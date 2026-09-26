@@ -1,4 +1,5 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
+import { maySpendCredits } from '@brandspace/shared';
 import {
   BRAND_MEMORY_LAYERS,
   ORB_AREAS,
@@ -7,7 +8,8 @@ import {
   localizedFrom,
   memoryRank,
 } from '@brandspace/brand-brain';
-import { requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { analyticsEvidence, conflictNote } from '../../../server/learning-review';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
@@ -56,7 +58,9 @@ export default async function BrandBrainPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'brand_brain.read');
+  const access = await requireWorkspacePage(locale, '/brand-brain');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const permissions = workspace.permissionKeys;
   const can = (key: string) => permissions.includes(key);
@@ -549,8 +553,10 @@ export default async function BrandBrainPage({
           edit: can('brand_brain.edit'),
           upload: can('brand_brain.upload'),
           review: can('brand_brain.review'),
-          remove: can('brand_brain.delete'),
-          chat: can('brand_brain.chat'),
+          // E3 — archiving a fact needs `brand_brain.edit`, the same as the action.
+          remove: can('brand_brain.edit'),
+          // Q18 — a Brand Brain answer spends credits.
+          chat: maySpendCredits(workspace.permissionKeys, 'brand_brain.chat'),
         }}
       />
 

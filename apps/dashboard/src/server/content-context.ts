@@ -155,34 +155,51 @@ export async function inContentStudio<T>(
         denialSink: denialSink(workspaceId),
       });
 
+    const calendar = async () => {
+      const workspace = await scoped.db.workspace.findUniqueOrThrow({
+        where: { id: workspaceId },
+        select: { timezone: true },
+      });
+      return new ContentCalendarService({
+        db: scoped.db,
+        workspaceId,
+        policy: await policy(),
+        timezone: workspace.timezone,
+        quota,
+        /*
+         * AC-14.6 — the calendar asks the Approvals module whether THIS brand
+         * requires approval, rather than reading one workspace-wide default.
+         * D-120's gate is now backed by a workflow that can satisfy it.
+         */
+        approvalGate: await approvals(),
+      });
+    };
+
     return fn({
       ...scoped,
       policy,
       approvals,
-      campaigns: () => new CampaignService({ db: scoped.db, workspaceId }),
+      campaigns: () =>
+        new CampaignService({
+          db: scoped.db,
+          workspaceId,
+          // F1 — changing a post-in-review's campaign withdraws the review.
+          reviewWithdrawal: {
+            withdrawForEdit: async (input) => (await approvals()).withdrawForEdit(input),
+          },
+        }),
       suggestions: async () =>
         new MemberSuggestionService({ db: scoped.db, workspaceId, policy: await policy() }),
       library: async () =>
-        new ContentLibraryService({ db: scoped.db, workspaceId, policy: await policy() }),
-      calendar: async () => {
-        const workspace = await scoped.db.workspace.findUniqueOrThrow({
-          where: { id: workspaceId },
-          select: { timezone: true },
-        });
-        return new ContentCalendarService({
+        new ContentLibraryService({
           db: scoped.db,
           workspaceId,
           policy: await policy(),
-          timezone: workspace.timezone,
-          quota,
-          /*
-           * AC-14.6 — the calendar asks the Approvals module whether THIS brand
-           * requires approval, rather than reading one workspace-wide default.
-           * D-120's gate is now backed by a workflow that can satisfy it.
-           */
-          approvalGate: await approvals(),
-        });
-      },
+          // Q8 — an edit by a member who may not schedule takes the post off
+          // the calendar, through the calendar, in this same transaction.
+          scheduling: await calendar(),
+        }),
+      calendar,
     });
   });
 }

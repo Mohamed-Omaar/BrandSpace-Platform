@@ -134,6 +134,171 @@ A1/A2 (Q1, Q2) · A4 overrides (Q4) · A5 no-access page (Q5) · A7 view-as (Q3)
 
 Every change must keep: RLS and brand scope, audit events, `ar` + `en` message parity (`tests/unit/dashboard-i18n-parity.test.ts`), and the production safety checks.
 
+## 4. Phone layout (prototype v81, artboard 3 · `Mobile.dc.html`)
+
+The phone artboard now runs the **same logic as desktop** (same post store, roles, permissions, workspaces, plans, view-as, settings). Only the layout changes. Compare the repo's mobile shell (< 768px) against these rules; do this **after Phase 1 is merged**.
+
+| #   | Rule                                                                                                                                                                                                                                                                                                       |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1  | **Bottom tab bar (5):** Home · Calendar · **+ Create** (only with `content.create`; current while in Studio) · Approvals with pending badge (without approvals access → Posts; without Posts → Performance) · Menu.                                                                                        |
+| M2  | **Top bar:** menu · workspace name + page title (tap = workspace sheet) · search · bell with unread count.                                                                                                                                                                                                 |
+| M3  | **Drawer:** workspace card (role · plan) · the same nav groups as the desktop sidebar, filtered by permissions · badges (approvals pending = amber, publishing failed = red, notes unread) · Copilot with credits (only `copilot.use`) · "View as" (owner only) · footer: user, language switch, sign out. |
+| M4  | **Workspace sheet:** list with role · plan and a check on the current one · usage `n/limit` hidden when the plan allows 1 · "New workspace" only for the owner and below the limit; at the limit it shows the usage and opens upgrade. Switching closes the drawer and sheets.                             |
+| M5  | **Overlays:** notifications, Copilot and workspace are bottom sheets; search is full screen. Only one overlay open at a time (opening one closes the others).                                                                                                                                              |
+| M6  | **Homes and access:** the same role homes as desktop (A6), the same "No access to this page" (A5) and the view-as banner at the top (A7).                                                                                                                                                                  |
+| M7  | **Calendar = agenda list** on phone. Drag and drop is desktop-only; the note says to move a post from its menu.                                                                                                                                                                                            |
+| M8  | **Studio:** topic, channels, caption with AI (`copilot.use`), rewrite tools, **When** picker (best time / pick date+time / right after approval, with suggested slots), **Reviewer** picker, pre-send reason line, the same send rules as desktop (B4).                                                    |
+| M9  | **Approvals:** "Waiting for me / Sent by me" tabs, the note field, Approve · Request changes (note required) · Reject.                                                                                                                                                                                     |
+| M10 | **Media:** Library/Generate tabs, storage card (used / plan quota, breakdown bar), filters, generate panel with format and credits.                                                                                                                                                                        |
+| M11 | **Settings:** section chips with the same gating as desktop (A8) and a sticky "unsaved changes" bar with Cancel/Save.                                                                                                                                                                                      |
+| M12 | Touch targets ≥ 44px, `ar` RTL throughout, no hover-only actions.                                                                                                                                                                                                                                          |
+
+---
+
+## 5. Prototype v90: what changed since v76
+
+**Compared on:** `feat/prototype-v76-alignment` @ `0029ee8` (after Phase 1), 2026-09-25.
+**Prototype:** BrandSpace design canvas v90 (`Main.dc.html`, `Auth.dc.html`).
+
+The ids D1–H2 are prototype items; their short text is in Appendix B. They are not repo decisions, which are always written with a hyphen (`D-28`).
+
+**No sample data.** The prototype's demo workspace ("Reema Café") exists only to demonstrate the design. The real product must never seed sample content into a customer workspace; every page needs a designed empty state instead (G9). The comparison found no seeding in the repo. The analytics mock adapter outside production is tagged `MOCK` and stays.
+
+### 5.0 Owner decisions (answered 2026-09-25)
+
+Each answer becomes a new `D-` entry in `docs/DECISIONS.md` when it is implemented.
+
+| #   | Question                                                                | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q18 | Which permission guards actions that spend credits?                     | Keep the per-feature keys, and **also** require `copilot.use` on every action that spends credits. Members without `copilot.use` don't see credit-spending buttons or the credit balance.                                                                                                                                                                                                                                                                                       |
+| Q19 | Brand Brain completeness vs the repo's "no score" rule (`minimumItems`) | Show a list of **key questions per area**, as "answered n of m". There is no percentage and no overall score, so the no-score rule is kept. The questions live in config; Offers questions depend on the industry (food, fashion, beauty, services). "What's missing" lists the top unanswered questions.                                                                                                                                                                       |
+| Q20 | Grounding for writing, not only for chat                                | Extends Q14 to all AI writing: captions, strategy, Copilot and Brand Brain chat use only **approved, non-expired facts**. Uploaded documents and websites are sources that propose pending facts; their raw chunks are never retrieved into prompts. This is what makes "Used N facts" and "Fix it" accurate.                                                                                                                                                                   |
+| Q21 | Attaching a campaign to an existing post                                | Clarifies Q11. Attaching a campaign to a post that has none needs `content.create`, the same as choosing one at creation. Moving a post to another campaign, or removing its campaign, needs `campaigns.manage`. The same rule applies in the Posts menu and in the Studio.                                                                                                                                                                                                     |
+| Q22 | What happens to scheduled posts when the workspace time zone changes    | They keep their **local clock time** (09:00 stays 09:00): each future `PLANNED`/`SCHEDULED` slot is re-computed in the new zone in one transaction. Slots that are `PUBLISHING` or later are untouched. The settings warning says so, and the change is an audit event (Security → Activity).                                                                                                                                                                                   |
+| Q23 | Two-step verification details                                           | Authenticator app (TOTP) only, no SMS. **10** backup codes (the repo's number; the prototype was changed to match). Setup uses a QR code or a typed key, then a 6-digit check, then the codes are shown. Turning it off needs the **password or a current code**. "New phone" re-enrols and needs a current code. The owner can require it for the workspace: members without it are asked to enrol at their next sign-in, and while it is required a member can't turn it off. |
+| Q3  | View as (re-confirmed)                                                  | Implement Q3 on the **support-mode pattern**: a read-only permission preview. There is no session switch; every change action is refused with "Preview only"; the start of each preview is audited. It is offered only for members who have joined, not pending invites. This is not the impersonation D-28 forbids.                                                                                                                                                            |
+
+### 5.1 Status by item
+
+These statuses come from the v90 comparison. Claude Code re-checks every row in its report before writing any code.
+
+| Id  | Item                                                                                                                                                                               | Status                 | Main gap / links to §2 and §0                                                                                                                                                                                                                                                                    |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D1  | Brand Brain tabs: Knowledge · Look & voice · Sources, and a separate chat tab; area "Identity" renamed "About the business"                                                        | PARTIAL                | Tabs and labels; a single Voice card (voice words, Tone facts, Do/Don't rules). Links to C4.                                                                                                                                                                                                     |
+| D2  | Four font slots, plus uploaded fonts                                                                                                                                               | PARTIAL                | Heading and body per language; uploads go through the asset pipeline and the storage quota (TTF/OTF/WOFF/WOFF2, 5 MB, up to 4 per language); templates use them.                                                                                                                                 |
+| D3  | Key questions per area                                                                                                                                                             | MISSING                | Q19.                                                                                                                                                                                                                                                                                             |
+| D4  | One review inbox, confidence labels, conflicts shown side by side, bulk accept with a preview                                                                                      | MISSING                | Links to C1 (`reviewCandidates`).                                                                                                                                                                                                                                                                |
+| D5  | Sources: real uploads, editable website, counts per source, remove with keep or drop                                                                                               | PARTIAL                | Website source (**migration**, SSRF-safe fetch, security review as in C3); approved and pending counts per source.                                                                                                                                                                               |
+| D6  | "Valid until" on facts; expired facts excluded from writing and chat; "Used in N posts"                                                                                            | MISSING                | `validUntil` (**migration**). It is separate from the repo's STALE state, which means "review due".                                                                                                                                                                                              |
+| D7  | Brand Brain chat modes: Ask / Add / Edit / Remove, plus handoff to Copilot                                                                                                         | MISSING                | Links to C2 (correction and save-as-fact). Changes made in the chat update the area cards immediately.                                                                                                                                                                                           |
+| D8  | Copilot answers from the same facts, names what is missing, never saves facts itself                                                                                               | PARTIAL                | Q20.                                                                                                                                                                                                                                                                                             |
+| D9  | Writing uses Brand Brain; "Used N facts" in the Studio; the Settings → AI "Use Brand Brain" toggle really turns it off                                                             | PARTIAL                | Q20; record which facts each variant used.                                                                                                                                                                                                                                                       |
+| D10 | A fact used in a caption changed or expired: rewrite or keep, and "Needs you" on Home                                                                                              | MISSING                | Depends on D6 and D9.                                                                                                                                                                                                                                                                            |
+| D11 | Performance insight → "Save as learning" (pending fact)                                                                                                                            | MISSING                | —                                                                                                                                                                                                                                                                                                |
+| D12 | Home lines: facts waiting for review; "Brand Brain is missing: …"                                                                                                                  | MISSING                | Depends on D3 and D4.                                                                                                                                                                                                                                                                            |
+| D13 | The Strategy "Brand Brain changed" alert fires only when approved facts change                                                                                                     | MISSING                | A signature of approved facts and their versions; **migration** if it is stored.                                                                                                                                                                                                                 |
+| E1  | View as                                                                                                                                                                            | MISSING                | Q3, as re-confirmed above; A7.                                                                                                                                                                                                                                                                   |
+| E2  | "No access" also for non-owners and when a page is reached from search                                                                                                             | PARTIAL                | Q5 (known routes only; otherwise 404).                                                                                                                                                                                                                                                           |
+| E3  | Permission per action (duplicate, sources, look, review, credits, pause, strategy, report, connections)                                                                            | PARTIAL                | Mostly enforced on the server; Q18 for credits.                                                                                                                                                                                                                                                  |
+| E4  | New permission `templates.manage` (owner, admin, marketing manager, designer)                                                                                                      | MISSING                | New key and role grants (**migration** if roles are seeded); links to B2.                                                                                                                                                                                                                        |
+| E5  | Changing a post's campaign                                                                                                                                                         | CONFLICT → decided     | Q21. `setContentCampaign` also needs the editable-status and withdraw checks (F1).                                                                                                                                                                                                               |
+| E6  | Denial messages ("… doesn't have the “X” permission … ask <owner>"; owner-only wording)                                                                                            | MISSING                | A5.                                                                                                                                                                                                                                                                                              |
+| E7  | The client viewer's Home "feedback" links to the calendar                                                                                                                          | MISSING                | Q12.                                                                                                                                                                                                                                                                                             |
+| F1  | Any edit to a post in review pulls it back to draft (channels, date, format, tags, slides, design, campaign); "Make a new copy" opens the copy                                     | PARTIAL                | Extend B-3 to every edit path, including `setContentCampaign`.                                                                                                                                                                                                                                   |
+| F2  | No scheduling in the past; new posts default to tomorrow; best-time on today moves to tomorrow 09:00                                                                               | PARTIAL                | Server check exists (`#resolveInstant`); UI defaults and messages.                                                                                                                                                                                                                               |
+| F3  | A simulated approval never acts as the current user                                                                                                                                | EXISTS                 | —                                                                                                                                                                                                                                                                                                |
+| F4  | Strategy topic status comes from the real post                                                                                                                                     | MISSING                | Depends on C5 (`StrategyTopic` → `ContentItem`).                                                                                                                                                                                                                                                 |
+| F5  | Performance and Home count published posts from the same live list                                                                                                                 | PARTIAL                | Archived posts are still counted.                                                                                                                                                                                                                                                                |
+| F6  | The automations log is recorded history                                                                                                                                            | EXISTS                 | —                                                                                                                                                                                                                                                                                                |
+| G1  | Settings save bar on every draftable tab                                                                                                                                           | MISSING                | A9 (sticky save bar).                                                                                                                                                                                                                                                                            |
+| G2  | Notification preferences per person                                                                                                                                                | MISSING                | A10 (`NotificationPreference` per member, **migration**).                                                                                                                                                                                                                                        |
+| G3  | The AI writing language follows the UI language; the wizard's posting languages set it                                                                                             | PARTIAL                | A10; G8.                                                                                                                                                                                                                                                                                         |
+| G4  | Two-step verification                                                                                                                                                              | PARTIAL                | Q23: QR image, "New phone", turning off with password or code, owner requirement.                                                                                                                                                                                                                |
+| G5  | Time-zone change keeps the local clock time; the change is audited                                                                                                                 | CONFLICT → decided     | Q22.                                                                                                                                                                                                                                                                                             |
+| G6  | Country sets time zone, holidays and best times; industry sets Offers questions and observances; "affects" notes; ★ holiday chips                                                  | MISSING                | Q7 (country only preselects the time zone); holiday and observance data per country and industry.                                                                                                                                                                                                |
+| G7  | Workspace allowance from the owner's plan                                                                                                                                          | MISSING                | A1/A2, Q1.                                                                                                                                                                                                                                                                                       |
+| G8  | Wizard: required names, terms unticked, editable sign-up, handoff of facts (origin "Setup"), accounts, languages, goal, city                                                       | PARTIAL                | Needs a "Setup" fact origin and an AI-language field; links to C6.                                                                                                                                                                                                                               |
+| G9  | Designed empty state on every page                                                                                                                                                 | PARTIAL                | Copy and calls to action.                                                                                                                                                                                                                                                                        |
+| G10 | Getting-started checklist built from real state, filtered by permissions                                                                                                           | PARTIAL                | —                                                                                                                                                                                                                                                                                                |
+| G11 | First-run tour, shown once per person                                                                                                                                              | MISSING                | Per-user flags (tour done, checklist hidden, hints seen) stored per user, not per device (**migration**).                                                                                                                                                                                        |
+| G12 | First-visit hints on Brand Brain and Strategy                                                                                                                                      | MISSING                | Uses the G11 flags.                                                                                                                                                                                                                                                                              |
+| G13 | Automations v2: each event offers only its own conditions (with values) and actions; personal alerts move to Settings → Notifications; asks-first actions become approval requests | PARTIAL                | B12 engine exists; add per-event condition/action lists, values (channel, campaign, format, person), a monthly cap for credit actions (Q18), approval requests with Approve / Skip on Home that lapse after 24 h (**migration**), and drop rules whose trigger or action moved to Notifications. |
+| H1  | Official platform marks                                                                                                                                                            | EXISTS except LinkedIn | The owner supplies LinkedIn's official SVG for `PLATFORM_MARK_PATHS` (`packages/ui/src/platform-icons.tsx`). Never draw it by hand.                                                                                                                                                              |
+| H2  | Phone layout                                                                                                                                                                       | See §4                 | M1–M12. The phone prototype is updated to v90 separately.                                                                                                                                                                                                                                        |
+
+### 5.2 Migrations this needs
+
+These are migration **files only**. Claude Code never applies them to staging or production.
+
+- D5: website source.
+- D6: `validUntil` on facts.
+- D9: which facts each variant used.
+- D13: the approved-facts signature, if it is stored.
+- E4: `templates.manage`.
+- G2: per-member notification preferences.
+- G8: the "Setup" fact origin and the AI language.
+- G11: per-user first-run flags.
+- G13: rule condition/action values and caps; automation approval requests.
+
+§2 already lists the models for C5 (strategy) and B9 (slides and templates).
+
+### 5.3 Implementation order
+
+This replaces §3 Phase 2 and Phase 3 for everything not built yet. Each part is:
+
+- its own branch from `staging`, merged into `staging` through its own PR;
+- report first, with no code until the owner approves the report;
+- one commit per item, with tests.
+
+**Phase 2A: permissions and the post lifecycle**
+
+- A5 + E6 denial messages; E2/Q5 no-access page.
+- E3 + Q18.
+- A6 role homes + E7/Q12.
+- B3/Q8; F1; F2; F5.
+- B4/Q10; B5.
+- B7 calendar; B8 menu + Q21.
+
+**Phase 2B: settings, workspaces, onboarding**
+
+- A1/A2/G7 (Q1, Q2); A3 hidden while Q2b is off.
+- A8 tabs, workspace deletion and billing visibility (Q13).
+- A9 + G1; A10 + G2 + G3; A11/Q9.
+- G4/Q23; G5/Q22; G6/Q7.
+- G8 + C6 + Q16.
+- E4 + B2 templates; B9 studio.
+- B11; B12 + G13 automations; B14; C7.
+- C8 popovers and toasts.
+
+**Phase 2C: Brand Brain v2**
+
+- C1–C4 + D1–D13.
+- Q14 / Q19 / Q20.
+- Website reading (C3, D5) after its security review.
+
+**Phase 2D: empty workspaces and the first run**
+
+- G9–G12.
+
+**Phase 2E: phone**
+
+- §4 M1–M12, after the desktop parts it depends on.
+
+**Phase 3**
+
+- A7/E1 view-as (Q3).
+- C5 strategy data model, then F4.
+- Deferred: A4 overrides (Q4), search (Q6), link tracking (Q15).
+
+**Any time:** H1, LinkedIn's official mark, once the owner provides the file.
+
+Every change keeps:
+
+- RLS and brand scope;
+- audit events;
+- `ar` + `en` parity (`tests/unit/dashboard-i18n-parity.test.ts`);
+- the production safety checks.
+
 ---
 
 ## Appendix — prototype decisions (v76)
@@ -154,3 +319,156 @@ Short form of each decision (the full prototype lives in the BrandSpace design c
 - **A12** Credits never negative; purchase needs `billing.manage` + confirm.
 - **B1–B14** One post store; author kept; published read-only; edit in review → draft; no past scheduling; submit-only must review; default reviewer; approvals "For me"/"Sent", note required for changes, feedback shown to author; per-recipient notifications; calendar drag/move; posts menu with permissions; studio (AI by topic + language, slides saved, templates, previews, checks, date/time, reviewer); performance "—" for unsupported metrics, CSV/PDF, link tracking; campaign results from its published posts; automations; notes with mentions; copilot by intent.
 - **C1–C8** Brand Brain bulk accept; chat answers from approved facts, proposes corrections, saves new facts; uploads/website produce pending facts; identity editable; strategy with KPI, pillars by identity, channel mix, topics linked to drafts, one review per period; onboarding fields carried into the app; storage breakdown; shell (rail, ⌘K, one popover at a time, glass UI, ar/en).
+
+---
+
+## Appendix B — prototype additions (v90)
+
+Short form of each item compared in §5 (the full prototype lives in the BrandSpace design canvas, v90).
+
+### D. Brand Brain v2
+
+- **D1. Tabs.** There are three tabs: Knowledge · Look & voice · Sources. There is also a separate chat tab, "Talk with the brand".
+  - The area "Identity" was renamed "About the business".
+  - Look & voice contains: logo, templates, colours, fonts, and one Voice card (voice words + Tone facts + Do/Don't rules, all editable there).
+- **D2. Fonts.** There are four font slots: heading and body, in Arabic and in English, each chosen from a list.
+  - Uploaded fonts are allowed: TTF/OTF/WOFF/WOFF2, up to 5 MB, max 4 per language. Uploaded fonts can be renamed, have their file replaced, or be removed; removing a font that is in use falls back to the default.
+  - Templates render headlines with the heading font and badges with the body font, picked by the text's language.
+- **D3. Completeness uses key questions per area, not fact counts** — shown as "answered n of m", with no percentage (Q19).
+  - Examples for Offers in food: what you sell / prices / hours & offers.
+  - The Offers questions change with the industry: fashion, beauty, services.
+  - The hero card "What's missing" lists the top missing questions. Clicking one opens that area with the question as the input placeholder.
+- **D4. One review inbox.**
+  - Pending facts from all areas are shown one card at a time. Each card shows the snippet from the source, the area, and a confidence label (High ≥85 / Medium 70–84 / Low <70) with an explanation.
+  - Actions: Accept / Edit & accept / Reject / Later.
+  - When a fact conflicts with an approved one, old and new are shown side by side, and accepting archives the old one.
+  - "Accept the confident ones" shows a preview list and needs a confirm.
+- **D5. Sources.**
+  - Real file upload: PDF, Word, PowerPoint or text, up to 20 MB. Any other file shows a failed row with the reason.
+  - Website URL can be edited, with validation, and re-read.
+  - Each source shows its approved and pending counts and a list of its facts, and has Read again and Remove. Remove asks whether to keep or drop the facts; dropping archives them.
+- **D6. Facts.**
+  - Optional "valid until" date. Expired facts are shown dimmed as "Expired · not used in writing", and they are excluded from AI writing and from chat answers.
+  - Each fact shows "Used in N posts".
+  - Versions and archive work as before.
+- **D7. Brand Brain chat.** It has mode buttons: Ask about a fact / Add a new fact / Edit a fact / Remove a fact.
+  - **Add:** pick an area. Someone with `brand_brain.review` gets "Add & approve"; others get "Send for review".
+  - **Edit:** finds the closest fact (including expired ones) and shows the old one struck through next to the new one.
+  - **Remove:** shows up to 3 matching facts. Removing archives the fact and can be undone.
+  - **Handoff:** job-like requests ("make 3 posts about…") get a card saying "This is a job for Copilot", listing the facts that will be used, with a button "Send to Copilot". Copilot then opens with the request and builds the plan from it: count, topic, and campaign if one is named.
+  - All chat actions update the area cards immediately.
+- **D8. Copilot (Q20).**
+  - It answers brand questions from the same approved facts and names the area.
+  - When a fact is missing, it says so (for example "doesn't have Prices yet (Offers)").
+  - When asked to save a fact, it doesn't save it. It redirects to the Brand Brain chat with the fact pre-filled in Add mode.
+- **D9. Writing uses Brand Brain.**
+  - Captions include a relevant fact (offer or branches) and apply the tone and rules: no hype, no "the best", the emoji rule.
+  - The Studio shows "Used N Brand Brain facts" with the list and "Fix it" on each one.
+  - The Settings → AI toggle "Use Brand Brain" really turns this off.
+- **D10. When a fact used in a caption changes, expires or is removed:**
+  - The Studio shows a banner with the old fact → the new one, and two buttons: "Rewrite with the new fact · 1 credit" and "Keep as is".
+  - Any scheduled or in-review post whose caption contains an old or expired fact appears in Home "Needs you".
+- **D11. Performance.** Insight cards have "Save as learning", which sends a pending fact to Learnings.
+- **D12. Home.** Shows "Brand Brain · N facts waiting for your review" and "Brand Brain is missing: <question>".
+- **D13. Brand Brain changed alert on Strategy.** It fires only when approved facts actually change: compare a signature of the approved facts and their versions.
+
+### E. Permissions and roles
+
+- **E1. "View as" is strictly read-only.** Any attempt to change data shows "Preview only". View-as is only offered for members who have joined, not pending invites.
+- **E2. Permission checks apply to every non-owner signed-in person**, not only to view-as. Hidden pages show "No access" even if reached through search.
+- **E3. Permissions needed per action:**
+  - duplicate → `content.create`
+  - Brand Brain sources → `brand_brain.upload`
+  - logo, colours, fonts, voice, add/edit/archive facts → `brand_brain.edit`
+  - accept/reject → `brand_brain.review`
+  - anything that spends credits → `copilot.use`
+  - campaign pause → `campaigns.manage`
+  - strategy, including the month plan → `strategy.manage`
+  - weekly report → `analytics.export`
+  - connect/disconnect → `integrations.manage`
+  - **Deviation (owner, Phase 2A approval):** logo, colours and fonts stay on `brand.manage`, so no
+    role gains brand-identity rights; only fact archiving moves (from `brand_brain.delete` to
+    `brand_brain.edit`). Voice and facts already used `brand_brain.edit`.
+- **E4. New permission `templates.manage`.** Given by default to owner, admin, marketing manager and designer. Anyone who can create posts can use templates; saving, deleting or changing the default template needs this permission.
+- **E5. Changing a post's campaign follows the same rule in the Posts menu and in the Studio (Q21):** attaching a campaign to a post that has none needs `content.create`; moving it to another campaign or removing it needs `campaigns.manage`.
+- **E6. Denial messages.**
+  - "<Name> doesn't have the “X” permission. Permissions come from the role · ask <owner> to change your role."
+  - Owner-only actions say "… is owner-only".
+  - Per-member overrides stay locked (from the role).
+- **E7. Client viewer.** The home "feedback" section links to the calendar.
+
+### F. Content lifecycle fixes
+
+- **F1.** Any edit to a post in review pulls it back to draft and cancels the approval request. This covers channels, date, format, tags, headline, slides, design and campaign, not only the caption. Published posts are fully read-only, and "Make a new copy" opens the copy.
+- **F2.** No scheduling in the past, including earlier today; compare date and time.
+  - New posts default to tomorrow.
+  - Best-time on today moves to tomorrow 09:00.
+  - Moving a post onto a past day in the calendar shows a message.
+- **F3.** The simulated approval must not act as the current user.
+- **F4.** Strategy topic status is derived from the real post (idea/draft/in review/scheduled/published).
+  - "Draft the ideas" links each draft to its topic and adds a caption.
+  - A Story topic opens as Story.
+- **F5.** Performance and Home count published posts from the same live list, so archived posts are excluded from both.
+- **F6.** The automations activity log is recorded history: turning a rule off or changing a post doesn't rewrite it.
+
+### G. Settings, workspaces, onboarding
+
+- **G1. Settings Save.** Every draftable section (General, Approvals, Publishing defaults, Notifications, AI) has a visible bottom bar.
+  - When there are no changes: "All changes saved" with Save disabled.
+  - When there are changes: "unsaved changes" with Cancel/Save.
+- **G2.** Notification preferences are per person.
+- **G3.** The default AI writing language follows the UI language; the wizard's posting languages set it.
+- **G4. Two-step verification (Q23).** Authenticator app (TOTP) plus 10 backup codes; there is no SMS.
+  - Turning it on: scan a QR code or type the key, then verify a 6-digit code, then see the backup codes.
+  - "New phone" moves it to another device.
+  - Turning it off needs the password or a current code.
+  - The owner can require it for the team; once required, it can't be turned off.
+- **G5. Time zone.** Scheduled posts keep their local clock time after a change, and the warning says so. The time-zone change and the default-template change are written to the Security → Activity log.
+- **G6. Country and industry.**
+  - Country sets the time zone, the calendar holidays and the best posting times (the Gulf uses 10:00/16:00/21:00).
+  - Industry changes the Brand Brain Offers questions and adds industry observances to the calendar.
+  - Settings shows under each field what it affects.
+  - Calendar holidays show as a ★ chip, and clicking one opens the Studio for that day.
+- **G7. Workspaces.**
+  - The allowance comes from the owner's account plan (Growth = 2), not from the trial plan of a new workspace.
+  - The Auth workspace list respects the limit ("Create workspace · 1/2", or an upgrade note).
+  - Created workspaces persist with their settings (industry, country, time zone).
+  - The multi-brand flag is off, so "Brands they work on" is hidden.
+- **G8. Wizard.**
+  - Business and brand name are required. Terms start unticked. Sign-up fields are editable, with email and 12-character password checks. The reset password must match.
+  - A new workspace from inside the app starts blank, with a Back button.
+  - The handoff to the app carries:
+    - the facts accepted in the wizard, which go to Brand Brain with the source "Setup"
+    - the accounts that were not connected (shown as not connected)
+    - the posting languages, which set the AI language
+    - the goal key (translated in the app, and it also updates the Brand Brain Strategy fact)
+    - the city, which is emptied when the country is not Egypt
+  - Area names match Brand Brain.
+- **G9. Empty workspaces (the real product has no sample data).** Every page has a designed empty state:
+  - Strategy: "No strategy yet", "Build a 90-day plan · 3 credits".
+  - Performance: "Your numbers will show up here", "Connect accounts".
+  - Notes, Media library and Campaigns each have one line explaining the page and the next action.
+  - Home performance: "no numbers yet".
+- **G10. Getting-started checklist on Home**, built from real state.
+  - Steps: Brand profile ✓ / Connect accounts / Teach Brand Brain (n/10) / First post / Schedule or send for review / Invite team.
+  - Only the steps the person's permissions allow are shown.
+  - It has "Not needed" and hides itself when complete.
+  - It also appears on the role homes.
+- **G11. First-run tour.** Four bubbles: menu, Create, Brand Brain, Copilot.
+  - Shown once per person, on an empty workspace, with Next and Skip.
+  - Can be run again from the user menu with "Take the tour".
+  - Not shown in view-as.
+  - The per-person flags (tour done, checklist hidden, hints seen) are stored per user, not per device.
+- **G12. First-visit hints** appear only on Brand Brain and Strategy, in empty workspaces, and can be dismissed.
+
+- **G13. Automations v2.**
+  - Events: a post is approved / published / fails to publish / waits for review over 24 h; a campaign starts / ends; weekly engagement drops 20%; nothing is scheduled for the next 3 days; a post lands in the top 10%; an account connection expires within 7 days; a Brand Brain fact expires within 7 days.
+  - Each event offers only the conditions (channel, campaign, format, each with a value) and actions that make sense for it.
+  - Actions: schedule in the next free slot (posts without a time), notify a chosen person, add to a campaign, remind the reviewer, draft 3 ideas (credits, a monthly cap of 2/4/8, needs `copilot.use`), make a draft copy, try publishing once more (asks first, `publishing.manage`), pause the campaign (asks first, `campaigns.manage`, needs a campaign condition).
+  - Personal alerts (failed posts, approvals, credits, Brand Brain reviews) live only in Settings → Notifications; the old "notify me / email me", credits and new-fact rules are removed.
+  - Asks-first actions create a request shown on Home "Needs you" and at the top of Automations to people holding the permission, with Approve / Skip; unanswered requests lapse after 24 hours and nothing runs. The activity log records waiting / approved by / skipped by.
+
+### H. Assets
+
+- **H1. Platform icons** must use the official brand files. LinkedIn stays without a mark until the official SVG from LinkedIn's brand page is added to `PLATFORM_MARK_PATHS` (see the comment in `packages/ui/src/platform-icons.tsx`).
+- **H2. Phone layout rules M1–M12** are in §4. The phone prototype will be updated to v90 separately.

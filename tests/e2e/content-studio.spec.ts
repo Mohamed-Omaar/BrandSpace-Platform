@@ -949,30 +949,37 @@ test.describe('filing a manual post under a campaign', () => {
     expect(await storedCampaignName(itemId)).toBeNull();
   });
 
-  test('D — content.create without campaigns.manage: no selector, and a crafted id is refused', async ({
+  test("D — Q21: content.create files a new post under its brand's campaign; another brand's is refused", async ({
     page,
   }) => {
     const creds = credentials();
     await signInAs(page, creds.customer.copywriterEmail, creds.customer.copywriterPassword);
     await openComposer(page);
 
-    // THE CONTROL IS NOT THERE, and neither is any campaign name.
-    await expect(page.getByTestId('content-manual-campaign')).toHaveCount(0);
-    await expect(page.locator('body')).not.toContainText(PRIMARY_CAMPAIGN);
+    /*
+     * Q21 (D-318, superseding D-232's permission paragraph): choosing a FIRST
+     * campaign is part of creating the post, so `content.create` is enough.
+     * The copywriter holds it without `campaigns.manage`, and gets the control.
+     */
+    const selector = page.getByTestId('content-manual-campaign');
+    await expect(selector).toBeVisible();
+    await expect(selector.locator('option', { hasText: PRIMARY_CAMPAIGN })).toHaveCount(1);
+    await expect(selector.locator('option', { hasText: SECOND_CAMPAIGN })).toHaveCount(0);
 
-    // AUTHORING STILL WORKS. The permission gates the FILING, not the writing.
-    await compose(page, `A copywriter's own words, at ${new Date().toISOString()}.`);
+    await compose(page, `A copywriter files their own post, at ${new Date().toISOString()}.`);
+    await selector.selectOption({ label: PRIMARY_CAMPAIGN });
     const itemId = await writeManualPost(page, 'copywriter');
-    expect(await storedCampaignName(itemId)).toBeNull();
+    expect(await storedCampaignName(itemId)).toBe(PRIMARY_CAMPAIGN);
 
     /*
-     * AND THE SERVER REFUSES A CRAFTED SUBMISSION. The campaign id is injected
-     * into the manual form directly, which is precisely what a hand-built POST
-     * would carry — the UI gate is courtesy, the server check is the rule.
+     * AND THE SERVER STILL DECIDES WHICH CAMPAIGN. Another brand's campaign id
+     * is put into the control directly, which is precisely what a hand-built
+     * POST would carry — the option list is courtesy, the server check is the
+     * rule.
      */
     const campaignId = await withPlatformPrisma(async (prisma) => {
       const campaign = await prisma.campaign.findFirstOrThrow({
-        where: { workspaceId: creds.customer.workspaceId, name: PRIMARY_CAMPAIGN },
+        where: { workspaceId: creds.customer.workspaceId, name: SECOND_CAMPAIGN },
         select: { id: true },
       });
       return campaign.id;
@@ -981,13 +988,15 @@ test.describe('filing a manual post under a campaign', () => {
     await openComposer(page);
     await compose(page, `Crafted, at ${new Date().toISOString()}.`);
     await page.evaluate((id) => {
-      const form = document.querySelector('[data-testid="content-manual-form"]');
-      if (!form) throw new Error('no manual form');
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'campaignId';
-      input.value = id;
-      form.appendChild(input);
+      const select = document.querySelector<HTMLSelectElement>(
+        '[data-testid="content-manual-campaign"]',
+      );
+      if (!select) throw new Error('no campaign control');
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = 'crafted';
+      select.appendChild(option);
+      select.value = id;
     }, campaignId);
 
     const before = await withPlatformPrisma(async (prisma) =>
@@ -995,10 +1004,9 @@ test.describe('filing a manual post under a campaign', () => {
     );
     await page.getByTestId('content-write-manual').click();
     /*
-     * REFUSED, AND NAMED AS A MISS. `NOT_FOUND` is the same code a campaign in
+     * REFUSED, AND NAMED AS A MISS. `NOT_FOUND` is the code a campaign in
      * another brand gets, so the refusal does not confirm that a campaign by
-     * that id exists — and the screen says so rather than showing a generic
-     * failure.
+     * that id exists.
      */
     await page.waitForURL((url) => url.searchParams.has('error'), { timeout: 60_000 });
     expect(new URL(page.url()).searchParams.get('error')).toBe('NOT_FOUND');

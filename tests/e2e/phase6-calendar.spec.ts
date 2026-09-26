@@ -51,7 +51,9 @@ test.afterAll(async () => {
 });
 
 /** An unscheduled draft (with a variant), optionally filed under a new campaign. */
-async function draft(withCampaign = false): Promise<{ itemId: string; campaignId: string | null }> {
+async function draft(
+  withCampaign = false,
+): Promise<{ itemId: string; campaignId: string | null; words: string }> {
   const loaded = credentials();
   const workspaceId = loaded.customer.workspaceId;
   const brandId = brandFixtures(loaded).primaryBrandId;
@@ -91,7 +93,7 @@ async function draft(withCampaign = false): Promise<{ itemId: string; campaignId
       },
     });
     created.push(item.id);
-    return { itemId: item.id, campaignId: campaign?.id ?? null };
+    return { itemId: item.id, campaignId: campaign?.id ?? null, words: `Tray words ${suffix}` };
   });
 }
 
@@ -117,7 +119,8 @@ test.describe('D-290 · the calendar', () => {
     const { itemId } = await draft();
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
-    const day = page.locator('[data-testid^="calendar-day-"]').nth(15);
+    // F2 — a day that has not passed: the grid's last day is never before today.
+    const day = page.locator('[data-testid^="calendar-day-"]:not([data-past])').last();
     const dayKey = ((await day.getAttribute('data-testid')) ?? '').replace('calendar-day-', '');
     /*
      * THE REAL HTML5 DRAG EVENTS, carrying one DataTransfer from the tray row
@@ -133,6 +136,109 @@ test.describe('D-290 · the calendar', () => {
     await expect(page.getByTestId('calendar-schedule-dialog')).toBeVisible();
     await expect(page.getByTestId('schedule-item')).toHaveValue(itemId);
     await expect(page.getByTestId('schedule-date')).toHaveValue(dayKey);
+  });
+
+  test('F2: dropping a post on a day that has passed says so and opens nothing', async ({
+    page,
+  }) => {
+    test.skip(test.info().project.name.includes('mobile'), 'drag is a desktop gesture');
+    const { itemId } = await draft();
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
+    const past = page.locator('[data-testid^="calendar-day-"][data-past="true"]');
+    test.skip((await past.count()) === 0, 'the month on screen starts today');
+    const transfer = await page.evaluateHandle(() => new DataTransfer());
+    await page.getByTestId(`calendar-tray-${itemId}`).dispatchEvent('dragstart', {
+      dataTransfer: transfer,
+    });
+    await past.first().dispatchEvent('dragover', { dataTransfer: transfer });
+    await past.first().dispatchEvent('drop', { dataTransfer: transfer });
+    await expect(page.getByTestId('calendar-past-day')).toContainText('That day has passed');
+    await expect(page.getByTestId('calendar-schedule-dialog')).toHaveCount(0);
+  });
+
+  test('F2: a new post is proposed for tomorrow at 09:00, and nothing before today is offered', async ({
+    page,
+  }) => {
+    const { itemId } = await draft();
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
+    await page.getByTestId(`calendar-tray-schedule-${itemId}`).click();
+    const date = page.getByTestId('schedule-date');
+    const today = (await date.getAttribute('min')) ?? '';
+    expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const proposed = await date.inputValue();
+    expect(proposed > today, `${proposed} is after ${today}`).toBe(true);
+    await expect(page.getByTestId('schedule-time')).toHaveValue('09:00');
+
+    // TODAY gets no proposed time: 09:00 may already have passed in the
+    // workspace's zone. The field stays required, and a later day gets 09:00 back.
+    await date.fill(today);
+    await expect(page.getByTestId('schedule-time')).toHaveValue('');
+    await expect(page.getByTestId('schedule-time')).toHaveAttribute('required', '');
+    await date.fill(proposed);
+    await expect(page.getByTestId('schedule-time')).toHaveValue('09:00');
+  });
+
+  /** Next month, where every day is still to come, as `YYYY-MM` and a day key. */
+  function nextMonth(): { month: string; day: (d: number) => string } {
+    const now = new Date();
+    const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const month = first.toISOString().slice(0, 7);
+    return { month, day: (d) => `${month}-${String(d).padStart(2, '0')}` };
+  }
+
+  test('B7: a scheduled post dragged to another day moves there, at the same time', async ({
+    page,
+  }) => {
+    test.skip(test.info().project.name.includes('mobile'), 'drag is a desktop gesture');
+    const { itemId, words } = await draft();
+    // A chip on the grid shows the post's TITLE, not its words.
+    const title = words.replace('Tray words', 'Tray post');
+    const { month, day } = nextMonth();
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
+    await page.getByTestId(`calendar-tray-schedule-${itemId}`).click();
+    await page.getByTestId('schedule-date').fill(day(10));
+    await page.getByTestId('schedule-time').fill('12:00');
+    await Promise.all([
+      page.waitForURL(/[?&]ok=CONTENT_SCHEDULED/),
+      page.getByTestId('schedule-submit').click(),
+    ]);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
+    const chip = page
+      .getByTestId(`calendar-day-${day(10)}`)
+      .locator('[data-testid^="calendar-post-"]', { hasText: title });
+    await expect(chip).toHaveAttribute('draggable', 'true');
+
+    const target = page.getByTestId(`calendar-day-${day(20)}`);
+    const transfer = await page.evaluateHandle(() => new DataTransfer());
+    await chip.dispatchEvent('dragstart', { dataTransfer: transfer });
+    await target.dispatchEvent('dragover', { dataTransfer: transfer });
+    await Promise.all([
+      page.waitForURL(/[?&]ok=CONTENT_RESCHEDULED/),
+      target.dispatchEvent('drop', { dataTransfer: transfer }),
+    ]);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
+    const moved = page
+      .getByTestId(`calendar-day-${day(20)}`)
+      .locator('[data-testid^="calendar-post-"]', { hasText: title });
+    await expect(moved).toBeVisible();
+    await moved.click();
+    await expect(page.getByTestId('reschedule-time')).toHaveValue('12:00');
+  });
+
+  test('B7: "new post" on an empty future day opens scheduling with that day', async ({ page }) => {
+    test.skip(test.info().project.name.includes('mobile'), 'the grid is a desktop view');
+    await draft();
+    const { month } = nextMonth();
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
+    const create = page.locator('[data-testid^="calendar-new-"]').first();
+    const key = ((await create.getAttribute('data-testid')) ?? '').replace('calendar-new-', '');
+    await create.click();
+    await expect(page.getByTestId('calendar-schedule-dialog')).toBeVisible();
+    await expect(page.getByTestId('schedule-date')).toHaveValue(key);
   });
 
   test('the campaign filter narrows the tray to that campaign', async ({ page }) => {

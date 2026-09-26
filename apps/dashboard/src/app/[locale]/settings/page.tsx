@@ -8,7 +8,8 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { settingsNavItems } from '../../../server/settings-nav';
 import { inContentStudio } from '../../../server/content-context';
@@ -30,7 +31,9 @@ export default async function SettingsPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'workspace.update');
+  const access = await requireWorkspacePage(locale, '/settings');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const row = await inWorkspace(workspace.workspaceId, async ({ db }) =>
     db.workspace.findUniqueOrThrow({

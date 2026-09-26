@@ -532,6 +532,40 @@ describe('AC-14.8 and AC-14.9 — moving, cancelling, and the audit trail', () =
     expect(moved.slot.scheduledLocalTime).toBe(target);
   });
 
+  it.each(['PUBLISHING', 'PUBLISHED', 'PARTIALLY_PUBLISHED', 'FAILED'] as const)(
+    'B7 — a %s slot cannot be taken off the calendar, and nothing is refunded',
+    async (status) => {
+      const contentItemId = await makeDraft(`Gone out (${status})`);
+      const { slot } = await inA((calendar) =>
+        calendar.schedule({ contentItemId, localTime: futureLocal(10), ...actor() }),
+      );
+      await withWorkspace(
+        fixtures.a.workspaceId,
+        (db) => db.calendarSlot.update({ where: { id: slot.id }, data: { status } }),
+        { prisma: app },
+      );
+      await expect(
+        inA((calendar) => calendar.cancel({ slotId: slot.id, ...actor() })),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+      const after = await withWorkspace(
+        fixtures.a.workspaceId,
+        async (db) => ({
+          slot: await db.calendarSlot.findUniqueOrThrow({ where: { id: slot.id } }),
+          item: await db.contentItem.findUniqueOrThrow({ where: { id: contentItemId } }),
+          refunds: await db.usageEvent.count({
+            where: { idempotencyKey: `${slot.usageIdempotencyKey}:refund` },
+          }),
+        }),
+        { prisma: app },
+      );
+      expect(after.slot.status).toBe(status);
+      expect(after.slot.cancelledAt).toBeNull();
+      expect(after.item.status).toBe('SCHEDULED');
+      expect(after.refunds).toBe(0);
+    },
+  );
+
   it('cancelling takes it off the calendar and returns the item to DRAFT', async () => {
     const contentItemId = await makeDraft('Called off');
     const { slot } = await inA((calendar) =>
@@ -611,6 +645,19 @@ describe('the bounds the activated policy sets', () => {
     await expect(
       inA((calendar) => calendar.schedule({ contentItemId, localTime: yesterday, ...actor() })),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('F2: refuses a time EARLIER TODAY — the date and the time are compared together', async () => {
+    const contentItemId = await makeDraft('Earlier today');
+    const now = new Date();
+    const earlier = formatLocalTime(new Date(now.getTime() - 90_000), ZONE);
+    // The same local day except in the 90 seconds after midnight — either way a past time.
+    await expect(
+      inA((calendar) => calendar.schedule({ contentItemId, localTime: earlier, ...actor() })),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      publicDetails: { reason: 'schedule_in_past' },
+    });
   });
 
   it('refuses a date beyond the planning horizon', async () => {

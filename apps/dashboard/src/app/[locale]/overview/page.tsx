@@ -20,9 +20,14 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { localizedFrom } from '@brandspace/brand-brain';
-import { NOTE_PERMISSION, NotesService, type NoteInboxEntry } from '@brandspace/collaboration';
+import {
+  NOTE_MANAGE_PERMISSION,
+  NOTE_PERMISSION,
+  NotesService,
+  type NoteInboxEntry,
+} from '@brandspace/collaboration';
 import { brandIdQueryFilter, systemClock } from '@brandspace/shared';
-import { detectAnomalies } from '@brandspace/analytics';
+import { countPublishedPosts, detectAnomalies } from '@brandspace/analytics';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
@@ -35,6 +40,8 @@ import {
   performanceShiftItem,
 } from '../../../server/performance-patterns';
 import {
+  HOME_ROLE_ROWS,
+  homeSectionsFor,
   HOME_NOTES,
   HOME_RECOMMENDATIONS,
   HOME_UPCOMING_DAYS,
@@ -149,6 +156,8 @@ export default async function OverviewPage({
   const maySeeInsights = may('strategy.read');
   const mayReviewInsights = may('strategy.manage');
   const mayUseNotes = may(NOTE_PERMISSION);
+  // Q12 — resolving a thread is triage; a member who may only comment is not offered it.
+  const mayManageNotes = may(NOTE_MANAGE_PERMISSION);
 
   const brandContext = await brandContextFor(workspace, '/overview');
   const brand = requiredBrand(brandContext);
@@ -272,13 +281,12 @@ export default async function OverviewPage({
               ...scope,
             },
           }),
-          db.publishJob.count({
-            where: {
-              workspaceId: workspace.workspaceId,
-              status: 'PUBLISHED',
-              publishedAt: { gte: new Date(now.getTime() - 28 * 86_400_000) },
-              ...scope,
-            },
+          // F5 — the same live list Performance counts: posts, not per-channel jobs.
+          countPublishedPosts(db, {
+            workspaceId: workspace.workspaceId,
+            brandId,
+            brandScope: workspace.brandScope,
+            period: { start: new Date(now.getTime() - 28 * 86_400_000), end: now },
           }),
         ]);
         return { upcoming, inReview, published };
@@ -337,6 +345,110 @@ export default async function OverviewPage({
         return metric?.value === null || metric?.value === undefined ? null : Number(metric.value);
       }).catch(() => null)
     : null;
+
+  /* ------------------------------------------------ A6 — sections by role */
+  const sections = homeSectionsFor(workspace.permissionKeys);
+  const roleScope = brandIdQueryFilter({ brandId, brandScope: workspace.brandScope });
+
+  /*
+   * REVIEWS WAITING ON THIS MEMBER, brand-scoped at the query by the approval
+   * service; the selected brand narrows it further.
+   */
+  const reviewQueue = sections.reviewQueue
+    ? (
+        await inContentStudio(workspace.workspaceId, async ({ approvals }) =>
+          (await approvals()).queue({
+            brandScope: workspace.brandScope,
+            take: HOME_ROLE_ROWS * 4,
+          }),
+        )
+      )
+        .filter((approval) => !brandId || approval.brandId === brandId)
+        .slice(0, HOME_ROLE_ROWS)
+    : [];
+
+  /* THIS MEMBER'S OWN WORK: drafts, what they sent, what of theirs is scheduled. */
+  const myWork = sections.myWork
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
+        const [drafts, sent, scheduled] = await Promise.all([
+          db.contentItem.findMany({
+            where: {
+              workspaceId: workspace.workspaceId,
+              deletedAt: null,
+              createdByUserId: customer.userId,
+              status: { in: ['DRAFT', 'CHANGES_REQUESTED'] },
+              ...roleScope,
+            },
+            orderBy: { updatedAt: 'desc' },
+            take: HOME_ROLE_ROWS,
+            select: { id: true, title: true, status: true },
+          }),
+          db.approval.findMany({
+            where: {
+              workspaceId: workspace.workspaceId,
+              requestedByUserId: customer.userId,
+              status: 'PENDING',
+              ...roleScope,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: HOME_ROLE_ROWS,
+            select: { id: true, item: { select: { title: true } } },
+          }),
+          db.calendarSlot.findMany({
+            where: {
+              workspaceId: workspace.workspaceId,
+              status: { in: ['PLANNED', 'SCHEDULED'] },
+              scheduledAtUtc: { gte: now },
+              item: { createdByUserId: customer.userId, deletedAt: null },
+              ...roleScope,
+            },
+            orderBy: { scheduledAtUtc: 'asc' },
+            take: HOME_ROLE_ROWS,
+            select: {
+              id: true,
+              scheduledAtUtc: true,
+              contentItemId: true,
+              item: { select: { title: true } },
+            },
+          }),
+        ]);
+        return { drafts, sent, scheduled };
+      })
+    : null;
+
+  /* WHAT IS WORKING: the best posts of the last 28 days, by engagements. */
+  const topPosts = sections.topPosts
+    ? await inAnalytics(workspace.workspaceId, async (services) =>
+        (await services.queries()).topPosts({
+          scope: brandId ? { brandId } : {},
+          period: { start: new Date(now.getTime() - 28 * 86_400_000), end: now },
+          metricKey: 'engagements',
+          limit: 3,
+          brandScope: workspace.brandScope,
+        }),
+      ).catch(() => [])
+    : [];
+
+  /*
+   * E7 — WHAT A COMMENT-ONLY MEMBER MAY GIVE FEEDBACK ON: the posts coming up,
+   * which they comment on from the calendar.
+   */
+  const feedback = sections.feedback
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) =>
+        db.calendarSlot.findMany({
+          where: {
+            workspaceId: workspace.workspaceId,
+            status: { in: ['PLANNED', 'SCHEDULED'] },
+            scheduledAtUtc: { gte: now },
+            item: { deletedAt: null },
+            ...roleScope,
+          },
+          orderBy: { scheduledAtUtc: 'asc' },
+          take: HOME_ROLE_ROWS,
+          select: { id: true, scheduledAtUtc: true, item: { select: { title: true } } },
+        }),
+      )
+    : [];
 
   /* ------------------------------------------------------------------- setup */
   const setup = await setupFactsFor(workspace.workspaceId, brand?.id ?? null);
@@ -446,9 +558,13 @@ export default async function OverviewPage({
                 placement="end"
                 title={t('overview.float.performance')}
                 detail={
-                  engagements === null
-                    ? t('analytics.absent.metrics_pending')
-                    : t('home.float.engagements').replace('{count}', number.format(engagements))
+                  // A6 — "pending" is a promise; a member who may not read
+                  // analytics is told the figure is hidden instead.
+                  !maySeeAnalytics
+                    ? t('overview.metric.hidden')
+                    : engagements === null
+                      ? t('analytics.absent.metrics_pending')
+                      : t('home.float.engagements').replace('{count}', number.format(engagements))
                 }
               />
               <HeroFloatCard
@@ -538,6 +654,176 @@ export default async function OverviewPage({
             </ul>
           )}
         </Card>
+
+        {/* ------------------------------------------ A6 — WHAT YOUR ROLE ASKS */}
+        {sections.reviewQueue ? (
+          <Card testId="home-review-queue">
+            <SectionHeader
+              title={t('home.role.review.title')}
+              actions={
+                <Link
+                  href={`/${locale}/approvals`}
+                  style={buttonStyle('neutral', 'sm')}
+                  className={buttonClass('neutral')}
+                >
+                  {t('home.role.review.all')}
+                </Link>
+              }
+            />
+            {reviewQueue.length === 0 ? (
+              quiet(t('home.role.review.none'), 'home-review-queue-none')
+            ) : (
+              <ul style={listStyle}>
+                {reviewQueue.map((approval) => (
+                  <li key={approval.id} data-testid={`home-review-${approval.id}`} style={rowStyle}>
+                    <span style={roleRowTextStyle}>{approval.item?.title ?? '—'}</span>
+                    <Link
+                      href={`/${locale}/approvals?review=${approval.id}`}
+                      style={buttonStyle('neutral', 'sm')}
+                      className={buttonClass('neutral')}
+                    >
+                      {t('home.role.review.open')}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        ) : null}
+
+        {myWork ? (
+          <Card testId="home-my-work">
+            <SectionHeader title={t('home.role.mine.title')} />
+            <ContentGrid min="14rem" gap={spacingTokens.md}>
+              <section data-testid="home-my-drafts" style={roleColumnStyle}>
+                <h3 style={roleHeadingStyle}>{t('home.role.drafts.title')}</h3>
+                {myWork.drafts.length === 0 ? (
+                  quiet(t('home.role.drafts.none'), 'home-my-drafts-none')
+                ) : (
+                  <ul style={listStyle}>
+                    {myWork.drafts.map((item) => (
+                      <li key={item.id} style={rowStyle}>
+                        <Link
+                          href={`/${locale}/content/compose?item=${item.id}`}
+                          style={roleRowLinkStyle}
+                        >
+                          {item.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <section data-testid="home-my-sent" style={roleColumnStyle}>
+                <h3 style={roleHeadingStyle}>{t('home.role.sent.title')}</h3>
+                {myWork.sent.length === 0 ? (
+                  quiet(t('home.role.sent.none'), 'home-my-sent-none')
+                ) : (
+                  <ul style={listStyle}>
+                    {myWork.sent.map((approval) => (
+                      <li key={approval.id} style={rowStyle}>
+                        <Link href={`/${locale}/approvals`} style={roleRowLinkStyle}>
+                          {approval.item?.title ?? '—'}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <section data-testid="home-my-scheduled" style={roleColumnStyle}>
+                <h3 style={roleHeadingStyle}>{t('home.role.scheduled.title')}</h3>
+                {myWork.scheduled.length === 0 ? (
+                  quiet(t('home.role.scheduled.none'), 'home-my-scheduled-none')
+                ) : (
+                  <ul style={listStyle}>
+                    {myWork.scheduled.map((slot) => (
+                      <li key={slot.id} style={rowStyle}>
+                        <Link
+                          href={`/${locale}/calendar?item=${slot.contentItemId}`}
+                          style={roleRowLinkStyle}
+                        >
+                          {slot.item?.title ?? '—'}
+                        </Link>
+                        <time dateTime={slot.scheduledAtUtc.toISOString()} style={roleMetaStyle}>
+                          {dayFormat.format(slot.scheduledAtUtc)}
+                        </time>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </ContentGrid>
+          </Card>
+        ) : null}
+
+        {sections.topPosts ? (
+          <Card testId="home-top-posts">
+            <SectionHeader
+              title={t('home.role.top.title')}
+              actions={
+                <Link
+                  href={`/${locale}/analytics`}
+                  style={buttonStyle('neutral', 'sm')}
+                  className={buttonClass('neutral')}
+                >
+                  {t('home.role.top.all')}
+                </Link>
+              }
+            />
+            {topPosts.length === 0 ? (
+              quiet(t('home.role.top.none'), 'home-top-posts-none')
+            ) : (
+              <ul style={listStyle}>
+                {topPosts.map((post) => (
+                  <li key={`${post.contentItemId}-${post.provider}`} style={rowStyle}>
+                    <span style={roleRowTextStyle}>{post.title ?? '—'}</span>
+                    <span style={roleMetaStyle}>
+                      {t('home.float.engagements').replace(
+                        '{count}',
+                        number.format(Number(post.value)),
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        ) : null}
+
+        {sections.feedback ? (
+          <Card testId="home-feedback">
+            <SectionHeader
+              title={t('home.role.feedback.title')}
+              description={t('home.role.feedback.body')}
+              actions={
+                <Link
+                  href={`/${locale}/calendar`}
+                  style={buttonStyle('neutral', 'sm')}
+                  className={buttonClass('neutral')}
+                  data-testid="home-feedback-calendar"
+                >
+                  {t('home.role.feedback.open')}
+                </Link>
+              }
+            />
+            {feedback.length === 0 ? (
+              quiet(t('home.role.feedback.none'), 'home-feedback-none')
+            ) : (
+              <ul style={listStyle}>
+                {feedback.map((slot) => (
+                  <li key={slot.id} style={rowStyle}>
+                    <Link href={`/${locale}/calendar`} style={roleRowLinkStyle}>
+                      {slot.item?.title ?? '—'}
+                    </Link>
+                    <time dateTime={slot.scheduledAtUtc.toISOString()} style={roleMetaStyle}>
+                      {dayFormat.format(slot.scheduledAtUtc)}
+                    </time>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        ) : null}
 
         {/* --------------------------------------- B — RECOMMENDED BY BRANDSPACE */}
         {maySeeInsights ? (
@@ -814,7 +1100,7 @@ export default async function OverviewPage({
                             >
                               {t(`home.notes.open.${entry.subjectType}` as MessageKey)}
                             </Link>
-                            {entry.status === 'OPEN' ? (
+                            {entry.status === 'OPEN' && mayManageNotes ? (
                               <form action={resolveNoteThreadAction}>
                                 <input type="hidden" name="locale" value={locale} />
                                 <input type="hidden" name="threadId" value={entry.threadId} />
@@ -999,6 +1285,24 @@ const rowStyle = {
   borderRadius: radiusTokens.md,
   background: colorTokens.surfaceSoft,
 } as const;
+
+const roleColumnStyle = { display: 'grid', gap: spacingTokens.xs, alignContent: 'start' } as const;
+
+const roleHeadingStyle = { margin: 0, ...typographyTokens.label } as const;
+
+const roleRowTextStyle = {
+  ...typographyTokens.bodySm,
+  flex: '1 1 12rem',
+  minInlineSize: 0,
+  overflowWrap: 'anywhere',
+} as const;
+
+const roleRowLinkStyle = {
+  ...roleRowTextStyle,
+  color: colorTokens.textPrimary,
+} as const;
+
+const roleMetaStyle = { ...typographyTokens.caption, color: colorTokens.textSecondary } as const;
 
 const actionsStyle = {
   display: 'flex',

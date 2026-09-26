@@ -13,6 +13,10 @@ import { RouteState } from '../../components/route-state';
  * member's role may not open all answer `notFound()`, and all of them render
  * THIS, identically — so the page cannot tell one from another (CLAUDE.md
  * §2.1). It says so in the reader's language and offers Home.
+ *
+ * The one exception is a page on the known navigation list, which every member
+ * can see listed: it answers "No access to this page" instead (D-322, Q5 —
+ * `NoAccessPage`). Records inside those pages still come here.
  */
 export default function NotFound() {
   const params = useParams<{ locale?: string }>();

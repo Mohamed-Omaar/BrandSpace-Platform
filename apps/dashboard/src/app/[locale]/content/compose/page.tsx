@@ -2,9 +2,15 @@ import type React from 'react';
 import { notFound } from 'next/navigation';
 import { CONTENT_TOOLS, READ_ONLY_CONTENT_STATUSES } from '@brandspace/content';
 import { CREATIVE_FORMATS } from '@brandspace/creative';
-import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
+import {
+  brandIdQueryFilter,
+  brandScopeFilter,
+  maySpendCredits,
+  systemClock,
+} from '@brandspace/shared';
 import '@brandspace/ui/content-studio.css';
-import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
+import { NoAccessPage } from '../../../../components/no-access-page';
 import { decidePreferenceAction } from '../../overview/actions';
 import { brandContextFor, defaultBrandFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
@@ -80,7 +86,9 @@ export default async function ComposePage({
   const { locale } = await params;
   const query = await searchParams;
   const translate = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'content.read');
+  const access = await requireWorkspacePage(locale, '/content/compose');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const single = (key: string): string | undefined => {
     const value = query[key];
@@ -150,7 +158,12 @@ export default async function ComposePage({
          * list stays empty.
          */
         const options =
-          composingBrandId === null || !workspace.permissionKeys.includes('campaigns.manage')
+          // Q21 — a new post may be filed by anyone who may create it.
+          composingBrandId === null ||
+          !(
+            workspace.permissionKeys.includes('content.create') ||
+            workspace.permissionKeys.includes('campaigns.manage')
+          )
             ? []
             : await services.campaigns().list({
                 brandId: composingBrandId,
@@ -239,8 +252,40 @@ export default async function ComposePage({
     ? await inContentStudio(workspace.workspaceId, async (services) => {
         const approvals = await services.approvals();
         const brandPolicy = await approvals.policyForBrand(draft.brandId);
+        /*
+         * Q10 — WHO MAY BE ASKED, default first: the same ordered list the
+         * service assigns from, without the submitter OR the author (D-122
+         * bars both from deciding), so "Automatic" names exactly the person
+         * `submit()` will assign.
+         */
+        const reviewerIds =
+          workspace.permissionKeys.includes('content.submit') &&
+          (draft.status === 'DRAFT' || draft.status === 'CHANGES_REQUESTED')
+            ? await approvals.eligibleReviewers({
+                brandId: draft.brandId,
+                excludeUserIds: [customer.userId, draft.createdByUserId ?? null],
+              })
+            : [];
+        const reviewerRows =
+          reviewerIds.length > 0
+            ? await services.db.membership.findMany({
+                where: { userId: { in: reviewerIds } },
+                select: { userId: true, user: { select: { name: true, email: true } } },
+              })
+            : [];
+        const reviewerName = new Map(
+          reviewerRows.map((row) => [row.userId, row.user.name ?? row.user.email] as const),
+        );
+        const reviewers = reviewerIds.map((userId) => ({
+          userId,
+          name: reviewerName.get(userId) ?? userId,
+        }));
         if (draft.status !== 'CHANGES_REQUESTED') {
-          return { requiresApproval: brandPolicy.requireApprovalBeforeScheduling, changes: null };
+          return {
+            requiresApproval: brandPolicy.requireApprovalBeforeScheduling,
+            reviewers,
+            changes: null,
+          };
         }
         const last = await services.db.approval.findFirst({
           where: { contentItemId: draft.id, status: 'CHANGES_REQUESTED' },
@@ -248,7 +293,11 @@ export default async function ComposePage({
           select: { decisionNote: true, decidedByUserId: true, decidedAt: true },
         });
         if (!last) {
-          return { requiresApproval: brandPolicy.requireApprovalBeforeScheduling, changes: null };
+          return {
+            requiresApproval: brandPolicy.requireApprovalBeforeScheduling,
+            reviewers,
+            changes: null,
+          };
         }
         const [reviewer, threads] = await Promise.all([
           last.decidedByUserId
@@ -274,6 +323,7 @@ export default async function ComposePage({
         ]);
         return {
           requiresApproval: brandPolicy.requireApprovalBeforeScheduling,
+          reviewers,
           changes: {
             note: last.decisionNote,
             reviewer: reviewer ? (reviewer.user.name ?? reviewer.user.email) : null,
@@ -745,7 +795,8 @@ export default async function ComposePage({
         campaigns={campaigns}
         mediaOptions={allMedia}
         carriedMedia={carried}
-        tools={CONTENT_TOOLS}
+        // Q18 — the AI edits spend credits, so without `copilot.use` none is offered.
+        tools={maySpendCredits(workspace.permissionKeys, 'content.edit') ? CONTENT_TOOLS : []}
         now={now.getTime()}
         review={reviewFacts}
         mode={mode === 'write' ? 'write' : 'ai'}
@@ -768,16 +819,27 @@ export default async function ComposePage({
           edit: workspace.permissionKeys.includes('content.edit') && !composerDraft?.readOnly,
           submit: workspace.permissionKeys.includes('content.submit'),
           archive: workspace.permissionKeys.includes('content.archive'),
-          manageCampaigns: workspace.permissionKeys.includes('campaigns.manage'),
+          // F1 — a published post's campaign is read-only like its words.
+          manageCampaigns:
+            workspace.permissionKeys.includes('campaigns.manage') && !composerDraft?.readOnly,
+          // Q21 (D-318) — attaching a campaign to a post that has none is part
+          // of making it: `content.create` is enough. Moving or removing one
+          // stays `manageCampaigns`.
+          attachCampaign:
+            (workspace.permissionKeys.includes('content.create') ||
+              workspace.permissionKeys.includes('campaigns.manage')) &&
+            !composerDraft?.readOnly,
           uploadMedia:
             workspace.permissionKeys.includes('assets.upload') && !composerDraft?.readOnly,
           schedule: workspace.permissionKeys.includes('content.schedule'),
           // The Creative route's own gate (`assets.upload`), and generation
           // needs content editing here because it changes this post.
           generateMedia:
-            workspace.permissionKeys.includes('assets.upload') &&
+            maySpendCredits(workspace.permissionKeys, 'assets.upload') &&
             workspace.permissionKeys.includes('content.edit') &&
             !composerDraft?.readOnly,
+          // Q18 — spending credits also needs `copilot.use`.
+          generate: maySpendCredits(workspace.permissionKeys, 'content.create'),
         }}
         creativeFormats={CREATIVE_FORMATS.map((format) => ({
           key: format.key,
@@ -906,6 +968,12 @@ const EDITOR_KEYS = [
   'editor.insufficientBody',
   'editor.insufficient.add',
   'editor.approvedWarning',
+  'editor.reviewer.label',
+  'content.archive.confirm',
+  'content.archive.confirmBody',
+  'editor.reviewer.auto',
+  'editor.scheduledWarning.scheduler',
+  'editor.scheduledWarning.unschedules',
   'editor.inReviewWarning',
   'editor.published.readOnly',
   'content.action.duplicate',

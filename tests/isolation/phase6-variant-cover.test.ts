@@ -115,6 +115,7 @@ const setCover = (variantId: string, coverAssetId: string | null, brandScope: st
       coverAssetId,
       actorUserId: fixtures.a.userId,
       actorBrandScope: brandScope,
+      actorPermissionKeys: ['content.edit', 'content.schedule'],
     }),
   );
 
@@ -151,6 +152,7 @@ describe('D-285 · the service', () => {
         body: 'Edited words.',
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
     expect(kept.coverAssetId).toBe(imageOfBrandOne);

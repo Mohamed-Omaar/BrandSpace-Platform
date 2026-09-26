@@ -806,6 +806,7 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
         actorUserId: fixtures.a.userId,
         planKey: null,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 
@@ -834,6 +835,7 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
         actorUserId: fixtures.a.userId,
         planKey: null,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
     expect(variant.validationState).toBe('VALID');
@@ -898,6 +900,7 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
         actorUserId: fixtures.a.userId,
         planKey: null,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
     expect(variant.body).toBe('Keep these exact words.');
@@ -923,6 +926,7 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
         actorUserId: fixtures.a.userId,
         planKey: null,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 
@@ -953,6 +957,7 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
         body: 'Rewritten by a person.',
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 
@@ -1236,6 +1241,7 @@ describe('a customer can write a post without a model (PHASE 2)', () => {
         body: 'Second words.',
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 
@@ -1450,6 +1456,48 @@ describe('a customer can write a post without a model (PHASE 2)', () => {
         }),
       ),
     ).rejects.toThrow();
+  });
+
+  it('files a new post under a live campaign, and never under an ARCHIVED one (Q21)', async () => {
+    const campaign = (status: 'ACTIVE' | 'ARCHIVED') =>
+      platform.campaign.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          name: `Manual ${status} ${key()}`,
+          objective: 'AWARENESS',
+          status,
+          deletedAt: status === 'ARCHIVED' ? new Date() : null,
+        },
+        select: { id: true },
+      });
+    const live = await campaign('ACTIVE');
+    const archived = await campaign('ARCHIVED');
+    const input = (campaignId: string) => ({
+      brandId: fixtures.a.brandId,
+      title: `Filed ${campaignId.slice(0, 6)}`,
+      locale: 'EN' as const,
+      variants: [{ platformKey: 'instagram', body: 'Filed words.' }],
+      actorUserId: fixtures.a.userId,
+      actorBrandScope: [],
+      expiresAt: null,
+      idempotencyKey: key(),
+      campaignId,
+    });
+
+    const filed = await libraryIn('a', (library) => library.createManualItem(input(live.id)));
+    expect(filed.item.campaignId).toBe(live.id);
+
+    // A crafted form carrying the archived id is a miss, and writes nothing.
+    const before = await platform.contentItem.count({
+      where: { workspaceId: fixtures.a.workspaceId },
+    });
+    await expect(
+      libraryIn('a', (library) => library.createManualItem(input(archived.id))),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(
+      await platform.contentItem.count({ where: { workspaceId: fixtures.a.workspaceId } }),
+    ).toBe(before);
   });
 
   it('refuses a platform the activated policy does not carry', async () => {

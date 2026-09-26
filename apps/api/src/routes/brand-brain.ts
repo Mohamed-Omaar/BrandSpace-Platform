@@ -12,6 +12,7 @@ import { CUSTOMER_REALM, CustomerAuthService } from '@brandspace/auth';
 import { getPrisma, withWorkspace } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import {
+  creditSpendingPermissions,
   brandInScope,
   createLogger,
   currentEnvironment,
@@ -155,7 +156,7 @@ function sessionTokenFrom(req: FastifyRequest): string | null {
 async function resolveCaller(
   req: FastifyRequest,
   reply: FastifyReply,
-  permission: string,
+  permission: string | readonly string[],
 ): Promise<{ userId: string; workspaceId: string; brandScope: readonly string[] } | null> {
   const token = sessionTokenFrom(req);
   if (!token) {
@@ -174,7 +175,10 @@ async function resolveCaller(
   // simply ignored — there is no field to name one.
   const workspaces = await auth.listWorkspaces(token).catch(() => null);
   const workspace = workspaces?.find((w) => w.workspaceId === customer.activeWorkspaceId);
-  if (!workspace || !workspace.permissionKeys.includes(permission)) {
+  // Q18 — a credit-spending route passes its feature key AND `copilot.use`;
+  // every key must be held, and a miss is the same 404 as any other.
+  const required = typeof permission === 'string' ? [permission] : permission;
+  if (!workspace || !required.every((key) => workspace.permissionKeys.includes(key))) {
     await reply.code(404).send({ error: { code: 'NOT_FOUND' } });
     return null;
   }
@@ -196,6 +200,7 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
     {
       scope: 'workspace',
       permission: CHAT_PERMISSION,
+      spendsCredits: true,
       // A chat turn spends credits, so a retry must never bill twice. The
       // client key is required by the schema, not optional here.
       idempotent: true,
@@ -204,7 +209,7 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const environment = currentEnvironment();
-      const caller = await resolveCaller(req, reply, CHAT_PERMISSION);
+      const caller = await resolveCaller(req, reply, creditSpendingPermissions(CHAT_PERMISSION));
       if (!caller) return reply;
 
       const parsed = chatMessageSchema.safeParse(req.body);

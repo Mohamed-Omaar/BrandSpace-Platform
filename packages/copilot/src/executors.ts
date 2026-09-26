@@ -416,6 +416,9 @@ const contentDraft: ToolExecutor = async (context, args) => {
       contentItemId: generation.item.id,
       campaignId: String(args['campaignId']),
       actor: { userId: context.authorization.userId, brandScope: context.authorization.brandScope },
+      // Q21 — attaching to the fresh draft needs `content.create`, which the
+      // `content.draft` tool already required.
+      actorPermissionKeys: context.authorization.permissionKeys,
     });
   }
 

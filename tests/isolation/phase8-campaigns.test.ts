@@ -191,6 +191,7 @@ describe('AC-26.3: content and campaign must be the same brand', () => {
         contentItemId: itemOfBrandOne,
         campaignId: campaignOfBrandOne,
         actor: { userId: fixtures.a.userId, brandScope: [] },
+        actorPermissionKeys: ['content.create', 'campaigns.manage'],
       }),
     );
     const row = await inA((db) =>
@@ -219,6 +220,7 @@ describe('AC-26.3: content and campaign must be the same brand', () => {
           contentItemId: itemOfBrandOne,
           campaignId: campaignOfBrandTwo,
           actor: { userId: fixtures.a.userId, brandScope: [] },
+          actorPermissionKeys: ['content.create', 'campaigns.manage'],
         }),
       ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -230,6 +232,7 @@ describe('AC-26.3: content and campaign must be the same brand', () => {
           contentItemId: itemOfBrandOne,
           campaignId: randomUUID(),
           actor: { userId: fixtures.a.userId, brandScope: [] },
+          actorPermissionKeys: ['content.create', 'campaigns.manage'],
         }),
       ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -242,6 +245,7 @@ describe('AC-26.3: content and campaign must be the same brand', () => {
           contentItemId: itemOfBrandOne,
           campaignId: foreignCampaign,
           actor: { userId: fixtures.a.userId, brandScope: [] },
+          actorPermissionKeys: ['content.create', 'campaigns.manage'],
         }),
       ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -254,6 +258,7 @@ describe('AC-26.3: content and campaign must be the same brand', () => {
           contentItemId: itemOfBrandTwo,
           campaignId: null,
           actor: { userId: fixtures.a.userId, brandScope: [brandOne] },
+          actorPermissionKeys: ['content.create', 'campaigns.manage'],
         }),
       ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -265,6 +270,7 @@ describe('AC-26.3: content and campaign must be the same brand', () => {
         contentItemId: itemOfBrandOne,
         campaignId: null,
         actor: { userId: fixtures.a.userId, brandScope: [] },
+        actorPermissionKeys: ['content.create', 'campaigns.manage'],
       }),
     );
     const row = await inA((db) =>
@@ -292,6 +298,7 @@ describe('AC-26.2: archiving is a soft delete that keeps the content', () => {
         contentItemId: itemId,
         campaignId,
         actor: { userId: fixtures.a.userId, brandScope: [] },
+        actorPermissionKeys: ['content.create', 'campaigns.manage'],
       }),
     );
 
@@ -450,6 +457,7 @@ describe('AN ARCHIVED CAMPAIGN DOES NOT SILENTLY LOSE ITS CONTENT (PHASE 2)', ()
         contentItemId: item.id,
         campaignId: campaign.id,
         actor: actor(),
+        actorPermissionKeys: ['content.create', 'campaigns.manage'],
       });
       await service.archive({ campaignId: campaign.id, actor: actor() });
       return { campaignId: campaign.id, itemId: item.id };
@@ -484,6 +492,7 @@ describe('AN ARCHIVED CAMPAIGN DOES NOT SILENTLY LOSE ITS CONTENT (PHASE 2)', ()
           contentItemId: itemId,
           campaignId,
           actor: actor(),
+          actorPermissionKeys: ['content.create', 'campaigns.manage'],
         }),
       ),
     ).resolves.toBeUndefined();
@@ -531,8 +540,76 @@ describe('AN ARCHIVED CAMPAIGN DOES NOT SILENTLY LOSE ITS CONTENT (PHASE 2)', ()
           contentItemId: otherItem,
           campaignId,
           actor: actor(),
+          actorPermissionKeys: ['content.create', 'campaigns.manage'],
         }),
       ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('Q21 — attaching needs content.create; moving or removing needs campaigns.manage', () => {
+  const makeLoose = () => makeItem(fixtures.a.workspaceId, inA, brandOne, `Q21 ${randomUUID()}`);
+  const set = (itemId: string, campaignId: string | null, keys: readonly string[]) =>
+    inA((db) =>
+      serviceA(db).setContentCampaign({
+        contentItemId: itemId,
+        campaignId,
+        actor: { userId: fixtures.a.userId, brandScope: [] },
+        actorPermissionKeys: keys,
+      }),
+    );
+  const campaignOf = async (itemId: string) =>
+    (
+      await inA((db) =>
+        db.contentItem.findFirstOrThrow({ where: { id: itemId }, select: { campaignId: true } }),
+      )
+    ).campaignId;
+
+  let secondCampaign: string;
+  beforeAll(async () => {
+    secondCampaign = await makeCampaign(fixtures.a.workspaceId, inA, brandOne, 'Alpha autumn');
+  });
+
+  it('a creator may attach a campaign to a post that has none', async () => {
+    const item = await makeLoose();
+    await set(item, campaignOfBrandOne, ['content.read', 'content.create']);
+    expect(await campaignOf(item)).toBe(campaignOfBrandOne);
+  });
+
+  it('a creator may NOT move a post to another campaign, or remove it', async () => {
+    const item = await makeLoose();
+    await set(item, campaignOfBrandOne, ['content.create']);
+    for (const target of [secondCampaign, null]) {
+      await expect(set(item, target, ['content.read', 'content.create'])).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+        publicDetails: { permission: 'campaigns.manage' },
+      });
+    }
+    expect(await campaignOf(item)).toBe(campaignOfBrandOne);
+  });
+
+  it('a campaign manager may attach, move and remove', async () => {
+    const item = await makeLoose();
+    await set(item, campaignOfBrandOne, ['campaigns.manage']);
+    await set(item, secondCampaign, ['campaigns.manage']);
+    expect(await campaignOf(item)).toBe(secondCampaign);
+    await set(item, null, ['campaigns.manage']);
+    expect(await campaignOf(item)).toBeNull();
+  });
+
+  it('a member with neither may not even attach', async () => {
+    const item = await makeLoose();
+    await expect(set(item, campaignOfBrandOne, ['content.read'])).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      publicDetails: { permission: 'content.create' },
+    });
+    expect(await campaignOf(item)).toBeNull();
+  });
+
+  it('re-sending the same campaign asks nothing of anyone', async () => {
+    const item = await makeLoose();
+    await set(item, campaignOfBrandOne, ['content.create']);
+    await set(item, campaignOfBrandOne, []);
+    expect(await campaignOf(item)).toBe(campaignOfBrandOne);
   });
 });

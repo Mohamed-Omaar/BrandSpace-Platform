@@ -19,9 +19,10 @@ import {
   type ChartLabels,
   type ChartPoint,
 } from '@brandspace/ui';
-import { systemClock } from '@brandspace/shared';
+import { systemClock, maySpendCredits } from '@brandspace/shared';
 import { detectAnomalies, type MetricAbsenceReason } from '@brandspace/analytics';
-import { requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { evidenceRefs, statusMessage, translator, type MessageKey } from '../../../i18n/messages';
@@ -80,14 +81,17 @@ export default async function AnalyticsPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const session = await requireWorkspace(locale, 'analytics.read');
+  const access = await requireWorkspacePage(locale, '/analytics');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const session = access.session;
   const { workspace } = session;
 
   const direction = locale === 'ar' ? 'rtl' : 'ltr';
   const days = parseRange(query['range']);
   const compare = query['compare'] !== '0';
   const mayExport = workspace.permissionKeys.includes('analytics.export');
-  const mayExplain = workspace.permissionKeys.includes('analytics.explain');
+  // Q18 — explaining a period spends credits, so it also needs `copilot.use`.
+  const mayExplain = maySpendCredits(workspace.permissionKeys, 'analytics.explain');
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
 

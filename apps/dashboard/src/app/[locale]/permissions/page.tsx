@@ -193,6 +193,15 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
                         <span data-testid={`permission-state-${p.key}`}>
                           {held ? t('common.enabled') : t('common.disabled')}
                         </span>
+                        {/* E6/Q4 — no per-member override exists: every row is the
+                          role's, and says so rather than looking editable. */}
+                        <br />
+                        <span
+                          data-testid={`permission-source-${p.key}`}
+                          style={{ color: colorTokens.textSecondary, ...typographyTokens.label }}
+                        >
+                          {t('perms.fromRole')}
+                        </span>
                       </td>
                     </tr>
                   );

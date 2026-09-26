@@ -59,7 +59,8 @@ export const TOPBAR_CREATE_FLOWS: readonly {
   {
     key: 'creative',
     path: '/creative',
-    requires: ['assets.upload'],
+    // Q18 — the Studio spends credits, so it also needs `copilot.use`.
+    requires: ['assets.upload', 'copilot.use'],
     labelKey: 'topbar.createCreative',
   },
   // `?upload=1` opens the Asset Library's own upload dialog.

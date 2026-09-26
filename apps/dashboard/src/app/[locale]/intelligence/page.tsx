@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { maySpendCredits } from '@brandspace/shared';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
@@ -13,7 +14,8 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import {
@@ -85,12 +87,16 @@ export default async function IntelligencePage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const session = await requireWorkspace(locale, 'strategy.read');
+  const access = await requireWorkspacePage(locale, '/intelligence');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const session = access.session;
   const { workspace } = session;
 
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const mayManage = workspace.permissionKeys.includes('strategy.manage');
+  // Q18 — a content-gap analysis spends credits; accepting a finding does not.
+  const mayAnalyse = maySpendCredits(workspace.permissionKeys, 'strategy.manage');
   const mayReview = workspace.permissionKeys.includes('brand_brain.review');
   const mayReadBrain = workspace.permissionKeys.includes('brand_brain.read');
   /*
@@ -288,7 +294,7 @@ export default async function IntelligencePage({
           />
         ) : (
           <>
-            {mayManage ? (
+            {mayAnalyse ? (
               <Card title={t('intelligence.analyse')}>
                 <form action={analyseContentGapsAction} data-testid="content-gap-form">
                   <input type="hidden" name="locale" value={locale} />

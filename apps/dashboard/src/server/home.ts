@@ -162,3 +162,45 @@ export function shouldInviteSetup(input: {
   if (!input.hasBrand) return true;
   return input.sources === 0 && input.connections === 0 && !input.hasGoal;
 }
+
+/** How many rows each role section on Home lists at most (A6). */
+export const HOME_ROLE_ROWS = 5;
+
+/**
+ * THE HOME SECTIONS A MEMBER'S ROLE CALLS FOR (A6, E7, Q12).
+ *
+ * Chosen from PERMISSIONS, never from the role's name, so a role is its grant
+ * set here as everywhere else, and a custom role gets the sections its keys
+ * earn. Each section is a question the member actually has:
+ *
+ *   reviewQueue  "what is waiting for my review?"   `content.approve`
+ *   myWork       "where are my drafts, what did I    `content.create` or
+ *                 send, what of mine is scheduled?"  `content.submit`
+ *   topPosts     "what is working?"                  `analytics.read`
+ *   feedback     "what may I comment on?" — a member who reads content and
+ *                can neither create, submit nor approve it: the read-only
+ *                Viewer once it holds `content.read`. It links to the
+ *                calendar (E7).
+ *
+ * A section is a view of rows the member could already open; nothing here
+ * grants anything.
+ */
+export interface HomeSections {
+  readonly reviewQueue: boolean;
+  readonly myWork: boolean;
+  readonly topPosts: boolean;
+  readonly feedback: boolean;
+}
+
+export function homeSectionsFor(permissionKeys: readonly string[]): HomeSections {
+  const may = (key: string) => permissionKeys.includes(key);
+  const reads = may('content.read');
+  const authors = may('content.create') || may('content.submit');
+  const approves = may('content.approve');
+  return {
+    reviewQueue: reads && approves,
+    myWork: reads && authors,
+    topPosts: may('analytics.read'),
+    feedback: reads && !authors && !approves,
+  };
+}

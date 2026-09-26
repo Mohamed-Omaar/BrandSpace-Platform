@@ -4,11 +4,17 @@ import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
-import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
 import { readRetentionFacts, resolveContentExpiry } from '@brandspace/content';
+import { NOTE_MANAGE_PERMISSION } from '@brandspace/collaboration';
 import { systemClock } from '@brandspace/shared';
 import { parseContentType } from './content-types';
-import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
+import {
+  requireWorkspace,
+  type WorkspaceSession,
+  requireWorkspaceAction,
+} from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
 import { inNotes } from '../../../server/notes-context';
 import { resolveContentLanguage } from '../../../server/content-language';
@@ -54,7 +60,7 @@ function failure(
   // side — a draft caption is routinely the most commercially sensitive string
   // in the record (docs/SECURITY.md §11).
   log.warn('content action failed', { correlationId, action, ...internalErrorFields(error) });
-  return pageUrl(locale, path, { ...extra, error: toPublicErrorCode(error), ref: correlationId });
+  return pageUrl(locale, path, { ...extra, error: actionErrorCode(error), ref: correlationId });
 }
 
 function actorOf(session: WorkspaceSession) {
@@ -82,23 +88,19 @@ function approvalActorOf(session: WorkspaceSession) {
 }
 
 /**
- * THE PERMISSION THAT LETS CONTENT BE FILED UNDER A CAMPAIGN.
+ * WHO MAY FILE A POST UNDER A CAMPAIGN (Q21, D-318; supersedes D-232 here).
  *
- * `setContentCampaignAction` has required `campaigns.manage` since Phase 8, so
- * that is the EXISTING contract for associating a content item with a campaign
- * and manual creation aligns with it rather than inventing a second rule. The
- * alternative reading — that `campaigns.read` should be enough, because filing
- * a post does not edit the campaign — is a real product question, and changing
- * it here would silently widen RBAC for a path nobody reviewed: `campaigns.read`
- * is held by three more roles than `campaigns.manage`, so it would hand
- * `content_creator`, `approver` and `analyst` an authority the screen that
- * already does this refuses them.
- *
- * A NAMED CONSTANT, so the UI gate, the create path and the option list cannot
- * drift apart — the defect this correction exists for was exactly that kind of
- * gap between a control and its server check.
+ * ATTACHING a campaign to a post that has none is part of making the post, so
+ * `content.create` is enough (`campaigns.manage` too). MOVING a post to another
+ * campaign, or REMOVING it, reorganises a campaign and needs `campaigns.manage`
+ * — decided inside `CampaignService.setContentCampaign`, which reads the post's
+ * current campaign. This helper only says whether ANY campaign choice may be
+ * offered for a new or campaign-less post: the option list, a new draft and a
+ * copy.
  */
-const CAMPAIGN_ASSOCIATION_PERMISSION = 'campaigns.manage';
+function mayAttachCampaign(permissionKeys: readonly string[]): boolean {
+  return permissionKeys.includes('content.create') || permissionKeys.includes('campaigns.manage');
+}
 
 /**
  * The campaigns a NEW post could be filed under, for one brand.
@@ -128,7 +130,9 @@ export async function listCampaignOptionsAction(
   brandId: string,
 ): Promise<readonly { id: string; name: string }[]> {
   if (brandId.trim() === '') return [];
-  const session = await requireWorkspace(locale, CAMPAIGN_ASSOCIATION_PERMISSION);
+  const session = await requireWorkspace(locale);
+  // Q21 — the same authority that lets the option be used; otherwise a miss.
+  if (!mayAttachCampaign(session.workspace.permissionKeys)) notFound();
   const campaigns = await inContentStudio(session.workspace.workspaceId, async (services) =>
     services.campaigns().list({
       brandId,
@@ -164,7 +168,7 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.create');
+    const session = await requireWorkspaceAction(locale, 'content.create');
     const brandId = String(formData.get('brandId') ?? '');
     const title = String(formData.get('title') ?? '');
     const explicitLanguage = formData.get('contentLocale');
@@ -183,35 +187,11 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
     const platformKeys = formData.getAll('platformKeys').map((value) => String(value));
     const campaignId = String(formData.get('campaignId') ?? '') || null;
     /*
-     * FILING A NEW POST UNDER A CAMPAIGN NEEDS THE SAME AUTHORITY AS REFILING
-     * AN EXISTING ONE.
-     *
-     * `content.create` alone reached this action, and it accepted a
-     * `campaignId` — so a member who may write a draft but not manage campaigns
-     * could establish an association that `setContentCampaignAction` would then
-     * refuse to CHANGE. A right to create a link that cannot be edited is a
-     * worse grant than either half of it, and it was reachable by a crafted
-     * POST whether or not the selector was on the screen.
-     *
-     * CHECKED ONLY WHEN THERE IS A CAMPAIGN. A member without the permission
-     * keeps the whole authoring path; they simply cannot file the post, which
-     * is exactly the authority they hold elsewhere.
-     *
-     * SHAPED LIKE A MISS, AND THROWN AS A TYPED ERROR rather than `notFound()`.
-     * An unauthorized association must not announce that a campaign by that id
-     * exists, which is why the code is `NOT_FOUND` — the same refusal
-     * `#resolveCampaign` gives for a campaign in another brand. It is thrown as
-     * an `AppError` because this action's `catch` maps a typed error to a public
-     * code the screen can name; `notFound()` throws a framework control-flow
-     * error that the same `catch` would swallow into "something went wrong",
-     * which tells the customer nothing and tells a reader of the log less.
+     * Q21 (D-318) — filing a NEW post under a campaign is part of creating it,
+     * so the `content.create` this action already requires is the authority.
+     * The campaign itself is still checked by the library: same brand, in the
+     * member's scope, or a miss.
      */
-    if (
-      campaignId !== null &&
-      !session.workspace.permissionKeys.includes(CAMPAIGN_ASSOCIATION_PERMISSION)
-    ) {
-      throw new AppError('NOT_FOUND', 'Campaign not found.');
-    }
     const hashtags = String(formData.get('hashtags') ?? '')
       .split(/[\s,]+/)
       .map((tag) => tag.replace(/^#/, '').trim())
@@ -282,7 +262,7 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.edit');
+    const session = await requireWorkspaceAction(locale, 'content.edit');
     const variantId = String(formData.get('variantId') ?? '');
     const body = String(formData.get('body') ?? '');
     const hashtags = String(formData.get('hashtags') ?? '')
@@ -327,6 +307,8 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
         ...(coverAssetId === undefined ? {} : { coverAssetId }),
         ...(assetIds === undefined ? {} : { assetIds }),
         ...actorOf(session),
+        // Q8 — taken from the session, never the form.
+        actorPermissionKeys: session.workspace.permissionKeys,
       }),
     );
     destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SAVED' });
@@ -356,9 +338,17 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
 export async function setContentCampaignAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
+  // B8 — the Posts menu comes back to the library (a closed set).
+  const fromLibrary = formData.get('returnTo') === '/content';
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'campaigns.manage');
+    /*
+     * Q21 (D-318) — membership in the content surfaces at the door; WHICH
+     * permission the change needs (attach: `content.create`; move or remove:
+     * `campaigns.manage`) depends on the post's current campaign, so the
+     * service decides it, from the session's keys.
+     */
+    const session = await requireWorkspaceAction(locale, 'content.read');
     const raw = formData.get('campaignId');
     if (raw === null) notFound();
     const campaignId = String(raw).trim();
@@ -371,16 +361,21 @@ export async function setContentCampaignAction(formData: FormData): Promise<void
           userId: session.customer.userId,
           brandScope: session.workspace.brandScope,
         },
+        actorPermissionKeys: session.workspace.permissionKeys,
       }),
     );
-    destination = pageUrl(locale, '/compose', {
-      item: itemId,
-      ok: 'CAMPAIGN_LINKED',
-      ...attachParam(formData),
-    });
+    destination = fromLibrary
+      ? pageUrl(locale, '', { ok: 'CAMPAIGN_LINKED' })
+      : pageUrl(locale, '/compose', {
+          item: itemId,
+          ok: 'CAMPAIGN_LINKED',
+          ...attachParam(formData),
+        });
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
-    destination = failure(locale, error, 'setContentCampaign', '/compose', { item: itemId });
+    destination = fromLibrary
+      ? failure(locale, error, 'setContentCampaign', '')
+      : failure(locale, error, 'setContentCampaign', '/compose', { item: itemId });
   }
   revalidatePath(`/${locale}/content`);
   redirect(destination);
@@ -411,7 +406,7 @@ export async function uploadComposerMediaAction(formData: FormData): Promise<voi
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'assets.upload');
+    const session = await requireWorkspaceAction(locale, 'assets.upload');
     const file = formData.get('file');
     if (!(file instanceof File) || file.size === 0)
       throw new AppError('VALIDATION_FAILED', 'No file.');
@@ -479,16 +474,26 @@ export async function transitionItemAction(formData: FormData): Promise<void> {
   const itemId = String(formData.get('itemId') ?? '');
   const raw = String(formData.get('to') ?? '');
   const to = raw === 'ARCHIVED' || raw === 'DRAFT' ? raw : null;
+  // B8 — the Posts menu comes back to the library (a closed set).
+  const fromLibrary = formData.get('returnTo') === '/content';
 
   let destination: string;
   try {
     if (!to) throw new Error('unsupported transition');
+    /*
+     * B8 — ARCHIVING IS TWO STEPS: the screen asks, then this confirms. The
+     * second step is the `intent` its confirmation carries; a single-click
+     * form (or a crafted POST) without it archives nothing.
+     */
+    if (to === 'ARCHIVED' && formData.get('intent') !== 'ARCHIVE') {
+      throw new AppError('VALIDATION_FAILED', 'Archiving needs a confirmation.');
+    }
     // B-7 — archiving always needs `content.archive`. A move back to DRAFT may
     // be a restore (`content.archive`) or an editorial step (`content.edit`),
     // which only the item's own status can tell, so the service decides.
     const session =
       to === 'ARCHIVED'
-        ? await requireWorkspace(locale, 'content.archive')
+        ? await requireWorkspaceAction(locale, 'content.archive')
         : await requireWorkspace(locale);
 
     await inContentStudio(session.workspace.workspaceId, async ({ library }) =>
@@ -500,11 +505,13 @@ export async function transitionItemAction(formData: FormData): Promise<void> {
       }),
     );
     destination =
-      to === 'ARCHIVED'
+      to === 'ARCHIVED' || fromLibrary
         ? pageUrl(locale, '', { ok: 'SAVED' })
         : pageUrl(locale, '/compose', { item: itemId, ok: 'SAVED' });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'transitionItem', '/compose', { item: itemId });
+    destination = fromLibrary
+      ? failure(locale, error, 'transitionItem', '')
+      : failure(locale, error, 'transitionItem', '/compose', { item: itemId });
   }
   revalidatePath(`/${locale}/content`);
   redirect(destination);
@@ -537,7 +544,7 @@ export async function submitForReviewAction(formData: FormData): Promise<void> {
 
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.submit');
+    const session = await requireWorkspaceAction(locale, 'content.submit');
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).submit({
         itemId,
@@ -595,27 +602,48 @@ export async function resubmitAfterChangesAction(formData: FormData): Promise<vo
     .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
     .slice(0, 10);
 
+  const assignedTo = String(formData.get('assignedToUserId') ?? '');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.submit');
-    try {
-      await inNotes(locale, async ({ service, actor }) => {
-        for (const threadId of threadIds) {
-          if (reply !== '') await service.reply({ actor, threadId, body: reply });
-          await service.resolve({ actor, threadId });
-        }
-      });
-    } catch (noteFailure: unknown) {
-      log.warn('changes-requested thread could not be closed', {
-        itemId,
-        ...internalErrorFields(noteFailure),
-      });
+    const session = await requireWorkspaceAction(locale, 'content.submit');
+    /*
+     * THE REPLY AND THE RESOLVE ARE SEPARATE STEPS, EACH ITS OWN TRANSACTION.
+     *
+     * They shared one: a resolve the author may not perform (Q12 —
+     * `notes.manage`) threw, and rolled back the author's reply with it,
+     * silently. The reply is the author's answer and always goes in; the
+     * thread is closed only by somebody who may close it. Otherwise it stays
+     * open with the answer in it, for the reviewer to close. A step that fails
+     * is logged and does not stop the resubmission.
+     */
+    const mayCloseThreads = session.workspace.permissionKeys.includes(NOTE_MANAGE_PERMISSION);
+    const noteStep = async (step: string, run: Parameters<typeof inNotes>[1]) => {
+      try {
+        await inNotes(locale, run);
+      } catch (noteFailure: unknown) {
+        log.warn(`changes-requested thread: ${step} failed`, {
+          itemId,
+          ...internalErrorFields(noteFailure),
+        });
+      }
+    };
+    for (const threadId of threadIds) {
+      if (reply !== '') {
+        await noteStep('reply', ({ service, actor }) =>
+          service.reply({ actor, threadId, body: reply }),
+        );
+      }
+      if (mayCloseThreads) {
+        await noteStep('resolve', ({ service, actor }) => service.resolve({ actor, threadId }));
+      }
     }
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).submit({
         itemId,
         actor: approvalActorOf(session),
-        assignedToUserId: null,
+        // Q10 — the reviewer chosen in the form, or the default reviewer when
+        // "Automatic" (empty) is left selected. The service validates it.
+        assignedToUserId: assignedTo.length > 0 ? assignedTo : null,
         note: reply,
       }),
     );
@@ -640,7 +668,7 @@ export async function cancelReviewAction(formData: FormData): Promise<void> {
     // `content.submit` is what it takes to OPEN a review, so it is what it takes
     // to withdraw one. The service additionally requires the caller to be the
     // requester or somebody who could have decided it.
-    const session = await requireWorkspace(locale, 'content.submit');
+    const session = await requireWorkspaceAction(locale, 'content.submit');
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).cancel({ approvalId, actor: approvalActorOf(session) }),
     );
@@ -667,7 +695,7 @@ export async function saveRetentionAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'workspace.update');
+    const session = await requireWorkspaceAction(locale, 'workspace.update');
     const raw = String(formData.get('retentionDays') ?? '').trim();
     const days = raw === '' ? null : Number.parseInt(raw, 10);
     if (days !== null && (!Number.isInteger(days) || days < 1)) {
@@ -709,7 +737,7 @@ export async function saveRetentionAction(formData: FormData): Promise<void> {
       action: 'saveRetention',
       ...internalErrorFields(error),
     });
-    destination = `/${locale}/settings?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+    destination = `/${locale}/settings?error=${actionErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/settings`);
   redirect(destination);
@@ -734,8 +762,9 @@ export async function duplicateContentAction(formData: FormData): Promise<void> 
   const token = String(formData.get('token') ?? '').slice(0, 120) || randomUUID();
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.create');
-    const mayFile = session.workspace.permissionKeys.includes(CAMPAIGN_ASSOCIATION_PERMISSION);
+    const session = await requireWorkspaceAction(locale, 'content.create');
+    // Q21 — a copy is a new post; filing it where the original was is attaching.
+    const mayFile = mayAttachCampaign(session.workspace.permissionKeys);
     const copyId = await inContentStudio(session.workspace.workspaceId, async (services) => {
       const [library, policy] = await Promise.all([services.library(), services.policy()]);
       const source = await library.getItem(itemId, session.workspace.brandScope);

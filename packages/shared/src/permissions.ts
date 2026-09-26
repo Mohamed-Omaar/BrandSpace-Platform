@@ -62,10 +62,12 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('brand.read', 'workspace', 'View brands'),
   def('brand.manage', 'workspace', 'Create and edit brands'),
   def('brand_brain.read', 'workspace', 'View Brand Brain knowledge and sources'),
-  def('brand_brain.edit', 'workspace', 'Add and edit brand knowledge'),
+  // E3 — archiving a fact is an edit of the brand's knowledge, so it moved here
+  // from `brand_brain.delete`, which keeps removing sources.
+  def('brand_brain.edit', 'workspace', 'Add, edit and archive brand knowledge'),
   def('brand_brain.upload', 'workspace', 'Upload source documents'),
   def('brand_brain.review', 'workspace', 'Approve or reject extracted knowledge'),
-  def('brand_brain.delete', 'workspace', 'Archive brand knowledge and remove sources'),
+  def('brand_brain.delete', 'workspace', 'Remove brand sources'),
   def('brand_brain.chat', 'workspace', 'Ask Brand Brain questions'),
 
   /*
@@ -155,6 +157,15 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('content.archive', 'workspace', 'Archive a content draft'),
   def('content.schedule', 'workspace', 'Place content on the calendar and move it'),
   def('content.delete', 'workspace', 'Delete content permanently'),
+  /*
+   * Q12 — running a conversation, not just taking part in it. Starting a note
+   * thread and replying to an open one need `content.read` (the Notes
+   * permission); resolving, reopening, assigning, setting a due date or
+   * importance, and replying to a resolved thread need this as well. Granted
+   * to every role that held `content.read` when it was introduced, so no one
+   * lost anything (migration `…_notes_manage_permission`).
+   */
+  def('notes.manage', 'workspace', 'Resolve, assign and triage note threads'),
 
   /*
    * Phase 5B-3 — Approvals, Activity Log, Notifications.

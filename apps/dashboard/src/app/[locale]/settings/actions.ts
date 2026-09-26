@@ -4,8 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { getPrisma, writeAuditEvent, withWorkspace } from '@brandspace/database';
-import { AppError, createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
-import { requireWorkspace } from '../../../server/customer-context';
+import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
+import { requireWorkspaceAction } from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 
 const log = createLogger({ context: { component: 'dashboard.settings' } });
 
@@ -24,7 +25,7 @@ export async function saveSettingsAction(formData: FormData): Promise<void> {
   let destination: string;
 
   try {
-    const session = await requireWorkspace(locale, 'workspace.update');
+    const session = await requireWorkspaceAction(locale, 'workspace.update');
     const name = String(formData.get('name') ?? '').trim();
     if (name.length < 2) throw new AppError('VALIDATION_FAILED', 'A workspace name is required.');
 
@@ -63,7 +64,7 @@ export async function saveSettingsAction(formData: FormData): Promise<void> {
   } catch (error: unknown) {
     const correlationId = randomUUID();
     log.warn('settings save failed', { correlationId, ...internalErrorFields(error) });
-    destination = `/${locale}/settings?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+    destination = `/${locale}/settings?error=${actionErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/settings`);
   redirect(destination);

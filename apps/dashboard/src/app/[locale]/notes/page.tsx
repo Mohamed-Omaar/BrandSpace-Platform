@@ -10,9 +10,10 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { NOTE_PERMISSION, NotesService, type NoteInboxEntry } from '@brandspace/collaboration';
+import { NotesService, type NoteInboxEntry } from '@brandspace/collaboration';
 import { systemClock } from '@brandspace/shared';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { mentionableMembers } from '../../../server/notes-context';
 import { noteThreadHref } from '../../../server/note-links';
@@ -49,7 +50,9 @@ export default async function NotesPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, NOTE_PERMISSION);
+  const access = await requireWorkspacePage(locale, '/notes');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const brandContext = await brandContextFor(
     workspace,

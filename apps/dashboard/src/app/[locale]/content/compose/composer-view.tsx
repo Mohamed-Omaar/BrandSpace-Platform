@@ -69,7 +69,12 @@ export interface ComposerVariant {
 export interface ComposerDraft {
   readonly id: string;
   readonly title: string;
-  readonly status: 'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'ARCHIVED';
+  /*
+   * Q8 — SCHEDULED is here because the composer opens a scheduled post and
+   * says what saving it will do; the read-only statuses arrive as `readOnly`.
+   */
+  readonly status:
+    'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'SCHEDULED' | 'ARCHIVED';
   /** Phase 5B-3 — the open review, when there is one. */
   readonly openApprovalId: string | null;
   readonly brandId: string;
@@ -139,11 +144,19 @@ export interface ComposerViewProps {
     submit: boolean;
     archive: boolean;
     manageCampaigns: boolean;
+    /** Q21 — may file a post that has no campaign (`content.create` or `campaigns.manage`). */
+    attachCampaign?: boolean;
     uploadMedia: boolean;
     /** D-288 — may put this post on the calendar (`content.schedule`). */
     schedule?: boolean;
     /** Creative generation from the media drawer (`assets.upload`, AI credits). */
     generateMedia?: boolean;
+    /**
+     * Q18 — may spend credits writing a post (`content.create` AND
+     * `copilot.use`). Without it the estimate and generate buttons are not
+     * offered; writing it yourself still is.
+     */
+    generate?: boolean;
   };
   readonly tools: readonly string[];
   /** PHASE 6 FINAL (D-285) — the Creative Studio's sizes, for the media drawer. */
@@ -154,6 +167,11 @@ export interface ComposerViewProps {
    */
   readonly review?: {
     readonly requiresApproval: boolean;
+    /**
+     * Q10 — who may be asked to review, default first (members before the
+     * owner, never the author). Empty when the reader may not send for review.
+     */
+    readonly reviewers?: readonly { readonly userId: string; readonly name: string }[];
     readonly changes: {
       readonly note: string | null;
       readonly reviewer: string | null;
@@ -351,7 +369,7 @@ export function ComposerView({
   useEffect(() => {
     // Only the pre-draft form owns this; an existing draft has its own campaign
     // control, with its own action and its own list.
-    if (draft !== null || !can.manageCampaigns) return;
+    if (draft !== null || !can.attachCampaign) return;
     if (brandId === '') {
       setCampaignId('');
       setCampaignOptions([]);
@@ -382,7 +400,7 @@ export function ComposerView({
     return () => {
       current = false;
     };
-  }, [brandId, defaultBrandId, draft, can.manageCampaigns, campaigns, actions, locale]);
+  }, [brandId, defaultBrandId, draft, can.attachCampaign, campaigns, actions, locale]);
   const [busy, setBusy] = useState<null | 'quote' | 'generate' | string>(null);
   const [quote, setQuote] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -485,10 +503,10 @@ export function ComposerView({
        * THE CAMPAIGN THE READER CHOSE IS FILED THROUGH THE ONE ACTION THAT
        * FILES CAMPAIGNS (§19). Generation goes through the AI Gateway, which
        * neither takes nor stores a campaign; the association is a second,
-       * audited step under `campaigns.manage`, and its own redirect opens the
-       * new draft — with its own success or failure message.
+       * audited step — attaching needs `content.create` (Q21) — and its own
+       * redirect opens the new draft, with its own success or failure message.
        */
-      if (campaignId !== '' && can.manageCampaigns) {
+      if (campaignId !== '' && can.attachCampaign) {
         const form = new FormData();
         form.set('locale', locale);
         form.set('itemId', String(payload['itemId']));
@@ -530,8 +548,9 @@ export function ComposerView({
   };
 
   const briefTooLong = generationBrief.length > maxBriefChars;
-  const canGenerate =
+  const hasInputs =
     can.create && brandId !== '' && selected.length > 0 && brief.trim() !== '' && !briefTooLong;
+  const canGenerate = hasInputs && can.generate === true;
   /*
    * THE SAME THREE ANSWERS, USED LITERALLY RATHER THAN AS A BRIEF.
    *
@@ -545,7 +564,7 @@ export function ComposerView({
    * words on screen are the VARIANTS' and each has its own save form; making a
    * second item out of the brief field at that point would be a surprise.
    */
-  const canWrite = canGenerate && draft === null;
+  const canWrite = hasInputs && draft === null;
   const manualFormId = `${fieldId}-manual`;
 
   return (
@@ -873,15 +892,17 @@ export function ComposerView({
             ) : null}
 
             <div className="cs-form-actions">
-              <button
-                type="button"
-                className="cs-ghost-button"
-                disabled={!canGenerate || busy !== null}
-                data-testid="content-estimate"
-                onClick={runQuote}
-              >
-                {t['content.composer.estimate']}
-              </button>
+              {can.generate ? (
+                <button
+                  type="button"
+                  className="cs-ghost-button"
+                  disabled={!canGenerate || busy !== null}
+                  data-testid="content-estimate"
+                  onClick={runQuote}
+                >
+                  {t['content.composer.estimate']}
+                </button>
+              ) : null}
               <button
                 type="submit"
                 form={manualFormId}
@@ -891,27 +912,29 @@ export function ComposerView({
               >
                 {t['content.composer.write']}
               </button>
-              <button
-                type="button"
-                className={mode === 'write' ? 'cs-ghost-button' : 'cs-dark-button'}
-                disabled={!canGenerate || busy !== null}
-                data-testid="content-generate"
-                /*
-                THE KEY THIS BUTTON WOULD SEND, on the button that sends it.
-                It is the only way a browser test can see WHICH of the two keys
-                the composer wired to generation — the defect being that the
-                manual key, which moves with the campaign, was reaching an
-                endpoint that neither sends nor stores one. It discloses
-                nothing: a hash of the customer's own inputs, already present in
-                this form as the manual submission's hidden field.
-              */
-                data-generation-key={generationIdempotencyKey}
-                onClick={runGenerate}
-              >
-                {busy === 'generate'
-                  ? t['content.composer.generating']
-                  : t['content.composer.generate']}
-              </button>
+              {can.generate ? (
+                <button
+                  type="button"
+                  className={mode === 'write' ? 'cs-ghost-button' : 'cs-dark-button'}
+                  disabled={!canGenerate || busy !== null}
+                  data-testid="content-generate"
+                  /*
+                  THE KEY THIS BUTTON WOULD SEND, on the button that sends it.
+                  It is the only way a browser test can see WHICH of the two keys
+                  the composer wired to generation — the defect being that the
+                  manual key, which moves with the campaign, was reaching an
+                  endpoint that neither sends nor stores one. It discloses
+                  nothing: a hash of the customer's own inputs, already present in
+                  this form as the manual submission's hidden field.
+                */
+                  data-generation-key={generationIdempotencyKey}
+                  onClick={runGenerate}
+                >
+                  {busy === 'generate'
+                    ? t['content.composer.generating']
+                    : t['content.composer.generate']}
+                </button>
+              ) : null}
             </div>
 
             {/*
@@ -972,19 +995,17 @@ export function ComposerView({
                 THE CONTROL IS GATED ON THE PERMISSION THAT AUTHORIZES THE
                 ASSOCIATION, not merely on having campaigns to show.
 
-                `setContentCampaignAction` has required `campaigns.manage` since
-                Phase 8. Offering this selector to a member without it would
-                have let them establish a link they could never change
-                afterwards — and would have put campaign names on the screen for
-                a role that holds no campaign authority. The server enforces the
-                same permission on the submission, so hiding the control is
+                Q21 (D-318): filing a NEW post under a campaign is part of
+                making it, so `content.create` (or `campaigns.manage`) is the
+                authority; changing it later needs `campaigns.manage`. The
+                server enforces the same rule, so hiding the control is
                 courtesy rather than security.
 
                 CONTROLLED, because the idempotency key has to include the
                 choice: two posts identical but for the campaign are two
                 requests, not a retry of one.
               */}
-                {can.manageCampaigns && campaignOptions.length > 0 ? (
+                {can.attachCampaign && campaignOptions.length > 0 ? (
                   <div className="cs-field">
                     <label htmlFor={`${fieldId}-manual-campaign`}>
                       {t['campaigns.composerLabel']}

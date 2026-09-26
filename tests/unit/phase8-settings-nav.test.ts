@@ -5,6 +5,10 @@ import {
   SETTINGS_NAV_ROUTES,
   settingsNavItems,
 } from '../../apps/dashboard/src/server/settings-nav';
+import {
+  KNOWN_PAGE_PERMISSIONS,
+  type KnownPage,
+} from '../../apps/dashboard/src/server/known-routes';
 
 /**
  * PHASE 8 — NO NAVIGATION ROW LEADS TO A 404.
@@ -148,6 +152,14 @@ describe('P8: the settings nav permission column matches the routes themselves',
       expect(file, `no page mapped for ${routePath}`).toBeDefined();
       const source = readFileSync(path.join(ROOT, file as string), 'utf8');
 
+      // E2/Q5 — a known page gates through `requireWorkspacePage(locale, '<route>')`,
+      // whose permission is the known-route table's; it must name its OWN route.
+      const known = /requireWorkspacePage\(\s*locale\s*,\s*'([^']+)'\s*\)/.exec(source);
+      if (known) {
+        expect(known[1]).toBe(routePath);
+        expect(KNOWN_PAGE_PERMISSIONS[known[1] as KnownPage]).toBe(permission);
+        return;
+      }
       const call = /requireWorkspace\(\s*locale\s*(?:,\s*'([^']+)'\s*)?\)/.exec(source);
       expect(call, `no requireWorkspace call found in ${file}`).not.toBeNull();
 

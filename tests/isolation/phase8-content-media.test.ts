@@ -313,6 +313,7 @@ describe('AC-29.1: changing the MEDIA revokes an approval, exactly as changing t
         assetIds: [secondImageOfBrandOne],
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 
@@ -341,6 +342,7 @@ describe('AC-29.1: changing the MEDIA revokes an approval, exactly as changing t
         assetIds: [],
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
 

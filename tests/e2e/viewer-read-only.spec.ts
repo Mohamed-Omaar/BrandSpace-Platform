@@ -47,8 +47,26 @@ async function signInAsViewer(page: Page): Promise<void> {
   await page.waitForURL(/\/en\/overview$/);
 }
 
+/**
+ * E2/Q5 — a page on the known navigation list answers "No access to this page"
+ * inside the shell (200), with the E6 denial, instead of the not-found screen.
+ * What the Viewer must still never receive is the page's CONTENT, so each
+ * caller also asserts the markup it guards is absent.
+ */
+async function expectNoAccess(page: Page, path: string): Promise<void> {
+  const response = await page.goto(`${DASHBOARD_BASE_URL}/${path}`);
+  expect(response?.status(), `/${path} answers the no-access screen`).toBe(200);
+  const screen = page.getByTestId('route-no-access');
+  await expect(screen, path).toBeVisible();
+  await expect(screen, path).toContainText(
+    path.startsWith('ar/') ? 'لا يمكنك الوصول إلى هذه الصفحة' : 'No access to this page',
+  );
+  await expect(screen, path).toContainText(path.startsWith('ar/') ? 'ليس لدى' : "doesn't have the");
+  await expect(page.getByTestId('route-not-found')).toHaveCount(0);
+}
+
 test.describe('D-62 — a read-only Viewer has no approval surface at all', () => {
-  test('every approval route answers 404, in both locales', async ({ page }) => {
+  test('every approval route answers "No access", in both locales', async ({ page }) => {
     await signInAsViewer(page);
 
     /*
@@ -64,8 +82,8 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
       'ar/approvals',
       'en/approvals?review=00000000-0000-4000-8000-000000000000',
     ]) {
-      const response = await page.goto(`${DASHBOARD_BASE_URL}/${path}`);
-      expect(response?.status(), `/${path} must not be readable by a Viewer`).toBe(404);
+      await expectNoAccess(page, path);
+      expect(await page.content(), path).not.toContain('approvals-queue');
     }
   });
 
@@ -73,8 +91,25 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
     await signInAsViewer(page);
 
     for (const route of ['content', 'content/compose', 'assets', 'brand-brain', 'calendar']) {
-      const response = await page.goto(`${DASHBOARD_BASE_URL}/en/${route}`);
-      expect(response?.status(), `/${route} must not be readable by a Viewer`).toBe(404);
+      await expectNoAccess(page, `en/${route}`);
+    }
+  });
+
+  test('E2/Q5: a record or an unknown URL still answers the one not-found screen', async ({
+    page,
+  }) => {
+    await signInAsViewer(page);
+    // A record inside a known area, and a path that matches no page at all,
+    // both answer the one localized not-found screen — never "No access".
+    for (const path of [
+      'en/not-a-real-area',
+      'ar/not-a-real-area',
+      'en/campaigns/00000000-0000-4000-8000-000000000000',
+    ]) {
+      const response = await page.goto(`${DASHBOARD_BASE_URL}/${path}`);
+      expect(response?.status(), path).toBe(404);
+      await expect(page.getByTestId('route-not-found'), path).toBeVisible();
+      await expect(page.getByTestId('route-no-access'), path).toHaveCount(0);
     }
   });
 
@@ -92,8 +127,8 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
     await signInAsViewer(page);
 
     for (const path of ['en/integrations', 'ar/integrations']) {
-      const response = await page.goto(`${DASHBOARD_BASE_URL}/${path}`);
-      expect(response?.status(), `/${path} must not be readable by a Viewer`).toBe(404);
+      await expectNoAccess(page, path);
+      await expect(page.getByTestId('connected-accounts-list'), path).toHaveCount(0);
     }
   });
 
@@ -116,10 +151,7 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
 
     for (const route of ['analytics', 'strategy', 'copilot', 'automations']) {
       for (const locale of ['en', 'ar']) {
-        const response = await page.goto(`${DASHBOARD_BASE_URL}/${locale}/${route}`);
-        expect(response?.status(), `/${locale}/${route} must not be readable by a Viewer`).toBe(
-          404,
-        );
+        await expectNoAccess(page, `${locale}/${route}`);
       }
     }
   });
@@ -170,8 +202,7 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
   test('PHASE 8: Brand Profile and workspace settings are closed to a Viewer', async ({ page }) => {
     await signInAsViewer(page);
     for (const path of ['en/settings/brand', 'ar/settings/brand', 'en/settings']) {
-      const response = await page.goto(`${DASHBOARD_BASE_URL}/${path}`);
-      expect(response?.status(), path).toBe(404);
+      await expectNoAccess(page, path);
     }
   });
 

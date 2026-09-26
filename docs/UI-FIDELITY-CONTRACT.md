@@ -536,6 +536,44 @@ icon in `icons.tsx`) and a `label`-scale name. The text-only content card uses `
 in `brandPurplePressed`, and the post's words in `bodySm` / `textPrimary`. `MediaImage` is the
 existing `<img>` that removes itself on error so the tile's own neutral bed shows.
 
+### 6.3.27 Prototype v90 Phase 2A — denial notices and "No access to this page" (A5, E6, E2, D-322)
+
+Both are the existing `StateMessage` `forbidden` state (lock glyph, muted fill), with no new
+treatment. `PermissionNotice` stands where a control the role does not offer would be — the invite
+form on Team, the plan controls on Billing — and says who lacks which permission and who can change
+the role. `NoAccessPage` is the same state inside the normal `WorkspaceShell` (the shell owns the
+`h1`), with the not-found screen's Home button. The Permissions table adds a `label`-scale
+`textSecondary` "From the role" line under each state.
+
+### 6.3.28 Prototype v90 Phase 2A — Home sections by role (A6, E7)
+
+Four cards, composed exactly like the Home cards beside them (`Card`, `SectionHeader`, the page's
+own `listStyle` / `rowStyle`, `quiet` empty lines, neutral `sm` buttons): "Waiting for your review"
+(`content.approve`), "Your work" — drafts, sent for review and scheduled, three columns in a
+`ContentGrid` (`content.create` or `content.submit`) — "Top posts" (`analytics.read`) and "Waiting for
+your feedback" (reads content, creates and approves nothing; links to the calendar). They sit between
+"What needs you" and "Recommended", so the owner's A → E order is unchanged.
+
+### 6.3.29 Prototype v90 Phase 2A — calendar drag, new post on a day, past days (B7, F2)
+
+The ported grid, cells and chips keep their geometry. A chip for a post that can still move is
+`draggable` for a scheduler; dropping it on another day reschedules it at the same time. An empty
+day that has not passed offers a quiet "+ Create post" control — `micro` type, `textSecondary`, no
+fill until hover — so an empty month does not become a wall of buttons. A day before today carries
+`data-past` and refuses a drop with a warning `Banner`. On a phone (no drag) a `bs-narrow-only` line
+says a post is moved from its own drawer. Drag is never the only way (WCAG 2.5.7).
+
+### 6.3.30 Prototype v90 Phase 2A — the Posts "…" menu and a two-step archive (B8, Q21)
+
+Each library card that has anything to offer gains a `DropdownMenu` in the `control` trigger — the
+showcase's own "⋯" post menu, with the label as the trigger's visually hidden name. Items are
+`menuItemStyle()` buttons or links: Move… (a `Dialog` with the calendar drawer's date and time
+fields), Unschedule, Campaign… (a `Dialog` with one `select`), Archive…, Restore, and "View on
+{platform}" for an `https:` published link (new tab, `noopener noreferrer`). An item appears only
+when the role's permission and the post's state both allow it; a card with nothing to offer shows no
+trigger. Archive asks first — `ConfirmDialog` in the menu, a `details` disclosure in the Studio — and
+the server refuses an archive that does not carry the confirmation. No new component or treatment.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

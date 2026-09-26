@@ -61,12 +61,19 @@ export interface DraftEditorProps {
     submit: boolean;
     archive: boolean;
     manageCampaigns: boolean;
+    /** Q21 — may file a post that has no campaign yet. */
+    attachCampaign?: boolean;
     uploadMedia: boolean;
     schedule?: boolean;
   };
   /** D-288 — the approval policy and a changes request, when there is one. */
   readonly review?: {
     readonly requiresApproval: boolean;
+    /**
+     * Q10 — who may be asked to review, default first (members before the
+     * owner, never the author). Empty when the reader may not send for review.
+     */
+    readonly reviewers?: readonly { readonly userId: string; readonly name: string }[];
     readonly changes: {
       readonly note: string | null;
       readonly reviewer: string | null;
@@ -331,6 +338,33 @@ export function DraftEditor({
   }, [canQuote, activeVariant, estimateKey, estimates]);
   const estimate = estimates[estimateKey];
 
+  /*
+   * Q10 — WHO TO ASK. "Automatic" sends the review to the default reviewer the
+   * service picks (the first name below); choosing a name asks that person.
+   * Either way anyone who may approve for the brand can decide it.
+   */
+  const reviewerPicker = (id: string) =>
+    review?.reviewers && review.reviewers.length > 0 ? (
+      <span className="cs-field">
+        <label htmlFor={`${fieldId}-${id}`}>{t['editor.reviewer.label']}</label>
+        <select
+          id={`${fieldId}-${id}`}
+          name="assignedToUserId"
+          defaultValue=""
+          data-testid={`${id}-reviewer`}
+        >
+          <option value="">
+            {fill(t['editor.reviewer.auto'] ?? '{name}', { name: review.reviewers[0]?.name ?? '' })}
+          </option>
+          {review.reviewers.map((reviewer) => (
+            <option key={reviewer.userId} value={reviewer.userId}>
+              {reviewer.name}
+            </option>
+          ))}
+        </select>
+      </span>
+    ) : null;
+
   return (
     <div className="cs-draft-layout" data-testid="draft-editor">
       {/* ------------------------------------------------ CONTEXT --- */}
@@ -412,7 +446,11 @@ export function DraftEditor({
           </div>
         ) : null}
 
-        {can.manageCampaigns ? (
+        {/*
+          Q21 — a post with no campaign may be filed by anyone who may create
+          posts; moving or removing a campaign needs campaigns.manage.
+        */}
+        {can.manageCampaigns || (can.attachCampaign && draft.campaignId === null) ? (
           <form
             action={actions.setCampaign}
             className="cs-field"
@@ -486,6 +524,15 @@ export function DraftEditor({
         {draft.status === 'APPROVED' && can.edit ? (
           <div className="cs-notice warning" role="note" data-testid="editor-approved-warning">
             {t['editor.approvedWarning']}
+          </div>
+        ) : null}
+
+        {/* Q8 — what saving does to a scheduled post depends on who saves it. */}
+        {draft.status === 'SCHEDULED' && can.edit ? (
+          <div className="cs-notice warning" role="note" data-testid="editor-scheduled-warning">
+            {can.schedule
+              ? t['editor.scheduledWarning.scheduler']
+              : t['editor.scheduledWarning.unschedules']}
           </div>
         ) : null}
 
@@ -788,6 +835,7 @@ export function DraftEditor({
                       maxLength={2_000}
                       data-testid="resubmit-reply"
                     />
+                    {reviewerPicker('resubmit')}
                     <button
                       type="submit"
                       className="cs-dark-button"
@@ -824,6 +872,7 @@ export function DraftEditor({
                 <form action={actions.submitForReview}>
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="itemId" value={draft.id} />
+                  {reviewerPicker('submit')}
                   <button
                     type="submit"
                     className={
@@ -864,14 +913,26 @@ export function DraftEditor({
                 </form>
               ) : null}
               {can.archive && draft.status !== 'ARCHIVED' ? (
-                <form action={actions.transition}>
-                  <input type="hidden" name="locale" value={locale} />
-                  <input type="hidden" name="itemId" value={draft.id} />
-                  <input type="hidden" name="to" value="ARCHIVED" />
-                  <button type="submit" className="cs-ghost-button cs-compact">
+                /*
+                 * B8 — ARCHIVE ASKS FIRST, the same two steps as the Posts
+                 * menu: the disclosure opens the question, the button inside
+                 * answers it with the `intent` the server requires.
+                 */
+                <details data-testid="archive-disclosure">
+                  <summary className="cs-ghost-button cs-compact">
                     {t['content.composer.archive']}
-                  </button>
-                </form>
+                  </summary>
+                  <form action={actions.transition} className="cs-field">
+                    <input type="hidden" name="locale" value={locale} />
+                    <input type="hidden" name="itemId" value={draft.id} />
+                    <input type="hidden" name="to" value="ARCHIVED" />
+                    <input type="hidden" name="intent" value="ARCHIVE" />
+                    <p className="cs-hint">{t['content.archive.confirmBody']}</p>
+                    <button type="submit" className="cs-dark-button" data-testid="archive-confirm">
+                      {t['content.archive.confirm']}
+                    </button>
+                  </form>
+                </details>
               ) : null}
             </div>
 

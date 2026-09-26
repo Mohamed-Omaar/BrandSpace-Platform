@@ -27,6 +27,12 @@ export interface RouteContract {
   readonly scope: RouteScope;
   /** Required permission key. Mandatory for non-public routes. */
   readonly permission?: string;
+  /**
+   * The route spends AI credits, so its handler also requires `copilot.use`
+   * (Q18, D-315): `resolveCaller(req, reply, creditSpendingPermissions(<permission>))`.
+   * `tests/unit/prototype-v90-phase2a.test.ts` pins the two together.
+   */
+  readonly spendsCredits?: true;
   /** Entitlement (plan feature) gate. Wired in Phase 3. */
   readonly entitlement?: string;
   /** High-impact actions require an explicit confirmation policy — CLAUDE.md §2.5. */

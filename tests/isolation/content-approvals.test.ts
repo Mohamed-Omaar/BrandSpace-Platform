@@ -305,6 +305,7 @@ describe('submitting for review', () => {
         approvals.decide({
           approvalId: approval.id,
           verdict: 'REQUEST_CHANGES',
+          note: 'Please change the opening line.',
           actor: reviewer(),
         }),
       );
@@ -568,6 +569,88 @@ describe('D-62 — the Viewer is strictly read-only, end to end', () => {
   });
 });
 
+describe('B5 — asking for changes needs a reason; approving and rejecting do not', () => {
+  it.each([undefined, '', '   \n  '])(
+    'refuses REQUEST_CHANGES with no reason (%j)',
+    async (note) => {
+      const approval = await inA(({ approvals }) =>
+        approvals.submit({ itemId: itemId(), actor: author() }),
+      );
+      await expect(
+        inA(({ approvals }) =>
+          approvals.decide({
+            approvalId: approval.id,
+            verdict: 'REQUEST_CHANGES',
+            actor: reviewer(),
+            ...(note === undefined ? {} : { note }),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: 'VALIDATION_FAILED',
+        publicDetails: { reason: 'note_required' },
+      });
+      // Still open: the refusal decided nothing.
+      expect(await statusOf()).toBe('IN_REVIEW');
+      await inA(({ approvals }) => approvals.cancel({ approvalId: approval.id, actor: author() }));
+    },
+  );
+
+  it.each(['APPROVE', 'REJECT'] as const)('%s needs no reason', async (verdict) => {
+    const approval = await inA(({ approvals }) =>
+      approvals.submit({ itemId: itemId(), actor: author() }),
+    );
+    const decided = await inA(({ approvals }) =>
+      approvals.decide({ approvalId: approval.id, verdict, actor: reviewer() }),
+    );
+    expect(decided.decisionNote).toBeNull();
+    await inA((scoped) =>
+      scoped.db.contentItem.update({ where: { id: itemId() }, data: { status: 'DRAFT' } }),
+    );
+  });
+});
+
+describe('Q12 — a Viewer that READS content sees reviews and still decides nothing', () => {
+  /*
+   * Phase 2A builds the read-only Approvals the Viewer gets once a later
+   * release grants it `content.read`; the real role is unchanged here, so the
+   * grant is given to this fixture actor only. Reading the review subject is
+   * the read it gains; deciding, withdrawing and submitting stay refused.
+   */
+  const reader = (): ApprovalActor => ({
+    userId: '77777777-6666-4555-8444-333333333334',
+    roleKey: 'client_viewer',
+    permissionKeys: ['workspace.read', 'content.read'],
+    brandScope: [],
+  });
+
+  it('may read the review subject', async () => {
+    const approval = await inA(({ approvals }) =>
+      approvals.submit({ itemId: itemId(), actor: author() }),
+    );
+    const subject = await inA(({ approvals }) =>
+      approvals.reviewSubject({ approvalId: approval.id, actor: reader() }),
+    );
+    expect(subject).toBeTruthy();
+  });
+
+  it('may not decide, withdraw or submit', async () => {
+    const approval = await inA(({ approvals }) =>
+      approvals.submit({ itemId: itemId(), actor: author() }),
+    );
+    for (const verdict of ['APPROVE', 'REJECT'] as const) {
+      await expect(
+        inA(({ approvals }) =>
+          approvals.decide({ approvalId: approval.id, verdict, actor: reader() }),
+        ),
+      ).rejects.toThrow();
+    }
+    await expect(
+      inA(({ approvals }) => approvals.cancel({ approvalId: approval.id, actor: reader() })),
+    ).rejects.toThrow();
+    expect(await statusOf()).toBe('IN_REVIEW');
+  });
+});
+
 describe('withdrawing a review', () => {
   it('returns the item to a draft and closes the cycle', async () => {
     const approval = await inA(({ approvals }) =>
@@ -617,6 +700,7 @@ describe('an edit revokes an approval', () => {
         body: 'Rewritten after approval.',
         actorUserId: fixtures.a.userId,
         actorBrandScope: [],
+        actorPermissionKeys: ['content.edit', 'content.schedule'],
       }),
     );
     expect(await statusOf()).toBe('DRAFT');
@@ -732,7 +816,12 @@ describe('AC-14.6 — the calendar gate, now backed by a workflow (D-120 closed)
       approvals.submit({ itemId: itemId(), actor: author() }),
     );
     await inA(({ approvals }) =>
-      approvals.decide({ approvalId: approval.id, verdict: 'REQUEST_CHANGES', actor: reviewer() }),
+      approvals.decide({
+        approvalId: approval.id,
+        verdict: 'REQUEST_CHANGES',
+        note: 'Please change the opening line.',
+        actor: reviewer(),
+      }),
     );
     await expect(
       inA(({ approvals, db }) =>
@@ -766,7 +855,12 @@ describe('the queue, the history and the audit trail', () => {
       approvals.submit({ itemId: itemId(), actor: author() }),
     );
     await inA(({ approvals }) =>
-      approvals.decide({ approvalId: first.id, verdict: 'REQUEST_CHANGES', actor: reviewer() }),
+      approvals.decide({
+        approvalId: first.id,
+        verdict: 'REQUEST_CHANGES',
+        note: 'Please change the opening line.',
+        actor: reviewer(),
+      }),
     );
     const second = await inA(({ approvals }) =>
       approvals.submit({ itemId: itemId(), actor: author() }),

@@ -1,6 +1,8 @@
 import type React from 'react';
 import Link from 'next/link';
 import {
+  LinkTabs,
+  type LinkTab,
   AssetThumb,
   Card,
   CONTROL_CLASS,
@@ -55,8 +57,11 @@ export interface ApprovalRow {
   readonly mayDecide: boolean;
   /** True when the reader submitted it and the brand forbids self-approval. */
   readonly blockedAsSelf: boolean;
-  /** True when the review is assigned to somebody else, who alone may decide it. */
-  readonly assignedElsewhere: boolean;
+  /** Q10 — "Assigned to you" / "Assigned to Sara", or null when nobody is. */
+  readonly assignedToLabel: string | null;
+  /** B5 — on "Sent": who decided, and the reason they gave. */
+  readonly decidedByLabel?: string | null;
+  readonly decisionNote?: string | null;
   readonly mayWithdraw: boolean;
   /**
    * Whether to offer the Studio link — a link that refuses the person who
@@ -129,6 +134,8 @@ export function ApprovalsView({
   mine,
   policies,
   review,
+  tab,
+  tabs,
   mayReview,
   mayReadContent,
   mayManagePolicy,
@@ -140,6 +147,9 @@ export function ApprovalsView({
   readonly mine: readonly ApprovalRow[];
   readonly policies: readonly BrandPolicyRow[];
   readonly review: ReviewSubjectView | null;
+  /** B5 — which list is showing, and the two links between them. */
+  readonly tab: 'forMe' | 'sent';
+  readonly tabs: readonly LinkTab[];
   readonly mayReview: boolean;
   readonly mayReadContent: boolean;
   readonly mayManagePolicy: boolean;
@@ -229,6 +239,7 @@ export function ApprovalsView({
               t={t}
               approvalId={review.approvalId}
               itemId={review.itemId}
+              tab={tab}
               action={actions.decide}
             />
           ) : null}
@@ -236,58 +247,71 @@ export function ApprovalsView({
         </Card>
       ) : null}
 
-      <Card testId="approvals-queue">
-        <SectionHeader eyebrow={t('approvals.eyebrow')} title={t('approvals.queue')} />
-        {!mayReview ? (
-          <StateMessage
-            title={t('approvals.noPermissionTitle')}
-            description={t('approvals.noPermissionBody')}
-          />
-        ) : queue.length === 0 ? (
-          <StateMessage
-            title={t('approvals.queueEmptyTitle')}
-            description={t('approvals.queueEmptyBody')}
-          />
-        ) : (
-          <ul style={listStyle} data-testid="approvals-queue-list">
-            {queue.map((row) => (
-              <li key={row.id} style={rowStyle} data-testid={`approval-${row.itemId}`}>
-                <ApprovalSummary locale={locale} t={t} row={row} />
-                {row.mayDecide ? (
-                  <DecisionForm
-                    locale={locale}
-                    t={t}
-                    approvalId={row.id}
-                    itemId={row.itemId}
-                    action={actions.decide}
-                  />
-                ) : row.assignedElsewhere ? (
-                  <p style={noteStyle} data-testid={`assigned-elsewhere-${row.itemId}`}>
-                    {t('approvals.assignedElsewhere')}
-                  </p>
-                ) : row.blockedAsSelf ? (
-                  /*
-                   * D-122. The reader submitted this and the brand forbids
-                   * self-approval, so it says so rather than silently omitting
-                   * the buttons — a control that vanishes without explanation
-                   * reads as a bug. The server refuses it regardless.
-                   */
-                  <p style={noteStyle} data-testid={`self-blocked-${row.itemId}`}>
-                    {t('approvals.selfBlocked')}
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <div>
+        <LinkTabs
+          label={t('approvals.tabs.label')}
+          tabs={tabs}
+          currentId={tab}
+          testId="approvals-tabs"
+        />
+      </div>
+
+      {tab === 'forMe' ? (
+        <Card testId="approvals-queue">
+          <SectionHeader eyebrow={t('approvals.eyebrow')} title={t('approvals.queue')} />
+          {!mayReview ? (
+            <StateMessage
+              title={t('approvals.noPermissionTitle')}
+              description={t('approvals.noPermissionBody')}
+            />
+          ) : queue.length === 0 ? (
+            <StateMessage
+              title={t('approvals.queueEmptyTitle')}
+              description={t('approvals.queueEmptyBody')}
+            />
+          ) : (
+            <ul style={listStyle} data-testid="approvals-queue-list">
+              {queue.map((row) => (
+                <li key={row.id} style={rowStyle} data-testid={`approval-${row.itemId}`}>
+                  <ApprovalSummary locale={locale} t={t} row={row} />
+                  {row.assignedToLabel ? (
+                    <p style={noteStyle} data-testid={`assigned-to-${row.itemId}`}>
+                      {row.assignedToLabel}
+                    </p>
+                  ) : null}
+                  {row.mayDecide ? (
+                    <DecisionForm
+                      locale={locale}
+                      t={t}
+                      approvalId={row.id}
+                      itemId={row.itemId}
+                      tab={tab}
+                      action={actions.decide}
+                    />
+                  ) : row.blockedAsSelf ? (
+                    /*
+                     * D-122. The reader submitted this and the brand forbids
+                     * self-approval, so it says so rather than silently omitting
+                     * the buttons — a control that vanishes without explanation
+                     * reads as a bug. The server refuses it regardless.
+                     */
+                    <p style={noteStyle} data-testid={`self-blocked-${row.itemId}`}>
+                      {t('approvals.selfBlocked')}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
 
       {/*
         "What you sent" belongs to members who can send. A Viewer has never
         opened a cycle, so the panel is withheld rather than shown empty — and
         the page does not query it for them either.
       */}
-      {mayReadContent ? (
+      {tab === 'sent' && mayReadContent ? (
         <Card testId="approvals-mine">
           <SectionHeader title={t('approvals.mine')} />
           {mine.length === 0 ? (
@@ -312,6 +336,7 @@ export function ApprovalsView({
                     <form action={actions.withdraw}>
                       <input type="hidden" name="locale" value={locale} />
                       <input type="hidden" name="approvalId" value={row.id} />
+                      <input type="hidden" name="tab" value={tab} />
                       <button
                         type="submit"
                         style={buttonStyle('ghost')}
@@ -334,7 +359,7 @@ export function ApprovalsView({
         can approve must not also be able to grant itself the right to approve
         its own work.
       */}
-      {mayManagePolicy && policies.length > 0 ? (
+      {tab === 'forMe' && mayManagePolicy && policies.length > 0 ? (
         <Card testId="approvals-policy">
           <SectionHeader
             title={t('approvals.policyTitle')}
@@ -410,6 +435,16 @@ function ApprovalSummary({
         {t('approvals.requestedAt')} {row.requestedAtLabel} · {t('approvals.cycle')} {row.cycle}
       </span>
       {row.requestNote ? <p style={noteStyle}>{row.requestNote}</p> : null}
+      {row.decidedByLabel ? (
+        <span style={metaStyle} data-testid={`decided-by-${row.itemId}`}>
+          {row.decidedByLabel}
+        </span>
+      ) : null}
+      {row.decisionNote ? (
+        <p style={noteStyle} data-testid={`decision-note-${row.itemId}`}>
+          {row.decisionNote}
+        </p>
+      ) : null}
       {row.mayOpenInStudio && row.itemId ? (
         <Link
           href={`/${locale}/content/compose?item=${row.itemId}`}
@@ -434,27 +469,37 @@ function DecisionForm({
   t,
   approvalId,
   itemId,
+  tab,
   action,
 }: {
   readonly locale: string;
   readonly t: (key: MessageKey) => string;
   readonly approvalId: string;
   readonly itemId: string;
+  readonly tab: 'forMe' | 'sent';
   readonly action: (formData: FormData) => Promise<void>;
 }) {
+  /*
+   * B5 — THE REASON IS REQUIRED FOR "REQUEST CHANGES", and only for it: the
+   * field is `required`, and Approve and Reject skip the browser's validation
+   * (`formNoValidate`). The server refuses a blank reason either way.
+   */
   return (
     <form action={action} style={formStyle}>
       <input type="hidden" name="locale" value={locale} />
       <input type="hidden" name="approvalId" value={approvalId} />
+      <input type="hidden" name="tab" value={tab} />
       <Field label={t('approvals.decisionNote')} htmlFor={`note-${approvalId}`}>
         <input
           id={`note-${approvalId}`}
           name="note"
           type="text"
+          required
           style={inputStyle()}
           className={CONTROL_CLASS}
           placeholder={t('approvals.notePlaceholder')}
           maxLength={1000}
+          data-testid={`decision-note-input-${itemId}`}
         />
       </Field>
       <div style={buttonRowStyle}>
@@ -462,6 +507,7 @@ function DecisionForm({
           type="submit"
           name="verdict"
           value="APPROVE"
+          formNoValidate
           style={buttonStyle('primary')}
           data-testid={`approve-${itemId}`}
         >
@@ -480,6 +526,7 @@ function DecisionForm({
           type="submit"
           name="verdict"
           value="REJECT"
+          formNoValidate
           style={buttonStyle('ghost')}
           data-testid={`reject-${itemId}`}
         >

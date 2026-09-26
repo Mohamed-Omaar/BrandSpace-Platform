@@ -10,7 +10,7 @@ import { LearningWriteBackService, StrategyService } from '@brandspace/intellige
 import { BrandKnowledgeService } from '@brandspace/brand-brain';
 import { resolveContentExpiry, resolveContentPolicy } from '@brandspace/content';
 import { withWorkspace, getPrisma } from '@brandspace/database';
-import { brandInScope, systemClock } from '@brandspace/shared';
+import { brandInScope, creditSpendingPermissions, systemClock } from '@brandspace/shared';
 import { route } from '../route-contract';
 import {
   currentEnvironment,
@@ -103,11 +103,12 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     {
       scope: 'workspace',
       permission: EXPLAIN_PERMISSION,
+      spendsCredits: true,
       rateLimit: 'ai.generate',
       idempotent: true,
     },
     async (req, reply) => {
-      const caller = await resolveCaller(req, reply, EXPLAIN_PERMISSION);
+      const caller = await resolveCaller(req, reply, creditSpendingPermissions(EXPLAIN_PERMISSION));
       if (!caller) return;
 
       const parsed = explainSchema.safeParse(req.body);
@@ -200,11 +201,12 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     {
       scope: 'workspace',
       permission: STRATEGY_MANAGE,
+      spendsCredits: true,
       rateLimit: 'ai.generate',
       idempotent: true,
     },
     async (req, reply) => {
-      const caller = await resolveCaller(req, reply, STRATEGY_MANAGE);
+      const caller = await resolveCaller(req, reply, creditSpendingPermissions(STRATEGY_MANAGE));
       if (!caller) return;
 
       const parsed = strategySchema.safeParse(req.body);
@@ -296,11 +298,12 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
     {
       scope: 'workspace',
       permission: STRATEGY_MANAGE,
+      spendsCredits: true,
       rateLimit: 'ai.generate',
       idempotent: true,
     },
     async (req, reply) => {
-      const caller = await resolveCaller(req, reply, STRATEGY_MANAGE);
+      const caller = await resolveCaller(req, reply, creditSpendingPermissions(STRATEGY_MANAGE));
       if (!caller) return;
 
       const parsed = strategySchema.safeParse(req.body);

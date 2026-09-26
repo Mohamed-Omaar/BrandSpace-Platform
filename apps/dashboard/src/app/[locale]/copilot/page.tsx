@@ -1,7 +1,9 @@
 import { StateMessage, Stack, spacingTokens } from '@brandspace/ui';
+import { mayReadCreditBalance } from '@brandspace/shared';
 import { copilotSurface } from '../../../server/copilot-surface';
 import { copilotLabels } from '../../../server/copilot-labels';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { translator } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
@@ -51,10 +53,12 @@ export default async function CopilotPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const session = await requireWorkspace(locale, 'copilot.use');
+  const access = await requireWorkspacePage(locale, '/copilot');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const session = access.session;
   const { workspace } = session;
 
-  const maySeeCredits = workspace.permissionKeys.includes('credits.read');
+  const maySeeCredits = mayReadCreditBalance(workspace.permissionKeys);
   const from = typeof query['from'] === 'string' ? query['from'] : null;
   const surface = copilotSurface(from);
 

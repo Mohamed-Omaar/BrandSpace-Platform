@@ -357,13 +357,13 @@ describe('an assignment is validated before it is persisted', () => {
   });
 });
 
-describe('an assignment is ENFORCED on the verdict, not merely recorded', () => {
-  it('somebody else who could otherwise approve is refused', async () => {
+describe('Q10 — an assignment says who is asked first, not who alone may decide', () => {
+  it('another eligible approver may still decide an assigned review (D-325 amends D-127)', async () => {
     /*
-     * The half-built behaviour this replaces: assignment was written to the row
-     * and then ignored, so the screen said a review was assigned and any
-     * approver could still decide it. Recording an intention the system does
-     * not honour is worse than not offering it.
+     * D-127 made an assignment exclusive. Q10 reverses that: every review is
+     * now assigned by default, and an exclusive assignment would stall a
+     * review whenever that one person is away. The rule that remains is the
+     * rest of `decide()` — authority, brand scope, self-approval.
      */
     const approval = await run((s) =>
       s.submit({
@@ -375,34 +375,19 @@ describe('an assignment is ENFORCED on the verdict, not merely recorded', () => 
 
     const otherApprover: ApprovalActor = {
       userId: approverBrandTwoOnly,
-      roleKey: 'approver',
-      permissionKeys: ['content.read', 'content.approve'],
-      brandScope: [],
-    };
-    await expect(
-      run((s) => s.decide({ approvalId: approval.id, verdict: 'APPROVE', actor: otherApprover })),
-    ).rejects.toThrow();
-
-    const assignee: ApprovalActor = {
-      userId: approverBothBrands,
       roleKey: 'approver',
       permissionKeys: ['content.read', 'content.approve'],
       brandScope: [],
     };
     const decided = await run((s) =>
-      s.decide({ approvalId: approval.id, verdict: 'APPROVE', actor: assignee }),
+      s.decide({ approvalId: approval.id, verdict: 'APPROVE', actor: otherApprover }),
     );
     expect(decided.status).toBe('APPROVED');
-    expect(decided.decidedByUserId).toBe(approverBothBrands);
+    expect(decided.decidedByUserId).toBe(approverBrandTwoOnly);
+    expect(decided.assignedToUserId).toBe(approverBothBrands);
   });
 
-  it('and reviewSubject().mayDecide SAYS SO, rather than offering a button that refuses', async () => {
-    /*
-     * The screen reads `mayDecide` off the review subject. It answered from the
-     * permission and the status alone, so a non-assignee was offered the
-     * Approve button on a review the verdict would then refuse — the same
-     * half-behaviour one layer up. The card and the verdict share the rule.
-     */
+  it('and reviewSubject().mayDecide offers the decision to that other approver too', async () => {
     const approval = await run((s) =>
       s.submit({
         itemId: fixtures.a.contentItemId,
@@ -410,25 +395,15 @@ describe('an assignment is ENFORCED on the verdict, not merely recorded', () => 
         assignedToUserId: approverBothBrands,
       }),
     );
-
     const otherApprover: ApprovalActor = {
       userId: approverBrandTwoOnly,
       roleKey: 'approver',
       permissionKeys: ['content.read', 'content.approve'],
       brandScope: [],
     };
-    const withheld = await run((s) =>
+    const offered = await run((s) =>
       s.reviewSubject({ approvalId: approval.id, actor: otherApprover }),
     );
-    expect(withheld.mayDecide).toBe(false);
-
-    const assignee: ApprovalActor = {
-      userId: approverBothBrands,
-      roleKey: 'approver',
-      permissionKeys: ['content.read', 'content.approve'],
-      brandScope: [],
-    };
-    const offered = await run((s) => s.reviewSubject({ approvalId: approval.id, actor: assignee }));
     expect(offered.mayDecide).toBe(true);
   });
 
@@ -449,5 +424,217 @@ describe('an assignment is ENFORCED on the verdict, not merely recorded', () => 
         )
       ).status,
     ).toBe('APPROVED');
+  });
+});
+
+describe('Q10 — every review has a default reviewer', () => {
+  const copywriterAuthor = (): ApprovalActor => ({
+    userId: copywriter,
+    roleKey: 'copywriter',
+    permissionKeys: ['content.read', 'content.submit'],
+    brandScope: [],
+  });
+
+  it('assigns the first eligible approver who is not the author, and tells them alone', async () => {
+    const { notifier, recipients } = capturing();
+    const approval = await run(
+      (s) => s.submit({ itemId: fixtures.a.contentItemId, actor: author() }),
+      notifier,
+    );
+    expect(approval.assignedToUserId).toBe(approverBothBrands);
+    expect(recipients).toEqual([approverBothBrands]);
+  });
+
+  it('puts members before the owner, even an owner who joined first', async () => {
+    const eligible = await run((s) =>
+      s.eligibleReviewers({ brandId: fixtures.a.brandId, excludeUserId: copywriter }),
+    );
+    expect(eligible).toContain(fixtures.a.userId); // the owner may approve…
+    expect(eligible.at(-1)).toBe(fixtures.a.userId); // …and is asked last
+    const approval = await run((s) =>
+      s.submit({ itemId: fixtures.a.contentItemId, actor: copywriterAuthor() }),
+    );
+    expect(approval.assignedToUserId).toBe(approverBothBrands);
+  });
+
+  it("submitting a colleague's post never assigns its author, and asks somebody who may decide", async () => {
+    // The author is the approver who would otherwise be first in line.
+    await platform.contentItem.update({
+      where: { id: fixtures.a.contentItemId },
+      data: { createdByUserId: approverBothBrands },
+    });
+    const { notifier, recipients } = capturing();
+    const approval = await run(
+      (s) => s.submit({ itemId: fixtures.a.contentItemId, actor: copywriterAuthor() }),
+      notifier,
+    );
+    // D-122 bars the author from deciding, so the default moves on — here to
+    // the owner, the only other approver for this brand.
+    expect(approval.assignedToUserId).not.toBe(approverBothBrands);
+    expect(approval.assignedToUserId).toBe(fixtures.a.userId);
+    expect(recipients).toEqual([fixtures.a.userId]);
+    // The composer's "Automatic (name)" preview asks the same question.
+    const preview = await run((s) =>
+      s.eligibleReviewers({
+        brandId: fixtures.a.brandId,
+        excludeUserIds: [copywriter, approverBothBrands],
+      }),
+    );
+    expect(preview[0]).toBe(approval.assignedToUserId);
+    expect(
+      await run((s) =>
+        s.defaultReviewer({
+          brandId: fixtures.a.brandId,
+          submitterUserId: copywriter,
+          authorUserId: approverBothBrands,
+        }),
+      ),
+    ).toBe(fixtures.a.userId);
+  });
+
+  describe('an explicit assignee must be able to decide THIS item (D-122)', () => {
+    /** Both people here hold `content.approve`, so only D-122 can refuse them. */
+    const approverSubmitting = (): ApprovalActor => ({
+      userId: approverBothBrands,
+      roleKey: 'approver',
+      permissionKeys: ['content.read', 'content.submit', 'content.approve'],
+      brandScope: [],
+    });
+    const approvalsFor = () =>
+      platform.approval.count({
+        where: { workspaceId: fixtures.a.workspaceId, contentItemId: fixtures.a.contentItemId },
+      });
+    const allowSelfApproval = (allow: boolean) =>
+      run((s) =>
+        s.setPolicyForBrand({
+          brandId: fixtures.a.brandId,
+          actorUserId: fixtures.a.userId,
+          actorBrandScope: [],
+          patch: { allowSelfApproval: allow },
+        }),
+      );
+
+    it("refuses a crafted assignment to the post's AUTHOR, and writes no approval", async () => {
+      await platform.contentItem.update({
+        where: { id: fixtures.a.contentItemId },
+        data: { createdByUserId: approverBothBrands },
+      });
+      const { notifier, recipients } = capturing();
+      await expect(
+        run(
+          (s) =>
+            s.submit({
+              itemId: fixtures.a.contentItemId,
+              actor: copywriterAuthor(),
+              assignedToUserId: approverBothBrands,
+            }),
+          notifier,
+        ),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(await approvalsFor()).toBe(0);
+      expect(recipients).toEqual([]);
+      const item = await platform.contentItem.findUniqueOrThrow({
+        where: { id: fixtures.a.contentItemId },
+      });
+      expect(item.status).toBe('DRAFT');
+    });
+
+    it('refuses a crafted assignment to the SUBMITTER, and writes no approval', async () => {
+      await platform.contentItem.update({
+        where: { id: fixtures.a.contentItemId },
+        data: { createdByUserId: copywriter },
+      });
+      await expect(
+        run((s) =>
+          s.submit({
+            itemId: fixtures.a.contentItemId,
+            actor: approverSubmitting(),
+            assignedToUserId: approverBothBrands,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(await approvalsFor()).toBe(0);
+    });
+
+    it('accepts the author or the submitter when the brand allows self-approval', async () => {
+      await allowSelfApproval(true);
+
+      await platform.contentItem.update({
+        where: { id: fixtures.a.contentItemId },
+        data: { createdByUserId: approverBothBrands },
+      });
+      const toAuthor = await run((s) =>
+        s.submit({
+          itemId: fixtures.a.contentItemId,
+          actor: copywriterAuthor(),
+          assignedToUserId: approverBothBrands,
+        }),
+      );
+      expect(toAuthor.assignedToUserId).toBe(approverBothBrands);
+
+      // A second cycle, submitted by the approver themself.
+      await platform.approval.deleteMany({ where: { workspaceId: fixtures.a.workspaceId } });
+      await platform.contentItem.update({
+        where: { id: fixtures.a.contentItemId },
+        data: { status: 'DRAFT', createdByUserId: copywriter },
+      });
+      const toSubmitter = await run((s) =>
+        s.submit({
+          itemId: fixtures.a.contentItemId,
+          actor: approverSubmitting(),
+          assignedToUserId: approverBothBrands,
+        }),
+      );
+      expect(toSubmitter.assignedToUserId).toBe(approverBothBrands);
+    });
+  });
+
+  it('an explicit choice wins over the default', async () => {
+    // The copywriter wrote it and submits it; the owner is neither, so D-122
+    // leaves the owner free to be chosen.
+    await platform.contentItem.update({
+      where: { id: fixtures.a.contentItemId },
+      data: { createdByUserId: copywriter },
+    });
+    const approval = await run((s) =>
+      s.submit({
+        itemId: fixtures.a.contentItemId,
+        actor: copywriterAuthor(),
+        assignedToUserId: fixtures.a.userId,
+      }),
+    );
+    expect(approval.assignedToUserId).toBe(fixtures.a.userId);
+  });
+
+  it("the queue lists a reviewer's own assignments first", async () => {
+    const second = await platform.contentItem.create({
+      data: {
+        workspaceId: fixtures.a.workspaceId,
+        brandId: fixtures.a.brandId,
+        title: 'Q10 second',
+        contentType: 'POST',
+        primaryLocale: 'EN',
+        createdByUserId: copywriter,
+      },
+      select: { id: true },
+    });
+    const mine = await run((s) =>
+      s.submit({ itemId: fixtures.a.contentItemId, actor: copywriterAuthor() }),
+    );
+    // Newer, and assigned to somebody else: without the preference it would lead.
+    const theirs = await run((s) =>
+      s.submit({
+        itemId: second.id,
+        actor: copywriterAuthor(),
+        assignedToUserId: fixtures.a.userId,
+      }),
+    );
+    const plain = await run((s) => s.queue({ brandScope: [] }));
+    expect(plain[0]?.id).toBe(theirs.id);
+    const preferred = await run((s) =>
+      s.queue({ brandScope: [], preferUserId: approverBothBrands }),
+    );
+    expect(preferred.map((a) => a.id)).toEqual([mine.id, theirs.id]);
+    await platform.contentItem.delete({ where: { id: second.id } });
   });
 });

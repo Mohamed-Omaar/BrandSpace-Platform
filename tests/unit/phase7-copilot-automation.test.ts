@@ -89,9 +89,11 @@ describe('the Copilot tool registry', () => {
   });
 
   it('availableTools offers exactly what the caller holds, and nothing adjacent', () => {
-    const offered = availableTools(['campaigns.read']);
+    const offered = availableTools(['copilot.use', 'campaigns.read']);
     expect(offered.map((t) => t.key)).toEqual(['campaign.list']);
     expect(availableTools([])).toHaveLength(0);
+    // Q12 — without `copilot.use` nothing is offered, whatever else is held.
+    expect(availableTools(['campaigns.read', 'content.read'])).toHaveLength(0);
   });
 
   it('`client_viewer` is offered NOTHING — D-62 and D-130, asserted from the role itself', () => {
@@ -103,6 +105,8 @@ describe('the Copilot tool registry', () => {
     const viewer = ROLE_DEFINITIONS.find((r) => r.key === 'client_viewer');
     expect(viewer?.permissionKeys).toEqual(['workspace.read']);
     expect(availableTools(viewer?.permissionKeys ?? [])).toHaveLength(0);
+    // And once the Viewer reads content (a later release), still nothing.
+    expect(availableTools([...(viewer?.permissionKeys ?? []), 'content.read'])).toHaveLength(0);
   });
 
   it('an unknown tool key resolves to nothing', () => {

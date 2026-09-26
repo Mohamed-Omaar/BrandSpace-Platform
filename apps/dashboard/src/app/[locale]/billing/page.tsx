@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { planDisplayName } from '../../../server/plan-usage';
-import { formatMoney, systemClock, type Money } from '@brandspace/shared';
+import { formatMoney, systemClock, type Money, mayReadCreditBalance } from '@brandspace/shared';
 import {
   buttonClass,
   buttonStyle,
@@ -9,7 +9,14 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import {
+  inWorkspace,
+  memberDisplayName,
+  workspaceOwnerName,
+  requireWorkspacePage,
+} from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
+import { PermissionNotice } from '../../../components/permission-notice';
 import { billingOverviewFor, commerceSnapshotFor } from '../../../server/commerce-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
@@ -53,9 +60,12 @@ export const dynamic = 'force-dynamic';
 export default async function BillingPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'billing.read');
+  const access = await requireWorkspacePage(locale, '/billing');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
   const mayManage = workspace.permissionKeys.includes('billing.manage');
-  const mayReadCredits = workspace.permissionKeys.includes('credits.read');
+  // Q18 — the balance is shown to the people who spend it (`credits.read` + `copilot.use`).
+  const mayReadCredits = mayReadCreditBalance(workspace.permissionKeys);
 
   const snapshot = await commerceSnapshotFor(workspace.workspaceId);
   const overview = await billingOverviewFor(workspace.workspaceId, snapshot.currencyScale);
@@ -104,6 +114,16 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
     >
       <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="billing">
         <BillingTabs locale={locale} current="billing" />
+        {/* A5/E6 — changing the plan or payment method is owner-only; say so
+          once, where the buttons would be, instead of leaving them missing. */}
+        {mayManage ? null : (
+          <PermissionNotice
+            locale={locale}
+            permissionKey="billing.manage"
+            memberName={memberDisplayName(customer)}
+            ownerName={await workspaceOwnerName(workspace.workspaceId)}
+          />
+        )}
         {/* The three states dunning can put a workspace in, each said plainly and
           each stating what is NOT happening: nothing is being deleted. */}
         {subscription?.status === 'SUSPENDED' ? (

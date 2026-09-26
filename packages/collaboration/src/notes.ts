@@ -140,10 +140,25 @@ const INBOX_TAKE = 40;
  * ONE PERMISSION FOR READING AND WRITING, deliberately. A workspace where some
  * members can read the conversation and not reply is a workspace where the
  * conversation moves somewhere else; the meaningful boundary is whether you are
- * in the room. Resolving somebody else's thread and deleting a note are the two
- * places a stronger check applies, and each is checked where it happens.
+ * in the room. Starting a thread and replying to an open one need nothing more.
  */
 export const NOTE_PERMISSION = 'content.read';
+
+/**
+ * THE PERMISSION TO RUN A CONVERSATION rather than take part in it (Q12).
+ *
+ * Resolving, reopening, assigning, setting a due date or importance, assigning
+ * someone when a thread starts, and replying to a RESOLVED thread (which
+ * reopens it) are all triage: they change the state everyone else sees. They
+ * need `notes.manage` on top of `NOTE_PERMISSION`. Every role that could do
+ * them before holds it, so nobody lost anything; it exists so a member who may
+ * only comment — the read-only Viewer, once it is given `content.read` — can
+ * start and answer threads and nothing more.
+ *
+ * Refused with FORBIDDEN naming the permission, not 404: the member can already
+ * see the thread, so its existence is not the secret (E6).
+ */
+export const NOTE_MANAGE_PERMISSION = 'notes.manage';
 
 /** The longest a single note may be. */
 const MAX_BODY = 4_000;
@@ -179,6 +194,15 @@ export class NotesService {
 
   #requirePermission(actor: NoteActor): void {
     if (!actor.permissionKeys.includes(NOTE_PERMISSION)) throw this.#notFound();
+  }
+
+  /** Q12 — triage needs `notes.manage`. Asked AFTER the thread is found. */
+  #requireManage(actor: NoteActor): void {
+    if (!actor.permissionKeys.includes(NOTE_MANAGE_PERMISSION)) {
+      throw new AppError('FORBIDDEN', 'Managing a conversation needs notes.manage.', {
+        permission: NOTE_MANAGE_PERMISSION,
+      });
+    }
   }
 
   /**
@@ -331,6 +355,8 @@ export class NotesService {
     this.#requirePermission(input.actor);
     const body = this.#validBody(input.body);
     const brandId = await this.#brandForSubject(input.subject, input.actor);
+    // Pointing a new thread at somebody is triage (Q12).
+    if ((input.assignedToUserId ?? null) !== null) this.#requireManage(input.actor);
     const mentions = await this.#resolvableMentions(input.mentionedUserIds ?? []);
     const assignee = await this.#validAssignee(input.assignedToUserId ?? null);
 
@@ -371,32 +397,46 @@ export class NotesService {
     this.#requirePermission(input.actor);
     const body = this.#validBody(input.body);
     const thread = await this.#threadFor(input.threadId, input.actor);
+    // Replying to a RESOLVED thread reopens it, which is triage (Q12).
+    if (thread.status === 'RESOLVED') this.#requireManage(input.actor);
     const mentions = await this.#resolvableMentions(input.mentionedUserIds ?? []);
 
     const now = this.#clock.now();
-    const note = await this.#writeNote(thread.id, input.actor.userId, body, mentions, now);
     /*
-     * REPLYING TO A RESOLVED THREAD REOPENS IT.
+     * THE THREAD'S STATE IS CLAIMED BEFORE THE REPLY IS WRITTEN, IN ONE STEP.
      *
-     * Somebody typing into a closed conversation is saying it is not closed.
-     * Leaving it resolved would hide the reply from every "what is open" view,
-     * which is the one place it needed to appear.
+     * Reading the status and then writing left a gap: a thread resolved in
+     * between took a reply from somebody who may not reopen it (Q12). Each
+     * claim below is a conditional UPDATE on the status the reply depends on.
+     * It locks the row, so a concurrent resolve waits for this transaction,
+     * and one that already committed makes the claim match nothing — PostgreSQL
+     * re-checks the WHERE after the lock. No row matched means the thread is no
+     * longer in the state the reply needs, and nothing is written.
+     *
+     * REPLYING TO A RESOLVED THREAD REOPENS IT (with `notes.manage`). Somebody
+     * typing into a closed conversation is saying it is not closed; leaving it
+     * resolved would hide the reply from every "what is open" view.
      */
-    if (thread.status === 'RESOLVED') {
-      await this.#db.noteThread.update({
-        where: { id: thread.id },
+    const stillOpen = await this.#db.noteThread.updateMany({
+      where: { id: thread.id, status: 'OPEN' },
+      data: { updatedAt: now },
+    });
+    let reopened = false;
+    if (stillOpen.count === 0) {
+      // Resolved — now, or since it was read. Only a manager may reopen it.
+      this.#requireManage(input.actor);
+      const reopenedRows = await this.#db.noteThread.updateMany({
+        where: { id: thread.id, status: 'RESOLVED' },
         data: { status: 'OPEN', resolvedAt: null, resolvedByUserId: null, updatedAt: now },
       });
-    } else {
-      await this.#db.noteThread.update({
-        where: { id: thread.id },
-        data: { updatedAt: now },
-      });
+      if (reopenedRows.count === 0) throw this.#notFound();
+      reopened = true;
     }
+    const note = await this.#writeNote(thread.id, input.actor.userId, body, mentions, now);
 
     await this.#audit(input.actor, 'customer.note.replied', thread.id, {
       noteId: note.id,
-      reopened: thread.status === 'RESOLVED',
+      reopened,
       mentions: mentions.length,
     });
     return { noteId: note.id };
@@ -406,6 +446,7 @@ export class NotesService {
   async resolve(input: { readonly actor: NoteActor; readonly threadId: string }): Promise<void> {
     this.#requirePermission(input.actor);
     const thread = await this.#threadFor(input.threadId, input.actor);
+    this.#requireManage(input.actor);
     if (thread.status === 'RESOLVED') return;
 
     const now = this.#clock.now();
@@ -425,6 +466,7 @@ export class NotesService {
   async reopen(input: { readonly actor: NoteActor; readonly threadId: string }): Promise<void> {
     this.#requirePermission(input.actor);
     const thread = await this.#threadFor(input.threadId, input.actor);
+    this.#requireManage(input.actor);
     if (thread.status === 'OPEN') return;
 
     const now = this.#clock.now();
@@ -443,6 +485,7 @@ export class NotesService {
   }): Promise<void> {
     this.#requirePermission(input.actor);
     const thread = await this.#threadFor(input.threadId, input.actor);
+    this.#requireManage(input.actor);
     const assignee = await this.#validAssignee(input.assignedToUserId);
 
     await this.#db.noteThread.update({
@@ -467,6 +510,7 @@ export class NotesService {
   }): Promise<void> {
     this.#requirePermission(input.actor);
     const thread = await this.#threadFor(input.threadId, input.actor);
+    this.#requireManage(input.actor);
     if (input.dueAt !== null && Number.isNaN(input.dueAt.getTime())) {
       throw new AppError('VALIDATION_FAILED', 'That is not a date.');
     }
@@ -490,6 +534,7 @@ export class NotesService {
       throw new AppError('VALIDATION_FAILED', 'Unknown importance.');
     }
     const thread = await this.#threadFor(input.threadId, input.actor);
+    this.#requireManage(input.actor);
     await this.#db.noteThread.update({
       where: { id: thread.id },
       data: { importance: input.importance, updatedAt: this.#clock.now() },

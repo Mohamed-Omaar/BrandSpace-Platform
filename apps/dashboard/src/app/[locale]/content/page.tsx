@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { canPreviewWithoutDerivative, isSelectable } from '@brandspace/assets';
+import { RESCHEDULABLE_SLOT_STATUSES, formatLocalTime } from '@brandspace/content';
 import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inAssetLibrary } from '../../../server/assets-context';
@@ -62,7 +64,9 @@ export default async function ContentPage({
   const query = await searchParams;
   const translate = translator(locale);
   const t = (key: string): string => optionalMessage(locale, key) ?? key;
-  const { customer, workspace } = await requireWorkspace(locale, 'content.read');
+  const access = await requireWorkspacePage(locale, '/content');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
   const may = (key: string) => workspace.permissionKeys.includes(key);
 
   const single = (key: string): string | undefined => {
@@ -224,6 +228,76 @@ export default async function ContentPage({
     });
   }
 
+  /*
+   * B8 — WHAT THE POSTS MENU NEEDS, read once for the page in the tenant
+   * context: each post's live plan (only one that can still move is offered),
+   * the links of what was published, and the campaigns a post may be filed
+   * under (Q21: attach with `content.create`, change with `campaigns.manage`).
+   */
+  const mayAttachCampaign = may('content.create') || may('campaigns.manage');
+  const menuFacts = await inWorkspace(workspace.workspaceId, async ({ db }) => {
+    const ids = items.map((item) => item.id);
+    const [workspaceRow, slots, jobs, campaignOptions] = await Promise.all([
+      db.workspace.findUnique({
+        where: { id: workspace.workspaceId },
+        select: { timezone: true },
+      }),
+      ids.length > 0 && may('content.schedule')
+        ? db.calendarSlot.findMany({
+            where: { contentItemId: { in: ids }, status: { in: [...RESCHEDULABLE_SLOT_STATUSES] } },
+            select: { id: true, contentItemId: true, scheduledAtUtc: true },
+          })
+        : Promise.resolve([]),
+      ids.length > 0
+        ? db.publishJob.findMany({
+            where: {
+              contentItemId: { in: ids },
+              status: 'PUBLISHED',
+              externalPostUrl: { not: null },
+            },
+            select: { contentItemId: true, provider: true, externalPostUrl: true },
+          })
+        : Promise.resolve([]),
+      mayAttachCampaign
+        ? db.campaign.findMany({
+            where: {
+              deletedAt: null,
+              status: { not: 'ARCHIVED' },
+              ...brandIdQueryFilter({ brandScope: workspace.brandScope }),
+            },
+            select: { id: true, name: true, brandId: true },
+            orderBy: { name: 'asc' },
+            take: 200,
+          })
+        : Promise.resolve([]),
+    ]);
+    return { timezone: workspaceRow?.timezone ?? 'UTC', slots, jobs, campaignOptions };
+  });
+  const slotByItem = new Map(
+    menuFacts.slots.map((slot) => {
+      const local = formatLocalTime(slot.scheduledAtUtc, menuFacts.timezone);
+      return [
+        slot.contentItemId,
+        { id: slot.id, date: local.slice(0, 10), time: local.slice(11, 16) },
+      ] as const;
+    }),
+  );
+  const linksByItem = new Map<string, { label: string; url: string }[]>();
+  for (const job of menuFacts.jobs) {
+    if (!job.externalPostUrl || !job.externalPostUrl.startsWith('https://')) continue;
+    const list = linksByItem.get(job.contentItemId) ?? [];
+    list.push({
+      label:
+        optionalMessage(locale, `content.platform.${job.provider.toLowerCase()}`) ?? job.provider,
+      url: job.externalPostUrl,
+    });
+    linksByItem.set(job.contentItemId, list);
+  }
+  const campaignsByBrand: Record<string, { id: string; name: string }[]> = {};
+  for (const row of menuFacts.campaignOptions) {
+    (campaignsByBrand[row.brandId] ??= []).push({ id: row.id, name: row.name });
+  }
+
   const campaignNames = new Map(campaigns.map((row) => [row.id, row.name]));
   const cards: LibraryCard[] = items.map((item) => {
     const assetIds = firstAssets.find((entry) => entry.itemId === item.id)?.assetIds ?? [];
@@ -245,6 +319,10 @@ export default async function ContentPage({
       ownerName: item.createdByUserId ? (owners.get(item.createdByUserId) ?? null) : null,
       media: first ? { ...first, count: assetIds.length } : { kind: 'none' },
       excerpt: (primary?.body ?? '').slice(0, 280),
+      brandId: item.brandId,
+      campaignId: item.campaignId,
+      slot: slotByItem.get(item.id) ?? null,
+      links: linksByItem.get(item.id) ?? [],
     };
   });
 
@@ -377,6 +455,19 @@ export default async function ContentPage({
         ideas={ideas}
         duplicateToken={randomUUID()}
         paging={{ page: pageNumber, hasMore }}
+        menu={{
+          can: {
+            schedule: may('content.schedule'),
+            archive: may('content.archive'),
+            attachCampaign: mayAttachCampaign,
+            changeCampaign: may('campaigns.manage'),
+          },
+          campaignsByBrand,
+          today: formatLocalTime(now, menuFacts.timezone).slice(0, 10),
+          labels: Object.fromEntries(
+            MENU_KEYS.map((key) => [key, optionalMessage(locale, key) ?? '']),
+          ),
+        }}
         can={{
           create: may('content.create'),
           submit: may('content.submit'),
@@ -399,3 +490,26 @@ export default async function ContentPage({
     </WorkspaceShell>
   );
 }
+
+/** B8 — the words the Posts menu uses, resolved on the server. */
+const MENU_KEYS = [
+  'common.close',
+  'common.cancel',
+  'calendar.scheduleDate',
+  'calendar.scheduleTime',
+  'content.menu.label',
+  'content.menu.move',
+  'content.menu.unschedule',
+  'content.menu.archive',
+  'content.menu.restore',
+  'content.menu.campaign',
+  'content.menu.viewOn',
+  'content.move.title',
+  'content.move.submit',
+  'content.campaign.title',
+  'content.campaign.none',
+  'content.campaign.submit',
+  'content.archive.title',
+  'content.archive.confirm',
+  'content.archive.confirmBody',
+] as const;

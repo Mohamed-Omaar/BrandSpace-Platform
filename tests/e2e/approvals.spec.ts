@@ -195,7 +195,10 @@ test.describe('the approval workflow', () => {
     await expect(page.locator('[data-testid^="approve-"]')).toHaveCount(0);
 
     // 5. Withdrawing and resubmitting opens a NEW cycle, which carries the new
-    //    policy — and that one may be self-approved.
+    //    policy — and that one may be self-approved. What the reader sent is on
+    //    the "Sent" tab (B5).
+    await page.goto(`${DASHBOARD_BASE_URL}/en/approvals?tab=sent`);
+    await expect(page.getByTestId('approvals-mine')).toBeVisible({ timeout: 15_000 });
     await submitAndSettle(page, '[data-testid^="withdraw-"]', /ok=SAVED|error=/);
     expect(page.url()).toMatch(/ok=SAVED/);
 
@@ -230,9 +233,14 @@ test.describe('the approval workflow', () => {
     page,
   }) => {
     await signIn(page);
+    // B5 — two tabs: "For me" (the default for a reviewer) and "Sent".
     await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
-    await expect(page.getByTestId('approvals-queue')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('approvals-mine')).toBeVisible();
+    await expect(page.getByTestId('approvals-tabs')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('approvals-queue')).toBeVisible();
+    await expect(page.getByTestId('approvals-mine')).toHaveCount(0);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/approvals?tab=sent`);
+    await expect(page.getByTestId('approvals-mine')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('approvals-queue')).toHaveCount(0);
   });
 });
 

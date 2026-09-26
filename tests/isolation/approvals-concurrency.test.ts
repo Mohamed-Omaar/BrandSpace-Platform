@@ -431,7 +431,12 @@ describe('the calendar and the approval cannot diverge', () => {
   it('content a reviewer sent back cannot be scheduled', async () => {
     const id = await openCycle();
     await run((s) =>
-      s.decide({ approvalId: id, verdict: 'REQUEST_CHANGES', actor: reviewer(REVIEWER_A) }),
+      s.decide({
+        approvalId: id,
+        verdict: 'REQUEST_CHANGES',
+        note: 'Please change the opening line.',
+        actor: reviewer(REVIEWER_A),
+      }),
     );
     expect(await statusOf()).toBe('CHANGES_REQUESTED');
     await expect(schedule()).rejects.toThrow();

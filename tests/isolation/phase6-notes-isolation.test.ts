@@ -101,7 +101,8 @@ async function freshWorkspace(label: string): Promise<Fixture> {
 function actorFor(fixture: Fixture, overrides: Partial<NoteActor> = {}): NoteActor {
   return {
     userId: fixture.userId,
-    permissionKeys: ['content.read'],
+    // Every role that reads content also triages notes (Q12, `notes.manage`).
+    permissionKeys: ['content.read', 'notes.manage'],
     brandScope: [],
     ...overrides,
   };
@@ -494,5 +495,185 @@ describe('P6-05 · the conversation behaves like a conversation', () => {
         body: '   ',
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+});
+
+describe('Q12 · a member who may only comment starts and answers threads, and triages nothing', () => {
+  /*
+   * `content.read` WITHOUT `notes.manage` — the Viewer once it is given read
+   * access to content (a later release grants it; the permission model is
+   * proven here). Starting a thread and replying to an OPEN one are allowed;
+   * everything that changes the state other people see is refused with a
+   * FORBIDDEN that names `notes.manage`, and leaves the thread as it was.
+   */
+  const commenter = (fixture: Fixture): NoteActor =>
+    actorFor(fixture, { permissionKeys: ['workspace.read', 'content.read'] });
+
+  async function threadIn(fixture: Fixture): Promise<string> {
+    const { threadId } = await serviceFor(fixture.workspaceId).startThread({
+      actor: actorFor(fixture),
+      subject: { type: 'CONTENT_ITEM', contentItemId: fixture.contentItemId },
+      body: 'A thread the team runs',
+    });
+    return threadId;
+  }
+
+  const forbiddenNotesManage = {
+    code: 'FORBIDDEN',
+    publicDetails: { permission: 'notes.manage' },
+  };
+
+  it('may start a thread and reply to an open one', async () => {
+    const w = await freshWorkspace('q12-comment');
+    const service = serviceFor(w.workspaceId);
+    const { threadId } = await service.startThread({
+      actor: commenter(w),
+      subject: { type: 'CONTENT_ITEM', contentItemId: w.contentItemId },
+      body: 'Could the headline be shorter?',
+    });
+    await service.reply({ actor: commenter(w), threadId, body: 'And the colour warmer.' });
+    const notes = await service.notesIn(threadId, commenter(w));
+    expect(notes.map((n) => n.body)).toEqual([
+      'Could the headline be shorter?',
+      'And the colour warmer.',
+    ]);
+  });
+
+  it('may not assign a thread, even when starting it', async () => {
+    const w = await freshWorkspace('q12-assign');
+    const service = serviceFor(w.workspaceId);
+    await expect(
+      service.startThread({
+        actor: commenter(w),
+        subject: { type: 'CONTENT_ITEM', contentItemId: w.contentItemId },
+        body: 'Over to you',
+        assignedToUserId: w.userId,
+      }),
+    ).rejects.toMatchObject(forbiddenNotesManage);
+    const threadId = await threadIn(w);
+    await expect(
+      service.assign({ actor: commenter(w), threadId, assignedToUserId: w.userId }),
+    ).rejects.toMatchObject(forbiddenNotesManage);
+    const row = await platform.noteThread.findUniqueOrThrow({ where: { id: threadId } });
+    expect(row.assignedToUserId).toBeNull();
+  });
+
+  it('may not resolve, reopen, set a due date or set importance', async () => {
+    const w = await freshWorkspace('q12-triage');
+    const service = serviceFor(w.workspaceId);
+    const threadId = await threadIn(w);
+    const before = await platform.noteThread.findUniqueOrThrow({ where: { id: threadId } });
+
+    await expect(service.resolve({ actor: commenter(w), threadId })).rejects.toMatchObject(
+      forbiddenNotesManage,
+    );
+    await expect(
+      service.setDue({ actor: commenter(w), threadId, dueAt: new Date('2026-12-01') }),
+    ).rejects.toMatchObject(forbiddenNotesManage);
+    await expect(
+      service.setImportance({ actor: commenter(w), threadId, importance: 'IMPORTANT' }),
+    ).rejects.toMatchObject(forbiddenNotesManage);
+
+    await service.resolve({ actor: actorFor(w), threadId });
+    await expect(service.reopen({ actor: commenter(w), threadId })).rejects.toMatchObject(
+      forbiddenNotesManage,
+    );
+
+    const after = await platform.noteThread.findUniqueOrThrow({ where: { id: threadId } });
+    expect(after.status).toBe('RESOLVED');
+    expect(after.dueAt).toBe(before.dueAt);
+    expect(after.importance).toBe(before.importance);
+  });
+
+  it('may not reply to a resolved thread, which would reopen it', async () => {
+    const w = await freshWorkspace('q12-resolved');
+    const service = serviceFor(w.workspaceId);
+    const threadId = await threadIn(w);
+    await service.resolve({ actor: actorFor(w), threadId });
+
+    await expect(
+      service.reply({ actor: commenter(w), threadId, body: 'One more thing' }),
+    ).rejects.toMatchObject(forbiddenNotesManage);
+    const row = await platform.noteThread.findUniqueOrThrow({ where: { id: threadId } });
+    expect(row.status).toBe('RESOLVED');
+    expect(await service.notesIn(threadId, actorFor(w))).toHaveLength(1);
+    // Nothing refused was audited as if it had happened.
+    const reopened = await platform.auditEvent.count({
+      where: { workspaceId: w.workspaceId, action: 'customer.note.reopened' },
+    });
+    expect(reopened).toBe(0);
+  });
+
+  /**
+   * A client whose FIRST `noteThread.findFirst` — the reply's own read of the
+   * thread — is followed, before the reply goes on, by a resolve committed on
+   * another connection. That is the gap between reading the status and writing.
+   */
+  function resolvedRightAfterRead(fixture: Fixture, threadId: string): NotesService {
+    let fired = false;
+    const noteThread = new Proxy(platform.noteThread, {
+      get(target, key, receiver) {
+        const value = Reflect.get(target, key, receiver) as unknown;
+        if (key !== 'findFirst' || typeof value !== 'function') return value;
+        return async (...args: unknown[]) => {
+          const row = await (value as (...a: unknown[]) => Promise<unknown>).apply(target, args);
+          if (!fired) {
+            fired = true;
+            await serviceFor(fixture.workspaceId).resolve({ actor: actorFor(fixture), threadId });
+          }
+          return row;
+        };
+      },
+    });
+    const db = new Proxy(platform, {
+      get: (target, key, receiver) =>
+        key === 'noteThread' ? noteThread : Reflect.get(target, key, receiver),
+    });
+    return new NotesService({
+      db: db as unknown as TenantScopedClient,
+      workspaceId: fixture.workspaceId,
+      clock: systemClock,
+    });
+  }
+
+  it('a thread resolved between the read and the write takes no reply from a commenter', async () => {
+    const w = await freshWorkspace('q12-race');
+    const threadId = await threadIn(w);
+    await expect(
+      resolvedRightAfterRead(w, threadId).reply({
+        actor: commenter(w),
+        threadId,
+        body: 'Slipped in after it closed',
+      }),
+    ).rejects.toMatchObject(forbiddenNotesManage);
+    const row = await platform.noteThread.findUniqueOrThrow({ where: { id: threadId } });
+    expect(row.status).toBe('RESOLVED');
+    expect(await serviceFor(w.workspaceId).notesIn(threadId, actorFor(w))).toHaveLength(1);
+  });
+
+  it('a manager replying across the same race reopens the thread, and says so', async () => {
+    const w = await freshWorkspace('q12-race-manager');
+    const threadId = await threadIn(w);
+    await resolvedRightAfterRead(w, threadId).reply({
+      actor: actorFor(w),
+      threadId,
+      body: 'Not finished yet',
+    });
+    const row = await platform.noteThread.findUniqueOrThrow({ where: { id: threadId } });
+    expect(row.status).toBe('OPEN');
+    const replied = await platform.auditEvent.findFirstOrThrow({
+      where: { workspaceId: w.workspaceId, action: 'customer.note.replied' },
+      orderBy: { occurredAt: 'desc' },
+    });
+    expect(replied.after).toMatchObject({ reopened: true });
+  });
+
+  it('another workspace’s thread is still a 404, not a FORBIDDEN', async () => {
+    const a = await freshWorkspace('q12-cross-a');
+    const b = await freshWorkspace('q12-cross-b');
+    const threadId = await threadIn(b);
+    await expect(
+      serviceFor(a.workspaceId).resolve({ actor: commenter(a), threadId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

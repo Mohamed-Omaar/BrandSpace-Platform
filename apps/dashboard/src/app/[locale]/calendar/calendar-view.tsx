@@ -116,6 +116,13 @@ export interface SlotReadinessDetail {
 
 export interface CalendarViewProps {
   readonly locale: string;
+  /**
+   * F2 — today and tomorrow in the workspace's zone (`YYYY-MM-DD`), and the
+   * time a new post is proposed for. Nothing before today can be chosen.
+   */
+  readonly today?: string;
+  readonly tomorrow?: string;
+  readonly defaultTime?: string;
   readonly t: Record<string, string>;
   readonly periodLabel: string;
   /** `YYYY-MM`, the month the URL asked for. */
@@ -177,6 +184,9 @@ export interface CalendarViewProps {
 
 export function CalendarView({
   locale,
+  today = '',
+  tomorrow = '',
+  defaultTime = '',
   t,
   periodLabel,
   month,
@@ -209,7 +219,24 @@ export function CalendarView({
   const [scheduling, setScheduling] = useState(preselected !== undefined);
   const [trayExpanded, setTrayExpanded] = useState(false);
   const [scheduleItem, setScheduleItem] = useState<string>(preselected ?? drafts[0]?.id ?? '');
-  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleDate, setScheduleDate] = useState(tomorrow);
+  /*
+   * F2 — THE PROPOSED TIME FOLLOWS THE DAY. On a later day it is the default
+   * (09:00); on TODAY it is left empty, because 09:00 may already have passed
+   * in the workspace's zone and the server would refuse it. The field is
+   * required, so the person picks a time that is still to come; the day they
+   * chose is never moved for them.
+   */
+  const proposedTime = (date: string) => (date !== '' && date === today ? '' : defaultTime);
+  const [scheduleTime, setScheduleTime] = useState(() => proposedTime(tomorrow));
+  const chooseScheduleDate = (date: string) => {
+    setScheduleDate(date);
+    setScheduleTime((current) =>
+      current === '' || current === defaultTime ? proposedTime(date) : current,
+    );
+  };
+  // F2 — said when a post is dropped on a day that has passed.
+  const [pastDayNotice, setPastDayNotice] = useState(false);
   const [openSlotId, setOpenSlotId] = useState<string | null>(null);
 
   /*
@@ -220,9 +247,55 @@ export function CalendarView({
    */
   const openScheduleFor = (itemId: string, date = '') => {
     if (!drafts.some((draft) => draft.id === itemId)) return;
+    // F2 — a day that has passed is not offered; say so rather than open a
+    // dialog the server would refuse.
+    if (date !== '' && today !== '' && date < today) {
+      setPastDayNotice(true);
+      return;
+    }
+    setPastDayNotice(false);
     setScheduleItem(itemId);
-    setScheduleDate(date);
+    const chosen = date === '' ? tomorrow : date;
+    setScheduleDate(chosen);
+    setScheduleTime(proposedTime(chosen));
     setScheduling(true);
+  };
+
+  /*
+   * B7 — A PLANNED POST DRAGGED TO ANOTHER DAY keeps its time: the same
+   * reschedule action the drawer's form posts, with the new date. Drag is
+   * never the only way (WCAG 2.5.7) — the drawer has the date and time form.
+   */
+  const moveSlotTo = (slotId: string, day: string) => {
+    const slot = slots.find((candidate) => candidate.slotId === slotId);
+    if (!slot || !canSchedule || slot.reschedulable === false) return;
+    if (today !== '' && day < today) {
+      setPastDayNotice(true);
+      return;
+    }
+    setPastDayNotice(false);
+    if (slot.date === day) return;
+    const form = new FormData();
+    form.set('locale', locale);
+    form.set('month', month);
+    form.set('slotId', slot.slotId);
+    form.set('date', day);
+    form.set('time', slot.time);
+    startTransition(() => {
+      void actions.reschedule(form);
+    });
+  };
+
+  const onDrop = (day: string, data: string) => {
+    if (data.startsWith('slot:')) moveSlotTo(data.slice('slot:'.length), day);
+    else openScheduleFor(data.startsWith('item:') ? data.slice('item:'.length) : data, day);
+  };
+
+  /** B7 — only a post that can still move is draggable, and only for a scheduler. */
+  const postDragData = (post: PostRecord): string | undefined => {
+    if (!canSchedule) return undefined;
+    const slot = slots.find((candidate) => candidate.slotId === post.id);
+    return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;
   };
 
   const filterQuery = new URLSearchParams(
@@ -251,6 +324,11 @@ export function CalendarView({
 
   return (
     <div data-testid="calendar-page" style={{ display: 'grid', gap: spacingTokens.lg }}>
+      {pastDayNotice ? (
+        <Banner tone="warning" testId="calendar-past-day">
+          {t['calendar.pastDay']}
+        </Banner>
+      ) : null}
       <ContentCalendar
         periodLabel={periodLabel}
         days={days}
@@ -296,7 +374,17 @@ export function CalendarView({
           ) : undefined
         }
         {...(canSchedule
-          ? { onDropDay: (day: string, data: string) => openScheduleFor(data, day) }
+          ? {
+              onDropDay: onDrop,
+              postDragData,
+              // B7 — "new post" on an empty day: the scheduling dialog, dated.
+              onCreateOnDay: (day: string) => {
+                setPastDayNotice(false);
+                setScheduleDate(day);
+                setScheduleTime(proposedTime(day));
+                setScheduling(true);
+              },
+            }
           : {})}
         filters={
           <>
@@ -436,6 +524,14 @@ export function CalendarView({
               >
                 {t['calendar.tray.hint']}
               </p>
+              {/* B7 / M7 — a phone has no drag; moving is done from the post itself. */}
+              <p
+                className="bs-narrow-only"
+                data-testid="calendar-move-note"
+                style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+              >
+                {t['calendar.moveFromPost']}
+              </p>
               <ul
                 style={{
                   listStyle: 'none',
@@ -454,7 +550,8 @@ export function CalendarView({
                     draggable
                     data-testid={`calendar-tray-${draft.id}`}
                     onDragStart={(event) => {
-                      event.dataTransfer.setData('text/plain', draft.id);
+                      // B7 — `item:` says a tray draft; a post already planned carries `slot:`.
+                      event.dataTransfer.setData('text/plain', `item:${draft.id}`);
                       event.dataTransfer.effectAllowed = 'copy';
                     }}
                     style={{
@@ -581,7 +678,8 @@ export function CalendarView({
                   type="date"
                   required
                   value={scheduleDate}
-                  onChange={(event) => setScheduleDate(event.target.value)}
+                  onChange={(event) => chooseScheduleDate(event.target.value)}
+                  {...(today ? { min: today } : {})}
                   data-testid="schedule-date"
                   style={inputStyle()}
                 />
@@ -593,6 +691,8 @@ export function CalendarView({
                   name="time"
                   type="time"
                   required
+                  value={scheduleTime}
+                  onChange={(event) => setScheduleTime(event.target.value)}
                   data-testid="schedule-time"
                   style={inputStyle()}
                 />
@@ -736,6 +836,7 @@ export function CalendarView({
                       type="date"
                       required
                       defaultValue={openSlot.date}
+                      {...(today ? { min: today } : {})}
                       data-testid="reschedule-date"
                       style={inputStyle()}
                     />
@@ -794,7 +895,8 @@ export function CalendarView({
                   </button>
                 </form>
               ) : null}
-              {canSchedule ? (
+              {/* B7 — only a plan that has not started publishing can be taken off. */}
+              {canSchedule && openSlot.reschedulable !== false ? (
                 <form action={actions.cancel}>
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="month" value={month} />

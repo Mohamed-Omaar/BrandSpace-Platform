@@ -10,7 +10,11 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import type { NoteSubject, NoteThreadSummary } from '@brandspace/collaboration';
+import {
+  NOTE_MANAGE_PERMISSION,
+  type NoteSubject,
+  type NoteThreadSummary,
+} from '@brandspace/collaboration';
 import { systemClock } from '@brandspace/shared';
 import { inNotes, mentionableMembers } from '../server/notes-context';
 import { relativeTime } from '../server/home';
@@ -82,8 +86,13 @@ export async function NotesPanel({
    */
   let threads;
   let members;
+  let mayManage = false;
   try {
-    threads = await inNotes(locale, ({ service, actor }) => service.threadsFor(subject, actor));
+    threads = await inNotes(locale, async ({ service, actor }) => {
+      // Q12 — whether this member may run a conversation or only take part.
+      mayManage = actor.permissionKeys.includes(NOTE_MANAGE_PERMISSION);
+      return service.threadsFor(subject, actor);
+    });
     members = await mentionableMembers(locale);
   } catch {
     return null;
@@ -123,6 +132,7 @@ export async function NotesPanel({
               returnPath={returnPath}
               members={members}
               highlighted={thread.id === highlightThreadId}
+              mayManage={mayManage}
             />
           ))}
         </ul>
@@ -186,12 +196,19 @@ async function NoteThread({
   returnPath,
   members,
   highlighted,
+  mayManage,
 }: {
   readonly locale: string;
   readonly thread: NoteThreadSummary;
   readonly returnPath: string;
   readonly members: readonly { readonly userId: string; readonly name: string }[];
   readonly highlighted: boolean;
+  /**
+   * Q12 — `notes.manage`: resolve, reopen, assign, due date, importance, and
+   * replying to a resolved thread (which reopens it). Without it the member
+   * may still reply to an open thread and mark their mentions read.
+   */
+  readonly mayManage: boolean;
 }) {
   const t = translator(locale);
   const threadId = thread.id;
@@ -317,56 +334,60 @@ async function NoteThread({
         ))}
       </ol>
 
-      <form
-        action={replyToNoteThreadAction}
-        style={{ display: 'grid', gap: spacingTokens.xs }}
-        data-testid={`note-reply-form-${threadId}`}
-      >
-        <input type="hidden" name="locale" value={locale} />
-        <input type="hidden" name="threadId" value={threadId} />
-        <input type="hidden" name="returnPath" value={returnPath} />
-        <label htmlFor={`reply-${threadId}`} className="bs-sr-only">
-          {t('notes.replyLabel')}
-        </label>
-        <MentionField
-          id={`reply-${threadId}`}
-          name="body"
-          multiline={false}
-          required
-          placeholder={t('notes.replyPlaceholder')}
-          suggestionsLabel={t('notes.mentionSuggestions')}
-          members={members}
-          testId={`note-reply-${threadId}`}
-        />
-        <noscript>
-          <MentionPicker locale={locale} members={members} id={`reply-mentions-${threadId}`} />
-        </noscript>
-        <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
-          <button
-            type="submit"
-            className={buttonClass('neutral')}
-            style={buttonStyle('neutral', 'sm')}
-            data-testid={`note-reply-submit-${threadId}`}
-          >
-            {t('notes.reply')}
-          </button>
-        </div>
-      </form>
-
-      <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
-        <form action={status === 'RESOLVED' ? reopenNoteThreadAction : resolveNoteThreadAction}>
+      {status === 'RESOLVED' && !mayManage ? null : (
+        <form
+          action={replyToNoteThreadAction}
+          style={{ display: 'grid', gap: spacingTokens.xs }}
+          data-testid={`note-reply-form-${threadId}`}
+        >
           <input type="hidden" name="locale" value={locale} />
           <input type="hidden" name="threadId" value={threadId} />
           <input type="hidden" name="returnPath" value={returnPath} />
-          <button
-            type="submit"
-            className={buttonClass('ghost')}
-            style={buttonStyle('ghost', 'sm')}
-            data-testid={`note-${status === 'RESOLVED' ? 'reopen' : 'resolve'}-${threadId}`}
-          >
-            {t(status === 'RESOLVED' ? 'notes.reopen' : 'notes.resolve')}
-          </button>
+          <label htmlFor={`reply-${threadId}`} className="bs-sr-only">
+            {t('notes.replyLabel')}
+          </label>
+          <MentionField
+            id={`reply-${threadId}`}
+            name="body"
+            multiline={false}
+            required
+            placeholder={t('notes.replyPlaceholder')}
+            suggestionsLabel={t('notes.mentionSuggestions')}
+            members={members}
+            testId={`note-reply-${threadId}`}
+          />
+          <noscript>
+            <MentionPicker locale={locale} members={members} id={`reply-mentions-${threadId}`} />
+          </noscript>
+          <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
+            <button
+              type="submit"
+              className={buttonClass('neutral')}
+              style={buttonStyle('neutral', 'sm')}
+              data-testid={`note-reply-submit-${threadId}`}
+            >
+              {t('notes.reply')}
+            </button>
+          </div>
         </form>
+      )}
+
+      <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
+        {mayManage ? (
+          <form action={status === 'RESOLVED' ? reopenNoteThreadAction : resolveNoteThreadAction}>
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="threadId" value={threadId} />
+            <input type="hidden" name="returnPath" value={returnPath} />
+            <button
+              type="submit"
+              className={buttonClass('ghost')}
+              style={buttonStyle('ghost', 'sm')}
+              data-testid={`note-${status === 'RESOLVED' ? 'reopen' : 'resolve'}-${threadId}`}
+            >
+              {t(status === 'RESOLVED' ? 'notes.reopen' : 'notes.resolve')}
+            </button>
+          </form>
+        ) : null}
 
         {/*
           MARKING READ IS AN ACT, NOT A SIDE EFFECT OF RENDERING. Clearing
@@ -395,80 +416,84 @@ async function NoteThread({
         and not a task card. Each is the service's own rule; no workflow sits
         behind them.
       */}
-      <details data-testid={`note-options-${threadId}`}>
-        <summary style={{ cursor: 'pointer', ...typographyTokens.caption, fontWeight: 700 }}>
-          {t('notes.options')}
-        </summary>
-        <div style={{ display: 'grid', gap: spacingTokens.sm, marginBlockStart: spacingTokens.sm }}>
-          <form action={assignNoteThreadAction} style={optionRowStyle}>
-            {hidden}
-            <label htmlFor={`assign-${threadId}`} style={optionLabelStyle}>
-              {t('notes.assignLabel')}
-            </label>
-            <select
-              id={`assign-${threadId}`}
-              name="assignedToUserId"
-              defaultValue={thread.assignedToUserId ?? ''}
-              className="bs-control bs-select"
-              style={inputStyle({ size: 'sm' })}
-              data-testid={`note-assign-${threadId}`}
-            >
-              <option value="">{t('notes.nobody')}</option>
-              {members.map((member) => (
-                <option key={member.userId} value={member.userId}>
-                  {member.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className={buttonClass('neutral')}
-              style={buttonStyle('neutral', 'sm')}
-            >
-              {t('notes.save')}
-            </button>
-          </form>
-          <form action={setNoteDueAction} style={optionRowStyle}>
-            {hidden}
-            <label htmlFor={`due-${threadId}`} style={optionLabelStyle}>
-              {t('notes.dueLabel')}
-            </label>
-            <input
-              id={`due-${threadId}`}
-              type="date"
-              name="dueAt"
-              defaultValue={thread.dueAt ? thread.dueAt.toISOString().slice(0, 10) : ''}
-              className="bs-control"
-              style={inputStyle({ size: 'sm' })}
-              data-testid={`note-due-input-${threadId}`}
-            />
-            <button
-              type="submit"
-              className={buttonClass('neutral')}
-              style={buttonStyle('neutral', 'sm')}
-              data-testid={`note-due-save-${threadId}`}
-            >
-              {t('notes.save')}
-            </button>
-          </form>
-          <form action={setNoteImportanceAction} style={optionRowStyle}>
-            {hidden}
-            <input
-              type="hidden"
-              name="importance"
-              value={thread.importance === 'IMPORTANT' ? 'NORMAL' : 'IMPORTANT'}
-            />
-            <button
-              type="submit"
-              className={buttonClass('neutral')}
-              style={buttonStyle('neutral', 'sm')}
-              data-testid={`note-importance-${threadId}`}
-            >
-              {t(thread.importance === 'IMPORTANT' ? 'notes.markNormal' : 'notes.markImportant')}
-            </button>
-          </form>
-        </div>
-      </details>
+      {mayManage ? (
+        <details data-testid={`note-options-${threadId}`}>
+          <summary style={{ cursor: 'pointer', ...typographyTokens.caption, fontWeight: 700 }}>
+            {t('notes.options')}
+          </summary>
+          <div
+            style={{ display: 'grid', gap: spacingTokens.sm, marginBlockStart: spacingTokens.sm }}
+          >
+            <form action={assignNoteThreadAction} style={optionRowStyle}>
+              {hidden}
+              <label htmlFor={`assign-${threadId}`} style={optionLabelStyle}>
+                {t('notes.assignLabel')}
+              </label>
+              <select
+                id={`assign-${threadId}`}
+                name="assignedToUserId"
+                defaultValue={thread.assignedToUserId ?? ''}
+                className="bs-control bs-select"
+                style={inputStyle({ size: 'sm' })}
+                data-testid={`note-assign-${threadId}`}
+              >
+                <option value="">{t('notes.nobody')}</option>
+                {members.map((member) => (
+                  <option key={member.userId} value={member.userId}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className={buttonClass('neutral')}
+                style={buttonStyle('neutral', 'sm')}
+              >
+                {t('notes.save')}
+              </button>
+            </form>
+            <form action={setNoteDueAction} style={optionRowStyle}>
+              {hidden}
+              <label htmlFor={`due-${threadId}`} style={optionLabelStyle}>
+                {t('notes.dueLabel')}
+              </label>
+              <input
+                id={`due-${threadId}`}
+                type="date"
+                name="dueAt"
+                defaultValue={thread.dueAt ? thread.dueAt.toISOString().slice(0, 10) : ''}
+                className="bs-control"
+                style={inputStyle({ size: 'sm' })}
+                data-testid={`note-due-input-${threadId}`}
+              />
+              <button
+                type="submit"
+                className={buttonClass('neutral')}
+                style={buttonStyle('neutral', 'sm')}
+                data-testid={`note-due-save-${threadId}`}
+              >
+                {t('notes.save')}
+              </button>
+            </form>
+            <form action={setNoteImportanceAction} style={optionRowStyle}>
+              {hidden}
+              <input
+                type="hidden"
+                name="importance"
+                value={thread.importance === 'IMPORTANT' ? 'NORMAL' : 'IMPORTANT'}
+              />
+              <button
+                type="submit"
+                className={buttonClass('neutral')}
+                style={buttonStyle('neutral', 'sm')}
+                data-testid={`note-importance-${threadId}`}
+              >
+                {t(thread.importance === 'IMPORTANT' ? 'notes.markNormal' : 'notes.markImportant')}
+              </button>
+            </form>
+          </div>
+        </details>
+      ) : null}
     </li>
   );
 }

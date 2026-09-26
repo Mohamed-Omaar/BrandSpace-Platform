@@ -445,6 +445,20 @@ A confirmed charge can be reversed (support decision, provider incident, or a de
 
 ---
 
+### 7.8 Who may spend credits — Q18 (D-315)
+
+Every customer-started action that spends credits needs its own feature key **and** `copilot.use`
+(`creditSpendingPermissions()` in `@brandspace/shared`). The API routes that spend are marked
+`spendsCredits: true` in their contract and gate on both keys: `/v1/content/generate`,
+`/v1/content/tool`, `/v1/creative/generate`, `/v1/brand-brain/chat`, `/v1/analytics/explain`,
+`/v1/strategy/generate` and `/v1/intelligence/content-gap`. A member without `copilot.use` gets the
+same 404 as any other missing permission, sees no credit-spending button and no credit balance
+(`mayReadCreditBalance`: `credits.read` + `copilot.use`). Quotes spend nothing and keep their read
+keys. No worker, scheduler or automation path calls the gateway today; the scheduler's ledger
+housekeeping runs as the platform. An automation action that ever spends credits must add
+`copilot.use` to its action permission, which the engine re-checks against the rule's creator at
+every run.
+
 ## 8. Budgets and Limits
 
 | Level         | Control                                         | Behavior on breach                                                  |

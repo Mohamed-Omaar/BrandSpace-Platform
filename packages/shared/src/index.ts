@@ -1,6 +1,7 @@
 export * from './brand-scope';
 export * from './clock';
 export * from './content-fingerprint';
+export * from './credit-spending';
 export * from './deployment';
 export * from './security-headers';
 export * from './env';

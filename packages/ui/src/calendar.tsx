@@ -36,6 +36,11 @@ export interface CalendarDay {
   readonly longLabel: string;
   readonly inCurrentPeriod: boolean;
   readonly isToday: boolean;
+  /**
+   * F2 — before today. Marked on the cell (`data-past`) so a caller and a test
+   * can tell; how a drop on it is answered is the caller's decision.
+   */
+  readonly isPast?: boolean;
   readonly posts: readonly PostRecord[];
 }
 
@@ -74,12 +79,18 @@ function MonthGrid({
   labels,
   onOpenPost,
   onDropDay,
+  postDragData,
+  onCreateOnDay,
 }: {
   readonly days: readonly CalendarDay[];
   readonly labels: CalendarLabels;
   readonly onOpenPost?: ((post: PostRecord) => void) | undefined;
   /** PHASE 6 FINAL (D-290) — a dragged draft dropped on a day. */
   readonly onDropDay?: ((dayKey: string, data: string) => void) | undefined;
+  /** B7 — the drag payload for a post that may move, or undefined when it may not. */
+  readonly postDragData?: ((post: PostRecord) => string | undefined) | undefined;
+  /** B7 — "new post" on an empty day that has not passed. */
+  readonly onCreateOnDay?: ((dayKey: string) => void) | undefined;
 }) {
   return (
     <div
@@ -147,6 +158,7 @@ function MonthGrid({
               key={day.key}
               role="gridcell"
               data-testid={`calendar-day-${day.key}`}
+              data-past={day.isPast ? 'true' : undefined}
               {...(onDropDay
                 ? {
                     onDragOver: (event: React.DragEvent<HTMLDivElement>) => event.preventDefault(),
@@ -208,8 +220,38 @@ function MonthGrid({
                     post={post}
                     labels={labels}
                     onOpen={onOpenPost ? () => onOpenPost(post) : undefined}
+                    dragData={postDragData?.(post)}
                   />
                 ))}
+                {onCreateOnDay && !day.isPast && day.posts.length === 0 ? (
+                  /*
+                   * B7 — a new post on THIS day. Quiet until needed: a neutral
+                   * text-size control composed from the ghost button style, so
+                   * an empty month does not turn into a wall of buttons.
+                   */
+                  <button
+                    type="button"
+                    className="bs-pressable"
+                    data-testid={`calendar-new-${day.key}`}
+                    aria-label={`${labels.createPost} — ${day.longLabel}`}
+                    onClick={() => onCreateOnDay(day.key)}
+                    style={{
+                      justifySelf: 'start',
+                      minBlockSize: '1.5rem',
+                      paddingInline: spacingTokens.xs,
+                      border: '1px solid transparent',
+                      borderRadius: radiusTokens.md,
+                      background: 'transparent',
+                      color: colorTokens.textSecondary,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      ...typographyTokens.micro,
+                      fontWeight: 700,
+                    }}
+                  >
+                    + {labels.createPost}
+                  </button>
+                ) : null}
               </div>
             </div>
           ))}
@@ -330,6 +372,8 @@ export function ContentCalendar({
   busy,
   weekIndex = 0,
   onDropDay,
+  postDragData,
+  onCreateOnDay,
   emptyAction,
 }: {
   readonly periodLabel: string;
@@ -361,6 +405,10 @@ export function ContentCalendar({
   readonly weekIndex?: number | undefined;
   /** A dragged item dropped on a day. Drag is never the only way to schedule. */
   readonly onDropDay?: ((dayKey: string, data: string) => void) | undefined;
+  /** B7 — the drag payload for a post that may move to another day. */
+  readonly postDragData?: ((post: PostRecord) => string | undefined) | undefined;
+  /** B7 — "new post" on an empty day that has not passed. */
+  readonly onCreateOnDay?: ((dayKey: string) => void) | undefined;
   /** D-299 (§43) — what an empty agenda offers: the caller's next step. */
   readonly emptyAction?: ReactNode;
 }) {
@@ -512,6 +560,8 @@ export function ContentCalendar({
               labels={labels}
               onOpenPost={onOpenPost}
               onDropDay={onDropDay}
+              postDragData={postDragData}
+              onCreateOnDay={onCreateOnDay}
             />
           </div>
           <div className="bs-narrow-only">

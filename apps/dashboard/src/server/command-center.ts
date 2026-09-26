@@ -687,7 +687,8 @@ const SOURCES: readonly {
   { permissions: ['integrations.read', 'publishing.read'], run: connectionsExpiring },
   { permissions: ['campaigns.read'], run: campaignsWithoutContent },
   { permissions: ['content.read'], run: calendarGaps },
-  { permissions: ['credits.read', 'billing.read'], run: creditsRunningOut },
+  // Q18 — the balance is shown to the people who spend it.
+  { permissions: ['credits.read', 'billing.read', 'copilot.use'], run: creditsRunningOut },
 ];
 
 /**

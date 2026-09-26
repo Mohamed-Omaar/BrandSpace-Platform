@@ -1089,7 +1089,18 @@ to have checked:
 
 Enforcement is at four layers — navigation, page loader, server action, and **service**. The service is
 the one that matters; the rest are convenience. A missing permission on a page is a `404`, not a `403`:
-which pages exist but are closed is itself information.
+which pages exist but are closed is itself information. **One exception (D-322, Q5):** a page on the
+known navigation list (`KNOWN_PAGE_PERMISSIONS` — the sidebar, the Settings list and the top bar, which
+every member already sees) answers "No access to this page" inside the shell with a 200. Records inside
+those pages, and every other URL, keep the identical 404.
+
+**Refusals are explained, not disguised (prototype v90 A5/E6).** A server action is posted from a
+screen the member can already see, so its permission refusal is a `FORBIDDEN` that names the
+permission (`requireWorkspaceAction`), and the banner says which one and who can change the role —
+"… is owner-only" for the three owner-only keys. Only the permission KEY travels in the URL, and it
+becomes words through the dictionary; names never go into a URL. Controls a role does not offer are
+replaced by the same explanation (`PermissionNotice`). None of this is a second permission check: it
+reads the same `permissionKeys` the gates read.
 
 ### 20.4 Entitlements
 
@@ -1586,6 +1597,16 @@ require `content.read`; the navigation omits the entry, but the ROUTE's refusal 
 `approval_policy."clientApprovalEnabled"` survives as reserved structure, pinned to false by
 `approval_policy_client_approval_withdrawn`, for a future **External Review / Guest Approval**
 capability that will be its own narrow actor rather than a repurposed customer role.
+
+**Q12 (D-323) — the Viewer gains READ access to content in TWO releases, in this order.** Phase 2A
+ships the permission model only: `notes.manage` (resolve, reopen, assign, due date, importance,
+assigning a new thread, replying to a resolved thread) is split out of `content.read` and granted by
+the `…_notes_manage_permission` data migration to every role that already held `content.read`, so
+nobody loses anything; a member with `content.read` alone may start a thread and reply to an open
+one. Approvals render read-only for anyone without `content.approve`, and Copilot tools need
+`copilot.use`. `client_viewer` stays exactly `['workspace.read']` in Phase 2A. A separate, later
+release grants it `content.read` in the migration, the seed and the bootstrap together — and must be
+deployed after Phase 2A, never with it. Until then the D-62 paragraph above holds unchanged.
 
 **The escalation that is deliberately prevented.** `approvals.policy.manage` can turn self-approval
 on, so it is held only by the Workspace Owner and Workspace Admin — and NOT by the Marketing Manager,

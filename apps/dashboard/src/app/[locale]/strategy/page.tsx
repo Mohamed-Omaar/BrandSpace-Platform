@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { maySpendCredits } from '@brandspace/shared';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
@@ -14,7 +15,8 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
 import { copilotHref } from '../../../server/copilot-surface';
@@ -84,13 +86,17 @@ export default async function StrategyPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const session = await requireWorkspace(locale, 'strategy.read');
+  const access = await requireWorkspacePage(locale, '/strategy');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const session = access.session;
   const { workspace } = session;
   const may = (key: string) => workspace.permissionKeys.includes(key);
 
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const mayManage = may('strategy.manage');
+  // Q18 — proposing a strategy spends credits; reviewing one does not.
+  const mayGenerate = maySpendCredits(workspace.permissionKeys, 'strategy.manage');
   const mayReview = may('brand_brain.review');
 
   const brandContext = await brandContextFor(
@@ -459,7 +465,7 @@ export default async function StrategyPage({
                 description={t('strategy.proposalNotice')}
               />
               <div style={{ display: 'grid', gap: spacingTokens.md }}>
-                {mayManage ? (
+                {mayGenerate ? (
                   <form
                     action={generateStrategyAction}
                     data-testid="strategy-form"

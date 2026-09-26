@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { StateMessage, buttonStyle, spacingTokens } from '@brandspace/ui';
-import { requireWorkspace } from '../../../../server/customer-context';
+import { requireWorkspacePage } from '../../../../server/customer-context';
+import { NoAccessPage } from '../../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
@@ -42,7 +43,9 @@ export default async function NewCampaignPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'campaigns.manage');
+  const access = await requireWorkspacePage(locale, '/campaigns/new');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const single = (key: string): string | undefined => {
     const value = query[key];

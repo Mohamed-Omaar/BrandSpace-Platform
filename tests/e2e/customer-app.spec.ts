@@ -332,9 +332,13 @@ test.describe('RBAC is enforced by the server, not by hidden buttons', () => {
     await signIn(page, customer.viewerEmail, customer.viewerPassword);
     await enterWorkspace(page, customer.workspaceSlug);
 
-    // 404, not 403: which pages exist but are closed is itself information.
+    // E2/Q5 — the Team page is on the known navigation list, so a member
+    // without `member.read` gets "No access to this page" and none of the
+    // team's rows; a route off the list would still be a 404.
     const response = await page.goto(`${DASHBOARD_BASE_URL}/en/members`);
-    expect(response?.status()).toBe(404);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByTestId('route-no-access')).toBeVisible();
+    await expect(page.getByTestId('members-card')).toHaveCount(0);
   });
 
   test('a read-only member cannot reach settings or the plan page', async ({ page }) => {
@@ -344,7 +348,8 @@ test.describe('RBAC is enforced by the server, not by hidden buttons', () => {
 
     for (const path of ['/en/settings', '/en/plan']) {
       const response = await page.goto(`${DASHBOARD_BASE_URL}${path}`);
-      expect(response?.status()).toBe(404);
+      expect(response?.status(), path).toBe(200);
+      await expect(page.getByTestId('route-no-access'), path).toBeVisible();
     }
   });
 

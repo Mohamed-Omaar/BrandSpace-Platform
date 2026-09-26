@@ -23,6 +23,22 @@ export const messages = {
     'nav.signOut': 'تسجيل الخروج',
     'nav.account': 'الحساب',
     'common.close': 'إغلاق',
+    'common.cancel': 'إلغاء',
+    'content.menu.label': 'إجراءات المنشور',
+    'content.menu.move': 'نقل…',
+    'content.menu.unschedule': 'إلغاء الجدولة',
+    'content.menu.archive': 'أرشفة…',
+    'content.menu.restore': 'استعادة',
+    'content.menu.campaign': 'الحملة…',
+    'content.menu.viewOn': 'عرض على {platform}',
+    'content.move.title': 'نقل هذا المنشور',
+    'content.move.submit': 'نقل',
+    'content.campaign.title': 'الحملة',
+    'content.campaign.none': 'بدون حملة',
+    'content.campaign.submit': 'حفظ',
+    'content.archive.title': 'أرشفة هذا المنشور؟',
+    'content.archive.confirm': 'أرشفة',
+    'content.archive.confirmBody': 'الأرشفة تُخرج المنشور من قوائمك. يمكنك استعادته لاحقًا.',
     'common.noResults': 'لا توجد نتائج مطابقة.',
     'topbar.review': 'المراجعة',
     'topbar.reviewCount': '{count} بانتظار قرارك',
@@ -336,6 +352,15 @@ export const messages = {
     'perms.permissionCountOne': 'صلاحية واحدة',
     'perms.permission': 'الصلاحية',
     'perms.eyebrow': 'التحكم في الوصول',
+    'errors.noAccess.title': 'لا يمكنك الوصول إلى هذه الصفحة',
+    'perms.denied.title': 'غير متاح لدورك',
+    'perms.denied.body': 'ليس لدى {name} صلاحية “{permission}”.',
+    'perms.denied.hint': 'الصلاحيات تأتي من الدور · اطلب من {owner} تغيير دورك.',
+    'perms.denied.you': 'ليس لديك صلاحية “{permission}”.',
+    'perms.denied.hintOwner': 'الصلاحيات تأتي من الدور · اطلب من المالك تغيير دورك.',
+    'perms.denied.ownerOnly': '“{permission}” متاح للمالك فقط.',
+    'perms.denied.thisAction': 'هذا الإجراء',
+    'perms.fromRole': 'من الدور',
     'perms.desc.workspace.read': 'عرض مساحة العمل',
     'perms.desc.workspace.update': 'تغيير إعدادات مساحة العمل',
     'perms.desc.workspace.delete': 'حذف مساحة العمل',
@@ -351,10 +376,10 @@ export const messages = {
     'perms.desc.brand.read': 'عرض العلامات التجارية',
     'perms.desc.brand.manage': 'إنشاء العلامات التجارية وتعديلها',
     'perms.desc.brand_brain.read': 'عرض معرفة Brand Brain ومصادرها',
-    'perms.desc.brand_brain.edit': 'إضافة معرفة العلامة التجارية وتعديلها',
+    'perms.desc.brand_brain.edit': 'إضافة معرفة العلامة التجارية وتعديلها وأرشفتها',
     'perms.desc.brand_brain.upload': 'رفع مستندات المصادر',
     'perms.desc.brand_brain.review': 'اعتماد المعرفة المستخرجة أو رفضها',
-    'perms.desc.brand_brain.delete': 'أرشفة معرفة العلامة التجارية وإزالة المصادر',
+    'perms.desc.brand_brain.delete': 'إزالة مصادر العلامة التجارية',
     'perms.desc.brand_brain.chat': 'طرح الأسئلة على Brand Brain',
     'perms.desc.assets.read': 'عرض مكتبة الأصول',
     'perms.desc.assets.use': 'اختيار أصل معتمد لاستخدامه',
@@ -372,6 +397,7 @@ export const messages = {
     'perms.desc.content.archive': 'أرشفة مسودة محتوى',
     'perms.desc.content.schedule': 'وضع المحتوى على التقويم ونقله',
     'perms.desc.content.delete': 'حذف المحتوى نهائيًا',
+    'perms.desc.notes.manage': 'حلّ سلاسل الملاحظات وإسنادها وتنظيمها',
     'perms.desc.content.approve': 'اعتماد المحتوى أو رفضه أو طلب تعديلات عليه',
     'perms.desc.approvals.policy.manage': 'تغيير سياسة الاعتماد لعلامة تجارية',
     'perms.desc.audit.read_own': 'عرض إجراءاتك الخاصة في سجل النشاط',
@@ -813,7 +839,7 @@ export const messages = {
     'content.action.open': 'فتح',
     'content.action.requestApproval': 'طلب الموافقة',
     'content.action.schedule': 'جدولة',
-    'content.action.duplicate': 'نسخ',
+    'content.action.duplicate': 'إنشاء نسخة جديدة',
     'content.openNotes': '{count} ملاحظات مفتوحة',
     'content.mediaCount': '{count} وسائط',
     'content.textOnly': 'منشور نصي',
@@ -1021,11 +1047,17 @@ export const messages = {
     'editor.insufficientBody':
       'يحتاج BrandSpace إلى معلومات أكثر قبل أن يكتب مسودة موثوقة عن هذا الموضوع.',
     'editor.insufficient.add': 'أضف معرفة',
-    'editor.published.readOnly': 'نُشر هذا المنشور ولا يمكن تعديله. انسخه لإنشاء نسخة جديدة.',
+    'editor.published.readOnly': 'نُشر هذا المنشور ولا يمكن تعديله. أنشئ نسخة جديدة منه لتعديلها.',
+    'editor.reviewer.label': 'المراجِع',
+    'editor.reviewer.auto': 'تلقائي ({name})',
     'editor.inReviewWarning':
       'هذا المنشور بانتظار المراجعة. حفظ أي تعديل يسحب طلب المراجعة ويعيده مسودة.',
     'editor.approvedWarning':
       'تمت الموافقة على هذا المنشور. تعديل محتواه أو وسائطه سيعيده إلى مسودة ويتطلب مراجعة جديدة.',
+    'editor.scheduledWarning.unschedules':
+      'هذا المنشور مجدول. حفظ أي تعديل يُزيله من التقويم ويعيده مسودة، وسيحتاج إلى موافقة وجدولة من جديد.',
+    'editor.scheduledWarning.scheduler':
+      'هذا المنشور مجدول. إذا كانت علامتك تتطلب الموافقة، فلن تغطي الموافقة الحالية ما تغيّره.',
     'editor.variants.label': 'نسخ المنصات',
     'editor.caption': 'النص',
     'editor.unsaved': 'تغييرات غير محفوظة',
@@ -1212,6 +1244,8 @@ export const messages = {
     'calendar.select': 'تحديد',
     'calendar.scheduleTitle': 'إضافة إلى التقويم',
     'calendar.scheduleDraft': 'المسودة',
+    'calendar.pastDay': 'مضى هذا اليوم. اختر اليوم أو يومًا لاحقًا.',
+    'calendar.moveFromPost': 'على الهاتف، افتح المنشور لنقله إلى يوم آخر.',
     'calendar.scheduleDate': 'التاريخ',
     'calendar.scheduleTime': 'الوقت',
     'calendar.scheduleSubmit': 'أضف إلى التقويم',
@@ -1365,7 +1399,11 @@ export const messages = {
     'approvals.requestedAt': 'تاريخ الإرسال',
     'approvals.cycle': 'الدورة',
     'approvals.note': 'ملاحظة',
-    'approvals.notePlaceholder': 'اكتب ملاحظة للمراجع (اختياري)',
+    'approvals.notePlaceholder': 'مطلوب عند طلب التعديلات',
+    'approvals.tabs.label': 'المراجعات',
+    'approvals.tabs.forMe': 'لي',
+    'approvals.tabs.sent': 'المُرسلة',
+    'approvals.decidedBy': 'قرّرها {name}',
     'approvals.decisionNote': 'سبب القرار',
     'approvals.approve': 'اعتماد',
     'approvals.requestChanges': 'طلب تعديل',
@@ -1382,7 +1420,8 @@ export const messages = {
     'approvals.status.REJECTED': 'مرفوض',
     'approvals.status.CANCELLED': 'مسحوب',
     'approvals.selfBlocked': 'لا يمكنك اعتماد محتوى أرسلته بنفسك.',
-    'approvals.assignedElsewhere': 'هذه المراجعة مُسندة إلى عضو آخر.',
+    'approvals.assignedTo': 'مُسندة إلى {name}',
+    'approvals.assignedToYou': 'مُسندة إليك',
     'approvals.policyTitle': 'سياسة الموافقات',
     'approvals.policyBody': 'تُطبَّق هذه القواعد على محتوى هذه العلامة وحدها.',
     'approvals.policyBrand': 'العلامة',
@@ -2401,6 +2440,24 @@ export const messages = {
     'home.slot.SCHEDULED': 'مجدول',
     'home.slot.PUBLISHING': 'قيد النشر',
     'home.performance.title': 'لمحة عن الأداء',
+    'home.role.review.title': 'بانتظار مراجعتك',
+    'home.role.review.all': 'كل المراجعات',
+    'home.role.review.none': 'لا يوجد شيء بانتظار مراجعتك.',
+    'home.role.review.open': 'راجِع',
+    'home.role.mine.title': 'عملك',
+    'home.role.drafts.title': 'مسوداتك',
+    'home.role.drafts.none': 'ليست لديك مسودات قيد العمل.',
+    'home.role.sent.title': 'أُرسلت للمراجعة',
+    'home.role.sent.none': 'لا يوجد شيء أرسلته بانتظار قرار.',
+    'home.role.scheduled.title': 'منشوراتك المجدولة',
+    'home.role.scheduled.none': 'لم تُجدول أي من منشوراتك بعد.',
+    'home.role.top.title': 'أفضل المنشورات',
+    'home.role.top.all': 'الأداء',
+    'home.role.top.none': 'لا توجد نتائج لأي منشور منشور بعد.',
+    'home.role.feedback.title': 'بانتظار ملاحظاتك',
+    'home.role.feedback.body': 'منشورات قادمة. افتح التقويم لقراءتها وترك ملاحظة.',
+    'home.role.feedback.open': 'افتح التقويم',
+    'home.role.feedback.none': 'لا يوجد شيء قادم بعد.',
     'home.metric.published': 'المنشور',
     'home.metric.publishedHint': 'المنشورات المنشورة في آخر 28 يومًا',
     'home.metric.scheduledHint': 'المخطط أو المجدول في الأيام السبعة القادمة',
@@ -2599,6 +2656,23 @@ export const messages = {
     'nav.signOut': 'Sign out',
     'nav.account': 'Account',
     'common.close': 'Close',
+    'common.cancel': 'Cancel',
+    'content.menu.label': 'Post actions',
+    'content.menu.move': 'Move…',
+    'content.menu.unschedule': 'Unschedule',
+    'content.menu.archive': 'Archive…',
+    'content.menu.restore': 'Restore',
+    'content.menu.campaign': 'Campaign…',
+    'content.menu.viewOn': 'View on {platform}',
+    'content.move.title': 'Move this post',
+    'content.move.submit': 'Move',
+    'content.campaign.title': 'Campaign',
+    'content.campaign.none': 'No campaign',
+    'content.campaign.submit': 'Save',
+    'content.archive.title': 'Archive this post?',
+    'content.archive.confirm': 'Archive',
+    'content.archive.confirmBody':
+      'Archiving takes the post out of your lists. You can restore it later.',
     'common.noResults': 'No matching results.',
     'topbar.review': 'Review',
     'topbar.reviewCount': '{count} waiting for your decision',
@@ -2900,6 +2974,15 @@ export const messages = {
     'perms.permissionCountOne': '1 permission',
     'perms.permission': 'Permission',
     'perms.eyebrow': 'Access control',
+    'errors.noAccess.title': 'No access to this page',
+    'perms.denied.title': 'Not available with your role',
+    'perms.denied.body': "{name} doesn't have the “{permission}” permission.",
+    'perms.denied.hint': 'Permissions come from the role · ask {owner} to change your role.',
+    'perms.denied.you': "You don't have the “{permission}” permission.",
+    'perms.denied.hintOwner': 'Permissions come from the role · ask the owner to change your role.',
+    'perms.denied.ownerOnly': '“{permission}” is owner-only.',
+    'perms.denied.thisAction': 'this action',
+    'perms.fromRole': 'From the role',
     'perms.desc.workspace.read': 'View the workspace',
     'perms.desc.workspace.update': 'Change workspace settings',
     'perms.desc.workspace.delete': 'Delete the workspace',
@@ -2915,10 +2998,10 @@ export const messages = {
     'perms.desc.brand.read': 'View brands',
     'perms.desc.brand.manage': 'Create and edit brands',
     'perms.desc.brand_brain.read': 'View Brand Brain knowledge and sources',
-    'perms.desc.brand_brain.edit': 'Add and edit brand knowledge',
+    'perms.desc.brand_brain.edit': 'Add, edit and archive brand knowledge',
     'perms.desc.brand_brain.upload': 'Upload source documents',
     'perms.desc.brand_brain.review': 'Approve or reject extracted knowledge',
-    'perms.desc.brand_brain.delete': 'Archive brand knowledge and remove sources',
+    'perms.desc.brand_brain.delete': 'Remove brand sources',
     'perms.desc.brand_brain.chat': 'Ask Brand Brain questions',
     'perms.desc.assets.read': 'View the Asset Library',
     'perms.desc.assets.use': 'Select an approved asset for use',
@@ -2936,6 +3019,7 @@ export const messages = {
     'perms.desc.content.archive': 'Archive a content draft',
     'perms.desc.content.schedule': 'Place content on the calendar and move it',
     'perms.desc.content.delete': 'Delete content permanently',
+    'perms.desc.notes.manage': 'Resolve, assign and triage note threads',
     'perms.desc.content.approve': 'Approve, reject or request changes on content',
     'perms.desc.approvals.policy.manage': "Change a brand's approval policy",
     'perms.desc.audit.read_own': 'View your own actions in the activity log',
@@ -3386,7 +3470,7 @@ export const messages = {
     'content.action.open': 'Open',
     'content.action.requestApproval': 'Request approval',
     'content.action.schedule': 'Schedule',
-    'content.action.duplicate': 'Duplicate',
+    'content.action.duplicate': 'Make a new copy',
     'content.openNotes': '{count} open notes',
     'content.mediaCount': '{count} media',
     'content.textOnly': 'Text post',
@@ -3606,11 +3690,17 @@ export const messages = {
       'BrandSpace needs more information before it can make a grounded draft about this topic.',
     'editor.insufficient.add': 'Add knowledge',
     'editor.published.readOnly':
-      'This post has been published and can no longer be edited. Duplicate it to make a new version.',
+      'This post has been published and can no longer be edited. Make a new copy to change it.',
+    'editor.reviewer.label': 'Reviewer',
+    'editor.reviewer.auto': 'Automatic ({name})',
     'editor.inReviewWarning':
       'This post is waiting for review. Saving a change withdraws the review and returns it to draft.',
     'editor.approvedWarning':
       'This post was approved. Editing its content or media will return it to Draft and require review again.',
+    'editor.scheduledWarning.unschedules':
+      'This post is scheduled. Saving a change takes it off the calendar and returns it to Draft; it will need approval and scheduling again.',
+    'editor.scheduledWarning.scheduler':
+      'This post is scheduled. If your brand requires approval, the current approval will not cover what you change.',
     'editor.variants.label': 'Platform versions',
     'editor.caption': 'Caption',
     'editor.unsaved': 'Unsaved changes',
@@ -3802,6 +3892,8 @@ export const messages = {
     'calendar.select': 'Select',
     'calendar.scheduleTitle': 'Add to the calendar',
     'calendar.scheduleDraft': 'Draft',
+    'calendar.pastDay': 'That day has passed. Choose today or a later day.',
+    'calendar.moveFromPost': 'On a phone, open a post to move it to another day.',
     'calendar.scheduleDate': 'Date',
     'calendar.scheduleTime': 'Time',
     'calendar.scheduleSubmit': 'Add to calendar',
@@ -3965,7 +4057,11 @@ export const messages = {
     'approvals.requestedAt': 'Sent',
     'approvals.cycle': 'Round',
     'approvals.note': 'Note',
-    'approvals.notePlaceholder': 'A note for the reviewer (optional)',
+    'approvals.notePlaceholder': 'Required when asking for changes',
+    'approvals.tabs.label': 'Reviews',
+    'approvals.tabs.forMe': 'For me',
+    'approvals.tabs.sent': 'Sent',
+    'approvals.decidedBy': 'Decided by {name}',
     'approvals.decisionNote': 'Reason',
     'approvals.approve': 'Approve',
     'approvals.requestChanges': 'Request changes',
@@ -3982,7 +4078,8 @@ export const messages = {
     'approvals.status.REJECTED': 'Rejected',
     'approvals.status.CANCELLED': 'Withdrawn',
     'approvals.selfBlocked': 'You cannot approve content you sent for review yourself.',
-    'approvals.assignedElsewhere': 'This review is assigned to another member.',
+    'approvals.assignedTo': 'Assigned to {name}',
+    'approvals.assignedToYou': 'Assigned to you',
     'approvals.policyTitle': 'Approval policy',
     'approvals.policyBody': 'These rules apply to this brand\u2019s content only.',
     'approvals.policyBrand': 'Brand',
@@ -5049,6 +5146,24 @@ export const messages = {
     'home.slot.SCHEDULED': 'Scheduled',
     'home.slot.PUBLISHING': 'Publishing',
     'home.performance.title': 'Performance snapshot',
+    'home.role.review.title': 'Waiting for your review',
+    'home.role.review.all': 'All reviews',
+    'home.role.review.none': 'Nothing is waiting for your review.',
+    'home.role.review.open': 'Review',
+    'home.role.mine.title': 'Your work',
+    'home.role.drafts.title': 'Your drafts',
+    'home.role.drafts.none': 'You have no drafts in progress.',
+    'home.role.sent.title': 'Sent for review',
+    'home.role.sent.none': 'Nothing you sent is waiting for a decision.',
+    'home.role.scheduled.title': 'Your scheduled posts',
+    'home.role.scheduled.none': 'None of your posts is scheduled yet.',
+    'home.role.top.title': 'Top posts',
+    'home.role.top.all': 'Performance',
+    'home.role.top.none': 'No published post has results yet.',
+    'home.role.feedback.title': 'Waiting for your feedback',
+    'home.role.feedback.body': 'Posts coming up. Open the calendar to read them and leave a note.',
+    'home.role.feedback.open': 'Open the calendar',
+    'home.role.feedback.none': 'Nothing is coming up yet.',
     'home.metric.published': 'Published',
     'home.metric.publishedHint': 'Posts published in the last 28 days',
     'home.metric.scheduledHint': 'Planned or scheduled in the next 7 days',
@@ -5315,6 +5430,16 @@ export function optionalMessage(locale: string, key: string): string | null {
  * reach the address bar, the browser history or an access log.
  */
 const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
+  // B5 — "request changes" needs a reason.
+  NOTE_REQUIRED: {
+    en: 'Say what should change before asking for changes.',
+    ar: 'اكتب ما يجب تغييره قبل طلب التعديلات.',
+  },
+  // F2 — a time already past, or inside the minimum notice, including earlier today.
+  SCHEDULE_IN_PAST: {
+    en: 'That time has already passed or is too soon. Choose a later time.',
+    ar: 'هذا الوقت مضى أو قريب جدًا. اختر وقتًا لاحقًا.',
+  },
   // Phase 6 final (D-288, D-290) — sent for review from the editor, library or calendar.
   WORKFLOW_SNOOZE: {
     en: 'Okay — BrandSpace will ask again later.',
@@ -5665,15 +5790,63 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
 };
 
 /** Render a status code. An unrecognised code renders nothing at all. */
+function fixedStatusText(code: string, locale: string): string | null {
+  const entry = STATUS_TEXT[code];
+  if (!entry) return null;
+  return locale === 'ar' ? entry.ar : entry.en;
+}
+
+/**
+ * A REFUSED ACTION THAT NAMES THE PERMISSION (E6).
+ *
+ * `FORBIDDEN:<permission>` or `FORBIDDEN_OWNER:<permission>`, as the action's
+ * failure path writes it (`actionErrorCode`). The permission is only ever a
+ * lookup key: it becomes words through `perms.desc.*`, so a key the dictionary
+ * does not hold — a typo, a crafted URL — falls back to the plain FORBIDDEN
+ * sentence rather than being echoed. No name reaches the URL; the banner says
+ * "the owner", and the screens that know the names say them (PermissionNotice).
+ */
+/**
+ * THE PERMISSIONS ONLY THE WORKSPACE OWNER HOLDS — a mirror of
+ * `OWNER_ONLY_PERMISSION_KEYS` in `@brandspace/shared`, which derives them
+ * from the role catalogue. Mirrored rather than imported because this
+ * dictionary is loaded in client components and by the browser suite, where
+ * the shared package (Node built-ins included) cannot be; a unit test fails
+ * the moment the two differ.
+ */
+export const OWNER_ONLY_PERMISSIONS: readonly string[] = [
+  'workspace.delete',
+  'workspace.transfer_ownership',
+  'billing.manage',
+];
+
+function deniedActionText(code: string, locale: string): string | null {
+  const match = /^FORBIDDEN(?:_OWNER)?:([a-z_]+(?:\.[a-z_]+)+)$/.exec(code);
+  if (!match?.[1]) return null;
+  const key = match[1];
+  const permission = optionalMessage(locale, `perms.desc.${key}`);
+  if (!permission) return fixedStatusText('FORBIDDEN', locale);
+  const fill = (template: string) =>
+    (optionalMessage(locale, template) ?? '').replace('{permission}', permission);
+  /*
+   * "OWNER-ONLY" IS DECIDED FROM THE PERMISSION, NEVER FROM THE URL. The code
+   * arrives in the `error` query parameter, so its `_OWNER` suffix is whatever
+   * a link says; a crafted one must not make an ordinary permission read as
+   * owner-only (or the reverse). The role catalogue is the one source.
+   */
+  return OWNER_ONLY_PERMISSIONS.includes(key)
+    ? fill('perms.denied.ownerOnly')
+    : `${fill('perms.denied.you')} ${fill('perms.denied.hintOwner')}`;
+}
+
 export function statusMessage(
   code: string | null | undefined,
   locale: string,
   correlationId?: string,
 ): string | null {
   if (!code) return null;
-  const entry = STATUS_TEXT[code];
-  if (!entry) return null;
-  const text = locale === 'ar' ? entry.ar : entry.en;
+  const text = deniedActionText(code, locale) ?? fixedStatusText(code, locale);
+  if (text === null) return null;
   // The correlation id is an opaque uuid we generated: the ONE variable part,
   // and the only thing joining this screen to the redacted server log.
   const safeId = correlationId && /^[0-9a-f-]{36}$/i.test(correlationId) ? correlationId : null;

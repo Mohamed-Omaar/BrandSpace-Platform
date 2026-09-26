@@ -5,8 +5,10 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
+import { mayReadCreditBalance } from '@brandspace/shared';
 import { QUOTA_FEATURES, TOTAL_RESOURCE_DIMENSIONS } from '@brandspace/entitlements';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { optionalMessage, translator } from '../../../i18n/messages';
 import { ceilingFor, featureDisplayName, planDisplayName } from '../../../server/plan-usage';
@@ -58,11 +60,14 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
   const ledgerDate = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
     dateStyle: 'medium',
   });
-  const { customer, workspace } = await requireWorkspace(locale, 'billing.read');
+  const access = await requireWorkspacePage(locale, '/plan');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   // Inside the tenant context: the overrides and the wallet are tenant-owned,
   // and the catalogue comes through the allow-listed configuration function.
-  const mayReadCredits = workspace.permissionKeys.includes('credits.read');
+  // Q18 — the balance is shown to the people who spend it (`credits.read` + `copilot.use`).
+  const mayReadCredits = mayReadCreditBalance(workspace.permissionKeys);
   const mayReadBilling = workspace.permissionKeys.includes('billing.read');
 
   const { effective, features, wallet, grants, ledger, subscription, counters } = await inWorkspace(

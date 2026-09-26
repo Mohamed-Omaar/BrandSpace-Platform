@@ -1,4 +1,10 @@
-import { RESCHEDULABLE_SLOT_STATUSES, formatLocalTime, partsInZone } from '@brandspace/content';
+import {
+  DEFAULT_POST_TIME,
+  RESCHEDULABLE_SLOT_STATUSES,
+  formatLocalTime,
+  nextDayKey,
+  partsInZone,
+} from '@brandspace/content';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { systemClock } from '@brandspace/shared';
 import type {
@@ -8,7 +14,8 @@ import type {
   PostStatus,
   SocialPlatform,
 } from '@brandspace/ui';
-import { requireWorkspace } from '../../../server/customer-context';
+import { requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inSocial } from '../../../server/social-context';
@@ -132,7 +139,9 @@ export default async function CalendarPage({
   const { locale } = await params;
   const query = await searchParams;
   const translate = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'content.read');
+  const access = await requireWorkspacePage(locale, '/calendar');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const single = (key: string): string | undefined => {
     const value = query[key];
@@ -552,6 +561,8 @@ export default async function CalendarPage({
       longLabel: longFormatter.format(cell),
       inCurrentPeriod: cell.getUTCMonth() + 1 === month && cell.getUTCFullYear() === year,
       isToday: key === todayKey,
+      // F2 — a day before today, in the workspace's zone; nothing is planned on it.
+      isPast: key < todayKey,
       posts: byDay.get(key) ?? [],
     });
   }
@@ -623,6 +634,9 @@ export default async function CalendarPage({
       ) : null}
       <CalendarView
         locale={locale}
+        today={todayKey}
+        tomorrow={nextDayKey(todayKey)}
+        defaultTime={DEFAULT_POST_TIME}
         preselectItemId={single('item')}
         weekIndex={weekIndex}
         gaps={gapDays.map((day) =>
@@ -749,6 +763,8 @@ const CALENDAR_KEYS = [
   'calendar.scheduleTitle',
   'calendar.scheduleDraft',
   'calendar.scheduleDate',
+  'calendar.pastDay',
+  'calendar.moveFromPost',
   'calendar.scheduleTime',
   'calendar.scheduleSubmit',
   'calendar.rescheduleTitle',

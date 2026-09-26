@@ -1,0 +1,947 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import {
+  AppError,
+  CREDIT_SPENDING_PERMISSION,
+  OWNER_ONLY_PERMISSION_KEYS,
+  creditSpendingPermissions,
+  mayReadCreditBalance,
+  maySpendCredits,
+  ROLE_DEFINITIONS,
+  isOwnerOnlyPermission,
+} from '@brandspace/shared';
+import { NOTE_MANAGE_PERMISSION, NOTE_PERMISSION } from '@brandspace/collaboration';
+import { homeSectionsFor } from '../../apps/dashboard/src/server/home';
+import {
+  DEFAULT_POST_TIME,
+  bestTimeFor,
+  nextDayKey,
+  scheduleTooSoon,
+} from '../../packages/content/src/index';
+import {
+  OWNER_ONLY_PERMISSIONS,
+  messages,
+  statusMessage,
+} from '../../apps/dashboard/src/i18n/messages';
+import {
+  KNOWN_PAGE_PERMISSIONS,
+  type KnownPage,
+} from '../../apps/dashboard/src/server/known-routes';
+import { SETTINGS_NAV_ROUTES } from '../../apps/dashboard/src/server/settings-nav';
+import { TOPBAR_CREATE_FLOWS, TOPBAR_PERMISSIONS } from '../../apps/dashboard/src/server/topbar';
+import {
+  actionErrorCode,
+  deniedPermission,
+  denialText,
+  permissionDenied,
+} from '../../apps/dashboard/src/server/denial';
+
+/**
+ * Prototype v90 alignment, Phase 2A (docs/PROTOTYPE-V76-ALIGNMENT.md §5.3) — the
+ * screen halves of the permission and post-lifecycle items. The server halves
+ * are proven against PostgreSQL in tests/isolation.
+ */
+
+const root = path.resolve(__dirname, '../..');
+const read = (file: string) => readFileSync(path.join(root, file), 'utf8');
+const both = (key: string) => {
+  const en = (messages.en as Record<string, string>)[key];
+  const ar = (messages.ar as Record<string, string>)[key];
+  expect(en, `en:${key}`).toBeTruthy();
+  expect(ar, `ar:${key}`).toBeTruthy();
+  expect(en).not.toBe(ar);
+};
+
+function actionFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = path.join(dir, name);
+    if (statSync(full).isDirectory()) return actionFiles(full);
+    return name === 'actions.ts' ? [full] : [];
+  });
+}
+
+describe('A5 + E6 · a refusal names the permission and who can change it', () => {
+  it('owner-only is exactly what the Owner holds and no other role does', () => {
+    expect([...OWNER_ONLY_PERMISSION_KEYS].sort()).toEqual([
+      'billing.manage',
+      'workspace.delete',
+      'workspace.transfer_ownership',
+    ]);
+    const others = ROLE_DEFINITIONS.filter(
+      (r) => r.realm === 'workspace' && r.key !== 'workspace_owner',
+    );
+    for (const key of OWNER_ONLY_PERMISSION_KEYS) {
+      expect(
+        others.some((r) => r.permissionKeys.includes(key)),
+        key,
+      ).toBe(false);
+    }
+    expect(isOwnerOnlyPermission('member.invite')).toBe(false);
+  });
+
+  it('has every denial sentence in both languages', () => {
+    for (const key of [
+      'perms.denied.title',
+      'perms.denied.body',
+      'perms.denied.hint',
+      'perms.denied.you',
+      'perms.denied.hintOwner',
+      'perms.denied.ownerOnly',
+      'perms.denied.thisAction',
+      'perms.fromRole',
+    ]) {
+      both(key);
+    }
+  });
+
+  it('a page names the member, the permission and the owner', () => {
+    const en = denialText('en', {
+      permissionKey: 'member.invite',
+      memberName: 'Sara',
+      ownerName: 'Omar',
+    });
+    expect(en.body).toBe(
+      "Sara doesn't have the “Invite a member” permission. " +
+        'Permissions come from the role · ask Omar to change your role.',
+    );
+    expect(en.ownerOnly).toBe(false);
+    const ar = denialText('ar', {
+      permissionKey: 'member.invite',
+      memberName: 'سارة',
+      ownerName: 'عمر',
+    });
+    expect(ar.body).toContain('سارة');
+    expect(ar.body).toContain('عمر');
+    expect(ar.body).toContain('دعوة عضو');
+  });
+
+  it('an owner-only permission says so instead of "ask the owner"', () => {
+    const text = denialText('en', {
+      permissionKey: 'billing.manage',
+      memberName: 'Sara',
+      ownerName: 'Omar',
+    });
+    expect(text.ownerOnly).toBe(true);
+    expect(text.body).toBe('“Change the plan or payment method” is owner-only.');
+    expect(text.body).not.toContain('Omar');
+  });
+
+  it('an action refusal keeps the permission KEY for the URL, never a name', () => {
+    expect(actionErrorCode(permissionDenied('member.invite'))).toBe('FORBIDDEN:member.invite');
+    expect(actionErrorCode(permissionDenied('billing.manage'))).toBe(
+      'FORBIDDEN_OWNER:billing.manage',
+    );
+    // A FORBIDDEN that names nothing, or names a key outside the catalogue,
+    // stays the plain code.
+    expect(actionErrorCode(new AppError('FORBIDDEN', 'ladder'))).toBe('FORBIDDEN');
+    expect(actionErrorCode(permissionDenied('platform.everything'))).toBe('FORBIDDEN');
+    expect(deniedPermission(new AppError('NOT_FOUND', 'x'))).toBeNull();
+    expect(actionErrorCode(new Error('boom'))).toBe('INTERNAL');
+  });
+
+  it('the banner turns the key into words and refuses anything else', () => {
+    expect(statusMessage('FORBIDDEN:member.invite', 'en')).toBe(
+      "You don't have the “Invite a member” permission. " +
+        'Permissions come from the role · ask the owner to change your role.',
+    );
+    expect(statusMessage('FORBIDDEN:member.invite', 'ar')).toContain('دعوة عضو');
+    expect(statusMessage('FORBIDDEN_OWNER:billing.manage', 'en')).toBe(
+      '“Change the plan or payment method” is owner-only.',
+    );
+    // "Owner-only" comes from the permission, never from the URL's suffix: a
+    // crafted `_OWNER` on an ordinary permission is shown as the ordinary text,
+    // and a missing suffix on an owner-only one still says owner-only.
+    expect(statusMessage('FORBIDDEN_OWNER:member.invite', 'en')).toBe(
+      statusMessage('FORBIDDEN:member.invite', 'en'),
+    );
+    expect(statusMessage('FORBIDDEN:billing.manage', 'en')).toBe(
+      '“Change the plan or payment method” is owner-only.',
+    );
+    // The dictionary's mirror is the role catalogue's own list, exactly.
+    expect([...OWNER_ONLY_PERMISSIONS].sort()).toEqual([...OWNER_ONLY_PERMISSION_KEYS].sort());
+    // A crafted key the dictionary does not hold is never echoed.
+    expect(statusMessage('FORBIDDEN:evil.key', 'en')).toBe(statusMessage('FORBIDDEN', 'en'));
+    expect(statusMessage('FORBIDDEN:<script>', 'en')).toBeNull();
+  });
+
+  it('actions refuse with a named FORBIDDEN instead of a swallowed 404', () => {
+    const dir = path.join(root, 'apps/dashboard/src/app/[locale]');
+    const offenders: string[] = [];
+    for (const file of actionFiles(dir)) {
+      const source = readFileSync(file, 'utf8');
+      if (!source.includes('actionErrorCode')) continue;
+      // Files that report failures through `actionErrorCode` must gate through
+      // the action variant, or the refusal is caught and shown as INTERNAL.
+      const plain = source.match(/await requireWorkspace\(locale, [^)]+\)/g) ?? [];
+      if (plain.length > 0) offenders.push(path.relative(root, file));
+      if (/toPublicErrorCode\(error\)/.test(source)) offenders.push(`${file}: toPublicErrorCode`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('the action gate is the same permission test as the page gate', () => {
+    const context = read('apps/dashboard/src/server/customer-context.ts');
+    expect(context).toMatch(/if \(!holdsEvery\(workspace, permissionKey\)\) notFound\(\);/);
+    expect(context).toMatch(/required\.every\(\(key\) => holdsPermission\(workspace, key\)\)/);
+    expect(context).toMatch(
+      /if \(!holdsPermission\(session\.workspace, permissionKey\)\) \{\s*throw permissionDenied\(permissionKey\);/,
+    );
+  });
+
+  it('Members and Billing explain a missing control, and Permissions says "from the role"', () => {
+    const members = read('apps/dashboard/src/app/[locale]/members/page.tsx');
+    expect(members).toMatch(/!may\('member\.invite'\) && \(\s*<PermissionNotice/);
+    const billing = read('apps/dashboard/src/app/[locale]/billing/page.tsx');
+    expect(billing).toMatch(/mayManage \? null : \(\s*<PermissionNotice/);
+    const permissions = read('apps/dashboard/src/app/[locale]/permissions/page.tsx');
+    expect(permissions).toContain("t('perms.fromRole')");
+  });
+});
+
+describe('E2 / Q5 · "No access to this page" for the known navigation list only', () => {
+  const known = Object.keys(KNOWN_PAGE_PERMISSIONS) as KnownPage[];
+  const pageFile = (route: string) => `apps/dashboard/src/app/[locale]${route}/page.tsx`;
+
+  it('has its title in both languages', () => {
+    both('errors.noAccess.title');
+  });
+
+  it.each(known)('%s gates through the known-route table and renders NoAccessPage', (route) => {
+    const source = read(pageFile(route));
+    expect(source).toContain(`await requireWorkspacePage(locale, '${route}')`);
+    expect(source).toMatch(
+      /if \(!access\.allowed\) return <NoAccessPage locale=\{locale\} access=\{access\} \/>;/,
+    );
+    // The page no longer carries a second, drifting copy of its permission.
+    expect(source).not.toMatch(/requireWorkspace\(locale, '[^']+'\)/);
+  });
+
+  it('the sidebar, the Settings list and the top bar advertise the gate the page applies', () => {
+    const shell = read('apps/dashboard/src/components/workspace-shell.tsx');
+    const nav = [
+      ...shell.matchAll(/href: '(\/[^']+)',\s*key: '[^']+',\s*permission: (?:'([^']+)'|null)/g),
+    ];
+    expect(nav.length).toBeGreaterThan(10);
+    for (const [, href, permission] of nav) {
+      if (!permission) continue;
+      expect(KNOWN_PAGE_PERMISSIONS[href as KnownPage], href).toBe(permission);
+    }
+    for (const route of SETTINGS_NAV_ROUTES) {
+      if (!route.permission) continue;
+      expect(KNOWN_PAGE_PERMISSIONS[route.path as KnownPage], route.path).toBe(route.permission);
+    }
+    expect(KNOWN_PAGE_PERMISSIONS['/approvals']).toBe(TOPBAR_PERMISSIONS.review);
+    expect(KNOWN_PAGE_PERMISSIONS['/notes']).toBe(TOPBAR_PERMISSIONS.notes);
+    expect(KNOWN_PAGE_PERMISSIONS['/notes']).toBe(NOTE_PERMISSION);
+    expect(KNOWN_PAGE_PERMISSIONS['/copilot']).toBe(TOPBAR_PERMISSIONS.copilot);
+    for (const flow of TOPBAR_CREATE_FLOWS) {
+      const route = flow.path.split('?')[0] as KnownPage;
+      expect(flow.requires, route).toContain(KNOWN_PAGE_PERMISSIONS[route]);
+    }
+  });
+
+  it('records keep the identical 404: resource routes are NOT on the list', () => {
+    for (const route of [
+      '/campaigns/[campaignId]',
+      '/billing/invoices/[invoiceId]',
+      '/billing/checkout/[outcome]',
+    ]) {
+      expect(known).not.toContain(route);
+      expect(read(pageFile(route))).toMatch(/requireWorkspace\(locale, '[^']+'\)/);
+    }
+    const context = read('apps/dashboard/src/server/customer-context.ts');
+    // `requireWorkspace` itself still answers a missing permission with 404.
+    expect(context).toMatch(/!holdsEvery\(workspace, permissionKey\)\) notFound\(\)/);
+  });
+
+  it('the screen sits inside the shell and carries the E6 denial', () => {
+    const screen = read('apps/dashboard/src/components/no-access-page.tsx');
+    expect(screen).toContain('<WorkspaceShell');
+    expect(screen).toContain('kind="forbidden"');
+    expect(screen).toContain('denialText(locale');
+    expect(screen).toContain('testId="route-no-access"');
+  });
+});
+
+describe('E3 + Q18 · spending credits needs copilot.use as well as the feature key', () => {
+  const SPENDING_FEATURE_KEYS = [
+    'content.create',
+    'content.edit',
+    'assets.upload',
+    'brand_brain.chat',
+    'analytics.explain',
+    'strategy.manage',
+  ];
+
+  it('the rule is the feature key AND copilot.use', () => {
+    expect(CREDIT_SPENDING_PERMISSION).toBe('copilot.use');
+    expect(creditSpendingPermissions('content.create')).toEqual(['content.create', 'copilot.use']);
+    expect(creditSpendingPermissions('copilot.use')).toEqual(['copilot.use']);
+    expect(maySpendCredits(['content.create'], 'content.create')).toBe(false);
+    expect(maySpendCredits(['content.create', 'copilot.use'], 'content.create')).toBe(true);
+    expect(maySpendCredits(['copilot.use'], 'content.create')).toBe(false);
+    expect(mayReadCreditBalance(['credits.read'])).toBe(false);
+    expect(mayReadCreditBalance(['credits.read', 'copilot.use'])).toBe(true);
+  });
+
+  it('no role loses a spending capability: every holder of a spending key holds copilot.use', () => {
+    for (const role of ROLE_DEFINITIONS.filter((r) => r.realm === 'workspace')) {
+      const spends = SPENDING_FEATURE_KEYS.filter((k) => role.permissionKeys.includes(k));
+      if (spends.length === 0) continue;
+      expect(role.permissionKeys, role.key).toContain('copilot.use');
+    }
+  });
+
+  it('every API route marked spendsCredits gates on creditSpendingPermissions(<its permission>)', () => {
+    const files = ['content', 'creative', 'brand-brain', 'analytics'].map((f) =>
+      read(`apps/api/src/routes/${f}.ts`),
+    );
+    const marked: string[] = [];
+    for (const source of files) {
+      for (const block of source.split(/\n {2}route\(/).slice(1)) {
+        const url = /'(\/v1\/[^']+)'/.exec(block)?.[1] ?? '';
+        const permission = /permission: ([A-Z_]+|'[^']+'),/.exec(block)?.[1];
+        if (!block.includes('spendsCredits: true')) {
+          expect(block, url).not.toContain('creditSpendingPermissions(');
+          continue;
+        }
+        marked.push(url);
+        expect(block, url).toContain(
+          `await resolveCaller(req, reply, creditSpendingPermissions(${permission}))`,
+        );
+      }
+    }
+    expect(marked.sort()).toEqual([
+      '/v1/analytics/explain',
+      '/v1/brand-brain/chat',
+      '/v1/content/generate',
+      '/v1/content/tool',
+      '/v1/creative/generate',
+      '/v1/intelligence/content-gap',
+      '/v1/strategy/generate',
+    ]);
+  });
+
+  it('every copy of resolveCaller requires EVERY key it is given', () => {
+    for (const file of ['content', 'brand-brain', 'phase7-context']) {
+      const source = read(`apps/api/src/routes/${file}.ts`);
+      expect(source, file).toContain('permission: string | readonly string[],');
+      expect(source, file).toMatch(
+        /!required\.every\(\(key\) => workspace\.permissionKeys\.includes\(key\)\)/,
+      );
+    }
+  });
+
+  it('the dashboard offers no credit-spending button without copilot.use', () => {
+    const compose = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
+    expect(compose).toContain(
+      "generate: maySpendCredits(workspace.permissionKeys, 'content.create')",
+    );
+    expect(compose).toMatch(
+      /tools=\{maySpendCredits\(workspace\.permissionKeys, 'content\.edit'\) \? CONTENT_TOOLS : \[\]\}/,
+    );
+    expect(compose).toMatch(
+      /generateMedia:\s*maySpendCredits\(workspace\.permissionKeys, 'assets\.upload'\)/,
+    );
+    const composer = read('apps/dashboard/src/app/[locale]/content/compose/composer-view.tsx');
+    expect(composer).toMatch(
+      /\{can\.generate \? \(\s*<button[^>]*?\s*type="button"\s*className="cs-ghost-button"/,
+    );
+    // Writing it yourself spends nothing and stays available.
+    expect(composer).toContain('const canWrite = hasInputs && draft === null;');
+    const pages: Array<[string, RegExp]> = [
+      [
+        'analytics/page.tsx',
+        /mayExplain = maySpendCredits\(workspace\.permissionKeys, 'analytics\.explain'\)/,
+      ],
+      [
+        'strategy/page.tsx',
+        /mayGenerate = maySpendCredits\(workspace\.permissionKeys, 'strategy\.manage'\)/,
+      ],
+      [
+        'intelligence/page.tsx',
+        /mayAnalyse = maySpendCredits\(workspace\.permissionKeys, 'strategy\.manage'\)/,
+      ],
+      [
+        'brand-brain/page.tsx',
+        /chat: maySpendCredits\(workspace\.permissionKeys, 'brand_brain\.chat'\)/,
+      ],
+      [
+        'creative/page.tsx',
+        /if \(!maySpendCredits\(workspace\.permissionKeys, 'assets\.upload'\)\)/,
+      ],
+      ['copilot/page.tsx', /maySeeCredits = mayReadCreditBalance\(workspace\.permissionKeys\)/],
+      ['plan/page.tsx', /mayReadCredits = mayReadCreditBalance\(workspace\.permissionKeys\)/],
+      ['billing/page.tsx', /mayReadCredits = mayReadCreditBalance\(workspace\.permissionKeys\)/],
+    ];
+    for (const [file, pattern] of pages) {
+      expect(read(`apps/dashboard/src/app/[locale]/${file}`), file).toMatch(pattern);
+    }
+    expect(read('apps/dashboard/src/server/command-center.ts')).toContain(
+      "permissions: ['credits.read', 'billing.read', 'copilot.use'], run: creditsRunningOut",
+    );
+    expect(TOPBAR_CREATE_FLOWS.find((f) => f.key === 'creative')?.requires).toContain(
+      'copilot.use',
+    );
+  });
+
+  it('the dashboard spending actions ask for the same keys the API does', () => {
+    for (const [file, key] of [
+      ['analytics/actions.ts', 'analytics.explain'],
+      ['strategy/actions.ts', 'strategy.manage'],
+      ['intelligence/actions.ts', 'strategy.manage'],
+    ] as const) {
+      expect(read(`apps/dashboard/src/app/[locale]/${file}`), file).toContain(
+        `requireWorkspace(locale, creditSpendingPermissions('${key}'))`,
+      );
+    }
+  });
+
+  it('E3 — archiving a fact needs brand_brain.edit; brand identity stays on brand.manage', () => {
+    const actions = read('apps/dashboard/src/app/[locale]/brand-brain/actions.ts');
+    const archive = actions.slice(actions.indexOf('export async function archiveKnowledgeAction'));
+    expect(archive).toContain("requireWorkspaceAction(locale, 'brand_brain.edit')");
+    expect(read('apps/dashboard/src/app/[locale]/brand-brain/page.tsx')).toContain(
+      "remove: can('brand_brain.edit')",
+    );
+    expect(read('apps/dashboard/src/app/[locale]/settings/brand/actions.ts')).toContain(
+      "requireWorkspaceAction(locale, 'brand.manage')",
+    );
+  });
+});
+
+describe('A6 + E7 / Q12 · Home by role, and a member who may only comment', () => {
+  const role = (key: string) => ROLE_DEFINITIONS.find((r) => r.key === key)?.permissionKeys ?? [];
+
+  it('chooses Home sections from permissions, per role', () => {
+    expect(homeSectionsFor(role('workspace_owner'))).toEqual({
+      reviewQueue: true,
+      myWork: true,
+      topPosts: true,
+      feedback: false,
+    });
+    expect(homeSectionsFor(role('approver'))).toMatchObject({ reviewQueue: true, myWork: false });
+    expect(homeSectionsFor(role('copywriter'))).toMatchObject({
+      reviewQueue: false,
+      myWork: true,
+      topPosts: false,
+    });
+    expect(homeSectionsFor(role('analyst'))).toMatchObject({ topPosts: true, myWork: false });
+    // The Viewer today reads no content, so it gets none of these sections…
+    expect(homeSectionsFor(role('client_viewer'))).toEqual({
+      reviewQueue: false,
+      myWork: false,
+      topPosts: false,
+      feedback: false,
+    });
+    // …and once a later release grants it `content.read`, the feedback section (E7).
+    expect(homeSectionsFor([...role('client_viewer'), 'content.read'])).toEqual({
+      reviewQueue: false,
+      myWork: false,
+      topPosts: false,
+      feedback: true,
+    });
+  });
+
+  it('the Viewer is NOT given content.read in Phase 2A', () => {
+    expect(role('client_viewer')).toEqual(['workspace.read']);
+  });
+
+  it('notes.manage goes to exactly the roles that read content, and not to the Viewer', () => {
+    expect(NOTE_MANAGE_PERMISSION).toBe('notes.manage');
+    for (const r of ROLE_DEFINITIONS.filter((d) => d.realm === 'workspace')) {
+      expect(r.permissionKeys.includes('notes.manage'), r.key).toBe(
+        r.permissionKeys.includes(NOTE_PERMISSION),
+      );
+    }
+    expect(role('client_viewer')).not.toContain('notes.manage');
+  });
+
+  it('the notes panel and Home offer triage only with notes.manage', () => {
+    const panel = read('apps/dashboard/src/components/notes-panel.tsx');
+    expect(panel).toContain('mayManage = actor.permissionKeys.includes(NOTE_MANAGE_PERMISSION)');
+    expect(panel).toMatch(
+      /\{status === 'RESOLVED' && !mayManage \? null : \(\s*<form\s*action=\{replyToNoteThreadAction\}/,
+    );
+    expect(panel).toMatch(
+      /\{mayManage \? \(\s*<form action=\{status === 'RESOLVED' \? reopenNoteThreadAction/,
+    );
+    expect(panel).toMatch(/\{mayManage \? \(\s*<details data-testid=\{`note-options-/);
+    const home = read('apps/dashboard/src/app/[locale]/overview/page.tsx');
+    expect(home).toContain("entry.status === 'OPEN' && mayManageNotes ? (");
+  });
+
+  it('the notes service asks notes.manage for every triage write', () => {
+    const service = read('packages/collaboration/src/notes.ts');
+    for (const method of ['resolve', 'reopen', 'assign', 'setDue', 'setImportance']) {
+      const body = service.slice(service.indexOf(`  async ${method}(`));
+      const end = body.indexOf('\n  }\n');
+      expect(body.slice(0, end), method).toContain('this.#requireManage(input.actor);');
+    }
+    expect(service).toContain(
+      "if (thread.status === 'RESOLVED') this.#requireManage(input.actor);",
+    );
+  });
+
+  it("Home lists the member's own work by createdBy/requestedBy, and feedback links to the calendar", () => {
+    const home = read('apps/dashboard/src/app/[locale]/overview/page.tsx');
+    expect(home).toMatch(
+      /createdByUserId: customer\.userId,\s*status: \{ in: \['DRAFT', 'CHANGES_REQUESTED'\] \}/,
+    );
+    expect(home).toContain('requestedByUserId: customer.userId');
+    expect(home).toContain('item: { createdByUserId: customer.userId, deletedAt: null }');
+    expect(home).toMatch(/testId="home-feedback"[\s\S]*?href=\{`\/\$\{locale\}\/calendar`\}/);
+    // A member without analytics is told the figure is hidden, not pending.
+    expect(home).toMatch(/!maySeeAnalytics\s*\?\s*t\('overview\.metric\.hidden'\)/);
+    for (const key of [
+      'home.role.review.title',
+      'home.role.drafts.title',
+      'home.role.sent.title',
+      'home.role.scheduled.title',
+      'home.role.top.title',
+      'home.role.feedback.title',
+      'home.role.feedback.open',
+    ]) {
+      both(key);
+    }
+  });
+});
+
+describe('B3 / Q8 · an edit by someone without content.schedule unschedules the post', () => {
+  it('both edit paths hand the editor’s session permissions to the rule', () => {
+    const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+    const save = actions.slice(actions.indexOf('export async function saveVariantAction'));
+    expect(save.slice(0, save.indexOf('\n}\n'))).toContain(
+      'actorPermissionKeys: session.workspace.permissionKeys',
+    );
+    const api = read('apps/api/src/routes/content.ts');
+    expect(api).toContain('permissionKeys: workspace.permissionKeys,');
+    expect(api).toContain('actorPermissionKeys: caller.permissionKeys,');
+  });
+
+  it('the library gets the calendar as its scheduling port, in the dashboard and the API', () => {
+    expect(read('apps/dashboard/src/server/content-context.ts')).toContain(
+      'scheduling: await calendar(),',
+    );
+    const api = read('apps/api/src/routes/content.ts');
+    expect(api).toMatch(
+      /scheduling: new ContentCalendarService\(\{[\s\S]*?quota: scheduleQuota\(db, caller\.workspaceId\)/,
+    );
+  });
+
+  it('the composer says what saving will do, in both languages', () => {
+    const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+    expect(editor).toContain("draft.status === 'SCHEDULED' && can.edit");
+    both('editor.scheduledWarning.unschedules');
+    both('editor.scheduledWarning.scheduler');
+  });
+});
+
+describe('F1 · every edit path, the campaign included, obeys the edit rules', () => {
+  /** The body of the method that starts at `signature`, up to the next method. */
+  const method = (source: string, signature: string) => {
+    const start = source.indexOf(signature);
+    expect(start, signature).toBeGreaterThan(-1);
+    const next = source.indexOf('\n  async ', start + signature.length);
+    return source.slice(start, next === -1 ? undefined : next);
+  };
+
+  it('no new write path changes a variant without the guards', () => {
+    const files = readdirSync(path.join(root, 'packages/content/src')).filter((f) =>
+      f.endsWith('.ts'),
+    );
+    const writers = files.flatMap((f) =>
+      (read(`packages/content/src/${f}`).match(/contentVariant\.update\(/g) ?? []).map(() => f),
+    );
+    // editVariant (library) and applyTool (studio). A third needs these guards too.
+    expect(writers.sort()).toEqual(['library.ts', 'studio.ts']);
+    const library = read('packages/content/src/library.ts');
+    const edit = method(library, 'async editVariant(');
+    expect(edit).toContain('await this.assertEditable(variant.contentItemId);');
+    expect(edit).toContain('await this.revokeApprovalOnEdit(');
+    const studio = read('packages/content/src/studio.ts');
+    expect(method(studio, 'async applyTool(')).toContain('await this.revokeApprovalOnEdit(');
+    expect(studio).toMatch(/async #toolRequest[\s\S]*?await this\.assertEditable\(/);
+  });
+
+  it('a campaign change refuses a published post and withdraws a review, after the no-op', () => {
+    const campaigns = read('packages/content/src/campaigns.ts');
+    const set = method(campaigns, 'async setContentCampaign(');
+    const noop = set.indexOf('if (input.campaignId === item.campaignId) return;');
+    const readOnly = set.indexOf('READ_ONLY_CONTENT_STATUSES.includes(item.status)');
+    const withdraw = set.indexOf('this.#reviewWithdrawal.withdrawForEdit(');
+    expect(noop).toBeGreaterThan(-1);
+    expect(readOnly).toBeGreaterThan(noop);
+    expect(withdraw).toBeGreaterThan(readOnly);
+    expect(read('apps/dashboard/src/server/content-context.ts')).toContain(
+      'withdrawForEdit: async (input) => (await approvals()).withdrawForEdit(input)',
+    );
+  });
+
+  it('the composer hides the campaign control on a published post, and offers "Make a new copy"', () => {
+    const compose = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
+    expect(compose).toMatch(
+      /manageCampaigns:\s*workspace\.permissionKeys\.includes\('campaigns\.manage'\) && !composerDraft\?\.readOnly/,
+    );
+    expect((messages.en as Record<string, string>)['content.action.duplicate']).toBe(
+      'Make a new copy',
+    );
+    both('content.action.duplicate');
+  });
+});
+
+describe('F2 · no scheduling in the past; new posts default to tomorrow 09:00', () => {
+  it('tomorrow is calendar arithmetic on the day, across month, year and DST edges', () => {
+    expect(nextDayKey('2026-09-25')).toBe('2026-09-26');
+    expect(nextDayKey('2026-09-30')).toBe('2026-10-01');
+    expect(nextDayKey('2026-12-31')).toBe('2027-01-01');
+    expect(nextDayKey('2028-02-28')).toBe('2028-02-29');
+    // The nights clocks change in Europe and the US: still exactly the next day.
+    expect(nextDayKey('2026-03-28')).toBe('2026-03-29');
+    expect(nextDayKey('2026-11-01')).toBe('2026-11-02');
+  });
+
+  it('a best time on today or earlier moves to tomorrow at 09:00; a later day stays', () => {
+    expect(DEFAULT_POST_TIME).toBe('09:00');
+    expect(bestTimeFor({ todayKey: '2026-09-25', dayKey: '2026-09-25' })).toEqual({
+      date: '2026-09-26',
+      time: '09:00',
+    });
+    expect(bestTimeFor({ todayKey: '2026-09-25', dayKey: '2026-09-20' })).toEqual({
+      date: '2026-09-26',
+      time: '09:00',
+    });
+    expect(bestTimeFor({ todayKey: '2026-09-25', dayKey: '2026-09-27' })).toBeNull();
+  });
+
+  it('a past time is refused with its own reason and its own words', () => {
+    expect(scheduleTooSoon().publicDetails).toEqual({ reason: 'schedule_in_past' });
+    const actions = read('apps/dashboard/src/app/[locale]/calendar/actions.ts');
+    expect(actions).toMatch(/SCHEDULE_IN_PAST_REASON\) \{\s*return 'SCHEDULE_IN_PAST';/);
+    expect(statusMessage('SCHEDULE_IN_PAST', 'en')).toContain('Choose a later time');
+    expect(statusMessage('SCHEDULE_IN_PAST', 'ar')).toBeTruthy();
+    both('calendar.pastDay');
+  });
+
+  it('the calendar proposes tomorrow at 09:00, offers nothing before today, and refuses a past drop', () => {
+    const page = read('apps/dashboard/src/app/[locale]/calendar/page.tsx');
+    expect(page).toContain('isPast: key < todayKey,');
+    expect(page).toContain('tomorrow={nextDayKey(todayKey)}');
+    expect(page).toContain('defaultTime={DEFAULT_POST_TIME}');
+    // …except on today, where 09:00 may have passed: no time is proposed.
+    const calendarView = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    expect(calendarView).toContain(
+      "const proposedTime = (date: string) => (date !== '' && date === today ? '' : defaultTime);",
+    );
+    expect(calendarView).not.toContain('defaultValue={defaultTime}');
+    const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    expect(view).toContain('useState(tomorrow)');
+    expect(view.match(/\{\.\.\.\(today \? \{ min: today \} : \{\}\)\}/g)).toHaveLength(2);
+    expect(view).toMatch(
+      /if \(date !== '' && today !== '' && date < today\) \{\s*setPastDayNotice\(true\);\s*return;/,
+    );
+    expect(read('packages/ui/src/calendar.tsx')).toContain(
+      "data-past={day.isPast ? 'true' : undefined}",
+    );
+  });
+});
+
+describe('F5 · Home and Performance count published posts from the same live list', () => {
+  it('both call the one shared count, and no inline job count is left', () => {
+    const home = read('apps/dashboard/src/app/[locale]/overview/page.tsx');
+    expect(home).toContain('countPublishedPosts(db, {');
+    expect(home).not.toMatch(/publishJob\.count\(/);
+    const queries = read('packages/analytics/src/queries.ts');
+    expect(queries).toContain('const publishedPostCount = await countPublishedPosts(this.#db, {');
+    expect(queries).not.toMatch(/publishJob\.count\(/);
+  });
+
+  it('the live list is posts, not jobs, and leaves out archived and expired posts', () => {
+    const published = read('packages/analytics/src/published.ts');
+    expect(published).toContain('db.contentItem.count(');
+    expect(published).toContain('deletedAt: null,');
+    expect(published).toContain("status: { not: 'ARCHIVED' as const },");
+    expect(published).toContain('publishJobs: {');
+    const queries = read('packages/analytics/src/queries.ts');
+    expect(queries).toMatch(
+      /id: \{ in: candidateIds \},\s*deletedAt: null,\s*status: \{ not: 'ARCHIVED' \}/,
+    );
+  });
+});
+
+describe('B4 / Q10 · default reviewer; anyone who may approve can decide', () => {
+  it('the service assigns the default, and no longer refuses a non-assignee', () => {
+    const approvals = read('packages/content/src/approvals.ts');
+    expect(approvals).toMatch(/const assignedToUserId =\s*chosen \?\?/);
+    expect(approvals).not.toContain("'assigned_to_another'");
+    expect(approvals).not.toMatch(/approval\.assignedToUserId !== input\.actor\.userId/);
+    expect(approvals).toContain('preferUserId?: string;');
+  });
+
+  it('the Approvals screen offers the decision and says who it is assigned to', () => {
+    const page = read('apps/dashboard/src/app/[locale]/approvals/page.tsx');
+    expect(page).toContain('mayDecide: mayApprove && !blocked,');
+    expect(page).toContain('preferUserId: customer.userId');
+    both('approvals.assignedTo');
+    both('approvals.assignedToYou');
+  });
+
+  it('the composer lets the author choose, or leave it automatic, on submit and resubmit', () => {
+    const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+    expect(editor).toContain("{reviewerPicker('submit')}");
+    expect(editor).toContain("{reviewerPicker('resubmit')}");
+    expect(editor).toContain('name="assignedToUserId"');
+    const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+    const resubmit = actions.slice(
+      actions.indexOf('export async function resubmitAfterChangesAction'),
+    );
+    expect(resubmit.slice(0, resubmit.indexOf('\n}\n'))).toContain(
+      'assignedToUserId: assignedTo.length > 0 ? assignedTo : null,',
+    );
+    both('editor.reviewer.label');
+    both('editor.reviewer.auto');
+  });
+});
+
+describe('B5 · Approvals per person, and a reason for "request changes"', () => {
+  it('the service refuses a blank reason for REQUEST_CHANGES only', () => {
+    const approvals = read('packages/content/src/approvals.ts');
+    expect(approvals).toContain(
+      "if (input.verdict === 'REQUEST_CHANGES' && note === null) throw decisionNoteRequired();",
+    );
+    const actions = read('apps/dashboard/src/app/[locale]/approvals/actions.ts');
+    expect(actions).toMatch(/DECISION_NOTE_REQUIRED_REASON\s*\?\s*'NOTE_REQUIRED'/);
+    expect(statusMessage('NOTE_REQUIRED', 'en')).toContain('before asking for changes');
+    expect(statusMessage('NOTE_REQUIRED', 'ar')).toBeTruthy();
+  });
+
+  it('the form requires the reason for "request changes", and Approve/Reject skip it', () => {
+    const view = read('apps/dashboard/src/app/[locale]/approvals/approvals-view.tsx');
+    const form = view.slice(view.indexOf('function DecisionForm('));
+    expect(form).toMatch(/name="note"\s*type="text"\s*required/);
+    expect(form.match(/^\s+formNoValidate$/gm)).toHaveLength(2);
+    const requestChanges = form.slice(form.indexOf('value="REQUEST_CHANGES"'));
+    expect(requestChanges.slice(0, requestChanges.indexOf('</button>'))).not.toContain(
+      'formNoValidate',
+    );
+  });
+
+  it('two tabs, "For me" by default for a reviewer and "Sent" otherwise, carried through actions', () => {
+    const page = read('apps/dashboard/src/app/[locale]/approvals/page.tsx');
+    expect(page).toMatch(/: mayApprove \? 'forMe' : 'sent';/);
+    const view = read('apps/dashboard/src/app/[locale]/approvals/approvals-view.tsx');
+    expect(view).toContain("{tab === 'forMe' ? (");
+    expect(view).toContain("{tab === 'sent' && mayReadContent ? (");
+    expect(view.match(/name="tab" value=\{tab\}/g)).toHaveLength(2);
+    const actions = read('apps/dashboard/src/app/[locale]/approvals/actions.ts');
+    expect(actions).toContain("return tab === 'sent' || tab === 'forMe' ? { tab } : {};");
+    for (const key of [
+      'approvals.tabs.label',
+      'approvals.tabs.forMe',
+      'approvals.tabs.sent',
+      'approvals.decidedBy',
+    ]) {
+      both(key);
+    }
+  });
+
+  it('"Sent" says who it went to, who decided and why', () => {
+    const page = read('apps/dashboard/src/app/[locale]/approvals/page.tsx');
+    const mine = page.slice(page.indexOf('const mineRows'));
+    expect(mine).toContain('decidedByLabel: row.decidedByUserId');
+    expect(mine).toContain('decisionNote: row.decisionNote,');
+    expect(mine).toContain('assignedToLabel: row.assignedToUserId');
+  });
+});
+
+describe('B7 · calendar: drag a post, a new post on a day, no unscheduling once it goes out', () => {
+  it('a planned post is draggable for a scheduler, and a drop keeps its time', () => {
+    const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    expect(view).toContain(
+      'return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;',
+    );
+    expect(view).toContain("form.set('time', slot.time);");
+    expect(view).toMatch(/if \(today !== '' && day < today\) \{\s*setPastDayNotice\(true\);/);
+    expect(view).toContain("event.dataTransfer.setData('text/plain', `item:${draft.id}`);");
+    const chip = read('packages/ui/src/post-card.tsx');
+    expect(chip).toContain('draggable: true');
+    expect(chip).toContain("event.dataTransfer.setData('text/plain', dragData);");
+  });
+
+  it('"new post" is offered only on an empty day that has not passed', () => {
+    const grid = read('packages/ui/src/calendar.tsx');
+    expect(grid).toContain('{onCreateOnDay && !day.isPast && day.posts.length === 0 ? (');
+    expect(grid).toContain('aria-label={`${labels.createPost} — ${day.longLabel}`}');
+  });
+
+  it('Unschedule is offered, and accepted, only for a plan that has not started', () => {
+    const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    expect(view).toContain(
+      '{canSchedule && openSlot.reschedulable !== false ? (\n                <form action={actions.cancel}>',
+    );
+    const calendar = read('packages/content/src/calendar.ts');
+    const cancel = calendar.slice(calendar.indexOf('  async cancel('));
+    expect(cancel.slice(0, cancel.indexOf('\n  async '))).toContain(
+      'if (!RESCHEDULABLE_SLOT_STATUSES.includes(slot.status)) throw slotNotReschedulable();',
+    );
+  });
+
+  it('a phone is told how to move a post, in both languages', () => {
+    const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    expect(view).toMatch(/className="bs-narrow-only"\s*data-testid="calendar-move-note"/);
+    both('calendar.moveFromPost');
+  });
+});
+
+describe('B8 · the Posts "…" menu, and Q21 · who may file a post under a campaign', () => {
+  const menu = () => read('apps/dashboard/src/app/[locale]/content/post-menu.tsx');
+
+  it('offers each item only when the permission AND the post allow it', () => {
+    const source = menu();
+    expect(source).toContain('const mayMove = can.schedule && slot !== null;');
+    expect(source).toContain('const mayArchive = can.archive && ARCHIVABLE.has(status);');
+    expect(source).toContain("const mayRestore = can.archive && status === 'ARCHIVED';");
+    expect(source).toContain(
+      "const ARCHIVABLE = new Set(['DRAFT', 'CHANGES_REQUESTED', 'APPROVED']);",
+    );
+    expect(source).toContain('(campaignId === null ? can.attachCampaign : can.changeCampaign);');
+    // Nothing to offer → no trigger at all, rather than an empty menu.
+    expect(source).toMatch(/channelLinks\.length === 0\) \{\s*return null;/);
+    const page = read('apps/dashboard/src/app/[locale]/content/page.tsx');
+    expect(page).toContain("schedule: may('content.schedule'),");
+    expect(page).toContain("archive: may('content.archive'),");
+    expect(page).toContain("changeCampaign: may('campaigns.manage'),");
+  });
+
+  it('every item posts to an action that already exists — no second way to change a post', () => {
+    const library = read('apps/dashboard/src/app/[locale]/content/content-library.tsx');
+    expect(library).toContain('transition: transitionItemAction,');
+    for (const action of [
+      'actions.reschedule',
+      'actions.cancel',
+      'actions.transition',
+      'actions.setCampaign',
+    ]) {
+      expect(menu()).toContain(`action={${action}}`);
+    }
+    expect(menu()).not.toMatch(/'use server'/);
+  });
+
+  it('"View on" opens only an https link, in a new tab that cannot reach back', () => {
+    expect(menu()).toContain("links.filter((link) => link.url.startsWith('https://'))");
+    expect(menu()).toContain('rel="noopener noreferrer"');
+    const page = read('apps/dashboard/src/app/[locale]/content/page.tsx');
+    expect(page).toContain("!job.externalPostUrl.startsWith('https://')");
+  });
+
+  it('archiving is two steps everywhere: the server refuses an archive without the confirmation', () => {
+    const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+    expect(actions).toMatch(
+      /if \(to === 'ARCHIVED' && formData\.get\('intent'\) !== 'ARCHIVE'\) \{\s*throw new AppError\('VALIDATION_FAILED'/,
+    );
+    expect(menu()).toContain('<input type="hidden" name="intent" value="ARCHIVE" />');
+    expect(menu()).toContain('<ConfirmDialog');
+    const studio = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+    expect(studio).toContain('<details data-testid="archive-disclosure">');
+    expect(studio).toContain('<input type="hidden" name="intent" value="ARCHIVE" />');
+  });
+
+  it('the menu returns to the library only for the one known path', () => {
+    for (const file of [
+      'apps/dashboard/src/app/[locale]/content/actions.ts',
+      'apps/dashboard/src/app/[locale]/calendar/actions.ts',
+    ]) {
+      const source = read(file);
+      expect(source).toContain("formData.get('returnTo') === '/content'");
+      // Only ever compared with a literal — never followed as a URL.
+      const uses = source.match(/formData\.get\('returnTo'\)[^\n]*/g) ?? [];
+      for (const use of uses) expect(use, file).toMatch(/^formData\.get\('returnTo'\) === '\/\w+'/);
+    }
+  });
+
+  it('the service decides Q21: attach with content.create, move or remove with campaigns.manage', () => {
+    const service = read('packages/content/src/campaigns.ts');
+    expect(service).toContain(
+      'const attaching = item.campaignId === null && input.campaignId !== null;',
+    );
+    expect(service).toContain(
+      "attaching ? !held('content.create') && !held('campaigns.manage') : !held('campaigns.manage')",
+    );
+    expect(service).toContain("permission: attaching ? 'content.create' : 'campaigns.manage',");
+    // The no-op comes first: saving the same campaign asks for nothing.
+    expect(service.indexOf('if (input.campaignId === item.campaignId) return;')).toBeLessThan(
+      service.indexOf('const attaching ='),
+    );
+    // Every caller hands the session's permissions to the rule.
+    expect(read('apps/dashboard/src/app/[locale]/content/actions.ts')).toContain(
+      'actorPermissionKeys: session.workspace.permissionKeys,',
+    );
+    expect(read('packages/copilot/src/executors.ts')).toContain(
+      'actorPermissionKeys: context.authorization.permissionKeys',
+    );
+  });
+
+  it('the composer offers a campaign to a creator only while the post has none', () => {
+    const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+    expect(editor).toContain(
+      '{can.manageCampaigns || (can.attachCampaign && draft.campaignId === null) ? (',
+    );
+    const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+    expect(actions).toContain(
+      "return permissionKeys.includes('content.create') || permissionKeys.includes('campaigns.manage');",
+    );
+    expect(actions).not.toContain('CAMPAIGN_ASSOCIATION_PERMISSION');
+  });
+
+  it('the trigger is named, and every word is in both languages', () => {
+    expect(menu()).toContain(
+      "<span style={visuallyHiddenStyle()}>{l('content.menu.label')}</span>",
+    );
+    for (const key of [
+      'content.menu.label',
+      'content.menu.move',
+      'content.menu.unschedule',
+      'content.menu.archive',
+      'content.menu.restore',
+      'content.menu.campaign',
+      'content.menu.viewOn',
+      'content.move.title',
+      'content.move.submit',
+      'content.campaign.title',
+      'content.campaign.none',
+      'content.archive.title',
+      'content.archive.confirm',
+      'content.archive.confirmBody',
+      'common.cancel',
+    ]) {
+      both(key);
+    }
+  });
+});
+
+describe('Q12 · resubmitting after changes keeps the author’s reply', () => {
+  const action = () => {
+    const source = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+    const start = source.indexOf('export async function resubmitAfterChangesAction');
+    return source.slice(start, source.indexOf('\nexport async function', start + 1));
+  };
+
+  it('the reply and the resolve are separate transactions, so a refused resolve cannot undo the reply', () => {
+    const body = action();
+    expect(body).toContain('await inNotes(locale, run);');
+    expect(body).toMatch(
+      /await noteStep\('reply', \(\{ service, actor \}\) =>\s*service\.reply\(\{ actor, threadId, body: reply \}\),/,
+    );
+    // One transaction per step — never the reply and the resolve in one callback.
+    expect(body).not.toMatch(/service\.reply\([^)]*\);\s*await service\.resolve/);
+  });
+
+  it('closes the thread only for somebody who holds notes.manage', () => {
+    const body = action();
+    expect(body).toContain(
+      'const mayCloseThreads = session.workspace.permissionKeys.includes(NOTE_MANAGE_PERMISSION);',
+    );
+    expect(body).toMatch(/if \(mayCloseThreads\) \{\s*await noteStep\('resolve'/);
+  });
+});

@@ -4,7 +4,8 @@ import {
   type ResolvedApprovalPolicy,
 } from '@brandspace/content';
 import { brandScopeFilter } from '@brandspace/shared';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { mediaForVariants } from '../../../server/media-picker';
@@ -58,12 +59,21 @@ export default async function ApprovalsPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'content.read');
+  const access = await requireWorkspacePage(locale, '/approvals');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const { customer, workspace } = access.session;
 
   const ok = typeof query.ok === 'string' ? query.ok : null;
   const error = typeof query.error === 'string' ? query.error : null;
   const reference = typeof query.ref === 'string' ? query.ref : undefined;
   const reviewId = typeof query.review === 'string' ? query.review : null;
+  /*
+   * B5 — "For me" (what waits on this reader) and "Sent" (what they sent),
+   * opening on "Sent" for a member who may not approve anything.
+   */
+  const mayApprove = mayApproveForBrand({ permissionKeys: workspace.permissionKeys });
+  const tab: 'forMe' | 'sent' =
+    query.tab === 'sent' || query.tab === 'forMe' ? query.tab : mayApprove ? 'forMe' : 'sent';
 
   // Implied by the route gate above; kept as a named constant because the view
   // props read better for it, and because the gate is the thing that may change.
@@ -120,7 +130,11 @@ export default async function ApprovalsPage({
        * to build first.
        */
       const queueScope = workspace.brandScope.length > 0 ? workspace.brandScope : undefined;
-      const pending = await service.queue({ brandScope: queueScope });
+      // Q10 — this reviewer's own assignments first.
+      const pending = await service.queue({
+        brandScope: queueScope,
+        preferUserId: customer.userId,
+      });
 
       /* "What you sent" is every cycle THIS member opened. */
       const own = await db.approval.findMany({
@@ -206,12 +220,15 @@ export default async function ApprovalsPage({
       row.requestedByUserId === customer.userId || row.item?.createdByUserId === customer.userId;
     const blocked = mayApprove && isSelf && policy?.allowSelfApproval === false;
     /*
-     * An ASSIGNED review is that person's to decide, and the service enforces
-     * it. The screen reflects it so a reviewer is not offered a button that
-     * will refuse them.
+     * Q10 (D-325) — WHO IT IS ASSIGNED TO, SAID; not who alone may decide it.
+     * Anyone who may approve for the brand is offered the decision.
      */
-    const assignedElsewhere =
-      row.assignedToUserId !== null && row.assignedToUserId !== customer.userId;
+    const assignedToLabel =
+      row.assignedToUserId === null
+        ? null
+        : row.assignedToUserId === customer.userId
+          ? t('approvals.assignedToYou')
+          : t('approvals.assignedTo').replace('{name}', nameOf(row.assignedToUserId));
     return {
       id: row.id,
       itemId: row.contentItemId ?? '',
@@ -222,9 +239,9 @@ export default async function ApprovalsPage({
       requestedAtLabel: dateFormat.format(row.createdAt),
       cycle: row.cycle,
       requestNote: row.requestNote,
-      mayDecide: mayApprove && !blocked && !assignedElsewhere,
+      mayDecide: mayApprove && !blocked,
       blockedAsSelf: Boolean(blocked),
-      assignedElsewhere,
+      assignedToLabel,
       mayWithdraw: false,
       mayOpenInStudio: maySeeContent,
     };
@@ -242,7 +259,14 @@ export default async function ApprovalsPage({
     requestNote: row.requestNote,
     mayDecide: false,
     blockedAsSelf: false,
-    assignedElsewhere: false,
+    // B5 — what happened to it: who it went to, who decided, and why.
+    assignedToLabel: row.assignedToUserId
+      ? t('approvals.assignedTo').replace('{name}', nameOf(row.assignedToUserId))
+      : null,
+    decidedByLabel: row.decidedByUserId
+      ? t('approvals.decidedBy').replace('{name}', nameOf(row.decidedByUserId))
+      : null,
+    decisionNote: row.decisionNote,
     mayWithdraw: row.status === 'PENDING',
     mayOpenInStudio: maySeeContent,
   }));
@@ -349,7 +373,12 @@ export default async function ApprovalsPage({
         mine={mineRows}
         policies={policies}
         review={reviewView}
-        mayReview={mayApproveForBrand({ permissionKeys: workspace.permissionKeys })}
+        tab={tab}
+        tabs={[
+          { id: 'forMe', href: `/${locale}/approvals?tab=forMe`, label: t('approvals.tabs.forMe') },
+          { id: 'sent', href: `/${locale}/approvals?tab=sent`, label: t('approvals.tabs.sent') },
+        ]}
+        mayReview={mayApprove}
         mayReadContent={maySeeContent}
         mayManagePolicy={mayManagePolicy}
         actions={{

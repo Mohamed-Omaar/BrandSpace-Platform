@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  ContentCalendarService,
   ContentStudioService,
   contentGenerateRequestSchema,
   contentQuoteRequestSchema,
@@ -17,6 +18,7 @@ import { CUSTOMER_REALM, CustomerAuthService } from '@brandspace/auth';
 import { getPrisma, withWorkspace } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import {
+  creditSpendingPermissions,
   brandInScope,
   createLogger,
   currentEnvironment,
@@ -24,6 +26,7 @@ import {
   isAppError,
 } from '@brandspace/shared';
 import { route } from '../route-contract';
+import { scheduleQuota } from './schedule-quota';
 
 /**
  * AI Content Studio — the customer-initiated generation surface.
@@ -125,6 +128,8 @@ interface Caller {
   readonly userId: string;
   readonly workspaceId: string;
   readonly brandScope: readonly string[];
+  /** Q8 — the session's grants, for the rules that depend on them. Never from a body. */
+  readonly permissionKeys: readonly string[];
 }
 
 /**
@@ -138,7 +143,7 @@ interface Caller {
 async function resolveCaller(
   req: FastifyRequest,
   reply: FastifyReply,
-  permission: string,
+  permission: string | readonly string[],
 ): Promise<Caller | null> {
   const token = sessionTokenFrom(req);
   if (!token) {
@@ -155,7 +160,10 @@ async function resolveCaller(
 
   const workspaces = await auth.listWorkspaces(token).catch(() => null);
   const workspace = workspaces?.find((w) => w.workspaceId === customer.activeWorkspaceId);
-  if (!workspace || !workspace.permissionKeys.includes(permission)) {
+  // Q18 — a credit-spending route passes its feature key AND `copilot.use`;
+  // every key must be held, and a miss is the same 404 as any other.
+  const required = typeof permission === 'string' ? [permission] : permission;
+  if (!workspace || !required.every((key) => workspace.permissionKeys.includes(key))) {
     await reply.code(404).send({ error: { code: 'NOT_FOUND' } });
     return null;
   }
@@ -164,6 +172,7 @@ async function resolveCaller(
     userId: customer.userId,
     workspaceId: workspace.workspaceId,
     brandScope: workspace.brandScope,
+    permissionKeys: workspace.permissionKeys,
   };
 }
 
@@ -225,11 +234,28 @@ function fail(reply: FastifyReply, action: string, error: unknown) {
 }
 
 async function studioFor(caller: Caller, db: Parameters<Parameters<typeof withWorkspace>[1]>[0]) {
+  const policy = await resolveContentPolicy(configurationService(), currentEnvironment());
+  const workspace = await db.workspace.findUniqueOrThrow({
+    where: { id: caller.workspaceId },
+    select: { timezone: true },
+  });
   return new ContentStudioService({
     db,
     workspaceId: caller.workspaceId,
     gateway: gateway(),
-    policy: await resolveContentPolicy(configurationService(), currentEnvironment()),
+    policy,
+    /*
+     * Q8 — an AI edit by a member who may not schedule takes a scheduled post
+     * off the calendar, through the calendar, in the edit's transaction. The
+     * quota is the shared binding (P7-R6), so the refund is the real one.
+     */
+    scheduling: new ContentCalendarService({
+      db,
+      workspaceId: caller.workspaceId,
+      policy,
+      timezone: workspace.timezone,
+      quota: scheduleQuota(db, caller.workspaceId),
+    }),
   });
 }
 
@@ -296,6 +322,7 @@ export function registerContentRoutes(app: FastifyInstance): void {
     {
       scope: 'workspace',
       permission: CREATE_PERMISSION,
+      spendsCredits: true,
       // A generation spends credits, so a retry must never bill twice. The
       // client key is required by the schema, not optional here.
       idempotent: true,
@@ -303,7 +330,7 @@ export function registerContentRoutes(app: FastifyInstance): void {
       confirmation: 'not_required',
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const caller = await resolveCaller(req, reply, CREATE_PERMISSION);
+      const caller = await resolveCaller(req, reply, creditSpendingPermissions(CREATE_PERMISSION));
       if (!caller) return reply;
 
       const parsed = contentGenerateRequestSchema.safeParse(req.body);
@@ -408,12 +435,13 @@ export function registerContentRoutes(app: FastifyInstance): void {
     {
       scope: 'workspace',
       permission: EDIT_PERMISSION,
+      spendsCredits: true,
       idempotent: true,
       rateLimit: 'ai.generate',
       confirmation: 'not_required',
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const caller = await resolveCaller(req, reply, EDIT_PERMISSION);
+      const caller = await resolveCaller(req, reply, creditSpendingPermissions(EDIT_PERMISSION));
       if (!caller) return reply;
 
       const parsed = contentToolRequestSchema.safeParse(req.body);
@@ -433,6 +461,7 @@ export function registerContentRoutes(app: FastifyInstance): void {
               actorUserId: caller.userId,
               planKey: facts.planKey,
               actorBrandScope: caller.brandScope,
+              actorPermissionKeys: caller.permissionKeys,
             }),
           { prisma: getPrisma() },
         );

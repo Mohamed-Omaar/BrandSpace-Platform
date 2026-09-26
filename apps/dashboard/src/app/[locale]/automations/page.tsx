@@ -22,7 +22,8 @@ import {
 } from '@brandspace/automation';
 import { INGESTED_METRIC_KEYS } from '@brandspace/analytics';
 import { brandIdQueryFilter, brandScopeFilter } from '@brandspace/shared';
-import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
+import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { copilotHref } from '../../../server/copilot-surface';
 import { inAnalytics } from '../../../server/analytics-context';
@@ -108,7 +109,9 @@ export default async function AutomationsPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
-  const session = await requireWorkspace(locale, 'automation.read');
+  const access = await requireWorkspacePage(locale, '/automations');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
+  const session = access.session;
   const { workspace } = session;
 
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;

@@ -3,8 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { createLogger, internalErrorFields, toPublicErrorCode } from '@brandspace/shared';
-import { requireWorkspace, type WorkspaceSession } from '../../../server/customer-context';
+import { SCHEDULE_IN_PAST_REASON } from '@brandspace/content';
+import { createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
+import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
+import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
 
 const log = createLogger({ context: { component: 'dashboard.calendar' } });
@@ -32,6 +34,18 @@ function pageUrl(locale: string, params: Record<string, string> = {}): string {
   return `/${locale}/calendar${search ? `?${search}` : ''}`;
 }
 
+/**
+ * B8 — where a Posts-menu action comes back to. A closed set: the library, or
+ * the calendar (the default).
+ */
+function landing(locale: string, formData: FormData, params: Record<string, string>): string {
+  if (formData.get('returnTo') === '/content') {
+    const search = new URLSearchParams(params).toString();
+    return `/${locale === 'ar' ? 'ar' : 'en'}/content${search ? `?${search}` : ''}`;
+  }
+  return pageUrl(locale, params);
+}
+
 /** Carry the month the customer was looking at through the redirect. */
 function periodOf(formData: FormData): Record<string, string> {
   const month = String(formData.get('month') ?? '').trim();
@@ -48,7 +62,18 @@ function failure(
   // The correlation id is the ONLY thing joining this screen to the server log,
   // and the log is redacted. No caption and no title is written either side.
   log.warn('calendar action failed', { correlationId, action, ...internalErrorFields(error) });
-  return pageUrl(locale, { ...extra, error: toPublicErrorCode(error), ref: correlationId });
+  return pageUrl(locale, { ...extra, error: calendarErrorCode(error), ref: correlationId });
+}
+
+/**
+ * F2 — a time already past (earlier today included) gets its own words; the
+ * reason is machine-readable, never matched on a message.
+ */
+function calendarErrorCode(error: unknown): string {
+  if (isAppError(error) && error.publicDetails['reason'] === SCHEDULE_IN_PAST_REASON) {
+    return 'SCHEDULE_IN_PAST';
+  }
+  return actionErrorCode(error);
 }
 
 function actorOf(session: WorkspaceSession) {
@@ -64,7 +89,7 @@ export async function scheduleContentAction(formData: FormData): Promise<void> {
   const period = periodOf(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.schedule');
+    const session = await requireWorkspaceAction(locale, 'content.schedule');
     const contentItemId = String(formData.get('contentItemId') ?? '');
     /*
      * The two halves of a wall-clock arrive as two fields, because that is what
@@ -97,7 +122,7 @@ export async function rescheduleContentAction(formData: FormData): Promise<void>
   const period = periodOf(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.schedule');
+    const session = await requireWorkspaceAction(locale, 'content.schedule');
     const slotId = String(formData.get('slotId') ?? '');
     const date = String(formData.get('date') ?? '').trim();
     const time = String(formData.get('time') ?? '').trim();
@@ -109,11 +134,19 @@ export async function rescheduleContentAction(formData: FormData): Promise<void>
         ...actorOf(session),
       }),
     );
-    destination = pageUrl(locale, { ...period, ok: 'CONTENT_RESCHEDULED' });
+    destination = landing(locale, formData, { ...period, ok: 'CONTENT_RESCHEDULED' });
   } catch (error: unknown) {
     destination = failure(locale, error, 'reschedule', period);
+    if (formData.get('returnTo') === '/content') {
+      const failed = new URL(destination, 'http://x').searchParams;
+      destination = landing(locale, formData, {
+        error: failed.get('error') ?? '',
+        ref: failed.get('ref') ?? '',
+      });
+    }
   }
   revalidatePath(`/${locale}/calendar`);
+  revalidatePath(`/${locale}/content`);
   redirect(destination);
 }
 
@@ -123,15 +156,22 @@ export async function cancelScheduleAction(formData: FormData): Promise<void> {
   const period = periodOf(formData);
   let destination: string;
   try {
-    const session = await requireWorkspace(locale, 'content.schedule');
+    const session = await requireWorkspaceAction(locale, 'content.schedule');
     const slotId = String(formData.get('slotId') ?? '');
 
     await inContentStudio(session.workspace.workspaceId, async ({ calendar }) =>
       (await calendar()).cancel({ slotId, ...actorOf(session) }),
     );
-    destination = pageUrl(locale, { ...period, ok: 'CONTENT_UNSCHEDULED' });
+    destination = landing(locale, formData, { ...period, ok: 'CONTENT_UNSCHEDULED' });
   } catch (error: unknown) {
     destination = failure(locale, error, 'cancel', period);
+    if (formData.get('returnTo') === '/content') {
+      const failed = new URL(destination, 'http://x').searchParams;
+      destination = landing(locale, formData, {
+        error: failed.get('error') ?? '',
+        ref: failed.get('ref') ?? '',
+      });
+    }
   }
   revalidatePath(`/${locale}/calendar`);
   revalidatePath(`/${locale}/content`);
