@@ -506,8 +506,6 @@
   padding: 9px 4px 14px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: #3a3a44 transparent;
 }
 
 .bb-chat-message {
