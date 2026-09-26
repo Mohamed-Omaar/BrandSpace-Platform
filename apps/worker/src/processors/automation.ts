@@ -129,8 +129,11 @@ function portsFor(
           actor: {
             userId: input.actorUserId,
             // THE CREATOR'S OWN AUTHORITY, resolved live by the engine and passed
-            // straight through. The approval service checks it itself; this port
-            // does not get to decide.
+            // straight through. The ENGINE is what authorizes this action: it
+            // re-checks the creator's live `content.submit` (the registry's
+            // permission for SUBMIT_FOR_APPROVAL) before every run and blocks it
+            // otherwise. `ContentApprovalService.submit()` does not check that
+            // permission itself; this port does not get to decide either.
             roleKey: input.actorRoleKey,
             permissionKeys: input.actorPermissionKeys,
             brandScope: input.actorBrandScope,
