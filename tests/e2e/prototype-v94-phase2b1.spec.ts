@@ -139,13 +139,11 @@ test.describe('Q1 / Q2 · the rail card opens the business switcher', () => {
     await expect(other).toBeVisible();
     await expect(other).not.toHaveAttribute('aria-current', 'true');
 
-    // The owner's allowance: the fixture workspaces carry no plan, which states
-    // no ceiling (D-326), so the usage shows and "+ New workspace" is offered.
+    // The owner's allowance: the fixture workspaces carry no plan, which adds
+    // no allowance (review item 1, amends D-326), so the usage shows and
+    // "+ New workspace" is not offered.
     await expect(page.getByTestId('workspace-usage')).toContainText('Workspaces: ');
-    const create = page.getByTestId('workspace-new');
-    if ((await create.count()) > 0) {
-      await expect(create).toHaveAttribute('href', '/en/onboarding/workspace');
-    }
+    await expect(page.getByTestId('workspace-new')).toHaveCount(0);
 
     await other.click();
     await page.waitForURL(/\/en\/overview$/);
@@ -941,7 +939,75 @@ test.describe('G8 / Q16 · sign-up, reset and a new workspace from inside the ap
   test('an owner starting another workspace gets a blank form, a city for Egypt only, and a way back', async ({
     page,
   }) => {
-    await signIn(page);
+    // REAL PLAN STATE (review item 1): an owner whose workspace is on a plan
+    // with no stated workspace ceiling (the fixture Growth plan) and an ACTIVE
+    // subscription. A plan-less workspace grants nothing any more.
+    const suffix = randomUUID().slice(0, 8);
+    const password = `e2e-${randomUUID()}`;
+    const email = `e2e-ws-owner-${suffix}@brandspace.test`;
+    const slug = `e2e-ws-${suffix}`;
+    await withPlatformPrisma(async (prisma) => {
+      const owner = await prisma.user.create({
+        data: {
+          email,
+          name: 'Workspace Owner',
+          status: 'ACTIVE',
+          emailVerifiedAt: new Date(),
+          passwordHash: await hashPassword(password),
+          locale: 'EN',
+          timezone: 'UTC',
+        },
+        select: { id: true },
+      });
+      const id = randomUUID();
+      await prisma.workspace.create({
+        data: {
+          id,
+          workspaceId: id,
+          slug,
+          name: `E2E Owner ${suffix}`,
+          ownerUserId: owner.id,
+          status: 'ACTIVE',
+          country: 'US',
+          defaultLocale: 'EN',
+          timezone: 'America/New_York',
+          currency: 'USD',
+          planKey: 'fixture-growth',
+        },
+      });
+      const now = new Date();
+      await prisma.workspaceSubscription.create({
+        data: {
+          workspaceId: id,
+          planKey: 'fixture-growth',
+          status: 'ACTIVE',
+          currency: 'USD',
+          pinnedMonthlyMinor: 7900,
+          pinnedAnnualMinor: 79000,
+          currentPeriodStart: now,
+          currentPeriodEnd: new Date(now.getTime() + 30 * 86_400_000),
+        },
+      });
+      const role = await prisma.role.findFirstOrThrow({
+        where: { key: 'workspace_owner', workspaceId: null },
+        select: { id: true },
+      });
+      await prisma.membership.create({
+        data: {
+          workspaceId: id,
+          userId: owner.id,
+          roleId: role.id,
+          status: 'ACTIVE',
+          acceptedAt: new Date(),
+        },
+      });
+    });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
+    await page.fill('#email', email);
+    await page.fill('#password', password);
+    await page.click('[data-testid="signin-submit"]');
+    await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
+
     await page.goto(`${DASHBOARD_BASE_URL}/en/onboarding/workspace`);
     await expect(page.getByTestId('create-workspace-form')).toBeVisible();
     // Blank: nothing is copied from the current workspace.
@@ -954,6 +1020,17 @@ test.describe('G8 / Q16 · sign-up, reset and a new workspace from inside the ap
     const back = page.getByTestId('create-workspace-back');
     await expect(back).toHaveAttribute('href', '/en/overview');
     await back.click();
-    await page.waitForURL(/\/en\/overview$/);
+    await page.waitForURL(/\/en\/(overview|workspaces)/);
+  });
+
+  test('an owner whose workspaces have no plan is not offered another (review item 1)', async ({
+    page,
+  }) => {
+    // The shared E2E owner's fixture workspaces carry no plan and no
+    // subscription: they add no allowance, so the page sends the owner on.
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/onboarding/workspace`);
+    await page.waitForURL(/\/en\/onboarding(\?.*)?$/);
+    await expect(page.getByTestId('create-workspace-form')).toHaveCount(0);
   });
 });

@@ -22,10 +22,10 @@ import type { PlanDetail } from './plan-catalogue';
  *         workspace whose subscription is ACTIVE or PAST_DUE, so creating a
  *         trial workspace can never raise the allowance (G7: "from the owner's
  *         account plan, not from the trial plan of a new workspace");
- *       · a workspace that has NEVER HAD A PLAN (no plan key, no subscription)
- *         states no ceiling, which the precedence engine already reads as "no
- *         ceiling applies" for a quota with a null default (precedence.ts,
- *         `neverHadAPlan`) — the same answer, not a new one;
+ *       · a workspace with NO PLAN (no plan key, with or without a
+ *         subscription) contributes NOTHING — it never grants Unlimited (owner
+ *         decision, PR #47 review item 1; amends D-326). It still counts as
+ *         `used` while it exists and is not deleted;
  *       · a plan key the active catalogue does not contain contributes nothing.
  *   - `null` IS UNLIMITED, exactly as for every other plan quota. The highest
  *     stated number wins; any unlimited contribution makes it unlimited.
@@ -93,11 +93,8 @@ export function workspaceAllowance(
     const status = row.subscriptionStatus;
     if (status !== null && TERMINAL.has(status)) continue;
     if (status === 'TRIALING' && hasPaid) continue;
-    if (row.planKey === null) {
-      // Never had a plan: no ceiling is stated anywhere (see the header).
-      if (status === null) unlimited = true;
-      continue;
-    }
+    // No plan: counted in `used` above, contributes no allowance (see the header).
+    if (row.planKey === null) continue;
     const plan = plans.find((candidate) => candidate.key === row.planKey);
     if (!plan) continue;
     const quota = plan.quotas.workspaces;

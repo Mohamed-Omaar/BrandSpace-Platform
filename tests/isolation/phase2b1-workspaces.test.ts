@@ -200,6 +200,19 @@ describe('Q1 · the workspace allowance is enforced where a workspace is written
     });
   });
 
+  it('a workspace with no plan and no subscription grants nothing: no second workspace (review item 1)', async () => {
+    const owner = await verifiedUser('planless');
+    const first = await create(owner);
+    // Strip it to "no plan, no subscription", the case D-326 once read as unlimited.
+    await platform.workspaceSubscription.deleteMany({ where: { workspaceId: first.workspaceId } });
+    await platform.workspace.update({ where: { id: first.workspaceId }, data: { planKey: null } });
+    await expect(create(owner)).rejects.toMatchObject({
+      code: 'QUOTA_EXCEEDED',
+      publicDetails: { reason: 'WORKSPACE_ALLOWANCE_REACHED', used: 1, allowed: 0 },
+    });
+    expect(await ownedCount(owner)).toBe(1);
+  });
+
   it('never counts another person’s workspaces', async () => {
     const busy = await verifiedUser('busy');
     await create(busy, FIVE);

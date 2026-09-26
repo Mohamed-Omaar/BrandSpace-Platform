@@ -84,15 +84,58 @@ describe('Q1 · the workspace allowance', () => {
     });
   });
 
-  it('a workspace that never had a plan states no ceiling', () => {
-    expect(workspaceAllowance([owned(null, null)], plans)).toMatchObject({
-      allowed: null,
-      canCreate: true,
+  /*
+   * OWNER DECISION (PR #47 review item 1, amends D-326): a workspace with no
+   * plan and no subscription contributes NOTHING. It never grants Unlimited.
+   */
+  it('an owner whose only workspace has no plan cannot create a second one', () => {
+    expect(workspaceAllowance([owned(null, null)], plans)).toEqual({
+      used: 1,
+      allowed: 0,
+      canCreate: false,
+    });
+  });
+
+  it('a plan-less workspace adds no allowance, with or without a subscription row', () => {
+    expect(workspaceAllowance([owned(null, null), owned(null, null)], plans)).toEqual({
+      used: 2,
+      allowed: 0,
+      canCreate: false,
+    });
+    expect(workspaceAllowance([owned(null, 'ACTIVE')], plans)).toMatchObject({
+      allowed: 0,
+      canCreate: false,
     });
     // A plan key the active catalogue no longer contains contributes nothing.
     expect(workspaceAllowance([owned('retired', 'ACTIVE')], plans)).toMatchObject({
       allowed: 0,
       canCreate: false,
+    });
+  });
+
+  it('with a valid planned workspace, only its plan contributes; plan-less ones still count as used', () => {
+    expect(
+      workspaceAllowance([owned('five', 'ACTIVE'), owned(null, null), owned(null, null)], plans),
+    ).toEqual({ used: 3, allowed: 5, canCreate: true });
+    expect(workspaceAllowance([owned('two', 'ACTIVE'), owned(null, null)], plans)).toEqual({
+      used: 2,
+      allowed: 2,
+      canCreate: false,
+    });
+  });
+
+  it('a plan-less workspace pending deletion still counts until it is DELETED', () => {
+    const pending = owned(null, null);
+    expect(workspaceAllowance([owned('two', 'ACTIVE'), pending], plans)).toEqual({
+      used: 2,
+      allowed: 2,
+      canCreate: false,
+    });
+    const gone = owned(null, null, { deletedAt: new Date(), status: 'DELETED' });
+    expect(workspaceAllowance([owned('two', 'ACTIVE'), gone], plans)).toEqual({
+      used: 1,
+      allowed: 2,
+      canCreate: true,
     });
   });
 
