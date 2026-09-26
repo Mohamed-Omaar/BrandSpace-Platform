@@ -919,3 +919,29 @@ describe('B8 · the Posts "…" menu, and Q21 · who may file a post under a cam
     }
   });
 });
+
+describe('Q12 · resubmitting after changes keeps the author’s reply', () => {
+  const action = () => {
+    const source = read('apps/dashboard/src/app/[locale]/content/actions.ts');
+    const start = source.indexOf('export async function resubmitAfterChangesAction');
+    return source.slice(start, source.indexOf('\nexport async function', start + 1));
+  };
+
+  it('the reply and the resolve are separate transactions, so a refused resolve cannot undo the reply', () => {
+    const body = action();
+    expect(body).toContain('await inNotes(locale, run);');
+    expect(body).toMatch(
+      /await noteStep\('reply', \(\{ service, actor \}\) =>\s*service\.reply\(\{ actor, threadId, body: reply \}\),/,
+    );
+    // One transaction per step — never the reply and the resolve in one callback.
+    expect(body).not.toMatch(/service\.reply\([^)]*\);\s*await service\.resolve/);
+  });
+
+  it('closes the thread only for somebody who holds notes.manage', () => {
+    const body = action();
+    expect(body).toContain(
+      'const mayCloseThreads = session.workspace.permissionKeys.includes(NOTE_MANAGE_PERMISSION);',
+    );
+    expect(body).toMatch(/if \(mayCloseThreads\) \{\s*await noteStep\('resolve'/);
+  });
+});

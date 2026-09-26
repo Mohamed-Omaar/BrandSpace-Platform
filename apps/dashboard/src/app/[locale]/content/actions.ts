@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
 import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
 import { readRetentionFacts, resolveContentExpiry } from '@brandspace/content';
+import { NOTE_MANAGE_PERMISSION } from '@brandspace/collaboration';
 import { systemClock } from '@brandspace/shared';
 import { parseContentType } from './content-types';
 import {
@@ -605,18 +606,36 @@ export async function resubmitAfterChangesAction(formData: FormData): Promise<vo
   let destination: string;
   try {
     const session = await requireWorkspaceAction(locale, 'content.submit');
-    try {
-      await inNotes(locale, async ({ service, actor }) => {
-        for (const threadId of threadIds) {
-          if (reply !== '') await service.reply({ actor, threadId, body: reply });
-          await service.resolve({ actor, threadId });
-        }
-      });
-    } catch (noteFailure: unknown) {
-      log.warn('changes-requested thread could not be closed', {
-        itemId,
-        ...internalErrorFields(noteFailure),
-      });
+    /*
+     * THE REPLY AND THE RESOLVE ARE SEPARATE STEPS, EACH ITS OWN TRANSACTION.
+     *
+     * They shared one: a resolve the author may not perform (Q12 —
+     * `notes.manage`) threw, and rolled back the author's reply with it,
+     * silently. The reply is the author's answer and always goes in; the
+     * thread is closed only by somebody who may close it. Otherwise it stays
+     * open with the answer in it, for the reviewer to close. A step that fails
+     * is logged and does not stop the resubmission.
+     */
+    const mayCloseThreads = session.workspace.permissionKeys.includes(NOTE_MANAGE_PERMISSION);
+    const noteStep = async (step: string, run: Parameters<typeof inNotes>[1]) => {
+      try {
+        await inNotes(locale, run);
+      } catch (noteFailure: unknown) {
+        log.warn(`changes-requested thread: ${step} failed`, {
+          itemId,
+          ...internalErrorFields(noteFailure),
+        });
+      }
+    };
+    for (const threadId of threadIds) {
+      if (reply !== '') {
+        await noteStep('reply', ({ service, actor }) =>
+          service.reply({ actor, threadId, body: reply }),
+        );
+      }
+      if (mayCloseThreads) {
+        await noteStep('resolve', ({ service, actor }) => service.resolve({ actor, threadId }));
+      }
     }
     await inContentStudio(session.workspace.workspaceId, async ({ approvals }) =>
       (await approvals()).submit({
