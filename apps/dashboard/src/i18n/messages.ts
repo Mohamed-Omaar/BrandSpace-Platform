@@ -5806,14 +5806,35 @@ function fixedStatusText(code: string, locale: string): string | null {
  * sentence rather than being echoed. No name reaches the URL; the banner says
  * "the owner", and the screens that know the names say them (PermissionNotice).
  */
+/**
+ * THE PERMISSIONS ONLY THE WORKSPACE OWNER HOLDS — a mirror of
+ * `OWNER_ONLY_PERMISSION_KEYS` in `@brandspace/shared`, which derives them
+ * from the role catalogue. Mirrored rather than imported because this
+ * dictionary is loaded in client components and by the browser suite, where
+ * the shared package (Node built-ins included) cannot be; a unit test fails
+ * the moment the two differ.
+ */
+export const OWNER_ONLY_PERMISSIONS: readonly string[] = [
+  'workspace.delete',
+  'workspace.transfer_ownership',
+  'billing.manage',
+];
+
 function deniedActionText(code: string, locale: string): string | null {
-  const match = /^FORBIDDEN(_OWNER)?:([a-z_]+(?:\.[a-z_]+)+)$/.exec(code);
-  if (!match) return null;
-  const permission = optionalMessage(locale, `perms.desc.${match[2]}`);
+  const match = /^FORBIDDEN(?:_OWNER)?:([a-z_]+(?:\.[a-z_]+)+)$/.exec(code);
+  if (!match?.[1]) return null;
+  const key = match[1];
+  const permission = optionalMessage(locale, `perms.desc.${key}`);
   if (!permission) return fixedStatusText('FORBIDDEN', locale);
-  const fill = (key: string) =>
-    (optionalMessage(locale, key) ?? '').replace('{permission}', permission);
-  return match[1]
+  const fill = (template: string) =>
+    (optionalMessage(locale, template) ?? '').replace('{permission}', permission);
+  /*
+   * "OWNER-ONLY" IS DECIDED FROM THE PERMISSION, NEVER FROM THE URL. The code
+   * arrives in the `error` query parameter, so its `_OWNER` suffix is whatever
+   * a link says; a crafted one must not make an ordinary permission read as
+   * owner-only (or the reverse). The role catalogue is the one source.
+   */
+  return OWNER_ONLY_PERMISSIONS.includes(key)
     ? fill('perms.denied.ownerOnly')
     : `${fill('perms.denied.you')} ${fill('perms.denied.hintOwner')}`;
 }

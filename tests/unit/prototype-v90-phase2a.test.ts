@@ -19,7 +19,11 @@ import {
   nextDayKey,
   scheduleTooSoon,
 } from '../../packages/content/src/index';
-import { messages, statusMessage } from '../../apps/dashboard/src/i18n/messages';
+import {
+  OWNER_ONLY_PERMISSIONS,
+  messages,
+  statusMessage,
+} from '../../apps/dashboard/src/i18n/messages';
 import {
   KNOWN_PAGE_PERMISSIONS,
   type KnownPage,
@@ -145,6 +149,17 @@ describe('A5 + E6 · a refusal names the permission and who can change it', () =
     expect(statusMessage('FORBIDDEN_OWNER:billing.manage', 'en')).toBe(
       '“Change the plan or payment method” is owner-only.',
     );
+    // "Owner-only" comes from the permission, never from the URL's suffix: a
+    // crafted `_OWNER` on an ordinary permission is shown as the ordinary text,
+    // and a missing suffix on an owner-only one still says owner-only.
+    expect(statusMessage('FORBIDDEN_OWNER:member.invite', 'en')).toBe(
+      statusMessage('FORBIDDEN:member.invite', 'en'),
+    );
+    expect(statusMessage('FORBIDDEN:billing.manage', 'en')).toBe(
+      '“Change the plan or payment method” is owner-only.',
+    );
+    // The dictionary's mirror is the role catalogue's own list, exactly.
+    expect([...OWNER_ONLY_PERMISSIONS].sort()).toEqual([...OWNER_ONLY_PERMISSION_KEYS].sort());
     // A crafted key the dictionary does not hold is never echoed.
     expect(statusMessage('FORBIDDEN:evil.key', 'en')).toBe(statusMessage('FORBIDDEN', 'en'));
     expect(statusMessage('FORBIDDEN:<script>', 'en')).toBeNull();
