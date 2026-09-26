@@ -140,9 +140,16 @@ test.describe('Q1 / Q2 · the rail card opens the business switcher', () => {
     await expect(other).not.toHaveAttribute('aria-current', 'true');
 
     // The owner's allowance: the fixture workspaces carry no plan, which adds
-    // no allowance (review item 1, amends D-326), so the usage shows and
-    // "+ New workspace" is not offered.
-    await expect(page.getByTestId('workspace-usage')).toContainText('Workspaces: ');
+    // no allowance (review item 1, amends D-326). Owner decision (PR #47):
+    // never "N of 0" — the reason and the way to plans instead, and no
+    // "+ New workspace".
+    await expect(page.getByTestId('workspace-usage')).toHaveCount(0);
+    await expect(page.getByTestId('workspace-unavailable')).toHaveText(
+      'Additional workspaces unavailable',
+    );
+    const upgrade = page.getByTestId('workspace-unavailable-upgrade');
+    await expect(upgrade).toHaveText('Upgrade to add another workspace.');
+    await expect(upgrade).toHaveAttribute('href', '/en/plan');
     await expect(page.getByTestId('workspace-new')).toHaveCount(0);
 
     await other.click();

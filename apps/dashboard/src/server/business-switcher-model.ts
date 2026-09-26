@@ -9,6 +9,11 @@ import type { WorkspaceAllowance } from '@brandspace/entitlements';
  *     plan that allows only 1 the option is not shown at all").
  *   - BELOW THE ALLOWANCE: the usage "used / allowed" and "+ New workspace".
  *   - AT OR OVER IT: the usage and an upgrade message instead.
+ *   - AN ALLOWANCE OF ZERO (the owner's workspaces carry no plan, so they add
+ *     none — D-326): never "N of 0". "Additional workspaces unavailable" and
+ *     "Upgrade to add another workspace." instead, with no usage line and no
+ *     "+ New workspace" (owner decision, PR #47). Display only: the allowance
+ *     and its rules are unchanged.
  *
  * The same `WorkspaceAllowance` the server enforces in
  * `WorkspaceOnboardingService.create`, so the screen can never offer a
@@ -16,6 +21,7 @@ import type { WorkspaceAllowance } from '@brandspace/entitlements';
  */
 export type SwitcherFoot =
   | { readonly kind: 'none' }
+  | { readonly kind: 'unavailable' }
   | {
       readonly kind: 'create' | 'limit';
       readonly used: number;
@@ -26,6 +32,7 @@ export type SwitcherFoot =
 export function switcherFoot(allowance: WorkspaceAllowance): SwitcherFoot {
   if (allowance.used === 0) return { kind: 'none' };
   if (allowance.allowed === 1) return { kind: 'none' };
+  if (allowance.allowed === 0) return { kind: 'unavailable' };
   return {
     kind: allowance.canCreate ? 'create' : 'limit',
     used: allowance.used,

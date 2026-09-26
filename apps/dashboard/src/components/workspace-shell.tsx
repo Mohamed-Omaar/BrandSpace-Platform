@@ -525,7 +525,7 @@ export async function WorkspaceShell({
               hiddenFields={{ locale }}
               footer={
                 <>
-                  {switcher.foot.kind === 'none' ? null : (
+                  {switcher.foot.kind === 'none' || switcher.foot.kind === 'unavailable' ? null : (
                     <p
                       data-testid="workspace-usage"
                       style={{
@@ -552,6 +552,44 @@ export async function WorkspaceShell({
                     >
                       {t('ws.new')}
                     </Link>
+                  ) : null}
+                  {switcher.foot.kind === 'unavailable' ? (
+                    // Owner decision (PR #47): an allowance of 0 never reads "N of 0".
+                    <>
+                      <p
+                        data-testid="workspace-unavailable"
+                        style={{
+                          ...menuItemStyle(),
+                          cursor: 'default',
+                          margin: 0,
+                          color: colorTokens.textSecondary,
+                        }}
+                      >
+                        {t('ws.unavailable')}
+                      </p>
+                      {permissionKeys.includes('billing.read') ? (
+                        <Link
+                          href={`/${locale}/plan`}
+                          role="menuitem"
+                          data-testid="workspace-unavailable-upgrade"
+                          style={{ ...menuItemStyle(), color: colorTokens.brandPurple }}
+                        >
+                          {t('ws.unavailableUpgrade')}
+                        </Link>
+                      ) : (
+                        <p
+                          data-testid="workspace-unavailable-upgrade"
+                          style={{
+                            ...menuItemStyle(),
+                            cursor: 'default',
+                            margin: 0,
+                            color: colorTokens.textSecondary,
+                          }}
+                        >
+                          {t('ws.unavailableUpgrade')}
+                        </p>
+                      )}
+                    </>
                   ) : null}
                   {switcher.foot.kind === 'limit' ? (
                     <>

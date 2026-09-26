@@ -31,10 +31,51 @@ describe('Q1 · what the business switcher offers at its foot', () => {
       used: 2,
       allowed: 2,
     });
-    // A cancelled plan: the owner still sees what they have, and why they cannot add.
-    expect(switcherFoot({ used: 1, allowed: 0, canCreate: false })).toMatchObject({
-      kind: 'limit',
-    });
+  });
+
+  it('owner decision (PR #47): an allowance of 0 never reads "N of 0" and offers no new workspace', async () => {
+    const { switcherFoot } =
+      await import('../../apps/dashboard/src/server/business-switcher-model');
+    // Plan-less (or cancelled-plan) workspaces add no allowance (D-326).
+    for (const used of [1, 2, 5]) {
+      expect(switcherFoot({ used, allowed: 0, canCreate: false })).toEqual({
+        kind: 'unavailable',
+      });
+    }
+    // Display only: the allowance itself is untouched, so every other case stands.
+    expect(switcherFoot({ used: 2, allowed: 2, canCreate: false }).kind).toBe('limit');
+    expect(switcherFoot({ used: 1, allowed: 2, canCreate: true }).kind).toBe('create');
+
+    const { readFileSync } = await import('node:fs');
+    const shell = readFileSync(
+      `${__dirname}/../../apps/dashboard/src/components/workspace-shell.tsx`,
+      'utf8',
+    );
+    // No usage line and no "+ New workspace" for it; the second line links to the plans page.
+    expect(shell).toContain(
+      "switcher.foot.kind === 'none' || switcher.foot.kind === 'unavailable' ? null : (",
+    );
+    const block = shell.slice(
+      shell.indexOf("switcher.foot.kind === 'unavailable' ? ("),
+      shell.indexOf("switcher.foot.kind === 'limit' ? ("),
+    );
+    expect(block).toContain('href={`/${locale}/plan`}');
+    expect(block).toContain("t('ws.unavailable')");
+    expect(block).toContain("t('ws.unavailableUpgrade')");
+    expect(block).not.toContain('ws.new');
+    expect(block).not.toContain('ws.usage');
+  });
+
+  it('the owner’s words, in both languages', async () => {
+    const { optionalMessage } = await import('../../apps/dashboard/src/i18n/messages');
+    expect(optionalMessage('en', 'ws.unavailable')).toBe('Additional workspaces unavailable');
+    expect(optionalMessage('en', 'ws.unavailableUpgrade')).toBe(
+      'Upgrade to add another workspace.',
+    );
+    expect(optionalMessage('ar', 'ws.unavailable')).toBe('مساحات عمل إضافية غير متاحة');
+    expect(optionalMessage('ar', 'ws.unavailableUpgrade')).toBe(
+      'قم بالترقية لإضافة مساحة عمل أخرى.',
+    );
   });
 
   it('the rail offers the switcher, the new-workspace page and the server all read one allowance', async () => {

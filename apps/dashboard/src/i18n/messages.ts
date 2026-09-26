@@ -225,6 +225,9 @@ export const messages = {
     'ws.new': '+ مساحة عمل جديدة',
     'ws.limitReached': 'وصلت إلى عدد مساحات العمل في باقتك. رقِّ الباقة لإضافة مساحة أخرى.',
     'ws.upgrade': 'عرض الباقات',
+    // Owner decision (PR #47) — an allowance of 0 never reads "N of 0".
+    'ws.unavailable': 'مساحات عمل إضافية غير متاحة',
+    'ws.unavailableUpgrade': 'قم بالترقية لإضافة مساحة عمل أخرى.',
     'brand.allBrands': 'كل العلامات التجارية',
     'brand.allBrandsCaption': 'كل ما يمكنك الوصول إليه',
     'brand.selectedCaption': 'العلامة التجارية النشطة',
@@ -2997,6 +3000,9 @@ export const messages = {
     'ws.new': '+ New workspace',
     'ws.limitReached': 'You have reached your plan’s workspace limit. Upgrade to add another.',
     'ws.upgrade': 'See plans',
+    // Owner decision (PR #47) — an allowance of 0 never reads "N of 0".
+    'ws.unavailable': 'Additional workspaces unavailable',
+    'ws.unavailableUpgrade': 'Upgrade to add another workspace.',
     'brand.allBrands': 'All brands',
     'brand.allBrandsCaption': 'Everything you can access',
     'brand.selectedCaption': 'Active brand',
