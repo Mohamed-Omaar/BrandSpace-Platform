@@ -81,3 +81,16 @@ describe('Q12 · and every mutation stays behind a permission it does not hold',
     expect(viewer).not.toContain(NOTE_MANAGE_PERMISSION);
   });
 });
+
+describe('Q12 · the Viewer is offered no control it would be refused', () => {
+  it('a Content card says "Open", not "Edit", to a member without content.edit', () => {
+    const library = read('apps/dashboard/src/app/[locale]/content/content-library.tsx');
+    expect(library).toContain(
+      "!can.edit || card.status === 'PUBLISHED' || card.status === 'ARCHIVED'",
+    );
+    expect(read('apps/dashboard/src/app/[locale]/content/page.tsx')).toContain(
+      "edit: may('content.edit'),",
+    );
+    expect(viewer).not.toContain('content.edit');
+  });
+});

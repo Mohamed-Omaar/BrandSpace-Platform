@@ -139,6 +139,8 @@ export function ContentLibrary({
   readonly ideas: readonly LibraryIdea[];
   readonly can: {
     readonly create: boolean;
+    /** Q12 — may change a post's words (`content.edit`); otherwise it is opened, not edited. */
+    readonly edit: boolean;
     readonly submit: boolean;
     /** B-6 — may put a post on the calendar (`content.schedule`). */
     readonly schedule: boolean;
@@ -190,7 +192,9 @@ export function ContentLibrary({
         data-testid={`content-edit-${card.id}`}
       >
         {t(
-          card.status === 'PUBLISHED' || card.status === 'ARCHIVED'
+          // A member who may not edit (the Viewer, Q12) OPENS a post — the Studio
+          // shows it read-only — so the card never offers an edit it would refuse.
+          !can.edit || card.status === 'PUBLISHED' || card.status === 'ARCHIVED'
             ? 'content.action.open'
             : 'content.action.edit',
         )}
