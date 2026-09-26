@@ -126,6 +126,11 @@ export interface CustomerWorkspaceContext {
   readonly roleNameAr: string;
   readonly permissionKeys: readonly string[];
   readonly brandScope: readonly string[];
+  /**
+   * A8 (D-328): when a pending deletion takes effect, or null. Only ever set
+   * on a list asked for with `includePendingDeletion`.
+   */
+  readonly deletionScheduledFor?: Date | null;
 }
 
 /** One business in the rail's switcher (`listBusinesses`). */
@@ -259,6 +264,46 @@ export class CustomerAuthService {
   }
 
   /**
+   * STEP-UP: does this signed-in person know their password right now?
+   *
+   * Asked before an irreversible or security-weakening action — deleting a
+   * workspace (A8, D-328), turning a second factor off (Q23) — so a session
+   * left open on a shared screen is not enough to do either (docs/SECURITY.md
+   * §3). Counted exactly like a sign-in: the per-account ceiling applies first,
+   * and a wrong password counts toward the account's lockout, so this is not a
+   * second, unthrottled place to guess it.
+   */
+  async confirmPassword(input: {
+    readonly token: string;
+    readonly password: string;
+    readonly ip?: string | undefined;
+    readonly userAgent?: string | undefined;
+  }): Promise<boolean> {
+    const customer = await this.resolve(input.token);
+    if (!customer) throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
+    await this.#limiter.enforce(
+      'signin:account',
+      customer.email,
+      this.#ceilings.signInPerAccount,
+      this.#ceilings.windowSeconds,
+    );
+    const user = await this.#prisma.user.findUnique({
+      where: { id: customer.userId },
+      select: { id: true, passwordHash: true, lockedUntil: true },
+    });
+    if (!user || this.#isLocked(user.lockedUntil)) return false;
+    const ok =
+      user.passwordHash !== null &&
+      input.password !== '' &&
+      (await verifyPassword(user.passwordHash, input.password));
+    if (!ok) {
+      await this.#countFailure(user.id, 'customer.auth.step_up_failed', input.ip, input.userAgent);
+      return false;
+    }
+    return true;
+  }
+
+  /**
    * Present the second factor for a session that owes one.
    *
    * THE SESSION ALREADY EXISTS AND STILL GRANTS NOTHING. Keeping it lets the
@@ -375,7 +420,11 @@ export class CustomerAuthService {
     // request instead of the next sign-in.
     let activeWorkspaceId: string | null = null;
     if (session.activeWorkspaceId) {
-      const available = await this.listWorkspaces(token);
+      // A workspace PENDING DELETION stays the session's workspace, so the
+      // dashboard can show its owner the "scheduled for deletion" screen; every
+      // surface that acts in it asks `listWorkspaces` without the option and
+      // does not find it (D-328).
+      const available = await this.listWorkspaces(token, { includePendingDeletion: true });
       activeWorkspaceId = available.some((w) => w.workspaceId === session.activeWorkspaceId)
         ? session.activeWorkspaceId
         : null;
@@ -422,7 +471,18 @@ export class CustomerAuthService {
    * suspended, archived or cancelled workspace simply disappears from the
    * selector — the member keeps the membership and loses the surface.
    */
-  async listWorkspaces(token: string): Promise<CustomerWorkspaceContext[]> {
+  async listWorkspaces(
+    token: string,
+    options: {
+      /**
+       * A8 (D-328): include workspaces PENDING DELETION. OFF BY DEFAULT, so
+       * every caller that acts in a workspace — the API, the switcher's
+       * re-check — fails closed on one, and only the few callers that must
+       * show it (the dashboard's gate, the chooser, the switch itself) opt in.
+       */
+      readonly includePendingDeletion?: boolean;
+    } = {},
+  ): Promise<CustomerWorkspaceContext[]> {
     if (!token) return [];
     const tokenHash = hashSessionToken(token);
 
@@ -443,7 +503,11 @@ export class CustomerAuthService {
           status: 'ACTIVE',
           // A suspended, archived, cancelled or deleted workspace is not
           // selectable: the member keeps the membership and loses the surface.
-          workspace: { status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE'] }, deletedAt: null },
+          workspace: {
+            status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE'] },
+            deletedAt: null,
+            ...(options.includePendingDeletion ? {} : { deletionScheduledFor: null }),
+          },
         },
         include: {
           workspace: true,
@@ -465,6 +529,7 @@ export class CustomerAuthService {
       // at the next request rather than at the next sign-in.
       permissionKeys: m.role.permissions.map((rp) => rp.permission.key),
       brandScope: m.brandScope,
+      deletionScheduledFor: m.workspace.deletionScheduledFor,
     }));
   }
 
@@ -542,7 +607,9 @@ export class CustomerAuthService {
     const customer = await this.resolve(token);
     if (!customer) throw new AppError('UNAUTHENTICATED', 'Your session is no longer valid.');
 
-    const available = await this.listWorkspaces(token);
+    // A pending-deletion workspace may be switched INTO, so an owner can reach
+    // its "cancel deletion" screen; nothing in it can be done there (D-328).
+    const available = await this.listWorkspaces(token, { includePendingDeletion: true });
     const target = available.find((w) => w.workspaceId === workspaceId);
     if (!target) {
       // The same answer as a workspace that does not exist, so the switcher

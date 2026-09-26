@@ -338,6 +338,12 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   links to it. Settings → Notifications and Settings → AI arrive with A10/G2/G3 (item 4 below).
   **Publishing defaults is deferred to Phase 2B-2** (owner, 2026-09-26): its contents — default
   channels and time, hashtags in the first comment, templates — are B2/E4.
+- **A8 — workspace deletion (D-328).** Owner only, two confirmations (typed name + password),
+  refused while a paid plan still renews; 30-day configurable wait during which the workspace is
+  closed to every member (pending screen, API refuses, no credits, nothing publishes), owners can
+  cancel, members are told in-app; then a job marks it DELETED. Migration
+  `20260928090000_workspace_deletion_request`. **Q13 (billing visibility)** needed no change:
+  `billing.read` (Owner, Admin) sees billing read-only, `billing.manage` (Owner) changes it.
 
 ---
 

@@ -2163,6 +2163,20 @@ const onboardingSchema = z.object({
     .default({}),
 
   /*
+   * A8 (prototype v94 Phase 2B-1, D-328) — THE OWNER'S DELETION REQUEST.
+   *
+   * How long a workspace waits, pending deletion, before a job marks it
+   * DELETED. During the wait an owner may cancel; nobody can work in it. The
+   * 30 days is the grace docs/DATABASE.md and docs/SECURITY.md state for a
+   * deleted workspace; changing it is an operator decision, not a deploy.
+   */
+  workspaceDeletion: z
+    .object({
+      graceDays: z.number().int().min(1).max(365).default(30),
+    })
+    .default({}),
+
+  /*
    * THE FIRST-RUN CHECKLIST.
    *
    * KEYS, NOT COPY AND NOT ROUTES. Each step is identified by a key the

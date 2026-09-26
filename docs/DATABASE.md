@@ -1200,17 +1200,17 @@ Indexes: `(domain, environment, status)`, `(activatedAt desc)`.
 
 ## 13. Data Lifecycle and Retention
 
-| Data                           | Default retention                     | Notes                                                           |
-| ------------------------------ | ------------------------------------- | --------------------------------------------------------------- |
-| Audit events                   | 24 months                             | configurable per plan; exportable                               |
-| Metric snapshots               | per plan (`analyticsRetentionDays`)   | pruned by a scheduled job                                       |
-| AI request input summaries     | 90 days                               | raw prompt/response bodies are **not** stored by default (R-23) |
-| AI usage ledger                | 7 years                               | financial record                                                |
-| Credit transactions / invoices | 7 years                               | financial record                                                |
-| Soft-deleted content           | 30 days, then purge                   | restorable within the window                                    |
-| Deleted workspace              | 30-day grace, then irreversible purge | export offered first                                            |
-| Publish attempts               | 12 months                             | provider responses redacted                                     |
-| Backups                        | 30 days PITR + 12 monthly snapshots   | restore tested quarterly                                        |
+| Data                           | Default retention                     | Notes                                                                                                                                        |
+| ------------------------------ | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Audit events                   | 24 months                             | configurable per plan; exportable                                                                                                            |
+| Metric snapshots               | per plan (`analyticsRetentionDays`)   | pruned by a scheduled job                                                                                                                    |
+| AI request input summaries     | 90 days                               | raw prompt/response bodies are **not** stored by default (R-23)                                                                              |
+| AI usage ledger                | 7 years                               | financial record                                                                                                                             |
+| Credit transactions / invoices | 7 years                               | financial record                                                                                                                             |
+| Soft-deleted content           | 30 days, then purge                   | restorable within the window                                                                                                                 |
+| Deleted workspace              | 30-day grace, then irreversible purge | export offered first; the grace is `workspace.deletionScheduledFor` (D-328) — marked DELETED at its end; physical purge is the §15 lifecycle |
+| Publish attempts               | 12 months                             | provider responses redacted                                                                                                                  |
+| Backups                        | 30 days PITR + 12 monthly snapshots   | restore tested quarterly                                                                                                                     |
 
 ---
 

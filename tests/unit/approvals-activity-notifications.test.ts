@@ -304,6 +304,13 @@ describe('the notification catalogue is closed and fully translated', () => {
          * template to itself.
          */
         'automation.notice',
+        /*
+         * Prototype v94 Phase 2B-1, A8 (D-328) — the owner's deletion request.
+         * The members lose access while it waits, and are owed the reason and
+         * the date; and they are told again if it is taken back.
+         */
+        'workspace.deletion_cancelled',
+        'workspace.deletion_requested',
       ].sort(),
     );
   });

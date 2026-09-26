@@ -184,6 +184,22 @@ describe('Q1 · the workspace allowance is enforced where a workspace is written
     await expect(create(owner)).resolves.toMatchObject({ workspaceId: expect.any(String) });
   });
 
+  it('counts a workspace PENDING DELETION until it is actually deleted (D-326, D-328)', async () => {
+    const owner = await verifiedUser('pending');
+    const first = await create(owner);
+    await platform.workspace.update({
+      where: { id: first.workspaceId },
+      data: {
+        deletionRequestedAt: new Date(),
+        deletionScheduledFor: new Date(Date.now() + 30 * 86_400_000),
+      },
+    });
+    await expect(create(owner)).rejects.toMatchObject({
+      code: 'QUOTA_EXCEEDED',
+      publicDetails: { used: 1, allowed: 1 },
+    });
+  });
+
   it('never counts another person’s workspaces', async () => {
     const busy = await verifiedUser('busy');
     await create(busy, FIVE);

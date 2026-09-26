@@ -290,6 +290,8 @@ model User {
 
   memberships     Membership[]
   ownedWorkspaces Workspace[]  @relation("WorkspaceOwner")
+  /// Prototype v94 Phase 2B-1 (D-328): workspaces this person asked to delete.
+  deletionRequests Workspace[] @relation("WorkspaceDeletionRequester")
   invitesSent     Membership[] @relation("MembershipInviter")
 
   sessions            CustomerSession[]
@@ -429,6 +431,17 @@ model Workspace {
   /// records have their own retention and are out of this column's reach.
   aiContentRetentionDays Int?
 
+  // --- Prototype v94 Phase 2B-1: the owner's deletion request (A8, D-328) ---
+  /// The owner asked for this workspace to be deleted. Both columns are set
+  /// together or not at all (CHECK `workspace_deletion_request_coherent`).
+  /// While `deletionScheduledFor` is set the workspace is PENDING DELETION:
+  /// its data is closed to every member, nothing publishes, no credit is
+  /// spent, and an owner may cancel; at the deadline a job marks it DELETED.
+  deletionRequestedAt       DateTime? @db.Timestamptz(6)
+  deletionScheduledFor      DateTime? @db.Timestamptz(6)
+  deletionRequestedByUserId String?   @db.Uuid
+  deletionRequestedBy       User?     @relation("WorkspaceDeletionRequester", fields: [deletionRequestedByUserId], references: [id], onDelete: SetNull)
+
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
@@ -523,6 +536,7 @@ model Workspace {
 
   @@index([status])
   @@index([ownerUserId])
+  @@index([deletionScheduledFor])
   @@index([planKey])
   @@map("workspace")
 }

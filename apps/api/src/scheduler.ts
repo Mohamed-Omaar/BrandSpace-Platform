@@ -19,6 +19,7 @@ import {
   recordRuleAutomationEvent,
   withWorkspace,
   type PrismaClient,
+  type TenantScopedClient,
 } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import {
@@ -72,6 +73,7 @@ import {
   type RotationState,
 } from '@brandspace/billing';
 import { createObjectStore } from '@brandspace/storage';
+import { WorkspaceDeletionService } from '@brandspace/onboarding';
 import {
   AppError,
   createLogger,
@@ -188,6 +190,8 @@ export interface MaintenanceResult {
   readonly cycleAllowancesGranted: number;
   readonly dunningSuspensions: number;
   readonly financialDriftsFound: number;
+  /** Prototype v94 Phase 2B-1, A8 (D-328) — deletions whose waiting period ended. */
+  readonly workspacesDeleted: number;
 }
 
 export interface SchedulerOptions {
@@ -447,7 +451,12 @@ export class MaintenanceScheduler {
      * by the second query below.
      */
     const dueSlots = await platform.calendarSlot.findMany({
-      where: { status: 'SCHEDULED', scheduledAtUtc: { lte: now } },
+      where: {
+        status: 'SCHEDULED',
+        scheduledAtUtc: { lte: now },
+        // A8 (D-328): nothing publishes from a workspace pending deletion.
+        workspace: { deletionScheduledFor: null },
+      },
       select: { id: true, workspaceId: true },
       orderBy: { scheduledAtUtc: 'asc' },
       take: batch,
@@ -505,7 +514,11 @@ export class MaintenanceScheduler {
      * pipeline wrote is the schedule this honours.
      */
     const waiting = await platform.publishJob.findMany({
-      where: { status: 'QUEUED', nextAttemptAt: { lte: now } },
+      where: {
+        status: 'QUEUED',
+        nextAttemptAt: { lte: now },
+        workspace: { deletionScheduledFor: null },
+      },
       select: { id: true, workspaceId: true, idempotencyKey: true },
       orderBy: { nextAttemptAt: 'asc' },
       take: batch,
@@ -1713,6 +1726,7 @@ export class MaintenanceScheduler {
     const analyticsRowsPruned = await this.pruneAnalyticsRetention(cadence.retentionPurgeBatch);
     const automations = await this.sweepAutomations(cadence.ingestionReconcileBatch);
     const finance = await this.sweepFinance(cadence.retentionPurgeBatch);
+    const workspacesDeleted = await this.finishWorkspaceDeletions(cadence.retentionPurgeBatch);
     return {
       ingestionDispatched,
       chatContentPurged: purged.chat,
@@ -1735,7 +1749,26 @@ export class MaintenanceScheduler {
       cycleAllowancesGranted: finance.allowancesGranted,
       dunningSuspensions: finance.dunningSuspensions,
       financialDriftsFound: finance.driftsFound,
+      workspacesDeleted,
     };
+  }
+
+  /**
+   * FINISH THE DELETIONS WHOSE WAITING PERIOD ENDED (A8, D-328).
+   *
+   * On the PLATFORM connection, because it acts on every workspace that is
+   * due. Each one is marked DELETED by a conditional update — a cancel that
+   * landed first wins, and a rerun finishes nothing twice — its sessions are
+   * revoked and `workspace.deleted` is audited. Physical purge is the
+   * data-deletion lifecycle of docs/SECURITY.md §15, not this sweep.
+   */
+  async finishWorkspaceDeletions(batch: number): Promise<number> {
+    const platform = getPlatformClient();
+    const finished = await new WorkspaceDeletionService({ clock: this.#clock }).finishDue(
+      platform as unknown as TenantScopedClient,
+      batch,
+    );
+    return finished.length;
   }
 
   /**
@@ -1843,6 +1876,10 @@ export class MaintenanceScheduler {
      * rollover cap can take, and the reconciliation must judge the state the
      * others left.
      */
+    // A8 (D-328): a deadline measured in days answers to the purge cadence.
+    every(cadence.retentionPurgeSeconds, 'workspace-deletion', () =>
+      this.finishWorkspaceDeletions(cadence.retentionPurgeBatch),
+    );
     every(cadence.retentionPurgeSeconds, 'finance-sweep', async () => {
       const finance = await this.sweepFinance(cadence.retentionPurgeBatch);
       return (

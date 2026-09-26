@@ -34,7 +34,11 @@ export default async function WorkspacePickerPage({
   // never the user id: the question "which workspaces may this request act in"
   // is answered from the credential the request actually carries.
   await requireCustomer(locale);
-  const workspaces = await getCustomerAuth().listWorkspaces((await getSessionToken()) ?? '');
+  // A8 (D-328): a workspace pending deletion is still listed — marked — so its
+  // owner can reach the screen that cancels it. Nothing can be done inside it.
+  const workspaces = await getCustomerAuth().listWorkspaces((await getSessionToken()) ?? '', {
+    includePendingDeletion: true,
+  });
 
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
@@ -91,6 +95,15 @@ export default async function WorkspacePickerPage({
                     {' — '}
                     {locale === 'ar' ? w.roleNameAr : w.roleNameEn}
                   </span>
+                  {w.deletionScheduledFor ? (
+                    <span
+                      data-testid={`workspace-pending-deletion-${w.workspaceSlug}`}
+                      style={{ color: colorTokens.danger }}
+                    >
+                      {' · '}
+                      {t('deletion.listTag')}
+                    </span>
+                  ) : null}
                 </button>
               </form>
             </li>

@@ -72,6 +72,10 @@ export interface OnboardingPolicy {
     readonly requiredForCustomers: boolean;
     readonly recoveryCodeCount: number;
   };
+  /** A8 (D-328): how long a workspace waits, pending deletion. */
+  readonly workspaceDeletion: {
+    readonly graceDays: number;
+  };
   readonly steps: readonly OnboardingStepRule[];
 }
 

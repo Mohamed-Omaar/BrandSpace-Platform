@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
@@ -147,5 +148,88 @@ test.describe('Q1 / Q2 · the rail card opens the business switcher', () => {
     await other.click();
     await page.waitForURL(/\/en\/overview$/);
     await expect(page.getByTestId('sidebar').getByTestId('brand-switcher')).toBeVisible();
+  });
+});
+
+test.describe('A8 · the owner deletes a workspace, it waits, and the owner cancels', () => {
+  test('two confirmations, a closed workspace, and cancel restores it', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const { customer } = credentials();
+    const slug = `e2e-delete-${randomUUID().slice(0, 8)}`;
+    const name = `E2E Deletion ${slug.slice(-8)}`;
+    // A workspace of its own, so asking to delete it touches nothing another
+    // suite reads. Written the way the platform creates one: owner + membership.
+    await withPlatformPrisma(async (prisma) => {
+      const owner = await prisma.user.findFirstOrThrow({
+        where: { email: customer.email },
+        select: { id: true },
+      });
+      const role = await prisma.role.findFirstOrThrow({
+        where: { key: 'workspace_owner', workspaceId: null },
+        select: { id: true },
+      });
+      const id = randomUUID();
+      await prisma.workspace.create({
+        data: {
+          id,
+          workspaceId: id,
+          slug,
+          name,
+          ownerUserId: owner.id,
+          status: 'ACTIVE',
+          country: 'EG',
+          defaultLocale: 'EN',
+          timezone: 'Africa/Cairo',
+          currency: 'USD',
+        },
+      });
+      await prisma.membership.create({
+        data: {
+          workspaceId: id,
+          userId: owner.id,
+          roleId: role.id,
+          status: 'ACTIVE',
+          acceptedAt: new Date(),
+        },
+      });
+    });
+
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+    await page.click(`[data-testid="choose-workspace-${slug}"]`);
+    await page.waitForURL(/\/en\/overview$/);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/data`);
+    await page.getByTestId('workspace-deletion-open').click();
+    // A wrong name is refused on the server, and nothing is scheduled.
+    await page.getByTestId('workspace-deletion-name').fill('not the name');
+    await page.getByTestId('workspace-deletion-password').fill(customer.password);
+    await page.getByTestId('workspace-deletion-confirm').click();
+    await page.waitForURL(/error=DELETION_NAME_MISMATCH/);
+
+    await page.getByTestId('workspace-deletion-open').click();
+    await page.getByTestId('workspace-deletion-name').fill(name);
+    await page.getByTestId('workspace-deletion-password').fill(customer.password);
+    await page.getByTestId('workspace-deletion-confirm').click();
+    await page.waitForURL(/\/en\/deletion-pending$/);
+    await expect(page.getByTestId('deletion-pending-date')).toContainText(name);
+
+    // Closed: every page of the workspace lands on this screen.
+    for (const path of ['/en/content', '/en/settings', '/en/overview']) {
+      await page.goto(`${DASHBOARD_BASE_URL}${path}`);
+      await page.waitForURL(/\/en\/deletion-pending$/);
+    }
+    // Marked in the chooser.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+    await expect(page.getByTestId(`workspace-pending-deletion-${slug}`)).toBeVisible();
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/deletion-pending`);
+    await page.getByTestId('deletion-cancel').click();
+    await page.waitForURL(/\/en\/settings\/data\?ok=DELETION_CANCELLED$/);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content`);
+    await expect(page).toHaveURL(/\/en\/content$/);
   });
 });

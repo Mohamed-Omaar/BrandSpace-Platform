@@ -210,6 +210,13 @@ export const messages = {
     'brand.switcherLabel': 'العلامات التجارية',
     'brand.cardLabel': 'علامتك التجارية',
     'ws.switchBusiness': 'تبديل النشاط التجاري',
+    'deletion.title': 'مساحة العمل بانتظار الحذف',
+    'deletion.body':
+      'ستُحذف مساحة العمل «{workspace}» في {date}. لا يمكن العمل فيها حتى ذلك الحين.',
+    'deletion.cancel': 'إلغاء الحذف',
+    'deletion.askOwner': 'المالك وحده يستطيع إلغاء الحذف. تواصل معه إن كنت تحتاج مساحة العمل.',
+    'deletion.otherWorkspace': 'اختيار مساحة عمل أخرى',
+    'deletion.listTag': 'بانتظار الحذف',
     'ws.noPlan': 'بدون باقة',
     'ws.usage': 'مساحات العمل: {used} من {allowed}',
     'ws.usageUnlimited': 'مساحات العمل: {used}',
@@ -468,8 +475,16 @@ export const messages = {
     'data.brandSources.body': 'احذف المستندات المرفوعة والمعرفة المستخلصة منها من عقل العلامة.',
     'data.workspaceExport.title': 'تصدير كل بياناتك',
     'data.workspaceExport.body': 'لا يتوفر تصدير واحد لكل بيانات نشاطك التجاري كإجراء ذاتي.',
-    'data.workspaceDeletion.title': 'حذف حساب النشاط التجاري',
-    'data.workspaceDeletion.body': 'حذف حساب النشاط التجاري غير متاح كإجراء ذاتي.',
+    'data.workspaceDeletion.title': 'حذف مساحة العمل',
+    'data.workspaceDeletion.body':
+      'المالك وحده يطلب الحذف. تبقى مساحة العمل {days} يومًا بانتظار الحذف ويمكن إلغاء الطلب خلالها، ثم تُحذف.',
+    'data.workspaceDeletion.start': 'حذف مساحة العمل…',
+    'data.workspaceDeletion.warning':
+      'بعد التأكيد يُغلق العمل في مساحة العمل على كل الأعضاء، ولا يُنشر شيء ولا تُصرف أي أرصدة. بعد {days} يومًا تُحذف ما لم يُلغِ المالك الطلب.',
+    'data.workspaceDeletion.confirmName': 'اكتب اسم مساحة العمل للتأكيد: {name}',
+    'data.workspaceDeletion.password': 'كلمة مرورك',
+    'data.workspaceDeletion.confirm': 'اطلب حذف مساحة العمل',
+    'data.workspaceDeletion.ownerOnly': 'المالك وحده يستطيع حذف مساحة العمل',
     'settings.name': 'الاسم',
     'settings.locale': 'اللغة',
     'settings.timezone': 'المنطقة الزمنية',
@@ -1548,6 +1563,9 @@ export const messages = {
     'activity.action.assets.folder_moved': 'نُقل مجلد',
     'activity.action.assets.folder_deleted': 'حُذف مجلد',
     'activity.action.workspace.created': 'أُنشئ حساب النشاط التجاري',
+    'activity.action.workspace.deletion_requested': 'طُلب حذف مساحة العمل',
+    'activity.action.workspace.deletion_cancelled': 'أُلغي حذف مساحة العمل',
+    'activity.action.workspace.deleted': 'حُذفت مساحة العمل',
     'activity.action.workspace.settings.updated': 'تغيّرت إعدادات النشاط التجاري',
     'activity.action.workspace.ai_content_retention.updated':
       'تغيّر الاحتفاظ بمحتوى الذكاء الاصطناعي',
@@ -2125,6 +2143,8 @@ export const messages = {
     'automations.brandFilter': 'القواعد والتشغيلات للعلامة {brand}.',
     'notifications.template.analytics.anomaly_detected': 'تغيّر غير معتاد في الأداء',
     'notifications.template.brand_brain.learning_proposed': 'درس مقترح بانتظار مراجعتك',
+    'notifications.template.workspace.deletion_requested': 'طلب المالك حذف مساحة العمل هذه',
+    'notifications.template.workspace.deletion_cancelled': 'أُلغي حذف مساحة العمل هذه',
     'overview.metric.engagement': 'التفاعلات (٢٨ يومًا)',
     'overview.metric.engagementHint': 'من القياسات المخزّنة',
     'overview.analyticsSeeAll': 'عرض التحليلات',
@@ -2841,6 +2861,14 @@ export const messages = {
     'brand.switcherLabel': 'Brands',
     'brand.cardLabel': 'Your brand',
     'ws.switchBusiness': 'Switch business',
+    'deletion.title': 'This workspace is pending deletion',
+    'deletion.body':
+      'The workspace “{workspace}” will be deleted on {date}. Nobody can work in it until then.',
+    'deletion.cancel': 'Cancel deletion',
+    'deletion.askOwner':
+      'Only an owner can cancel the deletion. Ask them if you still need the workspace.',
+    'deletion.otherWorkspace': 'Choose another workspace',
+    'deletion.listTag': 'Pending deletion',
     'ws.noPlan': 'No plan',
     'ws.usage': 'Workspaces: {used} of {allowed}',
     'ws.usageUnlimited': 'Workspaces: {used}',
@@ -3107,9 +3135,16 @@ export const messages = {
     'data.workspaceExport.title': 'Export all your data',
     'data.workspaceExport.body':
       'A single export of all your business data is not available as a self-serve action.',
-    'data.workspaceDeletion.title': 'Delete your business account',
+    'data.workspaceDeletion.title': 'Delete the workspace',
     'data.workspaceDeletion.body':
-      'Deleting a business account is not available as a self-serve action.',
+      'Only the owner can ask for this. The workspace then waits {days} days, pending deletion, and the request can be cancelled until then.',
+    'data.workspaceDeletion.start': 'Delete the workspace…',
+    'data.workspaceDeletion.warning':
+      'Once confirmed, nobody can work in this workspace, nothing is published and no credits are spent. After {days} days it is deleted unless an owner cancels.',
+    'data.workspaceDeletion.confirmName': 'Type the workspace name to confirm: {name}',
+    'data.workspaceDeletion.password': 'Your password',
+    'data.workspaceDeletion.confirm': 'Ask to delete the workspace',
+    'data.workspaceDeletion.ownerOnly': 'Only the owner can delete the workspace',
     'settings.name': 'Name',
     'settings.locale': 'Locale',
     'settings.timezone': 'Timezone',
@@ -4220,6 +4255,9 @@ export const messages = {
     'activity.action.assets.folder_moved': 'A folder was moved',
     'activity.action.assets.folder_deleted': 'A folder was deleted',
     'activity.action.workspace.created': 'The business account was created',
+    'activity.action.workspace.deletion_requested': 'Deletion of the workspace was requested',
+    'activity.action.workspace.deletion_cancelled': 'Deletion of the workspace was cancelled',
+    'activity.action.workspace.deleted': 'The workspace was deleted',
     'activity.action.workspace.settings.updated': 'Business settings were changed',
     'activity.action.workspace.ai_content_retention.updated': 'AI content retention was changed',
     'activity.action.workspace.member.role_changed': 'A member’s role was changed',
@@ -4828,6 +4866,10 @@ export const messages = {
     'notifications.template.analytics.anomaly_detected': 'An unusual change in performance',
     'notifications.template.brand_brain.learning_proposed':
       'A proposed learning is waiting for your review',
+    'notifications.template.workspace.deletion_requested':
+      'An owner asked for this workspace to be deleted',
+    'notifications.template.workspace.deletion_cancelled':
+      'The deletion of this workspace was cancelled',
     'overview.metric.engagement': 'Engagements (28 days)',
     'overview.metric.engagementHint': 'From stored measurements',
     'overview.analyticsSeeAll': 'View analytics',
@@ -5611,6 +5653,23 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   INVITATION_REVOKED: { en: 'Invitation revoked.', ar: 'تم إلغاء الدعوة.' },
   INVITATION_RESENT: { en: 'A new invitation was sent.', ar: 'تم إرسال دعوة جديدة.' },
   SETTINGS_SAVED: { en: 'Settings saved.', ar: 'تم حفظ الإعدادات.' },
+  // A8 (D-328) — the owner's workspace deletion request.
+  CANCEL_PLAN_FIRST: {
+    en: 'Cancel the plan in Billing first; the workspace can then be deleted.',
+    ar: 'ألغِ الباقة من الفوترة أولًا، ثم يمكن حذف مساحة العمل.',
+  },
+  DELETION_NAME_MISMATCH: {
+    en: 'The name you typed does not match the workspace name.',
+    ar: 'الاسم الذي كتبته لا يطابق اسم مساحة العمل.',
+  },
+  STEP_UP_FAILED: {
+    en: 'That password is not correct.',
+    ar: 'كلمة المرور غير صحيحة.',
+  },
+  DELETION_CANCELLED: {
+    en: 'The deletion was cancelled. The workspace is open again.',
+    ar: 'أُلغي الحذف. مساحة العمل متاحة من جديد.',
+  },
   BRAND_PROFILE_SAVED: { en: 'Brand profile saved.', ar: 'تم حفظ ملف العلامة التجارية.' },
   CONTENT_SCHEDULED: {
     en: 'Added to the calendar.',

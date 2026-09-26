@@ -228,7 +228,7 @@ export async function getSessionToken(): Promise<string | null> {
  */
 export async function customerLandingPath(locale: string, token: string): Promise<string> {
   const workspaces = await getCustomerAuth()
-    .listWorkspaces(token)
+    .listWorkspaces(token, { includePendingDeletion: true })
     .catch(() => []);
   return workspaces.length === 0 ? `/${locale}/onboarding/workspace` : `/${locale}/workspaces`;
 }
@@ -270,7 +270,7 @@ export async function requireWorkspace(
   // returning an empty list, so a session revoked between `requireCustomer` and
   // here lands on sign-in instead of on "you are a member of nothing".
   const available = await getCustomerAuth()
-    .listWorkspaces(token)
+    .listWorkspaces(token, { includePendingDeletion: true })
     .catch(() => null);
   if (available === null) redirect(`/${locale}/sign-in`);
 
@@ -283,6 +283,15 @@ export async function requireWorkspace(
     ? available.find((w) => w.workspaceId === customer.activeWorkspaceId)
     : undefined;
   if (!workspace) redirect(`/${locale}/workspaces`);
+
+  /*
+   * A8 (D-328): A WORKSPACE PENDING DELETION IS CLOSED TO EVERY MEMBER. Every
+   * page and every action lands on the screen that says when it will be
+   * deleted — where an owner may cancel — before any permission is checked
+   * or anything is read or written. An action's redirect is re-thrown by its
+   * own `isRedirectError` guard, so nothing it would have done happens.
+   */
+  if (workspace.deletionScheduledFor) redirect(`/${locale}/deletion-pending`);
 
   if (!holdsEvery(workspace, permissionKey)) notFound();
   return { customer, workspace, token };
