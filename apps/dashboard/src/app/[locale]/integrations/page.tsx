@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { brandScopeFilter } from '@brandspace/shared';
-import { SOCIAL_PROVIDERS } from '@brandspace/social-connectors';
+import {
+  SOCIAL_PROVIDERS,
+  retryableAfterReconnect as failedOnItsAccount,
+} from '@brandspace/social-connectors';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
@@ -167,7 +170,7 @@ export default async function IntegrationsPage({
   }));
   const brandNames = new Map(brandRows.map((brand) => [brand.id, brand.name]));
 
-  const { connections, connectable, jobs, itemTitles } = await inSocial(
+  const { connections, connectable, jobs, itemTitles, pastDeadline } = await inSocial(
     workspace.workspaceId,
     async (services) => {
       const connectionService = await services.connections();
@@ -184,6 +187,19 @@ export default async function IntegrationsPage({
       const history = mayReadPublishing
         ? await services.history().list({ brandScope: workspace.brandScope, limit: 25 })
         : [];
+
+      /*
+       * D-332 (owner decision) — failed posts past their lateness deadline:
+       * the retry paths refuse them, so no Retry is offered for them here.
+       */
+      const failedHistory = history.filter((job) => job.status === 'FAILED');
+      const pastDeadline = new Set<string>();
+      if (failedHistory.length > 0) {
+        const pipeline = await services.pipeline();
+        for (const job of failedHistory) {
+          if (pipeline.pastLatenessDeadline(job.scheduledAtUtc)) pastDeadline.add(job.id);
+        }
+      }
 
       const titles = new Map<string, string>();
       if (history.length > 0) {
@@ -203,6 +219,7 @@ export default async function IntegrationsPage({
         })),
         jobs: history,
         itemTitles: titles,
+        pastDeadline,
       };
     },
   );
@@ -335,7 +352,13 @@ export default async function IntegrationsPage({
     failureMessage: failureMessage(job.failureClass, job.failureCode),
     needsReconnect: job.needsReconnect,
     canCancel: job.canCancel,
-    canRetry: job.canRetry,
+    canRetry: job.canRetry && !(job.status === 'FAILED' && pastDeadline.has(job.id)),
+    lateNotice:
+      job.status === 'FAILED' &&
+      pastDeadline.has(job.id) &&
+      (job.canRetry || failedOnItsAccount(job))
+        ? t(failedOnItsAccount(job) ? 'publishing.late.disconnected' : 'publishing.late.passed')
+        : null,
   }));
 
   const brandContext = await brandContextFor(session.workspace, '/integrations');

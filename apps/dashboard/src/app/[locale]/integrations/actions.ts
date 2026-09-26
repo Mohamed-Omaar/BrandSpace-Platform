@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
+import { AppError, createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
+import { PUBLISH_DEADLINE_PASSED_REASON } from '@brandspace/social-connectors';
 import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
 import { callSocialApi, inSocial } from '../../../server/social-context';
@@ -83,7 +84,19 @@ function failure(
     action,
     ...internalErrorFields(error),
   });
-  return pageUrl(locale, { error: actionErrorCode(error), ref: correlationId }, back);
+  return pageUrl(locale, { error: publishingErrorCode(error), ref: correlationId }, back);
+}
+
+/**
+ * D-332 (owner decision) — a retry refused because the post's time has passed
+ * gets its own words; the reason is machine-readable, never matched on a
+ * message.
+ */
+function publishingErrorCode(error: unknown): string {
+  if (isAppError(error) && error.publicDetails['reason'] === PUBLISH_DEADLINE_PASSED_REASON) {
+    return 'PUBLISH_DEADLINE_PASSED';
+  }
+  return actionErrorCode(error);
 }
 
 /** The API's refusal code, or a stable INTERNAL. Never its prose. */

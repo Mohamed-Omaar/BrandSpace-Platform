@@ -68,6 +68,7 @@ export {
   RECONNECT_REQUIRED_CODE,
   providerForPlatformKey,
   publishIdempotencyKey,
+  retryableAfterReconnect,
   unreachableChannelGate,
 } from './publishing';
 export type {
@@ -91,6 +92,8 @@ export {
   publishJobNotCancellable,
   publishJobNotFound,
   publishJobNotRetryable,
+  publishJobPastDeadline,
+  PUBLISH_DEADLINE_PASSED_REASON,
   socialConnectionNotFound,
   unsupportedByProvider,
 } from './errors';

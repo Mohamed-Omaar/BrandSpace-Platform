@@ -94,6 +94,8 @@ export interface PublishRow {
   readonly needsReconnect: boolean;
   readonly canCancel: boolean;
   readonly canRetry: boolean;
+  /** D-332 — why a failed post past its deadline offers no Retry. Translated. */
+  readonly lateNotice: string | null;
 }
 
 const CONNECTION_TONE: Record<ConnectionRow['status'], BadgeTone> = {
@@ -459,6 +461,11 @@ export function IntegrationsView({
                 {row.failureMessage ? (
                   <p style={noticeStyle} data-testid={`failure-${row.id}`}>
                     {row.failureMessage}
+                  </p>
+                ) : null}
+                {row.lateNotice ? (
+                  <p style={noticeStyle} data-testid={`late-${row.id}`}>
+                    {row.lateNotice}
                   </p>
                 ) : null}
                 {row.needsReconnect ? (

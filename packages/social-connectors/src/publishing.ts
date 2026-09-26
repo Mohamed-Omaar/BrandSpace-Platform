@@ -21,6 +21,7 @@ import {
   publishJobNotCancellable,
   publishJobNotFound,
   publishJobNotRetryable,
+  publishJobPastDeadline,
 } from './errors';
 import { capabilitiesFor, PROVIDER_CONFIG_KEYS, type PublishingPolicy } from './policy';
 
@@ -43,7 +44,7 @@ const RECONNECT_RETRY_CLASSES: ReadonlySet<string> = new Set([
  * That job is `NOT_CONNECTED` with that code: the connection itself is never
  * given a status of that name.
  */
-function retryableAfterReconnect(job: {
+export function retryableAfterReconnect(job: {
   readonly failureClass: string | null;
   readonly failureCode: string | null;
 }): boolean {
@@ -1279,9 +1280,6 @@ export class PublishPipelineService {
     });
     if (!job) throw publishJobNotFound();
     if (job.status !== 'FAILED') throw publishJobNotRetryable();
-    if (job.failureClass && !FAILURE_BEHAVIOUR[job.failureClass].manualRetryUseful) {
-      throw publishJobNotRetryable();
-    }
     /*
      * AND NOT AN INDETERMINATE CLASS EVEN WHEN FAILED. A job that exhausted its
      * attempts on a TIMEOUT is a job whose last request may have landed; it
@@ -1289,6 +1287,11 @@ export class PublishPipelineService {
      * a longer route.
      */
     if (job.failureClass && FAILURE_BEHAVIOUR[job.failureClass].indeterminate) {
+      throw publishJobNotRetryable();
+    }
+    // D-332 (owner decision): a retry never publishes late. Refused, not queued.
+    if (this.pastLatenessDeadline(job.scheduledAtUtc)) throw publishJobPastDeadline();
+    if (job.failureClass && !FAILURE_BEHAVIOUR[job.failureClass].manualRetryUseful) {
       throw publishJobNotRetryable();
     }
 
@@ -1362,6 +1365,13 @@ export class PublishPipelineService {
     if (job.status !== 'FAILED' || !retryableAfterReconnect(job)) {
       throw publishJobNotRetryable();
     }
+    /*
+     * D-332 (owner decision): THE TIME PASSED WHILE THE ACCOUNT WAS
+     * DISCONNECTED, so the post is not published late. Refused before anything
+     * changes: the job stays FAILED with the failure it recorded, and nothing
+     * is queued or sent.
+     */
+    if (this.pastLatenessDeadline(job.scheduledAtUtc)) throw publishJobPastDeadline();
     const replacement = await this.#reconnectedConnection(job);
     if (!replacement) throw publishJobNotRetryable();
 
@@ -1429,9 +1439,21 @@ export class PublishPipelineService {
     const ready = new Set<string>();
     for (const job of jobs) {
       if (!retryableAfterReconnect(job)) continue;
+      // Past its deadline it cannot be retried (D-332), so it is not offered.
+      if (this.pastLatenessDeadline(job.scheduledAtUtc)) continue;
       if (await this.#reconnectedConnection(job)) ready.add(job.id);
     }
     return ready;
+  }
+
+  /**
+   * Has this post's LATENESS DEADLINE passed — its scheduled time plus the
+   * configured tolerance? The same measure the preflight uses to stop a post
+   * that is too late to be worth sending, read here so the retry paths refuse
+   * it up front and the screens stop offering Retry (D-332). Read-only.
+   */
+  pastLatenessDeadline(scheduledAtUtc: Date): boolean {
+    return this.#clock.now().getTime() - scheduledAtUtc.getTime() > this.#lateness();
   }
 
   /**

@@ -324,6 +324,11 @@ Exponential backoff with jitter, per error class:
 Max attempts and windows are configuration. Exhausted jobs land in the **dead-letter queue** with full
 context and an admin replay tool.
 
+**A manual Retry never publishes late (D-332).** A customer's Retry, including the retry after a
+reconnection, is refused (`publish_deadline_passed`) once the post's lateness deadline has passed.
+Nothing is queued and no provider is called. The screen offers no Retry for such a post and points to
+"Make a new copy" instead.
+
 ### 7.4 Provider response storage
 
 Every attempt stores a `PublishAttempt` with HTTP status, provider error code, timing, and the raw response

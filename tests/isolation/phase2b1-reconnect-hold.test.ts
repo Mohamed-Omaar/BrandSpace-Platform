@@ -7,6 +7,7 @@ import { ContentCalendarService, parseContentPolicy } from '@brandspace/content'
 import {
   AWAITING_RECONNECT_CODE,
   RECONNECT_REQUIRED_CODE,
+  PUBLISH_DEADLINE_PASSED_REASON,
   PublishPipelineService,
   SocialTokenVault,
   createConnectorRegistry,
@@ -192,6 +193,9 @@ async function world(xStatus: 'NEEDS_REAUTH' | 'REVOKED') {
 
 const minutes = (base: Date, count: number) => new Date(base.getTime() + count * 60_000);
 
+const attemptsOf = (jobId: string) =>
+  inA((db) => db.publishAttempt.count({ where: { publishJobId: jobId } }));
+
 async function jobsOf(slotId: string) {
   return inA((db) =>
     db.publishJob.findMany({ where: { calendarSlotId: slotId }, orderBy: { provider: 'asc' } }),
@@ -294,8 +298,8 @@ describe('Q9 · an expired channel waits for its account; the others publish on 
   });
 });
 
-describe('Review item 12 · a post that failed waiting for its account can be retried once it is back', () => {
-  it('reconnect_required → account reconnected → retry accepted, through the existing flow', async () => {
+describe('Review item 12 + D-332 · retry after reconnect never publishes late', () => {
+  it('reconnect_required → account reconnected after the deadline → retry REFUSED: nothing queued, nothing sent', async () => {
     const q9 = await world('NEEDS_REAUTH');
     await inA((db) => pipeline(db, q9.scheduledAtUtc).materialiseSlot(q9.slotId));
     const x = (await jobsOf(q9.slotId))[1]!;
@@ -308,6 +312,7 @@ describe('Review item 12 · a post that failed waiting for its account can be re
       failureClass: 'NOT_CONNECTED',
       failureCode: RECONNECT_REQUIRED_CODE,
     });
+    const attemptsBefore = await attemptsOf(x.id);
     const retryAt = minutes(q9.scheduledAtUtc, 130);
     const retry = () =>
       inA((db) =>
@@ -324,51 +329,133 @@ describe('Review item 12 · a post that failed waiting for its account can be re
     );
     await expect(retry()).rejects.toMatchObject({ code: 'CONFLICT' });
 
-    // The customer reconnects the SAME account (the connection says ACTIVE and
-    // was renewed after the failure). The status is never "reconnect_required".
+    // The customer reconnects the SAME account, after the deadline.
     await inA((db) =>
       db.socialConnection.update({
         where: { id: q9.connectionIds.X },
         data: { status: 'ACTIVE', lastRefreshedAt: minutes(q9.scheduledAtUtc, 125) },
       }),
     );
+    // D-332: its time passed while the account was disconnected — not offered…
+    expect(
+      await inA(async (db) => pipeline(db, retryAt).pastLatenessDeadline(q9.scheduledAtUtc)),
+    ).toBe(true);
+    expect(await inA((db) => pipeline(db, retryAt).reconnectedRetryable([x.id]))).toEqual(
+      new Set(),
+    );
+    // …and refused with its own reason, before anything changes.
+    await expect(retry()).rejects.toMatchObject({
+      code: 'CONFLICT',
+      publicDetails: { reason: PUBLISH_DEADLINE_PASSED_REASON },
+    });
+    const after = (await jobsOf(q9.slotId))[1]!;
+    expect(after).toMatchObject({
+      status: 'FAILED',
+      failureClass: 'NOT_CONNECTED',
+      failureCode: RECONNECT_REQUIRED_CODE,
+      attemptCount: failed.attemptCount,
+      idempotencyKey: failed.idempotencyKey,
+    });
+    // NO PROVIDER CALL: every call writes an attempt row.
+    expect(await attemptsOf(x.id)).toBe(attemptsBefore);
+  });
+
+  it('an account failure reconnected BEFORE the deadline: retry is queued and publishes', async () => {
+    const q9 = await world('NEEDS_REAUTH');
+    await inA((db) => pipeline(db, q9.scheduledAtUtc).materialiseSlot(q9.slotId));
+    const x = (await jobsOf(q9.slotId))[1]!;
+    // X failed on its account early (as a provider refusal would record it).
+    await inA((db) =>
+      db.publishJob.update({
+        where: { id: x.id },
+        data: {
+          status: 'FAILED',
+          failureClass: 'AUTH_REVOKED',
+          failureCode: null,
+          completedAt: minutes(q9.scheduledAtUtc, 2),
+        },
+      }),
+    );
+    await inA((db) =>
+      db.socialConnection.update({
+        where: { id: q9.connectionIds.X },
+        data: { status: 'ACTIVE', lastRefreshedAt: minutes(q9.scheduledAtUtc, 10) },
+      }),
+    );
+    const retryAt = minutes(q9.scheduledAtUtc, 20);
     expect(await inA((db) => pipeline(db, retryAt).reconnectedRetryable([x.id]))).toEqual(
       new Set([x.id]),
     );
-    expect(await retry()).toMatchObject({ status: 'QUEUED', failureClass: null });
+    expect(
+      await inA((db) =>
+        pipeline(db, retryAt).retryOnReconnectedAccount({
+          jobId: x.id,
+          actorUserId: fixtures.a.userId,
+          brandScope: [],
+        }),
+      ),
+    ).toMatchObject({ status: 'QUEUED', failureClass: null });
+    const result = await inA((db) => pipeline(db, minutes(q9.scheduledAtUtc, 21)).execute(x.id));
+    expect(result.status).toBe('PUBLISHED');
+  });
+});
 
-    const queued = (await jobsOf(q9.slotId))[1]!;
-    expect(queued).toMatchObject({
+describe('D-332 · an explicit Retry never publishes late', () => {
+  /** The LinkedIn job, failed by hand with `failureClass` at one minute past. */
+  async function failedLinkedIn(failureClass: 'CONTENT_REJECTED' | 'TARGET_UNAVAILABLE') {
+    const q9 = await world('NEEDS_REAUTH');
+    await inA((db) => pipeline(db, q9.scheduledAtUtc).materialiseSlot(q9.slotId));
+    const linkedIn = (await jobsOf(q9.slotId))[0]!;
+    await inA((db) =>
+      db.publishJob.update({
+        where: { id: linkedIn.id },
+        data: {
+          status: 'FAILED',
+          failureClass,
+          failureCode: null,
+          completedAt: minutes(q9.scheduledAtUtc, 1),
+        },
+      }),
+    );
+    return { q9, jobId: linkedIn.id };
+  }
+  const retryAt = (jobId: string, at: Date) =>
+    inA((db) => pipeline(db, at).retry({ jobId, actorUserId: fixtures.a.userId, brandScope: [] }));
+
+  it('retry BEFORE the deadline is queued, as before', async () => {
+    const { q9, jobId } = await failedLinkedIn('CONTENT_REJECTED');
+    expect(await retryAt(jobId, minutes(q9.scheduledAtUtc, 30))).toMatchObject({
       status: 'QUEUED',
-      attemptCount: 0,
-      maxAttempts: policy.retry.maxAttempts,
-      failureClass: null,
-      failureCode: null,
-      // The same job and the same idempotency key: nothing can be sent twice.
-      idempotencyKey: failed.idempotencyKey,
-      socialConnectionId: q9.connectionIds.X,
     });
-    expect(queued.nextAttemptAt!.getTime()).toBe(retryAt.getTime());
-    // One retry per failure: it is QUEUED now, so a second press is refused.
-    await expect(retry()).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect((await jobsOf(q9.slotId))[0]).toMatchObject({ status: 'QUEUED', failureClass: null });
+  });
 
-    /*
-     * AND IT RUNS AGAIN: the account is healthy, so the job is neither held
-     * nor refused for its connection. The lateness rule is unchanged and still
-     * decides — a post that failed at its deadline is past the tolerance on any
-     * retry, so it ends TARGET_UNAVAILABLE. Whether a person's explicit retry
-     * may publish late is an open owner decision (reported with review item
-     * 12), not guessed here.
-     */
-    await inA((db) => pipeline(db, retryAt).execute(x.id));
-    expect((await jobsOf(q9.slotId))[1]).toMatchObject({
+  it('retry AFTER the deadline is refused with its reason: stays FAILED, no provider call', async () => {
+    const { q9, jobId } = await failedLinkedIn('CONTENT_REJECTED');
+    const before = await attemptsOf(jobId);
+    await expect(retryAt(jobId, minutes(q9.scheduledAtUtc, 121))).rejects.toMatchObject({
+      code: 'CONFLICT',
+      publicDetails: { reason: PUBLISH_DEADLINE_PASSED_REASON },
+    });
+    expect((await jobsOf(q9.slotId))[0]).toMatchObject({
+      status: 'FAILED',
+      failureClass: 'CONTENT_REJECTED',
+    });
+    expect(await attemptsOf(jobId)).toBe(before);
+  });
+
+  it('a post failed TARGET_UNAVAILABLE for lateness stays TARGET_UNAVAILABLE; the refusal names the deadline', async () => {
+    const { q9, jobId } = await failedLinkedIn('TARGET_UNAVAILABLE');
+    const before = await attemptsOf(jobId);
+    await expect(retryAt(jobId, minutes(q9.scheduledAtUtc, 130))).rejects.toMatchObject({
+      code: 'CONFLICT',
+      publicDetails: { reason: PUBLISH_DEADLINE_PASSED_REASON },
+    });
+    expect((await jobsOf(q9.slotId))[0]).toMatchObject({
       status: 'FAILED',
       failureClass: 'TARGET_UNAVAILABLE',
     });
-    expect(
-      (await jobsOf(q9.slotId))[1]!.failureCode === RECONNECT_REQUIRED_CODE ||
-        (await jobsOf(q9.slotId))[1]!.failureCode === AWAITING_RECONNECT_CODE,
-    ).toBe(false);
+    expect(await attemptsOf(jobId)).toBe(before);
   });
 });
 

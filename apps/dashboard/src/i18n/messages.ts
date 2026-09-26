@@ -1460,6 +1460,11 @@ export const messages = {
     'publishing.nextAttempt': 'المحاولة التالية',
     'publishing.cancel': 'إلغاء',
     'publishing.retry': 'إعادة المحاولة',
+    // D-332 (owner decision) — a failed post past its lateness deadline is not retried.
+    'publishing.late.disconnected':
+      'عدّى معاد البوست والحساب مفصول، فمتنشرش متأخر. اعمل نسخة جديدة عشان تجدوله تاني.',
+    'publishing.late.passed':
+      'مضى موعد هذا المنشور، لذا لن يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
     'publishing.untitled': 'بدون عنوان',
     'publishing.reconnectNeeded': 'يجب إعادة ربط الحساب قبل إعادة المحاولة.',
     'publishing.status.pending': 'بالانتظار',
@@ -4260,6 +4265,11 @@ export const messages = {
     'publishing.nextAttempt': 'Next attempt',
     'publishing.cancel': 'Cancel',
     'publishing.retry': 'Retry',
+    // D-332 (owner decision) — a failed post past its lateness deadline is not retried.
+    'publishing.late.disconnected':
+      'This post’s time passed while the account was disconnected, so it wasn’t published late. Make a new copy to schedule it again.',
+    'publishing.late.passed':
+      'This post’s time has passed, so it won’t be published late. Make a new copy to schedule it again.',
     'publishing.untitled': 'Untitled',
     'publishing.reconnectNeeded': 'Reconnect the account before retrying.',
     'publishing.status.pending': 'Pending',
@@ -5739,6 +5749,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   SCHEDULE_IN_PAST: {
     en: 'That time has already passed or is too soon. Choose a later time.',
     ar: 'هذا الوقت مضى أو قريب جدًا. اختر وقتًا لاحقًا.',
+  },
+  // D-332 (owner decision) — an explicit Retry never publishes a post late.
+  PUBLISH_DEADLINE_PASSED: {
+    en: 'This post’s time has passed, so it won’t be published late. Make a new copy to schedule it again.',
+    ar: 'مضى موعد هذا المنشور، لذا لن يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
   },
   // Q9 (D-332) — every account for one of the post's channels was revoked.
   CHANNEL_DISCONNECTED: {
