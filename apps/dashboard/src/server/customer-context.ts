@@ -228,7 +228,7 @@ export async function getSessionToken(): Promise<string | null> {
  */
 export async function customerLandingPath(locale: string, token: string): Promise<string> {
   const workspaces = await getCustomerAuth()
-    .listWorkspaces(token, { includePendingDeletion: true })
+    .listWorkspaces(token, { includePendingDeletion: true, includeMfaRequired: true })
     .catch(() => []);
   return workspaces.length === 0 ? `/${locale}/onboarding/workspace` : `/${locale}/workspaces`;
 }
@@ -270,7 +270,7 @@ export async function requireWorkspace(
   // returning an empty list, so a session revoked between `requireCustomer` and
   // here lands on sign-in instead of on "you are a member of nothing".
   const available = await getCustomerAuth()
-    .listWorkspaces(token, { includePendingDeletion: true })
+    .listWorkspaces(token, { includePendingDeletion: true, includeMfaRequired: true })
     .catch(() => null);
   if (available === null) redirect(`/${locale}/sign-in`);
 
@@ -292,6 +292,15 @@ export async function requireWorkspace(
    * own `isRedirectError` guard, so nothing it would have done happens.
    */
   if (workspace.deletionScheduledFor) redirect(`/${locale}/deletion-pending`);
+
+  /*
+   * G4 / Q23 (D-333): A WORKSPACE THAT REQUIRES TWO-STEP VERIFICATION is
+   * closed to a member who has not turned it on — every page and every action
+   * sends them to set it up first, before anything is read or written. The
+   * API answers 404 for the same member: `listWorkspaces` leaves the
+   * workspace out unless asked, which only this gate does.
+   */
+  if (workspace.requireMfa && !customer.mfaEnabled) redirect(`/${locale}/mfa-setup`);
 
   if (!holdsEvery(workspace, permissionKey)) notFound();
   return { customer, workspace, token };

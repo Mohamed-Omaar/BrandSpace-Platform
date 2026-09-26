@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { Secret, TOTP } from 'otpauth';
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { hashPassword } from '@brandspace/auth';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
@@ -618,5 +620,153 @@ test.describe('A11 / Q9 · an expired account warns in the Studio and does not b
     await expect(page.getByTestId('editor-channel-expired-linkedin').locator('b')).toHaveText(
       'منتهي الصلاحية',
     );
+  });
+});
+
+test.describe('G4 / Q23 · two-step verification: QR, new phone, and the workspace requirement', () => {
+  /** A code from the key the page printed — exactly what an authenticator app does. */
+  function codeFromKey(printedKey: string): string {
+    return new TOTP({
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+      secret: Secret.fromBase32(printedKey.replace(/\s+/g, '')),
+    }).generate();
+  }
+
+  async function signInAs(page: Page, email: string, password: string): Promise<void> {
+    await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
+    await page.fill('#email', email);
+    await page.fill('#password', password);
+    await page.click('[data-testid="signin-submit"]');
+    await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
+  }
+
+  test('the owner enrols by the printed key, requires it, moves to a new phone; a member is sent to set it up', async ({
+    page,
+    browser,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own accounts; the desktop run covers it');
+    // FRESH ACCOUNTS: turning two-step on for the shared E2E owner would change
+    // every other suite's sign-in.
+    const suffix = randomUUID().slice(0, 8);
+    const password = `e2e-${randomUUID()}`;
+    const ownerEmail = `e2e-mfa-owner-${suffix}@brandspace.test`;
+    const memberEmail = `e2e-mfa-member-${suffix}@brandspace.test`;
+    const slug = `e2e-mfa-${suffix}`;
+    await withPlatformPrisma(async (prisma) => {
+      const passwordHash = await hashPassword(password);
+      const make = (email: string, name: string) =>
+        prisma.user.create({
+          data: {
+            email,
+            name,
+            status: 'ACTIVE',
+            emailVerifiedAt: new Date(),
+            passwordHash,
+            locale: 'EN',
+            timezone: 'UTC',
+          },
+          select: { id: true },
+        });
+      const owner = await make(ownerEmail, 'MFA Owner');
+      const member = await make(memberEmail, 'MFA Member');
+      const id = randomUUID();
+      await prisma.workspace.create({
+        data: {
+          id,
+          workspaceId: id,
+          slug,
+          name: `E2E MFA ${suffix}`,
+          ownerUserId: owner.id,
+          status: 'ACTIVE',
+          country: 'US',
+          defaultLocale: 'EN',
+          timezone: 'America/New_York',
+          currency: 'USD',
+        },
+      });
+      for (const [userId, roleKey] of [
+        [owner.id, 'workspace_owner'],
+        [member.id, 'copywriter'],
+      ] as const) {
+        const role = await prisma.role.findFirstOrThrow({
+          where: { key: roleKey, workspaceId: null },
+          select: { id: true },
+        });
+        await prisma.membership.create({
+          data: {
+            workspaceId: id,
+            userId,
+            roleId: role.id,
+            status: 'ACTIVE',
+            acceptedAt: new Date(),
+          },
+        });
+      }
+    });
+
+    // 1. The owner enrols: a QR code AND the key to type, drawn by the server.
+    await signInAs(page, ownerEmail, password);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+    await page.click(`[data-testid="choose-workspace-${slug}"]`);
+    await page.waitForURL(/\/en\/overview$/);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/security`);
+    await page.getByTestId('mfa-begin').click();
+    await page.waitForURL(/\/en\/settings\/security$/);
+    expect(page.url()).not.toContain('otpauth');
+    await expect(page.getByTestId('mfa-enrolment-qr')).toBeVisible();
+    const firstKey = (await page.getByTestId('mfa-enrolment-key').textContent()) ?? '';
+    expect(firstKey).toMatch(/^[A-Z2-7]{4}( [A-Z2-7]{1,4})+$/);
+    await page.getByTestId('mfa-enrolment-code').fill(codeFromKey(firstKey));
+    await page.getByTestId('mfa-enrolment-confirm').click();
+    await page.waitForURL(/ok=MFA_ENABLED/);
+    expect(page.url()).not.toContain('codes=');
+    // The recovery codes, shown once, and gone once saved.
+    await expect(page.getByTestId('recovery-codes').locator('li')).toHaveCount(10);
+    await page.getByTestId('recovery-codes-saved').click();
+    await expect(page.getByTestId('recovery-codes')).toHaveCount(0);
+
+    // 2. The owner requires it for everyone; now nobody can turn theirs off.
+    await page.getByTestId('mfa-require').check();
+    await page.getByTestId('mfa-require-save').click();
+    await page.waitForURL(/ok=SETTINGS_SAVED/);
+    await expect(page.getByTestId('mfa-require')).toBeChecked();
+    await expect(page.getByTestId('mfa-required-note')).toBeVisible();
+    await expect(page.getByTestId('mfa-disable')).toHaveCount(0);
+
+    // 3. "New phone": a current code, then the new phone's own code.
+    await page.getByTestId('mfa-new-phone-code').fill(codeFromKey(firstKey));
+    await page.getByTestId('mfa-new-phone-begin').click();
+    await expect(page.getByTestId('mfa-new-phone-qr')).toBeVisible();
+    const newKey = (await page.getByTestId('mfa-new-phone-key').textContent()) ?? '';
+    expect(newKey).not.toBe(firstKey);
+    await page.getByTestId('mfa-new-phone-code').fill(codeFromKey(newKey));
+    await page.getByTestId('mfa-new-phone-confirm').click();
+    await page.waitForURL(/ok=MFA_NEW_PHONE/);
+    await expect(page.getByTestId('recovery-codes').locator('li')).toHaveCount(10);
+
+    // 4. A member without two-step is sent to set it up before anything else.
+    const memberContext = await browser.newContext();
+    const member = await memberContext.newPage();
+    await signInAs(member, memberEmail, password);
+    await member.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+    await member.click(`[data-testid="choose-workspace-${slug}"]`);
+    await member.waitForURL(/\/en\/mfa-setup$/);
+    await member.goto(`${DASHBOARD_BASE_URL}/en/content`);
+    await member.waitForURL(/\/en\/mfa-setup$/);
+    await member.getByTestId('mfa-setup-begin').click();
+    await expect(member.getByTestId('mfa-setup-qr')).toBeVisible();
+    const memberKey = (await member.getByTestId('mfa-setup-key').textContent()) ?? '';
+    await member.getByTestId('mfa-setup-code').fill(codeFromKey(memberKey));
+    await member.getByTestId('mfa-setup-confirm').click();
+    await member.waitForURL(/\/en\/settings\/security\?ok=MFA_ENABLED$/);
+    // In, and unable to turn it off while the workspace requires it.
+    await expect(member.getByTestId('mfa-required-note')).toBeVisible();
+    await expect(member.getByTestId('mfa-disable')).toHaveCount(0);
+    await member.goto(`${DASHBOARD_BASE_URL}/en/content`);
+    await expect(member).toHaveURL(/\/en\/content$/);
+    await memberContext.close();
   });
 });

@@ -102,18 +102,19 @@ erDiagram
 
 Global identity. **Not** tenant-owned — a user may belong to several workspaces.
 
-| Field                                            | Type            | Notes                                          |
-| ------------------------------------------------ | --------------- | ---------------------------------------------- |
-| `id`                                             | uuid            | PK                                             |
-| `email`                                          | citext          | unique, case-insensitive                       |
-| `emailVerifiedAt`                                | timestamptz     | null until confirmed                           |
-| `passwordHash`                                   | text            | Argon2id; null for SSO-only users              |
-| `name`, `avatarAssetId`                          | text/uuid       |                                                |
-| `locale`                                         | enum(`ar`,`en`) | default from signup                            |
-| `timezone`                                       | text            | IANA                                           |
-| `mfaEnabled`, `mfaSecretRef`                     | bool/text       | secret stored via Secret Service, never inline |
-| `status`                                         | enum            | `pending`, `active`, `suspended`, `deleted`    |
-| `lastLoginAt`, `failedLoginCount`, `lockedUntil` |                 | brute-force protection                         |
+| Field                                            | Type            | Notes                                                                                  |
+| ------------------------------------------------ | --------------- | -------------------------------------------------------------------------------------- |
+| `id`                                             | uuid            | PK                                                                                     |
+| `email`                                          | citext          | unique, case-insensitive                                                               |
+| `emailVerifiedAt`                                | timestamptz     | null until confirmed                                                                   |
+| `passwordHash`                                   | text            | Argon2id; null for SSO-only users                                                      |
+| `name`, `avatarAssetId`                          | text/uuid       |                                                                                        |
+| `locale`                                         | enum(`ar`,`en`) | default from signup                                                                    |
+| `timezone`                                       | text            | IANA                                                                                   |
+| `mfaEnabled`, `mfaSecretRef`                     | bool/text       | secret stored via Secret Service, never inline                                         |
+| `mfaSecretMaterial`, `mfaPendingSecretMaterial`  | jsonb null      | a customer's sealed TOTP seed (D-206), and the one being set up on a new phone (D-333) |
+| `status`                                         | enum            | `pending`, `active`, `suspended`, `deleted`                                            |
+| `lastLoginAt`, `failedLoginCount`, `lockedUntil` |                 | brute-force protection                                                                 |
 
 Indexes: `unique(email)`, `(status)`.
 Lifecycle: `pending → active → suspended → deleted` (soft, then purge after retention window).
@@ -135,6 +136,7 @@ The isolation boundary.
 | `deletionRequestedAt`, `deletionScheduledFor`, `deletionRequestedByUserId` | timestamptz null / uuid null | the owner's deletion request and its date (D-328); both or neither (CHECK)               |
 | `city`                                                                     | text null                    | an ISO 3166-2:EG governorate code, Egypt only (CHECK `workspace_city_egypt_only`, D-330) |
 | `weekStartsOn`                                                             | int null                     | 0 = Sunday … 6 = Saturday (CHECK); null follows `content.calendar.weekStartsOn` (D-330)  |
+| `requireMfa`                                                               | boolean, default false       | every member must have two-step verification on here (D-333)                             |
 
 Indexes: `unique(slug)`, `(status)`, `(ownerUserId)`.
 

@@ -38,6 +38,8 @@ export default async function WorkspacePickerPage({
   // owner can reach the screen that cancels it. Nothing can be done inside it.
   const workspaces = await getCustomerAuth().listWorkspaces((await getSessionToken()) ?? '', {
     includePendingDeletion: true,
+    // G4 (D-333): one that requires two-step is listed; entering it asks for it.
+    includeMfaRequired: true,
   });
 
   const error = typeof query['error'] === 'string' ? query['error'] : null;

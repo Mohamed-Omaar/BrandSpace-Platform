@@ -279,6 +279,11 @@ model User {
   mfaSecretRef      String?
   mfaSecretMaterial Json?
   mfaEnrolledAt     DateTime? @db.Timestamptz(6)
+  /// G4 / Q23 (D-333) — "New phone": the sealed seed of an authenticator being
+  /// enrolled while the current one keeps working. Moved into
+  /// `mfaSecretMaterial` only when a code from the new phone proves it; the
+  /// same envelope and key domain as the live seed, and never returned.
+  mfaPendingSecretMaterial Json?
 
   failedLoginCount Int       @default(0)
   lockedUntil      DateTime? @db.Timestamptz(6)
@@ -453,6 +458,12 @@ model Workspace {
   /// `workspace_week_starts_on_range`). NULL follows the activated `content`
   /// configuration's `calendar.weekStartsOn`.
   weekStartsOn Int?
+
+  // --- Prototype v94 Phase 2B-1: the owner requires two-step (G4, D-333) ---
+  /// Every member must have two-step verification on to use this workspace.
+  /// Set by the Owner (`workspace.security.manage`); a member without it is
+  /// sent to enrol, and cannot turn it off while it is required.
+  requireMfa Boolean @default(false)
 
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)

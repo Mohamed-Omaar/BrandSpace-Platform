@@ -624,6 +624,14 @@ bold ("Expired") and its explanation as a block line beneath it. The calendar's 
 expired channel in its existing warning `Banner`, with the same explanation on its own line. No new
 component or treatment; the wider Studio redesign (B9) is Phase 2B-2.
 
+### 6.3.36 Prototype v94 Phase 2B-1 — two-step set-up, new phone and the requirement (G4, Q23)
+
+Settings → Security keeps its cards. Setting up shows a 192px QR code (a PNG data URL on the surface
+colour), the printed key in the body type grouped by four, and the code `Field` with the primary button —
+one shared panel, also used by "New phone" and by `/mfa-setup`, which is the sign-in `AuthCard`. Turning
+off shows the code and password `Field`s side by side (`bs-form-row`). The Owner's requirement is its own
+card with the composed checkbox row and its hint line. No new component or treatment beyond the panel.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

@@ -113,6 +113,8 @@ export interface AuthenticatedCustomer {
   readonly sessionId: string;
   /** Null until a workspace is selected, or after the membership went away. */
   readonly activeWorkspaceId: string | null;
+  /** G4 / Q23 (D-333): this person has two-step verification on. */
+  readonly mfaEnabled?: boolean;
 }
 
 /** A membership the signed-in user may act under, with its effective grants. */
@@ -131,6 +133,8 @@ export interface CustomerWorkspaceContext {
    * on a list asked for with `includePendingDeletion`.
    */
   readonly deletionScheduledFor?: Date | null;
+  /** G4 / Q23 (D-333): every member must have two-step verification on here. */
+  readonly requireMfa?: boolean;
 }
 
 /** One business in the rail's switcher (`listBusinesses`). */
@@ -279,6 +283,40 @@ export class CustomerAuthService {
     readonly ip?: string | undefined;
     readonly userAgent?: string | undefined;
   }): Promise<boolean> {
+    return this.stepUp({
+      token: input.token,
+      ip: input.ip,
+      userAgent: input.userAgent,
+      attempt: async (userId) => {
+        const user = await this.#prisma.user.findUnique({
+          where: { id: userId },
+          select: { passwordHash: true },
+        });
+        return (
+          user?.passwordHash !== null &&
+          user?.passwordHash !== undefined &&
+          input.password !== '' &&
+          (await verifyPassword(user.passwordHash, input.password))
+        );
+      },
+    });
+  }
+
+  /**
+   * PROVE IT IS STILL YOU, before something that must not be done with a
+   * stolen session alone (Phase 2B-1: D-328 deletion, D-333 two-step).
+   *
+   * `attempt` is the proof — a password, a current code, or a whole operation
+   * that verifies one. This wraps it in the same brakes a sign-in has: its own
+   * per-account ceiling (`step-up:account`), a locked account refused outright,
+   * and a failed proof COUNTED toward the lockout. False means refused.
+   */
+  async stepUp(input: {
+    readonly token: string;
+    readonly attempt: (userId: string) => Promise<boolean>;
+    readonly ip?: string | undefined;
+    readonly userAgent?: string | undefined;
+  }): Promise<boolean> {
     const customer = await this.resolve(input.token);
     if (!customer) throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
     await this.#limiter.enforce(
@@ -289,14 +327,10 @@ export class CustomerAuthService {
     );
     const user = await this.#prisma.user.findUnique({
       where: { id: customer.userId },
-      select: { id: true, passwordHash: true, lockedUntil: true },
+      select: { id: true, lockedUntil: true },
     });
     if (!user || this.#isLocked(user.lockedUntil)) return false;
-    const ok =
-      user.passwordHash !== null &&
-      input.password !== '' &&
-      (await verifyPassword(user.passwordHash, input.password));
-    if (!ok) {
+    if (!(await input.attempt(user.id))) {
       await this.#countFailure(user.id, 'customer.auth.step_up_failed', input.ip, input.userAgent);
       return false;
     }
@@ -424,7 +458,10 @@ export class CustomerAuthService {
       // dashboard can show its owner the "scheduled for deletion" screen; every
       // surface that acts in it asks `listWorkspaces` without the option and
       // does not find it (D-328).
-      const available = await this.listWorkspaces(token, { includePendingDeletion: true });
+      const available = await this.listWorkspaces(token, {
+        includePendingDeletion: true,
+        includeMfaRequired: true,
+      });
       activeWorkspaceId = available.some((w) => w.workspaceId === session.activeWorkspaceId)
         ? session.activeWorkspaceId
         : null;
@@ -442,6 +479,7 @@ export class CustomerAuthService {
       locale: session.user.locale,
       sessionId: session.id,
       activeWorkspaceId,
+      mfaEnabled: session.user.mfaEnabled,
     };
   }
 
@@ -481,21 +519,32 @@ export class CustomerAuthService {
        * show it (the dashboard's gate, the chooser, the switch itself) opt in.
        */
       readonly includePendingDeletion?: boolean;
+      /**
+       * G4 / Q23 (D-333): include a workspace that REQUIRES two-step
+       * verification when this person has not turned it on. OFF BY DEFAULT,
+       * exactly like the option above: every surface that acts in a workspace
+       * — the API included — fails closed on it, and only the dashboard's
+       * gate (which sends the person to set it up), the chooser and the
+       * session's own workspace check opt in.
+       */
+      readonly includeMfaRequired?: boolean;
     } = {},
   ): Promise<CustomerWorkspaceContext[]> {
     if (!token) return [];
     const tokenHash = hashSessionToken(token);
 
     const now = this.#clock.now();
-    const live = await this.#prisma.customerSession.count({
+    const live = await this.#prisma.customerSession.findFirst({
       where: {
         tokenHash,
         revokedAt: null,
         expiresAt: { gt: now },
         absoluteExpiresAt: { gt: now },
       },
+      select: { user: { select: { mfaEnabled: true } } },
     });
-    if (live === 0) throw new AppError('UNAUTHENTICATED', 'Your session is no longer valid.');
+    if (!live) throw new AppError('UNAUTHENTICATED', 'Your session is no longer valid.');
+    const hasMfa = live.user.mfaEnabled;
 
     const memberships = await this.#scope(tokenHash, (db) =>
       db.membership.findMany({
@@ -517,20 +566,23 @@ export class CustomerAuthService {
       }),
     );
 
-    return memberships.map((m) => ({
-      workspaceId: m.workspaceId,
-      workspaceName: m.workspace.name,
-      workspaceSlug: m.workspace.slug,
-      workspaceStatus: m.workspace.status,
-      roleKey: m.role.key,
-      roleNameEn: m.role.nameEn,
-      roleNameAr: m.role.nameAr,
-      // Recomputed from the stored role on every call, so a role change lands
-      // at the next request rather than at the next sign-in.
-      permissionKeys: m.role.permissions.map((rp) => rp.permission.key),
-      brandScope: m.brandScope,
-      deletionScheduledFor: m.workspace.deletionScheduledFor,
-    }));
+    return memberships
+      .filter((m) => options.includeMfaRequired === true || hasMfa || !m.workspace.requireMfa)
+      .map((m) => ({
+        workspaceId: m.workspaceId,
+        workspaceName: m.workspace.name,
+        workspaceSlug: m.workspace.slug,
+        workspaceStatus: m.workspace.status,
+        roleKey: m.role.key,
+        roleNameEn: m.role.nameEn,
+        roleNameAr: m.role.nameAr,
+        // Recomputed from the stored role on every call, so a role change lands
+        // at the next request rather than at the next sign-in.
+        permissionKeys: m.role.permissions.map((rp) => rp.permission.key),
+        brandScope: m.brandScope,
+        deletionScheduledFor: m.workspace.deletionScheduledFor,
+        requireMfa: m.workspace.requireMfa,
+      }));
   }
 
   /**
@@ -609,7 +661,12 @@ export class CustomerAuthService {
 
     // A pending-deletion workspace may be switched INTO, so an owner can reach
     // its "cancel deletion" screen; nothing in it can be done there (D-328).
-    const available = await this.listWorkspaces(token, { includePendingDeletion: true });
+    // So may one that requires two-step verification: the dashboard then sends
+    // the person to set it up before anything else (D-333).
+    const available = await this.listWorkspaces(token, {
+      includePendingDeletion: true,
+      includeMfaRequired: true,
+    });
     const target = available.find((w) => w.workspaceId === workspaceId);
     if (!target) {
       // The same answer as a workspace that does not exist, so the switcher

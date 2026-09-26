@@ -63,9 +63,11 @@ function actionFiles(dir: string): string[] {
 
 describe('A5 + E6 · a refusal names the permission and who can change it', () => {
   it('owner-only is exactly what the Owner holds and no other role does', () => {
+    // G4 / Q23 (Phase 2B-1, D-333) added `workspace.security.manage`, owner only.
     expect([...OWNER_ONLY_PERMISSION_KEYS].sort()).toEqual([
       'billing.manage',
       'workspace.delete',
+      'workspace.security.manage',
       'workspace.transfer_ownership',
     ]);
     const others = ROLE_DEFINITIONS.filter(

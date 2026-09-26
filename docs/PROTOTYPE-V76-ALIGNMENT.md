@@ -367,6 +367,12 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   its explanation on the next line); revoked/disabled blocks, and the server refuses scheduling onto it.
   The hold is real: the expired channel's job waits for the reconnection until the lateness deadline,
   then fails with "reconnect the account", while the other channels publish on time. No migration.
+- **G4 / Q23 — two-step verification (D-333).** QR code and typed key drawn on the server (no seed in a
+  URL), recovery codes shown once from a short-lived httpOnly cookie, off with a code or the password,
+  "New phone" keeping the old phone until the new one proves itself, every proof a counted step-up. The
+  Owner can require it (`workspace.security.manage`, Owner only): members without it are sent to set it up,
+  the API answers 404, and nobody there can turn theirs off. Migrations
+  `20261001090000_workspace_security_manage_permission` (DATA) and `20261002090000_workspace_require_mfa`.
 
 ---
 

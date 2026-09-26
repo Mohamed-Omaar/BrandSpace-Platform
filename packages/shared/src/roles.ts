@@ -64,9 +64,13 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
     // because that phrasing silently granted `billing.manage` the moment the
     // permission was added — caught by tests/unit/phase2b-boundaries.test.ts
     // before it shipped. A blanket grant inherits every future permission.
+    // G4 / Q23 (D-333): and requiring two-step verification for everyone.
     permissionKeys: allWorkspacePermissionKeys.filter(
       (k) =>
-        k !== 'workspace.transfer_ownership' && k !== 'workspace.delete' && k !== 'billing.manage',
+        k !== 'workspace.transfer_ownership' &&
+        k !== 'workspace.delete' &&
+        k !== 'billing.manage' &&
+        k !== 'workspace.security.manage',
     ),
   },
   {

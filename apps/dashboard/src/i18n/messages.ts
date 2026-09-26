@@ -377,6 +377,7 @@ export const messages = {
     'perms.desc.workspace.read': 'عرض مساحة العمل',
     'perms.desc.workspace.update': 'تغيير إعدادات مساحة العمل',
     'perms.desc.workspace.delete': 'حذف مساحة العمل',
+    'perms.desc.workspace.security.manage': 'إلزام الجميع في مساحة العمل بالتحقق بخطوتين',
     'perms.desc.workspace.transfer_ownership': 'نقل ملكية مساحة العمل',
     'perms.desc.member.read': 'عرض أعضاء مساحة العمل',
     'perms.desc.member.invite': 'دعوة عضو',
@@ -439,9 +440,28 @@ export const messages = {
     'security.enrolScan': 'امسح الرمز في تطبيق المصادقة، ثم أدخل الرمز المعروض.',
     'security.enrolUri': 'أو أدخل هذا العنوان يدويًا في التطبيق:',
     'security.code': 'الرمز',
+    'security.qrAlt': 'رمز QR لتطبيق المصادقة',
+    'security.typeKey': 'لا يمكنك مسحه؟ اكتب هذا المفتاح في التطبيق بدلًا من ذلك:',
+    'security.newPhoneHeading': 'إعداد هاتفك الجديد',
+    'security.newPhoneExplain':
+      'تنتقل إلى هاتف جديد؟ أدخل رمزًا حاليًا — من هاتفك القديم أو رمز استرداد — لإعداد الجديد. يظل الهاتف القديم يعمل حتى يتم تأكيد الجديد.',
+    'security.newPhone': 'هاتف جديد',
+    'security.requiredCannotDisable':
+      'تتطلب {workspace} التحقق بخطوتين، لذلك لا يمكن إيقافه ما دمت عضوًا فيها.',
+    'security.orPassword': 'أو كلمة المرور',
+    'security.requireHeading': 'التحقق بخطوتين للجميع',
+    'security.requireLabel': 'إلزام التحقق بخطوتين في {workspace}',
+    'security.requireHint':
+      'يُطلب ممن لم يفعّله إعداده قبل المتابعة، ولا يمكن لأحد هنا إيقافه ما دام هذا الخيار مفعّلًا. فعّل التحقق الخاص بك أولًا.',
+    'security.recoverySaved': 'حفظتها',
+    'mfaSetup.title': 'إعداد التحقق بخطوتين',
+    'mfaSetup.body': 'تتطلب {workspace} التحقق بخطوتين. أعدّه على هاتفك للمتابعة.',
+    'mfaSetup.start': 'ابدأ الإعداد',
+    'mfaSetup.other': 'استخدم مساحة عمل أخرى',
     'security.confirm': 'تأكيد',
     'security.disable': 'إيقاف التحقق بخطوتين',
-    'security.disableExplain': 'يتطلب رمزًا صالحًا: سرقة الجلسة وحدها يجب ألا تكفي لإزالة الحماية.',
+    'security.disableExplain':
+      'يتطلب رمزًا حاليًا أو كلمة المرور: سرقة الجلسة وحدها يجب ألا تكفي لإزالة الحماية.',
     'security.recoveryHeading': 'رموز الاسترداد',
     'security.recoveryRemaining': 'الرموز المتبقية',
     'security.recoveryExplain':
@@ -1656,6 +1676,10 @@ export const messages = {
     'activity.action.workspace.invitation.accepted': 'قُبلت دعوة',
     'activity.action.customer.mfa.enrolled': 'فُعّل التحقق بخطوتين',
     'activity.action.customer.mfa.disabled': 'أُوقف التحقق بخطوتين',
+    'activity.action.customer.mfa.reenrolment_started': 'بدأ إعداد هاتف جديد للتحقق بخطوتين',
+    'activity.action.customer.mfa.reenrolled': 'نُقل التحقق بخطوتين إلى هاتف جديد',
+    'activity.action.workspace.security.mfa_requirement_changed':
+      'تغيّر إلزام التحقق بخطوتين في مساحة العمل',
     'activity.action.customer.workspace.created': 'أُنشئ حساب نشاط تجاري',
     'activity.action.customer.signup.started': 'أُنشئ حساب',
     'activity.action.customer.note.thread_started': 'بدأت محادثة',
@@ -3110,6 +3134,8 @@ export const messages = {
     'perms.desc.workspace.read': 'View the workspace',
     'perms.desc.workspace.update': 'Change workspace settings',
     'perms.desc.workspace.delete': 'Delete the workspace',
+    'perms.desc.workspace.security.manage':
+      'Require two-step verification for everyone in the workspace',
     'perms.desc.workspace.transfer_ownership': 'Transfer workspace ownership',
     'perms.desc.member.read': 'List workspace members',
     'perms.desc.member.invite': 'Invite a member',
@@ -3172,10 +3198,29 @@ export const messages = {
     'security.enrolScan': 'Scan this in your authenticator app, then enter the code it shows.',
     'security.enrolUri': 'Or enter this address in the app by hand:',
     'security.code': 'Code',
+    'security.qrAlt': 'QR code for your authenticator app',
+    'security.typeKey': 'Can’t scan it? Type this key into the app instead:',
+    'security.newPhoneHeading': 'Set up your new phone',
+    'security.newPhoneExplain':
+      'Moving to a new phone? Enter a current code — from your old phone, or a recovery code — to set up the new one. The old phone keeps working until the new one is confirmed.',
+    'security.newPhone': 'New phone',
+    'security.requiredCannotDisable':
+      '{workspace} requires two-step verification, so it can’t be turned off while you belong to it.',
+    'security.orPassword': 'Or your password',
+    'security.requireHeading': 'Two-step verification for everyone',
+    'security.requireLabel': 'Require two-step verification in {workspace}',
+    'security.requireHint':
+      'Members without it are asked to set it up before they can continue, and nobody here can turn it off while this is on. Turn on your own first.',
+    'security.recoverySaved': 'I have saved them',
+    'mfaSetup.title': 'Set up two-step verification',
+    'mfaSetup.body':
+      '{workspace} requires two-step verification. Set it up on your phone to continue.',
+    'mfaSetup.start': 'Set it up',
+    'mfaSetup.other': 'Use another workspace',
     'security.confirm': 'Confirm',
     'security.disable': 'Turn off two-factor authentication',
     'security.disableExplain':
-      'Requires a working code: a stolen session must not be enough to remove the protection it was behind.',
+      'Needs a current code or your password: a stolen session alone must not be enough to remove the protection.',
     'security.recoveryHeading': 'Recovery codes',
     'security.recoveryRemaining': 'Codes remaining',
     'security.recoveryExplain':
@@ -4428,6 +4473,11 @@ export const messages = {
     'activity.action.workspace.invitation.accepted': 'An invitation was accepted',
     'activity.action.customer.mfa.enrolled': 'Two-step verification was turned on',
     'activity.action.customer.mfa.disabled': 'Two-step verification was turned off',
+    'activity.action.customer.mfa.reenrolment_started':
+      'Setting up a new phone for two-step verification began',
+    'activity.action.customer.mfa.reenrolled': 'Two-step verification moved to a new phone',
+    'activity.action.workspace.security.mfa_requirement_changed':
+      'The workspace’s two-step requirement was changed',
     'activity.action.customer.workspace.created': 'A business account was created',
     'activity.action.customer.signup.started': 'An account was created',
     'activity.action.customer.note.thread_started': 'A conversation was started',
@@ -6006,6 +6056,23 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     en: 'Two-factor authentication is on. Save your recovery codes now.',
     ar: 'تم تفعيل التحقق بخطوتين. احفظ رموز الاسترداد الآن.',
   },
+  // G4 / Q23 (D-333).
+  MFA_NEW_PHONE: {
+    en: 'Your new phone is set up. Save your new recovery codes now.',
+    ar: 'تم إعداد هاتفك الجديد. احفظ رموز الاسترداد الجديدة الآن.',
+  },
+  MFA_PROOF_FAILED: {
+    en: 'That code or password is not correct.',
+    ar: 'الرمز أو كلمة المرور غير صحيحة.',
+  },
+  MFA_REQUIRED_BY_WORKSPACE: {
+    en: 'A workspace you belong to requires two-step verification, so it stays on.',
+    ar: 'تتطلب مساحة عمل أنت عضو فيها التحقق بخطوتين، لذلك يبقى مفعّلًا.',
+  },
+  MFA_ENROL_FIRST: {
+    en: 'Turn on your own two-step verification first.',
+    ar: 'فعّل التحقق بخطوتين الخاص بك أولًا.',
+  },
   MFA_DISABLED: {
     en: 'Two-factor authentication is off.',
     ar: 'تم إيقاف التحقق بخطوتين.',
@@ -6065,6 +6132,8 @@ export const OWNER_ONLY_PERMISSIONS: readonly string[] = [
   'workspace.delete',
   'workspace.transfer_ownership',
   'billing.manage',
+  // G4 / Q23 (D-333): requiring two-step verification for everyone.
+  'workspace.security.manage',
 ];
 
 function deniedActionText(code: string, locale: string): string | null {
