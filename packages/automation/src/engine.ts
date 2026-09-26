@@ -244,6 +244,13 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+/**
+ * The failure code of a run refused because its workspace is pending deletion
+ * (D-328). Lower-case like every other run failure code; the same reason the
+ * credit ledger records as `WORKSPACE_PENDING_DELETION`.
+ */
+export const WORKSPACE_PENDING_DELETION_FAILURE = 'workspace_pending_deletion';
+
 export class AutomationEngine {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
@@ -702,6 +709,26 @@ export class AutomationEngine {
     const run: AutomationRun = await this.#db.automationRun.findFirstOrThrow({
       where: { id: runId, workspaceId: this.#workspaceId },
     });
+
+    /*
+     * --- A WORKSPACE PENDING DELETION RUNS NOTHING (D-328, review item 2) ---
+     *
+     * Read HERE, in the transaction that would perform the action, not taken
+     * from whoever enqueued the event: a deletion requested after the
+     * scheduler read the rule, or while the event sat in the queue, still
+     * stops it. The row is read FOR SHARE, so a deletion request committing
+     * concurrently waits for this run rather than slipping in beside it.
+     * Not silent: the run ends BLOCKED_BY_POLICY with a stable reason and is
+     * audited like every other refusal.
+     */
+    const closed = await this.#db.$queryRaw<{ pending: boolean }[]>`
+      SELECT ("deletionScheduledFor" IS NOT NULL) AS "pending"
+        FROM "workspace" WHERE "id" = ${this.#workspaceId}::uuid FOR SHARE`;
+    if (closed[0]?.pending === true) {
+      return this.#finish(rule, run, 'BLOCKED_BY_POLICY', {
+        failureCode: WORKSPACE_PENDING_DELETION_FAILURE,
+      });
+    }
 
     // --- The daily ceiling ---------------------------------------------------
     const since = new Date(now.getTime() - 24 * 60 * 60 * 1_000);

@@ -971,6 +971,8 @@ export class MaintenanceScheduler {
         enabled: true,
         deletedAt: null,
         nextEvaluationAt: { lte: now },
+        // D-328 (review item 2): a workspace pending deletion produces nothing.
+        workspace: { deletionScheduledFor: null },
       },
       select: { id: true, workspaceId: true, brandId: true, nextEvaluationAt: true },
       // The id breaks ties, so the order is TOTAL. Two rules parked in the same
@@ -1101,6 +1103,8 @@ export class MaintenanceScheduler {
         enabled: true,
         deletedAt: null,
         nextEvaluationAt: { lte: now },
+        // D-328 (review item 2): a workspace pending deletion produces nothing.
+        workspace: { deletionScheduledFor: null },
       },
       select: { id: true, workspaceId: true },
       orderBy: [{ nextEvaluationAt: 'asc' }, { id: 'asc' }],
