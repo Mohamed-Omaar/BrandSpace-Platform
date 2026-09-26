@@ -604,6 +604,70 @@ describe('Q12 · a member who may only comment starts and answers threads, and t
     expect(reopened).toBe(0);
   });
 
+  /**
+   * A client whose FIRST `noteThread.findFirst` — the reply's own read of the
+   * thread — is followed, before the reply goes on, by a resolve committed on
+   * another connection. That is the gap between reading the status and writing.
+   */
+  function resolvedRightAfterRead(fixture: Fixture, threadId: string): NotesService {
+    let fired = false;
+    const noteThread = new Proxy(platform.noteThread, {
+      get(target, key, receiver) {
+        const value = Reflect.get(target, key, receiver) as unknown;
+        if (key !== 'findFirst' || typeof value !== 'function') return value;
+        return async (...args: unknown[]) => {
+          const row = await (value as (...a: unknown[]) => Promise<unknown>).apply(target, args);
+          if (!fired) {
+            fired = true;
+            await serviceFor(fixture.workspaceId).resolve({ actor: actorFor(fixture), threadId });
+          }
+          return row;
+        };
+      },
+    });
+    const db = new Proxy(platform, {
+      get: (target, key, receiver) =>
+        key === 'noteThread' ? noteThread : Reflect.get(target, key, receiver),
+    });
+    return new NotesService({
+      db: db as unknown as TenantScopedClient,
+      workspaceId: fixture.workspaceId,
+      clock: systemClock,
+    });
+  }
+
+  it('a thread resolved between the read and the write takes no reply from a commenter', async () => {
+    const w = await freshWorkspace('q12-race');
+    const threadId = await threadIn(w);
+    await expect(
+      resolvedRightAfterRead(w, threadId).reply({
+        actor: commenter(w),
+        threadId,
+        body: 'Slipped in after it closed',
+      }),
+    ).rejects.toMatchObject(forbiddenNotesManage);
+    const row = await platform.noteThread.findUniqueOrThrow({ where: { id: threadId } });
+    expect(row.status).toBe('RESOLVED');
+    expect(await serviceFor(w.workspaceId).notesIn(threadId, actorFor(w))).toHaveLength(1);
+  });
+
+  it('a manager replying across the same race reopens the thread, and says so', async () => {
+    const w = await freshWorkspace('q12-race-manager');
+    const threadId = await threadIn(w);
+    await resolvedRightAfterRead(w, threadId).reply({
+      actor: actorFor(w),
+      threadId,
+      body: 'Not finished yet',
+    });
+    const row = await platform.noteThread.findUniqueOrThrow({ where: { id: threadId } });
+    expect(row.status).toBe('OPEN');
+    const replied = await platform.auditEvent.findFirstOrThrow({
+      where: { workspaceId: w.workspaceId, action: 'customer.note.replied' },
+      orderBy: { occurredAt: 'desc' },
+    });
+    expect(replied.after).toMatchObject({ reopened: true });
+  });
+
   it('another workspace’s thread is still a 404, not a FORBIDDEN', async () => {
     const a = await freshWorkspace('q12-cross-a');
     const b = await freshWorkspace('q12-cross-b');

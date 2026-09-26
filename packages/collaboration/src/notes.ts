@@ -402,29 +402,41 @@ export class NotesService {
     const mentions = await this.#resolvableMentions(input.mentionedUserIds ?? []);
 
     const now = this.#clock.now();
-    const note = await this.#writeNote(thread.id, input.actor.userId, body, mentions, now);
     /*
-     * REPLYING TO A RESOLVED THREAD REOPENS IT.
+     * THE THREAD'S STATE IS CLAIMED BEFORE THE REPLY IS WRITTEN, IN ONE STEP.
      *
-     * Somebody typing into a closed conversation is saying it is not closed.
-     * Leaving it resolved would hide the reply from every "what is open" view,
-     * which is the one place it needed to appear.
+     * Reading the status and then writing left a gap: a thread resolved in
+     * between took a reply from somebody who may not reopen it (Q12). Each
+     * claim below is a conditional UPDATE on the status the reply depends on.
+     * It locks the row, so a concurrent resolve waits for this transaction,
+     * and one that already committed makes the claim match nothing — PostgreSQL
+     * re-checks the WHERE after the lock. No row matched means the thread is no
+     * longer in the state the reply needs, and nothing is written.
+     *
+     * REPLYING TO A RESOLVED THREAD REOPENS IT (with `notes.manage`). Somebody
+     * typing into a closed conversation is saying it is not closed; leaving it
+     * resolved would hide the reply from every "what is open" view.
      */
-    if (thread.status === 'RESOLVED') {
-      await this.#db.noteThread.update({
-        where: { id: thread.id },
+    const stillOpen = await this.#db.noteThread.updateMany({
+      where: { id: thread.id, status: 'OPEN' },
+      data: { updatedAt: now },
+    });
+    let reopened = false;
+    if (stillOpen.count === 0) {
+      // Resolved — now, or since it was read. Only a manager may reopen it.
+      this.#requireManage(input.actor);
+      const reopenedRows = await this.#db.noteThread.updateMany({
+        where: { id: thread.id, status: 'RESOLVED' },
         data: { status: 'OPEN', resolvedAt: null, resolvedByUserId: null, updatedAt: now },
       });
-    } else {
-      await this.#db.noteThread.update({
-        where: { id: thread.id },
-        data: { updatedAt: now },
-      });
+      if (reopenedRows.count === 0) throw this.#notFound();
+      reopened = true;
     }
+    const note = await this.#writeNote(thread.id, input.actor.userId, body, mentions, now);
 
     await this.#audit(input.actor, 'customer.note.replied', thread.id, {
       noteId: note.id,
-      reopened: thread.status === 'RESOLVED',
+      reopened,
       mentions: mentions.length,
     });
     return { noteId: note.id };
