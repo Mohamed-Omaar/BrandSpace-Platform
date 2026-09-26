@@ -55,6 +55,32 @@ export const contentPolicySchema = z.object({
     minLeadMinutes: z.number().int().min(0),
     maxSlotsPerDay: z.number().int().min(1),
     requireApprovalBeforeScheduling: z.boolean(),
+    /**
+     * G6 / Q7 (D-329): operator facts, empty until entered. OPTIONAL in the
+     * type — an older document or a fixture that never heard of them is simply
+     * "none configured", which every reader treats as empty.
+     */
+    suggestedTimes: z
+      .array(z.object({ country: z.string(), times: z.array(z.string()) }))
+      .optional(),
+    holidays: z
+      .array(
+        z.object({
+          country: z.string(),
+          date: z.string(),
+          name: z.object({ en: z.string(), ar: z.string() }),
+        }),
+      )
+      .optional(),
+    observances: z
+      .array(
+        z.object({
+          industry: z.string(),
+          date: z.string(),
+          name: z.object({ en: z.string(), ar: z.string() }),
+        }),
+      )
+      .optional(),
   }),
   approvals: z.object({
     requireApprovalBeforeScheduling: z.boolean(),

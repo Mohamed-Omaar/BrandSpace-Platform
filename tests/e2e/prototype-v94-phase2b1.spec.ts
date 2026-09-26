@@ -233,3 +233,33 @@ test.describe('A8 · the owner deletes a workspace, it waits, and the owner canc
     await expect(page).toHaveURL(/\/en\/content$/);
   });
 });
+
+test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; suggested times', () => {
+  test('a holiday chip, the Studio for that day, and "Suggested time" in the schedule dialog', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'the month grid is desktop; the agenda carries the same chip');
+    // `seed-calendar-fixture.ts`: a fixture holiday three days after the seed, in
+    // the fixture workspaces' country, and suggested times for that country.
+    const day = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${day.slice(0, 7)}`);
+    const chip = page.getByTestId(`calendar-marker-${day}-0`);
+    await expect(chip).toContainText('E2E Fixture Holiday');
+    await expect(chip).toHaveAttribute('data-kind', 'holiday');
+    await expect(chip).toHaveAttribute('href', `/en/content/compose?date=${day}`);
+
+    await page.getByTestId('calendar-schedule-open').click();
+    const suggested = page.getByTestId('schedule-suggested');
+    await expect(suggested).toContainText('Suggested time');
+    await expect(suggested).not.toContainText(/best time/i);
+    await page.getByTestId('schedule-suggested-13:00').click();
+    await expect(page.getByTestId('schedule-time')).toHaveValue('13:00');
+    await page.keyboard.press('Escape');
+
+    await chip.click();
+    await page.waitForURL(new RegExp(`/en/content/compose\\?date=${day}$`));
+    await expect(page.getByTestId('composer-planned-date')).toContainText('E2E Fixture Holiday');
+  });
+});

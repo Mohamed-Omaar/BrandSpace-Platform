@@ -63,6 +63,8 @@ export {
   resolveZonedTime,
 } from './timezone';
 export type { LocalParts, ZonedResolution } from './timezone';
+export { calendarMarkers, suggestedPostingTimes } from './calendar-markers';
+export type { CalendarMarker, SuggestedTimeSource } from './calendar-markers';
 
 export {
   CONTENT_CONFIG_DOMAIN,

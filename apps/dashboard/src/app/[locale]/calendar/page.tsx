@@ -1,10 +1,13 @@
 import {
   DEFAULT_POST_TIME,
   RESCHEDULABLE_SLOT_STATUSES,
+  calendarMarkers,
   formatLocalTime,
   nextDayKey,
   partsInZone,
+  suggestedPostingTimes,
 } from '@brandspace/content';
+import { TenantOnboardingPolicySource, industryKeyFor } from '@brandspace/onboarding';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { systemClock } from '@brandspace/shared';
 import type {
@@ -14,7 +17,7 @@ import type {
   PostStatus,
   SocialPlatform,
 } from '@brandspace/ui';
-import { requireWorkspacePage } from '../../../server/customer-context';
+import { currentEnvironment, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
@@ -316,7 +319,42 @@ export default async function CalendarPage({
       }),
     ]);
 
+    /*
+     * G6 / Q7 (D-329) — WHAT THE COUNTRY AND THE INDUSTRY ADD: the workspace's
+     * holidays, the observances of the industries of the brands in view (each
+     * brand's catalogue KEY; free text maps to none), and the country's
+     * suggested posting times. All three are operator configuration.
+     */
+    const [workspaceRow, onboarding, brandIndustries] = await Promise.all([
+      services.db.workspace.findUnique({
+        where: { id: workspace.workspaceId },
+        select: { country: true },
+      }),
+      new TenantOnboardingPolicySource(services.db, currentEnvironment()).load(),
+      services.db.brand.findMany({
+        where: {
+          deletedAt: null,
+          ...(filterBrand
+            ? { id: filterBrand }
+            : workspace.brandScope.length > 0
+              ? { id: { in: [...workspace.brandScope] } }
+              : {}),
+        },
+        select: { industry: true },
+      }),
+    ]);
+    const industryKeys = [
+      ...new Set(
+        brandIndustries
+          .map((brand) => industryKeyFor(brand.industry, onboarding.industries))
+          .filter((key): key is string => key !== null),
+      ),
+    ];
+
     return {
+      country: workspaceRow?.country ?? null,
+      industryKeys,
+      calendarPolicy: policy.calendar,
       timezone,
       year,
       month,
@@ -353,6 +391,9 @@ export default async function CalendarPage({
     filterBrands,
     platformKeys,
     openNotes,
+    country,
+    industryKeys,
+    calendarPolicy,
   } = data;
 
   /*
@@ -550,6 +591,7 @@ export default async function CalendarPage({
   }
 
   const todayKey = formatLocalTime(now, timezone).slice(0, 10);
+  const mayCreate = workspace.permissionKeys.includes('content.create');
   const days: CalendarDay[] = [];
   for (let index = 0; index < 42; index += 1) {
     const cellUtc = firstOfMonthUtc + (index - lead) * 24 * 3_600_000;
@@ -566,6 +608,50 @@ export default async function CalendarPage({
       posts: byDay.get(key) ?? [],
     });
   }
+
+  /*
+   * G6 (D-329) — THE ★ CHIPS: a day's holidays (the workspace's country) and
+   * observances (the industries of the brands in view). A chip on a day that
+   * has not passed opens the Studio for that day, for a member who may create.
+   */
+  const firstKey = days[0]?.key ?? todayKey;
+  const lastKey = days.at(-1)?.key ?? todayKey;
+  const markers = [
+    ...calendarMarkers(calendarPolicy, {
+      country,
+      industryKey: null,
+      from: firstKey,
+      to: lastKey,
+    }),
+    ...industryKeys.flatMap((industryKey) =>
+      calendarMarkers(calendarPolicy, { country: null, industryKey, from: firstKey, to: lastKey }),
+    ),
+  ];
+  for (const [index, day] of days.entries()) {
+    const onDay = markers.filter((marker) => marker.date === day.key);
+    if (onDay.length === 0) continue;
+    days[index] = {
+      ...day,
+      markers: onDay.map((marker) => ({
+        label: locale === 'ar' ? marker.name.ar : marker.name.en,
+        kind: marker.kind,
+        href:
+          mayCreate && day.key >= todayKey
+            ? `/${locale}/content/compose?date=${day.key}`
+            : undefined,
+      })),
+    };
+  }
+
+  /*
+   * G6 (D-329) — "SUGGESTED TIME", never "best time": the country's configured
+   * posting times, used only where no measured best time exists for the brand.
+   * No measured source exists yet, so `measured` is empty and says so.
+   */
+  const suggested = suggestedPostingTimes(calendarPolicy, { measured: [], country });
+  const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(single('date') ?? '')
+    ? single('date')
+    : undefined;
 
   const todayIndex = days.findIndex((day) => day.isToday);
   const weekIndex = todayIndex >= 0 ? Math.floor(todayIndex / 7) : 0;
@@ -636,7 +722,9 @@ export default async function CalendarPage({
         locale={locale}
         today={todayKey}
         tomorrow={nextDayKey(todayKey)}
-        defaultTime={DEFAULT_POST_TIME}
+        defaultTime={suggested.times[0] ?? DEFAULT_POST_TIME}
+        suggestedTimes={suggested.times}
+        preselectDate={requestedDate && requestedDate >= todayKey ? requestedDate : undefined}
         preselectItemId={single('item')}
         weekIndex={weekIndex}
         gaps={gapDays.map((day) =>
@@ -766,6 +854,7 @@ const CALENDAR_KEYS = [
   'calendar.pastDay',
   'calendar.moveFromPost',
   'calendar.scheduleTime',
+  'calendar.suggestedTime',
   'calendar.scheduleSubmit',
   'calendar.rescheduleTitle',
   'calendar.rescheduleSubmit',

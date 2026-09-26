@@ -1155,6 +1155,8 @@ export const messages = {
     'create.repurpose.from': 'إعادة استخدام «{title}»',
     'create.repurpose.fromBody':
       'يحتوي الوصف أدناه على كلمات المنشور الأصلي. عدّله كما تشاء — الأصل لا يتغير.',
+    'create.plannedFor': 'لـ {name} · {date}',
+    'create.plannedDate': 'مخطط ليوم {date}',
     'create.write.label': 'منشورك',
     'create.write.placeholder': 'اكتب المنشور تمامًا كما يجب أن يُقرأ.',
     'create.format.unsupported': 'لا تدعم هذه القناة هذا الشكل.',
@@ -1271,6 +1273,7 @@ export const messages = {
     'calendar.moveFromPost': 'على الهاتف، افتح المنشور لنقله إلى يوم آخر.',
     'calendar.scheduleDate': 'التاريخ',
     'calendar.scheduleTime': 'الوقت',
+    'calendar.suggestedTime': 'وقت مقترح',
     'calendar.scheduleSubmit': 'أضف إلى التقويم',
     'calendar.rescheduleTitle': 'نقل الموعد',
     'calendar.rescheduleSubmit': 'انقل',
@@ -3833,6 +3836,8 @@ export const messages = {
     'create.repurpose.from': 'Repurposing “{title}”',
     'create.repurpose.fromBody':
       'The brief below holds the original post’s words. Edit it as you like — the original is not changed.',
+    'create.plannedFor': 'For {name} · {date}',
+    'create.plannedDate': 'Planned for {date}',
     'create.write.label': 'Your post',
     'create.write.placeholder': 'Write the post exactly as it should read.',
     'create.format.unsupported': 'This channel cannot carry this format.',
@@ -3951,6 +3956,7 @@ export const messages = {
     'calendar.moveFromPost': 'On a phone, open a post to move it to another day.',
     'calendar.scheduleDate': 'Date',
     'calendar.scheduleTime': 'Time',
+    'calendar.suggestedTime': 'Suggested time',
     'calendar.scheduleSubmit': 'Add to calendar',
     'calendar.rescheduleTitle': 'Move this post',
     'calendar.rescheduleSubmit': 'Move',

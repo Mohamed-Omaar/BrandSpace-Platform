@@ -923,6 +923,50 @@ const contentStudioSchema = z.object({
        * behind it.
        */
       requireApprovalBeforeScheduling: z.boolean().default(false),
+
+      /*
+       * G6 / Q7 (prototype v94 Phase 2B-1, D-329) — WHAT A COUNTRY AND AN
+       * INDUSTRY ADD TO THE CALENDAR. All three lists ship EMPTY: they are an
+       * operator's facts, entered and approved in the Control Center, never
+       * seeded by code. A draft for Egypt, Saudi Arabia and the UAE lives in
+       * docs/CALENDAR-OBSERVANCES-DRAFT.md, UNVERIFIED and NOT ACTIVATED.
+       */
+      /**
+       * Default posting times per country, shown as "Suggested time" — never
+       * "best time" — and only where no MEASURED best time exists for the
+       * brand, which always wins (D-329).
+       */
+      suggestedTimes: z
+        .array(
+          z.object({
+            country: z.string().length(2),
+            times: z
+              .array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/))
+              .min(1)
+              .max(6),
+          }),
+        )
+        .default([]),
+      /** A country's public holidays, drawn on the calendar as ★ chips. */
+      holidays: z
+        .array(
+          z.object({
+            country: z.string().length(2),
+            date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            name: localizedText,
+          }),
+        )
+        .default([]),
+      /** An industry's observances, keyed by `onboarding.industries[].key`. */
+      observances: z
+        .array(
+          z.object({
+            industry: z.string().min(1),
+            date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            name: localizedText,
+          }),
+        )
+        .default([]),
     })
     .default({}),
 
@@ -2175,6 +2219,24 @@ const onboardingSchema = z.object({
       graceDays: z.number().int().min(1).max(365).default(30),
     })
     .default({}),
+
+  /*
+   * G6 (prototype v94 Phase 2B-1, D-329) — THE INDUSTRY LIST the setup wizard
+   * and Settings offer, with "Something else" always available beside it.
+   * Each industry names the Brand Brain OFFERS question set it uses
+   * (`offersQuestionSet`, e.g. food / fashion / beauty / services); the
+   * questions themselves are Brand Brain v2 (Phase 2C), which reads this key.
+   * EMPTY until an operator enters it: with no list, the fields stay free text.
+   */
+  industries: z
+    .array(
+      z.object({
+        key: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+        name: localizedText,
+        offersQuestionSet: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+      }),
+    )
+    .default([]),
 
   /*
    * THE FIRST-RUN CHECKLIST.

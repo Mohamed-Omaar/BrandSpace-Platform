@@ -344,6 +344,12 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   cancel, members are told in-app; then a job marks it DELETED. Migration
   `20260928090000_workspace_deletion_request`. **Q13 (billing visibility)** needed no change:
   `billing.read` (Owner, Admin) sees billing read-only, `billing.manage` (Owner) changes it.
+- **G6 / Q7 (D-329).** Country preselects its usual time zone (editable). Holidays by country,
+  observances by industry and posting times per country are `content.calendar` configuration, empty by
+  default; ★ chips on the calendar open the Studio for that day; configured times say "Suggested time",
+  never "best time", and measured times win. The industry list is `onboarding.industries` with each
+  industry's Offers question set for Brand Brain v2 to read. The Egypt / Saudi Arabia / UAE draft is
+  `docs/CALENDAR-OBSERVANCES-DRAFT.md` — UNVERIFIED, NOT ACTIVATED.
 
 ---
 

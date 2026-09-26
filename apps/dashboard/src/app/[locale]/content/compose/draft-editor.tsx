@@ -89,6 +89,8 @@ export interface DraftEditorProps {
   readonly canGenerateMedia: boolean;
   /** An image carried from the Creative Studio: on the slides, unsaved. */
   readonly attach?: MediaOptionView | null;
+  /** G6 (D-329): the ★ day the Studio was opened for; its Schedule link opens there. */
+  readonly plannedDate?: string | null;
   readonly onTool: (variantId: string, tool: string, argument?: string) => void;
   readonly actions: {
     save(formData: FormData): Promise<void>;
@@ -147,6 +149,7 @@ export function DraftEditor({
   creativeFormats,
   canGenerateMedia,
   attach = null,
+  plannedDate = null,
   review = null,
   onTool,
   actions,
@@ -904,7 +907,7 @@ export function DraftEditor({
                 draft.status === 'APPROVED') ? (
                 <Link
                   className="cs-dark-button"
-                  href={`/${locale}/calendar?item=${draft.id}`}
+                  href={`/${locale}/calendar?item=${draft.id}${plannedDate ? `&date=${plannedDate}` : ''}`}
                   aria-disabled={anyDirty}
                   data-testid="editor-schedule"
                 >

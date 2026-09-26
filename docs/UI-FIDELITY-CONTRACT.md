@@ -589,6 +589,15 @@ areas that deliberately hide their bar keep both hiding rules on a class: the si
 before and so still showed a bar in Safari) and Brand Brain's chat suggestions
 (`.bb-chat-suggestions`). `tests/unit/ui1-scrollbar.test.ts` pins both halves.
 
+### 6.3.32 Prototype v94 Phase 2B-1 — ★ holiday chips, "Suggested time", the planned day (G6)
+
+A calendar day's holiday or industry observance is a ★ chip above its posts: the "today" pill's accent
+pair (`brandYellowTint` behind `brandYellowText`) at the post chip's `micro` size and `full` radius, a
+link to the Studio for that day where the member may create. The phone's agenda lists a day that has
+one. The schedule dialog's configured posting times are neutral `sm` buttons after a `caption`
+"Suggested time" label, the chosen one filled; the Studio opened from a ★ day shows one `cs-notice
+info` line naming the day. No new component or treatment.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

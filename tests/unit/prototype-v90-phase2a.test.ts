@@ -630,7 +630,9 @@ describe('F2 · no scheduling in the past; new posts default to tomorrow 09:00',
     const page = read('apps/dashboard/src/app/[locale]/calendar/page.tsx');
     expect(page).toContain('isPast: key < todayKey,');
     expect(page).toContain('tomorrow={nextDayKey(todayKey)}');
-    expect(page).toContain('defaultTime={DEFAULT_POST_TIME}');
+    // G6 (D-329): the country's first SUGGESTED time when an operator configured
+    // some; otherwise the ordinary 09:00, exactly as before.
+    expect(page).toContain('defaultTime={suggested.times[0] ?? DEFAULT_POST_TIME}');
     // …except on today, where 09:00 may have passed: no time is proposed.
     const calendarView = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
     expect(calendarView).toContain(
@@ -638,7 +640,12 @@ describe('F2 · no scheduling in the past; new posts default to tomorrow 09:00',
     );
     expect(calendarView).not.toContain('defaultValue={defaultTime}');
     const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
-    expect(view).toContain('useState(tomorrow)');
+    // Tomorrow, unless the Studio was opened from a ★ day (G6, D-329), which
+    // the page accepts only when it has not passed.
+    expect(view).toContain('useState(preselectDate ?? tomorrow)');
+    expect(read('apps/dashboard/src/app/[locale]/calendar/page.tsx')).toContain(
+      'preselectDate={requestedDate && requestedDate >= todayKey ? requestedDate : undefined}',
+    );
     expect(view.match(/\{\.\.\.\(today \? \{ min: today \} : \{\}\)\}/g)).toHaveLength(2);
     expect(view).toMatch(
       /if \(date !== '' && today !== '' && date < today\) \{\s*setPastDayNotice\(true\);\s*return;/,

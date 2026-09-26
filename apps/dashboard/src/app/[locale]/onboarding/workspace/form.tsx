@@ -10,6 +10,7 @@ import {
   type SearchableOption,
 } from '@brandspace/ui';
 import { authButtonStyle, authInputStyle } from '../../../../components/auth-card';
+import { timeZoneAfterCountryChange } from '../../../../components/time-zone-suggestion';
 
 interface ApiFailurePayload {
   readonly error?: {
@@ -43,6 +44,7 @@ export function CreateWorkspaceForm({
   defaultEmail,
   countries,
   timezones,
+  suggestedZones,
   labels,
 }: {
   locale: string;
@@ -50,6 +52,8 @@ export function CreateWorkspaceForm({
   defaultEmail: string;
   countries: readonly SearchableOption[];
   timezones: readonly SearchableOption[];
+  /** Q7: each country's usual zone, preselected as a suggestion (still editable). */
+  suggestedZones: Readonly<Record<string, string>>;
   labels: {
     name: string;
     slug: string;
@@ -176,7 +180,19 @@ export function CreateWorkspaceForm({
           name="country"
           options={countries}
           value={country}
-          onChange={setCountry}
+          onChange={(next) => {
+            // Q7 — the country PRESELECTS its usual zone; one the person
+            // picked themselves is never replaced (D-194 stands).
+            setTimezone((current) =>
+              timeZoneAfterCountryChange({
+                previousCountry: country,
+                nextCountry: next,
+                currentZone: current,
+                suggestions: suggestedZones,
+              }),
+            );
+            setCountry(next);
+          }}
           placeholder={labels.choose}
           noResultsLabel={labels.noResults}
           required

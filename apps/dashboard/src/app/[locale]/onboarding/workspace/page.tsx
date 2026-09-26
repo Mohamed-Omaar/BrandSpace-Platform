@@ -3,7 +3,7 @@ import { getPrisma, withoutTenantContext } from '@brandspace/database';
 import { readPlanCatalogue } from '@brandspace/entitlements';
 import { parseConfigPayload } from '@brandspace/config';
 import { spacingTokens, typographyTokens, colorTokens } from '@brandspace/ui';
-import { countryOptions, timeZoneOptions } from '@brandspace/shared';
+import { countryOptions, suggestedTimeZones, timeZoneOptions } from '@brandspace/shared';
 import {
   currentEnvironment,
   getCustomerAuth,
@@ -101,6 +101,7 @@ export default async function CreateWorkspacePage({
         defaultEmail={customer.email}
         countries={countries}
         timezones={timezones}
+        suggestedZones={suggestedTimeZones()}
         labels={{
           name: t('createWorkspace.name'),
           slug: t('createWorkspace.slug'),

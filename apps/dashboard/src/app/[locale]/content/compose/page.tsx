@@ -35,6 +35,7 @@ import { activityTimeline } from '../../../../server/activity-timeline';
 import { NotesPanel } from '../../../../components/notes-panel';
 import { inSocial } from '../../../../server/social-context';
 import { relativeTime } from '../../../../server/home';
+import { plannedDateFrom } from '../../../../server/planned-date';
 import {
   POST_GOALS,
   createModeFrom,
@@ -758,6 +759,13 @@ export default async function ComposePage({
       ? [...mediaOptions, carried]
       : mediaOptions;
 
+  /*
+   * G6 (D-329) — OPENED FROM A ★ DAY ON THE CALENDAR. A date shape, not in the
+   * past for the workspace, and — when that day is one of the workspace's
+   * holidays or its brand's observances — what the day is, to say so.
+   */
+  const plannedDate = await plannedDateFrom(single('date'), workspace.workspaceId, locale);
+  const plannedFor = plannedDate?.label ?? null;
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
   const reference = single('ref');
@@ -819,6 +827,8 @@ export default async function ComposePage({
         campaigns={campaigns}
         mediaOptions={allMedia}
         carriedMedia={carried}
+        plannedDate={plannedDate?.date ?? null}
+        plannedFor={plannedFor}
         // Q18 — the AI edits spend credits, so without `copilot.use` none is offered.
         tools={maySpendCredits(workspace.permissionKeys, 'content.edit') ? CONTENT_TOOLS : []}
         now={now.getTime()}
@@ -1056,6 +1066,8 @@ const COMPOSER_KEYS = [
   'create.write.placeholder',
   'create.repurpose.from',
   'create.repurpose.fromBody',
+  'create.plannedFor',
+  'create.plannedDate',
   // Phase 8 — the campaign control on an existing draft (AC-26.3).
   'campaigns.composerLabel',
   'campaigns.composerNone',

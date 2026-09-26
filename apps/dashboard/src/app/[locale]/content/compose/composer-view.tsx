@@ -126,6 +126,10 @@ export interface ComposerViewProps {
    * checked by the server. Offered on the draft's slides, unsaved.
    */
   readonly carriedMedia?: MediaOptionView | null;
+  /** G6 (D-329): the day a ★ holiday chip opened the Studio for, `YYYY-MM-DD`. */
+  readonly plannedDate?: string | null;
+  /** G6 (D-329): what that day is, in the reader's language. */
+  readonly plannedFor?: string | null;
   readonly contentTypes: readonly string[];
   readonly maxBriefChars: number;
   readonly maxVariants: number;
@@ -288,6 +292,8 @@ export function ComposerView({
   now = 0,
   creativeFormats = [],
   carriedMedia = null,
+  plannedDate = null,
+  plannedFor = null,
   review = null,
 }: ComposerViewProps) {
   const router = useRouter();
@@ -516,6 +522,7 @@ export function ComposerView({
         form.set('itemId', String(payload['itemId']));
         form.set('campaignId', campaignId);
         if (carriedMedia) form.set('attach', carriedMedia.id);
+        if (plannedDate) form.set('plannedDate', plannedDate);
         await actions.setCampaign(form);
         return;
       }
@@ -526,6 +533,7 @@ export function ComposerView({
         `/${locale}/content/compose?${new URLSearchParams({
           item: String(payload['itemId']),
           ...(carriedMedia ? { attach: carriedMedia.id } : {}),
+          ...(plannedDate ? { date: plannedDate } : {}),
         }).toString()}`,
       );
       router.refresh();
@@ -626,6 +634,20 @@ export function ComposerView({
         </div>
       ) : null}
 
+      {plannedDate ? (
+        /*
+          G6 (D-329) — the Studio was opened from a ★ day on the calendar. Said
+          here and carried to the draft, so its Schedule step opens on that day.
+        */
+        <div className="cs-notice info" role="note" data-testid="composer-planned-date">
+          <b>
+            {(plannedFor ? t['create.plannedFor'] : t['create.plannedDate'])
+              ?.replace('{name}', plannedFor ?? '')
+              .replace('{date}', plannedDate)}
+          </b>
+        </div>
+      ) : null}
+
       {brands.length === 0 ? (
         <div className="cs-notice info" role="status" data-testid="content-no-brand">
           <b>{t['content.noBrand']}</b>
@@ -652,6 +674,7 @@ export function ComposerView({
           can={can}
           creativeFormats={creativeFormats}
           attach={carriedMedia}
+          plannedDate={plannedDate}
           review={review}
           canGenerateMedia={can.generateMedia ?? false}
           onTool={(variantId, tool, argument) => void runTool(variantId, tool, argument)}
@@ -991,6 +1014,9 @@ export function ComposerView({
                 <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
                 {carriedMedia ? (
                   <input type="hidden" name="attach" value={carriedMedia.id} />
+                ) : null}
+                {plannedDate ? (
+                  <input type="hidden" name="plannedDate" value={plannedDate} />
                 ) : null}
                 {selected.map((platformKey) => (
                   <input key={platformKey} type="hidden" name="platformKeys" value={platformKey} />
