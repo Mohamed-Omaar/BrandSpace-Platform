@@ -74,3 +74,21 @@ describe('A8 · while it waits, nobody works in it', () => {
     );
   });
 });
+
+describe('Review item 9 · the pending screen says who asked and when', () => {
+  it('reads the details in the workspace context and shows them, in both languages', async () => {
+    const page = read('apps/dashboard/src/app/[locale]/deletion-pending/page.tsx');
+    expect(page).toMatch(
+      /inWorkspace\(workspace\.workspaceId, \(\{ db \}\) =>\s*deletionRequestDetails\(db, workspace\.workspaceId\)/,
+    );
+    expect(page).toContain('data-testid="deletion-requested"');
+    const { optionalMessage } = await import('../../apps/dashboard/src/i18n/messages');
+    for (const key of ['deletion.requestedBy', 'deletion.requestedOn']) {
+      expect(optionalMessage('en', key), key).toContain('{date}');
+      expect(optionalMessage('ar', key), key).toMatch(/[؀-ۿ]/);
+      expect(optionalMessage('ar', key), key).toContain('{date}');
+    }
+    expect(optionalMessage('en', 'deletion.requestedBy')).toContain('{name}');
+    expect(optionalMessage('ar', 'deletion.requestedBy')).toContain('{name}');
+  });
+});

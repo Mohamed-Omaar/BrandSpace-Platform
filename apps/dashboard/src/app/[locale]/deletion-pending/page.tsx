@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { buttonStyle, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
-import { holdsPermission } from '../../../server/customer-context';
+import { holdsPermission, inWorkspace } from '../../../server/customer-context';
+import { deletionRequestDetails } from '../../../server/deletion-request-details';
 import { pendingDeletionSession } from '../../../server/pending-deletion';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { AuthCard } from '../../../components/auth-card';
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic';
  * "SCHEDULED FOR DELETION" (A8, D-328).
  *
  * The only screen a workspace pending deletion shows anybody: which workspace,
- * and the date it will be deleted. An owner (`workspace.delete`) can cancel
+ * the date it will be deleted, and who asked for it and when (review item 9). An owner (`workspace.delete`) can cancel
  * here; every other member is told who can. Nothing of the workspace's data is
  * read or shown — the workspace is closed while it waits.
  *
@@ -32,10 +33,16 @@ export default async function DeletionPendingPage({
   const t = translator(locale);
   const { workspace } = await pendingDeletionSession(locale);
   const mayCancel = holdsPermission(workspace, 'workspace.delete');
-  const date = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
+  const format = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
     dateStyle: 'long',
     timeZone: 'UTC',
-  }).format(workspace.deletionScheduledFor);
+  });
+  const date = format.format(workspace.deletionScheduledFor);
+  // Review item 9: who asked, and when — read in the workspace's own context.
+  const request = await inWorkspace(workspace.workspaceId, ({ db }) =>
+    deletionRequestDetails(db, workspace.workspaceId),
+  );
+  const requestedOn = request.requestedAt ? format.format(request.requestedAt) : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
 
@@ -52,6 +59,16 @@ export default async function DeletionPendingPage({
             .replace('{workspace}', workspace.workspaceName)
             .replace('{date}', date)}
         </p>
+        {requestedOn ? (
+          <p
+            style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary, margin: 0 }}
+            data-testid="deletion-requested"
+          >
+            {(request.requestedByName ? t('deletion.requestedBy') : t('deletion.requestedOn'))
+              .replace('{name}', request.requestedByName ?? '')
+              .replace('{date}', requestedOn)}
+          </p>
+        ) : null}
         {mayCancel ? (
           <form action={cancelWorkspaceDeletionAction}>
             <input type="hidden" name="locale" value={locale} />

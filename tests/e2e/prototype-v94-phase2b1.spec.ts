@@ -216,6 +216,10 @@ test.describe('A8 · the owner deletes a workspace, it waits, and the owner canc
     await page.getByTestId('workspace-deletion-confirm').click();
     await page.waitForURL(/\/en\/deletion-pending$/);
     await expect(page.getByTestId('deletion-pending-date')).toContainText(name);
+    // Review item 9: who asked for it, and when.
+    await expect(page.getByTestId('deletion-requested')).toContainText(
+      /asked for the deletion on \d{1,2} \w+ \d{4}\./,
+    );
 
     // Closed: every page of the workspace lands on this screen.
     for (const path of ['/en/content', '/en/settings', '/en/overview']) {

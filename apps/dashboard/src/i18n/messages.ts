@@ -214,6 +214,8 @@ export const messages = {
     'deletion.body':
       'ستُحذف مساحة العمل «{workspace}» في {date}. لا يمكن العمل فيها حتى ذلك الحين.',
     'deletion.cancel': 'إلغاء الحذف',
+    'deletion.requestedBy': 'طلب {name} الحذف في {date}.',
+    'deletion.requestedOn': 'طُلب الحذف في {date}.',
     'deletion.askOwner': 'المالك وحده يستطيع إلغاء الحذف. تواصل معه إن كنت تحتاج مساحة العمل.',
     'deletion.otherWorkspace': 'اختيار مساحة عمل أخرى',
     'deletion.listTag': 'بانتظار الحذف',
@@ -2978,6 +2980,8 @@ export const messages = {
     'deletion.body':
       'The workspace “{workspace}” will be deleted on {date}. Nobody can work in it until then.',
     'deletion.cancel': 'Cancel deletion',
+    'deletion.requestedBy': '{name} asked for the deletion on {date}.',
+    'deletion.requestedOn': 'The deletion was requested on {date}.',
     'deletion.askOwner':
       'Only an owner can cancel the deletion. Ask them if you still need the workspace.',
     'deletion.otherWorkspace': 'Choose another workspace',
