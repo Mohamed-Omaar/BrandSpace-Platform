@@ -220,6 +220,21 @@ export function CalendarView({
   const [trayExpanded, setTrayExpanded] = useState(false);
   const [scheduleItem, setScheduleItem] = useState<string>(preselected ?? drafts[0]?.id ?? '');
   const [scheduleDate, setScheduleDate] = useState(tomorrow);
+  /*
+   * F2 — THE PROPOSED TIME FOLLOWS THE DAY. On a later day it is the default
+   * (09:00); on TODAY it is left empty, because 09:00 may already have passed
+   * in the workspace's zone and the server would refuse it. The field is
+   * required, so the person picks a time that is still to come; the day they
+   * chose is never moved for them.
+   */
+  const proposedTime = (date: string) => (date !== '' && date === today ? '' : defaultTime);
+  const [scheduleTime, setScheduleTime] = useState(() => proposedTime(tomorrow));
+  const chooseScheduleDate = (date: string) => {
+    setScheduleDate(date);
+    setScheduleTime((current) =>
+      current === '' || current === defaultTime ? proposedTime(date) : current,
+    );
+  };
   // F2 — said when a post is dropped on a day that has passed.
   const [pastDayNotice, setPastDayNotice] = useState(false);
   const [openSlotId, setOpenSlotId] = useState<string | null>(null);
@@ -240,7 +255,9 @@ export function CalendarView({
     }
     setPastDayNotice(false);
     setScheduleItem(itemId);
-    setScheduleDate(date === '' ? tomorrow : date);
+    const chosen = date === '' ? tomorrow : date;
+    setScheduleDate(chosen);
+    setScheduleTime(proposedTime(chosen));
     setScheduling(true);
   };
 
@@ -364,6 +381,7 @@ export function CalendarView({
               onCreateOnDay: (day: string) => {
                 setPastDayNotice(false);
                 setScheduleDate(day);
+                setScheduleTime(proposedTime(day));
                 setScheduling(true);
               },
             }
@@ -660,7 +678,7 @@ export function CalendarView({
                   type="date"
                   required
                   value={scheduleDate}
-                  onChange={(event) => setScheduleDate(event.target.value)}
+                  onChange={(event) => chooseScheduleDate(event.target.value)}
                   {...(today ? { min: today } : {})}
                   data-testid="schedule-date"
                   style={inputStyle()}
@@ -673,7 +691,8 @@ export function CalendarView({
                   name="time"
                   type="time"
                   required
-                  defaultValue={defaultTime}
+                  value={scheduleTime}
+                  onChange={(event) => setScheduleTime(event.target.value)}
                   data-testid="schedule-time"
                   style={inputStyle()}
                 />

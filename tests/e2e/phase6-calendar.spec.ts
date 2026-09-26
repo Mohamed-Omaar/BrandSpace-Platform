@@ -170,6 +170,14 @@ test.describe('D-290 · the calendar', () => {
     const proposed = await date.inputValue();
     expect(proposed > today, `${proposed} is after ${today}`).toBe(true);
     await expect(page.getByTestId('schedule-time')).toHaveValue('09:00');
+
+    // TODAY gets no proposed time: 09:00 may already have passed in the
+    // workspace's zone. The field stays required, and a later day gets 09:00 back.
+    await date.fill(today);
+    await expect(page.getByTestId('schedule-time')).toHaveValue('');
+    await expect(page.getByTestId('schedule-time')).toHaveAttribute('required', '');
+    await date.fill(proposed);
+    await expect(page.getByTestId('schedule-time')).toHaveValue('09:00');
   });
 
   /** Next month, where every day is still to come, as `YYYY-MM` and a day key. */

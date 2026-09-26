@@ -614,6 +614,12 @@ describe('F2 · no scheduling in the past; new posts default to tomorrow 09:00',
     expect(page).toContain('isPast: key < todayKey,');
     expect(page).toContain('tomorrow={nextDayKey(todayKey)}');
     expect(page).toContain('defaultTime={DEFAULT_POST_TIME}');
+    // …except on today, where 09:00 may have passed: no time is proposed.
+    const calendarView = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    expect(calendarView).toContain(
+      "const proposedTime = (date: string) => (date !== '' && date === today ? '' : defaultTime);",
+    );
+    expect(calendarView).not.toContain('defaultValue={defaultTime}');
     const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
     expect(view).toContain('useState(tomorrow)');
     expect(view.match(/\{\.\.\.\(today \? \{ min: today \} : \{\}\)\}/g)).toHaveLength(2);
