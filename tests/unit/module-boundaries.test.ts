@@ -1,5 +1,4 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -20,22 +19,27 @@ const repoRoot = path.resolve(here, '../..');
  * not.
  */
 
+/**
+ * Lint a probe AS IF it lived at `relativeFile`, without writing it there.
+ *
+ * `--stdin-filename` makes ESLint apply exactly the configuration that path
+ * would get. The probe used to be written into the real source tree and
+ * deleted after — and every other suite that walks those directories could
+ * list it and then find it gone (ENOENT), failing on a file that was never
+ * source. Nothing touches the disk now, so there is nothing to race.
+ */
 function lintSnippet(relativeFile: string, source: string): string {
-  const absolute = path.join(repoRoot, relativeFile);
-  mkdirSync(path.dirname(absolute), { recursive: true });
-  writeFileSync(absolute, `${source}\nexport const probe = 1;\n`);
   try {
-    execFileSync('pnpm', ['eslint', relativeFile], {
+    execFileSync('pnpm', ['eslint', '--stdin', '--stdin-filename', relativeFile], {
       cwd: repoRoot,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
+      input: `${source}\nexport const probe = 1;\n`,
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     return '';
   } catch (e: unknown) {
     const err = e as { stdout?: string; stderr?: string };
     return `${err.stdout ?? ''}${err.stderr ?? ''}`;
-  } finally {
-    rmSync(absolute, { force: true });
   }
 }
 
