@@ -329,6 +329,10 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   are on (`workspaceAllowance` in `@brandspace/entitlements`), not a per-workspace `limit.*`
   entitlement and not a new billing record. `WorkspaceOnboardingService.create` enforces it in one
   transaction, after locking the owner's row; a member who owns no workspace may not create one.
+- **Q1 / Q2 — the switcher (D-326).** With one brand in view, the rail card opens every business as
+  "role · plan" (current ticked) and, for an owner, "Workspaces: used of allowed" with "+ New
+  workspace" below the allowance or an upgrade note at it; nothing on a plan that allows one. The
+  new-workspace page admits an owner under the same rule the server enforces.
 
 ---
 

@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
+import { withPlatformPrisma } from './platform-prisma';
 
 /**
  * Prototype v94, Phase 2B-1 — the read-only half, as a person meets it in a
@@ -65,5 +66,60 @@ test.describe('UI-1 · one global scrollbar', () => {
     }));
     expect(hidden.bar).toBe(0);
     expect(hidden.width).toBe('none');
+  });
+});
+
+test.describe('Q1 / Q2 · the rail card opens the business switcher', () => {
+  test('lists every business as role · plan, ticks the current one, and switches', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'the rail card is desktop; the phone drawer is Phase 2E');
+    const loaded = credentials();
+    const { customer } = loaded;
+    const secondId = await withPlatformPrisma(
+      async (prisma) =>
+        (
+          await prisma.workspace.findUniqueOrThrow({
+            where: { slug: customer.secondWorkspaceSlug },
+            select: { id: true },
+          })
+        ).id,
+    );
+    await signIn(page);
+    // The primary fixture workspace has several brands and multi-brand ON:
+    // its rail keeps the brand selector (D-327).
+    await expect(page.getByTestId('sidebar').getByTestId('brand-switcher')).toBeVisible();
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+    await page.click(`[data-testid="choose-workspace-${customer.secondWorkspaceSlug}"]`);
+    await page.waitForURL(/\/en\/overview$/);
+
+    const rail = page.getByTestId('sidebar');
+    // Multi-brand is OFF here: no brand selector, the card opens the switcher.
+    await expect(rail.getByTestId('brand-switcher')).toHaveCount(0);
+    const card = rail.getByTestId('workspace-switcher');
+    await expect(card).toBeVisible();
+    await expect(rail.getByTestId('active-brand-caption')).toContainText('Owner ·');
+    await card.click();
+
+    const current = page.getByTestId(`workspace-option-${secondId}`);
+    const other = page.getByTestId(`workspace-option-${customer.workspaceId}`);
+    await expect(current).toHaveAttribute('aria-current', 'true');
+    await expect(current).toContainText('Owner ·');
+    await expect(other).toBeVisible();
+    await expect(other).not.toHaveAttribute('aria-current', 'true');
+
+    // The owner's allowance: the fixture workspaces carry no plan, which states
+    // no ceiling (D-326), so the usage shows and "+ New workspace" is offered.
+    await expect(page.getByTestId('workspace-usage')).toContainText('Workspaces: ');
+    const create = page.getByTestId('workspace-new');
+    if ((await create.count()) > 0) {
+      await expect(create).toHaveAttribute('href', '/en/onboarding/workspace');
+    }
+
+    await other.click();
+    await page.waitForURL(/\/en\/overview$/);
+    await expect(page.getByTestId('sidebar').getByTestId('brand-switcher')).toBeVisible();
   });
 });

@@ -128,6 +128,25 @@ export interface CustomerWorkspaceContext {
   readonly brandScope: readonly string[];
 }
 
+/** One business in the rail's switcher (`listBusinesses`). */
+export interface CustomerBusiness {
+  readonly workspaceId: string;
+  readonly workspaceName: string;
+  readonly workspaceStatus: string;
+  /** False for a suspended, archived or cancelled workspace: counted, never offered. */
+  readonly operable: boolean;
+  /** This person is the workspace's owner (`Workspace.ownerUserId`). */
+  readonly isOwner: boolean;
+  /** The plan key on the workspace row, or null. */
+  readonly planKey: string | null;
+  readonly roleKey: string;
+  readonly roleNameEn: string;
+  readonly roleNameAr: string;
+}
+
+/** The statuses a customer may act in — the same list `listWorkspaces` uses. */
+const OPERABLE_STATUSES: ReadonlySet<string> = new Set(['TRIALING', 'ACTIVE', 'PAST_DUE']);
+
 export interface CustomerAuthOptions {
   readonly prisma: PrismaClient;
   readonly clock?: Clock;
@@ -446,6 +465,65 @@ export class CustomerAuthService {
       // at the next request rather than at the next sign-in.
       permissionKeys: m.role.permissions.map((rp) => rp.permission.key),
       brandScope: m.brandScope,
+    }));
+  }
+
+  /**
+   * Every business this person belongs to, for the rail's switcher (Q1 / Q2,
+   * D-326) — including the ones they cannot currently act in.
+   *
+   * `listWorkspaces` answers "where may this session act?", so it hides a
+   * suspended or archived workspace. The switcher asks a different question:
+   * the workspace ALLOWANCE counts every workspace a person owns until it is
+   * deleted (a suspended one still counts), so the owner's own non-operable
+   * workspaces are returned too, flagged `operable: false`, and only ever
+   * COUNTED — never offered as a destination. A deleted workspace is not
+   * returned at all.
+   *
+   * Read through the same session scope as `listWorkspaces`: only workspaces
+   * where this person holds an ACTIVE membership are visible to it at all.
+   */
+  async listBusinesses(token: string): Promise<CustomerBusiness[]> {
+    if (!token) return [];
+    const tokenHash = hashSessionToken(token);
+    const now = this.#clock.now();
+    const live = await this.#prisma.customerSession.findFirst({
+      where: {
+        tokenHash,
+        revokedAt: null,
+        expiresAt: { gt: now },
+        absoluteExpiresAt: { gt: now },
+      },
+      select: { userId: true },
+    });
+    if (!live) throw new AppError('UNAUTHENTICATED', 'Your session is no longer valid.');
+
+    const memberships = await this.#scope(tokenHash, (db) =>
+      db.membership.findMany({
+        where: {
+          status: 'ACTIVE',
+          workspace: { deletedAt: null, status: { not: 'DELETED' } },
+        },
+        include: {
+          workspace: {
+            select: { id: true, name: true, status: true, ownerUserId: true, planKey: true },
+          },
+          role: { select: { key: true, nameEn: true, nameAr: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+    );
+
+    return memberships.map((m) => ({
+      workspaceId: m.workspace.id,
+      workspaceName: m.workspace.name,
+      workspaceStatus: m.workspace.status,
+      operable: OPERABLE_STATUSES.has(m.workspace.status),
+      isOwner: m.workspace.ownerUserId === live.userId,
+      planKey: m.workspace.planKey,
+      roleKey: m.role.key,
+      roleNameEn: m.role.nameEn,
+      roleNameAr: m.role.nameAr,
     }));
   }
 

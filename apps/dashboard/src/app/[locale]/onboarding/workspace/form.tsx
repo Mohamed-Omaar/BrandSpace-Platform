@@ -67,6 +67,8 @@ export function CreateWorkspaceForm({
     invalidFields: string;
     conflict: string;
     forbidden: string;
+    /** Q1: the owner's workspace allowance is used up. */
+    limitReached: string;
     noResults: string;
     localeAr: string;
     localeEn: string;
@@ -131,7 +133,9 @@ export function CreateWorkspaceForm({
                 ? labels.conflict
                 : code === 'FORBIDDEN'
                   ? labels.forbidden
-                  : labels.failed;
+                  : code === 'QUOTA_EXCEEDED'
+                    ? labels.limitReached
+                    : labels.failed;
 
           setState({ busy: false, error: message });
           return;

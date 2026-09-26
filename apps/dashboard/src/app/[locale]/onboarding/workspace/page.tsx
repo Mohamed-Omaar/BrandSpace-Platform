@@ -11,6 +11,7 @@ import {
   requireCustomer,
 } from '../../../../server/customer-context';
 import { translator } from '../../../../i18n/messages';
+import { businessSwitcherModel } from '../../../../server/business-switcher';
 import { AuthCard } from '../../../../components/auth-card';
 import { CreateWorkspaceForm } from './form';
 
@@ -38,14 +39,24 @@ export default async function CreateWorkspacePage({
   const t = translator(locale);
   const customer = await requireCustomer(locale);
 
-  // Already a member of something: this page is for the first one.
+  /*
+   * THE FIRST WORKSPACE, OR ANOTHER ONE FOR AN OWNER WITHIN THEIR ALLOWANCE
+   * (Q1 / A2, D-326). Anybody already in a business is sent on, unless they
+   * own one and their plans allow another — the same rule the server enforces
+   * when the workspace is written, read from the same allowance the rail's
+   * switcher shows. The server refuses regardless of what this page decided.
+   */
   const token = await getSessionToken();
   const existing = token
     ? await getCustomerAuth()
         .listWorkspaces(token)
         .catch(() => [])
     : [];
-  if (existing.length > 0) redirect(`/${locale}/onboarding`);
+  if (existing.length > 0) {
+    const current = customer.activeWorkspaceId ?? existing[0]?.workspaceId ?? null;
+    const switcher = current ? await businessSwitcherModel(locale, current) : null;
+    if (switcher?.foot.kind !== 'create') redirect(`/${locale}/onboarding`);
+  }
 
   const trial = await withoutTenantContext(
     async (db) => {
@@ -108,6 +119,7 @@ export default async function CreateWorkspacePage({
           noResults: t('common.noResults'),
           conflict: t('createWorkspace.conflict'),
           forbidden: t('createWorkspace.forbidden'),
+          limitReached: t('ws.limitReached'),
           localeAr: t('brandProfile.localeAr'),
           localeEn: t('brandProfile.localeEn'),
         }}
