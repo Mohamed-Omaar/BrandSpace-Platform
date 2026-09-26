@@ -588,8 +588,11 @@ export class ContentLibraryService {
    */
   async #resolveCampaign(campaignId: string | null, brandId: string): Promise<string | null> {
     if (!campaignId) return null;
+    // An ARCHIVED campaign is gone from every list (archiving sets
+    // `deletedAt`), so it is a miss here too — not a place a crafted form can
+    // still file a new post.
     const campaign = await this.db.campaign.findFirst({
-      where: { id: campaignId, brandId },
+      where: { id: campaignId, brandId, deletedAt: null },
       select: { id: true },
     });
     if (!campaign) throw contentItemNotFound();
