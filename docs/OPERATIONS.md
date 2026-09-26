@@ -170,6 +170,21 @@ production at 3am. The policy is:
 
 **If a migration must be undone**, the mechanism is a point-in-time restore (§3), not a down script.
 
+### 6.1 Never re-run an applied migration by hand
+
+`prisma migrate deploy` records every migration it applies and never applies one twice, so an ordinary
+deploy is safe. Running a migration file again **by hand** is not: `psql -f …/migration.sql`, or
+`prisma migrate resolve --rolled-back` followed by a deploy, replays SQL that was written for the
+database as it stood on the day it shipped.
+
+**`20260926090000_notes_manage_permission` is the standing example, and must never be re-run after
+`20260927090000_q12_viewer_content_read`.** The notes migration grants `notes.manage` to every role
+that holds `content.read`. When it first ran, the Viewer (`client_viewer`) held no `content.read`, so it
+received nothing. The Q12 second release gives the Viewer `content.read`, so replaying the notes
+migration afterwards would hand the Viewer `notes.manage` — the right to resolve, reopen, assign and
+triage conversations, which Q12 withholds from it (D-323). Should a grant ever need repairing, write a
+new, reviewed migration; do not replay an old one.
+
 ---
 
 ## 7. Secret rotation
