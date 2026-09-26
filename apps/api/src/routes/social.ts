@@ -147,7 +147,10 @@ function callbackUriFor(provider: SocialProvider): string {
  * either is missing. A half-configured provider must not produce an
  * authorization URL that sends a customer to a consent screen which then fails.
  */
-function applicationResolver(): ApplicationResolver {
+// Exported for the publishing sweep (review item 3): refreshing an expired
+// token before a post is dispatched is the same platform operation as the
+// Refresh route, on the same designated surface (F-07).
+export function applicationResolver(): ApplicationResolver {
   return {
     async resolve(provider: SocialProvider): Promise<AdapterApplication> {
       const environment = currentEnvironment();

@@ -1551,8 +1551,21 @@ export class PublishPipelineService {
 
     const connection = await this.#db.socialConnection.findFirst({
       where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },
-      select: { status: true },
+      select: { status: true, tokenExpiresAt: true },
     });
+    /*
+     * REVIEW ITEM 3: AN ACTIVE CONNECTION WHOSE TOKEN HAS EXPIRED IS NOT SENT
+     * TO THE PROVIDER. The publishing sweep refreshes it first, through the
+     * existing refresh path, on the surface allowed to (F-07); a job that
+     * reaches this point with the token still expired — no refresh token, a
+     * refused refresh, or one not yet attempted — is treated exactly like one
+     * whose account needs reconnecting. The persisted status is not changed
+     * here: the refresh path is the one that decides that.
+     */
+    const tokenExpired =
+      connection?.status === 'ACTIVE' &&
+      connection.tokenExpiresAt !== null &&
+      connection.tokenExpiresAt.getTime() <= this.#clock.now().getTime();
     /*
      * Q9 (D-332): AN ACCOUNT THAT NEEDS RECONNECTING HOLDS ITS JOB until the
      * lateness deadline, then fails it with the reason. A job that waited and
@@ -1560,7 +1573,7 @@ export class PublishPipelineService {
      * reason — the post is late BECAUSE it waited for the reconnection, and
      * "the destination is unavailable" would not say so.
      */
-    if (connection?.status === 'NEEDS_REAUTH')
+    if (connection?.status === 'NEEDS_REAUTH' || tokenExpired)
       return tooLate ? RECONNECT_TOO_LATE : AWAITING_RECONNECT;
     if (!connection || connection.status !== 'ACTIVE') return 'NOT_CONNECTED';
     if (tooLate && job.failureCode === AWAITING_RECONNECT_CODE) return RECONNECT_TOO_LATE;
