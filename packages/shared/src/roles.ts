@@ -396,8 +396,7 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
      * `client_viewer` is a stored RBAC identifier: it is written into
      * `Membership.roleId` rows, referenced by the permission matrix and
      * asserted by the isolation and RBAC suites. Renaming it would be a data
-     * migration wearing a copy change, so it stays exactly as it is, with
-     * exactly the permissions it had (`workspace.read`, and nothing else).
+     * migration wearing a copy change, so it stays exactly as it is.
      *
      * What changes is the VISIBLE NAME. "Client Viewer" framed the narrowest
      * role as an outside client of an agency, which is one customer shape
@@ -415,8 +414,16 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
      * nobody is watching. D-62 and D-130 keep this role at exactly
      * `workspace.read`; a single analytics grant would be the first crack in
      * the rule that every later phase would widen.
+     *
+     * Q12 (D-323, second release) — `content.read`, and NOTHING ELSE. The
+     * Viewer reads Content and Approvals and may only comment: start a note
+     * thread and reply to an open one. Every mutation stays behind a
+     * permission this role does not hold (`notes.manage`, `content.create`,
+     * `content.approve`, …). Deployed databases receive the same grant from
+     * `20260927090000_q12_viewer_content_read`; the migration parity suites
+     * hold the two to each other.
      */
-    permissionKeys: ['workspace.read'],
+    permissionKeys: ['workspace.read', 'content.read'],
   },
   {
     key: 'platform_owner',

@@ -161,14 +161,17 @@ describe('who may approve — D-62: the permission, and nothing else', () => {
     expect(mayApproveForBrand({ permissionKeys: ['content.approve'] })).toBe(true);
   });
 
-  it('THE VIEWER ROLE IS EXACTLY `workspace.read` — D-58 and D-62', () => {
+  it('THE VIEWER ROLE IS EXACTLY `workspace.read` + `content.read` — D-58, D-62, Q12 (D-323)', () => {
     /*
      * Pinned exactly, not merely "does not contain content.approve": the point
      * of D-62 is that Viewer is READ-ONLY, so any addition to this list is a
      * decision somebody has to make deliberately and this test has to be
-     * edited to record.
+     * edited to record. Q12's second release (D-323) is that decision:
+     * `content.read`, so the Viewer reads content and approvals — and still
+     * approves nothing.
      */
-    expect(perms('client_viewer')).toEqual(['workspace.read']);
+    expect(perms('client_viewer')).toEqual(['workspace.read', 'content.read']);
+    expect(perms('client_viewer')).not.toContain('content.approve');
   });
 });
 

@@ -311,10 +311,11 @@ describe('the customer role matrix matches the Blueprint', () => {
     }
 
     /*
-     * D-62 / D-130: the Viewer's grant is EXACTLY `workspace.read`, and Phase 7
-     * added nothing to it.
+     * D-62 / D-130: the Viewer's grant is EXACT, and Phase 7 added nothing to
+     * it. Q12's second release (D-323) added `content.read` — a read — and
+     * nothing else.
      */
-    expect(grants('client_viewer')).toEqual(['workspace.read']);
+    expect(grants('client_viewer')).toEqual(['workspace.read', 'content.read']);
   });
 
   it('approver may review extracted knowledge, and may do nothing else to it', () => {
@@ -336,8 +337,8 @@ describe('the customer role matrix matches the Blueprint', () => {
     }
   });
 
-  it('the read-only Viewer sees the workspace and nothing else', () => {
-    expect(grants('client_viewer')).toEqual(['workspace.read']);
+  it('the read-only Viewer sees the workspace and its content, and nothing else (Q12, D-323)', () => {
+    expect(grants('client_viewer')).toEqual(['workspace.read', 'content.read']);
   });
 });
 

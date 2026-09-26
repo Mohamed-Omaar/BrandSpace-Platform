@@ -64,9 +64,9 @@ describe('role definitions', () => {
     }
   });
 
-  it('gives the read-only Viewer the narrowest workspace access', () => {
+  it('gives the read-only Viewer the narrowest workspace access (reads content since Q12, D-323)', () => {
     const readOnlyViewer = ROLE_DEFINITIONS.find((r) => r.key === 'client_viewer');
-    expect(readOnlyViewer?.permissionKeys).toEqual(['workspace.read']);
+    expect(readOnlyViewer?.permissionKeys).toEqual(['workspace.read', 'content.read']);
   });
 
   /*
@@ -81,7 +81,8 @@ describe('role definitions', () => {
   it('renames the read-only role in the interface without touching its key or its grants', () => {
     const role = ROLE_DEFINITIONS.find((r) => r.key === 'client_viewer');
     expect(role, 'the stored RBAC key client_viewer must not be renamed').toBeDefined();
-    expect(role?.permissionKeys).toEqual(['workspace.read']);
+    // Q12 (D-323) is the one deliberate widening: `content.read`, nothing else.
+    expect(role?.permissionKeys).toEqual(['workspace.read', 'content.read']);
     expect(role?.nameEn).not.toMatch(/client/i);
     expect(role?.nameAr).not.toContain('عميل');
   });
