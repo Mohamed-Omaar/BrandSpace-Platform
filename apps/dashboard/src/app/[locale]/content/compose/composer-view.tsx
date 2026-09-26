@@ -7,6 +7,7 @@ import { generationKeyFor, manualKeyFor } from './idempotency';
 import type { MediaOptionView } from './media-picker';
 import { DraftEditor } from './draft-editor';
 import { formatCredits } from '../../../../server/composer-editor';
+import { PlatformIcon, type SocialPlatform } from '@brandspace/ui';
 
 /**
  * The composer — a MECHANICAL PORT of the approved demo's `composer()`
@@ -36,6 +37,18 @@ import { formatCredits } from '../../../../server/composer-editor';
  */
 
 export type ContentLocale = 'AR' | 'EN';
+
+const SOCIAL_PLATFORM_KEYS = new Set<SocialPlatform>([
+  'instagram',
+  'facebook',
+  'linkedin',
+  'x',
+  'tiktok',
+]);
+
+function socialPlatformOf(value: string): SocialPlatform | null {
+  return SOCIAL_PLATFORM_KEYS.has(value as SocialPlatform) ? (value as SocialPlatform) : null;
+}
 
 export interface ComposerPlatform {
   readonly key: string;
@@ -772,7 +785,35 @@ export function ComposerView({
                       data-platform={platform.key}
                       onClick={() => toggle(platform.key)}
                     >
-                      {platform.label}
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4375rem',
+                        }}
+                      >
+                        {socialPlatformOf(platform.key) ? (
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              inlineSize: '1.25rem',
+                              blockSize: '1.25rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '0.4375rem',
+                              background: 'rgba(255, 255, 255, 0.92)',
+                            }}
+                          >
+                            <PlatformIcon
+                              platform={socialPlatformOf(platform.key) as SocialPlatform}
+                              size={14}
+                              tone="brand"
+                            />
+                          </span>
+                        ) : null}
+                        <span>{platform.label}</span>
+                      </span>
                     </button>
                   );
                 })}
