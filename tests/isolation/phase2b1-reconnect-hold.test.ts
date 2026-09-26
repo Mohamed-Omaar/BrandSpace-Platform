@@ -294,6 +294,84 @@ describe('Q9 · an expired channel waits for its account; the others publish on 
   });
 });
 
+describe('Review item 12 · a post that failed waiting for its account can be retried once it is back', () => {
+  it('reconnect_required → account reconnected → retry accepted, through the existing flow', async () => {
+    const q9 = await world('NEEDS_REAUTH');
+    await inA((db) => pipeline(db, q9.scheduledAtUtc).materialiseSlot(q9.slotId));
+    const x = (await jobsOf(q9.slotId))[1]!;
+    await inA((db) => pipeline(db, minutes(q9.scheduledAtUtc, 1)).execute(x.id));
+    const failedAt = minutes(q9.scheduledAtUtc, 121);
+    await inA((db) => pipeline(db, failedAt).execute(x.id));
+    const failed = (await jobsOf(q9.slotId))[1]!;
+    expect(failed).toMatchObject({
+      status: 'FAILED',
+      failureClass: 'NOT_CONNECTED',
+      failureCode: RECONNECT_REQUIRED_CODE,
+    });
+    const retryAt = minutes(q9.scheduledAtUtc, 130);
+    const retry = () =>
+      inA((db) =>
+        pipeline(db, retryAt).retryOnReconnectedAccount({
+          jobId: x.id,
+          actorUserId: fixtures.a.userId,
+          brandScope: [],
+        }),
+      );
+
+    // Still broken: not offered, and refused.
+    expect(await inA((db) => pipeline(db, retryAt).reconnectedRetryable([x.id]))).toEqual(
+      new Set(),
+    );
+    await expect(retry()).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    // The customer reconnects the SAME account (the connection says ACTIVE and
+    // was renewed after the failure). The status is never "reconnect_required".
+    await inA((db) =>
+      db.socialConnection.update({
+        where: { id: q9.connectionIds.X },
+        data: { status: 'ACTIVE', lastRefreshedAt: minutes(q9.scheduledAtUtc, 125) },
+      }),
+    );
+    expect(await inA((db) => pipeline(db, retryAt).reconnectedRetryable([x.id]))).toEqual(
+      new Set([x.id]),
+    );
+    expect(await retry()).toMatchObject({ status: 'QUEUED', failureClass: null });
+
+    const queued = (await jobsOf(q9.slotId))[1]!;
+    expect(queued).toMatchObject({
+      status: 'QUEUED',
+      attemptCount: 0,
+      maxAttempts: policy.retry.maxAttempts,
+      failureClass: null,
+      failureCode: null,
+      // The same job and the same idempotency key: nothing can be sent twice.
+      idempotencyKey: failed.idempotencyKey,
+      socialConnectionId: q9.connectionIds.X,
+    });
+    expect(queued.nextAttemptAt!.getTime()).toBe(retryAt.getTime());
+    // One retry per failure: it is QUEUED now, so a second press is refused.
+    await expect(retry()).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    /*
+     * AND IT RUNS AGAIN: the account is healthy, so the job is neither held
+     * nor refused for its connection. The lateness rule is unchanged and still
+     * decides — a post that failed at its deadline is past the tolerance on any
+     * retry, so it ends TARGET_UNAVAILABLE. Whether a person's explicit retry
+     * may publish late is an open owner decision (reported with review item
+     * 12), not guessed here.
+     */
+    await inA((db) => pipeline(db, retryAt).execute(x.id));
+    expect((await jobsOf(q9.slotId))[1]).toMatchObject({
+      status: 'FAILED',
+      failureClass: 'TARGET_UNAVAILABLE',
+    });
+    expect(
+      (await jobsOf(q9.slotId))[1]!.failureCode === RECONNECT_REQUIRED_CODE ||
+        (await jobsOf(q9.slotId))[1]!.failureCode === AWAITING_RECONNECT_CODE,
+    ).toBe(false);
+  });
+});
+
 describe('Q9 · scheduling refuses a channel whose every account was revoked', () => {
   const contentPolicy = parseContentPolicy(parseConfigPayload('content', {}));
   const localTime = `${new Date().getUTCFullYear() + 1}-07-20T09:00`;

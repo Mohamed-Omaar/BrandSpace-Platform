@@ -35,6 +35,21 @@ const RECONNECT_RETRY_CLASSES: ReadonlySet<string> = new Set([
   'AUTH_REVOKED',
   'INSUFFICIENT_SCOPE',
 ]);
+
+/**
+ * May this failed job be retried through a reconnected account? One of the
+ * account classes above — or a job that WAITED for its account and failed at
+ * the deadline with `preflight.reconnect_required` (Q9, D-332; review item 12).
+ * That job is `NOT_CONNECTED` with that code: the connection itself is never
+ * given a status of that name.
+ */
+function retryableAfterReconnect(job: {
+  readonly failureClass: string | null;
+  readonly failureCode: string | null;
+}): boolean {
+  if (RECONNECT_RETRY_CLASSES.has(job.failureClass ?? '')) return true;
+  return job.failureClass === 'NOT_CONNECTED' && job.failureCode === RECONNECT_REQUIRED_CODE;
+}
 import type { ConnectorRegistry } from './registry';
 import type { SocialTokenVault } from './token-vault';
 
@@ -1344,7 +1359,7 @@ export class PublishPipelineService {
       where: { id: input.jobId, ...brandIdQueryFilter({ brandScope: input.brandScope }) },
     });
     if (!job) throw publishJobNotFound();
-    if (job.status !== 'FAILED' || !RECONNECT_RETRY_CLASSES.has(job.failureClass ?? '')) {
+    if (job.status !== 'FAILED' || !retryableAfterReconnect(job)) {
       throw publishJobNotRetryable();
     }
     const replacement = await this.#reconnectedConnection(job);
@@ -1413,7 +1428,7 @@ export class PublishPipelineService {
     });
     const ready = new Set<string>();
     for (const job of jobs) {
-      if (!RECONNECT_RETRY_CLASSES.has(job.failureClass ?? '')) continue;
+      if (!retryableAfterReconnect(job)) continue;
       if (await this.#reconnectedConnection(job)) ready.add(job.id);
     }
     return ready;
