@@ -26,9 +26,12 @@ export { ContentLibraryService, READ_ONLY_CONTENT_STATUSES } from './library';
 export type { ContentLibraryOptions } from './library';
 
 export { ContentCalendarService, RESCHEDULABLE_SLOT_STATUSES } from './calendar';
+export { WorkspaceTimezoneService, timezoneChangeEffects } from './timezone-change';
+export type { TimezoneChangeActor, TimezoneChangeEffect } from './timezone-change';
 export type {
   ApprovalGate,
   CalendarOptions,
+  ChannelGate,
   CalendarSlotView,
   ScheduleInput,
   ScheduleQuota,
@@ -63,6 +66,8 @@ export {
   resolveZonedTime,
 } from './timezone';
 export type { LocalParts, ZonedResolution } from './timezone';
+export { calendarMarkers, suggestedPostingTimes } from './calendar-markers';
+export type { CalendarMarker, SuggestedTimeSource } from './calendar-markers';
 
 export {
   CONTENT_CONFIG_DOMAIN,
@@ -96,6 +101,7 @@ export { purgeExpiredContent } from './purge';
 export type { ContentPurgeResult } from './purge';
 
 export {
+  CHANNEL_DISCONNECTED_REASON,
   DECISION_NOTE_REQUIRED_REASON,
   SCHEDULE_IN_PAST_REASON,
   decisionNoteRequired,
@@ -103,6 +109,7 @@ export {
   approvalRequiredBeforeScheduling,
   briefTooLong,
   calendarSlotNotFound,
+  channelDisconnected,
   contentItemNotFound,
   contentVariantNotFound,
   dayIsFull,

@@ -35,6 +35,8 @@ import { activityTimeline } from '../../../../server/activity-timeline';
 import { NotesPanel } from '../../../../components/notes-panel';
 import { inSocial } from '../../../../server/social-context';
 import { relativeTime } from '../../../../server/home';
+import { plannedDateFrom } from '../../../../server/planned-date';
+import { channelReadinessForBrand } from '../../../../server/publish-readiness';
 import {
   POST_GOALS,
   createModeFrom,
@@ -42,7 +44,7 @@ import {
   platformsByFormat,
   repurposeBrief,
 } from '../../../../server/create-post';
-import { GOAL_ITEM_KEY, goalFromTitle, goalLabels } from '../../../../server/setup-wizard-state';
+import { GOAL_ITEM_KEY, GOAL_ITEM_SELECT, storedGoal } from '../../../../server/setup-wizard-state';
 import { CreateEntry, IdeaPicker, RepurposePicker, type IdeaOption } from './create-entry';
 import { CONTENT_TYPES } from '../content-types';
 import {
@@ -127,8 +129,16 @@ export default async function ComposePage({
    */
   const mode = itemId ? null : createModeFrom(single('mode'));
   const tk = (key: string): string => optionalMessage(locale, key) ?? key;
+  /*
+   * G6 (D-329) — OPENED FROM A ★ DAY ON THE CALENDAR. A date shape, not in the
+   * past for the workspace, and — when that day is one of the workspace's
+   * holidays or its brand's observances — what the day is, to say so. It
+   * travels with the choice below like a campaign does.
+   */
+  const plannedDate = await plannedDateFrom(single('date'), workspace.workspaceId, locale);
+  const plannedFor = plannedDate?.label ?? null;
   const carry: Record<string, string> = Object.fromEntries(
-    Object.entries({ campaign: single('campaign') }).filter(
+    Object.entries({ campaign: single('campaign'), date: plannedDate?.date }).filter(
       (entry): entry is [string, string] => typeof entry[1] === 'string',
     ),
   );
@@ -375,7 +385,20 @@ export default async function ComposePage({
 
   /* ------------------------------------------------ §17 — the entry */
   if (!itemId && mode === null) {
-    return shell(<CreateEntry locale={locale} t={tk} carry={carry} />);
+    return shell(
+      <CreateEntry
+        locale={locale}
+        t={tk}
+        carry={carry}
+        planned={
+          plannedDate
+            ? (plannedFor ? tk('create.plannedFor') : tk('create.plannedDate'))
+                .replace('{name}', plannedFor ?? '')
+                .replace('{date}', plannedDate.date)
+            : null
+        }
+      />,
+    );
   }
 
   const scope = brandIdQueryFilter({
@@ -398,7 +421,7 @@ export default async function ComposePage({
                 itemKey: GOAL_ITEM_KEY,
                 status: { in: ['ACTIVE', 'STALE'] },
               },
-              select: { title: true },
+              select: GOAL_ITEM_SELECT,
             })
           : Promise.resolve(null),
         db.brandKnowledgeItem.findMany({
@@ -444,11 +467,9 @@ export default async function ComposePage({
       return (locale === 'ar' ? (text?.ar ?? text?.en) : (text?.en ?? text?.ar)) ?? '';
     };
     const ideas: IdeaOption[] = [];
-    // The stored title is the objective's ENGLISH label (D-278), whatever the
-    // reader's interface language.
-    const goal = goalForObjective(
-      goalFromTitle((found.goal?.title as { en?: string } | null)?.en, goalLabels('en')),
-    );
+    // By its key while setup's goal is unedited, else by its ENGLISH title
+    // (D-278, D-335), whatever the reader's interface language.
+    const goal = goalForObjective(storedGoal(found.goal));
     if (found.goal) {
       const label = pick(found.goal.title);
       ideas.push({
@@ -566,10 +587,9 @@ export default async function ComposePage({
             itemKey: GOAL_ITEM_KEY,
             status: { in: ['ACTIVE', 'STALE'] },
           },
-          select: { title: true },
+          select: GOAL_ITEM_SELECT,
         });
-        const title = (row?.title as { en?: string } | null)?.en;
-        return goalForObjective(goalFromTitle(title, goalLabels('en')));
+        return goalForObjective(storedGoal(row));
       })
     : null;
   /*
@@ -678,6 +698,40 @@ export default async function ComposePage({
         })),
       }
     : null;
+
+  /*
+   * Q9 (D-332) — A CHANNEL WHOSE ACCOUNT HAS EXPIRED, said in the Studio: a
+   * short "Expired" and, on the next line, what that means for this post. The
+   * same readiness rules the calendar uses; only EXPIRED is shown here — a
+   * warning, not a block. Nothing about the account itself reaches the page.
+   */
+  const expiredChannels: Record<string, { label: string; explanation: string }> =
+    composerDraft && !composerDraft.readOnly
+      ? await inSocial(workspace.workspaceId, async (services) => {
+          const publishingPolicy = await services.policy();
+          const channels = await channelReadinessForBrand({
+            db: services.db,
+            workspaceId: workspace.workspaceId,
+            policy: publishingPolicy,
+            brandScope: workspace.brandScope,
+            brandId: composerDraft.brandId,
+            platformKeys: composerDraft.variants.map((variant) => variant.platformKey),
+            now: systemClock.now(),
+          });
+          const explanation = translate('readiness.expiredExplanation').replace(
+            '{minutes}',
+            String(publishingPolicy.dispatch.latenessToleranceMinutes),
+          );
+          return Object.fromEntries(
+            channels
+              .filter((channel) => channel.state === 'EXPIRED')
+              .map((channel) => [
+                channel.platformKey,
+                { label: translate('calendar.readiness.EXPIRED'), explanation },
+              ]),
+          );
+        })
+      : {};
 
   /*
    * PHASE 8 — THE MEDIA THIS DRAFT'S BRAND MAY USE (AC-27.2).
@@ -819,6 +873,9 @@ export default async function ComposePage({
         campaigns={campaigns}
         mediaOptions={allMedia}
         carriedMedia={carried}
+        plannedDate={plannedDate?.date ?? null}
+        plannedFor={plannedFor}
+        expiredChannels={expiredChannels}
         // Q18 — the AI edits spend credits, so without `copilot.use` none is offered.
         tools={maySpendCredits(workspace.permissionKeys, 'content.edit') ? CONTENT_TOOLS : []}
         now={now.getTime()}
@@ -1056,6 +1113,8 @@ const COMPOSER_KEYS = [
   'create.write.placeholder',
   'create.repurpose.from',
   'create.repurpose.fromBody',
+  'create.plannedFor',
+  'create.plannedDate',
   // Phase 8 — the campaign control on an existing draft (AC-26.3).
   'campaigns.composerLabel',
   'campaigns.composerNone',

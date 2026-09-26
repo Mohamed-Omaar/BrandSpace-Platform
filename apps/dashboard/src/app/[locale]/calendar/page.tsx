@@ -1,10 +1,13 @@
 import {
   DEFAULT_POST_TIME,
   RESCHEDULABLE_SLOT_STATUSES,
+  calendarMarkers,
   formatLocalTime,
   nextDayKey,
   partsInZone,
+  suggestedPostingTimes,
 } from '@brandspace/content';
+import { TenantOnboardingPolicySource, industryKeyFor } from '@brandspace/onboarding';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { systemClock } from '@brandspace/shared';
 import type {
@@ -14,12 +17,12 @@ import type {
   PostStatus,
   SocialPlatform,
 } from '@brandspace/ui';
-import { requireWorkspacePage } from '../../../server/customer-context';
+import { currentEnvironment, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inSocial } from '../../../server/social-context';
-import { isBlocking, publishReadiness } from '../../../server/publish-readiness';
+import { isBlocking, needsAttention, publishReadiness } from '../../../server/publish-readiness';
 import { mediaForVariants } from '../../../server/media-picker';
 import { GAP_WEEKS, emptyWeekdays, gapWindow, weekdayName } from '../../../server/calendar-gaps';
 import { copilotHref } from '../../../server/copilot-surface';
@@ -172,6 +175,16 @@ export default async function CalendarPage({
     const library = await services.library();
     const policy = await services.policy();
     const timezone = calendar.timezone;
+    /*
+     * A9 (D-330) — THE WORKSPACE'S OWN WEEK START, set in Settings → General;
+     * without one, the activated configuration's. The country is read here too
+     * for the ★ chips below.
+     */
+    const workspaceRow = await services.db.workspace.findUnique({
+      where: { id: workspace.workspaceId },
+      select: { country: true, weekStartsOn: true },
+    });
+    const weekStartsOn = workspaceRow?.weekStartsOn ?? policy.calendar.weekStartsOn;
     const now = systemClock.now();
     const { year, month } = requestedMonth(single('month'), timezone, now);
 
@@ -238,10 +251,7 @@ export default async function CalendarPage({
      * member's BrandScope (plus the brand filter); a cancelled slot is not a
      * post. The UTC range is padded a day each side and narrowed by LOCAL date.
      */
-    const gapRange = gapWindow(
-      formatLocalTime(now, timezone).slice(0, 10),
-      policy.calendar.weekStartsOn,
-    );
+    const gapRange = gapWindow(formatLocalTime(now, timezone).slice(0, 10), weekStartsOn);
     const gapSlots = await services.db.calendarSlot.findMany({
       where: {
         status: { not: 'CANCELLED' },
@@ -316,7 +326,38 @@ export default async function CalendarPage({
       }),
     ]);
 
+    /*
+     * G6 / Q7 (D-329) — WHAT THE COUNTRY AND THE INDUSTRY ADD: the workspace's
+     * holidays, the observances of the industries of the brands in view (each
+     * brand's catalogue KEY; free text maps to none), and the country's
+     * suggested posting times. All three are operator configuration.
+     */
+    const [onboarding, brandIndustries] = await Promise.all([
+      new TenantOnboardingPolicySource(services.db, currentEnvironment()).load(),
+      services.db.brand.findMany({
+        where: {
+          deletedAt: null,
+          ...(filterBrand
+            ? { id: filterBrand }
+            : workspace.brandScope.length > 0
+              ? { id: { in: [...workspace.brandScope] } }
+              : {}),
+        },
+        select: { industry: true },
+      }),
+    ]);
+    const industryKeys = [
+      ...new Set(
+        brandIndustries
+          .map((brand) => industryKeyFor(brand.industry, onboarding.industries))
+          .filter((key): key is string => key !== null),
+      ),
+    ];
+
     return {
+      country: workspaceRow?.country ?? null,
+      industryKeys,
+      calendarPolicy: policy.calendar,
       timezone,
       year,
       month,
@@ -330,7 +371,7 @@ export default async function CalendarPage({
       ),
       quotaLimit,
       quotaUsed: counter?.usedValue ?? 0,
-      weekStartsOn: policy.calendar.weekStartsOn,
+      weekStartsOn,
       now,
       approvalStates,
       campaignNames: new Map(campaigns.map((campaign) => [campaign.id, campaign.name])),
@@ -353,6 +394,9 @@ export default async function CalendarPage({
     filterBrands,
     platformKeys,
     openNotes,
+    country,
+    industryKeys,
+    calendarPolicy,
   } = data;
 
   /*
@@ -370,26 +414,31 @@ export default async function CalendarPage({
    * application resolver, so this page cannot open a credential (F-07).
    */
   const mayReadAccounts = workspace.permissionKeys.includes('integrations.read');
-  const readiness = await inSocial(workspace.workspaceId, async (services) =>
-    publishReadiness({
-      db: services.db,
-      workspaceId: workspace.workspaceId,
-      policy: await services.policy(),
-      brandScope: workspace.brandScope,
-      slots: visible.map((view) => ({
-        slotId: view.slot.id,
-        brandId: view.slot.brandId,
-        status: view.slot.status,
-        /*
-         * THE ITEM'S VARIANTS AS THEY ARE NOW — what the publisher matches
-         * connections against — and NOT `slot.platformKeys`, which records
-         * what was planned and is deliberately never updated.
-         */
-        variantPlatformKeys: view.variants.map((variant) => variant.platformKey),
-      })),
-      now,
-    }),
-  );
+  const { readiness, latenessMinutes } = await inSocial(workspace.workspaceId, async (services) => {
+    const publishingPolicy = await services.policy();
+    return {
+      // Q9 (D-332): how long an expired channel waits for its account, said as it is.
+      latenessMinutes: publishingPolicy.dispatch.latenessToleranceMinutes,
+      readiness: await publishReadiness({
+        db: services.db,
+        workspaceId: workspace.workspaceId,
+        policy: publishingPolicy,
+        brandScope: workspace.brandScope,
+        slots: visible.map((view) => ({
+          slotId: view.slot.id,
+          brandId: view.slot.brandId,
+          status: view.slot.status,
+          /*
+           * THE ITEM'S VARIANTS AS THEY ARE NOW — what the publisher matches
+           * connections against — and NOT `slot.platformKeys`, which records
+           * what was planned and is deliberately never updated.
+           */
+          variantPlatformKeys: view.variants.map((variant) => variant.platformKey),
+        })),
+        now,
+      }),
+    };
+  });
   const blockedCount = [...readiness.values()].filter((entry) => isBlocking(entry.state)).length;
 
   /*
@@ -528,8 +577,11 @@ export default async function CalendarPage({
             label: translate(`calendar.readiness.${slotReadiness.state}` as MessageKey),
             blocking: isBlocking(slotReadiness.state),
             /*
-             * ONLY THE CHANNELS THAT ARE IN THE WAY. Listing the healthy ones
-             * beside them would bury the one line the planner has to act on.
+             * ONLY THE CHANNELS THAT NEED ATTENTION — the blocked ones, and
+             * (Q9, D-332) an EXPIRED one, which does not block but waits for
+             * its account, with what that means on the next line. Listing the
+             * healthy ones beside them would bury the line the planner has to
+             * act on.
              *
              * THE ACCOUNT'S NAME IS WITHHELD FROM A READER WHO MAY NOT SEE IT.
              * This screen needs `content.read`; the connected accounts are an
@@ -538,10 +590,17 @@ export default async function CalendarPage({
              * so it is dropped rather than the row being hidden.
              */
             channels: slotReadiness.channels
-              .filter((channel) => isBlocking(channel.state))
+              .filter((channel) => needsAttention(channel.state))
               .map((channel) => ({
                 platformKey: channel.platformKey,
                 label: translate(`calendar.readiness.${channel.state}` as MessageKey),
+                explanation:
+                  channel.state === 'EXPIRED'
+                    ? translate('readiness.expiredExplanation').replace(
+                        '{minutes}',
+                        String(latenessMinutes),
+                      )
+                    : null,
                 accountName: mayReadAccounts ? channel.accountName : null,
               })),
           }
@@ -550,6 +609,7 @@ export default async function CalendarPage({
   }
 
   const todayKey = formatLocalTime(now, timezone).slice(0, 10);
+  const mayCreate = workspace.permissionKeys.includes('content.create');
   const days: CalendarDay[] = [];
   for (let index = 0; index < 42; index += 1) {
     const cellUtc = firstOfMonthUtc + (index - lead) * 24 * 3_600_000;
@@ -566,6 +626,50 @@ export default async function CalendarPage({
       posts: byDay.get(key) ?? [],
     });
   }
+
+  /*
+   * G6 (D-329) — THE ★ CHIPS: a day's holidays (the workspace's country) and
+   * observances (the industries of the brands in view). A chip on a day that
+   * has not passed opens the Studio for that day, for a member who may create.
+   */
+  const firstKey = days[0]?.key ?? todayKey;
+  const lastKey = days.at(-1)?.key ?? todayKey;
+  const markers = [
+    ...calendarMarkers(calendarPolicy, {
+      country,
+      industryKey: null,
+      from: firstKey,
+      to: lastKey,
+    }),
+    ...industryKeys.flatMap((industryKey) =>
+      calendarMarkers(calendarPolicy, { country: null, industryKey, from: firstKey, to: lastKey }),
+    ),
+  ];
+  for (const [index, day] of days.entries()) {
+    const onDay = markers.filter((marker) => marker.date === day.key);
+    if (onDay.length === 0) continue;
+    days[index] = {
+      ...day,
+      markers: onDay.map((marker) => ({
+        label: locale === 'ar' ? marker.name.ar : marker.name.en,
+        kind: marker.kind,
+        href:
+          mayCreate && day.key >= todayKey
+            ? `/${locale}/content/compose?date=${day.key}`
+            : undefined,
+      })),
+    };
+  }
+
+  /*
+   * G6 (D-329) — "SUGGESTED TIME", never "best time": the country's configured
+   * posting times, used only where no measured best time exists for the brand.
+   * No measured source exists yet, so `measured` is empty and says so.
+   */
+  const suggested = suggestedPostingTimes(calendarPolicy, { measured: [], country });
+  const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(single('date') ?? '')
+    ? single('date')
+    : undefined;
 
   const todayIndex = days.findIndex((day) => day.isToday);
   const weekIndex = todayIndex >= 0 ? Math.floor(todayIndex / 7) : 0;
@@ -636,7 +740,9 @@ export default async function CalendarPage({
         locale={locale}
         today={todayKey}
         tomorrow={nextDayKey(todayKey)}
-        defaultTime={DEFAULT_POST_TIME}
+        defaultTime={suggested.times[0] ?? DEFAULT_POST_TIME}
+        suggestedTimes={suggested.times}
+        preselectDate={requestedDate && requestedDate >= todayKey ? requestedDate : undefined}
         preselectItemId={single('item')}
         weekIndex={weekIndex}
         gaps={gapDays.map((day) =>
@@ -766,6 +872,7 @@ const CALENDAR_KEYS = [
   'calendar.pastDay',
   'calendar.moveFromPost',
   'calendar.scheduleTime',
+  'calendar.suggestedTime',
   'calendar.scheduleSubmit',
   'calendar.rescheduleTitle',
   'calendar.rescheduleSubmit',
@@ -777,7 +884,8 @@ const CALENDAR_KEYS = [
   'calendar.readiness',
   'calendar.readiness.READY',
   'calendar.readiness.EXPIRING',
-  'calendar.readiness.NEEDS_REAUTH',
+  'calendar.readiness.EXPIRED',
+  'calendar.readiness.REVOKED',
   'calendar.readiness.NOT_CONNECTED',
   'calendar.readiness.UNSUPPORTED',
   'calendar.channels',

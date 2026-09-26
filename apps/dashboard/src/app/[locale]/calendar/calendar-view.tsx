@@ -105,10 +105,12 @@ export interface SlotReadinessDetail {
   readonly label: string;
   /** True when the post cannot go out at all as it stands. */
   readonly blocking: boolean;
-  /** Only the channels that are in the way; empty when nothing is. */
+  /** Only the channels that need attention; empty when none does. */
   readonly channels: readonly {
     readonly platformKey: string;
     readonly label: string;
+    /** Q9 (D-332): what an EXPIRED channel's wait means, for its own line. */
+    readonly explanation?: string | null;
     /** `null` for a reader who may not see connected accounts. */
     readonly accountName: string | null;
   }[];
@@ -138,6 +140,10 @@ export interface CalendarViewProps {
    * dialog opens with that post chosen. Ignored unless it is a schedulable draft.
    */
   readonly preselectItemId?: string | undefined;
+  /** G6 (D-329): the day a ★ chip in the Studio came from — the dialog opens on it. */
+  readonly preselectDate?: string | undefined;
+  /** G6 (D-329): the country's configured posting times, shown as "Suggested time". */
+  readonly suggestedTimes?: readonly string[] | undefined;
   /** D-290 — the week the Week view shows, and the active filters. */
   readonly weekIndex?: number;
   /** D-290 — the quiet, measured suggestion(s): "Tuesday has been empty for 5 weeks." */
@@ -197,6 +203,8 @@ export function CalendarView({
   slots,
   drafts,
   preselectItemId,
+  preselectDate,
+  suggestedTimes = [],
   weekIndex = 0,
   gaps = [],
   copilotHref = null,
@@ -219,7 +227,7 @@ export function CalendarView({
   const [scheduling, setScheduling] = useState(preselected !== undefined);
   const [trayExpanded, setTrayExpanded] = useState(false);
   const [scheduleItem, setScheduleItem] = useState<string>(preselected ?? drafts[0]?.id ?? '');
-  const [scheduleDate, setScheduleDate] = useState(tomorrow);
+  const [scheduleDate, setScheduleDate] = useState(preselectDate ?? tomorrow);
   /*
    * F2 — THE PROPOSED TIME FOLLOWS THE DAY. On a later day it is the default
    * (09:00); on TODAY it is left empty, because 09:00 may already have passed
@@ -228,7 +236,7 @@ export function CalendarView({
    * chose is never moved for them.
    */
   const proposedTime = (date: string) => (date !== '' && date === today ? '' : defaultTime);
-  const [scheduleTime, setScheduleTime] = useState(() => proposedTime(tomorrow));
+  const [scheduleTime, setScheduleTime] = useState(() => proposedTime(preselectDate ?? tomorrow));
   const chooseScheduleDate = (date: string) => {
     setScheduleDate(date);
     setScheduleTime((current) =>
@@ -698,6 +706,35 @@ export function CalendarView({
                 />
               </Field>
             </div>
+            {/*
+              G6 (D-329) — THE COUNTRY'S SUGGESTED TIMES, one tap each. Said as
+              "Suggested time", never "best time": nothing here was measured.
+            */}
+            {suggestedTimes.length > 0 ? (
+              <div
+                role="group"
+                aria-label={t['calendar.suggestedTime'] ?? ''}
+                data-testid="schedule-suggested"
+                style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.375rem' }}
+              >
+                <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                  {t['calendar.suggestedTime']}
+                </span>
+                {suggestedTimes.map((time) => (
+                  <button
+                    key={time}
+                    type="button"
+                    className="bs-pressable"
+                    data-testid={`schedule-suggested-${time}`}
+                    aria-pressed={scheduleTime === time}
+                    onClick={() => setScheduleTime(time)}
+                    style={buttonStyle(scheduleTime === time ? 'primary' : 'neutral', 'sm')}
+                  >
+                    {time}
+                  </button>
+                ))}
+              </div>
+            ) : null}
 
             <div>
               <button type="submit" data-testid="schedule-submit" style={buttonStyle('primary')}>
@@ -808,7 +845,7 @@ export function CalendarView({
               server sent one, which it does only for a reader holding
               `integrations.read`.
             */}
-            {openSlot.readiness?.blocking ? (
+            {openSlot.readiness && openSlot.readiness.channels.length > 0 ? (
               <Banner tone="warning" testId="calendar-slot-readiness-detail">
                 <ul style={{ margin: 0, paddingInlineStart: spacingTokens.md }}>
                   {openSlot.readiness.channels.map((channel) => (
@@ -816,6 +853,9 @@ export function CalendarView({
                       {channel.accountName
                         ? `${channel.platformKey} · ${channel.label} — ${channel.accountName}`
                         : `${channel.platformKey} · ${channel.label}`}
+                      {channel.explanation ? (
+                        <span style={{ display: 'block' }}>{channel.explanation}</span>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

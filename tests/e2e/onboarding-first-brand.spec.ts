@@ -127,7 +127,23 @@ test.describe('onboarding reaches a first real brand', () => {
     // --- Step 2: the brand, created on the wizard's own screen.
     await page.fill('[data-testid="setup-brand-name"]', BRAND_NAME);
     await page.fill('#setup-brand-website', 'https://onboarding.example');
-    await page.fill('#setup-brand-industry', 'Retail');
+    // D-335: the industry list with "Something else", as Settings offers it.
+    await expect(page.getByTestId('setup-brand-industry')).toBeVisible();
+    await page.getByTestId('setup-brand-industry').selectOption('__other');
+    await page.getByTestId('setup-brand-industry-other').fill('Retail');
+    // At least one publishing language: with none ticked the form cannot go.
+    await page.getByTestId('setup-brand-language-EN').uncheck();
+    await page.getByTestId('setup-brand-language-AR').uncheck();
+    expect(
+      await page
+        .getByTestId('setup-brand-language-EN')
+        .evaluate((input) => (input as HTMLInputElement).validity.customError),
+    ).toBe(true);
+    // Exactly one ticked decides the AI language; both back leaves the choice.
+    await page.getByTestId('setup-brand-language-AR').check();
+    await expect(page.getByTestId('setup-brand-locale')).toHaveValue('AR');
+    await page.getByTestId('setup-brand-language-EN').check();
+    await page.getByTestId('setup-brand-locale').selectOption('EN');
     await page.getByTestId('setup-create-brand').click();
     await page.waitForURL(/step=learn/);
     await expect(page).toHaveURL(/ok=BRAND_CREATED/);
@@ -167,7 +183,8 @@ test.describe('onboarding reaches a first real brand', () => {
       await page.reload();
       await expect(candidate.or(allDone)).toBeVisible();
     }).toPass({ timeout: 60_000, intervals: [1_000, 2_000, 3_000] });
-    if (await candidate.isVisible()) {
+    const acceptedOne = await candidate.isVisible();
+    if (acceptedOne) {
       await candidate.locator('[data-testid^="setup-accept-"]').first().click();
       await page.waitForURL(/step=review/);
       await expect(page).toHaveURL(/ok=CANDIDATE_ACCEPTED/);
@@ -197,8 +214,9 @@ test.describe('onboarding reaches a first real brand', () => {
     ).toBeVisible();
     await expect(page.getByTestId('setup-home')).toHaveAttribute('href', '/en/overview');
 
-    // THE DATA, not the screen: one brand, audited; the goal is a HUMAN
-    // knowledge item in STRATEGY memory — not a wizard-only field.
+    // THE DATA, not the screen: one brand, audited; the goal is a SETUP
+    // knowledge item in STRATEGY memory (D-335) — not a wizard-only field —
+    // and its key is on the brand.
     const stored = await withPlatformPrisma(async (prisma) => {
       const user = await prisma.user.findUniqueOrThrow({
         where: { email },
@@ -207,7 +225,17 @@ test.describe('onboarding reaches a first real brand', () => {
       const workspaceId = user.memberships[0]?.workspaceId ?? '';
       const brands = await prisma.brand.findMany({
         where: { workspaceId, deletedAt: null },
-        select: { id: true, defaultLocale: true, websiteUrl: true, industry: true },
+        select: {
+          id: true,
+          defaultLocale: true,
+          websiteUrl: true,
+          industry: true,
+          primaryGoalKey: true,
+        },
+      });
+      // D-335: what the Review step accepted is marked as setup's.
+      const setupFacts = await prisma.brandKnowledgeItem.count({
+        where: { workspaceId, origin: 'SETUP', NOT: { itemKey: 'goal.primary' } },
       });
       const goal = await prisma.brandKnowledgeItem.findFirst({
         where: { workspaceId, itemKey: 'goal.primary' },
@@ -216,18 +244,20 @@ test.describe('onboarding reaches a first real brand', () => {
       const audits = await prisma.auditEvent.count({
         where: { workspaceId, action: 'brand.created' },
       });
-      return { brands, goal, audits };
+      return { brands, goal, audits, setupFacts };
     });
     expect(stored.brands).toHaveLength(1);
     expect(stored.brands[0]).toMatchObject({
       defaultLocale: 'EN',
       websiteUrl: 'https://onboarding.example',
       industry: 'Retail',
+      primaryGoalKey: 'LEADS',
     });
+    if (acceptedOne) expect(stored.setupFacts).toBeGreaterThan(0);
     expect(stored.goal).toMatchObject({
       area: 'STRATEGY',
       memory: 'STRATEGY',
-      origin: 'HUMAN',
+      origin: 'SETUP',
       status: 'ACTIVE',
       title: { en: 'Generate leads' },
     });

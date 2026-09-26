@@ -22,9 +22,10 @@ import { inAnalytics } from '../../../server/analytics-context';
 import { copilotHref } from '../../../server/copilot-surface';
 import {
   GOAL_ITEM_KEY,
+  GOAL_ITEM_SELECT,
   campaignObjectiveFor,
-  goalFromTitle,
   goalLabels,
+  storedGoal,
 } from '../../../server/setup-wizard-state';
 import {
   campaignHref,
@@ -140,7 +141,7 @@ export default async function StrategyPage({
               itemKey: GOAL_ITEM_KEY,
               status: { in: ['ACTIVE', 'STALE'] },
             },
-            select: { title: true },
+            select: GOAL_ITEM_SELECT,
           }),
           db.brandKnowledgeItem.findMany({
             where: {
@@ -163,10 +164,7 @@ export default async function StrategyPage({
     data?.goal && typeof data.goal.title === 'object' && data.goal.title !== null
       ? (data.goal.title as Record<string, unknown>)
       : null;
-  const firstGoal = goalFromTitle(
-    typeof goalTitle?.['en'] === 'string' ? goalTitle['en'] : undefined,
-    goalLabels('en'),
-  );
+  const firstGoal = storedGoal(data?.goal ?? null);
   const goalText = firstGoal
     ? goalLabels(locale === 'ar' ? 'ar' : 'en')[firstGoal]
     : typeof goalTitle?.[locale === 'ar' ? 'ar' : 'en'] === 'string'

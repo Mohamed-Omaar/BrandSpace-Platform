@@ -467,6 +467,23 @@ export class CreditLedgerService {
       }
 
       const wallet = await this.#lockWallet(tx, input.workspaceId);
+
+      /*
+       * A8 (D-328): A WORKSPACE PENDING DELETION SPENDS NOTHING. Checked here,
+       * at the one place every credit-spending path reserves through, after
+       * the wallet lock — so a request racing the owner's deletion either
+       * reserved before it or is refused, never half of each.
+       */
+      const workspace = await tx.workspace.findUnique({
+        where: { id: input.workspaceId },
+        select: { deletionScheduledFor: true },
+      });
+      if (workspace?.deletionScheduledFor) {
+        throw new AppError('FORBIDDEN', 'This workspace is pending deletion.', {
+          reason: 'WORKSPACE_PENDING_DELETION',
+        });
+      }
+
       const available = wallet.balanceMilliCredits - wallet.reservedMilliCredits;
       if (available < input.estimateMilliCredits) {
         // D-11: a hard stop. No postpaid overage, no invoice line, no partial

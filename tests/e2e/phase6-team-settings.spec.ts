@@ -70,9 +70,14 @@ test.describe('P6-13 · team, activity, settings, plan', () => {
     const card = page.getByTestId('data-controls');
     await expect(card).toBeVisible();
     await expect(page.getByTestId('data-control-retention')).toBeVisible();
-    await expect(page.getByTestId('data-control-workspaceDeletion')).toContainText(
+    // What does not exist is still said: there is no self-serve workspace export.
+    await expect(page.getByTestId('data-control-workspaceExport')).toContainText(
       'Not available yet',
     );
+    // Workspace deletion EXISTS since D-328 (Phase 2B-1, A8), so it is no longer
+    // listed as unavailable: it has its own card, with who may use it.
+    await expect(page.getByTestId('data-control-workspaceDeletion')).toHaveCount(0);
+    await expect(page.getByTestId('workspace-deletion')).toBeVisible();
     // Reachable from the Settings navigation, alongside Connected accounts.
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
     await expect(page.getByRole('link', { name: 'Data controls' }).first()).toBeVisible();

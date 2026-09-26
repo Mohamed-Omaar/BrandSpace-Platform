@@ -29,6 +29,17 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
   def('workspace.update', 'workspace', 'Change workspace settings'),
   def('workspace.delete', 'workspace', 'Delete the workspace'),
   def('workspace.transfer_ownership', 'workspace', 'Transfer workspace ownership'),
+  /*
+   * G4 / Q23 (prototype v94 Phase 2B-1, D-333) — require two-step verification
+   * for everyone in the workspace. OWNER ONLY: it decides whether anybody,
+   * the Admin included, can sign in without a second factor. Added to live
+   * databases by migration `…_workspace_security_manage_permission`.
+   */
+  def(
+    'workspace.security.manage',
+    'workspace',
+    'Require two-step verification for everyone in the workspace',
+  ),
   def('member.read', 'workspace', 'List workspace members'),
   def('member.invite', 'workspace', 'Invite a member'),
   def('member.remove', 'workspace', 'Remove a member'),

@@ -21,6 +21,7 @@ import {
 import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
 import { inBrandBrain } from '../../../server/brand-brain-context';
+import { brandLocaleAtCreation } from '../../../server/brand-ai-language';
 import { createBrandFor } from '../../../server/brand-creation';
 
 const log = createLogger({ context: { component: 'dashboard.brand-brain' } });
@@ -118,13 +119,14 @@ export async function createBrandAction(formData: FormData): Promise<void> {
     /*
      * THE ONE CREATION PATH (`server/brand-creation.ts`), shared with the
      * first-run Setup Wizard: idempotent on the name, counted against the
-     * plan's brand quota, and audited. The brand's content language is the
-     * form's explicit choice, else English (D-277) — never the UI locale.
+     * plan's brand quota, and audited. The brand's AI writing language is the
+     * form's explicit choice, else the language its creator is using the
+     * interface in right now (D-331, amending D-277) — and it stays that until
+     * changed in Settings → AI.
      */
-    const explicit = String(formData.get('defaultLocale') ?? '');
     await createBrandFor(session, {
       name,
-      defaultLocale: explicit === 'AR' ? 'AR' : 'EN',
+      defaultLocale: brandLocaleAtCreation(String(formData.get('defaultLocale') ?? ''), locale),
       supportedLocales: ['EN', 'AR'],
     });
     destination = pageUrl(locale, { ok: 'BRAND_CREATED' });
@@ -279,6 +281,9 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
         reason: parsed.reason,
         actor: knowledgeActor(session),
         policy: (await policy()).staleness,
+        // D-335: accepted on the setup wizard's Review step — decided from the
+        // closed-set return path, never from a field naming the origin.
+        acceptedInSetup: back.path === '/onboarding',
       });
     });
     destination = pageUrl(

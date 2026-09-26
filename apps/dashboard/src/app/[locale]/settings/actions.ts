@@ -3,22 +3,33 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { getPrisma, writeAuditEvent, withWorkspace } from '@brandspace/database';
-import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
-import { requireWorkspaceAction } from '../../../server/customer-context';
+import { createLogger, internalErrorFields } from '@brandspace/shared';
+import { TenantContentPolicySource, WorkspaceTimezoneService } from '@brandspace/content';
+import { createScheduleQuota } from '@brandspace/entitlements';
+import {
+  currentEnvironment,
+  inWorkspace,
+  requireWorkspaceAction,
+} from '../../../server/customer-context';
+import { generalSettingsFrom, saveGeneralSettings } from '../../../server/general-settings';
 import { actionErrorCode } from '../../../server/denial';
 
 const log = createLogger({ context: { component: 'dashboard.settings' } });
 
 /**
- * Workspace settings, edited by the customer.
+ * Workspace settings, edited by the customer — Settings → General (A9, D-330).
  *
- * Runs inside `withWorkspace()`, so PostgreSQL RLS applies to every statement:
- * even a bug that dropped the `where` clause could not reach another tenant's
- * row. That is the second, independent layer CLAUDE.md §2.1 requires.
+ * Runs inside `withWorkspace()` (through `inWorkspace`), so PostgreSQL RLS
+ * applies to every statement: even a bug that dropped the `where` clause could
+ * not reach another tenant's row. That is the second, independent layer
+ * CLAUDE.md §2.1 requires.
  *
- * The slug, status, plan and country are NOT editable here: they carry billing
- * and routing consequences and belong to the Control Center.
+ * `workspace.update` opens the form. The sole brand's industry and website ride
+ * along only with `brand.manage`, inside the member's BrandScope, and only
+ * while multi-brand is off — `saveGeneralSettings` checks all three.
+ *
+ * The slug, status, plan and billing currency are NOT editable here: they
+ * carry billing and routing consequences and belong to the Control Center.
  */
 export async function saveSettingsAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
@@ -26,38 +37,34 @@ export async function saveSettingsAction(formData: FormData): Promise<void> {
 
   try {
     const session = await requireWorkspaceAction(locale, 'workspace.update');
-    const name = String(formData.get('name') ?? '').trim();
-    if (name.length < 2) throw new AppError('VALIDATION_FAILED', 'A workspace name is required.');
+    const input = generalSettingsFrom(formData);
 
-    const defaultLocale = String(formData.get('defaultLocale') ?? 'EN');
-    if (defaultLocale !== 'AR' && defaultLocale !== 'EN') {
-      throw new AppError('VALIDATION_FAILED', 'Unsupported locale.');
-    }
-    const timezone = String(formData.get('timezone') ?? '').trim();
-
-    await withWorkspace(
-      session.workspace.workspaceId,
-      async (db) => {
-        const before = await db.workspace.findUniqueOrThrow({
-          where: { id: session.workspace.workspaceId },
-          select: { name: true, defaultLocale: true, timezone: true },
-        });
-        await db.workspace.update({
-          where: { id: session.workspace.workspaceId },
-          data: { name, defaultLocale, timezone },
-        });
-        await writeAuditEvent(db, session.workspace.workspaceId, {
-          action: 'workspace.settings.updated',
-          actorType: 'USER',
-          actorId: session.customer.userId,
-          resourceType: 'workspace',
-          resourceId: session.workspace.workspaceId,
-          severity: 'NOTICE',
-          before,
-          after: { name, defaultLocale, timezone },
-        });
-      },
-      { prisma: getPrisma() },
+    const workspaceId = session.workspace.workspaceId;
+    await inWorkspace(workspaceId, async ({ db, entitlements }) =>
+      saveGeneralSettings(
+        db,
+        entitlements,
+        {
+          workspaceId,
+          actorUserId: session.customer.userId,
+          permissionKeys: session.workspace.permissionKeys,
+          brandScope: session.workspace.brandScope,
+          // G5 / Q22 (D-334): planned posts keep their local time in the new zone.
+          changeTimezone: async (toZone) => {
+            const policy = await new TenantContentPolicySource(db, currentEnvironment()).load();
+            await new WorkspaceTimezoneService({
+              db,
+              workspaceId,
+              quota: createScheduleQuota({ db, workspaceId, environment: currentEnvironment() }),
+            }).change({
+              toZone,
+              actor: { type: 'USER', id: session.customer.userId },
+              minLeadMinutes: policy.calendar.minLeadMinutes,
+            });
+          },
+        },
+        input,
+      ),
     );
 
     destination = `/${locale}/settings?ok=SETTINGS_SAVED`;

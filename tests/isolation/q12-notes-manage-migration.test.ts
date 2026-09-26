@@ -90,6 +90,14 @@ async function connect(url: string): Promise<Client> {
 }
 
 /**
+ * Permissions a LATER migration adds to a live database, so the simulated old
+ * catalogue must not already hold them: `notes.manage` (Phase 2A) and
+ * `workspace.security.manage` (Phase 2B-1, D-333). With them left out, the
+ * equality below proves each migration grants exactly what the definitions do.
+ */
+const LATER_PERMISSIONS: readonly string[] = ['notes.manage', 'workspace.security.manage'];
+
+/**
  * The catalogue as the release BEFORE Phase 2A wrote it, on the platform
  * connection its seed and bootstrap used: today's definitions without
  * `notes.manage` (Phase 2A added it) and without the Viewer's `content.read`
@@ -97,7 +105,7 @@ async function connect(url: string): Promise<Client> {
  * the simulated old database the very grant a later migration is meant to add.
  */
 function inPreviousRelease(roleKey: string, permissionKey: string): boolean {
-  if (permissionKey === 'notes.manage') return false;
+  if (LATER_PERMISSIONS.includes(permissionKey)) return false;
   if (roleKey === 'client_viewer' && permissionKey === 'content.read') return false;
   return true;
 }
@@ -105,7 +113,7 @@ function inPreviousRelease(roleKey: string, permissionKey: string): boolean {
 async function previousReleaseCatalogue(platform: Client): Promise<void> {
   const permissionIds = new Map<string, string>();
   for (const p of ALL_PERMISSIONS) {
-    if (p.key === 'notes.manage') continue;
+    if (LATER_PERMISSIONS.includes(p.key)) continue;
     const id = randomUUID();
     permissionIds.set(p.key, id);
     await platform.query(
@@ -235,6 +243,23 @@ describe('Q12 — notes.manage: an upgraded database and a fresh one grant the s
     const upgradedGrants = await grants(upgraded);
     expect(upgradedGrants.length).toBeGreaterThan(100);
     expect(upgradedGrants).toEqual(await grants(fresh));
+  });
+
+  it('grants workspace.security.manage to the Owner alone, described identically in both (D-333)', async () => {
+    for (const db of [upgraded, fresh]) {
+      const all = await grants(db);
+      expect(all.filter((g) => g.endsWith(':workspace.security.manage'))).toEqual([
+        'workspace_owner:workspace.security.manage',
+      ]);
+    }
+    const describe = (db: Client) =>
+      db.query(
+        `SELECT "key", "resource", "action", "minScope", "description"
+           FROM "permission" WHERE "key" = 'workspace.security.manage'`,
+      );
+    const [upgradedRow, freshRow] = [(await describe(upgraded)).rows, (await describe(fresh)).rows];
+    expect(upgradedRow).toHaveLength(1);
+    expect(upgradedRow).toEqual(freshRow);
   });
 
   it('describes notes.manage identically in both', async () => {

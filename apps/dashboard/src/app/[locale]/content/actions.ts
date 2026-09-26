@@ -236,6 +236,7 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
       item: itemId,
       ok: 'SAVED',
       ...attachParam(formData),
+      ...plannedDateParam(formData),
     });
   } catch (error: unknown) {
     destination = failure(locale, error, 'createManualDraft', '/compose');
@@ -254,6 +255,16 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
 function attachParam(formData: FormData): { attach?: string } {
   const value = String(formData.get('attach') ?? '');
   return /^[0-9a-f-]{36}$/i.test(value) ? { attach: value } : {};
+}
+
+/**
+ * G6 (D-329) — THE DAY A ★ CHIP OPENED THE STUDIO FOR, carried to the new
+ * draft so its Schedule link opens the calendar on that day. A date shape
+ * only, and it proposes: the calendar still validates the slot.
+ */
+function plannedDateParam(formData: FormData): { date?: string } {
+  const value = String(formData.get('plannedDate') ?? '');
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? { date: value } : {};
 }
 
 /** Save a person's own edit to a caption. No gateway, no credits. */
@@ -370,6 +381,7 @@ export async function setContentCampaignAction(formData: FormData): Promise<void
           item: itemId,
           ok: 'CAMPAIGN_LINKED',
           ...attachParam(formData),
+          ...plannedDateParam(formData),
         });
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;

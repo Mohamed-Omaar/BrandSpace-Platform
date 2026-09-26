@@ -294,6 +294,39 @@ describe('the second factor is counted too', () => {
   });
 });
 
+describe('the password step-up is counted on its own (Phase 2B-1, D-328)', () => {
+  it('ordinary sign-ins do not use up the step-up, and the step-up has its own ceiling', async () => {
+    const service = auth();
+    const target = await customer();
+
+    // Spend the account's whole SIGN-IN budget honestly, from fresh sources.
+    let token = '';
+    for (let attempt = 0; attempt < CEILINGS.signInPerAccount; attempt += 1) {
+      token = (await service.signIn({ email: target.email, password: PASSWORD, ip: freshIp() }))
+        .token;
+    }
+    await expect(
+      service.signIn({ email: target.email, password: PASSWORD, ip: freshIp() }),
+    ).rejects.toSatisfy(isRateLimited);
+
+    // The step-up before an irreversible action still answers — it is not a
+    // sign-in and does not share that count.
+    const outcomes: string[] = [];
+    for (let attempt = 0; attempt <= CEILINGS.signInPerAccount; attempt += 1) {
+      outcomes.push(
+        await service
+          .confirmPassword({ token, password: PASSWORD, ip: freshIp() })
+          .then((ok) => (ok ? 'confirmed' : 'refused'))
+          .catch((error: unknown) => (isRateLimited(error) ? 'rate-limited' : 'error')),
+      );
+    }
+    expect(outcomes.slice(0, CEILINGS.signInPerAccount)).toEqual(
+      Array.from({ length: CEILINGS.signInPerAccount }, () => 'confirmed'),
+    );
+    expect(outcomes[CEILINGS.signInPerAccount]).toBe('rate-limited');
+  });
+});
+
 describe('the counter is correct under concurrency', () => {
   /*
    * A DETERMINISTIC RACE, NOT A TIMING ONE. Every attempt is started before any

@@ -11,18 +11,33 @@ import {
 import { getPrisma, withoutTenantContext } from '@brandspace/database';
 import { SignupService } from '@brandspace/auth';
 import { TenantOnboardingPolicySource } from '@brandspace/onboarding';
-import { currentEnvironment, requireWorkspace } from '../../../../server/customer-context';
+import { cookies } from 'next/headers';
+import {
+  currentEnvironment,
+  getCustomerAuth,
+  getSessionToken,
+  holdsPermission,
+  requireWorkspace,
+} from '../../../../server/customer-context';
 import { brandContextFor } from '../../../../server/brand-context';
 import { settingsNavItems } from '../../../../server/settings-nav';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import {
   beginMfaEnrolmentAction,
+  beginNewPhoneAction,
+  cancelNewPhoneAction,
   confirmMfaEnrolmentAction,
+  confirmNewPhoneAction,
   disableMfaAction,
+  dismissRecoveryCodesAction,
   regenerateRecoveryCodesAction,
+  setWorkspaceMfaRequirementAction,
   signOutOtherSessionsAction,
 } from './actions';
+import { MfaEnrolmentPanel } from '../../../../components/mfa-enrolment';
+import { CheckboxRow } from '../../../../components/checkbox-row';
+import { RECOVERY_CODES_COOKIE } from '../../../../server/mfa-codes';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,16 +93,40 @@ export default async function SecuritySettingsPage({
   const remainingCodes = account.mfaEnabled
     ? await signup.remainingRecoveryCodes(customer.userId)
     : 0;
+  /*
+   * G4 / Q23 (D-333): the enrolment in progress — first time, or a new phone —
+   * opened on the server so the QR code and the key are drawn here and the
+   * seed never travels in a URL.
+   */
+  const pending = await signup.pendingEnrolment(customer.userId);
+  /* Every workspace this person belongs to, to know whether any requires two-step. */
+  const memberships = await getCustomerAuth()
+    .listWorkspaces((await getSessionToken()) ?? '', {
+      includePendingDeletion: true,
+      includeMfaRequired: true,
+    })
+    .catch(() => []);
+  const requiredBy = memberships.find((membership) => membership.requireMfa) ?? null;
+  const mayRequire = holdsPermission(workspace, 'workspace.security.manage');
 
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
-  const otpauth = typeof query['otpauth'] === 'string' ? query['otpauth'] : null;
   /*
-   * SHOWN ONCE, AND THE PAGE SAYS SO. Only the hashes are stored, so this is
-   * literally the only render in which these strings exist anywhere.
+   * SHOWN ONCE, AND THE PAGE SAYS SO. Only the hashes are stored; the codes
+   * arrive in a five-minute httpOnly cookie that "I have saved them" deletes
+   * (D-333) — never in the query string, where history and Referer keep them.
    */
-  const issuedCodes = typeof query['codes'] === 'string' ? query['codes'].split(' ') : [];
+  const issuedCodes = ((await cookies()).get(RECOVERY_CODES_COOKIE)?.value ?? '')
+    .split(' ')
+    .filter((code) => code !== '');
+  const enrolmentLabels = {
+    scan: t('security.enrolScan'),
+    qrAlt: t('security.qrAlt'),
+    typeKey: t('security.typeKey'),
+    code: t('security.code'),
+    confirm: t('security.confirm'),
+  };
 
   const brandContext = await brandContextFor(workspace, '/settings/security');
   const mfaAvailable = policy.mfa.customerEnrolmentEnabled;
@@ -138,7 +177,7 @@ export default async function SecuritySettingsPage({
             )}
 
             {/* NOT ENROLLED, AND ENROLMENT NOT YET STARTED. */}
-            {mfaAvailable && !account.mfaEnabled && !otpauth && (
+            {mfaAvailable && !account.mfaEnabled && !pending && (
               <form action={beginMfaEnrolmentAction}>
                 <input type="hidden" name="locale" value={locale} />
                 <button type="submit" data-testid="mfa-begin" style={buttonStyle('primary')}>
@@ -147,66 +186,116 @@ export default async function SecuritySettingsPage({
               </form>
             )}
 
-            {/* MID-ENROLMENT: the seed is on screen and nowhere else. */}
-            {mfaAvailable && !account.mfaEnabled && otpauth && (
-              <form
+            {/* MID-ENROLMENT: a QR code and the typed key, drawn from the server. */}
+            {mfaAvailable && !account.mfaEnabled && pending && (
+              <MfaEnrolmentPanel
+                locale={locale}
+                otpauthUri={pending.otpauthUri}
+                secret={pending.secret}
                 action={confirmMfaEnrolmentAction}
-                style={{ display: 'grid', gap: spacingTokens.md }}
-              >
+                from="security"
+                labels={enrolmentLabels}
+              />
+            )}
+
+            {/* ENROLLED, A NEW PHONE BEING SET UP: the old one works until this one proves itself. */}
+            {account.mfaEnabled && pending && (
+              <div style={{ display: 'grid', gap: spacingTokens.md }}>
+                <b>{t('security.newPhoneHeading')}</b>
+                <MfaEnrolmentPanel
+                  locale={locale}
+                  otpauthUri={pending.otpauthUri}
+                  secret={pending.secret}
+                  action={confirmNewPhoneAction}
+                  from="security"
+                  labels={enrolmentLabels}
+                  testId="mfa-new-phone"
+                />
+                <form action={cancelNewPhoneAction}>
+                  <input type="hidden" name="locale" value={locale} />
+                  <button
+                    type="submit"
+                    data-testid="mfa-new-phone-cancel"
+                    style={buttonStyle('ghost')}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* ENROLLED: "New phone" costs a current code. */}
+            {mfaAvailable && account.mfaEnabled && !pending && (
+              <form action={beginNewPhoneAction} style={{ display: 'grid', gap: spacingTokens.md }}>
                 <input type="hidden" name="locale" value={locale} />
-                <p style={typographyTokens.bodySm}>{t('security.enrolScan')}</p>
                 <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
-                  {t('security.enrolUri')}
+                  {t('security.newPhoneExplain')}
                 </p>
-                <code
-                  data-testid="mfa-otpauth"
-                  style={{
-                    ...typographyTokens.caption,
-                    wordBreak: 'break-all',
-                    color: colorTokens.textMuted,
-                  }}
-                >
-                  {otpauth}
-                </code>
-                <Field label={t('security.code')} htmlFor="enrol-code">
+                <Field label={t('security.code')} htmlFor="new-phone-code">
                   <input
                     className="bs-control"
-                    id="enrol-code"
+                    id="new-phone-code"
                     name="code"
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     required
-                    data-testid="mfa-code"
+                    data-testid="mfa-new-phone-code"
                     style={inputStyle()}
                   />
                 </Field>
                 <div>
-                  <button type="submit" data-testid="mfa-confirm" style={buttonStyle('primary')}>
-                    {t('security.confirm')}
+                  <button
+                    type="submit"
+                    data-testid="mfa-new-phone-begin"
+                    style={buttonStyle('neutral')}
+                  >
+                    {t('security.newPhone')}
                   </button>
                 </div>
               </form>
             )}
 
-            {/* ENROLLED: turning it off costs a working code. */}
-            {account.mfaEnabled && (
+            {/* ENROLLED AND REQUIRED: it cannot be turned off, and the page says why. */}
+            {account.mfaEnabled && requiredBy ? (
+              <p style={typographyTokens.bodySm} data-testid="mfa-required-note">
+                {t('security.requiredCannotDisable').replace(
+                  '{workspace}',
+                  requiredBy.workspaceName,
+                )}
+              </p>
+            ) : null}
+
+            {/* ENROLLED: turning it off costs a current code OR the password. */}
+            {account.mfaEnabled && !requiredBy && (
               <form action={disableMfaAction} style={{ display: 'grid', gap: spacingTokens.md }}>
                 <input type="hidden" name="locale" value={locale} />
                 <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
                   {t('security.disableExplain')}
                 </p>
-                <Field label={t('security.code')} htmlFor="disable-code">
-                  <input
-                    className="bs-control"
-                    id="disable-code"
-                    name="code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    required
-                    data-testid="mfa-disable-code"
-                    style={inputStyle()}
-                  />
-                </Field>
+                <div className="bs-form-row">
+                  <Field label={t('security.code')} htmlFor="disable-code">
+                    <input
+                      className="bs-control"
+                      id="disable-code"
+                      name="code"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      data-testid="mfa-disable-code"
+                      style={inputStyle()}
+                    />
+                  </Field>
+                  <Field label={t('security.orPassword')} htmlFor="disable-password">
+                    <input
+                      className="bs-control"
+                      id="disable-password"
+                      name="password"
+                      type="password"
+                      autoComplete="current-password"
+                      data-testid="mfa-disable-password"
+                      style={inputStyle()}
+                    />
+                  </Field>
+                </div>
                 <div>
                   <button type="submit" data-testid="mfa-disable" style={buttonStyle('neutral')}>
                     {t('security.disable')}
@@ -216,6 +305,35 @@ export default async function SecuritySettingsPage({
             )}
           </div>
         </Card>
+
+        {/*
+          G4 / Q23 (D-333) — THE OWNER REQUIRES IT FOR EVERYONE. Offered only
+          with `workspace.security.manage` (the Owner); the action checks it
+          again and refuses to turn it on before the Owner's own is on.
+        */}
+        {mayRequire ? (
+          <Card testId="mfa-requirement-card">
+            <form
+              action={setWorkspaceMfaRequirementAction}
+              style={{ display: 'grid', gap: spacingTokens.md }}
+            >
+              <input type="hidden" name="locale" value={locale} />
+              <b>{t('security.requireHeading')}</b>
+              <CheckboxRow
+                name="requireMfa"
+                label={t('security.requireLabel').replace('{workspace}', workspace.workspaceName)}
+                hint={t('security.requireHint')}
+                checked={workspace.requireMfa === true}
+                testId="mfa-require"
+              />
+              <div>
+                <button type="submit" data-testid="mfa-require-save" style={buttonStyle('primary')}>
+                  {t('common.save')}
+                </button>
+              </div>
+            </form>
+          </Card>
+        ) : null}
 
         {/* THE CODES, SHOWN ONCE. Their own card, because losing them is how
             optional MFA turns into MFA nobody switches on. */}
@@ -230,7 +348,10 @@ export default async function SecuritySettingsPage({
               </div>
 
               {issuedCodes.length > 0 && (
-                <div data-testid="recovery-codes">
+                <div
+                  data-testid="recovery-codes"
+                  style={{ display: 'grid', gap: spacingTokens.sm }}
+                >
                   <p style={typographyTokens.bodySm}>
                     <b>{t('security.recoveryOnce')}</b>
                   </p>
@@ -247,6 +368,16 @@ export default async function SecuritySettingsPage({
                       </li>
                     ))}
                   </ul>
+                  <form action={dismissRecoveryCodesAction}>
+                    <input type="hidden" name="locale" value={locale} />
+                    <button
+                      type="submit"
+                      data-testid="recovery-codes-saved"
+                      style={buttonStyle('neutral')}
+                    >
+                      {t('security.recoverySaved')}
+                    </button>
+                  </form>
                 </div>
               )}
 

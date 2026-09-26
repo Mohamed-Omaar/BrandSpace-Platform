@@ -94,8 +94,24 @@ describe('D-290 · the screen', () => {
     expect(view).toContain('calendar-drawer-preview');
   });
 
-  it('no best-time recommendation is offered — there is no measured basis for one', () => {
-    expect(`${page}\n${view}`).not.toMatch(/best[ -]?time/i);
+  /*
+   * G6 (prototype v94 Phase 2B-1, D-329) CHANGED THIS RULE, deliberately and on
+   * the owner's instruction. It used to be "no best-time recommendation at all,
+   * because nothing is measured". Now the country's CONFIGURED posting times are
+   * offered — but never called a "best time", and a MEASURED best time, when
+   * one exists, takes precedence over them. The precedence itself is pinned in
+   * tests/unit/phase2b1-calendar-country-industry.test.ts.
+   */
+  it('offers configured times only as "Suggested time", never as a best time', () => {
+    const wording = Object.entries({ ...messages.en, ...messages.ar })
+      .filter(([key]) => key.startsWith('calendar.'))
+      .map(([, value]) => String(value));
+    for (const value of wording) expect(value).not.toMatch(/best[ -]?time|أفضل وقت/i);
+    expect(messages.en['calendar.suggestedTime']).toBe('Suggested time');
+    expect(messages.ar['calendar.suggestedTime']).toBe('وقت مقترح');
+    expect(view).toContain("t['calendar.suggestedTime']");
+    // The page asks for measured times FIRST; configured ones only fill in.
+    expect(page).toContain('suggestedPostingTimes(calendarPolicy, { measured: [], country })');
   });
 
   it('the fix for an unreachable post is Publishing › Accounts, not a technical page', () => {

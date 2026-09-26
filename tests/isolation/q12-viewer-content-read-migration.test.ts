@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -243,8 +243,15 @@ describe('Q12, second release — every client_viewer row gains content.read, an
     await admin.query(`CREATE DATABASE "${freshDb}"`);
     const names = migrationNames();
     expect(names).toContain(VIEWER_MIGRATION);
-    // The Viewer grant is the newest migration; nothing later re-runs Phase 2A.
-    expect(names.at(-1)).toBe(VIEWER_MIGRATION);
+    // NOTHING LATER RE-RUNS PHASE 2A. It used to be enough that the Viewer grant
+    // was the newest migration; later phases add their own, so the invariant is
+    // now asserted directly: no migration after this one mentions
+    // `notes.manage`, which is the grant that must never be replayed once the
+    // Viewer holds `content.read` (docs/OPERATIONS.md §6.1).
+    for (const later of names.filter((name) => name > VIEWER_MIGRATION)) {
+      const sql = readFileSync(path.join(migrationsDir, later, 'migration.sql'), 'utf8');
+      expect(sql, later).not.toContain('notes.manage');
+    }
 
     // UPGRADED: Phase 2A's schema and catalogue, the extra role rows, then the grant.
     const upgradedMigrator = urlFor('migrator', upgradedDb);

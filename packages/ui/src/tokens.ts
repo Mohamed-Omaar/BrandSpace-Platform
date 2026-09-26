@@ -200,6 +200,16 @@ export const colorTokens = {
    */
   documentRule: '#D8D8DE',
 
+  /**
+   * UI-1 (prototype v94): the ONE scrollbar thumb, everywhere. The resting
+   * value is the grey the dropdown panel already used for its "quiet
+   * scrollbar", so no new grey entered the system; hover darkens it to
+   * `textMuted`. A design-system extension (UI-FIDELITY-CONTRACT §6), not a
+   * demo port: the demo styles only the sidebar's hidden scroller.
+   */
+  scrollbarThumb: '#9A9AA2',
+  scrollbarThumbHover: '#6A6A72',
+
   /** Body text. 17.9:1 on white. */
   textPrimary: '#111114',
   /** Secondary text, labels, captions. 7.55:1 on white — AA at every size. */

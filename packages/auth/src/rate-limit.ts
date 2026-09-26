@@ -53,7 +53,14 @@ export type RateLimitScope =
   | 'password-reset:account'
   | 'verification-resend:ip'
   | 'mfa:ip'
-  | 'mfa:account';
+  | 'mfa:account'
+  /**
+   * A password asked again inside a session before an irreversible action
+   * (Phase 2B-1, D-328). Its OWN count, with the sign-in ceiling: sharing the
+   * sign-in budget let ordinary sign-ins exhaust it, so an owner who had signed
+   * in often could not confirm a deletion.
+   */
+  | 'step-up:account';
 
 /**
  * The ceilings, as the activated `onboarding` document carries them.

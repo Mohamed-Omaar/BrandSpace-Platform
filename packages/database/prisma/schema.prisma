@@ -279,6 +279,11 @@ model User {
   mfaSecretRef      String?
   mfaSecretMaterial Json?
   mfaEnrolledAt     DateTime? @db.Timestamptz(6)
+  /// G4 / Q23 (D-333) — "New phone": the sealed seed of an authenticator being
+  /// enrolled while the current one keeps working. Moved into
+  /// `mfaSecretMaterial` only when a code from the new phone proves it; the
+  /// same envelope and key domain as the live seed, and never returned.
+  mfaPendingSecretMaterial Json?
 
   failedLoginCount Int       @default(0)
   lockedUntil      DateTime? @db.Timestamptz(6)
@@ -290,6 +295,8 @@ model User {
 
   memberships     Membership[]
   ownedWorkspaces Workspace[]  @relation("WorkspaceOwner")
+  /// Prototype v94 Phase 2B-1 (D-328): workspaces this person asked to delete.
+  deletionRequests Workspace[] @relation("WorkspaceDeletionRequester")
   invitesSent     Membership[] @relation("MembershipInviter")
 
   sessions            CustomerSession[]
@@ -302,7 +309,9 @@ model User {
   legalAcceptances   UserLegalAcceptance[]
   mfaRecoveryCodes   UserMfaRecoveryCode[]
 
-  memberSuggestions MemberSuggestion[]
+  memberSuggestions       MemberSuggestion[]
+  /// A10 / G2 (D-331) — this person's notification switches, per workspace.
+  notificationPreferences NotificationPreference[]
 
   @@index([status])
   @@map("user")
@@ -429,6 +438,33 @@ model Workspace {
   /// records have their own retention and are out of this column's reach.
   aiContentRetentionDays Int?
 
+  // --- Prototype v94 Phase 2B-1: the owner's deletion request (A8, D-328) ---
+  /// The owner asked for this workspace to be deleted. Both columns are set
+  /// together or not at all (CHECK `workspace_deletion_request_coherent`).
+  /// While `deletionScheduledFor` is set the workspace is PENDING DELETION:
+  /// its data is closed to every member, nothing publishes, no credit is
+  /// spent, and an owner may cancel; at the deadline a job marks it DELETED.
+  deletionRequestedAt       DateTime? @db.Timestamptz(6)
+  deletionScheduledFor      DateTime? @db.Timestamptz(6)
+  deletionRequestedByUserId String?   @db.Uuid
+  deletionRequestedBy       User?     @relation("WorkspaceDeletionRequester", fields: [deletionRequestedByUserId], references: [id], onDelete: SetNull)
+
+  // --- Prototype v94 Phase 2B-1: General settings (A9) --------------------
+  /// The business's city, as an ISO 3166-2:EG subdivision code (`EG-C`). Egypt
+  /// only: CHECK `workspace_city_egypt_only` refuses it for any other country,
+  /// and the settings action clears it when the country changes.
+  city         String?
+  /// The first day of the calendar week, 0 = Sunday … 6 = Saturday (CHECK
+  /// `workspace_week_starts_on_range`). NULL follows the activated `content`
+  /// configuration's `calendar.weekStartsOn`.
+  weekStartsOn Int?
+
+  // --- Prototype v94 Phase 2B-1: the owner requires two-step (G4, D-333) ---
+  /// Every member must have two-step verification on to use this workspace.
+  /// Set by the Owner (`workspace.security.manage`); a member without it is
+  /// sent to enrol, and cannot turn it off while it is required.
+  requireMfa Boolean @default(false)
+
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
@@ -482,7 +518,8 @@ model Workspace {
 
   /// Phase 5B-3 — Notifications. Workspace-owned only: a notification is
   /// addressed to a member OF this workspace, never to a user globally.
-  notifications Notification[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
 
   /// Phase 6 — Social Publishing.
   socialConnections SocialConnection[]
@@ -523,6 +560,7 @@ model Workspace {
 
   @@index([status])
   @@index([ownerUserId])
+  @@index([deletionScheduledFor])
   @@index([planKey])
   @@map("workspace")
 }
@@ -1708,6 +1746,9 @@ enum BrandKnowledgeOrigin {
   HUMAN
   DOCUMENT
   AI_INFERRED
+  /// Accepted on the setup wizard's Review step, or the goal chosen in setup
+  /// (D-335). Ranks with DOCUMENT: a later edit in Brand Brain outranks it.
+  SETUP
 }
 
 /// D-65's approval state, plus the two terminal states a real corpus needs.
@@ -1776,6 +1817,12 @@ model Brand {
   websiteUrl       String?
   defaultLocale    Locale   @default(EN)
   supportedLocales Locale[] @default([])
+
+  /// The first goal chosen in setup, as its identifier (`LEADS`), so it is
+  /// rendered in the reader's language rather than matched by its English
+  /// title (D-335). The goal itself is the STRATEGY item `goal.primary`; this
+  /// names it only while setup wrote that item's latest version.
+  primaryGoalKey String?
 
   /// Brand kit. Structured, and validated at the boundary rather than trusted.
   colorPalette Json?
@@ -3319,6 +3366,27 @@ model Notification {
   @@index([workspaceId, userId, readAt, createdAt(sort: Desc)])
   @@index([workspaceId, userId, createdAt(sort: Desc)])
   @@map("notification")
+}
+
+/// A10 / G2 (prototype v94 Phase 2B-1, D-331) — one member's switch for one
+/// category of their own in-app notifications. NO ROW MEANS ON: only an
+/// explicit "off" needs storing, so a member who never opened the screen gets
+/// everything. `category` is one of `NOTIFICATION_CATEGORIES` in
+/// `@brandspace/notifications` (CHECK `notification_preference_category_known`).
+model NotificationPreference {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  userId      String   @db.Uuid
+  category    String
+  enabled     Boolean
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, category])
+  @@map("notification_preference")
 }
 
 // ---------------------------------------------------------------------------

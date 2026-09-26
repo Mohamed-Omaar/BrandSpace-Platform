@@ -35,6 +35,8 @@ const createWorkspaceSchema = z.object({
   // Billing currency is a platform launch default, not a customer-facing choice.
   billingEmail: z.string().email().max(320),
   legalName: z.string().max(200).optional(),
+  /** G8 (D-335): an Egyptian governorate code; kept only for Egypt (the service clears it otherwise). */
+  city: z.string().trim().max(10).optional(),
 });
 
 export function registerOnboardingRoutes(app: FastifyInstance): void {
@@ -99,12 +101,14 @@ export function registerOnboardingRoutes(app: FastifyInstance): void {
             currency: DEFAULT_BILLING_CURRENCY,
             billingEmail: parsed.data.billingEmail,
             legalName: parsed.data.legalName ?? null,
+            city: parsed.data.city ?? null,
             ip: req.ip || undefined,
             userAgent: userAgentOf(req),
           },
           commerce,
           trialPlan,
           catalogue.versionId,
+          catalogue.plans,
         );
 
         // Put the new workspace in scope for this session, so the customer lands

@@ -1,5 +1,6 @@
 import {
   Card,
+  DraftForm,
   Field,
   SettingsSplit,
   buttonStyle,
@@ -8,7 +9,23 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { TenantOnboardingPolicySource } from '@brandspace/onboarding';
+import {
+  EGYPT_CITY_CODES,
+  brandScopeFilter,
+  countryOptions,
+  suggestedTimeZones,
+  timeZoneOptions,
+} from '@brandspace/shared';
+import {
+  currentEnvironment,
+  holdsPermission,
+  inWorkspace,
+  requireWorkspacePage,
+} from '../../../server/customer-context';
+import { multiBrandEnabled } from '../../../server/multi-brand';
+import { saveBarLabels, weekdayNames } from '../../../server/save-bar-labels';
+import { GeneralFields } from './general-fields';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { settingsNavItems } from '../../../server/settings-nav';
@@ -42,12 +59,57 @@ export default async function SettingsPage({
         name: true,
         defaultLocale: true,
         timezone: true,
+        country: true,
+        city: true,
+        weekStartsOn: true,
         slug: true,
         status: true,
         aiContentRetentionDays: true,
       },
     }),
   );
+
+  /*
+   * A9 (D-330) — the week start the calendar uses today (the workspace's own,
+   * else the activated configuration's), the industry catalogue, and the SOLE
+   * brand's industry and website. The brand is offered only while multi-brand
+   * is off and only to a member who manages it; the action re-checks both.
+   */
+  const { configuredWeekStart, onboarding, soleBrand } = await inContentStudio(
+    workspace.workspaceId,
+    async (services) => {
+      const [policy, onboardingPolicy, multiBrand] = await Promise.all([
+        services.policy(),
+        new TenantOnboardingPolicySource(services.db, currentEnvironment()).load(),
+        multiBrandEnabled(services.entitlements, workspace.workspaceId),
+      ]);
+      const brand =
+        !multiBrand && holdsPermission(workspace, 'brand.manage')
+          ? await services.db.brand.findFirst({
+              where: { deletedAt: null, ...brandScopeFilter(workspace.brandScope) },
+              orderBy: { createdAt: 'asc' },
+              select: { id: true, industry: true, websiteUrl: true },
+            })
+          : null;
+      return {
+        configuredWeekStart: policy.calendar.weekStartsOn,
+        onboarding: onboardingPolicy,
+        soleBrand: brand
+          ? { brandId: brand.id, industry: brand.industry, websiteUrl: brand.websiteUrl }
+          : null,
+      };
+    },
+  );
+  const saved = {
+    name: row.name,
+    defaultLocale: row.defaultLocale,
+    country: row.country,
+    timezone: row.timezone,
+    city: row.city,
+    weekStartsOn: row.weekStartsOn ?? configuredWeekStart,
+    industry: soleBrand?.industry ?? null,
+    websiteUrl: soleBrand?.websiteUrl ?? null,
+  };
 
   /*
    * D-117 — the customer's own retention control, and its FLOOR.
@@ -104,63 +166,68 @@ export default async function SettingsPage({
       >
         <Card testId="settings-card">
           {/*
-          THE THREE CONTROLS ON THIS PAGE WERE INVISIBLE (F-38).
+            A9 / G1 (D-330) — THE GENERAL FIELDS, UNDER THE SAVE BAR.
 
-          They were styled with `customerInputStyle()` and carried no
-          `bs-control` class, so under the borderless tokens they rendered as
-          transparent rectangles on a white card — F-27 exactly, in three
-          controls the original scan could not see because it only looked at
-          calls named `inputStyle`. Their labels were hand-rolled `<label>`
-          elements with a literal `0.8125rem` rather than `Field`, which is
-          what let them drift in the first place.
-        */}
-          <form action={saveSettingsAction} style={{ display: 'grid', gap: spacingTokens.md }}>
+            Keyed on the SAVED values, so a successful save re-renders a clean
+            form. Each field says underneath what it changes. Industry and
+            website are the sole brand's, shown only while multi-brand is off
+            and only to a member who manages that brand.
+          */}
+          <DraftForm
+            key={JSON.stringify(saved)}
+            action={saveSettingsAction}
+            testId="settings-form"
+            barTestId="settings-bar"
+            saveTestId="settings-save"
+            labels={saveBarLabels(t)}
+            style={{ display: 'grid', gap: spacingTokens.md }}
+          >
             <input type="hidden" name="locale" value={locale} />
-
-            <Field label={t('settings.name')} htmlFor="name">
-              <input
-                className="bs-control"
-                id="name"
-                name="name"
-                defaultValue={row.name}
-                required
-                style={inputStyle()}
-              />
-            </Field>
-
-            {/* `.form-row { grid-template-columns: 1fr 1fr; gap: 10px }` — two
-                short fields share a row rather than each taking a full one. */}
-            <div className="bs-form-row">
-              <Field label={t('settings.locale')} htmlFor="defaultLocale">
-                <select
-                  className="bs-control"
-                  id="defaultLocale"
-                  name="defaultLocale"
-                  defaultValue={row.defaultLocale}
-                  style={inputStyle()}
-                >
-                  <option value="AR">AR</option>
-                  <option value="EN">EN</option>
-                </select>
-              </Field>
-
-              <Field label={t('settings.timezone')} htmlFor="timezone">
-                <input
-                  className="bs-control"
-                  id="timezone"
-                  name="timezone"
-                  defaultValue={row.timezone}
-                  style={inputStyle()}
-                />
-              </Field>
-            </div>
-
-            <div>
-              <button type="submit" data-testid="settings-save" style={buttonStyle('primary')}>
-                {t('common.save')}
-              </button>
-            </div>
-          </form>
+            <GeneralFields
+              saved={saved}
+              countries={countryOptions(locale)}
+              timezones={timeZoneOptions(locale)}
+              cities={EGYPT_CITY_CODES.map((code) => ({
+                value: code,
+                label: t(`geo.city.${code}`),
+              }))}
+              weekdays={weekdayNames(locale)}
+              industries={onboarding.industries.map((industry) => ({
+                value: industry.key,
+                label: locale === 'ar' ? industry.name.ar : industry.name.en,
+              }))}
+              suggestedZones={suggestedTimeZones()}
+              brand={soleBrand}
+              labels={{
+                name: t('settings.name'),
+                nameHint: t('settings.hint.name'),
+                locale: t('settings.locale'),
+                localeHint: t('settings.hint.locale'),
+                localeAr: t('brandProfile.localeAr'),
+                localeEn: t('brandProfile.localeEn'),
+                country: t('settings.country'),
+                countryHint: t('settings.hint.country'),
+                timezone: t('settings.timezone'),
+                timezoneHint: t('settings.hint.timezone'),
+                city: t('settings.city'),
+                cityHint: t('settings.hint.city'),
+                cityNone: t('settings.cityNone'),
+                weekStart: t('settings.weekStart'),
+                weekStartHint: t('settings.hint.weekStart'),
+                industry: t('settings.industry'),
+                industryHint: t('settings.hint.industry'),
+                industryNone: t('settings.industryNone'),
+                industryOther: t('settings.industryOther'),
+                industryOtherLabel: t('settings.industryOtherLabel'),
+                website: t('settings.website'),
+                websiteHint: t('settings.hint.website'),
+                choose: t('createWorkspace.choose'),
+                noResults: t('common.noResults'),
+                timezoneKept: t('settings.timezoneKept'),
+                timezoneUnplanned: t('settings.timezoneUnplanned'),
+              }}
+            />
+          </DraftForm>
         </Card>
 
         {/*

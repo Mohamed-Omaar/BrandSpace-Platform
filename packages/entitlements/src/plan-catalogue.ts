@@ -22,6 +22,8 @@ export interface PlanQuotas {
   readonly scheduledPostsPerMonth: number | null;
   readonly storageGb: number | null;
   readonly analyticsRetentionDays: number | null;
+  /** Q1: how many workspaces an owner on this plan may own. `null` = unlimited. */
+  readonly workspaces: number | null;
 }
 
 export interface PlanAddOn {
@@ -143,6 +145,7 @@ function readPlan(p: Record<string, unknown>): PlanDetail {
       scheduledPostsPerMonth: nullableNumber(quotas['scheduledPostsPerMonth']),
       storageGb: nullableNumber(quotas['storageGb']),
       analyticsRetentionDays: nullableNumber(quotas['analyticsRetentionDays']),
+      workspaces: nullableNumber(quotas['workspaces']),
     },
     addOns: ((p['addOns'] ?? []) as ReadonlyArray<Record<string, unknown>>).map((addOn) => {
       const addOnName = (addOn['name'] ?? {}) as Record<string, string>;

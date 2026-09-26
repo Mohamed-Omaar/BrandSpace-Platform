@@ -31,6 +31,12 @@ export interface LegalDocumentRequirement {
   readonly required: boolean;
 }
 
+export interface IndustryDefinition {
+  readonly key: string;
+  readonly name: LocalizedText;
+  readonly offersQuestionSet: string;
+}
+
 export type OnboardingStepKey =
   'workspace' | 'brand' | 'brand_profile' | 'brand_brain' | 'social' | 'team' | 'plan';
 
@@ -72,6 +78,12 @@ export interface OnboardingPolicy {
     readonly requiredForCustomers: boolean;
     readonly recoveryCodeCount: number;
   };
+  /** A8 (D-328): how long a workspace waits, pending deletion. */
+  readonly workspaceDeletion: {
+    readonly graceDays: number;
+  };
+  /** G6 (D-329): the industry list, and each industry's Offers question set. */
+  readonly industries: readonly IndustryDefinition[];
   readonly steps: readonly OnboardingStepRule[];
 }
 

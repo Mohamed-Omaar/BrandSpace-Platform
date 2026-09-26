@@ -102,18 +102,19 @@ erDiagram
 
 Global identity. **Not** tenant-owned — a user may belong to several workspaces.
 
-| Field                                            | Type            | Notes                                          |
-| ------------------------------------------------ | --------------- | ---------------------------------------------- |
-| `id`                                             | uuid            | PK                                             |
-| `email`                                          | citext          | unique, case-insensitive                       |
-| `emailVerifiedAt`                                | timestamptz     | null until confirmed                           |
-| `passwordHash`                                   | text            | Argon2id; null for SSO-only users              |
-| `name`, `avatarAssetId`                          | text/uuid       |                                                |
-| `locale`                                         | enum(`ar`,`en`) | default from signup                            |
-| `timezone`                                       | text            | IANA                                           |
-| `mfaEnabled`, `mfaSecretRef`                     | bool/text       | secret stored via Secret Service, never inline |
-| `status`                                         | enum            | `pending`, `active`, `suspended`, `deleted`    |
-| `lastLoginAt`, `failedLoginCount`, `lockedUntil` |                 | brute-force protection                         |
+| Field                                            | Type            | Notes                                                                                  |
+| ------------------------------------------------ | --------------- | -------------------------------------------------------------------------------------- |
+| `id`                                             | uuid            | PK                                                                                     |
+| `email`                                          | citext          | unique, case-insensitive                                                               |
+| `emailVerifiedAt`                                | timestamptz     | null until confirmed                                                                   |
+| `passwordHash`                                   | text            | Argon2id; null for SSO-only users                                                      |
+| `name`, `avatarAssetId`                          | text/uuid       |                                                                                        |
+| `locale`                                         | enum(`ar`,`en`) | default from signup                                                                    |
+| `timezone`                                       | text            | IANA                                                                                   |
+| `mfaEnabled`, `mfaSecretRef`                     | bool/text       | secret stored via Secret Service, never inline                                         |
+| `mfaSecretMaterial`, `mfaPendingSecretMaterial`  | jsonb null      | a customer's sealed TOTP seed (D-206), and the one being set up on a new phone (D-333) |
+| `status`                                         | enum            | `pending`, `active`, `suspended`, `deleted`                                            |
+| `lastLoginAt`, `failedLoginCount`, `lockedUntil` |                 | brute-force protection                                                                 |
 
 Indexes: `unique(email)`, `(status)`.
 Lifecycle: `pending → active → suspended → deleted` (soft, then purge after retention window).
@@ -122,16 +123,20 @@ Lifecycle: `pending → active → suspended → deleted` (soft, then purge afte
 
 The isolation boundary.
 
-| Field                                                                   | Type                 | Notes                                                                 |
-| ----------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------- |
-| `id`, `slug`                                                            | uuid / citext unique | slug used in URLs                                                     |
-| `name`, `legalName`, `country`, `defaultLocale`, `timezone`, `currency` |                      |                                                                       |
-| `type`                                                                  | enum                 | `individual`, `startup`, `company`, `creator`, `agency`, `enterprise` |
-| `status`                                                                | enum                 | `trialing`, `active`, `past_due`, `suspended`, `cancelled`, `deleted` |
-| `ownerUserId`                                                           | uuid                 | current Workspace Owner                                               |
-| `parentWorkspaceId`                                                     | uuid null            | reserved for agency grouping (no data access implication)             |
-| `dataRetentionDays`, `analyticsRetentionDays`                           | int                  | from plan, overridable                                                |
-| `suspendedAt`, `suspendedReason`, `trialEndsAt`                         |                      |                                                                       |
+| Field                                                                      | Type                         | Notes                                                                                    |
+| -------------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
+| `id`, `slug`                                                               | uuid / citext unique         | slug used in URLs                                                                        |
+| `name`, `legalName`, `country`, `defaultLocale`, `timezone`, `currency`    |                              |                                                                                          |
+| `type`                                                                     | enum                         | `individual`, `startup`, `company`, `creator`, `agency`, `enterprise`                    |
+| `status`                                                                   | enum                         | `trialing`, `active`, `past_due`, `suspended`, `cancelled`, `deleted`                    |
+| `ownerUserId`                                                              | uuid                         | current Workspace Owner                                                                  |
+| `parentWorkspaceId`                                                        | uuid null                    | reserved for agency grouping (no data access implication)                                |
+| `dataRetentionDays`, `analyticsRetentionDays`                              | int                          | from plan, overridable                                                                   |
+| `suspendedAt`, `suspendedReason`, `trialEndsAt`                            |                              |                                                                                          |
+| `deletionRequestedAt`, `deletionScheduledFor`, `deletionRequestedByUserId` | timestamptz null / uuid null | the owner's deletion request and its date (D-328); both or neither (CHECK)               |
+| `city`                                                                     | text null                    | an ISO 3166-2:EG governorate code, Egypt only (CHECK `workspace_city_egypt_only`, D-330) |
+| `weekStartsOn`                                                             | int null                     | 0 = Sunday … 6 = Saturday (CHECK); null follows `content.calendar.weekStartsOn` (D-330)  |
+| `requireMfa`                                                               | boolean, default false       | every member must have two-step verification on here (D-333)                             |
 
 Indexes: `unique(slug)`, `(status)`, `(ownerUserId)`.
 
@@ -185,13 +190,14 @@ Indexes: `unique(role.workspaceId, role.key)`, `unique(permission.key)`, `unique
 
 ### 4.1 `Brand`
 
-| Field                                                                          | Notes                         |
-| ------------------------------------------------------------------------------ | ----------------------------- |
-| `id`, `workspaceId`, `slug`, `name`                                            | `unique(workspaceId, slug)`   |
-| `industry`, `description`, `websiteUrl`, `defaultLocale`, `supportedLocales[]` |                               |
-| `logoAssetId`, `colorPalette jsonb`, `typography jsonb`, `voiceProfile jsonb`  | brand kit                     |
-| `status`                                                                       | `draft`, `active`, `archived` |
-| `deletedAt`                                                                    | soft delete                   |
+| Field                                                                          | Notes                                                                                                                                                           |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`, `workspaceId`, `slug`, `name`                                            | `unique(workspaceId, slug)`                                                                                                                                     |
+| `industry`, `description`, `websiteUrl`, `defaultLocale`, `supportedLocales[]` |                                                                                                                                                                 |
+| `primaryGoalKey`                                                               | text null — the first goal's identifier (`LEADS`), CHECK `brand_primary_goal_key_shape`; trusted only while setup wrote `goal.primary`'s latest version (D-335) |
+| `logoAssetId`, `colorPalette jsonb`, `typography jsonb`, `voiceProfile jsonb`  | brand kit                                                                                                                                                       |
+| `status`                                                                       | `draft`, `active`, `archived`                                                                                                                                   |
+| `deletedAt`                                                                    | soft delete                                                                                                                                                     |
 
 Indexes: `(workspaceId, status)`, `unique(workspaceId, slug)`.
 
@@ -205,16 +211,16 @@ composite foreign key `(workspaceId, brandId)` referencing `brand(workspaceId, i
 pointing at another workspace's brand is refused by PostgreSQL and not by a service that remembered
 to check. RLS alone would admit such a row, because it would carry its own `workspaceId`.
 
-| Table                                              | What it holds                                                                                                                                                                                                                                                                                                                                                |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `brand`                                            | One brand in a workspace. `unique(workspaceId, slug)`, soft delete                                                                                                                                                                                                                                                                                           |
-| `brand_knowledge_item`                             | The canonical unit. `area`, `memory` (D-64), `origin` (D-65 human precedence), `status`, `itemKey`, localized `title`/`body`, `confidenceMilli` (NULL for human knowledge — a human statement is not a probability), provenance columns, `evidence`, `version`, `indexVector`, staleness and conflict columns. `unique(workspaceId, brandId, area, itemKey)` |
-| `brand_knowledge_version`                          | APPEND-ONLY history. UPDATE and DELETE revoked from both roles, FORCE RLS leaves the owner without a policy, and a trigger refuses the operation outright — three independent layers                                                                                                                                                                         |
-| `brand_source_document`                            | An uploaded source. The BYTES ARE NOT HERE: a `storageKey` points into object storage. `unique(workspaceId, brandId, checksum)` is duplicate protection by content; `unique(workspaceId, idempotencyKey)` is request replay                                                                                                                                  |
-| `brand_source_chunk`                               | Retrievable chunks with a human-readable `locator`, so a citation points somewhere a person can check                                                                                                                                                                                                                                                        |
-| `brand_knowledge_candidate`                        | **The governance boundary.** Extraction writes here and never to `brand_knowledge_item`, so no upload can change approved knowledge on its own. The extraction is preserved even when a reviewer edits before accepting                                                                                                                                      |
-| `brand_ingestion_job`                              | Lifecycle, attempts and customer-safe failure text. A partial unique index keeps at most one live job per document                                                                                                                                                                                                                                           |
-| `brand_brain_conversation` / `brand_brain_message` | Chat. D-78: the message row is the artifact, carries its own `expiresAt`, and the purge clears the BODY while leaving `aiRequestId` and the ledger link intact                                                                                                                                                                                               |
+| Table                                              | What it holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `brand`                                            | One brand in a workspace. `unique(workspaceId, slug)`, soft delete                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `brand_knowledge_item`                             | The canonical unit. `area`, `memory` (D-64), `origin` (D-65 human precedence: HUMAN, then DOCUMENT and SETUP (D-335) level, then AI_INFERRED; where the row came from, never changed by later versions), `status`, `itemKey`, localized `title`/`body`, `confidenceMilli` (NULL for human knowledge — a human statement is not a probability), provenance columns, `evidence`, `version`, `indexVector`, staleness and conflict columns. `unique(workspaceId, brandId, area, itemKey)` |
+| `brand_knowledge_version`                          | APPEND-ONLY history. UPDATE and DELETE revoked from both roles, FORCE RLS leaves the owner without a policy, and a trigger refuses the operation outright — three independent layers                                                                                                                                                                                                                                                                                                   |
+| `brand_source_document`                            | An uploaded source. The BYTES ARE NOT HERE: a `storageKey` points into object storage. `unique(workspaceId, brandId, checksum)` is duplicate protection by content; `unique(workspaceId, idempotencyKey)` is request replay                                                                                                                                                                                                                                                            |
+| `brand_source_chunk`                               | Retrievable chunks with a human-readable `locator`, so a citation points somewhere a person can check                                                                                                                                                                                                                                                                                                                                                                                  |
+| `brand_knowledge_candidate`                        | **The governance boundary.** Extraction writes here and never to `brand_knowledge_item`, so no upload can change approved knowledge on its own. The extraction is preserved even when a reviewer edits before accepting                                                                                                                                                                                                                                                                |
+| `brand_ingestion_job`                              | Lifecycle, attempts and customer-safe failure text. A partial unique index keeps at most one live job per document                                                                                                                                                                                                                                                                                                                                                                     |
+| `brand_brain_conversation` / `brand_brain_message` | Chat. D-78: the message row is the artifact, carries its own `expiresAt`, and the purge clears the BODY while leaving `aiRequestId` and the ledger link intact                                                                                                                                                                                                                                                                                                                         |
 
 **Enums:** `BrandStatus`, `BrandKnowledgeArea` (ten areas), `BrandMemoryLayer` (D-64's four memories),
 `BrandKnowledgeOrigin`, `BrandKnowledgeStatus`, `BrandSourceStatus`, `BrandIngestionStage`,
@@ -664,6 +670,17 @@ the CHECK is what makes the limitation a fact rather than a convention.
 **WIDER** in `linkPath`, `brandId`, `resourceType` and `resourceId` — where the notification points.
 `notification_link_is_relative` refuses anything that is not a relative path, so a row can never
 carry an absolute redirect target written by one tenant and followed by another's browser.
+
+### 9.3c The `notification_preference` table — prototype v94 Phase 2B-1 (D-331)
+
+| Field                               | Type        | Notes                                                                                                     |
+| ----------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------- |
+| `workspaceId`, `userId`, `category` | uuid / text | unique together; `category` is CHECKed to `approvals`, `publishing`, `automations`, `brand_brain_reviews` |
+| `enabled`                           | boolean     | only "off" needs a row: NO ROW MEANS ON                                                                   |
+
+Tenant-owned: ENABLE + FORCE RLS with `tenant_isolation` / `platform_access`, FKs to `workspace` and
+`user` (both CASCADE). Read by `NotificationService.create`, which leaves out a recipient who switched
+the template's category off; workspace notices belong to no category and are always written.
 
 ### The Activity Log adds NO TABLE (Phase 5B-3, D-124)
 
@@ -1200,17 +1217,17 @@ Indexes: `(domain, environment, status)`, `(activatedAt desc)`.
 
 ## 13. Data Lifecycle and Retention
 
-| Data                           | Default retention                     | Notes                                                           |
-| ------------------------------ | ------------------------------------- | --------------------------------------------------------------- |
-| Audit events                   | 24 months                             | configurable per plan; exportable                               |
-| Metric snapshots               | per plan (`analyticsRetentionDays`)   | pruned by a scheduled job                                       |
-| AI request input summaries     | 90 days                               | raw prompt/response bodies are **not** stored by default (R-23) |
-| AI usage ledger                | 7 years                               | financial record                                                |
-| Credit transactions / invoices | 7 years                               | financial record                                                |
-| Soft-deleted content           | 30 days, then purge                   | restorable within the window                                    |
-| Deleted workspace              | 30-day grace, then irreversible purge | export offered first                                            |
-| Publish attempts               | 12 months                             | provider responses redacted                                     |
-| Backups                        | 30 days PITR + 12 monthly snapshots   | restore tested quarterly                                        |
+| Data                           | Default retention                     | Notes                                                                                                                                        |
+| ------------------------------ | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Audit events                   | 24 months                             | configurable per plan; exportable                                                                                                            |
+| Metric snapshots               | per plan (`analyticsRetentionDays`)   | pruned by a scheduled job                                                                                                                    |
+| AI request input summaries     | 90 days                               | raw prompt/response bodies are **not** stored by default (R-23)                                                                              |
+| AI usage ledger                | 7 years                               | financial record                                                                                                                             |
+| Credit transactions / invoices | 7 years                               | financial record                                                                                                                             |
+| Soft-deleted content           | 30 days, then purge                   | restorable within the window                                                                                                                 |
+| Deleted workspace              | 30-day grace, then irreversible purge | export offered first; the grace is `workspace.deletionScheduledFor` (D-328) — marked DELETED at its end; physical purge is the §15 lifecycle |
+| Publish attempts               | 12 months                             | provider responses redacted                                                                                                                  |
+| Backups                        | 30 days PITR + 12 monthly snapshots   | restore tested quarterly                                                                                                                     |
 
 ---
 

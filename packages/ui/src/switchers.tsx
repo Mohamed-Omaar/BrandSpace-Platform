@@ -287,6 +287,96 @@ export function BrandCard({
 }
 
 /**
+ * THE BUSINESS SWITCHER (Q1 / Q2, D-326 — supersedes D-302 for the switcher).
+ *
+ * The rail's card, opening the list of every business this person belongs to.
+ * It is the SAME card as `BrandCard` — the same tile, the same two lines, the
+ * same surface — so nothing about the rail's look changes: the face still
+ * names the brand the reader works on, and its second line now says who they
+ * are here ("Owner · Growth"). What changes is that the card opens a menu.
+ *
+ * WHY THE ROWS ARE FORMS. Switching business rewrites the session the server
+ * owns and re-verifies membership (`switchWorkspaceAction`), so each row posts
+ * to it, exactly as a brand row posts to its action. The current business is
+ * marked by a tick AND `aria-current`, never by colour alone.
+ *
+ * THE FOOT OF THE MENU IS THE CALLER'S (usage, "+ New workspace" or the
+ * upgrade note, the brand profile), because whether it appears at all is a
+ * rule about the person's plans that this component must not know.
+ */
+export interface BusinessSwitcherOption {
+  readonly id: string;
+  readonly name: string;
+  /** "Role · Plan", in the reader's language. */
+  readonly caption: string;
+  readonly current?: boolean | undefined;
+}
+
+export function BusinessSwitcher({
+  label,
+  current,
+  options,
+  action,
+  hiddenFields,
+  footer,
+}: {
+  readonly label: string;
+  /** The card's two lines: the brand worked on, and "Role · Plan". */
+  readonly current: { readonly name: string; readonly caption: string };
+  readonly options: readonly BusinessSwitcherOption[];
+  /** The server action each row posts to, with `workspaceId`. */
+  readonly action: (formData: FormData) => void | Promise<void>;
+  readonly hiddenFields: Readonly<Record<string, string>>;
+  readonly footer?: ReactNode;
+}) {
+  return (
+    <DropdownMenu
+      label={label}
+      testId="workspace-switcher"
+      align="start"
+      trigger="card"
+      triggerContent={brandCardContent(current)}
+    >
+      {options.map((option) => (
+        <form action={action} key={option.id}>
+          {Object.entries(hiddenFields).map(([field, fieldValue]) => (
+            <input key={field} type="hidden" name={field} value={fieldValue} />
+          ))}
+          <input type="hidden" name="workspaceId" value={option.id} />
+          <button
+            type="submit"
+            role="menuitem"
+            data-testid={`workspace-option-${option.id}`}
+            aria-current={option.current ? 'true' : undefined}
+            style={{
+              ...menuItemStyle(),
+              background: option.current ? colorTokens.brandPurpleTint : 'transparent',
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                display: 'inline-flex',
+                color: option.current ? colorTokens.brandPurple : 'transparent',
+              }}
+            >
+              <CheckIcon size={16} />
+            </span>
+            <span style={{ display: 'grid', minInlineSize: 0 }}>
+              <span style={{ fontWeight: 600 }}>{option.name}</span>
+              <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                {option.caption}
+              </span>
+            </span>
+          </button>
+        </form>
+      ))}
+      {footer}
+    </DropdownMenu>
+  );
+}
+
+/**
  * THE GLOBAL BRAND SELECTOR (D-190).
  *
  * IT IS THE WORKSPACE CARD'S SIBLING, NOT A SECOND NAVIGATION SYSTEM. Same

@@ -63,9 +63,12 @@ export { EXPIRING_SOON_MS, SocialConnectionService, toConnectionView } from './c
 export type { ConnectionServiceOptions, ConnectionView } from './connections';
 
 export {
+  AWAITING_RECONNECT_CODE,
   PublishPipelineService,
+  RECONNECT_REQUIRED_CODE,
   providerForPlatformKey,
   publishIdempotencyKey,
+  unreachableChannelGate,
 } from './publishing';
 export type {
   ExecuteResult,

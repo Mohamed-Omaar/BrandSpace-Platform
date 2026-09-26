@@ -42,6 +42,92 @@ export interface CalendarDay {
    */
   readonly isPast?: boolean;
   readonly posts: readonly PostRecord[];
+  /**
+   * G6 (prototype v94 Phase 2B-1, D-329) — the day's holidays and industry
+   * observances, each a ★ chip; with an `href`, the chip opens the Studio for
+   * this day.
+   */
+  readonly markers?: readonly CalendarDayMarker[];
+}
+
+export interface CalendarDayMarker {
+  readonly label: string;
+  readonly kind: 'holiday' | 'observance';
+  readonly href?: string | undefined;
+}
+
+/**
+ * THE ★ CHIP (G6, D-329) — a DESIGN-SYSTEM EXTENSION (UI-FIDELITY §6.3.32).
+ *
+ * Composed from what the calendar already draws: the "today" pill's accent
+ * pair (`brandYellowTint` behind `brandYellowText`, 6.1:1) at the post chip's
+ * `micro` size, so a day that means something reads apart from the posts on
+ * it without a new colour or shape. A link when it leads somewhere — the
+ * Studio for that day — and plain text otherwise.
+ */
+function DayMarkers({
+  day,
+  markers,
+  testIdPrefix,
+}: {
+  readonly day: CalendarDay;
+  readonly markers: readonly CalendarDayMarker[];
+  /** The month grid and the agenda are both in the DOM; each names its own. */
+  readonly testIdPrefix: string;
+}) {
+  return (
+    <>
+      {markers.map((marker, index) => {
+        const style = {
+          justifySelf: 'start',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.25rem',
+          maxInlineSize: '100%',
+          minBlockSize: '1.5rem',
+          paddingInline: spacingTokens.xs,
+          borderRadius: radiusTokens.full,
+          background: colorTokens.brandYellowTint,
+          color: colorTokens.brandYellowText,
+          textDecoration: 'none',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          ...typographyTokens.micro,
+          fontWeight: 700,
+        } as const;
+        const content = (
+          <>
+            <span aria-hidden="true">★</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{marker.label}</span>
+          </>
+        );
+        const testId = `${testIdPrefix}-${day.key}-${index}`;
+        return marker.href ? (
+          <a
+            key={`${marker.kind}-${index}`}
+            href={marker.href}
+            className="bs-pressable"
+            data-testid={testId}
+            data-kind={marker.kind}
+            aria-label={`${marker.label} — ${day.longLabel}`}
+            style={style}
+          >
+            {content}
+          </a>
+        ) : (
+          <span
+            key={`${marker.kind}-${index}`}
+            data-testid={testId}
+            data-kind={marker.kind}
+            style={style}
+          >
+            {content}
+          </span>
+        );
+      })}
+    </>
+  );
 }
 
 export interface CalendarLabels extends PostCardLabels {
@@ -214,6 +300,9 @@ function MonthGrid({
                 {day.label}
               </span>
               <div style={{ display: 'grid', gap: spacingTokens['3xs'], alignContent: 'start' }}>
+                {day.markers && day.markers.length > 0 ? (
+                  <DayMarkers day={day} markers={day.markers} testIdPrefix="calendar-marker" />
+                ) : null}
                 {day.posts.map((post) => (
                   <CalendarPostChip
                     key={post.id}
@@ -279,7 +368,11 @@ function Agenda({
   readonly onOpenPost?: ((post: PostRecord) => void) | undefined;
   readonly emptyAction?: ReactNode;
 }) {
-  const withPosts = days.filter((day) => day.posts.length > 0);
+  // A day with a ★ holiday or observance is listed too, so the phone's agenda
+  // says what the month grid says (G6, D-329).
+  const withPosts = days.filter(
+    (day) => day.posts.length > 0 || (day.markers !== undefined && day.markers.length > 0),
+  );
   if (withPosts.length === 0) {
     return (
       <StateMessage
@@ -343,6 +436,9 @@ function Agenda({
             ) : null}
           </div>
           <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+            {day.markers && day.markers.length > 0 ? (
+              <DayMarkers day={day} markers={day.markers} testIdPrefix="agenda-marker" />
+            ) : null}
             {day.posts.map((post) => (
               <CalendarPostChip
                 key={post.id}

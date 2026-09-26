@@ -21,7 +21,7 @@ import {
   type BrandPolicyRow,
   type ReviewSubjectView,
 } from './approvals-view';
-import { decideApprovalAction, saveApprovalPolicyAction, withdrawApprovalAction } from './actions';
+import { decideApprovalAction, withdrawApprovalAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -384,7 +384,6 @@ export default async function ApprovalsPage({
         actions={{
           decide: decideApprovalAction,
           withdraw: withdrawApprovalAction,
-          savePolicy: saveApprovalPolicyAction,
         }}
       />
     </WorkspaceShell>

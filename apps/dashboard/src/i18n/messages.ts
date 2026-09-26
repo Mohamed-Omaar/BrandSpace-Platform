@@ -210,6 +210,19 @@ export const messages = {
     'brand.switcherLabel': 'العلامات التجارية',
     'brand.cardLabel': 'علامتك التجارية',
     'ws.switchBusiness': 'تبديل النشاط التجاري',
+    'deletion.title': 'مساحة العمل بانتظار الحذف',
+    'deletion.body':
+      'ستُحذف مساحة العمل «{workspace}» في {date}. لا يمكن العمل فيها حتى ذلك الحين.',
+    'deletion.cancel': 'إلغاء الحذف',
+    'deletion.askOwner': 'المالك وحده يستطيع إلغاء الحذف. تواصل معه إن كنت تحتاج مساحة العمل.',
+    'deletion.otherWorkspace': 'اختيار مساحة عمل أخرى',
+    'deletion.listTag': 'بانتظار الحذف',
+    'ws.noPlan': 'بدون باقة',
+    'ws.usage': 'مساحات العمل: {used} من {allowed}',
+    'ws.usageUnlimited': 'مساحات العمل: {used}',
+    'ws.new': '+ مساحة عمل جديدة',
+    'ws.limitReached': 'وصلت إلى عدد مساحات العمل في باقتك. رقِّ الباقة لإضافة مساحة أخرى.',
+    'ws.upgrade': 'عرض الباقات',
     'brand.allBrands': 'كل العلامات التجارية',
     'brand.allBrandsCaption': 'كل ما يمكنك الوصول إليه',
     'brand.selectedCaption': 'العلامة التجارية النشطة',
@@ -364,6 +377,7 @@ export const messages = {
     'perms.desc.workspace.read': 'عرض مساحة العمل',
     'perms.desc.workspace.update': 'تغيير إعدادات مساحة العمل',
     'perms.desc.workspace.delete': 'حذف مساحة العمل',
+    'perms.desc.workspace.security.manage': 'إلزام الجميع في مساحة العمل بالتحقق بخطوتين',
     'perms.desc.workspace.transfer_ownership': 'نقل ملكية مساحة العمل',
     'perms.desc.member.read': 'عرض أعضاء مساحة العمل',
     'perms.desc.member.invite': 'دعوة عضو',
@@ -426,9 +440,28 @@ export const messages = {
     'security.enrolScan': 'امسح الرمز في تطبيق المصادقة، ثم أدخل الرمز المعروض.',
     'security.enrolUri': 'أو أدخل هذا العنوان يدويًا في التطبيق:',
     'security.code': 'الرمز',
+    'security.qrAlt': 'رمز QR لتطبيق المصادقة',
+    'security.typeKey': 'لا يمكنك مسحه؟ اكتب هذا المفتاح في التطبيق بدلًا من ذلك:',
+    'security.newPhoneHeading': 'إعداد هاتفك الجديد',
+    'security.newPhoneExplain':
+      'تنتقل إلى هاتف جديد؟ أدخل رمزًا حاليًا — من هاتفك القديم أو رمز استرداد — لإعداد الجديد. يظل الهاتف القديم يعمل حتى يتم تأكيد الجديد.',
+    'security.newPhone': 'هاتف جديد',
+    'security.requiredCannotDisable':
+      'تتطلب {workspace} التحقق بخطوتين، لذلك لا يمكن إيقافه ما دمت عضوًا فيها.',
+    'security.orPassword': 'أو كلمة المرور',
+    'security.requireHeading': 'التحقق بخطوتين للجميع',
+    'security.requireLabel': 'إلزام التحقق بخطوتين في {workspace}',
+    'security.requireHint':
+      'يُطلب ممن لم يفعّله إعداده قبل المتابعة، ولا يمكن لأحد هنا إيقافه ما دام هذا الخيار مفعّلًا. فعّل التحقق الخاص بك أولًا.',
+    'security.recoverySaved': 'حفظتها',
+    'mfaSetup.title': 'إعداد التحقق بخطوتين',
+    'mfaSetup.body': 'تتطلب {workspace} التحقق بخطوتين. أعدّه على هاتفك للمتابعة.',
+    'mfaSetup.start': 'ابدأ الإعداد',
+    'mfaSetup.other': 'استخدم مساحة عمل أخرى',
     'security.confirm': 'تأكيد',
     'security.disable': 'إيقاف التحقق بخطوتين',
-    'security.disableExplain': 'يتطلب رمزًا صالحًا: سرقة الجلسة وحدها يجب ألا تكفي لإزالة الحماية.',
+    'security.disableExplain':
+      'يتطلب رمزًا حاليًا أو كلمة المرور: سرقة الجلسة وحدها يجب ألا تكفي لإزالة الحماية.',
     'security.recoveryHeading': 'رموز الاسترداد',
     'security.recoveryRemaining': 'الرموز المتبقية',
     'security.recoveryExplain':
@@ -444,6 +477,8 @@ export const messages = {
     'settings.navLabel': 'أقسام الإعدادات',
     'settings.connections': 'الاتصالات',
     'settings.data': 'التحكم في البيانات',
+    'settings.approvals': 'الموافقات',
+    'settings.approvalsNoBrand': 'أنشئ علامتك التجارية أولًا، ثم اضبط قواعد الموافقة لها هنا.',
     'data.subtitle': 'ما يمكن لبراندسبيس فعله ببياناتك اليوم، وما لا يمكنه بعد.',
     'data.open': 'فتح',
     'data.unavailable': 'غير متاح بعد',
@@ -460,11 +495,91 @@ export const messages = {
     'data.brandSources.body': 'احذف المستندات المرفوعة والمعرفة المستخلصة منها من عقل العلامة.',
     'data.workspaceExport.title': 'تصدير كل بياناتك',
     'data.workspaceExport.body': 'لا يتوفر تصدير واحد لكل بيانات نشاطك التجاري كإجراء ذاتي.',
-    'data.workspaceDeletion.title': 'حذف حساب النشاط التجاري',
-    'data.workspaceDeletion.body': 'حذف حساب النشاط التجاري غير متاح كإجراء ذاتي.',
+    'data.workspaceDeletion.title': 'حذف مساحة العمل',
+    'data.workspaceDeletion.body':
+      'المالك وحده يطلب الحذف. تبقى مساحة العمل {days} يومًا بانتظار الحذف ويمكن إلغاء الطلب خلالها، ثم تُحذف.',
+    'data.workspaceDeletion.start': 'حذف مساحة العمل…',
+    'data.workspaceDeletion.warning':
+      'بعد التأكيد يُغلق العمل في مساحة العمل على كل الأعضاء، ولا يُنشر شيء ولا تُصرف أي أرصدة. بعد {days} يومًا تُحذف ما لم يُلغِ المالك الطلب.',
+    'data.workspaceDeletion.confirmName': 'اكتب اسم مساحة العمل للتأكيد: {name}',
+    'data.workspaceDeletion.password': 'كلمة مرورك',
+    'data.workspaceDeletion.confirm': 'اطلب حذف مساحة العمل',
+    'data.workspaceDeletion.ownerOnly': 'المالك وحده يستطيع حذف مساحة العمل',
     'settings.name': 'الاسم',
     'settings.locale': 'اللغة',
     'settings.timezone': 'المنطقة الزمنية',
+    'settings.notifications': 'الإشعارات',
+    'settings.ai': 'الذكاء الاصطناعي',
+    'notificationPrefs.title': 'ما الذي يصلني إشعار به',
+    'notificationPrefs.body':
+      'مفاتيحك الخاصة لجرس الإشعارات في مساحة العمل هذه. لا يراها أحد غيرك، وتصلك دائمًا الإشعارات الخاصة بمساحة العمل نفسها.',
+    'notificationPrefs.approvals': 'الموافقات',
+    'notificationPrefs.approvals.hint':
+      'منشور ينتظر مراجعتي، أو تمت الموافقة على منشوري أو إعادته أو رفضه.',
+    'notificationPrefs.publishing': 'النشر',
+    'notificationPrefs.publishing.hint': 'نُشر منشور أو فشل نشره، أو يحتاج حساب إلى إعادة الربط.',
+    'notificationPrefs.automations': 'أتمتة تُعلمني أو تحتاج موافقتي',
+    'notificationPrefs.automations.hint': 'إشعارات من الأتمتة، وتلك التي تنتظر تأكيدي.',
+    'notificationPrefs.brand_brain_reviews': 'معلومات في عقل العلامة تنتظر مراجعتي',
+    'notificationPrefs.brand_brain_reviews.hint':
+      'تعلّم عقل العلامة شيئًا من النتائج وينتظر مراجعتي.',
+    'aiSettings.title': 'لغة الكتابة بالذكاء الاصطناعي',
+    'aiSettings.body': 'اللغة التي يكتب بها الذكاء الاصطناعي المسودات الجديدة لهذه العلامة.',
+    'aiSettings.language': 'لغة الكتابة',
+    'aiSettings.languageHint':
+      'تبدأ المسودات الجديدة بهذه اللغة، ويمكنك اختيار لغة أخرى لأي منشور.',
+    'aiSettings.noBrand': 'أضف علامة تجارية لاختيار لغة الكتابة الخاصة بها.',
+    'settings.country': 'الدولة',
+    'settings.city': 'المدينة',
+    'settings.cityNone': 'اختر مدينة',
+    'settings.weekStart': 'يبدأ الأسبوع يوم',
+    'settings.industry': 'المجال',
+    'settings.industryNone': 'غير محدد',
+    'settings.industryOther': 'شيء آخر',
+    'settings.industryOtherLabel': 'مجال نشاطك',
+    'settings.website': 'الموقع الإلكتروني',
+    'settings.hint.name': 'يظهر في مبدّل مساحات العمل وفي الدعوات.',
+    'settings.hint.locale': 'اللغة الأساسية لنشاطك التجاري.',
+    'settings.hint.country': 'تحدد العطلات في تقويمك وأوقات النشر المقترحة.',
+    'settings.hint.timezone':
+      'تُجدول المنشورات وتُعرض بتوقيت هذه المنطقة. عند تغييرها تبقى المنشورات المخططة على توقيتها المحلي.',
+    'settings.timezoneKept':
+      'ستبقى {count} من المنشورات المخططة على توقيتها المحلي في المنطقة الجديدة.',
+    'settings.timezoneUnplanned':
+      'هذه ستصبح في الماضي أو قريبة جدًا، فتعود إلى مخطط ويُبلَّغ كاتبوها:',
+    'settings.hint.city': 'لمصر فقط. تُحفظ مع بيانات نشاطك التجاري.',
+    'settings.hint.weekStart': 'أول يوم في كل أسبوع في تقويمك.',
+    'settings.hint.industry': 'يضيف المناسبات الخاصة بمجالك إلى التقويم.',
+    'settings.hint.website': 'يُحفظ في ملف علامتك التجارية.',
+    'saveBar.saved': 'تم حفظ كل التغييرات',
+    'saveBar.unsaved': 'تغييرات غير محفوظة',
+    'geo.city.EG-C': 'القاهرة',
+    'geo.city.EG-GZ': 'الجيزة',
+    'geo.city.EG-ALX': 'الإسكندرية',
+    'geo.city.EG-KB': 'القليوبية',
+    'geo.city.EG-PTS': 'بورسعيد',
+    'geo.city.EG-SUZ': 'السويس',
+    'geo.city.EG-IS': 'الإسماعيلية',
+    'geo.city.EG-DT': 'دمياط',
+    'geo.city.EG-DK': 'الدقهلية',
+    'geo.city.EG-SHR': 'الشرقية',
+    'geo.city.EG-GH': 'الغربية',
+    'geo.city.EG-MNF': 'المنوفية',
+    'geo.city.EG-BH': 'البحيرة',
+    'geo.city.EG-KFS': 'كفر الشيخ',
+    'geo.city.EG-FYM': 'الفيوم',
+    'geo.city.EG-BNS': 'بني سويف',
+    'geo.city.EG-MN': 'المنيا',
+    'geo.city.EG-AST': 'أسيوط',
+    'geo.city.EG-SHG': 'سوهاج',
+    'geo.city.EG-KN': 'قنا',
+    'geo.city.EG-LX': 'الأقصر',
+    'geo.city.EG-ASN': 'أسوان',
+    'geo.city.EG-BA': 'البحر الأحمر',
+    'geo.city.EG-WAD': 'الوادي الجديد',
+    'geo.city.EG-MT': 'مطروح',
+    'geo.city.EG-SIN': 'شمال سيناء',
+    'geo.city.EG-JS': 'جنوب سيناء',
     'plan.title': 'الخطة والميزات الفعّالة',
     'plan.current': 'الخطة الحالية',
     'plan.none': 'لم تُعيَّن خطة بعد.',
@@ -779,6 +894,7 @@ export const messages = {
       'ترتيب الأولوية: الأساسية تسبق الاستراتيجية تسبق المحتوى تسبق التعلّم.',
     'bb.origin.DOCUMENT': 'من مستند',
     'bb.origin.AI_INFERRED': 'مستنتجة',
+    'bb.origin.SETUP': 'من الإعداد',
     'bb.fieldStatus': 'الحالة',
     'bb.archive': 'أرشفة',
     'bb.detailClose': 'إغلاق اللوحة',
@@ -1132,6 +1248,8 @@ export const messages = {
     'create.repurpose.from': 'إعادة استخدام «{title}»',
     'create.repurpose.fromBody':
       'يحتوي الوصف أدناه على كلمات المنشور الأصلي. عدّله كما تشاء — الأصل لا يتغير.',
+    'create.plannedFor': 'لـ {name} · {date}',
+    'create.plannedDate': 'مخطط ليوم {date}',
     'create.write.label': 'منشورك',
     'create.write.placeholder': 'اكتب المنشور تمامًا كما يجب أن يُقرأ.',
     'create.format.unsupported': 'لا تدعم هذه القناة هذا الشكل.',
@@ -1248,6 +1366,7 @@ export const messages = {
     'calendar.moveFromPost': 'على الهاتف، افتح المنشور لنقله إلى يوم آخر.',
     'calendar.scheduleDate': 'التاريخ',
     'calendar.scheduleTime': 'الوقت',
+    'calendar.suggestedTime': 'وقت مقترح',
     'calendar.scheduleSubmit': 'أضف إلى التقويم',
     'calendar.rescheduleTitle': 'نقل الموعد',
     'calendar.rescheduleSubmit': 'انقل',
@@ -1264,7 +1383,10 @@ export const messages = {
     'calendar.readiness': 'جاهزية النشر',
     'calendar.readiness.READY': 'جاهز للنشر',
     'calendar.readiness.EXPIRING': 'صلاحية الحساب تنتهي قريبًا',
-    'calendar.readiness.NEEDS_REAUTH': 'الحساب يحتاج إعادة ربط',
+    'calendar.readiness.EXPIRED': 'منتهي الصلاحية',
+    'calendar.readiness.REVOKED': 'الحساب مفصول — لن يُرسل شيء إلى هذه القناة',
+    'readiness.expiredExplanation':
+      'أعد ربط الحساب. حتى ذلك الحين تنتظر هذه القناة؛ وإن لم يُعد ربطه خلال {minutes} دقيقة من الموعد المجدول فلن يُنشر عليها. تُنشر القنوات الأخرى في موعدها.',
     'calendar.readiness.NOT_CONNECTED': 'لا يوجد حساب مرتبط',
     'calendar.readiness.UNSUPPORTED': 'القناة غير متاحة للنشر',
     'calendar.readinessBlocked': 'منشورات مجدولة لن تُنشر بحالتها الحالية',
@@ -1361,6 +1483,10 @@ export const messages = {
     'publishing.failure.unknown': 'ردّ غير متوقع من المنصة.',
     /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
     'publishing.code.preflight.not_connected': 'الحساب لم يعد متصلًا. أعد ربطه ثم أعد المحاولة.',
+    'publishing.code.preflight.awaiting_reconnect':
+      'بانتظار إعادة ربط الحساب. أعد ربطه ليُنشر المنشور؛ وإن لم يُعد ربطه في الوقت المناسب فلن يُرسل إلى هذا الحساب.',
+    'publishing.code.preflight.reconnect_required':
+      'لم يُرسل: كان الحساب بحاجة إلى إعادة ربط ولم يُعد ربطه في الوقت المناسب. أعد ربط الحساب ثم انشر مرة أخرى.',
     'publishing.code.preflight.no_credential': 'لا يوجد إذن صالح لهذا الحساب. أعد ربطه.',
     'publishing.code.preflight.variant_missing': 'لم يعد لهذا المنشور نص على هذه المنصة.',
     'publishing.code.preflight.too_many_media':
@@ -1429,6 +1555,8 @@ export const messages = {
     'approvals.policySelf': 'اسمح باعتماد المحتوى الذي أرسله المراجع نفسه',
     'approvals.policySave': 'حفظ السياسة',
     'approvals.policyNoPermission': 'تعديل السياسة يحتاج صلاحية إدارة الموافقات.',
+    'approvals.policyMoved': 'تُضبط قواعد الموافقة الآن من الإعدادات ← الموافقات.',
+    'approvals.policyOpen': 'فتح إعدادات الموافقات',
 
     'activity.title': 'سجل النشاط',
     'activity.family.analytics': 'نشاط التحليلات',
@@ -1538,6 +1666,10 @@ export const messages = {
     'activity.action.assets.folder_moved': 'نُقل مجلد',
     'activity.action.assets.folder_deleted': 'حُذف مجلد',
     'activity.action.workspace.created': 'أُنشئ حساب النشاط التجاري',
+    'activity.action.workspace.deletion_requested': 'طُلب حذف مساحة العمل',
+    'activity.action.notification.preferences.updated': 'تم تغيير تفضيلات الإشعارات',
+    'activity.action.workspace.deletion_cancelled': 'أُلغي حذف مساحة العمل',
+    'activity.action.workspace.deleted': 'حُذفت مساحة العمل',
     'activity.action.workspace.settings.updated': 'تغيّرت إعدادات النشاط التجاري',
     'activity.action.workspace.ai_content_retention.updated':
       'تغيّر الاحتفاظ بمحتوى الذكاء الاصطناعي',
@@ -1550,6 +1682,10 @@ export const messages = {
     'activity.action.workspace.invitation.accepted': 'قُبلت دعوة',
     'activity.action.customer.mfa.enrolled': 'فُعّل التحقق بخطوتين',
     'activity.action.customer.mfa.disabled': 'أُوقف التحقق بخطوتين',
+    'activity.action.customer.mfa.reenrolment_started': 'بدأ إعداد هاتف جديد للتحقق بخطوتين',
+    'activity.action.customer.mfa.reenrolled': 'نُقل التحقق بخطوتين إلى هاتف جديد',
+    'activity.action.workspace.security.mfa_requirement_changed':
+      'تغيّر إلزام التحقق بخطوتين في مساحة العمل',
     'activity.action.customer.workspace.created': 'أُنشئ حساب نشاط تجاري',
     'activity.action.customer.signup.started': 'أُنشئ حساب',
     'activity.action.customer.note.thread_started': 'بدأت محادثة',
@@ -1635,6 +1771,8 @@ export const messages = {
       'عُدّل منشور كان بانتظار مراجعتك، فسُحب طلب المراجعة',
     'notifications.template.publishing.published': 'تم نشر منشورك',
     'notifications.template.publishing.failed': 'فشل نشر منشورك',
+    'notifications.template.calendar.unplanned_by_timezone_change':
+      'تغيّرت المنطقة الزمنية فأصبح وقت منشورك مضى أو قريبًا جدًا، فعاد إلى مخطط. اختر وقتًا جديدًا.',
     'notifications.template.publishing.connection_needs_reauth': 'حساب متصل يحتاج إعادة ربط',
 
     'overview.needsApproval': 'بانتظار موافقتك',
@@ -2115,6 +2253,8 @@ export const messages = {
     'automations.brandFilter': 'القواعد والتشغيلات للعلامة {brand}.',
     'notifications.template.analytics.anomaly_detected': 'تغيّر غير معتاد في الأداء',
     'notifications.template.brand_brain.learning_proposed': 'درس مقترح بانتظار مراجعتك',
+    'notifications.template.workspace.deletion_requested': 'طلب المالك حذف مساحة العمل هذه',
+    'notifications.template.workspace.deletion_cancelled': 'أُلغي حذف مساحة العمل هذه',
     'overview.metric.engagement': 'التفاعلات (٢٨ يومًا)',
     'overview.metric.engagementHint': 'من القياسات المخزّنة',
     'overview.analyticsSeeAll': 'عرض التحليلات',
@@ -2505,6 +2645,7 @@ export const messages = {
     'setup.brand.defaultLanguageHint':
       'اللغة التي تبدأ بها المنشورات الجديدة. يمكنك تغييرها في أي منشور.',
     'setup.brand.languages': 'اللغات التي تنشر بها العلامة',
+    'setup.brand.languagesRequired': 'اختر لغة واحدة على الأقل تنشر بها العلامة.',
     'setup.brand.colours': 'ألوان العلامة',
     'setup.brand.coloursHint': 'اختياري. رموز سداسية عشرية مفصولة بفواصل.',
     'setup.brand.logo': 'الشعار',
@@ -2577,6 +2718,7 @@ export const messages = {
     'createWorkspace.legalName': 'الاسم القانوني (اختياري)',
     'createWorkspace.choose': 'اختر…',
     'createWorkspace.submit': 'متابعة',
+    'createWorkspace.back': 'العودة إلى مساحة عملك',
     'createWorkspace.creating': 'جارٍ الإنشاء…',
     'createWorkspace.trialNotice':
       'تبدأ فترة تجريبية مدتها {days} يومًا مع {credits} رصيدًا، بدون بطاقة. عند انتهائها يتوقّف الوصول إلى المزايا المدفوعة ولا يُحذف أي شيء.',
@@ -2831,6 +2973,20 @@ export const messages = {
     'brand.switcherLabel': 'Brands',
     'brand.cardLabel': 'Your brand',
     'ws.switchBusiness': 'Switch business',
+    'deletion.title': 'This workspace is pending deletion',
+    'deletion.body':
+      'The workspace “{workspace}” will be deleted on {date}. Nobody can work in it until then.',
+    'deletion.cancel': 'Cancel deletion',
+    'deletion.askOwner':
+      'Only an owner can cancel the deletion. Ask them if you still need the workspace.',
+    'deletion.otherWorkspace': 'Choose another workspace',
+    'deletion.listTag': 'Pending deletion',
+    'ws.noPlan': 'No plan',
+    'ws.usage': 'Workspaces: {used} of {allowed}',
+    'ws.usageUnlimited': 'Workspaces: {used}',
+    'ws.new': '+ New workspace',
+    'ws.limitReached': 'You have reached your plan’s workspace limit. Upgrade to add another.',
+    'ws.upgrade': 'See plans',
     'brand.allBrands': 'All brands',
     'brand.allBrandsCaption': 'Everything you can access',
     'brand.selectedCaption': 'Active brand',
@@ -2988,6 +3144,8 @@ export const messages = {
     'perms.desc.workspace.read': 'View the workspace',
     'perms.desc.workspace.update': 'Change workspace settings',
     'perms.desc.workspace.delete': 'Delete the workspace',
+    'perms.desc.workspace.security.manage':
+      'Require two-step verification for everyone in the workspace',
     'perms.desc.workspace.transfer_ownership': 'Transfer workspace ownership',
     'perms.desc.member.read': 'List workspace members',
     'perms.desc.member.invite': 'Invite a member',
@@ -3050,10 +3208,29 @@ export const messages = {
     'security.enrolScan': 'Scan this in your authenticator app, then enter the code it shows.',
     'security.enrolUri': 'Or enter this address in the app by hand:',
     'security.code': 'Code',
+    'security.qrAlt': 'QR code for your authenticator app',
+    'security.typeKey': 'Can’t scan it? Type this key into the app instead:',
+    'security.newPhoneHeading': 'Set up your new phone',
+    'security.newPhoneExplain':
+      'Moving to a new phone? Enter a current code — from your old phone, or a recovery code — to set up the new one. The old phone keeps working until the new one is confirmed.',
+    'security.newPhone': 'New phone',
+    'security.requiredCannotDisable':
+      '{workspace} requires two-step verification, so it can’t be turned off while you belong to it.',
+    'security.orPassword': 'Or your password',
+    'security.requireHeading': 'Two-step verification for everyone',
+    'security.requireLabel': 'Require two-step verification in {workspace}',
+    'security.requireHint':
+      'Members without it are asked to set it up before they can continue, and nobody here can turn it off while this is on. Turn on your own first.',
+    'security.recoverySaved': 'I have saved them',
+    'mfaSetup.title': 'Set up two-step verification',
+    'mfaSetup.body':
+      '{workspace} requires two-step verification. Set it up on your phone to continue.',
+    'mfaSetup.start': 'Set it up',
+    'mfaSetup.other': 'Use another workspace',
     'security.confirm': 'Confirm',
     'security.disable': 'Turn off two-factor authentication',
     'security.disableExplain':
-      'Requires a working code: a stolen session must not be enough to remove the protection it was behind.',
+      'Needs a current code or your password: a stolen session alone must not be enough to remove the protection.',
     'security.recoveryHeading': 'Recovery codes',
     'security.recoveryRemaining': 'Codes remaining',
     'security.recoveryExplain':
@@ -3071,6 +3248,8 @@ export const messages = {
     'settings.navLabel': 'Settings sections',
     'settings.connections': 'Connections',
     'settings.data': 'Data controls',
+    'settings.approvals': 'Approvals',
+    'settings.approvalsNoBrand': 'Create your brand first, then set its approval rules here.',
     'data.subtitle': 'What BrandSpace can do with your data today, and what it cannot yet.',
     'data.open': 'Open',
     'data.unavailable': 'Not available yet',
@@ -3089,12 +3268,93 @@ export const messages = {
     'data.workspaceExport.title': 'Export all your data',
     'data.workspaceExport.body':
       'A single export of all your business data is not available as a self-serve action.',
-    'data.workspaceDeletion.title': 'Delete your business account',
+    'data.workspaceDeletion.title': 'Delete the workspace',
     'data.workspaceDeletion.body':
-      'Deleting a business account is not available as a self-serve action.',
+      'Only the owner can ask for this. The workspace then waits {days} days, pending deletion, and the request can be cancelled until then.',
+    'data.workspaceDeletion.start': 'Delete the workspace…',
+    'data.workspaceDeletion.warning':
+      'Once confirmed, nobody can work in this workspace, nothing is published and no credits are spent. After {days} days it is deleted unless an owner cancels.',
+    'data.workspaceDeletion.confirmName': 'Type the workspace name to confirm: {name}',
+    'data.workspaceDeletion.password': 'Your password',
+    'data.workspaceDeletion.confirm': 'Ask to delete the workspace',
+    'data.workspaceDeletion.ownerOnly': 'Only the owner can delete the workspace',
     'settings.name': 'Name',
     'settings.locale': 'Locale',
     'settings.timezone': 'Timezone',
+    'settings.notifications': 'Notifications',
+    'settings.ai': 'AI',
+    'notificationPrefs.title': 'What notifies me',
+    'notificationPrefs.body':
+      'Your own switches for the bell in this workspace. Nobody else sees them, and notices about the workspace itself always arrive.',
+    'notificationPrefs.approvals': 'Approvals',
+    'notificationPrefs.approvals.hint':
+      'A post waits for my review, or mine was approved, sent back or rejected.',
+    'notificationPrefs.publishing': 'Publishing',
+    'notificationPrefs.publishing.hint':
+      'A post was published or failed, or an account needs reconnecting.',
+    'notificationPrefs.automations': 'An automation notifies me or needs my OK',
+    'notificationPrefs.automations.hint':
+      'Notices from automations, and the ones waiting for my confirmation.',
+    'notificationPrefs.brand_brain_reviews': 'Brand Brain facts wait for my review',
+    'notificationPrefs.brand_brain_reviews.hint':
+      'Brand Brain learned something from results and waits for my review.',
+    'aiSettings.title': 'AI writing language',
+    'aiSettings.body': 'The language AI writes new drafts in for this brand.',
+    'aiSettings.language': 'Writing language',
+    'aiSettings.languageHint':
+      'New drafts start in this language; you can still choose another for any post.',
+    'aiSettings.noBrand': 'Add a brand to choose its writing language.',
+    'settings.country': 'Country',
+    'settings.city': 'City',
+    'settings.cityNone': 'Choose a city',
+    'settings.weekStart': 'Week starts on',
+    'settings.industry': 'Industry',
+    'settings.industryNone': 'Not set',
+    'settings.industryOther': 'Something else',
+    'settings.industryOtherLabel': 'Your industry',
+    'settings.website': 'Website',
+    'settings.hint.name': 'Shown in the workspace switcher and on invitations.',
+    'settings.hint.locale': 'The main language of your business.',
+    'settings.hint.country':
+      'Decides the holidays on your calendar and the suggested posting times.',
+    'settings.hint.timezone':
+      'Posts are scheduled and shown at this clock time. Changing it keeps planned posts at their clock time.',
+    'settings.timezoneKept': '{count} planned posts keep their local clock time in the new zone.',
+    'settings.timezoneUnplanned':
+      'These would then be in the past or too soon, so they go back to planned and their authors are told:',
+    'settings.hint.city': 'Egypt only. Saved with your business details.',
+    'settings.hint.weekStart': 'The first day of each week on your calendar.',
+    'settings.hint.industry': "Adds your industry's observances to the calendar.",
+    'settings.hint.website': "Saved on your brand's profile.",
+    'saveBar.saved': 'All changes saved',
+    'saveBar.unsaved': 'Unsaved changes',
+    'geo.city.EG-C': 'Cairo',
+    'geo.city.EG-GZ': 'Giza',
+    'geo.city.EG-ALX': 'Alexandria',
+    'geo.city.EG-KB': 'Qalyubia',
+    'geo.city.EG-PTS': 'Port Said',
+    'geo.city.EG-SUZ': 'Suez',
+    'geo.city.EG-IS': 'Ismailia',
+    'geo.city.EG-DT': 'Damietta',
+    'geo.city.EG-DK': 'Dakahlia',
+    'geo.city.EG-SHR': 'Sharqia',
+    'geo.city.EG-GH': 'Gharbia',
+    'geo.city.EG-MNF': 'Monufia',
+    'geo.city.EG-BH': 'Beheira',
+    'geo.city.EG-KFS': 'Kafr El Sheikh',
+    'geo.city.EG-FYM': 'Faiyum',
+    'geo.city.EG-BNS': 'Beni Suef',
+    'geo.city.EG-MN': 'Minya',
+    'geo.city.EG-AST': 'Asyut',
+    'geo.city.EG-SHG': 'Sohag',
+    'geo.city.EG-KN': 'Qena',
+    'geo.city.EG-LX': 'Luxor',
+    'geo.city.EG-ASN': 'Aswan',
+    'geo.city.EG-BA': 'Red Sea',
+    'geo.city.EG-WAD': 'New Valley',
+    'geo.city.EG-MT': 'Matrouh',
+    'geo.city.EG-SIN': 'North Sinai',
+    'geo.city.EG-JS': 'South Sinai',
     'plan.title': 'Plan & effective features',
     'plan.current': 'Current plan',
     'plan.none': 'No plan has been assigned yet.',
@@ -3406,6 +3666,7 @@ export const messages = {
     'bb.origin.HUMAN': 'Entered by a person',
     'bb.origin.DOCUMENT': 'From a document',
     'bb.origin.AI_INFERRED': 'Inferred',
+    'bb.origin.SETUP': 'From setup',
     'bb.memory.CANONICAL': 'Canonical knowledge',
     'bb.memory.STRATEGY': 'Strategy memory',
     'bb.memory.CONTENT': 'Content memory',
@@ -3780,6 +4041,8 @@ export const messages = {
     'create.repurpose.from': 'Repurposing “{title}”',
     'create.repurpose.fromBody':
       'The brief below holds the original post’s words. Edit it as you like — the original is not changed.',
+    'create.plannedFor': 'For {name} · {date}',
+    'create.plannedDate': 'Planned for {date}',
     'create.write.label': 'Your post',
     'create.write.placeholder': 'Write the post exactly as it should read.',
     'create.format.unsupported': 'This channel cannot carry this format.',
@@ -3898,6 +4161,7 @@ export const messages = {
     'calendar.moveFromPost': 'On a phone, open a post to move it to another day.',
     'calendar.scheduleDate': 'Date',
     'calendar.scheduleTime': 'Time',
+    'calendar.suggestedTime': 'Suggested time',
     'calendar.scheduleSubmit': 'Add to calendar',
     'calendar.rescheduleTitle': 'Move this post',
     'calendar.rescheduleSubmit': 'Move',
@@ -3915,7 +4179,10 @@ export const messages = {
     'calendar.readiness': 'Publishing readiness',
     'calendar.readiness.READY': 'Ready to publish',
     'calendar.readiness.EXPIRING': 'Account access expires soon',
-    'calendar.readiness.NEEDS_REAUTH': 'Account needs reconnecting',
+    'calendar.readiness.EXPIRED': 'Expired',
+    'calendar.readiness.REVOKED': 'Account disconnected — nothing will be sent to this channel',
+    'readiness.expiredExplanation':
+      'Reconnect the account. Until then this channel waits; if it is not reconnected within {minutes} minutes of the scheduled time, it is not posted there. The other channels go out on time.',
     'calendar.readiness.NOT_CONNECTED': 'No connected account',
     'calendar.readiness.UNSUPPORTED': 'Channel unavailable for publishing',
     'calendar.readinessBlocked': 'scheduled posts will not go out as they stand',
@@ -4019,6 +4286,10 @@ export const messages = {
     /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
     'publishing.code.preflight.not_connected':
       'The account is no longer connected. Reconnect it and try again.',
+    'publishing.code.preflight.awaiting_reconnect':
+      'Waiting for the account to be reconnected. Reconnect it and this post goes out; if it is not reconnected in time, it is not sent to this account.',
+    'publishing.code.preflight.reconnect_required':
+      'Not sent: the account needed reconnecting and was not reconnected in time. Reconnect the account, then publish again.',
     'publishing.code.preflight.no_credential':
       'There is no valid access for this account. Reconnect it.',
     'publishing.code.preflight.variant_missing':
@@ -4089,6 +4360,8 @@ export const messages = {
     'approvals.policySelf': 'Allow reviewers to approve what they sent themselves',
     'approvals.policySave': 'Save policy',
     'approvals.policyNoPermission': 'Changing the policy needs approval-management permission.',
+    'approvals.policyMoved': 'Approval rules are set in Settings → Approvals.',
+    'approvals.policyOpen': 'Open approval settings',
 
     'activity.title': 'Activity',
     'activity.family.analytics': 'Analytics activity',
@@ -4200,6 +4473,10 @@ export const messages = {
     'activity.action.assets.folder_moved': 'A folder was moved',
     'activity.action.assets.folder_deleted': 'A folder was deleted',
     'activity.action.workspace.created': 'The business account was created',
+    'activity.action.workspace.deletion_requested': 'Deletion of the workspace was requested',
+    'activity.action.notification.preferences.updated': 'Notification preferences were changed',
+    'activity.action.workspace.deletion_cancelled': 'Deletion of the workspace was cancelled',
+    'activity.action.workspace.deleted': 'The workspace was deleted',
     'activity.action.workspace.settings.updated': 'Business settings were changed',
     'activity.action.workspace.ai_content_retention.updated': 'AI content retention was changed',
     'activity.action.workspace.member.role_changed': 'A member’s role was changed',
@@ -4211,6 +4488,11 @@ export const messages = {
     'activity.action.workspace.invitation.accepted': 'An invitation was accepted',
     'activity.action.customer.mfa.enrolled': 'Two-step verification was turned on',
     'activity.action.customer.mfa.disabled': 'Two-step verification was turned off',
+    'activity.action.customer.mfa.reenrolment_started':
+      'Setting up a new phone for two-step verification began',
+    'activity.action.customer.mfa.reenrolled': 'Two-step verification moved to a new phone',
+    'activity.action.workspace.security.mfa_requirement_changed':
+      'The workspace’s two-step requirement was changed',
     'activity.action.customer.workspace.created': 'A business account was created',
     'activity.action.customer.signup.started': 'An account was created',
     'activity.action.customer.note.thread_started': 'A conversation was started',
@@ -4297,6 +4579,8 @@ export const messages = {
       'A post waiting for your review was edited, so the review was withdrawn',
     'notifications.template.publishing.published': 'Your post was published',
     'notifications.template.publishing.failed': 'Your post could not be published',
+    'notifications.template.calendar.unplanned_by_timezone_change':
+      'The time zone changed and your post’s time would have passed, so it went back to planned. Choose a new time.',
     'notifications.template.publishing.connection_needs_reauth':
       'A connected account needs reconnecting',
 
@@ -4808,6 +5092,10 @@ export const messages = {
     'notifications.template.analytics.anomaly_detected': 'An unusual change in performance',
     'notifications.template.brand_brain.learning_proposed':
       'A proposed learning is waiting for your review',
+    'notifications.template.workspace.deletion_requested':
+      'An owner asked for this workspace to be deleted',
+    'notifications.template.workspace.deletion_cancelled':
+      'The deletion of this workspace was cancelled',
     'overview.metric.engagement': 'Engagements (28 days)',
     'overview.metric.engagementHint': 'From stored measurements',
     'overview.analyticsSeeAll': 'View analytics',
@@ -5214,6 +5502,7 @@ export const messages = {
     'setup.brand.defaultLanguageHint':
       'The language new posts start in. You can change it on any post.',
     'setup.brand.languages': 'Languages this brand publishes in',
+    'setup.brand.languagesRequired': 'Choose at least one language the brand publishes in.',
     'setup.brand.colours': 'Brand colours',
     'setup.brand.coloursHint': 'Optional. Hex codes separated by commas.',
     'setup.brand.logo': 'Logo',
@@ -5289,6 +5578,7 @@ export const messages = {
     'createWorkspace.legalName': 'Legal name (optional)',
     'createWorkspace.choose': 'Choose…',
     'createWorkspace.submit': 'Continue',
+    'createWorkspace.back': 'Back to your workspace',
     'createWorkspace.creating': 'Creating…',
     'createWorkspace.trialNotice':
       'You start a {days}-day trial with {credits} credits and no card. When it ends, access to paid features stops and nothing is deleted.',
@@ -5444,6 +5734,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     en: 'That time has already passed or is too soon. Choose a later time.',
     ar: 'هذا الوقت مضى أو قريب جدًا. اختر وقتًا لاحقًا.',
   },
+  // Q9 (D-332) — every account for one of the post's channels was revoked.
+  CHANNEL_DISCONNECTED: {
+    en: 'An account for one of this post’s channels was disconnected, so nothing could be sent there. Connect it again, or remove that channel.',
+    ar: 'فُصل حساب إحدى قنوات هذا المنشور، فلا يمكن الإرسال إليها. أعد ربطه أو احذف تلك القناة.',
+  },
   // Phase 6 final (D-288, D-290) — sent for review from the editor, library or calendar.
   WORKFLOW_SNOOZE: {
     en: 'Okay — BrandSpace will ask again later.',
@@ -5591,6 +5886,23 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   INVITATION_REVOKED: { en: 'Invitation revoked.', ar: 'تم إلغاء الدعوة.' },
   INVITATION_RESENT: { en: 'A new invitation was sent.', ar: 'تم إرسال دعوة جديدة.' },
   SETTINGS_SAVED: { en: 'Settings saved.', ar: 'تم حفظ الإعدادات.' },
+  // A8 (D-328) — the owner's workspace deletion request.
+  CANCEL_PLAN_FIRST: {
+    en: 'Cancel the plan in Billing first; the workspace can then be deleted.',
+    ar: 'ألغِ الباقة من الفوترة أولًا، ثم يمكن حذف مساحة العمل.',
+  },
+  DELETION_NAME_MISMATCH: {
+    en: 'The name you typed does not match the workspace name.',
+    ar: 'الاسم الذي كتبته لا يطابق اسم مساحة العمل.',
+  },
+  STEP_UP_FAILED: {
+    en: 'That password is not correct.',
+    ar: 'كلمة المرور غير صحيحة.',
+  },
+  DELETION_CANCELLED: {
+    en: 'The deletion was cancelled. The workspace is open again.',
+    ar: 'أُلغي الحذف. مساحة العمل متاحة من جديد.',
+  },
   BRAND_PROFILE_SAVED: { en: 'Brand profile saved.', ar: 'تم حفظ ملف العلامة التجارية.' },
   CONTENT_SCHEDULED: {
     en: 'Added to the calendar.',
@@ -5763,6 +6075,23 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     en: 'Two-factor authentication is on. Save your recovery codes now.',
     ar: 'تم تفعيل التحقق بخطوتين. احفظ رموز الاسترداد الآن.',
   },
+  // G4 / Q23 (D-333).
+  MFA_NEW_PHONE: {
+    en: 'Your new phone is set up. Save your new recovery codes now.',
+    ar: 'تم إعداد هاتفك الجديد. احفظ رموز الاسترداد الجديدة الآن.',
+  },
+  MFA_PROOF_FAILED: {
+    en: 'That code or password is not correct.',
+    ar: 'الرمز أو كلمة المرور غير صحيحة.',
+  },
+  MFA_REQUIRED_BY_WORKSPACE: {
+    en: 'A workspace you belong to requires two-step verification, so it stays on.',
+    ar: 'تتطلب مساحة عمل أنت عضو فيها التحقق بخطوتين، لذلك يبقى مفعّلًا.',
+  },
+  MFA_ENROL_FIRST: {
+    en: 'Turn on your own two-step verification first.',
+    ar: 'فعّل التحقق بخطوتين الخاص بك أولًا.',
+  },
   MFA_DISABLED: {
     en: 'Two-factor authentication is off.',
     ar: 'تم إيقاف التحقق بخطوتين.',
@@ -5822,6 +6151,8 @@ export const OWNER_ONLY_PERMISSIONS: readonly string[] = [
   'workspace.delete',
   'workspace.transfer_ownership',
   'billing.manage',
+  // G4 / Q23 (D-333): requiring two-step verification for everyone.
+  'workspace.security.manage',
 ];
 
 function deniedActionText(code: string, locale: string): string | null {

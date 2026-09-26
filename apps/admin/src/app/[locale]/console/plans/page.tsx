@@ -839,6 +839,7 @@ function PlanForm({
               'analyticsRetentionDays',
               isArabic ? 'حفظ التحليلات (يوم)' : 'Analytics retention (days)',
             ],
+            ['workspaces', isArabic ? 'مساحات العمل للمالك' : 'Workspaces per owner'],
           ] as const
         ).map(([field, label]) => (
           <Field key={field} label={label} htmlFor={`quota-${field}`}>

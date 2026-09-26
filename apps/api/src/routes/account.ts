@@ -304,6 +304,21 @@ export function registerAccountRoutes(app: FastifyInstance): void {
       if (!user) return;
       const parsed = codeSchema.safeParse(req.body);
       if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      /*
+       * G4 / Q23 (D-333): NOT WHILE A WORKSPACE REQUIRES IT. Asked before the
+       * code is checked, so a recovery code is never spent on a refusal.
+       */
+      const workspaces = await new CustomerAuthService({ prisma: getPrisma() })
+        .listWorkspaces(sessionTokenFrom(req) ?? '', {
+          includePendingDeletion: true,
+          includeMfaRequired: true,
+        })
+        .catch(() => []);
+      if (workspaces.some((workspace) => workspace.requireMfa)) {
+        return reply
+          .code(409)
+          .send({ error: { code: 'CONFLICT', reason: 'MFA_REQUIRED_BY_WORKSPACE' } });
+      }
       try {
         await (await signupService()).disableMfa(user, parsed.data.code);
         return await reply.send({ disabled: true });

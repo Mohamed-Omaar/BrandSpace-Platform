@@ -205,6 +205,54 @@ export function goalFromTitle(
   return SETUP_GOALS.find((goal) => labels[goal] === titleEn) ?? null;
 }
 
+/**
+ * WHAT THE READERS ASK FOR THE GOAL ITEM (D-335): its title, where it came
+ * from, the kind of its latest version, and the goal key the brand carries. One
+ * select, so the four places that read the goal cannot come to read it
+ * differently.
+ */
+export const GOAL_ITEM_SELECT = {
+  title: true,
+  origin: true,
+  versions: { orderBy: { version: 'desc' }, take: 1, select: { changeKind: true } },
+  brand: { select: { primaryGoalKey: true } },
+} as const;
+
+/** The version kind setup writes when the goal is chosen again (`server/setup-goal.ts`). */
+export const SETUP_GOAL_CHANGE_KIND = 'setup';
+
+/**
+ * The goal the stored item names (D-335).
+ *
+ * BY ITS KEY while setup wrote the item's latest version — created by setup
+ * (origin SETUP, version kind `created`) or chosen again in setup (version kind
+ * `setup`) — so it reads the same in Arabic and English and survives a change to
+ * the goals' wording. An item's ORIGIN is where the row came from and never
+ * changes, so it cannot say whether a person has since edited it; the latest
+ * version can. Once someone edits the goal in Brand Brain (or restores an older
+ * version) the key no longer describes it, and the title is matched as before;
+ * a goal written before the key existed is read the same way.
+ */
+export function storedGoal(
+  item: {
+    readonly title: unknown;
+    readonly origin: string;
+    readonly versions?: readonly { readonly changeKind: string }[];
+    readonly brand?: { readonly primaryGoalKey: string | null } | null;
+  } | null,
+): SetupGoal | null {
+  if (!item) return null;
+  const latest = item.versions?.[0]?.changeKind;
+  const writtenBySetup =
+    latest === SETUP_GOAL_CHANGE_KIND || (latest === 'created' && item.origin === 'SETUP');
+  if (writtenBySetup) {
+    const byKey = setupGoalFrom(item.brand?.primaryGoalKey ?? null);
+    if (byKey !== null && byKey !== 'unsure') return byKey;
+  }
+  const title = item.title as { readonly en?: unknown } | null;
+  return goalFromTitle(typeof title?.en === 'string' ? title.en : undefined, goalLabels('en'));
+}
+
 /** The English label of each objective — what the wizard writes as the goal's title. */
 export function goalLabels(locale: 'en' | 'ar'): Readonly<Record<SetupGoal, string>> {
   const dictionary = messages[locale] as Record<string, string>;

@@ -23,6 +23,9 @@ import {
   SparkIcon,
   BrandCard,
   BrandSwitcher,
+  BusinessSwitcher,
+  colorTokens,
+  typographyTokens,
   Banner,
   StateMessage,
   spacingTokens,
@@ -42,10 +45,11 @@ import { NotificationsBell } from './notifications-bell';
 import { loadNotificationFeed } from '../app/[locale]/notifications/feed';
 import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
-import { getCustomerAuth, getSessionToken } from '../server/customer-context';
+import { getCustomer, getCustomerAuth, getSessionToken } from '../server/customer-context';
+import { businessSwitcherModel } from '../server/business-switcher';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
-import { signOutAction } from '../app/[locale]/(auth)/actions';
+import { signOutAction, switchWorkspaceAction } from '../app/[locale]/(auth)/actions';
 
 /**
  * The authenticated customer shell.
@@ -438,6 +442,21 @@ export async function WorkspaceShell({
             .catch(() => [])
         ).length;
 
+  /*
+   * THE BUSINESS SWITCHER (Q1 / Q2, D-326 — supersedes D-302 for the switcher).
+   * With one brand in view (which is every workspace while multi-brand is off,
+   * Q2b), the rail's card opens the list of businesses as "role · plan", with
+   * the owner's workspace allowance at its foot. A workspace that still has
+   * several brands in view keeps the brand selector exactly as it was.
+   */
+  const activeWorkspaceId =
+    brandContext && brandContext.brands.length < 2
+      ? ((await getCustomer().catch(() => null))?.activeWorkspaceId ?? null)
+      : null;
+  const switcher = activeWorkspaceId
+    ? await businessSwitcherModel(locale, activeWorkspaceId)
+    : null;
+
   return (
     <AppShell
       brand={<BrandMark title={t('app.title')} />}
@@ -467,20 +486,7 @@ export async function WorkspaceShell({
          * than by code.
          */
         brandContext ? (
-          brandContext.brands.length === 1 && brandContext.brands[0] ? (
-            <BrandCard
-              label={t('brand.cardLabel')}
-              current={{
-                name: brandContext.brands[0].name,
-                caption: t('brand.selectedCaption'),
-              }}
-              href={
-                mayReadBrandProfile
-                  ? `/${locale}/settings/brand?brand=${brandContext.brands[0].id}`
-                  : undefined
-              }
-            />
-          ) : (
+          brandContext.brands.length >= 2 ? (
             <BrandSwitcher
               label={t('brand.switcherLabel')}
               current={brandTrigger(brandContext, t)}
@@ -507,7 +513,98 @@ export async function WorkspaceShell({
                   }
                 : {})}
             />
-          )
+          ) : switcher ? (
+            <BusinessSwitcher
+              label={t('ws.switcherLabel')}
+              current={{
+                name: brandContext.brands[0]?.name ?? workspaceName,
+                caption: switcher.currentCaption,
+              }}
+              options={switcher.options}
+              action={switchWorkspaceAction}
+              hiddenFields={{ locale }}
+              footer={
+                <>
+                  {switcher.foot.kind === 'none' ? null : (
+                    <p
+                      data-testid="workspace-usage"
+                      style={{
+                        ...menuItemStyle(),
+                        cursor: 'default',
+                        margin: 0,
+                        ...typographyTokens.caption,
+                        color: colorTokens.textSecondary,
+                      }}
+                    >
+                      {switcher.foot.allowed === null
+                        ? t('ws.usageUnlimited').replace('{used}', String(switcher.foot.used))
+                        : t('ws.usage')
+                            .replace('{used}', String(switcher.foot.used))
+                            .replace('{allowed}', String(switcher.foot.allowed))}
+                    </p>
+                  )}
+                  {switcher.foot.kind === 'create' ? (
+                    <Link
+                      href={`/${locale}/onboarding/workspace`}
+                      role="menuitem"
+                      data-testid="workspace-new"
+                      style={{ ...menuItemStyle(), color: colorTokens.brandPurple }}
+                    >
+                      {t('ws.new')}
+                    </Link>
+                  ) : null}
+                  {switcher.foot.kind === 'limit' ? (
+                    <>
+                      <p
+                        data-testid="workspace-limit"
+                        style={{
+                          ...menuItemStyle(),
+                          cursor: 'default',
+                          margin: 0,
+                          color: colorTokens.textSecondary,
+                        }}
+                      >
+                        {t('ws.limitReached')}
+                      </p>
+                      {permissionKeys.includes('billing.read') ? (
+                        <Link
+                          href={`/${locale}/plan`}
+                          role="menuitem"
+                          data-testid="workspace-upgrade"
+                          style={{ ...menuItemStyle(), color: colorTokens.brandPurple }}
+                        >
+                          {t('ws.upgrade')}
+                        </Link>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {brandContext.brands[0] && mayReadBrandProfile ? (
+                    <Link
+                      href={`/${locale}/settings/brand?brand=${brandContext.brands[0].id}`}
+                      role="menuitem"
+                      data-testid="manage-brand"
+                      style={{ ...menuItemStyle(), color: colorTokens.brandPurple }}
+                    >
+                      {t('brand.profile')}
+                    </Link>
+                  ) : null}
+                </>
+              }
+            />
+          ) : brandContext.brands[0] ? (
+            <BrandCard
+              label={t('brand.cardLabel')}
+              current={{
+                name: brandContext.brands[0].name,
+                caption: t('brand.selectedCaption'),
+              }}
+              href={
+                mayReadBrandProfile
+                  ? `/${locale}/settings/brand?brand=${brandContext.brands[0].id}`
+                  : undefined
+              }
+            />
+          ) : null
         ) : null
       }
       headerEnd={

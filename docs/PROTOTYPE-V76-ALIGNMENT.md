@@ -301,6 +301,93 @@ Every change keeps:
 
 ---
 
+## 6. Prototype v94: Phase 2B-1 (settings, security, workspaces, onboarding)
+
+**Branch:** `feat/prototype-v90-phase-2b1` from `staging` @ `5c8f311` · **PR target:** `staging`, never `main`.
+
+The Phase 2B-1 brief (owner, 2026-09-26) is the source of truth for this phase; the rows below record
+what it adds to §5 and how each item was built. Items not listed here are unchanged by this phase.
+
+### 6.1 New in v94
+
+- **UI-1. One global scrollbar style**, in the design system rather than per screen: thin, no arrow
+  buttons, a transparent track, a subtle thumb that darkens on hover. Chrome/Edge through the
+  `::-webkit-scrollbar` pseudo-elements; Firefox through `scrollbar-width` / `scrollbar-color`.
+  Elements that deliberately hide their scrollbar stay hidden. **Built:** `packages/ui/src/tokens.css`
+  (tokens `--bs-scrollbar-thumb`, `--bs-scrollbar-thumb-hover`); the sidebar navigation gained the
+  demo's `.nav-scroll` hiding rules as `.bs-nav-scroll`; `UI-FIDELITY-CONTRACT.md` §6.3.31.
+
+### 6.2 How Phase 2B-1 was built
+
+- **Q2b (D-327).** `feature.multi_brand` is a Control Center feature registered by nobody in code, so
+  it fails closed ("Nobody"). While it is off the server refuses a second brand (`createBrandFor`),
+  the member acts on the workspace's oldest brand they may see (no brand selector), and Plan & usage
+  hides the brand-limit rows. All multi-brand code is kept. The end-to-end seed turns it on for the one
+  multi-brand fixture workspace only.
+- **Q1 / A2 / G7 — the allowance (D-326).** Plans gain a `workspaces` quota (Control Center plan
+  editor, `null` = unlimited). It is an ACCOUNT allowance read from the plans the owner's workspaces
+  are on (`workspaceAllowance` in `@brandspace/entitlements`), not a per-workspace `limit.*`
+  entitlement and not a new billing record. `WorkspaceOnboardingService.create` enforces it in one
+  transaction, after locking the owner's row; a member who owns no workspace may not create one.
+- **Q1 / Q2 — the switcher (D-326).** With one brand in view, the rail card opens every business as
+  "role · plan" (current ticked) and, for an owner, "Workspaces: used of allowed" with "+ New
+  workspace" below the allowance or an upgrade note at it; nothing on a plan that allows one. The
+  new-workspace page admits an owner under the same rule the server enforces.
+- **A8 — Settings tabs.** Settings → Approvals (`/settings/approvals`, `approvals.policy.manage`)
+  now holds the brand approval rules, through the same action and audit event; the Approvals queue
+  links to it. Settings → Notifications and Settings → AI arrive with A10/G2/G3 (item 4 below).
+  **Publishing defaults is deferred to Phase 2B-2** (owner, 2026-09-26): its contents — default
+  channels and time, hashtags in the first comment, templates — are B2/E4.
+- **A8 — workspace deletion (D-328).** Owner only, two confirmations (typed name + password),
+  refused while a paid plan still renews; 30-day configurable wait during which the workspace is
+  closed to every member (pending screen, API refuses, no credits, nothing publishes), owners can
+  cancel, members are told in-app; then a job marks it DELETED. Migration
+  `20260928090000_workspace_deletion_request`. **Q13 (billing visibility)** needed no change:
+  `billing.read` (Owner, Admin) sees billing read-only, `billing.manage` (Owner) changes it.
+- **G6 / Q7 (D-329).** Country preselects its usual time zone (editable). Holidays by country,
+  observances by industry and posting times per country are `content.calendar` configuration, empty by
+  default; ★ chips on the calendar open the Studio for that day; configured times say "Suggested time",
+  never "best time", and measured times win. The industry list is `onboarding.industries` with each
+  industry's Offers question set for Brand Brain v2 to read. The Egypt / Saudi Arabia / UAE draft is
+  `docs/CALENDAR-OBSERVANCES-DRAFT.md` — UNVERIFIED, NOT ACTIVATED.
+- **A9 / G1 — General and the save bar (D-330).** General edits name, language, country, time zone
+  (validated), city (Egypt's governorates only; cleared elsewhere) and week start (the calendar
+  follows it), each with a line saying what it changes; the sole brand's industry (catalogue + "Something
+  else") and website are edited here while multi-brand is off, with `brand.manage`. A sticky save bar —
+  "All changes saved" / "Unsaved changes" with Cancel · Save — sits under General and Approvals.
+  Migration `20260929090000_workspace_general_fields`.
+- **A10 / G2 / G3 — my notifications and the AI language (D-331).** Settings → Notifications (every
+  member, their own switches) filters four categories of their bell — approvals, publishing,
+  automations, Brand Brain reviews — inside the one notification writer; workspace notices always
+  arrive. Settings → AI (`brand.manage`) edits the brand's AI writing language (`Brand.defaultLocale`),
+  which a new brand now takes from its creator's interface language (amends D-277). Migration
+  `20260930090000_notification_preference`. Suggestions on/off, first-comment hashtags, link tracking
+  and default channels/time stay with Publishing defaults in Phase 2B-2.
+- **A11 / Q9 — expired connections (D-332).** Expired warns (calendar, and "Expired" in the Studio with
+  its explanation on the next line); revoked/disabled blocks, and the server refuses scheduling onto it.
+  The hold is real: the expired channel's job waits for the reconnection until the lateness deadline,
+  then fails with "reconnect the account", while the other channels publish on time. No migration.
+- **G4 / Q23 — two-step verification (D-333).** QR code and typed key drawn on the server (no seed in a
+  URL), recovery codes shown once from a short-lived httpOnly cookie, off with a code or the password,
+  "New phone" keeping the old phone until the new one proves itself, every proof a counted step-up. The
+  Owner can require it (`workspace.security.manage`, Owner only): members without it are sent to set it up,
+  the API answers 404, and nobody there can turn theirs off. Migrations
+  `20261001090000_workspace_security_manage_permission` (DATA) and `20261002090000_workspace_require_mfa`.
+- **G5 / Q22 — time-zone change (D-334).** Planned and scheduled posts keep their local clock time in the
+  new zone (Settings and the Control Center, one service, one transaction, audited per post); posts that
+  would then be too late go back to planned with the quota refunded and their authors told, and Settings
+  lists them before saving. No migration.
+- **G8 / C6 / Q16 — the wizard's handoff, sign-up and reset (D-335).** Facts accepted on the wizard's Review
+  step and the first goal are Brand Brain facts with origin SETUP (level with DOCUMENT); the goal's key is on
+  the brand and read in the reader's language. Industry list with "Something else" (shared with Settings); at
+  least one publishing language, and exactly one sets the AI language. A refused sign-up keeps name, email and
+  time zone (never the password); a mismatched confirmation blocks the submit (D-261 unchanged). An owner
+  starting another workspace gets a blank form, a city for Egypt only, and a Back link. Migration
+  `20261003090000_setup_origin_and_goal_key`. Team size, a custom goal and "Ready" ideas stay out of this
+  phase.
+
+---
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):

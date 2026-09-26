@@ -141,18 +141,32 @@ export interface WorkspaceDetail extends WorkspaceListItem {
   readonly lockVersion: number;
 }
 
+/**
+ * G5 / Q22 (D-334) — how a change of time zone is carried out, supplied by the
+ * app: `WorkspaceTimezoneService` keeps every planned post at its local time.
+ * It lives in `@brandspace/content`, which this package must not depend on, so
+ * it is injected. It runs inside the update's transaction and sets the zone.
+ */
+export type WorkspaceTimezoneChanger = (
+  tx: PrismaClient,
+  input: { readonly workspaceId: string; readonly toZone: string; readonly actorId: string },
+) => Promise<void>;
+
 export interface WorkspaceServiceOptions {
   readonly prisma: PrismaClient;
   readonly clock?: Clock;
+  readonly timezoneChange?: WorkspaceTimezoneChanger;
 }
 
 export class WorkspaceAdminService {
   readonly #prisma: PrismaClient;
   readonly #clock: Clock;
+  readonly #timezoneChange: WorkspaceTimezoneChanger | undefined;
 
   constructor(options: WorkspaceServiceOptions) {
     this.#prisma = options.prisma;
     this.#clock = options.clock ?? systemClock;
+    this.#timezoneChange = options.timezoneChange;
   }
 
   /**
@@ -433,20 +447,39 @@ export class WorkspaceAdminService {
       data['slug'] = slug;
     }
     if (input.defaultLocale !== undefined) data['defaultLocale'] = input.defaultLocale;
-    if (input.timezone !== undefined) data['timezone'] = input.timezone.trim();
-    if (input.country !== undefined) data['country'] = input.country.trim().toUpperCase();
+    // G5 / Q22 (D-334): a NEW zone goes through the injected changer, which
+    // keeps planned posts at their local time; without one it is stored as is.
+    const toZone = input.timezone?.trim();
+    const zoneChanges = toZone !== undefined && toZone !== before.timezone;
+    if (toZone !== undefined && !(zoneChanges && this.#timezoneChange)) data['timezone'] = toZone;
+    if (input.country !== undefined) {
+      data['country'] = input.country.trim().toUpperCase();
+      // A9 (D-330): a city is an Egyptian governorate, so it goes with Egypt
+      // (CHECK `workspace_city_egypt_only` would refuse it anyway).
+      if (data['country'] !== 'EG') data['city'] = null;
+    }
     if (input.currency !== undefined) data['currency'] = input.currency.trim().toUpperCase();
 
     try {
-      const updated = await this.#prisma.workspace.updateMany({
-        where: { id: workspaceId, lockVersion: input.lockVersion, deletedAt: null },
-        data: { ...data, lockVersion: { increment: 1 } },
-      });
-      if (updated.count !== 1) {
-        throw new AppError('CONFLICT', 'This workspace was changed by someone else. Reload.', {
-          expectedLockVersion: input.lockVersion,
+      await this.#prisma.$transaction(async (tx) => {
+        const updated = await tx.workspace.updateMany({
+          where: { id: workspaceId, lockVersion: input.lockVersion, deletedAt: null },
+          data: { ...data, lockVersion: { increment: 1 } },
         });
-      }
+        if (updated.count !== 1) {
+          throw new AppError('CONFLICT', 'This workspace was changed by someone else. Reload.', {
+            expectedLockVersion: input.lockVersion,
+          });
+        }
+        if (zoneChanges && this.#timezoneChange && toZone !== undefined) {
+          await this.#timezoneChange(tx as unknown as PrismaClient, {
+            workspaceId,
+            toZone,
+            actorId: actor.platformUserId,
+          });
+          data['timezone'] = toZone;
+        }
+      });
     } catch (error: unknown) {
       if (isUniqueViolation(error)) {
         throw new AppError('CONFLICT', 'That workspace slug is already taken.');
