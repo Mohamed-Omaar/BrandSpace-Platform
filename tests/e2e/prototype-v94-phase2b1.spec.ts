@@ -37,26 +37,45 @@ async function signIn(page: Page, locale = 'en'): Promise<void> {
 }
 
 test.describe('UI-1 · one global scrollbar', () => {
-  test('a scroll area gets the thin bar; the sidebar navigation keeps its bar hidden', async ({
+  test('the one global scrollbar style reaches the page; the sidebar navigation keeps its bar hidden', async ({
     page,
     isMobile,
   }) => {
     // Phone emulation draws overlay scrollbars that take no width at all.
     test.skip(isMobile === true, 'desktop scrollbars only');
     await signIn(page);
-    const probe = await page.evaluate(() => {
-      const box = document.createElement('div');
-      box.style.cssText =
-        'position:absolute;inset-block-start:0;width:120px;height:60px;overflow:scroll';
-      box.innerHTML = '<div style="width:400px;height:400px"></div>';
-      document.body.appendChild(box);
-      const bar = box.offsetWidth - box.clientWidth;
-      box.remove();
-      return bar;
+    /*
+     * The rules the BROWSER loaded, read from the CSSOM. Headless Chromium runs
+     * with overlay scrollbars (`--hide-scrollbars`), so a bar's width cannot be
+     * measured there; what can be proven is that the one global style reached
+     * the page, and that the hidden areas compute `scrollbar-width: none`.
+     */
+    const rules = await page.evaluate(() => {
+      const found: Record<string, string> = {};
+      for (const sheet of Array.from(document.styleSheets)) {
+        let list: CSSRuleList;
+        try {
+          list = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(list)) {
+          if (rule instanceof CSSStyleRule && rule.selectorText.includes('::-webkit-scrollbar')) {
+            // The universal `*` may be dropped when the sheet is minified or
+            // serialised (`*::x` and `::x` select the same elements).
+            for (const selector of rule.selectorText.split(',')) {
+              found[selector.trim().replace(/^\*/, '')] = rule.style.cssText;
+            }
+          }
+        }
+      }
+      return found;
     });
-    // Chromium draws the pseudo-element bar at the token's 8px — not the
-    // platform's default width, and not zero.
-    expect(probe).toBe(8);
+    expect(rules['::-webkit-scrollbar']).toContain('width: 8px');
+    expect(rules['::-webkit-scrollbar-button']).toContain('display: none');
+    expect(rules['::-webkit-scrollbar-thumb']).toContain('var(--bs-scrollbar-thumb)');
+    expect(rules['::-webkit-scrollbar-thumb:hover']).toContain('var(--bs-scrollbar-thumb-hover)');
+    expect(rules['.bs-nav-scroll::-webkit-scrollbar']).toContain('display: none');
 
     const nav = page.locator('.bs-nav-scroll').first();
     await expect(nav).toBeVisible();
@@ -66,6 +85,13 @@ test.describe('UI-1 · one global scrollbar', () => {
     }));
     expect(hidden.bar).toBe(0);
     expect(hidden.width).toBe('none');
+    // An ordinary scroll area is NOT hidden: it keeps the platform default here
+    // and is drawn by the global pseudo-element rules.
+    expect(
+      await page.evaluate(() =>
+        getComputedStyle(document.body).getPropertyValue('scrollbar-width'),
+      ),
+    ).toBe('auto');
   });
 });
 
