@@ -15,6 +15,7 @@ import {
   appRoleClient,
   createIsolationFixtures,
   platformRoleClient,
+  systemRolePermissionKeys,
   type IsolationFixtures,
 } from './fixtures';
 
@@ -504,11 +505,31 @@ describe('D-62 — the Viewer is strictly read-only, end to end', () => {
    * What replaces it is the opposite proof, at every layer that used to carry
    * the grant.
    */
+  /**
+   * THE REAL ROLE: the permissions `client_viewer` holds in this database, read
+   * back from `role_permission` (Q12's second release gives it `content.read`).
+   */
+  let viewerKeys: string[] = [];
+  beforeAll(async () => {
+    viewerKeys = await systemRolePermissionKeys(platform, 'client_viewer');
+  });
   const viewer = (): ApprovalActor => ({
     userId: '77777777-6666-4555-8444-333333333333',
     roleKey: 'client_viewer',
+    permissionKeys: viewerKeys,
+    brandScope: [],
+  });
+  /** A member who holds `workspace.read` and nothing else — no content access. */
+  const noContentReader = (): ApprovalActor => ({
+    userId: '77777777-6666-4555-8444-333333333335',
+    roleKey: 'client_viewer',
     permissionKeys: ['workspace.read'],
     brandScope: [],
+  });
+
+  it('the real Viewer reads content and holds no approval authority', () => {
+    expect(viewerKeys).toEqual(['content.read', 'workspace.read']);
+    expect(mayApproveForBrand({ permissionKeys: viewerKeys })).toBe(false);
   });
 
   it('the rule cannot be told about a role or a brand at all', () => {
@@ -540,7 +561,7 @@ describe('D-62 — the Viewer is strictly read-only, end to end', () => {
     ).rejects.toThrow();
   });
 
-  it('a Viewer cannot READ the review subject — NOT_FOUND, not FORBIDDEN', async () => {
+  it('a member WITHOUT content.read cannot READ the review subject — NOT_FOUND, not FORBIDDEN', async () => {
     /*
      * `reviewSubject()` was the Viewer's one authorized read under D-121, and
      * it admitted anybody who could decide EVEN WITHOUT `content.read`. That
@@ -552,7 +573,9 @@ describe('D-62 — the Viewer is strictly read-only, end to end', () => {
       approvals.submit({ itemId: itemId(), actor: author() }),
     );
     await expect(
-      inA(({ approvals }) => approvals.reviewSubject({ approvalId: approval.id, actor: viewer() })),
+      inA(({ approvals }) =>
+        approvals.reviewSubject({ approvalId: approval.id, actor: noContentReader() }),
+      ),
     ).rejects.toThrow(/not found/i);
   });
 
@@ -609,18 +632,28 @@ describe('B5 — asking for changes needs a reason; approving and rejecting do n
   });
 });
 
-describe('Q12 — a Viewer that READS content sees reviews and still decides nothing', () => {
+describe('Q12 — the REAL Viewer reads reviews and still decides nothing', () => {
   /*
-   * Phase 2A builds the read-only Approvals the Viewer gets once a later
-   * release grants it `content.read`; the real role is unchanged here, so the
-   * grant is given to this fixture actor only. Reading the review subject is
-   * the read it gains; deciding, withdrawing and submitting stay refused.
+   * Q12's second release grants `client_viewer` `content.read`. The actor here
+   * carries the permissions the role REALLY holds in this database — no grant
+   * is added for the test. Reading the review subject is the read it gains;
+   * deciding (every verdict), withdrawing and submitting stay refused.
    */
+  let keys: string[] = [];
+  beforeAll(async () => {
+    keys = await systemRolePermissionKeys(platform, 'client_viewer');
+  });
   const reader = (): ApprovalActor => ({
     userId: '77777777-6666-4555-8444-333333333334',
     roleKey: 'client_viewer',
-    permissionKeys: ['workspace.read', 'content.read'],
+    permissionKeys: keys,
     brandScope: [],
+  });
+
+  it('holds content.read through the role itself', () => {
+    expect(keys).toContain('content.read');
+    expect(keys).not.toContain('content.approve');
+    expect(keys).not.toContain('content.submit');
   });
 
   it('may read the review subject', async () => {
@@ -633,14 +666,21 @@ describe('Q12 — a Viewer that READS content sees reviews and still decides not
     expect(subject).toBeTruthy();
   });
 
-  it('may not decide, withdraw or submit', async () => {
+  // Submitting is refused at the server-action gate (`content.submit`), which
+  // the Viewer does not hold — pinned in tests/unit/q12-viewer-activation.test.ts.
+  it('may not decide (any verdict) or withdraw — refused by the service', async () => {
     const approval = await inA(({ approvals }) =>
       approvals.submit({ itemId: itemId(), actor: author() }),
     );
-    for (const verdict of ['APPROVE', 'REJECT'] as const) {
+    for (const verdict of ['APPROVE', 'REJECT', 'REQUEST_CHANGES'] as const) {
       await expect(
         inA(({ approvals }) =>
-          approvals.decide({ approvalId: approval.id, verdict, actor: reader() }),
+          approvals.decide({
+            approvalId: approval.id,
+            verdict,
+            actor: reader(),
+            note: 'A reason, so only the authority can refuse it.',
+          }),
         ),
       ).rejects.toThrow();
     }
@@ -648,6 +688,26 @@ describe('Q12 — a Viewer that READS content sees reviews and still decides not
       inA(({ approvals }) => approvals.cancel({ approvalId: approval.id, actor: reader() })),
     ).rejects.toThrow();
     expect(await statusOf()).toBe('IN_REVIEW');
+  });
+
+  it('may not archive or restore content — refused by the service, nothing moves', async () => {
+    const move = (to: 'ARCHIVED' | 'DRAFT') =>
+      inA(({ library }) =>
+        library.transition({
+          itemId: itemId(),
+          to,
+          actorUserId: reader().userId,
+          actorBrandScope: [],
+          actorPermissionKeys: reader().permissionKeys,
+        }),
+      );
+    await expect(move('ARCHIVED')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await statusOf()).toBe('DRAFT');
+    await inA(({ db }) =>
+      db.contentItem.update({ where: { id: itemId() }, data: { status: 'ARCHIVED' } }),
+    );
+    await expect(move('DRAFT')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await statusOf()).toBe('ARCHIVED');
   });
 });
 
