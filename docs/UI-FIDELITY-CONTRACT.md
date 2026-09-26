@@ -574,6 +574,21 @@ when the role's permission and the post's state both allow it; a card with nothi
 trigger. Archive asks first — `ConfirmDialog` in the menu, a `details` disclosure in the Studio — and
 the server refuses an archive that does not carry the confirmation. No new component or treatment.
 
+### 6.3.31 Prototype v94 Phase 2B-1 — one global scrollbar (UI-1)
+
+An APPROVED DESIGN-SYSTEM EXTENSION: the demo styles only the sidebar scroller (`.nav-scroll`, hidden)
+and leaves every other scroll area to the browser. UI-1 defines ONE scrollbar for the whole product,
+once, in `packages/ui/src/tokens.css` — never per screen. Thin (8px), no arrow buttons, a transparent
+track and a pill thumb in `--bs-scrollbar-thumb` (`#9A9AA2`, the grey the dropdown panel's "quiet
+scrollbar" already used) that darkens to `--bs-scrollbar-thumb-hover` (`#6A6A72`, `textMuted`) on
+hover. Chrome and Edge draw it with the `::-webkit-scrollbar` pseudo-elements; Firefox with
+`scrollbar-width` / `scrollbar-color`, scoped by `@supports not selector(::-webkit-scrollbar)` because
+Chromium 121+ ignores the pseudo-elements on any element that sets the standard properties. Scroll
+areas that deliberately hide their bar keep both hiding rules on a class: the sidebar navigation
+(`.bs-nav-scroll`, transcribing the demo's `.nav-scroll`, which had only the inline standard property
+before and so still showed a bar in Safari) and Brand Brain's chat suggestions
+(`.bb-chat-suggestions`). `tests/unit/ui1-scrollbar.test.ts` pins both halves.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

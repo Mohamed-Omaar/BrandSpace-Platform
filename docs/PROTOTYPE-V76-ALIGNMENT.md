@@ -301,6 +301,24 @@ Every change keeps:
 
 ---
 
+## 6. Prototype v94: Phase 2B-1 (settings, security, workspaces, onboarding)
+
+**Branch:** `feat/prototype-v90-phase-2b1` from `staging` @ `5c8f311` · **PR target:** `staging`, never `main`.
+
+The Phase 2B-1 brief (owner, 2026-09-26) is the source of truth for this phase; the rows below record
+what it adds to §5 and how each item was built. Items not listed here are unchanged by this phase.
+
+### 6.1 New in v94
+
+- **UI-1. One global scrollbar style**, in the design system rather than per screen: thin, no arrow
+  buttons, a transparent track, a subtle thumb that darkens on hover. Chrome/Edge through the
+  `::-webkit-scrollbar` pseudo-elements; Firefox through `scrollbar-width` / `scrollbar-color`.
+  Elements that deliberately hide their scrollbar stay hidden. **Built:** `packages/ui/src/tokens.css`
+  (tokens `--bs-scrollbar-thumb`, `--bs-scrollbar-thumb-hover`); the sidebar navigation gained the
+  demo's `.nav-scroll` hiding rules as `.bs-nav-scroll`; `UI-FIDELITY-CONTRACT.md` §6.3.31.
+
+---
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):
