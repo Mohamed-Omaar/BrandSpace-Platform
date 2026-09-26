@@ -1,5 +1,6 @@
 import { type Notification, type TenantScopedClient } from '@brandspace/database';
 import { systemClock, type Clock } from '@brandspace/shared';
+import { mutedRecipients } from './preferences';
 import type { NotificationPayload, NotificationTemplateKey } from './templates';
 
 /**
@@ -71,9 +72,18 @@ export class NotificationService {
     this.#clock = options.clock ?? systemClock;
   }
 
-  /** Fan one event out to its recipients. Returns how many rows were new. */
+  /**
+   * Fan one event out to its recipients. Returns how many rows were new.
+   *
+   * A10 / G2 (D-331): a recipient who switched this template's CATEGORY off
+   * is left out — here, the one place every producer writes through, so no
+   * producer can forget it. Everybody else still gets theirs.
+   */
   async create(input: CreateNotificationInput): Promise<number> {
-    const recipients = [...new Set(input.userIds)].filter((id) => id.length > 0);
+    const addressed = [...new Set(input.userIds)].filter((id) => id.length > 0);
+    if (addressed.length === 0) return 0;
+    const muted = await mutedRecipients(this.#db, this.#workspaceId, addressed, input.templateKey);
+    const recipients = addressed.filter((id) => !muted.has(id));
     if (recipients.length === 0) return 0;
 
     const rows = recipients.map((userId) => ({

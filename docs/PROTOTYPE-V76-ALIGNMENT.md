@@ -356,6 +356,13 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   else") and website are edited here while multi-brand is off, with `brand.manage`. A sticky save bar —
   "All changes saved" / "Unsaved changes" with Cancel · Save — sits under General and Approvals.
   Migration `20260929090000_workspace_general_fields`.
+- **A10 / G2 / G3 — my notifications and the AI language (D-331).** Settings → Notifications (every
+  member, their own switches) filters four categories of their bell — approvals, publishing,
+  automations, Brand Brain reviews — inside the one notification writer; workspace notices always
+  arrive. Settings → AI (`brand.manage`) edits the brand's AI writing language (`Brand.defaultLocale`),
+  which a new brand now takes from its creator's interface language (amends D-277). Migration
+  `20260930090000_notification_preference`. Suggestions on/off, first-comment hashtags, link tracking
+  and default channels/time stay with Publishing defaults in Phase 2B-2.
 
 ---
 

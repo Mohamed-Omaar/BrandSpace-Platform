@@ -488,6 +488,27 @@ export const messages = {
     'settings.name': 'الاسم',
     'settings.locale': 'اللغة',
     'settings.timezone': 'المنطقة الزمنية',
+    'settings.notifications': 'الإشعارات',
+    'settings.ai': 'الذكاء الاصطناعي',
+    'notificationPrefs.title': 'ما الذي يصلني إشعار به',
+    'notificationPrefs.body':
+      'مفاتيحك الخاصة لجرس الإشعارات في مساحة العمل هذه. لا يراها أحد غيرك، وتصلك دائمًا الإشعارات الخاصة بمساحة العمل نفسها.',
+    'notificationPrefs.approvals': 'الموافقات',
+    'notificationPrefs.approvals.hint':
+      'منشور ينتظر مراجعتي، أو تمت الموافقة على منشوري أو إعادته أو رفضه.',
+    'notificationPrefs.publishing': 'النشر',
+    'notificationPrefs.publishing.hint': 'نُشر منشور أو فشل نشره، أو يحتاج حساب إلى إعادة الربط.',
+    'notificationPrefs.automations': 'أتمتة تُعلمني أو تحتاج موافقتي',
+    'notificationPrefs.automations.hint': 'إشعارات من الأتمتة، وتلك التي تنتظر تأكيدي.',
+    'notificationPrefs.brand_brain_reviews': 'معلومات في عقل العلامة تنتظر مراجعتي',
+    'notificationPrefs.brand_brain_reviews.hint':
+      'تعلّم عقل العلامة شيئًا من النتائج وينتظر مراجعتي.',
+    'aiSettings.title': 'لغة الكتابة بالذكاء الاصطناعي',
+    'aiSettings.body': 'اللغة التي يكتب بها الذكاء الاصطناعي المسودات الجديدة لهذه العلامة.',
+    'aiSettings.language': 'لغة الكتابة',
+    'aiSettings.languageHint':
+      'تبدأ المسودات الجديدة بهذه اللغة، ويمكنك اختيار لغة أخرى لأي منشور.',
+    'aiSettings.noBrand': 'أضف علامة تجارية لاختيار لغة الكتابة الخاصة بها.',
     'settings.country': 'الدولة',
     'settings.city': 'المدينة',
     'settings.cityNone': 'اختر مدينة',
@@ -1613,6 +1634,7 @@ export const messages = {
     'activity.action.assets.folder_deleted': 'حُذف مجلد',
     'activity.action.workspace.created': 'أُنشئ حساب النشاط التجاري',
     'activity.action.workspace.deletion_requested': 'طُلب حذف مساحة العمل',
+    'activity.action.notification.preferences.updated': 'تم تغيير تفضيلات الإشعارات',
     'activity.action.workspace.deletion_cancelled': 'أُلغي حذف مساحة العمل',
     'activity.action.workspace.deleted': 'حُذفت مساحة العمل',
     'activity.action.workspace.settings.updated': 'تغيّرت إعدادات النشاط التجاري',
@@ -3197,6 +3219,29 @@ export const messages = {
     'settings.name': 'Name',
     'settings.locale': 'Locale',
     'settings.timezone': 'Timezone',
+    'settings.notifications': 'Notifications',
+    'settings.ai': 'AI',
+    'notificationPrefs.title': 'What notifies me',
+    'notificationPrefs.body':
+      'Your own switches for the bell in this workspace. Nobody else sees them, and notices about the workspace itself always arrive.',
+    'notificationPrefs.approvals': 'Approvals',
+    'notificationPrefs.approvals.hint':
+      'A post waits for my review, or mine was approved, sent back or rejected.',
+    'notificationPrefs.publishing': 'Publishing',
+    'notificationPrefs.publishing.hint':
+      'A post was published or failed, or an account needs reconnecting.',
+    'notificationPrefs.automations': 'An automation notifies me or needs my OK',
+    'notificationPrefs.automations.hint':
+      'Notices from automations, and the ones waiting for my confirmation.',
+    'notificationPrefs.brand_brain_reviews': 'Brand Brain facts wait for my review',
+    'notificationPrefs.brand_brain_reviews.hint':
+      'Brand Brain learned something from results and waits for my review.',
+    'aiSettings.title': 'AI writing language',
+    'aiSettings.body': 'The language AI writes new drafts in for this brand.',
+    'aiSettings.language': 'Writing language',
+    'aiSettings.languageHint':
+      'New drafts start in this language; you can still choose another for any post.',
+    'aiSettings.noBrand': 'Add a brand to choose its writing language.',
     'settings.country': 'Country',
     'settings.city': 'City',
     'settings.cityNone': 'Choose a city',
@@ -4355,6 +4400,7 @@ export const messages = {
     'activity.action.assets.folder_deleted': 'A folder was deleted',
     'activity.action.workspace.created': 'The business account was created',
     'activity.action.workspace.deletion_requested': 'Deletion of the workspace was requested',
+    'activity.action.notification.preferences.updated': 'Notification preferences were changed',
     'activity.action.workspace.deletion_cancelled': 'Deletion of the workspace was cancelled',
     'activity.action.workspace.deleted': 'The workspace was deleted',
     'activity.action.workspace.settings.updated': 'Business settings were changed',

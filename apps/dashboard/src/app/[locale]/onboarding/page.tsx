@@ -271,7 +271,12 @@ export default async function OnboardingPage({
               <select
                 id="setup-brand-locale"
                 name="defaultLocale"
-                defaultValue="EN"
+                /*
+                 * D-331 (amends D-277): the brand's AI writing language starts
+                 * as the language the creator is using right now; they can
+                 * change it here, and later in Settings → AI.
+                 */
+                defaultValue={locale === 'ar' ? 'AR' : 'EN'}
                 className={`${CONTROL_CLASS} bs-select`}
                 style={inputStyle()}
                 data-testid="setup-brand-locale"

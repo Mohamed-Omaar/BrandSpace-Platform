@@ -393,3 +393,116 @@ test.describe('A9 / G1 · Settings → General, under the save bar', () => {
     await expect(page.getByTestId('settings-bar-status')).toHaveText('تم حفظ كل التغييرات');
   });
 });
+
+test.describe('A10 / G2 / G3 · my notification switches, and the AI writing language', () => {
+  test('a switched-off category stays out of my bell; the AI language saves per brand', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const { customer } = credentials();
+    const slug = `e2e-notify-${randomUUID().slice(0, 8)}`;
+    const workspaceId = randomUUID();
+    let ownerId = '';
+    let brandId = '';
+    // A workspace of its own, so its bell holds only what this test sends.
+    await withPlatformPrisma(async (prisma) => {
+      const owner = await prisma.user.findFirstOrThrow({
+        where: { email: customer.email },
+        select: { id: true },
+      });
+      ownerId = owner.id;
+      const role = await prisma.role.findFirstOrThrow({
+        where: { key: 'workspace_owner', workspaceId: null },
+        select: { id: true },
+      });
+      await prisma.workspace.create({
+        data: {
+          id: workspaceId,
+          workspaceId,
+          slug,
+          name: `E2E Notify ${slug.slice(-8)}`,
+          ownerUserId: owner.id,
+          status: 'ACTIVE',
+          country: 'US',
+          defaultLocale: 'EN',
+          timezone: 'America/New_York',
+          currency: 'USD',
+        },
+      });
+      await prisma.membership.create({
+        data: {
+          workspaceId,
+          userId: owner.id,
+          roleId: role.id,
+          status: 'ACTIVE',
+          acceptedAt: new Date(),
+        },
+      });
+      const brand = await prisma.brand.create({
+        data: { workspaceId, slug: `${slug}-brand`, name: 'Notify Brand', status: 'ACTIVE' },
+        select: { id: true },
+      });
+      brandId = brand.id;
+    });
+
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+    await page.click(`[data-testid="choose-workspace-${slug}"]`);
+    await page.waitForURL(/\/en\/overview$/);
+
+    // Everything is on until I say otherwise.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/notifications`);
+    const bar = page.getByTestId('notification-preferences-bar');
+    await expect(bar).toHaveAttribute('data-state', 'clean');
+    const approvals = page.getByTestId('notification-pref-approvals');
+    await expect(approvals).toBeChecked();
+    await expect(page.getByTestId('notification-pref-automations')).toBeChecked();
+    await approvals.uncheck();
+    await expect(bar).toHaveAttribute('data-state', 'dirty');
+    await page.getByTestId('notification-preferences-save').click();
+    await page.waitForURL(/ok=SETTINGS_SAVED/);
+    await expect(page.getByTestId('notification-pref-approvals')).not.toBeChecked();
+    await expect(page.getByTestId('notification-preferences-bar')).toHaveAttribute(
+      'data-state',
+      'clean',
+    );
+
+    // Two events reach me through the one notification writer; the bell shows
+    // the one I did not switch off.
+    const { NotificationService } = await import('@brandspace/notifications');
+    await withPlatformPrisma(async (prisma) => {
+      const service = new NotificationService({ db: prisma as never, workspaceId });
+      await service.create({
+        userIds: [ownerId],
+        templateKey: 'approval.requested',
+        idempotencyKey: `e2e-notify-approval-${slug}`,
+      });
+      await service.create({
+        userIds: [ownerId],
+        templateKey: 'publishing.published',
+        idempotencyKey: `e2e-notify-published-${slug}`,
+      });
+    });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/notifications`);
+    const list = page.getByTestId('notifications-list');
+    await expect(list).toContainText('Your post was published');
+    await expect(list).not.toContainText('A post is waiting for your review');
+
+    // Settings → AI: the brand's writing language, under the same bar.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/ai`);
+    const aiBar = page.getByTestId(`ai-bar-${brandId}`);
+    await expect(aiBar).toHaveAttribute('data-state', 'clean');
+    await page.getByTestId(`ai-language-${brandId}`).selectOption('AR');
+    await expect(aiBar).toHaveAttribute('data-state', 'dirty');
+    await page.getByTestId(`ai-save-${brandId}`).click();
+    await page.waitForURL(/ok=SETTINGS_SAVED/);
+    await expect(page.getByTestId(`ai-language-${brandId}`)).toHaveValue('AR');
+
+    // And in Arabic.
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/settings/notifications`);
+    await expect(page.getByTestId('notification-preferences')).toContainText(
+      'أتمتة تُعلمني أو تحتاج موافقتي',
+    );
+  });
+});

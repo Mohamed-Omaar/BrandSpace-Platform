@@ -304,7 +304,9 @@ model User {
   legalAcceptances   UserLegalAcceptance[]
   mfaRecoveryCodes   UserMfaRecoveryCode[]
 
-  memberSuggestions MemberSuggestion[]
+  memberSuggestions       MemberSuggestion[]
+  /// A10 / G2 (D-331) — this person's notification switches, per workspace.
+  notificationPreferences NotificationPreference[]
 
   @@index([status])
   @@map("user")
@@ -505,7 +507,8 @@ model Workspace {
 
   /// Phase 5B-3 — Notifications. Workspace-owned only: a notification is
   /// addressed to a member OF this workspace, never to a user globally.
-  notifications Notification[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
 
   /// Phase 6 — Social Publishing.
   socialConnections SocialConnection[]
@@ -3343,6 +3346,27 @@ model Notification {
   @@index([workspaceId, userId, readAt, createdAt(sort: Desc)])
   @@index([workspaceId, userId, createdAt(sort: Desc)])
   @@map("notification")
+}
+
+/// A10 / G2 (prototype v94 Phase 2B-1, D-331) — one member's switch for one
+/// category of their own in-app notifications. NO ROW MEANS ON: only an
+/// explicit "off" needs storing, so a member who never opened the screen gets
+/// everything. `category` is one of `NOTIFICATION_CATEGORIES` in
+/// `@brandspace/notifications` (CHECK `notification_preference_category_known`).
+model NotificationPreference {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  userId      String   @db.Uuid
+  category    String
+  enabled     Boolean
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, category])
+  @@map("notification_preference")
 }
 
 // ---------------------------------------------------------------------------

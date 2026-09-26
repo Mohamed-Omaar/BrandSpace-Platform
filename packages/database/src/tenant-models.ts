@@ -85,6 +85,8 @@ export const STRICT_TENANT_MODELS = [
   'Approval',
   'ApprovalPolicy',
   'Notification',
+  // Prototype v94 Phase 2B-1 (D-331): each member sets their own notification switches.
+  'NotificationPreference',
 
   // --- Phase 6: Social Publishing ------------------------------------------
   // A connection is a customer authorization to act on their own account; a
@@ -343,6 +345,7 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   Approval: 'approval',
   ApprovalPolicy: 'approval_policy',
   Notification: 'notification',
+  NotificationPreference: 'notification_preference',
   // Phase 6 — Social Publishing.
   SocialConnection: 'social_connection',
   SocialCredential: 'social_credential',

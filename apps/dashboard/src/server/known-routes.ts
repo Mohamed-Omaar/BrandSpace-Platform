@@ -34,6 +34,7 @@ export const KNOWN_PAGE_PERMISSIONS = {
   '/settings': 'workspace.update',
   '/settings/brand': 'brand.read',
   '/settings/approvals': 'approvals.policy.manage',
+  '/settings/ai': 'brand.manage',
   '/settings/data': 'workspace.update',
   '/integrations': 'integrations.read',
   '/members': 'member.read',

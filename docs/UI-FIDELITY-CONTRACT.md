@@ -610,6 +610,13 @@ the fields. The General fields reuse `Field` (its `hint` line says what each cha
 for country, time zone and city, the `bs-form-row` two-up grid and the native `bs-select`. Nothing new
 beyond the bar itself, and the bar is one component used by every draftable tab.
 
+### 6.3.34 Prototype v94 Phase 2B-1 — Settings → Notifications and Settings → AI (A10, G2, G3)
+
+Two Settings rows built exactly like Approvals: `SettingsSplit`, one `Card` with a `SectionHeader`, and
+the §6.3.33 save bar. Notifications is four composed checkbox rows, each with its `caption` hint line
+saying what it covers; AI is one `Field` with the native `bs-select` per brand the member may see (one
+while multi-brand is off). Nothing new.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

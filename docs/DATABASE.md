@@ -668,6 +668,17 @@ the CHECK is what makes the limitation a fact rather than a convention.
 `notification_link_is_relative` refuses anything that is not a relative path, so a row can never
 carry an absolute redirect target written by one tenant and followed by another's browser.
 
+### 9.3c The `notification_preference` table — prototype v94 Phase 2B-1 (D-331)
+
+| Field                               | Type        | Notes                                                                                                     |
+| ----------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------- |
+| `workspaceId`, `userId`, `category` | uuid / text | unique together; `category` is CHECKed to `approvals`, `publishing`, `automations`, `brand_brain_reviews` |
+| `enabled`                           | boolean     | only "off" needs a row: NO ROW MEANS ON                                                                   |
+
+Tenant-owned: ENABLE + FORCE RLS with `tenant_isolation` / `platform_access`, FKs to `workspace` and
+`user` (both CASCADE). Read by `NotificationService.create`, which leaves out a recipient who switched
+the template's category off; workspace notices belong to no category and are always written.
+
 ### The Activity Log adds NO TABLE (Phase 5B-3, D-124)
 
 `docs/PRODUCT.md` §5 module 17 lists `AuditEvent` as the Activity Log's entity, and that is exactly

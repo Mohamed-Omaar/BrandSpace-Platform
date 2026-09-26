@@ -28,6 +28,8 @@ export type SettingsNavKey =
   | 'settings'
   | 'brand'
   | 'approvals'
+  | 'notifications'
+  | 'ai'
   | 'security'
   | 'connections'
   | 'data'
@@ -72,6 +74,8 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
     labelKey: 'settings.approvals',
     permission: 'approvals.policy.manage',
   },
+  /* G3 (D-331) — AI: the brand's AI writing language, `brand.manage`. */
+  { key: 'ai', path: '/settings/ai', labelKey: 'settings.ai', permission: 'brand.manage' },
   /*
    * P6-13 — CONNECTIONS, reached from Settings as well as from the PUBLISH
    * group. The connected accounts are workspace configuration as much as a
@@ -91,6 +95,17 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
    * definition — `requireWorkspace(locale)` with no permission argument.
    */
   { key: 'permissions', path: '/permissions', labelKey: 'perms.title', permission: null },
+  /*
+   * A10 / G2 (prototype v94 Phase 2B-1, D-331) — NOTIFICATIONS, the reader's
+   * OWN switches, so open to every member like Security below. AFTER Roles &
+   * permissions, so a member without a gated row still lands there (D-277).
+   */
+  {
+    key: 'notifications',
+    path: '/settings/notifications',
+    labelKey: 'settings.notifications',
+    permission: null,
+  },
   /*
    * SECURITY IS OPEN TO EVERY MEMBER, for the reason `permissions` is: it shows
    * the reader their OWN second factor and their own sessions, which belong to
