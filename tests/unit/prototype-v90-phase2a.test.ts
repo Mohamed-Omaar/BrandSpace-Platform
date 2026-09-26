@@ -428,33 +428,35 @@ describe('A6 + E7 / Q12 · Home by role, and a member who may only comment', () 
       topPosts: false,
     });
     expect(homeSectionsFor(role('analyst'))).toMatchObject({ topPosts: true, myWork: false });
-    // The Viewer today reads no content, so it gets none of these sections…
+    // The Viewer reads content (Q12, second release): the feedback section (E7)
+    // and nothing that creates, approves or analyses.
     expect(homeSectionsFor(role('client_viewer'))).toEqual({
-      reviewQueue: false,
-      myWork: false,
-      topPosts: false,
-      feedback: false,
-    });
-    // …and once a later release grants it `content.read`, the feedback section (E7).
-    expect(homeSectionsFor([...role('client_viewer'), 'content.read'])).toEqual({
       reviewQueue: false,
       myWork: false,
       topPosts: false,
       feedback: true,
     });
+    // Without `content.read` (the Phase 2A grant) it had none of them.
+    expect(homeSectionsFor(['workspace.read'])).toEqual({
+      reviewQueue: false,
+      myWork: false,
+      topPosts: false,
+      feedback: false,
+    });
   });
 
-  it('the Viewer is NOT given content.read in Phase 2A', () => {
-    expect(role('client_viewer')).toEqual(['workspace.read']);
+  it('the Viewer holds content.read since Q12’s second release, and nothing more', () => {
+    expect(role('client_viewer')).toEqual(['workspace.read', 'content.read']);
   });
 
-  it('notes.manage goes to exactly the roles that read content, and not to the Viewer', () => {
+  it('notes.manage goes to exactly the roles that read content, EXCEPT the Viewer', () => {
     expect(NOTE_MANAGE_PERMISSION).toBe('notes.manage');
     for (const r of ROLE_DEFINITIONS.filter((d) => d.realm === 'workspace')) {
-      expect(r.permissionKeys.includes('notes.manage'), r.key).toBe(
-        r.permissionKeys.includes(NOTE_PERMISSION),
-      );
+      // The Viewer reads content and may only comment (Q12).
+      const expected = r.key !== 'client_viewer' && r.permissionKeys.includes(NOTE_PERMISSION);
+      expect(r.permissionKeys.includes('notes.manage'), r.key).toBe(expected);
     }
+    expect(role('client_viewer')).toContain(NOTE_PERMISSION);
     expect(role('client_viewer')).not.toContain('notes.manage');
   });
 

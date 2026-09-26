@@ -246,12 +246,15 @@ test.describe('P6-16 · the customer top bar', () => {
     await expect(page.getByTestId('assets-upload-dialog')).toBeVisible();
   });
 
-  test('a read-only member is offered only their own notifications', async ({ page }) => {
+  test('a read-only member is offered reading, never creating or the Copilot', async ({ page }) => {
     await signIn(page, 'viewer');
-    for (const key of ['review', 'notes', 'copilot', 'create']) {
+    // Q12 — the Viewer reads content, so Approvals ("Review") and Notes are its to open.
+    for (const key of ['review', 'notes', 'notifications']) {
+      await expect(page.getByTestId(`topbar-${key}`), key).toBeVisible();
+    }
+    for (const key of ['copilot', 'create']) {
       await expect(page.getByTestId(`topbar-${key}`), key).toHaveCount(0);
     }
-    await expect(page.getByTestId('topbar-notifications')).toBeVisible();
   });
 
   test('a copywriter can start only what a copywriter can create', async ({ page }) => {

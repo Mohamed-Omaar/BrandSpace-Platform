@@ -470,6 +470,7 @@ export default async function ContentPage({
         }}
         can={{
           create: may('content.create'),
+          edit: may('content.edit'),
           submit: may('content.submit'),
           schedule: may('content.schedule'),
         }}

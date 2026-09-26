@@ -148,73 +148,84 @@ export function MediaSlides({
                       .join(' · ')}
                   </span>
                 </span>
-                <span className="cs-slide-actions">
-                  <button
-                    type="button"
-                    className="cs-channel"
-                    aria-label={fill(t['editor.media.moveEarlier'] ?? '', { slide: label(index) })}
-                    disabled={index === 0}
-                    data-testid={`${testId}-earlier-${index}`}
-                    onClick={() => onChange(moveItem(value, index, index - 1))}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="cs-channel"
-                    aria-label={fill(t['editor.media.moveLater'] ?? '', { slide: label(index) })}
-                    disabled={index === value.length - 1}
-                    data-testid={`${testId}-later-${index}`}
-                    onClick={() => onChange(moveItem(value, index, index + 1))}
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    className="cs-channel"
-                    data-testid={`${testId}-replace-${index}`}
-                    onClick={() => onOpenDrawer(index)}
-                  >
-                    {t['editor.media.replace']}
-                  </button>
-                  {coverable && option?.kind === 'IMAGE' ? (
+                {/*
+                  Q12 — READ-ONLY SHOWS THE SLIDES, NOT DEAD CONTROLS. A reader
+                  (the Viewer) or a published post gets no move, replace,
+                  cover or remove button, rather than a disabled one.
+                */}
+                {disabled ? null : (
+                  <span className="cs-slide-actions">
                     <button
                       type="button"
-                      className={isCover ? 'cs-channel selected' : 'cs-channel'}
-                      aria-pressed={isCover}
-                      data-testid={`${testId}-cover-${index}`}
-                      onClick={() => onCoverChange(isCover ? null : id)}
+                      className="cs-channel"
+                      aria-label={fill(t['editor.media.moveEarlier'] ?? '', {
+                        slide: label(index),
+                      })}
+                      disabled={index === 0}
+                      data-testid={`${testId}-earlier-${index}`}
+                      onClick={() => onChange(moveItem(value, index, index - 1))}
                     >
-                      {t['editor.media.useAsCover']}
+                      ↑
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="cs-channel"
-                    data-testid={`${testId}-remove-${index}`}
-                    onClick={() => {
-                      onChange(value.filter((_, at) => at !== index));
-                      if (isCover) onCoverChange(null);
-                    }}
-                  >
-                    {t['editor.media.remove']}
-                  </button>
-                </span>
+                    <button
+                      type="button"
+                      className="cs-channel"
+                      aria-label={fill(t['editor.media.moveLater'] ?? '', { slide: label(index) })}
+                      disabled={index === value.length - 1}
+                      data-testid={`${testId}-later-${index}`}
+                      onClick={() => onChange(moveItem(value, index, index + 1))}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="cs-channel"
+                      data-testid={`${testId}-replace-${index}`}
+                      onClick={() => onOpenDrawer(index)}
+                    >
+                      {t['editor.media.replace']}
+                    </button>
+                    {coverable && option?.kind === 'IMAGE' ? (
+                      <button
+                        type="button"
+                        className={isCover ? 'cs-channel selected' : 'cs-channel'}
+                        aria-pressed={isCover}
+                        data-testid={`${testId}-cover-${index}`}
+                        onClick={() => onCoverChange(isCover ? null : id)}
+                      >
+                        {t['editor.media.useAsCover']}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="cs-channel"
+                      data-testid={`${testId}-remove-${index}`}
+                      onClick={() => {
+                        onChange(value.filter((_, at) => at !== index));
+                        if (isCover) onCoverChange(null);
+                      }}
+                    >
+                      {t['editor.media.remove']}
+                    </button>
+                  </span>
+                )}
               </li>
             );
           })}
         </ol>
       )}
 
-      <button
-        type="button"
-        className="cs-ghost-button cs-compact"
-        disabled={atLimit}
-        data-testid={`${testId}-add`}
-        onClick={() => onOpenDrawer(null)}
-      >
-        {atLimit ? t['content.media.atLimit'] : t['editor.media.add']}
-      </button>
+      {disabled ? null : (
+        <button
+          type="button"
+          className="cs-ghost-button cs-compact"
+          disabled={atLimit}
+          data-testid={`${testId}-add`}
+          onClick={() => onOpenDrawer(null)}
+        >
+          {atLimit ? t['content.media.atLimit'] : t['editor.media.add']}
+        </button>
+      )}
     </fieldset>
   );
 }

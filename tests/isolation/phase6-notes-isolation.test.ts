@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { NotesService, type NoteActor } from '@brandspace/collaboration';
 import { systemClock } from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
+import { ensureWorkspaceRbac, systemRolePermissionKeys } from './fixtures';
 
 /**
  * PHASE 6 · P6-05 — NOTES, THREADS AND MENTIONS ARE TENANT-OWNED, AND THIS IS
@@ -498,16 +499,27 @@ describe('P6-05 · the conversation behaves like a conversation', () => {
   });
 });
 
-describe('Q12 · a member who may only comment starts and answers threads, and triages nothing', () => {
+describe('Q12 · the REAL Viewer starts and answers threads, and triages nothing', () => {
   /*
-   * `content.read` WITHOUT `notes.manage` — the Viewer once it is given read
-   * access to content (a later release grants it; the permission model is
-   * proven here). Starting a thread and replying to an OPEN one are allowed;
-   * everything that changes the state other people see is refused with a
-   * FORBIDDEN that names `notes.manage`, and leaves the thread as it was.
+   * `content.read` WITHOUT `notes.manage` — exactly what `client_viewer` holds
+   * since Q12's second release. The actor carries the permissions the role
+   * REALLY has in this database; no grant is added for the test. Starting a
+   * thread and replying to an OPEN one are allowed; everything that changes the
+   * state other people see is refused with a FORBIDDEN that names
+   * `notes.manage`, and leaves the thread as it was.
    */
+  let viewerKeys: string[] = [];
+  beforeAll(async () => {
+    // The catalogue as the seed writes it, in case this suite runs first.
+    await ensureWorkspaceRbac(platform);
+    viewerKeys = await systemRolePermissionKeys(platform, 'client_viewer');
+  });
   const commenter = (fixture: Fixture): NoteActor =>
-    actorFor(fixture, { permissionKeys: ['workspace.read', 'content.read'] });
+    actorFor(fixture, { permissionKeys: viewerKeys });
+
+  it('is the real Viewer grant: content.read, and not notes.manage', () => {
+    expect(viewerKeys).toEqual(['content.read', 'workspace.read']);
+  });
 
   async function threadIn(fixture: Fixture): Promise<string> {
     const { threadId } = await serviceFor(fixture.workspaceId).startThread({

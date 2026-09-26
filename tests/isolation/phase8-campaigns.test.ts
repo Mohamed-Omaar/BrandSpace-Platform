@@ -3,7 +3,12 @@ import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { CampaignService } from '@brandspace/content';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  systemRolePermissionKeys,
+  type IsolationFixtures,
+} from './fixtures';
 
 /**
  * PHASE 8 — CAMPAIGNS, ON REAL POSTGRESQL (AC-26.5).
@@ -611,5 +616,26 @@ describe('Q21 — attaching needs content.create; moving or removing needs campa
     await set(item, campaignOfBrandOne, ['content.create']);
     await set(item, campaignOfBrandOne, []);
     expect(await campaignOf(item)).toBe(campaignOfBrandOne);
+  });
+
+  it('the REAL Viewer may neither attach, move nor remove a campaign (Q12)', async () => {
+    // The permissions `client_viewer` really holds here — `content.read`, no more.
+    const viewerKeys = await systemRolePermissionKeys(app, 'client_viewer');
+    expect(viewerKeys).toEqual(['content.read', 'workspace.read']);
+    const loose = await makeLoose();
+    await expect(set(loose, campaignOfBrandOne, viewerKeys)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      publicDetails: { permission: 'content.create' },
+    });
+    expect(await campaignOf(loose)).toBeNull();
+    const filed = await makeLoose();
+    await set(filed, campaignOfBrandOne, ['content.read', 'content.create']);
+    for (const target of [secondCampaign, null]) {
+      await expect(set(filed, target, viewerKeys)).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+        publicDetails: { permission: 'campaigns.manage' },
+      });
+    }
+    expect(await campaignOf(filed)).toBe(campaignOfBrandOne);
   });
 });

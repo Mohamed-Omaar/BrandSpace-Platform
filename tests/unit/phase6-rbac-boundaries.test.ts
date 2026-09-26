@@ -53,9 +53,9 @@ describe('the Phase 6 permission catalogue', () => {
 });
 
 describe('client_viewer is STRICTLY read-only (D-62, D-130)', () => {
-  it('holds exactly one permission, and it is not a Phase 6 one', () => {
+  it('holds exactly two read permissions, and neither is a Phase 6 one (Q12, D-323)', () => {
     const viewer = roleFor('client_viewer');
-    expect(viewer.permissionKeys).toEqual(['workspace.read']);
+    expect(viewer.permissionKeys).toEqual(['workspace.read', 'content.read']);
   });
 
   it('CANNOT CONNECT, DISCONNECT, PUBLISH, CANCEL OR RETRY', () => {

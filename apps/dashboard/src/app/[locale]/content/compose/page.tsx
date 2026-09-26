@@ -9,7 +9,11 @@ import {
   systemClock,
 } from '@brandspace/shared';
 import '@brandspace/ui/content-studio.css';
-import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
+import {
+  holdsPermission,
+  inWorkspace,
+  requireWorkspacePage,
+} from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { decidePreferenceAction } from '../../overview/actions';
 import { brandContextFor, defaultBrandFor } from '../../../../server/brand-context';
@@ -96,6 +100,26 @@ export default async function ComposePage({
   };
 
   const itemId = single('item');
+  /*
+   * Q12 — WITHOUT A POST, THIS PAGE IS FOR CREATING ONE. The route admits
+   * `content.read` so a reader (the Viewer) can open an EXISTING post
+   * read-only; with no `item` it would otherwise offer every way of making a
+   * new one. A member who may not create gets the "No access" page naming
+   * `content.create` (E2/E6) — the server actions refuse anyway.
+   */
+  if (itemId === undefined && !holdsPermission(workspace, 'content.create')) {
+    return (
+      <NoAccessPage
+        locale={locale}
+        access={{
+          allowed: false,
+          session: access.session,
+          route: '/content/compose',
+          permissionKey: 'content.create',
+        }}
+      />
+    );
+  }
   /*
    * HOW THE PERSON IS STARTING (D-277 §17, D-283). Without a draft and without
    * a mode the page asks first; `?mode=` makes the choice an address. What the
@@ -815,6 +839,8 @@ export default async function ComposePage({
         formatPlatforms={formatPlatforms}
         can={{
           create: workspace.permissionKeys.includes('content.create'),
+          readBrain: workspace.permissionKeys.includes('brand_brain.read'),
+          teachBrain: workspace.permissionKeys.includes('brand_brain.edit'),
           // B-2 — a published post is read-only whatever the member may do.
           edit: workspace.permissionKeys.includes('content.edit') && !composerDraft?.readOnly,
           submit: workspace.permissionKeys.includes('content.submit'),

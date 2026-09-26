@@ -99,14 +99,14 @@ describe('the Copilot tool registry', () => {
   it('`client_viewer` is offered NOTHING — D-62 and D-130, asserted from the role itself', () => {
     /*
      * READ FROM THE ROLE DEFINITION, not from a literal. The Viewer's grant is
-     * exactly `workspace.read`, and if a future change widened it this test
-     * would fail here rather than in a screenshot six weeks later.
+     * exactly `workspace.read` and, since Q12's second release (D-323),
+     * `content.read`; if a future change widened it this test would fail here
+     * rather than in a screenshot six weeks later. Reading content offers no
+     * tool: every tool needs `copilot.use`.
      */
     const viewer = ROLE_DEFINITIONS.find((r) => r.key === 'client_viewer');
-    expect(viewer?.permissionKeys).toEqual(['workspace.read']);
+    expect(viewer?.permissionKeys).toEqual(['workspace.read', 'content.read']);
     expect(availableTools(viewer?.permissionKeys ?? [])).toHaveLength(0);
-    // And once the Viewer reads content (a later release), still nothing.
-    expect(availableTools([...(viewer?.permissionKeys ?? []), 'content.read'])).toHaveLength(0);
   });
 
   it('an unknown tool key resolves to nothing', () => {

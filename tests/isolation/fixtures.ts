@@ -1827,6 +1827,23 @@ export async function createIsolationFixtures(
 }
 
 /**
+ * The permission keys a SYSTEM role actually holds in this database — read
+ * from `role_permission`, not from `ROLE_DEFINITIONS`. A suite that proves
+ * what "the Viewer" may do must use the grant the Viewer really has, not a
+ * literal list it could have typed wrong. Sorted.
+ */
+export async function systemRolePermissionKeys(
+  prisma: PrismaClient,
+  roleKey: string,
+): Promise<string[]> {
+  const role = await prisma.role.findFirstOrThrow({
+    where: { key: roleKey, workspaceId: null, realm: 'WORKSPACE' },
+    select: { permissions: { select: { permission: { select: { key: true } } } } },
+  });
+  return role.permissions.map((rp) => rp.permission.key).sort();
+}
+
+/**
  * Drop a throwaway migration-upgrade database, tolerating the close race that
  * `WITH (FORCE)` cannot resolve.
  *
