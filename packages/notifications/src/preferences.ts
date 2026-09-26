@@ -51,6 +51,7 @@ const CATEGORY_OF: Readonly<Record<NotificationTemplateKey, NotificationCategory
   'analytics.anomaly_detected': null,
   'workspace.deletion_requested': null,
   'workspace.deletion_cancelled': null,
+  'calendar.unplanned_by_timezone_change': 'publishing',
 };
 
 export function categoryOf(templateKey: NotificationTemplateKey): NotificationCategory | null {

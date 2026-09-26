@@ -541,7 +541,12 @@ export const messages = {
     'settings.hint.name': 'يظهر في مبدّل مساحات العمل وفي الدعوات.',
     'settings.hint.locale': 'اللغة الأساسية لنشاطك التجاري.',
     'settings.hint.country': 'تحدد العطلات في تقويمك وأوقات النشر المقترحة.',
-    'settings.hint.timezone': 'تُجدول المنشورات وتُعرض بتوقيت هذه المنطقة.',
+    'settings.hint.timezone':
+      'تُجدول المنشورات وتُعرض بتوقيت هذه المنطقة. عند تغييرها تبقى المنشورات المخططة على توقيتها المحلي.',
+    'settings.timezoneKept':
+      'ستبقى {count} من المنشورات المخططة على توقيتها المحلي في المنطقة الجديدة.',
+    'settings.timezoneUnplanned':
+      'هذه ستصبح في الماضي أو قريبة جدًا، فتعود إلى مخطط ويُبلَّغ كاتبوها:',
     'settings.hint.city': 'لمصر فقط. تُحفظ مع بيانات نشاطك التجاري.',
     'settings.hint.weekStart': 'أول يوم في كل أسبوع في تقويمك.',
     'settings.hint.industry': 'يضيف المناسبات الخاصة بمجالك إلى التقويم.',
@@ -1765,6 +1770,8 @@ export const messages = {
       'عُدّل منشور كان بانتظار مراجعتك، فسُحب طلب المراجعة',
     'notifications.template.publishing.published': 'تم نشر منشورك',
     'notifications.template.publishing.failed': 'فشل نشر منشورك',
+    'notifications.template.calendar.unplanned_by_timezone_change':
+      'تغيّرت المنطقة الزمنية فأصبح وقت منشورك مضى أو قريبًا جدًا، فعاد إلى مخطط. اختر وقتًا جديدًا.',
     'notifications.template.publishing.connection_needs_reauth': 'حساب متصل يحتاج إعادة ربط',
 
     'overview.needsApproval': 'بانتظار موافقتك',
@@ -3307,7 +3314,11 @@ export const messages = {
     'settings.hint.locale': 'The main language of your business.',
     'settings.hint.country':
       'Decides the holidays on your calendar and the suggested posting times.',
-    'settings.hint.timezone': 'Posts are scheduled and shown at this clock time.',
+    'settings.hint.timezone':
+      'Posts are scheduled and shown at this clock time. Changing it keeps planned posts at their clock time.',
+    'settings.timezoneKept': '{count} planned posts keep their local clock time in the new zone.',
+    'settings.timezoneUnplanned':
+      'These would then be in the past or too soon, so they go back to planned and their authors are told:',
     'settings.hint.city': 'Egypt only. Saved with your business details.',
     'settings.hint.weekStart': 'The first day of each week on your calendar.',
     'settings.hint.industry': "Adds your industry's observances to the calendar.",
@@ -4564,6 +4575,8 @@ export const messages = {
       'A post waiting for your review was edited, so the review was withdrawn',
     'notifications.template.publishing.published': 'Your post was published',
     'notifications.template.publishing.failed': 'Your post could not be published',
+    'notifications.template.calendar.unplanned_by_timezone_change':
+      'The time zone changed and your post’s time would have passed, so it went back to planned. Choose a new time.',
     'notifications.template.publishing.connection_needs_reauth':
       'A connected account needs reconnecting',
 

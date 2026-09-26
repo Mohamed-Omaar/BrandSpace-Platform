@@ -770,3 +770,116 @@ test.describe('G4 / Q23 · two-step verification: QR, new phone, and the workspa
     await memberContext.close();
   });
 });
+
+test.describe('G5 / Q22 · a time-zone change keeps local times, and says what it cannot keep', () => {
+  test('the warning lists the post that would be too late, and its author is told after saving', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const { customer } = credentials();
+    const slug = `e2e-tz-${randomUUID().slice(0, 8)}`;
+    const workspaceId = randomUUID();
+    const local = (at: Date) => at.toISOString().slice(0, 16);
+    // Two hours from now in UTC: in Tokyo (UTC+9) that clock time is already past.
+    const soonUtc = new Date(Date.now() + 2 * 3_600_000);
+    const laterUtc = new Date(Date.now() + 30 * 86_400_000);
+    await withPlatformPrisma(async (prisma) => {
+      const owner = await prisma.user.findFirstOrThrow({
+        where: { email: customer.email },
+        select: { id: true },
+      });
+      const role = await prisma.role.findFirstOrThrow({
+        where: { key: 'workspace_owner', workspaceId: null },
+        select: { id: true },
+      });
+      await prisma.workspace.create({
+        data: {
+          id: workspaceId,
+          workspaceId,
+          slug,
+          name: `E2E TZ ${slug.slice(-8)}`,
+          ownerUserId: owner.id,
+          status: 'ACTIVE',
+          country: 'US',
+          defaultLocale: 'EN',
+          timezone: 'UTC',
+          currency: 'USD',
+        },
+      });
+      await prisma.membership.create({
+        data: {
+          workspaceId,
+          userId: owner.id,
+          roleId: role.id,
+          status: 'ACTIVE',
+          acceptedAt: new Date(),
+        },
+      });
+      const brand = await prisma.brand.create({
+        data: { workspaceId, slug: `${slug}-brand`, name: 'TZ Brand', status: 'ACTIVE' },
+        select: { id: true },
+      });
+      for (const [title, at] of [
+        ['Too late in Tokyo', soonUtc],
+        ['Still fine in Tokyo', laterUtc],
+      ] as const) {
+        const item = await prisma.contentItem.create({
+          data: {
+            workspaceId,
+            brandId: brand.id,
+            title,
+            contentType: 'POST',
+            primaryLocale: 'EN',
+            status: 'SCHEDULED',
+            origin: 'HUMAN',
+            createdByUserId: owner.id,
+            idempotencyKey: `${slug}-${title}`,
+          },
+          select: { id: true },
+        });
+        await prisma.calendarSlot.create({
+          data: {
+            workspaceId,
+            brandId: brand.id,
+            contentItemId: item.id,
+            scheduledAtUtc: at,
+            scheduledLocalTime: local(at),
+            timezone: 'UTC',
+            status: 'SCHEDULED',
+            platformKeys: ['linkedin'],
+            createdByUserId: owner.id,
+            usageIdempotencyKey: `calendar:${workspaceId}:${randomUUID()}`,
+          },
+        });
+      }
+    });
+
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+    await page.click(`[data-testid="choose-workspace-${slug}"]`);
+    await page.waitForURL(/\/en\/overview$/);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+    await page.getByTestId('settings-timezone').click();
+    await page.getByTestId('settings-timezone').fill('Tokyo');
+    await page.getByRole('option', { name: /Tokyo/ }).first().click();
+    // Before saving: one post keeps its time, one is listed as going back to planned.
+    const warning = page.getByTestId('settings-timezone-warning');
+    await expect(warning).toContainText('1 planned posts keep their local clock time');
+    await expect(page.getByTestId('settings-timezone-unplanned')).toContainText(
+      'Too late in Tokyo',
+    );
+    await expect(page.getByTestId('settings-timezone-unplanned')).not.toContainText(
+      'Still fine in Tokyo',
+    );
+    await page.getByTestId('settings-save').click();
+    await page.waitForURL(/ok=SETTINGS_SAVED/);
+
+    // Its author — the owner here — is told in the app.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/notifications`);
+    await expect(page.getByTestId('notifications-list')).toContainText(
+      'The time zone changed and your post’s time would have passed',
+    );
+  });
+});

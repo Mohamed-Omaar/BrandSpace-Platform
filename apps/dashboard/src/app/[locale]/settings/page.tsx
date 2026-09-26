@@ -223,6 +223,8 @@ export default async function SettingsPage({
                 websiteHint: t('settings.hint.website'),
                 choose: t('createWorkspace.choose'),
                 noResults: t('common.noResults'),
+                timezoneKept: t('settings.timezoneKept'),
+                timezoneUnplanned: t('settings.timezoneUnplanned'),
               }}
             />
           </DraftForm>

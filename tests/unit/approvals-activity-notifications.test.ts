@@ -311,6 +311,12 @@ describe('the notification catalogue is closed and fully translated', () => {
          */
         'workspace.deletion_cancelled',
         'workspace.deletion_requested',
+        /*
+         * Prototype v94 Phase 2B-1, G5 / Q22 (D-334) — a time-zone change left
+         * a post's local time in the past, so it went back to planned. Its
+         * author has to choose a new time, and nothing else would say so.
+         */
+        'calendar.unplanned_by_timezone_change',
       ].sort(),
     );
   });

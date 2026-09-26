@@ -4,7 +4,13 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
-import { inWorkspace, requireWorkspaceAction } from '../../../server/customer-context';
+import { TenantContentPolicySource, WorkspaceTimezoneService } from '@brandspace/content';
+import { createScheduleQuota } from '@brandspace/entitlements';
+import {
+  currentEnvironment,
+  inWorkspace,
+  requireWorkspaceAction,
+} from '../../../server/customer-context';
 import { generalSettingsFrom, saveGeneralSettings } from '../../../server/general-settings';
 import { actionErrorCode } from '../../../server/denial';
 
@@ -33,15 +39,29 @@ export async function saveSettingsAction(formData: FormData): Promise<void> {
     const session = await requireWorkspaceAction(locale, 'workspace.update');
     const input = generalSettingsFrom(formData);
 
-    await inWorkspace(session.workspace.workspaceId, async ({ db, entitlements }) =>
+    const workspaceId = session.workspace.workspaceId;
+    await inWorkspace(workspaceId, async ({ db, entitlements }) =>
       saveGeneralSettings(
         db,
         entitlements,
         {
-          workspaceId: session.workspace.workspaceId,
+          workspaceId,
           actorUserId: session.customer.userId,
           permissionKeys: session.workspace.permissionKeys,
           brandScope: session.workspace.brandScope,
+          // G5 / Q22 (D-334): planned posts keep their local time in the new zone.
+          changeTimezone: async (toZone) => {
+            const policy = await new TenantContentPolicySource(db, currentEnvironment()).load();
+            await new WorkspaceTimezoneService({
+              db,
+              workspaceId,
+              quota: createScheduleQuota({ db, workspaceId, environment: currentEnvironment() }),
+            }).change({
+              toZone,
+              actor: { type: 'USER', id: session.customer.userId },
+              minLeadMinutes: policy.calendar.minLeadMinutes,
+            });
+          },
         },
         input,
       ),

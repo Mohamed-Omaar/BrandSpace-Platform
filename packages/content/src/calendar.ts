@@ -307,6 +307,9 @@ export class ContentCalendarService {
 
     const instant = this.#resolveInstant(input.localTime);
     await this.#assertDayHasRoom(instant, slot.id);
+    // G5 / Q22 (D-334): a post a time-zone change sent back to PLANNED goes out
+    // again only through every rule scheduling applies.
+    if (slot.status === 'PLANNED') return this.#replan(slot, input, instant);
     const variantsNow = await this.#db.contentVariant.findMany({
       where: { contentItemId: slot.contentItemId },
       select: { platformKey: true },
@@ -343,6 +346,63 @@ export class ContentCalendarService {
       toUtc: moved.scheduledAtUtc.toISOString(),
     });
 
+    return this.#viewOf(moved);
+  }
+
+  /**
+   * G5 / Q22 (D-334) — A PLANNED POST GIVEN A NEW TIME IS SCHEDULED AGAIN.
+   *
+   * A time-zone change sends a post that would have been too late back to
+   * PLANNED and refunds its quota. Moving it to a new time puts it back on the
+   * way out through the SAME rules `schedule()` applies — the approval gate,
+   * the states it may be scheduled from, its channels — and takes the quota
+   * again, under a key derived from the slot and the new time, so a retried
+   * move takes it once.
+   */
+  async #replan(
+    slot: CalendarSlot,
+    input: { slotId: string; localTime: string; actorUserId: string },
+    instant: Date,
+  ): Promise<CalendarSlotView> {
+    const item = await this.#db.contentItem.findUnique({ where: { id: slot.contentItemId } });
+    if (!item || item.deletedAt) throw calendarSlotNotFound();
+    if ((await this.#approvalRequired(item.brandId)) && item.status !== 'APPROVED') {
+      throw approvalRequiredBeforeScheduling();
+    }
+    if (!SCHEDULABLE_FROM.includes(item.status)) throw transitionNotAllowed();
+    const variants = await this.#db.contentVariant.findMany({
+      where: { contentItemId: item.id },
+      select: { platformKey: true },
+    });
+    if (variants.length === 0) throw nothingToSchedule();
+    await this.#assertChannelsReachable(
+      slot.brandId,
+      variants.map((variant) => variant.platformKey),
+    );
+
+    const usageIdempotencyKey = `calendar:${this.#workspaceId}:${slot.id}:replan:${input.localTime}`;
+    if (!(await this.#quota.consume(usageIdempotencyKey))) throw scheduleQuotaExceeded();
+
+    const claimed = await this.#db.calendarSlot.updateMany({
+      where: { id: slot.id, status: 'PLANNED' },
+      data: {
+        status: 'SCHEDULED',
+        scheduledAtUtc: instant,
+        scheduledLocalTime: input.localTime,
+        timezone: this.#timezone,
+        usageIdempotencyKey,
+      },
+    });
+    if (claimed.count === 0) throw slotNotReschedulable();
+    await this.#db.contentItem.update({ where: { id: item.id }, data: { status: 'SCHEDULED' } });
+    const moved = await this.#db.calendarSlot.findUniqueOrThrow({ where: { id: slot.id } });
+    await this.#audit('content.rescheduled', moved, input.actorUserId, {
+      fromStatus: 'PLANNED',
+      fromLocalTime: slot.scheduledLocalTime,
+      toLocalTime: moved.scheduledLocalTime,
+      toTimezone: moved.timezone,
+      toUtc: moved.scheduledAtUtc.toISOString(),
+    });
     return this.#viewOf(moved);
   }
 

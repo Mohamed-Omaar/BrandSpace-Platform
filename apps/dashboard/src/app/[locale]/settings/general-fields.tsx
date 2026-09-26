@@ -1,7 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Field, SearchableSelect, inputStyle, type SearchableOption } from '@brandspace/ui';
+import { useEffect, useState } from 'react';
+import {
+  Banner,
+  Field,
+  SearchableSelect,
+  inputStyle,
+  spacingTokens,
+  type SearchableOption,
+} from '@brandspace/ui';
 import { timeZoneAfterCountryChange } from '../../../components/time-zone-suggestion';
 
 /**
@@ -44,6 +51,15 @@ export interface GeneralFieldsLabels {
   readonly websiteHint: string;
   readonly choose: string;
   readonly noResults: string;
+  /** G5 / Q22: said before saving a new zone. `{count}` is filled in. */
+  readonly timezoneKept: string;
+  readonly timezoneUnplanned: string;
+}
+
+/** What `/api/settings/timezone-preview` answers. */
+interface TimezonePreview {
+  readonly kept: number;
+  readonly unplanned: readonly { readonly title: string; readonly localTime: string }[];
 }
 
 export function GeneralFields({
@@ -84,6 +100,27 @@ export function GeneralFields({
   const [country, setCountry] = useState(saved.country);
   const [lastCountry, setLastCountry] = useState(saved.country);
   const [timezone, setTimezone] = useState(saved.timezone);
+  /*
+   * G5 / Q22 (D-334) — BEFORE SAVING A NEW ZONE, what it would do: planned
+   * posts keep their local time, and any that would then be in the past or too
+   * soon are listed, because they go back to planned. Asked of the server,
+   * which answers from the same rule the save applies.
+   */
+  const [preview, setPreview] = useState<TimezonePreview | null>(null);
+  useEffect(() => {
+    if (timezone === '' || timezone === saved.timezone) {
+      setPreview(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(`/api/settings/timezone-preview?zone=${encodeURIComponent(timezone)}`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => (response.ok ? ((await response.json()) as TimezonePreview) : null))
+      .then(setPreview)
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [timezone, saved.timezone]);
   const savedIndustry = brand?.industry ?? '';
   const savedIsKey = industries.some((option) => option.value === savedIndustry);
   const [industryChoice, setIndustryChoice] = useState(
@@ -149,6 +186,31 @@ export function GeneralFields({
           />
         </Field>
       </div>
+
+      {preview && (preview.kept > 0 || preview.unplanned.length > 0) ? (
+        <Banner tone="warning" testId="settings-timezone-warning">
+          <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+            {preview.kept > 0 ? (
+              <span>{labels.timezoneKept.replace('{count}', String(preview.kept))}</span>
+            ) : null}
+            {preview.unplanned.length > 0 ? (
+              <>
+                <span>{labels.timezoneUnplanned}</span>
+                <ul
+                  style={{ margin: 0, paddingInlineStart: spacingTokens.md }}
+                  data-testid="settings-timezone-unplanned"
+                >
+                  {preview.unplanned.map((post) => (
+                    <li key={`${post.title}-${post.localTime}`}>
+                      <bdi>{post.title}</bdi> — {post.localTime.replace('T', ' ')}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </div>
+        </Banner>
+      ) : null}
 
       {country === 'EG' ? (
         <Field label={labels.city} htmlFor="city" hint={labels.cityHint}>

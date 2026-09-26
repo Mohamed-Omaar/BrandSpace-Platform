@@ -59,6 +59,9 @@ importers:
       '@brandspace/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@brandspace/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@brandspace/database':
         specifier: workspace:*
         version: link:../../packages/database

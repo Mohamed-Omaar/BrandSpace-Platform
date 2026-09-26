@@ -116,6 +116,11 @@ export async function saveGeneralSettings(
     readonly actorUserId: string;
     readonly permissionKeys: readonly string[];
     readonly brandScope: readonly string[];
+    /**
+     * G5 / Q22 (D-334): a change of zone goes through `WorkspaceTimezoneService`,
+     * which keeps every planned post at its local time — in this transaction.
+     */
+    readonly changeTimezone?: (toZone: string) => Promise<void>;
   },
   input: GeneralSettingsInput,
 ): Promise<void> {
@@ -144,6 +149,9 @@ export async function saveGeneralSettings(
       weekStartsOn: true,
     },
   });
+  if (before.timezone !== input.timezone && context.changeTimezone) {
+    await context.changeTimezone(input.timezone);
+  }
   const after = {
     name: input.name,
     defaultLocale: input.defaultLocale,

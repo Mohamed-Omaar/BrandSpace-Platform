@@ -15,6 +15,8 @@ import {
   type EmailProvider,
 } from '@brandspace/auth';
 import { ConfigurationService } from '@brandspace/config';
+import { TenantContentPolicySource, WorkspaceTimezoneService } from '@brandspace/content';
+import type { TenantScopedClient } from '@brandspace/database';
 import {
   BetaCohortService,
   CreditLedgerService,
@@ -25,6 +27,7 @@ import {
   readPlanCatalogue,
   type CreditPolicy,
   type PlanDetail,
+  createScheduleQuota,
 } from '@brandspace/entitlements';
 import {
   BillingReconciler,
@@ -121,7 +124,28 @@ export function getPlatformAuth(): PlatformAuthService {
  * the action guard are convenience, not the control (R-02).
  */
 export function getWorkspaceService(): WorkspaceAdminService {
-  return new WorkspaceAdminService({ prisma: getPlatformPrisma() });
+  return new WorkspaceAdminService({
+    prisma: getPlatformPrisma(),
+    /*
+     * G5 / Q22 (D-334): an operator changing a workspace's time zone keeps its
+     * planned posts at their local time, exactly as its owner's change does —
+     * the same service, in the update's transaction.
+     */
+    timezoneChange: async (tx, input) => {
+      const db = tx as unknown as TenantScopedClient;
+      const environment = currentEnvironment();
+      const policy = await new TenantContentPolicySource(db, environment).load();
+      await new WorkspaceTimezoneService({
+        db,
+        workspaceId: input.workspaceId,
+        quota: createScheduleQuota({ db, workspaceId: input.workspaceId, environment }),
+      }).change({
+        toZone: input.toZone,
+        actor: { type: 'PLATFORM_USER', id: input.actorId },
+        minLeadMinutes: policy.calendar.minLeadMinutes,
+      });
+    },
+  });
 }
 
 export function getMembershipService(): MembershipService {

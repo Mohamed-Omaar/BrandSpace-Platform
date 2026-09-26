@@ -632,6 +632,12 @@ one shared panel, also used by "New phone" and by `/mfa-setup`, which is the sig
 off shows the code and password `Field`s side by side (`bs-form-row`). The Owner's requirement is its own
 card with the composed checkbox row and its hint line. No new component or treatment beyond the panel.
 
+### 6.3.37 Prototype v94 Phase 2B-1 — the time-zone warning in Settings → General (G5, Q22)
+
+Choosing another time zone shows, under the field and before saving, the existing warning `Banner`: a line
+saying how many planned posts keep their local time, and a list of the posts that would go back to planned
+(title, then local time). No new component or treatment.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

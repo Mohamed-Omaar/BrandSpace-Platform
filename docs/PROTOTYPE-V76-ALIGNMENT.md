@@ -373,6 +373,10 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   Owner can require it (`workspace.security.manage`, Owner only): members without it are sent to set it up,
   the API answers 404, and nobody there can turn theirs off. Migrations
   `20261001090000_workspace_security_manage_permission` (DATA) and `20261002090000_workspace_require_mfa`.
+- **G5 / Q22 — time-zone change (D-334).** Planned and scheduled posts keep their local clock time in the
+  new zone (Settings and the Control Center, one service, one transaction, audited per post); posts that
+  would then be too late go back to planned with the quota refunded and their authors told, and Settings
+  lists them before saving. No migration.
 
 ---
 

@@ -89,6 +89,12 @@ export const NOTIFICATION_TEMPLATES = {
   'workspace.deletion_requested': { severity: 'warning' },
   /** An owner took the deletion request back; the workspace is open again. */
   'workspace.deletion_cancelled': { severity: 'info' },
+  /**
+   * Prototype v94 Phase 2B-1, G5 / Q22 (D-334) — the workspace's time zone
+   * changed and this post's local time would now be in the past or too soon,
+   * so it went back to planned. Goes to the post's author.
+   */
+  'calendar.unplanned_by_timezone_change': { severity: 'warning' },
 } as const;
 
 export type NotificationTemplateKey = keyof typeof NOTIFICATION_TEMPLATES;
