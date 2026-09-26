@@ -224,14 +224,13 @@ export const SETUP_GOAL_CHANGE_KIND = 'setup';
 /**
  * The goal the stored item names (D-335).
  *
- * BY ITS KEY while setup wrote the item's latest version — created by setup
- * (origin SETUP, version kind `created`) or chosen again in setup (version kind
- * `setup`) — so it reads the same in Arabic and English and survives a change to
- * the goals' wording. An item's ORIGIN is where the row came from and never
- * changes, so it cannot say whether a person has since edited it; the latest
- * version can. Once someone edits the goal in Brand Brain (or restores an older
- * version) the key no longer describes it, and the title is matched as before;
- * a goal written before the key existed is read the same way.
+ * BY ITS KEY while setup wrote the item's latest version — origin SETUP (the
+ * origin of the latest write) and version kind `created` or `setup` — so it
+ * reads the same in Arabic and English and survives a change to the goals'
+ * wording. Once someone edits the goal in Brand Brain (origin HUMAN) or restores
+ * an older version (kind `rolled_back`), the key no longer describes it and the
+ * title is matched as before; a goal written before the key existed is read the
+ * same way.
  */
 export function storedGoal(
   item: {
@@ -244,7 +243,7 @@ export function storedGoal(
   if (!item) return null;
   const latest = item.versions?.[0]?.changeKind;
   const writtenBySetup =
-    latest === SETUP_GOAL_CHANGE_KIND || (latest === 'created' && item.origin === 'SETUP');
+    item.origin === 'SETUP' && (latest === SETUP_GOAL_CHANGE_KIND || latest === 'created');
   if (writtenBySetup) {
     const byKey = setupGoalFrom(item.brand?.primaryGoalKey ?? null);
     if (byKey !== null && byKey !== 'unsure') return byKey;

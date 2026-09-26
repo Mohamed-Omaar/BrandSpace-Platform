@@ -58,7 +58,7 @@ export async function saveSetupGoal(
       itemKey: GOAL_ITEM_KEY,
       status: { in: ['ACTIVE', 'STALE'] },
     },
-    select: { id: true, origin: true },
+    select: { id: true },
   });
   if (existing) {
     await knowledge.updateItem({
@@ -68,10 +68,10 @@ export async function saveSetupGoal(
       changeReason: 'First goal chosen in setup',
       actor,
       policy: input.staleness,
-      // SETUP ranks below HUMAN (D-335). A goal written before SETUP existed
-      // is a HUMAN row; choosing it again here is still a person choosing, so
-      // it is checked as one rather than refused.
-      incomingOrigin: existing.origin === 'HUMAN' ? 'HUMAN' : 'SETUP',
+      // SETUP ranks below HUMAN (D-335): a goal a person wrote in Brand Brain
+      // is theirs, and choosing again in setup is refused rather than
+      // overwriting it (`mayOverwrite`), with the transaction rolled back.
+      incomingOrigin: 'SETUP',
       // What tells a reader the goal key still describes this item.
       changeKind: SETUP_GOAL_CHANGE_KIND,
     });

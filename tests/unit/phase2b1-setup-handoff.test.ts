@@ -68,9 +68,9 @@ describe('D-335 · the goal is read by its key while setup wrote it', () => {
     expect(
       storedGoal({ title: { en: 'x' }, origin: 'SETUP', versions: latest('created'), brand: key }),
     ).toBe('LEADS');
-    // Chosen again in setup — also over a goal written before SETUP existed.
+    // Chosen again in setup over setup's own goal.
     expect(
-      storedGoal({ title: { en: 'x' }, origin: 'HUMAN', versions: latest('setup'), brand: key }),
+      storedGoal({ title: { en: 'x' }, origin: 'SETUP', versions: latest('setup'), brand: key }),
     ).toBe('LEADS');
   });
 
@@ -82,10 +82,12 @@ describe('D-335 · the goal is read by its key while setup wrote it', () => {
         'TRAFFIC',
       );
     }
-    // A HUMAN row's first version was a person, not setup.
-    expect(storedGoal({ title, origin: 'HUMAN', versions: latest('created'), brand: key })).toBe(
-      'TRAFFIC',
-    );
+    // A HUMAN row was last written by a person, not setup — whatever its kind.
+    for (const kind of ['created', 'setup', 'edited']) {
+      expect(storedGoal({ title, origin: 'HUMAN', versions: latest(kind), brand: key }), kind).toBe(
+        'TRAFFIC',
+      );
+    }
     expect(
       storedGoal({
         title,
@@ -132,10 +134,12 @@ describe('D-335 · the goal is read by its key while setup wrote it', () => {
     }
   });
 
-  it('the goal is written as SETUP, and choosing it again is a version setup signs', () => {
+  it('the goal is written as SETUP, and choosing it again is a SETUP version setup signs', () => {
     const save = read('apps/dashboard/src/server/setup-goal.ts');
     expect(save).toContain("origin: 'SETUP',");
-    expect(save).toContain("incomingOrigin: existing.origin === 'HUMAN' ? 'HUMAN' : 'SETUP',");
+    // Blocker 0: always SETUP — a HUMAN goal is refused, never re-labelled.
+    expect(save).toContain("incomingOrigin: 'SETUP',");
+    expect(save).not.toMatch(/incomingOrigin: existing\.origin/);
     expect(save).toContain('changeKind: SETUP_GOAL_CHANGE_KIND,');
     expect(save).toContain('data: { primaryGoalKey: goal }');
     expect(save.indexOf('assertBrandInScope(')).toBeLessThan(save.indexOf('db.brand.findFirst('));
@@ -253,5 +257,28 @@ describe('G8 · a new workspace from inside the app', () => {
       expect(optionalMessage('en', key), key).toBeTruthy();
       expect(optionalMessage('ar', key), key).toMatch(/[؀-ۿ]/);
     }
+  });
+});
+
+describe('Blocker 0 · an allowed update writes its own origin', () => {
+  it('updateItem persists the effective origin; the version copies the updated row', () => {
+    const knowledge = read('packages/brand-brain/src/knowledge.ts');
+    const update = knowledge.slice(knowledge.indexOf('async updateItem('));
+    const body = update.slice(0, update.indexOf('\n  }\n'));
+    expect(body).toContain('origin: incomingOrigin,');
+    expect(body.indexOf('if (!decision.allowed) throw humanPrecedenceViolation();')).toBeLessThan(
+      body.indexOf('brandKnowledgeItem.update('),
+    );
+    expect(body).toMatch(/await this\.appendVersion\(updated,/);
+    expect(knowledge).toMatch(/private async appendVersion[\s\S]*?origin: item\.origin,/);
+  });
+
+  it('HUMAN refuses SETUP and DOCUMENT; SETUP and DOCUMENT replace each other; HUMAN replaces both', () => {
+    for (const lower of ['SETUP', 'DOCUMENT'] as const) {
+      expect(mayOverwrite(subject('HUMAN'), subject(lower)).allowed, lower).toBe(false);
+      expect(mayOverwrite(subject(lower), subject('HUMAN')).allowed, lower).toBe(true);
+    }
+    expect(mayOverwrite(subject('DOCUMENT'), subject('SETUP')).allowed).toBe(true);
+    expect(mayOverwrite(subject('SETUP'), subject('DOCUMENT')).allowed).toBe(true);
   });
 });

@@ -236,6 +236,17 @@ export class BrandKnowledgeService {
       data: {
         title: toJson(input.title),
         body: toJson(input.body),
+        /*
+         * THE ROW SAYS WHO WROTE WHAT IT NOW SAYS (D-335). The origin is the
+         * effective origin of THIS write, not of the row's first one: a person
+         * editing a SETUP or DOCUMENT fact makes it HUMAN, and a document
+         * accepted on the setup wizard's Review step makes it SETUP. Keeping
+         * the old origin would let a later lower-authority write replace text
+         * a person wrote, because `mayOverwrite` would still see the old
+         * origin. `appendVersion` copies the updated row, so the version
+         * carries the same origin as the item it represents.
+         */
+        origin: incomingOrigin,
         version: { increment: 1 },
         // A human editing an item has just reviewed it, by definition.
         lastReviewedAt: now,
@@ -260,8 +271,12 @@ export class BrandKnowledgeService {
       resourceType: 'BrandKnowledgeItem',
       resourceId: updated.id,
       brandId: updated.brandId,
-      before: { version: existing.version },
-      after: { version: updated.version, reason: input.changeReason ?? null },
+      before: { version: existing.version, origin: existing.origin },
+      after: {
+        version: updated.version,
+        origin: updated.origin,
+        reason: input.changeReason ?? null,
+      },
     });
 
     return updated;

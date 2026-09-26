@@ -155,9 +155,9 @@ describe('D-335 · a fact accepted on the Review step is SETUP', () => {
 
   it('a SETUP fact can still be refreshed by a newer document and edited by a person', async () => {
     /*
-     * An item's origin says where the ROW came from and never changes; each
-     * later change is a version. What matters is that neither later change is
-     * refused: SETUP shares DOCUMENT's rank, so it does not lock the fact.
+     * SETUP shares DOCUMENT's rank, so it does not lock the fact. Each write
+     * leaves the row with its OWN origin (blocker 0): the newer document makes
+     * it DOCUMENT, the person's edit makes it HUMAN.
      */
     const key = uniqueKey('audience.refresh');
     const result = await inA(async (svc, db) => {
@@ -186,13 +186,17 @@ describe('D-335 · a fact accepted on the Review step is SETUP', () => {
       const versions = await db.brandKnowledgeVersion.findMany({
         where: { knowledgeItemId: edited.id },
         orderBy: { version: 'asc' },
-        select: { changeKind: true },
+        select: { changeKind: true, origin: true },
       });
-      return { accepted, refreshed, edited, versions: versions.map((v) => v.changeKind) };
+      return { accepted, refreshed, edited, versions };
     });
     expect(result.refreshed.itemId).toBe(result.accepted.itemId);
-    expect(result.edited).toMatchObject({ origin: 'SETUP', version: 3 });
-    expect(result.versions).toEqual(['approved', 'approved', 'edited']);
+    expect(result.edited).toMatchObject({ origin: 'HUMAN', version: 3 });
+    expect(result.versions).toEqual([
+      { changeKind: 'approved', origin: 'SETUP' },
+      { changeKind: 'approved', origin: 'DOCUMENT' },
+      { changeKind: 'edited', origin: 'HUMAN' },
+    ]);
   });
 });
 
@@ -234,13 +238,13 @@ describe('D-335 · the first goal', () => {
     expect(result.audits).toContain('brand.profile.updated');
   });
 
-  it('a Brand Brain edit stops the key describing it; choosing again in setup restores it', async () => {
+  it('a Brand Brain edit makes the goal HUMAN; setup can no longer overwrite it', async () => {
     const read = (db: ScopedDb) =>
       db.brandKnowledgeItem.findFirstOrThrow({
         where: { brandId: fixtures.a.brandId, area: 'STRATEGY', itemKey: GOAL_ITEM_KEY },
         select: { id: true, version: true, ...GOAL_ITEM_SELECT },
       });
-    const result = await inA(async (svc, db) => {
+    const { chosen, edited } = await inA(async (svc, db) => {
       const chosen = await read(db);
       await svc.updateItem({
         itemId: chosen.id,
@@ -249,33 +253,44 @@ describe('D-335 · the first goal', () => {
         actor: actorA(),
         policy: POLICY,
       });
-      const edited = await read(db);
-      await saveSetupGoal(db, svc, {
-        workspaceId: fixtures.a.workspaceId,
-        brandId: fixtures.a.brandId,
-        goal: 'TRAFFIC',
-        actor: actorA(),
-        staleness: POLICY,
-      });
-      const again = await read(db);
-      const count = await db.brandKnowledgeItem.count({
-        where: { brandId: fixtures.a.brandId, area: 'STRATEGY', itemKey: GOAL_ITEM_KEY },
-      });
-      return { chosen, edited, again, count };
+      return { chosen, edited: await read(db) };
     });
-    // Read by its key while setup wrote it …
-    expect(storedGoal(result.chosen)).toBe('LEADS');
-    // … by its title once a person rewrote it — "Our own goal" is no preset …
-    expect(storedGoal(result.edited)).toBeNull();
-    // … and by its key again once it is chosen again in setup: one item, a new version.
-    expect(storedGoal(result.again)).toBe('TRAFFIC');
-    expect(result.again.id).toBe(result.chosen.id);
-    expect(result.again.version).toBe(result.chosen.version + 2);
-    expect(result.again.origin).toBe('SETUP');
-    expect(result.count).toBe(1);
+    // Read by its key while setup wrote it, by its title once a person rewrote
+    // it — and "Our own goal" is no preset.
+    expect(storedGoal(chosen)).toBe('LEADS');
+    expect(edited.origin).toBe('HUMAN');
+    expect(storedGoal(edited)).toBeNull();
+
+    // Choosing again in setup is refused: lower-authority input never
+    // replaces what a person wrote, and nothing of the attempt is kept.
+    await expect(
+      inA((svc, db) =>
+        saveSetupGoal(db, svc, {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          goal: 'TRAFFIC',
+          actor: actorA(),
+          staleness: POLICY,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    const after = await inA(async (_svc, db) => ({
+      item: await read(db),
+      key: (
+        await db.brand.findUniqueOrThrow({
+          where: { id: fixtures.a.brandId },
+          select: { primaryGoalKey: true },
+        })
+      ).primaryGoalKey,
+      versions: await db.brandKnowledgeVersion.count({ where: { knowledgeItemId: chosen.id } }),
+    }));
+    expect(after.item).toMatchObject({ origin: 'HUMAN', version: edited.version });
+    expect(after.item.title).toEqual(edited.title);
+    expect(after.key).toBe('LEADS');
+    expect(after.versions).toBe(edited.version);
   });
 
-  it('a goal written before SETUP existed (a HUMAN row) is chosen again without a refusal', async () => {
+  it('a goal written before SETUP existed (a HUMAN row) is refused, not overwritten', async () => {
     const brand = await platform.brand.create({
       data: {
         workspaceId: fixtures.a.workspaceId,
@@ -285,8 +300,8 @@ describe('D-335 · the first goal', () => {
       },
       select: { id: true },
     });
-    const goal = await inA(async (svc, db) => {
-      await svc.createItem({
+    await inA((svc) =>
+      svc.createItem({
         brandId: brand.id,
         area: 'STRATEGY',
         itemKey: GOAL_ITEM_KEY,
@@ -294,21 +309,27 @@ describe('D-335 · the first goal', () => {
         body: { en: 'Before D-335' },
         actor: actorA(),
         policy: POLICY,
-      });
-      await saveSetupGoal(db, svc, {
-        workspaceId: fixtures.a.workspaceId,
-        brandId: brand.id,
-        goal: 'RETENTION',
-        actor: actorA(),
-        staleness: POLICY,
-      });
-      return db.brandKnowledgeItem.findFirstOrThrow({
-        where: { brandId: brand.id, itemKey: GOAL_ITEM_KEY },
-        select: GOAL_ITEM_SELECT,
-      });
+      }),
+    );
+    await expect(
+      inA((svc, db) =>
+        saveSetupGoal(db, svc, {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: brand.id,
+          goal: 'RETENTION',
+          actor: actorA(),
+          staleness: POLICY,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    const goal = await platform.brandKnowledgeItem.findFirstOrThrow({
+      where: { brandId: brand.id, itemKey: GOAL_ITEM_KEY },
+      select: { origin: true, version: true, body: true },
     });
-    expect(goal.origin).toBe('HUMAN');
-    expect(storedGoal(goal)).toBe('RETENTION');
+    expect(goal).toMatchObject({ origin: 'HUMAN', version: 1, body: { en: 'Before D-335' } });
+    expect(
+      (await platform.brand.findUniqueOrThrow({ where: { id: brand.id } })).primaryGoalKey,
+    ).toBeNull();
   });
 
   it('another workspace’s brand is a 404, and nothing is written there', async () => {
