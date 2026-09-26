@@ -51,6 +51,7 @@ import {
   SocialOAuthService,
   SocialTokenVault,
   type ApplicationResolver,
+  type PublishingPolicy,
 } from '@brandspace/social-connectors';
 import { ContentApprovalService, TenantContentPolicySource } from '@brandspace/content';
 import {
@@ -207,6 +208,13 @@ export interface SchedulerOptions {
    * resolver; injected by a test that has no Secret Service behind it.
    */
   readonly socialApplications?: ApplicationResolver;
+  /**
+   * The publishing policy for every pass. Defaults to the activated
+   * `publishing` configuration, read each time; injected by a test so its
+   * outcome does not depend on what another run left activated in a shared
+   * database.
+   */
+  readonly publishingPolicy?: PublishingPolicy;
 }
 
 export class MaintenanceScheduler {
@@ -216,11 +224,24 @@ export class MaintenanceScheduler {
   #running = false;
 
   readonly #socialApplications: ApplicationResolver;
+  readonly #injectedPublishingPolicy: PublishingPolicy | undefined;
 
   constructor(options: SchedulerOptions) {
     this.#environment = options.environment;
     this.#clock = options.clock ?? systemClock;
     this.#socialApplications = options.socialApplications ?? applicationResolver();
+    this.#injectedPublishingPolicy = options.publishingPolicy;
+  }
+
+  /** The activated publishing policy, unless one was injected. */
+  async #resolvePublishing(): Promise<PublishingPolicy> {
+    return (
+      this.#injectedPublishingPolicy ??
+      resolvePublishingPolicy(
+        new ConfigurationService({ prisma: getPlatformClient() }),
+        this.#environment,
+      )
+    );
   }
 
   async #cadence(): Promise<{
@@ -487,10 +508,7 @@ export class MaintenanceScheduler {
       created += await withWorkspace(
         workspaceId,
         async (db) => {
-          const policy = await resolvePublishingPolicy(
-            new ConfigurationService({ prisma: platform }),
-            environment,
-          );
+          const policy = await this.#resolvePublishing();
           const contentPolicy = await new TenantContentPolicySource(db, environment).load();
           const pipeline = new PublishPipelineService({
             db,
@@ -641,10 +659,7 @@ export class MaintenanceScheduler {
         await withWorkspace(
           connection.workspaceId,
           async (db) => {
-            const policy = await resolvePublishingPolicy(
-              new ConfigurationService({ prisma: platform }),
-              this.#environment,
-            );
+            const policy = await this.#resolvePublishing();
             await new SocialOAuthService({
               db,
               workspaceId: connection.workspaceId,
@@ -901,10 +916,7 @@ export class MaintenanceScheduler {
 
   /** The dispatch half of the publishing policy, read once per pass. */
   async #publishingPolicy(): Promise<{ claimLeaseSeconds: number; staleClaimBatchSize: number }> {
-    const policy = await resolvePublishingPolicy(
-      new ConfigurationService({ prisma: getPlatformClient() }),
-      this.#environment,
-    );
+    const policy = await this.#resolvePublishing();
     return {
       claimLeaseSeconds: policy.dispatch.claimLeaseSeconds,
       staleClaimBatchSize: policy.dispatch.staleClaimBatchSize,

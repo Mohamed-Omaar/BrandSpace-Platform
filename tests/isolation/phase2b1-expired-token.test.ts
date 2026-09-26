@@ -197,6 +197,9 @@ const sweep = (at: Date) =>
     environment: 'DEVELOPMENT',
     clock: { now: () => at },
     socialApplications: applications,
+    // LinkedIn enabled explicitly: the refresh must not depend on whatever
+    // publishing configuration another run left activated in this database.
+    publishingPolicy: policy,
   }).sweepPublishing(500);
 
 beforeAll(async () => {
