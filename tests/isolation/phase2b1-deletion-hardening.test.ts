@@ -206,13 +206,18 @@ describe('Review item 8 · a plan that still renews is never deleted', () => {
       await held;
     });
     await new Promise((resolve) => setTimeout(resolve, 100));
-    const attempt = request(f);
+    // Settled into a value at once, so its refusal is handled even while this
+    // test is still awaiting the resume below.
+    const attempt = request(f).then(
+      (accepted) => ({ accepted }),
+      (error: unknown) => error,
+    );
     // The request is now waiting for the lock; let the resume commit.
     await new Promise((resolve) => setTimeout(resolve, 200));
     release();
     await resume;
 
-    await expect(attempt).rejects.toMatchObject({
+    expect(await attempt).toMatchObject({
       code: 'CONFLICT',
       publicDetails: { reason: 'CANCEL_PLAN_FIRST' },
     });
