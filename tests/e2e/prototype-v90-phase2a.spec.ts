@@ -47,11 +47,12 @@ test.describe('A6 · Home by role', () => {
     await expect(page.getByTestId('home-feedback')).toHaveCount(0);
   });
 
-  test('the Viewer, which reads no content yet, gets none of the role sections', async ({
+  test('the Viewer, which reads content since Q12, gets the feedback section and no other', async ({
     page,
   }) => {
     await signIn(page, 'viewer');
-    for (const id of ['home-review-queue', 'home-my-work', 'home-top-posts', 'home-feedback']) {
+    await expect(page.getByTestId('home-feedback')).toBeVisible();
+    for (const id of ['home-review-queue', 'home-my-work', 'home-top-posts']) {
       await expect(page.getByTestId(id), id).toHaveCount(0);
     }
   });

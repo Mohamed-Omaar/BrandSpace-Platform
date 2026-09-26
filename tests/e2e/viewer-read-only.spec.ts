@@ -65,32 +65,18 @@ async function expectNoAccess(page: Page, path: string): Promise<void> {
   await expect(page.getByTestId('route-not-found')).toHaveCount(0);
 }
 
-test.describe('D-62 — a read-only Viewer has no approval surface at all', () => {
-  test('every approval route answers "No access", in both locales', async ({ page }) => {
+test.describe('D-62 / Q12 — the Viewer reads, and holds no authority beyond reading', () => {
+  /*
+   * Q12's second release gives the Viewer `content.read`: Content, the
+   * Calendar and Approvals now OPEN for it, read-only — proven in
+   * `q12-viewer-read-only.spec.ts`. What stays closed is everything else: the
+   * surfaces below need a permission the Viewer still does not hold, and the
+   * Studio without a post needs `content.create`.
+   */
+  test('the surfaces beyond content stay closed, and so does creating a post', async ({ page }) => {
     await signInAsViewer(page);
 
-    /*
-     * `/approvals` IS THE ONE THAT REGRESSED. Making D-121 reachable meant
-     * gating it on membership rather than `content.read`, which handed the
-     * Viewer a queue. It is back to `content.read`, so the Viewer gets the
-     * same not-found any member without the permission gets — and a review
-     * id in the query string changes nothing, because the refusal happens
-     * before the page reads it.
-     */
-    for (const path of [
-      'en/approvals',
-      'ar/approvals',
-      'en/approvals?review=00000000-0000-4000-8000-000000000000',
-    ]) {
-      await expectNoAccess(page, path);
-      expect(await page.content(), path).not.toContain('approvals-queue');
-    }
-  });
-
-  test('the content surfaces stay closed too', async ({ page }) => {
-    await signInAsViewer(page);
-
-    for (const route of ['content', 'content/compose', 'assets', 'brand-brain', 'calendar']) {
+    for (const route of ['assets', 'brand-brain', 'content/compose']) {
       await expectNoAccess(page, `en/${route}`);
     }
   });
@@ -115,8 +101,8 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
 
   test('PHASE 6: connected accounts and publishing are closed to a Viewer', async ({ page }) => {
     /*
-     * D-62 and D-130 in their Phase 6 form. A Viewer holds `workspace.read` and
-     * nothing else, so they may not connect an account, may not publish, may
+     * D-62 and D-130 in their Phase 6 form. A Viewer holds `workspace.read` and,
+     * since Q12, `content.read` — nothing else — so they may not connect an account, may not publish, may
      * not cancel or retry — and may not even SEE which external accounts a
      * brand controls, which is business information the narrowest role has no
      * need for.
@@ -139,7 +125,7 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
      * D-62 AND D-130 IN THEIR PHASE 7 FORM, and the assertion the whole phase
      * had to keep: nothing new was granted to `client_viewer`.
      *
-     * A Viewer holds exactly `workspace.read`. Every Phase 7 route requires a
+     * A Viewer holds exactly `workspace.read` and (since Q12) `content.read`. Every Phase 7 route requires a
      * permission they do not have — `analytics.read`, `strategy.read`,
      * `copilot.use`, `automation.read` — so each is a REAL refusal shaped like a
      * genuine miss, not a hidden link. The commercial performance of a business
@@ -206,15 +192,18 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
     }
   });
 
-  test('the navigation does not offer Approvals — but the refusal is the control', async ({
+  test('the top bar offers Approvals ("Review"), which the Viewer may read (Q12)', async ({
     page,
   }) => {
     await signInAsViewer(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
-    await expect(page.getByTestId('nav-approvals')).toHaveCount(0);
+    // Approvals lives in the top bar, not the rail.
+    await expect(page.getByTestId('topbar-review')).toHaveAttribute('href', '/en/approvals');
   });
 
-  test('POSTING to the route hands a Viewer no approvals content either', async ({ page }) => {
+  test('POSTING a verdict to the route hands a Viewer no decision or policy control', async ({
+    page,
+  }) => {
     /*
      * WHAT THIS CAN AND CANNOT PROVE, stated honestly.
      *
@@ -245,8 +234,13 @@ test.describe('D-62 — a read-only Viewer has no approval surface at all', () =
     });
 
     const body = await response.text();
+    // Q12 — the Viewer READS Approvals now; what it must never receive is a
+    // decision control or a queue to decide from.
     expect(body, 'no approvals queue may be rendered for a Viewer').not.toContain(
       'approvals-queue',
+    );
+    expect(body, 'no approve control may be rendered for a Viewer').not.toContain(
+      'data-testid="approve-',
     );
     expect(body, 'no policy editor may be rendered for a Viewer').not.toContain('approvals-policy');
     expect(body, 'no review subject may be rendered for a Viewer').not.toContain(
