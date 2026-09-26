@@ -7,7 +7,6 @@ import { createLogger, internalErrorFields } from '@brandspace/shared';
 import {
   checksumOf,
   createKnowledgeItemSchema,
-  reviewCandidateSchema,
   rollbackSchema,
   updateKnowledgeItemSchema,
   type LocalizedText,
@@ -23,6 +22,7 @@ import { actionErrorCode } from '../../../server/denial';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 import { brandLocaleAtCreation } from '../../../server/brand-ai-language';
 import { createBrandFor } from '../../../server/brand-creation';
+import { applyCandidateReview, reviewCandidateInputFrom } from '../../../server/candidate-review';
 
 const log = createLogger({ context: { component: 'dashboard.brand-brain' } });
 
@@ -260,32 +260,20 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
   let destination: string;
   try {
     const session = await requireWorkspaceAction(locale, 'brand_brain.review');
-    const decision = String(formData.get('decision') ?? '');
-    const parsed = reviewCandidateSchema.parse({
-      candidateId: String(formData.get('candidateId') ?? ''),
-      decision,
-      // Only an edited acceptance may carry text. The schema refuses an edit
-      // smuggled alongside a plain accept, so this stays honest.
-      ...(decision === 'accept_edited'
-        ? { title: localized(formData, 'title'), body: localized(formData, 'body') }
-        : {}),
-      ...(formData.get('reason') ? { reason: String(formData.get('reason')) } : {}),
-    });
+    const parsed = reviewCandidateInputFrom(formData);
 
-    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
-      await knowledge.reviewCandidate({
-        candidateId: parsed.candidateId,
-        decision: parsed.decision,
-        title: parsed.title,
-        body: parsed.body,
-        reason: parsed.reason,
-        actor: knowledgeActor(session),
-        policy: (await policy()).staleness,
-        // D-335: accepted on the setup wizard's Review step — decided from the
-        // closed-set return path, never from a field naming the origin.
-        acceptedInSetup: back.path === '/onboarding',
-      });
-    });
+    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) =>
+      applyCandidateReview(
+        knowledge,
+        parsed,
+        knowledgeActor(session),
+        (await policy()).staleness,
+        // Review item 15: Brand Brain's review is ALWAYS a document review. The
+        // setup wizard has its own action, which decides SETUP on the server;
+        // no field of this request can.
+        false,
+      ),
+    );
     destination = pageUrl(
       locale,
       {

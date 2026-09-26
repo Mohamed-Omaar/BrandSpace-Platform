@@ -36,9 +36,9 @@ import {
   type MessageKey,
 } from '../../../i18n/messages';
 import { CustomerBanner, CustomerCard, WorkspaceShell } from '../../../components/workspace-shell';
-import { reviewCandidateAction, uploadSourceAction } from '../brand-brain/actions';
+import { uploadSourceAction } from '../brand-brain/actions';
 import { connectAccountAction } from '../integrations/actions';
-import { createSetupBrandAction, saveFirstGoalAction } from './actions';
+import { createSetupBrandAction, reviewSetupCandidateAction, saveFirstGoalAction } from './actions';
 import { SetupProgress, SetupStepper } from './setup-stepper';
 import { IndustryField } from '../../../components/industry-field';
 import { SetupBrandLanguages } from '../../../components/setup-brand-languages';
@@ -590,8 +590,6 @@ export default async function OnboardingPage({
                           <input type="hidden" name="area" value={candidate.area} />
                           <input type="hidden" name="candidateId" value={candidate.id} />
                           <input type="hidden" name="decision" value={decision} />
-                          <input type="hidden" name="returnTo" value="/onboarding" />
-                          <input type="hidden" name="step" value="review" />
                         </>
                       );
                       return (
@@ -623,7 +621,7 @@ export default async function OnboardingPage({
                             )}
                           </span>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
-                            <form action={reviewCandidateAction}>
+                            <form action={reviewSetupCandidateAction}>
                               {hidden('accept')}
                               <button
                                 type="submit"
@@ -634,7 +632,7 @@ export default async function OnboardingPage({
                                 {t('bb.reviewAccept')}
                               </button>
                             </form>
-                            <form action={reviewCandidateAction}>
+                            <form action={reviewSetupCandidateAction}>
                               {hidden('reject')}
                               <button
                                 type="submit"
@@ -657,7 +655,7 @@ export default async function OnboardingPage({
                               {t('bb.reviewEdit')}
                             </summary>
                             <form
-                              action={reviewCandidateAction}
+                              action={reviewSetupCandidateAction}
                               style={{
                                 display: 'grid',
                                 gap: spacingTokens.xs,

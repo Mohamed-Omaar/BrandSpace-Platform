@@ -43,10 +43,33 @@ describe('D-335 · SETUP ranks with DOCUMENT', () => {
     expect(mayOverwrite(subject('HUMAN'), subject('SETUP')).allowed).toBe(false);
   });
 
-  it('the Review step decides SETUP from the closed-set return path, not from a field', () => {
-    const actions = read('apps/dashboard/src/app/[locale]/brand-brain/actions.ts');
-    expect(actions).toContain("acceptedInSetup: back.path === '/onboarding',");
-    expect(actions).not.toMatch(/formData\.get\('origin'\)/);
+  it('review item 15: SETUP is decided on the server — Brand Brain always DOCUMENT, the wizard by its own rule', () => {
+    const brandBrain = read('apps/dashboard/src/app/[locale]/brand-brain/actions.ts');
+    const review = brandBrain.slice(
+      brandBrain.indexOf('export async function reviewCandidateAction'),
+    );
+    const body = review.slice(0, review.indexOf('\n}\n'));
+    // Brand Brain passes a literal false; nothing from the form reaches the origin.
+    expect(body).toMatch(
+      /applyCandidateReview\([\s\S]*?\(await policy\(\)\)\.staleness,[\s\S]*?false,\s*\)/,
+    );
+    expect(body).not.toContain('acceptedInSetup');
+    expect(body).not.toMatch(/back\.path === '\/onboarding'/);
+
+    const onboarding = read('apps/dashboard/src/app/[locale]/onboarding/actions.ts');
+    const setup = onboarding.slice(
+      onboarding.indexOf('export async function reviewSetupCandidateAction'),
+    );
+    expect(setup).toContain(
+      'await setupReviewInProgress(db, parsed.candidateId, actor.brandScope)',
+    );
+    expect(setup).not.toMatch(/formData\.get\('(origin|returnTo|step|setup)'\)/);
+
+    // The wizard's Review forms post to the wizard's own action, and carry no marker.
+    const page = read('apps/dashboard/src/app/[locale]/onboarding/page.tsx');
+    expect(page).toContain('action={reviewSetupCandidateAction}');
+    expect(page).not.toContain('action={reviewCandidateAction}');
+
     const knowledge = read('packages/brand-brain/src/knowledge.ts');
     // An analytics candidate stays an inference whatever the screen.
     expect(knowledge).toMatch(

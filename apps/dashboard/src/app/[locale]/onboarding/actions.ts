@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
@@ -13,6 +13,11 @@ import { rememberBrand } from '../../../server/brand-cookie';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
 import { setupBrandFrom } from '../../../server/setup-brand-form';
 import { saveSetupGoal } from '../../../server/setup-goal';
+import {
+  applyCandidateReview,
+  reviewCandidateInputFrom,
+  setupReviewInProgress,
+} from '../../../server/candidate-review';
 import { setupGoalFrom, type SetupView } from '../../../server/setup-wizard-state';
 
 const log = createLogger({ context: { component: 'dashboard.setup-wizard' } });
@@ -206,6 +211,48 @@ export async function saveFirstGoalAction(formData: FormData): Promise<void> {
     destination = pageUrl(locale, 'done', goal === 'unsure' ? {} : { ok: 'GOAL_SAVED' });
   } catch (error: unknown) {
     destination = failure(locale, 'goal', error, 'save-goal');
+  }
+  revalidatePath(`/${locale}/onboarding`);
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}
+
+/**
+ * STEP 4 — REVIEW WHAT BRANDSPACE LEARNED (review item 15, D-335).
+ *
+ * The wizard's OWN review action, so the origin of what it accepts is decided
+ * HERE, on the server, and never read from the request: SETUP only while this
+ * brand's setup is still in progress (it has no first goal yet), DOCUMENT
+ * otherwise — exactly what Brand Brain's review records. The decision, the
+ * candidate and the permission (`brand_brain.review`) are checked as Brand
+ * Brain checks them, through the same shared decoder and service call.
+ */
+export async function reviewSetupCandidateAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.review');
+    const parsed = reviewCandidateInputFrom(formData);
+    const actor = {
+      userId: session.customer.userId,
+      permissionKeys: session.workspace.permissionKeys,
+      brandScope: session.workspace.brandScope,
+    };
+    await inBrandBrain(session.workspace.workspaceId, async ({ db, knowledge, policy }) =>
+      applyCandidateReview(
+        knowledge,
+        parsed,
+        actor,
+        (await policy()).staleness,
+        await setupReviewInProgress(db, parsed.candidateId, actor.brandScope),
+      ),
+    );
+    destination = pageUrl(locale, 'review', {
+      ok: parsed.decision === 'reject' ? 'CANDIDATE_REJECTED' : 'CANDIDATE_ACCEPTED',
+    });
+  } catch (error: unknown) {
+    unstable_rethrow(error);
+    destination = failure(locale, 'review', error, 'review-candidate');
   }
   revalidatePath(`/${locale}/onboarding`);
   revalidatePath(`/${locale}/brand-brain`);
