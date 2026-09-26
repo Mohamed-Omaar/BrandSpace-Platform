@@ -647,7 +647,9 @@ export default async function OverviewPage({
                     className={buttonClass('neutral')}
                     data-testid={`attention-action-${item.kind}`}
                   >
-                    {t(`home.action.${attentionAction(item.kind)}` as MessageKey)}
+                    {t(
+                      `home.action.${attentionAction(item.kind, workspace.permissionKeys)}` as MessageKey,
+                    )}
                   </Link>
                 </li>
               ))}

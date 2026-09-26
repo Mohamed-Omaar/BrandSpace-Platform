@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { ROLE_DEFINITIONS, maySpendCredits } from '@brandspace/shared';
 import { mayApproveForBrand } from '@brandspace/content';
 import { NOTE_MANAGE_PERMISSION, NOTE_PERMISSION } from '@brandspace/collaboration';
-import { homeSectionsFor } from '../../apps/dashboard/src/server/home';
+import { attentionAction, homeSectionsFor } from '../../apps/dashboard/src/server/home';
+import { messages } from '../../apps/dashboard/src/i18n/messages';
 import { KNOWN_PAGE_PERMISSIONS } from '../../apps/dashboard/src/server/known-routes';
 
 /**
@@ -122,5 +123,27 @@ describe('Q12 · the Viewer is offered no control it would be refused', () => {
     expect(page).toContain("teachBrain: workspace.permissionKeys.includes('brand_brain.edit'),");
     expect(viewer).not.toContain('brand_brain.read');
     expect(viewer).not.toContain('brand_brain.edit');
+  });
+});
+
+describe('Q12 · Home tells the Viewer what is happening, not what to do', () => {
+  it('"Waiting for approval" and "See the calendar" for a member who cannot act', () => {
+    expect(attentionAction('content-in-review', viewer)).toBe('awaitApproval');
+    expect(attentionAction('calendar-gap', viewer)).toBe('seeCalendar');
+    // A member who can act keeps the verb; nothing else changes for anyone.
+    const owner = ROLE_DEFINITIONS.find((r) => r.key === 'workspace_owner')?.permissionKeys ?? [];
+    expect(attentionAction('content-in-review', owner)).toBe('review');
+    expect(attentionAction('calendar-gap', owner)).toBe('plan');
+    expect(attentionAction('content-in-review')).toBe('review');
+    expect(attentionAction('publishing-failed', viewer)).toBe('fix');
+  });
+
+  it('says it in both languages', () => {
+    const en = messages.en as Record<string, string>;
+    const ar = messages.ar as Record<string, string>;
+    expect(en['home.action.awaitApproval']).toBe('Waiting for approval');
+    expect(ar['home.action.awaitApproval']).toBe('مستني موافقة');
+    expect(en['home.action.seeCalendar']).toBe('See the calendar');
+    expect(ar['home.action.seeCalendar']).toBe('شوف التقويم');
   });
 });

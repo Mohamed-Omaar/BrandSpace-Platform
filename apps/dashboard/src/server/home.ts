@@ -81,8 +81,23 @@ export const ATTENTION_ACTIONS: Readonly<Record<string, string>> = {
   'performance-below': 'open',
 };
 
-export function attentionAction(kind: string): string {
-  return ATTENTION_ACTIONS[kind] ?? 'open';
+/**
+ * Q12 — THE VERB MUST BE ONE THE READER CAN DO. A member who may not approve
+ * (the Viewer) is told a review is waiting, not asked to review it; one who
+ * may not schedule is offered the calendar to look at, not content to plan.
+ * The link is the same; only the words change. Without `permissionKeys` the
+ * plain action is returned.
+ */
+export function attentionAction(kind: string, permissionKeys?: readonly string[]): string {
+  const action = ATTENTION_ACTIONS[kind] ?? 'open';
+  if (!permissionKeys) return action;
+  if (kind === 'content-in-review' && !permissionKeys.includes('content.approve')) {
+    return 'awaitApproval';
+  }
+  if (kind === 'calendar-gap' && !permissionKeys.includes('content.schedule')) {
+    return 'seeCalendar';
+  }
+  return action;
 }
 
 /** How many recommendations Home shows at most (§7 B: "only 2–3"). */
