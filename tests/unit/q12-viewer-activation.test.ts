@@ -93,4 +93,13 @@ describe('Q12 · the Viewer is offered no control it would be refused', () => {
     );
     expect(viewer).not.toContain('content.edit');
   });
+
+  it('the Studio with no post answers "No access" naming content.create', () => {
+    const page = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
+    expect(page).toMatch(
+      /if \(itemId === undefined && !holdsPermission\(workspace, 'content\.create'\)\) \{\s*return \(\s*<NoAccessPage/,
+    );
+    expect(page).toContain("permissionKey: 'content.create',");
+    expect(viewer).not.toContain('content.create');
+  });
 });
