@@ -429,7 +429,16 @@ export class ContentApprovalService {
         userId: chosen,
         brandId: item.brandId,
       });
-      if (!eligible) throw assigneeNotEligible();
+      /*
+       * AND ELIGIBLE FOR THIS ITEM, not only for the brand (D-122, Q10). Under
+       * the policy this cycle is snapshotted with, `decide()` refuses both the
+       * requester and the author unless self-approval is allowed — so naming
+       * either would assign the review to the one person who may not answer
+       * it, and notify only them. Checked here, on the server, whatever the
+       * composer offered.
+       */
+      const isSelf = chosen === input.actor.userId || chosen === item.createdByUserId;
+      if (!eligible || (isSelf && !policy.allowSelfApproval)) throw assigneeNotEligible();
     }
     /*
      * Q10 (D-325) — NOBODY CHOSEN MEANS THE DEFAULT REVIEWER, not nobody: the

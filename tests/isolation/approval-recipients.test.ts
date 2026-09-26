@@ -492,7 +492,110 @@ describe('Q10 — every review has a default reviewer', () => {
     ).toBe(fixtures.a.userId);
   });
 
+  describe('an explicit assignee must be able to decide THIS item (D-122)', () => {
+    /** Both people here hold `content.approve`, so only D-122 can refuse them. */
+    const approverSubmitting = (): ApprovalActor => ({
+      userId: approverBothBrands,
+      roleKey: 'approver',
+      permissionKeys: ['content.read', 'content.submit', 'content.approve'],
+      brandScope: [],
+    });
+    const approvalsFor = () =>
+      platform.approval.count({
+        where: { workspaceId: fixtures.a.workspaceId, contentItemId: fixtures.a.contentItemId },
+      });
+    const allowSelfApproval = (allow: boolean) =>
+      run((s) =>
+        s.setPolicyForBrand({
+          brandId: fixtures.a.brandId,
+          actorUserId: fixtures.a.userId,
+          actorBrandScope: [],
+          patch: { allowSelfApproval: allow },
+        }),
+      );
+
+    it("refuses a crafted assignment to the post's AUTHOR, and writes no approval", async () => {
+      await platform.contentItem.update({
+        where: { id: fixtures.a.contentItemId },
+        data: { createdByUserId: approverBothBrands },
+      });
+      const { notifier, recipients } = capturing();
+      await expect(
+        run(
+          (s) =>
+            s.submit({
+              itemId: fixtures.a.contentItemId,
+              actor: copywriterAuthor(),
+              assignedToUserId: approverBothBrands,
+            }),
+          notifier,
+        ),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(await approvalsFor()).toBe(0);
+      expect(recipients).toEqual([]);
+      const item = await platform.contentItem.findUniqueOrThrow({
+        where: { id: fixtures.a.contentItemId },
+      });
+      expect(item.status).toBe('DRAFT');
+    });
+
+    it('refuses a crafted assignment to the SUBMITTER, and writes no approval', async () => {
+      await platform.contentItem.update({
+        where: { id: fixtures.a.contentItemId },
+        data: { createdByUserId: copywriter },
+      });
+      await expect(
+        run((s) =>
+          s.submit({
+            itemId: fixtures.a.contentItemId,
+            actor: approverSubmitting(),
+            assignedToUserId: approverBothBrands,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(await approvalsFor()).toBe(0);
+    });
+
+    it('accepts the author or the submitter when the brand allows self-approval', async () => {
+      await allowSelfApproval(true);
+
+      await platform.contentItem.update({
+        where: { id: fixtures.a.contentItemId },
+        data: { createdByUserId: approverBothBrands },
+      });
+      const toAuthor = await run((s) =>
+        s.submit({
+          itemId: fixtures.a.contentItemId,
+          actor: copywriterAuthor(),
+          assignedToUserId: approverBothBrands,
+        }),
+      );
+      expect(toAuthor.assignedToUserId).toBe(approverBothBrands);
+
+      // A second cycle, submitted by the approver themself.
+      await platform.approval.deleteMany({ where: { workspaceId: fixtures.a.workspaceId } });
+      await platform.contentItem.update({
+        where: { id: fixtures.a.contentItemId },
+        data: { status: 'DRAFT', createdByUserId: copywriter },
+      });
+      const toSubmitter = await run((s) =>
+        s.submit({
+          itemId: fixtures.a.contentItemId,
+          actor: approverSubmitting(),
+          assignedToUserId: approverBothBrands,
+        }),
+      );
+      expect(toSubmitter.assignedToUserId).toBe(approverBothBrands);
+    });
+  });
+
   it('an explicit choice wins over the default', async () => {
+    // The copywriter wrote it and submits it; the owner is neither, so D-122
+    // leaves the owner free to be chosen.
+    await platform.contentItem.update({
+      where: { id: fixtures.a.contentItemId },
+      data: { createdByUserId: copywriter },
+    });
     const approval = await run((s) =>
       s.submit({
         itemId: fixtures.a.contentItemId,
