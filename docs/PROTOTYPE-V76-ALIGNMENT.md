@@ -333,6 +333,11 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   "role · plan" (current ticked) and, for an owner, "Workspaces: used of allowed" with "+ New
   workspace" below the allowance or an upgrade note at it; nothing on a plan that allows one. The
   new-workspace page admits an owner under the same rule the server enforces.
+- **A8 — Settings tabs.** Settings → Approvals (`/settings/approvals`, `approvals.policy.manage`)
+  now holds the brand approval rules, through the same action and audit event; the Approvals queue
+  links to it. Settings → Notifications and Settings → AI arrive with A10/G2/G3 (item 4 below).
+  **Publishing defaults is deferred to Phase 2B-2** (owner, 2026-09-26): its contents — default
+  channels and time, hashtags in the first comment, templates — are B2/E4.
 
 ---
 

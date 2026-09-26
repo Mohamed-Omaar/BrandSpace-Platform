@@ -156,7 +156,6 @@ export function ApprovalsView({
   readonly actions: {
     decide(formData: FormData): Promise<void>;
     withdraw(formData: FormData): Promise<void>;
-    savePolicy(formData: FormData): Promise<void>;
   };
 }) {
   return (
@@ -354,47 +353,23 @@ export function ApprovalsView({
       ) : null}
 
       {/*
-        The policy editor is rendered only for the permission that may change it.
-        It can enable self-approval, so it is Owner and Admin only — a role that
-        can approve must not also be able to grant itself the right to approve
-        its own work.
+        The approval rules live in Settings → Approvals (A8, prototype v94). The
+        queue only points there, and only for the permission that may change
+        them — Owner and Admin (`approvals.policy.manage`).
       */}
       {tab === 'forMe' && mayManagePolicy && policies.length > 0 ? (
-        <Card testId="approvals-policy">
+        <Card testId="approvals-policy-link">
           <SectionHeader
             title={t('approvals.policyTitle')}
-            description={t('approvals.policyBody')}
+            description={t('approvals.policyMoved')}
           />
-          <ul style={listStyle}>
-            {policies.map((policy) => (
-              <li key={policy.brandId} style={rowStyle}>
-                <form action={actions.savePolicy} style={formStyle}>
-                  <input type="hidden" name="locale" value={locale} />
-                  <input type="hidden" name="brandId" value={policy.brandId} />
-                  <strong style={typographyTokens.bodySm}>{policy.brandName}</strong>
-                  <Checkbox
-                    name="requireApproval"
-                    label={t('approvals.policyRequire')}
-                    checked={policy.requireApprovalBeforeScheduling}
-                    testId={`policy-require-${policy.brandId}`}
-                  />
-                  <Checkbox
-                    name="allowSelfApproval"
-                    label={t('approvals.policySelf')}
-                    checked={policy.allowSelfApproval}
-                    testId={`policy-self-${policy.brandId}`}
-                  />
-                  <button
-                    type="submit"
-                    style={buttonStyle('ghost')}
-                    data-testid={`policy-save-${policy.brandId}`}
-                  >
-                    {t('approvals.policySave')}
-                  </button>
-                </form>
-              </li>
-            ))}
-          </ul>
+          <Link
+            href={`/${locale}/settings/approvals`}
+            style={buttonStyle('ghost', 'sm')}
+            data-testid="approvals-policy-open"
+          >
+            {t('approvals.policyOpen')}
+          </Link>
         </Card>
       ) : null}
     </Stack>
@@ -534,52 +509,6 @@ function DecisionForm({
         </button>
       </div>
     </form>
-  );
-}
-
-/**
- * A checkbox, composed rather than created.
- *
- * `Field` renders a text control, and a checkbox is the one shape it does not
- * cover. It uses the same label typography, the same focus treatment and the
- * same spacing tokens as everything else — UI-FIDELITY-CONTRACT §6.2 rule 4
- * asks for a recorded reason when something new appears, and this is it.
- *
- * THE WHOLE ROW IS THE TARGET, and it is at least 24px tall: WCAG 2.2 AA 2.5.8
- * sets a 24×24 minimum and a native checkbox renders at about 13×13. Growing
- * the box alone would fix the number and leave a fiddly target; making the
- * LABEL the target is what the criterion asks for.
- */
-function Checkbox({
-  name,
-  label,
-  checked,
-  testId,
-}: {
-  readonly name: string;
-  readonly label: string;
-  readonly checked: boolean;
-  readonly testId: string;
-}) {
-  return (
-    <label
-      style={{
-        display: 'flex',
-        gap: spacingTokens.xs,
-        alignItems: 'center',
-        minBlockSize: '24px',
-        cursor: 'pointer',
-      }}
-    >
-      <input
-        type="checkbox"
-        name={name}
-        defaultChecked={checked}
-        data-testid={testId}
-        style={{ inlineSize: '20px', blockSize: '20px', margin: 0, cursor: 'pointer' }}
-      />
-      <span style={typographyTokens.bodySm}>{label}</span>
-    </label>
   );
 }
 

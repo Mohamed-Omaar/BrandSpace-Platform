@@ -82,6 +82,21 @@ describe('P8: the settings nav offers only what the member can open', () => {
     ]);
   });
 
+  it('offers Settings → Approvals only with approvals.policy.manage (A8, Phase 2B-1)', () => {
+    const without = settingsNavItems({
+      locale: 'en',
+      permissionKeys: WORKSPACE_ADMIN,
+      selected: 'settings',
+    });
+    expect(without.map((item) => item.href)).not.toContain('/en/settings/approvals');
+    const withIt = settingsNavItems({
+      locale: 'en',
+      permissionKeys: [...WORKSPACE_ADMIN, 'approvals.policy.manage'],
+      selected: 'settings',
+    });
+    expect(withIt.map((item) => item.href)).toContain('/en/settings/approvals');
+  });
+
   /*
    * PERMISSIONS IS THE ONE ROW EVERY MEMBER GETS, because it shows the reader
    * their own effective permissions and the route asks for nothing.
@@ -135,6 +150,7 @@ describe('P8: the settings nav permission column matches the routes themselves',
   const PAGE_FOR: Readonly<Record<string, string>> = {
     '/settings': 'apps/dashboard/src/app/[locale]/settings/page.tsx',
     '/settings/brand': 'apps/dashboard/src/app/[locale]/settings/brand/page.tsx',
+    '/settings/approvals': 'apps/dashboard/src/app/[locale]/settings/approvals/page.tsx',
     '/settings/security': 'apps/dashboard/src/app/[locale]/settings/security/page.tsx',
     '/integrations': 'apps/dashboard/src/app/[locale]/integrations/page.tsx',
     '/settings/data': 'apps/dashboard/src/app/[locale]/settings/data/page.tsx',

@@ -27,6 +27,7 @@ import type { MessageKey } from '../i18n/messages';
 export type SettingsNavKey =
   | 'settings'
   | 'brand'
+  | 'approvals'
   | 'security'
   | 'connections'
   | 'data'
@@ -59,6 +60,18 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
     permission: 'workspace.update',
   },
   { key: 'brand', path: '/settings/brand', labelKey: 'brand.profile', permission: 'brand.read' },
+  /*
+   * A8 (prototype v94 Phase 2B-1) — APPROVALS, the brand approval rules. They
+   * used to be edited inline on the Approvals queue; the rules are workspace
+   * configuration, so they live here now, behind the same permission
+   * (`approvals.policy.manage`, Owner and Admin only).
+   */
+  {
+    key: 'approvals',
+    path: '/settings/approvals',
+    labelKey: 'settings.approvals',
+    permission: 'approvals.policy.manage',
+  },
   /*
    * P6-13 — CONNECTIONS, reached from Settings as well as from the PUBLISH
    * group. The connected accounts are workspace configuration as much as a
