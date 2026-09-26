@@ -3125,6 +3125,12 @@ model CalendarSlot {
   /// The usage-quota event this slot consumed (AC-14.5), so cancelling can
   /// refund exactly what scheduling took and a retry cannot double-count.
   usageIdempotencyKey String?
+  /// How many times a CHARGED scheduling of this slot was refunded back to
+  /// PLANNED (review item 13). The scheduling quota key is derived from it, so a
+  /// genuine reschedule after a refund is charged again, while a retry of the
+  /// same scheduling request reuses the same key. Incremented only in the
+  /// transaction that refunds; never on the scheduling request itself.
+  rescheduleAttempt   Int     @default(0)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)

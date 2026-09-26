@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -7,6 +9,7 @@ import {
   ContentCalendarService,
   WorkspaceTimezoneService,
   parseContentPolicy,
+  scheduleUsageKey,
   timezoneChangeEffects,
 } from '@brandspace/content';
 import { appRoleClient, platformRoleClient } from './fixtures';
@@ -320,6 +323,238 @@ describe('G5 / Q22 · a post sent back to PLANNED goes out again only by being r
     );
     expect(view.slot.status).toBe('SCHEDULED');
     expect(view.item.status).toBe('SCHEDULED');
-    expect(consumed).toEqual([`calendar:${w.workspaceId}:${soon.slotId}:replan:${localTime}`]);
+    // Review item 13: the key is the slot's persisted attempt, which the refund
+    // back to PLANNED moved from 0 to 1 — not the local time.
+    expect(consumed).toEqual([`calendar:${w.workspaceId}:${soon.slotId}:attempt:1`]);
+  });
+});
+
+/**
+ * REVIEW ITEM 13 — THE SCHEDULING QUOTA KEY FOLLOWS `rescheduleAttempt`.
+ *
+ * The quota here is an idempotent fake keyed exactly like the real usage
+ * service: a key it has seen is not charged again.
+ */
+function ledger() {
+  const charged = new Set<string>();
+  const refunded = new Set<string>();
+  return {
+    charged,
+    refunded,
+    quota: {
+      limit: async () => null,
+      consume: async (key: string) => {
+        charged.add(key);
+        return true;
+      },
+      refund: async (key: string) => void refunded.add(key),
+    },
+  };
+}
+
+function calendar(
+  w: Awaited<ReturnType<typeof world>>,
+  timezone: string,
+  q: ReturnType<typeof ledger>,
+) {
+  return (db: TenantScopedClient) =>
+    new ContentCalendarService({
+      db,
+      workspaceId: w.workspaceId,
+      policy: POLICY,
+      timezone,
+      quota: q.quota,
+      approvalGate: { policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }) },
+    });
+}
+
+function changeZone(
+  w: Awaited<ReturnType<typeof world>>,
+  toZone: string,
+  q: ReturnType<typeof ledger>,
+) {
+  return inTenant(w.workspaceId, (db) =>
+    new WorkspaceTimezoneService({ db, workspaceId: w.workspaceId, quota: q.quota, clock }).change({
+      toZone,
+      actor: { type: 'USER', id: w.authorId },
+      minLeadMinutes: POLICY.calendar.minLeadMinutes,
+    }),
+  );
+}
+
+const attemptOf = async (slotId: string) =>
+  (await platform.calendarSlot.findUniqueOrThrow({ where: { id: slotId } })).rescheduleAttempt;
+
+describe('Review item 13 · a refund moves the scheduling key on; a retry never does', () => {
+  it('old rows read 0, and attempt 0 is the key a slot always had', async () => {
+    const w = await world('UTC');
+    const s = await slot(w, '2026-12-01T09:00', new Date(Date.UTC(2026, 11, 1, 9, 0)));
+    expect(await attemptOf(s.slotId)).toBe(0);
+    expect(scheduleUsageKey(w.workspaceId, s.slotId, 0)).toBe(
+      `calendar:${w.workspaceId}:${s.slotId}`,
+    );
+    expect(scheduleUsageKey(w.workspaceId, s.slotId, 2)).toBe(
+      `calendar:${w.workspaceId}:${s.slotId}:attempt:2`,
+    );
+  });
+
+  it('a refund back to PLANNED increments exactly once; repeating it neither refunds nor increments again', async () => {
+    const w = await world('UTC');
+    const soon = await slot(w, '2026-10-01T14:00', new Date(Date.UTC(2026, 9, 1, 14, 0)));
+    const q = ledger();
+    await changeZone(w, 'Asia/Tokyo', q);
+    expect(await attemptOf(soon.slotId)).toBe(1);
+    expect([...q.refunded]).toEqual([`${soon.usageKey}:refund`]);
+    // Another zone where it is still too late: already PLANNED, so it only moves.
+    await changeZone(w, 'Asia/Seoul', q);
+    expect(await attemptOf(soon.slotId)).toBe(1);
+    expect([...q.refunded]).toEqual([`${soon.usageKey}:refund`]);
+    expect(
+      (await platform.calendarSlot.findUniqueOrThrow({ where: { id: soon.slotId } })).status,
+    ).toBe('PLANNED');
+  });
+
+  it('refund, then rescheduled to EXACTLY the same time, is charged again — each cycle under a new key', async () => {
+    const w = await world('UTC');
+    const soon = await slot(w, '2026-10-01T14:00', new Date(Date.UTC(2026, 9, 1, 14, 0)));
+    const q = ledger();
+    const sameTime = '2026-10-01T14:00';
+    for (const cycle of [1, 2]) {
+      // Too late in Tokyo: refunded back to PLANNED, the attempt moves on.
+      await changeZone(w, 'Asia/Tokyo', q);
+      // Back to UTC, where 14:00 is still ahead; then put back at the SAME time.
+      await changeZone(w, 'UTC', q);
+      const view = await inTenant(w.workspaceId, (db) =>
+        calendar(
+          w,
+          'UTC',
+          q,
+        )(db).reschedule({
+          slotId: soon.slotId,
+          localTime: sameTime,
+          actorUserId: w.authorId,
+          actorBrandScope: [],
+        }),
+      );
+      expect(view.slot.status).toBe('SCHEDULED');
+      expect(await attemptOf(soon.slotId)).toBe(cycle);
+      expect(q.charged.has(`calendar:${w.workspaceId}:${soon.slotId}:attempt:${cycle}`)).toBe(true);
+    }
+    expect([...q.charged]).toEqual([
+      `calendar:${w.workspaceId}:${soon.slotId}:attempt:1`,
+      `calendar:${w.workspaceId}:${soon.slotId}:attempt:2`,
+    ]);
+  });
+
+  it('a retried scheduling request reuses the same persisted attempt and key, and does not increment it', async () => {
+    const w = await world('UTC');
+    const soon = await slot(w, '2026-10-01T14:00', new Date(Date.UTC(2026, 9, 1, 14, 0)));
+    const q = ledger();
+    await changeZone(w, 'Asia/Tokyo', q);
+    await changeZone(w, 'UTC', q);
+    const keys: string[] = [];
+    const recording = {
+      ...q.quota,
+      consume: async (key: string) => {
+        keys.push(key);
+        return q.quota.consume(key);
+      },
+    };
+    const request = () =>
+      inTenant(w.workspaceId, (db) =>
+        new ContentCalendarService({
+          db,
+          workspaceId: w.workspaceId,
+          policy: POLICY,
+          timezone: 'UTC',
+          quota: recording,
+          approvalGate: {
+            policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }),
+          },
+        }).reschedule({
+          slotId: soon.slotId,
+          localTime: '2026-10-01T15:00',
+          actorUserId: w.authorId,
+          actorBrandScope: [],
+        }),
+      );
+    // The first delivery is lost after the charge: its transaction rolls back.
+    await expect(
+      inTenant(w.workspaceId, async (db) => {
+        await new ContentCalendarService({
+          db,
+          workspaceId: w.workspaceId,
+          policy: POLICY,
+          timezone: 'UTC',
+          quota: recording,
+          approvalGate: {
+            policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }),
+          },
+        }).reschedule({
+          slotId: soon.slotId,
+          localTime: '2026-10-01T15:00',
+          actorUserId: w.authorId,
+          actorBrandScope: [],
+        });
+        throw new Error('the request died after charging');
+      }),
+    ).rejects.toThrow(/died/);
+    expect(await attemptOf(soon.slotId)).toBe(1);
+    // The retry: the same attempt, so the same key — the fake, like the usage
+    // service, charges a key once.
+    await request();
+    expect(keys).toEqual([
+      `calendar:${w.workspaceId}:${soon.slotId}:attempt:1`,
+      `calendar:${w.workspaceId}:${soon.slotId}:attempt:1`,
+    ]);
+    expect(q.charged.size).toBe(1);
+    expect(await attemptOf(soon.slotId)).toBe(1);
+  });
+});
+
+describe('Review item 14 · every query names the workspace, not only RLS', () => {
+  it('run on the RLS-free platform connection, a change in one workspace moves nothing of another', async () => {
+    const mine = await world('UTC');
+    const theirs = await world('UTC');
+    const theirSoon = await slot(theirs, '2026-10-01T14:00', new Date(Date.UTC(2026, 9, 1, 14, 0)));
+    const mineSoon = await slot(mine, '2026-10-01T14:00', new Date(Date.UTC(2026, 9, 1, 14, 0)));
+    const q = ledger();
+    // THE PLATFORM CLIENT BYPASSES RLS: the workspace predicates are the only guard.
+    await platform.$transaction((tx) =>
+      new WorkspaceTimezoneService({
+        db: tx as unknown as TenantScopedClient,
+        workspaceId: mine.workspaceId,
+        quota: q.quota,
+        clock,
+      }).change({
+        toZone: 'Asia/Tokyo',
+        actor: { type: 'USER', id: mine.authorId },
+        minLeadMinutes: POLICY.calendar.minLeadMinutes,
+      }),
+    );
+    expect(
+      await platform.calendarSlot.findUniqueOrThrow({ where: { id: mineSoon.slotId } }),
+    ).toMatchObject({ status: 'PLANNED', rescheduleAttempt: 1 });
+    expect(
+      await platform.calendarSlot.findUniqueOrThrow({ where: { id: theirSoon.slotId } }),
+    ).toMatchObject({ status: 'SCHEDULED', timezone: 'UTC', rescheduleAttempt: 0 });
+    expect(
+      (await platform.contentItem.findUniqueOrThrow({ where: { id: theirSoon.itemId } })).status,
+    ).toBe('SCHEDULED');
+    expect([...q.refunded]).toEqual([`${mineSoon.usageKey}:refund`]);
+  });
+
+  it('the source: every slot, item and approval query in the service carries workspaceId', () => {
+    const source = readFileSync(
+      path.join(__dirname, '../../packages/content/src/timezone-change.ts'),
+      'utf8',
+    );
+    const calls = [
+      ...source.matchAll(
+        /this\.#db\.(calendarSlot|contentItem|approval)\.(\w+)\(\{\s*where:\s*\{([^}]*)\}/g,
+      ),
+    ];
+    expect(calls.length).toBeGreaterThanOrEqual(6);
+    for (const call of calls) expect(call[3], `${call[1]}.${call[2]}`).toContain('workspaceId');
   });
 });

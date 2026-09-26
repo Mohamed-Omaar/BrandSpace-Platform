@@ -491,11 +491,12 @@ nothing can reach is a state whose meaning nobody has settled.
 
 **WIDER**, in three columns the design predates:
 
-| Column                | Why                                                                                                                                                                                     |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `targetKind`          | AC-14.7. The publishing target is a MOCK, said in the data rather than only in a comment. Phase 6 adds real connection targets beside it; until then nothing in the system can name one |
-| `platformKeys`        | Derived from the item's variants when the slot is created, so a slot still renders its channels after a variant is edited. A calendar is a plan, and a plan records what was planned    |
-| `usageIdempotencyKey` | AC-14.5. The quota event this slot consumed, so cancelling refunds exactly what scheduling took and a retry cannot double-count                                                         |
+| Column                | Why                                                                                                                                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `targetKind`          | AC-14.7. The publishing target is a MOCK, said in the data rather than only in a comment. Phase 6 adds real connection targets beside it; until then nothing in the system can name one       |
+| `platformKeys`        | Derived from the item's variants when the slot is created, so a slot still renders its channels after a variant is edited. A calendar is a plan, and a plan records what was planned          |
+| `usageIdempotencyKey` | AC-14.5. The quota event this slot consumed, so cancelling refunds exactly what scheduling took and a retry cannot double-count                                                               |
+| `rescheduleAttempt`   | int, default 0, CHECK ≥ 0 (review item 13). Incremented only when a charged scheduling is refunded back to PLANNED; the scheduling quota key is derived from workspace, slot and this attempt |
 
 **THE SLOT IS THE _WHEN_; `ContentItem` REMAINS THE SOURCE OF TRUTH FOR THE WHAT AND THE STATE.**
 There is no caption, no status copy and no channel list here that `content_item` already answers.

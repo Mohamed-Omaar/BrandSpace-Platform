@@ -150,28 +150,56 @@ export class WorkspaceTimezoneService {
     for (const effect of effects) {
       const unplanned = effect.outcome === 'unplanned';
       /*
-       * CONDITIONAL, so a post the publisher claimed a moment ago is not
-       * moved underneath it. One that no longer matches is simply left out.
+       * A CHARGED POST GOES BACK TO PLANNED ONCE (review item 13). Only a
+       * SCHEDULED slot is sent back: in the SAME conditional update its
+       * `rescheduleAttempt` is incremented, and its quota is refunded under the
+       * key it was charged with, read in this transaction. A slot already
+       * PLANNED was refunded before — it only moves, and neither the refund nor
+       * the attempt repeats. CONDITIONAL throughout, so a post the publisher
+       * claimed a moment ago is not moved underneath it.
        */
-      const moved = await this.#db.calendarSlot.updateMany({
-        where: { id: effect.slotId, status: { in: [...MOVABLE] } },
-        data: {
-          scheduledAtUtc: effect.toUtc,
-          timezone: input.toZone,
-          ...(unplanned ? { status: 'PLANNED' as const } : {}),
-        },
-      });
-      if (moved.count === 0) continue;
-
+      let refundKey: string | null = null;
+      let sentBack = false;
       if (unplanned) {
-        const slot = await this.#db.calendarSlot.findUniqueOrThrow({
-          where: { id: effect.slotId },
-          select: { usageIdempotencyKey: true },
+        const charged = await this.#db.calendarSlot.findFirst({
+          where: { id: effect.slotId, workspaceId, status: 'SCHEDULED' },
+          select: { usageIdempotencyKey: true, rescheduleAttempt: true },
         });
-        // The same derived key a cancel uses, so the quota comes back once.
-        if (slot.usageIdempotencyKey) {
-          await this.#quota.refund(`${slot.usageIdempotencyKey}:refund`);
+        if (charged) {
+          const flipped = await this.#db.calendarSlot.updateMany({
+            where: {
+              id: effect.slotId,
+              workspaceId,
+              status: 'SCHEDULED',
+              rescheduleAttempt: charged.rescheduleAttempt,
+            },
+            data: {
+              scheduledAtUtc: effect.toUtc,
+              timezone: input.toZone,
+              status: 'PLANNED',
+              rescheduleAttempt: { increment: 1 },
+            },
+          });
+          sentBack = flipped.count > 0;
+          refundKey = sentBack ? charged.usageIdempotencyKey : null;
         }
+      }
+      if (!sentBack) {
+        const moved = await this.#db.calendarSlot.updateMany({
+          where: {
+            id: effect.slotId,
+            workspaceId,
+            // A post that would be too late only moves if it is already PLANNED.
+            status: unplanned ? 'PLANNED' : { in: [...MOVABLE] },
+          },
+          data: { scheduledAtUtc: effect.toUtc, timezone: input.toZone },
+        });
+        if (moved.count === 0) continue;
+      }
+
+      if (sentBack) {
+        // The same derived key a cancel uses, so the quota comes back once.
+        if (refundKey) await this.#quota.refund(`${refundKey}:refund`);
         await this.#unscheduleItem(effect.contentItemId);
         if (effect.authorUserId) {
           await notifications.create({
@@ -200,7 +228,7 @@ export class WorkspaceTimezoneService {
           toTimezone: input.toZone,
           localTime: effect.localTime,
           toUtc: effect.toUtc.toISOString(),
-          ...(unplanned ? { toStatus: 'PLANNED' } : {}),
+          ...(sentBack ? { toStatus: 'PLANNED' } : {}),
         },
       });
     }
@@ -232,18 +260,21 @@ export class WorkspaceTimezoneService {
    * reason to ask for the review again — and to DRAFT otherwise.
    */
   async #unscheduleItem(contentItemId: string): Promise<void> {
-    const item = await this.#db.contentItem.findUnique({
-      where: { id: contentItemId },
+    // Review item 14: every read and write names the workspace as well as the
+    // id, beside RLS — the two independent layers CLAUDE.md §2.1 asks for.
+    const workspaceId = this.#workspaceId;
+    const item = await this.#db.contentItem.findFirst({
+      where: { id: contentItemId, workspaceId },
       select: { status: true },
     });
     if (item?.status !== 'SCHEDULED') return;
     const approval = await this.#db.approval.findFirst({
-      where: { contentItemId },
+      where: { contentItemId, workspaceId },
       orderBy: { cycle: 'desc' },
       select: { status: true },
     });
-    await this.#db.contentItem.update({
-      where: { id: contentItemId },
+    await this.#db.contentItem.updateMany({
+      where: { id: contentItemId, workspaceId, status: 'SCHEDULED' },
       data: { status: approval?.status === 'APPROVED' ? 'APPROVED' : 'DRAFT' },
     });
   }

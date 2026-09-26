@@ -152,6 +152,17 @@ export const RESCHEDULABLE_SLOT_STATUSES: readonly CalendarSlot['status'][] = [
   'SCHEDULED',
 ];
 
+/**
+ * The scheduling quota's idempotency key for one slot and one charged attempt
+ * (review item 13). Attempt 0 is the key a slot has always had, so rows written
+ * before `rescheduleAttempt` existed keep theirs.
+ */
+export function scheduleUsageKey(workspaceId: string, slotId: string, attempt: number): string {
+  return attempt === 0
+    ? `calendar:${workspaceId}:${slotId}`
+    : `calendar:${workspaceId}:${slotId}:attempt:${attempt}`;
+}
+
 export class ContentCalendarService {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
@@ -235,7 +246,8 @@ export class ContentCalendarService {
      * Minting the id up front costs nothing: it is a v4 uuid either way.
      */
     const slotId = randomUUID();
-    const usageIdempotencyKey = `calendar:${this.#workspaceId}:${slotId}`;
+    // A new slot is attempt 0 (review item 13): the same key as ever.
+    const usageIdempotencyKey = scheduleUsageKey(this.#workspaceId, slotId, 0);
     if (!(await this.#quota.consume(usageIdempotencyKey))) throw scheduleQuotaExceeded();
 
     const slot = await this.#db.calendarSlot.create({
@@ -380,11 +392,25 @@ export class ContentCalendarService {
       variants.map((variant) => variant.platformKey),
     );
 
-    const usageIdempotencyKey = `calendar:${this.#workspaceId}:${slot.id}:replan:${input.localTime}`;
+    /*
+     * THE KEY IS THE SLOT'S PERSISTED ATTEMPT (review item 13), read — never
+     * incremented — here. A retry of this same request derives the same key
+     * and cannot charge twice; the key moves on only when a charged scheduling
+     * is refunded back to PLANNED, which increments the attempt in that
+     * refund's own transaction. Deriving it from the local time instead let a
+     * post refunded and put back at the SAME time reuse the spent key and go
+     * out uncharged.
+     */
+    const usageIdempotencyKey = scheduleUsageKey(
+      this.#workspaceId,
+      slot.id,
+      slot.rescheduleAttempt,
+    );
     if (!(await this.#quota.consume(usageIdempotencyKey))) throw scheduleQuotaExceeded();
 
     const claimed = await this.#db.calendarSlot.updateMany({
-      where: { id: slot.id, status: 'PLANNED' },
+      // The attempt this key was derived from must still be the slot's.
+      where: { id: slot.id, status: 'PLANNED', rescheduleAttempt: slot.rescheduleAttempt },
       data: {
         status: 'SCHEDULED',
         scheduledAtUtc: instant,

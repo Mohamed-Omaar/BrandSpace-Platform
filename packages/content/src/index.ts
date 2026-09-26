@@ -25,7 +25,7 @@ export type {
 export { ContentLibraryService, READ_ONLY_CONTENT_STATUSES } from './library';
 export type { ContentLibraryOptions } from './library';
 
-export { ContentCalendarService, RESCHEDULABLE_SLOT_STATUSES } from './calendar';
+export { ContentCalendarService, RESCHEDULABLE_SLOT_STATUSES, scheduleUsageKey } from './calendar';
 export { WorkspaceTimezoneService, timezoneChangeEffects } from './timezone-change';
 export type { TimezoneChangeActor, TimezoneChangeEffect } from './timezone-change';
 export type {
