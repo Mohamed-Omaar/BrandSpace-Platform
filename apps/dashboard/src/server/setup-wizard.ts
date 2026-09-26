@@ -1,7 +1,6 @@
 import 'server-only';
-import { localizedFrom } from '@brandspace/brand-brain';
 import { inBrandBrain } from './brand-brain-context';
-import { GOAL_ITEM_KEY, goalFromTitle, goalLabels, type SetupFacts } from './setup-wizard-state';
+import { GOAL_ITEM_KEY, GOAL_ITEM_SELECT, storedGoal, type SetupFacts } from './setup-wizard-state';
 
 /**
  * THE FACTS THE WIZARD'S STEPS ARE COMPUTED FROM — read, never stored.
@@ -49,7 +48,7 @@ export async function setupFactsFor(
           itemKey: GOAL_ITEM_KEY,
           status: { in: ['ACTIVE', 'STALE'] },
         },
-        select: { id: true, title: true },
+        select: { id: true, ...GOAL_ITEM_SELECT },
       }),
     ]);
 
@@ -72,7 +71,7 @@ export async function setupFactsFor(
       goal: goal
         ? {
             itemId: goal.id,
-            objective: goalFromTitle(localizedFrom(goal.title).en, goalLabels('en')),
+            objective: storedGoal(goal),
           }
         : null,
     };

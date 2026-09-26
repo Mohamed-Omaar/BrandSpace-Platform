@@ -377,6 +377,14 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   new zone (Settings and the Control Center, one service, one transaction, audited per post); posts that
   would then be too late go back to planned with the quota refunded and their authors told, and Settings
   lists them before saving. No migration.
+- **G8 / C6 / Q16 — the wizard's handoff, sign-up and reset (D-335).** Facts accepted on the wizard's Review
+  step and the first goal are Brand Brain facts with origin SETUP (level with DOCUMENT); the goal's key is on
+  the brand and read in the reader's language. Industry list with "Something else" (shared with Settings); at
+  least one publishing language, and exactly one sets the AI language. A refused sign-up keeps name, email and
+  time zone (never the password); a mismatched confirmation blocks the submit (D-261 unchanged). An owner
+  starting another workspace gets a blank form, a city for Egypt only, and a Back link. Migration
+  `20261003090000_setup_origin_and_goal_key`. Team size, a custom goal and "Ready" ideas stay out of this
+  phase.
 
 ---
 

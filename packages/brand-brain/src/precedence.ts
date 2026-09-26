@@ -39,10 +39,20 @@ const MEMORY_RANK: Readonly<Record<BrandMemoryLayer, number>> = Object.fromEntri
   BRAND_MEMORY_LAYERS.map((layer, index) => [layer, index]),
 ) as Readonly<Record<BrandMemoryLayer, number>>;
 
-/** D-65 human precedence, highest first. Lower number wins. */
+/**
+ * D-65 human precedence, highest first. Lower number wins.
+ *
+ * SETUP SHARES DOCUMENT'S RANK (D-335). It marks what the setup wizard
+ * recorded — facts a person accepted on its Review step, and the goal chosen
+ * there — so the label can say where a fact came from. It is a starting point,
+ * not a deliberate edit: a later edit in Brand Brain (HUMAN) outranks it, a
+ * newer document accepted in review may refresh it exactly as it could before
+ * setup had a name, and an inference never overwrites it.
+ */
 const ORIGIN_RANK: Readonly<Record<BrandKnowledgeOrigin, number>> = {
   HUMAN: 0,
   DOCUMENT: 1,
+  SETUP: 1,
   AI_INFERRED: 2,
 };
 

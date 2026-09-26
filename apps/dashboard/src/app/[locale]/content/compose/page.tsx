@@ -44,7 +44,7 @@ import {
   platformsByFormat,
   repurposeBrief,
 } from '../../../../server/create-post';
-import { GOAL_ITEM_KEY, goalFromTitle, goalLabels } from '../../../../server/setup-wizard-state';
+import { GOAL_ITEM_KEY, GOAL_ITEM_SELECT, storedGoal } from '../../../../server/setup-wizard-state';
 import { CreateEntry, IdeaPicker, RepurposePicker, type IdeaOption } from './create-entry';
 import { CONTENT_TYPES } from '../content-types';
 import {
@@ -421,7 +421,7 @@ export default async function ComposePage({
                 itemKey: GOAL_ITEM_KEY,
                 status: { in: ['ACTIVE', 'STALE'] },
               },
-              select: { title: true },
+              select: GOAL_ITEM_SELECT,
             })
           : Promise.resolve(null),
         db.brandKnowledgeItem.findMany({
@@ -467,11 +467,9 @@ export default async function ComposePage({
       return (locale === 'ar' ? (text?.ar ?? text?.en) : (text?.en ?? text?.ar)) ?? '';
     };
     const ideas: IdeaOption[] = [];
-    // The stored title is the objective's ENGLISH label (D-278), whatever the
-    // reader's interface language.
-    const goal = goalForObjective(
-      goalFromTitle((found.goal?.title as { en?: string } | null)?.en, goalLabels('en')),
-    );
+    // By its key while setup's goal is unedited, else by its ENGLISH title
+    // (D-278, D-335), whatever the reader's interface language.
+    const goal = goalForObjective(storedGoal(found.goal));
     if (found.goal) {
       const label = pick(found.goal.title);
       ideas.push({
@@ -589,10 +587,9 @@ export default async function ComposePage({
             itemKey: GOAL_ITEM_KEY,
             status: { in: ['ACTIVE', 'STALE'] },
           },
-          select: { title: true },
+          select: GOAL_ITEM_SELECT,
         });
-        const title = (row?.title as { en?: string } | null)?.en;
-        return goalForObjective(goalFromTitle(title, goalLabels('en')));
+        return goalForObjective(storedGoal(row));
       })
     : null;
   /*

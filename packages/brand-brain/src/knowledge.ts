@@ -123,6 +123,12 @@ export class BrandKnowledgeService {
     body: LocalizedText;
     actor: KnowledgeActor;
     policy: StalenessPolicy;
+    /**
+     * HUMAN unless the setup wizard is writing (D-335): its goal is SETUP. No
+     * other origin is accepted here — an inference or a document never enters
+     * through the human path.
+     */
+    origin?: 'HUMAN' | 'SETUP';
   }): Promise<BrandKnowledgeItem> {
     // The brand is named by the caller here, so it is checked before anything
     // is written. An out-of-scope brand is a 404 shaped like a genuine miss.
@@ -137,7 +143,7 @@ export class BrandKnowledgeService {
         brandId: input.brandId,
         area: input.area,
         memory: definition.memory,
-        origin: 'HUMAN',
+        origin: input.origin ?? 'HUMAN',
         status: 'ACTIVE',
         itemKey: input.itemKey,
         title: toJson(input.title),
@@ -165,7 +171,12 @@ export class BrandKnowledgeService {
       // content, not a secret, and the audit log is the customer's own — but
       // only the shape is recorded, not the prose, so the audit table does not
       // quietly become a second copy of the corpus.
-      after: { area: input.area, itemKey: input.itemKey, version: 1 },
+      after: {
+        area: input.area,
+        itemKey: input.itemKey,
+        version: 1,
+        ...(input.origin === 'SETUP' ? { origin: 'SETUP' } : {}),
+      },
     });
 
     return item;
@@ -448,7 +459,7 @@ export class BrandKnowledgeService {
         itemKey: input.itemKey,
         area: { not: 'LEARNINGS' },
         status: 'ACTIVE',
-        origin: { in: ['HUMAN', 'DOCUMENT'] },
+        origin: { in: ['HUMAN', 'DOCUMENT', 'SETUP'] },
       },
       select: { id: true },
     });
@@ -509,6 +520,12 @@ export class BrandKnowledgeService {
     reason?: string | undefined;
     actor: KnowledgeActor;
     policy: StalenessPolicy;
+    /**
+     * Set by the setup wizard's Review step (D-335): a DOCUMENT candidate
+     * accepted there lands as SETUP. An ANALYTICS candidate stays AI_INFERRED
+     * whatever the screen — see below.
+     */
+    acceptedInSetup?: boolean;
   }): Promise<{ readonly itemId: string | null; readonly version: number | null }> {
     // D-132, as above.
     const candidate = await this.db.brandKnowledgeCandidate.findFirst({
@@ -575,9 +592,17 @@ export class BrandKnowledgeService {
      * AI_INFERRED by origin — which is exactly what a statistic deserves against
      * something the customer wrote. A human may still edit it afterwards, because
      * an incoming HUMAN origin outranks an existing AI_INFERRED one.
+     *
+     * ACCEPTED ON THE SETUP WIZARD'S REVIEW STEP, a document candidate lands as
+     * SETUP (D-335) — the same rank as DOCUMENT, so nothing about what may
+     * overwrite it changes; only the label says where it was accepted.
      */
     const acceptedOrigin: BrandKnowledgeOrigin =
-      candidate.sourceKind === 'ANALYTICS' ? 'AI_INFERRED' : 'DOCUMENT';
+      candidate.sourceKind === 'ANALYTICS'
+        ? 'AI_INFERRED'
+        : input.acceptedInSetup === true
+          ? 'SETUP'
+          : 'DOCUMENT';
 
     let itemId: string;
     let version: number;
@@ -661,6 +686,7 @@ export class BrandKnowledgeService {
         area: candidate.area,
         itemKey: candidate.itemKey,
         edited: input.decision === 'accept_edited',
+        origin: acceptedOrigin,
         resultingItemId: itemId,
         resultingVersion: version,
       },

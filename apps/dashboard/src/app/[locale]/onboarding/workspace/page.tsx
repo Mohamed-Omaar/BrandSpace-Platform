@@ -1,9 +1,15 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getPrisma, withoutTenantContext } from '@brandspace/database';
 import { readPlanCatalogue } from '@brandspace/entitlements';
 import { parseConfigPayload } from '@brandspace/config';
 import { spacingTokens, typographyTokens, colorTokens } from '@brandspace/ui';
-import { countryOptions, suggestedTimeZones, timeZoneOptions } from '@brandspace/shared';
+import {
+  EGYPT_CITY_CODES,
+  countryOptions,
+  suggestedTimeZones,
+  timeZoneOptions,
+} from '@brandspace/shared';
 import {
   currentEnvironment,
   getCustomerAuth,
@@ -102,6 +108,7 @@ export default async function CreateWorkspacePage({
         countries={countries}
         timezones={timezones}
         suggestedZones={suggestedTimeZones()}
+        cities={EGYPT_CITY_CODES.map((code) => ({ value: code, label: t(`geo.city.${code}`) }))}
         labels={{
           name: t('createWorkspace.name'),
           slug: t('createWorkspace.slug'),
@@ -123,8 +130,23 @@ export default async function CreateWorkspacePage({
           limitReached: t('ws.limitReached'),
           localeAr: t('brandProfile.localeAr'),
           localeEn: t('brandProfile.localeEn'),
+          city: t('settings.city'),
+          cityNone: t('settings.cityNone'),
         }}
       />
+      {/*
+        G8 (D-335): A NEW WORKSPACE STARTED FROM INSIDE THE APP starts blank —
+        nothing is copied from the current one — and has a way back to it.
+      */}
+      {existing.length > 0 ? (
+        <Link
+          href={`/${locale}/overview`}
+          data-testid="create-workspace-back"
+          style={{ display: 'inline-block', marginBlockStart: spacingTokens.md }}
+        >
+          {t('createWorkspace.back')}
+        </Link>
+      ) : null}
     </AuthCard>
   );
 }

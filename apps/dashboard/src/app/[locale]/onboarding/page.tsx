@@ -14,6 +14,8 @@ import {
   visuallyHiddenStyle,
 } from '@brandspace/ui';
 import { areaDefinition, localizedFrom } from '@brandspace/brand-brain';
+import { TenantOnboardingPolicySource } from '@brandspace/onboarding';
+import { currentEnvironment } from '@brandspace/shared';
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
@@ -38,6 +40,8 @@ import { reviewCandidateAction, uploadSourceAction } from '../brand-brain/action
 import { connectAccountAction } from '../integrations/actions';
 import { createSetupBrandAction, saveFirstGoalAction } from './actions';
 import { SetupProgress, SetupStepper } from './setup-stepper';
+import { IndustryField } from '../../../components/industry-field';
+import { SetupBrandLanguages } from '../../../components/setup-brand-languages';
 
 export const dynamic = 'force-dynamic';
 
@@ -204,6 +208,11 @@ export default async function OnboardingPage({
         </CustomerCard>
       );
     } else {
+      const industries = await inBrandBrain(
+        workspace.workspaceId,
+        async ({ db }) =>
+          (await new TenantOnboardingPolicySource(db, currentEnvironment()).load()).industries,
+      );
       body = (
         <CustomerCard
           title={t('setup.brand.title')}
@@ -249,58 +258,42 @@ export default async function OnboardingPage({
                 style={inputStyle()}
               />
             </Field>
-            <Field
-              label={t('setup.brand.industry')}
-              htmlFor="setup-brand-industry"
-              hint={t('setup.optional')}
-            >
-              <input
-                id="setup-brand-industry"
-                name="industry"
-                maxLength={120}
-                className={CONTROL_CLASS}
-                style={inputStyle()}
-              />
-            </Field>
-            <Field
-              label={t('setup.brand.defaultLanguage')}
-              htmlFor="setup-brand-locale"
-              hint={t('setup.brand.defaultLanguageHint')}
-              required
-            >
-              <select
-                id="setup-brand-locale"
-                name="defaultLocale"
-                /*
-                 * D-331 (amends D-277): the brand's AI writing language starts
-                 * as the language the creator is using right now; they can
-                 * change it here, and later in Settings → AI.
-                 */
-                defaultValue={locale === 'ar' ? 'AR' : 'EN'}
-                className={`${CONTROL_CLASS} bs-select`}
-                style={inputStyle()}
-                data-testid="setup-brand-locale"
-              >
-                <option value="EN">{t('brandProfile.localeEn')}</option>
-                <option value="AR">{t('brandProfile.localeAr')}</option>
-              </select>
-            </Field>
-            <fieldset
-              style={{ border: 0, margin: 0, padding: 0, display: 'grid', gap: spacingTokens.xs }}
-            >
-              <legend style={{ ...typographyTokens.label, marginBlockEnd: spacingTokens.xs }}>
-                {t('setup.brand.languages')}
-              </legend>
-              {(['EN', 'AR'] as const).map((code) => (
-                <label
-                  key={code}
-                  style={{ display: 'inline-flex', gap: spacingTokens.xs, alignItems: 'center' }}
-                >
-                  <input type="checkbox" name="supportedLocales" value={code} defaultChecked />
-                  {t(code === 'EN' ? 'brandProfile.localeEn' : 'brandProfile.localeAr')}
-                </label>
-              ))}
-            </fieldset>
+            {/*
+              D-335 — the activated industry list with "Something else", the
+              same field Settings → General offers (G6, D-329).
+            */}
+            <IndustryField
+              industries={industries.map((industry) => ({
+                value: industry.key,
+                label: locale === 'ar' ? industry.name.ar : industry.name.en,
+              }))}
+              saved={null}
+              labels={{
+                industry: t('setup.brand.industry'),
+                industryHint: t('setup.optional'),
+                industryNone: t('settings.industryNone'),
+                industryOther: t('settings.industryOther'),
+                industryOtherLabel: t('settings.industryOtherLabel'),
+              }}
+              idPrefix="setup-brand-"
+              testIdPrefix="setup-brand"
+            />
+            {/*
+              D-331 (amends D-277): the AI language starts as the creator's
+              interface language. D-335: at least one publishing language, and
+              exactly one decides the AI language.
+            */}
+            <SetupBrandLanguages
+              initialDefault={locale === 'ar' ? 'AR' : 'EN'}
+              labels={{
+                defaultLanguage: t('setup.brand.defaultLanguage'),
+                defaultLanguageHint: t('setup.brand.defaultLanguageHint'),
+                languages: t('setup.brand.languages'),
+                localeEn: t('brandProfile.localeEn'),
+                localeAr: t('brandProfile.localeAr'),
+                atLeastOne: t('setup.brand.languagesRequired'),
+              }}
+            />
             {/*
               D-303 — the optional identity details sit behind one disclosure,
               so the first step asks only for what the brand needs to exist.

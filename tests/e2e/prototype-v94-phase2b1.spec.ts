@@ -883,3 +883,77 @@ test.describe('G5 / Q22 · a time-zone change keeps local times, and says what i
     );
   });
 });
+
+test.describe('G8 / Q16 · sign-up, reset and a new workspace from inside the app', () => {
+  test('a refused sign-up comes back with the name, email and time zone — never the password', async ({
+    page,
+  }) => {
+    const email = `e2e-draft-${randomUUID().slice(0, 8)}@example.local`;
+    await page.goto(`${DASHBOARD_BASE_URL}/en/sign-up`);
+    await page.fill('#name', 'Draft Keeper');
+    await page.fill('#email', email);
+    await page.fill('#timezone', 'Africa/Cairo');
+    await page.press('#timezone', 'Enter');
+    // The browser's own length check is lifted so the SERVER refuses the
+    // password — the refusal this feature is about.
+    await page.evaluate(() => {
+      for (const id of ['password', 'password-confirm']) {
+        document.getElementById(id)?.removeAttribute('minlength');
+      }
+    });
+    await page.fill('#password', 'short');
+    await page.fill('#password-confirm', 'short');
+    const terms = page.locator('[data-testid="accept-terms-of-service"] input[type="checkbox"]');
+    if ((await terms.count()) > 0) await terms.check();
+    await page.click('[data-testid="signup-submit"]');
+    await page.waitForURL(/\/en\/sign-up\?error=/);
+    await expect(page.locator('#name')).toHaveValue('Draft Keeper');
+    await expect(page.locator('#email')).toHaveValue(email);
+    await expect(page.locator('#timezone')).toHaveValue(/Cairo/);
+    await expect(page.locator('#password')).toHaveValue('');
+    await expect(page.locator('#password-confirm')).toHaveValue('');
+    // The email is not in the address bar.
+    expect(page.url()).not.toContain(encodeURIComponent(email));
+  });
+
+  test('a mismatched reset confirmation does not submit (the policy is unchanged, D-261)', async ({
+    page,
+  }) => {
+    await page.goto(`${DASHBOARD_BASE_URL}/en/reset/not-a-real-token`);
+    await page.fill('#password', 'a-long-enough-password');
+    await page.fill('#password-confirm', 'a-different-password');
+    await page.click('[data-testid="reset-submit"]');
+    // Nothing was sent: still on the form, no server answer in the URL.
+    await expect(page).toHaveURL(/\/en\/reset\/not-a-real-token$/);
+    expect(
+      await page
+        .locator('#password-confirm')
+        .evaluate((input) => (input as HTMLInputElement).validity.customError),
+    ).toBe(true);
+    await page.fill('#password-confirm', 'a-long-enough-password');
+    expect(
+      await page
+        .locator('#password-confirm')
+        .evaluate((input) => (input as HTMLInputElement).validity.valid),
+    ).toBe(true);
+  });
+
+  test('an owner starting another workspace gets a blank form, a city for Egypt only, and a way back', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/onboarding/workspace`);
+    await expect(page.getByTestId('create-workspace-form')).toBeVisible();
+    // Blank: nothing is copied from the current workspace.
+    await expect(page.locator('#name')).toHaveValue('');
+    await expect(page.getByTestId('city-select')).toHaveCount(0);
+    const egypt = new Intl.DisplayNames(['en'], { type: 'region' }).of('EG') ?? 'Egypt';
+    await page.fill('[data-testid="country-select"]', egypt);
+    await page.press('[data-testid="country-select"]', 'Enter');
+    await expect(page.getByTestId('city-select')).toBeVisible();
+    const back = page.getByTestId('create-workspace-back');
+    await expect(back).toHaveAttribute('href', '/en/overview');
+    await back.click();
+    await page.waitForURL(/\/en\/overview$/);
+  });
+});

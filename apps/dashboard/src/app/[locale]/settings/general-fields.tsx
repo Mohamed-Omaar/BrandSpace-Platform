@@ -9,6 +9,7 @@ import {
   spacingTokens,
   type SearchableOption,
 } from '@brandspace/ui';
+import { IndustryField } from '../../../components/industry-field';
 import { timeZoneAfterCountryChange } from '../../../components/time-zone-suggestion';
 
 /**
@@ -17,14 +18,12 @@ import { timeZoneAfterCountryChange } from '../../../components/time-zone-sugges
  * Client-side only for what the person sees while choosing: the country
  * preselects its usual time zone (Q7 — a zone they picked themselves is never
  * replaced), the city is asked only for Egypt, and "Something else" opens a
- * free-text industry. Every rule is enforced again by the server action.
+ * free-text industry (`IndustryField`, shared with the setup wizard). Every
+ * rule is enforced again by the server action.
  *
  * Rendered inside a `DraftForm`, which re-mounts these fields on Cancel — so
  * the state below starts again from the saved values.
  */
-
-/** The industry select's "Something else" value. Never stored. */
-const OTHER = '__other';
 
 export interface GeneralFieldsLabels {
   readonly name: string;
@@ -121,13 +120,6 @@ export function GeneralFields({
       .catch(() => undefined);
     return () => controller.abort();
   }, [timezone, saved.timezone]);
-  const savedIndustry = brand?.industry ?? '';
-  const savedIsKey = industries.some((option) => option.value === savedIndustry);
-  const [industryChoice, setIndustryChoice] = useState(
-    savedIndustry === '' ? '' : savedIsKey ? savedIndustry : OTHER,
-  );
-  const [industryOther, setIndustryOther] = useState(savedIsKey ? '' : savedIndustry);
-  const industryValue = industryChoice === OTHER ? industryOther : industryChoice;
 
   return (
     <>
@@ -261,48 +253,14 @@ export function GeneralFields({
       {brand ? (
         <>
           <input type="hidden" name="brandId" value={brand.brandId} />
-          <input type="hidden" name="industry" value={industryValue} />
           <div className="bs-form-row">
-            {industries.length > 0 ? (
-              <Field label={labels.industry} htmlFor="industryChoice" hint={labels.industryHint}>
-                <select
-                  className="bs-control bs-select"
-                  id="industryChoice"
-                  data-testid="settings-industry"
-                  value={industryChoice}
-                  onChange={(event) => setIndustryChoice(event.target.value)}
-                  style={inputStyle()}
-                >
-                  <option value="">{labels.industryNone}</option>
-                  {industries.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                  <option value={OTHER}>{labels.industryOther}</option>
-                </select>
-              </Field>
-            ) : null}
-            {industries.length === 0 || industryChoice === OTHER ? (
-              <Field
-                label={industries.length === 0 ? labels.industry : labels.industryOtherLabel}
-                htmlFor="industryOther"
-                hint={industries.length === 0 ? labels.industryHint : undefined}
-              >
-                <input
-                  className="bs-control"
-                  id="industryOther"
-                  data-testid="settings-industry-other"
-                  value={industryOther}
-                  maxLength={120}
-                  onChange={(event) => {
-                    setIndustryOther(event.target.value);
-                    if (industries.length === 0) setIndustryChoice(OTHER);
-                  }}
-                  style={inputStyle()}
-                />
-              </Field>
-            ) : null}
+            <IndustryField
+              industries={industries}
+              saved={brand.industry}
+              labels={labels}
+              idPrefix=""
+              testIdPrefix="settings"
+            />
             <Field label={labels.website} htmlFor="websiteUrl" hint={labels.websiteHint}>
               <input
                 className="bs-control"

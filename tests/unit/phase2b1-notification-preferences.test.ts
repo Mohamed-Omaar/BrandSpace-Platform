@@ -103,9 +103,14 @@ describe('G3 · the brand’s AI writing language starts as its creator’s inte
     expect(brands).toMatch(
       /defaultLocale: brandLocaleAtCreation\(String\(formData\.get\('defaultLocale'\) \?\? ''\), locale\)/,
     );
+    // The wizard's language fields moved into `SetupBrandLanguages` (D-335),
+    // which starts the select at the value the page hands it.
     const wizard = read('apps/dashboard/src/app/[locale]/onboarding/page.tsx');
     expect(wizard).toMatch(
-      /name="defaultLocale"[\s\S]{0,400}defaultValue=\{locale === 'ar' \? 'AR' : 'EN'\}/,
+      /<SetupBrandLanguages\s+initialDefault=\{locale === 'ar' \? 'AR' : 'EN'\}/,
     );
+    const fields = read('apps/dashboard/src/components/setup-brand-languages.tsx');
+    expect(fields).toContain('useState<Code>(initialDefault)');
+    expect(fields).toMatch(/name="defaultLocale"[\s\S]{0,400}value=\{defaultLocale\}/);
   });
 });

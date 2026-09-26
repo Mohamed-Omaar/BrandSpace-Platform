@@ -281,6 +281,9 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
         reason: parsed.reason,
         actor: knowledgeActor(session),
         policy: (await policy()).staleness,
+        // D-335: accepted on the setup wizard's Review step — decided from the
+        // closed-set return path, never from a field naming the origin.
+        acceptedInSetup: back.path === '/onboarding',
       });
     });
     destination = pageUrl(

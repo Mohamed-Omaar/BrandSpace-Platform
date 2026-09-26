@@ -638,6 +638,16 @@ Choosing another time zone shows, under the field and before saving, the existin
 saying how many planned posts keep their local time, and a list of the posts that would go back to planned
 (title, then local time). No new component or treatment.
 
+### 6.3.38 Prototype v94 Phase 2B-1 — the wizard's brand step, sign-up, reset and a new workspace (G8, C6, Q16)
+
+The setup wizard's industry field is Settings → General's own (`IndustryField`, extracted from the General
+fields so both screens render the one control: the catalogue select, "Something else", then the free-text
+field). Its language fields keep their layout: the AI-language select above the publishing-language
+checkboxes, which now require at least one (the browser's own validity message) and move the select when
+exactly one is ticked (`SetupBrandLanguages`). The new-workspace page gains a plain Back link under the
+form and, for Egypt only, the city `SearchableSelect` General already uses. A Brand Brain fact's origin
+badge can read "From setup". No new visual treatment, colour, or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

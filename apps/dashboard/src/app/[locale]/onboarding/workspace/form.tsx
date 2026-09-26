@@ -45,6 +45,7 @@ export function CreateWorkspaceForm({
   countries,
   timezones,
   suggestedZones,
+  cities = [],
   labels,
 }: {
   locale: string;
@@ -54,6 +55,8 @@ export function CreateWorkspaceForm({
   timezones: readonly SearchableOption[];
   /** Q7: each country's usual zone, preselected as a suggestion (still editable). */
   suggestedZones: Readonly<Record<string, string>>;
+  /** G8 (D-335): Egypt's governorates, asked only when the country is Egypt. */
+  cities?: readonly SearchableOption[];
   labels: {
     name: string;
     slug: string;
@@ -76,11 +79,14 @@ export function CreateWorkspaceForm({
     noResults: string;
     localeAr: string;
     localeEn: string;
+    city?: string;
+    cityNone?: string;
   };
 }) {
   const [country, setCountry] = useState('');
   const [lastCountry, setLastCountry] = useState('');
   const [timezone, setTimezone] = useState('');
+  const [city, setCity] = useState('');
   const [state, setState] = useState<{ busy: boolean; error: string | null }>({
     busy: false,
     error: null,
@@ -113,6 +119,8 @@ export function CreateWorkspaceForm({
             country,
             defaultLocale: String(formData.get('defaultLocale') ?? ''),
             timezone,
+            // G8 (D-335): Egypt only; cleared for any other country.
+            ...(country === 'EG' && city !== '' ? { city } : {}),
             billingEmail: String(formData.get('billingEmail') ?? ''),
             legalName: String(formData.get('legalName') ?? '') || undefined,
           }),
@@ -240,6 +248,22 @@ export function CreateWorkspaceForm({
           style={authInputStyle()}
         />
       </Field>
+
+      {country === 'EG' && cities.length > 0 && labels.city ? (
+        <Field label={labels.city} htmlFor="city">
+          <SearchableSelect
+            id="city"
+            name="city"
+            options={cities}
+            value={city}
+            onChange={setCity}
+            placeholder={labels.cityNone ?? labels.choose}
+            noResultsLabel={labels.noResults}
+            testId="city-select"
+            style={authInputStyle()}
+          />
+        </Field>
+      ) : null}
 
       <Field label={labels.billingEmail} htmlFor="billingEmail" required>
         <input

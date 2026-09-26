@@ -894,6 +894,7 @@ export const messages = {
       'ترتيب الأولوية: الأساسية تسبق الاستراتيجية تسبق المحتوى تسبق التعلّم.',
     'bb.origin.DOCUMENT': 'من مستند',
     'bb.origin.AI_INFERRED': 'مستنتجة',
+    'bb.origin.SETUP': 'من الإعداد',
     'bb.fieldStatus': 'الحالة',
     'bb.archive': 'أرشفة',
     'bb.detailClose': 'إغلاق اللوحة',
@@ -2644,6 +2645,7 @@ export const messages = {
     'setup.brand.defaultLanguageHint':
       'اللغة التي تبدأ بها المنشورات الجديدة. يمكنك تغييرها في أي منشور.',
     'setup.brand.languages': 'اللغات التي تنشر بها العلامة',
+    'setup.brand.languagesRequired': 'اختر لغة واحدة على الأقل تنشر بها العلامة.',
     'setup.brand.colours': 'ألوان العلامة',
     'setup.brand.coloursHint': 'اختياري. رموز سداسية عشرية مفصولة بفواصل.',
     'setup.brand.logo': 'الشعار',
@@ -2716,6 +2718,7 @@ export const messages = {
     'createWorkspace.legalName': 'الاسم القانوني (اختياري)',
     'createWorkspace.choose': 'اختر…',
     'createWorkspace.submit': 'متابعة',
+    'createWorkspace.back': 'العودة إلى مساحة عملك',
     'createWorkspace.creating': 'جارٍ الإنشاء…',
     'createWorkspace.trialNotice':
       'تبدأ فترة تجريبية مدتها {days} يومًا مع {credits} رصيدًا، بدون بطاقة. عند انتهائها يتوقّف الوصول إلى المزايا المدفوعة ولا يُحذف أي شيء.',
@@ -3663,6 +3666,7 @@ export const messages = {
     'bb.origin.HUMAN': 'Entered by a person',
     'bb.origin.DOCUMENT': 'From a document',
     'bb.origin.AI_INFERRED': 'Inferred',
+    'bb.origin.SETUP': 'From setup',
     'bb.memory.CANONICAL': 'Canonical knowledge',
     'bb.memory.STRATEGY': 'Strategy memory',
     'bb.memory.CONTENT': 'Content memory',
@@ -5498,6 +5502,7 @@ export const messages = {
     'setup.brand.defaultLanguageHint':
       'The language new posts start in. You can change it on any post.',
     'setup.brand.languages': 'Languages this brand publishes in',
+    'setup.brand.languagesRequired': 'Choose at least one language the brand publishes in.',
     'setup.brand.colours': 'Brand colours',
     'setup.brand.coloursHint': 'Optional. Hex codes separated by commas.',
     'setup.brand.logo': 'Logo',
@@ -5573,6 +5578,7 @@ export const messages = {
     'createWorkspace.legalName': 'Legal name (optional)',
     'createWorkspace.choose': 'Choose…',
     'createWorkspace.submit': 'Continue',
+    'createWorkspace.back': 'Back to your workspace',
     'createWorkspace.creating': 'Creating…',
     'createWorkspace.trialNotice':
       'You start a {days}-day trial with {credits} credits and no card. When it ends, access to paid features stops and nothing is deleted.',

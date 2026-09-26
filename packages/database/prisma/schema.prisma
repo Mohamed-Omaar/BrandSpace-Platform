@@ -1746,6 +1746,9 @@ enum BrandKnowledgeOrigin {
   HUMAN
   DOCUMENT
   AI_INFERRED
+  /// Accepted on the setup wizard's Review step, or the goal chosen in setup
+  /// (D-335). Ranks with DOCUMENT: a later edit in Brand Brain outranks it.
+  SETUP
 }
 
 /// D-65's approval state, plus the two terminal states a real corpus needs.
@@ -1814,6 +1817,12 @@ model Brand {
   websiteUrl       String?
   defaultLocale    Locale   @default(EN)
   supportedLocales Locale[] @default([])
+
+  /// The first goal chosen in setup, as its identifier (`LEADS`), so it is
+  /// rendered in the reader's language rather than matched by its English
+  /// title (D-335). The goal itself is the STRATEGY item `goal.primary`; this
+  /// names it only while setup wrote that item's latest version.
+  primaryGoalKey String?
 
   /// Brand kit. Structured, and validated at the boundary rather than trusted.
   colorPalette Json?

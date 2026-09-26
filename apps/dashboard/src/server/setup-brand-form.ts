@@ -1,3 +1,4 @@
+import { AppError } from '@brandspace/shared';
 import { brandProfileFrom } from './brand-profile';
 import type { NewBrandInput } from './brand-creation';
 
@@ -17,6 +18,13 @@ import type { NewBrandInput } from './brand-creation';
  * id; setting them blank here means a crafted request carrying them writes
  * nothing, because nothing below passes them on.
  *
+ * THE LANGUAGES IT PUBLISHES IN DECIDE THE AI LANGUAGE WHEN THERE IS ONE
+ * (D-335). At least one must be ticked — the screen requires it and this
+ * refuses a request without one — and when exactly one is, the brand's default
+ * content language is that one, whatever the select said: a brand that
+ * publishes only in Arabic does not get English drafts. With both ticked the
+ * select decides, and it starts at the creator's interface language (D-331).
+ *
  * NOT `server-only` and not `'use server'`: pure, so the unit suite reaches it.
  */
 const NOT_ASKED_BY_THE_WIZARD = [
@@ -33,6 +41,17 @@ export function setupBrandFrom(formData: FormData): NewBrandInput {
     if (typeof value === 'string') copy.append(key, value);
   }
   for (const field of NOT_ASKED_BY_THE_WIZARD) copy.set(field, '');
+
+  const posting = [
+    ...new Set(copy.getAll('supportedLocales').filter((v) => v === 'AR' || v === 'EN')),
+  ];
+  if (posting.length === 0) {
+    throw new AppError('VALIDATION_FAILED', 'Choose at least one language the brand publishes in.');
+  }
+  // Only over a field the form sent: an absent one is still refused below.
+  if (posting.length === 1 && copy.has('defaultLocale')) {
+    copy.set('defaultLocale', String(posting[0]));
+  }
 
   const profile = brandProfileFrom(copy);
   return {

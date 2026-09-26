@@ -143,11 +143,16 @@ describe('G1 · the save bar on every draftable Settings tab', () => {
       'timezoneHint',
       'cityHint',
       'weekStartHint',
-      'industryHint',
       'websiteHint',
     ]) {
       expect(fields, hint).toContain(`labels.${hint}`);
     }
+    // D-335: the industry control is shared with the setup wizard; General hands
+    // it its own labels, and the control renders the hint.
+    expect(fields).toMatch(/<IndustryField[\s\S]{0,200}labels=\{labels\}/);
+    expect(read('apps/dashboard/src/components/industry-field.tsx')).toContain(
+      'hint={labels.industryHint}',
+    );
   });
 
   it('a country typed over is judged against the last one CHOSEN, in both forms', () => {

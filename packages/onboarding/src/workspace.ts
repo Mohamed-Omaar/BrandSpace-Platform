@@ -25,7 +25,14 @@
 import type { TenantScopedClient } from '@brandspace/database';
 import type { CommercePolicy } from '@brandspace/billing';
 import { ownedWorkspaceFacts, workspaceAllowance, type PlanDetail } from '@brandspace/entitlements';
-import { AppError, normaliseCurrency, type Clock, systemClock } from '@brandspace/shared';
+import {
+  AppError,
+  CITY_COUNTRY,
+  isEgyptCityCode,
+  normaliseCurrency,
+  type Clock,
+  systemClock,
+} from '@brandspace/shared';
 
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,48})[a-z0-9]$/;
 const MILLI_PER_CREDIT = 1_000n;
@@ -40,6 +47,12 @@ export interface CreateWorkspaceFromOnboardingInput {
   readonly defaultLocale: 'AR' | 'EN';
   /** An IANA zone, chosen by the customer. Validated, never defaulted. */
   readonly timezone: string;
+  /**
+   * G8 (D-335): the business's city, an ISO 3166-2:EG governorate code. Asked
+   * for Egypt only; for any other country it is dropped, and a code that is
+   * not a governorate is refused.
+   */
+  readonly city?: string | null;
   /** Billing currency assigned by the caller's product policy. */
   readonly currency: string;
   readonly billingEmail: string;
@@ -251,6 +264,7 @@ export class WorkspaceOnboardingService {
             country,
             defaultLocale: input.defaultLocale,
             timezone: input.timezone.trim(),
+            city: cityFor(country, input.city),
             currency,
             ownerUserId: owner.id,
             planKey: offersTrial ? trialPlan.key : null,
@@ -465,4 +479,12 @@ function isUniqueViolation(error: unknown): boolean {
     'code' in error &&
     (error as { code?: unknown }).code === 'P2002'
   );
+}
+
+/** G8 (D-335): a city only for Egypt, and only a governorate code. */
+function cityFor(country: string, city: string | null | undefined): string | null {
+  const value = city?.trim() ?? '';
+  if (country !== CITY_COUNTRY || value === '') return null;
+  if (!isEgyptCityCode(value)) throw new AppError('VALIDATION_FAILED', 'Choose a city.');
+  return value;
 }
