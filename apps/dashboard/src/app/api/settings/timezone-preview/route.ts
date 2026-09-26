@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { unstable_rethrow } from 'next/navigation';
 import {
   TenantContentPolicySource,
   isKnownTimeZone,
@@ -56,6 +57,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       { headers: { 'cache-control': 'private, no-store' } },
     );
   } catch (error: unknown) {
+    // Next.js control flow (a redirect from the session gate, notFound, …) is
+    // re-thrown, never turned into an error redirect (review item 10).
+    unstable_rethrow(error);
     log.warn('timezone preview failed', internalErrorFields(error));
     return NextResponse.json({ error: 'INTERNAL' }, { status: 500 });
   }

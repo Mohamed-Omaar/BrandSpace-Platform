@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 import { TenantOnboardingPolicySource, WorkspaceDeletionService } from '@brandspace/onboarding';
 import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
 import {
@@ -64,6 +64,9 @@ export async function requestWorkspaceDeletionAction(formData: FormData): Promis
     });
     destination = `/${locale}/deletion-pending`;
   } catch (error: unknown) {
+    // Next.js control flow (a redirect from the session gate, notFound, …) is
+    // re-thrown, never turned into an error redirect (review item 10).
+    unstable_rethrow(error);
     const correlationId = randomUUID();
     log.warn('workspace deletion request failed', {
       correlationId,

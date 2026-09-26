@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { inWorkspace, requireWorkspaceAction } from '../../../../server/customer-context';
 import { actionErrorCode } from '../../../../server/denial';
@@ -37,6 +37,9 @@ export async function saveAiLanguageAction(formData: FormData): Promise<void> {
     );
     destination = `/${locale}/settings/ai?ok=SETTINGS_SAVED`;
   } catch (error: unknown) {
+    // Next.js control flow (a redirect from the session gate, notFound, …) is
+    // re-thrown, never turned into an error redirect (review item 10).
+    unstable_rethrow(error);
     const correlationId = randomUUID();
     log.warn('AI settings save failed', { correlationId, ...internalErrorFields(error) });
     destination = `/${locale}/settings/ai?error=${actionErrorCode(error)}&ref=${correlationId}`;

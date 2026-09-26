@@ -2,7 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 import {
   NOTIFICATION_CATEGORIES,
   NotificationPreferenceService,
@@ -39,6 +39,9 @@ export async function saveNotificationPreferencesAction(formData: FormData): Pro
     );
     destination = `/${locale}/settings/notifications?ok=SETTINGS_SAVED`;
   } catch (error: unknown) {
+    // Next.js control flow (a redirect from the session gate, notFound, …) is
+    // re-thrown, never turned into an error redirect (review item 10).
+    unstable_rethrow(error);
     const correlationId = randomUUID();
     log.warn('notification preferences save failed', {
       correlationId,
