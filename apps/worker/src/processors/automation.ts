@@ -19,6 +19,7 @@ import { createScheduleQuota } from '@brandspace/entitlements';
 import { NotificationService, resolveRecipients } from '@brandspace/notifications';
 import type { EvaluateAutomationPayload } from '@brandspace/jobs';
 import { createLogger, currentEnvironment, systemClock } from '@brandspace/shared';
+import { unreachableChannelGate } from '@brandspace/social-connectors';
 
 /**
  * Evaluate the automation rules listening for one event.
@@ -153,6 +154,8 @@ function portsFor(
           db,
           workspaceId,
           policy,
+          // Q9 (D-332): a channel whose every account was revoked is refused.
+          channelGate: unreachableChannelGate(db, workspaceId),
           timezone: workspace?.timezone ?? 'UTC',
           /*
            * THE QUOTA IS REAL (P7-R6), and an automation is subject to it

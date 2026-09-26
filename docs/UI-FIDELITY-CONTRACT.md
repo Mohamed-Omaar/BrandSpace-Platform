@@ -617,6 +617,13 @@ the §6.3.33 save bar. Notifications is four composed checkbox rows, each with i
 saying what it covers; AI is one `Field` with the native `bs-select` per brand the member may see (one
 while multi-brand is off). Nothing new.
 
+### 6.3.35 Prototype v94 Phase 2B-1 — "Expired" in the Studio and the calendar (A11, Q9)
+
+The Studio's existing `cs-issues` list gains one warning row per expired channel: the short status in
+bold ("Expired") and its explanation as a block line beneath it. The calendar's slot drawer lists an
+expired channel in its existing warning `Banner`, with the same explanation on its own line. No new
+component or treatment; the wider Studio redesign (B9) is Phase 2B-2.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

@@ -506,3 +506,117 @@ test.describe('A10 / G2 / G3 · my notification switches, and the AI writing lan
     );
   });
 });
+
+test.describe('A11 / Q9 · an expired account warns in the Studio and does not block', () => {
+  test('the channel reads "Expired", with what that means on the next line', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const { customer } = credentials();
+    const slug = `e2e-expired-${randomUUID().slice(0, 8)}`;
+    const workspaceId = randomUUID();
+    let itemId = '';
+    // A workspace of its own: one brand, its LinkedIn account needing
+    // reconnection, and a draft written for LinkedIn.
+    await withPlatformPrisma(async (prisma) => {
+      const owner = await prisma.user.findFirstOrThrow({
+        where: { email: customer.email },
+        select: { id: true },
+      });
+      const role = await prisma.role.findFirstOrThrow({
+        where: { key: 'workspace_owner', workspaceId: null },
+        select: { id: true },
+      });
+      await prisma.workspace.create({
+        data: {
+          id: workspaceId,
+          workspaceId,
+          slug,
+          name: `E2E Expired ${slug.slice(-8)}`,
+          ownerUserId: owner.id,
+          status: 'ACTIVE',
+          country: 'US',
+          defaultLocale: 'EN',
+          timezone: 'America/New_York',
+          currency: 'USD',
+        },
+      });
+      await prisma.membership.create({
+        data: {
+          workspaceId,
+          userId: owner.id,
+          roleId: role.id,
+          status: 'ACTIVE',
+          acceptedAt: new Date(),
+        },
+      });
+      const brand = await prisma.brand.create({
+        data: { workspaceId, slug: `${slug}-brand`, name: 'Expired Brand', status: 'ACTIVE' },
+        select: { id: true },
+      });
+      await prisma.socialConnection.create({
+        data: {
+          workspaceId,
+          brandId: brand.id,
+          provider: 'LINKEDIN',
+          externalAccountId: `${slug}-linkedin`,
+          displayName: 'Expired LinkedIn',
+          targetKind: 'organization',
+          status: 'NEEDS_REAUTH',
+          grantedScopes: ['w_member_social'],
+          connectedByUserId: owner.id,
+          connectedAt: new Date(),
+        },
+      });
+      const item = await prisma.contentItem.create({
+        data: {
+          workspaceId,
+          brandId: brand.id,
+          title: 'Expired channel post',
+          contentType: 'POST',
+          primaryLocale: 'EN',
+          status: 'DRAFT',
+          origin: 'HUMAN',
+          createdByUserId: owner.id,
+          idempotencyKey: `${slug}-item`,
+        },
+        select: { id: true },
+      });
+      itemId = item.id;
+      await prisma.contentVariant.create({
+        data: {
+          workspaceId,
+          brandId: brand.id,
+          contentItemId: item.id,
+          platformKey: 'linkedin',
+          locale: 'EN',
+          body: 'A post for an account that needs reconnecting.',
+          hashtags: [],
+          characterCount: 46,
+          validationState: 'VALID',
+          origin: 'HUMAN',
+        },
+      });
+    });
+
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+    await page.click(`[data-testid="choose-workspace-${slug}"]`);
+    await page.waitForURL(/\/en\/overview$/);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
+    const row = page.getByTestId('editor-channel-expired-linkedin');
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await expect(row.locator('b')).toHaveText('Expired');
+    await expect(row).toContainText('Reconnect the account');
+    await expect(row).toContainText('120 minutes');
+    // A warning, not a block: the row is a warning and the draft can still be scheduled.
+    await expect(row).toHaveClass(/warning/);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/content/compose?item=${itemId}`);
+    await expect(page.getByTestId('editor-channel-expired-linkedin').locator('b')).toHaveText(
+      'منتهي الصلاحية',
+    );
+  });
+});

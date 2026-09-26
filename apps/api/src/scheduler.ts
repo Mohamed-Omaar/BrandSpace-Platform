@@ -519,7 +519,7 @@ export class MaintenanceScheduler {
         nextAttemptAt: { lte: now },
         workspace: { deletionScheduledFor: null },
       },
-      select: { id: true, workspaceId: true, idempotencyKey: true },
+      select: { id: true, workspaceId: true, idempotencyKey: true, nextAttemptAt: true },
       orderBy: { nextAttemptAt: 'asc' },
       take: batch,
     });
@@ -529,10 +529,17 @@ export class MaintenanceScheduler {
       const result = await enqueue('publish-jobs', PUBLISH_SOCIAL_POST, {
         kind: PUBLISH_SOCIAL_POST,
         workspaceId: job.workspaceId,
-        // THE JOB'S OWN DERIVED KEY. BullMQ refuses a duplicate job id, so a
-        // sweep racing a successful dispatch adds nothing rather than queuing a
-        // second attempt at the same post.
-        idempotencyKey: job.idempotencyKey,
+        /*
+         * THE JOB'S OWN DERIVED KEY, PER SCHEDULED ATTEMPT. BullMQ refuses a
+         * duplicate job id, so a sweep racing a successful dispatch of the SAME
+         * attempt adds nothing. The attempt's time is part of the id because
+         * BullMQ also keeps finished jobs: a job sent back to QUEUED for a later
+         * look — a retry, or a post waiting for its account to be reconnected
+         * (Q9, D-332) — would otherwise be refused as a duplicate of its own
+         * first run and never looked at again. A second delivery of anything is
+         * still harmless: `execute()` claims QUEUED once.
+         */
+        idempotencyKey: `${job.idempotencyKey}-${job.nextAttemptAt?.getTime() ?? 0}`,
         publishJobId: job.id,
       } satisfies PublishSocialPostPayload);
       if (result.dispatched) dispatched += 1;

@@ -46,11 +46,17 @@ export type ChannelReadinessState =
    *  has switched that provider off in versioned configuration. The customer
    *  cannot fix this, which is why it outranks the other two blockers. */
   | 'UNSUPPORTED'
-  /** No account is connected for this provider on this brand. */
+  /** No account is connected for this provider on this brand (a connection
+   *  still PENDING its authorisation counts as none). */
   | 'NOT_CONNECTED'
-  /** An account exists but cannot publish: re-auth needed, revoked, disabled
-   *  by the platform, or its token has already expired. */
-  | 'NEEDS_REAUTH'
+  /** Every account for the provider was revoked or disabled: nothing will be
+   *  sent there, and scheduling is refused on the server (Q9, D-332). */
+  | 'REVOKED'
+  /** EXPIRED (Q9, D-332) — the account needs reconnecting (or its token has
+   *  run out). NOT a blocker: the post is scheduled, the channel WAITS for the
+   *  reconnection until the lateness deadline and then fails with that reason,
+   *  while the other channels go out on time. */
+  | 'EXPIRED'
   /** Publishable now, and its token expires inside the refresh window. */
   | 'EXPIRING'
   /** Publishable. */
@@ -66,16 +72,25 @@ export type ChannelReadinessState =
  * channel would be sending somebody to do work that does not help.
  */
 const SEVERITY: Record<ChannelReadinessState, number> = {
-  UNSUPPORTED: 4,
-  NOT_CONNECTED: 3,
-  NEEDS_REAUTH: 2,
+  UNSUPPORTED: 5,
+  NOT_CONNECTED: 4,
+  REVOKED: 3,
+  EXPIRED: 2,
   EXPIRING: 1,
   READY: 0,
 };
 
-/** True when the state means the post cannot go out at all. */
+/**
+ * True when the state means the post cannot go out at all on that channel.
+ * EXPIRED is a WARNING, not a block (Q9): the channel waits for the account.
+ */
 export function isBlocking(state: ChannelReadinessState): boolean {
-  return SEVERITY[state] >= SEVERITY.NEEDS_REAUTH;
+  return SEVERITY[state] >= SEVERITY.REVOKED;
+}
+
+/** True when the reader should be told, blocking or not. */
+export function needsAttention(state: ChannelReadinessState): boolean {
+  return SEVERITY[state] >= SEVERITY.EXPIRED;
 }
 
 export interface ChannelReadiness {
@@ -223,6 +238,39 @@ export async function publishReadiness(
   return readiness;
 }
 
+/**
+ * One brand's channels, for a post that is not on the calendar yet — the
+ * Studio's channel row (Q9, D-332). The same rules as a scheduled slot's,
+ * through `publishReadiness` itself, so the two can never disagree.
+ */
+export async function channelReadinessForBrand(input: {
+  readonly db: TenantScopedClient;
+  readonly workspaceId: string;
+  readonly policy: PublishingPolicy;
+  readonly brandScope: readonly string[];
+  readonly brandId: string;
+  readonly platformKeys: readonly string[];
+  readonly now: Date;
+}): Promise<readonly ChannelReadiness[]> {
+  const key = `brand:${input.brandId}`;
+  const readiness = await publishReadiness({
+    db: input.db,
+    workspaceId: input.workspaceId,
+    policy: input.policy,
+    brandScope: input.brandScope,
+    slots: [
+      {
+        slotId: key,
+        brandId: input.brandId,
+        status: 'SCHEDULED',
+        variantPlatformKeys: input.platformKeys,
+      },
+    ],
+    now: input.now,
+  });
+  return readiness.get(key)?.channels ?? [];
+}
+
 function channelReadiness(input: {
   platformKey: string;
   policy: PublishingPolicy;
@@ -248,7 +296,10 @@ function channelReadiness(input: {
     return { platformKey: input.platformKey, provider, state: 'UNSUPPORTED', accountName: null };
   }
 
-  const accounts = input.accounts?.get(provider) ?? [];
+  // A connection still PENDING its authorisation has never been usable.
+  const accounts = (input.accounts?.get(provider) ?? []).filter(
+    (account) => account.status !== 'PENDING',
+  );
   if (accounts.length === 0) {
     return { platformKey: input.platformKey, provider, state: 'NOT_CONNECTED', accountName: null };
   }
@@ -269,10 +320,36 @@ function channelReadiness(input: {
       accountName: publishable.displayName,
     };
   }
+  /*
+   * EXPIRED OUTRANKS REVOKED IN THE CUSTOMER'S FAVOUR: one account waiting to
+   * be reconnected is enough for the pipeline to create the channel's job and
+   * hold it (D-332), so the channel is a warning, not a block.
+   */
+  const waiting = accounts.find((account) => awaitsReconnect(account));
+  if (waiting) {
+    return {
+      platformKey: input.platformKey,
+      provider,
+      state: 'EXPIRED',
+      accountName: waiting.displayName,
+    };
+  }
   return {
     platformKey: input.platformKey,
     provider,
-    state: 'NEEDS_REAUTH',
+    state: 'REVOKED',
     accountName: accounts[0]?.displayName ?? null,
   };
+}
+
+/**
+ * An account that is still ours to use once reconnected: the platform asked
+ * for re-authorisation, or its token ran out. Revoked and disabled accounts
+ * are not — nothing is ever sent to them.
+ */
+export function awaitsReconnect(account: {
+  readonly status: string;
+  readonly publishable: boolean;
+}): boolean {
+  return account.status === 'NEEDS_REAUTH' || (account.status === 'ACTIVE' && !account.publishable);
 }

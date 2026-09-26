@@ -22,7 +22,7 @@ import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inSocial } from '../../../server/social-context';
-import { isBlocking, publishReadiness } from '../../../server/publish-readiness';
+import { isBlocking, needsAttention, publishReadiness } from '../../../server/publish-readiness';
 import { mediaForVariants } from '../../../server/media-picker';
 import { GAP_WEEKS, emptyWeekdays, gapWindow, weekdayName } from '../../../server/calendar-gaps';
 import { copilotHref } from '../../../server/copilot-surface';
@@ -414,26 +414,31 @@ export default async function CalendarPage({
    * application resolver, so this page cannot open a credential (F-07).
    */
   const mayReadAccounts = workspace.permissionKeys.includes('integrations.read');
-  const readiness = await inSocial(workspace.workspaceId, async (services) =>
-    publishReadiness({
-      db: services.db,
-      workspaceId: workspace.workspaceId,
-      policy: await services.policy(),
-      brandScope: workspace.brandScope,
-      slots: visible.map((view) => ({
-        slotId: view.slot.id,
-        brandId: view.slot.brandId,
-        status: view.slot.status,
-        /*
-         * THE ITEM'S VARIANTS AS THEY ARE NOW — what the publisher matches
-         * connections against — and NOT `slot.platformKeys`, which records
-         * what was planned and is deliberately never updated.
-         */
-        variantPlatformKeys: view.variants.map((variant) => variant.platformKey),
-      })),
-      now,
-    }),
-  );
+  const { readiness, latenessMinutes } = await inSocial(workspace.workspaceId, async (services) => {
+    const publishingPolicy = await services.policy();
+    return {
+      // Q9 (D-332): how long an expired channel waits for its account, said as it is.
+      latenessMinutes: publishingPolicy.dispatch.latenessToleranceMinutes,
+      readiness: await publishReadiness({
+        db: services.db,
+        workspaceId: workspace.workspaceId,
+        policy: publishingPolicy,
+        brandScope: workspace.brandScope,
+        slots: visible.map((view) => ({
+          slotId: view.slot.id,
+          brandId: view.slot.brandId,
+          status: view.slot.status,
+          /*
+           * THE ITEM'S VARIANTS AS THEY ARE NOW — what the publisher matches
+           * connections against — and NOT `slot.platformKeys`, which records
+           * what was planned and is deliberately never updated.
+           */
+          variantPlatformKeys: view.variants.map((variant) => variant.platformKey),
+        })),
+        now,
+      }),
+    };
+  });
   const blockedCount = [...readiness.values()].filter((entry) => isBlocking(entry.state)).length;
 
   /*
@@ -572,8 +577,11 @@ export default async function CalendarPage({
             label: translate(`calendar.readiness.${slotReadiness.state}` as MessageKey),
             blocking: isBlocking(slotReadiness.state),
             /*
-             * ONLY THE CHANNELS THAT ARE IN THE WAY. Listing the healthy ones
-             * beside them would bury the one line the planner has to act on.
+             * ONLY THE CHANNELS THAT NEED ATTENTION — the blocked ones, and
+             * (Q9, D-332) an EXPIRED one, which does not block but waits for
+             * its account, with what that means on the next line. Listing the
+             * healthy ones beside them would bury the line the planner has to
+             * act on.
              *
              * THE ACCOUNT'S NAME IS WITHHELD FROM A READER WHO MAY NOT SEE IT.
              * This screen needs `content.read`; the connected accounts are an
@@ -582,10 +590,17 @@ export default async function CalendarPage({
              * so it is dropped rather than the row being hidden.
              */
             channels: slotReadiness.channels
-              .filter((channel) => isBlocking(channel.state))
+              .filter((channel) => needsAttention(channel.state))
               .map((channel) => ({
                 platformKey: channel.platformKey,
                 label: translate(`calendar.readiness.${channel.state}` as MessageKey),
+                explanation:
+                  channel.state === 'EXPIRED'
+                    ? translate('readiness.expiredExplanation').replace(
+                        '{minutes}',
+                        String(latenessMinutes),
+                      )
+                    : null,
                 accountName: mayReadAccounts ? channel.accountName : null,
               })),
           }
@@ -869,7 +884,8 @@ const CALENDAR_KEYS = [
   'calendar.readiness',
   'calendar.readiness.READY',
   'calendar.readiness.EXPIRING',
-  'calendar.readiness.NEEDS_REAUTH',
+  'calendar.readiness.EXPIRED',
+  'calendar.readiness.REVOKED',
   'calendar.readiness.NOT_CONNECTED',
   'calendar.readiness.UNSUPPORTED',
   'calendar.channels',

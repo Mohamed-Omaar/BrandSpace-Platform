@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { SCHEDULE_IN_PAST_REASON } from '@brandspace/content';
+import { CHANNEL_DISCONNECTED_REASON, SCHEDULE_IN_PAST_REASON } from '@brandspace/content';
 import { createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
 import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
@@ -72,6 +72,10 @@ function failure(
 function calendarErrorCode(error: unknown): string {
   if (isAppError(error) && error.publicDetails['reason'] === SCHEDULE_IN_PAST_REASON) {
     return 'SCHEDULE_IN_PAST';
+  }
+  // Q9 (D-332): every account for one of the post's channels was revoked.
+  if (isAppError(error) && error.publicDetails['reason'] === CHANNEL_DISCONNECTED_REASON) {
+    return CHANNEL_DISCONNECTED_REASON;
   }
   return actionErrorCode(error);
 }

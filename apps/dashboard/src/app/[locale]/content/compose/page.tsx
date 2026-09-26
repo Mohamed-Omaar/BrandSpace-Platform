@@ -36,6 +36,7 @@ import { NotesPanel } from '../../../../components/notes-panel';
 import { inSocial } from '../../../../server/social-context';
 import { relativeTime } from '../../../../server/home';
 import { plannedDateFrom } from '../../../../server/planned-date';
+import { channelReadinessForBrand } from '../../../../server/publish-readiness';
 import {
   POST_GOALS,
   createModeFrom,
@@ -702,6 +703,40 @@ export default async function ComposePage({
     : null;
 
   /*
+   * Q9 (D-332) — A CHANNEL WHOSE ACCOUNT HAS EXPIRED, said in the Studio: a
+   * short "Expired" and, on the next line, what that means for this post. The
+   * same readiness rules the calendar uses; only EXPIRED is shown here — a
+   * warning, not a block. Nothing about the account itself reaches the page.
+   */
+  const expiredChannels: Record<string, { label: string; explanation: string }> =
+    composerDraft && !composerDraft.readOnly
+      ? await inSocial(workspace.workspaceId, async (services) => {
+          const publishingPolicy = await services.policy();
+          const channels = await channelReadinessForBrand({
+            db: services.db,
+            workspaceId: workspace.workspaceId,
+            policy: publishingPolicy,
+            brandScope: workspace.brandScope,
+            brandId: composerDraft.brandId,
+            platformKeys: composerDraft.variants.map((variant) => variant.platformKey),
+            now: systemClock.now(),
+          });
+          const explanation = translate('readiness.expiredExplanation').replace(
+            '{minutes}',
+            String(publishingPolicy.dispatch.latenessToleranceMinutes),
+          );
+          return Object.fromEntries(
+            channels
+              .filter((channel) => channel.state === 'EXPIRED')
+              .map((channel) => [
+                channel.platformKey,
+                { label: translate('calendar.readiness.EXPIRED'), explanation },
+              ]),
+          );
+        })
+      : {};
+
+  /*
    * PHASE 8 — THE MEDIA THIS DRAFT'S BRAND MAY USE (AC-27.2).
    *
    * Loaded only for an EXISTING draft, because media attaches to a variant and
@@ -843,6 +878,7 @@ export default async function ComposePage({
         carriedMedia={carried}
         plannedDate={plannedDate?.date ?? null}
         plannedFor={plannedFor}
+        expiredChannels={expiredChannels}
         // Q18 — the AI edits spend credits, so without `copilot.use` none is offered.
         tools={maySpendCredits(workspace.permissionKeys, 'content.edit') ? CONTENT_TOOLS : []}
         now={now.getTime()}

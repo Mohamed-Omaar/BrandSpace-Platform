@@ -128,6 +128,10 @@ export interface ComposerViewProps {
   readonly carriedMedia?: MediaOptionView | null;
   /** G6 (D-329): the day a ★ holiday chip opened the Studio for, `YYYY-MM-DD`. */
   readonly plannedDate?: string | null;
+  /** Q9 (D-332): a channel whose account has expired — "Expired", and what it means. */
+  readonly expiredChannels?: Readonly<
+    Record<string, { readonly label: string; readonly explanation: string }>
+  >;
   /** G6 (D-329): what that day is, in the reader's language. */
   readonly plannedFor?: string | null;
   readonly contentTypes: readonly string[];
@@ -293,6 +297,7 @@ export function ComposerView({
   creativeFormats = [],
   carriedMedia = null,
   plannedDate = null,
+  expiredChannels = {},
   plannedFor = null,
   review = null,
 }: ComposerViewProps) {
@@ -675,6 +680,7 @@ export function ComposerView({
           creativeFormats={creativeFormats}
           attach={carriedMedia}
           plannedDate={plannedDate}
+          expiredChannels={expiredChannels}
           review={review}
           canGenerateMedia={can.generateMedia ?? false}
           onTool={(variantId, tool, argument) => void runTool(variantId, tool, argument)}

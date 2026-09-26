@@ -44,6 +44,10 @@ import type { ComposerDraft, ComposerPlatform, ComposerVariant } from './compose
 
 export interface DraftEditorProps {
   readonly locale: string;
+  /** Q9 (D-332): a channel whose account has expired — "Expired", and what it means. */
+  readonly expiredChannels?: Readonly<
+    Record<string, { readonly label: string; readonly explanation: string }>
+  >;
   readonly t: Record<string, string>;
   readonly draft: ComposerDraft;
   readonly platforms: readonly ComposerPlatform[];
@@ -150,6 +154,7 @@ export function DraftEditor({
   canGenerateMedia,
   attach = null,
   plannedDate = null,
+  expiredChannels = {},
   review = null,
   onTool,
   actions,
@@ -656,8 +661,27 @@ export function DraftEditor({
                     §21 — WHAT IS WRONG, IN WORDS, WITH THE FIX BESIDE IT. The
                     numbers are the platform's configured limits.
                   */}
-                  {issues.length > 0 ? (
+                  {issues.length > 0 || expiredChannels[variant.platformKey] ? (
                     <ul className="cs-issues" data-testid={`editor-issues-${variant.platformKey}`}>
+                      {/*
+                        Q9 (D-332) — THE ACCOUNT FOR THIS CHANNEL HAS EXPIRED. A
+                        warning row in the list the Studio already has: the
+                        short status, and what it means on its own line.
+                      */}
+                      {expiredChannels[variant.platformKey] ? (
+                        <li
+                          className="warning"
+                          data-issue="channel.expired"
+                          data-testid={`editor-channel-expired-${variant.platformKey}`}
+                        >
+                          <span>
+                            <b>{expiredChannels[variant.platformKey]?.label}</b>
+                            <span style={{ display: 'block' }}>
+                              {expiredChannels[variant.platformKey]?.explanation}
+                            </span>
+                          </span>
+                        </li>
+                      ) : null}
                       {issues.map((issue) => (
                         <IssueRow
                           key={issue.key}

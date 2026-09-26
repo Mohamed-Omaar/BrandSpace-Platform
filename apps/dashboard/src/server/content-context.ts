@@ -14,6 +14,7 @@ import { approvalNotifier, denialSink } from './approvals-context';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import { isAppError } from '@brandspace/shared';
 import { currentEnvironment, inWorkspace, type ScopedServices } from './customer-context';
+import { unreachableChannelGate } from '@brandspace/social-connectors';
 
 /**
  * AI Content Studio wiring for the customer dashboard.
@@ -172,6 +173,8 @@ export async function inContentStudio<T>(
          * D-120's gate is now backed by a workflow that can satisfy it.
          */
         approvalGate: await approvals(),
+        // Q9 (D-332): a channel whose every account was revoked is refused.
+        channelGate: unreachableChannelGate(scoped.db, workspaceId),
       });
     };
 

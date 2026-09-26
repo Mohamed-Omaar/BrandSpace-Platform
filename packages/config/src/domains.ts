@@ -1621,6 +1621,12 @@ const publishingSchema = z.object({
       claimLeaseSeconds: z.number().int().positive().min(60).max(3_600).default(900),
       /** Stale claims examined per recovery pass. */
       staleClaimBatchSize: z.number().int().positive().max(500).default(50),
+      /**
+       * Q9 (D-332). How often a post waiting for an account to be RECONNECTED
+       * looks again. It waits no longer than `latenessToleranceMinutes` in all,
+       * then fails saying to reconnect the account.
+       */
+      reconnectRecheckSeconds: z.number().int().min(30).max(3_600).default(60),
     })
     .default({}),
 });

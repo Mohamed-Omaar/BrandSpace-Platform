@@ -1357,7 +1357,10 @@ export const messages = {
     'calendar.readiness': 'جاهزية النشر',
     'calendar.readiness.READY': 'جاهز للنشر',
     'calendar.readiness.EXPIRING': 'صلاحية الحساب تنتهي قريبًا',
-    'calendar.readiness.NEEDS_REAUTH': 'الحساب يحتاج إعادة ربط',
+    'calendar.readiness.EXPIRED': 'منتهي الصلاحية',
+    'calendar.readiness.REVOKED': 'الحساب مفصول — لن يُرسل شيء إلى هذه القناة',
+    'readiness.expiredExplanation':
+      'أعد ربط الحساب. حتى ذلك الحين تنتظر هذه القناة؛ وإن لم يُعد ربطه خلال {minutes} دقيقة من الموعد المجدول فلن يُنشر عليها. تُنشر القنوات الأخرى في موعدها.',
     'calendar.readiness.NOT_CONNECTED': 'لا يوجد حساب مرتبط',
     'calendar.readiness.UNSUPPORTED': 'القناة غير متاحة للنشر',
     'calendar.readinessBlocked': 'منشورات مجدولة لن تُنشر بحالتها الحالية',
@@ -1454,6 +1457,10 @@ export const messages = {
     'publishing.failure.unknown': 'ردّ غير متوقع من المنصة.',
     /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
     'publishing.code.preflight.not_connected': 'الحساب لم يعد متصلًا. أعد ربطه ثم أعد المحاولة.',
+    'publishing.code.preflight.awaiting_reconnect':
+      'بانتظار إعادة ربط الحساب. أعد ربطه ليُنشر المنشور؛ وإن لم يُعد ربطه في الوقت المناسب فلن يُرسل إلى هذا الحساب.',
+    'publishing.code.preflight.reconnect_required':
+      'لم يُرسل: كان الحساب بحاجة إلى إعادة ربط ولم يُعد ربطه في الوقت المناسب. أعد ربط الحساب ثم انشر مرة أخرى.',
     'publishing.code.preflight.no_credential': 'لا يوجد إذن صالح لهذا الحساب. أعد ربطه.',
     'publishing.code.preflight.variant_missing': 'لم يعد لهذا المنشور نص على هذه المنصة.',
     'publishing.code.preflight.too_many_media':
@@ -4112,7 +4119,10 @@ export const messages = {
     'calendar.readiness': 'Publishing readiness',
     'calendar.readiness.READY': 'Ready to publish',
     'calendar.readiness.EXPIRING': 'Account access expires soon',
-    'calendar.readiness.NEEDS_REAUTH': 'Account needs reconnecting',
+    'calendar.readiness.EXPIRED': 'Expired',
+    'calendar.readiness.REVOKED': 'Account disconnected — nothing will be sent to this channel',
+    'readiness.expiredExplanation':
+      'Reconnect the account. Until then this channel waits; if it is not reconnected within {minutes} minutes of the scheduled time, it is not posted there. The other channels go out on time.',
     'calendar.readiness.NOT_CONNECTED': 'No connected account',
     'calendar.readiness.UNSUPPORTED': 'Channel unavailable for publishing',
     'calendar.readinessBlocked': 'scheduled posts will not go out as they stand',
@@ -4216,6 +4226,10 @@ export const messages = {
     /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
     'publishing.code.preflight.not_connected':
       'The account is no longer connected. Reconnect it and try again.',
+    'publishing.code.preflight.awaiting_reconnect':
+      'Waiting for the account to be reconnected. Reconnect it and this post goes out; if it is not reconnected in time, it is not sent to this account.',
+    'publishing.code.preflight.reconnect_required':
+      'Not sent: the account needed reconnecting and was not reconnected in time. Reconnect the account, then publish again.',
     'publishing.code.preflight.no_credential':
       'There is no valid access for this account. Reconnect it.',
     'publishing.code.preflight.variant_missing':
@@ -5650,6 +5664,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   SCHEDULE_IN_PAST: {
     en: 'That time has already passed or is too soon. Choose a later time.',
     ar: 'هذا الوقت مضى أو قريب جدًا. اختر وقتًا لاحقًا.',
+  },
+  // Q9 (D-332) — every account for one of the post's channels was revoked.
+  CHANNEL_DISCONNECTED: {
+    en: 'An account for one of this post’s channels was disconnected, so nothing could be sent there. Connect it again, or remove that channel.',
+    ar: 'فُصل حساب إحدى قنوات هذا المنشور، فلا يمكن الإرسال إليها. أعد ربطه أو احذف تلك القناة.',
   },
   // Phase 6 final (D-288, D-290) — sent for review from the editor, library or calendar.
   WORKFLOW_SNOOZE: {

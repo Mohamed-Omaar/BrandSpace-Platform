@@ -363,6 +363,10 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   which a new brand now takes from its creator's interface language (amends D-277). Migration
   `20260930090000_notification_preference`. Suggestions on/off, first-comment hashtags, link tracking
   and default channels/time stay with Publishing defaults in Phase 2B-2.
+- **A11 / Q9 — expired connections (D-332).** Expired warns (calendar, and "Expired" in the Studio with
+  its explanation on the next line); revoked/disabled blocks, and the server refuses scheduling onto it.
+  The hold is real: the expired channel's job waits for the reconnection until the lateness deadline,
+  then fails with "reconnect the account", while the other channels publish on time. No migration.
 
 ---
 

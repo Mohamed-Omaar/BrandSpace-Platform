@@ -29,6 +29,7 @@ export { ContentCalendarService, RESCHEDULABLE_SLOT_STATUSES } from './calendar'
 export type {
   ApprovalGate,
   CalendarOptions,
+  ChannelGate,
   CalendarSlotView,
   ScheduleInput,
   ScheduleQuota,
@@ -98,6 +99,7 @@ export { purgeExpiredContent } from './purge';
 export type { ContentPurgeResult } from './purge';
 
 export {
+  CHANNEL_DISCONNECTED_REASON,
   DECISION_NOTE_REQUIRED_REASON,
   SCHEDULE_IN_PAST_REASON,
   decisionNoteRequired,
@@ -105,6 +107,7 @@ export {
   approvalRequiredBeforeScheduling,
   briefTooLong,
   calendarSlotNotFound,
+  channelDisconnected,
   contentItemNotFound,
   contentVariantNotFound,
   dayIsFull,

@@ -105,10 +105,12 @@ export interface SlotReadinessDetail {
   readonly label: string;
   /** True when the post cannot go out at all as it stands. */
   readonly blocking: boolean;
-  /** Only the channels that are in the way; empty when nothing is. */
+  /** Only the channels that need attention; empty when none does. */
   readonly channels: readonly {
     readonly platformKey: string;
     readonly label: string;
+    /** Q9 (D-332): what an EXPIRED channel's wait means, for its own line. */
+    readonly explanation?: string | null;
     /** `null` for a reader who may not see connected accounts. */
     readonly accountName: string | null;
   }[];
@@ -843,7 +845,7 @@ export function CalendarView({
               server sent one, which it does only for a reader holding
               `integrations.read`.
             */}
-            {openSlot.readiness?.blocking ? (
+            {openSlot.readiness && openSlot.readiness.channels.length > 0 ? (
               <Banner tone="warning" testId="calendar-slot-readiness-detail">
                 <ul style={{ margin: 0, paddingInlineStart: spacingTokens.md }}>
                   {openSlot.readiness.channels.map((channel) => (
@@ -851,6 +853,9 @@ export function CalendarView({
                       {channel.accountName
                         ? `${channel.platformKey} · ${channel.label} — ${channel.accountName}`
                         : `${channel.platformKey} · ${channel.label}`}
+                      {channel.explanation ? (
+                        <span style={{ display: 'block' }}>{channel.explanation}</span>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

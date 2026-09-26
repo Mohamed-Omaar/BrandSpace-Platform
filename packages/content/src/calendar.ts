@@ -12,6 +12,7 @@ import {
   alreadyScheduled,
   approvalRequiredBeforeScheduling,
   calendarSlotNotFound,
+  channelDisconnected,
   contentItemNotFound,
   dayIsFull,
   invalidScheduleTime,
@@ -81,6 +82,21 @@ export interface CalendarOptions {
    * failing or — far worse — silently letting unapproved content through.
    */
   readonly approvalGate?: ApprovalGate;
+  /**
+   * Q9 (D-332). Answers which of a post's channels can reach NO account at
+   * all because every account for it was revoked or disabled. Scheduling and
+   * rescheduling onto such a channel is refused. An EXPIRED account is not
+   * one of them — its channel waits for the reconnection — and a channel with
+   * no account connected keeps today's behaviour. Wired by every production
+   * caller (a unit test pins that); without it, nothing is refused.
+   */
+  readonly channelGate?: ChannelGate;
+}
+
+/** The single question the calendar asks the social connections. */
+export interface ChannelGate {
+  /** Of these platform keys, the ones whose every account for the brand is revoked or disabled. */
+  unreachableChannels(brandId: string, platformKeys: readonly string[]): Promise<readonly string[]>;
 }
 
 /** The single question the calendar asks the Approvals module. */
@@ -143,6 +159,7 @@ export class ContentCalendarService {
   readonly #timezone: string;
   readonly #quota: ScheduleQuota;
   readonly #clock: Clock;
+  readonly #channelGate: ChannelGate | undefined;
   readonly #approvalGate: ApprovalGate | undefined;
 
   constructor(options: CalendarOptions) {
@@ -152,6 +169,7 @@ export class ContentCalendarService {
     this.#timezone = options.timezone;
     this.#quota = options.quota;
     this.#clock = options.clock ?? systemClock;
+    this.#channelGate = options.channelGate;
     this.#approvalGate = options.approvalGate;
   }
 
@@ -193,6 +211,10 @@ export class ContentCalendarService {
     });
     // A plan for content with no caption is a plan to publish nothing.
     if (variants.length === 0) throw nothingToSchedule();
+    await this.#assertChannelsReachable(
+      item.brandId,
+      variants.map((variant) => variant.platformKey),
+    );
 
     const live = await this.#liveSlotFor(item.id);
     if (live) throw alreadyScheduled();
@@ -285,6 +307,14 @@ export class ContentCalendarService {
 
     const instant = this.#resolveInstant(input.localTime);
     await this.#assertDayHasRoom(instant, slot.id);
+    const variantsNow = await this.#db.contentVariant.findMany({
+      where: { contentItemId: slot.contentItemId },
+      select: { platformKey: true },
+    });
+    await this.#assertChannelsReachable(
+      slot.brandId,
+      variantsNow.map((variant) => variant.platformKey),
+    );
 
     /*
      * B-4 — CONDITIONAL, NOT READ-THEN-WRITE. The status check above answers
@@ -314,6 +344,15 @@ export class ContentCalendarService {
     });
 
     return this.#viewOf(moved);
+  }
+
+  /** Q9 (D-332): refuse a channel that can reach no account at all. */
+  async #assertChannelsReachable(brandId: string, platformKeys: readonly string[]): Promise<void> {
+    if (!this.#channelGate) return;
+    const unreachable = await this.#channelGate.unreachableChannels(brandId, [
+      ...new Set(platformKeys),
+    ]);
+    if (unreachable.length > 0) throw channelDisconnected(unreachable);
   }
 
   /** AC-14.8 — take a slot off the calendar, refund its quota, audit it. */
