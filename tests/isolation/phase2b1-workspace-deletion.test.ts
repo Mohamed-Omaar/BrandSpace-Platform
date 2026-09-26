@@ -347,7 +347,7 @@ describe('A8 · finishing at the deadline', () => {
     await auth.switchWorkspace(session.token, due.workspaceId);
 
     const finisher = new WorkspaceDeletionService({ clock: later(31) });
-    const finished = await finisher.finishDue(platform as unknown as TenantScopedClient, 500);
+    const finished = await finisher.finishDue(platform, 500);
     expect(finished).toContain(due.workspaceId);
     expect(finished).not.toContain(notYet.workspaceId);
     expect(finished).not.toContain(cancelled.workspaceId);
@@ -379,7 +379,7 @@ describe('A8 · finishing at the deadline', () => {
     }
 
     // A rerun finishes nothing twice.
-    const again = await finisher.finishDue(platform as unknown as TenantScopedClient, 500);
+    const again = await finisher.finishDue(platform, 500);
     expect(again).not.toContain(due.workspaceId);
     expect(await auditActions(due.workspaceId)).toHaveLength(2);
   });

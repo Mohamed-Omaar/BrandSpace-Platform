@@ -33,7 +33,7 @@
  * every workspace that is due.
  */
 
-import type { TenantScopedClient } from '@brandspace/database';
+import type { PrismaClient, TenantScopedClient } from '@brandspace/database';
 import { NotificationService } from '@brandspace/notifications';
 import { AppError, systemClock, type Clock } from '@brandspace/shared';
 
@@ -86,11 +86,15 @@ export class WorkspaceDeletionService {
       });
     }
 
-    const subscription = await db.workspaceSubscription.findUnique({
-      where: { workspaceId: input.workspaceId },
-      select: { status: true, cancelAtPeriodEnd: true },
-    });
-    if (subscription && RENEWING.has(subscription.status) && !subscription.cancelAtPeriodEnd) {
+    /*
+     * THE SUBSCRIPTION ROW IS LOCKED, THEN READ (review item 8), in the
+     * caller's transaction — the one that accepts the request. A plan change
+     * committing a moment earlier is seen; one arriving now waits until this
+     * request is decided. `finishDue` checks again at the deadline, so a plan
+     * resumed while the workspace waits still stops the deletion.
+     */
+    const subscription = await lockedSubscription(db, input.workspaceId);
+    if (stillRenewing(subscription)) {
       throw new AppError('CONFLICT', 'Cancel the plan before deleting the workspace.', {
         reason: 'CANCEL_PLAN_FIRST',
       });
@@ -185,60 +189,118 @@ export class WorkspaceDeletionService {
   /**
    * Mark every workspace whose deadline has passed DELETED.
    *
-   * `db` MUST BE THE PLATFORM CONNECTION. Each workspace is finished in its own
-   * conditional update, so a cancel that lands first wins and a rerun is a
-   * no-op: nothing is ever finished twice.
+   * `db` MUST BE THE PLATFORM CONNECTION: it acts on every workspace that is
+   * due.
+   *
+   * ONE TRANSACTION PER WORKSPACE (review item 7). The workspace row is locked
+   * and re-read, the subscription re-checked, and then DELETED + `deletedAt`,
+   * the session revocation and the `workspace.deleted` audit are written
+   * together: a failure at any step leaves the workspace exactly as it was —
+   * still pending, never half deleted — and the next pass tries again. A
+   * cancel that lands first wins, and a rerun is a no-op.
+   *
+   * A PLAN STILL RENEWING STOPS IT (review item 8): ACTIVE or PAST_DUE and not
+   * set to cancel at the period end means the workspace is NOT deleted — the
+   * owner resumed or restarted billing while it waited. It stays pending,
+   * the reason is audited once (`workspace.deletion_blocked`,
+   * `CANCEL_PLAN_FIRST`), and billing is never cancelled here.
    */
-  async finishDue(db: TenantScopedClient, limit = 50): Promise<readonly string[]> {
+  async finishDue(db: PrismaClient, limit = 50): Promise<readonly string[]> {
     const now = this.#clock.now();
     const due = await db.workspace.findMany({
       where: { deletionScheduledFor: { lte: now }, deletedAt: null, status: { not: 'DELETED' } },
-      select: { id: true, deletionRequestedByUserId: true },
+      select: { id: true },
       orderBy: { deletionScheduledFor: 'asc' },
       take: limit,
     });
 
     const finished: string[] = [];
-    for (const workspace of due) {
-      const updated = await db.workspace.updateMany({
-        where: {
-          id: workspace.id,
-          deletionScheduledFor: { lte: now },
-          deletedAt: null,
-          status: { not: 'DELETED' },
-        },
-        data: {
-          status: 'DELETED',
-          deletedAt: now,
-          statusReason: 'Deleted at the owner’s request after the waiting period.',
-          statusChangedAt: now,
-        },
-      });
-      if (updated.count === 0) continue;
-
-      await db.customerSession.updateMany({
-        where: { activeWorkspaceId: workspace.id, revokedAt: null },
-        data: { revokedAt: now, revokedReason: 'Workspace deleted' },
-      });
-      await db.auditEvent.create({
-        data: {
-          workspaceId: workspace.id,
-          actorType: 'SYSTEM',
-          actorId: null,
-          action: 'workspace.deleted',
-          resourceType: 'workspace',
-          resourceId: workspace.id,
-          severity: 'WARNING',
-          outcome: 'SUCCESS',
-          after: {
-            requestedByUserId: workspace.deletionRequestedByUserId,
-            deletedAt: now.toISOString(),
-          },
-        },
-      });
-      finished.push(workspace.id);
+    for (const { id } of due) {
+      const outcome = await db.$transaction((tx) =>
+        this.#finishOne(tx as unknown as TenantScopedClient, id, now),
+      );
+      if (outcome === 'deleted') finished.push(id);
     }
     return finished;
+  }
+
+  async #finishOne(
+    tx: TenantScopedClient,
+    workspaceId: string,
+    now: Date,
+  ): Promise<'deleted' | 'skipped' | 'blocked'> {
+    const locked = await tx.$queryRaw<
+      { deletionRequestedAt: Date | null; deletionRequestedByUserId: string | null }[]
+    >`
+      SELECT "deletionRequestedAt", "deletionRequestedByUserId"
+        FROM "workspace"
+       WHERE "id" = ${workspaceId}::uuid
+         AND "deletionScheduledFor" <= ${now}
+         AND "deletedAt" IS NULL
+         AND "status" <> 'DELETED'
+       FOR UPDATE`;
+    const workspace = locked[0];
+    // Cancelled, already finished, or moved on since the list was read.
+    if (!workspace) return 'skipped';
+
+    const subscription = await lockedSubscription(tx, workspaceId);
+    if (stillRenewing(subscription)) {
+      const flagged = await tx.auditEvent.count({
+        where: {
+          workspaceId,
+          action: 'workspace.deletion_blocked',
+          occurredAt: { gte: workspace.deletionRequestedAt ?? new Date(0) },
+        },
+      });
+      if (flagged === 0) {
+        await tx.auditEvent.create({
+          data: {
+            workspaceId,
+            actorType: 'SYSTEM',
+            actorId: null,
+            action: 'workspace.deletion_blocked',
+            resourceType: 'workspace',
+            resourceId: workspaceId,
+            severity: 'WARNING',
+            outcome: 'DENIED',
+            reason: 'CANCEL_PLAN_FIRST',
+            after: { subscriptionStatus: subscription?.status ?? null },
+          },
+        });
+      }
+      return 'blocked';
+    }
+
+    await tx.workspace.update({
+      where: { id: workspaceId },
+      data: {
+        status: 'DELETED',
+        deletedAt: now,
+        statusReason: 'Deleted at the owner’s request after the waiting period.',
+        statusChangedAt: now,
+      },
+    });
+    await tx.customerSession.updateMany({
+      where: { activeWorkspaceId: workspaceId, revokedAt: null },
+      data: { revokedAt: now, revokedReason: 'Workspace deleted' },
+    });
+    await tx.auditEvent.create({
+      data: {
+        workspaceId,
+        actorType: 'SYSTEM',
+        actorId: null,
+        action: 'workspace.deleted',
+        resourceType: 'workspace',
+        resourceId: workspaceId,
+        severity: 'WARNING',
+        outcome: 'SUCCESS',
+        after: {
+          requestedByUserId: workspace.deletionRequestedByUserId,
+          deletedAt: now.toISOString(),
+        },
+      },
+    });
+    return 'deleted';
   }
 
   async #tellMembers(
@@ -268,4 +330,26 @@ export class WorkspaceDeletionService {
       idempotencyKey: event.idempotencyKey,
     });
   }
+}
+
+/** The workspace's subscription, its row locked FOR UPDATE for this transaction. */
+async function lockedSubscription(
+  db: TenantScopedClient,
+  workspaceId: string,
+): Promise<{ readonly status: string; readonly cancelAtPeriodEnd: boolean } | null> {
+  const rows = await db.$queryRaw<{ status: string; cancelAtPeriodEnd: boolean }[]>`
+    SELECT "status"::text AS "status", "cancelAtPeriodEnd"
+      FROM "workspace_subscription"
+     WHERE "workspaceId" = ${workspaceId}::uuid
+     FOR UPDATE`;
+  return rows[0] ?? null;
+}
+
+/** Still billing, or will bill again: the existing CANCEL_PLAN_FIRST rule. */
+function stillRenewing(
+  subscription: { readonly status: string; readonly cancelAtPeriodEnd: boolean } | null,
+): boolean {
+  return (
+    subscription !== null && RENEWING.has(subscription.status) && !subscription.cancelAtPeriodEnd
+  );
 }

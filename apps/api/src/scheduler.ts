@@ -19,7 +19,6 @@ import {
   recordRuleAutomationEvent,
   withWorkspace,
   type PrismaClient,
-  type TenantScopedClient,
 } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import {
@@ -1865,7 +1864,7 @@ export class MaintenanceScheduler {
   async finishWorkspaceDeletions(batch: number): Promise<number> {
     const platform = getPlatformClient();
     const finished = await new WorkspaceDeletionService({ clock: this.#clock }).finishDue(
-      platform as unknown as TenantScopedClient,
+      platform,
       batch,
     );
     return finished.length;

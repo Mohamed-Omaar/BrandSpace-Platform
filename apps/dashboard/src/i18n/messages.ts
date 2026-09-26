@@ -1667,6 +1667,7 @@ export const messages = {
     'activity.action.assets.folder_deleted': 'حُذف مجلد',
     'activity.action.workspace.created': 'أُنشئ حساب النشاط التجاري',
     'activity.action.workspace.deletion_requested': 'طُلب حذف مساحة العمل',
+    'activity.action.workspace.deletion_blocked': 'أُوقف حذف مساحة العمل لأن الباقة ما زالت تتجدد',
     'activity.action.notification.preferences.updated': 'تم تغيير تفضيلات الإشعارات',
     'activity.action.workspace.deletion_cancelled': 'أُلغي حذف مساحة العمل',
     'activity.action.workspace.deleted': 'حُذفت مساحة العمل',
@@ -4474,6 +4475,8 @@ export const messages = {
     'activity.action.assets.folder_deleted': 'A folder was deleted',
     'activity.action.workspace.created': 'The business account was created',
     'activity.action.workspace.deletion_requested': 'Deletion of the workspace was requested',
+    'activity.action.workspace.deletion_blocked':
+      'Deletion of the workspace was stopped because its plan still renews',
     'activity.action.notification.preferences.updated': 'Notification preferences were changed',
     'activity.action.workspace.deletion_cancelled': 'Deletion of the workspace was cancelled',
     'activity.action.workspace.deleted': 'The workspace was deleted',
