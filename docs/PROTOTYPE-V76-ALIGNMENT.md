@@ -383,7 +383,8 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   least one publishing language, and exactly one sets the AI language. A refused sign-up keeps name, email and
   time zone (never the password); a mismatched confirmation blocks the submit (D-261 unchanged). An owner
   starting another workspace gets a blank form, a city for Egypt only, and a Back link. Migration
-  `20261003090000_setup_origin_and_goal_key`. Team size, a custom goal and "Ready" ideas stay out of this
+  `20261003090000_setup_origin_and_goal_key` — rolling the application back after SETUP rows exist
+  follows `docs/OPERATIONS.md` §6.2 (a forward SETUP → DOCUMENT migration first). Team size, a custom goal and "Ready" ideas stay out of this
   phase.
 
 ---

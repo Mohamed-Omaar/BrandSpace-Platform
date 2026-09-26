@@ -13,11 +13,14 @@
 -- does today. The CHECK holds for every existing row (NULL passes it), so it
 -- validates instantly.
 --
--- A ROLLBACK OF THE APPLICATION after the new release has written a SETUP row
--- is the one case the previous release would meet the value: its precedence
--- table does not know it. The rollback path is therefore a forward migration
--- that rewrites SETUP rows to DOCUMENT (the rank SETUP shares), never a replay
--- or an edit of this file. PostgreSQL cannot drop an enum value in place.
+-- ROLLBACK OF THE APPLICATION IS NOT COMPATIBLE ONCE A SETUP ROW EXISTS. After
+-- the new release has written one, the previous release must NOT serve traffic:
+-- its Prisma client fails reading a row whose origin it does not know, and its
+-- precedence table has no rank for it. PostgreSQL cannot drop an enum value in
+-- place, and this file is never replayed or edited. The only rollback path is
+-- docs/OPERATIONS.md §6.2: a reviewed forward corrective migration rewriting
+-- SETUP to DOCUMENT (the rank SETUP shares) on the item and version tables, and
+-- only after it is applied may the previous release serve traffic.
 
 ALTER TYPE "BrandKnowledgeOrigin" ADD VALUE IF NOT EXISTS 'SETUP';
 

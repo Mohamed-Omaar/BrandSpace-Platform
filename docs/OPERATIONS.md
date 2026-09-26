@@ -185,6 +185,85 @@ migration afterwards would hand the Viewer `notes.manage` — the right to resol
 triage conversations, which Q12 withholds from it (D-323). Should a grant ever need repairing, write a
 new, reviewed migration; do not replay an old one.
 
+### 6.2 Rolling the application back after `SETUP` knowledge exists (D-335)
+
+**Migration `20261003090000_setup_origin_and_goal_key` adds the value `SETUP` to the enum
+`"BrandKnowledgeOrigin"`.** The migration itself is safe while the previous release is live, because that
+release never writes `SETUP` and no row holds it until the new release writes one. It is **not** safe to
+run the previous release against a database in which the new release has already written `SETUP` rows:
+
+- the previous release's Prisma client does not know the value and **fails when it reads such a row**
+  (`brand_knowledge_item.origin` or `brand_knowledge_version.origin`) — Brand Brain, retrieval for AI
+  context, Strategy and Create all read those rows;
+- its precedence table (`originRank`) does not know the value either;
+- **PostgreSQL cannot remove an enum value in place**, so the migration cannot simply be reversed, and
+  §6's policy forbids a down script anyway.
+
+**The procedure, in this order:**
+
+1. **Do not route traffic to the previous release yet.** Keep the current release serving, or put the
+   product in maintenance, while steps 2–3 happen.
+2. **Ship a forward corrective migration**, reviewed like any other and deployed through the normal
+   `prisma migrate deploy` path (never by hand, §6.1). It rewrites every `SETUP` origin to `DOCUMENT`, the
+   origin that shares its precedence rank (HUMAN, then SETUP = DOCUMENT, then AI_INFERRED), so no
+   precedence decision changes. The enum value stays defined but unused.
+3. **Verify** that `SELECT count(*) FROM "brand_knowledge_item" WHERE "origin" = 'SETUP'` and the same
+   count on `"brand_knowledge_version"` are both `0`.
+4. **Only then** may the previous application release serve traffic.
+
+`brand.primaryGoalKey` needs nothing: the previous release neither reads nor writes it. The Setup label
+is lost by the rewrite (those facts read "From a document"); the text, versions and precedence are
+unchanged.
+
+**The exact SQL of that future corrective migration.** It is documented here and deliberately **not**
+added to the migration chain now; nothing in this repository runs it, and it must never be run by hand
+against a real database. Two protections have to be lifted for the rewrite and are put back in the same
+transaction, exactly as earlier data migrations do: both tables are under FORCE row-level security, which
+binds even their owner (the migrator role), so without `NO FORCE` the UPDATEs would silently change
+nothing; and `brand_knowledge_version` is append-only (its trigger refuses every UPDATE, D-65). FORCE is
+then asserted rather than assumed.
+
+```sql
+-- Forward corrective migration: SETUP knowledge becomes DOCUMENT (same rank, D-335),
+-- so a release that predates SETUP can read every row again. Run only as a reviewed
+-- migration through `prisma migrate deploy`, never by hand.
+BEGIN;
+
+ALTER TABLE "brand_knowledge_item" NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE "brand_knowledge_version" NO FORCE ROW LEVEL SECURITY;
+
+UPDATE "brand_knowledge_item"
+   SET "origin" = 'DOCUMENT', "updatedAt" = now()
+ WHERE "origin" = 'SETUP';
+
+-- The history is append-only (D-65). This rewrite is the one sanctioned exception:
+-- it changes the origin label only, never text, version numbers or authorship.
+ALTER TABLE "brand_knowledge_version" DISABLE TRIGGER brand_knowledge_version_append_only;
+UPDATE "brand_knowledge_version"
+   SET "origin" = 'DOCUMENT'
+ WHERE "origin" = 'SETUP';
+ALTER TABLE "brand_knowledge_version" ENABLE TRIGGER brand_knowledge_version_append_only;
+
+ALTER TABLE "brand_knowledge_item" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "brand_knowledge_version" FORCE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+     WHERE oid IN ('"brand_knowledge_item"'::regclass, '"brand_knowledge_version"'::regclass)
+       AND (relrowsecurity IS NOT TRUE OR relforcerowsecurity IS NOT TRUE)
+  ) THEN
+    RAISE EXCEPTION 'brand knowledge tables must have RLS ENABLED and FORCED after this migration';
+  END IF;
+END $$;
+
+COMMIT;
+```
+
+(Prisma runs a migration file inside its own transaction; in the actual migration file the explicit
+`BEGIN`/`COMMIT` lines are therefore omitted, and the statements run as one unit.)
+
 ---
 
 ## 7. Secret rotation
