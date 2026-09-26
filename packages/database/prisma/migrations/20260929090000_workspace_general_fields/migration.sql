@@ -13,16 +13,30 @@
 -- has already given a city — impossible before the new release runs, and
 -- during a rollback it is refused with an error, never stored inconsistently.
 --
+-- CORRECTED IN PLACE before it reached any persistent environment (PR #47
+-- review item 6): the city CHECK first accepted any `^EG-[A-Z]{1,3}$`, wider
+-- than the application's 27 codes. This migration exists only on the PR
+-- branch — not on `staging`, which is the only branch any environment deploys
+-- migrations from — so no database has ever applied the earlier text.
+--
 -- ROLLBACK is by a forward migration (drop the columns), never by replaying or
--- editing this file.
+-- editing this file once it has shipped.
 
 ALTER TABLE "workspace" ADD COLUMN     "city" TEXT,
 ADD COLUMN     "weekStartsOn" INTEGER;
 
--- A city is an Egyptian governorate code, and only for an Egyptian workspace.
+-- A city is one of Egypt's 27 governorate codes (ISO 3166-2:EG), and only for
+-- an Egyptian workspace. EXACTLY the list the application accepts
+-- (`EGYPT_CITY_CODES` in packages/shared/src/geography.ts); a test proves the
+-- two lists are equal, so they cannot drift apart.
 ALTER TABLE "workspace"
   ADD CONSTRAINT "workspace_city_egypt_only"
-  CHECK ("city" IS NULL OR ("country" = 'EG' AND "city" ~ '^EG-[A-Z]{1,3}$'));
+  CHECK ("city" IS NULL OR ("country" = 'EG' AND "city" IN (
+      'EG-C', 'EG-GZ', 'EG-ALX', 'EG-KB', 'EG-PTS', 'EG-SUZ', 'EG-IS',
+      'EG-DT', 'EG-DK', 'EG-SHR', 'EG-GH', 'EG-MNF', 'EG-BH', 'EG-KFS',
+      'EG-FYM', 'EG-BNS', 'EG-MN', 'EG-AST', 'EG-SHG', 'EG-KN', 'EG-LX',
+      'EG-ASN', 'EG-BA', 'EG-WAD', 'EG-MT', 'EG-SIN', 'EG-JS'
+  )));
 
 -- A weekday: 0 = Sunday … 6 = Saturday.
 ALTER TABLE "workspace"

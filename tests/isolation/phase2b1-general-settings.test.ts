@@ -7,6 +7,7 @@ import {
   generalSettingsFrom,
   saveGeneralSettings,
 } from '../../apps/dashboard/src/server/general-settings';
+import { EGYPT_CITY_CODES } from '@brandspace/shared';
 import { appRoleClient, platformRoleClient } from './fixtures';
 
 /**
@@ -176,6 +177,27 @@ describe('A9 · Settings → General saves the workspace, and only that workspac
         db.workspace.update({ where: { id: fixture.workspaceId }, data: { weekStartsOn: 7 } }),
       ),
     ).rejects.toThrow(/workspace_week_starts_on_range/);
+  });
+
+  it('review item 6: the database takes every one of the 27 governorates, and nothing that merely looks like one', async () => {
+    const fixture = await workspaceWithBrand('city-list');
+    await platform.workspace.update({
+      where: { id: fixture.workspaceId },
+      data: { country: 'EG', timezone: 'Africa/Cairo' },
+    });
+    for (const city of EGYPT_CITY_CODES) {
+      await platform.workspace.update({ where: { id: fixture.workspaceId }, data: { city } });
+    }
+    // Shaped like a code (the old `^EG-[A-Z]{1,3}$` accepted them), but not a governorate.
+    for (const city of ['EG-ZZ', 'EG-A', 'EG-XYZ']) {
+      await expect(
+        platform.workspace.update({ where: { id: fixture.workspaceId }, data: { city } }),
+        city,
+      ).rejects.toThrow(/workspace_city_egypt_only/);
+    }
+    expect(
+      (await platform.workspace.findUniqueOrThrow({ where: { id: fixture.workspaceId } })).city,
+    ).toBe(EGYPT_CITY_CODES[EGYPT_CITY_CODES.length - 1]);
   });
 });
 

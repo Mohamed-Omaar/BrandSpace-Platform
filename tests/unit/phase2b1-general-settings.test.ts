@@ -176,3 +176,21 @@ describe('G1 · the save bar on every draftable Settings tab', () => {
     expect(calendar).not.toMatch(/gapWindow\([^)]*policy\.calendar\.weekStartsOn/);
   });
 });
+
+describe('Review item 6 · the database accepts exactly the application’s city codes', () => {
+  it('the migration CHECK lists precisely EGYPT_CITY_CODES — same set, no extra, no duplicate', () => {
+    const sql = read(
+      'packages/database/prisma/migrations/20260929090000_workspace_general_fields/migration.sql',
+    );
+    const check =
+      /ADD CONSTRAINT "workspace_city_egypt_only"([\s\S]*?)\)\)\);/.exec(sql)?.[1] ?? '';
+    // An IN list, never a pattern wider than the list.
+    expect(check).toContain('"city" IN (');
+    expect(check).not.toMatch(/~|SIMILAR TO|LIKE/);
+    const listed = [...check.matchAll(/'(EG-[A-Z]+)'/g)].map((match) => match[1]);
+    expect(listed).toHaveLength(EGYPT_CITY_CODES.length);
+    expect(new Set(listed).size).toBe(listed.length);
+    expect([...listed].sort()).toEqual([...EGYPT_CITY_CODES].sort());
+    expect(EGYPT_CITY_CODES).toHaveLength(27);
+  });
+});
