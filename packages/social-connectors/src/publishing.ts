@@ -439,10 +439,34 @@ export class PublishPipelineService {
       });
     }
 
-    const inserted =
-      rows.length === 0
-        ? { count: 0 }
-        : await this.#db.publishJob.createMany({ data: rows, skipDuplicates: true });
+    if (rows.length === 0) {
+      return { slotId, created: 0, existing: 0, skipped: 0, skipReason: 'no_matching_variant' };
+    }
+
+    /*
+     * THE CLAIM (review item 4). Everything above was decided from the slot as
+     * it was READ. A time-zone change (D-334) can commit in between — moving
+     * the post back to PLANNED or to another instant — and jobs built from the
+     * stale read would publish a post that is no longer due. So the slot is
+     * locked HERE, and only if it is still SCHEDULED at the instant this
+     * materialisation read. No match: nothing is created and the slot is left
+     * alone. A change arriving after this point waits for the lock and then
+     * finds the slot PUBLISHING, which it does not move.
+     *
+     * THE LOCK, THE INSERT AND THE TRANSITION share the caller's transaction:
+     * a failure anywhere below rolls all three back, so a slot is never left
+     * PUBLISHING without its jobs.
+     */
+    const claimed = await this.#db.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "calendar_slot"
+       WHERE "id" = ${slot.id}::uuid
+         AND "workspaceId" = ${this.#workspaceId}::uuid
+         AND "status" = 'SCHEDULED'
+         AND date_trunc('milliseconds', "scheduledAtUtc") = ${slot.scheduledAtUtc}
+       FOR UPDATE`;
+    if (claimed.length === 0) return empty('slot_changed');
+
+    const inserted = await this.#db.publishJob.createMany({ data: rows, skipDuplicates: true });
     const created = inserted.count;
     const existing = rows.length - created;
 
