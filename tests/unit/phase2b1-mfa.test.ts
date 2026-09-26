@@ -65,6 +65,19 @@ describe('G4 · turning it off, and "New phone", go through the counted step-up'
     const api = read('apps/api/src/routes/account.ts');
     expect(api).toContain("reason: 'MFA_REQUIRED_BY_WORKSPACE'");
   });
+
+  it('review item 11: the API disable uses the same counted step-up and fails closed', () => {
+    const api = read('apps/api/src/routes/account.ts');
+    const route = api.slice(api.indexOf("'/v1/account/mfa/disable'"));
+    const body = route.slice(0, route.indexOf('\n  );\n'));
+    expect(body).toContain('auth.stepUp({');
+    expect(body).toContain('signup.disableMfaWith(userId, proof)');
+    // No second MFA path, and an unreadable requirement is never read as "none".
+    expect(body).not.toContain('.disableMfa(');
+    expect(body).not.toMatch(/\.catch\(\(\) => \[\]\)/);
+    // The requirement is checked before the proof.
+    expect(body.indexOf('requireMfa')).toBeLessThan(body.indexOf('auth.stepUp({'));
+  });
 });
 
 describe('G4 · the workspace requirement', () => {

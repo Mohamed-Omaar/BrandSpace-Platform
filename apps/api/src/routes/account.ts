@@ -39,6 +39,15 @@ const signupSchema = z.object({
 const emailOnlySchema = z.object({ email: z.string().min(3).max(320) });
 const tokenSchema = z.object({ token: z.string().min(10).max(512) });
 const codeSchema = z.object({ code: z.string().min(4).max(32) });
+/** Turning two-step off: a current code, OR the account password (never neither). */
+const disableSchema = z
+  .object({
+    code: z.string().trim().max(32).optional(),
+    password: z.string().max(1_024).optional(),
+  })
+  .refine((body) => (body.code ?? '') !== '' || (body.password ?? '') !== '', {
+    message: 'A code or the password is required.',
+  });
 
 /**
  * The caller's address and device, read the same way the dashboard reads them.
@@ -293,7 +302,12 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     },
   );
 
-  /** Turn it off. Requires a working code, not merely a session. */
+  /**
+   * Turn it off — the SAME rules as Settings → Security (G4, D-333; review
+   * item 11): a current code (authenticator or recovery) OR the account
+   * password, checked only through the counted, rate-limited step-up, and
+   * refused while any workspace the person belongs to requires two-step.
+   */
   route(
     app,
     'POST',
@@ -302,25 +316,44 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const user = await resolveUser(req, reply);
       if (!user) return;
-      const parsed = codeSchema.safeParse(req.body);
+      const parsed = disableSchema.safeParse(req.body);
       if (!parsed.success) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
-      /*
-       * G4 / Q23 (D-333): NOT WHILE A WORKSPACE REQUIRES IT. Asked before the
-       * code is checked, so a recovery code is never spent on a refusal.
-       */
-      const workspaces = await new CustomerAuthService({ prisma: getPrisma() })
-        .listWorkspaces(sessionTokenFrom(req) ?? '', {
+      const token = sessionTokenFrom(req) ?? '';
+      const auth = new CustomerAuthService({ prisma: getPrisma() });
+      try {
+        /*
+         * NOT WHILE A WORKSPACE REQUIRES IT — asked before any proof is checked,
+         * so a recovery code is never spent on a refusal. FAIL CLOSED: if the
+         * requirement cannot be read, the answer is "refused", never "none".
+         */
+        const workspaces = await auth.listWorkspaces(token, {
           includePendingDeletion: true,
           includeMfaRequired: true,
-        })
-        .catch(() => []);
-      if (workspaces.some((workspace) => workspace.requireMfa)) {
-        return reply
-          .code(409)
-          .send({ error: { code: 'CONFLICT', reason: 'MFA_REQUIRED_BY_WORKSPACE' } });
-      }
-      try {
-        await (await signupService()).disableMfa(user, parsed.data.code);
+        });
+        if (workspaces.some((workspace) => workspace.requireMfa)) {
+          return await reply
+            .code(409)
+            .send({ error: { code: 'CONFLICT', reason: 'MFA_REQUIRED_BY_WORKSPACE' } });
+        }
+        const signup = await signupService();
+        const proof =
+          parsed.data.code !== undefined && parsed.data.code !== ''
+            ? { code: parsed.data.code }
+            : { password: parsed.data.password ?? '' };
+        // THE ONE COUNTED STEP-UP the dashboard uses: its own per-account
+        // ceiling, refused while locked, and a wrong proof counts toward the
+        // lockout.
+        const ok = await auth.stepUp({
+          token,
+          attempt: (userId) => signup.disableMfaWith(userId, proof),
+          ip: ipOf(req),
+          userAgent: userAgentOf(req),
+        });
+        if (!ok) {
+          return await reply
+            .code(401)
+            .send({ error: { code: 'UNAUTHENTICATED', reason: 'MFA_PROOF_FAILED' } });
+        }
         return await reply.send({ disabled: true });
       } catch (error: unknown) {
         return fail(reply, 'account.mfa.disable', error);
