@@ -282,7 +282,7 @@ export class CustomerAuthService {
     const customer = await this.resolve(input.token);
     if (!customer) throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
     await this.#limiter.enforce(
-      'signin:account',
+      'step-up:account',
       customer.email,
       this.#ceilings.signInPerAccount,
       this.#ceilings.windowSeconds,
