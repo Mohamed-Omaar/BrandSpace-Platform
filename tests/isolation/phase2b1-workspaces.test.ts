@@ -56,9 +56,14 @@ const plans = readPlanCatalogue({
     },
   ],
 });
-const ONE = findPlan(plans, `ws-one-${run}`);
-const TWO = findPlan(plans, `ws-two-${run}`);
-const FIVE = findPlan(plans, `ws-five-${run}`);
+function plan(key: string) {
+  const found = findPlan(plans, key);
+  if (!found) throw new Error(`fixture plan ${key} is missing`);
+  return found;
+}
+const ONE = plan(`ws-one-${run}`);
+const TWO = plan(`ws-two-${run}`);
+const FIVE = plan(`ws-five-${run}`);
 
 async function verifiedUser(label: string): Promise<string> {
   const user = await platform.user.create({
