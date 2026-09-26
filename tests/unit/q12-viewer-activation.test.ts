@@ -102,4 +102,25 @@ describe('Q12 · the Viewer is offered no control it would be refused', () => {
     expect(page).toContain("permissionKey: 'content.create',");
     expect(viewer).not.toContain('content.create');
   });
+
+  it('a read-only composer shows the slides and no media control at all', () => {
+    const slides = read('apps/dashboard/src/app/[locale]/content/compose/media-slides.tsx');
+    // Move, replace, cover and remove live in one block, and Add media in another;
+    // both are omitted — not disabled — when the list is read-only.
+    expect(slides).toMatch(/\{disabled \? null : \(\s*<span className="cs-slide-actions">/);
+    expect(slides).toMatch(
+      /\{disabled \? null : \(\s*<button[\s\S]*?data-testid=\{`\$\{testId\}-add`\}/,
+    );
+  });
+
+  it('the composer links to the Brand Brain only for a member who may open it', () => {
+    const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+    expect(editor.match(/\{can\.readBrain \? \(/g)).toHaveLength(2);
+    expect(editor).toContain('{can.teachBrain ? (');
+    const page = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
+    expect(page).toContain("readBrain: workspace.permissionKeys.includes('brand_brain.read'),");
+    expect(page).toContain("teachBrain: workspace.permissionKeys.includes('brand_brain.edit'),");
+    expect(viewer).not.toContain('brand_brain.read');
+    expect(viewer).not.toContain('brand_brain.edit');
+  });
 });

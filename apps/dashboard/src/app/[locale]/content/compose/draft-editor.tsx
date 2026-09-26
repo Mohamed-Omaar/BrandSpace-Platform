@@ -65,6 +65,10 @@ export interface DraftEditorProps {
     attachCampaign?: boolean;
     uploadMedia: boolean;
     schedule?: boolean;
+    /** Q12 — may open the Brand Brain (`brand_brain.read`); a link otherwise refused. */
+    readBrain?: boolean;
+    /** Q12 — may add knowledge (`brand_brain.edit`), the onboarding "learn" step. */
+    teachBrain?: boolean;
   };
   /** D-288 — the approval policy and a changes request, when there is one. */
   readonly review?: {
@@ -423,26 +427,35 @@ export function DraftEditor({
           ) : (
             <p className="cs-hint">{t['editor.brain.noSources']}</p>
           )}
-          <Link className="cs-ghost-button cs-compact" href={brainHref}>
-            {t['editor.brain.open']}
-          </Link>
+          {can.readBrain ? (
+            <Link className="cs-ghost-button cs-compact" href={brainHref}>
+              {t['editor.brain.open']}
+            </Link>
+          ) : null}
         </details>
 
         {draft.insufficientKnowledge ? (
           <div className="cs-notice warning" role="status" data-testid="content-insufficient">
             <b>{t['content.insufficient']}</b>
             <p>{t['editor.insufficientBody']}</p>
-            <div className="cs-channel-row">
-              <Link
-                className="cs-ghost-button cs-compact"
-                href={`/${locale}/onboarding?step=learn`}
-              >
-                {t['editor.insufficient.add']}
-              </Link>
-              <Link className="cs-ghost-button cs-compact" href={brainHref}>
-                {t['editor.brain.open']}
-              </Link>
-            </div>
+            {/* Q12 — only the doors this member may walk through. */}
+            {can.teachBrain || can.readBrain ? (
+              <div className="cs-channel-row">
+                {can.teachBrain ? (
+                  <Link
+                    className="cs-ghost-button cs-compact"
+                    href={`/${locale}/onboarding?step=learn`}
+                  >
+                    {t['editor.insufficient.add']}
+                  </Link>
+                ) : null}
+                {can.readBrain ? (
+                  <Link className="cs-ghost-button cs-compact" href={brainHref}>
+                    {t['editor.brain.open']}
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

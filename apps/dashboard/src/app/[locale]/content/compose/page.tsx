@@ -839,6 +839,8 @@ export default async function ComposePage({
         formatPlatforms={formatPlatforms}
         can={{
           create: workspace.permissionKeys.includes('content.create'),
+          readBrain: workspace.permissionKeys.includes('brand_brain.read'),
+          teachBrain: workspace.permissionKeys.includes('brand_brain.edit'),
           // B-2 — a published post is read-only whatever the member may do.
           edit: workspace.permissionKeys.includes('content.edit') && !composerDraft?.readOnly,
           submit: workspace.permissionKeys.includes('content.submit'),

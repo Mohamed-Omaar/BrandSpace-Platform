@@ -157,6 +157,10 @@ export interface ComposerViewProps {
      * offered; writing it yourself still is.
      */
     generate?: boolean;
+    /** Q12 — may open the Brand Brain (`brand_brain.read`); a link otherwise refused. */
+    readBrain?: boolean;
+    /** Q12 — may add knowledge (`brand_brain.edit`), the onboarding "learn" step. */
+    teachBrain?: boolean;
   };
   readonly tools: readonly string[];
   /** PHASE 6 FINAL (D-285) — the Creative Studio's sizes, for the media drawer. */
