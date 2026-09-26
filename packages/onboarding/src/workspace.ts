@@ -24,7 +24,7 @@
 
 import type { TenantScopedClient } from '@brandspace/database';
 import type { CommercePolicy } from '@brandspace/billing';
-import type { PlanDetail } from '@brandspace/entitlements';
+import { ownedWorkspaceFacts, workspaceAllowance, type PlanDetail } from '@brandspace/entitlements';
 import { AppError, normaliseCurrency, type Clock, systemClock } from '@brandspace/shared';
 
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,48})[a-z0-9]$/;
@@ -104,6 +104,12 @@ export class WorkspaceOnboardingService {
     commerce: CommercePolicy,
     trialPlan: PlanDetail | null,
     planVersionId: string | null,
+    /**
+     * The ACTIVE plan catalogue, which the workspace allowance is read from
+     * (Q1, D-326). Required: an allowance decided without the catalogue would
+     * be a guess.
+     */
+    plans: readonly PlanDetail[],
   ): Promise<WorkspaceCreated> {
     const slug = input.slug.trim().toLowerCase();
     if (!SLUG_PATTERN.test(slug)) {
@@ -133,6 +139,76 @@ export class WorkspaceOnboardingService {
       // path is addressed to it.
       throw new AppError('FORBIDDEN', 'Verify your email address first.');
     }
+
+    return inOneTransaction(db, async (tx) => {
+      await this.#assertWithinAllowance(tx, owner.id, plans);
+      return this.#createFor(tx, input, trialPlan, planVersionId, owner.id, slug, name);
+    });
+  }
+
+  /**
+   * THE WORKSPACE ALLOWANCE (Q1 / A2, D-326), enforced where the row is written.
+   *
+   * ONLY AN OWNER CREATES ANOTHER WORKSPACE (A2). A person who owns none may
+   * create their first — the sign-up path — unless they are already a member of
+   * some other business: joining one by invitation does not make somebody an
+   * owner, and the allowance comes from an owner's plans.
+   *
+   * THE OWNER'S ROW IS LOCKED FIRST, so two concurrent requests from the same
+   * person serialise here: the second one counts the first one's workspace and
+   * is refused at the limit, rather than both reading the same count.
+   */
+  async #assertWithinAllowance(
+    tx: TenantScopedClient,
+    ownerUserId: string,
+    plans: readonly PlanDetail[],
+  ): Promise<void> {
+    await (
+      tx as unknown as { $queryRaw: (q: TemplateStringsArray, ...v: unknown[]) => Promise<unknown> }
+    ).$queryRaw`SELECT "id" FROM "user" WHERE "id" = ${ownerUserId}::uuid FOR UPDATE`;
+
+    const facts = await ownedWorkspaceFacts(tx as never, ownerUserId);
+    const allowance = workspaceAllowance(facts, plans);
+    if (allowance.used === 0) {
+      const memberships = await tx.membership.count({
+        where: {
+          userId: ownerUserId,
+          status: 'ACTIVE',
+          workspace: { deletedAt: null, status: { not: 'DELETED' } },
+        },
+      });
+      if (memberships > 0) {
+        throw new AppError(
+          'FORBIDDEN',
+          'Only the owner of a business can create another workspace.',
+          { reason: 'WORKSPACE_OWNER_ONLY' },
+        );
+      }
+      return;
+    }
+    if (!allowance.canCreate) {
+      throw new AppError(
+        'QUOTA_EXCEEDED',
+        'Your plan allows no more workspaces. Upgrade to add another.',
+        {
+          reason: 'WORKSPACE_ALLOWANCE_REACHED',
+          used: allowance.used,
+          allowed: allowance.allowed ?? 0,
+        },
+      );
+    }
+  }
+
+  async #createFor(
+    db: TenantScopedClient,
+    input: CreateWorkspaceFromOnboardingInput,
+    trialPlan: PlanDetail | null,
+    planVersionId: string | null,
+    ownerId: string,
+    slug: string,
+    name: string,
+  ): Promise<WorkspaceCreated> {
+    const owner = { id: ownerId };
 
     const ownerRole = await db.role.findFirst({
       where: { key: 'workspace_owner', realm: 'WORKSPACE', workspaceId: null },
@@ -278,6 +354,24 @@ export class WorkspaceOnboardingService {
       throw error;
     }
   }
+}
+
+/**
+ * Run `fn` in ONE transaction on `db`.
+ *
+ * The platform client a caller passes can open one, and the allowance check,
+ * the owner-row lock and every row this service writes must commit or roll
+ * back together — the lock only serialises anything while it is held. A client
+ * that is ALREADY a transaction (no `$transaction`) runs `fn` inline.
+ */
+async function inOneTransaction<T>(
+  db: TenantScopedClient,
+  fn: (tx: TenantScopedClient) => Promise<T>,
+): Promise<T> {
+  const runner = db as unknown as {
+    $transaction?: (callback: (tx: TenantScopedClient) => Promise<T>) => Promise<T>;
+  };
+  return typeof runner.$transaction === 'function' ? runner.$transaction(fn) : fn(db);
 }
 
 /**

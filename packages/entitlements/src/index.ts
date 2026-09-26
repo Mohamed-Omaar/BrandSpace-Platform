@@ -19,3 +19,4 @@ export * from './service';
 export * from './subscription';
 export * from './storage-recompute';
 export * from './usage';
+export * from './workspace-allowance';

@@ -490,6 +490,14 @@ const planQuotasSchema = z.object({
   scheduledPostsPerMonth: z.number().int().positive().nullable().default(null),
   storageGb: z.number().int().positive().nullable().default(null),
   analyticsRetentionDays: z.number().int().positive().nullable().default(null),
+  /**
+   * WORKSPACE ALLOWANCE (Q1, prototype v94 Phase 2B-1). How many workspaces an
+   * OWNER on this plan may own — an account-level allowance read from the plan,
+   * never a per-workspace entitlement, so it has no `limit.*` projection and no
+   * usage counter (`workspaceAllowance` in `@brandspace/entitlements` counts the
+   * owner's workspaces live). `null` is unlimited, as for every quota here.
+   */
+  workspaces: z.number().int().positive().nullable().default(null),
 });
 
 const plansSchema = z.object({

@@ -324,6 +324,11 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   the member acts on the workspace's oldest brand they may see (no brand selector), and Plan & usage
   hides the brand-limit rows. All multi-brand code is kept. The end-to-end seed turns it on for the one
   multi-brand fixture workspace only.
+- **Q1 / A2 / G7 — the allowance (D-326).** Plans gain a `workspaces` quota (Control Center plan
+  editor, `null` = unlimited). It is an ACCOUNT allowance read from the plans the owner's workspaces
+  are on (`workspaceAllowance` in `@brandspace/entitlements`), not a per-workspace `limit.*`
+  entitlement and not a new billing record. `WorkspaceOnboardingService.create` enforces it in one
+  transaction, after locking the owner's row; a member who owns no workspace may not create one.
 
 ---
 

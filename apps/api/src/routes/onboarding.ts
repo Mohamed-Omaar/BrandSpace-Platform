@@ -105,6 +105,7 @@ export function registerOnboardingRoutes(app: FastifyInstance): void {
           commerce,
           trialPlan,
           catalogue.versionId,
+          catalogue.plans,
         );
 
         // Put the new workspace in scope for this session, so the customer lands
