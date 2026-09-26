@@ -317,6 +317,14 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
   (tokens `--bs-scrollbar-thumb`, `--bs-scrollbar-thumb-hover`); the sidebar navigation gained the
   demo's `.nav-scroll` hiding rules as `.bs-nav-scroll`; `UI-FIDELITY-CONTRACT.md` §6.3.31.
 
+### 6.2 How Phase 2B-1 was built
+
+- **Q2b (D-327).** `feature.multi_brand` is a Control Center feature registered by nobody in code, so
+  it fails closed ("Nobody"). While it is off the server refuses a second brand (`createBrandFor`),
+  the member acts on the workspace's oldest brand they may see (no brand selector), and Plan & usage
+  hides the brand-limit rows. All multi-brand code is kept. The end-to-end seed turns it on for the one
+  multi-brand fixture workspace only.
+
 ---
 
 ## Appendix — prototype decisions (v76)

@@ -10,6 +10,7 @@ export * from './beta-cohorts';
 export * from './credit-ledger';
 export * from './credit-policy';
 export * from './credits';
+export * from './multi-brand';
 export * from './plan-catalogue';
 export * from './plan-quota';
 export * from './precedence';
