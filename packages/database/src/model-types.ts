@@ -29,6 +29,7 @@ export type {
   BrandSourceDocument,
   // Phase 5B-2 — AI Content Studio.
   ContentItem,
+  ContentTemplate,
   ContentVariant,
   // Phase 5B-2 — Content Calendar.
   CalendarSlot,

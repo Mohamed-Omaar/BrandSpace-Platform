@@ -23,6 +23,9 @@ import { translator } from '../../../i18n/messages';
 
 const log = createLogger({ context: { component: 'dashboard.content' } });
 
+/** A uuid's shape, and nothing more: a form field is never trusted beyond it. */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Content Studio actions — the half that never calls a model.
  *
@@ -204,6 +207,13 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
      * index is what decides that rather than a check in this handler.
      */
     const idempotencyKey = String(formData.get('idempotencyKey') ?? '') || randomUUID();
+    /*
+     * E4 / B2 — the template the composer started from, when it did. An id
+     * shape only: the library resolves it against THIS brand and the member's
+     * scope, and fills only what the form left blank.
+     */
+    const templateValue = String(formData.get('templateId') ?? '');
+    const templateId = UUID_SHAPE.test(templateValue) ? templateValue : null;
 
     const itemId = await inContentStudio(session.workspace.workspaceId, async (services) => {
       const [library, policy] = await Promise.all([services.library(), services.policy()]);
@@ -226,6 +236,7 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
         })),
         campaignId,
         idempotencyKey,
+        templateId,
         expiresAt: resolveContentExpiry(policy, facts, systemClock),
         ...actorOf(session),
       });

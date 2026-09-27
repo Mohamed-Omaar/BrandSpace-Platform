@@ -23,6 +23,23 @@ export type {
 } from './requests';
 
 export { ContentLibraryService, READ_ONLY_CONTENT_STATUSES } from './library';
+
+/* Phase 2B-2 — post templates (prototype v90 E4 / B2). */
+export {
+  ContentTemplateService,
+  TEMPLATES_MANAGE_PERMISSION,
+  TEMPLATE_BODY_MAX,
+  TEMPLATE_FIRST_COMMENT_MAX,
+  TEMPLATE_HASHTAGS_MAX,
+  TEMPLATE_NAME_MAX,
+  applyTemplateToDraft,
+  applyTemplateToGeneratedVariant,
+  contentTemplateNotFound,
+  generationDefaults,
+  normaliseHashtags,
+  templateNameTaken,
+} from './templates';
+export type { TemplateActor, TemplateFields, TemplateSource } from './templates';
 export type { ContentLibraryOptions } from './library';
 
 export { ContentCalendarService, RESCHEDULABLE_SLOT_STATUSES, scheduleUsageKey } from './calendar';

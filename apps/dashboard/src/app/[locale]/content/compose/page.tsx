@@ -63,6 +63,7 @@ import {
   ComposerView,
   type ComposerDraft,
   type ComposerPlatform,
+  type ComposerTemplate,
   type ContentLocale,
 } from './composer-view';
 
@@ -634,6 +635,35 @@ export default async function ComposePage({
         return [];
       })
     : [];
+  /*
+   * E4 / B2 — the brand's templates, for a NEW post only, and only for a member
+   * who may create one. Listed under the member's BrandScope; the create paths
+   * re-resolve the chosen id against the brand anyway.
+   */
+  const templates: ComposerTemplate[] =
+    !draft && composingBrandId && workspace.permissionKeys.includes('content.create')
+      ? (
+          await inContentStudio(workspace.workspaceId, async (services) =>
+            (await services.templates()).list({
+              brandId: composingBrandId,
+              brandScope: workspace.brandScope,
+            }),
+          )
+        ).map((template) => ({
+          id: template.id,
+          name: template.name,
+          isDefault: template.isDefault,
+          contentType: template.contentType,
+          platformKeys: template.platformKeys,
+          body: template.body,
+          hashtags: template.hashtags,
+          firstComment: template.firstComment,
+        }))
+      : [];
+  const requestedTemplate = single('template');
+  const initialTemplateId = templates.some((template) => template.id === requestedTemplate)
+    ? (requestedTemplate as string)
+    : '';
   const requestedGoal = single('goal');
   const initialGoal = POST_GOALS.includes(requestedGoal as never) ? (requestedGoal as string) : '';
 
@@ -894,6 +924,8 @@ export default async function ComposePage({
         defaultsBrandId={composingBrandId ?? ''}
         forgetDefault={decidePreferenceAction}
         formatPlatforms={formatPlatforms}
+        templates={templates}
+        initialTemplateId={initialTemplateId}
         can={{
           create: workspace.permissionKeys.includes('content.create'),
           readBrain: workspace.permissionKeys.includes('brand_brain.read'),
@@ -1105,6 +1137,12 @@ const COMPOSER_KEYS = [
   'create.format.unsupported',
   'create.goal.label',
   'create.goal.none',
+  // Phase 2B-2 — post templates (E4 / B2).
+  'create.template.label',
+  'create.template.none',
+  'create.template.default',
+  'create.template.hintWrite',
+  'create.template.hintAi',
   'create.goal.recommended',
   'create.defaults.title',
   'create.defaults.forget',

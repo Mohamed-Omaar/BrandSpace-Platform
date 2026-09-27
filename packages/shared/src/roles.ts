@@ -148,6 +148,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       'copilot.use',
       'automation.read',
       'automation.manage',
+      // E4 (Phase 2B-2): saves, changes and deletes post templates.
+      'templates.manage',
     ],
   },
   {
@@ -292,6 +294,8 @@ export const ROLE_DEFINITIONS: readonly RoleDefinition[] = [
       // strategy; uses the Copilot for the visual work it already does.
       'strategy.read',
       'copilot.use',
+      // E4 (Phase 2B-2): the prototype gives the Designer the post templates.
+      'templates.manage',
     ],
   },
   {

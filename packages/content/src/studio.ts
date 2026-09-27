@@ -20,6 +20,12 @@ import { preferenceInstructions, TONE_KEYS } from './suggestions';
 import { findPlatform, type ContentDialect } from './policy';
 import { resolveContentExpiry, type RetentionInput } from './retention';
 import { validateVariant } from './validation';
+import {
+  ContentTemplateService,
+  applyTemplateToGeneratedVariant,
+  generationDefaults,
+  type TemplateSource,
+} from './templates';
 import { parseGeneratedContent, type GeneratedContent } from './schemas';
 
 /**
@@ -140,6 +146,13 @@ export interface GenerateInput {
   readonly planKey: string | null;
   readonly actorBrandScope: readonly string[];
   readonly retention: RetentionInput;
+  /**
+   * E4 / B2 — a template of THIS brand. Only its NON-PROMPT fields apply
+   * (owner answer D4 (a)): the format and channels when the request named
+   * none, and its hashtags and first comment on what the model wrote. The
+   * caption skeleton never reaches the prompt.
+   */
+  readonly templateId?: string | null | undefined;
 }
 
 export interface GenerationResult {
@@ -215,6 +228,20 @@ export class ContentStudioService extends ContentLibraryService {
      */
     assertBrandInScope(input.actorBrandScope, input.brandId);
     this.#assertBrief(input.brief);
+
+    let template: TemplateSource | null = null;
+    if (input.templateId) {
+      template = await new ContentTemplateService({
+        db: this.db,
+        workspaceId: this.workspaceId,
+        policy: this.policy,
+      }).forBrand({
+        templateId: input.templateId,
+        brandId: input.brandId,
+        brandScope: input.actorBrandScope,
+      });
+      input = { ...input, ...generationDefaults(template, input) };
+    }
     const platforms = this.assertPlatforms(input.platformKeys);
 
     /*
@@ -336,10 +363,12 @@ export class ContentStudioService extends ContentLibraryService {
       dialect,
       aiRequestId: result.requestId,
       expiresAt,
+      template,
     });
 
     await this.#audit(item, input.actorUserId, {
       // Counts, never content, and never the brief (docs/SECURITY.md §11).
+      ...(template ? { templateId: template.id } : {}),
       variants: variants.length,
       citations: retrieval.citations.length,
       knowledgeItems: retrieval.items.length,
@@ -690,15 +719,25 @@ export class ContentStudioService extends ContentLibraryService {
     dialect: ContentDialect;
     aiRequestId: string;
     expiresAt: Date | null;
+    /** E4 / B2 — its hashtags and first comment land on what the model wrote. */
+    template?: TemplateSource | null;
   }): Promise<ContentVariant[]> {
     const written: ContentVariant[] = [];
     for (const produced of args.parsed.variants) {
       const platform = findPlatform(this.policy, produced.platformKey);
       /* c8 ignore next -- the parser only admits requested platform keys. */
       if (!platform) continue;
+      const extras = args.template
+        ? applyTemplateToGeneratedVariant(
+            args.template,
+            { hashtags: produced.hashtags, firstComment: null },
+            platform,
+          )
+        : { hashtags: [...produced.hashtags], firstComment: null };
       const validation = validateVariant(platform, {
         body: produced.body,
-        hashtags: produced.hashtags,
+        hashtags: extras.hashtags,
+        firstComment: extras.firstComment,
       });
       written.push(
         await this.db.contentVariant.create({
@@ -709,7 +748,8 @@ export class ContentStudioService extends ContentLibraryService {
             platformKey: produced.platformKey,
             locale: args.locale,
             body: produced.body,
-            hashtags: [...produced.hashtags],
+            hashtags: extras.hashtags,
+            ...(extras.firstComment ? { firstComment: extras.firstComment } : {}),
             characterCount: validation.characterCount,
             validationState: validation.state,
             ...(validation.errors.length > 0

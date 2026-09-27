@@ -43,6 +43,13 @@ export interface ComposerAsk {
   readonly platformKeys: readonly string[];
   readonly contentLocale: string;
   readonly contentType: string;
+  /**
+   * E4 / B2 — the template the ask starts from. Part of the key only when one
+   * is chosen, so every key minted before templates existed is unchanged; two
+   * asks that differ only by template are two requests, because the template
+   * changes the hashtags and first comment the post is saved with.
+   */
+  readonly templateId?: string;
 }
 
 /**
@@ -62,7 +69,14 @@ function digest(material: readonly unknown[]): string {
 }
 
 function sharedMaterial(ask: ComposerAsk): readonly unknown[] {
-  return [ask.brandId, ask.brief, [...ask.platformKeys].sort(), ask.contentLocale, ask.contentType];
+  const material = [
+    ask.brandId,
+    ask.brief,
+    [...ask.platformKeys].sort(),
+    ask.contentLocale,
+    ask.contentType,
+  ];
+  return ask.templateId ? [...material, ask.templateId] : material;
 }
 
 /**

@@ -93,6 +93,24 @@ export interface ComposerDraft {
   readonly readOnly?: boolean;
 }
 
+/**
+ * E4 / B2 — a post template offered on a NEW post, already narrowed server-side
+ * to the brand being composed for and the member's BrandScope. Choosing one
+ * prefills the format and channels, and — only when writing it yourself — the
+ * caption. Its hashtags and first comment are applied by the server to the
+ * draft it creates, never through a prompt.
+ */
+export interface ComposerTemplate {
+  readonly id: string;
+  readonly name: string;
+  readonly isDefault: boolean;
+  readonly contentType: string;
+  readonly platformKeys: readonly string[];
+  readonly body: string | null;
+  readonly hashtags: readonly string[];
+  readonly firstComment: string | null;
+}
+
 export interface ComposerViewProps {
   readonly locale: string;
   readonly t: Record<string, string>;
@@ -222,6 +240,10 @@ export interface ComposerViewProps {
    * Absent means "no registry answer": every format, every platform.
    */
   readonly formatPlatforms?: Readonly<Record<string, readonly string[]>>;
+  /** E4 / B2 — the templates of `defaultBrandId`, the default first. */
+  readonly templates?: readonly ComposerTemplate[];
+  /** E4 / B2 — a template the reader arrived with (`?template=`), already checked. */
+  readonly initialTemplateId?: string;
   readonly actions: {
     save(formData: FormData): Promise<void>;
     transition(formData: FormData): Promise<void>;
@@ -293,6 +315,8 @@ export function ComposerView({
   forgetDefault,
   initialGoal = '',
   formatPlatforms,
+  templates = [],
+  initialTemplateId = '',
   now = 0,
   creativeFormats = [],
   carriedMedia = null,
@@ -335,17 +359,55 @@ export function ComposerView({
   const offeredTypes = formatPlatforms
     ? contentTypes.filter((type) => (formatPlatforms[type]?.length ?? 0) > 0)
     : contentTypes;
-  const [contentType, setContentType] = useState(offeredTypes[0] ?? contentTypes[0] ?? 'POST');
   const carries = useCallback(
     (type: string, platformKey: string) =>
       !formatPlatforms || (formatPlatforms[type] ?? []).includes(platformKey),
     [formatPlatforms],
   );
+
+  /*
+   * E4 / B2 — THE TEMPLATE A NEW POST STARTS FROM: the one the reader arrived
+   * with, else the brand's default, else none. Only on a new post, and only
+   * for the brand the server listed them for.
+   */
+  const startingTemplate =
+    draft === null
+      ? (templates.find((template) => template.id === initialTemplateId) ??
+        templates.find((template) => template.isDefault) ??
+        null)
+      : null;
+  const [templateId, setTemplateId] = useState(startingTemplate?.id ?? '');
+  const templateFor = (type: string, template: ComposerTemplate | null) => {
+    const format =
+      template && offeredTypes.includes(template.contentType) ? template.contentType : type;
+    const channels = template
+      ? template.platformKeys
+          .filter((key) => platforms.some((platform) => platform.key === key))
+          .filter((key) => carries(format, key))
+          .slice(0, maxVariants)
+      : [];
+    return { format, channels };
+  };
+
+  const [contentType, setContentType] = useState(
+    () => templateFor(offeredTypes[0] ?? contentTypes[0] ?? 'POST', startingTemplate).format,
+  );
   const [selected, setSelected] = useState<string[]>(() => {
+    const fromTemplate = templateFor(contentType, startingTemplate).channels;
+    if (fromTemplate.length > 0) return fromTemplate;
     const first = platforms.find((platform) => carries(contentType, platform.key));
     return first ? [first.key] : [];
   });
-  const [brief, setBrief] = useState(initialBrief);
+  /*
+   * THE CAPTION SKELETON FILLS THE TEXT ONLY WHEN WRITING IT YOURSELF — in that
+   * mode the field IS the post. In AI mode the field is the brief a model
+   * reads, and a template's words never go into a prompt (owner answer D4).
+   */
+  const [brief, setBrief] = useState(
+    () =>
+      initialBrief ||
+      (mode === 'write' && startingTemplate?.body ? startingTemplate.body : initialBrief),
+  );
   const [goal, setGoal] = useState(initialGoal || recommendedGoal || '');
   const [contentLocale, setContentLocale] = useState<ContentLocale>(
     () => brands.find((brand) => brand.id === brandId)?.defaultLocale ?? 'EN',
@@ -435,6 +497,30 @@ export function ComposerView({
    * `idempotency.ts` holds the derivation, and holds it as a pure function
    * because that is what makes this property provable without a browser.
    */
+  /* Templates were listed for the page's brand; another brand has none here. */
+  const offeredTemplates = brandId !== '' && brandId === defaultBrandId ? templates : [];
+  const chosenTemplateId = offeredTemplates.some((template) => template.id === templateId)
+    ? templateId
+    : '';
+
+  const chooseTemplate = (id: string) => {
+    const previous = offeredTemplates.find((template) => template.id === chosenTemplateId) ?? null;
+    const next = offeredTemplates.find((template) => template.id === id) ?? null;
+    setTemplateId(id);
+    setQuote(null);
+    if (!next) return;
+    const { format, channels } = templateFor(contentType, next);
+    setContentType(format);
+    if (channels.length > 0) setSelected(channels);
+    // Only an empty field, or one still holding the previous template's words,
+    // is replaced: nothing the person typed is ever overwritten.
+    if (mode === 'write' && next.body) {
+      setBrief((current) =>
+        current.trim() === '' || current === (previous?.body ?? '') ? (next.body ?? '') : current,
+      );
+    }
+  };
+
   const ask = useMemo(
     () => ({
       brandId,
@@ -442,8 +528,9 @@ export function ComposerView({
       platformKeys: selected,
       contentLocale,
       contentType,
+      ...(chosenTemplateId ? { templateId: chosenTemplateId } : {}),
     }),
-    [brandId, brief, selected, contentLocale, contentType],
+    [brandId, brief, selected, contentLocale, contentType, chosenTemplateId],
   );
   // The GENERATION ask reads the brief the model will read — goal included —
   // so choosing a different goal is a different request, not a retry.
@@ -511,6 +598,7 @@ export function ComposerView({
       locale: contentLocale,
       contentType,
       idempotencyKey: generationIdempotencyKey,
+      ...(chosenTemplateId ? { templateId: chosenTemplateId } : {}),
     });
     setBusy(null);
     if (payload) {
@@ -734,6 +822,34 @@ export function ComposerView({
                     </option>
                   ))}
                 </select>
+              </div>
+            ) : null}
+
+            {offeredTemplates.length > 0 ? (
+              <div className="cs-field">
+                <label htmlFor={`${fieldId}-template`}>{t['create.template.label']}</label>
+                <select
+                  id={`${fieldId}-template`}
+                  value={chosenTemplateId}
+                  data-testid="content-template"
+                  aria-describedby={`${fieldId}-template-hint`}
+                  onChange={(event) => chooseTemplate(event.target.value)}
+                >
+                  <option value="">{t['create.template.none']}</option>
+                  {offeredTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.isDefault
+                        ? (t['create.template.default'] ?? '{name}').replace(
+                            '{name}',
+                            template.name,
+                          )
+                        : template.name}
+                    </option>
+                  ))}
+                </select>
+                <p id={`${fieldId}-template-hint`} className="cs-hint">
+                  {mode === 'write' ? t['create.template.hintWrite'] : t['create.template.hintAi']}
+                </p>
               </div>
             ) : null}
 
@@ -1018,6 +1134,9 @@ export function ComposerView({
                 <input type="hidden" name="contentType" value={contentType} />
                 <input type="hidden" name="body" value={brief} />
                 <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
+                {chosenTemplateId ? (
+                  <input type="hidden" name="templateId" value={chosenTemplateId} />
+                ) : null}
                 {carriedMedia ? (
                   <input type="hidden" name="attach" value={carriedMedia.id} />
                 ) : null}

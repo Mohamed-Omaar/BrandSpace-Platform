@@ -18,6 +18,7 @@ import { ContentApprovalService } from './approvals';
 import { findPlatform, resolveDialect, type ContentDialect, type ContentPolicy } from './policy';
 import { ContentMediaResolver } from './media';
 import { validateVariant } from './validation';
+import { ContentTemplateService, applyTemplateToDraft } from './templates';
 
 /**
  * The half of the Content Studio that NEVER calls a model.
@@ -385,8 +386,29 @@ export class ContentLibraryService {
      * arbiter, not a check-then-act in this method.
      */
     readonly idempotencyKey: string;
+    /**
+     * E4 / B2 — a template of THIS brand to start from. It fills only what the
+     * request left blank (`applyTemplateToDraft`) and never changes the author.
+     * A template of another brand, or outside the member's scope, is NOT_FOUND.
+     */
+    readonly templateId?: string | null | undefined;
   }): Promise<{ item: ContentItem; variants: ContentVariant[]; replayed: boolean }> {
     await this.requireItemForBrandScope(input.brandId, input.actorBrandScope);
+
+    let templateId: string | null = null;
+    if (input.templateId) {
+      const template = await new ContentTemplateService({
+        db: this.db,
+        workspaceId: this.workspaceId,
+        policy: this.policy,
+      }).forBrand({
+        templateId: input.templateId,
+        brandId: input.brandId,
+        brandScope: input.actorBrandScope,
+      });
+      input = { ...input, ...applyTemplateToDraft(template, input, this.policy) };
+      templateId = template.id;
+    }
 
     const platforms = this.assertPlatforms(input.variants.map((variant) => variant.platformKey));
     if (new Set(input.variants.map((v) => v.platformKey)).size !== input.variants.length) {
@@ -573,6 +595,7 @@ export class ContentLibraryService {
         origin: 'HUMAN',
         variants: written.length,
         platformKeys: input.variants.map((v) => v.platformKey),
+        ...(templateId ? { templateId } : {}),
       },
     });
 

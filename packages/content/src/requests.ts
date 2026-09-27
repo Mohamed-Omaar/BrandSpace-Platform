@@ -44,6 +44,8 @@ export const contentQuoteRequestSchema = z.object({
 export const contentGenerateRequestSchema = contentQuoteRequestSchema.extend({
   locale: z.enum(['AR', 'EN']),
   idempotencyKey: z.string().min(8).max(200),
+  /** E4 / B2 — a template of this brand; only its non-prompt fields apply. */
+  templateId: uuid.optional(),
 });
 
 export const contentToolRequestSchema = z.object({
