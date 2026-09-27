@@ -15,6 +15,7 @@ import {
 } from '@brandspace/shared';
 import { contentItemNotFound, contentNotEditable } from './errors';
 import { READ_ONLY_CONTENT_STATUSES } from './library';
+import { campaignDateFromKey, campaignDayKey, todayKeyIn } from './campaign-results';
 
 /**
  * THE CAMPAIGN DOMAIN — Phase 7, and the smallest honest version of
@@ -96,6 +97,10 @@ export function campaignNotFound(): AppError {
 export function campaignVersionConflict(): AppError {
   return new AppError('CONFLICT', 'This campaign has changed since you last saw it.');
 }
+
+/** "Start now" refusals — machine-readable reasons, never matched on a message. */
+export const CAMPAIGN_NOT_PLANNED_REASON = 'campaign_not_planned';
+export const CAMPAIGN_ALREADY_ENDED_REASON = 'campaign_already_ended';
 
 const NAME_MAX = 120;
 
@@ -246,8 +251,23 @@ export class CampaignService {
       throw new AppError('VALIDATION_FAILED', 'A campaign cannot end before it starts.');
     }
 
-    const updated = await this.#db.campaign.update({
-      where: { id: existing.id },
+    /*
+     * A CONDITIONAL WRITE, NOT READ-THEN-WRITE (Phase 2B-2b). The version check
+     * above compares against a row read a moment ago; two saves that both read
+     * version 4 would both pass it and the second would silently overwrite the
+     * first. Putting the version in the WHERE makes the database the referee:
+     * under concurrency exactly one write matches, and the other is refused as
+     * the same conflict the check above raises. "Start now" relies on this too
+     * — it checked the status on the row it read, and only a write against THAT
+     * version may act on the check.
+     */
+    const written = await this.#db.campaign.updateMany({
+      where: {
+        id: existing.id,
+        workspaceId: this.#workspaceId,
+        version: existing.version,
+        deletedAt: null,
+      },
       data: {
         ...(input.name === undefined ? {} : { name: input.name.trim().slice(0, NAME_MAX) }),
         ...(input.objective === undefined ? {} : { objective: input.objective }),
@@ -260,6 +280,8 @@ export class CampaignService {
         version: { increment: 1 },
       },
     });
+    if (written.count !== 1) throw campaignVersionConflict();
+    const updated = await this.#db.campaign.findUniqueOrThrow({ where: { id: existing.id } });
 
     await writeAuditEvent(this.#db, this.#workspaceId, {
       action: 'campaign.updated',
@@ -274,6 +296,55 @@ export class CampaignService {
     });
 
     return updated;
+  }
+
+  /**
+   * B11 (Phase 2B-2b) — "START NOW" on a PLANNED campaign.
+   *
+   * NOT A SECOND START PATH. There is no campaign lifecycle beyond `update()`
+   * (a campaign's status is whatever its editor last set), so this is `update()`
+   * with two fields fixed — `status: ACTIVE` and `startDate: today` in the
+   * WORKSPACE's zone — and the checks that make those two fields honest:
+   *
+   *   - ONLY FROM PLANNED. Anything else is refused (`not_planned`).
+   *   - NEVER PAST ITS END. A campaign whose end date is before today would end
+   *     before it starts; it is refused (`already_ended`) and the end date is
+   *     never moved to make room (owner answer, Phase 2B-2b).
+   *
+   * The status was checked on the row read here, so the write goes through
+   * `update()` against THAT version: if anyone changed the campaign in between,
+   * the conditional write refuses and nothing moves. One transaction (the
+   * caller's), one `campaign.updated` audit event with reason `start_now`.
+   */
+  async startNow(input: {
+    campaignId: string;
+    timezone: string;
+    expectedVersion?: number | undefined;
+    actor: CampaignActor;
+  }): Promise<Campaign> {
+    const existing = await this.#require(input.campaignId, input.actor.brandScope);
+    if (input.expectedVersion !== undefined && existing.version !== input.expectedVersion) {
+      throw campaignVersionConflict();
+    }
+    if (existing.status !== 'PLANNED') {
+      throw new AppError('CONFLICT', 'Only a planned campaign can be started now.', {
+        reason: CAMPAIGN_NOT_PLANNED_REASON,
+      });
+    }
+    const today = todayKeyIn(this.#clock.now(), input.timezone);
+    if (existing.endDate && campaignDayKey(existing.endDate) < today) {
+      throw new AppError('VALIDATION_FAILED', 'This campaign has already ended.', {
+        reason: CAMPAIGN_ALREADY_ENDED_REASON,
+      });
+    }
+    return this.update({
+      campaignId: existing.id,
+      expectedVersion: existing.version,
+      status: 'ACTIVE',
+      startDate: campaignDateFromKey(today),
+      actor: input.actor,
+      reason: 'start_now',
+    });
   }
 
   /**
@@ -458,7 +529,9 @@ export class CampaignService {
         ...(input.includeArchived ? {} : { deletedAt: null }),
         ...(input.statuses?.length ? { status: { in: [...input.statuses] } } : {}),
       },
-      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+      // `id` last so the order is TOTAL — the Best campaign card breaks a tie by
+      // this very order (Phase 2B-2b), and a tie needs a single answer.
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
       take: Math.max(1, Math.min(input.take ?? 50, 200)),
     });
   }

@@ -23,6 +23,11 @@ import {
 } from './metrics';
 import { freshnessFor, type AnalyticsPolicy } from './policy';
 import { countPublishedPosts } from './published';
+import {
+  pooledCampaignRates,
+  type CampaignPooledRate,
+  type PostEngagementSums,
+} from './campaign-rates';
 import type { AnalyticsRegistry } from './registry';
 
 /**
@@ -467,6 +472,77 @@ export class AnalyticsQueryService {
         },
       ];
     });
+  }
+
+  /**
+   * B11 (Phase 2B-2b) — EVERY LIVE CAMPAIGN'S POOLED ENGAGEMENT RATE, over its
+   * whole life, for the "Best campaign" card (D-341).
+   *
+   * ONE GROUPED READ, per post and metric, through the SAME `#where` every other
+   * read here starts from — so the caller's brand filter and authorization scope
+   * intersect exactly as they do for `summary`. The campaign is reached the way
+   * `AnalyticsScope.campaignId` reaches it, through the post (`metric_observation`
+   * carries no `campaignId`), and ARCHIVED campaigns are excluded in the same
+   * predicate, as the Campaigns list excludes them.
+   *
+   * WHOLE LIFE means no window: every daily reading the campaign's posts ever
+   * produced, up to now. Pooling and the "rate unavailable" rule are
+   * `pooledCampaignRates`'s, so they are unit-testable without a database.
+   */
+  async campaignEngagementRates(input: {
+    brandId?: string | undefined;
+    brandScope: readonly string[];
+  }): Promise<ReadonlyMap<string, CampaignPooledRate>> {
+    if (input.brandId) assertBrandInScope(input.brandScope, input.brandId);
+    const lifetime = { start: new Date(0), end: this.#clock.now() };
+
+    const grouped = await this.#db.metricObservation.groupBy({
+      by: ['contentItemId', 'metricKey'],
+      where: {
+        ...this.#where({ brandId: input.brandId, subjectType: 'POST' }, input.brandScope, lifetime),
+        granularity: 'DAY',
+        metricKey: { in: ['engagements', 'impressions'] },
+        contentItemId: { not: null },
+        item: { is: { campaign: { is: { deletedAt: null } } } },
+      },
+      _sum: { value: true },
+    });
+
+    const itemIds = [
+      ...new Set(grouped.flatMap((row) => (row.contentItemId ? [row.contentItemId] : []))),
+    ];
+    if (itemIds.length === 0) return new Map();
+
+    // A SECOND SCOPED READ for each post's campaign, under the same brand
+    // predicate — never a join through an unscoped client.
+    const items = await this.#db.contentItem.findMany({
+      where: {
+        workspaceId: this.#workspaceId,
+        id: { in: itemIds },
+        campaignId: { not: null },
+        ...brandIdQueryFilter({ brandScope: input.brandScope }),
+      },
+      select: { id: true, campaignId: true },
+    });
+    const campaignOf = new Map(items.map((item) => [item.id, item.campaignId]));
+
+    const sums = new Map<string, { engagements: bigint | null; impressions: bigint | null }>();
+    for (const row of grouped) {
+      if (!row.contentItemId) continue;
+      const entry = sums.get(row.contentItemId) ?? { engagements: null, impressions: null };
+      const value = row._sum.value ?? null;
+      if (row.metricKey === 'engagements') entry.engagements = value;
+      if (row.metricKey === 'impressions') entry.impressions = value;
+      sums.set(row.contentItemId, entry);
+    }
+
+    const posts: PostEngagementSums[] = [];
+    for (const [contentItemId, entry] of sums) {
+      const campaignId = campaignOf.get(contentItemId);
+      if (!campaignId) continue;
+      posts.push({ contentItemId, campaignId, ...entry });
+    }
+    return pooledCampaignRates(posts);
   }
 
   /** Per-platform totals for one metric, for the platform-comparison surface. */

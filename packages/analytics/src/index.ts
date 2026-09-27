@@ -70,6 +70,8 @@ export type {
 } from './ingestion';
 
 export { AnalyticsQueryService, changeInMilli } from './queries';
+export { highestPooledRates, pooledCampaignRates } from './campaign-rates';
+export type { CampaignPooledRate, PostEngagementSums } from './campaign-rates';
 export { countPublishedPosts, livePublishedPostWhere } from './published';
 export type { PublishedPostCountInput } from './published';
 export type {
