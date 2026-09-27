@@ -36,6 +36,7 @@ export {
   applyTemplateToGeneratedVariant,
   contentTemplateNotFound,
   generationDefaults,
+  hashtagsIntoFirstComment,
   normaliseHashtags,
   templateNameTaken,
 } from './templates';

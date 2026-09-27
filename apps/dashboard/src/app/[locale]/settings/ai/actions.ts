@@ -7,6 +7,7 @@ import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { inWorkspace, requireWorkspaceAction } from '../../../../server/customer-context';
 import { actionErrorCode } from '../../../../server/denial';
 import { saveBrandAiLanguage } from '../../../../server/brand-ai-language';
+import { saveBrandAiSuggestions } from '../../../../server/publishing-defaults';
 
 const log = createLogger({ context: { component: 'dashboard.ai-settings' } });
 
@@ -21,20 +22,23 @@ export async function saveAiLanguageAction(formData: FormData): Promise<void> {
   let destination: string;
   try {
     const session = await requireWorkspaceAction(locale, 'brand.manage');
-    await inWorkspace(session.workspace.workspaceId, async ({ db }) =>
-      saveBrandAiLanguage(
-        db,
-        {
-          workspaceId: session.workspace.workspaceId,
-          actorUserId: session.customer.userId,
-          brandScope: session.workspace.brandScope,
-        },
-        {
-          brandId: String(formData.get('brandId') ?? ''),
-          defaultLocale: String(formData.get('defaultLocale') ?? ''),
-        },
-      ),
-    );
+    const context = {
+      workspaceId: session.workspace.workspaceId,
+      actorUserId: session.customer.userId,
+      brandScope: session.workspace.brandScope,
+    };
+    const brandId = String(formData.get('brandId') ?? '');
+    await inWorkspace(session.workspace.workspaceId, async ({ db }) => {
+      await saveBrandAiLanguage(db, context, {
+        brandId,
+        defaultLocale: String(formData.get('defaultLocale') ?? ''),
+      });
+      // D7 (Phase 2B-2) — the Home recommendations card, in the same save.
+      await saveBrandAiSuggestions(db, context, {
+        brandId,
+        enabled: formData.get('aiSuggestionsEnabled') === 'on',
+      });
+    });
     destination = `/${locale}/settings/ai?ok=SETTINGS_SAVED`;
   } catch (error: unknown) {
     // Next.js control flow (a redirect from the session gate, notFound, …) is

@@ -152,7 +152,7 @@ export default async function ComposePage({
         ...brandScopeFilter(workspace.brandScope),
       },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, defaultLocale: true },
+      select: { id: true, name: true, defaultLocale: true, defaultPlatformKeys: true },
     }),
   );
 

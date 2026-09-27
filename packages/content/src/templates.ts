@@ -494,3 +494,26 @@ export function applyTemplateToGeneratedVariant(
       generated.firstComment ?? (platform.allowsFirstComment ? template.firstComment : null),
   };
 }
+
+/**
+ * A BRAND'S "HASHTAGS IN THE FIRST COMMENT" DEFAULT (A10, Phase 2B-2).
+ *
+ * Applied when a post is CREATED — by hand or by the model — and only on a
+ * channel that takes a first comment: the tags leave the caption's hashtag list
+ * and are written, marked, at the end of the first comment. Nothing is lost and
+ * nothing is hidden: the editor shows the first comment, and the person may
+ * move them back. A channel with no first comment keeps its tags as they were.
+ */
+export function hashtagsIntoFirstComment(
+  variant: { readonly hashtags: readonly string[]; readonly firstComment: string | null },
+  platform: { readonly allowsFirstComment: boolean },
+): { hashtags: string[]; firstComment: string | null } {
+  if (!platform.allowsFirstComment || variant.hashtags.length === 0) {
+    return { hashtags: [...variant.hashtags], firstComment: variant.firstComment };
+  }
+  const line = variant.hashtags.map((tag) => `#${tag}`).join(' ');
+  return {
+    hashtags: [],
+    firstComment: variant.firstComment ? `${variant.firstComment}\n\n${line}` : line,
+  };
+}

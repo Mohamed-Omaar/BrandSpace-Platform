@@ -516,6 +516,50 @@ export const messages = {
     'settings.timezone': 'المنطقة الزمنية',
     'settings.notifications': 'الإشعارات',
     'settings.ai': 'الذكاء الاصطناعي',
+    'settings.publishing': 'إعدادات النشر الافتراضية',
+    'publishingDefaults.title': 'الإعدادات الافتراضية للنشر',
+    'publishingDefaults.body':
+      'ما يبدأ به المنشور الجديد لهذه العلامة. كل ما هنا اقتراح يمكن تغييره في أي منشور.',
+    'publishingDefaults.channels': 'القنوات الافتراضية',
+    'publishingDefaults.channelsHint':
+      'يبدأ المنشور الجديد بهذه القنوات، ما لم يحدد القالب المختار قنواته.',
+    'publishingDefaults.time': 'الوقت الافتراضي',
+    'publishingDefaults.timeHint':
+      'الوقت الذي يُقترح للنشر الجديد، في يوم الغد. اتركه فارغًا لاستخدام الوقت المعتاد.',
+    'publishingDefaults.hashtags': 'الوسوم في التعليق الأول',
+    'publishingDefaults.hashtagsHint':
+      'في القنوات التي تدعم تعليقًا أول، تُكتب وسوم المنشور الجديد في تعليقه الأول بدلًا من النص.',
+    'publishingDefaults.noBrand': 'أضف علامة تجارية لتحديد إعدادات النشر الخاصة بها.',
+    'templates.title': 'قوالب المنشورات',
+    'templates.body':
+      'نقطة بداية جاهزة للمنشور: الشكل والقنوات والنص والوسوم والتعليق الأول. القالب الافتراضي يُختار تلقائيًا للمنشور الجديد.',
+    'templates.bodyReadOnly':
+      'قوالب هذه العلامة. يمكن لمن يملك صلاحية إدارة القوالب حفظها وتعديلها.',
+    'templates.empty': 'لا توجد قوالب بعد',
+    'templates.emptyBody': 'أنشئ قالبًا أدناه ليبدأ منه فريقك منشوراته.',
+    'templates.emptyReadOnly': 'لم يحفظ أحد قالبًا لهذه العلامة بعد.',
+    'templates.default': 'افتراضي',
+    'templates.noChannels': 'بدون قنوات',
+    'templates.edit': 'تعديل',
+    'templates.makeDefault': 'اجعله افتراضيًا',
+    'templates.clearDefault': 'إلغاء الافتراضي',
+    'templates.delete': 'حذف',
+    'templates.deleteBody': 'سيُحذف القالب. المنشورات التي بدأت منه لا تتغير.',
+    'templates.deleteConfirm': 'حذف القالب',
+    'templates.newTitle': 'قالب جديد',
+    'templates.editTitle': 'تعديل القالب',
+    'templates.name': 'اسم القالب',
+    'templates.format': 'الشكل',
+    'templates.channels': 'القنوات',
+    'templates.caption': 'النص',
+    'templates.captionHint':
+      'يملأ نص المنشور عند كتابته يدويًا. لا يُرسَل إلى الذكاء الاصطناعي أبدًا.',
+    'templates.hashtags': 'الوسوم',
+    'templates.hashtagsHint': 'افصل بينها بمسافة، مثل ‎#إطلاق #جديد',
+    'templates.firstComment': 'التعليق الأول',
+    'templates.makeDefaultOnSave': 'اجعله القالب الافتراضي لهذه العلامة',
+    'templates.save': 'حفظ القالب',
+    'templates.cancelEdit': 'إلغاء',
     'notificationPrefs.title': 'ما الذي يصلني إشعار به',
     'notificationPrefs.body':
       'مفاتيحك الخاصة لجرس الإشعارات في مساحة العمل هذه. لا يراها أحد غيرك. تصلك دائمًا الإشعارات الخاصة بمساحة العمل نفسها، وبحساب يحتاج إلى إعادة الربط، وبمنشور مجدول أعاده تغيير المنطقة الزمنية إلى المخطط.',
@@ -535,6 +579,9 @@ export const messages = {
     'aiSettings.languageHint':
       'تبدأ المسودات الجديدة بهذه اللغة، ويمكنك اختيار لغة أخرى لأي منشور.',
     'aiSettings.noBrand': 'أضف علامة تجارية لاختيار لغة الكتابة الخاصة بها.',
+    'aiSettings.suggestions': 'اقتراحات الذكاء الاصطناعي في الصفحة الرئيسية',
+    'aiSettings.suggestionsHint':
+      'تعرض بطاقة «توصيات BrandSpace» في الصفحة الرئيسية لهذه العلامة. عند الإيقاف تختفي البطاقة وحدها.',
     'settings.country': 'الدولة',
     'settings.city': 'المدينة',
     'settings.cityNone': 'اختر مدينة',
@@ -3307,6 +3354,51 @@ export const messages = {
     'settings.timezone': 'Timezone',
     'settings.notifications': 'Notifications',
     'settings.ai': 'AI',
+    'settings.publishing': 'Publishing defaults',
+    'publishingDefaults.title': 'Publishing defaults',
+    'publishingDefaults.body':
+      'What a new post for this brand starts with. Everything here is a suggestion that any post can change.',
+    'publishingDefaults.channels': 'Default channels',
+    'publishingDefaults.channelsHint':
+      'A new post starts with these channels, unless the template chosen names its own.',
+    'publishingDefaults.time': 'Default time',
+    'publishingDefaults.timeHint':
+      'The time proposed for a new post, tomorrow. Leave empty to use the usual time.',
+    'publishingDefaults.hashtags': 'Hashtags in the first comment',
+    'publishingDefaults.hashtagsHint':
+      'On channels that take a first comment, a new post’s hashtags are written into its first comment instead of the caption.',
+    'publishingDefaults.noBrand': 'Add a brand to set its publishing defaults.',
+    'templates.title': 'Post templates',
+    'templates.body':
+      'A ready starting point for a post: format, channels, caption, hashtags and first comment. The default template is chosen for every new post.',
+    'templates.bodyReadOnly':
+      'This brand’s templates. Members who can manage templates save and change them.',
+    'templates.empty': 'No templates yet',
+    'templates.emptyBody': 'Create one below so your team can start posts from it.',
+    'templates.emptyReadOnly': 'Nobody has saved a template for this brand yet.',
+    'templates.default': 'Default',
+    'templates.noChannels': 'No channels',
+    'templates.edit': 'Edit',
+    'templates.makeDefault': 'Make default',
+    'templates.clearDefault': 'Stop using as default',
+    'templates.delete': 'Delete',
+    'templates.deleteBody':
+      'The template will be deleted. Posts that started from it do not change.',
+    'templates.deleteConfirm': 'Delete template',
+    'templates.newTitle': 'New template',
+    'templates.editTitle': 'Edit template',
+    'templates.name': 'Template name',
+    'templates.format': 'Format',
+    'templates.channels': 'Channels',
+    'templates.caption': 'Caption',
+    'templates.captionHint':
+      'Fills the caption when a post is written by hand. It is never sent to the AI.',
+    'templates.hashtags': 'Hashtags',
+    'templates.hashtagsHint': 'Separate them with spaces, like #launch #new',
+    'templates.firstComment': 'First comment',
+    'templates.makeDefaultOnSave': 'Make this the brand’s default template',
+    'templates.save': 'Save template',
+    'templates.cancelEdit': 'Cancel',
     'notificationPrefs.title': 'What notifies me',
     'notificationPrefs.body':
       'Your own switches for the bell in this workspace. Nobody else sees them. Notices about the workspace itself, an account that needs reconnecting, and a scheduled post a time-zone change sent back to planned always arrive.',
@@ -3327,6 +3419,9 @@ export const messages = {
     'aiSettings.languageHint':
       'New drafts start in this language; you can still choose another for any post.',
     'aiSettings.noBrand': 'Add a brand to choose its writing language.',
+    'aiSettings.suggestions': 'AI suggestions on Home',
+    'aiSettings.suggestionsHint':
+      'Shows the “Recommended by BrandSpace” card on Home for this brand. Turning it off hides that card only.',
     'settings.country': 'Country',
     'settings.city': 'City',
     'settings.cityNone': 'Choose a city',
@@ -5928,6 +6023,12 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   INVITATION_REVOKED: { en: 'Invitation revoked.', ar: 'تم إلغاء الدعوة.' },
   INVITATION_RESENT: { en: 'A new invitation was sent.', ar: 'تم إرسال دعوة جديدة.' },
   SETTINGS_SAVED: { en: 'Settings saved.', ar: 'تم حفظ الإعدادات.' },
+  TEMPLATE_SAVED: { en: 'Template saved.', ar: 'تم حفظ القالب.' },
+  TEMPLATE_DELETED: { en: 'Template deleted.', ar: 'تم حذف القالب.' },
+  TEMPLATE_DEFAULT_CHANGED: {
+    en: 'Default template updated.',
+    ar: 'تم تحديث القالب الافتراضي.',
+  },
   // A8 (D-328) — the owner's workspace deletion request.
   CANCEL_PLAN_FIRST: {
     en: 'Cancel the plan in Billing first; the workspace can then be deleted.',

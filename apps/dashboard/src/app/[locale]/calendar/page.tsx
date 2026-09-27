@@ -17,9 +17,13 @@ import type {
   PostStatus,
   SocialPlatform,
 } from '@brandspace/ui';
-import { currentEnvironment, requireWorkspacePage } from '../../../server/customer-context';
+import {
+  currentEnvironment,
+  inWorkspace,
+  requireWorkspacePage,
+} from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
-import { brandContextFor } from '../../../server/brand-context';
+import { brandContextFor, defaultBrandFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inSocial } from '../../../server/social-context';
 import { isBlocking, needsAttention, publishReadiness } from '../../../server/publish-readiness';
@@ -694,6 +698,23 @@ export default async function CalendarPage({
   const errorText = error ? statusMessage(error, locale, reference) : null;
 
   const brandContext = await brandContextFor(workspace, '/calendar');
+  /*
+   * A10 (Phase 2B-2) — THE BRAND'S OWN DEFAULT TIME comes first when one brand
+   * is in view: the owner's choice beats the configured suggestions, which
+   * beat 09:00. It only proposes; the F2 rule (never a past time) still
+   * decides, in the dialog and on the server.
+   */
+  const viewBrandId = defaultBrandFor(brandContext);
+  const brandDefaultTime = viewBrandId
+    ? ((
+        await inWorkspace(workspace.workspaceId, async ({ db }) =>
+          db.brand.findFirst({
+            where: { id: viewBrandId, deletedAt: null },
+            select: { defaultPostTime: true },
+          }),
+        )
+      )?.defaultPostTime ?? null)
+    : null;
 
   return (
     <WorkspaceShell
@@ -740,7 +761,7 @@ export default async function CalendarPage({
         locale={locale}
         today={todayKey}
         tomorrow={nextDayKey(todayKey)}
-        defaultTime={suggested.times[0] ?? DEFAULT_POST_TIME}
+        defaultTime={brandDefaultTime ?? suggested.times[0] ?? DEFAULT_POST_TIME}
         suggestedTimes={suggested.times}
         preselectDate={requestedDate && requestedDate >= todayKey ? requestedDate : undefined}
         preselectItemId={single('item')}

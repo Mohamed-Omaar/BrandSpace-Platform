@@ -1855,6 +1855,22 @@ model Brand {
   /// A configured key, validated against the activated `content` domain.
   arabicDialect String?
 
+  /// PUBLISHING DEFAULTS (prototype v90 A8 / A10 / B2, Phase 2B-2), edited in
+  /// Settings → Publishing defaults under `brand.manage`. Each proposes; none
+  /// overrides what a person chooses on a post.
+  ///
+  /// The channels a new post starts with (policy platform keys).
+  defaultPlatformKeys    String[] @default([])
+  /// The local time a post is proposed at, `HH:mm` (CHECK in the migration).
+  /// NULL means the calendar's own default.
+  defaultPostTime        String?
+  /// On channels that take a first comment, a new post's hashtags go into its
+  /// first comment instead of the caption.
+  hashtagsInFirstComment Boolean  @default(false)
+  /// Settings → AI: Home shows the "Recommended by BrandSpace" card for this
+  /// brand. Only that card (owner answer D7).
+  aiSuggestionsEnabled   Boolean  @default(true)
+
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   /// Soft delete (docs/DATABASE.md §2). Never applied to ledgers or audit.

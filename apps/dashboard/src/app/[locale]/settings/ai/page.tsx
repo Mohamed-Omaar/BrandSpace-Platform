@@ -11,6 +11,7 @@ import {
 } from '@brandspace/ui';
 import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
+import { CheckboxRow } from '../../../../components/checkbox-row';
 import { brandContextFor, listAccessibleBrands } from '../../../../server/brand-context';
 import { settingsNavItems } from '../../../../server/settings-nav';
 import { saveBarLabels } from '../../../../server/save-bar-labels';
@@ -24,7 +25,8 @@ export const dynamic = 'force-dynamic';
  * SETTINGS → AI (G3, prototype v94 Phase 2B-1, D-331).
  *
  * The language AI writes new drafts in, per brand — `Brand.defaultLocale`, the
- * one field the composer already starts from. `brand.manage`, one form per
+ * one field the composer already starts from — and (Phase 2B-2, owner answer
+ * D7) whether Home shows the brand's "Recommended by BrandSpace" card. `brand.manage`, one form per
  * brand the member may see (one while multi-brand is off, D-327), under the
  * save bar (G1).
  *
@@ -50,7 +52,7 @@ export default async function AiSettingsPage({
     db.brand.findMany({
       where: { id: { in: accessible.map((brand) => brand.id) }, deletedAt: null },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, defaultLocale: true },
+      select: { id: true, name: true, defaultLocale: true, aiSuggestionsEnabled: true },
     }),
   );
 
@@ -100,7 +102,7 @@ export default async function AiSettingsPage({
               {brands.map((brand) => (
                 <li key={brand.id}>
                   <DraftForm
-                    key={brand.defaultLocale}
+                    key={`${brand.defaultLocale}:${String(brand.aiSuggestionsEnabled)}`}
                     action={saveAiLanguageAction}
                     style={{ display: 'grid', gap: spacingTokens.sm }}
                     testId={`ai-form-${brand.id}`}
@@ -130,6 +132,17 @@ export default async function AiSettingsPage({
                         <option value="AR">{t('brandProfile.localeAr')}</option>
                       </select>
                     </Field>
+                    {/*
+                      D7 (Phase 2B-2) — the Home "Recommended by BrandSpace"
+                      card for this brand, and only that card.
+                    */}
+                    <CheckboxRow
+                      name="aiSuggestionsEnabled"
+                      label={t('aiSettings.suggestions')}
+                      hint={t('aiSettings.suggestionsHint')}
+                      checked={brand.aiSuggestionsEnabled}
+                      testId={`ai-suggestions-${brand.id}`}
+                    />
                   </DraftForm>
                 </li>
               ))}

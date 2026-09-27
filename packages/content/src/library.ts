@@ -18,7 +18,11 @@ import { ContentApprovalService } from './approvals';
 import { findPlatform, resolveDialect, type ContentDialect, type ContentPolicy } from './policy';
 import { ContentMediaResolver } from './media';
 import { validateVariant } from './validation';
-import { ContentTemplateService, applyTemplateToDraft } from './templates';
+import {
+  ContentTemplateService,
+  applyTemplateToDraft,
+  hashtagsIntoFirstComment,
+} from './templates';
 
 /**
  * The half of the Content Studio that NEVER calls a model.
@@ -332,6 +336,18 @@ export class ContentLibraryService {
   }
 
   /**
+   * A10 (Phase 2B-2) — whether this brand writes a new post's hashtags into
+   * its first comment. Read from the brand row, never from a request.
+   */
+  protected async hashtagsInFirstCommentFor(brandId: string): Promise<boolean> {
+    const brand = await this.db.brand.findFirst({
+      where: { id: brandId, workspaceId: this.workspaceId },
+      select: { hashtagsInFirstComment: true },
+    });
+    return brand?.hashtagsInFirstComment ?? false;
+  }
+
+  /**
    * The brand must be inside the member's scope before anything is written.
    *
    * NOT `brandIdQueryFilter`, because that helper narrows a `brandId` COLUMN and
@@ -548,11 +564,22 @@ export class ContentLibraryService {
 
     const item = await this.db.contentItem.findUniqueOrThrow({ where: { id: candidateId } });
 
+    const intoFirstComment = await this.hashtagsInFirstCommentFor(input.brandId);
     const written: ContentVariant[] = [];
-    for (const [index, variant] of input.variants.entries()) {
+    for (const [index, requested] of input.variants.entries()) {
       const platform = platforms[index];
       /* c8 ignore next -- assertPlatforms threw for anything unresolvable. */
       if (!platform) continue;
+      // A10 — the brand's default, on channels that take a first comment.
+      const variant = intoFirstComment
+        ? {
+            ...requested,
+            ...hashtagsIntoFirstComment(
+              { hashtags: requested.hashtags ?? [], firstComment: requested.firstComment ?? null },
+              platform,
+            ),
+          }
+        : requested;
       const validation = validateVariant(platform, {
         body: variant.body,
         ...(variant.hashtags ? { hashtags: variant.hashtags } : {}),

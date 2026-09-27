@@ -119,7 +119,13 @@ export interface ComposerViewProps {
    * post is written in when the author has not chosen (D-277). Never the UI
    * locale: a team may run an Arabic-speaking brand from an English interface.
    */
-  readonly brands: readonly { id: string; name: string; defaultLocale?: 'AR' | 'EN' }[];
+  readonly brands: readonly {
+    id: string;
+    name: string;
+    defaultLocale?: 'AR' | 'EN';
+    /** A10 (Phase 2B-2) — the channels a new post for this brand starts with. */
+    defaultPlatformKeys?: readonly string[];
+  }[];
   /**
    * The globally selected brand, or null when the rail is on "All brands".
    *
@@ -392,9 +398,21 @@ export function ComposerView({
   const [contentType, setContentType] = useState(
     () => templateFor(offeredTypes[0] ?? contentTypes[0] ?? 'POST', startingTemplate).format,
   );
+  /*
+   * A10 (Phase 2B-2) — THE BRAND'S DEFAULT CHANNELS, the ones the format can
+   * carry. A template's own channels come first; the first carrying channel
+   * is the last resort, as before.
+   */
+  const brandDefaultChannels = (id: string, type: string) =>
+    (brands.find((brand) => brand.id === id)?.defaultPlatformKeys ?? [])
+      .filter((key) => platforms.some((platform) => platform.key === key))
+      .filter((key) => carries(type, key))
+      .slice(0, maxVariants);
   const [selected, setSelected] = useState<string[]>(() => {
     const fromTemplate = templateFor(contentType, startingTemplate).channels;
     if (fromTemplate.length > 0) return fromTemplate;
+    const fromBrand = brandDefaultChannels(brandId, contentType);
+    if (fromBrand.length > 0) return fromBrand;
     const first = platforms.find((platform) => carries(contentType, platform.key));
     return first ? [first.key] : [];
   });
@@ -795,6 +813,8 @@ export function ComposerView({
                   onChange={(event) => {
                     setBrandId(event.target.value);
                     setQuote(null);
+                    const fromBrand = brandDefaultChannels(event.target.value, contentType);
+                    if (fromBrand.length > 0) setSelected(fromBrand);
                   }}
                 >
                   {/*

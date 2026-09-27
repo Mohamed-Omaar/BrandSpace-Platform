@@ -73,4 +73,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261005090000_runtime_roles_read_migration_history',
   '20261006090000_templates_manage_permission',
   '20261006100000_content_template',
+  '20261006110000_brand_publishing_defaults',
 ];

@@ -632,9 +632,12 @@ describe('F2 · no scheduling in the past; new posts default to tomorrow 09:00',
     const page = read('apps/dashboard/src/app/[locale]/calendar/page.tsx');
     expect(page).toContain('isPast: key < todayKey,');
     expect(page).toContain('tomorrow={nextDayKey(todayKey)}');
-    // G6 (D-329): the country's first SUGGESTED time when an operator configured
-    // some; otherwise the ordinary 09:00, exactly as before.
-    expect(page).toContain('defaultTime={suggested.times[0] ?? DEFAULT_POST_TIME}');
+    // A10 (Phase 2B-2): the brand's own default time first, when one brand is
+    // in view; then G6 (D-329): the country's first SUGGESTED time when an
+    // operator configured some; otherwise the ordinary 09:00, exactly as before.
+    expect(page).toContain(
+      'defaultTime={brandDefaultTime ?? suggested.times[0] ?? DEFAULT_POST_TIME}',
+    );
     // …except on today, where 09:00 may have passed: no time is proposed.
     const calendarView = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
     expect(calendarView).toContain(

@@ -24,6 +24,7 @@ import {
   ContentTemplateService,
   applyTemplateToGeneratedVariant,
   generationDefaults,
+  hashtagsIntoFirstComment,
   type TemplateSource,
 } from './templates';
 import { parseGeneratedContent, type GeneratedContent } from './schemas';
@@ -722,18 +723,21 @@ export class ContentStudioService extends ContentLibraryService {
     /** E4 / B2 — its hashtags and first comment land on what the model wrote. */
     template?: TemplateSource | null;
   }): Promise<ContentVariant[]> {
+    const intoFirstComment = await this.hashtagsInFirstCommentFor(args.item.brandId);
     const written: ContentVariant[] = [];
     for (const produced of args.parsed.variants) {
       const platform = findPlatform(this.policy, produced.platformKey);
       /* c8 ignore next -- the parser only admits requested platform keys. */
       if (!platform) continue;
-      const extras = args.template
+      const templated = args.template
         ? applyTemplateToGeneratedVariant(
             args.template,
             { hashtags: produced.hashtags, firstComment: null },
             platform,
           )
         : { hashtags: [...produced.hashtags], firstComment: null };
+      // A10 — the brand's default, on channels that take a first comment.
+      const extras = intoFirstComment ? hashtagsIntoFirstComment(templated, platform) : templated;
       const validation = validateVariant(platform, {
         body: produced.body,
         hashtags: extras.hashtags,
