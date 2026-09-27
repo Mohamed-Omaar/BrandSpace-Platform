@@ -344,3 +344,169 @@ test.describe('B11 · campaign results', () => {
     await expect(page.getByTestId('campaign-status')).toContainText('Planned');
   });
 });
+
+async function seedRule(
+  ws: OwnWorkspace,
+  input: {
+    name: string;
+    triggerType: 'SCHEDULED_TIME' | 'CONTENT_APPROVED';
+    triggerConfig: unknown;
+    actionType: 'NOTIFY' | 'PROPOSE_PUBLISH';
+    conditions?: unknown[];
+  },
+): Promise<string> {
+  const id = randomUUID();
+  await withPlatformPrisma((prisma) =>
+    prisma.automationRule.create({
+      data: {
+        id,
+        workspaceId: ws.workspaceId,
+        brandId: ws.brandId,
+        name: input.name,
+        enabled: false,
+        triggerType: input.triggerType,
+        triggerConfig: input.triggerConfig as never,
+        conditions: (input.conditions ?? []) as never,
+        actionType: input.actionType,
+        actionConfig: (input.actionType === 'NOTIFY'
+          ? { templateKey: 'automation.notice' }
+          : {}) as never,
+        maxRunsPerDay: 0,
+        createdByUserId: ws.ownerId,
+      },
+    }),
+  );
+  return id;
+}
+
+test.describe('B12 + G13 (a) · automations v2', () => {
+  test('a rule is edited in place: name, description and time; the rest stays', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const ws = await ownWorkspace('auto-edit');
+    const ruleId = await seedRule(ws, {
+      name: 'Morning note',
+      triggerType: 'SCHEDULED_TIME',
+      triggerConfig: { hourLocal: 9, daysOfWeek: [] },
+      actionType: 'NOTIFY',
+    });
+    await enter(page, ws.slug);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.getByTestId(`automation-edit-${ruleId}`).click();
+    const form = page.getByTestId('automation-edit-form');
+    await expect(form).toBeVisible();
+    // Trigger and action are named, not offered.
+    await expect(form.getByTestId('automation-trigger')).toHaveCount(0);
+    await expect(form.getByTestId('automation-hour')).toHaveValue('9');
+    await form.getByTestId('automation-name').fill('Early note');
+    await form.getByTestId('automation-description').fill('Before the stand-up.');
+    await form.getByTestId('automation-hour').selectOption('7');
+    await form.getByTestId('automation-edit-submit').click();
+    await page.waitForURL((url) => url.searchParams.get('ok') === 'AUTOMATION_UPDATED');
+    await expect(page.getByTestId('automation-rules')).toContainText('Early note');
+    // Still disabled: editing never switches a rule on.
+    await expect(page.getByTestId('automation-rules')).toContainText('Disabled');
+
+    await page.getByTestId(`automation-edit-${ruleId}`).click();
+    await expect(page.getByTestId('automation-hour')).toHaveValue('7');
+    await expect(page.getByTestId('automation-description')).toHaveValue('Before the stand-up.');
+    await noSeriousViolations(page);
+  });
+
+  test('a rule with several conditions keeps them all when edited', async ({ page, isMobile }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const ws = await ownWorkspace('auto-keep');
+    const ruleId = await seedRule(ws, {
+      name: 'Two conditions',
+      triggerType: 'CONTENT_APPROVED',
+      triggerConfig: {},
+      actionType: 'NOTIFY',
+      conditions: [
+        { field: 'content.type', operator: 'equals', value: 'REEL' },
+        { field: 'content.hasCampaign', operator: 'is_true' },
+      ],
+    });
+    await enter(page, ws.slug);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?edit=${ruleId}`);
+    await expect(page.getByTestId('automation-conditions-kept')).toContainText('2 conditions');
+    await expect(page.getByTestId('automation-condition')).toHaveCount(0);
+    await page.getByTestId('automation-name').fill('Two conditions, renamed');
+    await page.getByTestId('automation-edit-submit').click();
+    await page.waitForURL((url) => url.searchParams.get('ok') === 'AUTOMATION_UPDATED');
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?edit=${ruleId}`);
+    await expect(page.getByTestId('automation-conditions-kept')).toContainText('2 conditions');
+  });
+
+  test('the create form offers campaign, format and post author on a content trigger', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const ws = await ownWorkspace('auto-fields');
+    await seedCampaign(ws, { name: 'Autumn', status: 'ACTIVE' });
+    await enter(page, ws.slug);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    const fields = page.getByTestId('automation-condition-field');
+    await fields.selectOption('content.campaignId');
+    await expect(page.getByTestId('automation-condition-value')).toContainText('Autumn');
+    await fields.selectOption('content.type');
+    await expect(page.getByTestId('automation-condition-value')).toContainText('Reel');
+    await fields.selectOption('content.authorUserId');
+    await expect(page.getByTestId('automation-condition-value').locator('option')).not.toHaveCount(
+      0,
+    );
+  });
+
+  test('"Needs you" on Home and on Automations; Skip leaves it in the history', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const ws = await ownWorkspace('auto-skip');
+    const ruleId = await seedRule(ws, {
+      name: 'Publish when approved',
+      triggerType: 'CONTENT_APPROVED',
+      triggerConfig: {},
+      actionType: 'PROPOSE_PUBLISH',
+    });
+    const runId = randomUUID();
+    await withPlatformPrisma((prisma) =>
+      prisma.automationRun.create({
+        data: {
+          id: runId,
+          workspaceId: ws.workspaceId,
+          brandId: ws.brandId,
+          ruleId,
+          status: 'AWAITING_CONFIRMATION',
+          triggerType: 'CONTENT_APPROVED',
+          idempotencyKey: `e2e-${randomUUID()}`,
+          conditionsHeld: true,
+          actionType: 'PROPOSE_PUBLISH',
+          confirmationExpiresAt: new Date(Date.now() + 3_600_000),
+          correlationId: randomUUID(),
+        },
+      }),
+    );
+    await enter(page, ws.slug);
+
+    await expect(page.getByTestId('attention-automations-waiting')).toContainText(
+      '1 automation action is waiting for your decision.',
+    );
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    const waiting = page.getByTestId(`automation-needs-you-${runId}`);
+    await expect(waiting).toContainText('Publish when approved');
+    await expect(waiting.getByTestId('automation-confirm')).toBeVisible();
+    await waiting.getByTestId('automation-skip').click();
+    await page.waitForURL((url) => url.searchParams.get('ok') === 'AUTOMATION_SKIPPED');
+    await expect(page.getByTestId('automations-needs-you')).toHaveCount(0);
+    await expect(page.getByTestId('automation-runs')).toContainText('Skipped');
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    await expect(page.getByTestId('attention-automations-waiting')).toHaveCount(0);
+  });
+});

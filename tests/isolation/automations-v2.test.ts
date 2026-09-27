@@ -20,6 +20,8 @@ import {
   platformRoleClient,
   type IsolationFixtures,
 } from './fixtures';
+import type { CustomerWorkspaceContext } from '@brandspace/auth';
+import { attentionItems } from '../../apps/dashboard/src/server/command-center';
 
 /**
  * B12 + G13 OPTION (a) (Phase 2B-2b) — AUTOMATIONS v2, AGAINST REAL POSTGRESQL.
@@ -526,6 +528,38 @@ describe('Skip, and "Needs you"', () => {
     ).rejects.toThrow();
     const row = await platform.automationRun.findUniqueOrThrow({ where: { id: runId } });
     expect(row.status).toBe('AWAITING_CONFIRMATION');
+  });
+
+  it('Home counts the waiting runs this member could decide, and no others', async () => {
+    await waiting();
+    await waiting({ brandId: otherBrandId });
+    const session = (
+      overrides: Partial<CustomerWorkspaceContext> = {},
+    ): CustomerWorkspaceContext => ({
+      workspaceId: fixtures.a.workspaceId,
+      workspaceName: 'A',
+      workspaceSlug: 'a',
+      workspaceStatus: 'ACTIVE',
+      roleKey: 'workspace_owner',
+      roleNameEn: 'Owner',
+      roleNameAr: 'مالك',
+      permissionKeys: ['automation.read', 'publishing.manage'],
+      brandScope: [],
+      ...overrides,
+    });
+    const count = async (context: CustomerWorkspaceContext) =>
+      (await inA((db) => attentionItems(db, context))).find(
+        (item) => item.kind === 'automations-waiting',
+      )?.count ?? 0;
+
+    const everything = await count(session());
+    expect(everything).toBeGreaterThanOrEqual(2);
+    // Without the ACTION's permission nothing waits for you…
+    expect(await count(session({ permissionKeys: ['automation.read'] }))).toBe(0);
+    // …and without the route's, the item is not built at all.
+    expect(await count(session({ permissionKeys: ['publishing.manage'] }))).toBe(0);
+    // A member of one brand is not counted the other brand's runs.
+    expect(await count(session({ brandScope: [fixtures.a.brandId] }))).toBeLessThan(everything);
   });
 
   it('"Needs you" lists only open runs whose action this person could take, in scope', async () => {

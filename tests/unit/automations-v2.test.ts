@@ -148,3 +148,39 @@ describe('the engine paths', () => {
     expect(skip).toContain("status: 'AWAITING_CONFIRMATION',");
   });
 });
+
+describe('the screens', () => {
+  it('Home counts only runs whose ACTION the member could take, under automation.read', () => {
+    const source = read('apps/dashboard/src/server/command-center.ts');
+    expect(source).toContain("{ permissions: ['automation.read'], run: automationsWaiting },");
+    const body = source.slice(source.indexOf('async function automationsWaiting('));
+    expect(body.slice(0, body.indexOf('\n}\n'))).toContain(
+      'session.permissionKeys.includes(action.permission)',
+    );
+  });
+
+  it('the edit action reads the STORED rule, keeps unshown conditions, and uses updateEditableRule', () => {
+    const actions = read('apps/dashboard/src/app/[locale]/automations/actions.ts');
+    const start = actions.indexOf('export async function updateAutomationAction');
+    const body = actions.slice(start, actions.indexOf('\n}\n', start));
+    expect(body).toContain('engine.getRule(ruleId, session.workspace.brandScope)');
+    expect(body).toContain('triggerConfigFrom(formData, rule.triggerType)');
+    expect(body).toContain("formData.get('conditionsMode') === 'keep' ? undefined");
+    expect(body).toContain('engine.updateEditableRule({');
+    expect(body).not.toContain('enabled');
+  });
+
+  it('Skip goes to the engine, which applies the action gate', () => {
+    const actions = read('apps/dashboard/src/app/[locale]/automations/actions.ts');
+    const start = actions.indexOf('export async function skipAutomationRunAction');
+    const body = actions.slice(start, actions.indexOf('\n}\n', start));
+    expect(body).toContain("requireWorkspace(locale, 'automation.read')");
+    expect(body).toContain('engine.skipRun({');
+  });
+
+  it('a refused skip is audited on its own connection in the dashboard too', () => {
+    expect(read('apps/dashboard/src/server/analytics-context.ts')).toContain(
+      "action: 'automation.confirmation_refused',",
+    );
+  });
+});

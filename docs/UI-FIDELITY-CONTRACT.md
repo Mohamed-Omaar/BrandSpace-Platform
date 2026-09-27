@@ -691,6 +691,19 @@ On the Campaigns routes (D-195), in their own vocabulary:
 
 No new component, colour, font, shadow or interaction model.
 
+### 6.3.42 Prototype v90 Phase 2B-2b — editing a rule, and "Needs you" (B12, G13 a)
+
+On `/[locale]/automations` (D-154), in its own vocabulary:
+
+- **Edit**: a ghost `Edit` link beside each rule's Enable/Delete; the rule opens in the SAME authoring form
+  and `Card` the create path uses, with the brand, trigger and action shown as a small definition list
+  (they are fixed), one more `Field`-styled textarea for the description and, for "place on calendar",
+  one number field for the offset. Rules with several conditions show a caption saying they are kept.
+- **Needs you**: a `Card` with a `SectionHeader` at the top of the page, one row per waiting run with the
+  existing primary Confirm button and a ghost Skip button. Home's existing attention list gains one kind.
+
+No new component, colour, font, shadow or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

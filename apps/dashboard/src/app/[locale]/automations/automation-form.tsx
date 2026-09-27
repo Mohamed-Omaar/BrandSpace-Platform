@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import {
   buttonStyle,
@@ -99,6 +100,46 @@ export interface AutomationFormLabels {
   readonly conditionValues: string;
   readonly conditionValuesHint: string;
   readonly weekdays: readonly string[];
+  /** B12 — the edit form's extra words. Only read in edit mode. */
+  readonly description?: string;
+  readonly offsetHours?: string;
+  readonly conditionsKept?: string;
+  readonly valueUnavailable?: string;
+  readonly cancel?: string;
+}
+
+/**
+ * B12 (Phase 2B-2b) — WHAT AN EXISTING RULE HOLDS, for the edit form.
+ *
+ * The trigger and the action are FIXED: the form names them and posts
+ * neither — the server reads the stored ones. `extraConditions` is how many
+ * conditions the rule holds beyond the one this form can show; when there
+ * are any, the conditions are KEPT as they are rather than offered as one
+ * control, so an edit can never silently drop a condition somebody wrote
+ * (a Copilot-written rule may hold several).
+ */
+export interface AutomationFormInitial {
+  readonly ruleId: string;
+  readonly version: number;
+  readonly name: string;
+  readonly description: string;
+  readonly brandName: string;
+  readonly triggerType: string;
+  readonly actionType: string;
+  readonly hourLocal: number | null;
+  readonly daysOfWeek: readonly number[];
+  readonly metricKey: string | null;
+  readonly direction: 'above' | 'below' | null;
+  readonly threshold: number | null;
+  readonly windowDays: number | null;
+  /** `PLACE_ON_CALENDAR`'s one setting a person chooses; null for other actions. */
+  readonly offsetHours: number | null;
+  readonly condition: {
+    readonly field: string;
+    readonly operator: string;
+    readonly value: string | number | boolean | readonly string[] | null;
+  } | null;
+  readonly extraConditions: number;
 }
 
 export interface AutomationFormProps {
@@ -111,21 +152,62 @@ export interface AutomationFormProps {
   readonly metrics: readonly { readonly key: string; readonly label: string }[];
   readonly labels: AutomationFormLabels;
   readonly action: (formData: FormData) => void | Promise<void>;
+  /** B12 — edit an existing rule instead of creating one. */
+  readonly initial?: AutomationFormInitial | undefined;
+  /** Where Cancel leads, in edit mode. */
+  readonly cancelHref?: string | undefined;
 }
 
 const FIELD: React.CSSProperties = { display: 'grid', gap: '0.25rem' };
 
 export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
-  const [triggerType, setTriggerType] = useState(props.triggers[0]?.type ?? '');
-  const [conditionField, setConditionField] = useState('');
-  const [conditionOperator, setConditionOperator] = useState('');
+  const initial = props.initial;
+  const editing = initial !== undefined;
+  const [triggerType, setTriggerType] = useState(
+    initial?.triggerType ?? props.triggers[0]?.type ?? '',
+  );
+  const [conditionField, setConditionField] = useState(initial?.condition?.field ?? '');
+  const [conditionOperator, setConditionOperator] = useState(initial?.condition?.operator ?? '');
+  const keepConditions = (initial?.extraConditions ?? 0) > 0;
 
   const trigger = useMemo(
     () => props.triggers.find((option) => option.type === triggerType) ?? props.triggers[0],
     [props.triggers, triggerType],
   );
 
-  const field = conditionField === '' ? undefined : props.conditionCatalogue[conditionField];
+  const catalogued = conditionField === '' ? undefined : props.conditionCatalogue[conditionField];
+  /*
+   * A SAVED VALUE THAT IS NO LONGER OFFERED STAYS SELECTED. A campaign that was
+   * archived, or a person who left, is not in today's list — but the rule still
+   * names them, and posting the form back must not quietly drop or change that.
+   * The value is added to the list as "No longer available", selected.
+   */
+  const savedValues =
+    initial?.condition && initial.condition.field === conditionField
+      ? ([] as string[]).concat(
+          Array.isArray(initial.condition.value)
+            ? (initial.condition.value as readonly string[])
+            : typeof initial.condition.value === 'string'
+              ? [initial.condition.value]
+              : [],
+        )
+      : [];
+  const field =
+    catalogued && catalogued.options.length > 0
+      ? {
+          ...catalogued,
+          options: [
+            ...catalogued.options,
+            ...savedValues
+              .filter((value) => !catalogued.options.some((option) => option.value === value))
+              .map((value) => ({ value, label: props.labels.valueUnavailable ?? value })),
+          ],
+        }
+      : catalogued;
+  const savedDefault =
+    initial?.condition && initial.condition.field === conditionField
+      ? initial.condition.value
+      : null;
 
   /*
    * THE OPERATOR LIST IS THE FIELD'S, NEVER THE WHOLE REGISTRY'S. A string fact
@@ -159,8 +241,15 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
   const caption = { ...typographyTokens.caption, color: colorTokens.textSecondary } as const;
 
   return (
-    <form action={props.action} data-testid="automation-form">
+    <form action={props.action} data-testid={editing ? 'automation-edit-form' : 'automation-form'}>
       <input type="hidden" name="locale" value={props.locale} />
+      {initial ? (
+        <>
+          <input type="hidden" name="ruleId" value={initial.ruleId} />
+          <input type="hidden" name="version" value={initial.version} />
+          {keepConditions ? <input type="hidden" name="conditionsMode" value="keep" /> : null}
+        </>
+      ) : null}
       <div style={{ display: 'grid', gap: spacingTokens.md }}>
         <div
           style={{ display: 'flex', gap: spacingTokens.md, flexWrap: 'wrap', alignItems: 'end' }}
@@ -171,59 +260,117 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
               name="name"
               required
               maxLength={120}
+              defaultValue={initial?.name}
               className="bs-control"
               style={inputStyle()}
+              data-testid="automation-name"
             />
           </label>
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.brand}</span>
-            <select name="brandId" className="bs-control" data-testid="automation-brand">
-              {props.brands.map((brand) => (
-                <option key={brand.id} value={brand.id}>
-                  {brand.name}
-                </option>
+          {initial ? (
+            /*
+             * FIXED ON AN EXISTING RULE: the brand, the trigger and the action are
+             * named, not offered. Nothing is posted for them; the server uses the
+             * stored ones.
+             */
+            <dl style={{ display: 'flex', gap: spacingTokens.md, flexWrap: 'wrap', margin: 0 }}>
+              {[
+                [props.labels.brand, initial.brandName],
+                [props.labels.trigger, trigger?.label ?? initial.triggerType],
+                [props.labels.action, props.actionLabels[initial.actionType] ?? initial.actionType],
+              ].map(([term, value]) => (
+                <div key={term} style={FIELD}>
+                  <dt style={caption}>{term}</dt>
+                  <dd style={{ margin: 0, ...typographyTokens.bodySm }}>{value}</dd>
+                </div>
               ))}
-            </select>
-          </label>
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.trigger}</span>
-            <select
-              name="triggerType"
-              className="bs-control"
-              data-testid="automation-trigger"
-              value={triggerType}
-              onChange={(event) => {
-                setTriggerType(event.target.value);
-                // A field that is not produced by the NEW trigger must not
-                // survive the change.
-                setConditionField('');
-              }}
-            >
-              {props.triggers.map((option) => (
-                <option key={option.type} value={option.type}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.action}</span>
-            {/*
+            </dl>
+          ) : null}
+          {initial ? null : (
+            <>
+              <label style={FIELD}>
+                <span style={caption}>{props.labels.brand}</span>
+                <select name="brandId" className="bs-control" data-testid="automation-brand">
+                  {props.brands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={FIELD}>
+                <span style={caption}>{props.labels.trigger}</span>
+                <select
+                  name="triggerType"
+                  className="bs-control"
+                  data-testid="automation-trigger"
+                  value={triggerType}
+                  onChange={(event) => {
+                    setTriggerType(event.target.value);
+                    // A field that is not produced by the NEW trigger must not
+                    // survive the change.
+                    setConditionField('');
+                  }}
+                >
+                  {props.triggers.map((option) => (
+                    <option key={option.type} value={option.type}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={FIELD}>
+                <span style={caption}>{props.labels.action}</span>
+                {/*
               ONLY THE ACTIONS THIS TRIGGER SUPPORTS. `actionSupportsTrigger`
               decided this list on the server; an action that needs a content
               item is simply absent from a trigger that has none, so an
               incompatible pair cannot be selected rather than being refused
               after submit.
             */}
-            <select name="actionType" className="bs-control" data-testid="automation-action">
-              {(trigger?.actionTypes ?? []).map((type) => (
-                <option key={type} value={type}>
-                  {props.actionLabels[type] ?? type}
-                </option>
-              ))}
-            </select>
-          </label>
+                <select name="actionType" className="bs-control" data-testid="automation-action">
+                  {(trigger?.actionTypes ?? []).map((type) => (
+                    <option key={type} value={type}>
+                      {props.actionLabels[type] ?? type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
         </div>
+
+        {initial ? (
+          <label style={FIELD}>
+            <span style={caption}>{props.labels.description}</span>
+            <textarea
+              name="description"
+              maxLength={500}
+              rows={2}
+              defaultValue={initial.description}
+              className="bs-control"
+              style={inputStyle()}
+              data-testid="automation-description"
+            />
+          </label>
+        ) : null}
+
+        {initial && initial.offsetHours !== null ? (
+          <label style={FIELD}>
+            <span style={caption}>{props.labels.offsetHours}</span>
+            <input
+              name="offsetHours"
+              type="number"
+              min={0}
+              max={720}
+              step={1}
+              required
+              defaultValue={initial.offsetHours}
+              className="bs-control"
+              style={inputStyle()}
+              data-testid="automation-offset-hours"
+            />
+          </label>
+        ) : null}
 
         {trigger?.needsSchedule ? (
           <fieldset
@@ -239,7 +386,12 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
             <div style={{ display: 'flex', gap: spacingTokens.md, flexWrap: 'wrap' }}>
               <label style={FIELD}>
                 <span style={caption}>{props.labels.hour}</span>
-                <select name="hourLocal" className="bs-control" data-testid="automation-hour">
+                <select
+                  name="hourLocal"
+                  className="bs-control"
+                  data-testid="automation-hour"
+                  defaultValue={initial?.hourLocal ?? undefined}
+                >
                   {Array.from({ length: 24 }, (_, hour) => (
                     <option key={hour} value={hour}>
                       {String(hour).padStart(2, '0')}:00
@@ -256,7 +408,12 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                     key={day}
                     style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', ...caption }}
                   >
-                    <input type="checkbox" name="daysOfWeek" value={index} />
+                    <input
+                      type="checkbox"
+                      name="daysOfWeek"
+                      value={index}
+                      defaultChecked={initial?.daysOfWeek.includes(index) ?? false}
+                    />
                     <span>{day}</span>
                   </label>
                 ))}
@@ -279,7 +436,12 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
           >
             <label style={FIELD}>
               <span style={caption}>{props.labels.metric}</span>
-              <select name="metricKey" className="bs-control" data-testid="automation-metric">
+              <select
+                name="metricKey"
+                className="bs-control"
+                data-testid="automation-metric"
+                defaultValue={initial?.metricKey ?? undefined}
+              >
                 {props.metrics.map((metric) => (
                   <option key={metric.key} value={metric.key}>
                     {metric.label}
@@ -289,7 +451,12 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
             </label>
             <label style={FIELD}>
               <span style={caption}>{props.labels.direction}</span>
-              <select name="direction" className="bs-control" data-testid="automation-direction">
+              <select
+                name="direction"
+                className="bs-control"
+                data-testid="automation-direction"
+                defaultValue={initial?.direction ?? undefined}
+              >
                 <option value="above">{props.labels.above}</option>
                 <option value="below">{props.labels.below}</option>
               </select>
@@ -301,6 +468,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                 type="number"
                 step={1}
                 required
+                defaultValue={initial?.threshold ?? undefined}
                 className="bs-control"
                 style={inputStyle()}
                 data-testid="automation-threshold-value"
@@ -313,7 +481,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                 type="number"
                 min={1}
                 max={90}
-                defaultValue={7}
+                defaultValue={initial?.windowDays ?? 7}
                 className="bs-control"
                 style={inputStyle()}
                 data-testid="automation-window"
@@ -322,73 +490,81 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
           </fieldset>
         ) : null}
 
-        <fieldset
-          style={{
-            border: 'none',
-            padding: 0,
-            margin: 0,
-            display: 'flex',
-            gap: spacingTokens.md,
-            flexWrap: 'wrap',
-            alignItems: 'end',
-          }}
-          data-testid="automation-condition"
-        >
-          <legend style={caption}>{props.labels.conditionLegend}</legend>
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.conditionField}</span>
-            {/*
+        {keepConditions ? (
+          <p style={caption} data-testid="automation-conditions-kept">
+            {(props.labels.conditionsKept ?? '').replace(
+              '{count}',
+              String((initial?.extraConditions ?? 0) + 1),
+            )}
+          </p>
+        ) : (
+          <fieldset
+            style={{
+              border: 'none',
+              padding: 0,
+              margin: 0,
+              display: 'flex',
+              gap: spacingTokens.md,
+              flexWrap: 'wrap',
+              alignItems: 'end',
+            }}
+            data-testid="automation-condition"
+          >
+            <legend style={caption}>{props.labels.conditionLegend}</legend>
+            <label style={FIELD}>
+              <span style={caption}>{props.labels.conditionField}</span>
+              {/*
               ONLY THE FIELDS THIS TRIGGER ACTUALLY PRODUCES. The server derived
               this from `CONDITION_FIELD_TRIGGERS`, the same table the runtime
               gatherer is held to — so a customer cannot pick a field that would
               compare false for ever on the rule they are writing.
             */}
-            <select
-              name="conditionField"
-              className="bs-control"
-              data-testid="automation-condition-field"
-              value={conditionField}
-              onChange={(event) => {
-                setConditionField(event.target.value);
-                // THE OPERATOR MUST NOT SURVIVE THE FIELD. `greater_than` is
-                // legal on a count and meaningless on a provider; carrying it
-                // across would post a pair the engine refuses, against a
-                // control that never showed it.
-                setConditionOperator('');
-              }}
-            >
-              <option value="">{props.labels.conditionNone}</option>
-              {(trigger?.conditionFields ?? []).map((name) => (
-                <option key={name} value={name}>
-                  {props.conditionCatalogue[name]?.label ?? name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {field === undefined ? null : (
-            <>
-              <label style={FIELD}>
-                <span style={caption}>{props.labels.conditionOperator}</span>
-                <select
-                  name="conditionOperator"
-                  className="bs-control"
-                  data-testid="automation-condition-operator"
-                  value={operator}
-                  onChange={(event) => setConditionOperator(event.target.value)}
-                >
-                  {operators.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {needsValue ? (
+              <select
+                name="conditionField"
+                className="bs-control"
+                data-testid="automation-condition-field"
+                value={conditionField}
+                onChange={(event) => {
+                  setConditionField(event.target.value);
+                  // THE OPERATOR MUST NOT SURVIVE THE FIELD. `greater_than` is
+                  // legal on a count and meaningless on a provider; carrying it
+                  // across would post a pair the engine refuses, against a
+                  // control that never showed it.
+                  setConditionOperator('');
+                }}
+              >
+                <option value="">{props.labels.conditionNone}</option>
+                {(trigger?.conditionFields ?? []).map((name) => (
+                  <option key={name} value={name}>
+                    {props.conditionCatalogue[name]?.label ?? name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {field === undefined ? null : (
+              <>
                 <label style={FIELD}>
-                  <span style={caption}>
-                    {isList ? props.labels.conditionValues : props.labels.conditionValue}
-                  </span>
-                  {/*
+                  <span style={caption}>{props.labels.conditionOperator}</span>
+                  <select
+                    name="conditionOperator"
+                    className="bs-control"
+                    data-testid="automation-condition-operator"
+                    value={operator}
+                    onChange={(event) => setConditionOperator(event.target.value)}
+                  >
+                    {operators.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {needsValue ? (
+                  <label style={FIELD}>
+                    <span style={caption}>
+                      {isList ? props.labels.conditionValues : props.labels.conditionValue}
+                    </span>
+                    {/*
                     THE CONTROL IS THE FIELD'S KIND, NOT ALWAYS A TEXT BOX.
 
                     A closed or catalogued field gets a picker, so a status that
@@ -398,45 +574,70 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                     a number input, so `greater_than` compares numerically
                     instead of refusing a mixed comparison.
                   */}
-                  {field.options.length > 0 ? (
-                    <select
-                      name="conditionValue"
-                      multiple={isList}
-                      className="bs-control"
-                      data-testid="automation-condition-value"
-                      defaultValue={isList ? [] : field.options[0]?.value}
-                    >
-                      {field.options.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      name="conditionValue"
-                      type={field.kind === 'number' ? 'number' : 'text'}
-                      step={field.kind === 'number' ? 1 : undefined}
-                      maxLength={field.kind === 'number' ? undefined : 200}
-                      required
-                      className="bs-control"
-                      style={inputStyle()}
-                      data-testid="automation-condition-value"
-                    />
-                  )}
-                  {isList && field.options.length === 0 ? (
-                    <span style={caption}>{props.labels.conditionValuesHint}</span>
-                  ) : null}
-                </label>
-              ) : null}
-            </>
-          )}
-        </fieldset>
+                    {field.options.length > 0 ? (
+                      <select
+                        name="conditionValue"
+                        multiple={isList}
+                        className="bs-control"
+                        data-testid="automation-condition-value"
+                        defaultValue={
+                          isList
+                            ? Array.isArray(savedDefault)
+                              ? (savedDefault as string[])
+                              : []
+                            : typeof savedDefault === 'string'
+                              ? savedDefault
+                              : field.options[0]?.value
+                        }
+                      >
+                        {field.options.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        name="conditionValue"
+                        type={field.kind === 'number' ? 'number' : 'text'}
+                        step={field.kind === 'number' ? 1 : undefined}
+                        maxLength={field.kind === 'number' ? undefined : 200}
+                        required
+                        defaultValue={
+                          typeof savedDefault === 'string' || typeof savedDefault === 'number'
+                            ? savedDefault
+                            : Array.isArray(savedDefault)
+                              ? (savedDefault as string[]).join(', ')
+                              : undefined
+                        }
+                        className="bs-control"
+                        style={inputStyle()}
+                        data-testid="automation-condition-value"
+                      />
+                    )}
+                    {isList && field.options.length === 0 ? (
+                      <span style={caption}>{props.labels.conditionValuesHint}</span>
+                    ) : null}
+                  </label>
+                ) : null}
+              </>
+            )}
+          </fieldset>
+        )}
 
-        <div>
-          <button type="submit" style={buttonStyle('brand', 'sm')} data-testid="automation-submit">
+        <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
+          <button
+            type="submit"
+            style={buttonStyle('brand', 'sm')}
+            data-testid={editing ? 'automation-edit-submit' : 'automation-submit'}
+          >
             {props.labels.submit}
           </button>
+          {editing && props.cancelHref ? (
+            <Link href={props.cancelHref} style={buttonStyle('ghost', 'sm')}>
+              {props.labels.cancel}
+            </Link>
+          ) : null}
         </div>
       </div>
     </form>

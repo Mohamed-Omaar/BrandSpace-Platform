@@ -2,7 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { isAppError } from '@brandspace/shared';
+import { AppError, isAppError } from '@brandspace/shared';
+import {
+  AUTOMATION_RULE_NAME_TAKEN_REASON,
+  AUTOMATION_RULE_VERSION_CONFLICT_REASON,
+} from '@brandspace/automation';
 import type { AutomationActionType, AutomationTrigger } from '@brandspace/database';
 import { requireWorkspace } from '../../../server/customer-context';
 import { inAnalytics, callPhase7Api } from '../../../server/analytics-context';
@@ -27,6 +31,15 @@ import { conditionsFrom, triggerConfigFrom } from '../../../server/automation-fo
  */
 
 function codeFrom(error: unknown): string {
+  if (
+    isAppError(error) &&
+    error.publicDetails['reason'] === AUTOMATION_RULE_VERSION_CONFLICT_REASON
+  ) {
+    return 'AUTOMATION_RULE_CHANGED';
+  }
+  if (isAppError(error) && error.publicDetails['reason'] === AUTOMATION_RULE_NAME_TAKEN_REASON) {
+    return 'AUTOMATION_RULE_NAME_TAKEN';
+  }
   return isAppError(error) ? error.code : 'INTERNAL';
 }
 
@@ -82,6 +95,108 @@ export async function createAutomationAction(formData: FormData): Promise<void> 
 
   revalidatePath(`/${locale}/automations`);
   redirect(`/${locale}/automations?ok=AUTOMATION_CREATED`);
+}
+
+/**
+ * B12 (Phase 2B-2b) — SAVE AN EDITED RULE.
+ *
+ * `updateEditableRule`, which never touches `enabled` and refuses a stale
+ * version. The trigger and the action are the STORED ones — read here, never
+ * taken from the form — so the settings are decoded for the trigger the rule
+ * really has. Every decoder refuses rather than defaults (D-183): a blank
+ * number is not zero, a missing condition field is not "no condition".
+ *
+ * TWO THINGS ARE LEFT EXACTLY AS THEY ARE unless the form really shows them:
+ * conditions the one-condition control cannot display (`conditionsMode=keep`),
+ * and action settings nobody can choose on this screen. Only `PLACE_ON_CALENDAR`
+ * has a setting a person chooses, its offset; the rest of the stored action
+ * settings are carried over untouched.
+ */
+export async function updateAutomationAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const session = await requireWorkspace(locale, 'automation.manage');
+  const ruleId = String(formData.get('ruleId') ?? '');
+
+  try {
+    await inAnalytics(session.workspace.workspaceId, async (services) => {
+      const engine = await services.automations();
+      const rule = await engine.getRule(ruleId, session.workspace.brandScope);
+      const triggerConfig = triggerConfigFrom(formData, rule.triggerType);
+      const conditions =
+        formData.get('conditionsMode') === 'keep' ? undefined : conditionsFrom(formData);
+      const actionConfig =
+        rule.actionType === 'PLACE_ON_CALENDAR'
+          ? {
+              ...(rule.actionConfig as Record<string, unknown>),
+              offsetHours: offsetHoursFrom(formData),
+            }
+          : undefined;
+      await engine.updateEditableRule({
+        ruleId: rule.id,
+        expectedVersion: Number(formData.get('version')),
+        name: String(formData.get('name') ?? ''),
+        description: String(formData.get('description') ?? ''),
+        conditions,
+        triggerConfig,
+        actionConfig,
+        actor: {
+          userId: session.customer.userId,
+          roleKey: session.workspace.roleKey,
+          permissionKeys: session.workspace.permissionKeys,
+          brandScope: session.workspace.brandScope,
+        },
+      });
+    });
+  } catch (error: unknown) {
+    redirect(`/${locale}/automations?edit=${encodeURIComponent(ruleId)}&error=${codeFrom(error)}`);
+  }
+
+  revalidatePath(`/${locale}/automations`);
+  redirect(`/${locale}/automations?ok=AUTOMATION_UPDATED`);
+}
+
+/** A whole number of hours, 0–720, or a refusal — never a default. */
+function offsetHoursFrom(formData: FormData): number {
+  const raw = String(formData.get('offsetHours') ?? '').trim();
+  const value = raw === '' ? Number.NaN : Number(raw);
+  if (!Number.isInteger(value) || value < 0 || value > 720) {
+    throw new AppError('VALIDATION_FAILED', 'The offset must be a whole number of hours.');
+  }
+  return value;
+}
+
+/**
+ * B12 (Phase 2B-2b) — SKIP an asks-first run.
+ *
+ * The engine applies the gate — the ACTION's own permission and the run's brand
+ * against this person's live scope, the same checks Confirm makes — and records
+ * a refusal on its own connection. This action only requires that the person
+ * may see automations at all.
+ */
+export async function skipAutomationRunAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const session = await requireWorkspace(locale, 'automation.read');
+  const runId = String(formData.get('runId') ?? '');
+
+  try {
+    await inAnalytics(session.workspace.workspaceId, async (services) => {
+      const engine = await services.automations();
+      await engine.skipRun({
+        runId,
+        actor: {
+          userId: session.customer.userId,
+          roleKey: session.workspace.roleKey,
+          permissionKeys: session.workspace.permissionKeys,
+          brandScope: session.workspace.brandScope,
+        },
+      });
+    });
+  } catch (error: unknown) {
+    redirect(`/${locale}/automations?error=${codeFrom(error)}`);
+  }
+
+  revalidatePath(`/${locale}/automations`);
+  redirect(`/${locale}/automations?ok=AUTOMATION_SKIPPED`);
 }
 
 export async function toggleAutomationAction(formData: FormData): Promise<void> {

@@ -3,6 +3,7 @@ import type { TenantScopedClient } from '@brandspace/database';
 import type { CustomerWorkspaceContext } from '@brandspace/auth';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { EXPIRING_SOON_MS } from '@brandspace/social-connectors';
+import { AUTOMATION_ACTIONS } from '@brandspace/automation';
 
 /**
  * WHAT NEEDS A PERSON, RIGHT NOW, IN THIS WORKSPACE (P6-04).
@@ -654,6 +655,39 @@ async function unreadMentions(
 }
 
 /**
+ * B12 (Phase 2B-2b) — ASKS-FIRST AUTOMATION RUNS WAITING FOR A DECISION.
+ *
+ * Counted ONLY over the actions this member could take — a run waits for the
+ * permission its automation's ACTION requires, the same one Confirm and Skip
+ * check — so nobody is told something waits for them that they could not
+ * decide. Brand-scoped, and a run whose window closed waits for nobody. No
+ * second approval system: these are the engine's own AWAITING_CONFIRMATION
+ * runs, decided on the Automations screen.
+ */
+async function automationsWaiting(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+): Promise<AttentionItem | null> {
+  const actionable = AUTOMATION_ACTIONS.filter((action) =>
+    session.permissionKeys.includes(action.permission),
+  ).map((action) => action.type);
+  if (actionable.length === 0) return null;
+  const count = await db.automationRun.count({
+    where: {
+      workspaceId: session.workspaceId,
+      status: 'AWAITING_CONFIRMATION',
+      confirmedAt: null,
+      confirmationExpiresAt: { gt: systemClock.now() },
+      actionType: { in: actionable },
+      ...brandIdScopeFilter(session.brandScope),
+    },
+  });
+  return count === 0
+    ? null
+    : { kind: 'automations-waiting', severity: 'waiting', count, href: '/automations' };
+}
+
+/**
  * Every source, in one place, with the permission each one needs.
  *
  * A SOURCE THE MEMBER MAY NOT SEE IS NOT RUN. The rail already hides links a
@@ -680,6 +714,8 @@ const SOURCES: readonly {
   { permissions: ['content.read'], run: overdueSchedules },
   { permissions: ['integrations.read', 'publishing.read'], run: connectionsNeedingReauth },
   { permissions: ['content.read'], run: contentInReview },
+  // B12 — the route needs `automation.read`; the count needs the action's own.
+  { permissions: ['automation.read'], run: automationsWaiting },
   { permissions: ['brand_brain.read'], run: brandsWithNoKnowledge },
   // P6-11 — Pulse.
   { permissions: ['brand_brain.review'], run: learningsPending },

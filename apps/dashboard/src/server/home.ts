@@ -69,6 +69,7 @@ export const ATTENTION_ACTIONS: Readonly<Record<string, string>> = {
   'connection-reauth': 'reconnect',
   'connection-expiring': 'reconnect',
   'content-in-review': 'review',
+  'automations-waiting': 'review',
   'brand-brain-empty': 'teach',
   'learnings-pending': 'review',
   'insights-new': 'open',

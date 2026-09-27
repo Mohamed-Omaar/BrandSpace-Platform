@@ -29,12 +29,15 @@ import { copilotHref } from '../../../server/copilot-surface';
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
-import { AutomationForm } from './automation-form';
+import Link from 'next/link';
+import { AutomationForm, type AutomationFormInitial } from './automation-form';
 import {
   confirmAutomationRunAction,
   createAutomationAction,
   deleteAutomationAction,
+  skipAutomationRunAction,
   toggleAutomationAction,
+  updateAutomationAction,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -189,7 +192,7 @@ export default async function AutomationsPage({
   const conditionChoices = (field: ConditionField): readonly { value: string; label: string }[] =>
     conditionChoicesFor(field, locale, { brands, campaigns, members });
 
-  const { rules, runs } = await inAnalytics(workspace.workspaceId, async (services) => {
+  const { rules, runs, needsYou } = await inAnalytics(workspace.workspaceId, async (services) => {
     const engine = await services.automations();
     return {
       rules: await engine.listRules({
@@ -200,6 +203,16 @@ export default async function AutomationsPage({
         brandId: selectedBrand?.id,
         brandScope: workspace.brandScope,
         take: 25,
+      }),
+      /*
+       * B12 (Phase 2B-2b) — "NEEDS YOU": every open asks-first run this person
+       * could decide — only actions whose permission they hold — not merely the
+       * ones among the last 25 runs.
+       */
+      needsYou: await engine.awaitingRuns({
+        brandId: selectedBrand?.id,
+        brandScope: workspace.brandScope,
+        permissionKeys: workspace.permissionKeys,
       }),
     };
   });
@@ -212,12 +225,16 @@ export default async function AutomationsPage({
    * other read here; a title the reader cannot see is reported as such, never
    * shown.
    */
-  const awaiting = runs.filter(
-    (run) =>
-      run.status === 'AWAITING_CONFIRMATION' &&
-      run.confirmationExpiresAt !== null &&
-      run.confirmationExpiresAt.getTime() > Date.now(),
-  );
+  const awaiting = [
+    ...needsYou,
+    ...runs.filter(
+      (run) =>
+        run.status === 'AWAITING_CONFIRMATION' &&
+        run.confirmationExpiresAt !== null &&
+        run.confirmationExpiresAt.getTime() > Date.now() &&
+        !needsYou.some((waiting) => waiting.id === run.id),
+    ),
+  ];
   const proposals = new Map<string, { rule: string | null; content: string | null }>();
   if (awaiting.length > 0) {
     await inWorkspace(workspace.workspaceId, async ({ db }) => {
@@ -265,6 +282,59 @@ export default async function AutomationsPage({
     ? brands.filter((brand) => brand.id === selectedBrand.id)
     : brands;
 
+  /*
+   * B12 (Phase 2B-2b) — THE RULE BEING EDITED, from the list this page already
+   * read through the member's scope; an id outside it simply opens nothing.
+   */
+  const editId = typeof query['edit'] === 'string' ? query['edit'] : null;
+  const editing = mayManage && editId ? (rules.find((rule) => rule.id === editId) ?? null) : null;
+  const editInitial: AutomationFormInitial | null = editing
+    ? (() => {
+        const trigger = (editing.triggerConfig ?? {}) as Record<string, unknown>;
+        const action = (editing.actionConfig ?? {}) as Record<string, unknown>;
+        const conditions = Array.isArray(editing.conditions)
+          ? (editing.conditions as {
+              field: string;
+              operator: string;
+              value?: string | number | boolean | string[];
+            }[])
+          : [];
+        const first = conditions[0];
+        const number = (value: unknown): number | null =>
+          typeof value === 'number' && Number.isFinite(value) ? value : null;
+        return {
+          ruleId: editing.id,
+          version: editing.version,
+          name: editing.name,
+          description: editing.description ?? '',
+          brandName: brandNames.get(editing.brandId) ?? '',
+          triggerType: editing.triggerType,
+          actionType: editing.actionType,
+          hourLocal: number(trigger['hourLocal']),
+          daysOfWeek: Array.isArray(trigger['daysOfWeek'])
+            ? (trigger['daysOfWeek'] as unknown[]).filter(
+                (day): day is number => typeof day === 'number',
+              )
+            : [],
+          metricKey: typeof trigger['metricKey'] === 'string' ? trigger['metricKey'] : null,
+          direction:
+            trigger['direction'] === 'above' || trigger['direction'] === 'below'
+              ? trigger['direction']
+              : null,
+          threshold: number(trigger['threshold']),
+          windowDays: number(trigger['windowDays']),
+          offsetHours:
+            editing.actionType === 'PLACE_ON_CALENDAR'
+              ? (number(action['offsetHours']) ?? 24)
+              : null,
+          condition: first
+            ? { field: first.field, operator: first.operator, value: first.value ?? null }
+            : null,
+          extraConditions: Math.max(0, conditions.length - 1),
+        };
+      })()
+    : null;
+
   const stamp = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -289,6 +359,91 @@ export default async function AutomationsPage({
         ) : null}
         {error ? (
           <CustomerBanner tone="error">{statusMessage(error, locale) ?? error}</CustomerBanner>
+        ) : null}
+
+        {/*
+          B12 (Phase 2B-2b) — NEEDS YOU, at the top. The asks-first runs this
+          person could decide, with the decision on each: Confirm (the existing
+          confirmation path, through the API) or Skip. Nobody sees a run here
+          whose action they could not take, so nobody is offered a button that
+          can only be refused.
+        */}
+        {needsYou.length > 0 ? (
+          <Card testId="automations-needs-you">
+            <SectionHeader
+              title={t('automations.needsYou.title')}
+              description={t('automations.needsYou.body')}
+            />
+            <ul
+              style={{
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                display: 'grid',
+                gap: spacingTokens.sm,
+              }}
+            >
+              {needsYou.map((run) => (
+                <li
+                  key={run.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: spacingTokens.md,
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    ...typographyTokens.bodySm,
+                  }}
+                  data-testid={`automation-needs-you-${run.id}`}
+                >
+                  <span style={{ display: 'grid', gap: '0.125rem' }}>
+                    <strong>
+                      {t('automations.previewRule').replace(
+                        '{rule}',
+                        proposals.get(run.id)?.rule ?? '—',
+                      )}
+                    </strong>
+                    <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                      {t(`automations.action.${run.actionType}` as MessageKey)}
+                      {' · '}
+                      {proposals.get(run.id)?.content
+                        ? t('automations.previewContent').replace(
+                            '{content}',
+                            proposals.get(run.id)?.content ?? '',
+                          )
+                        : t('automations.previewUnknown')}
+                    </span>
+                  </span>
+                  <span style={{ display: 'flex', gap: spacingTokens.sm }}>
+                    <form action={confirmAutomationRunAction}>
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="runId" value={run.id} />
+                      <button
+                        type="submit"
+                        style={buttonStyle('primary', 'sm')}
+                        className={buttonClass('primary')}
+                        data-testid="automation-confirm"
+                      >
+                        {t('automations.confirmRun')}
+                      </button>
+                    </form>
+                    <form action={skipAutomationRunAction}>
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="runId" value={run.id} />
+                      <button
+                        type="submit"
+                        style={buttonStyle('ghost', 'sm')}
+                        className={buttonClass('ghost')}
+                        data-testid="automation-skip"
+                      >
+                        {t('automations.skipRun')}
+                      </button>
+                    </form>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
         ) : null}
 
         <CustomerBanner tone="info">{t('automations.externalNotice')}</CustomerBanner>
@@ -368,8 +523,11 @@ export default async function AutomationsPage({
           </Card>
         ) : null}
 
-        {mayManage && formBrands.length > 0 ? (
-          <Card title={t('automations.create')}>
+        {mayManage && (editInitial !== null || formBrands.length > 0) ? (
+          <Card
+            title={editInitial ? t('automations.editTitle') : t('automations.create')}
+            testId={editInitial ? 'automation-edit-card' : undefined}
+          >
             {/*
               THE FORM IS BUILT FROM THE REGISTRY, ON THE SERVER, AND HANDED
               PLAIN DATA.
@@ -385,8 +543,11 @@ export default async function AutomationsPage({
               client component is what took the Copilot screen down at render.
             */}
             <AutomationForm
+              key={editInitial?.ruleId ?? 'create'}
               locale={locale}
-              action={createAutomationAction}
+              action={editInitial ? updateAutomationAction : createAutomationAction}
+              initial={editInitial ?? undefined}
+              cancelHref={`/${locale}/automations`}
               brands={formBrands.map((brand) => ({ id: brand.id, name: brand.name }))}
               triggers={AUTOMATION_TRIGGERS.map((trigger) => ({
                 type: trigger.type,
@@ -446,7 +607,12 @@ export default async function AutomationsPage({
                 brand: t('analytics.brandLabel'),
                 trigger: t('automations.triggerLabel'),
                 action: t('automations.actionLabel'),
-                submit: t('automations.create'),
+                submit: editInitial ? t('automations.save') : t('automations.create'),
+                description: t('automations.descriptionLabel'),
+                offsetHours: t('automations.offsetHoursLabel'),
+                conditionsKept: t('automations.conditionsKept'),
+                valueUnavailable: t('automations.valueUnavailable'),
+                cancel: t('automations.cancelEdit'),
                 hour: t('automations.hourLabel'),
                 days: t('automations.daysLabel'),
                 metric: t('automations.metricLabel'),
@@ -521,6 +687,14 @@ export default async function AutomationsPage({
                     />
                     {mayManage ? (
                       <>
+                        <Link
+                          href={`/${locale}/automations?edit=${rule.id}`}
+                          style={buttonStyle('ghost', 'sm')}
+                          className={buttonClass('ghost')}
+                          data-testid={`automation-edit-${rule.id}`}
+                        >
+                          {t('automations.edit')}
+                        </Link>
                         <form action={toggleAutomationAction}>
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="ruleId" value={rule.id} />
@@ -606,7 +780,7 @@ export default async function AutomationsPage({
                       {t(`automations.trigger.${run.triggerType}` as MessageKey)} →{' '}
                       {t(`automations.action.${run.actionType}` as MessageKey)}
                     </span>
-                    {run.failureCode ? (
+                    {run.failureCode && run.failureCode !== 'skipped_by_member' ? (
                       <span data-testid={`automation-run-failure-${run.id}`}>
                         {t('automations.failure').replace('{code}', run.failureCode)}
                       </span>
@@ -660,18 +834,8 @@ export default async function AutomationsPage({
                       <span>{t('automations.confirmNeedsPermission')}</span>
                     ) : null}
                     {proposals.has(run.id) && mayPublish ? (
-                      <form action={confirmAutomationRunAction}>
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="runId" value={run.id} />
-                        <button
-                          type="submit"
-                          style={buttonStyle('primary', 'sm')}
-                          className={buttonClass('primary')}
-                          data-testid="automation-confirm"
-                        >
-                          {t('automations.confirmRun')}
-                        </button>
-                      </form>
+                      // B12 — decided in "Needs you" above, not here.
+                      <span>{t('automations.decideAbove')}</span>
                     ) : null}
                   </span>
                 </li>
