@@ -484,3 +484,66 @@ test.describe('§8 motion — overlays (D-350)', () => {
     expect(origin).toEqual({ right: true, bottom: true });
   });
 });
+
+test.describe('§8 motion — feedback, charts and figures (D-351)', () => {
+  test.skip(({ isMobile }) => isMobile === true, 'one run creates its own workspace');
+
+  const anim = (el: Element) => {
+    const style = getComputedStyle(el);
+    return `${style.animationName} ${style.animationDuration} ${style.animationDelay}`;
+  };
+
+  test('MO8: the toast rises in, its check draws, and dismissing it leaves nothing usable', async ({
+    page,
+  }) => {
+    const ws = await ownWorkspace('toast-motion');
+    await enter(page, ws.slug);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/ai`);
+    await saveAiSettings(page, ws.brandId);
+    const toast = page.getByTestId('toast');
+    await expect(toast).toBeVisible();
+    expect(await toast.evaluate(anim)).toBe('bs-toast-in 0.42s 0s');
+    expect(await toast.locator('[data-toast-check] path').first().evaluate(anim)).toBe(
+      'bs-check-draw 0.42s 0.16s',
+    );
+    await page.getByTestId('toast-dismiss').click();
+    // Closed at once; its picture leaves inert, then is gone.
+    await expect(page.getByTestId('toast')).toHaveCount(0);
+    await expect(page.locator('[data-toast-duration]')).toHaveCount(0);
+  });
+
+  test('MO11 and MO12: charts draw in and figures count up to the exact server value', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics`);
+    const figure = page.getByTestId('count-up').first();
+    await expect(figure).toBeVisible();
+    const finalText = await figure.locator('.bs-count-final').textContent();
+    // The element's text is the server value from the first frame to the last.
+    await expect(figure).toHaveText(finalText!);
+    await expect(figure).not.toHaveAttribute('data-counting', '');
+    await expect(figure).toHaveText(finalText!);
+
+    // The seeded analytics have one trend line and one comparison bar; the
+    // 35 ms bar stagger itself is pinned in tests/unit/motion-feedback.test.ts.
+    const line = page.locator('.bs-chart-line').first();
+    await expect(line).toBeAttached();
+    expect(await line.evaluate(anim)).toBe('bs-line-draw 1s 0s');
+    const bar = page.locator('.bs-chart-bar').first();
+    await expect(bar).toBeAttached();
+    expect(await bar.evaluate(anim)).toBe('bs-bar-grow 0.8s 0s');
+    const dot = page.locator('.bs-chart-dot').first();
+    await expect(dot).toBeAttached();
+    expect(await dot.evaluate(anim)).toMatch(/^bs-dot-pop 0\.36s 1(\.\d+)?s$/);
+  });
+
+  test('MO12 under reduced motion: no counting at all', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics`);
+    const figure = page.getByTestId('count-up').first();
+    await expect(figure).toBeVisible();
+    expect(await figure.getAttribute('data-counting')).toBeNull();
+  });
+});

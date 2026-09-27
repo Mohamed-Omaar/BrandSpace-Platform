@@ -14,9 +14,34 @@ import { motionMs } from './tokens';
  * assistive technology, so nothing can be done to a surface that is gone.
  * Reduced motion, or a browser without the API, unmounts at once.
  */
+/** How a surface leaves: the animations to run on it; unmount follows the first. */
+export type ExitMotion = (element: HTMLElement) => Animation[];
+
+/** MO5: the container fades with a 4 px lift while its rows blur to 4 px (180 ms). */
+function menuExit(element: HTMLElement): Animation[] {
+  const timing: KeyframeAnimationOptions = {
+    duration: motionMs.menuOut,
+    easing: EASE_OUT,
+    fill: 'forwards',
+  };
+  return [
+    element.animate(
+      [
+        { opacity: 1, translate: '0 0' },
+        { opacity: 0, translate: '0 -4px' },
+      ],
+      timing,
+    ),
+    ...Array.from(element.children).map((row) =>
+      row.animate([{ filter: 'blur(0)' }, { filter: 'blur(4px)' }], timing),
+    ),
+  ];
+}
+
 export function usePresence(
   open: boolean,
   ref: RefObject<HTMLElement | null>,
+  exit: ExitMotion = menuExit,
 ): { readonly present: boolean; readonly leaving: boolean } {
   const [present, setPresent] = useState(open);
   if (open && !present) setPresent(true);
@@ -28,21 +53,12 @@ export function usePresence(
       setPresent(false);
       return undefined;
     }
-    const timing: KeyframeAnimationOptions = {
-      duration: motionMs.menuOut,
-      easing: EASE_OUT,
-      fill: 'forwards',
-    };
-    const container = element.animate(
-      [
-        { opacity: 1, translate: '0 0' },
-        { opacity: 0, translate: '0 -4px' },
-      ],
-      timing,
-    );
-    const rows = Array.from(element.children).map((row) =>
-      row.animate([{ filter: 'blur(0)' }, { filter: 'blur(4px)' }], timing),
-    );
+    const animations = exit(element);
+    const container = animations[0];
+    if (!container) {
+      setPresent(false);
+      return undefined;
+    }
     let cancelled = false;
     container.finished
       .then(() => {
@@ -51,10 +67,9 @@ export function usePresence(
       .catch(() => undefined);
     return () => {
       cancelled = true;
-      container.cancel();
-      for (const row of rows) row.cancel();
+      for (const animation of animations) animation.cancel();
     };
-  }, [open, present, ref]);
+  }, [open, present, ref, exit]);
 
   return { present: open || present, leaving: !open && present };
 }

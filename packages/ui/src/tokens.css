@@ -1440,6 +1440,131 @@ html[dir='rtl'] input[type='week'] {
 }
 
 /*
+ * MO8 — A TOAST ENTERS from 12 px below with a fade while its contents unblur
+ * (6 px → 0, 420 ms, 50 ms apart); a success check draws itself (420 ms,
+ * 160 ms late). It leaves by rising 14 px with a fade while its contents blur
+ * to 6 px (280 ms) — the Web Animations API, `toast-host.tsx`.
+ */
+@keyframes bs-toast-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
+@keyframes bs-toast-part-in {
+  from {
+    filter: blur(6px);
+  }
+}
+
+@keyframes bs-check-draw {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.bs-toast-in {
+  animation: bs-toast-in var(--bs-motion-toast-in) var(--bs-ease-out) both;
+}
+.bs-toast-in > * {
+  animation: bs-toast-part-in var(--bs-motion-toast-in) var(--bs-ease-out) both;
+}
+.bs-toast-in > :nth-child(2) {
+  animation-delay: calc(var(--bs-motion-toast-step) * 1);
+}
+.bs-toast-in > :nth-child(3) {
+  animation-delay: calc(var(--bs-motion-toast-step) * 2);
+}
+.bs-toast-in > :nth-child(n + 4) {
+  animation-delay: calc(var(--bs-motion-toast-step) * 3);
+}
+.bs-toast-in [data-toast-check] path {
+  stroke-dasharray: 24;
+  animation: bs-check-draw var(--bs-motion-toast-in) var(--bs-ease-out)
+    var(--bs-motion-toast-check-delay) both;
+}
+
+/*
+ * MO11 — CHARTS ON PAGE ENTRY. Bars grow from their start edge (a 0 → 1 scale
+ * on the inline axis, 800 ms, 35 ms apart, up to the 14th); a line series
+ * draws from the reading start (a clip-path, 1000 ms); its dots and value
+ * labels pop in after it (360 ms, 40 ms apart). `--i` is each mark's index.
+ */
+@keyframes bs-bar-grow {
+  from {
+    scale: 0 1;
+  }
+}
+
+@keyframes bs-line-draw {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+
+@keyframes bs-line-draw-rtl {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+}
+
+@keyframes bs-dot-pop {
+  from {
+    opacity: 0;
+    scale: 0.4;
+  }
+}
+
+.bs-chart-bar {
+  transform-origin: left center;
+  animation: bs-bar-grow var(--bs-motion-bar) var(--bs-ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 13) * var(--bs-motion-bar-step));
+}
+.bs-chart-bar[data-dir='rtl'] {
+  transform-origin: right center;
+}
+
+.bs-chart-line {
+  animation: bs-line-draw var(--bs-motion-line) var(--bs-ease-out) both;
+}
+.bs-chart-line[data-dir='rtl'] {
+  animation-name: bs-line-draw-rtl;
+}
+
+.bs-chart-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bs-dot-pop var(--bs-motion-dot) var(--bs-ease-out) both;
+  animation-delay: calc(var(--bs-motion-line) + var(--i, 0) * var(--bs-motion-dot-step));
+}
+
+/*
+ * MO12 — A KPI COUNTS UP (`count-up.tsx`). The element's own text is the
+ * exact server value throughout — for assistive technology, for the layout's
+ * width and for anything that reads the page — and is only made transparent
+ * while the counting copy is drawn over it.
+ */
+.bs-count {
+  position: relative;
+}
+
+.bs-count[data-counting] > .bs-count-final {
+  opacity: 0;
+}
+
+.bs-count[data-counting]::after {
+  content: attr(data-display);
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  white-space: nowrap;
+}
+
+/*
  * MO2 — THE RAIL'S PILL. One ink pill per navigation list, placed on the
  * current item by script; its colour, radius and shadow are exactly the ones
  * the item used to paint on itself (D-59). Once placed, the item stops

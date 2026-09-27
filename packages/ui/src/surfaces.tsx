@@ -8,6 +8,7 @@ import {
   typographyTokens,
 } from './tokens';
 import { IconTile } from './primitives';
+import { CountUp } from './count-up';
 
 /**
  * Surfaces and structure: cards, metric cards, page and section headers, grids.
@@ -300,7 +301,8 @@ export function MetricCard({
               overflowWrap: 'anywhere',
             }}
           >
-            {value}
+            {/* MO12: counts up once on page entry, ending on this exact text. */}
+            {typeof value === 'string' ? <CountUp value={value} /> : value}
           </span>
         )}
         <div

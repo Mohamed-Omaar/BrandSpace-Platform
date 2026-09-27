@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Toast, type Tone } from './feedback';
-import { spacingTokens, zIndexTokens } from './tokens';
+import { motionMs, spacingTokens, zIndexTokens } from './tokens';
 import { TOAST_EVENT, type ToastMessage } from './toast-bus';
 import { TOAST_RESUME_MS, toastDuration } from './toast-timing';
+import { EASE_OUT } from './motion';
+import { usePresence } from './motion-hooks';
 
 /**
  * C8 (Phase 2B-2b) — THE ONE TOAST HOST.
@@ -25,6 +27,31 @@ import { TOAST_RESUME_MS, toastDuration } from './toast-timing';
  * Client code raises a toast with `showToast` — the calendar's "Moved … Undo"
  * (§8.2) — through the same host. There is no second toast system.
  */
+/**
+ * MO8 — A TOAST LEAVES by rising 14 px with a fade while its contents blur to
+ * 6 px (280 ms). Its close has already happened; this is only its picture.
+ */
+function toastExit(element: HTMLElement): Animation[] {
+  const timing: KeyframeAnimationOptions = {
+    duration: motionMs.toastOut,
+    easing: EASE_OUT,
+    fill: 'forwards',
+  };
+  const card = element.firstElementChild;
+  return [
+    element.animate(
+      [
+        { opacity: 1, translate: '0 0' },
+        { opacity: 0, translate: '0 -14px' },
+      ],
+      timing,
+    ),
+    ...Array.from(card?.children ?? []).map((part) =>
+      part.animate([{ filter: 'blur(0)' }, { filter: 'blur(6px)' }], timing),
+    ),
+  ];
+}
+
 /** Where the reader is, in one comparable string. */
 function locationKey(pathname: string, search: string): string {
   return `${pathname}?${new URLSearchParams(search).toString()}`;
@@ -101,6 +128,13 @@ export function ToastHost({
     return () => window.clearTimeout(timer.current);
   }, [current, close]);
 
+  // MO8: the toast that is leaving is still drawn until its exit ends.
+  const toastRef = useRef<HTMLDivElement | null>(null);
+  const lastShown = useRef(current);
+  if (current) lastShown.current = current;
+  const { present, leaving } = usePresence(current !== null, toastRef, toastExit);
+  const shown = current ?? (present ? lastShown.current : null);
+
   const hold = useCallback(() => window.clearTimeout(timer.current), []);
   const resume = useCallback(() => {
     window.clearTimeout(timer.current);
@@ -124,35 +158,38 @@ export function ToastHost({
         pointerEvents: 'none',
       }}
     >
-      {current ? (
+      {shown ? (
         <div
-          key={current.key}
-          data-toast-duration={toastDuration(current.message)}
+          key={shown.key}
+          ref={toastRef}
+          data-toast-duration={toastDuration(shown.message)}
           onMouseEnter={hold}
           onMouseLeave={resume}
           onFocus={hold}
           onBlur={resume}
+          {...(leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
           style={{ pointerEvents: 'auto', maxInlineSize: '100%' }}
         >
           <Toast
-            tone={current.tone}
+            tone={shown.tone}
             announce={false}
+            className="bs-toast-in"
             onDismiss={close}
             dismissLabel={dismissLabel}
             action={
-              current.action
+              shown.action
                 ? {
-                    ...current.action,
+                    ...shown.action,
                     onAction: () => {
                       close();
-                      current.action?.onAction();
+                      shown.action?.onAction();
                     },
                   }
                 : undefined
             }
-            testId={current.testId ?? 'toast'}
+            testId={leaving ? 'toast-leaving' : (shown.testId ?? 'toast')}
           >
-            {current.message}
+            {shown.message}
           </Toast>
         </div>
       ) : null}

@@ -198,22 +198,28 @@ export function TrendChart({
           />
         ))}
 
-        {segments.map((segment) => (
-          <path
-            key={segment.slice(0, 32)}
-            d={segment}
-            fill="none"
-            stroke={colorTokens.brandPurple}
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
+        {/* MO11: the series draws from the reading start on page entry. */}
+        <g className="bs-chart-line" data-dir={direction}>
+          {segments.map((segment) => (
+            <path
+              key={segment.slice(0, 32)}
+              d={segment}
+              fill="none"
+              stroke={colorTokens.brandPurple}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+        </g>
 
         {points.map((point, index) =>
           point.value === null ? null : (
             <circle
               key={point.label}
+              // MO11: dots pop in after the line, 40 ms apart.
+              className="bs-chart-dot"
+              style={{ '--i': index } as CSSProperties}
               cx={xFor(index)}
               cy={yFor(point.value)}
               r={4}
@@ -252,6 +258,9 @@ export function TrendChart({
             return (
               <text
                 key={`label-${point.label}`}
+                // MO11: value labels pop in with their dots.
+                className="bs-chart-dot"
+                style={{ '--i': index } as CSSProperties}
                 x={x}
                 y={Math.max(PADDING.top - 4, yFor(point.value) - 10)}
                 textAnchor={x > PLOT_WIDTH / 2 ? 'end' : 'start'}
@@ -309,7 +318,7 @@ export function ComparisonChart({
           marginBlockStart: spacingTokens.sm,
         }}
       >
-        {points.map((point) => {
+        {points.map((point, index) => {
           const fraction = point.value === null ? 0 : Math.max(0.02, point.value / max);
           return (
             <li key={point.label} style={{ display: 'grid', gap: '0.125rem' }}>
@@ -343,7 +352,11 @@ export function ComparisonChart({
                 }}
               >
                 <span
+                  // MO11: the bar grows from its start edge, 35 ms after the one before.
+                  className="bs-chart-bar"
+                  data-dir={direction}
                   style={{
+                    ...({ '--i': index } as CSSProperties),
                     display: 'block',
                     blockSize: '100%',
                     inlineSize: `${(fraction * 100).toFixed(1)}%`,

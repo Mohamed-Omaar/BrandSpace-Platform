@@ -115,6 +115,7 @@ export function Toast({
   dismissLabel,
   action,
   announce = true,
+  className,
   testId,
 }: {
   readonly tone: Tone;
@@ -135,12 +136,15 @@ export function Toast({
    * host keeps one that is always there.
    */
   readonly announce?: boolean | undefined;
+  /** `bs-toast-in` from `ToastHost`: MO8's entrance. */
+  readonly className?: string | undefined;
   readonly testId?: string | undefined;
 }) {
   const style = toneStyle(tone);
   return (
     <div
       {...(announce ? { role: 'status', 'aria-live': 'polite' as const } : {})}
+      className={className}
       data-testid={testId ?? 'toast'}
       style={{
         display: 'flex',
@@ -156,7 +160,11 @@ export function Toast({
         color: colorTokens.textPrimary,
       }}
     >
-      <span style={{ color: style.color, flexShrink: 0, display: 'inline-flex' }}>
+      <span
+        // MO8: a success check draws itself.
+        {...(tone === 'success' ? { 'data-toast-check': '' } : {})}
+        style={{ color: style.color, flexShrink: 0, display: 'inline-flex' }}
+      >
         {style.icon}
       </span>
       <span style={{ minInlineSize: 0, flex: 1 }}>{children}</span>
