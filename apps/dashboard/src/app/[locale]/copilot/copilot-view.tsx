@@ -763,6 +763,21 @@ function InspectionLines({
         );
       }
       break;
+    case 'approvals.summary':
+      // B14 — the counts first, then the oldest waiting posts.
+      lines.push(
+        t('copilot.inspection.approvals', '')
+          .replace('{pending}', number.format(Number(result['pendingCount'] ?? 0)))
+          .replace('{mine}', number.format(Number(result['assignedToYouCount'] ?? 0)))
+          .replace('{anyone}', number.format(Number(result['unassignedCount'] ?? 0))),
+      );
+      for (const item of list('items').slice(0, 10)) {
+        const at = Date.parse(String(item['requestedAt'] ?? ''));
+        lines.push(
+          `${String(item['title'] ?? '—')} — ${Number.isNaN(at) ? '' : time.format(new Date(at))}`,
+        );
+      }
+      break;
     default:
       break;
   }

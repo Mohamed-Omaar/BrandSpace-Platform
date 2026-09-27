@@ -2120,6 +2120,7 @@ export const messages = {
     'copilot.tool.contentSearch': 'البحث في المحتوى',
     'copilot.tool.calendarLookup': 'قراءة التقويم',
     'copilot.tool.campaignList': 'قراءة الحملات',
+    'copilot.tool.approvalsSummary': 'قراءة ما ينتظر المراجعة',
     'copilot.tool.campaignCreate': 'إنشاء حملة',
     'copilot.tool.campaignUpdate': 'تعديل حملة',
     'copilot.tool.contentDraft': 'إنشاء مسودة محتوى',
@@ -2188,6 +2189,8 @@ export const messages = {
     'copilot.inspection.brandContext':
       '{items} من عناصر المعرفة المعتمدة و{chunks} من مقاطع المستندات ذات صلة.',
     'copilot.inspection.nothing': 'لم يُعثر على شيء.',
+    'copilot.inspection.approvals':
+      '{pending} بانتظار المراجعة · {mine} مُسندة إليك · {anyone} لأي مراجع',
     'copilot.tool.automationCreate': 'إنشاء قاعدة أتمتة (تُنشأ متوقفة)',
     'copilot.preview.ruleName': 'اسم القاعدة',
     'copilot.preview.trigger': 'عندما',
@@ -5075,6 +5078,7 @@ export const messages = {
     'copilot.tool.contentSearch': 'Search content',
     'copilot.tool.calendarLookup': 'Read the calendar',
     'copilot.tool.campaignList': 'Read campaigns',
+    'copilot.tool.approvalsSummary': 'Read what is waiting for review',
     'copilot.tool.campaignCreate': 'Create a campaign',
     'copilot.tool.campaignUpdate': 'Edit a campaign',
     'copilot.tool.contentDraft': 'Draft content',
@@ -5147,6 +5151,8 @@ export const messages = {
     'copilot.inspection.brandContext':
       '{items} approved knowledge items and {chunks} document passages are relevant.',
     'copilot.inspection.nothing': 'Nothing was found.',
+    'copilot.inspection.approvals':
+      '{pending} waiting for review · {mine} assigned to you · {anyone} for any reviewer',
     'copilot.tool.automationCreate': 'Compose an automation (created switched off)',
     'copilot.preview.ruleName': 'Rule name',
     'copilot.preview.trigger': 'When',
