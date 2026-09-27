@@ -63,8 +63,17 @@ export async function loadNotificationFeed(
         .filter((entry) => entry.reason === 'mentioned')
         .slice(0, 10)
     : [];
+  /*
+   * MO10 (Phase 2B-2b, owner option A): the mention's "who" is the author of
+   * the note that MENTIONED the reader — never the thread's latest writer,
+   * who may be the reader replying — and a mention the reader wrote about
+   * themselves is not one (the service already leaves it out).
+   */
+  const mentionedBy = mentioned.filter((entry) => entry.lastMention !== null);
   const authorIds = [
-    ...new Set(mentioned.flatMap((entry) => (entry.lastNote ? [entry.lastNote.authorUserId] : []))),
+    ...new Set(
+      mentionedBy.flatMap((entry) => (entry.lastMention ? [entry.lastMention.authorUserId] : [])),
+    ),
   ];
   const names = authorIds.length
     ? await inWorkspace(
@@ -80,9 +89,10 @@ export async function loadNotificationFeed(
           ),
       )
     : new Map<string, string>();
-  const mentions = mentioned.map((entry) => ({
+  const mentions = mentionedBy.map((entry) => ({
     entry,
-    author: entry.lastNote ? (names.get(entry.lastNote.authorUserId) ?? null) : null,
+    mention: entry.lastMention!,
+    author: entry.lastMention ? (names.get(entry.lastMention.authorUserId) ?? null) : null,
   }));
 
   const kindOf = (templateKey: string): FeedKind =>
@@ -108,7 +118,7 @@ export async function loadNotificationFeed(
       at: item.createdAt.toISOString(),
       unread: item.readAt === null,
     })),
-    ...mentions.map(({ entry, author }) => ({
+    ...mentions.map(({ entry, mention, author }) => ({
       id: `m:${entry.threadId}`,
       kind: 'mention' as const,
       headline: (optionalMessage(locale, 'notifications.feed.mentioned') ?? '{name}').replace(
@@ -116,11 +126,11 @@ export async function loadNotificationFeed(
         author ?? optionalMessage(locale, 'notifications.feed.someone') ?? '',
       ),
       who: author,
-      excerpt: entry.lastNote ? entry.lastNote.body.slice(0, EXCERPT) : null,
+      excerpt: mention.body.slice(0, EXCERPT),
       context: entry.subjectTitle ?? entry.brandName,
       href: noteThreadHref(locale, entry),
-      when: relativeTime(entry.lastNote?.createdAt ?? entry.updatedAt, now, locale),
-      at: (entry.lastNote?.createdAt ?? entry.updatedAt).toISOString(),
+      when: relativeTime(mention.createdAt, now, locale),
+      at: mention.createdAt.toISOString(),
       unread: entry.unreadMentions > 0,
     })),
   ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));

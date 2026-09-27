@@ -119,6 +119,37 @@ export interface NoteInboxEntry {
     readonly body: string;
     readonly createdAt: Date;
   } | null;
+  /**
+   * MO10 (Phase 2B-2b) — THE NOTE THAT MENTIONED THE READER, most recent
+   * first, written by SOMEBODY ELSE. The bell's "who" is this note's author,
+   * not whoever wrote last in the thread. Null when nobody else named them.
+   */
+  readonly lastMention: {
+    readonly authorUserId: string;
+    readonly body: string;
+    readonly createdAt: Date;
+    readonly unread: boolean;
+  } | null;
+}
+
+/**
+ * MO10 (Phase 2B-2b, owner option A) — AN UNREAD MENTION OF THE READER BY
+ * ANOTHER PERSON, for the incoming notice. The sender is the mentioning
+ * note's author; a person naming themselves is never "incoming".
+ */
+export interface IncomingMention {
+  readonly mentionId: string;
+  readonly authorUserId: string;
+  readonly body: string;
+  readonly createdAt: Date;
+  readonly threadId: string;
+  readonly brandId: string;
+  readonly brandName: string;
+  readonly subjectType: NoteSubjectType;
+  readonly contentItemId: string | null;
+  readonly campaignId: string | null;
+  readonly assetId: string | null;
+  readonly subjectTitle: string | null;
 }
 
 export interface NoteInbox {
@@ -130,6 +161,11 @@ export interface NoteInbox {
 
 /** The longest excerpt of a note the inbox carries. */
 const EXCERPT = 180;
+
+/** A note cut to the inbox's excerpt length. */
+function excerpt(body: string): string {
+  return body.length > EXCERPT ? `${body.slice(0, EXCERPT - 1)}…` : body;
+}
 
 /** How many threads each inbox section returns at most. */
 const INBOX_TAKE = 40;
@@ -632,6 +668,8 @@ export class NotesService {
         readAt: null,
         note: {
           deletedAt: null,
+          // MO10 (owner option A): naming yourself is not a mention to you.
+          authorUserId: { not: actor.userId },
           thread: {
             ...brandIdScopeFilter(actor.brandScope),
             // The inbox cannot list a thread about deleted content, so the dot
@@ -720,7 +758,10 @@ export class NotesService {
     });
 
     const entry = (thread: (typeof mine)[number], forYou: boolean): NoteInboxEntry => {
-      const mentionsOfMe = thread.notes.flatMap((note) => note.mentions);
+      // MO10 (owner option A): a note the reader wrote never mentions them.
+      const byOthers = thread.notes.filter((note) => note.authorUserId !== me);
+      const mentionsOfMe = byOthers.flatMap((note) => note.mentions);
+      const mentioning = byOthers.find((note) => note.mentions.length > 0) ?? null;
       const unread = mentionsOfMe.filter((mention) => mention.readAt === null).length;
       const reason: NoteInboxEntry['reason'] = !forYou
         ? 'open'
@@ -754,6 +795,14 @@ export class NotesService {
               createdAt: last.createdAt,
             }
           : null,
+        lastMention: mentioning
+          ? {
+              authorUserId: mentioning.authorUserId,
+              body: excerpt(mentioning.body),
+              createdAt: mentioning.createdAt,
+              unread: mentioning.mentions.some((mention) => mention.readAt === null),
+            }
+          : null,
       };
     };
 
@@ -767,6 +816,79 @@ export class NotesService {
         b.updatedAt.getTime() - a.updatedAt.getTime(),
     );
     return { forYou, open: others.map((thread) => entry(thread, false)) };
+  }
+
+  /**
+   * MO10 (Phase 2B-2b, owner option A) — the reader's unread mentions BY
+   * OTHER PEOPLE, newest first, for the incoming notice on the next page
+   * render. Exactly the rows `unreadMentionCount` counts — the same
+   * permission, brand scope and deleted-subject rules — so the notice, the dot
+   * and the bell never disagree. Nothing is written; the notice marks nothing
+   * read.
+   */
+  async incomingMentions(actor: NoteActor, take = 5): Promise<readonly IncomingMention[]> {
+    if (!actor.permissionKeys.includes(NOTE_PERMISSION)) return [];
+    const rows = await this.#db.noteMention.findMany({
+      where: {
+        workspaceId: this.#workspaceId,
+        mentionedUserId: actor.userId,
+        readAt: null,
+        note: {
+          deletedAt: null,
+          authorUserId: { not: actor.userId },
+          thread: {
+            ...brandIdScopeFilter(actor.brandScope),
+            NOT: { contentItem: { is: { deletedAt: { not: null } } } },
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take,
+      select: {
+        id: true,
+        note: {
+          select: {
+            authorUserId: true,
+            body: true,
+            createdAt: true,
+            thread: {
+              select: {
+                id: true,
+                brandId: true,
+                subjectType: true,
+                contentItemId: true,
+                campaignId: true,
+                assetId: true,
+                brand: { select: { name: true } },
+                contentItem: { select: { title: true } },
+                campaign: { select: { name: true } },
+                asset: { select: { name: true, deletedAt: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    return rows
+      .filter((row) => (row.note.thread.asset?.deletedAt ?? null) === null)
+      .map((row) => ({
+        mentionId: row.id,
+        authorUserId: row.note.authorUserId,
+        body: excerpt(row.note.body),
+        createdAt: row.note.createdAt,
+        threadId: row.note.thread.id,
+        brandId: row.note.thread.brandId,
+        brandName: row.note.thread.brand.name,
+        subjectType: row.note.thread.subjectType as NoteSubjectType,
+        contentItemId: row.note.thread.contentItemId,
+        campaignId: row.note.thread.campaignId,
+        assetId: row.note.thread.assetId,
+        subjectTitle:
+          row.note.thread.contentItem?.title ??
+          row.note.thread.campaign?.name ??
+          row.note.thread.asset?.name ??
+          null,
+      }));
   }
 
   /** Mark this person's mentions in one thread as seen. */

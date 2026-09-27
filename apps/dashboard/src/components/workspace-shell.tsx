@@ -46,6 +46,7 @@ import { NotificationsBell } from './notifications-bell';
 import { loadNotificationFeed } from '../app/[locale]/notifications/feed';
 import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
+import { incomingMentions } from '../server/incoming-mentions';
 import { getCustomer, getCustomerAuth, getSessionToken } from '../server/customer-context';
 import { businessSwitcherModel } from '../server/business-switcher';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
@@ -818,7 +819,12 @@ export async function WorkspaceShell({
       <div className="bs-section-stack">{children}</div>
       {/* `useSearchParams` in the host needs a boundary on a prerendered route. */}
       <Suspense fallback={null}>
-        <ToastHost flash={flash} dismissLabel={t('toast.dismiss')} />
+        <ToastHost
+          flash={flash}
+          dismissLabel={t('toast.dismiss')}
+          incoming={await incomingMentions(locale)}
+          openLabel={t('notifications.incoming.open')}
+        />
       </Suspense>
     </AppShell>
   );

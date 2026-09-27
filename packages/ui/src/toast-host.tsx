@@ -4,7 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Toast, type Tone } from './feedback';
 import { motionMs, spacingTokens, zIndexTokens } from './tokens';
-import { TOAST_EVENT, type ToastMessage } from './toast-bus';
+import {
+  INCOMING_SEEN_KEY,
+  TOAST_EVENT,
+  pickIncoming,
+  type IncomingNotice,
+  type ToastMessage,
+} from './toast-bus';
+import { Avatar } from './media';
 import { TOAST_RESUME_MS, toastDuration } from './toast-timing';
 import { EASE_OUT } from './motion';
 import { usePresence } from './motion-hooks';
@@ -57,16 +64,142 @@ function locationKey(pathname: string, search: string): string {
   return `${pathname}?${new URLSearchParams(search).toString()}`;
 }
 
+/**
+ * MO10 (Phase 2B-2b, owner option A) — AN INCOMING MENTION FROM ANOTHER
+ * PERSON, at the bottom, above any toast: the sender's initial, the title, one
+ * line of context, Open and dismiss. It moves as a toast does (MO8), stays for
+ * its reading time (MO9) and closes on dismiss or the next navigation. Shown
+ * once per mention per browser tab — the tab remembers in `sessionStorage`,
+ * and when it cannot, it shows nothing rather than repeat itself on every page.
+ * It stays in the bell's list and in its count; opening it here marks nothing.
+ */
+function IncomingSlot({
+  incoming,
+  here,
+  openLabel,
+  dismissLabel,
+}: {
+  readonly incoming: readonly IncomingNotice[];
+  readonly here: string;
+  readonly openLabel: string;
+  readonly dismissLabel: string;
+}) {
+  const [notice, setNotice] = useState<(IncomingNotice & { readonly key: number }) | null>(null);
+  const noticeRef = useRef(notice);
+  noticeRef.current = notice;
+  const incomingRef = useRef(incoming);
+  incomingRef.current = incoming;
+  const shownAt = useRef<string | null>(null);
+  const sequence = useRef(1);
+  const timer = useRef<number | undefined>(undefined);
+  const close = useCallback(() => setNotice(null), []);
+  const ids = incoming.map((entry) => entry.id).join('|');
+
+  useEffect(() => {
+    if (noticeRef.current && shownAt.current !== null && shownAt.current !== here) {
+      setNotice(null);
+    }
+  }, [here]);
+
+  useEffect(() => {
+    if (ids === '') return;
+    let seen: string[];
+    try {
+      const parsed: unknown = JSON.parse(window.sessionStorage.getItem(INCOMING_SEEN_KEY) ?? '[]');
+      seen = Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
+    } catch {
+      return;
+    }
+    const next = pickIncoming(incomingRef.current, seen);
+    if (!next) return;
+    try {
+      window.sessionStorage.setItem(
+        INCOMING_SEEN_KEY,
+        JSON.stringify([...seen, next.id].slice(-200)),
+      );
+    } catch {
+      return;
+    }
+    shownAt.current = here;
+    setNotice({ ...next, key: sequence.current++ });
+  }, [ids, here]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    timer.current = window.setTimeout(
+      close,
+      toastDuration(`${notice.title} ${notice.context ?? ''}`),
+    );
+    return () => window.clearTimeout(timer.current);
+  }, [notice, close]);
+
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const lastShown = useRef(notice);
+  if (notice) lastShown.current = notice;
+  const { present, leaving } = usePresence(notice !== null, boxRef, toastExit);
+  const shown = notice ?? (present ? lastShown.current : null);
+  const hold = useCallback(() => window.clearTimeout(timer.current), []);
+  const resume = useCallback(() => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(close, TOAST_RESUME_MS);
+  }, [close]);
+
+  if (!shown) return null;
+  return (
+    <div
+      key={shown.key}
+      ref={boxRef}
+      data-incoming-duration={toastDuration(`${shown.title} ${shown.context ?? ''}`)}
+      onMouseEnter={hold}
+      onMouseLeave={resume}
+      onFocus={hold}
+      onBlur={resume}
+      {...(leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
+      style={{ pointerEvents: 'auto', maxInlineSize: '100%' }}
+    >
+      <Toast
+        tone="info"
+        announce={false}
+        className="bs-toast-in"
+        icon={<Avatar initials={shown.initial} size="1.75rem" />}
+        onDismiss={close}
+        dismissLabel={dismissLabel}
+        action={{
+          label: openLabel,
+          href: shown.href,
+          onAction: close,
+          testId: 'incoming-mention-open',
+        }}
+        testId={leaving ? 'incoming-mention-leaving' : 'incoming-mention'}
+      >
+        <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
+          <strong style={{ fontWeight: 600 }}>{shown.title}</strong>
+          {shown.context ? (
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {shown.context}
+            </span>
+          ) : null}
+        </span>
+      </Toast>
+    </div>
+  );
+}
+
 export function ToastHost({
   flash,
   consume = 'ok',
   dismissLabel,
+  incoming = [],
+  openLabel = '',
 }: {
   /** The server-resolved words for this request's `?ok=`, when there is one. */
   readonly flash?: { readonly tone: Tone; readonly message: string } | undefined;
   /** The query parameter a flash arrives on, removed once shown. */
   readonly consume?: string | undefined;
   readonly dismissLabel: string;
+  /** MO10: the reader's unread mentions by other people, newest first. */
+  readonly incoming?: readonly IncomingNotice[] | undefined;
+  readonly openLabel?: string | undefined;
 }) {
   const pathname = usePathname();
   const params = useSearchParams();
@@ -152,12 +285,21 @@ export function ToastHost({
         insetBlockEnd: spacingTokens.lg,
         zIndex: zIndexTokens.toast,
         display: 'flex',
-        justifyContent: 'center',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: spacingTokens.sm,
         paddingInline: spacingTokens.md,
         // The strip is click-through; only the toast itself takes the pointer.
         pointerEvents: 'none',
       }}
     >
+      {/* MO10: an incoming mention sits above any toast. */}
+      <IncomingSlot
+        incoming={incoming}
+        here={here}
+        openLabel={openLabel}
+        dismissLabel={dismissLabel}
+      />
       {shown ? (
         <div
           key={shown.key}

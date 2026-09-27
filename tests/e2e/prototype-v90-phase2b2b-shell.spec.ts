@@ -547,3 +547,133 @@ test.describe('§8 motion — feedback, charts and figures (D-351)', () => {
     expect(await figure.getAttribute('data-counting')).toBeNull();
   });
 });
+
+/**
+ * A second, ACTIVE member of `ws`, and a note by `authorId` about a post,
+ * naming `mentionedId` — the rows `NotesService` itself writes.
+ */
+async function seedMention(
+  ws: OwnWorkspace,
+  input: { authorName: string; self?: boolean },
+): Promise<{ threadId: string; itemId: string; authorId: string }> {
+  let authorId = ws.ownerId;
+  let threadId = '';
+  let itemId = '';
+  await withPlatformPrisma(async (prisma) => {
+    if (!input.self) {
+      const author = await prisma.user.create({
+        data: {
+          email: `mention-${randomUUID()}@example.test`,
+          name: input.authorName,
+          status: 'ACTIVE',
+          timezone: 'UTC',
+        },
+        select: { id: true },
+      });
+      authorId = author.id;
+      const role = await prisma.role.findFirstOrThrow({
+        where: { key: 'workspace_owner', workspaceId: null },
+        select: { id: true },
+      });
+      await prisma.membership.create({
+        data: {
+          workspaceId: ws.workspaceId,
+          userId: authorId,
+          roleId: role.id,
+          status: 'ACTIVE',
+          acceptedAt: new Date(),
+        },
+      });
+    }
+    const item = await prisma.contentItem.create({
+      data: {
+        workspaceId: ws.workspaceId,
+        brandId: ws.brandId,
+        title: `Mentioned post ${randomUUID().slice(0, 6)}`,
+        contentType: 'POST',
+        primaryLocale: 'EN',
+        status: 'DRAFT',
+        createdByUserId: ws.ownerId,
+      } as never,
+      select: { id: true },
+    });
+    itemId = item.id;
+    const thread = await prisma.noteThread.create({
+      data: {
+        workspaceId: ws.workspaceId,
+        brandId: ws.brandId,
+        subjectType: 'CONTENT_ITEM',
+        contentItemId: item.id,
+        createdByUserId: authorId,
+      },
+      select: { id: true },
+    });
+    threadId = thread.id;
+    const note = await prisma.note.create({
+      data: {
+        workspaceId: ws.workspaceId,
+        threadId: thread.id,
+        authorUserId: authorId,
+        body: 'Can you check the caption before Friday?',
+      },
+      select: { id: true },
+    });
+    await prisma.noteMention.create({
+      data: { workspaceId: ws.workspaceId, noteId: note.id, mentionedUserId: ws.ownerId },
+    });
+  });
+  return { threadId, itemId, authorId };
+}
+
+test.describe('MO10 · an incoming mention from another person (option A)', () => {
+  test.skip(({ isMobile }) => isMobile === true, 'one run creates its own workspace');
+
+  test('shows on the next page, once per tab, with the sender, the context and Open', async ({
+    page,
+  }) => {
+    const ws = await ownWorkspace('incoming');
+    const { threadId, itemId } = await seedMention(ws, { authorName: 'Sam Rivera' });
+    // The first page after the mention was written is where it arrives:
+    // `enter` lands on the overview.
+    await enter(page, ws.slug);
+
+    const notice = page.getByTestId('incoming-mention');
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText('Sam Rivera mentioned you');
+    await expect(notice).toContainText('Mentioned post');
+    await expect(notice.locator('[aria-hidden="true"]').first()).toHaveText('S');
+    expect(await notice.evaluate((el) => getComputedStyle(el).animationName)).toBe('bs-toast-in');
+    await expect(page.getByTestId('incoming-mention-open')).toHaveAttribute(
+      'href',
+      `/en/content/compose?item=${itemId}&thread=${threadId}#thread-${threadId}`,
+    );
+    // It stays in the bell's count.
+    await expect(page.getByTestId('topbar-notes-dot')).toBeVisible();
+
+    // Once per mention per tab: the next page does not announce it again.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
+    await expect(page.getByTestId('app-shell')).toBeVisible();
+    await expect(page.getByTestId('incoming-mention')).toHaveCount(0);
+  });
+
+  test('naming yourself is never incoming, and the Notes dot does not count it', async ({
+    page,
+  }) => {
+    const ws = await ownWorkspace('self-mention');
+    await seedMention(ws, { authorName: 'me', self: true });
+    await enter(page, ws.slug);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
+    await expect(page.getByTestId('app-shell')).toBeVisible();
+    await expect(page.getByTestId('incoming-mention')).toHaveCount(0);
+    await expect(page.getByTestId('topbar-notes-dot')).toHaveCount(0);
+  });
+
+  test('in Arabic, the notice speaks Arabic', async ({ page }) => {
+    const ws = await ownWorkspace('incoming-ar');
+    await seedMention(ws, { authorName: 'سارة' });
+    await enter(page, ws.slug, 'ar');
+    const notice = page.getByTestId('incoming-mention');
+    await expect(notice).toContainText('أشار إليك سارة');
+    await expect(page.getByTestId('incoming-mention-open')).toHaveText('فتح');
+  });
+});

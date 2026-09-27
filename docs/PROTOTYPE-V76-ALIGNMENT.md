@@ -485,6 +485,14 @@ Replaces native HTML drag and drop with pointer events, so it also works on touc
 - **Phone.** The calendar is a list, so a long-press lifts the post and a glass strip with the next 14 days slides up from the bottom; dropping on a day moves it. The hint under the list reads "Press and hold a post, then drag it to its new day."
 - **Rules.** Published posts can't be dragged. Dragging needs `content.schedule`, and the server re-checks every move with the existing scheduling rules (F2 no-past, quota, approval). In view-as, a drag is refused with "Preview only".
 
+### 8.3 Implementation notes and known gaps (Phase 2B-2b)
+
+Recorded beside §8, not in it: §8 above is the owner's text and is unchanged.
+
+- **MO10 is mentions only (owner option A, D-352).** A mention by another person appears on the next page the reader opens, once per browser tab. **Known gap — replies and "note" events are not incoming:** nothing writes a notification for them and nothing records who should hear about them, so there is no reliable sender-and-recipient pair to show. Doing it needs a delivery decision first (a notification row per recipient, or a polled feed), which is out of this phase.
+- **View-as does not exist yet (owner answer 2).** When it is built, a view-as session must drop `content.schedule`, so the calendar's existing check refuses a drag — and every other move — with "Preview only".
+- **MO4's pill never changes size.** The owner's width/height exception is MO2's; MO4 slides a `clip-path` instead (D-349).
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):

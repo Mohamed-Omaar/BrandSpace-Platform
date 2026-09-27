@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
 import { AlertIcon, CheckIcon, EmptyBoxIcon, InfoIcon, LockIcon, SearchIcon } from './icons';
@@ -116,20 +117,27 @@ export function Toast({
   action,
   announce = true,
   className,
+  icon,
   testId,
 }: {
   readonly tone: Tone;
   readonly children: ReactNode;
   readonly onDismiss?: (() => void) | undefined;
   readonly dismissLabel?: string | undefined;
-  /** One action beside the message — "Undo" after a move (§8.2). */
+  /**
+   * One action beside the message — "Undo" after a move (§8.2), or "Open" on
+   * an incoming mention (MO10), which is a link because it goes somewhere.
+   */
   readonly action?:
     | {
         readonly label: string;
         readonly onAction: () => void;
+        readonly href?: string | undefined;
         readonly testId?: string | undefined;
       }
     | undefined;
+  /** In place of the tone's icon — the sender's initial on an incoming mention. */
+  readonly icon?: ReactNode;
   /**
    * `false` inside `ToastHost`, whose own region is the live one: a live
    * region inserted together with its words is not reliably announced, so the
@@ -165,10 +173,27 @@ export function Toast({
         {...(tone === 'success' ? { 'data-toast-check': '' } : {})}
         style={{ color: style.color, flexShrink: 0, display: 'inline-flex' }}
       >
-        {style.icon}
+        {icon ?? style.icon}
       </span>
       <span style={{ minInlineSize: 0, flex: 1 }}>{children}</span>
-      {action ? (
+      {action?.href ? (
+        <Link
+          href={action.href}
+          onClick={action.onAction}
+          data-testid={action.testId}
+          className="bs-control"
+          style={{
+            flexShrink: 0,
+            alignSelf: 'center',
+            ...typographyTokens.bodySm,
+            fontWeight: 600,
+            color: colorTokens.brandPurplePressed,
+            textDecoration: 'none',
+          }}
+        >
+          {action.label}
+        </Link>
+      ) : action ? (
         <button
           type="button"
           onClick={action.onAction}

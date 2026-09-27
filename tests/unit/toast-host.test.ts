@@ -78,7 +78,7 @@ describe('the flows touched by Phase 2B-2a and 2B-2b say "done" with a toast', (
 
   it('the shell has exactly one host, and the host cleans the URL', () => {
     const shell = read('apps/dashboard/src/components/workspace-shell.tsx');
-    expect(shell.match(/<ToastHost /g)).toHaveLength(1);
+    expect(shell.match(/<ToastHost\b/g)).toHaveLength(1);
     const host = read('packages/ui/src/toast-host.tsx');
     expect(host).toContain('rest.delete(consume);');
     expect(host).toContain('window.history.replaceState(');
