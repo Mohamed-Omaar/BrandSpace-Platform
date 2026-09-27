@@ -21,7 +21,7 @@ import { mediaForVariants } from '../../../../server/media-picker';
 import { activityTimeline } from '../../../../server/activity-timeline';
 import { ActivityTimeline } from '../../../../components/activity-timeline';
 import { EmptyAction } from '../../../../components/empty-action';
-import { messages, type MessageKey } from '../../../../i18n/messages';
+import { messages, type MessageKey, successFlash } from '../../../../i18n/messages';
 import { brandContextFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
 import { inAnalytics } from '../../../../server/analytics-context';
@@ -412,6 +412,7 @@ export default async function CampaignDetailPage({
 
   return (
     <WorkspaceShell
+      flash={successFlash(single('ok'), locale)}
       brandContext={brandContext}
       locale={locale}
       heading={campaign.name}
@@ -435,9 +436,6 @@ export default async function CampaignDetailPage({
         <CustomerBanner tone="error">
           {statusMessage(single('error'), locale, single('ref'))}
         </CustomerBanner>
-      )}
-      {single('ok') && statusMessage(single('ok'), locale) && (
-        <CustomerBanner tone="success">{statusMessage(single('ok'), locale)}</CustomerBanner>
       )}
 
       <div style={{ display: 'grid', gap: spacingTokens.lg }}>

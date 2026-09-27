@@ -2034,6 +2034,7 @@ export const messages = {
       'لا تملك المنصة مصدر اتجاهات أو منافسين خارجيًا. كل اقتراح هنا مبني على بيانات مساحة عملك وحدها.',
     'insights.accept': 'اعتماد',
     'insights.dismiss': 'استبعاد',
+    'toast.dismiss': 'إغلاق الإشعار',
     'insights.anomalyBaseline': 'خط الأساس',
     'insights.anomalyObserved': 'القيمة المرصودة',
     'insights.anomalyThreshold': 'الحد المعتمد',
@@ -5003,6 +5004,7 @@ export const messages = {
       'BrandSpace has no external trend or competitor source. Every suggestion here rests on your own data alone.',
     'insights.accept': 'Accept',
     'insights.dismiss': 'Dismiss',
+    'toast.dismiss': 'Dismiss notification',
     'insights.anomalyBaseline': 'Baseline',
     'insights.anomalyObserved': 'Observed',
     'insights.anomalyThreshold': 'Threshold',
@@ -6512,6 +6514,19 @@ function deniedActionText(code: string, locale: string): string | null {
   return OWNER_ONLY_PERMISSIONS.includes(key)
     ? fill('perms.denied.ownerOnly')
     : `${fill('perms.denied.you')} ${fill('perms.denied.hintOwner')}`;
+}
+
+/**
+ * C8 (Phase 2B-2b) — A `?ok=` CODE AS A TOAST. The same words `statusMessage`
+ * gives the banner, handed to the shell's `ToastHost` instead; an unknown code
+ * shows nothing, exactly as the banner did.
+ */
+export function successFlash(
+  code: string | null | undefined,
+  locale: string,
+): { readonly tone: 'success'; readonly message: string } | undefined {
+  const message = statusMessage(code, locale);
+  return message === null ? undefined : { tone: 'success', message };
 }
 
 export function statusMessage(

@@ -12,6 +12,10 @@ import { statusMessage } from '../../apps/dashboard/src/i18n/messages';
  * (`ok: 'CODE'` and `ok=CODE`) and requires text for each, in both languages.
  * A code built at runtime (`PREFERENCE_${…}`) is not a literal and is covered
  * where it is built.
+ *
+ * Phase 2B-2b (item 8): also `done(locale, 'CODE')`, the helper Settings →
+ * Publishing redirects through — the gap the Phase 2B-2 report found, where
+ * `SETTINGS_SAVED` and the template codes were never checked.
  */
 
 const root = path.resolve(__dirname, '../../apps/dashboard/src/app');
@@ -34,6 +38,9 @@ function emittedCodes(): Map<string, string> {
     for (const match of source.matchAll(/[?&]ok=([A-Z][A-Z_]*[A-Z])(?![A-Z_$])/g)) {
       codes.set(match[1]!, path.relative(root, file));
     }
+    for (const match of source.matchAll(/\bdone\(\s*locale,\s*'([A-Z][A-Z_]*[A-Z])'\s*\)/g)) {
+      codes.set(match[1]!, path.relative(root, file));
+    }
   }
   return codes;
 }
@@ -44,6 +51,14 @@ describe('D11 · success codes have words', () => {
     expect(codes.has('SAVED')).toBe(true);
     expect(codes.has('TEMPLATE_SAVED')).toBe(true);
     expect(codes.size).toBeGreaterThan(20);
+    // Settings → Publishing, reached only through `done(locale, …)`; these two
+    // codes come from nowhere else, so finding them proves the pattern works.
+    for (const code of ['TEMPLATE_DELETED', 'TEMPLATE_DEFAULT_CHANGED']) {
+      expect(codes.get(code), code).toBe(
+        path.join('[locale]', 'settings', 'publishing', 'actions.ts'),
+      );
+    }
+    expect(codes.has('SETTINGS_SAVED')).toBe(true);
   });
 
   it.each([...emittedCodes().entries()])('%s (from %s) has English and Arabic text', (code) => {

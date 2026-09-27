@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
+import { statusMessage } from '../../apps/dashboard/src/i18n/messages';
+import { toastDuration } from '../../packages/ui/src/toast-timing';
 import { enter, ownWorkspace, signIn, type OwnWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
 
@@ -111,5 +113,102 @@ test.describe('C8 · one overlay stack', () => {
     await expect(drawer).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(drawer).toBeHidden();
+  });
+});
+
+/** Toggle the brand's AI suggestions and save: a real action that redirects with `?ok=SETTINGS_SAVED`. */
+async function saveAiSettings(page: Page, brandId: string): Promise<void> {
+  await page.getByTestId(`ai-suggestions-${brandId}`).click();
+  await page.getByTestId(`ai-save-${brandId}`).click();
+}
+
+test.describe('C8 · the toast host', () => {
+  test.skip(
+    ({ isMobile }) => isMobile === true,
+    'one run creates its own workspace; the desktop run covers it',
+  );
+
+  test('a save says so in a toast, the URL loses ok=, and a refresh does not replay it', async ({
+    page,
+  }) => {
+    const ws = await ownWorkspace('toast');
+    await enter(page, ws.slug);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/ai`);
+    await saveAiSettings(page, ws.brandId);
+
+    const toast = page.getByTestId('toast');
+    await expect(toast).toContainText(statusMessage('SETTINGS_SAVED', 'en')!);
+    // The success banner it replaces is gone from the page.
+    await expect(page.getByTestId('ai-settings')).toBeVisible();
+    await expect(page).toHaveURL(/\/en\/settings\/ai$/);
+
+    await page.reload();
+    await expect(page.getByTestId('ai-settings')).toBeVisible();
+    await expect(page.getByTestId('toast')).toHaveCount(0);
+  });
+
+  test('it stays its reading time, holds while hovered, and resumes with 2.2 s to go', async ({
+    page,
+  }) => {
+    const ws = await ownWorkspace('toast-time');
+    await enter(page, ws.slug);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/ai`);
+    await saveAiSettings(page, ws.brandId);
+
+    const toast = page.getByTestId('toast');
+    const text = statusMessage('SETTINGS_SAVED', 'en')!;
+    await expect(toast).toContainText(text);
+    await expect(page.locator('[data-toast-duration]')).toHaveAttribute(
+      'data-toast-duration',
+      String(toastDuration(text)),
+    );
+
+    // Held: well past its own reading time, it is still there.
+    await toast.hover();
+    await page.waitForTimeout(toastDuration(text) + 1_000);
+    await expect(toast).toBeVisible();
+
+    // Released: it stays about 2.2 s more, then goes.
+    const released = Date.now();
+    await page.mouse.move(2, 2);
+    await expect(toast).toBeHidden({ timeout: 6_000 });
+    expect(Date.now() - released).toBeGreaterThanOrEqual(1_800);
+  });
+
+  test('dismiss closes it at once, and so does the next navigation', async ({ page }) => {
+    const ws = await ownWorkspace('toast-close');
+    await enter(page, ws.slug);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/ai`);
+
+    await saveAiSettings(page, ws.brandId);
+    await expect(page.getByTestId('toast')).toBeVisible();
+    await page.getByTestId('toast-dismiss').click();
+    await expect(page.getByTestId('toast')).toHaveCount(0);
+
+    await saveAiSettings(page, ws.brandId);
+    await expect(page.getByTestId('toast')).toBeVisible();
+    // A client-side navigation, not a reload: the host itself stays mounted.
+    await page.locator('a[href="/en/calendar"]').first().click();
+    await page.waitForURL(/\/en\/calendar/);
+    await expect(page.getByTestId('toast')).toHaveCount(0);
+  });
+
+  test('in Arabic the toast speaks Arabic', async ({ page }) => {
+    const ws = await ownWorkspace('toast-ar');
+    await enter(page, ws.slug, 'ar');
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/settings/ai`);
+    await saveAiSettings(page, ws.brandId);
+    await expect(page.getByTestId('toast')).toContainText(statusMessage('SETTINGS_SAVED', 'ar')!);
+    await expect(page.getByTestId('toast-dismiss')).toHaveAttribute('aria-label', 'إغلاق الإشعار');
+  });
+
+  test('a page that still draws its own banner keeps ok= in its URL (not refactored here)', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/approvals?ok=SAVED`);
+    await expect(page.getByText(statusMessage('SAVED', 'en')!).first()).toBeVisible();
+    await expect(page).toHaveURL(/[?&]ok=SAVED/);
+    await expect(page.getByTestId('toast')).toHaveCount(0);
   });
 });

@@ -32,6 +32,7 @@ import {
   statusMessage,
   translator,
   type MessageKey,
+  successFlash,
 } from '../../../../i18n/messages';
 import {
   CustomerBanner,
@@ -923,7 +924,6 @@ export default async function ComposePage({
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
   const reference = single('ref');
-  const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? statusMessage(error, locale, reference) : null;
 
   /*
@@ -956,6 +956,7 @@ export default async function ComposePage({
 
   return (
     <WorkspaceShell
+      flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
       heading={translate(draft ? 'content.composer.editTitle' : 'content.composer.title')}
@@ -966,7 +967,6 @@ export default async function ComposePage({
       customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
       <ComposerView
         locale={locale}

@@ -113,19 +113,34 @@ export function Toast({
   children,
   onDismiss,
   dismissLabel,
+  action,
+  announce = true,
   testId,
 }: {
   readonly tone: Tone;
   readonly children: ReactNode;
   readonly onDismiss?: (() => void) | undefined;
   readonly dismissLabel?: string | undefined;
+  /** One action beside the message — "Undo" after a move (§8.2). */
+  readonly action?:
+    | {
+        readonly label: string;
+        readonly onAction: () => void;
+        readonly testId?: string | undefined;
+      }
+    | undefined;
+  /**
+   * `false` inside `ToastHost`, whose own region is the live one: a live
+   * region inserted together with its words is not reliably announced, so the
+   * host keeps one that is always there.
+   */
+  readonly announce?: boolean | undefined;
   readonly testId?: string | undefined;
 }) {
   const style = toneStyle(tone);
   return (
     <div
-      role="status"
-      aria-live="polite"
+      {...(announce ? { role: 'status', 'aria-live': 'polite' as const } : {})}
       data-testid={testId ?? 'toast'}
       style={{
         display: 'flex',
@@ -145,11 +160,34 @@ export function Toast({
         {style.icon}
       </span>
       <span style={{ minInlineSize: 0, flex: 1 }}>{children}</span>
+      {action ? (
+        <button
+          type="button"
+          onClick={action.onAction}
+          data-testid={action.testId}
+          className="bs-control"
+          style={{
+            flexShrink: 0,
+            background: 'transparent',
+            border: 0,
+            padding: 0,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            ...typographyTokens.bodySm,
+            fontWeight: 600,
+            color: colorTokens.brandPurplePressed,
+            minBlockSize: '24px',
+          }}
+        >
+          {action.label}
+        </button>
+      ) : null}
       {onDismiss && dismissLabel ? (
         <button
           type="button"
           onClick={onDismiss}
           aria-label={dismissLabel}
+          data-testid={`${testId ?? 'toast'}-dismiss`}
           style={{
             background: 'transparent',
             border: 0,

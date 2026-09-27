@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
 import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
+import { statusMessage } from '../../apps/dashboard/src/i18n/messages';
 
 /**
  * The Content Calendar, end to end, in a real browser.
@@ -126,9 +127,7 @@ async function clickUntil(page: Page, testId: string, settled: () => Promise<voi
  * alone to finish. A genuinely broken action still fails — it just fails at the
  * URL that never moved, instead of destroying the fixture on its way there.
  */
-async function submitAndExpect(page: Page, testId: string, marker: RegExp): Promise<void> {
-  const before = page.url();
-
+async function submitAndExpect(page: Page, testId: string, code: string): Promise<void> {
   await expect(async () => {
     // Armed BEFORE the click, so a request that races the await is not missed.
     const sent = page
@@ -139,12 +138,30 @@ async function submitAndExpect(page: Page, testId: string, marker: RegExp): Prom
     expect(await sent, 'the click never reached the server').toBe(true);
   }).toPass({ timeout: 30_000 });
 
-  // ONE ACTION, UNINTERRUPTED. Generous, because the only thing being waited on
-  // now is the server finishing work it has definitely started.
+  /*
+   * ONE ACTION, UNINTERRUPTED. Generous, because the only thing being waited on
+   * now is the server finishing work it has definitely started.
+   *
+   * C8 (Phase 2B-2b, owner-approved): the calendar says "done" with a TOAST
+   * and takes `ok=` off the address once shown, so a refresh does not replay
+   * it. The address can therefore end exactly where it started, so neither
+   * "the URL moved" nor "the URL says ok=" is a signal any more; the toast
+   * carrying the action's words is. A refusal still fails at once, with the
+   * URL it produced (point 3 above).
+   */
+  const expected = statusMessage(code, 'en');
   await expect
-    .poll(() => page.url(), { message: 'the form did not submit', timeout: 60_000 })
-    .not.toBe(before);
-  await expect.poll(() => page.url(), { timeout: 15_000 }).toMatch(marker);
+    .poll(
+      async () => {
+        const url = page.url();
+        if (/[?&]error=/.test(url)) return `refused: ${url}`;
+        const toast = page.getByTestId('toast');
+        return (await toast.count()) > 0 ? await toast.textContent() : `waiting: ${url}`;
+      },
+      { message: 'the form did not submit', timeout: 60_000 },
+    )
+    .toContain(expected);
+  await expect.poll(() => page.url(), { timeout: 15_000 }).not.toMatch(/[?&]ok=/);
 }
 
 /** A date a comfortable distance ahead, as the date input wants it. */
@@ -251,7 +268,7 @@ test.describe('placing content on the calendar', () => {
     await expect(page.getByTestId('schedule-date')).toHaveValue(when);
     await expect(page.getByTestId('schedule-time')).toHaveValue('09:00');
 
-    await submitAndExpect(page, 'schedule-submit', /[?&]ok=CONTENT_SCHEDULED/);
+    await submitAndExpect(page, 'schedule-submit', 'CONTENT_SCHEDULED');
 
     // AC-14.1 — it is on the calendar, in the month it was scheduled into.
     const openMonth = async (month: string) => {
@@ -301,14 +318,14 @@ test.describe('placing content on the calendar', () => {
     await page.getByTestId('reschedule-time').fill('17:30');
     await expect(page.getByTestId('reschedule-date')).toHaveValue(moved);
 
-    await submitAndExpect(page, 'reschedule-submit', /[?&]ok=CONTENT_RESCHEDULED/);
+    await submitAndExpect(page, 'reschedule-submit', 'CONTENT_RESCHEDULED');
 
     // AC-14.8 — and take it off again.
     const afterMove = await openMonth(moved.slice(0, 7));
     await expect(afterMove).toContainText('Seasonal note');
     await afterMove.locator('button').first().click();
     await expect(page.getByTestId('calendar-slot-dialog')).toBeVisible();
-    await submitAndExpect(page, 'calendar-cancel-submit', /[?&]ok=CONTENT_UNSCHEDULED/);
+    await submitAndExpect(page, 'calendar-cancel-submit', 'CONTENT_UNSCHEDULED');
 
     /*
      * It is schedulable AGAIN, which is the proof that cancelling returned the
