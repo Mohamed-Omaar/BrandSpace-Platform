@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SegmentPill } from './segment-pill';
 import {
   colorTokens,
   motionTokens,
@@ -60,6 +61,8 @@ export function LinkTabs({
         maxInlineSize: '100%',
       }}
     >
+      {/* MO4: the current tab's pill slides between tabs. */}
+      <SegmentPill selector='[aria-current="page"]' />
       {tabs.map((tab) => {
         const current = tab.id === currentId;
         return (

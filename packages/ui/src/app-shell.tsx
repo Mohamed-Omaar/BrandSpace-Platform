@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -21,7 +22,9 @@ import {
   spacingTokens,
   typographyTokens,
   zIndexTokens,
+  motionMs,
 } from './tokens';
+import { prefersReducedMotion } from './motion';
 import { AmbientBackground } from './ambient';
 import { ChevronEndIcon, ChevronStartIcon, CloseIcon, MenuIcon } from './icons';
 import { Tooltip, useOverlayBehaviour } from './overlays';
@@ -248,7 +251,10 @@ function NavLink({
         {item.icon}
       </span>
       {collapsed ? null : (
-        <span style={{ minInlineSize: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span
+          className="bs-nav-label"
+          style={{ minInlineSize: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}
+        >
           {item.label}
         </span>
       )}
@@ -271,22 +277,153 @@ function NavLink({
   );
 }
 
+/*
+ * MO1 — PAGES ENTER, EXCEPT THE FIRST PAGE OF A SESSION.
+ *
+ * The first page of a browser tab is always a full document load, painted
+ * before any script runs, so it is never animated; the entrance is for the page
+ * changes after it. The first shell to mount in a document marks the flow
+ * already on screen as entered, then switches the entrance on for every flow
+ * inserted later (`[data-page-enter]` in tokens.css). `sessionStorage` is the
+ * gate the owner chose (Phase 2B-2b answer 9): when it cannot be used — a
+ * private window that refuses it — nothing animates.
+ */
+const PAGE_ENTER_KEY = 'brandspace.session.seen';
+let pageEnterGateChecked = false;
+
+function usePageEnterGate(): void {
+  useEffect(() => {
+    if (pageEnterGateChecked) return;
+    pageEnterGateChecked = true;
+    try {
+      window.sessionStorage.setItem(PAGE_ENTER_KEY, '1');
+      if (window.sessionStorage.getItem(PAGE_ENTER_KEY) !== '1') return;
+    } catch {
+      return;
+    }
+    for (const flow of document.querySelectorAll('.bs-page-flow')) {
+      flow.setAttribute('data-entered', '');
+    }
+    document.documentElement.setAttribute('data-page-enter', '');
+  }, []);
+}
+
+/*
+ * MO2 — WHERE THE RAIL'S PILL LAST STOOD, in this document. A page change
+ * mounts a new shell, so the pill's previous place is kept here: the new pill
+ * starts where the old one was and glides to its item. The very first
+ * placement in a document has nowhere to come from, so it simply appears.
+ */
+let lastRailPill: { x: number; y: number; w: number; h: number } | null = null;
+
+/**
+ * MO2 — ONE DARK PILL GLIDES TO THE CURRENT ITEM (440 ms) instead of each item
+ * painting its own background. Until it has been placed — before hydration,
+ * or with script off — the current item keeps painting its own ink fill, so
+ * the first paint is never without one (`[data-pill='placed']` in tokens.css).
+ * It follows its item's size as the rail collapses (MO3) without a transition
+ * of its own, so it shrinks into the square with the column.
+ */
+function useNavPill(
+  listRef: React.RefObject<HTMLDivElement | null>,
+  pillRef: React.RefObject<HTMLSpanElement | null>,
+  scope: 'rail' | 'drawer',
+  activeHref: string | undefined,
+): void {
+  const placedOnce = useRef(false);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const pill = pillRef.current;
+    if (!list || !pill) return undefined;
+
+    const measure = () => {
+      const link = list.querySelector<HTMLElement>('a[aria-current="page"]');
+      if (!link) return null;
+      const outer = list.getBoundingClientRect();
+      const inner = link.getBoundingClientRect();
+      return {
+        x: inner.left - outer.left,
+        y: inner.top - outer.top,
+        w: inner.width,
+        h: inner.height,
+      };
+    };
+    const put = (at: { x: number; y: number; w: number; h: number }, glide: boolean) => {
+      pill.style.transition =
+        glide && !prefersReducedMotion()
+          ? ['transform', 'width', 'height']
+              .map((property) => `${property} ${motionMs.pill}ms var(--bs-ease-out)`)
+              .join(', ')
+          : 'none';
+      pill.style.transform = `translate(${at.x}px, ${at.y}px)`;
+      pill.style.width = `${at.w}px`;
+      pill.style.height = `${at.h}px`;
+    };
+
+    const target = measure();
+    if (!target) {
+      list.removeAttribute('data-pill');
+      return undefined;
+    }
+    const from = placedOnce.current ? null : scope === 'rail' ? lastRailPill : null;
+    if (!placedOnce.current && from) {
+      // Start where the previous page's pill stood, then glide.
+      put(from, false);
+      void pill.offsetWidth;
+      put(target, true);
+    } else {
+      put(target, placedOnce.current);
+    }
+    placedOnce.current = true;
+    list.setAttribute('data-pill', 'placed');
+    if (scope === 'rail') lastRailPill = target;
+
+    // The rail collapsing or the window resizing moves the item: follow it.
+    const observer = new ResizeObserver(() => {
+      const now = measure();
+      if (!now) return;
+      put(now, false);
+      if (scope === 'rail') lastRailPill = now;
+    });
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [listRef, pillRef, scope, activeHref]);
+}
+
 function NavList({
   sections,
   collapsed,
   onNavigate,
+  pillScope = 'rail',
 }: {
   readonly sections: readonly ShellNavSection[];
   readonly collapsed: boolean;
   readonly onNavigate?: (() => void) | undefined;
+  readonly pillScope?: 'rail' | 'drawer';
 }) {
   // Hidden items name pages; they are never drawn (D-308). A section left
   // with nothing to draw is not drawn either, heading included.
   const visible = sections
     .map((section) => ({ ...section, items: section.items.filter((item) => !item.hidden) }))
     .filter((section) => section.items.length > 0);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const pillRef = useRef<HTMLSpanElement | null>(null);
+  const activeHref = visible
+    .flatMap((section) => section.items)
+    .find((item) => item.active === true)?.href;
+  useNavPill(listRef, pillRef, pillScope, activeHref);
   return (
-    <div style={{ display: 'grid', gap: layoutTokens.navGroupGap }}>
+    <div
+      ref={listRef}
+      className="bs-nav-list"
+      style={{ display: 'grid', gap: layoutTokens.navGroupGap, position: 'relative' }}
+    >
+      <span
+        ref={pillRef}
+        aria-hidden="true"
+        className="bs-nav-pill"
+        data-testid={`nav-pill-${pillScope}`}
+      />
       {visible.map((section, sectionIndex) => (
         <div key={section.title ?? `section-${sectionIndex}`}>
           {/* A section heading is meaningless next to icons with no labels, so
@@ -304,6 +441,7 @@ function NavList({
               />
             ) : (
               <h2
+                className="bs-nav-label"
                 style={{
                   // `.nav-group-title { padding: 0 12px 7px; font-size: 9px;
                   //  font-weight: 800; letter-spacing: .08em }`.
@@ -432,6 +570,7 @@ export function AppShell({
   readonly contentMaxWidth?: string;
 }) {
   const pathname = usePathname();
+  usePageEnterGate();
   const matched = matchNavItem(sections, pathname);
 
   /*
@@ -453,6 +592,47 @@ export function AppShell({
   const resolvedTitle = pageTitle ?? matched?.pageTitle ?? matched?.label;
 
   const [collapsed, setCollapsed, hydrated] = useCollapsePreference();
+  /*
+   * MO3 — THE STATE CHANGES AT ONCE; ITS PRESENTATION IS SEQUENCED. The
+   * preference, `aria-pressed` and the control's name flip on the click.
+   * Collapsing, the labels first fade out (110 ms, `collapsing`), then the
+   * column shrinks (380 ms); expanding, the column grows and the labels fade
+   * in after it (220 ms, 150 ms late). The column transition exists only
+   * after a click (`data-sidebar-motion`): a stored "collapsed" applied on
+   * load is never animated.
+   */
+  const [fadingOut, setFadingOut] = useState(false);
+  const [sidebarMotion, setSidebarMotion] = useState(false);
+  const motionTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(motionTimer.current), []);
+  const toggleCollapsed = useCallback(() => {
+    const next = !collapsed;
+    setCollapsed(next);
+    window.clearTimeout(motionTimer.current);
+    if (prefersReducedMotion()) {
+      setFadingOut(false);
+      setSidebarMotion(false);
+      return;
+    }
+    setSidebarMotion(true);
+    const settle = () => {
+      motionTimer.current = window.setTimeout(
+        () => setSidebarMotion(false),
+        Math.max(motionMs.collapse, motionMs.labelInDelay + motionMs.labelIn) + 50,
+      );
+    };
+    if (next) {
+      setFadingOut(true);
+      motionTimer.current = window.setTimeout(() => {
+        setFadingOut(false);
+        settle();
+      }, motionMs.labelOut);
+    } else {
+      setFadingOut(false);
+      settle();
+    }
+  }, [collapsed, setCollapsed]);
+  const layoutCollapsed = collapsed && !fadingOut;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const drawerId = useId();
@@ -472,7 +652,9 @@ export function AppShell({
     return () => query.removeEventListener('change', onChange);
   }, [drawerOpen]);
 
-  const sidebarWidth = collapsed ? layoutTokens.sidebarCollapsed : layoutTokens.sidebarExpanded;
+  const sidebarWidth = layoutCollapsed
+    ? layoutTokens.sidebarCollapsed
+    : layoutTokens.sidebarExpanded;
 
   const sidebarBody = (
     <>
@@ -493,10 +675,12 @@ export function AppShell({
             //  column; height: 88px }` — the mark stays, the wordmark goes.
             // `.sidebar-top { height: 54px; padding: 0 5px }` and collapsed
             // `{ flex-direction: column; height: 90px; gap: 8px }`.
-            flexDirection: collapsed ? 'column' : 'row',
-            justifyContent: collapsed ? 'center' : 'space-between',
+            flexDirection: layoutCollapsed ? 'column' : 'row',
+            justifyContent: layoutCollapsed ? 'center' : 'space-between',
             gap: spacingTokens.sm,
-            blockSize: collapsed ? layoutTokens.railTopHeightCollapsed : layoutTokens.railTopHeight,
+            blockSize: layoutCollapsed
+              ? layoutTokens.railTopHeightCollapsed
+              : layoutTokens.railTopHeight,
             paddingInline: layoutTokens.railTopPadInline,
           }}
         >
@@ -507,7 +691,7 @@ export function AppShell({
             data-testid="toggle-sidebar"
             aria-label={collapsed ? labels.expandSidebar : labels.collapseSidebar}
             aria-pressed={collapsed}
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={toggleCollapsed}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -569,7 +753,7 @@ export function AppShell({
           paddingBlock: `${spacingTokens['3xs']} 0.625rem`,
         }}
       >
-        <NavList sections={resolvedSections} collapsed={collapsed} />
+        <NavList sections={resolvedSections} collapsed={layoutCollapsed} />
       </div>
 
       {/* The identity sits at the FOOT, pinned by `margin-block-start: auto`,
@@ -583,7 +767,7 @@ export function AppShell({
             paddingBlockStart: spacingTokens.sm,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'flex-start',
+            justifyContent: layoutCollapsed ? 'center' : 'flex-start',
             minInlineSize: 0,
           }}
         >
@@ -597,7 +781,16 @@ export function AppShell({
     <div
       className="bs-ambient-host"
       data-testid="app-shell"
-      data-sidebar-state={hydrated ? (collapsed ? 'collapsed' : 'expanded') : 'expanded'}
+      data-sidebar-state={
+        hydrated
+          ? fadingOut
+            ? 'collapsing'
+            : layoutCollapsed
+              ? 'collapsed'
+              : 'expanded'
+          : 'expanded'
+      }
+      {...(sidebarMotion ? { 'data-sidebar-motion': '' } : {})}
     >
       {/* Behind everything, at `z-index: -2`, opaque shell above it. */}
       <AmbientBackground />
@@ -811,7 +1004,13 @@ export function AppShell({
               paddingBlockEnd: layoutTokens.panelPadBlockEnd,
             }}
           >
+            {/*
+              MO1: keyed by the path, so a page change inserts a new flow whose
+              blocks enter; the same page re-rendering (a filter, a month)
+              keeps its flow and does not replay the entrance.
+            */}
             <div
+              key={pathname ?? ''}
               className="bs-page-flow"
               style={{ maxInlineSize: contentMaxWidth, marginInline: 'auto' }}
             >
@@ -890,7 +1089,12 @@ export function AppShell({
             {headerStart}
             {/* Never collapsed in the drawer: the whole point of the drawer is
                 that there is room for labels. */}
-            <NavList sections={resolvedSections} collapsed={false} onNavigate={closeDrawer} />
+            <NavList
+              sections={resolvedSections}
+              collapsed={false}
+              onNavigate={closeDrawer}
+              pillScope="drawer"
+            />
             {profile}
           </div>
         </div>

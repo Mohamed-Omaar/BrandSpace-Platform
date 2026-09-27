@@ -6,6 +6,7 @@ import { Button, ButtonRow, IconButton } from './primitives';
 import { ChevronEndIcon, ChevronStartIcon } from './icons';
 import { CalendarPostChip, type PostCardLabels, type PostRecord } from './post-card';
 import { StateMessage } from './feedback';
+import { SegmentPill } from './segment-pill';
 
 /**
  * The social content calendar.
@@ -613,6 +614,8 @@ export function ContentCalendar({
             background: colorTokens.surfaceMuted,
           }}
         >
+          {/* MO4: the chosen view's pill slides between views. */}
+          <SegmentPill selector='[aria-pressed="true"]' />
           {viewButton('month', labels.monthView)}
           {viewButton('week', labels.weekView)}
           {viewButton('agenda', labels.agendaView)}

@@ -515,7 +515,15 @@ h4 {
     background: rgba(255, 255, 255, 0.78);
     backdrop-filter: blur(24px);
     box-shadow: var(--bs-shadow-shell);
-    transition: grid-template-columns var(--bs-duration-slow) var(--bs-ease-out);
+  }
+
+  /*
+   * MO3 — the column animates (380 ms) only when the reader toggled it; a
+   * stored "collapsed" applied on load snaps into place. The one layout
+   * property §8 lets animate.
+   */
+  [data-sidebar-motion] .bs-shell {
+    transition: grid-template-columns var(--bs-motion-collapse) var(--bs-ease-out);
   }
 
   /*
@@ -1169,6 +1177,163 @@ html[dir='rtl'] input[type='week'] {
  */
 [data-sidebar-state='collapsed'] .bs-rail-copy {
   display: none !important;
+}
+
+/*
+ * MO3 — labels leave before the column shrinks (110 ms) and arrive after it
+ * grows (220 ms, 150 ms late). Opacity only; the labels' own space is taken
+ * away by the collapse itself.
+ */
+[data-sidebar-state='collapsing'] :is(.bs-nav-label, .bs-brand-text, .bs-rail-copy) {
+  opacity: 0;
+  transition: opacity var(--bs-motion-label-out) var(--bs-ease-out);
+}
+
+@keyframes bs-label-in {
+  from {
+    opacity: 0;
+  }
+}
+
+[data-sidebar-motion][data-sidebar-state='expanded']
+  :is(.bs-nav-label, .bs-brand-text, .bs-rail-copy) {
+  animation: bs-label-in var(--bs-motion-label-in) var(--bs-ease-out)
+    var(--bs-motion-label-in-delay) both;
+}
+
+/*
+ * MO1 — A PAGE'S TOP-LEVEL BLOCKS ENTER ONE AFTER ANOTHER: opacity, a 10 px
+ * rise and a 6 px blur clearing, 440 ms, 45 ms apart; from the 8th block on,
+ * 300 ms and no blur, starting with the 7th. Blocks are the page flow's own
+ * children (the hero, the actions row) and the section stack's. Never on a
+ * flow already on screen when the gate opened (`data-entered`, app-shell.tsx).
+ *
+ * §8.0: never `filter` on an element with `backdrop-filter` — nor on one
+ * holding glass, whose blur the filter would flatten — so those blocks take
+ * the rise without the blur.
+ */
+@keyframes bs-page-in {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+    filter: blur(6px);
+  }
+}
+
+@keyframes bs-page-in-plain {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+}
+
+[data-page-enter] .bs-page-flow:not([data-entered]) > :not(.bs-section-stack),
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > * {
+  animation: bs-page-in var(--bs-motion-page) var(--bs-ease-out) both;
+}
+
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(1) {
+  animation-delay: calc(var(--bs-motion-page-step) * 1);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(2) {
+  animation-delay: calc(var(--bs-motion-page-step) * 2);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(3) {
+  animation-delay: calc(var(--bs-motion-page-step) * 3);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(4) {
+  animation-delay: calc(var(--bs-motion-page-step) * 4);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(5) {
+  animation-delay: calc(var(--bs-motion-page-step) * 5);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(n + 6) {
+  animation-delay: calc(var(--bs-motion-page-step) * 6);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(n + 7) {
+  animation-name: bs-page-in-plain;
+  animation-duration: var(--bs-motion-page-late);
+}
+
+[data-page-enter]
+  .bs-page-flow:not([data-entered])
+  > :not(.bs-section-stack):is(
+    .bb-hero,
+    [style*='backdrop-filter'],
+    :has(.bb-hero, [style*='backdrop-filter'])
+  ),
+[data-page-enter]
+  .bs-page-flow:not([data-entered])
+  .bs-section-stack
+  > :is(.bb-hero, [style*='backdrop-filter'], :has(.bb-hero, [style*='backdrop-filter'])) {
+  animation-name: bs-page-in-plain;
+}
+
+/*
+ * MO4 — THE SEGMENTED PILL (`segment-pill.tsx`). A full-size layer clipped to
+ * the selected segment; the clip slides. Once placed, the segments sit above
+ * it and the selected one stops painting its own fill and shadow.
+ */
+.bs-seg-pill,
+.bs-seg-pill-fill {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.bs-seg-pill {
+  z-index: 0;
+  visibility: hidden;
+}
+
+[data-seg='placed'] > .bs-seg-pill {
+  visibility: visible;
+}
+
+[data-seg='placed'] > :not(.bs-seg-pill) {
+  position: relative;
+  z-index: 1;
+}
+
+[data-seg='placed']
+  > :is([aria-current='page'], [aria-pressed='true'], [aria-selected='true']):not(.bs-seg-pill) {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/*
+ * MO2 — THE RAIL'S PILL. One ink pill per navigation list, placed on the
+ * current item by script; its colour, radius and shadow are exactly the ones
+ * the item used to paint on itself (D-59). Once placed, the item stops
+ * painting its own, and sits above the pill.
+ */
+.bs-nav-pill {
+  position: absolute;
+  inset-block-start: 0;
+  /* PHYSICAL on purpose: script places it by `getBoundingClientRect` offsets,
+     which are physical in both directions, so the origin must be too. */
+  left: 0;
+  z-index: 0;
+  inline-size: 0;
+  block-size: 0;
+  border-radius: var(--bs-radius-control);
+  background: var(--bs-ink);
+  box-shadow: var(--bs-shadow-nav-active);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.bs-nav-list[data-pill='placed'] > .bs-nav-pill {
+  visibility: visible;
+}
+
+.bs-nav-list a {
+  z-index: 1;
+}
+
+.bs-nav-list[data-pill='placed'] a[aria-current='page'] {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 /*

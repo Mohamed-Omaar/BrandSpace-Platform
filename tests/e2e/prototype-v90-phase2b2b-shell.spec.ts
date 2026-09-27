@@ -254,3 +254,166 @@ test.describe('§8 motion — foundation (D-348)', () => {
     );
   });
 });
+
+test.describe('§8 motion — the shell (D-349)', () => {
+  test.skip(({ isMobile }) => isMobile === true, 'the rail and its pill are the desktop shell');
+
+  test('MO1: the first page does not enter; the next page’s blocks do, 45 ms apart', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    const first = page.locator('.bs-page-flow .bs-section-stack > *').first();
+    await expect(first).toBeVisible();
+    expect(await first.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+
+    await page.getByTestId('nav-calendar').click();
+    await page.waitForURL(/\/en\/calendar/);
+    const blocks = page.locator('.bs-page-flow:not([data-entered]) .bs-section-stack > *');
+    await expect(blocks.first()).toBeVisible();
+    const timing = await blocks.evaluateAll((els) =>
+      els.map((el) => {
+        const style = getComputedStyle(el);
+        return `${style.animationName} ${style.animationDuration} ${style.animationDelay}`;
+      }),
+    );
+    expect(timing[0]).toBe('bs-page-in 0.44s 0.045s');
+    if (timing.length > 1) expect(timing[1]).toMatch(/^bs-page-in(-plain)? 0\.44s 0\.09s$/);
+  });
+
+  test('MO1: when sessionStorage is refused, nothing enters', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'sessionStorage', {
+        get() {
+          throw new Error('storage refused');
+        },
+      });
+    });
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    await page.getByTestId('nav-calendar').click();
+    await page.waitForURL(/\/en\/calendar/);
+    const block = page.locator('.bs-page-flow .bs-section-stack > *').first();
+    await expect(block).toBeVisible();
+    expect(await block.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+  });
+
+  test('MO2: one ink pill sits on the current item and glides to the next', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    const offset = () =>
+      page.evaluate(() => {
+        const pill = document
+          .querySelector('[data-testid="nav-pill-rail"]')!
+          .getBoundingClientRect();
+        const item = document
+          .querySelector('[data-testid="sidebar"] a[aria-current="page"]')!
+          .getBoundingClientRect();
+        return (
+          Math.abs(pill.x - item.x) +
+          Math.abs(pill.y - item.y) +
+          Math.abs(pill.width - item.width) +
+          Math.abs(pill.height - item.height)
+        );
+      });
+    const pill = page.getByTestId('nav-pill-rail');
+    await expect(pill).toBeVisible();
+    await expect.poll(offset).toBeLessThan(1);
+    // The first placement has no transition; the item no longer paints its own ink.
+    expect(await pill.evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0s');
+    expect(await pill.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+      'rgb(17, 17, 20)',
+    );
+    expect(
+      await page
+        .locator('[data-testid="sidebar"] a[aria-current="page"]')
+        .evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe('rgba(0, 0, 0, 0)');
+
+    await page.getByTestId('nav-calendar').click();
+    await page.waitForURL(/\/en\/calendar/);
+    await expect(page.getByTestId('nav-calendar')).toHaveAttribute('aria-current', 'page');
+    const moving = await page
+      .getByTestId('nav-pill-rail')
+      .evaluate((el) => [
+        getComputedStyle(el).transitionProperty,
+        getComputedStyle(el).transitionDuration,
+      ]);
+    expect(moving[0]).toContain('transform');
+    expect(moving[1]).toContain('0.44s');
+    await expect.poll(offset).toBeLessThan(1);
+  });
+
+  test('MO3: the state flips at once, labels leave before the column, and a stored collapse does not animate', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    const shell = page.getByTestId('app-shell');
+    await expect(shell).toHaveAttribute('data-sidebar-state', 'expanded');
+    await page.evaluate(() => {
+      const host = document.querySelector('[data-testid="app-shell"]')!;
+      const seen: string[] = [];
+      (window as unknown as { seen: string[] }).seen = seen;
+      new MutationObserver(() => seen.push(host.getAttribute('data-sidebar-state') ?? '')).observe(
+        host,
+        { attributes: true, attributeFilter: ['data-sidebar-state'] },
+      );
+    });
+    const toggle = page.getByTestId('toggle-sidebar');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(shell).toHaveAttribute('data-sidebar-state', 'collapsed');
+    expect(await page.evaluate(() => (window as unknown as { seen: string[] }).seen)).toEqual([
+      'collapsing',
+      'collapsed',
+    ]);
+
+    // Stored "collapsed", applied on load: no transition on the column.
+    await page.reload();
+    await expect(shell).toHaveAttribute('data-sidebar-state', 'collapsed');
+    await expect(shell).not.toHaveAttribute('data-sidebar-motion', '');
+    expect(
+      await page.locator('.bs-shell').evaluate((el) => getComputedStyle(el).transitionDuration),
+    ).toBe('0s');
+
+    await toggle.click();
+    await expect(shell).toHaveAttribute('data-sidebar-state', 'expanded');
+  });
+
+  test('MO4: the calendar’s view pill slides with clip-path to the chosen view', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
+    const group = page.getByTestId('calendar-view-month').locator('..');
+    const pillFill = group.locator('.bs-seg-pill-fill');
+    await expect(group).toHaveAttribute('data-seg', 'placed');
+    await page.getByTestId('calendar-view-week').click();
+    await expect(page.getByTestId('calendar-view-week')).toHaveAttribute('aria-pressed', 'true');
+    const style = await pillFill.evaluate((el) => [
+      getComputedStyle(el).transitionProperty,
+      getComputedStyle(el).transitionDuration,
+    ]);
+    expect(style).toEqual(['clip-path', '0.38s']);
+    // It ends exactly on the chosen view, and the view no longer paints its own fill.
+    await expect
+      .poll(() =>
+        group.evaluate((box) => {
+          const clip = getComputedStyle(box.querySelector('.bs-seg-pill-fill')!).clipPath;
+          const week = box.querySelector<HTMLElement>('[data-testid="calendar-view-week"]')!;
+          const inner = week.getBoundingClientRect();
+          const outer = box.getBoundingClientRect();
+          const left = inner.left - outer.left - box.clientLeft;
+          const found = /inset\(\s*[\d.]+px\s+[\d.]+px\s+[\d.]+px\s+([\d.]+)px/.exec(clip);
+          return found !== null && Math.abs(Number(found[1]) - left) < 1;
+        }),
+      )
+      .toBe(true);
+    expect(
+      await page
+        .getByTestId('calendar-view-week')
+        .evaluate((el) => getComputedStyle(el).backgroundColor),
+    ).toBe('rgba(0, 0, 0, 0)');
+  });
+});
