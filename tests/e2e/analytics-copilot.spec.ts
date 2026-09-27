@@ -4,6 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
+import { statusMessage } from '../../apps/dashboard/src/i18n/messages';
 
 /**
  * Analytics, strategy, the Copilot and automations in a real browser — Phase 7.
@@ -405,6 +406,32 @@ test.describe('strategy', () => {
   });
 });
 
+/**
+ * THE AUTOMATIONS PAGE SAYS "DONE" WITH A TOAST (Phase 2B-2b C8, D-347).
+ *
+ * REPLACED WAIT: every submit on this page used `waitForLoadState('networkidle')`.
+ * C8 moved the page's `?ok=` to the one toast host, which takes `ok=` off the
+ * address once shown — and the router then prefetches the page's links again.
+ * One of those prefetches (the Copilot link) can stay open, so "the network
+ * went quiet" is no longer a signal that ever has to arrive; the toast carrying
+ * the action's own words is. A refusal still fails at once, with its URL. The
+ * assertions after each wait are unchanged.
+ */
+async function automationDone(page: Page, code: string): Promise<void> {
+  const words = statusMessage(code, 'en') ?? code;
+  await expect
+    .poll(
+      async () => {
+        const url = page.url();
+        if (/[?&]error=/.test(url)) return `refused: ${url}`;
+        const toast = page.getByTestId('toast');
+        return (await toast.count()) > 0 ? ((await toast.textContent()) ?? '') : `waiting: ${url}`;
+      },
+      { timeout: 60_000 },
+    )
+    .toContain(words);
+}
+
 test.describe('automations', () => {
   test('a rule can be created, is listed, and starts DISABLED', async ({ page }) => {
     /*
@@ -421,7 +448,7 @@ test.describe('automations', () => {
     const name = `E2E rule ${Date.now()}`;
     await form.locator('input[name="name"]').fill(name);
     await form.locator('button[type="submit"]').first().click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_CREATED');
 
     const rules = page.getByTestId('automation-rules');
     await expect(rules).toBeVisible();
@@ -454,7 +481,7 @@ test.describe('automations', () => {
     await page.getByTestId('automation-hour').selectOption('9');
     await form.locator('input[name="daysOfWeek"][value="1"]').check();
     await page.getByTestId('automation-submit').click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_CREATED');
 
     const rules = page.getByTestId('automation-rules');
     await expect(rules).toContainText(name);
@@ -463,7 +490,7 @@ test.describe('automations', () => {
     // created but never enabled would be the same defect one step along.
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_UPDATED');
     await expect(
       page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
     ).toContainText(/disable/i);
@@ -488,13 +515,13 @@ test.describe('automations', () => {
     await page.getByTestId('automation-threshold-value').fill('1000');
     await page.getByTestId('automation-window').fill('7');
     await page.getByTestId('automation-submit').click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_CREATED');
 
     await expect(page.getByTestId('automation-rules')).toContainText(name);
 
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_UPDATED');
     await expect(
       page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
     ).toContainText(/disable/i);
@@ -607,14 +634,14 @@ test.describe('automations', () => {
     await page.getByTestId('automation-condition-operator').selectOption('greater_than');
     await value.fill('1');
     await page.getByTestId('automation-submit').click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_CREATED');
 
     // IT WAS ACCEPTED, and it enables — the engine validated field, operator
     // and value kind, and none of them was refused.
     await expect(page.getByTestId('automation-rules')).toContainText(name);
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_UPDATED');
     await expect(
       page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
     ).toContainText(/disable/i);
@@ -641,12 +668,12 @@ test.describe('automations', () => {
     const name = `E2E boolean ${Date.now()}`;
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
     await page.getByTestId('automation-submit').click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_CREATED');
 
     await expect(page.getByTestId('automation-rules')).toContainText(name);
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_UPDATED');
     await expect(
       page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
     ).toContainText(/disable/i);
@@ -685,7 +712,7 @@ test.describe('automations', () => {
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
     await value.selectOption('APPROVED');
     await page.getByTestId('automation-submit').click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_CREATED');
     await expect(page.getByTestId('automation-rules')).toContainText(name);
   });
 
@@ -711,7 +738,7 @@ test.describe('automations', () => {
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
     await value.selectOption(['APPROVED', 'SCHEDULED']);
     await page.getByTestId('automation-submit').click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_CREATED');
 
     // ACCEPTED — the engine refuses a list operator whose value is not a
     // non-empty array of members of the closed set, so reaching the list at all
@@ -719,7 +746,7 @@ test.describe('automations', () => {
     await expect(page.getByTestId('automation-rules')).toContainText(name);
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_UPDATED');
     await expect(
       page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
     ).toContainText(/disable/i);
@@ -964,7 +991,7 @@ test.describe('P6-12 · copilot and automations', () => {
     const name = `E2E delete ${Date.now()}`;
     await form.locator('input[name="name"]').fill(name);
     await page.getByTestId('automation-submit').click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_CREATED');
 
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     const confirmDelete = row.getByRole('button', { name: /delete this rule/i });
@@ -973,7 +1000,7 @@ test.describe('P6-12 · copilot and automations', () => {
     await row.locator('summary').click();
     await expect(confirmDelete).toBeVisible();
     await confirmDelete.click();
-    await page.waitForLoadState('networkidle');
+    await automationDone(page, 'AUTOMATION_DELETED');
     // The rule is gone — whether the list remains or gives way to its empty state.
     await expect(page.locator('main')).not.toContainText(name);
   });
