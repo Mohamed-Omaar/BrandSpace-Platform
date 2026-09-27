@@ -324,11 +324,16 @@ test.describe('§8 motion — the shell (D-349)', () => {
     expect(await pill.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
       'rgb(17, 17, 20)',
     );
-    expect(
-      await page
-        .locator('[data-testid="sidebar"] a[aria-current="page"]')
-        .evaluate((el) => getComputedStyle(el).backgroundColor),
-    ).toBe('rgba(0, 0, 0, 0)');
+    // Polled, not read once: the item's own fill hands over with its existing
+    // 140 ms background-colour state transition, so a read inside that window
+    // sees the fade (rgba(17,17,20,.035) in CI). The end state is the rule.
+    await expect
+      .poll(() =>
+        page
+          .locator('[data-testid="sidebar"] a[aria-current="page"]')
+          .evaluate((el) => getComputedStyle(el).backgroundColor),
+      )
+      .toBe('rgba(0, 0, 0, 0)');
 
     await page.getByTestId('nav-calendar').click();
     await page.waitForURL(/\/en\/calendar/);
