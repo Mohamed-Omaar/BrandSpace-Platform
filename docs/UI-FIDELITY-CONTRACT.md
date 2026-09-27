@@ -455,6 +455,7 @@ filter row of native selects, the Unscheduled tray on the grid's `surfaceMuted` 
 existing compact button, a caption-sized "BrandSpace noticed" line, and the post detail moved from the
 centred `Dialog` into the shared `SideSheet` (D-285) holding the existing `VariantPreview`. The grid's
 only new behaviour is a drop target on each day cell. No new colour, font, shadow or interaction model.
+(Phase 2B-2b: the drop is now §8.2's pointer drag — §6.3.44, D-353.)
 
 ### 6.3.16 Phase 6 final — Publishing rows (D-291)
 
@@ -713,6 +714,26 @@ No new component, colour, font, shadow or interaction model.
 - **Asset Library**: one caption line above the grid, "Latest 48 of M files", in the grid's caption style.
 
 No new component, colour, font, shadow or interaction model.
+
+### 6.3.44 Prototype v90 Phase 2B-2b — the calendar drag (§8.2, D-353)
+
+§8.2 is the owner's text and defines the behaviour; it has no rendered reference, so its looks are an
+APPROVED DESIGN-SYSTEM EXTENSION composed from what already ships:
+
+- **The floating copy** is the post's own chip, cloned, with §8.2's lift (scale 1.04, −1.5°, the
+  existing `--bs-shadow-overlay`). The spot it left is a dashed placeholder in `--bs-brand-purple-border`.
+- **Days** are the grid's own cells: one that takes the post uses `--bs-brand-purple-tint` and a
+  dashed `--bs-brand-purple` outline; a past day `--bs-surface-sunken` and a dashed `--bs-danger`
+  outline — §8.2's "light purple" and "grey with a red dashed outline" in existing tokens.
+- **The label** under the copy is an ink pill in the caption size (danger for a past day).
+- **The phone's 14-day strip** (`CalendarDropStrip`) is the dropdown panel's glass
+  (`--bs-surface-glass`, 24 px blur) holding the agenda's lavender day badges, two rows of seven so
+  all fourteen fit 390 px without a scroll the drag would fight.
+- **The toast** that says where it moved, and its Undo, are the one `ToastHost` (C8, D-347).
+- **The status pulse** is one beat of MO13's rhythm drawn as a `box-shadow` ring in the brand purple.
+
+No new colour family, font, shadow style or interaction model: the drag replaces native drag and drop
+with pointer events, as §8.2 says, and the drawer's date-and-time form remains the keyboard path.
 
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 

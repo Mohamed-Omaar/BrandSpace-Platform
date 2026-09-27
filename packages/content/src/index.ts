@@ -146,6 +146,8 @@ export {
   scheduleQuotaExceeded,
   scheduleTooFarAhead,
   scheduleTooSoon,
+  SLOT_MOVED_SINCE_REASON,
+  slotMovedSince,
   transitionNotAllowed,
   unsupportedDialect,
   unsupportedPlatform,

@@ -1,13 +1,19 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { CHANNEL_DISCONNECTED_REASON, SCHEDULE_IN_PAST_REASON } from '@brandspace/content';
+import {
+  CHANNEL_DISCONNECTED_REASON,
+  SCHEDULE_IN_PAST_REASON,
+  SLOT_MOVED_SINCE_REASON,
+} from '@brandspace/content';
 import { createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
 import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
+import { parseSlotMove } from '../../../server/calendar-move';
+import { statusMessage } from '../../../i18n/messages';
 
 const log = createLogger({ context: { component: 'dashboard.calendar' } });
 
@@ -76,6 +82,10 @@ function calendarErrorCode(error: unknown): string {
   // Q9 (D-332): every account for one of the post's channels was revoked.
   if (isAppError(error) && error.publicDetails['reason'] === CHANNEL_DISCONNECTED_REASON) {
     return CHANNEL_DISCONNECTED_REASON;
+  }
+  // §8.2: an Undo found the post somewhere else, so it changed nothing.
+  if (isAppError(error) && error.publicDetails['reason'] === SLOT_MOVED_SINCE_REASON) {
+    return 'SLOT_MOVED_SINCE';
   }
   return actionErrorCode(error);
 }
@@ -152,6 +162,65 @@ export async function rescheduleContentAction(formData: FormData): Promise<void>
   revalidatePath(`/${locale}/calendar`);
   revalidatePath(`/${locale}/content`);
   redirect(destination);
+}
+
+/** What a dragged move, or its Undo, came to — for the toast the drag shows. */
+export type MoveSlotResult =
+  | { readonly ok: true; readonly status: string; readonly localTime: string }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * §8.2 (Phase 2B-2b) — A POST DRAGGED TO ANOTHER DAY, OR THE UNDO OF THAT.
+ *
+ * THE SAME MOVE AS THE FORM ABOVE: the same `content.schedule` requirement,
+ * the same `CalendarService.reschedule` — F2, quota, approval, B-4, brand and
+ * workspace scope, the audit event — and nothing a drag may skip. Only the
+ * transport differs: it answers with the outcome instead of redirecting, so
+ * the calendar can say where the post went and offer Undo without leaving the
+ * page. An Undo carries `expectedLocalTime` (the owner-approved precondition),
+ * so a second Undo, or one racing another move, changes nothing.
+ *
+ * Nothing calls this while a pointer moves: only a committed drop does.
+ */
+export async function moveSlotAction(input: {
+  readonly locale: string;
+  readonly slotId: string;
+  readonly date: string;
+  readonly time: string;
+  readonly expectedLocalTime?: string | undefined;
+}): Promise<MoveSlotResult> {
+  const locale = input.locale === 'ar' ? 'ar' : 'en';
+  try {
+    const session = await requireWorkspaceAction(locale, 'content.schedule');
+    const move = parseSlotMove(input);
+    if (!move) {
+      return { ok: false, message: statusMessage('VALIDATION_FAILED', locale) ?? '' };
+    }
+    const moved = await inContentStudio(session.workspace.workspaceId, async ({ calendar }) =>
+      (await calendar()).reschedule({
+        slotId: move.slotId,
+        localTime: `${move.date}T${move.time}`,
+        ...actorOf(session),
+        expectedLocalTime: move.expectedLocalTime,
+      }),
+    );
+    revalidatePath(`/${locale}/calendar`);
+    revalidatePath(`/${locale}/content`);
+    return { ok: true, status: moved.slot.status, localTime: moved.slot.scheduledLocalTime };
+  } catch (error: unknown) {
+    // A session that has lapsed is Next.js control flow (a redirect), not a failure.
+    unstable_rethrow(error);
+    const correlationId = randomUUID();
+    log.warn('calendar move failed', {
+      correlationId,
+      action: input.expectedLocalTime ? 'undo' : 'move',
+      ...internalErrorFields(error),
+    });
+    return {
+      ok: false,
+      message: statusMessage(calendarErrorCode(error), locale, correlationId) ?? '',
+    };
+  }
 }
 
 /** AC-14.8 — take a slot off the calendar; the draft goes back to DRAFT. */

@@ -1469,7 +1469,12 @@ export const messages = {
     'calendar.scheduleTitle': 'إضافة إلى التقويم',
     'calendar.scheduleDraft': 'المسودة',
     'calendar.pastDay': 'مضى هذا اليوم. اختر اليوم أو يومًا لاحقًا.',
-    'calendar.moveFromPost': 'على الهاتف، افتح المنشور لنقله إلى يوم آخر.',
+    'calendar.moveFromPost': 'اضغط مطولًا على منشور، ثم اسحبه إلى يومه الجديد.',
+    'calendar.drag.pastDay': 'مضى هذا اليوم — لا يمكن استخدامه',
+    'calendar.drag.strip': 'أفلته على يوم',
+    'calendar.drag.moved': 'نُقل إلى {when}.',
+    'calendar.drag.undo': 'تراجع',
+    'calendar.drag.undone': 'أُعيد إلى {when}.',
     'calendar.scheduleDate': 'التاريخ',
     'calendar.scheduleTime': 'الوقت',
     'calendar.suggestedTime': 'وقت مقترح',
@@ -4412,7 +4417,12 @@ export const messages = {
     'calendar.scheduleTitle': 'Add to the calendar',
     'calendar.scheduleDraft': 'Draft',
     'calendar.pastDay': 'That day has passed. Choose today or a later day.',
-    'calendar.moveFromPost': 'On a phone, open a post to move it to another day.',
+    'calendar.moveFromPost': 'Press and hold a post, then drag it to its new day.',
+    'calendar.drag.pastDay': 'This day has passed — it can’t be used',
+    'calendar.drag.strip': 'Drop on a day',
+    'calendar.drag.moved': 'Moved to {when}.',
+    'calendar.drag.undo': 'Undo',
+    'calendar.drag.undone': 'Moved back to {when}.',
     'calendar.scheduleDate': 'Date',
     'calendar.scheduleTime': 'Time',
     'calendar.suggestedTime': 'Suggested time',
@@ -6027,6 +6037,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   SCHEDULE_IN_PAST: {
     en: 'That time has already passed or is too soon. Choose a later time.',
     ar: 'هذا الوقت مضى أو قريب جدًا. اختر وقتًا لاحقًا.',
+  },
+  // §8.2 (Phase 2B-2b) — an Undo that found the post somewhere else.
+  SLOT_MOVED_SINCE: {
+    en: 'This post has moved since, so Undo changed nothing.',
+    ar: 'نُقل هذا المنشور منذ ذلك الحين، لذا لم يغيّر التراجع شيئًا.',
   },
   // D-332 (owner decision) — an explicit Retry never publishes a post late.
   PUBLISH_DEADLINE_PASSED: {

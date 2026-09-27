@@ -138,6 +138,20 @@ export function slotNotReschedulable(): AppError {
 }
 
 /**
+ * §8.2 (Phase 2B-2b) — UNDO FOUND THE POST SOMEWHERE ELSE. Undo moves a post
+ * back only while it is still where the move put it; if anything has moved it
+ * since — or the same Undo already ran — nothing changes. `reason` is the
+ * stable code the screen translates.
+ */
+export const SLOT_MOVED_SINCE_REASON = 'slot_moved_since';
+
+export function slotMovedSince(): AppError {
+  return new AppError('CONFLICT', 'This post has moved since. Nothing was changed.', {
+    reason: SLOT_MOVED_SINCE_REASON,
+  });
+}
+
+/**
  * Q9 (D-332) — every account for one of the post's channels was revoked or
  * disabled, so nothing could be sent there. `reason` is a stable code the
  * screens translate; the channel keys are the post's own.

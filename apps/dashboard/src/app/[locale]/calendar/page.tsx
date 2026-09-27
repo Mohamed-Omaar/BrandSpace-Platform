@@ -40,7 +40,12 @@ import {
 } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { CalendarView, type SchedulableDraft, type SlotDetail } from './calendar-view';
-import { cancelScheduleAction, rescheduleContentAction, scheduleContentAction } from './actions';
+import {
+  cancelScheduleAction,
+  moveSlotAction,
+  rescheduleContentAction,
+  scheduleContentAction,
+} from './actions';
 import { submitForReviewAction } from '../content/actions';
 
 export const dynamic = 'force-dynamic';
@@ -870,6 +875,7 @@ export default async function CalendarPage({
         actions={{
           schedule: scheduleContentAction,
           reschedule: rescheduleContentAction,
+          move: moveSlotAction,
           cancel: cancelScheduleAction,
           submitForReview: submitForReviewAction,
         }}
@@ -893,6 +899,11 @@ const CALENDAR_KEYS = [
   'calendar.scheduleDate',
   'calendar.pastDay',
   'calendar.moveFromPost',
+  'calendar.drag.pastDay',
+  'calendar.drag.strip',
+  'calendar.drag.moved',
+  'calendar.drag.undo',
+  'calendar.drag.undone',
   'calendar.scheduleTime',
   'calendar.suggestedTime',
   'calendar.scheduleSubmit',

@@ -1,4 +1,4 @@
-import type { DragEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
 import {
   AbstractMedia,
@@ -414,25 +414,27 @@ export function CalendarPostChip({
   onOpen,
   testId,
   dragData,
+  dragDay,
 }: {
   readonly post: PostRecord;
   readonly labels: PostCardLabels;
   readonly onOpen?: (() => void) | undefined;
   readonly testId?: string | undefined;
   /**
-   * B7 — when set, the chip can be dragged to another day, carrying this
-   * payload. Never the only way to move a post (WCAG 2.5.7): the post's own
+   * B7 / §8.2 — when set, the chip can be dragged to another day, carrying
+   * this payload. The drag itself is `useCalendarDrag` (pointer events, so a
+   * finger can do it too); the chip only says what it carries and where it
+   * sits. Never the only way to move a post (WCAG 2.5.7): the post's own
    * drawer has the date and time form.
    */
   readonly dragData?: string | undefined;
+  /** §8.2 — the day the chip sits on, so a drop on the same day is a cancel. */
+  readonly dragDay?: string | undefined;
 }) {
   const drag = dragData
     ? {
-        draggable: true,
-        onDragStart: (event: DragEvent<HTMLElement>) => {
-          event.dataTransfer.setData('text/plain', dragData);
-          event.dataTransfer.effectAllowed = 'move';
-        },
+        'data-drag-payload': dragData,
+        ...(dragDay ? { 'data-drag-day': dragDay } : {}),
       }
     : {};
   const body = (
@@ -500,6 +502,15 @@ export function CalendarPostChip({
     cursor: onOpen ? 'pointer' : 'default',
     fontFamily: 'inherit',
     textAlign: 'start' as const,
+    // §8.2: a long-press lifts the post; it must not select text or open the
+    // system's callout first.
+    ...(dragData
+      ? {
+          userSelect: 'none' as const,
+          WebkitUserSelect: 'none' as const,
+          WebkitTouchCallout: 'none' as const,
+        }
+      : {}),
   };
 
   // The accessible name states the post's status in words, because the coloured

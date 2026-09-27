@@ -1804,3 +1804,111 @@ select option {
     color: var(--bs-text-muted);
   }
 }
+
+/*
+ * §8.2 (Phase 2B-2b) — THE CALENDAR DRAG. The engine is `useCalendarDrag`;
+ * these are its looks. Motion stays on the compositor (translate, scale,
+ * rotate, opacity) except where §8's exceptions name it: the lift's deeper
+ * shadow, a day's dashed outline, and the status pulse's `box-shadow`. The
+ * reduced-motion block turns all of it off; the drag itself still works.
+ */
+
+/* LIFT — the floating copy: scale 1.04, rotate −1.5°, a deeper shadow, 180 ms.
+   `translate` is not transitioned: the copy follows the pointer exactly. */
+.bs-drag-copy {
+  pointer-events: none;
+  box-sizing: border-box;
+  cursor: grabbing;
+  transition:
+    scale var(--bs-motion-drag-lift) var(--bs-ease-out),
+    rotate var(--bs-motion-drag-lift) var(--bs-ease-out),
+    box-shadow var(--bs-motion-drag-lift) var(--bs-ease-out);
+}
+
+.bs-drag-copy.bs-drag-lifted {
+  scale: 1.04;
+  rotate: -1.5deg;
+  box-shadow: var(--bs-shadow-overlay);
+}
+
+/* The spot it came from stays, as a dashed placeholder. */
+.bs-drag-origin {
+  border: 1px dashed var(--bs-brand-purple-border) !important;
+  background: transparent !important;
+}
+
+.bs-drag-origin > * {
+  visibility: hidden;
+}
+
+/* OVER A DAY — one that takes it is light purple and dashed; a day that has
+   passed is grey with a red dashed outline. Days outside the month take nothing. */
+[data-drop-over='ok'] {
+  background-color: var(--bs-brand-purple-tint) !important;
+  outline: 2px dashed var(--bs-brand-purple);
+  outline-offset: -2px;
+}
+
+[data-drop-over='past'] {
+  background-color: var(--bs-surface-sunken) !important;
+  outline: 2px dashed var(--bs-danger);
+  outline-offset: -2px;
+}
+
+[data-dragging] [data-drop-day] {
+  transition: background-color var(--bs-motion-state) var(--bs-ease-out);
+}
+
+/* The words under the copy: "Wed 21 · 18:00", or that the day can't be used. */
+.bs-drag-label {
+  position: absolute;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-start: 0;
+  padding: 3px 8px;
+  border-radius: var(--bs-radius-full);
+  background: var(--bs-ink);
+  color: var(--bs-ink-ink);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
+  rotate: 1.5deg;
+}
+
+.bs-drag-label:empty {
+  display: none;
+}
+
+.bs-drag-label[data-state='past'] {
+  background: var(--bs-danger);
+}
+
+/* PHONE — the glass strip of the next 14 days slides up from the bottom. The
+   glass is the dropdown panel's; `backdrop-filter` unprefixed only (§8.0). */
+@keyframes bs-strip-in {
+  from {
+    opacity: 0;
+    translate: 0 100%;
+  }
+}
+
+.bs-drag-strip {
+  background: var(--bs-surface-glass);
+  backdrop-filter: blur(24px);
+  animation: bs-strip-in var(--bs-motion-settle) var(--bs-ease-out) both;
+}
+
+/* "If the move changed the post's status, its card pulses once" — one beat of
+   the MO13 rhythm, as a ring (§8's box-shadow exception for the status pulse). */
+@keyframes bs-status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(121, 53, 254, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(121, 53, 254, 0);
+  }
+}
+
+.bs-status-pulse {
+  animation: bs-status-pulse var(--bs-motion-loop) var(--bs-ease-out) 1;
+}

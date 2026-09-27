@@ -1,12 +1,20 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
+import {
+  colorTokens,
+  radiusTokens,
+  shadowTokens,
+  spacingTokens,
+  typographyTokens,
+  zIndexTokens,
+} from './tokens';
 import { Button, ButtonRow, IconButton } from './primitives';
 import { ChevronEndIcon, ChevronStartIcon } from './icons';
 import { CalendarPostChip, type PostCardLabels, type PostRecord } from './post-card';
 import { StateMessage } from './feedback';
 import { SegmentPill } from './segment-pill';
+import { dropStateOf } from './calendar-drag';
 
 /**
  * The social content calendar.
@@ -165,15 +173,19 @@ function MonthGrid({
   days,
   labels,
   onOpenPost,
-  onDropDay,
+  dropTargets,
   postDragData,
   onCreateOnDay,
 }: {
   readonly days: readonly CalendarDay[];
   readonly labels: CalendarLabels;
   readonly onOpenPost?: ((post: PostRecord) => void) | undefined;
-  /** PHASE 6 FINAL (D-290) — a dragged draft dropped on a day. */
-  readonly onDropDay?: ((dayKey: string, data: string) => void) | undefined;
+  /**
+   * §8.2 — each day says it can take a dragged post (`data-drop-day`), and
+   * whether it will (`data-drop-state`: ok, past, or none outside the month).
+   * `useCalendarDrag` reads them; the grid itself commits nothing.
+   */
+  readonly dropTargets?: boolean | undefined;
   /** B7 — the drag payload for a post that may move, or undefined when it may not. */
   readonly postDragData?: ((post: PostRecord) => string | undefined) | undefined;
   /** B7 — "new post" on an empty day that has not passed. */
@@ -246,14 +258,8 @@ function MonthGrid({
               role="gridcell"
               data-testid={`calendar-day-${day.key}`}
               data-past={day.isPast ? 'true' : undefined}
-              {...(onDropDay
-                ? {
-                    onDragOver: (event: React.DragEvent<HTMLDivElement>) => event.preventDefault(),
-                    onDrop: (event: React.DragEvent<HTMLDivElement>) => {
-                      event.preventDefault();
-                      onDropDay(day.key, event.dataTransfer.getData('text/plain'));
-                    },
-                  }
+              {...(dropTargets
+                ? { 'data-drop-day': day.key, 'data-drop-state': dropStateOf(day) }
                 : {})}
               aria-label={`${day.longLabel} — ${labels.postsOnDay(day.posts.length)}`}
               style={{
@@ -311,6 +317,7 @@ function MonthGrid({
                     labels={labels}
                     onOpen={onOpenPost ? () => onOpenPost(post) : undefined}
                     dragData={postDragData?.(post)}
+                    dragDay={day.key}
                   />
                 ))}
                 {onCreateOnDay && !day.isPast && day.posts.length === 0 ? (
@@ -362,11 +369,14 @@ function Agenda({
   days,
   labels,
   onOpenPost,
+  postDragData,
   emptyAction,
 }: {
   readonly days: readonly CalendarDay[];
   readonly labels: CalendarLabels;
   readonly onOpenPost?: ((post: PostRecord) => void) | undefined;
+  /** §8.2 — on the list, a long-press lifts a post onto the drop strip. */
+  readonly postDragData?: ((post: PostRecord) => string | undefined) | undefined;
   readonly emptyAction?: ReactNode;
 }) {
   // A day with a ★ holiday or observance is listed too, so the phone's agenda
@@ -446,6 +456,8 @@ function Agenda({
                 post={post}
                 labels={labels}
                 onOpen={onOpenPost ? () => onOpenPost(post) : undefined}
+                dragData={postDragData?.(post)}
+                dragDay={day.key}
               />
             ))}
           </div>
@@ -468,7 +480,8 @@ export function ContentCalendar({
   onToday,
   busy,
   weekIndex = 0,
-  onDropDay,
+  dropTargets,
+  dropStrip,
   postDragData,
   onCreateOnDay,
   emptyAction,
@@ -500,8 +513,17 @@ export function ContentCalendar({
    * week containing today, when the caller knows it). The first row otherwise.
    */
   readonly weekIndex?: number | undefined;
-  /** A dragged item dropped on a day. Drag is never the only way to schedule. */
-  readonly onDropDay?: ((dayKey: string, data: string) => void) | undefined;
+  /**
+   * §8.2 — the month and week days are drop targets. The caller's
+   * `useCalendarDrag` does the dragging and commits the drop; drag is never
+   * the only way to schedule or move.
+   */
+  readonly dropTargets?: boolean | undefined;
+  /**
+   * §8.2 — the phone's drop strip (`CalendarDropStrip`), shown wherever the
+   * calendar is a list: always below `md`, and in the Agenda view.
+   */
+  readonly dropStrip?: ReactNode;
   /** B7 — the drag payload for a post that may move to another day. */
   readonly postDragData?: ((post: PostRecord) => string | undefined) | undefined;
   /** B7 — "new post" on an empty day that has not passed. */
@@ -650,7 +672,13 @@ export function ContentCalendar({
         useless at 390px.
       */}
       {view === 'agenda' ? (
-        <Agenda days={days} labels={labels} onOpenPost={onOpenPost} emptyAction={emptyAction} />
+        <Agenda
+          days={days}
+          labels={labels}
+          onOpenPost={onOpenPost}
+          postDragData={postDragData}
+          emptyAction={emptyAction}
+        />
       ) : (
         <>
           <div className="bs-wide-only">
@@ -658,16 +686,111 @@ export function ContentCalendar({
               days={view === 'week' ? days.slice(weekIndex * 7, weekIndex * 7 + 7) : days}
               labels={labels}
               onOpenPost={onOpenPost}
-              onDropDay={onDropDay}
+              dropTargets={dropTargets}
               postDragData={postDragData}
               onCreateOnDay={onCreateOnDay}
             />
           </div>
           <div className="bs-narrow-only">
-            <Agenda days={days} labels={labels} onOpenPost={onOpenPost} emptyAction={emptyAction} />
+            <Agenda
+              days={days}
+              labels={labels}
+              onOpenPost={onOpenPost}
+              postDragData={postDragData}
+              emptyAction={emptyAction}
+            />
           </div>
         </>
       )}
+      {dropStrip ? (
+        <div className={view === 'agenda' ? undefined : 'bs-narrow-only'}>{dropStrip}</div>
+      ) : null}
     </section>
+  );
+}
+
+/** One day on the phone's drop strip, already in the reader's language. */
+export interface DropStripDay {
+  readonly key: string;
+  /** The short weekday ("Wed"). */
+  readonly weekday: string;
+  /** The day number ("21"). */
+  readonly label: string;
+  /** For screen readers: the whole date. */
+  readonly longLabel: string;
+}
+
+/**
+ * §8.2 — THE PHONE'S DROP STRIP.
+ *
+ * "The calendar is a list, so a long-press lifts the post and a glass strip
+ * with the next 14 days slides up from the bottom; dropping on a day moves it."
+ * Two rows of seven, so all fourteen fit a 390 px screen without a scroll the
+ * drag would have to fight. Every day is a drop target like a month cell
+ * (`data-drop-day`); the strip commits nothing itself.
+ *
+ * DESIGN-SYSTEM EXTENSION (UI-FIDELITY §6): the glass is the dropdown panel's
+ * (`--bs-surface-glass`, 24 px blur), the days are the agenda's day badges.
+ */
+export function CalendarDropStrip({
+  days,
+  title,
+}: {
+  readonly days: readonly DropStripDay[];
+  readonly title: string;
+}) {
+  return (
+    <div
+      role="region"
+      aria-label={title}
+      data-testid="calendar-drop-strip"
+      className="bs-drag-strip"
+      style={{
+        position: 'fixed',
+        insetInline: spacingTokens.md,
+        insetBlockEnd: spacingTokens.md,
+        zIndex: zIndexTokens.overlay,
+        display: 'grid',
+        gap: spacingTokens.xs,
+        padding: spacingTokens.sm,
+        borderRadius: '1.375rem',
+        boxShadow: shadowTokens.card,
+      }}
+    >
+      <span
+        style={{ ...typographyTokens.caption, fontWeight: 700, color: colorTokens.textSecondary }}
+      >
+        {title}
+      </span>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+          gap: '0.25rem',
+        }}
+      >
+        {days.map((day) => (
+          <div
+            key={day.key}
+            data-testid={`calendar-strip-${day.key}`}
+            data-drop-day={day.key}
+            data-drop-state="ok"
+            aria-label={day.longLabel}
+            style={{
+              display: 'grid',
+              justifyItems: 'center',
+              gap: '1px',
+              paddingBlock: spacingTokens.xs,
+              borderRadius: radiusTokens.md,
+              background: colorTokens.surfaceLavenderStrong,
+              color: colorTokens.brandPurplePressed,
+            }}
+          >
+            <span style={{ ...typographyTokens.caption, fontWeight: 600 }}>{day.weekday}</span>
+            <span style={{ ...typographyTokens.label, fontWeight: 700 }}>{day.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
