@@ -72,6 +72,13 @@ function secured(request: NextRequest, redirectTo?: URL): NextResponse {
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  /*
+   * `/api/*` is a machine endpoint — today only `/api/health/ready`, Railway's
+   * healthcheck (RAILWAY-DEPLOYMENT.md §4.4). A locale redirect would answer
+   * the probe with a 307 instead of the readiness verdict. Same rule as the
+   * customer dashboard's middleware.
+   */
+  if (pathname.startsWith('/api/')) return secured(request);
   const hasLocale = SUPPORTED_LOCALES.some(
     (locale) => pathname === `/${locale}` || pathname.startsWith(`/${locale}/`),
   );

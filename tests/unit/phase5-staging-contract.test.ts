@@ -282,8 +282,16 @@ describe('the Railway marketing service builds the Next app it starts', () => {
   });
 });
 
-describe('the Railway browser app healthchecks use stable 200 routes', () => {
-  it('does not probe the locale-redirecting root for dashboard or admin', () => {
+describe('the Railway browser app healthchecks use the migration readiness routes', () => {
+  it('probes the readiness gate, not a page and not the locale-redirecting root', () => {
+    /*
+     * The pages these used to probe (`/en/reset`, `/en/login`) answered 200 as
+     * soon as Next.js could render, whatever state the database schema was in —
+     * which is how PR #47's release served before its migrations had applied.
+     * `/api/health/ready` answers 200 only once every migration the build needs
+     * is applied (RAILWAY-DEPLOYMENT.md §4.4), and sits outside the locale
+     * redirect in both middlewares.
+     */
     const railway = readFileSync(resolve(process.cwd(), '.railway/railway.ts'), 'utf8');
     const dashboardStart = railway.indexOf("const dashboard = service('dashboard'");
     const adminStart = railway.indexOf("const admin = service('admin'");
@@ -291,8 +299,10 @@ describe('the Railway browser app healthchecks use stable 200 routes', () => {
     const dashboardBlock = railway.slice(dashboardStart, adminStart);
     const adminBlock = railway.slice(adminStart, apiStart);
 
-    expect(dashboardBlock).toContain("healthcheckPath: '/en/reset'");
-    expect(adminBlock).toContain("healthcheckPath: '/en/login'");
+    expect(dashboardBlock).toContain("healthcheckPath: '/api/health/ready'");
+    expect(adminBlock).toContain("healthcheckPath: '/api/health/ready'");
+    expect(dashboardBlock).not.toContain("healthcheckPath: '/en/");
+    expect(adminBlock).not.toContain("healthcheckPath: '/en/");
   });
 });
 

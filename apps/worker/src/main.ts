@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { Worker, type Job } from 'bullmq';
 import IORedis from 'ioredis';
+import { getPrisma, readSchemaReadiness, waitForSchema } from '@brandspace/database';
 import {
   QUEUE_DEFINITIONS,
   QUEUE_NAMES,
@@ -86,6 +87,50 @@ async function main(): Promise<void> {
     log.error('REDIS_URL is not configured; the worker cannot consume any queue');
     process.exit(1);
   }
+
+  /*
+   * A LIVENESS ENDPOINT, because a queue consumer has no other way to say it is
+   * alive. An orchestrator restarts a process that stops answering; without
+   * this, a worker that has lost its Redis connection and consumes nothing looks
+   * exactly like one that is merely idle. It is also what lets the end-to-end
+   * suite wait for the worker before driving an upload through it.
+   *
+   * `isRunning()` rather than a constant: it reports what the consumer is
+   * actually doing, so a closed or crashed worker fails the probe.
+   *
+   * IT LISTENS BEFORE ANY QUEUE IS CONSUMED (RAILWAY-DEPLOYMENT.md §4.4), and
+   * answers 503 `waiting_for_migrations` until the consumers exist, so Railway
+   * sees a deployment that is not ready yet rather than one that refuses
+   * connections.
+   */
+  const running: { consumer?: Worker } = {};
+  const port = Number(process.env['WORKER_PORT'] ?? 3004);
+  const health = createServer((_request, res) => {
+    const ready = running.consumer?.isRunning() ?? false;
+    res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        status: ready ? 'ok' : running.consumer ? 'stopped' : 'waiting_for_migrations',
+      }),
+    );
+  });
+  health.listen(port, '0.0.0.0');
+
+  /*
+   * NO JOB IS TAKEN UNTIL THE SCHEMA IS CURRENT. Every processor reads columns
+   * the newest migrations add, and a job taken against an older schema fails,
+   * is retried and eventually lands in the failed set — a publish among them.
+   * Jobs wait in Redis meanwhile, exactly as they do across a restart.
+   */
+  await waitForSchema({
+    read: () => readSchemaReadiness(getPrisma()),
+    onWaiting: ({ pending, error }) =>
+      log.warn('worker waiting for migrations', {
+        pending: pending.length,
+        next: pending[0],
+        ...(error ? internalErrorFields(error) : {}),
+      }),
+  });
 
   const definition = QUEUE_DEFINITIONS['media-processing'];
   const worker = new Worker(
@@ -297,23 +342,7 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
 
-  /*
-   * A LIVENESS ENDPOINT, because a queue consumer has no other way to say it is
-   * alive. An orchestrator restarts a process that stops answering; without
-   * this, a worker that has lost its Redis connection and consumes nothing looks
-   * exactly like one that is merely idle. It is also what lets the end-to-end
-   * suite wait for the worker before driving an upload through it.
-   *
-   * `isRunning()` rather than a constant: it reports what the consumer is
-   * actually doing, so a closed or crashed worker fails the probe.
-   */
-  const port = Number(process.env['WORKER_PORT'] ?? 3004);
-  const health = createServer((_request, res) => {
-    const ready = worker.isRunning();
-    res.writeHead(ready ? 200 : 503, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ status: ready ? 'ok' : 'stopped' }));
-  });
-  health.listen(port, '0.0.0.0');
+  running.consumer = worker;
 
   log.info('worker ready', {
     queue: 'media-processing',

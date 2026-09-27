@@ -192,6 +192,32 @@ test.describe('health tells the truth', () => {
   });
 });
 
+test.describe('the migration readiness gate answers from the built apps', () => {
+  /*
+   * Railway's healthcheck for the dashboard and the Control Center
+   * (RAILWAY-DEPLOYMENT.md §4.4). The suite's database was migrated before the
+   * apps started, so both must say ready — and say it at `/api/health/ready`
+   * itself, not through a locale redirect, which a healthcheck would read as
+   * a failure.
+   */
+  for (const [app, base] of [
+    ['dashboard', DASHBOARD_BASE_URL],
+    ['admin', ADMIN_BASE_URL],
+  ] as const) {
+    test(`${app}: /api/health/ready is 200 with the schema current`, async ({ request }) => {
+      const response = await request.get(`${base}/api/health/ready`, { maxRedirects: 0 });
+      expect(response.status()).toBe(200);
+      expect(await response.json()).toEqual({
+        status: 'ready',
+        checks: [
+          { name: 'database', state: 'ok' },
+          { name: 'schema', state: 'ok' },
+        ],
+      });
+    });
+  }
+});
+
 test.describe('the security headers reach the browser', () => {
   test('every app sends a nonce-bearing CSP and closes the classic gaps', async ({ page }) => {
     /*

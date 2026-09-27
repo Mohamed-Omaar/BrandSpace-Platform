@@ -385,7 +385,12 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/dashboard start',
-      healthcheckPath: '/en/reset',
+      /*
+       * THE MIGRATION GATE (docs/RAILWAY-DEPLOYMENT.md §4.4): 200 only once the
+       * database answers and holds every migration this build needs. It was
+       * `/en/reset`, which proved only that a page could render.
+       */
+      healthcheckPath: '/api/health/ready',
       healthcheckTimeout: 300,
       restartPolicyType: 'ON_FAILURE',
       restartPolicyMaxRetries: 10,
@@ -447,7 +452,8 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/admin start',
-      healthcheckPath: '/en/login',
+      // The migration gate, as for the dashboard (§4.4). It was `/en/login`.
+      healthcheckPath: '/api/health/ready',
       healthcheckTimeout: 300,
       restartPolicyType: 'ON_FAILURE',
       restartPolicyMaxRetries: 10,
@@ -521,7 +527,8 @@ export default defineRailway((ctx, project) => {
        * `down` when the tenant database does not answer and Railway should stop
        * sending traffic to an instance that cannot serve. `/health/live` checks
        * nothing external on purpose and would answer `ok` throughout a database
-       * outage.
+       * outage. It also answers 503 (`schema: down`) until every migration this
+       * build needs is applied — the migration gate, §4.4.
        */
       healthcheckPath: '/health/ready',
       healthcheckTimeout: 300,
@@ -590,6 +597,8 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/worker start',
+      // Any path: the worker's health server answers 503 until its queue
+      // consumers start, which is after the migration gate (§4.4).
       healthcheckPath: '/',
       healthcheckTimeout: 300,
       restartPolicyType: 'ON_FAILURE',

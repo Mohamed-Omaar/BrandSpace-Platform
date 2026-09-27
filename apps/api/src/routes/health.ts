@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getPrisma } from '@brandspace/database';
+import { getPrisma, probeDatabaseReadiness } from '@brandspace/database';
 import {
   evaluateHealth,
   publicView,
@@ -51,7 +51,7 @@ export function registerHealthRoutes(app: FastifyInstance): void {
 export async function probeDependencies(): Promise<readonly DependencyCheck[]> {
   const checks: DependencyCheck[] = [];
 
-  checks.push(await probeDatabase());
+  checks.push(...(await probeDatabase()));
 
   /*
    * THE QUEUE IS NOT REQUIRED FOR READINESS, and that is a deliberate reading
@@ -125,36 +125,53 @@ export async function probeDependencies(): Promise<readonly DependencyCheck[]> {
   return checks;
 }
 
-async function probeDatabase(): Promise<DependencyCheck> {
-  const startedAt = Date.now();
-  try {
-    /*
-     * THE TENANT POOL, not the platform one. This process serves customer
-     * traffic on the tenant identity, so that is the connection whose health
-     * decides whether it can serve — and probing with the platform credential
-     * would report a pool that customer requests never touch.
-     */
-    await withDeadline(getPrisma().$queryRaw`SELECT 1`, 2_000);
-    return { name: 'database', state: 'ok', required: true, latencyMs: Date.now() - startedAt };
-  } catch {
-    return {
-      name: 'database',
-      state: 'down',
-      required: true,
-      latencyMs: Date.now() - startedAt,
-      // No driver text: it names hosts, roles and ports.
-      detail: 'The tenant database connection did not answer.',
-    };
+/**
+ * THE DATABASE, AND WHETHER IT IS NEW ENOUGH FOR THIS CODE — two required
+ * checks from one bounded round trip (`probeDatabaseReadiness`).
+ *
+ * `schema` IS THE MIGRATION GATE (docs/RAILWAY-DEPLOYMENT.md §4.4). A release
+ * whose migrations have not all been applied answers 503, so Railway keeps
+ * the previous deployment serving until `migration-staging` has finished. The
+ * names of the pending migrations are operator detail: logged by the
+ * scheduler's wait, never put in this public response.
+ */
+async function probeDatabase(): Promise<DependencyCheck[]> {
+  /*
+   * THE TENANT POOL, not the platform one. This process serves customer
+   * traffic on the tenant identity, so that is the connection whose health
+   * decides whether it can serve — and probing with the platform credential
+   * would report a pool that customer requests never touch.
+   */
+  const probe = await probeDatabaseReadiness(getPrisma());
+  if (probe.database === 'down') {
+    return [
+      {
+        name: 'database',
+        state: 'down',
+        required: true,
+        latencyMs: probe.latencyMs,
+        // No driver text: it names hosts, roles and ports.
+        detail: 'The tenant database connection did not answer.',
+      },
+      {
+        name: 'schema',
+        state: 'unknown',
+        required: true,
+        detail: 'The migration history could not be read.',
+      },
+    ];
   }
-}
-
-function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    work,
-    new Promise<never>((_resolve, reject) =>
-      setTimeout(() => reject(new Error('probe deadline exceeded')), ms).unref?.(),
-    ),
-  ]);
+  return [
+    { name: 'database', state: 'ok', required: true, latencyMs: probe.latencyMs },
+    probe.schema === 'ok'
+      ? { name: 'schema', state: 'ok', required: true }
+      : {
+          name: 'schema',
+          state: 'down',
+          required: true,
+          detail: `${probe.pending.length} migration(s) this release needs are not applied yet.`,
+        },
+  ];
 }
 
 /** Re-exported so the Control Center can label a report with its deployment. */
