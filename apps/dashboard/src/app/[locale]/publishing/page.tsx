@@ -15,6 +15,7 @@ import {
   typographyTokens,
   type BadgeTone,
 } from '@brandspace/ui';
+import { lateNoticeKey, publishingRescheduleOffered } from '../../../server/late-notice';
 import { requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
@@ -398,17 +399,34 @@ export default async function PublishingPage({
                 // D-332 — past its deadline, a post that could have been retried
                 // is not: no Retry, and the reason, with the way on.
                 const superseded = data.superseded.has(job.id);
-                const lateNotice =
+                const late =
                   job.status === 'FAILED' &&
                   !superseded &&
                   data.late.has(job.id) &&
-                  (job.canRetry || retryableAfterReconnect(job))
-                    ? t(
-                        retryableAfterReconnect(job)
-                          ? 'publishing.late.disconnected'
-                          : 'publishing.late.passed',
-                      )
-                    : null;
+                  (job.canRetry || retryableAfterReconnect(job));
+                /*
+                 * D-332 (Phase 2B-2b wording) — WHERE THIS ROW OFFERS A WAY ON,
+                 * THE WORDS NAME IT. Reschedule, or "Send for review again" where
+                 * the brand requires approval, is offered exactly when nothing
+                 * was published (the post is FAILED) and the reader may
+                 * schedule; there the notice says "Reschedule it or make a new
+                 * copy". Anywhere else — no permission, or something published —
+                 * it keeps the owner's earlier wording.
+                 */
+                const rescheduleOffered =
+                  late &&
+                  publishingRescheduleOffered({
+                    itemStatus: data.itemStatus.get(job.contentItemId),
+                    permissionKeys: workspace.permissionKeys,
+                  });
+                const lateNotice = late
+                  ? t(
+                      lateNoticeKey({
+                        disconnected: retryableAfterReconnect(job),
+                        rescheduleOffered,
+                      }),
+                    )
+                  : null;
                 const when =
                   job.status === 'PUBLISHED' && job.publishedAt
                     ? job.publishedAt
@@ -566,9 +584,7 @@ export default async function PublishingPage({
                           — the post, to send it for review again. Only for a
                           post that failed with nothing published.
                         */}
-                        {lateNotice &&
-                        data.itemStatus.get(job.contentItemId) === 'FAILED' &&
-                        may('content.schedule') ? (
+                        {rescheduleOffered ? (
                           data.approvalRequired.get(job.brandId) ? (
                             <Link
                               href={`/${locale}/content/compose?item=${job.contentItemId}`}

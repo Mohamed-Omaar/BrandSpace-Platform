@@ -1569,6 +1569,12 @@ export const messages = {
       'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
     'publishing.late.passed':
       'مضى موعد هذا المنشور، لذا لن يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
+    // D-332, Phase 2B-2b (owner's words) — where Reschedule or "Send for review
+    // again" is offered beside the notice. The two lines above stay elsewhere.
+    'publishing.late.passedReschedule':
+      'مضى موعد هذا المنشور، لذا لم يُنشر متأخرًا. أعد جدولته أو أنشئ نسخة جديدة منه.',
+    'publishing.late.disconnectedReschedule':
+      'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أعد جدولته أو أنشئ نسخة جديدة منه.',
     'publishing.untitled': 'بدون عنوان',
     'publishing.reschedule': 'إعادة الجدولة',
     'publishing.resendForReview': 'إرسال للمراجعة مرة أخرى',
@@ -4507,6 +4513,12 @@ export const messages = {
       'This post’s time passed while the account was disconnected, so it wasn’t published late. Make a new copy to schedule it again.',
     'publishing.late.passed':
       'This post’s time has passed, so it won’t be published late. Make a new copy to schedule it again.',
+    // D-332, Phase 2B-2b (owner's words) — where Reschedule or "Send for review
+    // again" is offered beside the notice. The two lines above stay elsewhere.
+    'publishing.late.passedReschedule':
+      'This post’s time has passed, so it wasn’t published late. Reschedule it or make a new copy.',
+    'publishing.late.disconnectedReschedule':
+      'This post’s time passed while the account was disconnected, so it wasn’t published late. Reschedule it or make a new copy.',
     'publishing.untitled': 'Untitled',
     'publishing.reschedule': 'Reschedule',
     'publishing.resendForReview': 'Send for review again',

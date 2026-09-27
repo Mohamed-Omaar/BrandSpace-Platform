@@ -260,8 +260,11 @@ test.describe('D-332 · a failed post past its deadline is not retried', () => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/publishing?tab=failed`);
     await expect(page.getByTestId(`publish-job-${late.jobId}`)).toBeVisible();
+    // D-332 wording, Phase 2B-2b (owner-approved): Reschedule is offered on
+    // this row, so the notice names it. Replaces the earlier "Make a new copy
+    // to schedule it again", which stays only where Reschedule is not offered.
     await expect(page.getByTestId(`late-${late.jobId}`)).toHaveText(
-      'This post’s time passed while the account was disconnected, so it wasn’t published late. Make a new copy to schedule it again.',
+      'This post’s time passed while the account was disconnected, so it wasn’t published late. Reschedule it or make a new copy.',
     );
     await expect(page.getByTestId(`retry-reconnected-${late.jobId}`)).toHaveCount(0);
     await expect(page.getByTestId(`retry-${late.jobId}`)).toHaveCount(0);
@@ -276,7 +279,7 @@ test.describe('D-332 · a failed post past its deadline is not retried', () => {
 
     await page.goto(`${DASHBOARD_BASE_URL}/ar/publishing?tab=failed`);
     await expect(page.getByTestId(`late-${late.jobId}`)).toHaveText(
-      'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
+      'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أعد جدولته أو أنشئ نسخة جديدة منه.',
     );
     await expect(page.getByTestId(`retry-reconnected-${late.jobId}`)).toHaveCount(0);
     await expect(page.getByTestId(`copy-${late.jobId}`)).toBeVisible();
