@@ -25,6 +25,7 @@ import {
   motionMs,
 } from './tokens';
 import { prefersReducedMotion } from './motion';
+import { usePresence } from './motion-hooks';
 import { AmbientBackground } from './ambient';
 import { ChevronEndIcon, ChevronStartIcon, CloseIcon, MenuIcon } from './icons';
 import { Tooltip, useOverlayBehaviour } from './overlays';
@@ -379,10 +380,20 @@ function useNavPill(
     if (scope === 'rail') lastRailPill = target;
 
     // The rail collapsing or the window resizing moves the item: follow it.
+    // An observer reports once as soon as it starts; nothing has moved then,
+    // and answering it would cancel the glide that just began.
+    let placed = target;
     const observer = new ResizeObserver(() => {
       const now = measure();
       if (!now) return;
+      const moved =
+        Math.abs(now.x - placed.x) +
+        Math.abs(now.y - placed.y) +
+        Math.abs(now.w - placed.w) +
+        Math.abs(now.h - placed.h);
+      if (moved < 0.5) return;
       put(now, false);
+      placed = now;
       if (scope === 'rail') lastRailPill = now;
     });
     observer.observe(list);
@@ -639,6 +650,8 @@ export function AppShell({
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
   useOverlayBehaviour({ open: drawerOpen, onClose: closeDrawer, containerRef: drawerRef });
+  // MO5: the drawer leaves (180 ms) after it has closed.
+  const drawer = usePresence(drawerOpen, drawerRef);
 
   // A drawer left open while the viewport grows into desktop would trap focus
   // in a panel nobody can see.
@@ -1020,9 +1033,10 @@ export function AppShell({
         </div>
       </div>
 
-      {drawerOpen ? (
+      {drawer.present ? (
         <div
           data-testid="navigation-scrim"
+          {...(drawer.leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) closeDrawer();
           }}
@@ -1041,6 +1055,9 @@ export function AppShell({
             aria-label={labels.primaryNavigation}
             data-testid="navigation-drawer"
             tabIndex={-1}
+            // MO5: opens from the menu button's side, rows in order.
+            className="bs-pop"
+            data-origin="start"
             style={{
               position: 'absolute',
               insetBlock: 0,

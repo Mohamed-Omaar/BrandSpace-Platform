@@ -417,3 +417,70 @@ test.describe('§8 motion — the shell (D-349)', () => {
     ).toBe('rgba(0, 0, 0, 0)');
   });
 });
+
+test.describe('§8 motion — overlays (D-350)', () => {
+  test.skip(({ isMobile }) => isMobile === true, 'the top bar menus are the desktop shell');
+
+  const anim = (el: Element) => {
+    const style = getComputedStyle(el);
+    return `${style.animationName} ${style.animationDuration} ${style.animationDelay}`;
+  };
+
+  test('MO5: a menu is glass, grows in, its rows follow 22 ms apart, and it leaves inert', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    await page.getByTestId('topbar-create').click();
+    const menu = page.getByTestId('topbar-create-menu');
+    await expect(menu).toBeVisible();
+    expect(await menu.evaluate(anim)).toBe('bs-pop-in 0.2s 0s');
+    expect(await menu.evaluate((el) => getComputedStyle(el).backdropFilter)).toBe('blur(24px)');
+    const rows = await menu.locator(':scope > *').evaluateAll((els) =>
+      els.map((el) => {
+        const style = getComputedStyle(el);
+        return `${style.animationName} ${style.animationDuration} ${style.animationDelay}`;
+      }),
+    );
+    expect(rows[0]).toBe('bs-row-in 0.22s 0s');
+    if (rows.length > 1) expect(rows[1]).toBe('bs-row-in 0.22s 0.022s');
+
+    // Closing is immediate; only its picture leaves, and nothing in it is usable.
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('topbar-create')).toBeFocused();
+    await expect(menu).toHaveCount(0);
+  });
+
+  test('MO6: a modal grows in over a veil whose blur goes to 3 px', async ({ page, isMobile }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace');
+    const ws = await ownWorkspace('dialog-motion');
+    const assetId = await seedAsset(ws, 'Dialog motion.pdf');
+    await enter(page, ws.slug);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/assets?asset=${assetId}`);
+    await page.getByTestId('asset-detail').getByTestId('asset-delete').click();
+    const dialog = page.getByTestId('assets-delete-dialog');
+    await expect(dialog).toBeVisible();
+    expect(await dialog.evaluate(anim)).toBe('bs-dialog-in 0.3s 0s');
+    const veil = page.getByTestId('assets-delete-dialog-scrim');
+    expect(await veil.evaluate(anim)).toBe('bs-veil-in 0.26s 0s');
+    await expect
+      .poll(() => veil.evaluate((el) => getComputedStyle(el).backdropFilter))
+      .toBe('blur(3px)');
+  });
+
+  test('MO7: the Copilot panel rises from its bottom end corner', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    await page.getByTestId('topbar-copilot').click();
+    const panel = page.getByTestId('copilot-drawer');
+    await expect(panel).toBeVisible();
+    expect(await panel.evaluate(anim)).toBe('bs-copilot-in 0.34s 0s');
+    const origin = await panel.evaluate((el) => {
+      const [x, y] = getComputedStyle(el).transformOrigin.split(' ').map(parseFloat);
+      // Layout size, not the painted box: mid-entrance the panel is scaled.
+      const { offsetWidth: width, offsetHeight: height } = el as HTMLElement;
+      return { right: Math.abs(x! - width) < 1, bottom: Math.abs(y! - height) < 1 };
+    });
+    expect(origin).toEqual({ right: true, bottom: true });
+  });
+});

@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { colorTokens, typographyTokens, CONTROL_CLASS, useOverlayBehaviour } from '@brandspace/ui';
+import {
+  colorTokens,
+  typographyTokens,
+  CONTROL_CLASS,
+  useOverlayBehaviour,
+  usePresence,
+} from '@brandspace/ui';
 import { translator } from '../../../i18n/messages';
 import type { AreaCardData, BrandBrainPermissions, CandidateData } from './brand-brain-view';
 import {
@@ -34,7 +40,7 @@ import {
 export function AreaDrawer({
   locale,
   brandId,
-  area,
+  area: requestedArea,
   candidates,
   permissions,
   onClose,
@@ -51,7 +57,11 @@ export function AreaDrawer({
   const t = translator(locale);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
-  const open = area !== null;
+  const open = requestedArea !== null;
+  // MO5: while the drawer leaves (180 ms) it keeps showing the area it showed.
+  const shownArea = useRef<AreaCardData | null>(requestedArea);
+  if (requestedArea) shownArea.current = requestedArea;
+  const area = requestedArea ?? shownArea.current;
 
   // C8 (Phase 2B-2b): Escape, the focus trap, focus in (to the close button)
   // and focus back out come from the shared overlay stack, so a menu or dialog
@@ -84,13 +94,16 @@ export function AreaDrawer({
     };
   }, [open]);
 
-  if (!area) return null;
+  const { present, leaving } = usePresence(open, panelRef);
+  if (!present || !area) return null;
+  const leavingProps = leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {};
 
   return (
     <>
       <div
         onClick={onClose}
         data-testid="drawer-overlay"
+        {...leavingProps}
         aria-hidden="true"
         style={{ position: 'fixed', inset: 0, background: 'rgba(17,17,20,.18)', zIndex: 40 }}
       />
@@ -100,6 +113,11 @@ export function AreaDrawer({
         aria-modal="true"
         aria-label={area.label}
         data-testid="area-drawer"
+        // MO5 (§8 overrides this route's pinned motion, D-348): opens from the
+        // card's side, rows in order, and leaves before it unmounts.
+        className="bs-pop"
+        data-origin="end"
+        {...leavingProps}
         style={{
           position: 'fixed',
           insetBlock: 0,

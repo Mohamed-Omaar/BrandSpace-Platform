@@ -22,6 +22,7 @@ import {
 import { Button, buttonStyle } from './primitives';
 import { ChevronDownIcon, CloseIcon } from './icons';
 import { OverlayStack, type StackedOverlay } from './overlay-stack';
+import { usePresence } from './motion-hooks';
 
 /**
  * Overlay behaviour: tooltip, dropdown menu, dialog, confirmation.
@@ -376,6 +377,8 @@ export function DropdownMenu({
     trap: false,
   });
   useDismissOnOutsidePointer(wrapperRef, open, close, menuEntry);
+  // MO5: the menu leaves (180 ms) after it has closed.
+  const { present, leaving } = usePresence(open, menuRef);
   // AFTER `useOverlayBehaviour`, deliberately: that hook records where focus
   // came from (the trigger) so Escape can return it there, and it must record
   // it before this moves focus into the menu.
@@ -495,7 +498,7 @@ export function DropdownMenu({
           <ChevronDownIcon size={16} />
         )}
       </button>
-      {open ? (
+      {present ? (
         <div
           id={id}
           ref={menuRef}
@@ -520,7 +523,9 @@ export function DropdownMenu({
                 : items[(index - 1 + items.length) % items.length];
             next?.focus();
           }}
-          className="bs-dropdown-menu bs-dropdown-panel"
+          className={`bs-dropdown-menu bs-dropdown-panel bs-pop${placement === 'block-start' ? ' bs-pop-up' : ''}`}
+          data-origin={align}
+          {...(leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
           style={{
             position: 'absolute',
             insetBlockStart: placement === 'block-end' ? 'calc(100% + 6px)' : undefined,
@@ -578,6 +583,8 @@ export function Dialog({
   return (
     <div
       data-testid={testId ? `${testId}-scrim` : 'dialog-scrim'}
+      // MO6: the veil fades in while its backdrop blur goes 0 → 3 px.
+      className="bs-veil"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -600,6 +607,8 @@ export function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         data-testid={testId ?? 'dialog'}
         tabIndex={-1}
+        // MO6: the dialog fades, grows from .98 and rises 8 px.
+        className="bs-dialog-in"
         style={{
           inlineSize: '100%',
           maxInlineSize: '30rem',
@@ -902,10 +911,13 @@ export function SideSheet({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   useOverlayBehaviour({ open, onClose, containerRef: panelRef });
-  if (!open) return null;
+  // MO5: the sheet leaves (180 ms) after it has closed.
+  const { present, leaving } = usePresence(open, panelRef);
+  if (!present) return null;
   return (
     <div
       data-testid={`${testId}-scrim`}
+      {...(leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -923,6 +935,9 @@ export function SideSheet({
         aria-labelledby={titleId}
         data-testid={testId}
         tabIndex={-1}
+        // MO5: opens from its trigger's side (the top bar's end), rows in order.
+        className="bs-pop"
+        data-origin="end"
         style={{
           position: 'fixed',
           insetBlock: layoutTokens.shellInset,

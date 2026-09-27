@@ -10,6 +10,8 @@ import {
   textareaStyle,
   typographyTokens,
   zIndexTokens,
+  useOpening,
+  usePresence,
 } from '@brandspace/ui';
 import { mentionMatches, mentionQuery, type MentionMember } from './mention-match';
 
@@ -78,6 +80,10 @@ export function MentionField({
     [members, query],
   );
   const open = matches.length > 0;
+  // MO5: the suggestions enter when they open and leave (180 ms) after.
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const list = usePresence(open, listRef);
+  const opening = useOpening(open);
 
   // Only the people still named in the text are mentioned.
   const mentioned = picked.filter((member) => text.includes(`@${member.name}`));
@@ -162,9 +168,12 @@ export function MentionField({
           }
         />
       )}
-      {open ? (
+      {list.present ? (
         <ul
           id={listId}
+          ref={listRef}
+          className={opening ? 'bs-pop' : undefined}
+          {...(list.leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
           role="listbox"
           aria-label={suggestionsLabel}
           data-testid={`${testId}-suggestions`}

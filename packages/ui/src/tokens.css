@@ -32,6 +32,8 @@
   --bs-brand-yellow-tint: #fff9db;
 
   --bs-surface: #ffffff;
+  /* `drawerAlpha` in tokens.ts: the notifications sheet's glass, reused by menus (MO5). */
+  --bs-surface-glass: rgba(255, 255, 255, 0.96);
   --bs-surface-soft: #f8f8f9;
   --bs-surface-warm: #f7f6f4;
   --bs-surface-lavender: #f8f5ff;
@@ -1302,6 +1304,142 @@ html[dir='rtl'] input[type='week'] {
 }
 
 /*
+ * MO5 — A MENU, LISTBOX, POPOVER, SHEET OR DRAWER OPENS: the container fades
+ * in, grows from .97 and settles 4 px (180–200 ms, origin at its trigger; one
+ * that opens upward rises), then its rows enter in order — opacity, a 3 px
+ * blur clearing and a 3 px rise, 220 ms, 22 ms apart, capped at the 6th row.
+ * Closing is the Web Animations API (`usePresence`, motion.ts): the container
+ * fades with a 4 px lift over 180 ms while its rows blur to 4 px.
+ * Origins: `--bs-pop-origin`, set per surface.
+ */
+@keyframes bs-pop-in {
+  from {
+    opacity: 0;
+    scale: 0.97;
+    translate: 0 var(--bs-pop-from, -4px);
+  }
+}
+
+@keyframes bs-row-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+    translate: 0 3px;
+  }
+}
+
+.bs-pop {
+  transform-origin: var(--bs-pop-origin, top center);
+  animation: bs-pop-in var(--bs-motion-menu-in) var(--bs-ease-out) both;
+}
+
+/* The origin is the trigger's side, mirrored for Arabic. */
+.bs-pop[data-origin='end'] {
+  --bs-pop-origin: top right;
+}
+.bs-pop[data-origin='start'] {
+  --bs-pop-origin: top left;
+}
+[dir='rtl'] .bs-pop[data-origin='end'] {
+  --bs-pop-origin: top left;
+}
+[dir='rtl'] .bs-pop[data-origin='start'] {
+  --bs-pop-origin: top right;
+}
+
+/* A menu opening upward rises into place. */
+.bs-pop.bs-pop-up {
+  --bs-pop-from: 4px;
+  --bs-pop-origin: bottom center;
+}
+.bs-pop.bs-pop-up[data-origin='end'] {
+  --bs-pop-origin: bottom right;
+}
+.bs-pop.bs-pop-up[data-origin='start'] {
+  --bs-pop-origin: bottom left;
+}
+[dir='rtl'] .bs-pop.bs-pop-up[data-origin='end'] {
+  --bs-pop-origin: bottom left;
+}
+[dir='rtl'] .bs-pop.bs-pop-up[data-origin='start'] {
+  --bs-pop-origin: bottom right;
+}
+
+.bs-pop > :not(.bs-pop-static) {
+  animation: bs-row-in var(--bs-motion-menu-row) var(--bs-ease-out) both;
+}
+.bs-pop > :nth-child(2) {
+  animation-delay: calc(var(--bs-motion-menu-row-step) * 1);
+}
+.bs-pop > :nth-child(3) {
+  animation-delay: calc(var(--bs-motion-menu-row-step) * 2);
+}
+.bs-pop > :nth-child(4) {
+  animation-delay: calc(var(--bs-motion-menu-row-step) * 3);
+}
+.bs-pop > :nth-child(5) {
+  animation-delay: calc(var(--bs-motion-menu-row-step) * 4);
+}
+.bs-pop > :nth-child(n + 6) {
+  animation-delay: calc(var(--bs-motion-menu-row-step) * 5);
+}
+
+/* A surface leaving is inert: its close already happened (§8.0). */
+[data-leaving] {
+  pointer-events: none;
+}
+
+/*
+ * MO6 — A MODAL: the dialog fades, grows from .98 and rises 8 px (300 ms);
+ * its veil fades in while its backdrop blur goes 0 → 3 px (260 ms, the owner's
+ * exception).
+ */
+@keyframes bs-dialog-in {
+  from {
+    opacity: 0;
+    scale: 0.98;
+    translate: 0 8px;
+  }
+}
+
+@keyframes bs-veil-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+}
+
+.bs-dialog-in {
+  animation: bs-dialog-in var(--bs-motion-dialog) var(--bs-ease-out) both;
+}
+
+.bs-veil {
+  backdrop-filter: blur(3px);
+  animation: bs-veil-in var(--bs-motion-veil) var(--bs-ease-out) both;
+}
+
+/*
+ * MO7 — THE COPILOT PANEL enters with opacity, a .98 → 1 grow and a 16 px
+ * rise (340 ms), from its bottom end corner.
+ */
+@keyframes bs-copilot-in {
+  from {
+    opacity: 0;
+    scale: 0.98;
+    translate: 0 16px;
+  }
+}
+
+.bs-copilot-in {
+  transform-origin: bottom right;
+  animation: bs-copilot-in var(--bs-motion-copilot) var(--bs-ease-out) both;
+}
+
+[dir='rtl'] .bs-copilot-in {
+  transform-origin: bottom left;
+}
+
+/*
  * MO2 — THE RAIL'S PILL. One ink pill per navigation list, placed on the
  * current item by script; its colour, radius and shadow are exactly the ones
  * the item used to paint on itself (D-59). Once placed, the item stops
@@ -1391,7 +1529,16 @@ html[dir='rtl'] input[type='week'] {
   scrollbar-color: #9a9aa2 transparent;
   border: 1px solid transparent;
   border-radius: var(--bs-radius-control);
-  background: var(--bs-surface);
+  /*
+   * MO5 (owner answer 9): menus and listboxes are GLASS, frosted from the
+   * first frame — the notifications sheet's material, not a new one. The
+   * blur lives here, so the entrance never puts `filter` on this element;
+   * only its rows blur (§8.0).
+   */
+  background: var(--bs-surface-glass);
+  /* Unprefixed only: with the \`-webkit-\` twin beside it the build keeps just
+     the prefixed one, which Chrome ignores (the glass read as \`none\`). */
+  backdrop-filter: blur(24px);
   box-shadow: 0 14px 36px rgba(17, 17, 20, 0.14);
 }
 

@@ -1,9 +1,10 @@
 'use client';
 
-import { useId, useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { ChevronDownIcon } from './icons';
 import { colorTokens, spacingTokens, typographyTokens, zIndexTokens } from './tokens';
 import { inputStyle } from './primitives';
+import { useOpening, usePresence } from './motion-hooks';
 
 export interface SearchableOption {
   readonly value: string;
@@ -49,6 +50,10 @@ export function SearchableSelect({
   const [internalValue, setInternalValue] = useState(defaultValue);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  // MO5: the list enters when it opens and leaves (180 ms) after it closes.
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const list = usePresence(open && !disabled, listRef);
+  const opening = useOpening(open && !disabled);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const value = controlledValue ?? internalValue;
@@ -152,11 +157,13 @@ export function SearchableSelect({
         <ChevronDownIcon size={16} />
       </span>
 
-      {open && !disabled ? (
+      {list.present ? (
         <div
           id={listId}
+          ref={listRef}
           role="listbox"
-          className="bs-dropdown-panel"
+          className={`bs-dropdown-panel${opening ? ' bs-pop' : ''}`}
+          {...(list.leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
           style={{
             position: 'absolute',
             insetInline: 0,

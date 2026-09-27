@@ -20,6 +20,7 @@ export * from './toast-bus';
 export * from './toast-host';
 export * from './toast-timing';
 export * from './motion';
+export * from './motion-hooks';
 export * from './segment-pill';
 export * from './overview-hero';
 export * from './platform-icons';

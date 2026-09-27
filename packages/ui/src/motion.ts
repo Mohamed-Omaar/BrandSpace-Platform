@@ -9,3 +9,6 @@ export function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
+
+/** `--bs-ease-out`, for the Web Animations API. */
+export const EASE_OUT = 'cubic-bezier(0.16, 1, 0.3, 1)';
