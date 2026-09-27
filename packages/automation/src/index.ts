@@ -43,7 +43,12 @@ export type {
   TriggerDefinition,
 } from './registry';
 
-export { AutomationEngine, runBucketFor, runIdempotencyKeyFor } from './engine';
+export {
+  AutomationEngine,
+  WORKSPACE_PENDING_DELETION_FAILURE,
+  runBucketFor,
+  runIdempotencyKeyFor,
+} from './engine';
 export {
   localMomentFor,
   metricThresholdConfigSchema,

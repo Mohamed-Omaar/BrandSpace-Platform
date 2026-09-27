@@ -6,7 +6,11 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { mayReadCreditBalance } from '@brandspace/shared';
-import { QUOTA_FEATURES, TOTAL_RESOURCE_DIMENSIONS } from '@brandspace/entitlements';
+import {
+  MULTI_BRAND_FEATURE,
+  QUOTA_FEATURES,
+  TOTAL_RESOURCE_DIMENSIONS,
+} from '@brandspace/entitlements';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
@@ -70,7 +74,16 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
   const mayReadCredits = mayReadCreditBalance(workspace.permissionKeys);
   const mayReadBilling = workspace.permissionKeys.includes('billing.read');
 
-  const { effective, features, wallet, grants, ledger, subscription, counters } = await inWorkspace(
+  const {
+    effective: resolved,
+    features,
+    wallet,
+    grants,
+    ledger,
+    subscription,
+    counters: allCounters,
+    multiBrand,
+  } = await inWorkspace(
     workspace.workspaceId,
     async ({ entitlements, credits, ledger: creditLedger, subscriptions, usage }) => ({
       effective: await entitlements.resolveAll(workspace.workspaceId),
@@ -83,8 +96,24 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       ledger: mayReadCredits ? await credits.ledger(workspace.workspaceId, 10) : [],
       subscription: mayReadBilling ? await subscriptions.get(workspace.workspaceId) : null,
       counters: await usage.currentCounters(workspace.workspaceId),
+      multiBrand: await entitlements.can(workspace.workspaceId, MULTI_BRAND_FEATURE),
     }),
   );
+
+  /*
+   * MULTI-BRAND OFF (Q2b, D-327): NO BRAND-LIMIT UI. One workspace is one
+   * business with one brand, so "Brands n / limit" and the brand quota and
+   * multi-brand rows are not shown. The decisions still exist; nothing is
+   * changed, only not offered.
+   */
+  const brandRow = (featureKey: string): boolean =>
+    featureKey === QUOTA_FEATURES.brands || featureKey === MULTI_BRAND_FEATURE;
+  const effective = multiBrand
+    ? resolved
+    : { ...resolved, decisions: resolved.decisions.filter((d) => !brandRow(d.featureKey)) };
+  const counters = multiBrand
+    ? allCounters
+    : allCounters.filter((counter) => !brandRow(counter.featureKey));
 
   const { memberCount, brandCount, socialAccountCount } = await inWorkspace(
     workspace.workspaceId,
@@ -162,12 +191,16 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       value: String(memberCount),
       unavailable: laterPhase,
     },
-    {
-      key: 'brands',
-      label: t('plan.usageBrands'),
-      value: againstCeiling(String(brandCount), QUOTA_FEATURES.brands),
-      unavailable: laterPhase,
-    },
+    ...(multiBrand
+      ? [
+          {
+            key: 'brands',
+            label: t('plan.usageBrands'),
+            value: againstCeiling(String(brandCount), QUOTA_FEATURES.brands),
+            unavailable: laterPhase,
+          },
+        ]
+      : []),
     {
       key: 'social-accounts',
       label: t('plan.usageSocialAccounts'),

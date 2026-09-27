@@ -1,7 +1,7 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace } from './customer-context';
+import { readAccessibleBrands } from './multi-brand';
 // A TYPE-ONLY EDGE BACK: `route-scope` imports only `BrandScopeKind` from
 // `brand-selection`, and types are erased, so there is no runtime cycle.
 import { scopeForPath } from './route-scope';
@@ -64,16 +64,9 @@ export type {
 export async function listAccessibleBrands(
   source: BrandContextSource,
 ): Promise<readonly AccessibleBrand[]> {
-  return inWorkspace(source.workspaceId, async ({ db }) =>
-    db.brand.findMany({
-      where: {
-        deletedAt: null,
-        status: { in: ['ACTIVE', 'DRAFT'] },
-        ...brandScopeFilter(source.brandScope),
-      },
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
-      select: { id: true, name: true, slug: true, status: true },
-    }),
+  // MULTI-BRAND OFF (Q2b, D-327): the oldest brand the member may see, only.
+  return inWorkspace(source.workspaceId, async ({ db, entitlements }) =>
+    readAccessibleBrands(db as never, entitlements, source.workspaceId, source.brandScope),
   );
 }
 

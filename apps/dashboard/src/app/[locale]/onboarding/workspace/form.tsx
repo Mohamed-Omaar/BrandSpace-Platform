@@ -10,6 +10,7 @@ import {
   type SearchableOption,
 } from '@brandspace/ui';
 import { authButtonStyle, authInputStyle } from '../../../../components/auth-card';
+import { timeZoneAfterCountryChange } from '../../../../components/time-zone-suggestion';
 
 interface ApiFailurePayload {
   readonly error?: {
@@ -43,6 +44,8 @@ export function CreateWorkspaceForm({
   defaultEmail,
   countries,
   timezones,
+  suggestedZones,
+  cities = [],
   labels,
 }: {
   locale: string;
@@ -50,6 +53,10 @@ export function CreateWorkspaceForm({
   defaultEmail: string;
   countries: readonly SearchableOption[];
   timezones: readonly SearchableOption[];
+  /** Q7: each country's usual zone, preselected as a suggestion (still editable). */
+  suggestedZones: Readonly<Record<string, string>>;
+  /** G8 (D-335): Egypt's governorates, asked only when the country is Egypt. */
+  cities?: readonly SearchableOption[];
   labels: {
     name: string;
     slug: string;
@@ -67,13 +74,19 @@ export function CreateWorkspaceForm({
     invalidFields: string;
     conflict: string;
     forbidden: string;
+    /** Q1: the owner's workspace allowance is used up. */
+    limitReached: string;
     noResults: string;
     localeAr: string;
     localeEn: string;
+    city?: string;
+    cityNone?: string;
   };
 }) {
   const [country, setCountry] = useState('');
+  const [lastCountry, setLastCountry] = useState('');
   const [timezone, setTimezone] = useState('');
+  const [city, setCity] = useState('');
   const [state, setState] = useState<{ busy: boolean; error: string | null }>({
     busy: false,
     error: null,
@@ -106,6 +119,8 @@ export function CreateWorkspaceForm({
             country,
             defaultLocale: String(formData.get('defaultLocale') ?? ''),
             timezone,
+            // G8 (D-335): Egypt only; cleared for any other country.
+            ...(country === 'EG' && city !== '' ? { city } : {}),
             billingEmail: String(formData.get('billingEmail') ?? ''),
             legalName: String(formData.get('legalName') ?? '') || undefined,
           }),
@@ -131,7 +146,9 @@ export function CreateWorkspaceForm({
                 ? labels.conflict
                 : code === 'FORBIDDEN'
                   ? labels.forbidden
-                  : labels.failed;
+                  : code === 'QUOTA_EXCEEDED'
+                    ? labels.limitReached
+                    : labels.failed;
 
           setState({ busy: false, error: message });
           return;
@@ -172,7 +189,23 @@ export function CreateWorkspaceForm({
           name="country"
           options={countries}
           value={country}
-          onChange={setCountry}
+          onChange={(next) => {
+            // Q7 — the country PRESELECTS its usual zone; one the person
+            // picked themselves is never replaced (D-194 stands). Typing
+            // clears the choice before a new one is picked, so the zone is
+            // judged against the last country actually CHOSEN, not that blank.
+            setCountry(next);
+            if (next === '') return;
+            setTimezone((current) =>
+              timeZoneAfterCountryChange({
+                previousCountry: lastCountry,
+                nextCountry: next,
+                currentZone: current,
+                suggestions: suggestedZones,
+              }),
+            );
+            setLastCountry(next);
+          }}
           placeholder={labels.choose}
           noResultsLabel={labels.noResults}
           required
@@ -215,6 +248,22 @@ export function CreateWorkspaceForm({
           style={authInputStyle()}
         />
       </Field>
+
+      {country === 'EG' && cities.length > 0 && labels.city ? (
+        <Field label={labels.city} htmlFor="city">
+          <SearchableSelect
+            id="city"
+            name="city"
+            options={cities}
+            value={city}
+            onChange={setCity}
+            placeholder={labels.cityNone ?? labels.choose}
+            noResultsLabel={labels.noResults}
+            testId="city-select"
+            style={authInputStyle()}
+          />
+        </Field>
+      ) : null}
 
       <Field label={labels.billingEmail} htmlFor="billingEmail" required>
         <input

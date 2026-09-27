@@ -44,6 +44,10 @@ import type { ComposerDraft, ComposerPlatform, ComposerVariant } from './compose
 
 export interface DraftEditorProps {
   readonly locale: string;
+  /** Q9 (D-332): a channel whose account has expired — "Expired", and what it means. */
+  readonly expiredChannels?: Readonly<
+    Record<string, { readonly label: string; readonly explanation: string }>
+  >;
   readonly t: Record<string, string>;
   readonly draft: ComposerDraft;
   readonly platforms: readonly ComposerPlatform[];
@@ -89,6 +93,8 @@ export interface DraftEditorProps {
   readonly canGenerateMedia: boolean;
   /** An image carried from the Creative Studio: on the slides, unsaved. */
   readonly attach?: MediaOptionView | null;
+  /** G6 (D-329): the ★ day the Studio was opened for; its Schedule link opens there. */
+  readonly plannedDate?: string | null;
   readonly onTool: (variantId: string, tool: string, argument?: string) => void;
   readonly actions: {
     save(formData: FormData): Promise<void>;
@@ -147,6 +153,8 @@ export function DraftEditor({
   creativeFormats,
   canGenerateMedia,
   attach = null,
+  plannedDate = null,
+  expiredChannels = {},
   review = null,
   onTool,
   actions,
@@ -653,8 +661,27 @@ export function DraftEditor({
                     §21 — WHAT IS WRONG, IN WORDS, WITH THE FIX BESIDE IT. The
                     numbers are the platform's configured limits.
                   */}
-                  {issues.length > 0 ? (
+                  {issues.length > 0 || expiredChannels[variant.platformKey] ? (
                     <ul className="cs-issues" data-testid={`editor-issues-${variant.platformKey}`}>
+                      {/*
+                        Q9 (D-332) — THE ACCOUNT FOR THIS CHANNEL HAS EXPIRED. A
+                        warning row in the list the Studio already has: the
+                        short status, and what it means on its own line.
+                      */}
+                      {expiredChannels[variant.platformKey] ? (
+                        <li
+                          className="warning"
+                          data-issue="channel.expired"
+                          data-testid={`editor-channel-expired-${variant.platformKey}`}
+                        >
+                          <span>
+                            <b>{expiredChannels[variant.platformKey]?.label}</b>
+                            <span style={{ display: 'block' }}>
+                              {expiredChannels[variant.platformKey]?.explanation}
+                            </span>
+                          </span>
+                        </li>
+                      ) : null}
                       {issues.map((issue) => (
                         <IssueRow
                           key={issue.key}
@@ -904,7 +931,7 @@ export function DraftEditor({
                 draft.status === 'APPROVED') ? (
                 <Link
                   className="cs-dark-button"
-                  href={`/${locale}/calendar?item=${draft.id}`}
+                  href={`/${locale}/calendar?item=${draft.id}${plannedDate ? `&date=${plannedDate}` : ''}`}
                   aria-disabled={anyDirty}
                   data-testid="editor-schedule"
                 >

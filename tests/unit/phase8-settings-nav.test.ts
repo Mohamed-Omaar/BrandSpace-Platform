@@ -69,12 +69,14 @@ describe('P8: the settings nav offers only what the member can open', () => {
     expect(items.map((item) => item.href)).toEqual([
       // D-277 §44 order: Workspace, Brand, Connections, Team, Roles &
       // permissions, Security, Data controls, Activity, Billing & usage (D-298:
-      // plan and usage are one section with two tabs).
+      // plan and usage are one section with two tabs). A10 (Phase 2B-1, D-331):
+      // Notifications, the reader's own switches, is every member's.
       '/ar/settings',
       '/ar/settings/brand',
       '/ar/integrations',
       '/ar/members',
       '/ar/permissions',
+      '/ar/settings/notifications',
       '/ar/settings/security',
       '/ar/settings/data',
       '/ar/activity',
@@ -82,11 +84,41 @@ describe('P8: the settings nav offers only what the member can open', () => {
     ]);
   });
 
+  it('offers Settings → Approvals only with approvals.policy.manage (A8, Phase 2B-1)', () => {
+    const without = settingsNavItems({
+      locale: 'en',
+      permissionKeys: WORKSPACE_ADMIN,
+      selected: 'settings',
+    });
+    expect(without.map((item) => item.href)).not.toContain('/en/settings/approvals');
+    const withIt = settingsNavItems({
+      locale: 'en',
+      permissionKeys: [...WORKSPACE_ADMIN, 'approvals.policy.manage'],
+      selected: 'settings',
+    });
+    expect(withIt.map((item) => item.href)).toContain('/en/settings/approvals');
+  });
+
+  it('offers Settings → AI only with brand.manage (G3, Phase 2B-1)', () => {
+    const without = settingsNavItems({
+      locale: 'en',
+      permissionKeys: WORKSPACE_ADMIN,
+      selected: 'settings',
+    });
+    expect(without.map((item) => item.href)).not.toContain('/en/settings/ai');
+    const withIt = settingsNavItems({
+      locale: 'en',
+      permissionKeys: [...WORKSPACE_ADMIN, 'brand.manage'],
+      selected: 'settings',
+    });
+    expect(withIt.map((item) => item.href)).toContain('/en/settings/ai');
+  });
+
   /*
    * PERMISSIONS IS THE ONE ROW EVERY MEMBER GETS, because it shows the reader
    * their own effective permissions and the route asks for nothing.
    */
-  it('always offers the rows every member may read — roles, security, activity — and nothing else', () => {
+  it('always offers the rows every member may read — roles, notifications, security, activity — and nothing else', () => {
     const items = settingsNavItems({
       locale: 'en',
       permissionKeys: MEMBER_ONLY,
@@ -94,8 +126,10 @@ describe('P8: the settings nav offers only what the member can open', () => {
     });
     // SECURITY JOINS PERMISSIONS as a row every member gets: both are about the
     // reader themselves, and neither route asks for anything.
+    // A10 (Phase 2B-1, D-331): so does Notifications — the reader's own switches.
     expect(items.map((item) => item.href)).toEqual([
       '/en/permissions',
+      '/en/settings/notifications',
       '/en/settings/security',
       '/en/activity',
     ]);
@@ -135,6 +169,9 @@ describe('P8: the settings nav permission column matches the routes themselves',
   const PAGE_FOR: Readonly<Record<string, string>> = {
     '/settings': 'apps/dashboard/src/app/[locale]/settings/page.tsx',
     '/settings/brand': 'apps/dashboard/src/app/[locale]/settings/brand/page.tsx',
+    '/settings/approvals': 'apps/dashboard/src/app/[locale]/settings/approvals/page.tsx',
+    '/settings/notifications': 'apps/dashboard/src/app/[locale]/settings/notifications/page.tsx',
+    '/settings/ai': 'apps/dashboard/src/app/[locale]/settings/ai/page.tsx',
     '/settings/security': 'apps/dashboard/src/app/[locale]/settings/security/page.tsx',
     '/integrations': 'apps/dashboard/src/app/[locale]/integrations/page.tsx',
     '/settings/data': 'apps/dashboard/src/app/[locale]/settings/data/page.tsx',

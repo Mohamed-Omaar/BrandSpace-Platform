@@ -129,13 +129,22 @@ test.describe('customer security settings', () => {
 
     // ENROL. Before Phase 4 there was no control here at all.
     await page.getByTestId('mfa-begin').click();
-    await page.waitForURL(/otpauth=/, { timeout: 30_000 });
-    const otpauth = (await page.getByTestId('mfa-otpauth').textContent()) ?? '';
-    expect(otpauth).toContain('otpauth://totp/');
+    /*
+     * G4 (Phase 2B-1, D-333): THE SEED NO LONGER TRAVELS IN THE URL. The page
+     * draws a QR code and prints the key from the server-held enrolment; the
+     * code is computed from that printed key, exactly as an app would.
+     */
+    await page.waitForURL(/\/en\/settings\/security$/, { timeout: 30_000 });
+    expect(page.url()).not.toContain('otpauth');
+    await expect(page.getByTestId('mfa-enrolment-qr')).toBeVisible();
+    const printedKey = (await page.getByTestId('mfa-enrolment-key').textContent()) ?? '';
+    const otpauth = `otpauth://totp/BrandSpace?secret=${printedKey.replace(/\s+/g, '')}`;
 
-    await page.fill('[data-testid="mfa-code"]', codeFor(otpauth));
-    await page.getByTestId('mfa-confirm').click();
+    await page.fill('[data-testid="mfa-enrolment-code"]', codeFor(otpauth));
+    await page.getByTestId('mfa-enrolment-confirm').click();
     await page.waitForURL(/ok=MFA_ENABLED/, { timeout: 30_000 });
+    // The recovery codes are not in the URL either.
+    expect(page.url()).not.toContain('codes=');
 
     await expect(page.getByTestId('mfa-state')).toHaveText('On');
 

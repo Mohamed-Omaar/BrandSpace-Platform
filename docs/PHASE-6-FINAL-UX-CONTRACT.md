@@ -528,7 +528,10 @@ permissions/state: Edit, Reschedule, Request approval, Cancel schedule, Open ful
 
 DRAG/DROP: an accessible keyboard alternative must exist. Do not make drag the only scheduling path.
 BEST TIME: only show a best-time recommendation if supported by actual measured data; no AI guessing; if
-evidence is insufficient, do not display a recommendation. CALENDAR INTELLIGENCE: contextual, quiet
+evidence is insufficient, do not display a recommendation. **Amended by D-329 (prototype v94 Phase
+2B-1, owner, 2026-09-26):** the posting times an operator configures for a country may be offered, but
+only labelled "Suggested time" / «وقت مقترح» — never "best time" — and a MEASURED best time, when one
+exists, always takes precedence over them. CALENDAR INTELLIGENCE: contextual, quiet
 suggestion ("Tuesday has been empty for 5 weeks.") if real; Ask/Give to Copilot; no popups.
 
 ## 33. Publishing

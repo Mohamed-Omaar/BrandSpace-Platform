@@ -90,7 +90,7 @@ export function analyticsEvidence(evidence: unknown): AnalyticsEvidence | null {
 /**
  * What a reviewer must be told about a conflict, before they decide.
  *
- * `conflictsWithItemId` is set at proposal time when a HUMAN or DOCUMENT item
+ * `conflictsWithItemId` is set at proposal time when a HUMAN, DOCUMENT or SETUP item
  * outside the learnings area shares the key (`proposeLearning`). Accepting the
  * learning never changes that item — the learning can only target the
  * LEARNINGS area, and `mayOverwrite` refuses AI-inferred over human — so the

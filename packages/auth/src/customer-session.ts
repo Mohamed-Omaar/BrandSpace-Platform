@@ -113,6 +113,8 @@ export interface AuthenticatedCustomer {
   readonly sessionId: string;
   /** Null until a workspace is selected, or after the membership went away. */
   readonly activeWorkspaceId: string | null;
+  /** G4 / Q23 (D-333): this person has two-step verification on. */
+  readonly mfaEnabled?: boolean;
 }
 
 /** A membership the signed-in user may act under, with its effective grants. */
@@ -126,7 +128,33 @@ export interface CustomerWorkspaceContext {
   readonly roleNameAr: string;
   readonly permissionKeys: readonly string[];
   readonly brandScope: readonly string[];
+  /**
+   * A8 (D-328): when a pending deletion takes effect, or null. Only ever set
+   * on a list asked for with `includePendingDeletion`.
+   */
+  readonly deletionScheduledFor?: Date | null;
+  /** G4 / Q23 (D-333): every member must have two-step verification on here. */
+  readonly requireMfa?: boolean;
 }
+
+/** One business in the rail's switcher (`listBusinesses`). */
+export interface CustomerBusiness {
+  readonly workspaceId: string;
+  readonly workspaceName: string;
+  readonly workspaceStatus: string;
+  /** False for a suspended, archived or cancelled workspace: counted, never offered. */
+  readonly operable: boolean;
+  /** This person is the workspace's owner (`Workspace.ownerUserId`). */
+  readonly isOwner: boolean;
+  /** The plan key on the workspace row, or null. */
+  readonly planKey: string | null;
+  readonly roleKey: string;
+  readonly roleNameEn: string;
+  readonly roleNameAr: string;
+}
+
+/** The statuses a customer may act in — the same list `listWorkspaces` uses. */
+const OPERABLE_STATUSES: ReadonlySet<string> = new Set(['TRIALING', 'ACTIVE', 'PAST_DUE']);
 
 export interface CustomerAuthOptions {
   readonly prisma: PrismaClient;
@@ -237,6 +265,76 @@ export class CustomerAuthService {
     });
 
     return this.#createSession(user.id, input.ip, input.userAgent, user.mfaEnabled);
+  }
+
+  /**
+   * STEP-UP: does this signed-in person know their password right now?
+   *
+   * Asked before an irreversible or security-weakening action — deleting a
+   * workspace (A8, D-328), turning a second factor off (Q23) — so a session
+   * left open on a shared screen is not enough to do either (docs/SECURITY.md
+   * §3). Counted exactly like a sign-in: the per-account ceiling applies first,
+   * and a wrong password counts toward the account's lockout, so this is not a
+   * second, unthrottled place to guess it.
+   */
+  async confirmPassword(input: {
+    readonly token: string;
+    readonly password: string;
+    readonly ip?: string | undefined;
+    readonly userAgent?: string | undefined;
+  }): Promise<boolean> {
+    return this.stepUp({
+      token: input.token,
+      ip: input.ip,
+      userAgent: input.userAgent,
+      attempt: async (userId) => {
+        const user = await this.#prisma.user.findUnique({
+          where: { id: userId },
+          select: { passwordHash: true },
+        });
+        return (
+          user?.passwordHash !== null &&
+          user?.passwordHash !== undefined &&
+          input.password !== '' &&
+          (await verifyPassword(user.passwordHash, input.password))
+        );
+      },
+    });
+  }
+
+  /**
+   * PROVE IT IS STILL YOU, before something that must not be done with a
+   * stolen session alone (Phase 2B-1: D-328 deletion, D-333 two-step).
+   *
+   * `attempt` is the proof — a password, a current code, or a whole operation
+   * that verifies one. This wraps it in the same brakes a sign-in has: its own
+   * per-account ceiling (`step-up:account`), a locked account refused outright,
+   * and a failed proof COUNTED toward the lockout. False means refused.
+   */
+  async stepUp(input: {
+    readonly token: string;
+    readonly attempt: (userId: string) => Promise<boolean>;
+    readonly ip?: string | undefined;
+    readonly userAgent?: string | undefined;
+  }): Promise<boolean> {
+    const customer = await this.resolve(input.token);
+    if (!customer) throw new AppError('UNAUTHENTICATED', GENERIC_FAILURE);
+    await this.#limiter.enforce(
+      'step-up:account',
+      customer.email,
+      this.#ceilings.signInPerAccount,
+      this.#ceilings.windowSeconds,
+    );
+    const user = await this.#prisma.user.findUnique({
+      where: { id: customer.userId },
+      select: { id: true, lockedUntil: true },
+    });
+    if (!user || this.#isLocked(user.lockedUntil)) return false;
+    if (!(await input.attempt(user.id))) {
+      await this.#countFailure(user.id, 'customer.auth.step_up_failed', input.ip, input.userAgent);
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -356,7 +454,14 @@ export class CustomerAuthService {
     // request instead of the next sign-in.
     let activeWorkspaceId: string | null = null;
     if (session.activeWorkspaceId) {
-      const available = await this.listWorkspaces(token);
+      // A workspace PENDING DELETION stays the session's workspace, so the
+      // dashboard can show its owner the "scheduled for deletion" screen; every
+      // surface that acts in it asks `listWorkspaces` without the option and
+      // does not find it (D-328).
+      const available = await this.listWorkspaces(token, {
+        includePendingDeletion: true,
+        includeMfaRequired: true,
+      });
       activeWorkspaceId = available.some((w) => w.workspaceId === session.activeWorkspaceId)
         ? session.activeWorkspaceId
         : null;
@@ -374,6 +479,7 @@ export class CustomerAuthService {
       locale: session.user.locale,
       sessionId: session.id,
       activeWorkspaceId,
+      mfaEnabled: session.user.mfaEnabled,
     };
   }
 
@@ -403,20 +509,42 @@ export class CustomerAuthService {
    * suspended, archived or cancelled workspace simply disappears from the
    * selector — the member keeps the membership and loses the surface.
    */
-  async listWorkspaces(token: string): Promise<CustomerWorkspaceContext[]> {
+  async listWorkspaces(
+    token: string,
+    options: {
+      /**
+       * A8 (D-328): include workspaces PENDING DELETION. OFF BY DEFAULT, so
+       * every caller that acts in a workspace — the API, the switcher's
+       * re-check — fails closed on one, and only the few callers that must
+       * show it (the dashboard's gate, the chooser, the switch itself) opt in.
+       */
+      readonly includePendingDeletion?: boolean;
+      /**
+       * G4 / Q23 (D-333): include a workspace that REQUIRES two-step
+       * verification when this person has not turned it on. OFF BY DEFAULT,
+       * exactly like the option above: every surface that acts in a workspace
+       * — the API included — fails closed on it, and only the dashboard's
+       * gate (which sends the person to set it up), the chooser and the
+       * session's own workspace check opt in.
+       */
+      readonly includeMfaRequired?: boolean;
+    } = {},
+  ): Promise<CustomerWorkspaceContext[]> {
     if (!token) return [];
     const tokenHash = hashSessionToken(token);
 
     const now = this.#clock.now();
-    const live = await this.#prisma.customerSession.count({
+    const live = await this.#prisma.customerSession.findFirst({
       where: {
         tokenHash,
         revokedAt: null,
         expiresAt: { gt: now },
         absoluteExpiresAt: { gt: now },
       },
+      select: { user: { select: { mfaEnabled: true } } },
     });
-    if (live === 0) throw new AppError('UNAUTHENTICATED', 'Your session is no longer valid.');
+    if (!live) throw new AppError('UNAUTHENTICATED', 'Your session is no longer valid.');
+    const hasMfa = live.user.mfaEnabled;
 
     const memberships = await this.#scope(tokenHash, (db) =>
       db.membership.findMany({
@@ -424,7 +552,11 @@ export class CustomerAuthService {
           status: 'ACTIVE',
           // A suspended, archived, cancelled or deleted workspace is not
           // selectable: the member keeps the membership and loses the surface.
-          workspace: { status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE'] }, deletedAt: null },
+          workspace: {
+            status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE'] },
+            deletedAt: null,
+            ...(options.includePendingDeletion ? {} : { deletionScheduledFor: null }),
+          },
         },
         include: {
           workspace: true,
@@ -434,18 +566,81 @@ export class CustomerAuthService {
       }),
     );
 
+    return memberships
+      .filter((m) => options.includeMfaRequired === true || hasMfa || !m.workspace.requireMfa)
+      .map((m) => ({
+        workspaceId: m.workspaceId,
+        workspaceName: m.workspace.name,
+        workspaceSlug: m.workspace.slug,
+        workspaceStatus: m.workspace.status,
+        roleKey: m.role.key,
+        roleNameEn: m.role.nameEn,
+        roleNameAr: m.role.nameAr,
+        // Recomputed from the stored role on every call, so a role change lands
+        // at the next request rather than at the next sign-in.
+        permissionKeys: m.role.permissions.map((rp) => rp.permission.key),
+        brandScope: m.brandScope,
+        deletionScheduledFor: m.workspace.deletionScheduledFor,
+        requireMfa: m.workspace.requireMfa,
+      }));
+  }
+
+  /**
+   * Every business this person belongs to, for the rail's switcher (Q1 / Q2,
+   * D-326) — including the ones they cannot currently act in.
+   *
+   * `listWorkspaces` answers "where may this session act?", so it hides a
+   * suspended or archived workspace. The switcher asks a different question:
+   * the workspace ALLOWANCE counts every workspace a person owns until it is
+   * deleted (a suspended one still counts), so the owner's own non-operable
+   * workspaces are returned too, flagged `operable: false`, and only ever
+   * COUNTED — never offered as a destination. A deleted workspace is not
+   * returned at all.
+   *
+   * Read through the same session scope as `listWorkspaces`: only workspaces
+   * where this person holds an ACTIVE membership are visible to it at all.
+   */
+  async listBusinesses(token: string): Promise<CustomerBusiness[]> {
+    if (!token) return [];
+    const tokenHash = hashSessionToken(token);
+    const now = this.#clock.now();
+    const live = await this.#prisma.customerSession.findFirst({
+      where: {
+        tokenHash,
+        revokedAt: null,
+        expiresAt: { gt: now },
+        absoluteExpiresAt: { gt: now },
+      },
+      select: { userId: true },
+    });
+    if (!live) throw new AppError('UNAUTHENTICATED', 'Your session is no longer valid.');
+
+    const memberships = await this.#scope(tokenHash, (db) =>
+      db.membership.findMany({
+        where: {
+          status: 'ACTIVE',
+          workspace: { deletedAt: null, status: { not: 'DELETED' } },
+        },
+        include: {
+          workspace: {
+            select: { id: true, name: true, status: true, ownerUserId: true, planKey: true },
+          },
+          role: { select: { key: true, nameEn: true, nameAr: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+    );
+
     return memberships.map((m) => ({
-      workspaceId: m.workspaceId,
+      workspaceId: m.workspace.id,
       workspaceName: m.workspace.name,
-      workspaceSlug: m.workspace.slug,
       workspaceStatus: m.workspace.status,
+      operable: OPERABLE_STATUSES.has(m.workspace.status),
+      isOwner: m.workspace.ownerUserId === live.userId,
+      planKey: m.workspace.planKey,
       roleKey: m.role.key,
       roleNameEn: m.role.nameEn,
       roleNameAr: m.role.nameAr,
-      // Recomputed from the stored role on every call, so a role change lands
-      // at the next request rather than at the next sign-in.
-      permissionKeys: m.role.permissions.map((rp) => rp.permission.key),
-      brandScope: m.brandScope,
     }));
   }
 
@@ -464,7 +659,14 @@ export class CustomerAuthService {
     const customer = await this.resolve(token);
     if (!customer) throw new AppError('UNAUTHENTICATED', 'Your session is no longer valid.');
 
-    const available = await this.listWorkspaces(token);
+    // A pending-deletion workspace may be switched INTO, so an owner can reach
+    // its "cancel deletion" screen; nothing in it can be done there (D-328).
+    // So may one that requires two-step verification: the dashboard then sends
+    // the person to set it up before anything else (D-333).
+    const available = await this.listWorkspaces(token, {
+      includePendingDeletion: true,
+      includeMfaRequired: true,
+    });
     const target = available.find((w) => w.workspaceId === workspaceId);
     if (!target) {
       // The same answer as a workspace that does not exist, so the switcher

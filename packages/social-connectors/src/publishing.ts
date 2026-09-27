@@ -21,6 +21,7 @@ import {
   publishJobNotCancellable,
   publishJobNotFound,
   publishJobNotRetryable,
+  publishJobPastDeadline,
 } from './errors';
 import { capabilitiesFor, PROVIDER_CONFIG_KEYS, type PublishingPolicy } from './policy';
 
@@ -35,6 +36,21 @@ const RECONNECT_RETRY_CLASSES: ReadonlySet<string> = new Set([
   'AUTH_REVOKED',
   'INSUFFICIENT_SCOPE',
 ]);
+
+/**
+ * May this failed job be retried through a reconnected account? One of the
+ * account classes above — or a job that WAITED for its account and failed at
+ * the deadline with `preflight.reconnect_required` (Q9, D-332; review item 12).
+ * That job is `NOT_CONNECTED` with that code: the connection itself is never
+ * given a status of that name.
+ */
+export function retryableAfterReconnect(job: {
+  readonly failureClass: string | null;
+  readonly failureCode: string | null;
+}): boolean {
+  if (RECONNECT_RETRY_CLASSES.has(job.failureClass ?? '')) return true;
+  return job.failureClass === 'NOT_CONNECTED' && job.failureCode === RECONNECT_REQUIRED_CODE;
+}
 import type { ConnectorRegistry } from './registry';
 import type { SocialTokenVault } from './token-vault';
 
@@ -189,6 +205,44 @@ export function providerForPlatformKey(platformKey: string): SocialProvider | nu
 }
 
 /**
+ * Q9 (D-332) — THE CALENDAR'S QUESTION: which of a post's channels can reach
+ * no account at all? One whose every account for the brand was REVOKED or
+ * DISABLED. An account that needs reconnecting still counts as reachable (its
+ * post waits for it), a pending one is ignored, and a channel with no account
+ * at all is not answered here — scheduling it keeps today's behaviour.
+ *
+ * The workspace predicate goes into the query beside RLS, the two
+ * independent layers CLAUDE.md §2.1 asks for.
+ */
+export function unreachableChannelGate(
+  db: TenantScopedClient,
+  workspaceId: string,
+): {
+  unreachableChannels(brandId: string, platformKeys: readonly string[]): Promise<readonly string[]>;
+} {
+  return {
+    async unreachableChannels(brandId, platformKeys) {
+      if (platformKeys.length === 0) return [];
+      const accounts = await db.socialConnection.findMany({
+        where: { workspaceId, brandId, status: { not: 'PENDING' } },
+        select: { provider: true, status: true },
+      });
+      return platformKeys.filter((platformKey) => {
+        const provider = providerForPlatformKey(platformKey);
+        if (!provider) return false;
+        const forProvider = accounts.filter((account) => account.provider === provider);
+        return (
+          forProvider.length > 0 &&
+          forProvider.every(
+            (account) => account.status === 'REVOKED' || account.status === 'DISABLED',
+          )
+        );
+      });
+    },
+  };
+}
+
+/**
  * The idempotency key.
  *
  * DERIVED FROM THE FOUR IDS AND NOTHING ELSE — no clock, no counter, no random
@@ -212,6 +266,22 @@ export function publishIdempotencyKey(input: {
     )
     .digest('hex');
 }
+
+/**
+ * Q9 (D-332) — a job whose account needs reconnecting, before and after its
+ * lateness deadline. Not failure classes: the first is not a failure at all,
+ * and the second is `NOT_CONNECTED` with its own code, which the publishing
+ * log translates as "reconnect the account".
+ */
+const AWAITING_RECONNECT = 'AWAITING_RECONNECT' as const;
+const RECONNECT_TOO_LATE = 'RECONNECT_TOO_LATE' as const;
+/** On a held job, while it waits. */
+export const AWAITING_RECONNECT_CODE = 'preflight.awaiting_reconnect';
+/** On the job that waited until its deadline and the account never came back. */
+export const RECONNECT_REQUIRED_CODE = 'preflight.reconnect_required';
+
+type PreflightOutcome =
+  PublishFailureClass | typeof AWAITING_RECONNECT | typeof RECONNECT_TOO_LATE | null;
 
 export class PublishPipelineService {
   readonly #db: TenantScopedClient;
@@ -288,8 +358,21 @@ export class PublishPipelineService {
       if (!approval || approval.status !== 'APPROVED') return empty('approval_required');
     }
 
+    /*
+     * AN EXPIRED ACCOUNT STILL GETS ITS JOB (Q9, D-332). A connection that
+     * needs reconnecting used to be skipped here, so its channel was silently
+     * dropped from the post while the others went out. Its job is now created
+     * like any other and WAITS for the reconnection in `execute()` until the
+     * lateness deadline, then fails saying to reconnect the account — visible
+     * in the publishing log, never silent. Revoked, disabled and pending
+     * accounts publish nothing and are still left out.
+     */
     const connections = await this.#db.socialConnection.findMany({
-      where: { workspaceId: this.#workspaceId, brandId: slot.brandId, status: 'ACTIVE' },
+      where: {
+        workspaceId: this.#workspaceId,
+        brandId: slot.brandId,
+        status: { in: ['ACTIVE', 'NEEDS_REAUTH'] },
+      },
       orderBy: [{ provider: 'asc' }, { id: 'asc' }],
     });
     if (connections.length === 0) return empty('no_active_connection');
@@ -372,10 +455,34 @@ export class PublishPipelineService {
       });
     }
 
-    const inserted =
-      rows.length === 0
-        ? { count: 0 }
-        : await this.#db.publishJob.createMany({ data: rows, skipDuplicates: true });
+    if (rows.length === 0) {
+      return { slotId, created: 0, existing: 0, skipped: 0, skipReason: 'no_matching_variant' };
+    }
+
+    /*
+     * THE CLAIM (review item 4). Everything above was decided from the slot as
+     * it was READ. A time-zone change (D-334) can commit in between — moving
+     * the post back to PLANNED or to another instant — and jobs built from the
+     * stale read would publish a post that is no longer due. So the slot is
+     * locked HERE, and only if it is still SCHEDULED at the instant this
+     * materialisation read. No match: nothing is created and the slot is left
+     * alone. A change arriving after this point waits for the lock and then
+     * finds the slot PUBLISHING, which it does not move.
+     *
+     * THE LOCK, THE INSERT AND THE TRANSITION share the caller's transaction:
+     * a failure anywhere below rolls all three back, so a slot is never left
+     * PUBLISHING without its jobs.
+     */
+    const claimed = await this.#db.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "calendar_slot"
+       WHERE "id" = ${slot.id}::uuid
+         AND "workspaceId" = ${this.#workspaceId}::uuid
+         AND "status" = 'SCHEDULED'
+         AND date_trunc('milliseconds', "scheduledAtUtc") = ${slot.scheduledAtUtc}
+       FOR UPDATE`;
+    if (claimed.length === 0) return empty('slot_changed');
+
+    const inserted = await this.#db.publishJob.createMany({ data: rows, skipDuplicates: true });
     const created = inserted.count;
     const existing = rows.length - created;
 
@@ -463,6 +570,10 @@ export class PublishPipelineService {
     if (!job) throw publishJobNotFound();
 
     const preflight = await this.#preflight(job);
+    if (preflight === AWAITING_RECONNECT) return this.#holdForReconnect(job);
+    if (preflight === RECONNECT_TOO_LATE) {
+      return this.#fail(job, 'NOT_CONNECTED', RECONNECT_REQUIRED_CODE, null);
+    }
     if (preflight) return this.#fail(job, preflight, `preflight.${preflight.toLowerCase()}`, null);
 
     const connection = await this.#db.socialConnection.findFirst({
@@ -1169,9 +1280,6 @@ export class PublishPipelineService {
     });
     if (!job) throw publishJobNotFound();
     if (job.status !== 'FAILED') throw publishJobNotRetryable();
-    if (job.failureClass && !FAILURE_BEHAVIOUR[job.failureClass].manualRetryUseful) {
-      throw publishJobNotRetryable();
-    }
     /*
      * AND NOT AN INDETERMINATE CLASS EVEN WHEN FAILED. A job that exhausted its
      * attempts on a TIMEOUT is a job whose last request may have landed; it
@@ -1179,6 +1287,11 @@ export class PublishPipelineService {
      * a longer route.
      */
     if (job.failureClass && FAILURE_BEHAVIOUR[job.failureClass].indeterminate) {
+      throw publishJobNotRetryable();
+    }
+    // D-332 (owner decision): a retry never publishes late. Refused, not queued.
+    if (this.pastLatenessDeadline(job.scheduledAtUtc)) throw publishJobPastDeadline();
+    if (job.failureClass && !FAILURE_BEHAVIOUR[job.failureClass].manualRetryUseful) {
       throw publishJobNotRetryable();
     }
 
@@ -1249,9 +1362,16 @@ export class PublishPipelineService {
       where: { id: input.jobId, ...brandIdQueryFilter({ brandScope: input.brandScope }) },
     });
     if (!job) throw publishJobNotFound();
-    if (job.status !== 'FAILED' || !RECONNECT_RETRY_CLASSES.has(job.failureClass ?? '')) {
+    if (job.status !== 'FAILED' || !retryableAfterReconnect(job)) {
       throw publishJobNotRetryable();
     }
+    /*
+     * D-332 (owner decision): THE TIME PASSED WHILE THE ACCOUNT WAS
+     * DISCONNECTED, so the post is not published late. Refused before anything
+     * changes: the job stays FAILED with the failure it recorded, and nothing
+     * is queued or sent.
+     */
+    if (this.pastLatenessDeadline(job.scheduledAtUtc)) throw publishJobPastDeadline();
     const replacement = await this.#reconnectedConnection(job);
     if (!replacement) throw publishJobNotRetryable();
 
@@ -1318,10 +1438,22 @@ export class PublishPipelineService {
     });
     const ready = new Set<string>();
     for (const job of jobs) {
-      if (!RECONNECT_RETRY_CLASSES.has(job.failureClass ?? '')) continue;
+      if (!retryableAfterReconnect(job)) continue;
+      // Past its deadline it cannot be retried (D-332), so it is not offered.
+      if (this.pastLatenessDeadline(job.scheduledAtUtc)) continue;
       if (await this.#reconnectedConnection(job)) ready.add(job.id);
     }
     return ready;
+  }
+
+  /**
+   * Has this post's LATENESS DEADLINE passed — its scheduled time plus the
+   * configured tolerance? The same measure the preflight uses to stop a post
+   * that is too late to be worth sending, read here so the retry paths refuse
+   * it up front and the screens stop offering Retry (D-332). Read-only.
+   */
+  pastLatenessDeadline(scheduledAtUtc: Date): boolean {
+    return this.#clock.now().getTime() - scheduledAtUtc.getTime() > this.#lateness();
   }
 
   /**
@@ -1370,7 +1502,41 @@ export class PublishPipelineService {
    * between the two: approval is withdrawn, a connection expires, a slot is
    * cancelled, the post becomes too late to be worth sending.
    */
-  async #preflight(job: PublishJob): Promise<PublishFailureClass | null> {
+  /**
+   * WAIT FOR THE ACCOUNT TO BE RECONNECTED (Q9, D-332).
+   *
+   * Nothing was sent and nothing was attempted, so this is not a retry: the
+   * attempt count is untouched and no attempt row is written. The job goes
+   * back to QUEUED and is looked at again after the configured interval — or
+   * just after its lateness deadline, whichever comes first, so a job never
+   * waits past the moment it must fail. The code says why it is waiting, and
+   * the publishing log shows it.
+   */
+  async #holdForReconnect(job: PublishJob): Promise<ExecuteResult> {
+    const now = this.#clock.now().getTime();
+    const deadline = job.scheduledAtUtc.getTime() + this.#lateness();
+    const next = Math.min(
+      now + this.#policy.dispatch.reconnectRecheckSeconds * 1_000,
+      deadline + 1_000,
+    );
+    await this.#db.publishJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'QUEUED',
+        claimedAt: null,
+        failureClass: 'NOT_CONNECTED',
+        failureCode: AWAITING_RECONNECT_CODE,
+        nextAttemptAt: new Date(Math.max(next, now + 1_000)),
+      },
+    });
+    return { jobId: job.id, status: 'QUEUED', failureClass: 'NOT_CONNECTED', externalPostId: null };
+  }
+
+  #lateness(): number {
+    return this.#policy.dispatch.latenessToleranceMinutes * 60_000;
+  }
+
+  async #preflight(job: PublishJob): Promise<PreflightOutcome> {
     const slot = await this.#db.calendarSlot.findFirst({
       where: { id: job.calendarSlotId, workspaceId: this.#workspaceId },
     });
@@ -1441,11 +1607,37 @@ export class PublishPipelineService {
       }
     }
 
+    const lateByMs = this.#clock.now().getTime() - job.scheduledAtUtc.getTime();
+    const tooLate = lateByMs > this.#lateness();
+
     const connection = await this.#db.socialConnection.findFirst({
       where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },
-      select: { status: true },
+      select: { status: true, tokenExpiresAt: true },
     });
+    /*
+     * REVIEW ITEM 3: AN ACTIVE CONNECTION WHOSE TOKEN HAS EXPIRED IS NOT SENT
+     * TO THE PROVIDER. The publishing sweep refreshes it first, through the
+     * existing refresh path, on the surface allowed to (F-07); a job that
+     * reaches this point with the token still expired — no refresh token, a
+     * refused refresh, or one not yet attempted — is treated exactly like one
+     * whose account needs reconnecting. The persisted status is not changed
+     * here: the refresh path is the one that decides that.
+     */
+    const tokenExpired =
+      connection?.status === 'ACTIVE' &&
+      connection.tokenExpiresAt !== null &&
+      connection.tokenExpiresAt.getTime() <= this.#clock.now().getTime();
+    /*
+     * Q9 (D-332): AN ACCOUNT THAT NEEDS RECONNECTING HOLDS ITS JOB until the
+     * lateness deadline, then fails it with the reason. A job that waited and
+     * whose account came back only after the deadline fails with the same
+     * reason — the post is late BECAUSE it waited for the reconnection, and
+     * "the destination is unavailable" would not say so.
+     */
+    if (connection?.status === 'NEEDS_REAUTH' || tokenExpired)
+      return tooLate ? RECONNECT_TOO_LATE : AWAITING_RECONNECT;
     if (!connection || connection.status !== 'ACTIVE') return 'NOT_CONNECTED';
+    if (tooLate && job.failureCode === AWAITING_RECONNECT_CODE) return RECONNECT_TOO_LATE;
 
     const capabilities = capabilitiesFor(this.#policy, job.provider);
     if (!capabilities.enabled) return 'UNSUPPORTED';
@@ -1455,10 +1647,7 @@ export class PublishPipelineService {
      * worse than one not posted at all, so beyond the configured tolerance the
      * job stops and the customer decides (docs/SOCIAL-INTEGRATIONS.md §8).
      */
-    const lateByMs = this.#clock.now().getTime() - job.scheduledAtUtc.getTime();
-    if (lateByMs > this.#policy.dispatch.latenessToleranceMinutes * 60_000) {
-      return 'TARGET_UNAVAILABLE';
-    }
+    if (tooLate) return 'TARGET_UNAVAILABLE';
 
     return null;
   }

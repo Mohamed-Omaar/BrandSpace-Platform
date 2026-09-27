@@ -50,6 +50,7 @@ const QUOTAS: readonly (keyof PlanQuotas)[] = [
   'scheduledPostsPerMonth',
   'storageGb',
   'analyticsRetentionDays',
+  'workspaces',
 ];
 
 function saleState(plan: PlanDetail): { key: SimpleKey; tone: BadgeTone } {

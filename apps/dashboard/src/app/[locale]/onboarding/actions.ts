@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+import { redirect, unstable_rethrow } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
@@ -12,12 +12,13 @@ import { createBrandFor } from '../../../server/brand-creation';
 import { rememberBrand } from '../../../server/brand-cookie';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
 import { setupBrandFrom } from '../../../server/setup-brand-form';
+import { saveSetupGoal } from '../../../server/setup-goal';
 import {
-  GOAL_ITEM_KEY,
-  goalKnowledge,
-  setupGoalFrom,
-  type SetupView,
-} from '../../../server/setup-wizard-state';
+  applyCandidateReview,
+  reviewCandidateInputFrom,
+  setupReviewInProgress,
+} from '../../../server/candidate-review';
+import { setupGoalFrom, type SetupView } from '../../../server/setup-wizard-state';
 
 const log = createLogger({ context: { component: 'dashboard.setup-wizard' } });
 
@@ -167,11 +168,13 @@ async function attachLogo(
  * STEP 6 — THE FIRST GOAL, IN THE BRAND'S STRATEGY MEMORY.
  *
  * NOT AN ONBOARDING-ONLY FIELD (§6: "DO NOT store this as an onboarding-only
- * duplicate truth"). The goal is a HUMAN knowledge item in the brand's
- * STRATEGY area under `goal.primary`, written through `BrandKnowledgeService`
- * — versioned, audited, visible and editable in Brand Brain, and part of the
- * grounded context the strategy and Copilot read. Choosing again edits the
- * same item (a new version), never a second goal.
+ * duplicate truth"). The goal is a knowledge item in the brand's STRATEGY
+ * area under `goal.primary`, origin SETUP (D-335), written through
+ * `BrandKnowledgeService` — versioned, audited, visible and editable in Brand
+ * Brain, and part of the grounded context the strategy and Copilot read.
+ * Choosing again edits the same item (a new version), never a second goal. The
+ * brand also carries the goal's KEY, so it is shown in the reader's language
+ * (`server/setup-goal.ts`).
  *
  * "I'M NOT SURE" WRITES NOTHING and moves on: the truth is that there is no
  * goal yet, and a stored guess would be read as one.
@@ -189,49 +192,67 @@ export async function saveFirstGoalAction(formData: FormData): Promise<void> {
       // BEFORE the read (docs/SECURITY.md §4.2). Out of scope is a 404.
       assertBrandInScope(session.workspace.brandScope, brandId);
 
-      const { title, body } = goalKnowledge(goal);
       const actor = {
         userId: session.customer.userId,
         permissionKeys: session.workspace.permissionKeys,
         brandScope: session.workspace.brandScope,
       };
 
-      await inBrandBrain(session.workspace.workspaceId, async ({ db, knowledge, policy }) => {
-        const staleness = (await policy()).staleness;
-        const existing = await db.brandKnowledgeItem.findFirst({
-          where: {
-            brandId,
-            area: 'STRATEGY',
-            itemKey: GOAL_ITEM_KEY,
-            status: { in: ['ACTIVE', 'STALE'] },
-          },
-          select: { id: true },
-        });
-        if (existing) {
-          await knowledge.updateItem({
-            itemId: existing.id,
-            title,
-            body,
-            changeReason: 'First goal chosen in setup',
-            actor,
-            policy: staleness,
-          });
-        } else {
-          await knowledge.createItem({
-            brandId,
-            area: 'STRATEGY',
-            itemKey: GOAL_ITEM_KEY,
-            title,
-            body,
-            actor,
-            policy: staleness,
-          });
-        }
-      });
+      await inBrandBrain(session.workspace.workspaceId, async ({ db, knowledge, policy }) =>
+        saveSetupGoal(db, knowledge, {
+          workspaceId: session.workspace.workspaceId,
+          brandId,
+          goal,
+          actor,
+          staleness: (await policy()).staleness,
+        }),
+      );
     }
     destination = pageUrl(locale, 'done', goal === 'unsure' ? {} : { ok: 'GOAL_SAVED' });
   } catch (error: unknown) {
     destination = failure(locale, 'goal', error, 'save-goal');
+  }
+  revalidatePath(`/${locale}/onboarding`);
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}
+
+/**
+ * STEP 4 — REVIEW WHAT BRANDSPACE LEARNED (review item 15, D-335).
+ *
+ * The wizard's OWN review action, so the origin of what it accepts is decided
+ * HERE, on the server, and never read from the request: SETUP only while this
+ * brand's setup is still in progress (it has no first goal yet), DOCUMENT
+ * otherwise — exactly what Brand Brain's review records. The decision, the
+ * candidate and the permission (`brand_brain.review`) are checked as Brand
+ * Brain checks them, through the same shared decoder and service call.
+ */
+export async function reviewSetupCandidateAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.review');
+    const parsed = reviewCandidateInputFrom(formData);
+    const actor = {
+      userId: session.customer.userId,
+      permissionKeys: session.workspace.permissionKeys,
+      brandScope: session.workspace.brandScope,
+    };
+    await inBrandBrain(session.workspace.workspaceId, async ({ db, knowledge, policy }) =>
+      applyCandidateReview(
+        knowledge,
+        parsed,
+        actor,
+        (await policy()).staleness,
+        await setupReviewInProgress(db, parsed.candidateId, actor.brandScope),
+      ),
+    );
+    destination = pageUrl(locale, 'review', {
+      ok: parsed.decision === 'reject' ? 'CANDIDATE_REJECTED' : 'CANDIDATE_ACCEPTED',
+    });
+  } catch (error: unknown) {
+    unstable_rethrow(error);
+    destination = failure(locale, 'review', error, 'review-candidate');
   }
   revalidatePath(`/${locale}/onboarding`);
   revalidatePath(`/${locale}/brand-brain`);

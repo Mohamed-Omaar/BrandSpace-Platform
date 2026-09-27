@@ -13,6 +13,7 @@
     "@brandspace/auth": "workspace:*",
     "@brandspace/billing": "workspace:*",
     "@brandspace/config": "workspace:*",
+    "@brandspace/content": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/entitlements": "workspace:*",
     "@brandspace/integrations": "workspace:*",

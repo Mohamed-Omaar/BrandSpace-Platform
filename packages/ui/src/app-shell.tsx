@@ -556,14 +556,17 @@ export function AppShell({
        * the profile card below it stay put. The rail itself is a fixed
        * viewport-height column (see `.bs-shell > .bs-sidebar` in tokens.css).
        */}
+      {/* `.bs-nav-scroll` hides the bar in every engine (`scrollbar-width` AND
+          `::-webkit-scrollbar`), as the demo's `.nav-scroll` does; the global
+          UI-1 scrollbar must never re-show it. */}
       <div
+        className="bs-nav-scroll"
         style={{
           flex: '1 1 auto',
           minBlockSize: 0,
           overflowY: 'auto',
           overflowX: 'hidden',
           paddingBlock: `${spacingTokens['3xs']} 0.625rem`,
-          scrollbarWidth: 'none',
         }}
       >
         <NavList sections={resolvedSections} collapsed={collapsed} />

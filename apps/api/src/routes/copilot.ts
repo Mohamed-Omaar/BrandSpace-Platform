@@ -36,6 +36,7 @@ import {
   SocialTokenVault,
   createConnectorRegistry,
   resolvePublishingPolicy,
+  unreachableChannelGate,
 } from '@brandspace/social-connectors';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { PUBLISH_SOCIAL_POST, enqueue, type PublishSocialPostPayload } from '@brandspace/jobs';
@@ -180,6 +181,8 @@ async function executionContextFor(input: {
       policy: contentPolicy,
       timezone: workspace?.timezone ?? 'UTC',
       quota: scheduleQuota(db, workspaceId),
+      // Q9 (D-332): a channel whose every account was revoked is refused.
+      channelGate: unreachableChannelGate(db, workspaceId),
       /*
        * AC-14.6 — the calendar asks the APPROVALS MODULE whether this brand
        * requires approval, rather than reading one workspace-wide default. The
@@ -259,6 +262,8 @@ function externalActions(db: TenantScopedClient): ExternalActionPort {
         // plan's monthly ceiling exactly as scheduling by hand is; an assistant
         // that could exceed it would be a way to buy headroom by asking nicely.
         quota: scheduleQuota(db, input.workspaceId),
+        // Q9 (D-332): a channel whose every account was revoked is refused.
+        channelGate: unreachableChannelGate(db, input.workspaceId),
       });
 
       /*
@@ -752,6 +757,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
                   policy: contentPolicy,
                   timezone: workspace?.timezone ?? 'UTC',
                   quota: scheduleQuota(db, caller.workspaceId),
+                  channelGate: unreachableChannelGate(db, caller.workspaceId),
                 }),
                 // THE CONTENT DOMAIN'S OWN ARCHIVE (P7-R4). The undo no longer
                 // knows how to write a content row.

@@ -179,7 +179,7 @@ could clear look like a platform fault.
 | Password policy    | Length-first; the minimum is CONFIGURATION (`onboarding.signup.minPasswordLength`, default and absolute floor **8**, ceiling 128 — D-261), breached-password check (**NOT YET IMPLEMENTED — F-89**), no forced rotation |
 | Rate limiting      | Per-IP and per-account exponential backoff; lockout with unlock flow                                                                                                                                                    |
 | Email verification | Required before first login completes; signed single-use token                                                                                                                                                          |
-| MFA                | TOTP + recovery codes. Optional for customers; **mandatory for Platform Owner and Platform Admin**                                                                                                                      |
+| MFA                | TOTP + recovery codes. Optional for customers unless their workspace requires it (D-333); **mandatory for Platform Owner and Platform Admin**                                                                           |
 | Step-up auth       | Required for: secret create/rotate/revoke, plan price changes, entering support mode, refunds, credit adjustments above a threshold, account deletion, ownership transfer                                               |
 | Sessions           | Short-lived access token, rotating refresh, absolute max lifetime, device list, revoke-all                                                                                                                              |
 | Invalidation       | On password change, role change, membership removal, workspace suspension, MFA reset                                                                                                                                    |
@@ -187,6 +187,18 @@ could clear look like a platform fault.
 | Realm separation   | Distinct cookie names, signing keys, audiences, and session tables for customer vs. platform                                                                                                                            |
 | Admin surface      | Dedicated hostname; optional IP allowlist; no public registration path                                                                                                                                                  |
 | Future             | SSO (SAML/OIDC) and SCIM for Enterprise — identity model already supports it                                                                                                                                            |
+
+**Customer two-step verification (Phase 2B-1, D-333).** Authenticator app (TOTP) only — no SMS — with ten
+recovery codes. Set up by QR code or by typing the printed key; both are drawn on the server from the sealed
+seed, which never travels in a URL. Recovery codes are shown once, from a five-minute `HttpOnly`,
+`SameSite=Strict` cookie that "I have saved them" deletes. Turning it off takes a current code **or** the
+password; "New phone" takes a current code and keeps the old phone working until the new one proves itself
+(`user.mfaPendingSecretMaterial`). Every one of these proofs is a **step-up** (`CustomerAuthService.stepUp`):
+its own per-account ceiling (`step-up:account`), refused while the account is locked, and a wrong proof counts
+toward the lockout. The Owner (`workspace.security.manage`, Owner only) can **require** it for the workspace
+(`workspace.requireMfa`): a member without it is sent to set it up before any page or action of the workspace
+(the API answers 404, because `listWorkspaces` leaves such a workspace out unless the dashboard's gate asks for
+it), and nobody who belongs to a workspace that requires it can turn theirs off.
 
 **Cookies:** `HttpOnly`, `Secure`, `SameSite=Lax` (strict for admin), `__Host-` prefix, short TTL.
 **CSRF:** double-submit token plus SameSite; all mutations require the token.

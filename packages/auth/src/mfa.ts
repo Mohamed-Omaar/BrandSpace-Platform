@@ -56,6 +56,15 @@ export function generateTotpEnrolment(label: string): TotpEnrolment {
   };
 }
 
+/**
+ * The `otpauth://` URI for a seed that already exists — for rendering the QR
+ * code and the typed key of an enrolment in progress from the SERVER, so the
+ * seed never travels in a URL (G4, D-333).
+ */
+export function totpUri(secret: string, label: string): string {
+  return buildTotp(secret, label).toString();
+}
+
 export const totpVerifier: MfaVerifier = {
   method: 'totp',
   verify({ secret, token }) {

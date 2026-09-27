@@ -43,8 +43,9 @@ import {
   hashRecoveryCode,
   totpVerifier,
   type TotpEnrolment,
+  totpUri,
 } from './mfa';
-import { hashPassword } from './password';
+import { hashPassword, verifyPassword } from './password';
 import { AuthRateLimiter, type AbuseCeilings } from './rate-limit';
 
 // --- The policy, as the activated `onboarding` document carries it ------------
@@ -546,11 +547,19 @@ export class SignupService {
   async disableMfa(userId: string, code: string): Promise<void> {
     const ok = await this.verifyMfa(userId, code);
     if (!ok) throw new AppError('UNAUTHENTICATED', 'That code is not valid.');
+    await this.#turnOff(userId);
+  }
 
+  async #turnOff(userId: string): Promise<void> {
     await this.#prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
-        data: { mfaEnabled: false, mfaSecretMaterial: Prisma.DbNull, mfaEnrolledAt: null },
+        data: {
+          mfaEnabled: false,
+          mfaSecretMaterial: Prisma.DbNull,
+          mfaPendingSecretMaterial: Prisma.DbNull,
+          mfaEnrolledAt: null,
+        },
       });
       await tx.userMfaRecoveryCode.deleteMany({ where: { userId } });
       await tx.auditEvent.createMany({
@@ -622,6 +631,152 @@ export class SignupService {
     return { recoveryCodes: codes };
   }
 
+  /**
+   * THE ENROLMENT IN PROGRESS, for its own person's settings page (G4, D-333).
+   *
+   * A first enrolment (a sealed seed, two-step not on yet) or a new phone being
+   * set up (a pending seed beside the live one). Opened on the server so the
+   * page can draw the QR code and print the key — the seed is never put in a
+   * URL, a log or an audit row. Null when nothing is being set up.
+   */
+  async pendingEnrolment(
+    userId: string,
+  ): Promise<{ readonly secret: string; readonly otpauthUri: string } | null> {
+    const user = await this.#prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        email: true,
+        mfaEnabled: true,
+        mfaSecretMaterial: true,
+        mfaPendingSecretMaterial: true,
+      },
+    });
+    if (!user) return null;
+    const material = user.mfaEnabled ? user.mfaPendingSecretMaterial : user.mfaSecretMaterial;
+    if (!material) return null;
+    const secret = await this.#openMaterial(userId, material);
+    if (!secret) return null;
+    return { secret, otpauthUri: totpUri(secret, user.email) };
+  }
+
+  /**
+   * Turn two-step verification off with EITHER a current code or the account
+   * password (G4, D-333). The caller wraps this in the session step-up, which
+   * rate-limits it and counts a wrong proof toward the lockout; a workspace
+   * that requires two-step is checked by the caller before this is reached.
+   */
+  async disableMfaWith(
+    userId: string,
+    proof: { readonly code: string } | { readonly password: string },
+  ): Promise<boolean> {
+    if ('password' in proof) {
+      const user = await this.#prisma.user.findUnique({
+        where: { id: userId },
+        select: { passwordHash: true, mfaEnabled: true },
+      });
+      if (!user?.mfaEnabled || !user.passwordHash || proof.password === '') return false;
+      if (!(await verifyPassword(user.passwordHash, proof.password))) return false;
+    } else if (!(await this.verifyMfa(userId, proof.code))) {
+      return false;
+    }
+    await this.#turnOff(userId);
+    return true;
+  }
+
+  /**
+   * "NEW PHONE" (G4, D-333): a current code — from the old phone, or a
+   * recovery code — starts setting up another authenticator. The live one
+   * keeps working until the new one proves itself, so abandoning halfway
+   * locks nobody out. False when the code is wrong.
+   */
+  async beginMfaReenrolment(
+    policy: OnboardingPolicy,
+    userId: string,
+    code: string,
+  ): Promise<boolean> {
+    if (!policy.mfa.customerEnrolmentEnabled) {
+      throw new AppError('FORBIDDEN', 'Two-factor authentication is not available.');
+    }
+    const user = await this.#prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, mfaEnabled: true },
+    });
+    if (!user?.mfaEnabled) {
+      throw new AppError('CONFLICT', 'Two-factor authentication is not on for this account.');
+    }
+    if (!(await this.verifyMfa(userId, code))) return false;
+    const enrolment = generateTotpEnrolment(user.email);
+    const sealed = await encryptSecret(enrolment.secret, customerMfaContext(userId), this.#keys());
+    await this.#prisma.user.update({
+      where: { id: userId },
+      data: { mfaPendingSecretMaterial: sealed as unknown as object },
+    });
+    await this.#audit(userId, 'customer.mfa.reenrolment_started', undefined, 'NOTICE');
+    return true;
+  }
+
+  /**
+   * The new phone proves itself with a 6-digit code: its seed becomes the live
+   * one, the old phone stops working, and a fresh set of recovery codes is
+   * issued (the old printout stops working too).
+   */
+  async confirmMfaReenrolment(
+    policy: OnboardingPolicy,
+    userId: string,
+    code: string,
+  ): Promise<{ readonly recoveryCodes: readonly string[] }> {
+    const row = await this.#prisma.user.findUnique({
+      where: { id: userId },
+      select: { mfaPendingSecretMaterial: true },
+    });
+    const pending = row?.mfaPendingSecretMaterial
+      ? await this.#openMaterial(userId, row.mfaPendingSecretMaterial)
+      : null;
+    if (!row?.mfaPendingSecretMaterial || !pending) {
+      throw new AppError('CONFLICT', 'Start setting up the new phone before confirming it.');
+    }
+    if (!totpVerifier.verify({ secret: pending, token: code })) {
+      throw new AppError('UNAUTHENTICATED', 'That code is not valid.');
+    }
+    const codes = generateRecoveryCodes(policy.mfa.recoveryCodeCount);
+    const now = this.#clock.now();
+    await this.#prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          mfaSecretMaterial: row.mfaPendingSecretMaterial as object,
+          mfaPendingSecretMaterial: Prisma.DbNull,
+          mfaEnrolledAt: now,
+        },
+      });
+      await tx.userMfaRecoveryCode.deleteMany({ where: { userId } });
+      await tx.userMfaRecoveryCode.createMany({
+        data: codes.map((value) => ({ userId, codeHash: hashRecoveryCode(value) })),
+      });
+      await tx.auditEvent.createMany({
+        data: [
+          {
+            workspaceId: null,
+            actorType: 'USER',
+            actorId: userId,
+            action: 'customer.mfa.reenrolled',
+            severity: 'NOTICE',
+            outcome: 'SUCCESS',
+          },
+        ],
+      });
+    });
+    return { recoveryCodes: codes };
+  }
+
+  /** Stop setting up a new phone. The current one was never touched. */
+  async cancelMfaReenrolment(userId: string): Promise<void> {
+    await this.#prisma.user.update({
+      where: { id: userId },
+      data: { mfaPendingSecretMaterial: Prisma.DbNull },
+    });
+  }
+
   /** How many unused recovery codes remain — the number the settings page shows. */
   async remainingRecoveryCodes(userId: string): Promise<number> {
     return this.#prisma.userMfaRecoveryCode.count({ where: { userId, usedAt: null } });
@@ -647,7 +802,12 @@ export class SignupService {
      * returning their seed. Re-deriving it here and comparing first makes that
      * refusal explicit instead of relying on a GCM tag mismatch to say it.
      */
-    const material = row.mfaSecretMaterial as unknown as EncryptedMaterial;
+    return this.#openMaterial(userId, row.mfaSecretMaterial);
+  }
+
+  /** Open a sealed seed — live or pending — bound to exactly this user. */
+  async #openMaterial(userId: string, stored: unknown): Promise<string | null> {
+    const material = stored as EncryptedMaterial;
     if (material.encryptionContext !== customerMfaContext(userId)) return null;
     return decryptSecret(material, this.#keys());
   }

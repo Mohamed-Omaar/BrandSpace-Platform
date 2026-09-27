@@ -141,6 +141,7 @@ export async function savePlanAction(formData: FormData): Promise<void> {
         scheduledPostsPerMonth: readNullableInt(formData, 'quota.scheduledPostsPerMonth'),
         storageGb: readNullableInt(formData, 'quota.storageGb'),
         analyticsRetentionDays: readNullableInt(formData, 'quota.analyticsRetentionDays'),
+        workspaces: readNullableInt(formData, 'quota.workspaces'),
       },
       sortOrder: readInt(formData, 'sortOrder'),
     };

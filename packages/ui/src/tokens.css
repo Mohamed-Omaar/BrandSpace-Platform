@@ -58,6 +58,10 @@
   --bs-border-strong: #818c9c;
   --bs-document-rule: #d8d8de;
 
+  /* UI-1: the one scrollbar thumb, resting and hovered. */
+  --bs-scrollbar-thumb: #9a9aa2;
+  --bs-scrollbar-thumb-hover: #6a6a72;
+
   --bs-text-primary: #111114;
   --bs-text-secondary: #4d4c53;
   --bs-text-muted: #6a6a72;
@@ -241,6 +245,75 @@ html {
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/*
+ * UI-1 — ONE SCROLLBAR STYLE, GLOBALLY (prototype v94).
+ *
+ * Thin, no arrow buttons, a transparent track and a subtle thumb that darkens
+ * on hover. Defined once here, never per screen.
+ *
+ * TWO ENGINES, TWO MECHANISMS, AND THEY MUST NOT MEET. Chromium 121+ drops
+ * every `::-webkit-scrollbar` rule for an element that has `scrollbar-width`
+ * or `scrollbar-color` set — so setting the standard properties globally
+ * would silently switch Chrome and Edge to the standard path and lose the
+ * hover darkening, which only the pseudo-elements can express. The standard
+ * properties are therefore scoped to engines WITHOUT the pseudo-elements
+ * (Firefox), and Chrome/Edge/Safari use the pseudo-elements.
+ *
+ * DELIBERATELY HIDDEN SCROLLBARS STAY HIDDEN. An element that hides its bar
+ * sets `scrollbar-width: none` AND `::-webkit-scrollbar { display: none }`
+ * (the demo's `.nav-scroll` pattern) on a class, which is more specific than
+ * these universal rules: `.bs-nav-scroll` (the sidebar navigation) and
+ * `.bb-chat-suggestions` (Brand Brain). tests/unit/ui1-scrollbar.test.ts
+ * holds both halves in place.
+ */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--bs-scrollbar-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: var(--bs-radius-full);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--bs-scrollbar-thumb-hover);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--bs-scrollbar-thumb) transparent;
+  }
+
+  *:hover {
+    scrollbar-color: var(--bs-scrollbar-thumb-hover) transparent;
+  }
+}
+
+/* The sidebar navigation scrolls without a visible bar — `.nav-scroll` in the
+   demo, transcribed with BOTH of its rules. */
+.bs-nav-scroll {
+  scrollbar-width: none;
+}
+
+.bs-nav-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /*

@@ -52,13 +52,15 @@ const made: Made[] = [];
 async function fixture(input: {
   account: 'ACTIVE' | 'NEEDS_REAUTH';
   job: { status: 'PENDING' | 'FAILED'; failureClass?: 'AUTH_REVOKED' };
+  /** When the post was due. Defaults to a week ahead. */
+  scheduledAt?: Date;
 }): Promise<Made> {
   const loaded = credentials();
   const workspaceId = loaded.customer.workspaceId;
   const brandId = brandFixtures(loaded).primaryBrandId;
   const suffix = randomUUID().slice(0, 6);
   const title = `Publishing ${suffix}`;
-  const week = new Date(Date.now() + 7 * 86_400_000);
+  const week = input.scheduledAt ?? new Date(Date.now() + 7 * 86_400_000);
   const result = await withPlatformPrisma(async (prisma) => {
     const item = await prisma.contentItem.create({
       data: {
@@ -235,6 +237,43 @@ test.describe('D-291 · failed on a broken account → reconnect → retry', () 
     await link.click();
     await page.waitForURL(/\/en\/publishing\?tab=failed$/);
     await expect(page.getByTestId(`retry-reconnected-${failed.jobId}`)).toBeVisible();
+  });
+});
+
+test.describe('D-332 · a failed post past its deadline is not retried', () => {
+  test('no Retry, the reason, and the existing "Make a new copy" — in both languages', async ({
+    page,
+  }) => {
+    // Three days late: past any lateness tolerance the policy allows (max 24 h).
+    const late = await fixture({
+      account: 'NEEDS_REAUTH',
+      job: { status: 'FAILED', failureClass: 'AUTH_REVOKED' },
+      scheduledAt: new Date(Date.now() - 3 * 86_400_000),
+    });
+    // Reconnected since the failure: before D-332 this row offered Retry.
+    await withPlatformPrisma((prisma) =>
+      prisma.socialConnection.update({
+        where: { id: late.connectionId },
+        data: { status: 'ACTIVE', connectedAt: new Date(), lastFailureClass: null },
+      }),
+    );
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/publishing?tab=failed`);
+    await expect(page.getByTestId(`publish-job-${late.jobId}`)).toBeVisible();
+    await expect(page.getByTestId(`late-${late.jobId}`)).toHaveText(
+      'This post’s time passed while the account was disconnected, so it wasn’t published late. Make a new copy to schedule it again.',
+    );
+    await expect(page.getByTestId(`retry-reconnected-${late.jobId}`)).toHaveCount(0);
+    await expect(page.getByTestId(`retry-${late.jobId}`)).toHaveCount(0);
+    await expect(page.getByTestId(`reconnected-${late.jobId}`)).toHaveCount(0);
+    await expect(page.getByTestId(`copy-${late.jobId}`)).toHaveText('Make a new copy');
+
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/publishing?tab=failed`);
+    await expect(page.getByTestId(`late-${late.jobId}`)).toHaveText(
+      'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
+    );
+    await expect(page.getByTestId(`retry-reconnected-${late.jobId}`)).toHaveCount(0);
+    await expect(page.getByTestId(`copy-${late.jobId}`)).toBeVisible();
   });
 });
 

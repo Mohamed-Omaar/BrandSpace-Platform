@@ -24,6 +24,7 @@ import { withoutTenantContext } from '@brandspace/database';
 import { signupPolicy } from '../../../server/signup-policy';
 import { currentEnvironment } from '../../../server/customer-context';
 import { customerLink } from '../../../server/email-links';
+import { SIGNUP_DRAFT_COOKIE, encodeSignupDraft } from '../../../server/signup-draft';
 
 const log = createLogger({ context: { component: 'dashboard.auth' } });
 
@@ -442,11 +443,22 @@ export async function signUpAction(formData: FormData): Promise<void> {
       timezone: String(formData.get('timezone') ?? ''),
       acceptedDocuments: accepted,
     });
+    (await cookies()).delete(SIGNUP_DRAFT_COOKIE);
     destination = `/${locale}/sign-up/sent?email=${encodeURIComponent(email)}`;
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();
     log.warn('signup failed', { correlationId, ...internalErrorFields(error) });
+    // G8 (D-335): the form comes back with what was typed — never the password.
+    (await cookies()).set(
+      SIGNUP_DRAFT_COOKIE,
+      encodeSignupDraft({
+        name: String(formData.get('name') ?? ''),
+        email,
+        timezone: String(formData.get('timezone') ?? ''),
+      }),
+      { httpOnly: true, secure: true, sameSite: 'strict', path: '/', maxAge: 120 },
+    );
     destination = `/${locale}/sign-up?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
   }
   redirect(destination);

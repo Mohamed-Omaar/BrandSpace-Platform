@@ -17,6 +17,7 @@
     "@brandspace/config": "workspace:*",
     "@brandspace/database": "workspace:*",
     "@brandspace/entitlements": "workspace:*",
+    "@brandspace/notifications": "workspace:*",
     "@brandspace/shared": "workspace:*"
   },
   "devDependencies": {

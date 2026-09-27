@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { randomUUID } from 'node:crypto';
+import { retryableAfterReconnect } from '@brandspace/social-connectors';
 import {
   AssetThumb,
   Card,
@@ -32,6 +34,7 @@ import {
   retryOnReconnectedAction,
   retryPublishAction,
 } from '../integrations/actions';
+import { duplicateContentAction } from '../content/actions';
 
 import { EmptyAction } from '../../../components/empty-action';
 
@@ -174,6 +177,23 @@ export default async function PublishingPage({
             await services.pipeline()
           ).reconnectedRetryable(jobs.filter((job) => job.status === 'FAILED').map((j) => j.id))
         : new Set<string>();
+    /*
+     * D-332 (owner decision) — A FAILED POST PAST ITS LATENESS DEADLINE IS NOT
+     * RETRIED: the retry paths refuse it, so the row offers no Retry and says
+     * why, pointing at the existing "Make a new copy" instead.
+     */
+    const failedJobs = jobs.filter((job) => job.status === 'FAILED');
+    const late =
+      failedJobs.length > 0
+        ? await (async () => {
+            const pipeline = await services.pipeline();
+            return new Set(
+              failedJobs
+                .filter((job) => pipeline.pastLatenessDeadline(job.scheduledAtUtc))
+                .map((job) => job.id),
+            );
+          })()
+        : new Set<string>();
     const latestReview = new Map<string, string>();
     for (const review of reviews) {
       if (review.contentItemId && !latestReview.has(review.contentItemId)) {
@@ -209,6 +229,7 @@ export default async function PublishingPage({
       jobConnections: new Map(jobConnections.map((connection) => [connection.id, connection])),
       latestReview,
       reconnected,
+      late,
       titles: new Map(items.map((item) => [item.id, item.title])),
       brandNames: new Map(brands.map((brand) => [brand.id, brand.name])),
     };
@@ -354,6 +375,18 @@ export default async function PublishingPage({
               {data.jobs.map((job) => {
                 const title = data.titles.get(job.contentItemId) ?? t('publishing.untitled');
                 const failure = failureText(job.failureClass, job.failureCode);
+                // D-332 — past its deadline, a post that could have been retried
+                // is not: no Retry, and the reason, with the way on.
+                const lateNotice =
+                  job.status === 'FAILED' &&
+                  data.late.has(job.id) &&
+                  (job.canRetry || retryableAfterReconnect(job))
+                    ? t(
+                        retryableAfterReconnect(job)
+                          ? 'publishing.late.disconnected'
+                          : 'publishing.late.passed',
+                      )
+                    : null;
                 const when =
                   job.status === 'PUBLISHED' && job.publishedAt
                     ? job.publishedAt
@@ -438,6 +471,11 @@ export default async function PublishingPage({
                           {failure}
                         </p>
                       ) : null}
+                      {lateNotice ? (
+                        <p style={lateStyle} data-testid={`late-${job.id}`}>
+                          {lateNotice}
+                        </p>
+                      ) : null}
                       {data.reconnected.has(job.id) ? (
                         <p style={reconnectedStyle} data-testid={`reconnected-${job.id}`}>
                           {t('publishingHub.reconnected')}
@@ -478,6 +516,7 @@ export default async function PublishingPage({
                         {job.canRetry &&
                         job.status === 'FAILED' &&
                         !data.reconnected.has(job.id) &&
+                        !lateNotice &&
                         may('publishing.manage') ? (
                           <form action={retryPublishAction}>
                             {back}
@@ -489,6 +528,27 @@ export default async function PublishingPage({
                               data-testid={`retry-${job.id}`}
                             >
                               {t('publishing.retry')}
+                            </button>
+                          </form>
+                        ) : null}
+                        {lateNotice && may('content.create') ? (
+                          // The existing "Make a new copy" (duplicateContentAction):
+                          // a person's click, never an automatic duplicate.
+                          <form action={duplicateContentAction}>
+                            <input type="hidden" name="locale" value={locale} />
+                            <input type="hidden" name="itemId" value={job.contentItemId} />
+                            <input
+                              type="hidden"
+                              name="token"
+                              value={`publishing:${job.id}:${randomUUID()}`}
+                            />
+                            <button
+                              type="submit"
+                              style={buttonStyle('neutral', 'sm')}
+                              className={buttonClass('neutral')}
+                              data-testid={`copy-${job.id}`}
+                            >
+                              {t('content.action.duplicate')}
                             </button>
                           </form>
                         ) : null}
@@ -638,6 +698,12 @@ const textThumbStyle = {
   background: colorTokens.surfaceMuted,
   color: colorTokens.textSecondary,
   ...typographyTokens.label,
+} as const;
+
+const lateStyle = {
+  ...typographyTokens.bodySm,
+  margin: 0,
+  color: colorTokens.textMuted,
 } as const;
 
 const reconnectedStyle = {

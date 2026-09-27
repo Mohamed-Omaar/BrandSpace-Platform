@@ -12,6 +12,7 @@ import {
   alreadyScheduled,
   approvalRequiredBeforeScheduling,
   calendarSlotNotFound,
+  channelDisconnected,
   contentItemNotFound,
   dayIsFull,
   invalidScheduleTime,
@@ -81,6 +82,21 @@ export interface CalendarOptions {
    * failing or — far worse — silently letting unapproved content through.
    */
   readonly approvalGate?: ApprovalGate;
+  /**
+   * Q9 (D-332). Answers which of a post's channels can reach NO account at
+   * all because every account for it was revoked or disabled. Scheduling and
+   * rescheduling onto such a channel is refused. An EXPIRED account is not
+   * one of them — its channel waits for the reconnection — and a channel with
+   * no account connected keeps today's behaviour. Wired by every production
+   * caller (a unit test pins that); without it, nothing is refused.
+   */
+  readonly channelGate?: ChannelGate;
+}
+
+/** The single question the calendar asks the social connections. */
+export interface ChannelGate {
+  /** Of these platform keys, the ones whose every account for the brand is revoked or disabled. */
+  unreachableChannels(brandId: string, platformKeys: readonly string[]): Promise<readonly string[]>;
 }
 
 /** The single question the calendar asks the Approvals module. */
@@ -136,6 +152,17 @@ export const RESCHEDULABLE_SLOT_STATUSES: readonly CalendarSlot['status'][] = [
   'SCHEDULED',
 ];
 
+/**
+ * The scheduling quota's idempotency key for one slot and one charged attempt
+ * (review item 13). Attempt 0 is the key a slot has always had, so rows written
+ * before `rescheduleAttempt` existed keep theirs.
+ */
+export function scheduleUsageKey(workspaceId: string, slotId: string, attempt: number): string {
+  return attempt === 0
+    ? `calendar:${workspaceId}:${slotId}`
+    : `calendar:${workspaceId}:${slotId}:attempt:${attempt}`;
+}
+
 export class ContentCalendarService {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
@@ -143,6 +170,7 @@ export class ContentCalendarService {
   readonly #timezone: string;
   readonly #quota: ScheduleQuota;
   readonly #clock: Clock;
+  readonly #channelGate: ChannelGate | undefined;
   readonly #approvalGate: ApprovalGate | undefined;
 
   constructor(options: CalendarOptions) {
@@ -152,6 +180,7 @@ export class ContentCalendarService {
     this.#timezone = options.timezone;
     this.#quota = options.quota;
     this.#clock = options.clock ?? systemClock;
+    this.#channelGate = options.channelGate;
     this.#approvalGate = options.approvalGate;
   }
 
@@ -193,6 +222,10 @@ export class ContentCalendarService {
     });
     // A plan for content with no caption is a plan to publish nothing.
     if (variants.length === 0) throw nothingToSchedule();
+    await this.#assertChannelsReachable(
+      item.brandId,
+      variants.map((variant) => variant.platformKey),
+    );
 
     const live = await this.#liveSlotFor(item.id);
     if (live) throw alreadyScheduled();
@@ -213,7 +246,8 @@ export class ContentCalendarService {
      * Minting the id up front costs nothing: it is a v4 uuid either way.
      */
     const slotId = randomUUID();
-    const usageIdempotencyKey = `calendar:${this.#workspaceId}:${slotId}`;
+    // A new slot is attempt 0 (review item 13): the same key as ever.
+    const usageIdempotencyKey = scheduleUsageKey(this.#workspaceId, slotId, 0);
     if (!(await this.#quota.consume(usageIdempotencyKey))) throw scheduleQuotaExceeded();
 
     const slot = await this.#db.calendarSlot.create({
@@ -285,6 +319,17 @@ export class ContentCalendarService {
 
     const instant = this.#resolveInstant(input.localTime);
     await this.#assertDayHasRoom(instant, slot.id);
+    // G5 / Q22 (D-334): a post a time-zone change sent back to PLANNED goes out
+    // again only through every rule scheduling applies.
+    if (slot.status === 'PLANNED') return this.#replan(slot, input, instant);
+    const variantsNow = await this.#db.contentVariant.findMany({
+      where: { contentItemId: slot.contentItemId },
+      select: { platformKey: true },
+    });
+    await this.#assertChannelsReachable(
+      slot.brandId,
+      variantsNow.map((variant) => variant.platformKey),
+    );
 
     /*
      * B-4 — CONDITIONAL, NOT READ-THEN-WRITE. The status check above answers
@@ -314,6 +359,86 @@ export class ContentCalendarService {
     });
 
     return this.#viewOf(moved);
+  }
+
+  /**
+   * G5 / Q22 (D-334) — A PLANNED POST GIVEN A NEW TIME IS SCHEDULED AGAIN.
+   *
+   * A time-zone change sends a post that would have been too late back to
+   * PLANNED and refunds its quota. Moving it to a new time puts it back on the
+   * way out through the SAME rules `schedule()` applies — the approval gate,
+   * the states it may be scheduled from, its channels — and takes the quota
+   * again, under a key derived from the slot and the new time, so a retried
+   * move takes it once.
+   */
+  async #replan(
+    slot: CalendarSlot,
+    input: { slotId: string; localTime: string; actorUserId: string },
+    instant: Date,
+  ): Promise<CalendarSlotView> {
+    const item = await this.#db.contentItem.findUnique({ where: { id: slot.contentItemId } });
+    if (!item || item.deletedAt) throw calendarSlotNotFound();
+    if ((await this.#approvalRequired(item.brandId)) && item.status !== 'APPROVED') {
+      throw approvalRequiredBeforeScheduling();
+    }
+    if (!SCHEDULABLE_FROM.includes(item.status)) throw transitionNotAllowed();
+    const variants = await this.#db.contentVariant.findMany({
+      where: { contentItemId: item.id },
+      select: { platformKey: true },
+    });
+    if (variants.length === 0) throw nothingToSchedule();
+    await this.#assertChannelsReachable(
+      slot.brandId,
+      variants.map((variant) => variant.platformKey),
+    );
+
+    /*
+     * THE KEY IS THE SLOT'S PERSISTED ATTEMPT (review item 13), read — never
+     * incremented — here. A retry of this same request derives the same key
+     * and cannot charge twice; the key moves on only when a charged scheduling
+     * is refunded back to PLANNED, which increments the attempt in that
+     * refund's own transaction. Deriving it from the local time instead let a
+     * post refunded and put back at the SAME time reuse the spent key and go
+     * out uncharged.
+     */
+    const usageIdempotencyKey = scheduleUsageKey(
+      this.#workspaceId,
+      slot.id,
+      slot.rescheduleAttempt,
+    );
+    if (!(await this.#quota.consume(usageIdempotencyKey))) throw scheduleQuotaExceeded();
+
+    const claimed = await this.#db.calendarSlot.updateMany({
+      // The attempt this key was derived from must still be the slot's.
+      where: { id: slot.id, status: 'PLANNED', rescheduleAttempt: slot.rescheduleAttempt },
+      data: {
+        status: 'SCHEDULED',
+        scheduledAtUtc: instant,
+        scheduledLocalTime: input.localTime,
+        timezone: this.#timezone,
+        usageIdempotencyKey,
+      },
+    });
+    if (claimed.count === 0) throw slotNotReschedulable();
+    await this.#db.contentItem.update({ where: { id: item.id }, data: { status: 'SCHEDULED' } });
+    const moved = await this.#db.calendarSlot.findUniqueOrThrow({ where: { id: slot.id } });
+    await this.#audit('content.rescheduled', moved, input.actorUserId, {
+      fromStatus: 'PLANNED',
+      fromLocalTime: slot.scheduledLocalTime,
+      toLocalTime: moved.scheduledLocalTime,
+      toTimezone: moved.timezone,
+      toUtc: moved.scheduledAtUtc.toISOString(),
+    });
+    return this.#viewOf(moved);
+  }
+
+  /** Q9 (D-332): refuse a channel that can reach no account at all. */
+  async #assertChannelsReachable(brandId: string, platformKeys: readonly string[]): Promise<void> {
+    if (!this.#channelGate) return;
+    const unreachable = await this.#channelGate.unreachableChannels(brandId, [
+      ...new Set(platformKeys),
+    ]);
+    if (unreachable.length > 0) throw channelDisconnected(unreachable);
   }
 
   /** AC-14.8 — take a slot off the calendar, refund its quota, audit it. */

@@ -442,6 +442,7 @@ const en = {
   'quota.scheduledPostsPerMonth': 'Scheduled posts a month',
   'quota.storageGb': 'Storage (GB)',
   'quota.analyticsRetentionDays': 'Analytics history (days)',
+  'quota.workspaces': 'Workspaces per owner',
   // Plan editor.
   'pe.titleNew': 'New plan',
   'pe.titleEdit': 'Edit {name}',
@@ -973,6 +974,7 @@ const ar: Copy = {
   'quota.scheduledPostsPerMonth': 'المنشورات المجدولة شهريًا',
   'quota.storageGb': 'التخزين (غيغابايت)',
   'quota.analyticsRetentionDays': 'سجل التحليلات (أيام)',
+  'quota.workspaces': 'مساحات العمل للمالك',
   'pe.titleNew': 'خطة جديدة',
   'pe.titleEdit': 'تعديل {name}',
   'pe.back': '→ كل الخطط',

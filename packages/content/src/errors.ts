@@ -137,6 +137,21 @@ export function slotNotReschedulable(): AppError {
   return new AppError('CONFLICT', 'This post is already going out and cannot be moved.');
 }
 
+/**
+ * Q9 (D-332) — every account for one of the post's channels was revoked or
+ * disabled, so nothing could be sent there. `reason` is a stable code the
+ * screens translate; the channel keys are the post's own.
+ */
+export const CHANNEL_DISCONNECTED_REASON = 'CHANNEL_DISCONNECTED';
+
+export function channelDisconnected(platformKeys: readonly string[]): AppError {
+  return new AppError(
+    'CONFLICT',
+    'An account for one of these channels was disconnected. Connect it again, or remove the channel.',
+    { reason: CHANNEL_DISCONNECTED_REASON, channels: platformKeys.join(',') },
+  );
+}
+
 /** The item already has a live slot. Reschedule it rather than adding a second. */
 export function alreadyScheduled(): AppError {
   return new AppError('CONFLICT', 'This content is already on the calendar.');

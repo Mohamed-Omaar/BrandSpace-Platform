@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import {
   Banner,
@@ -21,6 +22,7 @@ import {
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { signUpAction } from '../actions';
+import { SIGNUP_DRAFT_COOKIE, decodeSignupDraft } from '../../../../server/signup-draft';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,6 +65,8 @@ export default async function SignUpPage({
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
   const required = policy.legalDocuments.filter((document) => document.required);
   const timezones = timeZoneOptions(locale);
+  // G8 (D-335): after a refusal, what was typed comes back — never the password.
+  const draft = error ? decodeSignupDraft((await cookies()).get(SIGNUP_DRAFT_COOKIE)?.value) : null;
 
   if (!policy.signup.open) {
     return (
@@ -101,6 +105,7 @@ export default async function SignUpPage({
             name="name"
             required
             maxLength={120}
+            defaultValue={draft?.name ?? ''}
             autoComplete="name"
             style={authInputStyle()}
           />
@@ -113,6 +118,7 @@ export default async function SignUpPage({
             name="email"
             type="email"
             required
+            defaultValue={draft?.email ?? ''}
             autoComplete="email"
             style={authInputStyle()}
           />
@@ -154,6 +160,7 @@ export default async function SignUpPage({
             id="timezone"
             name="timezone"
             options={timezones}
+            defaultValue={draft?.timezone ?? ''}
             placeholder={t('createWorkspace.choose')}
             noResultsLabel={t('common.noResults')}
             required

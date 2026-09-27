@@ -215,10 +215,15 @@ export async function saveApprovalPolicyAction(formData: FormData): Promise<void
         patch,
       }),
     );
-    destination = approvalsUrl(locale, { ok: 'SAVED', brand: brandId });
+    // A8 (Phase 2B-1): the rules are edited in Settings → Approvals now.
+    destination = `/${locale}/settings/approvals?ok=SAVED`;
   } catch (error: unknown) {
-    destination = failure(locale, error, 'saveApprovalPolicy');
+    destination = failure(locale, error, 'saveApprovalPolicy').replace(
+      `/${locale}/approvals`,
+      `/${locale}/settings/approvals`,
+    );
   }
+  revalidatePath(`/${locale}/settings/approvals`);
   revalidatePath(`/${locale}/approvals`);
   revalidatePath(`/${locale}/calendar`);
   redirect(destination);

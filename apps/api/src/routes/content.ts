@@ -27,6 +27,7 @@ import {
 } from '@brandspace/shared';
 import { route } from '../route-contract';
 import { scheduleQuota } from './schedule-quota';
+import { unreachableChannelGate } from '@brandspace/social-connectors';
 
 /**
  * AI Content Studio — the customer-initiated generation surface.
@@ -255,6 +256,8 @@ async function studioFor(caller: Caller, db: Parameters<Parameters<typeof withWo
       policy,
       timezone: workspace.timezone,
       quota: scheduleQuota(db, caller.workspaceId),
+      // Q9 (D-332): a channel whose every account was revoked is refused.
+      channelGate: unreachableChannelGate(db, caller.workspaceId),
     }),
   });
 }

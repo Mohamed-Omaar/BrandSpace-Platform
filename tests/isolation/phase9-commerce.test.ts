@@ -116,6 +116,7 @@ async function createWorkspace(input: {
     policy,
     findPlan(plans, 'fixture-starter'),
     null,
+    plans,
   );
   return created.workspaceId;
 }
@@ -647,6 +648,7 @@ describe('workspace creation is independent from checkout availability', () => {
       noProviderPolicy,
       findPlan(plans, 'fixture-starter'),
       null,
+      plans,
     );
     expect(created.workspaceId).toBeTruthy();
   });
@@ -668,6 +670,7 @@ describe('workspace creation is independent from checkout availability', () => {
         policy,
         findPlan(plans, 'fixture-starter'),
         null,
+        plans,
       ),
     ).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
@@ -735,6 +738,7 @@ describe('workspace creation is independent from checkout availability', () => {
         policy,
         findPlan(plans, 'fixture-starter'),
         null,
+        plans,
       ),
     ).rejects.toThrow(/Verify your email/i);
   });

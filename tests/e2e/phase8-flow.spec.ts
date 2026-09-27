@@ -531,7 +531,8 @@ test('10 · the post is submitted, the reviewer sees its media, and it is approv
    * that has already been opened — which is the record saying what the rules
    * were when the decision was asked for.
    */
-  await enter(page, '/approvals');
+  // A8 (Phase 2B-1): the brand's approval rules live in Settings → Approvals.
+  await enter(page, '/settings/approvals');
   const selfToggle = page.locator(`[data-testid="policy-self-${brandId}"]`);
   await expect(selfToggle).toBeVisible();
   const wasAllowed = await selfToggle.isChecked();
@@ -591,7 +592,7 @@ test('10 · the post is submitted, the reviewer sees its media, and it is approv
   // AND THE BRAND IS PUT BACK. A fixture that leaves a permission relaxed is a
   // fixture that changes what the next suite is testing.
   if (!wasAllowed) {
-    await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/approvals`);
     await page.locator(`[data-testid="policy-self-${brandId}"]`).uncheck();
     await clickAndSettle(page.locator(`[data-testid="policy-save-${brandId}"]`), page);
   }

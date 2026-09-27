@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
 import { QUOTA_FEATURES, TOTAL_RESOURCE_DIMENSIONS } from '@brandspace/entitlements';
 import { inBrandBrain } from './brand-brain-context';
+import { assertMayCreateAnotherBrand } from './multi-brand';
 import type { WorkspaceSession } from './customer-context';
 
 /**
@@ -47,6 +48,9 @@ export async function createBrandFor(
       select: { id: true },
     });
     if (existing) return { brandId: existing.id, created: false };
+
+    // ONE WORKSPACE, ONE BRAND, WHILE MULTI-BRAND IS OFF (Q2b, D-327).
+    await assertMayCreateAnotherBrand(db as never, entitlements, workspaceId);
 
     await usage.consume({
       workspaceId,

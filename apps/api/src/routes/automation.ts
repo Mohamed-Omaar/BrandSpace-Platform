@@ -16,6 +16,7 @@ import {
   SocialTokenVault,
   createConnectorRegistry,
   resolvePublishingPolicy,
+  unreachableChannelGate,
 } from '@brandspace/social-connectors';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { PUBLISH_SOCIAL_POST, enqueue, type PublishSocialPostPayload } from '@brandspace/jobs';
@@ -116,6 +117,8 @@ function publishPort(db: TenantScopedClient): NonNullable<AutomationPorts['publi
         workspaceId: input.workspaceId,
         policy: contentPolicy,
         timezone,
+        // Q9 (D-332): a channel whose every account was revoked is refused.
+        channelGate: unreachableChannelGate(db, input.workspaceId),
         // A no-op quota is NOT acceptable here: the plan ceiling applies to an
         // automation exactly as it does to a person, so the caller supplies the
         // real one through the shared helper below.

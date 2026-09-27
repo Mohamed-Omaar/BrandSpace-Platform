@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { Field, inputStyle, CONTROL_CLASS } from './primitives';
 import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
 
@@ -195,6 +195,17 @@ export function PasswordField({
   const compared = wantsConfirm && value !== '' && confirmValue !== '';
   const mismatched = compared && value !== confirmValue;
   const matched = compared && value === confirmValue;
+  /*
+   * G8 (Phase 2B-1): A MISMATCH BLOCKS SUBMITTING. The confirmation reports
+   * itself invalid while it differs, so the browser refuses the submit and
+   * says why — an emailed reset link is not spent on a typo. Still only the
+   * client's courtesy: the server never reads the confirmation, and the
+   * password rules it applies are unchanged (D-261).
+   */
+  const confirmRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    confirmRef.current?.setCustomValidity(mismatched ? (labels.mismatch ?? ' ') : '');
+  }, [mismatched, labels.mismatch]);
 
   const wrapper: CSSProperties = { position: 'relative' };
   // Room for the toggle, on the trailing edge, logically.
@@ -282,6 +293,7 @@ export function PasswordField({
         >
           <div style={wrapper}>
             <input
+              ref={confirmRef}
               className={CONTROL_CLASS}
               id={confirmId}
               /*

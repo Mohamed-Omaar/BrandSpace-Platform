@@ -215,10 +215,16 @@ describe('D-277 §6 · the first goal lives in the brand’s strategy memory', (
 
   it('the action writes through the knowledge service, never a wizard-only table', () => {
     const actions = read('apps/dashboard/src/app/[locale]/onboarding/actions.ts');
-    expect(actions).toMatch(/knowledge\.createItem\(/);
-    expect(actions).toMatch(/knowledge\.updateItem\(/);
-    expect(actions).toMatch(/area: 'STRATEGY'/);
-    expect(actions).not.toMatch(/onboarding(Progress|State)\./);
+    // D-335: the write moved into `server/setup-goal.ts`, so the isolation
+    // suite runs it against PostgreSQL; the action only calls it.
+    expect(actions).toMatch(/saveSetupGoal\(db, knowledge, \{/);
+    const save = read('apps/dashboard/src/server/setup-goal.ts');
+    expect(save).toMatch(/knowledge\.createItem\(/);
+    expect(save).toMatch(/knowledge\.updateItem\(/);
+    expect(save).toMatch(/area: 'STRATEGY'/);
+    for (const source of [actions, save]) {
+      expect(source).not.toMatch(/onboarding(Progress|State)\./);
+    }
   });
 });
 
@@ -256,10 +262,18 @@ describe('D-277 §6 · the brand step decodes with Brand Profile’s rules', () 
   });
 
   it('the default language is always one of the supported ones', () => {
+    // D-335: with exactly one publishing language ticked, that language IS the
+    // default — the select no longer adds a language the brand does not use.
     const decoded = setupBrandFrom(
       form({ ...valid, defaultLocale: 'AR', supportedLocales: ['EN'] }),
     );
-    expect(decoded.supportedLocales).toEqual(expect.arrayContaining(['AR', 'EN']));
+    expect(decoded.defaultLocale).toBe('EN');
+    expect(decoded.supportedLocales).toContain(decoded.defaultLocale);
+    const both = setupBrandFrom(
+      form({ ...valid, defaultLocale: 'AR', supportedLocales: ['EN', 'AR'] }),
+    );
+    expect(both.defaultLocale).toBe('AR');
+    expect(both.supportedLocales).toEqual(expect.arrayContaining(['AR', 'EN']));
   });
 
   it('a crafted logo id or description is never passed on', () => {

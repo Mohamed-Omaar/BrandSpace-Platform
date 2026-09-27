@@ -574,6 +574,80 @@ when the role's permission and the post's state both allow it; a card with nothi
 trigger. Archive asks first — `ConfirmDialog` in the menu, a `details` disclosure in the Studio — and
 the server refuses an archive that does not carry the confirmation. No new component or treatment.
 
+### 6.3.31 Prototype v94 Phase 2B-1 — one global scrollbar (UI-1)
+
+An APPROVED DESIGN-SYSTEM EXTENSION: the demo styles only the sidebar scroller (`.nav-scroll`, hidden)
+and leaves every other scroll area to the browser. UI-1 defines ONE scrollbar for the whole product,
+once, in `packages/ui/src/tokens.css` — never per screen. Thin (8px), no arrow buttons, a transparent
+track and a pill thumb in `--bs-scrollbar-thumb` (`#9A9AA2`, the grey the dropdown panel's "quiet
+scrollbar" already used) that darkens to `--bs-scrollbar-thumb-hover` (`#6A6A72`, `textMuted`) on
+hover. Chrome and Edge draw it with the `::-webkit-scrollbar` pseudo-elements; Firefox with
+`scrollbar-width` / `scrollbar-color`, scoped by `@supports not selector(::-webkit-scrollbar)` because
+Chromium 121+ ignores the pseudo-elements on any element that sets the standard properties. Scroll
+areas that deliberately hide their bar keep both hiding rules on a class: the sidebar navigation
+(`.bs-nav-scroll`, transcribing the demo's `.nav-scroll`, which had only the inline standard property
+before and so still showed a bar in Safari) and Brand Brain's chat suggestions
+(`.bb-chat-suggestions`). `tests/unit/ui1-scrollbar.test.ts` pins both halves.
+
+### 6.3.32 Prototype v94 Phase 2B-1 — ★ holiday chips, "Suggested time", the planned day (G6)
+
+A calendar day's holiday or industry observance is a ★ chip above its posts: the "today" pill's accent
+pair (`brandYellowTint` behind `brandYellowText`) at the post chip's `micro` size and `full` radius, a
+link to the Studio for that day where the member may create. The phone's agenda lists a day that has
+one. The schedule dialog's configured posting times are neutral `sm` buttons after a `caption`
+"Suggested time" label, the chosen one filled; the Studio opened from a ★ day shows one `cs-notice
+info` line naming the day. No new component or treatment.
+
+### 6.3.33 Prototype v94 Phase 2B-1 — the Settings save bar and the General fields (A9, G1)
+
+The approved demo has no save bar, so it is built from what ships: a `sticky` strip at the foot of the
+form on the card surface (`surface`, `cardBorder` hairline, `shadowTokens.card`, `xl` radius), a
+`bodySm` status line — the check icon and muted "All changes saved" when clean, "Unsaved changes" in
+`textPrimary` weight 600 when dirty — and the existing `ghost` Cancel and `primary` Save buttons, Save
+dimmed and disabled while clean. The status is a polite live region. `DraftForm` (`packages/ui/src/save-bar.tsx`)
+wraps a server-action form and compares what it would post with what it posted on load; Cancel re-mounts
+the fields. The General fields reuse `Field` (its `hint` line says what each changes), `SearchableSelect`
+for country, time zone and city, the `bs-form-row` two-up grid and the native `bs-select`. Nothing new
+beyond the bar itself, and the bar is one component used by every draftable tab.
+
+### 6.3.34 Prototype v94 Phase 2B-1 — Settings → Notifications and Settings → AI (A10, G2, G3)
+
+Two Settings rows built exactly like Approvals: `SettingsSplit`, one `Card` with a `SectionHeader`, and
+the §6.3.33 save bar. Notifications is four composed checkbox rows, each with its `caption` hint line
+saying what it covers; AI is one `Field` with the native `bs-select` per brand the member may see (one
+while multi-brand is off). Nothing new.
+
+### 6.3.35 Prototype v94 Phase 2B-1 — "Expired" in the Studio and the calendar (A11, Q9)
+
+The Studio's existing `cs-issues` list gains one warning row per expired channel: the short status in
+bold ("Expired") and its explanation as a block line beneath it. The calendar's slot drawer lists an
+expired channel in its existing warning `Banner`, with the same explanation on its own line. No new
+component or treatment; the wider Studio redesign (B9) is Phase 2B-2.
+
+### 6.3.36 Prototype v94 Phase 2B-1 — two-step set-up, new phone and the requirement (G4, Q23)
+
+Settings → Security keeps its cards. Setting up shows a 192px QR code (a PNG data URL on the surface
+colour), the printed key in the body type grouped by four, and the code `Field` with the primary button —
+one shared panel, also used by "New phone" and by `/mfa-setup`, which is the sign-in `AuthCard`. Turning
+off shows the code and password `Field`s side by side (`bs-form-row`). The Owner's requirement is its own
+card with the composed checkbox row and its hint line. No new component or treatment beyond the panel.
+
+### 6.3.37 Prototype v94 Phase 2B-1 — the time-zone warning in Settings → General (G5, Q22)
+
+Choosing another time zone shows, under the field and before saving, the existing warning `Banner`: a line
+saying how many planned posts keep their local time, and a list of the posts that would go back to planned
+(title, then local time). No new component or treatment.
+
+### 6.3.38 Prototype v94 Phase 2B-1 — the wizard's brand step, sign-up, reset and a new workspace (G8, C6, Q16)
+
+The setup wizard's industry field is Settings → General's own (`IndustryField`, extracted from the General
+fields so both screens render the one control: the catalogue select, "Something else", then the free-text
+field). Its language fields keep their layout: the AI-language select above the publishing-language
+checkboxes, which now require at least one (the browser's own validity message) and move the select when
+exactly one is ticked (`SetupBrandLanguages`). The new-workspace page gains a plain Back link under the
+form and, for Egypt only, the city `SearchableSelect` General already uses. A Brand Brain fact's origin
+badge can read "From setup". No new visual treatment, colour, or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

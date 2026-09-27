@@ -77,6 +77,7 @@ export interface PublishingPolicy {
     readonly tokenRefreshAtLifetimeRatio: number;
     readonly claimLeaseSeconds: number;
     readonly staleClaimBatchSize: number;
+    readonly reconnectRecheckSeconds: number;
   };
 }
 

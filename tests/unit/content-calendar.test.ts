@@ -237,6 +237,10 @@ describe('the calendar policy the service runs on is the one an operator saves',
       minLeadMinutes: 60,
       maxSlotsPerDay: 3,
       requireApprovalBeforeScheduling: true,
+      // G6 (D-329): operator lists, empty until entered — never seeded here.
+      suggestedTimes: [],
+      holidays: [],
+      observances: [],
     });
   });
 

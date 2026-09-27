@@ -324,6 +324,11 @@ Exponential backoff with jitter, per error class:
 Max attempts and windows are configuration. Exhausted jobs land in the **dead-letter queue** with full
 context and an admin replay tool.
 
+**A manual Retry never publishes late (D-332).** A customer's Retry, including the retry after a
+reconnection, is refused (`publish_deadline_passed`) once the post's lateness deadline has passed.
+Nothing is queued and no provider is called. The screen offers no Retry for such a post and points to
+"Make a new copy" instead.
+
 ### 7.4 Provider response storage
 
 Every attempt stores a `PublishAttempt` with HTTP status, provider error code, timing, and the raw response
@@ -642,6 +647,28 @@ class even there: a `TIMEOUT` that exhausted its attempts is still a post that m
 `createMany({ skipDuplicates: true })` — `INSERT ... ON CONFLICT DO NOTHING`. The conflict is
 resolved inside PostgreSQL, the losing sweep inserts nothing and raises nothing, and `created` is the
 number of rows that actually landed rather than the number a non-atomic check predicted.
+
+### 15.5 An expired account waits; a revoked one is refused (Q9, D-332 — prototype v94 Phase 2B-1)
+
+- **Materialisation** now creates a job for an account in `NEEDS_REAUTH` as well as `ACTIVE`. Before,
+  such a channel was silently dropped from a post whose other channels went out.
+- **Execution** holds that job while its account still needs reconnecting: it goes back to `QUEUED`
+  with `failureCode = preflight.awaiting_reconnect`, no attempt counted and no attempt row written, and
+  is looked at again every `publishing.dispatch.reconnectRecheckSeconds` (60 by default) — never later
+  than its lateness deadline. Reconnected in time, it publishes. Past `latenessToleranceMinutes`
+  (120 by default) it FAILS as `NOT_CONNECTED` with `preflight.reconnect_required`, which the
+  publishing log reads as "reconnect the account"; a job that waited and whose account came back only
+  after the deadline fails with the same reason. The other channels publish on time; the slot ends
+  `PARTIALLY_PUBLISHED`.
+- **Dispatch**: the sweep's queue id carries the attempt's `nextAttemptAt`, because BullMQ keeps
+  finished jobs and would otherwise refuse a job sent back to `QUEUED` as a duplicate of its own first
+  run. A second delivery is still harmless: `execute()` claims `QUEUED` once.
+- **Scheduling**: `ContentCalendarService` refuses schedule and reschedule (`CHANNEL_DISCONNECTED`)
+  when every account for one of the post's channels is `REVOKED` or `DISABLED`; every production caller
+  wires `unreachableChannelGate`. An expired account is accepted, and a channel with no account keeps
+  its earlier behaviour.
+- **Readiness** (calendar and Studio): `EXPIRED` is a warning with its explanation on the next line;
+  `REVOKED` blocks; a `PENDING` connection counts as none.
 
 ---
 

@@ -3,6 +3,14 @@
  *
  * In-app only (D-123). No transport, no external delivery, no third party.
  */
+export {
+  NOTIFICATION_CATEGORIES,
+  NotificationPreferenceService,
+  categoryOf,
+  isNotificationCategory,
+  mutedRecipients,
+} from './preferences';
+export type { NotificationCategory, NotificationPreferences } from './preferences';
 export { resolveRecipients } from './recipients';
 export { NotificationService } from './service';
 export type { CreateNotificationInput, NotificationOptions, NotificationView } from './service';

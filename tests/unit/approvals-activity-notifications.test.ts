@@ -304,6 +304,19 @@ describe('the notification catalogue is closed and fully translated', () => {
          * template to itself.
          */
         'automation.notice',
+        /*
+         * Prototype v94 Phase 2B-1, A8 (D-328) — the owner's deletion request.
+         * The members lose access while it waits, and are owed the reason and
+         * the date; and they are told again if it is taken back.
+         */
+        'workspace.deletion_cancelled',
+        'workspace.deletion_requested',
+        /*
+         * Prototype v94 Phase 2B-1, G5 / Q22 (D-334) — a time-zone change left
+         * a post's local time in the past, so it went back to planned. Its
+         * author has to choose a new time, and nothing else would say so.
+         */
+        'calendar.unplanned_by_timezone_change',
       ].sort(),
     );
   });

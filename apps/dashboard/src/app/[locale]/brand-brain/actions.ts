@@ -7,7 +7,6 @@ import { createLogger, internalErrorFields } from '@brandspace/shared';
 import {
   checksumOf,
   createKnowledgeItemSchema,
-  reviewCandidateSchema,
   rollbackSchema,
   updateKnowledgeItemSchema,
   type LocalizedText,
@@ -21,7 +20,9 @@ import {
 import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
 import { inBrandBrain } from '../../../server/brand-brain-context';
+import { brandLocaleAtCreation } from '../../../server/brand-ai-language';
 import { createBrandFor } from '../../../server/brand-creation';
+import { applyCandidateReview, reviewCandidateInputFrom } from '../../../server/candidate-review';
 
 const log = createLogger({ context: { component: 'dashboard.brand-brain' } });
 
@@ -118,13 +119,14 @@ export async function createBrandAction(formData: FormData): Promise<void> {
     /*
      * THE ONE CREATION PATH (`server/brand-creation.ts`), shared with the
      * first-run Setup Wizard: idempotent on the name, counted against the
-     * plan's brand quota, and audited. The brand's content language is the
-     * form's explicit choice, else English (D-277) — never the UI locale.
+     * plan's brand quota, and audited. The brand's AI writing language is the
+     * form's explicit choice, else the language its creator is using the
+     * interface in right now (D-331, amending D-277) — and it stays that until
+     * changed in Settings → AI.
      */
-    const explicit = String(formData.get('defaultLocale') ?? '');
     await createBrandFor(session, {
       name,
-      defaultLocale: explicit === 'AR' ? 'AR' : 'EN',
+      defaultLocale: brandLocaleAtCreation(String(formData.get('defaultLocale') ?? ''), locale),
       supportedLocales: ['EN', 'AR'],
     });
     destination = pageUrl(locale, { ok: 'BRAND_CREATED' });
@@ -258,29 +260,20 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
   let destination: string;
   try {
     const session = await requireWorkspaceAction(locale, 'brand_brain.review');
-    const decision = String(formData.get('decision') ?? '');
-    const parsed = reviewCandidateSchema.parse({
-      candidateId: String(formData.get('candidateId') ?? ''),
-      decision,
-      // Only an edited acceptance may carry text. The schema refuses an edit
-      // smuggled alongside a plain accept, so this stays honest.
-      ...(decision === 'accept_edited'
-        ? { title: localized(formData, 'title'), body: localized(formData, 'body') }
-        : {}),
-      ...(formData.get('reason') ? { reason: String(formData.get('reason')) } : {}),
-    });
+    const parsed = reviewCandidateInputFrom(formData);
 
-    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
-      await knowledge.reviewCandidate({
-        candidateId: parsed.candidateId,
-        decision: parsed.decision,
-        title: parsed.title,
-        body: parsed.body,
-        reason: parsed.reason,
-        actor: knowledgeActor(session),
-        policy: (await policy()).staleness,
-      });
-    });
+    await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) =>
+      applyCandidateReview(
+        knowledge,
+        parsed,
+        knowledgeActor(session),
+        (await policy()).staleness,
+        // Review item 15: Brand Brain's review is ALWAYS a document review. The
+        // setup wizard has its own action, which decides SETUP on the server;
+        // no field of this request can.
+        false,
+      ),
+    );
     destination = pageUrl(
       locale,
       {

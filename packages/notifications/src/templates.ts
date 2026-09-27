@@ -79,6 +79,22 @@ export const NOTIFICATION_TEMPLATES = {
   'analytics.anomaly_detected': { severity: 'info' },
   /** An inferred learning is waiting in the Brand Brain review queue. */
   'brand_brain.learning_proposed': { severity: 'info' },
+
+  /*
+   * Prototype v94 Phase 2B-1, A8 (D-328) — the owner's deletion request. Both go
+   * to every active member but the one who acted: people lose access to the
+   * workspace while it waits, and they are owed the reason and the date.
+   */
+  /** An owner asked for this workspace to be deleted, on `scheduledFor`. */
+  'workspace.deletion_requested': { severity: 'warning' },
+  /** An owner took the deletion request back; the workspace is open again. */
+  'workspace.deletion_cancelled': { severity: 'info' },
+  /**
+   * Prototype v94 Phase 2B-1, G5 / Q22 (D-334) — the workspace's time zone
+   * changed and this post's local time would now be in the past or too soon,
+   * so it went back to planned. Goes to the post's author.
+   */
+  'calendar.unplanned_by_timezone_change': { severity: 'warning' },
 } as const;
 
 export type NotificationTemplateKey = keyof typeof NOTIFICATION_TEMPLATES;
@@ -123,4 +139,6 @@ export interface NotificationPayload {
   automationName?: string;
   actionType?: string;
   metricKey?: string;
+  /** A8 (D-328): when a pending deletion takes effect, as an ISO instant. */
+  scheduledFor?: string;
 }

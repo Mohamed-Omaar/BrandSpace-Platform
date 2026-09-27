@@ -48,13 +48,17 @@ import {
   createConnectorRegistry,
   PublishPipelineService,
   resolvePublishingPolicy,
+  SocialOAuthService,
   SocialTokenVault,
+  type ApplicationResolver,
+  type PublishingPolicy,
 } from '@brandspace/social-connectors';
 import { ContentApprovalService, TenantContentPolicySource } from '@brandspace/content';
 import {
   CreditLedgerService,
   SubscriptionService,
   UsageService,
+  createTotalResourceQuota,
   creditPolicyFrom,
   findPlan,
   readPlanCatalogue,
@@ -72,6 +76,8 @@ import {
   type RotationState,
 } from '@brandspace/billing';
 import { createObjectStore } from '@brandspace/storage';
+import { applicationResolver } from './routes/social';
+import { WorkspaceDeletionService } from '@brandspace/onboarding';
 import {
   AppError,
   createLogger,
@@ -188,12 +194,27 @@ export interface MaintenanceResult {
   readonly cycleAllowancesGranted: number;
   readonly dunningSuspensions: number;
   readonly financialDriftsFound: number;
+  /** Prototype v94 Phase 2B-1, A8 (D-328) — deletions whose waiting period ended. */
+  readonly workspacesDeleted: number;
 }
 
 export interface SchedulerOptions {
   readonly environment: Environment;
   /** Injected so a test can drive the clock rather than wait for one. */
   readonly clock?: Clock;
+  /**
+   * The platform's social applications, for refreshing an expired token before
+   * its post is dispatched (review item 3). Defaults to the API's own
+   * resolver; injected by a test that has no Secret Service behind it.
+   */
+  readonly socialApplications?: ApplicationResolver;
+  /**
+   * The publishing policy for every pass. Defaults to the activated
+   * `publishing` configuration, read each time; injected by a test so its
+   * outcome does not depend on what another run left activated in a shared
+   * database.
+   */
+  readonly publishingPolicy?: PublishingPolicy;
 }
 
 export class MaintenanceScheduler {
@@ -202,9 +223,25 @@ export class MaintenanceScheduler {
   readonly #timers: NodeJS.Timeout[] = [];
   #running = false;
 
+  readonly #socialApplications: ApplicationResolver;
+  readonly #injectedPublishingPolicy: PublishingPolicy | undefined;
+
   constructor(options: SchedulerOptions) {
     this.#environment = options.environment;
     this.#clock = options.clock ?? systemClock;
+    this.#socialApplications = options.socialApplications ?? applicationResolver();
+    this.#injectedPublishingPolicy = options.publishingPolicy;
+  }
+
+  /** The activated publishing policy, unless one was injected. */
+  async #resolvePublishing(): Promise<PublishingPolicy> {
+    return (
+      this.#injectedPublishingPolicy ??
+      resolvePublishingPolicy(
+        new ConfigurationService({ prisma: getPlatformClient() }),
+        this.#environment,
+      )
+    );
   }
 
   async #cadence(): Promise<{
@@ -447,7 +484,12 @@ export class MaintenanceScheduler {
      * by the second query below.
      */
     const dueSlots = await platform.calendarSlot.findMany({
-      where: { status: 'SCHEDULED', scheduledAtUtc: { lte: now } },
+      where: {
+        status: 'SCHEDULED',
+        scheduledAtUtc: { lte: now },
+        // A8 (D-328): nothing publishes from a workspace pending deletion.
+        workspace: { deletionScheduledFor: null },
+      },
       select: { id: true, workspaceId: true },
       orderBy: { scheduledAtUtc: 'asc' },
       take: batch,
@@ -466,10 +508,7 @@ export class MaintenanceScheduler {
       created += await withWorkspace(
         workspaceId,
         async (db) => {
-          const policy = await resolvePublishingPolicy(
-            new ConfigurationService({ prisma: platform }),
-            environment,
-          );
+          const policy = await this.#resolvePublishing();
           const contentPolicy = await new TenantContentPolicySource(db, environment).load();
           const pipeline = new PublishPipelineService({
             db,
@@ -505,21 +544,40 @@ export class MaintenanceScheduler {
      * pipeline wrote is the schedule this honours.
      */
     const waiting = await platform.publishJob.findMany({
-      where: { status: 'QUEUED', nextAttemptAt: { lte: now } },
-      select: { id: true, workspaceId: true, idempotencyKey: true },
+      where: {
+        status: 'QUEUED',
+        nextAttemptAt: { lte: now },
+        workspace: { deletionScheduledFor: null },
+      },
+      select: {
+        id: true,
+        workspaceId: true,
+        idempotencyKey: true,
+        nextAttemptAt: true,
+        socialConnectionId: true,
+      },
       orderBy: { nextAttemptAt: 'asc' },
       take: batch,
     });
+
+    await this.#refreshExpiredConnections(waiting, now);
 
     let dispatched = 0;
     for (const job of waiting) {
       const result = await enqueue('publish-jobs', PUBLISH_SOCIAL_POST, {
         kind: PUBLISH_SOCIAL_POST,
         workspaceId: job.workspaceId,
-        // THE JOB'S OWN DERIVED KEY. BullMQ refuses a duplicate job id, so a
-        // sweep racing a successful dispatch adds nothing rather than queuing a
-        // second attempt at the same post.
-        idempotencyKey: job.idempotencyKey,
+        /*
+         * THE JOB'S OWN DERIVED KEY, PER SCHEDULED ATTEMPT. BullMQ refuses a
+         * duplicate job id, so a sweep racing a successful dispatch of the SAME
+         * attempt adds nothing. The attempt's time is part of the id because
+         * BullMQ also keeps finished jobs: a job sent back to QUEUED for a later
+         * look — a retry, or a post waiting for its account to be reconnected
+         * (Q9, D-332) — would otherwise be refused as a duplicate of its own
+         * first run and never looked at again. A second delivery of anything is
+         * still harmless: `execute()` claims QUEUED once.
+         */
+        idempotencyKey: `${job.idempotencyKey}-${job.nextAttemptAt?.getTime() ?? 0}`,
         publishJobId: job.id,
       } satisfies PublishSocialPostPayload);
       if (result.dispatched) dispatched += 1;
@@ -563,6 +621,71 @@ export class MaintenanceScheduler {
     }
 
     return { created, dispatched, recovered };
+  }
+
+  /**
+   * REVIEW ITEM 3 — AN EXPIRED TOKEN IS REFRESHED BEFORE ITS POST IS SENT.
+   *
+   * A connection can still say ACTIVE after its access token has expired. The
+   * worker never sends such a token (its preflight holds the job exactly as it
+   * holds one whose account needs reconnecting), so the refresh happens HERE,
+   * on the platform surface allowed to resolve the application's secret
+   * (F-07), through the existing `SocialOAuthService.refresh` — the same code
+   * as the Refresh button. It renews the credential and keeps the connection
+   * ACTIVE, or, with no refresh token or a refusal, marks it NEEDS_REAUTH,
+   * after which the post waits for reconnection until its deadline and then
+   * fails with "reconnect the account" (D-332). Nothing else is new.
+   *
+   * ONE ATTEMPT PER CONNECTION PER PASS, in the connection's own tenant
+   * transaction. A failure to reach the provider or the configuration is
+   * logged and left for the next pass: the job simply keeps waiting.
+   */
+  async #refreshExpiredConnections(
+    jobs: readonly { readonly workspaceId: string; readonly socialConnectionId: string }[],
+    now: Date,
+  ): Promise<void> {
+    if (jobs.length === 0) return;
+    const platform = getPlatformClient();
+    const expired = await platform.socialConnection.findMany({
+      where: {
+        id: { in: [...new Set(jobs.map((job) => job.socialConnectionId))] },
+        status: 'ACTIVE',
+        tokenExpiresAt: { lte: now },
+      },
+      select: { id: true, workspaceId: true },
+    });
+    for (const connection of expired) {
+      try {
+        await withWorkspace(
+          connection.workspaceId,
+          async (db) => {
+            const policy = await this.#resolvePublishing();
+            await new SocialOAuthService({
+              db,
+              workspaceId: connection.workspaceId,
+              policy,
+              registry: createConnectorRegistry({ policy, environment: this.#environment }),
+              vault: new SocialTokenVault(),
+              applications: this.#socialApplications,
+              quota: createTotalResourceQuota({
+                db,
+                workspaceId: connection.workspaceId,
+                environment: this.#environment,
+                dimension: 'socialAccounts',
+              }),
+              clock: this.#clock,
+            }).refresh({ connectionId: connection.id, brandScope: [] });
+          },
+          { prisma: getPrisma() },
+        );
+      } catch (error: unknown) {
+        log.warn('expired social token could not be refreshed', {
+          workspaceId: connection.workspaceId,
+          socialConnectionId: connection.id,
+          ...internalErrorFields(error),
+        });
+      }
+    }
   }
 
   /**
@@ -793,10 +916,7 @@ export class MaintenanceScheduler {
 
   /** The dispatch half of the publishing policy, read once per pass. */
   async #publishingPolicy(): Promise<{ claimLeaseSeconds: number; staleClaimBatchSize: number }> {
-    const policy = await resolvePublishingPolicy(
-      new ConfigurationService({ prisma: getPlatformClient() }),
-      this.#environment,
-    );
+    const policy = await this.#resolvePublishing();
     return {
       claimLeaseSeconds: policy.dispatch.claimLeaseSeconds,
       staleClaimBatchSize: policy.dispatch.staleClaimBatchSize,
@@ -951,6 +1071,8 @@ export class MaintenanceScheduler {
         enabled: true,
         deletedAt: null,
         nextEvaluationAt: { lte: now },
+        // D-328 (review item 2): a workspace pending deletion produces nothing.
+        workspace: { deletionScheduledFor: null },
       },
       select: { id: true, workspaceId: true, brandId: true, nextEvaluationAt: true },
       // The id breaks ties, so the order is TOTAL. Two rules parked in the same
@@ -1081,6 +1203,8 @@ export class MaintenanceScheduler {
         enabled: true,
         deletedAt: null,
         nextEvaluationAt: { lte: now },
+        // D-328 (review item 2): a workspace pending deletion produces nothing.
+        workspace: { deletionScheduledFor: null },
       },
       select: { id: true, workspaceId: true },
       orderBy: [{ nextEvaluationAt: 'asc' }, { id: 'asc' }],
@@ -1713,6 +1837,7 @@ export class MaintenanceScheduler {
     const analyticsRowsPruned = await this.pruneAnalyticsRetention(cadence.retentionPurgeBatch);
     const automations = await this.sweepAutomations(cadence.ingestionReconcileBatch);
     const finance = await this.sweepFinance(cadence.retentionPurgeBatch);
+    const workspacesDeleted = await this.finishWorkspaceDeletions(cadence.retentionPurgeBatch);
     return {
       ingestionDispatched,
       chatContentPurged: purged.chat,
@@ -1735,7 +1860,26 @@ export class MaintenanceScheduler {
       cycleAllowancesGranted: finance.allowancesGranted,
       dunningSuspensions: finance.dunningSuspensions,
       financialDriftsFound: finance.driftsFound,
+      workspacesDeleted,
     };
+  }
+
+  /**
+   * FINISH THE DELETIONS WHOSE WAITING PERIOD ENDED (A8, D-328).
+   *
+   * On the PLATFORM connection, because it acts on every workspace that is
+   * due. Each one is marked DELETED by a conditional update — a cancel that
+   * landed first wins, and a rerun finishes nothing twice — its sessions are
+   * revoked and `workspace.deleted` is audited. Physical purge is the
+   * data-deletion lifecycle of docs/SECURITY.md §15, not this sweep.
+   */
+  async finishWorkspaceDeletions(batch: number): Promise<number> {
+    const platform = getPlatformClient();
+    const finished = await new WorkspaceDeletionService({ clock: this.#clock }).finishDue(
+      platform,
+      batch,
+    );
+    return finished.length;
   }
 
   /**
@@ -1843,6 +1987,10 @@ export class MaintenanceScheduler {
      * rollover cap can take, and the reconciliation must judge the state the
      * others left.
      */
+    // A8 (D-328): a deadline measured in days answers to the purge cadence.
+    every(cadence.retentionPurgeSeconds, 'workspace-deletion', () =>
+      this.finishWorkspaceDeletions(cadence.retentionPurgeBatch),
+    );
     every(cadence.retentionPurgeSeconds, 'finance-sweep', async () => {
       const finance = await this.sweepFinance(cadence.retentionPurgeBatch);
       return (

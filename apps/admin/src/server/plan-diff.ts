@@ -43,6 +43,7 @@ const QUOTAS: readonly (keyof PlanQuotas)[] = [
   'scheduledPostsPerMonth',
   'storageGb',
   'analyticsRetentionDays',
+  'workspaces',
 ];
 
 export function describePlanChanges(

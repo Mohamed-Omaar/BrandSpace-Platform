@@ -134,7 +134,7 @@ async function stateOf(
   return map.get(slot.slotId ?? 'slot-0')?.state;
 }
 
-describe('P6-10 · the five states', () => {
+describe('P6-10 · the six states (Q9 split NEEDS_REAUTH into EXPIRED and REVOKED)', () => {
   it('calls a healthy account ready', async () => {
     expect(await stateOf([connection()])).toBe('READY');
   });
@@ -143,22 +143,39 @@ describe('P6-10 · the five states', () => {
     expect(await stateOf([])).toBe('NOT_CONNECTED');
   });
 
-  it('calls a connection the provider revoked NEEDS_REAUTH', async () => {
-    expect(await stateOf([connection({ status: 'REVOKED' })])).toBe('NEEDS_REAUTH');
+  /*
+   * Q9 (owner, Phase 2B-1, D-332) SPLIT THE OLD `NEEDS_REAUTH` BUCKET: an
+   * account that needs reconnecting is EXPIRED — a warning, because its
+   * channel waits for it — while a revoked or disabled one is REVOKED and
+   * blocks, and a connection still mid-OAuth is no account at all.
+   */
+  it('calls a connection the provider revoked REVOKED', async () => {
+    expect(await stateOf([connection({ status: 'REVOKED' })])).toBe('REVOKED');
   });
 
-  it('calls one the platform disabled NEEDS_REAUTH too', async () => {
+  it('calls one the platform disabled REVOKED too', async () => {
     // Different cause, same consequence for the planner: the post will not go
     // out through this account and somebody has to do something about it.
-    expect(await stateOf([connection({ status: 'DISABLED' })])).toBe('NEEDS_REAUTH');
+    expect(await stateOf([connection({ status: 'DISABLED' })])).toBe('REVOKED');
   });
 
-  it('calls one still mid-OAuth NEEDS_REAUTH', async () => {
-    // `PENDING` means the callback never completed. Never publishable.
-    expect(await stateOf([connection({ status: 'PENDING' })])).toBe('NEEDS_REAUTH');
+  it('calls one still mid-OAuth NOT_CONNECTED', async () => {
+    // `PENDING` means the callback never completed. Never publishable, and
+    // never an account: it counts as none.
+    expect(await stateOf([connection({ status: 'PENDING' })])).toBe('NOT_CONNECTED');
   });
 
-  it('refuses to call an ACTIVE connection with an EXPIRED token ready', async () => {
+  it('calls one that needs reconnecting EXPIRED, a warning rather than a block', async () => {
+    expect(await stateOf([connection({ status: 'NEEDS_REAUTH' })])).toBe('EXPIRED');
+    expect(isBlocking('EXPIRED')).toBe(false);
+  });
+
+  it('prefers the account that can still be reconnected over a revoked one', async () => {
+    const both = [connection({ status: 'REVOKED' }), connection({ status: 'NEEDS_REAUTH' })];
+    expect(await stateOf(both)).toBe('EXPIRED');
+  });
+
+  it('refuses to call an ACTIVE connection with an EXPIRED token ready — it is EXPIRED', async () => {
     /*
      * THE CASE THE PIPELINE'S OWN FILTER WOULD WAVE THROUGH. `materialiseSlot`
      * selects `status: 'ACTIVE'` and does not look at the token, so it creates
@@ -167,7 +184,7 @@ describe('P6-10 · the five states', () => {
      * outcome — and the outcome is the only thing the planner asked about.
      */
     const expired = connection({ tokenExpiresAt: new Date(NOW.getTime() - 60_000) });
-    expect(await stateOf([expired])).toBe('NEEDS_REAUTH');
+    expect(await stateOf([expired])).toBe('EXPIRED');
   });
 
   it('warns about a token that expires inside the day without blocking', async () => {
@@ -187,10 +204,11 @@ describe('P6-10 · the five states', () => {
     );
   });
 
-  it('blocks everything but READY and EXPIRING', async () => {
+  it('blocks everything but READY, EXPIRING and EXPIRED (Q9)', async () => {
     expect(isBlocking('READY')).toBe(false);
     expect(isBlocking('EXPIRING')).toBe(false);
-    expect(isBlocking('NEEDS_REAUTH')).toBe(true);
+    expect(isBlocking('EXPIRED')).toBe(false);
+    expect(isBlocking('REVOKED')).toBe(true);
     expect(isBlocking('NOT_CONNECTED')).toBe(true);
     expect(isBlocking('UNSUPPORTED')).toBe(true);
   });
@@ -382,8 +400,15 @@ describe('P6-10 · the answer reaches the screen, and the old claim is gone', ()
     expect(PAGE).not.toMatch(/variantPlatformKeys: view\.slot\.platformKeys/);
   });
 
-  it('names all five states in both languages', () => {
-    for (const state of ['READY', 'EXPIRING', 'NEEDS_REAUTH', 'NOT_CONNECTED', 'UNSUPPORTED']) {
+  it('names all six states in both languages', () => {
+    for (const state of [
+      'READY',
+      'EXPIRING',
+      'EXPIRED',
+      'REVOKED',
+      'NOT_CONNECTED',
+      'UNSUPPORTED',
+    ]) {
       const occurrences = [
         ...MESSAGES.matchAll(new RegExp(`'calendar\\.readiness\\.${state}':`, 'g')),
       ];

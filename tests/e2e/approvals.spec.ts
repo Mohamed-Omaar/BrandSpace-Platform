@@ -142,7 +142,8 @@ test.describe('the approval workflow', () => {
      * Saved only when it is actually wrong, so the normal run posts no extra
      * form and the seed's own state is what is asserted against.
      */
-    await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
+    // A8 (Phase 2B-1): the approval rules are edited in Settings → Approvals.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/approvals`);
     const policySelfApproval = page.locator('[data-testid^="policy-self-"]').first();
     await expect(policySelfApproval).toBeVisible({ timeout: 15_000 });
     if (await policySelfApproval.isChecked()) {
@@ -176,6 +177,10 @@ test.describe('the approval workflow', () => {
 
     // 3. The owner relaxes the brand's policy. This is the D-122 control
     //    surface, and it is gated on a permission only the owner and admin hold.
+    //    The queue points to it; the rules themselves live in Settings (A8).
+    await expect(page.getByTestId('approvals-policy-link')).toBeVisible();
+    await page.getByTestId('approvals-policy-open').click();
+    await page.waitForURL(/\/en\/settings\/approvals$/);
     await expect(page.getByTestId('approvals-policy')).toBeVisible();
     const selfToggle = page.locator('[data-testid^="policy-self-"]').first();
     await selfToggle.check();
@@ -223,7 +228,7 @@ test.describe('the approval workflow', () => {
 
     // Leave the brand as the seed left it: the next suite's assumptions are
     // not this suite's to change.
-    await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/approvals`);
     await expect(page.getByTestId('approvals-policy')).toBeVisible({ timeout: 15_000 });
     await page.locator('[data-testid^="policy-self-"]').first().uncheck();
     await submitAndSettle(page, '[data-testid^="policy-save-"]', /ok=SAVED|error=/);

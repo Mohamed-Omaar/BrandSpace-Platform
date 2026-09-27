@@ -165,5 +165,18 @@ export const publishJobNotCancellable = (): AppError =>
 export const publishJobNotRetryable = (): AppError =>
   new AppError('CONFLICT', 'This post cannot be retried in its current state.');
 
+/**
+ * OWNER DECISION (D-332, PR #47): AN EXPLICIT RETRY NEVER PUBLISHES LATE. A
+ * failed post whose lateness deadline has passed is refused here, before it is
+ * queued, rather than queued and then failed by the preflight. The reason is
+ * machine-readable so the screen can say which refusal this is.
+ */
+export const PUBLISH_DEADLINE_PASSED_REASON = 'publish_deadline_passed';
+
+export const publishJobPastDeadline = (): AppError =>
+  new AppError('CONFLICT', 'This post’s time has passed, so it will not be published late.', {
+    reason: PUBLISH_DEADLINE_PASSED_REASON,
+  });
+
 export const unsupportedByProvider = (): AppError =>
   new AppError('VALIDATION_FAILED', 'That platform does not support this action.');
