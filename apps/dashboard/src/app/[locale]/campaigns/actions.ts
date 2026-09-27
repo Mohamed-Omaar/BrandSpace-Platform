@@ -3,7 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { assertBrandInScope, createLogger, internalErrorFields } from '@brandspace/shared';
+import {
+  assertBrandInScope,
+  createLogger,
+  internalErrorFields,
+  isAppError,
+} from '@brandspace/shared';
+import { CAMPAIGN_ALREADY_ENDED_REASON, CAMPAIGN_NOT_PLANNED_REASON } from '@brandspace/content';
 import { requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
@@ -121,6 +127,61 @@ export async function updateCampaignAction(formData: FormData): Promise<void> {
   }
   revalidatePath(`/${locale}/campaigns`);
   redirect(destination);
+}
+
+/**
+ * B11 (Phase 2B-2b) — "START NOW" on a PLANNED campaign.
+ *
+ * `CampaignService.startNow`: the start date becomes today in the WORKSPACE's
+ * zone and the status ACTIVE, through `update()` — one transaction, one
+ * `campaign.updated` audit event with reason `start_now`, and the version the
+ * page rendered, so a campaign somebody changed in the meantime is refused
+ * rather than started from a stale read. A campaign whose end date has passed
+ * is refused with its own words; its end date is never moved.
+ */
+export async function startCampaignNowAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const campaignId = String(formData.get('campaignId') ?? '');
+  let destination: string;
+
+  try {
+    const session = await requireWorkspaceAction(locale, 'campaigns.manage');
+    const expected = Number(formData.get('version'));
+    await inContentStudio(session.workspace.workspaceId, async (services) => {
+      const workspace = await services.db.workspace.findUniqueOrThrow({
+        where: { id: session.workspace.workspaceId },
+        select: { timezone: true },
+      });
+      return services.campaigns().startNow({
+        campaignId,
+        timezone: workspace.timezone,
+        ...(Number.isInteger(expected) && expected > 0 ? { expectedVersion: expected } : {}),
+        actor: {
+          userId: session.customer.userId,
+          brandScope: session.workspace.brandScope,
+        },
+      });
+    });
+    destination = `/${locale}/campaigns/${campaignId}?ok=CAMPAIGN_STARTED`;
+  } catch (error: unknown) {
+    if (isRedirectError(error)) throw error;
+    const correlationId = randomUUID();
+    log.warn('campaign start failed', { correlationId, ...internalErrorFields(error) });
+    destination = `/${locale}/campaigns/${campaignId}?error=${startNowErrorCode(error)}&ref=${correlationId}`;
+  }
+  revalidatePath(`/${locale}/campaigns`);
+  redirect(destination);
+}
+
+/** "Start now" refusals get their own words; the reason is machine-readable. */
+function startNowErrorCode(error: unknown): string {
+  if (isAppError(error) && error.publicDetails['reason'] === CAMPAIGN_ALREADY_ENDED_REASON) {
+    return 'CAMPAIGN_ALREADY_ENDED';
+  }
+  if (isAppError(error) && error.publicDetails['reason'] === CAMPAIGN_NOT_PLANNED_REASON) {
+    return 'CAMPAIGN_NOT_PLANNED';
+  }
+  return actionErrorCode(error);
 }
 
 /**

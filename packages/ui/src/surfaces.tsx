@@ -172,6 +172,7 @@ export function MetricCard({
   label,
   value,
   hint,
+  hintTitle,
   icon,
   iconTone = 'brand',
   trend,
@@ -183,6 +184,12 @@ export function MetricCard({
   readonly label: string;
   readonly value?: string | undefined;
   readonly hint?: string | undefined;
+  /**
+   * The hint's FULL text, when the hint may be too long for one line (a name).
+   * Setting it keeps the hint on one line, cut with an ellipsis, and puts the
+   * whole text in the tooltip — the card never grows to fit a long name.
+   */
+  readonly hintTitle?: string | undefined;
   readonly icon?: ReactNode;
   readonly iconTone?: 'brand' | 'accent' | 'neutral' | 'success' | 'warning' | 'danger' | 'info';
   /** A real comparison, or nothing. Never a decorative arrow. */
@@ -305,7 +312,23 @@ export function MetricCard({
             </span>
           ) : null}
           {(unavailable ? unavailableLabel : hint) ? (
-            <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+            <span
+              {...(!unavailable && hintTitle ? { title: hintTitle } : {})}
+              style={{
+                ...typographyTokens.caption,
+                color: colorTokens.textSecondary,
+                ...(!unavailable && hintTitle
+                  ? {
+                      display: 'block',
+                      flex: '1 1 auto',
+                      minInlineSize: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }
+                  : {}),
+              }}
+            >
               {unavailable ? unavailableLabel : hint}
             </span>
           ) : null}

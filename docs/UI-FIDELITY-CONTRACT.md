@@ -676,6 +676,21 @@ Inside the ported composer (§4.1 route), four additions in its own vocabulary:
 
 No new component, interaction model or colour family.
 
+### 6.3.41 Prototype v90 Phase 2B-2b — campaign results and the Best campaign card (B11)
+
+On the Campaigns routes (D-195), in their own vocabulary:
+
+- **Best campaign** above the list's filter row: one `MetricCard` in the auto-fit metric grid the campaign
+  page uses — the rate as its figure and `<name> · avg engagement` as its caption, or the card's own
+  unavailable "—" with "No campaign has published yet". The caption gains one option on `MetricCard`,
+  `hintTitle`: a long name stays on one line, cut with an ellipsis, and the full text is the tooltip.
+- **The campaign page**: its existing metric row gains Clicks and a caption naming the period; "No results
+  yet" is the existing `StateMessage`; "Ends in N days" is one more caption in the header's row; **Start
+  now** is the page's `brand` button with a caption beside it, in the header card. "What changed" is
+  retitled "What changed · last 30 days".
+
+No new component, colour, font, shadow or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

@@ -407,7 +407,8 @@ app services went live) is its own PR (option 3, the readiness gate, D-336).
 - **C7** — the page size for "latest N of M" already exists (`DEFAULT_PAGE_SIZE`, 48).
 - **B11** — "best campaign" had no definition anywhere; the owner defined it (answer D5): highest average
   engagement rate across the campaign's published posts, over its whole life, brand-scoped, on the Campaigns
-  list header.
+  list header. **Amended in Phase 2B-2b (D-341):** the rate is POOLED — lifetime total
+  engagements ÷ total impressions — not the mean of per-post rates.
 - **A10** — `linkTrackingEnabled` was listed although Q15 deferred link tracking.
 
 ### 7.2 How Phase 2B-2a was built
