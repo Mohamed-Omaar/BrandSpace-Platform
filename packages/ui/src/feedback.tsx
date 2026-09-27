@@ -333,6 +333,8 @@ export function Skeleton({
     <span
       aria-hidden="true"
       data-testid="skeleton"
+      // MO13: a placeholder for something being generated or loaded shimmers.
+      className="bs-shimmer"
       style={{
         display: 'block',
         inlineSize: width,

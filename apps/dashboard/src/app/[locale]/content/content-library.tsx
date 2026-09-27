@@ -531,7 +531,14 @@ export function ContentLibrary({
           }}
         >
           {cards.map((card) => (
-            <li key={card.id} data-testid="content-card" data-item-id={card.id} style={cardStyle}>
+            // MO14: a post card lifts on hover (§8 overrides this route's pinned motion, D-348).
+            <li
+              key={card.id}
+              data-testid="content-card"
+              data-item-id={card.id}
+              className="bs-card-liftable"
+              style={cardStyle}
+            >
               {media(card)}
               <div style={{ display: 'grid', gap: spacingTokens['3xs'] }}>
                 <div

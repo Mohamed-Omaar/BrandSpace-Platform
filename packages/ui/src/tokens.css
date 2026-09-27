@@ -137,6 +137,45 @@
   --bs-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --bs-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 
+  /*
+   * §8 MOTION (prototype v105, Phase 2B-2b). Named for WHAT moves, so a
+   * component asks for "the menu's rows" rather than for a number, and the
+   * numbers are §8's exactly. `tokens.ts` mirrors them for the Web Animations
+   * API; `motion-tokens.test.ts` keeps the two equal.
+   */
+  --bs-motion-page: 440ms; /* MO1 a block entering */
+  --bs-motion-page-late: 300ms; /* MO1 blocks after the 7th */
+  --bs-motion-page-step: 45ms; /* MO1 stagger */
+  --bs-motion-pill: 440ms; /* MO2 the sidebar pill */
+  --bs-motion-collapse: 380ms; /* MO3 the sidebar column */
+  --bs-motion-label-out: 110ms; /* MO3 labels fade out */
+  --bs-motion-label-in: 220ms; /* MO3 labels fade in */
+  --bs-motion-label-in-delay: 150ms; /* MO3 … after the width */
+  --bs-motion-seg: 380ms; /* MO4 the segmented pill */
+  --bs-motion-menu-in: 200ms; /* MO5 a menu, listbox, popover or sheet opens */
+  --bs-motion-menu-row: 220ms; /* MO5 its rows */
+  --bs-motion-menu-row-step: 22ms; /* MO5 row stagger */
+  --bs-motion-menu-out: 180ms; /* MO5 it closes */
+  --bs-motion-dialog: 300ms; /* MO6 the dialog */
+  --bs-motion-veil: 260ms; /* MO6 its veil */
+  --bs-motion-copilot: 340ms; /* MO7 the Copilot panel */
+  --bs-motion-toast-in: 420ms; /* MO8 a toast enters; its check draws */
+  --bs-motion-toast-step: 50ms; /* MO8 content stagger */
+  --bs-motion-toast-check-delay: 160ms; /* MO8 */
+  --bs-motion-toast-out: 280ms; /* MO8 a toast leaves */
+  --bs-motion-bar: 800ms; /* MO11 a bar grows */
+  --bs-motion-bar-step: 35ms; /* MO11 bar stagger */
+  --bs-motion-line: 1000ms; /* MO11 a line draws */
+  --bs-motion-dot: 360ms; /* MO11 dots and labels pop */
+  --bs-motion-dot-step: 40ms; /* MO11 dot stagger */
+  --bs-motion-count: 650ms; /* MO12 a KPI counts up */
+  --bs-motion-loop: 1600ms; /* MO13 shimmer and pulse */
+  --bs-motion-hover: 220ms; /* MO14 a card lifts */
+  --bs-motion-drag-lift: 180ms; /* §8.2 a post lifts */
+  --bs-motion-drop: 360ms; /* §8.2 it flies into place */
+  --bs-motion-settle: 300ms; /* §8.2 others slide; a cancel glides back */
+  --bs-motion-state: 200ms; /* colour/background/border state feedback (≤ 200 ms) */
+
   --bs-z-sticky: 10;
   --bs-z-drawer: 40;
   --bs-z-overlay: 50;
@@ -333,13 +372,19 @@ html {
  * Motion is a preference, not a decision the design gets to make. Honoured
  * ONCE, here, so no component has to remember (WCAG 2.3.3).
  */
+/*
+ * §8.0 (Phase 2B-2b, owner-approved): reduced motion turns motion OFF, not
+ * faster. The old rule shrank durations to 0.01 ms, which still ran every
+ * animation, left `animation-delay` alone and never reached the Web Animations
+ * API. Now nothing animates and the end state is there at once; every JS
+ * animation asks `prefersReducedMotion()` (`motion.ts`) before it starts.
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation: none !important;
+    transition: none !important;
     scroll-behavior: auto !important;
   }
 }
@@ -836,34 +881,55 @@ html[dir='rtl'] input[type='week'] {
   background: var(--bs-surface-muted);
 }
 
-/* A card that lifts on hover, for grids of navigable things. */
-.bs-liftable {
+/*
+ * MO14 — A CLICKABLE CARD LIFTS 2 px with a softer, larger shadow (220 ms).
+ * `.bs-liftable` is a flat item (a list row, a tile): it takes the card's
+ * shadow. `.bs-card-liftable` is a surface card, already resting on the card
+ * shadow: it takes the shell's, larger and softer again. No new shadow.
+ */
+.bs-liftable,
+.bs-card-liftable {
   transition:
-    box-shadow var(--bs-duration-base) var(--bs-ease-out),
-    transform var(--bs-duration-base) var(--bs-ease-out);
+    box-shadow var(--bs-motion-hover) var(--bs-ease-out),
+    transform var(--bs-motion-hover) var(--bs-ease-out);
 }
 
 .bs-liftable:hover {
-  box-shadow: var(--bs-shadow-raised);
+  box-shadow: var(--bs-shadow-card);
   transform: translateY(-2px);
 }
 
-/* Buttons and chips get the same treatment without a bespoke class each. */
-.bs-pressable {
-  transition:
-    background-color var(--bs-duration-fast) var(--bs-ease-out),
-    box-shadow var(--bs-duration-fast) var(--bs-ease-out),
-    transform var(--bs-duration-instant) var(--bs-ease-out);
-}
-
-.bs-pressable:active:not(:disabled) {
-  transform: translateY(1px);
+.bs-card-liftable:hover {
+  box-shadow: var(--bs-shadow-shell);
+  transform: translateY(-2px);
 }
 
 /*
- * A slow brand pulse for the Copilot's processing state.
+ * Buttons and chips get the same state feedback without a bespoke class each.
+ * MO14: NO PRESS MOTION (owner, Phase 2B-2b answer 9) — the 1 px push on
+ * `:active` is gone, and with it the `transform` transition. A tile that is
+ * both pressable and liftable keeps its lift: this shorthand used to override
+ * `.bs-liftable`'s, so the workspace tiles jumped instead of lifting.
+ */
+.bs-pressable {
+  transition:
+    background-color var(--bs-duration-fast) var(--bs-ease-out),
+    box-shadow var(--bs-duration-fast) var(--bs-ease-out);
+}
+
+.bs-pressable.bs-liftable,
+.bs-pressable.bs-card-liftable {
+  transition:
+    background-color var(--bs-duration-fast) var(--bs-ease-out),
+    box-shadow var(--bs-motion-hover) var(--bs-ease-out),
+    transform var(--bs-motion-hover) var(--bs-ease-out);
+}
+
+/*
+ * MO13 — "READING" PULSES: opacity 1 → .55 over 1.6 s (the Copilot's
+ * processing spark, Brand Brain reading a question, a source being read).
  *
- * The reduced-motion block above already neutralises this for anyone who asked
+ * The reduced-motion block above already turns this off for anyone who asked
  * for less motion, so it needs no media query of its own.
  */
 @keyframes bs-pulse {
@@ -872,12 +938,37 @@ html[dir='rtl'] input[type='week'] {
     opacity: 1;
   }
   50% {
-    opacity: 0.35;
+    opacity: 0.55;
   }
 }
 
 .bs-pulse {
-  animation: bs-pulse 1.4s var(--bs-ease-out) infinite;
+  animation: bs-pulse var(--bs-motion-loop) var(--bs-ease-in-out) infinite;
+}
+
+/*
+ * MO13 — "GENERATING" SHIMMERS: a soft light band across the placeholder, a
+ * 1.6 s linear loop. `background-position` is §8's one exception for it; the
+ * band is the surface's own sunken and muted greys, no new colour.
+ */
+@keyframes bs-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.bs-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--bs-surface-sunken) 0%,
+    var(--bs-surface-muted) 50%,
+    var(--bs-surface-sunken) 100%
+  );
+  background-size: 200% 100%;
+  animation: bs-shimmer var(--bs-motion-loop) linear infinite;
 }
 
 /*

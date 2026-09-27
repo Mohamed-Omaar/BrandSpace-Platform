@@ -563,6 +563,46 @@ export const motionTokens = {
 } as const;
 
 /**
+ * §8 MOTION (prototype v105, Phase 2B-2b), in milliseconds, for the Web
+ * Animations API — the mirror of the `--bs-motion-*` custom properties in
+ * `tokens.css`, kept equal by `motion-tokens.test.ts`.
+ */
+export const motionMs = {
+  page: 440,
+  pageLate: 300,
+  pageStep: 45,
+  pill: 440,
+  collapse: 380,
+  labelOut: 110,
+  labelIn: 220,
+  labelInDelay: 150,
+  seg: 380,
+  menuIn: 200,
+  menuRow: 220,
+  menuRowStep: 22,
+  menuOut: 180,
+  dialog: 300,
+  veil: 260,
+  copilot: 340,
+  toastIn: 420,
+  toastStep: 50,
+  toastCheckDelay: 160,
+  toastOut: 280,
+  bar: 800,
+  barStep: 35,
+  line: 1000,
+  dot: 360,
+  dotStep: 40,
+  count: 650,
+  loop: 1600,
+  hover: 220,
+  dragLift: 180,
+  drop: 360,
+  settle: 300,
+  state: 200,
+} as const;
+
+/**
  * Stacking order, named once. Overlapping surfaces that each invent a number
  * are how a dialog ends up behind a sticky header.
  */

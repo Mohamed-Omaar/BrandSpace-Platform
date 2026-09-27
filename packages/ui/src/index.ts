@@ -19,6 +19,7 @@ export * from './overlays';
 export * from './toast-bus';
 export * from './toast-host';
 export * from './toast-timing';
+export * from './motion';
 export * from './overview-hero';
 export * from './platform-icons';
 export * from './post-card';

@@ -212,3 +212,45 @@ test.describe('C8 · the toast host', () => {
     await expect(page.getByTestId('toast')).toHaveCount(0);
   });
 });
+
+test.describe('§8 motion — foundation (D-348)', () => {
+  test('MO14: a pressed button does not move; a tile lifts 2 px on hover', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'hover is a pointer gesture');
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    const create = page.getByTestId('topbar-create');
+    const box = (await create.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    // No press motion at all (owner answer 9): no transform while held.
+    expect(await create.evaluate((el) => getComputedStyle(el).transform)).toBe('none');
+    await page.mouse.up();
+    await page.keyboard.press('Escape');
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
+    const tile = page.locator('[data-testid^="choose-workspace-"]').first();
+    await tile.hover();
+    await expect
+      .poll(() => tile.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m42))
+      .toBe(-2);
+  });
+
+  test('reduced motion: nothing animates or transitions', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
+    const styles = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('body *')].slice(0, 400).map((el) => {
+        const style = getComputedStyle(el);
+        return { animation: style.animationName, transition: style.transitionDuration };
+      }),
+    );
+    expect(styles.filter((s) => s.animation !== 'none')).toEqual([]);
+    expect(styles.filter((s) => s.transition.split(',').some((d) => parseFloat(d) > 0))).toEqual(
+      [],
+    );
+  });
+});

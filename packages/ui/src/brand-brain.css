@@ -666,6 +666,7 @@ input.bb-chat-input {
   gap: 14px;
 }
 
+/* MO14 (§8 overrides the pinned motion here, D-348): the lift is 2 px over 220 ms. */
 .bb-card {
   border: 0;
   border-radius: 24px;
@@ -677,15 +678,15 @@ input.bb-chat-input {
   background: rgba(255, 255, 255, 0.82);
   box-shadow: var(--bb-soft-shadow);
   transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+    transform var(--bs-motion-hover) var(--bs-ease-out),
+    box-shadow var(--bs-motion-hover) var(--bs-ease-out);
   cursor: pointer;
   font: inherit;
   color: inherit;
 }
 
 .bb-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   box-shadow: 0 9px 24px rgba(20, 16, 35, 0.055);
 }
 

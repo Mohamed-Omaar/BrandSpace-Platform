@@ -446,10 +446,13 @@ export default async function OnboardingPage({
                 <span style={{ ...typographyTokens.bodySm, overflowWrap: 'anywhere' }}>
                   {source.fileName}
                 </span>
-                <StatusBadge
-                  label={t(`setup.source.${source.status}` as MessageKey)}
-                  tone={SOURCE_TONE[source.status] ?? 'neutral'}
-                />
+                {/* MO13: a source still being read pulses. */}
+                <span className={source.status === 'PROCESSING' ? 'bs-pulse' : undefined}>
+                  <StatusBadge
+                    label={t(`setup.source.${source.status}` as MessageKey)}
+                    tone={SOURCE_TONE[source.status] ?? 'neutral'}
+                  />
+                </span>
               </li>
             ))}
           </ul>
