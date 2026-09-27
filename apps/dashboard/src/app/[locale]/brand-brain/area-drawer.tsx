@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { colorTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
+import { colorTokens, typographyTokens, CONTROL_CLASS, useOverlayBehaviour } from '@brandspace/ui';
 import { translator } from '../../../i18n/messages';
 import type { AreaCardData, BrandBrainPermissions, CandidateData } from './brand-brain-view';
 import {
@@ -51,15 +51,15 @@ export function AreaDrawer({
   const t = translator(locale);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
   const open = area !== null;
+
+  // C8 (Phase 2B-2b): Escape, the focus trap, focus in (to the close button)
+  // and focus back out come from the shared overlay stack, so a menu or dialog
+  // opened from this drawer stacks on it and Escape closes only the top one.
+  useOverlayBehaviour({ open, onClose, containerRef: panelRef, initialFocusRef: closeRef });
 
   useEffect(() => {
     if (!open) return;
-
-    // Remember where focus was, so it can go back exactly there.
-    returnFocusRef.current = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -78,39 +78,11 @@ export function AreaDrawer({
       }
     }
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-
-      const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), textarea, input:not([type="hidden"]), select, [tabindex]:not([tabindex="-1"])',
-      );
-      if (!focusable || focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (!first || !last) return;
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKeyDown, true);
     return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
       document.body.style.overflow = previousOverflow;
       for (const sibling of siblings) sibling.removeAttribute('inert');
-      returnFocusRef.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!area) return null;
 
