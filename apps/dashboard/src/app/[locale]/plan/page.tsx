@@ -10,11 +10,14 @@ import {
   MULTI_BRAND_FEATURE,
   QUOTA_FEATURES,
   TOTAL_RESOURCE_DIMENSIONS,
+  measureStorageBreakdown,
+  storageBreakdownView,
 } from '@brandspace/entitlements';
+import { formatBytes } from '../../../components/format-bytes';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
-import { optionalMessage, translator } from '../../../i18n/messages';
+import { optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { ceilingFor, featureDisplayName, planDisplayName } from '../../../server/plan-usage';
 import { commerceSnapshotFor } from '../../../server/commerce-context';
 import { SettingsFrame } from '../../../components/settings-frame';
@@ -115,9 +118,25 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
     ? allCounters
     : allCounters.filter((counter) => !brandRow(counter.featureKey));
 
-  const { memberCount, brandCount, socialAccountCount } = await inWorkspace(
+  const { memberCount, brandCount, socialAccountCount, storage } = await inWorkspace(
     workspace.workspaceId,
     async ({ db }) => ({
+      /*
+       * C7 (Phase 2B-2b) — WHERE THE STORED BYTES SIT, grouped from the SAME
+       * rows the storage meter sums (`measureStorageBreakdown`), set against
+       * the meter this page already shows — the storage counter's exact bytes.
+       * Workspace-wide, like the meter; read-only; nothing here writes the
+       * counter.
+       */
+      storage: storageBreakdownView(
+        await measureStorageBreakdown(db, workspace.workspaceId),
+        (
+          await db.usageCounter.findFirst({
+            where: { workspaceId: workspace.workspaceId, featureKey: QUOTA_FEATURES.storageGb },
+            select: { usedBytes: true },
+          })
+        )?.usedBytes ?? 0n,
+      ),
       memberCount: await db.membership.count({
         where: { workspaceId: workspace.workspaceId, status: 'ACTIVE' },
       }),
@@ -458,6 +477,66 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
           )}
         </CustomerCard>
 
+        {/* --- Storage breakdown (C7, Phase 2B-2b) ------------------------- */}
+        <CustomerCard title={t('plan.storageBreakdownTitle')} testId="storage-breakdown">
+          {storage.byKind.length === 0 && storage.other === 0n ? (
+            <CustomerEmpty message={t('plan.storageBreakdownEmpty')} />
+          ) : (
+            <>
+              <p
+                style={{
+                  ...typographyTokens.bodySm,
+                  color: colorTokens.textSecondary,
+                  marginBlockStart: 0,
+                }}
+              >
+                {t('plan.storageBreakdownBody')}
+              </p>
+              <div
+                style={{
+                  display: 'grid',
+                  gap: spacingTokens.lg,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(16rem, 100%), 1fr))',
+                }}
+              >
+                {(
+                  [
+                    ['kind', t('plan.storageByKind'), storage.byKind],
+                    ['source', t('plan.storageBySource'), storage.bySource],
+                  ] as const
+                ).map(([id, caption, lines]) => (
+                  <div key={id} style={tableSurface} tabIndex={0} role="group" aria-label={caption}>
+                    <table style={customerTableStyle()} data-testid={`storage-by-${id}`}>
+                      <caption
+                        style={{
+                          ...typographyTokens.label,
+                          textAlign: 'start',
+                          paddingBlockEnd: spacingTokens.xs,
+                        }}
+                      >
+                        {caption}
+                      </caption>
+                      <tbody>
+                        {[
+                          ...lines,
+                          ...(storage.other > 0n ? [{ key: 'OTHER', bytes: storage.other }] : []),
+                        ].map((line) => (
+                          <tr key={line.key} data-testid={`storage-${id}-${line.key}`}>
+                            <td style={customerTdStyle()}>{t(storageLabelKey(id, line.key))}</td>
+                            <td style={{ ...customerTdStyle(), textAlign: 'end' }}>
+                              {formatBytes(Number(line.bytes), locale)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </CustomerCard>
+
         {/* --- Credit history (Phase 3) ------------------------------------ */}
         {mayReadCredits ? (
           <CustomerCard title={t('plan.history')} testId="credit-history-card">
@@ -565,4 +644,15 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       </SettingsFrame>
     </WorkspaceShell>
   );
+}
+
+/**
+ * C7 — the words for one breakdown line: a kind or a source from the asset
+ * library's own labels, or one of the three stores that are not library files.
+ */
+function storageLabelKey(breakdown: 'kind' | 'source', key: string): MessageKey {
+  if (key === 'BRAND_BRAIN') return 'plan.storageBrandBrain';
+  if (key === 'UPLOADING') return 'plan.storageUploading';
+  if (key === 'OTHER') return 'plan.storageOther';
+  return (breakdown === 'kind' ? `assets.kind.${key}` : `assets.source.${key}`) as MessageKey;
 }

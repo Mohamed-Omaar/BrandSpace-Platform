@@ -35,6 +35,7 @@ import {
 } from '@brandspace/ui';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { ASSET_VIEWS, type RightsState } from '../../../server/asset-views';
+import { formatBytes } from '../../../components/format-bytes';
 
 /**
  * The Asset Library screen.
@@ -138,6 +139,8 @@ export interface AssetLibraryViewProps {
   readonly brands: ReadonlyArray<{ id: string; name: string }>;
   readonly cards: readonly AssetCardData[];
   readonly hasMore: boolean;
+  /** C7 — "Latest 48 of M files", already worded on the server; null when not counted. */
+  readonly countLabel?: string | null;
   readonly nextCursor: string | null;
   /** D-305 — the reader is past the first page, so the first is offered back. */
   readonly pastFirstPage?: boolean | undefined;
@@ -241,27 +244,6 @@ const KIND_LABEL: Readonly<Record<AssetKind, MessageKey>> = {
   DOCUMENT: 'assets.kind.DOCUMENT',
   FONT: 'assets.kind.FONT',
 };
-
-/**
- * Human file size, in the reader's locale.
- *
- * `Intl.NumberFormat` rather than a hand-rolled join, so Arabic gets its own
- * grouping and decimal separator (CLAUDE.md §4). The unit words are ASCII
- * abbreviations in both locales because that is what a file manager shows.
- */
-function formatBytes(bytes: number, locale: string): string {
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  const formatted = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
-    maximumFractionDigits: value < 10 && unit > 0 ? 1 : 0,
-  }).format(value);
-  return `${formatted} ${units[unit]}`;
-}
 
 function formatDate(iso: string, locale: string): string {
   return new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
@@ -757,6 +739,18 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                     {t('assets.bulk.apply')}
                   </Button>
                 </form>
+              ) : null}
+              {props.countLabel ? (
+                <p
+                  style={{
+                    margin: 0,
+                    ...typographyTokens.caption,
+                    color: colorTokens.textSecondary,
+                  }}
+                  data-testid="assets-count"
+                >
+                  {props.countLabel}
+                </p>
               ) : null}
               <ContentGrid min="14rem" testId="assets-grid">
                 {props.cards.map((asset) => (

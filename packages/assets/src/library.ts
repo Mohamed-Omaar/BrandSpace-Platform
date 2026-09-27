@@ -91,6 +91,11 @@ export interface BrowseAssetsInput {
   readonly createdAfter?: Date | undefined;
   /** Only files no post, cover or brand logo references. */
   readonly unusedOnly?: boolean | undefined;
+  /**
+   * C7 (Phase 2B-2b) — also count EVERY file these filters match ("Latest 48
+   * of M files"). Opt-in: one extra query, only where a screen shows it.
+   */
+  readonly withTotal?: boolean | undefined;
 }
 
 /** PHASE 6 FINAL (D-287) — one post a file appears in. */
@@ -108,6 +113,8 @@ export interface AssetPage {
   readonly items: readonly Asset[];
   readonly nextCursor: string | null;
   readonly hasMore: boolean;
+  /** Every file the filters match, when `withTotal` asked; otherwise null. */
+  readonly total: number | null;
 }
 
 /** The ceiling on one page, whatever a caller asks for. */
@@ -166,6 +173,13 @@ export class AssetLibraryService {
       where.name = { contains: input.search.trim(), mode: 'insensitive' };
     }
 
+    /*
+     * C7 — THE SAME `where` THE PAGE USES, brand scope and every filter
+     * included, WITHOUT the cursor: M is the whole filtered set, not what is
+     * left after this page. Asked for only by a screen that shows it.
+     */
+    const total = input.withTotal ? await this.#db.asset.count({ where }) : null;
+
     const rows = await this.#db.asset.findMany({
       where: this.#withCursor(where, sort, direction, input.cursor ?? null),
       // A TOTAL ORDER. The second key is what makes the page boundary stable
@@ -183,6 +197,7 @@ export class AssetLibraryService {
       items,
       hasMore,
       nextCursor: hasMore && last ? encodeCursor(last, sort) : null,
+      total,
     };
   }
 

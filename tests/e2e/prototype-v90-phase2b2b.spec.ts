@@ -510,3 +510,101 @@ test.describe('B12 + G13 (a) · automations v2', () => {
     await expect(page.getByTestId('attention-automations-waiting')).toHaveCount(0);
   });
 });
+
+test.describe('C7 · storage', () => {
+  test('Plan → Usage breaks storage down by type and source, with Other against the meter', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const ws = await ownWorkspace('storage');
+    await withPlatformPrisma(async (prisma) => {
+      const key = `e2e/${randomUUID()}`;
+      const asset = await prisma.asset.create({
+        data: {
+          workspaceId: ws.workspaceId,
+          brandId: ws.brandId,
+          name: 'cover.png',
+          kind: 'IMAGE',
+          mimeType: 'image/png',
+          sizeBytes: 2 * 1024 * 1024,
+          storageKey: key,
+          checksumSha256: randomUUID().replace(/-/g, '').padEnd(64, '0'),
+          status: 'READY',
+          scanStatus: 'CLEAN',
+          source: 'AI_GENERATED',
+        } as never,
+        select: { id: true },
+      });
+      await prisma.assetVersion.create({
+        data: {
+          workspaceId: ws.workspaceId,
+          assetId: asset.id,
+          versionNumber: 1,
+          storageKey: key,
+          mimeType: 'image/png',
+          sizeBytes: 2 * 1024 * 1024,
+          checksumSha256: randomUUID().replace(/-/g, '').padEnd(64, '0'),
+          createdByUserId: ws.ownerId,
+        } as never,
+      });
+      // The meter counts 3 MB: 1 MB more than the one stored file explains.
+      await prisma.usageCounter.create({
+        data: {
+          workspaceId: ws.workspaceId,
+          featureKey: 'limit.storage_gb',
+          // The storage meter's one "total" window (`quotaWindow('total')`).
+          periodStart: new Date(Date.UTC(1970, 0, 1)),
+          periodEnd: new Date(Date.UTC(9999, 0, 1)),
+          usedValue: 1,
+          usedBytes: BigInt(3 * 1024 * 1024),
+        },
+      });
+    });
+    await enter(page, ws.slug);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/plan`);
+    const card = page.getByTestId('storage-breakdown');
+    await expect(card.getByTestId('storage-kind-IMAGE')).toContainText('2 MB');
+    await expect(card.getByTestId('storage-source-AI_GENERATED')).toContainText('2 MB');
+    await expect(card.getByTestId('storage-kind-OTHER')).toContainText('1 MB');
+    // A category with nothing in it is not listed.
+    await expect(card.getByTestId('storage-kind-VIDEO')).toHaveCount(0);
+    await expect(card.getByTestId('storage-source-IMPORTED')).toHaveCount(0);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/plan`);
+    await expect(page.getByTestId('storage-breakdown')).toContainText('حسب المصدر');
+    await noSeriousViolations(page);
+  });
+
+  test('the library says "Latest N of M files", and "N of M" in another order', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const ws = await ownWorkspace('library-count');
+    await withPlatformPrisma(async (prisma) => {
+      for (let index = 0; index < 3; index += 1) {
+        await prisma.asset.create({
+          data: {
+            workspaceId: ws.workspaceId,
+            brandId: ws.brandId,
+            name: `file-${index}.png`,
+            kind: 'IMAGE',
+            mimeType: 'image/png',
+            sizeBytes: 1_024,
+            storageKey: `e2e/${randomUUID()}`,
+            checksumSha256: randomUUID().replace(/-/g, '').padEnd(64, '0'),
+            status: 'READY',
+            scanStatus: 'CLEAN',
+          } as never,
+        });
+      }
+    });
+    await enter(page, ws.slug);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/assets`);
+    await expect(page.getByTestId('assets-count')).toHaveText('Latest 3 of 3 files');
+    await page.goto(`${DASHBOARD_BASE_URL}/en/assets?sort=name`);
+    await expect(page.getByTestId('assets-count')).toHaveText('3 of 3 files');
+  });
+});

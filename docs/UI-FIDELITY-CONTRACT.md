@@ -704,6 +704,14 @@ On `/[locale]/automations` (D-154), in its own vocabulary:
 
 No new component, colour, font, shadow or interaction model.
 
+### 6.3.43 Prototype v90 Phase 2B-2b — the storage breakdown and the library count (C7)
+
+- **Plan → Usage**: one more `CustomerCard` under the quota table, holding two of the page's existing
+  tables side by side (by type, by source) with a caption line, and the page's own empty state.
+- **Asset Library**: one caption line above the grid, "Latest 48 of M files", in the grid's caption style.
+
+No new component, colour, font, shadow or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

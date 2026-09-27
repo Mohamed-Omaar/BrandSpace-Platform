@@ -64,6 +64,9 @@ export default async function AssetsPage({
   const { locale } = await params;
   const query = await searchParams;
   const t = translator(locale);
+  const countFormat = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+    numberingSystem: 'latn',
+  });
   const access = await requireWorkspacePage(locale, '/assets');
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
@@ -232,6 +235,7 @@ export default async function AssetsPage({
         ...(cursor ? { cursor } : {}),
         limit: 48,
         includeArchived: statusFilter === 'ARCHIVED',
+        withTotal: true,
       });
 
       const [folders, tags, storageLimitGb, usedCounter] = await Promise.all([
@@ -313,6 +317,16 @@ export default async function AssetsPage({
         cards,
         hasMore: page.hasMore,
         nextCursor: page.nextCursor,
+        /*
+         * C7 — "Latest 48 of M files": the newest-first first page says
+         * "latest"; any other order, or a later page, says only "N of M".
+         */
+        countLabel:
+          page.total === null
+            ? null
+            : t(sort === 'createdAt' && !cursor ? 'assets.latestOf' : 'assets.shownOf')
+                .replace('{shown}', countFormat.format(page.items.length))
+                .replace('{total}', countFormat.format(page.total)),
         folders: folders.map((folder): FolderData => ({
           id: folder.id,
           name: folder.name,

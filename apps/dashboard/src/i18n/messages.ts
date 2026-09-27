@@ -645,6 +645,16 @@ export const messages = {
     'plan.usageTitle': 'الاستخدام في هذه الدورة',
     'plan.usageScheduled': 'المنشورات المجدولة',
     'plan.usageStorage': 'التخزين',
+    // C7 (Phase 2B-2b) — where the stored bytes sit.
+    'plan.storageBreakdownTitle': 'أين يُستخدم التخزين',
+    'plan.storageBreakdownBody':
+      'مُقاس الآن مما هو مخزّن فعلًا، حسب النوع وحسب المصدر. «أخرى» هو ما يحسبه عدّاد التخزين ولا يظهر في هذه الفئات.',
+    'plan.storageBreakdownEmpty': 'لا يوجد شيء مخزّن بعد.',
+    'plan.storageByKind': 'حسب النوع',
+    'plan.storageBySource': 'حسب المصدر',
+    'plan.storageBrandBrain': 'مستندات عقل العلامة',
+    'plan.storageUploading': 'قيد الرفع',
+    'plan.storageOther': 'أخرى',
     'plan.usageOf': '{used} من {limit}',
     'plan.usageUnstated': '{used} · لا حد معلن',
     'plan.usageBrands': 'العلامات',
@@ -797,6 +807,9 @@ export const messages = {
     'assets.kind.AUDIO': 'صوت',
     'assets.kind.DOCUMENT': 'مستند',
     'assets.kind.FONT': 'خط',
+    // C7 (Phase 2B-2b) — how many files the filters match.
+    'assets.latestOf': 'أحدث {shown} من أصل {total} من الملفات',
+    'assets.shownOf': '{shown} من أصل {total} من الملفات',
     // --- Phase 5 — Brand Brain ---
     'nav.brandBrain': 'عقل العلامة',
     'bb.title': 'عقل العلامة',
@@ -3544,6 +3557,16 @@ export const messages = {
     'plan.usageTitle': 'Usage this cycle',
     'plan.usageScheduled': 'Scheduled posts',
     'plan.usageStorage': 'Storage',
+    // C7 (Phase 2B-2b) — where the stored bytes sit.
+    'plan.storageBreakdownTitle': 'Where your storage goes',
+    'plan.storageBreakdownBody':
+      'Measured now from what is actually stored, by type and by source. “Other” is what the storage meter counts that none of these categories explain.',
+    'plan.storageBreakdownEmpty': 'Nothing is stored yet.',
+    'plan.storageByKind': 'By type',
+    'plan.storageBySource': 'By source',
+    'plan.storageBrandBrain': 'Brand Brain documents',
+    'plan.storageUploading': 'Uploading',
+    'plan.storageOther': 'Other',
     'plan.usageOf': '{used} of {limit}',
     'plan.usageUnstated': '{used} · no ceiling stated',
     'plan.usageBrands': 'Brands',
@@ -3701,6 +3724,9 @@ export const messages = {
     'assets.kind.AUDIO': 'Audio',
     'assets.kind.DOCUMENT': 'Document',
     'assets.kind.FONT': 'Font',
+    // C7 (Phase 2B-2b) — how many files the filters match.
+    'assets.latestOf': 'Latest {shown} of {total} files',
+    'assets.shownOf': '{shown} of {total} files',
     // --- Phase 5 — Brand Brain ---
     'nav.brandBrain': 'Brand Brain',
     'bb.title': 'Brand Brain',
