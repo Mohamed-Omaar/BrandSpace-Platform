@@ -240,7 +240,8 @@ export default async function CalendarPage({
      */
     const schedulable = (
       await library.listItems({
-        statuses: ['DRAFT', 'APPROVED'],
+        // Item 9 — a FAILED post with nothing published may go on again.
+        statuses: ['DRAFT', 'APPROVED', 'FAILED'],
         unscheduledOnly: true,
         limit: 200,
         brandScope: workspace.brandScope,

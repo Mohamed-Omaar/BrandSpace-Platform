@@ -76,7 +76,14 @@ export interface ComposerDraft {
    * says what saving it will do; the read-only statuses arrive as `readOnly`.
    */
   readonly status:
-    'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'SCHEDULED' | 'ARCHIVED';
+    | 'DRAFT'
+    | 'IN_REVIEW'
+    | 'CHANGES_REQUESTED'
+    | 'APPROVED'
+    | 'SCHEDULED'
+    | 'ARCHIVED'
+    /* Item 9 — a post that failed with nothing published, which may go on again. */
+    | 'FAILED';
   /** Phase 5B-3 — the open review, when there is one. */
   readonly openApprovalId: string | null;
   readonly brandId: string;
@@ -198,6 +205,8 @@ export interface ComposerViewProps {
     /** E4 (Phase 2B-2) — may save a post as a template (`templates.manage`). */
     manageTemplates?: boolean;
   };
+  /** Item 9 (Phase 2B-2) — a FAILED post: what the Publishing screen would say about it. */
+  readonly failed?: { readonly message: string } | null;
   /** B9 / F2 (Phase 2B-2) — today, tomorrow and the default time, for inline scheduling. */
   readonly scheduling?: {
     readonly today: string;
@@ -345,6 +354,7 @@ export function ComposerView({
   plannedFor = null,
   review = null,
   scheduling = null,
+  failed = null,
 }: ComposerViewProps) {
   const router = useRouter();
   const fieldId = useId();
@@ -804,6 +814,7 @@ export function ComposerView({
           expiredChannels={expiredChannels}
           review={review}
           scheduling={scheduling}
+          failed={failed}
           canGenerateMedia={can.generateMedia ?? false}
           onTool={(variantId, tool, argument) => void runTool(variantId, tool, argument)}
           actions={actions}

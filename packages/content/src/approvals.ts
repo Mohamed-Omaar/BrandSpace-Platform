@@ -30,6 +30,7 @@ import {
 } from './errors';
 import { NotificationService } from '@brandspace/notifications';
 import type { ContentPolicy } from './policy';
+import { RESCHEDULABLE_ITEM_STATUS, liveSlotWhere } from './calendar';
 
 /**
  * Approvals — Phase 5 scope item 6 (docs/PRODUCT.md §5 module 14,
@@ -398,8 +399,28 @@ export class ContentApprovalService {
     });
     if (!item || item.deletedAt) throw contentItemNotFound();
 
-    if (item.status !== 'DRAFT' && item.status !== 'CHANGES_REQUESTED') {
+    /*
+     * ITEM 9 (Phase 2B-2) — A FAILED POST WITH NOTHING PUBLISHED MAY BE SENT
+     * FOR REVIEW AGAIN, so a brand that requires approval can schedule it
+     * again through the normal flow: a NEW cycle, and every earlier approval
+     * row left exactly as it was. Not while a retry is still in flight on its
+     * failed slot, and never once any channel published.
+     */
+    const fromFailed = item.status === RESCHEDULABLE_ITEM_STATUS;
+    if (item.status !== 'DRAFT' && item.status !== 'CHANGES_REQUESTED' && !fromFailed) {
       throw item.status === 'IN_REVIEW' ? alreadyInReview() : notSubmittable();
+    }
+    if (fromFailed) {
+      const [live, published] = await Promise.all([
+        this.#db.calendarSlot.findFirst({
+          where: { workspaceId: this.#workspaceId, ...liveSlotWhere(item.id) },
+          select: { id: true },
+        }),
+        this.#db.publishJob.count({
+          where: { workspaceId: this.#workspaceId, contentItemId: item.id, status: 'PUBLISHED' },
+        }),
+      ]);
+      if (live || published > 0) throw notSubmittable();
     }
 
     const priorCycles = await this.#db.approval.count({

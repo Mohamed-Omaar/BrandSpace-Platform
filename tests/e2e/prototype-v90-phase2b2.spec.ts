@@ -266,3 +266,86 @@ test.describe('B9 · the Studio: inline date and time, and "Save as template"', 
     await expect(page.getByTestId(`templates-${brandId}`)).toContainText('From the Studio');
   });
 });
+
+test.describe('Item 9 · reschedule a FAILED post (D-332 amended)', () => {
+  test('the post says it did not go out, and Reschedule opens the calendar dialog for it', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const { slug, brandId } = await ownWorkspace('reschedule');
+    const itemId = await withPlatformPrisma(async (prisma) => {
+      const brand = await prisma.brand.findUniqueOrThrow({
+        where: { id: brandId },
+        select: { workspaceId: true },
+      });
+      const owner = await prisma.workspace.findUniqueOrThrow({
+        where: { id: brand.workspaceId },
+        select: { ownerUserId: true },
+      });
+      const item = await prisma.contentItem.create({
+        data: {
+          workspaceId: brand.workspaceId,
+          brandId,
+          title: 'A post that failed',
+          contentType: 'POST',
+          primaryLocale: 'EN',
+          status: 'FAILED',
+          origin: 'HUMAN',
+          createdByUserId: owner.ownerUserId,
+        },
+      });
+      await prisma.contentVariant.create({
+        data: {
+          workspaceId: brand.workspaceId,
+          brandId,
+          contentItemId: item.id,
+          platformKey: 'linkedin',
+          locale: 'EN',
+          body: 'It did not go out.',
+          hashtags: [],
+          characterCount: 18,
+          validationState: 'VALID',
+          origin: 'HUMAN',
+        },
+      });
+      await prisma.calendarSlot.create({
+        data: {
+          workspaceId: brand.workspaceId,
+          brandId,
+          contentItemId: item.id,
+          scheduledAtUtc: new Date(Date.UTC(2026, 0, 5, 9, 0)),
+          scheduledLocalTime: '2026-01-05T09:00',
+          timezone: 'UTC',
+          status: 'FAILED',
+          platformKeys: ['linkedin'],
+          createdByUserId: owner.ownerUserId,
+        },
+      });
+      return item.id;
+    });
+    await enter(page, slug);
+
+    // Arabic first: the notice reads right-to-left, with its actions.
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/content/compose?item=${itemId}`);
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByTestId('editor-failed-notice')).toBeVisible();
+    await expect(page.getByTestId('editor-reschedule')).toHaveText('إعادة الجدولة');
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
+    await expect(page.getByTestId('editor-failed-notice')).toBeVisible();
+    await expect(page.getByTestId('editor-failed-duplicate')).toBeVisible();
+    await page.getByTestId('editor-reschedule').click();
+    await page.waitForURL(/\/en\/calendar\?item=/);
+
+    const dialog = page.getByTestId('calendar-schedule-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(page.getByTestId('schedule-item')).toHaveValue(itemId);
+    await page.getByTestId('schedule-submit').click();
+    await page.waitForURL(/ok=CONTENT_SCHEDULED/);
+
+    // Scheduled again: the post no longer says it failed.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
+    await expect(page.getByTestId('editor-failed-notice')).toHaveCount(0);
+  });
+});

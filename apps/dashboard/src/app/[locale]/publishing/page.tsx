@@ -194,6 +194,23 @@ export default async function PublishingPage({
             );
           })()
         : new Set<string>();
+    /*
+     * ITEM 9 (D-332 amended) — a failed job whose post was scheduled again is
+     * history: no Retry, and it says so. A failed post that was not can be
+     * rescheduled (the calendar), or sent for review again where the brand
+     * requires approval (the post).
+     */
+    const superseded =
+      tab === 'failed' && failedJobs.length > 0
+        ? await (await services.pipeline()).supersededJobs(failedJobs.map((job) => job.id))
+        : new Set<string>();
+    const approvalRequired = new Map<string, boolean>();
+    if (tab === 'failed' && failedJobs.length > 0) {
+      const pipeline = await services.pipeline();
+      for (const id of new Set(failedJobs.map((job) => job.brandId))) {
+        approvalRequired.set(id, await pipeline.approvalRequiredFor(id));
+      }
+    }
     const latestReview = new Map<string, string>();
     for (const review of reviews) {
       if (review.contentItemId && !latestReview.has(review.contentItemId)) {
@@ -207,7 +224,7 @@ export default async function PublishingPage({
     const items = itemIds.length
       ? await services.db.contentItem.findMany({
           where: { id: { in: itemIds } },
-          select: { id: true, title: true },
+          select: { id: true, title: true, status: true },
         })
       : [];
     const brands = brandIds.length
@@ -231,6 +248,9 @@ export default async function PublishingPage({
       reconnected,
       late,
       titles: new Map(items.map((item) => [item.id, item.title])),
+      itemStatus: new Map(items.map((item) => [item.id, item.status])),
+      superseded,
+      approvalRequired,
       brandNames: new Map(brands.map((brand) => [brand.id, brand.name])),
     };
   });
@@ -377,8 +397,10 @@ export default async function PublishingPage({
                 const failure = failureText(job.failureClass, job.failureCode);
                 // D-332 — past its deadline, a post that could have been retried
                 // is not: no Retry, and the reason, with the way on.
+                const superseded = data.superseded.has(job.id);
                 const lateNotice =
                   job.status === 'FAILED' &&
+                  !superseded &&
                   data.late.has(job.id) &&
                   (job.canRetry || retryableAfterReconnect(job))
                     ? t(
@@ -476,6 +498,11 @@ export default async function PublishingPage({
                           {lateNotice}
                         </p>
                       ) : null}
+                      {superseded ? (
+                        <p style={lateStyle} data-testid={`superseded-${job.id}`}>
+                          {t('publishing.superseded')}
+                        </p>
+                      ) : null}
                       {data.reconnected.has(job.id) ? (
                         <p style={reconnectedStyle} data-testid={`reconnected-${job.id}`}>
                           {t('publishingHub.reconnected')}
@@ -517,6 +544,7 @@ export default async function PublishingPage({
                         job.status === 'FAILED' &&
                         !data.reconnected.has(job.id) &&
                         !lateNotice &&
+                        !superseded &&
                         may('publishing.manage') ? (
                           <form action={retryPublishAction}>
                             {back}
@@ -530,6 +558,36 @@ export default async function PublishingPage({
                               {t('publishing.retry')}
                             </button>
                           </form>
+                        ) : null}
+                        {/*
+                          ITEM 9 (D-332 amended, owner's Option 1) — RESCHEDULE
+                          the same post as a NEW slot: the calendar's schedule
+                          dialog for it, or — where the brand requires approval
+                          — the post, to send it for review again. Only for a
+                          post that failed with nothing published.
+                        */}
+                        {lateNotice &&
+                        data.itemStatus.get(job.contentItemId) === 'FAILED' &&
+                        may('content.schedule') ? (
+                          data.approvalRequired.get(job.brandId) ? (
+                            <Link
+                              href={`/${locale}/content/compose?item=${job.contentItemId}`}
+                              style={buttonStyle('primary', 'sm')}
+                              className={buttonClass('primary')}
+                              data-testid={`reschedule-${job.id}`}
+                            >
+                              {t('publishing.resendForReview')}
+                            </Link>
+                          ) : (
+                            <Link
+                              href={`/${locale}/calendar?item=${job.contentItemId}`}
+                              style={buttonStyle('primary', 'sm')}
+                              className={buttonClass('primary')}
+                              data-testid={`reschedule-${job.id}`}
+                            >
+                              {t('publishing.reschedule')}
+                            </Link>
+                          )
                         ) : null}
                         {lateNotice && may('content.create') ? (
                           // The existing "Make a new copy" (duplicateContentAction):

@@ -41,6 +41,7 @@ import { ActivityTimeline } from '../../../../components/activity-timeline';
 import { activityTimeline } from '../../../../server/activity-timeline';
 import { NotesPanel } from '../../../../components/notes-panel';
 import { inSocial } from '../../../../server/social-context';
+import { retryableAfterReconnect } from '@brandspace/social-connectors';
 import { relativeTime } from '../../../../server/home';
 import { plannedDateFrom } from '../../../../server/planned-date';
 import { channelReadinessForBrand } from '../../../../server/publish-readiness';
@@ -699,6 +700,31 @@ export default async function ComposePage({
           };
         })
       : null;
+  /*
+   * ITEM 9 (D-332 amended) — A FAILED POST: what the Publishing screen would
+   * say about it. Its failed jobs past their lateness deadline carry the late
+   * message (the account wording when an account failure caused it); a post
+   * still inside its window gets the plain line. Read-only, under RLS.
+   */
+  const failed =
+    draft && draft.status === 'FAILED'
+      ? await inSocial(workspace.workspaceId, async (services) => {
+          const jobs = await services.db.publishJob.findMany({
+            where: { contentItemId: draft.id, status: 'FAILED' },
+            select: { scheduledAtUtc: true, failureClass: true, failureCode: true },
+          });
+          const pipeline = await services.pipeline();
+          const late = jobs.filter((job) => pipeline.pastLatenessDeadline(job.scheduledAtUtc));
+          return {
+            message:
+              late.length === 0
+                ? translate('editor.failed.notLate')
+                : late.some((job) => retryableAfterReconnect(job))
+                  ? translate('publishing.late.disconnected')
+                  : translate('publishing.late.passed'),
+          };
+        })
+      : null;
   const requestedGoal = single('goal');
   const initialGoal = POST_GOALS.includes(requestedGoal as never) ? (requestedGoal as string) : '';
 
@@ -995,6 +1021,7 @@ export default async function ComposePage({
           manageTemplates: workspace.permissionKeys.includes('templates.manage'),
         }}
         scheduling={scheduling}
+        failed={failed}
         creativeFormats={CREATIVE_FORMATS.map((format) => ({
           key: format.key,
           label: translate(format.labelKey as MessageKey),
@@ -1084,6 +1111,9 @@ const EDITOR_KEYS = [
   'editor.template.name',
   'editor.template.hint',
   'editor.template.confirm',
+  // Item 9 — a failed post, scheduled again.
+  'editor.failed.reschedule',
+  'editor.failed.reviewAgain',
   'editor.next.schedule',
   'editor.next.needsApproval',
   'editor.changes.title',

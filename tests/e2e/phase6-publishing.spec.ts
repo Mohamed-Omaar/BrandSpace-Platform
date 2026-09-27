@@ -267,6 +267,12 @@ test.describe('D-332 · a failed post past its deadline is not retried', () => {
     await expect(page.getByTestId(`retry-${late.jobId}`)).toHaveCount(0);
     await expect(page.getByTestId(`reconnected-${late.jobId}`)).toHaveCount(0);
     await expect(page.getByTestId(`copy-${late.jobId}`)).toHaveText('Make a new copy');
+    // Item 9 (D-332 amended): and Reschedule — the same post as a new slot, via
+    // the calendar, or the post itself where the brand requires approval.
+    await expect(page.getByTestId(`reschedule-${late.jobId}`)).toHaveAttribute(
+      'href',
+      new RegExp(`/en/(calendar|content/compose)\\?item=${late.itemId}$`),
+    );
 
     await page.goto(`${DASHBOARD_BASE_URL}/ar/publishing?tab=failed`);
     await expect(page.getByTestId(`late-${late.jobId}`)).toHaveText(

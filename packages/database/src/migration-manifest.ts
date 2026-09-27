@@ -75,4 +75,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261006100000_content_template',
   '20261006110000_brand_publishing_defaults',
   '20261006120000_content_variant_slides',
+  '20261006130000_calendar_slot_live_excludes_failed',
 ];

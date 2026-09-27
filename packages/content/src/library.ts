@@ -15,6 +15,7 @@ import {
   unsupportedPlatform,
 } from './errors';
 import { ContentApprovalService } from './approvals';
+import { SLOT_BUSY_JOB_STATUSES } from './calendar';
 import { findPlatform, resolveDialect, type ContentDialect, type ContentPolicy } from './policy';
 import { ContentMediaResolver } from './media';
 import { validateVariant } from './validation';
@@ -185,8 +186,21 @@ export class ContentLibraryService {
         ...(input.unscheduledOnly
           ? {
               ...(input.platformKey ? {} : { variants: { some: {} } }),
+              /*
+               * NO LIVE SLOT — the one rule the scheduler uses (`liveSlotWhere`,
+               * item 9 / D11): a PUBLISHED slot is not free; a FAILED slot
+               * whose jobs finished with nothing published is.
+               */
               calendarSlots: {
-                none: { status: { notIn: ['CANCELLED', 'PUBLISHED', 'FAILED'] } },
+                none: {
+                  OR: [
+                    { status: { notIn: ['CANCELLED', 'FAILED'] } },
+                    {
+                      status: 'FAILED',
+                      publishJobs: { some: { status: { in: [...SLOT_BUSY_JOB_STATUSES] } } },
+                    },
+                  ],
+                },
               },
             }
           : {}),

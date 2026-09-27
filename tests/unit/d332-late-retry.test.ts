@@ -43,6 +43,10 @@ describe('D-332 · the refusal', () => {
       const check = body.indexOf('throw publishJobPastDeadline()');
       expect(check).toBeGreaterThan(0);
       expect(check).toBeLessThan(body.indexOf('publishJob.update('));
+      // Item 9 (D-332 amended): and a post scheduled again is never retried.
+      const superseded = body.indexOf('throw publishJobSuperseded()');
+      expect(superseded).toBeGreaterThan(0);
+      expect(superseded).toBeLessThan(body.indexOf('publishJob.update('));
     }
   });
 });
@@ -89,10 +93,31 @@ describe('D-332 · what the screen says, in both languages', () => {
     );
   });
 
-  it('no Reschedule and no Publish now were added; Retry is hidden for the late case', () => {
+  /*
+   * D-332 AS AMENDED (Phase 2B-2, item 9, owner's Option 1). The original rule
+   * — "no Reschedule and no Publish now" — was the state before the follow-up
+   * the owner decided: a late failed post now also offers RESCHEDULE, which
+   * schedules the same post again as a new slot (never "publish now", never
+   * late). Retry stays hidden for the late case and for a post already
+   * scheduled again; "Make a new copy" stays.
+   */
+  it('a late failed post offers Reschedule and "Make a new copy", never Publish now, and no Retry', () => {
     const page = read('apps/dashboard/src/app/[locale]/publishing/page.tsx');
-    expect(page).not.toMatch(/reschedule|publishNow|publish-now/i);
+    expect(page).not.toMatch(/publishNow|publish-now/i);
     expect(page).toContain('!lateNotice &&');
+    expect(page).toContain('!superseded &&');
     expect(page).toContain('action={duplicateContentAction}');
+    // Reschedule: only beside the late notice, only for a FAILED post (nothing
+    // published), only for a member who may schedule; the calendar's dialog,
+    // or the post to send it for review again where approval is required.
+    const reschedule = page.slice(
+      page.indexOf('{lateNotice &&\n'),
+      page.indexOf("{lateNotice && may('content.create')"),
+    );
+    expect(reschedule).toContain("data.itemStatus.get(job.contentItemId) === 'FAILED'");
+    expect(reschedule).toContain("may('content.schedule')");
+    expect(reschedule).toContain('href={`/${locale}/calendar?item=${job.contentItemId}`}');
+    expect(reschedule).toContain('href={`/${locale}/content/compose?item=${job.contentItemId}`}');
+    expect(reschedule.match(/data-testid=\{`reschedule-\$\{job\.id\}`\}/g)).toHaveLength(2);
   });
 });

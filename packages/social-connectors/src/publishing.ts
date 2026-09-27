@@ -22,6 +22,7 @@ import {
   publishJobNotFound,
   publishJobNotRetryable,
   publishJobPastDeadline,
+  publishJobSuperseded,
 } from './errors';
 import { capabilitiesFor, PROVIDER_CONFIG_KEYS, type PublishingPolicy } from './policy';
 
@@ -1291,6 +1292,8 @@ export class PublishPipelineService {
     }
     // D-332 (owner decision): a retry never publishes late. Refused, not queued.
     if (this.pastLatenessDeadline(job.scheduledAtUtc)) throw publishJobPastDeadline();
+    // Item 9 (D-332 amended): the post was scheduled again; this attempt is history.
+    if ((await this.supersededJobs([job.id])).has(job.id)) throw publishJobSuperseded();
     if (job.failureClass && !FAILURE_BEHAVIOUR[job.failureClass].manualRetryUseful) {
       throw publishJobNotRetryable();
     }
@@ -1372,6 +1375,8 @@ export class PublishPipelineService {
      * is queued or sent.
      */
     if (this.pastLatenessDeadline(job.scheduledAtUtc)) throw publishJobPastDeadline();
+    // Item 9 (D-332 amended): the post was scheduled again; this attempt is history.
+    if ((await this.supersededJobs([job.id])).has(job.id)) throw publishJobSuperseded();
     const replacement = await this.#reconnectedConnection(job);
     if (!replacement) throw publishJobNotRetryable();
 
@@ -1437,13 +1442,63 @@ export class PublishPipelineService {
       where: { workspaceId: this.#workspaceId, id: { in: [...jobIds] }, status: 'FAILED' },
     });
     const ready = new Set<string>();
+    const superseded = await this.supersededJobs(jobs.map((job) => job.id));
     for (const job of jobs) {
       if (!retryableAfterReconnect(job)) continue;
       // Past its deadline it cannot be retried (D-332), so it is not offered.
       if (this.pastLatenessDeadline(job.scheduledAtUtc)) continue;
+      // Scheduled again as a new slot (item 9): history, not offered.
+      if (superseded.has(job.id)) continue;
       if (await this.#reconnectedConnection(job)) ready.add(job.id);
     }
     return ready;
+  }
+
+  /**
+   * ITEM 9 — whether this brand requires approval before scheduling, so a
+   * screen offers "Reschedule" (the calendar) or "Send for review again" (the
+   * post) for a failed post. The same gate `#preflight` and `schedule()` read.
+   */
+  async approvalRequiredFor(brandId: string): Promise<boolean> {
+    return (await this.#approvals.policyForBrand(brandId)).requireApprovalBeforeScheduling;
+  }
+
+  /**
+   * ITEM 9 (Phase 2B-2, D-332 amended) — which of these jobs belong to a slot
+   * that a NEWER, non-cancelled slot of the same post has replaced. Such a job
+   * is history: both retry paths refuse it and the screens offer no Retry.
+   * Read-only, and one query per call.
+   */
+  async supersededJobs(jobIds: readonly string[]): Promise<ReadonlySet<string>> {
+    if (jobIds.length === 0) return new Set();
+    const jobs = await this.#db.publishJob.findMany({
+      where: { workspaceId: this.#workspaceId, id: { in: [...jobIds] } },
+      select: {
+        id: true,
+        contentItemId: true,
+        slot: { select: { id: true, createdAt: true } },
+      },
+    });
+    if (jobs.length === 0) return new Set();
+    const slots = await this.#db.calendarSlot.findMany({
+      where: {
+        workspaceId: this.#workspaceId,
+        contentItemId: { in: [...new Set(jobs.map((job) => job.contentItemId))] },
+        status: { not: 'CANCELLED' },
+      },
+      select: { id: true, contentItemId: true, createdAt: true },
+    });
+    const superseded = new Set<string>();
+    for (const job of jobs) {
+      const newer = slots.some(
+        (slot) =>
+          slot.contentItemId === job.contentItemId &&
+          slot.id !== job.slot.id &&
+          slot.createdAt > job.slot.createdAt,
+      );
+      if (newer) superseded.add(job.id);
+    }
+    return superseded;
   }
 
   /**

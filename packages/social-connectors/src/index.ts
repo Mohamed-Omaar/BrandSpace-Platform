@@ -94,6 +94,8 @@ export {
   publishJobNotRetryable,
   publishJobPastDeadline,
   PUBLISH_DEADLINE_PASSED_REASON,
+  publishJobSuperseded,
+  PUBLISH_JOB_SUPERSEDED_REASON,
   socialConnectionNotFound,
   unsupportedByProvider,
 } from './errors';

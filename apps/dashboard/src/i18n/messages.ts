@@ -1191,6 +1191,11 @@ export const messages = {
     'editor.template.hint':
       'يحفظ شكل هذا المنشور وقنواته ونصه ووسومه وتعليقه الأول. لا يتغير المنشور نفسه.',
     'editor.template.confirm': 'حفظ القالب',
+    'editor.failed.reschedule': 'إعادة الجدولة',
+    'editor.failed.reviewAgain':
+      'تتطلب هذه العلامة الموافقة: أرسل المنشور للمراجعة مرة أخرى، ثم أعد جدولته بعد الموافقة.',
+    'editor.failed.notLate':
+      'لم يُنشر هذا المنشور. يمكنك إعادة المحاولة من صفحة النشر، أو جدولته مرة أخرى.',
     'editor.slides.headlinePlaceholder': 'عنوان قصير لهذه الشريحة',
     'editor.media.useAsCover': 'اجعلها الغلاف',
     'editor.media.remove': 'إزالة',
@@ -1534,6 +1539,9 @@ export const messages = {
     'publishing.late.passed':
       'مضى موعد هذا المنشور، لذا لن يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
     'publishing.untitled': 'بدون عنوان',
+    'publishing.reschedule': 'إعادة الجدولة',
+    'publishing.resendForReview': 'إرسال للمراجعة مرة أخرى',
+    'publishing.superseded': 'جُدول هذا المنشور مرة أخرى، لذا لا تُعاد هذه المحاولة.',
     'publishing.reconnectNeeded': 'يجب إعادة ربط الحساب قبل إعادة المحاولة.',
     'publishing.status.pending': 'بالانتظار',
     'publishing.status.queued': 'في الطابور',
@@ -4053,6 +4061,11 @@ export const messages = {
     'editor.template.hint':
       'Saves this post’s format, channels, caption, hashtags and first comment. The post itself does not change.',
     'editor.template.confirm': 'Save template',
+    'editor.failed.reschedule': 'Reschedule',
+    'editor.failed.reviewAgain':
+      'This brand requires approval: send the post for review again, then schedule it once it is approved.',
+    'editor.failed.notLate':
+      'This post did not go out. Retry it from Publishing, or schedule it again.',
     'editor.slides.headlinePlaceholder': 'A short headline for this slide',
     'editor.media.useAsCover': 'Use as cover',
     'editor.media.remove': 'Remove',
@@ -4410,6 +4423,9 @@ export const messages = {
     'publishing.late.passed':
       'This post’s time has passed, so it won’t be published late. Make a new copy to schedule it again.',
     'publishing.untitled': 'Untitled',
+    'publishing.reschedule': 'Reschedule',
+    'publishing.resendForReview': 'Send for review again',
+    'publishing.superseded': 'This post was scheduled again, so this attempt is not retried.',
     'publishing.reconnectNeeded': 'Reconnect the account before retrying.',
     'publishing.status.pending': 'Pending',
     'publishing.status.queued': 'Queued',
@@ -5893,6 +5909,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   PUBLISH_DEADLINE_PASSED: {
     en: 'This post’s time has passed, so it won’t be published late. Make a new copy to schedule it again.',
     ar: 'مضى موعد هذا المنشور، لذا لن يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
+  },
+  // Item 9 (D-332 amended) — a retry of an attempt the post has replaced.
+  PUBLISH_JOB_SUPERSEDED: {
+    en: 'This post was scheduled again, so this attempt is not retried.',
+    ar: 'جُدول هذا المنشور مرة أخرى، لذا لا تُعاد هذه المحاولة.',
   },
   // Q9 (D-332) — every account for one of the post's channels was revoked.
   CHANNEL_DISCONNECTED: {

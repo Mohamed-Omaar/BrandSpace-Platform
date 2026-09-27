@@ -45,7 +45,14 @@ export {
 export type { TemplateActor, TemplateFields, TemplateSource } from './templates';
 export type { ContentLibraryOptions } from './library';
 
-export { ContentCalendarService, RESCHEDULABLE_SLOT_STATUSES, scheduleUsageKey } from './calendar';
+export {
+  ContentCalendarService,
+  RESCHEDULABLE_ITEM_STATUS,
+  RESCHEDULABLE_SLOT_STATUSES,
+  SLOT_BUSY_JOB_STATUSES,
+  liveSlotWhere,
+  scheduleUsageKey,
+} from './calendar';
 export { WorkspaceTimezoneService, timezoneChangeEffects } from './timezone-change';
 export type { TimezoneChangeActor, TimezoneChangeEffect } from './timezone-change';
 export type {

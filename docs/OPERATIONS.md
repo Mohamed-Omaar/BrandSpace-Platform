@@ -268,6 +268,24 @@ COMMIT;
 (Prisma runs a migration file inside its own transaction; in the actual migration file the explicit
 `BEGIN`/`COMMIT` lines are therefore omitted, and the statements run as one unit.)
 
+### 6.3 The live-slot index is forward-only (Phase 2B-2, item 9, D-332 amended)
+
+`20261006130000_calendar_slot_live_excludes_failed` narrows the partial unique index
+`calendar_slot_one_live_per_item` from `status <> 'CANCELLED'` to `status NOT IN ('CANCELLED',
+'FAILED')`, so a post that failed with nothing published can be scheduled again as a NEW slot while the
+old FAILED slot stays as history.
+
+**It is forward-only.** As soon as any post has a FAILED slot and a newer slot, the previous, stricter
+index cannot be recreated — the rows it would forbid now exist, and they are correct history. Never
+replay an older index definition by hand.
+
+- **Rolling the APPLICATION back is safe** without touching the index: the previous release counts a
+  FAILED slot as live, so it simply refuses to schedule such a post again; every read still works, and
+  the looser index never forbids anything it does.
+- **If the stricter rule is ever wanted again**, it is a NEW migration that first decides what to do
+  with the posts that hold two slots (for example, cancel the older FAILED slot, keeping its jobs), and
+  only then recreates the index — reviewed like any destructive change (§6).
+
 ---
 
 ## 7. Secret rotation

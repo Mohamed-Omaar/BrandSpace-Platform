@@ -86,6 +86,8 @@ export interface DraftEditorProps {
     readonly tomorrow: string;
     readonly defaultTime: string;
   } | null;
+  /** Item 9 — a FAILED post: what the Publishing screen would say about it. */
+  readonly failed?: { readonly message: string } | null;
   /** D-288 — the approval policy and a changes request, when there is one. */
   readonly review?: {
     readonly requiresApproval: boolean;
@@ -187,6 +189,7 @@ export function DraftEditor({
   expiredChannels = {},
   review = null,
   scheduling = null,
+  failed = null,
   onTool,
   actions,
 }: DraftEditorProps) {
@@ -569,6 +572,49 @@ export function DraftEditor({
           </div>
         ) : null}
 
+        {/*
+          ITEM 9 (D-332 amended) — A POST THAT FAILED WITH NOTHING PUBLISHED.
+          The late message the Publishing screen shows (when it was late), and
+          the ways on: Reschedule (the calendar's dialog for this post) — or,
+          where the brand requires approval, sending it for review again from
+          the actions below — and "Make a new copy", which stays.
+        */}
+        {draft.status === 'FAILED' && failed ? (
+          <div className="cs-notice warning" role="note" data-testid="editor-failed-notice">
+            <p>{failed.message}</p>
+            <div className="cs-form-actions">
+              {can.schedule && !review?.requiresApproval ? (
+                <Link
+                  className="cs-dark-button"
+                  href={`/${locale}/calendar?item=${draft.id}`}
+                  data-testid="editor-reschedule"
+                >
+                  {t['editor.failed.reschedule']}
+                </Link>
+              ) : null}
+              {review?.requiresApproval && can.submit ? (
+                <span className="cs-hint" data-testid="editor-failed-review-hint">
+                  {t['editor.failed.reviewAgain']}
+                </span>
+              ) : null}
+              {can.create && actions.duplicate ? (
+                <form action={actions.duplicate}>
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="itemId" value={draft.id} />
+                  <input type="hidden" name="token" value={duplicateToken} />
+                  <button
+                    type="submit"
+                    className="cs-ghost-button cs-compact"
+                    data-testid="editor-failed-duplicate"
+                  >
+                    {t['content.action.duplicate']}
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         {draft.status === 'IN_REVIEW' && can.edit ? (
           <div className="cs-notice warning" role="note" data-testid="editor-in-review-warning">
             {t['editor.inReviewWarning']}
@@ -945,7 +991,7 @@ export function DraftEditor({
                 that does not goes straight to the calendar, and review stays
                 available. An approved post's next step is always the calendar.
               */}
-              {draft.status === 'DRAFT' && can.submit ? (
+              {(draft.status === 'DRAFT' || draft.status === 'FAILED') && can.submit ? (
                 <form action={actions.submitForReview}>
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="itemId" value={draft.id} />
