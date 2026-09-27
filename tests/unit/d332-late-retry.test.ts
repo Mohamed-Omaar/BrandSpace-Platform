@@ -80,6 +80,36 @@ describe('D-332 · what the screen says, in both languages', () => {
     expect(optionalMessage('en', 'content.action.duplicate')).toBe('Make a new copy');
   });
 
+  it('Phase 2B-2b — beside Reschedule, the owner’s new words, in both languages', () => {
+    expect(optionalMessage('en', 'publishing.late.passedReschedule')).toBe(
+      'This post’s time has passed, so it wasn’t published late. Reschedule it or make a new copy.',
+    );
+    expect(optionalMessage('en', 'publishing.late.disconnectedReschedule')).toBe(
+      'This post’s time passed while the account was disconnected, so it wasn’t published late. Reschedule it or make a new copy.',
+    );
+    expect(optionalMessage('ar', 'publishing.late.passedReschedule')).toBe(
+      'مضى موعد هذا المنشور، لذا لم يُنشر متأخرًا. أعد جدولته أو أنشئ نسخة جديدة منه.',
+    );
+    expect(optionalMessage('ar', 'publishing.late.disconnectedReschedule')).toBe(
+      'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أعد جدولته أو أنشئ نسخة جديدة منه.',
+    );
+  });
+
+  it('Phase 2B-2b — the new words only where Reschedule or "Send for review again" is offered', () => {
+    const read = (file: string) => readFileSync(file, 'utf8');
+    const publishing = read('apps/dashboard/src/app/[locale]/publishing/page.tsx');
+    // The same condition decides the words and the button.
+    expect(publishing).toContain('publishingRescheduleOffered({');
+    expect(publishing).toContain('{rescheduleOffered ? (');
+    // The Integrations page offers no Reschedule, so it keeps the earlier words.
+    const integrations = read('apps/dashboard/src/app/[locale]/integrations/page.tsx');
+    expect(integrations).toContain("'publishing.late.disconnected' : 'publishing.late.passed'");
+    expect(integrations).not.toContain('Reschedule');
+    // The post page follows the editor (every case: tests/unit/late-notice.test.ts).
+    const post = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
+    expect(post).toContain('rescheduleOffered: postPageRescheduleOffered({');
+  });
+
   it('the account wording is used exactly for an account failure', () => {
     expect(retryableAfterReconnect({ failureClass: 'AUTH_REVOKED', failureCode: null })).toBe(true);
     expect(
@@ -110,12 +140,18 @@ describe('D-332 · what the screen says, in both languages', () => {
     // Reschedule: only beside the late notice, only for a FAILED post (nothing
     // published), only for a member who may schedule; the calendar's dialog,
     // or the post to send it for review again where approval is required.
+    // The condition is named once (`publishingRescheduleOffered`, Phase 2B-2b)
+    // so the same rule decides both the button and the notice's words.
+    expect(page).toContain('publishingRescheduleOffered({');
+    const rule = readFileSync('apps/dashboard/src/server/late-notice.ts', 'utf8');
+    const publishingRule = rule.slice(rule.indexOf('export function publishingRescheduleOffered'));
+    expect(publishingRule).toContain('input.itemStatus === RESCHEDULABLE');
+    expect(publishingRule).toContain("input.permissionKeys.includes('content.schedule')");
+    expect(rule).toContain("const RESCHEDULABLE = 'FAILED';");
     const reschedule = page.slice(
-      page.indexOf('{lateNotice &&\n'),
+      page.indexOf('{rescheduleOffered ? ('),
       page.indexOf("{lateNotice && may('content.create')"),
     );
-    expect(reschedule).toContain("data.itemStatus.get(job.contentItemId) === 'FAILED'");
-    expect(reschedule).toContain("may('content.schedule')");
     expect(reschedule).toContain('href={`/${locale}/calendar?item=${job.contentItemId}`}');
     expect(reschedule).toContain('href={`/${locale}/content/compose?item=${job.contentItemId}`}');
     expect(reschedule.match(/data-testid=\{`reschedule-\$\{job\.id\}`\}/g)).toHaveLength(2);

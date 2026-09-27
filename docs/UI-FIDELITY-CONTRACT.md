@@ -676,6 +676,42 @@ Inside the ported composer (§4.1 route), four additions in its own vocabulary:
 
 No new component, interaction model or colour family.
 
+### 6.3.41 Prototype v90 Phase 2B-2b — campaign results and the Best campaign card (B11)
+
+On the Campaigns routes (D-195), in their own vocabulary:
+
+- **Best campaign** above the list's filter row: one `MetricCard` in the auto-fit metric grid the campaign
+  page uses — the rate as its figure and `<name> · avg engagement` as its caption, or the card's own
+  unavailable "—" with "No campaign has published yet". The caption gains one option on `MetricCard`,
+  `hintTitle`: a long name stays on one line, cut with an ellipsis, and the full text is the tooltip.
+- **The campaign page**: its existing metric row gains Clicks and a caption naming the period; "No results
+  yet" is the existing `StateMessage`; "Ends in N days" is one more caption in the header's row; **Start
+  now** is the page's `brand` button with a caption beside it, in the header card. "What changed" is
+  retitled "What changed · last 30 days".
+
+No new component, colour, font, shadow or interaction model.
+
+### 6.3.42 Prototype v90 Phase 2B-2b — editing a rule, and "Needs you" (B12, G13 a)
+
+On `/[locale]/automations` (D-154), in its own vocabulary:
+
+- **Edit**: a ghost `Edit` link beside each rule's Enable/Delete; the rule opens in the SAME authoring form
+  and `Card` the create path uses, with the brand, trigger and action shown as a small definition list
+  (they are fixed), one more `Field`-styled textarea for the description and, for "place on calendar",
+  one number field for the offset. Rules with several conditions show a caption saying they are kept.
+- **Needs you**: a `Card` with a `SectionHeader` at the top of the page, one row per waiting run with the
+  existing primary Confirm button and a ghost Skip button. Home's existing attention list gains one kind.
+
+No new component, colour, font, shadow or interaction model.
+
+### 6.3.43 Prototype v90 Phase 2B-2b — the storage breakdown and the library count (C7)
+
+- **Plan → Usage**: one more `CustomerCard` under the quota table, holding two of the page's existing
+  tables side by side (by type, by source) with a caption line, and the page's own empty state.
+- **Asset Library**: one caption line above the grid, "Latest 48 of M files", in the grid's caption style.
+
+No new component, colour, font, shadow or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

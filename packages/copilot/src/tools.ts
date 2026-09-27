@@ -147,6 +147,23 @@ export const COPILOT_TOOLS = [
     undoable: false,
     messageKey: 'calendarLookup',
   },
+  /*
+   * B14 (Phase 2B-2b) — THE REVIEW QUEUE, AS A SUMMARY. `content.read`, the
+   * permission the Approvals screen itself is gated on, and no new one; brand
+   * scope required, like every tool here. It reads the existing approval rows
+   * through the same brand filter the other reads use and writes nothing —
+   * there is no second approval path, only a way to ask "what is waiting?".
+   */
+  {
+    key: 'approvals.summary',
+    input: brandArgument,
+    permission: 'content.read',
+    brandScope: 'required',
+    actionClass: 'READ_ONLY',
+    spendsCredits: false,
+    undoable: false,
+    messageKey: 'approvalsSummary',
+  },
   {
     key: 'campaign.list',
     input: brandArgument,

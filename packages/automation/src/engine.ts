@@ -20,7 +20,9 @@ import {
   conditionFieldNotProduced,
   conditionOperatorNotAllowed,
   conditionValueInvalid,
+  automationRuleNameTaken,
   automationRuleNotFound,
+  automationRuleVersionConflict,
   brandRuleLimitReached,
   creatorLacksAuthority,
   ruleLimitReached,
@@ -505,6 +507,158 @@ export class AutomationEngine {
     return rule;
   }
 
+  /**
+   * B12 (Phase 2B-2b) — EDIT AN EXISTING RULE: name, description, conditions,
+   * and the trigger's and the action's settings.
+   *
+   * NOT `updateRule`, AND NOT A WAY TO SWITCH A RULE ON. `enabled` is not an
+   * input here: enabling stays the separate, action-permission-gated act it has
+   * always been, so an edit can never start a rule running. The TYPES of the
+   * trigger and the action are fixed at creation and are not inputs either.
+   *
+   * EVERY FIELD PASSES THE CREATE PATH'S CHECKS. Conditions are schema-parsed,
+   * counted and held to the STORED trigger (`#requireEvaluableConditions`);
+   * the trigger's and the action's settings are parsed by the registry's own
+   * schemas, exactly as `createRule` parses them. A field left `undefined` is
+   * left as it is.
+   *
+   * THE ACTION'S OWN PERMISSION IS RE-CHECKED WHENEVER ITS SETTINGS CHANGE. The
+   * settings are part of what the rule does on its creator's authority; holding
+   * `automation.manage` is not a way to change what a `content.schedule` action
+   * does without holding `content.schedule`.
+   *
+   * FAIL CLOSED ON A STALE EDIT. The caller names the version it read; the write
+   * is conditional on that version, so an edit racing another edit (or a
+   * toggle, which also bumps the version) is refused and nothing is stored.
+   *
+   * A CHANGED TRIGGER SETTING RE-ARMS THE RULE LIKE A NEW ONE: it is due for
+   * evaluation now, and a threshold's stored breach state is cleared so the new
+   * threshold establishes its baseline before it can fire — the same first
+   * evaluation a freshly created rule gets. The threshold cycle is kept, so no
+   * run key is ever reused.
+   */
+  async updateEditableRule(input: {
+    ruleId: string;
+    expectedVersion: number;
+    name?: string | undefined;
+    description?: string | null | undefined;
+    conditions?: unknown;
+    triggerConfig?: unknown;
+    actionConfig?: unknown;
+    actor: AutomationActor;
+  }): Promise<AutomationRule> {
+    const existing = await this.#requireRule(input.ruleId, input.actor.brandScope);
+    if (!input.actor.permissionKeys.includes('automation.manage')) throw creatorLacksAuthority();
+    if (existing.version !== input.expectedVersion) throw automationRuleVersionConflict();
+
+    const trigger = findTrigger(existing.triggerType);
+    const action = findAction(existing.actionType);
+    /* c8 ignore next -- a stored rule always names registry entries. */
+    if (!trigger || !action) throw unknownTriggerOrAction();
+
+    const conditions =
+      input.conditions === undefined ? undefined : conditionsSchema.parse(input.conditions);
+    if (conditions && conditions.length > this.#policy.limits.maxConditionsPerRule) {
+      throw tooManyConditions(this.#policy.limits.maxConditionsPerRule);
+    }
+    if (conditions) this.#requireEvaluableConditions(conditions, existing.triggerType);
+
+    const triggerConfig =
+      input.triggerConfig === undefined
+        ? undefined
+        : (trigger.config.parse(input.triggerConfig) as Prisma.InputJsonValue);
+    const actionConfig =
+      input.actionConfig === undefined
+        ? undefined
+        : (action.config.parse(input.actionConfig) as Prisma.InputJsonValue);
+    const triggerConfigChanged =
+      triggerConfig !== undefined && !sameJson(triggerConfig, existing.triggerConfig);
+    const actionConfigChanged =
+      actionConfig !== undefined && !sameJson(actionConfig, existing.actionConfig);
+    if (actionConfigChanged && !input.actor.permissionKeys.includes(action.permission)) {
+      throw creatorLacksAuthority();
+    }
+
+    const name = input.name === undefined ? undefined : input.name.trim().slice(0, 120);
+    if (name !== undefined && name.length === 0) {
+      throw new AppError('VALIDATION_FAILED', 'A rule needs a name.');
+    }
+    if (name !== undefined && name !== existing.name) {
+      // Checked here rather than left to the unique index: a violated index
+      // aborts the caller's transaction, and the person deserves the reason.
+      const clash = await this.#db.automationRule.findFirst({
+        where: {
+          workspaceId: this.#workspaceId,
+          brandId: existing.brandId,
+          name,
+          id: { not: existing.id },
+        },
+        select: { id: true },
+      });
+      if (clash) throw automationRuleNameTaken();
+    }
+    const description =
+      input.description === undefined
+        ? undefined
+        : input.description === null || input.description.trim() === ''
+          ? null
+          : input.description.trim().slice(0, 500);
+
+    const changed = [
+      ...(name !== undefined && name !== existing.name ? ['name'] : []),
+      ...(description !== undefined && description !== existing.description ? ['description'] : []),
+      ...(conditions !== undefined && !sameJson(conditions, existing.conditions)
+        ? ['conditions']
+        : []),
+      ...(triggerConfigChanged ? ['triggerConfig'] : []),
+      ...(actionConfigChanged ? ['actionConfig'] : []),
+    ];
+
+    const now = this.#clock.now();
+    const written = await this.#db.automationRule.updateMany({
+      where: {
+        id: existing.id,
+        workspaceId: this.#workspaceId,
+        version: input.expectedVersion,
+        deletedAt: null,
+      },
+      data: {
+        ...(name === undefined ? {} : { name }),
+        ...(description === undefined ? {} : { description }),
+        ...(conditions === undefined
+          ? {}
+          : { conditions: conditions as unknown as Prisma.InputJsonValue }),
+        ...(triggerConfig === undefined ? {} : { triggerConfig }),
+        ...(actionConfig === undefined ? {} : { actionConfig }),
+        ...(triggerConfigChanged
+          ? { nextEvaluationAt: now, thresholdBreached: null, thresholdEvaluatedAt: null }
+          : {}),
+        updatedByUserId: input.actor.userId,
+        version: { increment: 1 },
+      },
+    });
+    if (written.count !== 1) throw automationRuleVersionConflict();
+    const rule = await this.#db.automationRule.findUniqueOrThrow({ where: { id: existing.id } });
+
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'automation.updated',
+      actorType: 'USER',
+      actorId: input.actor.userId,
+      resourceType: 'AutomationRule',
+      resourceId: rule.id,
+      brandId: rule.brandId,
+      // WHICH fields changed, never their values: a condition can name a person.
+      before: { enabled: existing.enabled, version: existing.version },
+      after: { enabled: rule.enabled, version: rule.version, changed },
+    });
+    return rule;
+  }
+
+  /** One live rule, through the caller's brand scope; NOT_FOUND otherwise. */
+  async getRule(ruleId: string, brandScope: readonly string[]): Promise<AutomationRule> {
+    return this.#requireRule(ruleId, brandScope);
+  }
+
   async deleteRule(input: { ruleId: string; actor: AutomationActor }): Promise<void> {
     const existing = await this.#requireRule(input.ruleId, input.actor.brandScope);
     if (!input.actor.permissionKeys.includes('automation.manage')) throw creatorLacksAuthority();
@@ -560,6 +714,109 @@ export class AutomationEngine {
       orderBy: { startedAt: 'desc' },
       take: Math.max(1, Math.min(input.take ?? 50, 200)),
     });
+  }
+
+  /**
+   * B12 (Phase 2B-2b) — "NEEDS YOU": the asks-first runs this person may act on.
+   *
+   * A run waiting for confirmation is shown ONLY to a member who holds the
+   * permission the automation's ACTION requires — the same permission `confirmRun`
+   * and `skipRun` check — so nobody is offered a decision they could not make.
+   * Brand scope is in the WHERE, and a run whose window has closed is not
+   * waiting for anybody any more.
+   */
+  async awaitingRuns(input: {
+    brandId?: string | undefined;
+    brandScope: readonly string[];
+    permissionKeys: readonly string[];
+    take?: number | undefined;
+  }): Promise<readonly AutomationRun[]> {
+    const actionable = AUTOMATION_ACTIONS.filter((action) =>
+      input.permissionKeys.includes(action.permission),
+    ).map((action) => action.type);
+    if (actionable.length === 0) return [];
+    return this.#db.automationRun.findMany({
+      where: {
+        workspaceId: this.#workspaceId,
+        status: 'AWAITING_CONFIRMATION',
+        confirmedAt: null,
+        confirmationExpiresAt: { gt: this.#clock.now() },
+        actionType: { in: actionable },
+        ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.brandScope }),
+      },
+      orderBy: [{ confirmationExpiresAt: 'asc' }, { id: 'asc' }],
+      take: Math.max(1, Math.min(input.take ?? 50, 200)),
+    });
+  }
+
+  /**
+   * B12 (Phase 2B-2b) — SKIP an asks-first run: the person decided NOT to do it.
+   *
+   * THE SAME GATE AS CONFIRMING, deliberately. The action's own permission,
+   * checked against the person skipping (a refusal is audited exactly as a
+   * refused confirmation is), and the run's brand against their live scope. A
+   * member who could not have confirmed the run cannot dismiss it either — a
+   * skip is a decision about the action, not housekeeping.
+   *
+   * `CANCELLED`, NOT `SKIPPED`. `SKIPPED` already means "the condition did not
+   * hold", which is the engine's decision; `CANCELLED` is reserved in the schema
+   * for "a decision somebody made", which this is. The run row stays as history
+   * with its outcome, and the audit event names who decided.
+   *
+   * A COMPARE-AND-SWAP on the waiting state: a run confirmed, skipped or expired
+   * in between is refused, so a skip never lands on a run that already acted.
+   */
+  async skipRun(input: { runId: string; actor: AutomationActor }): Promise<AutomationRun> {
+    const run = await this.#db.automationRun.findFirst({
+      where: { id: input.runId, workspaceId: this.#workspaceId },
+    });
+    if (!run) throw automationConfirmationRejected();
+    const rule = await this.#db.automationRule.findFirst({
+      where: { id: run.ruleId, workspaceId: this.#workspaceId },
+    });
+    if (!rule) throw automationConfirmationRejected();
+    const action = findAction(rule.actionType);
+    if (!action) throw automationConfirmationRejected();
+    if (!input.actor.permissionKeys.includes(action.permission)) {
+      await this.#auditRefusal({
+        runId: run.id,
+        brandId: run.brandId,
+        actorUserId: input.actor.userId,
+        reason: 'skipper_lacks_permission',
+      });
+      throw automationConfirmationRejected();
+    }
+    if (!brandInScope(input.actor.brandScope, run.brandId)) throw automationConfirmationRejected();
+
+    const now = this.#clock.now();
+    const skipped = await this.#db.automationRun.updateMany({
+      where: {
+        id: run.id,
+        workspaceId: this.#workspaceId,
+        status: 'AWAITING_CONFIRMATION',
+        confirmedAt: null,
+        confirmationExpiresAt: { gt: now },
+      },
+      data: {
+        status: 'CANCELLED',
+        failureCode: 'skipped_by_member',
+        confirmationTokenHash: null,
+        finishedAt: now,
+      },
+    });
+    if (skipped.count === 0) throw automationConfirmationRejected();
+
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'automation.run_skipped',
+      actorType: 'USER',
+      actorId: input.actor.userId,
+      resourceType: 'AutomationRun',
+      resourceId: run.id,
+      brandId: run.brandId,
+      traceId: run.correlationId,
+      after: { ruleId: rule.id, actionType: rule.actionType, status: 'CANCELLED' },
+    });
+    return this.#db.automationRun.findFirstOrThrow({ where: { id: run.id } });
   }
 
   // -------------------------------------------------------------------------
@@ -1422,4 +1679,24 @@ export class AutomationEngine {
   static actionTypes(): readonly AutomationActionType[] {
     return AUTOMATION_ACTIONS.map((action) => action.type);
   }
+}
+
+/**
+ * Two stored JSON values mean the same thing. Key order is not meaning: a
+ * config parsed by Zod and the same config read back from `jsonb` may list
+ * their keys differently.
+ */
+function sameJson(left: unknown, right: unknown): boolean {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value !== null && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.keys(value as Record<string, unknown>)
+          .sort()
+          .map((key) => [key, canonical((value as Record<string, unknown>)[key])]),
+      );
+    }
+    return value;
+  };
+  return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
 }

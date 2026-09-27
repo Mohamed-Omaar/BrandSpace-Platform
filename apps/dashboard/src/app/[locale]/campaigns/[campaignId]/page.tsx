@@ -15,6 +15,7 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { isAppError, systemClock } from '@brandspace/shared';
+import { campaignResultsPeriod, daysUntilCampaignEnds } from '@brandspace/content';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
 import { mediaForVariants } from '../../../../server/media-picker';
 import { activityTimeline } from '../../../../server/activity-timeline';
@@ -27,7 +28,8 @@ import { inAnalytics } from '../../../../server/analytics-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { NotesPanel } from '../../../../components/notes-panel';
-import { archiveCampaignAction, updateCampaignAction } from '../actions';
+import { archiveCampaignAction, startCampaignNowAction, updateCampaignAction } from '../actions';
+import { formatRateMilli } from '../../../../server/best-campaign';
 import { CampaignFormView } from '../campaign-form-view';
 import {
   contentStatusLabel,
@@ -55,11 +57,23 @@ export const dynamic = 'force-dynamic';
  * not a second analytics implementation, which is what the phase brief rules
  * out and what a campaign-specific aggregation would have become.
  *
- * FOUR HEADLINE FIGURES, and a missing one reads as missing. `MetricValue.value`
- * is null for "no observation", which is not zero, and the card says so.
+ * FIVE HEADLINE FIGURES, and a missing one reads as missing. `MetricValue.value`
+ * is null for "no observation", which is not zero, and the card says so —
+ * which is how clicks show "—" where no platform reports them (B11).
+ *
+ * B11 (Phase 2B-2b) — THE RESULTS ARE THE CAMPAIGN'S OWN DATES, in the
+ * workspace's zone, with NO comparison period (owner answer D6). "What changed"
+ * is the one card that compares, and it keeps its own rolling window (D-289),
+ * labelled as the last 30 days so it cannot be read as the campaign's results.
  */
-const HEADLINE_METRICS = ['impressions', 'reach', 'engagements', 'engagement_rate'] as const;
-const WINDOW_DAYS = 30;
+const HEADLINE_METRICS = [
+  'impressions',
+  'reach',
+  'engagements',
+  'engagement_rate',
+  'clicks',
+] as const;
+const CHANGE_WINDOW_DAYS = 30;
 
 export default async function CampaignDetailPage({
   params,
@@ -93,13 +107,17 @@ export default async function CampaignDetailPage({
       const campaign = await campaigns.get(campaignId, workspace.brandScope);
       const policy = await services.policy();
       const library = await services.library();
+      const zone = await services.db.workspace.findUniqueOrThrow({
+        where: { id: workspace.workspaceId },
+        select: { timezone: true },
+      });
       const items = await library.listItems({
         brandId: campaign.brandId,
         brandScope: workspace.brandScope,
         campaignId: campaign.id,
         limit: 100,
       });
-      return { campaign, platforms: policy.platforms, items };
+      return { campaign, platforms: policy.platforms, items, timezone: zone.timezone };
     } catch (error: unknown) {
       if (isAppError(error) && error.code === 'NOT_FOUND') return null;
       throw error;
@@ -107,7 +125,7 @@ export default async function CampaignDetailPage({
   });
 
   if (!data) notFound();
-  const { campaign, platforms, items } = data;
+  const { campaign, platforms, items, timezone } = data;
 
   /*
    * PHASE 6 FINAL (D-277 §14, D-289) — THE PROJECT ROOM.
@@ -128,6 +146,16 @@ export default async function CampaignDetailPage({
     `/${locale}/campaigns/${campaign.id}?${new URLSearchParams({ tab: next, ...extra }).toString()}`;
   const now = systemClock.now();
   const itemIds = items.map((item) => item.id);
+  const resultsPeriod = campaignResultsPeriod({
+    startDate: campaign.startDate,
+    endDate: campaign.endDate,
+    timezone,
+    now,
+  });
+  const endsIn =
+    campaign.status === 'COMPLETED' || campaign.status === 'ARCHIVED'
+      ? null
+      : daysUntilCampaignEnds({ endDate: campaign.endDate, timezone, now });
 
   const room = await inWorkspace(workspace.workspaceId, async ({ db }) => {
     const ownerId = campaign.ownerUserId ?? campaign.createdByUserId;
@@ -204,38 +232,56 @@ export default async function CampaignDetailPage({
    * PERFORMANCE IS BEST-EFFORT AND SAYS SO. A workspace with no connected
    * account has no analytics policy to resolve and no observations to read;
    * that is an empty state, not an error, and it must not take the whole page
-   * down with it. The previous 30 days are the comparison: "what changed".
+   * down with it.
+   *
+   * THE RESULTS (B11) read the campaign's own period and nothing else, so a
+   * campaign with no start date — or one that has not started — has no
+   * results to read and reads none. "What changed" keeps its own rolling
+   * window (D-289): the last 30 days against the 30 before, and only on the
+   * tab that shows it.
    */
   const analyticsAllowed = workspace.permissionKeys.includes('analytics.read');
   const performance = analyticsAllowed
     ? await inAnalytics(workspace.workspaceId, async (services) => {
         try {
           const queries = await services.queries();
-          const period = { start: new Date(now.getTime() - WINDOW_DAYS * 86_400_000), end: now };
-          const comparison = {
-            start: new Date(now.getTime() - 2 * WINDOW_DAYS * 86_400_000),
-            end: period.start,
-          };
           const scope = { brandId: campaign.brandId, campaignId: campaign.id };
-          const [summary, top] = await Promise.all([
-            queries.summary({
-              scope,
-              period,
-              comparison,
-              brandScope: workspace.brandScope,
-              metricKeys: HEADLINE_METRICS,
-            }),
-            tab === 'performance'
+          const changeWindow = {
+            start: new Date(now.getTime() - CHANGE_WINDOW_DAYS * 86_400_000),
+            end: now,
+          };
+          const [summary, top, changes] = await Promise.all([
+            resultsPeriod
+              ? queries.summary({
+                  scope,
+                  period: resultsPeriod,
+                  brandScope: workspace.brandScope,
+                  metricKeys: HEADLINE_METRICS,
+                })
+              : Promise.resolve(null),
+            tab === 'performance' && resultsPeriod
               ? queries.topPosts({
                   scope,
-                  period,
+                  period: resultsPeriod,
                   metricKey: 'engagements',
                   limit: 5,
                   brandScope: workspace.brandScope,
                 })
               : Promise.resolve([]),
+            tab === 'performance'
+              ? queries.summary({
+                  scope,
+                  period: changeWindow,
+                  comparison: {
+                    start: new Date(now.getTime() - 2 * CHANGE_WINDOW_DAYS * 86_400_000),
+                    end: changeWindow.start,
+                  },
+                  brandScope: workspace.brandScope,
+                  metricKeys: HEADLINE_METRICS,
+                })
+              : Promise.resolve(null),
           ]);
-          return { summary, top };
+          return { summary, top, changes };
         } catch {
           return null;
         }
@@ -291,10 +337,30 @@ export default async function CampaignDetailPage({
     : null;
   const shownItems = statusFilter ? items.filter((item) => item.status === statusFilter) : items;
 
+  const results = performance?.summary ?? null;
+  const metricValue = (value: bigint | null, unit: string): string => {
+    if (value === null) return '—';
+    // A rate is stored in parts per mille (47 is 4.7%), never shown raw.
+    if (unit === 'RATIO_MILLI') return formatRateMilli(value, locale);
+    return numberFormat.format(Number(value));
+  };
   const metricsBlock =
-    performance && performance.summary.metrics.some((metric) => metric.value !== null) ? (
+    results && resultsPeriod && results.metrics.some((metric) => metric.value !== null) ? (
       <>
-        {performance.summary.containsMockData ? (
+        <p
+          style={{
+            ...typographyTokens.bodySm,
+            color: colorTokens.textSecondary,
+            marginBlockStart: 0,
+          }}
+          data-testid="campaign-results-period"
+        >
+          {t('campaigns.resultsPeriod').replace(
+            '{period}',
+            periodLabel(campaign.startDate, campaign.endDate, locale, t('campaigns.noDates')),
+          )}
+        </p>
+        {results.containsMockData ? (
           <p
             style={{
               ...typographyTokens.bodySm,
@@ -314,21 +380,22 @@ export default async function CampaignDetailPage({
           }}
           data-testid="campaign-metrics"
         >
-          {performance.summary.metrics.map((metric) => (
+          {results.metrics.map((metric) => (
             <MetricCard
               key={metric.metricKey}
               label={dictionary[`campaigns.metric.${metric.metricKey}`] ?? metric.metricKey}
-              value={metric.value === null ? '—' : numberFormat.format(Number(metric.value))}
+              value={metricValue(metric.value, metric.unit)}
               testId={`campaign-metric-${metric.metricKey}`}
             />
           ))}
         </div>
       </>
     ) : (
+      // D6 — no start date, not started yet, or no data: one honest sentence.
       <StateMessage
         kind="empty"
-        title={t('campaigns.performance')}
-        description={t('campaigns.performanceEmpty')}
+        title={t('campaigns.noResultsYet')}
+        description={t('campaigns.noResultsYetBody')}
         testId="campaign-performance-empty"
       />
     );
@@ -395,6 +462,14 @@ export default async function CampaignDetailPage({
             <span style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
               {periodLabel(campaign.startDate, campaign.endDate, locale, t('campaigns.noDates'))}
             </span>
+            {endsIn !== null ? (
+              <span
+                style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
+                data-testid="campaign-ends-in"
+              >
+                {endsInLabel(endsIn, locale, t)}
+              </span>
+            ) : null}
             <span
               style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
               data-testid="campaign-channels-summary"
@@ -412,6 +487,32 @@ export default async function CampaignDetailPage({
               </span>
             ) : null}
           </div>
+          {campaign.status === 'PLANNED' && mayManage ? (
+            /*
+             * B11 — "START NOW". A form, so it works before any script loads;
+             * the action is `CampaignService.startNow`, which is `update()` with
+             * today's date and ACTIVE — never a second start path.
+             */
+            <form
+              action={startCampaignNowAction}
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: spacingTokens.sm,
+              }}
+            >
+              <input type="hidden" name="locale" value={locale} />
+              <input type="hidden" name="campaignId" value={campaign.id} />
+              <input type="hidden" name="version" value={campaign.version} />
+              <button type="submit" style={buttonStyle('brand')} data-testid="campaign-start-now">
+                {t('campaigns.startNow')}
+              </button>
+              <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                {t('campaigns.startNowHint')}
+              </span>
+            </form>
+          ) : null}
           {brief.en !== '' || brief.ar !== '' ? (
             <p
               style={{ ...typographyTokens.body, color: colorTokens.textPrimary, marginBlock: 0 }}
@@ -857,11 +958,11 @@ export default async function CampaignDetailPage({
               />
             ) : (
               <>
-                <Card title={t('campaigns.room.whatChanged')} testId="campaign-what-changed">
-                  {performance &&
-                  performance.summary.metrics.some((metric) => metric.changeMilli !== null) ? (
+                <Card title={t('campaigns.room.whatChangedWindow')} testId="campaign-what-changed">
+                  {performance?.changes &&
+                  performance.changes.metrics.some((metric) => metric.changeMilli !== null) ? (
                     <ul style={listStyle}>
-                      {performance.summary.metrics
+                      {performance.changes.metrics
                         .filter((metric) => metric.changeMilli !== null)
                         .map((metric) => (
                           <li key={metric.metricKey} style={rowStyle}>
@@ -1003,3 +1104,22 @@ const thumbPlaceholder = {
   borderRadius: '0.5rem',
   background: colorTokens.surfaceMuted,
 } as const;
+
+/**
+ * B11 — "Ends in N days", with the locale's own plural forms (Arabic has
+ * six), and "Ends today" on the last day. The count uses Western digits
+ * (CLAUDE.md §4).
+ */
+function endsInLabel(days: number, locale: string, t: (key: MessageKey) => string): string {
+  if (days === 0) return t('campaigns.endsToday');
+  const category = new Intl.PluralRules(locale === 'ar' ? 'ar' : 'en').select(days);
+  const key = (
+    ['one', 'two', 'few', 'many'].includes(category)
+      ? `campaigns.endsIn.${category}`
+      : 'campaigns.endsIn.other'
+  ) as MessageKey;
+  return t(key).replace(
+    '{count}',
+    new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', { numberingSystem: 'latn' }).format(days),
+  );
+}

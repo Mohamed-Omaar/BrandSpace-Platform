@@ -3,6 +3,7 @@ import {
   Card,
   Cell,
   DataTable,
+  MetricCard,
   Row,
   StateMessage,
   StatusBadge,
@@ -19,6 +20,7 @@ import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { CAMPAIGN_STATUSES } from '../../../server/campaign-form';
+import { bestCampaign, formatRateMilli } from '../../../server/best-campaign';
 import { objectiveLabel, periodLabel, statusLabel } from './labels';
 
 import { EmptyAction } from '../../../components/empty-action';
@@ -85,6 +87,23 @@ export default async function CampaignsPage({
     }),
   );
 
+  /*
+   * B11 (Phase 2B-2b, D-341) — THE BEST CAMPAIGN, over the brands this list
+   * shows. An engagement figure is analytics, so it needs `analytics.read`, as
+   * the campaign's own Performance section does; without it the card is not
+   * drawn at all rather than drawn empty.
+   */
+  const best =
+    workspace.permissionKeys.includes('analytics.read') && brandContext.resolution.kind !== 'empty'
+      ? await bestCampaign({
+          workspaceId: workspace.workspaceId,
+          brandId: effectiveBrand,
+          brandScope: workspace.brandScope,
+        })
+      : null;
+  const bestDetail =
+    best?.kind === 'best' ? t('campaigns.best.detail').replace('{name}', best.name) : '';
+
   const filterHref = (next: Record<string, string | undefined>): string => {
     const params = new URLSearchParams();
     const current: Record<string, string | undefined> = {
@@ -130,6 +149,35 @@ export default async function CampaignsPage({
       {single('ok') && statusMessage(single('ok'), locale) && (
         <CustomerBanner tone="success">{statusMessage(single('ok'), locale)}</CustomerBanner>
       )}
+
+      {best ? (
+        <div
+          style={{
+            display: 'grid',
+            gap: spacingTokens.md,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(15rem, 100%), 1fr))',
+            marginBlockEnd: spacingTokens.md,
+          }}
+          data-testid="campaign-kpis"
+        >
+          {best.kind === 'best' ? (
+            <MetricCard
+              label={t('campaigns.best.label')}
+              value={formatRateMilli(best.rateMilli, locale)}
+              hint={bestDetail}
+              hintTitle={bestDetail}
+              testId="campaign-best"
+            />
+          ) : (
+            <MetricCard
+              label={t('campaigns.best.label')}
+              unavailable
+              unavailableLabel={t('campaigns.best.none')}
+              testId="campaign-best"
+            />
+          )}
+        </div>
+      ) : null}
 
       {/*
         THE SAME FILTER ROW THE CONTENT LIBRARY USES — links, not a control,

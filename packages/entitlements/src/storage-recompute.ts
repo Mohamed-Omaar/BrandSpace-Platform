@@ -1,4 +1,9 @@
-import { writeAuditEvent, type PrismaClient, type TenantScopedClient } from '@brandspace/database';
+import {
+  Prisma,
+  writeAuditEvent,
+  type PrismaClient,
+  type TenantScopedClient,
+} from '@brandspace/database';
 import { type Clock, systemClock } from '@brandspace/shared';
 import { gigabytesFor, QUOTA_FEATURES, quotaWindow, type UsageTx } from './usage';
 
@@ -53,6 +58,44 @@ export interface StorageRecomputeOptions {
   readonly clock?: Clock;
 }
 
+/**
+ * THE ONE DEFINITION OF "STORED" — one row per stored object, tagged with
+ * where it came from (C7, Phase 2B-2b).
+ *
+ * The meter SUMS these rows and the breakdown GROUPS them, so the two cannot
+ * disagree about what is stored: there is no second query that could drift.
+ * The tags are persisted columns only — `asset.kind` and `asset.source` for a
+ * library file, and for the other two parts, the table the row lives in
+ * (a PENDING upload session; a Brand Brain source document). Nothing is
+ * inferred from a file name, a MIME type or a storage path.
+ *
+ * Adding the tags changes no total: `kind` and `source` belong to the asset,
+ * so every version row of one asset carries the same pair and the
+ * `DISTINCT ON (assetId, storageKey)` that counts a shared object once is
+ * untouched.
+ */
+const STORED_OBJECTS = Prisma.sql`
+  SELECT v."workspaceId", v."sizeBytes"::bigint AS bytes,
+         'ASSET'::text AS category, v."kind"::text AS kind, v."source"::text AS source
+    FROM (
+      SELECT DISTINCT ON (av."assetId", av."storageKey")
+             av."workspaceId", av."sizeBytes", a."kind", a."source"
+        FROM "asset_version" av
+        JOIN "asset" a
+          ON a."id" = av."assetId" AND a."workspaceId" = av."workspaceId"
+       WHERE a."storageKey" <> ''
+    ) v
+  UNION ALL
+  SELECT s."workspaceId", s."declaredSizeBytes"::bigint,
+         'UPLOADING'::text, NULL::text, NULL::text
+    FROM "asset_upload_session" s
+   WHERE s."status" = 'PENDING'
+  UNION ALL
+  SELECT d."workspaceId", d."byteSize"::bigint,
+         'BRAND_BRAIN'::text, NULL::text, NULL::text
+    FROM "brand_source_document" d
+   WHERE d."deletedAt" IS NULL`;
+
 /** The SQL that decides "stored", for one workspace or for all of them. */
 async function measureStoredBytes(
   db: UsageTx,
@@ -60,28 +103,53 @@ async function measureStoredBytes(
 ): Promise<Map<string, bigint>> {
   const rows = await db.$queryRaw<{ workspaceId: string; bytes: bigint | null }[]>`
     SELECT t."workspaceId"::text AS "workspaceId", SUM(t.bytes)::bigint AS bytes
-      FROM (
-        SELECT v."workspaceId", v."sizeBytes"::bigint AS bytes
-          FROM (
-            SELECT DISTINCT ON (av."assetId", av."storageKey")
-                   av."workspaceId", av."sizeBytes"
-              FROM "asset_version" av
-              JOIN "asset" a
-                ON a."id" = av."assetId" AND a."workspaceId" = av."workspaceId"
-             WHERE a."storageKey" <> ''
-          ) v
-        UNION ALL
-        SELECT s."workspaceId", s."declaredSizeBytes"::bigint
-          FROM "asset_upload_session" s
-         WHERE s."status" = 'PENDING'
-        UNION ALL
-        SELECT d."workspaceId", d."byteSize"::bigint
-          FROM "brand_source_document" d
-         WHERE d."deletedAt" IS NULL
-      ) t
+      FROM (${STORED_OBJECTS}) t
      WHERE ${workspaceId}::uuid IS NULL OR t."workspaceId" = ${workspaceId}::uuid
      GROUP BY t."workspaceId"`;
   return new Map(rows.map((row) => [row.workspaceId, BigInt(row.bytes ?? 0)]));
+}
+
+/** Where a workspace's stored bytes sit, grouped from the SAME rows the meter sums. */
+export interface StorageBreakdownRow {
+  /** `ASSET` a library file; `UPLOADING` a PENDING upload; `BRAND_BRAIN` a source document. */
+  readonly category: 'ASSET' | 'UPLOADING' | 'BRAND_BRAIN';
+  /** `asset.kind` for a library file; null for the other two, which store none. */
+  readonly kind: string | null;
+  /** `asset.source` for a library file; null for the other two. */
+  readonly source: string | null;
+  readonly bytes: bigint;
+}
+
+/**
+ * C7 (Phase 2B-2b) — ONE WORKSPACE'S STORED BYTES, BY CATEGORY, KIND AND SOURCE.
+ *
+ * READ-ONLY and tenant-scoped: an explicit workspace predicate in the SQL
+ * (CLAUDE.md §5) on top of RLS under the caller's client. It measures; it
+ * writes nothing, and it does not touch the counter the meter shows — the
+ * difference between the two, if any, is the caller's to present.
+ */
+export async function measureStorageBreakdown(
+  db: UsageTx | TenantScopedClient,
+  workspaceId: string,
+): Promise<readonly StorageBreakdownRow[]> {
+  const rows = await (db as UsageTx).$queryRaw<
+    {
+      category: StorageBreakdownRow['category'];
+      kind: string | null;
+      source: string | null;
+      bytes: bigint | null;
+    }[]
+  >`
+    SELECT t.category, t.kind, t.source, SUM(t.bytes)::bigint AS bytes
+      FROM (${STORED_OBJECTS}) t
+     WHERE t."workspaceId" = ${workspaceId}::uuid
+     GROUP BY t.category, t.kind, t.source`;
+  return rows.map((row) => ({
+    category: row.category,
+    kind: row.kind,
+    source: row.source,
+    bytes: BigInt(row.bytes ?? 0),
+  }));
 }
 
 export async function recomputeStorageUsage(
@@ -169,4 +237,69 @@ export async function recomputeStorageUsage(
     );
   }
   return applied;
+}
+
+/** One line of a breakdown: a kind, a source, or one of the two other stores. */
+export interface StorageBreakdownLine {
+  readonly key: string;
+  readonly bytes: bigint;
+}
+
+export interface StorageBreakdownView {
+  /** Library files by `asset.kind`, then Brand Brain documents and uploads in progress. */
+  readonly byKind: readonly StorageBreakdownLine[];
+  /** Library files by `asset.source`, then the same two stores. */
+  readonly bySource: readonly StorageBreakdownLine[];
+  /** The meter (`usage_counter.usedBytes`) minus everything above, never below zero. */
+  readonly other: bigint;
+  /** Everything above, measured now from stored rows. */
+  readonly measured: bigint;
+  /** How far the measured total exceeds the meter — counter drift, shown as Other 0. */
+  readonly drift: bigint;
+}
+
+const KIND_ORDER = ['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT', 'FONT'] as const;
+const SOURCE_ORDER = ['UPLOAD', 'AI_GENERATED', 'IMPORTED'] as const;
+const STORE_ORDER = ['BRAND_BRAIN', 'UPLOADING'] as const;
+
+/**
+ * C7 (Phase 2B-2b) — THE BREAKDOWN AS SHOWN, against the official meter.
+ *
+ * Both breakdowns account for the SAME measured rows, so each sums to the same
+ * total. "Other" is the meter minus that total when the meter is larger — bytes
+ * the meter counts that no stored row explains. When the measured total is
+ * LARGER (the counter drifted below what is stored), Other is 0, never negative,
+ * and the difference is returned as `drift` for the caller to report; the meter
+ * itself is never changed here (`storage:recompute` is the repair, and it stays
+ * a dry run unless an operator asks). A category with 0 bytes is not listed.
+ */
+export function storageBreakdownView(
+  rows: readonly StorageBreakdownRow[],
+  meterBytes: bigint,
+): StorageBreakdownView {
+  const sum = (predicate: (row: StorageBreakdownRow) => boolean): bigint =>
+    rows.filter(predicate).reduce((total, row) => total + row.bytes, 0n);
+  const stores = STORE_ORDER.map((key) => ({ key, bytes: sum((row) => row.category === key) }));
+  const byKind = [
+    ...KIND_ORDER.map((key) => ({
+      key,
+      bytes: sum((row) => row.category === 'ASSET' && row.kind === key),
+    })),
+    ...stores,
+  ].filter((line) => line.bytes > 0n);
+  const bySource = [
+    ...SOURCE_ORDER.map((key) => ({
+      key,
+      bytes: sum((row) => row.category === 'ASSET' && row.source === key),
+    })),
+    ...stores,
+  ].filter((line) => line.bytes > 0n);
+  const measured = sum(() => true);
+  return {
+    byKind,
+    bySource,
+    other: meterBytes > measured ? meterBytes - measured : 0n,
+    measured,
+    drift: measured > meterBytes ? measured - meterBytes : 0n,
+  };
 }

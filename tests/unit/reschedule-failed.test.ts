@@ -106,8 +106,14 @@ describe('the screens', () => {
       "{(draft.status === 'DRAFT' || draft.status === 'FAILED') && can.submit ? (",
     );
     const page = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
-    expect(page).toContain("translate('publishing.late.disconnected')");
-    expect(page).toContain("translate('publishing.late.passed')");
+    // D-332 wording, Phase 2B-2b (owner-approved): the notice names the way on
+    // the editor offers this reader — decided by `postPageRescheduleOffered`
+    // and `lateNoticeKey` (every case in tests/unit/late-notice.test.ts).
+    // Replaces the pins on the single `translate('publishing.late.…')` calls
+    // this page used to make.
+    expect(page).toContain('lateNoticeKey({');
+    expect(page).toContain('rescheduleOffered: postPageRescheduleOffered({');
+    expect(page).toContain('itemStatus: draft.status,');
   });
 
   it('every new line exists in both languages', () => {

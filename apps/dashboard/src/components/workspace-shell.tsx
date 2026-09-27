@@ -38,7 +38,7 @@ import { customerRoleName, translator, type MessageKey } from '../i18n/messages'
 import type { BrandContext } from '../server/brand-context';
 import { topbarModel } from '../server/topbar';
 import { copilotSurfaceForPath } from '../server/copilot-surface';
-import { copilotLabels } from '../server/copilot-labels';
+import { RATE_METRIC_KEYS, copilotLabels } from '../server/copilot-labels';
 import { copilotDrawerSubject } from '../server/copilot-context';
 import { GlobalCopilot } from './global-copilot';
 import { NotificationsBell } from './notifications-bell';
@@ -709,6 +709,7 @@ export async function WorkspaceShell({
                 surface={copilotSurfaceForPath(requestPath)}
                 subject={drawerSubject}
                 labels={copilotLabels(locale, identity)}
+                rateMetricKeys={RATE_METRIC_KEYS}
                 strings={{
                   openFull: t('copilot.openFull'),
                   chooseBrandTitle: t('brand.chooseTitle'),

@@ -158,3 +158,22 @@ export function triggerConfigInvalid(triggerType: string, parameter: string): Ap
     parameter,
   });
 }
+
+/**
+ * B12 (Phase 2B-2b) — the rule changed since the editor read it. A stale edit is
+ * refused rather than written over somebody else's, and nothing is stored.
+ */
+export function automationRuleVersionConflict(): AppError {
+  return new AppError('CONFLICT', 'This rule has changed since you last saw it.', {
+    reason: AUTOMATION_RULE_VERSION_CONFLICT_REASON,
+  });
+}
+export const AUTOMATION_RULE_VERSION_CONFLICT_REASON = 'automation_rule_changed';
+
+/** B12 — a brand's rules have unique names, deleted ones included. */
+export function automationRuleNameTaken(): AppError {
+  return new AppError('CONFLICT', 'This brand already has a rule with that name.', {
+    reason: AUTOMATION_RULE_NAME_TAKEN_REASON,
+  });
+}
+export const AUTOMATION_RULE_NAME_TAKEN_REASON = 'automation_rule_name_taken';

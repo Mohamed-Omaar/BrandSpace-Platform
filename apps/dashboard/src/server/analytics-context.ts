@@ -12,6 +12,7 @@ import {
   type AutomationPolicy,
 } from '@brandspace/automation';
 import { CampaignService } from '@brandspace/content';
+import { writeDeniedAudit } from '@brandspace/database';
 import { CUSTOMER_REALM } from '@brandspace/auth';
 import { cookies } from 'next/headers';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
@@ -121,6 +122,25 @@ export async function inAnalytics<T>(
           // NO PORTS. See the interface comment: authoring needs none, and an
           // engine here that could act would be this app doing the worker's job.
           ports: {},
+          /*
+           * B12 (Phase 2B-2b) — A REFUSED SKIP IS RECORDED ON ITS OWN
+           * CONNECTION, exactly as `apps/api` records a refused confirmation:
+           * the transaction that refused is about to roll back, and would take
+           * an audit row written inside it along.
+           */
+          denialSink: async (event) => {
+            await inWorkspace(workspaceId, async ({ db }) =>
+              writeDeniedAudit(db, workspaceId, {
+                action: 'automation.confirmation_refused',
+                actorType: 'USER',
+                actorId: event.actorUserId,
+                resourceType: 'AutomationRun',
+                resourceId: event.runId,
+                brandId: event.brandId,
+                reason: event.reason,
+              }),
+            );
+          },
         }),
     });
   });

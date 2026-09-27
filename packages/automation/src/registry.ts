@@ -3,6 +3,7 @@ import type {
   AutomationActionType,
   AutomationTrigger,
   ContentStatus,
+  ContentType,
   CopilotActionClass,
   PublishFailureClass,
   SocialProvider,
@@ -167,6 +168,10 @@ export const CONDITION_FIELDS = [
   'content.pillar',
   'content.platformCount',
   'content.hasCampaign',
+  // B12 + G13 option (a), Phase 2B-2b — the values a rule can name.
+  'content.campaignId',
+  'content.type',
+  'content.authorUserId',
   'publish.provider',
   'publish.failureClass',
   'metric.key',
@@ -212,6 +217,9 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
   'content.pillar': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
   'content.platformCount': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
   'content.hasCampaign': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
+  'content.campaignId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
+  'content.type': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
+  'content.authorUserId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
   // Only the publish job carries these.
   'publish.provider': ['POST_PUBLISHED'],
   'publish.failureClass': ['POST_PUBLISHED'],
@@ -293,7 +301,19 @@ export interface ConditionFieldContract {
    * BrandScope predicate on the query that uses it and a metric key by the
    * analytics catalogue; this only decides which list a person picks from.
    */
-  readonly catalogue: 'brands' | 'metricKeys' | null;
+  readonly catalogue: 'brands' | 'metricKeys' | 'campaigns' | 'members' | null;
+  /**
+   * B12 (Phase 2B-2b) — WHEN THE FACT CANNOT BE RESOLVED, NO OPERATOR MATCHES.
+   *
+   * Every existing field keeps its behaviour: a missing fact compares as a
+   * missing value, so `not_equals` can hold. For a field that names a PERSON
+   * that would widen a rule the moment the person leaves — "not written by
+   * Sara" would suddenly match everything Sara ever wrote. So a field marked
+   * here FAILS CLOSED instead: an unresolved fact makes every condition on it
+   * false, whatever the operator. The value stored in the rule is never
+   * dropped or rewritten; the rule simply stops matching on it.
+   */
+  readonly failsClosedWhenUnresolved?: true;
 }
 
 /**
@@ -323,6 +343,16 @@ const CONTENT_STATUS_OPTIONS = closedEnum<ContentStatus>()([
   'PARTIALLY_PUBLISHED',
   'FAILED',
   'ARCHIVED',
+]);
+
+const CONTENT_TYPE_OPTIONS = closedEnum<ContentType>()([
+  'POST',
+  'CAROUSEL',
+  'STORY',
+  'REEL',
+  'VIDEO',
+  'ARTICLE',
+  'THREAD',
 ]);
 
 const SOCIAL_PROVIDER_OPTIONS = closedEnum<SocialProvider>()([
@@ -411,6 +441,35 @@ export const CONDITION_FIELD_CONTRACTS: Record<ConditionField, ConditionFieldCon
     operators: BOOLEAN_OPERATORS,
     options: null,
     catalogue: null,
+  },
+  /*
+   * B12 + G13 option (a) — CAMPAIGN, FORMAT AND PERSON (Phase 2B-2b).
+   *
+   * A campaign is tenant data: the screen offers the brand's campaigns and the
+   * query that runs the rule is what authorises them. A post with no campaign
+   * has no campaign value, exactly as a post with no pillar has none.
+   * The format is the closed `ContentType` enum. The PERSON is the post's
+   * AUTHOR — its creator, never a reviewer, approver or actor — and only while
+   * they are an active member; otherwise the condition fails closed.
+   */
+  'content.campaignId': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: null,
+    catalogue: 'campaigns',
+  },
+  'content.type': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: CONTENT_TYPE_OPTIONS,
+    catalogue: null,
+  },
+  'content.authorUserId': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: null,
+    catalogue: 'members',
+    failsClosedWhenUnresolved: true,
   },
   'publish.provider': {
     kind: 'string',
@@ -660,6 +719,15 @@ export function evaluateCondition(
   facts: Readonly<Record<string, unknown>>,
 ): boolean {
   const actual = facts[condition.field];
+
+  // B12 — a person the rule names who can no longer be resolved matches
+  // NOTHING, under every operator (see `failsClosedWhenUnresolved`).
+  if (
+    (actual === undefined || actual === null) &&
+    CONDITION_FIELD_CONTRACTS[condition.field].failsClosedWhenUnresolved
+  ) {
+    return false;
+  }
 
   switch (condition.operator) {
     case 'is_true':

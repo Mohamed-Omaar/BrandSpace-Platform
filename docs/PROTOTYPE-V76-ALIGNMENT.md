@@ -407,7 +407,8 @@ app services went live) is its own PR (option 3, the readiness gate, D-336).
 - **C7** — the page size for "latest N of M" already exists (`DEFAULT_PAGE_SIZE`, 48).
 - **B11** — "best campaign" had no definition anywhere; the owner defined it (answer D5): highest average
   engagement rate across the campaign's published posts, over its whole life, brand-scoped, on the Campaigns
-  list header.
+  list header. **Amended in Phase 2B-2b (D-341):** the rate is POOLED — lifetime total
+  engagements ÷ total impressions — not the mean of per-post rates.
 - **A10** — `linkTrackingEnabled` was listed although Q15 deferred link tracking.
 
 ### 7.2 How Phase 2B-2a was built
@@ -439,6 +440,50 @@ The monthly cap on credit-spending automation actions (Q18) is **not** part of P
 a **plan limit** in configuration (Control Center plan editor, never code), counted **per workspace per
 calendar month** in the workspace's time zone — **Starter 2 · Growth 4 · Scale 8 · Enterprise 8 · trial 2**.
 PROVISIONAL, NOT IMPLEMENTED.
+
+## 8. Motion (prototype v105)
+
+**Prototype:** BrandSpace design canvas v105 (`Main.dc.html`, `Mobile.dc.html`). This section is the source of truth for motion; build it with the existing tokens in `packages/ui/src/tokens.css` (`--bs-duration-*`, `--bs-ease-out` = `cubic-bezier(.16,1,.3,1)`).
+
+### 8.0 Rules for every item below
+
+- Animate only `opacity`, `transform` (or the `translate` / `scale` / `rotate` properties), `filter` and `clip-path`. Never animate layout (width, height, top, left, margin).
+- Never put `filter` on an element that has `backdrop-filter` (the glass loses its blur while it animates). Blur the element's children instead.
+- `prefers-reduced-motion: reduce` turns every item off; the end state appears at once.
+- No motion library. CSS, plus the Web Animations API where an element must animate out before it unmounts.
+- Motion never delays an action: the state changes at once; only its presentation animates.
+
+### 8.1 Items
+
+| #    | Where                                                            | Motion                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MO1  | Page change                                                      | Each page's top-level blocks enter one after another: `opacity 0→1`, `translate 0 10px→0`, `filter blur(6px)→0`, 440 ms, `--bs-ease-out`, 45 ms apart, stagger capped at the 7th block (later blocks: 300 ms, no blur). Not on the very first page of a session.                                                                                                                                     |
+| MO2  | Sidebar, current item                                            | One dark pill glides to the current item (`transform`, `width`, `height`, 440 ms, `--bs-ease-out`) instead of each item painting its own background. First placement has no transition.                                                                                                                                                                                                              |
+| MO3  | Sidebar collapse / expand                                        | The column width animates (`grid-template-columns` transition, 380 ms, `--bs-ease-out`). Collapsing: labels fade out first (110 ms), then the width shrinks and the pill shrinks into the square with it. Expanding: the width grows, then labels fade in (220 ms, 150 ms delay).                                                                                                                    |
+| MO4  | Segmented tabs (`.seg`)                                          | Same sliding pill as MO2 inside the control (380 ms).                                                                                                                                                                                                                                                                                                                                                |
+| MO5  | Menus, listboxes, popovers, bottom sheets, drawer                | Opening: container `opacity 0→1` + `scale .97→1` + `translate ∓4px→0` (180–200 ms, origin at the trigger side; a menu that opens upward rises). Its rows then enter in order: `opacity`, `blur(3px)→0`, `translate 3px→0`, 220 ms, 22 ms apart, capped at the 6th row. The glass is frosted from the first frame. Closing: the container fades out with a 4 px lift (180 ms), its rows blur to 4 px. |
+| MO6  | Modal dialogs                                                    | Dialog `opacity`, `scale .98→1`, `translate 8px→0` (300 ms); the veil fades in and its `backdrop-filter` goes `blur(0)→blur(3px)` (260 ms).                                                                                                                                                                                                                                                          |
+| MO7  | Copilot panel                                                    | Enters with `opacity`, `scale .98→1`, `translate 16px→0` (340 ms), origin bottom end.                                                                                                                                                                                                                                                                                                                |
+| MO8  | Toast                                                            | Enters from 12 px below with a fade; its contents unblur (`blur(6px)→0`, 420 ms, 50 ms apart). The success check draws itself (`stroke-dashoffset`, 420 ms, 160 ms delay). Leaves by rising 14 px with a fade while its contents blur to 6 px (280 ms). Stays for a reading time (MO9).                                                                                                              |
+| MO9  | Reading time                                                     | Toasts and incoming notifications stay for `2.5 s + 55 ms × characters`, at least 4 s and at most 9 s. Hover holds; leaving resumes with 2.2 s left. Dismiss, and the next navigation, close it at once (with MO8's exit).                                                                                                                                                                           |
+| MO10 | Incoming notification from another person (note, mention, reply) | Shown at the bottom with the same motion as MO8: avatar initial, title, one line of context, **Open** and dismiss. It also stays in the bell list and raises its count. If a toast is showing, it sits above it. It comes from the existing notification writer; no new notification path.                                                                                                           |
+| MO11 | Charts                                                           | On page entry: bars grow from their start edge (`scale 0→1` on the x axis, origin inline-start, 800 ms, 35 ms apart, max 14); line series draw left to right (`clip-path: inset(0 100% 0 0)→inset(0)`, 1000 ms); dots and value labels pop in after the line (360 ms, 40 ms apart).                                                                                                                  |
+| MO12 | KPI numbers                                                      | Count up from 0 to the value once on page entry (650 ms, ease-out cubic), keeping the value's format (decimals, thousands separator, `%`, units). Skip zero-padded labels such as "01". The final text is the exact server value.                                                                                                                                                                    |
+| MO13 | Loading                                                          | Generating cards use a soft shimmer (1.6 s linear loop); "reading" states pulse opacity 1→.55 (1.6 s).                                                                                                                                                                                                                                                                                               |
+| MO14 | Hover on clickable cards                                         | Post cards, campaign cards and tiles lift 2 px with a softer, larger shadow (220 ms). No press-shrink on buttons (removed by the owner).                                                                                                                                                                                                                                                             |
+
+### 8.2 Calendar drag (desktop and phone)
+
+Replaces native HTML drag and drop with pointer events, so it also works on touch.
+
+- **Start.** Mouse: after 5 px of movement (a plain click still opens the post). Touch: after a 380 ms long-press without moving more than 8 px; moving earlier scrolls the page. During a drag the page does not scroll and the context menu is suppressed.
+- **Lift.** A floating copy follows the pointer: `scale 1.04`, `rotate -1.5deg`, deeper shadow (180 ms). The original spot stays as a dashed placeholder.
+- **Over a day.** A day that can take the post turns light purple with a dashed outline, and a label under the copy says the target, e.g. "Wed 21 · 18:00" (the time does not change). A past day turns grey with a red dashed outline and the label says it can't be used. Days outside the month take nothing.
+- **Drop.** The move is saved at once; the copy then flies into the post's new place (360 ms, slight overshoot) and every other post that moved (in the old day and the new one) slides from its old position to its new one (300 ms). If the move changed the post's status, its card pulses once.
+- **Cancel.** Dropping outside a day, on a past day or on the same day, or pressing Esc: the copy glides back (300 ms) and nothing changes.
+- **After.** The toast says where it moved and has **Undo**, which moves it back through the same path. Undo is offered only while that toast is showing.
+- **Phone.** The calendar is a list, so a long-press lifts the post and a glass strip with the next 14 days slides up from the bottom; dropping on a day moves it. The hint under the list reads "Press and hold a post, then drag it to its new day."
+- **Rules.** Published posts can't be dragged. Dragging needs `content.schedule`, and the server re-checks every move with the existing scheduling rules (F2 no-past, quota, approval). In view-as, a drag is refused with "Preview only".
 
 ## Appendix — prototype decisions (v76)
 

@@ -22,6 +22,7 @@ import {
   requireWorkspacePage,
 } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
+import { lateNoticeKey, postPageRescheduleOffered } from '../../../../server/late-notice';
 import { decidePreferenceAction } from '../../overview/actions';
 import { brandContextFor, defaultBrandFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
@@ -715,13 +716,28 @@ export default async function ComposePage({
           });
           const pipeline = await services.pipeline();
           const late = jobs.filter((job) => pipeline.pastLatenessDeadline(job.scheduledAtUtc));
+          /*
+           * D-332 (Phase 2B-2b wording) — the notice names the way on the
+           * editor actually offers THIS reader: Reschedule where the brand
+           * needs no approval and they may schedule, or sending it for review
+           * again where it does and they may submit. Otherwise the earlier
+           * wording stays.
+           */
+          const disconnected = late.some((job) => retryableAfterReconnect(job));
           return {
             message:
               late.length === 0
                 ? translate('editor.failed.notLate')
-                : late.some((job) => retryableAfterReconnect(job))
-                  ? translate('publishing.late.disconnected')
-                  : translate('publishing.late.passed'),
+                : translate(
+                    lateNoticeKey({
+                      disconnected,
+                      rescheduleOffered: postPageRescheduleOffered({
+                        itemStatus: draft.status,
+                        requiresApproval: reviewFacts?.requiresApproval ?? false,
+                        permissionKeys: workspace.permissionKeys,
+                      }),
+                    }),
+                  ),
           };
         })
       : null;

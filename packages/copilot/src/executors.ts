@@ -217,6 +217,12 @@ const analyticsSummary: ToolExecutor = async (context, args) => {
       metrics: summary.metrics.map((metric) => ({
         metricKey: metric.metricKey,
         value: metric.value === null ? null : metric.value.toString(),
+        /*
+         * THE UNIT TRAVELS WITH THE FIGURE (Phase 2B-2b). A rate is stored in
+         * parts per mille, so `47` means 4.7% — and a figure handed over without
+         * its unit is one an assistant can read as "47% engagement".
+         */
+        unit: metric.unit,
         absent: metric.absent,
         changeMilli: metric.changeMilli,
       })),
@@ -296,6 +302,66 @@ const calendarLookup: ToolExecutor = async (context, args) => {
         scheduledAtUtc: slot.scheduledAtUtc.toISOString(),
         status: slot.status,
         contentItemId: slot.contentItemId,
+      })),
+    },
+  };
+};
+
+/**
+ * B14 (Phase 2B-2b) — WHAT IS WAITING FOR REVIEW ON THIS BRAND.
+ *
+ * READ-ONLY, and brand-scoped in the WHERE through `brandIdQueryFilter`, the
+ * same predicate `content.search` uses — the caller's brand and their
+ * authorization scope intersect. Only PENDING review cycles of posts that still
+ * exist. It returns counts and, oldest first, a short list: enough to answer
+ * "what needs review and what is mine?", and nothing a reviewer's notes or
+ * another person's identity could leak through.
+ */
+const APPROVALS_SUMMARY_ITEMS = 10;
+const approvalsSummary: ToolExecutor = async (context, args) => {
+  const brandId = String(args['brandId']);
+  const where = {
+    workspaceId: context.workspaceId,
+    status: 'PENDING' as const,
+    ...brandIdQueryFilter({ brandId, brandScope: context.authorization.brandScope }),
+    item: { is: { deletedAt: null } },
+  };
+  const [pendingCount, assignedToYouCount, unassignedCount, rows] = await Promise.all([
+    context.db.approval.count({ where }),
+    context.db.approval.count({
+      where: { ...where, assignedToUserId: context.authorization.userId },
+    }),
+    context.db.approval.count({ where: { ...where, assignedToUserId: null } }),
+    context.db.approval.findMany({
+      where,
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: APPROVALS_SUMMARY_ITEMS,
+      select: {
+        id: true,
+        contentItemId: true,
+        cycle: true,
+        createdAt: true,
+        assignedToUserId: true,
+        item: { select: { title: true, status: true } },
+      },
+    }),
+  ]);
+  return {
+    result: {
+      brandId,
+      pendingCount,
+      assignedToYouCount,
+      unassignedCount,
+      oldestPendingAt: rows[0]?.createdAt.toISOString() ?? null,
+      items: rows.map((row) => ({
+        approvalId: row.id,
+        contentItemId: row.contentItemId,
+        title: row.item?.title ?? null,
+        itemStatus: row.item?.status ?? null,
+        cycle: row.cycle,
+        requestedAt: row.createdAt.toISOString(),
+        assignedToYou: row.assignedToUserId === context.authorization.userId,
+        unassigned: row.assignedToUserId === null,
       })),
     },
   };
@@ -553,6 +619,7 @@ export const TOOL_EXECUTORS: Readonly<Record<string, ToolExecutor>> = {
   'content.search': contentSearch,
   'calendar.lookup': calendarLookup,
   'campaign.list': campaignList,
+  'approvals.summary': approvalsSummary,
   'campaign.create': campaignCreate,
   'campaign.update': campaignUpdate,
   'content.draft': contentDraft,

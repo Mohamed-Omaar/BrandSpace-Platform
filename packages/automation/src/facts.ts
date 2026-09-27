@@ -138,6 +138,8 @@ async function addContentFacts(
       status: true,
       pillar: true,
       campaignId: true,
+      contentType: true,
+      createdByUserId: true,
       _count: { select: { variants: true } },
     },
   });
@@ -146,6 +148,23 @@ async function addContentFacts(
   facts['content.pillar'] = item.pillar;
   facts['content.platformCount'] = item._count.variants;
   facts['content.hasCampaign'] = item.campaignId !== null;
+  // B12 + G13 option (a) — campaign, format and person.
+  facts['content.campaignId'] = item.campaignId;
+  facts['content.type'] = item.contentType;
+  /*
+   * THE AUTHOR, ONLY WHILE THEY ARE AN ACTIVE MEMBER. A post whose author has
+   * left, been suspended or was never recorded resolves to NULL, and
+   * `failsClosedWhenUnresolved` makes every condition on the person false —
+   * a rule naming someone never quietly widens to "everyone else" when they go.
+   */
+  facts['content.authorUserId'] = item.createdByUserId
+    ? ((
+        await db.membership.findFirst({
+          where: { workspaceId, userId: item.createdByUserId, status: 'ACTIVE' },
+          select: { userId: true },
+        })
+      )?.userId ?? null)
+    : null;
 }
 
 /**

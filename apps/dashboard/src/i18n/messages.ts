@@ -99,6 +99,8 @@ export const messages = {
     'attention.connection-reauth.one': 'يحتاج حساب متصل واحد إلى إعادة تفويض.',
     'attention.content-in-review': '{count} من المنشورات بانتظار المراجعة.',
     'attention.content-in-review.one': 'منشور واحد بانتظار المراجعة.',
+    'attention.automations-waiting': '{count} من إجراءات الأتمتة بانتظار قرارك.',
+    'attention.automations-waiting.one': 'إجراء أتمتة واحد بانتظار قرارك.',
     'attention.brand-brain-empty': 'لا توجد معرفة بعد للعلامة {detail}.',
     'attention.brand-brain-empty.many': '{count} من العلامات بلا معرفة بعد.',
     'attention.notes-assigned': '{count} من المحادثات مُسندة إليك.',
@@ -643,6 +645,16 @@ export const messages = {
     'plan.usageTitle': 'الاستخدام في هذه الدورة',
     'plan.usageScheduled': 'المنشورات المجدولة',
     'plan.usageStorage': 'التخزين',
+    // C7 (Phase 2B-2b) — where the stored bytes sit.
+    'plan.storageBreakdownTitle': 'أين يُستخدم التخزين',
+    'plan.storageBreakdownBody':
+      'مُقاس الآن مما هو مخزّن فعلًا، حسب النوع وحسب المصدر. «أخرى» هو ما يحسبه عدّاد التخزين ولا يظهر في هذه الفئات.',
+    'plan.storageBreakdownEmpty': 'لا يوجد شيء مخزّن بعد.',
+    'plan.storageByKind': 'حسب النوع',
+    'plan.storageBySource': 'حسب المصدر',
+    'plan.storageBrandBrain': 'مستندات عقل العلامة',
+    'plan.storageUploading': 'قيد الرفع',
+    'plan.storageOther': 'أخرى',
     'plan.usageOf': '{used} من {limit}',
     'plan.usageUnstated': '{used} · لا حد معلن',
     'plan.usageBrands': 'العلامات',
@@ -795,6 +807,9 @@ export const messages = {
     'assets.kind.AUDIO': 'صوت',
     'assets.kind.DOCUMENT': 'مستند',
     'assets.kind.FONT': 'خط',
+    // C7 (Phase 2B-2b) — how many files the filters match.
+    'assets.latestOf': 'أحدث {shown} من أصل {total} من الملفات',
+    'assets.shownOf': '{shown} من أصل {total} من الملفات',
     // --- Phase 5 — Brand Brain ---
     'nav.brandBrain': 'عقل العلامة',
     'bb.title': 'عقل العلامة',
@@ -1105,7 +1120,6 @@ export const messages = {
     'campaigns.room.assetsBody': 'الملفات التي تستخدمها منشورات هذه الحملة، من مكتبة الأصول.',
     'campaigns.room.assetsEmpty': 'لا ملفات مستخدمة بعد',
     'campaigns.room.assetsEmptyBody': 'أضف صورًا أو فيديو إلى منشورات هذه الحملة وستظهر هنا.',
-    'campaigns.room.whatChanged': 'ما الذي تغيّر',
     'campaigns.room.whatChangedNone': 'لا توجد بيانات كافية بعد للمقارنة بالأيام الثلاثين السابقة.',
     'campaigns.room.whatContributed': 'ما الذي ساهم',
     'campaigns.room.whatContributedNone': 'لم يُقَس تفاعل أي منشور بعد.',
@@ -1116,6 +1130,23 @@ export const messages = {
     'campaigns.metric.reach': 'الوصول',
     'campaigns.metric.engagements': 'التفاعلات',
     'campaigns.metric.engagement_rate': 'معدل التفاعل',
+    // B11 (Phase 2B-2b) — campaign results over the campaign's own dates.
+    'campaigns.metric.clicks': 'النقرات',
+    'campaigns.room.whatChangedWindow': 'ما الذي تغيّر · آخر 30 يومًا',
+    'campaigns.resultsPeriod': 'خلال فترة الحملة: {period}',
+    'campaigns.noResultsYet': 'لا نتائج بعد',
+    'campaigns.noResultsYetBody': 'تظهر النتائج بعد أن تبدأ الحملة وترد بيانات منشوراتها المنشورة.',
+    'campaigns.endsToday': 'تنتهي اليوم',
+    'campaigns.endsIn.one': 'تنتهي بعد يوم واحد',
+    'campaigns.endsIn.two': 'تنتهي بعد يومين',
+    'campaigns.endsIn.few': 'تنتهي بعد {count} أيام',
+    'campaigns.endsIn.many': 'تنتهي بعد {count} يومًا',
+    'campaigns.endsIn.other': 'تنتهي بعد {count} يوم',
+    'campaigns.startNow': 'ابدأ الآن',
+    'campaigns.startNowHint': 'يصبح تاريخ البدء اليوم، وتصبح الحملة نشطة.',
+    'campaigns.best.label': 'أفضل حملة',
+    'campaigns.best.detail': '{name} · متوسط التفاعل',
+    'campaigns.best.none': 'لم تنشر أي حملة بعد',
     'editor.next.schedule': 'جدولة',
     'editor.next.needsApproval': 'تحتاج هذه العلامة إلى موافقة قبل جدولة أي منشور.',
     'editor.changes.title': 'طُلبت تعديلات',
@@ -1538,6 +1569,12 @@ export const messages = {
       'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
     'publishing.late.passed':
       'مضى موعد هذا المنشور، لذا لن يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
+    // D-332, Phase 2B-2b (owner's words) — where Reschedule or "Send for review
+    // again" is offered beside the notice. The two lines above stay elsewhere.
+    'publishing.late.passedReschedule':
+      'مضى موعد هذا المنشور، لذا لم يُنشر متأخرًا. أعد جدولته أو أنشئ نسخة جديدة منه.',
+    'publishing.late.disconnectedReschedule':
+      'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أعد جدولته أو أنشئ نسخة جديدة منه.',
     'publishing.untitled': 'بدون عنوان',
     'publishing.reschedule': 'إعادة الجدولة',
     'publishing.resendForReview': 'إرسال للمراجعة مرة أخرى',
@@ -2102,6 +2139,7 @@ export const messages = {
     'copilot.tool.contentSearch': 'البحث في المحتوى',
     'copilot.tool.calendarLookup': 'قراءة التقويم',
     'copilot.tool.campaignList': 'قراءة الحملات',
+    'copilot.tool.approvalsSummary': 'قراءة ما ينتظر المراجعة',
     'copilot.tool.campaignCreate': 'إنشاء حملة',
     'copilot.tool.campaignUpdate': 'تعديل حملة',
     'copilot.tool.contentDraft': 'إنشاء مسودة محتوى',
@@ -2170,6 +2208,8 @@ export const messages = {
     'copilot.inspection.brandContext':
       '{items} من عناصر المعرفة المعتمدة و{chunks} من مقاطع المستندات ذات صلة.',
     'copilot.inspection.nothing': 'لم يُعثر على شيء.',
+    'copilot.inspection.approvals':
+      '{pending} بانتظار المراجعة · {mine} مُسندة إليك · {anyone} لأي مراجع',
     'copilot.tool.automationCreate': 'إنشاء قاعدة أتمتة (تُنشأ متوقفة)',
     'copilot.preview.ruleName': 'اسم القاعدة',
     'copilot.preview.trigger': 'عندما',
@@ -2250,6 +2290,24 @@ export const messages = {
     'automations.field.content.pillar': 'محور المحتوى',
     'automations.field.content.platformCount': 'عدد المنصات',
     'automations.field.content.hasCampaign': 'مرتبط بحملة',
+    // B12 + G13 option (a) — campaign, format and person (the post's author).
+    'automations.field.content.campaignId': 'الحملة',
+    'automations.field.content.type': 'التنسيق',
+    'automations.field.content.authorUserId': 'كاتب المنشور',
+    'automations.valueUnavailable': 'لم يعد متاحًا',
+    'automations.edit': 'تعديل',
+    'automations.editTitle': 'تعديل القاعدة',
+    'automations.save': 'حفظ التغييرات',
+    'automations.cancelEdit': 'إلغاء',
+    'automations.descriptionLabel': 'الوصف',
+    'automations.offsetHoursLabel': 'بعد كم ساعة من الحدث',
+    'automations.conditionsKept':
+      'لهذه القاعدة {count} شروط، وتبقى كما هي. لا تُعدَّل الشروط المتعددة من هذه الشاشة.',
+    'automations.needsYou.title': 'بانتظارك',
+    'automations.needsYou.body':
+      'إجراءات اقترحتها قواعد الأتمتة ولا تُنفَّذ إلا إذا أكّدتها. يمكنك تأكيدها أو تخطيها.',
+    'automations.skipRun': 'تخطٍّ',
+    'automations.decideAbove': 'قرِّر في قسم «بانتظارك» أعلاه.',
     'automations.field.publish.provider': 'المنصة',
     'automations.field.publish.failureClass': 'نوع الإخفاق',
     'automations.field.metric.key': 'مفتاح المؤشر',
@@ -2306,7 +2364,8 @@ export const messages = {
     'automations.status.BLOCKED_BY_POLICY': 'أوقفتها السياسة',
     'automations.status.BLOCKED_BY_AUTHORIZATION': 'صلاحية المنشئ لم تعد كافية',
     'automations.status.FAILED': 'فشلت',
-    'automations.status.CANCELLED': 'أُلغيت',
+    // B12 — the only writer of CANCELLED is a person pressing Skip.
+    'automations.status.CANCELLED': 'تم التخطي',
     'campaigns.title': 'الحملات',
     'campaigns.empty': 'لا توجد حملات بعد.',
     'campaigns.objective.AWARENESS': 'الوعي',
@@ -2943,6 +3002,8 @@ export const messages = {
     'attention.connection-reauth.one': '1 connected account needs re-authorising.',
     'attention.content-in-review': '{count} posts are waiting for review.',
     'attention.content-in-review.one': '1 post is waiting for review.',
+    'attention.automations-waiting': '{count} automation actions are waiting for your decision.',
+    'attention.automations-waiting.one': '1 automation action is waiting for your decision.',
     'attention.brand-brain-empty': '{detail} has no brand knowledge yet.',
     'attention.brand-brain-empty.many': '{count} brands have no brand knowledge yet.',
     'attention.notes-assigned': '{count} conversations are assigned to you.',
@@ -3502,6 +3563,16 @@ export const messages = {
     'plan.usageTitle': 'Usage this cycle',
     'plan.usageScheduled': 'Scheduled posts',
     'plan.usageStorage': 'Storage',
+    // C7 (Phase 2B-2b) — where the stored bytes sit.
+    'plan.storageBreakdownTitle': 'Where your storage goes',
+    'plan.storageBreakdownBody':
+      'Measured now from what is actually stored, by type and by source. “Other” is what the storage meter counts that none of these categories explain.',
+    'plan.storageBreakdownEmpty': 'Nothing is stored yet.',
+    'plan.storageByKind': 'By type',
+    'plan.storageBySource': 'By source',
+    'plan.storageBrandBrain': 'Brand Brain documents',
+    'plan.storageUploading': 'Uploading',
+    'plan.storageOther': 'Other',
     'plan.usageOf': '{used} of {limit}',
     'plan.usageUnstated': '{used} · no ceiling stated',
     'plan.usageBrands': 'Brands',
@@ -3659,6 +3730,9 @@ export const messages = {
     'assets.kind.AUDIO': 'Audio',
     'assets.kind.DOCUMENT': 'Document',
     'assets.kind.FONT': 'Font',
+    // C7 (Phase 2B-2b) — how many files the filters match.
+    'assets.latestOf': 'Latest {shown} of {total} files',
+    'assets.shownOf': '{shown} of {total} files',
     // --- Phase 5 — Brand Brain ---
     'nav.brandBrain': 'Brand Brain',
     'bb.title': 'Brand Brain',
@@ -3971,7 +4045,6 @@ export const messages = {
     'campaigns.room.assetsEmpty': 'No files used yet',
     'campaigns.room.assetsEmptyBody':
       "Add pictures or videos to this campaign's posts and they appear here.",
-    'campaigns.room.whatChanged': 'What changed',
     'campaigns.room.whatChangedNone': 'Not enough data yet to compare with the previous 30 days.',
     'campaigns.room.whatContributed': 'What contributed',
     'campaigns.room.whatContributedNone': 'No post has measured engagement yet.',
@@ -3982,6 +4055,24 @@ export const messages = {
     'campaigns.metric.reach': 'Reach',
     'campaigns.metric.engagements': 'Engagements',
     'campaigns.metric.engagement_rate': 'Engagement rate',
+    // B11 (Phase 2B-2b) — campaign results over the campaign's own dates.
+    'campaigns.metric.clicks': 'Clicks',
+    'campaigns.room.whatChangedWindow': 'What changed · last 30 days',
+    'campaigns.resultsPeriod': 'Over the campaign’s dates: {period}',
+    'campaigns.noResultsYet': 'No results yet',
+    'campaigns.noResultsYetBody':
+      'Results appear once the campaign has started and its published posts have data.',
+    'campaigns.endsToday': 'Ends today',
+    'campaigns.endsIn.one': 'Ends in 1 day',
+    'campaigns.endsIn.two': 'Ends in 2 days',
+    'campaigns.endsIn.few': 'Ends in {count} days',
+    'campaigns.endsIn.many': 'Ends in {count} days',
+    'campaigns.endsIn.other': 'Ends in {count} days',
+    'campaigns.startNow': 'Start now',
+    'campaigns.startNowHint': 'The start date becomes today and the campaign becomes active.',
+    'campaigns.best.label': 'Best campaign',
+    'campaigns.best.detail': '{name} · avg engagement',
+    'campaigns.best.none': 'No campaign has published yet',
     'editor.next.schedule': 'Schedule',
     'editor.next.needsApproval': 'This brand needs approval before a post is scheduled.',
     'editor.changes.title': 'Changes were requested',
@@ -4422,6 +4513,12 @@ export const messages = {
       'This post’s time passed while the account was disconnected, so it wasn’t published late. Make a new copy to schedule it again.',
     'publishing.late.passed':
       'This post’s time has passed, so it won’t be published late. Make a new copy to schedule it again.',
+    // D-332, Phase 2B-2b (owner's words) — where Reschedule or "Send for review
+    // again" is offered beside the notice. The two lines above stay elsewhere.
+    'publishing.late.passedReschedule':
+      'This post’s time has passed, so it wasn’t published late. Reschedule it or make a new copy.',
+    'publishing.late.disconnectedReschedule':
+      'This post’s time passed while the account was disconnected, so it wasn’t published late. Reschedule it or make a new copy.',
     'publishing.untitled': 'Untitled',
     'publishing.reschedule': 'Reschedule',
     'publishing.resendForReview': 'Send for review again',
@@ -5019,6 +5116,7 @@ export const messages = {
     'copilot.tool.contentSearch': 'Search content',
     'copilot.tool.calendarLookup': 'Read the calendar',
     'copilot.tool.campaignList': 'Read campaigns',
+    'copilot.tool.approvalsSummary': 'Read what is waiting for review',
     'copilot.tool.campaignCreate': 'Create a campaign',
     'copilot.tool.campaignUpdate': 'Edit a campaign',
     'copilot.tool.contentDraft': 'Draft content',
@@ -5091,6 +5189,8 @@ export const messages = {
     'copilot.inspection.brandContext':
       '{items} approved knowledge items and {chunks} document passages are relevant.',
     'copilot.inspection.nothing': 'Nothing was found.',
+    'copilot.inspection.approvals':
+      '{pending} waiting for review · {mine} assigned to you · {anyone} for any reviewer',
     'copilot.tool.automationCreate': 'Compose an automation (created switched off)',
     'copilot.preview.ruleName': 'Rule name',
     'copilot.preview.trigger': 'When',
@@ -5174,6 +5274,24 @@ export const messages = {
     'automations.field.content.pillar': 'Content pillar',
     'automations.field.content.platformCount': 'Platform count',
     'automations.field.content.hasCampaign': 'Has a campaign',
+    // B12 + G13 option (a) — campaign, format and person (the post's author).
+    'automations.field.content.campaignId': 'Campaign',
+    'automations.field.content.type': 'Format',
+    'automations.field.content.authorUserId': 'Post author',
+    'automations.valueUnavailable': 'No longer available',
+    'automations.edit': 'Edit',
+    'automations.editTitle': 'Edit rule',
+    'automations.save': 'Save changes',
+    'automations.cancelEdit': 'Cancel',
+    'automations.descriptionLabel': 'Description',
+    'automations.offsetHoursLabel': 'Hours after the event',
+    'automations.conditionsKept':
+      'This rule has {count} conditions, and they are kept as they are. Several conditions cannot be edited on this screen.',
+    'automations.needsYou.title': 'Needs you',
+    'automations.needsYou.body':
+      'Actions your automations proposed. Nothing happens unless you confirm; you can also skip them.',
+    'automations.skipRun': 'Skip',
+    'automations.decideAbove': 'Decide in “Needs you” above.',
     'automations.field.publish.provider': 'Platform',
     'automations.field.publish.failureClass': 'Failure class',
     'automations.field.metric.key': 'Metric key',
@@ -5230,7 +5348,8 @@ export const messages = {
     'automations.status.BLOCKED_BY_POLICY': 'Stopped by policy',
     'automations.status.BLOCKED_BY_AUTHORIZATION': "The creator's permission is no longer enough",
     'automations.status.FAILED': 'Failed',
-    'automations.status.CANCELLED': 'Cancelled',
+    // B12 — the only writer of CANCELLED is a person pressing Skip.
+    'automations.status.CANCELLED': 'Skipped',
     'campaigns.title': 'Campaigns',
     'campaigns.empty': 'No campaigns yet.',
     'campaigns.objective.AWARENESS': 'Awareness',
@@ -5962,6 +6081,19 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     en: 'The campaign was archived. Nothing was deleted.',
     ar: 'تمت أرشفة الحملة. لم يُحذف أي شيء.',
   },
+  // B11 (Phase 2B-2b) — "Start now".
+  CAMPAIGN_STARTED: {
+    en: 'The campaign has started. Its start date is today.',
+    ar: 'بدأت الحملة. تاريخ بدئها اليوم.',
+  },
+  CAMPAIGN_NOT_PLANNED: {
+    en: 'Only a planned campaign can be started now.',
+    ar: 'لا يمكن بدء إلا الحملة المخطط لها.',
+  },
+  CAMPAIGN_ALREADY_ENDED: {
+    en: 'This campaign’s end date has passed, so it can’t start now. Change its dates first.',
+    ar: 'انقضى تاريخ انتهاء هذه الحملة، لذا لا يمكن بدؤها الآن. غيّر تواريخها أولًا.',
+  },
   // Phase 6 — Social Publishing.
   ACCOUNT_DISCONNECTED: {
     en: 'The account was disconnected.',
@@ -6250,6 +6382,19 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   AUTOMATION_CREATED: {
     en: 'Automation created, and disabled until you enable it.',
     ar: 'تم إنشاء الأتمتة، وهي متوقفة حتى تفعّلها.',
+  },
+  // B12 (Phase 2B-2b) — editing a rule and skipping a run.
+  AUTOMATION_SKIPPED: {
+    en: 'Skipped. Nothing was done, and the run stays in the history.',
+    ar: 'تم التخطي. لم يُنفَّذ شيء، ويبقى التشغيل في السجل.',
+  },
+  AUTOMATION_RULE_CHANGED: {
+    en: 'This rule changed since you opened it, so nothing was saved. Open it again to see the latest.',
+    ar: 'تغيّرت هذه القاعدة منذ فتحتها، لذا لم يُحفظ شيء. افتحها مرة أخرى لترى أحدث نسخة.',
+  },
+  AUTOMATION_RULE_NAME_TAKEN: {
+    en: 'This brand already has a rule with that name. Choose another name.',
+    ar: 'لهذه العلامة قاعدة بهذا الاسم. اختر اسمًا آخر.',
   },
   AUTOMATION_UPDATED: { en: 'Automation updated.', ar: 'تم تحديث الأتمتة.' },
   AUTOMATION_DELETED: { en: 'Automation deleted.', ar: 'تم حذف الأتمتة.' },

@@ -159,7 +159,20 @@ export {
  * this product is a way of grouping content and reading its performance together
  * rather than a lifecycle of its own.
  */
-export { CampaignService, campaignNotFound, campaignVersionConflict } from './campaigns';
+export {
+  CAMPAIGN_ALREADY_ENDED_REASON,
+  CAMPAIGN_NOT_PLANNED_REASON,
+  CampaignService,
+  campaignNotFound,
+  campaignVersionConflict,
+} from './campaigns';
+export {
+  campaignDayKey,
+  campaignResultsPeriod,
+  daysUntilCampaignEnds,
+  todayKeyIn,
+} from './campaign-results';
+export type { CampaignResultsPeriod } from './campaign-results';
 /*
  * PHASE 8 — the media gate. Exported because BOTH the Studio and the publish
  * preflight use it: `ContentVariant.assetIds` is a uuid array and cannot carry
