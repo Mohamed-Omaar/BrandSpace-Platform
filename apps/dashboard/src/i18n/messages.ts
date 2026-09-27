@@ -6066,6 +6066,14 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   },
   INVITATION_REVOKED: { en: 'Invitation revoked.', ar: 'تم إلغاء الدعوة.' },
   INVITATION_RESENT: { en: 'A new invitation was sent.', ar: 'تم إرسال دعوة جديدة.' },
+  /*
+   * D11 (Phase 2B-2) — the plain save, emitted by the composer, the Approvals
+   * queue, the notification inbox, Settings → Approvals and the retention
+   * setting. It had no text, so those pages showed nothing — or an empty green
+   * banner. `tests/unit/status-codes.test.ts` now fails for any success code
+   * an action emits without words.
+   */
+  SAVED: { en: 'Saved.', ar: 'تم الحفظ.' },
   SETTINGS_SAVED: { en: 'Settings saved.', ar: 'تم حفظ الإعدادات.' },
   TEMPLATE_SAVED: { en: 'Template saved.', ar: 'تم حفظ القالب.' },
   TEMPLATE_DELETED: { en: 'Template deleted.', ar: 'تم حذف القالب.' },
