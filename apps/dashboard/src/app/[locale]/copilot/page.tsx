@@ -1,7 +1,7 @@
 import { StateMessage, Stack, spacingTokens } from '@brandspace/ui';
 import { mayReadCreditBalance } from '@brandspace/shared';
 import { copilotSurface } from '../../../server/copilot-surface';
-import { copilotLabels } from '../../../server/copilot-labels';
+import { RATE_METRIC_KEYS, copilotLabels } from '../../../server/copilot-labels';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
@@ -123,6 +123,7 @@ export default async function CopilotPage({
             initialRequest={typeof query['ask'] === 'string' ? query['ask'].slice(0, 1_000) : ''}
             creditsLabel={wallet ? number.format(wallet.balanceCredits) : null}
             labels={copilotLabels(locale, session.customer.name ?? session.customer.email)}
+            rateMetricKeys={RATE_METRIC_KEYS}
           />
         )}
       </Stack>

@@ -217,6 +217,12 @@ const analyticsSummary: ToolExecutor = async (context, args) => {
       metrics: summary.metrics.map((metric) => ({
         metricKey: metric.metricKey,
         value: metric.value === null ? null : metric.value.toString(),
+        /*
+         * THE UNIT TRAVELS WITH THE FIGURE (Phase 2B-2b). A rate is stored in
+         * parts per mille, so `47` means 4.7% — and a figure handed over without
+         * its unit is one an assistant can read as "47% engagement".
+         */
+        unit: metric.unit,
         absent: metric.absent,
         changeMilli: metric.changeMilli,
       })),

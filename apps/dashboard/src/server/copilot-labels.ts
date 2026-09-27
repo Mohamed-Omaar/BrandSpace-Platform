@@ -1,4 +1,5 @@
 import type { CopilotLabels } from '@brandspace/ui';
+import { METRIC_DEFINITIONS } from '@brandspace/analytics';
 import { translator } from '../i18n/messages';
 
 /**
@@ -47,3 +48,12 @@ export function copilotLabels(locale: string, userName: string): CopilotLabels {
     userName,
   };
 }
+
+/**
+ * The metrics stored in parts per mille, read from the analytics catalogue —
+ * never a list typed here. Both Copilot views take it, so a rate from a result
+ * recorded before results carried their unit still reads as a percentage.
+ */
+export const RATE_METRIC_KEYS: readonly string[] = METRIC_DEFINITIONS.filter(
+  (metric) => metric.unit === 'RATIO_MILLI',
+).map((metric) => metric.key);

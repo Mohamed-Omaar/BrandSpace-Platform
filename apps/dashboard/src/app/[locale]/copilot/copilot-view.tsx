@@ -111,8 +111,15 @@ export function CopilotView({
   creditsLabel,
   subject = null,
   initialRequest = '',
+  rateMetricKeys = [],
 }: {
   readonly locale: string;
+  /**
+   * The metrics stored in parts per mille, from the analytics catalogue on the
+   * server — so a rate from a result recorded before results carried their
+   * unit still reads as a percentage (Phase 2B-2b).
+   */
+  readonly rateMetricKeys?: readonly string[];
   /**
    * D-296 — a request handed over by "Give to Copilot" (a recurring workflow
    * BrandSpace noticed). Put in the box, NEVER sent: the person reads it and
@@ -511,6 +518,8 @@ export function CopilotView({
               t={tOr}
               number={number}
               time={time}
+              rateMetricKeys={rateMetricKeys}
+              locale={locale}
             />
           ) : null}
 
@@ -677,6 +686,8 @@ function InspectionResults({
   t,
   number,
   time,
+  rateMetricKeys,
+  locale,
 }: {
   calls: readonly InspectionCall[];
   title: string;
@@ -684,6 +695,8 @@ function InspectionResults({
   t: (key: string, fallback: string) => string;
   number: Intl.NumberFormat;
   time: Intl.DateTimeFormat;
+  rateMetricKeys: readonly string[];
+  locale: string;
 }) {
   return (
     <section data-testid="copilot-inspection" style={{ display: 'grid', gap: spacingTokens.sm }}>
@@ -696,7 +709,14 @@ function InspectionResults({
               {t(`copilot.toolStatus.${call.status}`, call.status)}
             </span>
           ) : (
-            <InspectionLines call={call} t={t} number={number} time={time} />
+            <InspectionLines
+              call={call}
+              t={t}
+              number={number}
+              time={time}
+              rateMetricKeys={rateMetricKeys}
+              locale={locale}
+            />
           )}
         </div>
       ))}
@@ -709,8 +729,12 @@ function InspectionLines({
   t,
   number,
   time,
+  rateMetricKeys,
+  locale,
 }: {
   call: InspectionCall;
+  rateMetricKeys: readonly string[];
+  locale: string;
   t: (key: string, fallback: string) => string;
   number: Intl.NumberFormat;
   time: Intl.DateTimeFormat;
@@ -726,9 +750,17 @@ function InspectionLines({
         const key = String(metric['metricKey'] ?? '');
         const value = metric['value'];
         const label = t(`analytics.metric.${key}`, key);
+        // A rate is parts per mille (47 is 4.7%) — never shown raw.
+        const isRate = metric['unit'] === 'RATIO_MILLI' || rateMetricKeys.includes(key);
+        const shown = isRate
+          ? `${new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+              maximumFractionDigits: 1,
+              numberingSystem: 'latn',
+            }).format(Number(value) / 10)}%`
+          : number.format(Number(value));
         lines.push(
           typeof value === 'string'
-            ? `${label}: ${number.format(Number(value))}`
+            ? `${label}: ${shown}`
             : `${label}: ${t(`analytics.absent.${String(metric['absent'] ?? '')}`, t('analytics.noValue', '—'))}`,
         );
       }

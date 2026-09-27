@@ -46,3 +46,38 @@ describe('approvals.summary', () => {
     }
   });
 });
+
+/**
+ * Phase 2B-2b (item 6) — THE COPILOT'S ANALYTICS RESULT NEVER SHOWS A RATE RAW.
+ * `engagement_rate` is stored in parts per mille: 47 is 4.7%, not 47.
+ */
+describe('analytics.summary rates', () => {
+  it('the result carries each figure’s unit, for the assistant and the screen alike', async () => {
+    const { readFileSync } = await import('node:fs');
+    const executors = readFileSync('packages/copilot/src/executors.ts', 'utf8');
+    const start = executors.indexOf('const analyticsSummary: ToolExecutor');
+    const body = executors.slice(start, executors.indexOf('\n};\n', start));
+    expect(body).toContain('unit: metric.unit,');
+  });
+
+  it('the rate keys come from the analytics catalogue, and include engagement rate', async () => {
+    const { RATE_METRIC_KEYS } = await import('../../apps/dashboard/src/server/copilot-labels');
+    expect(RATE_METRIC_KEYS).toContain('engagement_rate');
+    expect(RATE_METRIC_KEYS).not.toContain('impressions');
+  });
+
+  it('the Copilot view formats a rate as a percentage, from the unit or the catalogue', async () => {
+    const { readFileSync } = await import('node:fs');
+    const view = readFileSync('apps/dashboard/src/app/[locale]/copilot/copilot-view.tsx', 'utf8');
+    expect(view).toContain(
+      "const isRate = metric['unit'] === 'RATIO_MILLI' || rateMetricKeys.includes(key);",
+    );
+    expect(view).toContain('.format(Number(value) / 10)}%`');
+    for (const file of [
+      'apps/dashboard/src/app/[locale]/copilot/page.tsx',
+      'apps/dashboard/src/components/workspace-shell.tsx',
+    ]) {
+      expect(readFileSync(file, 'utf8'), file).toContain('rateMetricKeys={RATE_METRIC_KEYS}');
+    }
+  });
+});

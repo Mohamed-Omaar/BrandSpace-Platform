@@ -41,6 +41,7 @@ export function GlobalCopilot({
   surface,
   subject,
   labels,
+  rateMetricKeys = [],
   strings,
 }: {
   readonly locale: string;
@@ -56,6 +57,8 @@ export function GlobalCopilot({
     readonly title: string;
   } | null;
   readonly labels: CopilotLabels;
+  /** The metrics stored in parts per mille, from the server (Phase 2B-2b). */
+  readonly rateMetricKeys?: readonly string[];
   readonly strings: {
     readonly openFull: string;
     readonly chooseBrandTitle: string;
@@ -141,6 +144,7 @@ export function GlobalCopilot({
               initialRequest={handedRequest}
               creditsLabel={null}
               labels={labels}
+              rateMetricKeys={rateMetricKeys}
             />
           ) : (
             <div style={{ ...typographyTokens.bodySm }}>
