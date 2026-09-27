@@ -4,7 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { AppError, createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
-import { PUBLISH_DEADLINE_PASSED_REASON } from '@brandspace/social-connectors';
+import {
+  PUBLISH_DEADLINE_PASSED_REASON,
+  PUBLISH_JOB_SUPERSEDED_REASON,
+} from '@brandspace/social-connectors';
 import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
 import { callSocialApi, inSocial } from '../../../server/social-context';
@@ -95,6 +98,10 @@ function failure(
 function publishingErrorCode(error: unknown): string {
   if (isAppError(error) && error.publicDetails['reason'] === PUBLISH_DEADLINE_PASSED_REASON) {
     return 'PUBLISH_DEADLINE_PASSED';
+  }
+  // Item 9 (D-332 amended) — the post was scheduled again; this attempt is history.
+  if (isAppError(error) && error.publicDetails['reason'] === PUBLISH_JOB_SUPERSEDED_REASON) {
+    return 'PUBLISH_JOB_SUPERSEDED';
   }
   return actionErrorCode(error);
 }

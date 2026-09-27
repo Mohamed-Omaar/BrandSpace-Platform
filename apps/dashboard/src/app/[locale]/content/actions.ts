@@ -4,8 +4,15 @@ import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
-import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
-import { readRetentionFacts, resolveContentExpiry } from '@brandspace/content';
+import { AppError, createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
+import {
+  CHANNEL_DISCONNECTED_REASON,
+  SCHEDULE_IN_PAST_REASON,
+  TEMPLATES_MANAGE_PERMISSION,
+  readRetentionFacts,
+  readSlides,
+  resolveContentExpiry,
+} from '@brandspace/content';
 import { NOTE_MANAGE_PERMISSION } from '@brandspace/collaboration';
 import { systemClock } from '@brandspace/shared';
 import { parseContentType } from './content-types';
@@ -22,6 +29,9 @@ import { uploadIntoLibrary } from '../../../server/asset-upload';
 import { translator } from '../../../i18n/messages';
 
 const log = createLogger({ context: { component: 'dashboard.content' } });
+
+/** A uuid's shape, and nothing more: a form field is never trusted beyond it. */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Content Studio actions — the half that never calls a model.
@@ -204,6 +214,13 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
      * index is what decides that rather than a check in this handler.
      */
     const idempotencyKey = String(formData.get('idempotencyKey') ?? '') || randomUUID();
+    /*
+     * E4 / B2 — the template the composer started from, when it did. An id
+     * shape only: the library resolves it against THIS brand and the member's
+     * scope, and fills only what the form left blank.
+     */
+    const templateValue = String(formData.get('templateId') ?? '');
+    const templateId = UUID_SHAPE.test(templateValue) ? templateValue : null;
 
     const itemId = await inContentStudio(session.workspace.workspaceId, async (services) => {
       const [library, policy] = await Promise.all([services.library(), services.policy()]);
@@ -226,6 +243,7 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
         })),
         campaignId,
         idempotencyKey,
+        templateId,
         expiresAt: resolveContentExpiry(policy, facts, systemClock),
         ...actorOf(session),
       });
@@ -307,6 +325,20 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
     const rawComment = formData.get('firstComment');
     const firstComment =
       rawComment === null ? undefined : String(rawComment).trim().slice(0, 2_200);
+    /*
+     * B9 (Phase 2B-2) — A CAROUSEL'S SLIDE HEADLINES, one `slideHeadline` per
+     * `assetIds` entry and in the same order, under `slidesPresent` for the
+     * reason `mediaPresent` exists: without it this submission says nothing
+     * about headlines and the stored ones are left (and re-aligned to the
+     * images). The library validates and normalises them.
+     */
+    const slides =
+      formData.get('slidesPresent') !== null && assetIds !== undefined
+        ? assetIds.map((assetId, index) => ({
+            assetId,
+            headline: String(formData.getAll('slideHeadline')[index] ?? ''),
+          }))
+        : undefined;
 
     await inContentStudio(session.workspace.workspaceId, async ({ library }) =>
       (await library()).editVariant({
@@ -314,6 +346,7 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
         body,
         hashtags,
         ...(firstComment === undefined ? {} : { firstComment }),
+        ...(slides === undefined ? {} : { slides }),
         // PHASE 6 FINAL (D-285) — present only where a cover can be chosen.
         ...(coverAssetId === undefined ? {} : { coverAssetId }),
         ...(assetIds === undefined ? {} : { assetIds }),
@@ -800,6 +833,8 @@ export async function duplicateContentAction(formData: FormData): Promise<void> 
               : null,
             linkUrl: variant.linkUrl,
             assetIds: variant.assetIds,
+            // B9 — the slide headlines travel with their images.
+            slides: readSlides(variant.slides),
           })),
         campaignId: mayFile ? source.campaignId : null,
         pillar: source.pillar,
@@ -815,5 +850,97 @@ export async function duplicateContentAction(formData: FormData): Promise<void> 
     destination = failure(locale, error, 'duplicate', '');
   }
   revalidatePath(`/${locale}/content`);
+  redirect(destination);
+}
+
+/**
+ * B9 (Phase 2B-2) — SCHEDULE FROM THE STUDIO, inline, without leaving the post.
+ *
+ * The SAME service call the calendar's dialog makes (`schedule()`), under the
+ * same permission (`content.schedule`), so the F2 rule — no past time, earlier
+ * today included, within the configured lead — the approval gate and the
+ * channel checks are enforced exactly as they are there. Only the landing
+ * differs: back to the post, with the calendar's own success and refusal
+ * codes.
+ */
+export async function scheduleFromStudioAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const itemId = String(formData.get('contentItemId') ?? '');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'content.schedule');
+    const date = String(formData.get('date') ?? '').trim();
+    const time = String(formData.get('time') ?? '').trim();
+    await inContentStudio(session.workspace.workspaceId, async ({ calendar }) =>
+      (await calendar()).schedule({
+        contentItemId: itemId,
+        localTime: `${date}T${time}`,
+        ...actorOf(session),
+      }),
+    );
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'CONTENT_SCHEDULED' });
+  } catch (error: unknown) {
+    const correlationId = randomUUID();
+    log.warn('content action failed', {
+      correlationId,
+      action: 'scheduleFromStudio',
+      ...internalErrorFields(error),
+    });
+    const code =
+      isAppError(error) && error.publicDetails['reason'] === SCHEDULE_IN_PAST_REASON
+        ? 'SCHEDULE_IN_PAST'
+        : isAppError(error) && error.publicDetails['reason'] === CHANNEL_DISCONNECTED_REASON
+          ? CHANNEL_DISCONNECTED_REASON
+          : actionErrorCode(error);
+    destination = pageUrl(locale, '/compose', { item: itemId, error: code, ref: correlationId });
+  }
+  revalidatePath(`/${locale}/calendar`);
+  revalidatePath(`/${locale}/content`);
+  redirect(destination);
+}
+
+/**
+ * E4 / B9 (Phase 2B-2) — SAVE THIS POST AS A TEMPLATE, from the Studio.
+ *
+ * `templates.manage`, like every template write (and the service checks it
+ * again). The template takes the post's format and channels, and the caption,
+ * hashtags and first comment of its first version in the post's own language —
+ * the owner's list (answer D4). The post itself is not changed.
+ */
+export async function saveDraftAsTemplateAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const itemId = String(formData.get('itemId') ?? '');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, TEMPLATES_MANAGE_PERMISSION);
+    await inContentStudio(session.workspace.workspaceId, async (services) => {
+      const item = await (await services.library()).getItem(itemId, session.workspace.brandScope);
+      const lead =
+        item.variants.find((variant) => variant.locale === item.primaryLocale) ?? item.variants[0];
+      await (
+        await services.templates()
+      ).create({
+        brandId: item.brandId,
+        fields: {
+          name: String(formData.get('name') ?? ''),
+          contentType: item.contentType,
+          platformKeys: [...new Set(item.variants.map((variant) => variant.platformKey))],
+          body: lead?.body ?? null,
+          hashtags: lead?.hashtags ?? [],
+          firstComment: lead?.firstComment ?? null,
+        },
+        actor: {
+          userId: session.customer.userId,
+          brandScope: session.workspace.brandScope,
+          permissionKeys: session.workspace.permissionKeys,
+        },
+      });
+    });
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'TEMPLATE_SAVED' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'saveDraftAsTemplate', '/compose', { item: itemId });
+  }
+  revalidatePath(`/${locale}/content`);
+  revalidatePath(`/${locale}/settings/publishing`);
   redirect(destination);
 }

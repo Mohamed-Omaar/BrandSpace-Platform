@@ -205,12 +205,42 @@ export default async function OverviewPage({
   ]);
 
   /* ------------------------------------------------------ B — recommendations */
-  const recommendations = maySeeInsights
+  /*
+   * D7 (Phase 2B-2) — Settings → AI switches this card off per brand. A brand
+   * in view with it off hides the card; on "All brands" the card shows the
+   * brands that keep it on, and hides when none does. Nothing else on Home
+   * reads the switch.
+   */
+  const suggestionBrands = maySeeInsights
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) =>
+        db.brand.findMany({
+          where: {
+            workspaceId: workspace.workspaceId,
+            deletedAt: null,
+            ...(brandId ? { id: brandId } : {}),
+            ...(workspace.brandScope.length > 0
+              ? { AND: [{ id: { in: [...workspace.brandScope] } }] }
+              : {}),
+          },
+          select: { id: true, aiSuggestionsEnabled: true },
+        }),
+      )
+    : [];
+  const suggestionsOff = suggestionBrands
+    .filter((brand) => !brand.aiSuggestionsEnabled)
+    .map((brand) => brand.id);
+  const showRecommendations =
+    maySeeInsights &&
+    (suggestionBrands.length === 0 ||
+      suggestionBrands.some((brand) => brand.aiSuggestionsEnabled)) &&
+    !(brandId && suggestionsOff.includes(brandId));
+  const recommendations = showRecommendations
     ? await inWorkspace(workspace.workspaceId, async ({ db }) =>
         db.insight.findMany({
           where: {
             workspaceId: workspace.workspaceId,
             ...brandIdQueryFilter({ brandId, brandScope: workspace.brandScope }),
+            ...(suggestionsOff.length > 0 ? { NOT: { brandId: { in: suggestionsOff } } } : {}),
             type: { in: [...RECOMMENDATION_INSIGHT_TYPES] },
             status: { in: ['NEW', 'SEEN'] },
             OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
@@ -828,7 +858,7 @@ export default async function OverviewPage({
         ) : null}
 
         {/* --------------------------------------- B — RECOMMENDED BY BRANDSPACE */}
-        {maySeeInsights ? (
+        {showRecommendations ? (
           <Card testId="home-recommended">
             <SectionHeader
               title={t('home.recommended.title')}

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Prisma } from '@brandspace/database';
+import { Prisma } from '@brandspace/database';
 import {
   writeAuditEvent,
   type ContentItem,
@@ -15,9 +15,16 @@ import {
   unsupportedPlatform,
 } from './errors';
 import { ContentApprovalService } from './approvals';
+import { SLOT_BUSY_JOB_STATUSES } from './calendar';
 import { findPlatform, resolveDialect, type ContentDialect, type ContentPolicy } from './policy';
 import { ContentMediaResolver } from './media';
 import { validateVariant } from './validation';
+import { normaliseSlides, readSlides, slidesSchema, type Slide } from './slides';
+import {
+  ContentTemplateService,
+  applyTemplateToDraft,
+  hashtagsIntoFirstComment,
+} from './templates';
 
 /**
  * The half of the Content Studio that NEVER calls a model.
@@ -179,8 +186,21 @@ export class ContentLibraryService {
         ...(input.unscheduledOnly
           ? {
               ...(input.platformKey ? {} : { variants: { some: {} } }),
+              /*
+               * NO LIVE SLOT — the one rule the scheduler uses (`liveSlotWhere`,
+               * item 9 / D11): a PUBLISHED slot is not free; a FAILED slot
+               * whose jobs finished with nothing published is.
+               */
               calendarSlots: {
-                none: { status: { notIn: ['CANCELLED', 'PUBLISHED', 'FAILED'] } },
+                none: {
+                  OR: [
+                    { status: { notIn: ['CANCELLED', 'FAILED'] } },
+                    {
+                      status: 'FAILED',
+                      publishJobs: { some: { status: { in: [...SLOT_BUSY_JOB_STATUSES] } } },
+                    },
+                  ],
+                },
               },
             }
           : {}),
@@ -331,6 +351,18 @@ export class ContentLibraryService {
   }
 
   /**
+   * A10 (Phase 2B-2) — whether this brand writes a new post's hashtags into
+   * its first comment. Read from the brand row, never from a request.
+   */
+  protected async hashtagsInFirstCommentFor(brandId: string): Promise<boolean> {
+    const brand = await this.db.brand.findFirst({
+      where: { id: brandId, workspaceId: this.workspaceId },
+      select: { hashtagsInFirstComment: true },
+    });
+    return brand?.hashtagsInFirstComment ?? false;
+  }
+
+  /**
    * The brand must be inside the member's scope before anything is written.
    *
    * NOT `brandIdQueryFilter`, because that helper narrows a `brandId` COLUMN and
@@ -371,6 +403,8 @@ export class ContentLibraryService {
       readonly firstComment?: string | null;
       readonly linkUrl?: string | null;
       readonly assetIds?: readonly string[];
+      /** B9 — slide headlines, e.g. carried by "Make a new copy". */
+      readonly slides?: readonly { assetId: string; headline: string }[];
     }[];
     readonly campaignId?: string | null;
     readonly pillar?: string | null;
@@ -385,8 +419,29 @@ export class ContentLibraryService {
      * arbiter, not a check-then-act in this method.
      */
     readonly idempotencyKey: string;
+    /**
+     * E4 / B2 — a template of THIS brand to start from. It fills only what the
+     * request left blank (`applyTemplateToDraft`) and never changes the author.
+     * A template of another brand, or outside the member's scope, is NOT_FOUND.
+     */
+    readonly templateId?: string | null | undefined;
   }): Promise<{ item: ContentItem; variants: ContentVariant[]; replayed: boolean }> {
     await this.requireItemForBrandScope(input.brandId, input.actorBrandScope);
+
+    let templateId: string | null = null;
+    if (input.templateId) {
+      const template = await new ContentTemplateService({
+        db: this.db,
+        workspaceId: this.workspaceId,
+        policy: this.policy,
+      }).forBrand({
+        templateId: input.templateId,
+        brandId: input.brandId,
+        brandScope: input.actorBrandScope,
+      });
+      input = { ...input, ...applyTemplateToDraft(template, input, this.policy) };
+      templateId = template.id;
+    }
 
     const platforms = this.assertPlatforms(input.variants.map((variant) => variant.platformKey));
     if (new Set(input.variants.map((v) => v.platformKey)).size !== input.variants.length) {
@@ -526,11 +581,22 @@ export class ContentLibraryService {
 
     const item = await this.db.contentItem.findUniqueOrThrow({ where: { id: candidateId } });
 
+    const intoFirstComment = await this.hashtagsInFirstCommentFor(input.brandId);
     const written: ContentVariant[] = [];
-    for (const [index, variant] of input.variants.entries()) {
+    for (const [index, requested] of input.variants.entries()) {
       const platform = platforms[index];
       /* c8 ignore next -- assertPlatforms threw for anything unresolvable. */
       if (!platform) continue;
+      // A10 — the brand's default, on channels that take a first comment.
+      const variant = intoFirstComment
+        ? {
+            ...requested,
+            ...hashtagsIntoFirstComment(
+              { hashtags: requested.hashtags ?? [], firstComment: requested.firstComment ?? null },
+              platform,
+            ),
+          }
+        : requested;
       const validation = validateVariant(platform, {
         body: variant.body,
         ...(variant.hashtags ? { hashtags: variant.hashtags } : {}),
@@ -549,6 +615,15 @@ export class ContentLibraryService {
             firstComment: variant.firstComment ?? null,
             linkUrl: variant.linkUrl ?? null,
             assetIds: resolvedMedia.get(variant.platformKey) ?? [],
+            ...(variant.slides && variant.slides.length > 0
+              ? (() => {
+                  const slides = normaliseSlides(
+                    parseSlides(variant.slides),
+                    resolvedMedia.get(variant.platformKey) ?? [],
+                  );
+                  return slides ? { slides: slides as Prisma.InputJsonValue } : {};
+                })()
+              : {}),
             characterCount: validation.characterCount,
             validationState: validation.state,
             ...(validation.errors.length > 0
@@ -573,6 +648,7 @@ export class ContentLibraryService {
         origin: 'HUMAN',
         variants: written.length,
         platformKeys: input.variants.map((v) => v.platformKey),
+        ...(templateId ? { templateId } : {}),
       },
     });
 
@@ -610,6 +686,13 @@ export class ContentLibraryService {
      * it; an id must be an IMAGE this variant's brand may use, READY and CLEAN.
      */
     coverAssetId?: string | null | undefined;
+    /**
+     * B9 (Phase 2B-2) — the carousel's slide headlines, `{ assetId, headline }`
+     * per image. Undefined leaves them (re-aligned to the images if those
+     * changed); anything else replaces them. Validated, then normalised against
+     * the variant's images (`normaliseSlides`).
+     */
+    slides?: readonly { assetId: string; headline: string }[] | undefined;
     actorUserId: string;
     actorBrandScope: readonly string[];
     /** Q8 — whether this editor may schedule decides what an edit does to a scheduled post. */
@@ -680,10 +763,28 @@ export class ContentLibraryService {
       cover = resolved.id;
     }
 
+    /*
+     * B9 — THE HEADLINES FOLLOW THE IMAGES. New headlines are validated at the
+     * boundary; stored ones are re-aligned when the images change, so a removed
+     * image takes its headline with it and a reordered one keeps its own.
+     */
+    let slides: Slide[] | null | undefined;
+    if (input.slides !== undefined || media !== undefined) {
+      const requested =
+        input.slides === undefined ? readSlides(variant.slides) : parseSlides(input.slides);
+      slides = normaliseSlides(
+        requested,
+        media === undefined ? variant.assetIds : media.map((asset) => asset.id),
+      );
+    }
+
     const updated = await this.db.contentVariant.update({
       where: { id: variant.id },
       data: {
         body: input.body,
+        ...(slides === undefined
+          ? {}
+          : { slides: slides === null ? Prisma.DbNull : (slides as Prisma.InputJsonValue) }),
         ...(cover === undefined ? {} : { coverAssetId: cover }),
         ...(media === undefined ? {} : { assetIds: media.map((asset) => asset.id) }),
         ...(input.hashtags ? { hashtags: [...input.hashtags] } : {}),
@@ -709,6 +810,7 @@ export class ContentLibraryService {
         characterCount: validation.characterCount,
         validationState: validation.state,
         ...(media === undefined ? {} : { mediaCount: media.length }),
+        ...(slides === undefined ? {} : { slideHeadlines: slides?.length ?? 0 }),
         ...(cover === undefined ? {} : { cover: cover === null ? 'cleared' : 'set' }),
       },
     });
@@ -1063,4 +1165,15 @@ export class ContentLibraryService {
     });
     return { outcome: 'ARCHIVED' };
   }
+}
+
+/** B9 — slide headlines from a caller, validated; a bad one refuses the edit. */
+function parseSlides(value: readonly { assetId: string; headline: string }[]): Slide[] {
+  const parsed = slidesSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new AppError('VALIDATION_FAILED', 'A slide headline is too long or malformed.', {
+      field: 'slides',
+    });
+  }
+  return parsed.data;
 }

@@ -62,6 +62,8 @@ export interface ComposerVariant {
   readonly firstComment?: string | null;
   /** PHASE 6 FINAL (D-285) — the cover image of a Reel or video. */
   readonly coverAssetId?: string | null;
+  /** B9 (Phase 2B-2) — a carousel's slide headlines, `{ assetId, headline }`. */
+  readonly slides?: readonly { readonly assetId: string; readonly headline: string }[];
   /** When the row last changed — the editor's "Saved …" and its version key. */
   readonly updatedAt: string;
 }
@@ -74,7 +76,14 @@ export interface ComposerDraft {
    * says what saving it will do; the read-only statuses arrive as `readOnly`.
    */
   readonly status:
-    'DRAFT' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'SCHEDULED' | 'ARCHIVED';
+    | 'DRAFT'
+    | 'IN_REVIEW'
+    | 'CHANGES_REQUESTED'
+    | 'APPROVED'
+    | 'SCHEDULED'
+    | 'ARCHIVED'
+    /* Item 9 — a post that failed with nothing published, which may go on again. */
+    | 'FAILED';
   /** Phase 5B-3 — the open review, when there is one. */
   readonly openApprovalId: string | null;
   readonly brandId: string;
@@ -93,6 +102,24 @@ export interface ComposerDraft {
   readonly readOnly?: boolean;
 }
 
+/**
+ * E4 / B2 — a post template offered on a NEW post, already narrowed server-side
+ * to the brand being composed for and the member's BrandScope. Choosing one
+ * prefills the format and channels, and — only when writing it yourself — the
+ * caption. Its hashtags and first comment are applied by the server to the
+ * draft it creates, never through a prompt.
+ */
+export interface ComposerTemplate {
+  readonly id: string;
+  readonly name: string;
+  readonly isDefault: boolean;
+  readonly contentType: string;
+  readonly platformKeys: readonly string[];
+  readonly body: string | null;
+  readonly hashtags: readonly string[];
+  readonly firstComment: string | null;
+}
+
 export interface ComposerViewProps {
   readonly locale: string;
   readonly t: Record<string, string>;
@@ -101,7 +128,13 @@ export interface ComposerViewProps {
    * post is written in when the author has not chosen (D-277). Never the UI
    * locale: a team may run an Arabic-speaking brand from an English interface.
    */
-  readonly brands: readonly { id: string; name: string; defaultLocale?: 'AR' | 'EN' }[];
+  readonly brands: readonly {
+    id: string;
+    name: string;
+    defaultLocale?: 'AR' | 'EN';
+    /** A10 (Phase 2B-2) — the channels a new post for this brand starts with. */
+    defaultPlatformKeys?: readonly string[];
+  }[];
   /**
    * The globally selected brand, or null when the rail is on "All brands".
    *
@@ -169,7 +202,17 @@ export interface ComposerViewProps {
     readBrain?: boolean;
     /** Q12 — may add knowledge (`brand_brain.edit`), the onboarding "learn" step. */
     teachBrain?: boolean;
+    /** E4 (Phase 2B-2) — may save a post as a template (`templates.manage`). */
+    manageTemplates?: boolean;
   };
+  /** Item 9 (Phase 2B-2) — a FAILED post: what the Publishing screen would say about it. */
+  readonly failed?: { readonly message: string } | null;
+  /** B9 / F2 (Phase 2B-2) — today, tomorrow and the default time, for inline scheduling. */
+  readonly scheduling?: {
+    readonly today: string;
+    readonly tomorrow: string;
+    readonly defaultTime: string;
+  } | null;
   readonly tools: readonly string[];
   /** PHASE 6 FINAL (D-285) — the Creative Studio's sizes, for the media drawer. */
   readonly creativeFormats?: readonly { key: string; label: string }[];
@@ -222,6 +265,10 @@ export interface ComposerViewProps {
    * Absent means "no registry answer": every format, every platform.
    */
   readonly formatPlatforms?: Readonly<Record<string, readonly string[]>>;
+  /** E4 / B2 — the templates of `defaultBrandId`, the default first. */
+  readonly templates?: readonly ComposerTemplate[];
+  /** E4 / B2 — a template the reader arrived with (`?template=`), already checked. */
+  readonly initialTemplateId?: string;
   readonly actions: {
     save(formData: FormData): Promise<void>;
     transition(formData: FormData): Promise<void>;
@@ -233,6 +280,10 @@ export interface ComposerViewProps {
     resubmit(formData: FormData): Promise<void>;
     /** B-2 — a new draft from a published post, which cannot be edited. */
     duplicate?(formData: FormData): Promise<void>;
+    /** B9 (Phase 2B-2) — schedule from the Studio, inline. */
+    scheduleFromStudio?(formData: FormData): Promise<void>;
+    /** E4 (Phase 2B-2) — save the open post as a template. */
+    saveAsTemplate?(formData: FormData): Promise<void>;
     /**
      * WRITE THE POST YOURSELF — no model, no credits (D-224).
      *
@@ -293,6 +344,8 @@ export function ComposerView({
   forgetDefault,
   initialGoal = '',
   formatPlatforms,
+  templates = [],
+  initialTemplateId = '',
   now = 0,
   creativeFormats = [],
   carriedMedia = null,
@@ -300,6 +353,8 @@ export function ComposerView({
   expiredChannels = {},
   plannedFor = null,
   review = null,
+  scheduling = null,
+  failed = null,
 }: ComposerViewProps) {
   const router = useRouter();
   const fieldId = useId();
@@ -335,17 +390,67 @@ export function ComposerView({
   const offeredTypes = formatPlatforms
     ? contentTypes.filter((type) => (formatPlatforms[type]?.length ?? 0) > 0)
     : contentTypes;
-  const [contentType, setContentType] = useState(offeredTypes[0] ?? contentTypes[0] ?? 'POST');
   const carries = useCallback(
     (type: string, platformKey: string) =>
       !formatPlatforms || (formatPlatforms[type] ?? []).includes(platformKey),
     [formatPlatforms],
   );
+
+  /*
+   * E4 / B2 — THE TEMPLATE A NEW POST STARTS FROM: the one the reader arrived
+   * with, else the brand's default, else none. Only on a new post, and only
+   * for the brand the server listed them for.
+   */
+  const startingTemplate =
+    draft === null
+      ? (templates.find((template) => template.id === initialTemplateId) ??
+        templates.find((template) => template.isDefault) ??
+        null)
+      : null;
+  const [templateId, setTemplateId] = useState(startingTemplate?.id ?? '');
+  const templateFor = (type: string, template: ComposerTemplate | null) => {
+    const format =
+      template && offeredTypes.includes(template.contentType) ? template.contentType : type;
+    const channels = template
+      ? template.platformKeys
+          .filter((key) => platforms.some((platform) => platform.key === key))
+          .filter((key) => carries(format, key))
+          .slice(0, maxVariants)
+      : [];
+    return { format, channels };
+  };
+
+  const [contentType, setContentType] = useState(
+    () => templateFor(offeredTypes[0] ?? contentTypes[0] ?? 'POST', startingTemplate).format,
+  );
+  /*
+   * A10 (Phase 2B-2) — THE BRAND'S DEFAULT CHANNELS, the ones the format can
+   * carry. A template's own channels come first; the first carrying channel
+   * is the last resort, as before.
+   */
+  const brandDefaultChannels = (id: string, type: string) =>
+    (brands.find((brand) => brand.id === id)?.defaultPlatformKeys ?? [])
+      .filter((key) => platforms.some((platform) => platform.key === key))
+      .filter((key) => carries(type, key))
+      .slice(0, maxVariants);
   const [selected, setSelected] = useState<string[]>(() => {
+    const fromTemplate = templateFor(contentType, startingTemplate).channels;
+    if (fromTemplate.length > 0) return fromTemplate;
+    const fromBrand = brandDefaultChannels(brandId, contentType);
+    if (fromBrand.length > 0) return fromBrand;
     const first = platforms.find((platform) => carries(contentType, platform.key));
     return first ? [first.key] : [];
   });
-  const [brief, setBrief] = useState(initialBrief);
+  /*
+   * THE CAPTION SKELETON FILLS THE TEXT ONLY WHEN WRITING IT YOURSELF — in that
+   * mode the field IS the post. In AI mode the field is the brief a model
+   * reads, and a template's words never go into a prompt (owner answer D4).
+   */
+  const [brief, setBrief] = useState(
+    () =>
+      initialBrief ||
+      (mode === 'write' && startingTemplate?.body ? startingTemplate.body : initialBrief),
+  );
   const [goal, setGoal] = useState(initialGoal || recommendedGoal || '');
   const [contentLocale, setContentLocale] = useState<ContentLocale>(
     () => brands.find((brand) => brand.id === brandId)?.defaultLocale ?? 'EN',
@@ -435,6 +540,30 @@ export function ComposerView({
    * `idempotency.ts` holds the derivation, and holds it as a pure function
    * because that is what makes this property provable without a browser.
    */
+  /* Templates were listed for the page's brand; another brand has none here. */
+  const offeredTemplates = brandId !== '' && brandId === defaultBrandId ? templates : [];
+  const chosenTemplateId = offeredTemplates.some((template) => template.id === templateId)
+    ? templateId
+    : '';
+
+  const chooseTemplate = (id: string) => {
+    const previous = offeredTemplates.find((template) => template.id === chosenTemplateId) ?? null;
+    const next = offeredTemplates.find((template) => template.id === id) ?? null;
+    setTemplateId(id);
+    setQuote(null);
+    if (!next) return;
+    const { format, channels } = templateFor(contentType, next);
+    setContentType(format);
+    if (channels.length > 0) setSelected(channels);
+    // Only an empty field, or one still holding the previous template's words,
+    // is replaced: nothing the person typed is ever overwritten.
+    if (mode === 'write' && next.body) {
+      setBrief((current) =>
+        current.trim() === '' || current === (previous?.body ?? '') ? (next.body ?? '') : current,
+      );
+    }
+  };
+
   const ask = useMemo(
     () => ({
       brandId,
@@ -442,8 +571,9 @@ export function ComposerView({
       platformKeys: selected,
       contentLocale,
       contentType,
+      ...(chosenTemplateId ? { templateId: chosenTemplateId } : {}),
     }),
-    [brandId, brief, selected, contentLocale, contentType],
+    [brandId, brief, selected, contentLocale, contentType, chosenTemplateId],
   );
   // The GENERATION ask reads the brief the model will read — goal included —
   // so choosing a different goal is a different request, not a retry.
@@ -511,6 +641,7 @@ export function ComposerView({
       locale: contentLocale,
       contentType,
       idempotencyKey: generationIdempotencyKey,
+      ...(chosenTemplateId ? { templateId: chosenTemplateId } : {}),
     });
     setBusy(null);
     if (payload) {
@@ -682,6 +813,8 @@ export function ComposerView({
           plannedDate={plannedDate}
           expiredChannels={expiredChannels}
           review={review}
+          scheduling={scheduling}
+          failed={failed}
           canGenerateMedia={can.generateMedia ?? false}
           onTool={(variantId, tool, argument) => void runTool(variantId, tool, argument)}
           actions={actions}
@@ -707,6 +840,8 @@ export function ComposerView({
                   onChange={(event) => {
                     setBrandId(event.target.value);
                     setQuote(null);
+                    const fromBrand = brandDefaultChannels(event.target.value, contentType);
+                    if (fromBrand.length > 0) setSelected(fromBrand);
                   }}
                 >
                   {/*
@@ -734,6 +869,34 @@ export function ComposerView({
                     </option>
                   ))}
                 </select>
+              </div>
+            ) : null}
+
+            {offeredTemplates.length > 0 ? (
+              <div className="cs-field">
+                <label htmlFor={`${fieldId}-template`}>{t['create.template.label']}</label>
+                <select
+                  id={`${fieldId}-template`}
+                  value={chosenTemplateId}
+                  data-testid="content-template"
+                  aria-describedby={`${fieldId}-template-hint`}
+                  onChange={(event) => chooseTemplate(event.target.value)}
+                >
+                  <option value="">{t['create.template.none']}</option>
+                  {offeredTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.isDefault
+                        ? (t['create.template.default'] ?? '{name}').replace(
+                            '{name}',
+                            template.name,
+                          )
+                        : template.name}
+                    </option>
+                  ))}
+                </select>
+                <p id={`${fieldId}-template-hint`} className="cs-hint">
+                  {mode === 'write' ? t['create.template.hintWrite'] : t['create.template.hintAi']}
+                </p>
               </div>
             ) : null}
 
@@ -1018,6 +1181,9 @@ export function ComposerView({
                 <input type="hidden" name="contentType" value={contentType} />
                 <input type="hidden" name="body" value={brief} />
                 <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
+                {chosenTemplateId ? (
+                  <input type="hidden" name="templateId" value={chosenTemplateId} />
+                ) : null}
                 {carriedMedia ? (
                   <input type="hidden" name="attach" value={carriedMedia.id} />
                 ) : null}

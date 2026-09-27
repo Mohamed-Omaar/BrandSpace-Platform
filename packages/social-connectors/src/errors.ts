@@ -178,5 +178,17 @@ export const publishJobPastDeadline = (): AppError =>
     reason: PUBLISH_DEADLINE_PASSED_REASON,
   });
 
+/**
+ * ITEM 9 (Phase 2B-2, D-332 amended) — THE POST WAS SCHEDULED AGAIN. Once a
+ * failed post has a newer slot, its old failed jobs are history: retrying one
+ * would publish the post twice. Refused before anything changes.
+ */
+export const PUBLISH_JOB_SUPERSEDED_REASON = 'superseded_by_new_slot';
+
+export const publishJobSuperseded = (): AppError =>
+  new AppError('CONFLICT', 'This post was scheduled again, so this attempt is not retried.', {
+    reason: PUBLISH_JOB_SUPERSEDED_REASON,
+  });
+
 export const unsupportedByProvider = (): AppError =>
   new AppError('VALIDATION_FAILED', 'That platform does not support this action.');

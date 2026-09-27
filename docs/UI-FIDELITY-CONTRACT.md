@@ -648,6 +648,34 @@ exactly one is ticked (`SetupBrandLanguages`). The new-workspace page gains a pl
 form and, for Egypt only, the city `SearchableSelect` General already uses. A Brand Brain fact's origin
 badge can read "From setup". No new visual treatment, colour, or interaction model.
 
+### 6.3.39 Prototype v90 Phase 2B-2 — Settings → Publishing defaults (A8, A10, B2)
+
+A Settings row built exactly like Settings → AI: `SettingsSplit`, per brand a `Card` with a `SectionHeader`
+holding the defaults under the §6.3.33 save bar (channel `CheckboxRow`s in a `fieldset`, a native time
+`Field`, and the first-comment `CheckboxRow` with its hint line), then a second `Card` for the brand's post
+templates: rows with a `StatusBadge` for the default, ghost buttons for Edit and Make default, the
+Automations screen's `<details>` two-step delete, and the new/edit form in the same `Field`s. The empty
+list is a `StateMessage`. Nothing new.
+
+### 6.3.40 Prototype v90 Phase 2B-2 — templates, slide headlines, inline date and time, and a failed post in the Studio (B9, E4, item 9)
+
+Inside the ported composer (§4.1 route), four additions in its own vocabulary:
+
+- **Template picker** on a new post: one more `cs-field` with the native select and a `cs-hint` line,
+  above the format field. **Save as template** on an open post: a `<details>` disclosure beside Archive,
+  the same `cs-ghost-button` summary and `cs-field` form Archive uses.
+- **Slide headline**: one short text field under each numbered slide's name in `cs-slide-list`. It is the
+  one new class, `cs-slide-headline` — the composer field's own radius, padding and type on the card's
+  surface, so it reads against the slide row's soft fill; no new colour (the card surface and
+  `--cs-ink`), and the purple focus outline the composer already uses.
+- **Inline date and time**: a `cs-form-row` with two `cs-field` native inputs (date, time) and a
+  `cs-dark-button`, under the action row, wherever the Schedule link is offered.
+- **A failed post**: a `cs-notice warning` with the Publishing screen's own words and its actions
+  (Reschedule as `cs-dark-button`, "Make a new copy" as `cs-ghost-button`); the Publishing row gains a
+  primary "Reschedule" link beside its existing buttons.
+
+No new component, interaction model or colour family.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

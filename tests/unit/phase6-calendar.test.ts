@@ -78,9 +78,14 @@ describe('D-290 · the screen', () => {
 
   it('the tray offers only posts without a live slot', () => {
     expect(page).toContain('unscheduledOnly: true');
-    expect(page).toContain("statuses: ['DRAFT', 'APPROVED']");
-    expect(read('packages/content/src/library.ts')).toMatch(
-      /none: \{ status: \{ notIn: \['CANCELLED', 'PUBLISHED', 'FAILED'\] \} \}/,
+    // Item 9 (Phase 2B-2): a FAILED post with nothing published may go on again.
+    expect(page).toContain("statuses: ['DRAFT', 'APPROVED', 'FAILED']");
+    // D11 (Phase 2B-2): the scheduler's own live-slot rule — a PUBLISHED slot is
+    // not free; a FAILED slot with nothing published or in flight is.
+    const library = read('packages/content/src/library.ts');
+    expect(library).toContain("{ status: { notIn: ['CANCELLED', 'FAILED'] } },");
+    expect(library).toContain(
+      'publishJobs: { some: { status: { in: [...SLOT_BUSY_JOB_STATUSES] } } }',
     );
   });
 

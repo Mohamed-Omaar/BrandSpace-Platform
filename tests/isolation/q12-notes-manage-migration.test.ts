@@ -92,10 +92,15 @@ async function connect(url: string): Promise<Client> {
 /**
  * Permissions a LATER migration adds to a live database, so the simulated old
  * catalogue must not already hold them: `notes.manage` (Phase 2A) and
- * `workspace.security.manage` (Phase 2B-1, D-333). With them left out, the
+ * `workspace.security.manage` (Phase 2B-1, D-333) and `templates.manage`
+ * (Phase 2B-2, E4). With them left out, the
  * equality below proves each migration grants exactly what the definitions do.
  */
-const LATER_PERMISSIONS: readonly string[] = ['notes.manage', 'workspace.security.manage'];
+const LATER_PERMISSIONS: readonly string[] = [
+  'notes.manage',
+  'workspace.security.manage',
+  'templates.manage',
+];
 
 /**
  * The catalogue as the release BEFORE Phase 2A wrote it, on the platform
@@ -256,6 +261,26 @@ describe('Q12 — notes.manage: an upgraded database and a fresh one grant the s
       db.query(
         `SELECT "key", "resource", "action", "minScope", "description"
            FROM "permission" WHERE "key" = 'workspace.security.manage'`,
+      );
+    const [upgradedRow, freshRow] = [(await describe(upgraded)).rows, (await describe(fresh)).rows];
+    expect(upgradedRow).toHaveLength(1);
+    expect(upgradedRow).toEqual(freshRow);
+  });
+
+  it('grants templates.manage to Owner, Admin, Marketing Manager and Designer, identically in both (E4)', async () => {
+    for (const db of [upgraded, fresh]) {
+      const all = await grants(db);
+      expect(all.filter((g) => g.endsWith(':templates.manage'))).toEqual([
+        'designer:templates.manage',
+        'marketing_manager:templates.manage',
+        'workspace_admin:templates.manage',
+        'workspace_owner:templates.manage',
+      ]);
+    }
+    const describe = (db: Client) =>
+      db.query(
+        `SELECT "key", "resource", "action", "minScope", "description"
+           FROM "permission" WHERE "key" = 'templates.manage'`,
       );
     const [upgradedRow, freshRow] = [(await describe(upgraded)).rows, (await describe(fresh)).rows];
     expect(upgradedRow).toHaveLength(1);

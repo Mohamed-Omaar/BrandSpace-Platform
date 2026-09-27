@@ -40,6 +40,14 @@ export interface MediaSlidesProps {
   readonly onCoverChange: (assetId: string | null) => void;
   /** Open the media drawer: to add, or to replace the slide at `index`. */
   readonly onOpenDrawer: (replaceIndex: number | null) => void;
+  /**
+   * B9 (Phase 2B-2, owner answer D3) — a carousel slide is {image, headline}.
+   * Keyed by the image, so reordering keeps each headline with its picture.
+   * Offered only on a numbered (carousel) list.
+   */
+  readonly headlines?: Readonly<Record<string, string>>;
+  readonly onHeadlineChange?: (assetId: string, headline: string) => void;
+  readonly headlineMax?: number;
 }
 
 export function MediaSlides({
@@ -56,6 +64,9 @@ export function MediaSlides({
   onChange,
   onCoverChange,
   onOpenDrawer,
+  headlines = {},
+  onHeadlineChange,
+  headlineMax = 120,
 }: MediaSlidesProps) {
   const [dragging, setDragging] = useState<number | null>(null);
   if (maxItems === 0) return null;
@@ -73,6 +84,19 @@ export function MediaSlides({
         <input key={id} type="hidden" name="assetIds" value={id} />
       ))}
       {coverable ? <input type="hidden" name="coverAssetId" value={cover ?? ''} /> : null}
+      {/*
+        B9 — the headlines travel under their own presence marker, one per
+        image and in the images' order, so a form without them leaves the
+        stored ones alone.
+      */}
+      {numbered && onHeadlineChange && !disabled ? (
+        <>
+          <input type="hidden" name="slidesPresent" value="1" />
+          {value.map((id) => (
+            <input key={id} type="hidden" name="slideHeadline" value={headlines[id] ?? ''} />
+          ))}
+        </>
+      ) : null}
 
       <p className="cs-hint" data-testid={`${testId}-count`}>
         {fill(t['content.media.selected'] ?? '', { selected: value.length, max: maxItems })}
@@ -147,6 +171,28 @@ export function MediaSlides({
                       .filter(Boolean)
                       .join(' · ')}
                   </span>
+                  {numbered && onHeadlineChange ? (
+                    disabled ? (
+                      headlines[id] ? (
+                        <span dir="auto" data-testid={`${testId}-headline-${index}`}>
+                          {headlines[id]}
+                        </span>
+                      ) : null
+                    ) : (
+                      <input
+                        className="cs-slide-headline"
+                        dir="auto"
+                        value={headlines[id] ?? ''}
+                        maxLength={headlineMax}
+                        placeholder={t['editor.slides.headlinePlaceholder']}
+                        aria-label={fill(t['editor.slides.headline'] ?? '{slide}', {
+                          slide: label(index),
+                        })}
+                        data-testid={`${testId}-headline-${index}`}
+                        onChange={(event) => onHeadlineChange(id, event.target.value)}
+                      />
+                    )
+                  ) : null}
                 </span>
                 {/*
                   Q12 — READ-ONLY SHOWS THE SLIDES, NOT DEAD CONTROLS. A reader

@@ -354,6 +354,7 @@ export function registerContentRoutes(app: FastifyInstance): void {
               locale: parsed.data.locale,
               platformKeys: parsed.data.platformKeys,
               idempotencyKey: parsed.data.idempotencyKey,
+              ...(parsed.data.templateId ? { templateId: parsed.data.templateId } : {}),
               actorUserId: caller.userId,
               planKey: facts.planKey,
               actorBrandScope: caller.brandScope,

@@ -5,6 +5,7 @@ import {
   type CalendarSlot,
   type ContentItem,
   type ContentVariant,
+  type Prisma,
   type TenantScopedClient,
 } from '@brandspace/database';
 import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
@@ -143,6 +144,51 @@ export interface CalendarSlotView {
 const SCHEDULABLE_FROM: readonly ContentItem['status'][] = ['DRAFT', 'APPROVED', 'SCHEDULED'];
 
 /**
+ * ITEM 9 (Phase 2B-2, the D-332 follow-up, owner's Option 1) — A FAILED POST
+ * WITH NOTHING PUBLISHED MAY BE SCHEDULED AGAIN, as a NEW slot. The old FAILED
+ * slot and its jobs stay as history; retrying them is refused once the new
+ * slot exists (`superseded_by_new_slot` in the publishing pipeline). The
+ * approval gate is unchanged: FAILED is not APPROVED, so a brand that requires
+ * approval sends the post for review again first (`submit()` accepts FAILED
+ * for the same reason), and its earlier approvals are never touched.
+ *
+ * A partly published post is PARTIALLY_PUBLISHED, not FAILED, and is not
+ * rescheduled here: some channels already went out.
+ */
+export const RESCHEDULABLE_ITEM_STATUS: ContentItem['status'] = 'FAILED';
+
+/**
+ * The job states that mean a FAILED slot is still busy — a retry in flight —
+ * or produced something. Such a slot still counts as the post's live slot.
+ */
+export const SLOT_BUSY_JOB_STATUSES = [
+  'PENDING',
+  'QUEUED',
+  'PUBLISHING',
+  'VERIFICATION_PENDING',
+  'PUBLISHED',
+] as const;
+
+/**
+ * THE POST'S LIVE SLOT — the one rule the scheduler, the approvals module and
+ * the screens share, and the partial unique index `calendar_slot_one_live_per_item`
+ * backs (`status NOT IN ('CANCELLED', 'FAILED')`). A cancelled slot is gone; a
+ * FAILED slot whose jobs are all finished and none published is history.
+ */
+export function liveSlotWhere(contentItemId: string): Prisma.CalendarSlotWhereInput {
+  return {
+    contentItemId,
+    OR: [
+      { status: { notIn: ['CANCELLED', 'FAILED'] } },
+      {
+        status: 'FAILED',
+        publishJobs: { some: { status: { in: [...SLOT_BUSY_JOB_STATUSES] } } },
+      },
+    ],
+  };
+}
+
+/**
  * B-4 — the slot states a plan can still be moved from. Once publishing has
  * started (PUBLISHING) or finished (PUBLISHED, PARTIALLY_PUBLISHED, FAILED),
  * the slot records what happened and a reschedule is refused.
@@ -214,7 +260,15 @@ export class ContentCalendarService {
     if ((await this.#approvalRequired(item.brandId)) && item.status !== 'APPROVED') {
       throw approvalRequiredBeforeScheduling();
     }
-    if (!SCHEDULABLE_FROM.includes(item.status)) throw transitionNotAllowed();
+    // Item 9 — a FAILED post with nothing published is scheduled again.
+    const rescheduling = item.status === RESCHEDULABLE_ITEM_STATUS;
+    if (!SCHEDULABLE_FROM.includes(item.status) && !rescheduling) throw transitionNotAllowed();
+    if (rescheduling) {
+      const published = await this.#db.publishJob.count({
+        where: { workspaceId: this.#workspaceId, contentItemId: item.id, status: 'PUBLISHED' },
+      });
+      if (published > 0) throw transitionNotAllowed();
+    }
 
     const variants = await this.#db.contentVariant.findMany({
       where: { contentItemId: item.id },
@@ -229,6 +283,14 @@ export class ContentCalendarService {
 
     const live = await this.#liveSlotFor(item.id);
     if (live) throw alreadyScheduled();
+    // The attempt it replaces, for the history (item 9). Never changed here.
+    const replaces = rescheduling
+      ? await this.#db.calendarSlot.findFirst({
+          where: { workspaceId: this.#workspaceId, contentItemId: item.id, status: 'FAILED' },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        })
+      : null;
 
     const instant = this.#resolveInstant(input.localTime);
     await this.#assertDayHasRoom(instant, null);
@@ -278,6 +340,7 @@ export class ContentCalendarService {
       timezone: slot.timezone,
       scheduledAtUtc: slot.scheduledAtUtc.toISOString(),
       platformCount: slot.platformKeys.length,
+      ...(replaces ? { replacesFailedSlotId: replaces.id } : {}),
     });
 
     /*
@@ -650,7 +713,7 @@ export class ContentCalendarService {
 
   async #liveSlotFor(contentItemId: string): Promise<CalendarSlot | null> {
     return this.#db.calendarSlot.findFirst({
-      where: { contentItemId, status: { not: 'CANCELLED' } },
+      where: { workspaceId: this.#workspaceId, ...liveSlotWhere(contentItemId) },
     });
   }
 

@@ -28,6 +28,7 @@ export type SettingsNavKey =
   | 'settings'
   | 'brand'
   | 'approvals'
+  | 'publishing'
   | 'notifications'
   | 'ai'
   | 'security'
@@ -73,6 +74,19 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
     path: '/settings/approvals',
     labelKey: 'settings.approvals',
     permission: 'approvals.policy.manage',
+  },
+  /*
+   * A8 / B2 (Phase 2B-2) — PUBLISHING DEFAULTS: each brand's default channels,
+   * default time, hashtags in the first comment, and its post templates.
+   * `brand.manage`, the key Settings → AI already uses: these are brand
+   * settings (owner, Phase 2B-2 report). Managing a template also needs
+   * `templates.manage`, checked by every template action.
+   */
+  {
+    key: 'publishing',
+    path: '/settings/publishing',
+    labelKey: 'settings.publishing',
+    permission: 'brand.manage',
   },
   /* G3 (D-331) — AI: the brand's AI writing language, `brand.manage`. */
   { key: 'ai', path: '/settings/ai', labelKey: 'settings.ai', permission: 'brand.manage' },

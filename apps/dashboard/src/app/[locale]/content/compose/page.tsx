@@ -1,6 +1,13 @@
 import type React from 'react';
 import { notFound } from 'next/navigation';
-import { CONTENT_TOOLS, READ_ONLY_CONTENT_STATUSES } from '@brandspace/content';
+import {
+  CONTENT_TOOLS,
+  DEFAULT_POST_TIME,
+  READ_ONLY_CONTENT_STATUSES,
+  formatLocalTime,
+  nextDayKey,
+  readSlides,
+} from '@brandspace/content';
 import { CREATIVE_FORMATS } from '@brandspace/creative';
 import {
   brandIdQueryFilter,
@@ -34,6 +41,7 @@ import { ActivityTimeline } from '../../../../components/activity-timeline';
 import { activityTimeline } from '../../../../server/activity-timeline';
 import { NotesPanel } from '../../../../components/notes-panel';
 import { inSocial } from '../../../../server/social-context';
+import { retryableAfterReconnect } from '@brandspace/social-connectors';
 import { relativeTime } from '../../../../server/home';
 import { plannedDateFrom } from '../../../../server/planned-date';
 import { channelReadinessForBrand } from '../../../../server/publish-readiness';
@@ -50,6 +58,8 @@ import { CONTENT_TYPES } from '../content-types';
 import {
   cancelReviewAction,
   createManualDraftAction,
+  saveDraftAsTemplateAction,
+  scheduleFromStudioAction,
   duplicateContentAction,
   listCampaignOptionsAction,
   setContentCampaignAction,
@@ -63,6 +73,7 @@ import {
   ComposerView,
   type ComposerDraft,
   type ComposerPlatform,
+  type ComposerTemplate,
   type ContentLocale,
 } from './composer-view';
 
@@ -151,7 +162,7 @@ export default async function ComposePage({
         ...brandScopeFilter(workspace.brandScope),
       },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, defaultLocale: true },
+      select: { id: true, name: true, defaultLocale: true, defaultPlatformKeys: true },
     }),
   );
 
@@ -634,6 +645,86 @@ export default async function ComposePage({
         return [];
       })
     : [];
+  /*
+   * E4 / B2 — the brand's templates, for a NEW post only, and only for a member
+   * who may create one. Listed under the member's BrandScope; the create paths
+   * re-resolve the chosen id against the brand anyway.
+   */
+  const templates: ComposerTemplate[] =
+    !draft && composingBrandId && workspace.permissionKeys.includes('content.create')
+      ? (
+          await inContentStudio(workspace.workspaceId, async (services) =>
+            (await services.templates()).list({
+              brandId: composingBrandId,
+              brandScope: workspace.brandScope,
+            }),
+          )
+        ).map((template) => ({
+          id: template.id,
+          name: template.name,
+          isDefault: template.isDefault,
+          contentType: template.contentType,
+          platformKeys: template.platformKeys,
+          body: template.body,
+          hashtags: template.hashtags,
+          firstComment: template.firstComment,
+        }))
+      : [];
+  const requestedTemplate = single('template');
+  const initialTemplateId = templates.some((template) => template.id === requestedTemplate)
+    ? (requestedTemplate as string)
+    : '';
+  /*
+   * B9 / F2 (Phase 2B-2) — what the Studio's inline date and time start from:
+   * the workspace's today and tomorrow, and the brand's default time (A10),
+   * else 09:00. Only for a post that exists and a member who may schedule.
+   */
+  const scheduling =
+    draft && workspace.permissionKeys.includes('content.schedule')
+      ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
+          const [zone, brand] = await Promise.all([
+            db.workspace.findUniqueOrThrow({
+              where: { id: workspace.workspaceId },
+              select: { timezone: true },
+            }),
+            db.brand.findFirst({
+              where: { id: draft.brandId, deletedAt: null },
+              select: { defaultPostTime: true },
+            }),
+          ]);
+          const today = formatLocalTime(now, zone.timezone).slice(0, 10);
+          return {
+            today,
+            tomorrow: nextDayKey(today),
+            defaultTime: brand?.defaultPostTime ?? DEFAULT_POST_TIME,
+          };
+        })
+      : null;
+  /*
+   * ITEM 9 (D-332 amended) — A FAILED POST: what the Publishing screen would
+   * say about it. Its failed jobs past their lateness deadline carry the late
+   * message (the account wording when an account failure caused it); a post
+   * still inside its window gets the plain line. Read-only, under RLS.
+   */
+  const failed =
+    draft && draft.status === 'FAILED'
+      ? await inSocial(workspace.workspaceId, async (services) => {
+          const jobs = await services.db.publishJob.findMany({
+            where: { contentItemId: draft.id, status: 'FAILED' },
+            select: { scheduledAtUtc: true, failureClass: true, failureCode: true },
+          });
+          const pipeline = await services.pipeline();
+          const late = jobs.filter((job) => pipeline.pastLatenessDeadline(job.scheduledAtUtc));
+          return {
+            message:
+              late.length === 0
+                ? translate('editor.failed.notLate')
+                : late.some((job) => retryableAfterReconnect(job))
+                  ? translate('publishing.late.disconnected')
+                  : translate('publishing.late.passed'),
+          };
+        })
+      : null;
   const requestedGoal = single('goal');
   const initialGoal = POST_GOALS.includes(requestedGoal as never) ? (requestedGoal as string) : '';
 
@@ -694,6 +785,7 @@ export default async function ComposePage({
           assetIds: variant.assetIds,
           firstComment: variant.firstComment,
           coverAssetId: variant.coverAssetId,
+          slides: readSlides(variant.slides),
           updatedAt: variant.updatedAt.toISOString(),
         })),
       }
@@ -894,6 +986,8 @@ export default async function ComposePage({
         defaultsBrandId={composingBrandId ?? ''}
         forgetDefault={decidePreferenceAction}
         formatPlatforms={formatPlatforms}
+        templates={templates}
+        initialTemplateId={initialTemplateId}
         can={{
           create: workspace.permissionKeys.includes('content.create'),
           readBrain: workspace.permissionKeys.includes('brand_brain.read'),
@@ -923,7 +1017,11 @@ export default async function ComposePage({
             !composerDraft?.readOnly,
           // Q18 — spending credits also needs `copilot.use`.
           generate: maySpendCredits(workspace.permissionKeys, 'content.create'),
+          // E4 (Phase 2B-2) — "Save as template".
+          manageTemplates: workspace.permissionKeys.includes('templates.manage'),
         }}
+        scheduling={scheduling}
+        failed={failed}
         creativeFormats={CREATIVE_FORMATS.map((format) => ({
           key: format.key,
           label: translate(format.labelKey as MessageKey),
@@ -938,6 +1036,8 @@ export default async function ComposePage({
           setCampaign: setContentCampaignAction,
           uploadMedia: uploadComposerMediaAction,
           createManualDraft: createManualDraftAction,
+          scheduleFromStudio: scheduleFromStudioAction,
+          saveAsTemplate: saveDraftAsTemplateAction,
           listCampaignOptions: listCampaignOptionsAction,
         }}
       />
@@ -999,6 +1099,21 @@ function translateOptional(
 
 /** The draft editor's own vocabulary (D-284). */
 const EDITOR_KEYS = [
+  // Phase 2B-2 — carousel slide headlines (B9).
+  'editor.slides.headline',
+  'editor.slides.headlinePlaceholder',
+  // Phase 2B-2 — inline date and time, and "Save as template" (B9, E4).
+  'editor.schedule.date',
+  'editor.schedule.time',
+  'editor.schedule.submit',
+  'editor.schedule.todayHint',
+  'editor.template.save',
+  'editor.template.name',
+  'editor.template.hint',
+  'editor.template.confirm',
+  // Item 9 — a failed post, scheduled again.
+  'editor.failed.reschedule',
+  'editor.failed.reviewAgain',
   'editor.next.schedule',
   'editor.next.needsApproval',
   'editor.changes.title',
@@ -1105,6 +1220,12 @@ const COMPOSER_KEYS = [
   'create.format.unsupported',
   'create.goal.label',
   'create.goal.none',
+  // Phase 2B-2 — post templates (E4 / B2).
+  'create.template.label',
+  'create.template.none',
+  'create.template.default',
+  'create.template.hintWrite',
+  'create.template.hintAi',
   'create.goal.recommended',
   'create.defaults.title',
   'create.defaults.forget',

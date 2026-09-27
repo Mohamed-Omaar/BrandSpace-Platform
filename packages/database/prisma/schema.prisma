@@ -275,10 +275,10 @@ model User {
   // enrol them, so their TOTP seed is sealed with the customer MFA key domain
   // and the envelope is kept here (D-206). Only the envelope: the seed itself is
   // never stored, logged or returned, and the two paths never share a key.
-  mfaEnabled        Boolean   @default(false)
-  mfaSecretRef      String?
-  mfaSecretMaterial Json?
-  mfaEnrolledAt     DateTime? @db.Timestamptz(6)
+  mfaEnabled               Boolean   @default(false)
+  mfaSecretRef             String?
+  mfaSecretMaterial        Json?
+  mfaEnrolledAt            DateTime? @db.Timestamptz(6)
   /// G4 / Q23 (D-333) — "New phone": the sealed seed of an authenticator being
   /// enrolled while the current one keeps working. Moved into
   /// `mfaSecretMaterial` only when a code from the new phone proves it; the
@@ -293,11 +293,11 @@ model User {
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt DateTime? @db.Timestamptz(6)
 
-  memberships     Membership[]
-  ownedWorkspaces Workspace[]  @relation("WorkspaceOwner")
+  memberships      Membership[]
+  ownedWorkspaces  Workspace[]  @relation("WorkspaceOwner")
   /// Prototype v94 Phase 2B-1 (D-328): workspaces this person asked to delete.
-  deletionRequests Workspace[] @relation("WorkspaceDeletionRequester")
-  invitesSent     Membership[] @relation("MembershipInviter")
+  deletionRequests Workspace[]  @relation("WorkspaceDeletionRequester")
+  invitesSent      Membership[] @relation("MembershipInviter")
 
   sessions            CustomerSession[]
   passwordResets      PasswordResetToken[]
@@ -508,9 +508,10 @@ model Workspace {
   assetProcessingJobs AssetProcessingJob[]
 
   /// Phase 5B-2 — AI Content Studio.
-  contentItems    ContentItem[]
-  contentVariants ContentVariant[]
-  calendarSlots   CalendarSlot[]
+  contentItems     ContentItem[]
+  contentTemplates ContentTemplate[]
+  contentVariants  ContentVariant[]
+  calendarSlots    CalendarSlot[]
 
   /// Phase 5B-3 — Approvals.
   approvals        Approval[]
@@ -1452,7 +1453,7 @@ model UsageCounter {
   periodStart DateTime @db.Timestamptz(6)
   periodEnd   DateTime @db.Timestamptz(6)
 
-  usedValue Int @default(0)
+  usedValue Int    @default(0)
   /// EXACT bytes, for a quota measured in storage (B-1). Only the
   /// `limit.storage_gb` counter moves it; every other counter leaves it at 0.
   /// On that counter `usedValue` is DERIVED from it — the gigabytes the total
@@ -1483,7 +1484,7 @@ model UsageEvent {
   workspaceId String @db.Uuid
 
   featureKey     String
-  idempotencyKey String @unique
+  idempotencyKey String  @unique
   amount         Int
   /// SIGNED bytes a storage movement moved (B-1); null for every unit quota.
   /// A byte movement records `amount` 0 — it is not a whole unit of anything.
@@ -1854,6 +1855,22 @@ model Brand {
   /// A configured key, validated against the activated `content` domain.
   arabicDialect String?
 
+  /// PUBLISHING DEFAULTS (prototype v90 A8 / A10 / B2, Phase 2B-2), edited in
+  /// Settings → Publishing defaults under `brand.manage`. Each proposes; none
+  /// overrides what a person chooses on a post.
+  ///
+  /// The channels a new post starts with (policy platform keys).
+  defaultPlatformKeys    String[] @default([])
+  /// The local time a post is proposed at, `HH:mm` (CHECK in the migration).
+  /// NULL means the calendar's own default.
+  defaultPostTime        String?
+  /// On channels that take a first comment, a new post's hashtags go into its
+  /// first comment instead of the caption.
+  hashtagsInFirstComment Boolean  @default(false)
+  /// Settings → AI: Home shows the "Recommended by BrandSpace" card for this
+  /// brand. Only that card (owner answer D7).
+  aiSuggestionsEnabled   Boolean  @default(true)
+
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
   /// Soft delete (docs/DATABASE.md §2). Never applied to ledgers or audit.
@@ -1882,9 +1899,10 @@ model Brand {
   assetProcessingJobs AssetProcessingJob[]
 
   /// Phase 5B-2 — AI Content Studio.
-  contentItems    ContentItem[]
-  contentVariants ContentVariant[]
-  calendarSlots   CalendarSlot[]
+  contentItems     ContentItem[]
+  contentTemplates ContentTemplate[]
+  contentVariants  ContentVariant[]
+  calendarSlots    CalendarSlot[]
 
   /// Phase 5B-3 — Approvals.
   approvals        Approval[]
@@ -2986,6 +3004,53 @@ model ContentItem {
 
 /// TENANT-OWNED, BRAND-SCOPED. Per-platform, per-locale rendering of a content
 /// item — docs/DATABASE.md §4.5.
+/// A brand's reusable post template (prototype v90 E4 / B2, Phase 2B-2).
+///
+/// WHAT IT HOLDS: a format, the channels, a caption skeleton, hashtags and a
+/// first comment — the owner's list (report answer D4). Applied to a new post
+/// by `createManualItem` and the composer; to an AI generation ONLY through
+/// its non-prompt fields (format, channels, hashtags, first comment): the
+/// caption skeleton is never put into a prompt.
+///
+/// USING one needs `content.create`; saving, changing, deleting and choosing
+/// the default need `templates.manage`.
+///
+/// ONE DEFAULT PER BRAND and one live name per brand are PARTIAL unique
+/// indexes in the migration (`WHERE "deletedAt" IS NULL`), which Prisma cannot
+/// model. Deleting is soft, so a post that came from a template keeps the
+/// audit trail that names it.
+model ContentTemplate {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  name         String
+  contentType  ContentType @default(POST)
+  platformKeys String[]    @default([])
+  /// The caption skeleton. Prefills a hand-written post; never sent to a model.
+  body         String?
+  hashtags     String[]    @default([])
+  firstComment String?
+
+  isDefault Boolean @default(false)
+
+  createdByUserId String? @db.Uuid
+  updatedByUserId String? @db.Uuid
+
+  /// Every change increments it (optimistic concurrency for the edit form).
+  version Int @default(1)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "content_template_brand_fkey")
+
+  @@index([workspaceId, brandId])
+  @@map("content_template")
+}
+
 model ContentVariant {
   id          String @id @default(uuid()) @db.Uuid
   workspaceId String @db.Uuid
@@ -3026,6 +3091,13 @@ model ContentVariant {
   /// brand or the shared shelf (trigger `content_variant_cover_scope`); deleting
   /// the asset clears it.
   coverAssetId String? @db.Uuid
+  /// B9 (Phase 2B-2) — ONE SHORT HEADLINE PER SLIDE of a carousel, as
+  /// `[{ assetId, headline }]` in the slides' order. `assetIds` stays the
+  /// canonical media order the connectors publish; this only carries text
+  /// aligned to it (owner answer D3: a slide is {image, headline}). Validated
+  /// at the boundary (`normaliseSlides`); NULL for every variant written before
+  /// it existed and for any post that is not a carousel.
+  slides       Json?
 
   platformOptions Json?
 

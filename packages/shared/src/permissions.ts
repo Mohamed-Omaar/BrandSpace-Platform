@@ -177,6 +177,21 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
    * lost anything (migration `…_notes_manage_permission`).
    */
   def('notes.manage', 'workspace', 'Resolve, assign and triage note threads'),
+  /*
+   * E4 / B2 (Phase 2B-2) — post templates. USING one needs nothing beyond the
+   * right to create the post it prefills (`content.create`); SAVING, CHANGING
+   * or DELETING a template, and choosing the brand's default, need this. It is
+   * a separate key rather than `brand.manage` because the prototype gives it to
+   * the Designer, who holds no brand authority, and withholds it from the
+   * Content Creator and Copywriter, who write posts all day. Granted to Owner,
+   * Admin, Marketing Manager and Designer (migration
+   * `…_templates_manage_permission`).
+   */
+  def(
+    'templates.manage',
+    'workspace',
+    'Save, change and delete post templates, and set the default',
+  ),
 
   /*
    * Phase 5B-3 — Approvals, Activity Log, Notifications.

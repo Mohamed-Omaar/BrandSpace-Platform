@@ -389,6 +389,57 @@ what it adds to §5 and how each item was built. Items not listed here are uncha
 
 ---
 
+## 7. Prototype v90: Phase 2B-2 (templates, publishing defaults, Studio, automations v2, shell)
+
+**Split (owner, 2026-09-27):** Phase 2B-2a — items 1, 2, 3 and 9 — on
+`feat/prototype-v90-phase-2b2`; Phase 2B-2b — items 4–8 — from a fresh branch once 2B-2a is merged. The full
+G13 event and action catalogue is Phase 2B-3, after Phase 2C. The ops finding (migrations finishing after the
+app services went live) is its own PR (option 3, the readiness gate, D-336).
+
+### 7.1 Rows in §2 / §5.1 corrected by the Phase 2B-2 report
+
+- **B9** — the "reviewer `<select>` fed by `eligibleReviewers`" gap already EXISTED (Phase 2A).
+- **B12** — "EXISTS" was only partly true: no edit form, and `updateRule` takes `enabled`.
+- **G13** — the per-event condition and action lists already exist (D-178); the values (campaign, format,
+  person) and the new events and actions do not. "B12 engine exists" understated how little of the G13
+  catalogue overlaps the closed registry. None of the prototype's personal-alert rules exist in the repo,
+  so no existing rule counts as "moved" (owner answer D1).
+- **C7** — the page size for "latest N of M" already exists (`DEFAULT_PAGE_SIZE`, 48).
+- **B11** — "best campaign" had no definition anywhere; the owner defined it (answer D5): highest average
+  engagement rate across the campaign's published posts, over its whole life, brand-scoped, on the Campaigns
+  list header.
+- **A10** — `linkTrackingEnabled` was listed although Q15 deferred link tracking.
+
+### 7.2 How Phase 2B-2a was built
+
+- **E4 + B2 — templates (D-337).** `templates.manage` (Owner, Admin, Marketing Manager, Designer; DATA
+  migration `20261006090000_templates_manage_permission`). `ContentTemplate` (migration
+  `20261006100000_content_template`): format, channels, caption skeleton, hashtags, first comment; one default
+  per brand. Applied to a hand-written post (blanks only) and to an AI generation (non-prompt fields only);
+  the author is always the person creating the post. The composer preselects the default template.
+- **A8 — Publishing defaults (D-338).** `/settings/publishing`, `brand.manage`: default channels, default
+  time, hashtags in the first comment (save bar G1), and the templates list. AI suggestions on/off is in
+  Settings → AI and hides the Home "Recommended by BrandSpace" card only (answer D7). Migration
+  `20261006110000_brand_publishing_defaults`.
+- **B9 — Studio (D-339).** A slide is {image, headline} (answer D3): `content_variant.slides` (migration
+  `20261006120000_content_variant_slides`), covered by the approval fingerprint. Templates in the Studio
+  (picker, "Save as template"). Inline date and time through `schedule()` with the F2 rule. The reviewer
+  select already existed.
+- **Item 9 — reschedule a FAILED post (D-332 amended).** A FAILED post with nothing published is scheduled
+  again as a NEW slot (attempt 0, fresh quota under the existing key, F2); the old slot stays as history and
+  its retry is refused once the new slot exists; a brand that requires approval sends it for review again
+  (a new cycle, earlier approvals untouched). Reschedule on the Publishing row and on the post. Migration
+  `20261006130000_calendar_slot_live_excludes_failed` (owner-approved M6), forward-only (OPERATIONS §6.3).
+- **D11 — `ok=SAVED` (D-340).** The missing text is added; a unit test guards every success code.
+
+### 7.3 Provisional — decided in Phase 2B-3
+
+The monthly cap on credit-spending automation actions (Q18) is **not** part of Phase 2B-2 (answer D2): v2 in
+2B-2b has no credit-spending action. The proposal on record, to be decided with the G13 catalogue in 2B-3:
+a **plan limit** in configuration (Control Center plan editor, never code), counted **per workspace per
+calendar month** in the workspace's time zone — **Starter 2 · Growth 4 · Scale 8 · Enterprise 8 · trial 2**.
+PROVISIONAL, NOT IMPLEMENTED.
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):

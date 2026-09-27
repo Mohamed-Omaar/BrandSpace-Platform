@@ -2,6 +2,7 @@ import 'server-only';
 import {
   MemberSuggestionService,
   CampaignService,
+  ContentTemplateService,
   ContentApprovalService,
   ContentCalendarService,
   ContentLibraryService,
@@ -95,6 +96,8 @@ export interface ContentServices extends ScopedServices {
    * making it a promise would only be symmetry for its own sake.
    */
   campaigns(): CampaignService;
+  /** E4 / B2 — the brand's post templates, on the same client and policy. */
+  templates(): Promise<ContentTemplateService>;
 }
 
 export async function inContentStudio<T>(
@@ -193,6 +196,8 @@ export async function inContentStudio<T>(
         }),
       suggestions: async () =>
         new MemberSuggestionService({ db: scoped.db, workspaceId, policy: await policy() }),
+      templates: async () =>
+        new ContentTemplateService({ db: scoped.db, workspaceId, policy: await policy() }),
       library: async () =>
         new ContentLibraryService({
           db: scoped.db,
