@@ -270,7 +270,7 @@ test.describe('D-332 · a failed post past its deadline is not retried', () => {
 
     await page.goto(`${DASHBOARD_BASE_URL}/ar/publishing?tab=failed`);
     await expect(page.getByTestId(`late-${late.jobId}`)).toHaveText(
-      'عدّى معاد البوست والحساب مفصول، فمتنشرش متأخر. اعمل نسخة جديدة عشان تجدوله تاني.',
+      'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
     );
     await expect(page.getByTestId(`retry-reconnected-${late.jobId}`)).toHaveCount(0);
     await expect(page.getByTestId(`copy-${late.jobId}`)).toBeVisible();

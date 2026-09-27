@@ -53,7 +53,16 @@ describe('D-332 · what the screen says, in both languages', () => {
       'This post’s time passed while the account was disconnected, so it wasn’t published late. Make a new copy to schedule it again.',
     );
     expect(optionalMessage('ar', 'publishing.late.disconnected')).toBe(
-      'عدّى معاد البوست والحساب مفصول، فمتنشرش متأخر. اعمل نسخة جديدة عشان تجدوله تاني.',
+      'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
+    );
+  });
+
+  it('the owner-approved neutral line, in formal Arabic like the rest of the product', () => {
+    expect(optionalMessage('en', 'publishing.late.passed')).toBe(
+      'This post’s time has passed, so it won’t be published late. Make a new copy to schedule it again.',
+    );
+    expect(optionalMessage('ar', 'publishing.late.passed')).toBe(
+      'مضى موعد هذا المنشور، لذا لن يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
     );
   });
 

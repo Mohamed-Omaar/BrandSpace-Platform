@@ -1465,7 +1465,7 @@ export const messages = {
     'publishing.retry': 'إعادة المحاولة',
     // D-332 (owner decision) — a failed post past its lateness deadline is not retried.
     'publishing.late.disconnected':
-      'عدّى معاد البوست والحساب مفصول، فمتنشرش متأخر. اعمل نسخة جديدة عشان تجدوله تاني.',
+      'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
     'publishing.late.passed':
       'مضى موعد هذا المنشور، لذا لن يُنشر متأخرًا. أنشئ نسخة جديدة منه لجدولته مرة أخرى.',
     'publishing.untitled': 'بدون عنوان',
