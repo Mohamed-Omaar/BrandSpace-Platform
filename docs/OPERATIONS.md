@@ -167,6 +167,10 @@ production at 3am. The policy is:
 - **A migration is reviewed for its lock profile.** An `ALTER TABLE` that rewrites a large table takes an
   ACCESS EXCLUSIVE lock and stops the product.
 - **Migrations run from the migrator role**, which owns the schema and is never used to serve a request.
+- **Every release waits for its migrations.** The api, worker, dashboard and admin report ready only
+  once `_prisma_migrations` holds every migration their build was made with
+  (`docs/RAILWAY-DEPLOYMENT.md` §4.4). A new migration folder therefore needs `pnpm db:manifest` in the
+  same commit; the unit suite fails without it.
 
 **If a migration must be undone**, the mechanism is a point-in-time restore (§3), not a down script.
 

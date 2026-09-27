@@ -221,17 +221,21 @@ Every service: source `Mohamed-Omaar/BrandSpace-Platform`, root directory the
 repository root, builder Railpack, restart `ON_FAILURE` with 10 retries, one
 replica, region EU West.
 
-| Service     | Build command                                        | Start command                               | Healthcheck     | Drain | Watch paths                                                       |
-| ----------- | ---------------------------------------------------- | ------------------------------------------- | --------------- | ----- | ----------------------------------------------------------------- |
-| `web`       | _(Railpack default)_                                 | `pnpm --filter @brandspace/web start`       | `/en/status`    | 30 s  | `apps/web/**`, `packages/ui/**`, `packages/shared/**`, root files |
-| `dashboard` | `prisma generate && pnpm --filter …/dashboard build` | `pnpm --filter @brandspace/dashboard start` | `/`             | 30 s  | `apps/dashboard/**`, `packages/**`, root files                    |
-| `admin`     | `prisma generate && pnpm --filter …/admin build`     | `pnpm --filter @brandspace/admin start`     | `/`             | 30 s  | `apps/admin/**`, `packages/**`, root files                        |
-| `api`       | `prisma generate`                                    | `pnpm --filter @brandspace/api start`       | `/health/ready` | 30 s  | `apps/api/**`, `packages/**`, root files                          |
-| `worker`    | `prisma generate`                                    | `pnpm --filter @brandspace/worker start`    | `/`             | 120 s | `apps/worker/**`, `packages/**`, root files                       |
+| Service     | Build command                                        | Start command                               | Healthcheck         | Drain | Watch paths                                                       |
+| ----------- | ---------------------------------------------------- | ------------------------------------------- | ------------------- | ----- | ----------------------------------------------------------------- |
+| `web`       | _(Railpack default)_                                 | `pnpm --filter @brandspace/web start`       | `/en/status`        | 30 s  | `apps/web/**`, `packages/ui/**`, `packages/shared/**`, root files |
+| `dashboard` | `prisma generate && pnpm --filter …/dashboard build` | `pnpm --filter @brandspace/dashboard start` | `/api/health/ready` | 30 s  | `apps/dashboard/**`, `packages/**`, root files                    |
+| `admin`     | `prisma generate && pnpm --filter …/admin build`     | `pnpm --filter @brandspace/admin start`     | `/api/health/ready` | 30 s  | `apps/admin/**`, `packages/**`, root files                        |
+| `api`       | `prisma generate`                                    | `pnpm --filter @brandspace/api start`       | `/health/ready`     | 30 s  | `apps/api/**`, `packages/**`, root files                          |
+| `worker`    | `prisma generate`                                    | `pnpm --filter @brandspace/worker start`    | `/`                 | 120 s | `apps/worker/**`, `packages/**`, root files                       |
 
 The web healthcheck uses `/en/status` rather than `/`: the bilingual router redirects the bare root
 with HTTP 307, while the status page is a deterministic verification route that returns a successful
 response for Railway.
+
+The dashboard, admin, api and worker healthchecks are the **migration gate** (§4.4): each answers
+2xx only once the database holds every migration its build needs. The dashboard and admin used to
+probe `/en/reset` and `/en/login`, which proved only that a page could render.
 
 **No pre-deploy command on any application service.** Migrations are a separate
 job — §4 explains why.
@@ -375,8 +379,9 @@ configuration.
 
 ### 4.2 Failure, drift and rollback
 
-- **On failure:** the job exits non-zero and application services are not
-  deployed. `prisma migrate deploy` is transactional per migration; a failed
+- **On failure:** the job exits non-zero, and the application services'
+  new deployments never pass their healthcheck (§4.4), so the previous release
+  keeps serving. `prisma migrate deploy` is transactional per migration; a failed
   migration leaves the database at the last complete one and the `_prisma_migrations`
   table records the failure. Resolve with `prisma migrate resolve` after
   understanding the cause — never by editing the table.
@@ -388,8 +393,6 @@ configuration.
   policy and this blueprint does not change it. A deployment rollback on Railway
   reverts _code_, not schema, so a migration must be compatible with the
   previous release for a rollback to be safe.
-
----
 
 ### 4.3 The live `db-setup` service — UNVERIFIED
 
@@ -417,6 +420,64 @@ values). Two outcomes matter:
 
 Until that is answered, staging should create its roles by the manual §3.2
 procedure rather than by copying a service nobody has read.
+
+### 4.4 The application services wait for the migrations (readiness gate)
+
+**What went wrong.** When PR #47 merged into `staging` (`998bc6f`), the api, worker and dashboard
+went live about ninety seconds before `migration-staging` finished. Nothing made them wait: §4.1's
+job is separate by design, and §20's "migrations must succeed before anything else deploys" was a
+sentence, not a mechanism. For that window the api scheduler's `publishing-sweep` and
+`automation-sweep` failed on every pass with "column `deletionScheduledFor` does not exist", and every
+dashboard request that resolved a session read the same column. They recovered on their own once
+the migrations landed. On Production the same order would delay publishing and fail requests.
+
+**The gate.** Every build carries the list of migrations it was made with
+(`packages/database/src/migration-manifest.ts`, regenerated by `pnpm db:manifest` and checked against
+the folders by `tests/unit/migration-readiness.test.ts`). A service is READY only when each of them is
+recorded as finished in `_prisma_migrations`; migrations the database has and the build does not know
+are ignored, so a code rollback onto a newer schema stays ready.
+
+| Service     | Healthcheck (Railway) | While a migration is pending                                                                                                           |
+| ----------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `api`       | `/health/ready`       | 503 with `schema: down`; the HTTP server is listening but the maintenance scheduler (every sweep) has not started — it polls every 5 s |
+| `worker`    | `/` (any path)        | 503 `waiting_for_migrations`; no BullMQ consumer exists yet, so no job is taken — jobs wait in Redis                                   |
+| `dashboard` | `/api/health/ready`   | 503 with `schema: down`, tenant identity                                                                                               |
+| `admin`     | `/api/health/ready`   | 503 with `schema: down`, platform identity                                                                                             |
+
+Railway sends traffic to a new deployment only after its healthcheck returns 2xx, and until then the
+previous deployment keeps serving. So neither request traffic nor background work reaches the new
+code before its migrations exist, and the migrator credential stays on the migration job alone
+(§4.1's reasons still hold). The public responses name a state per check and nothing else; the
+pending migration names go to the service's log.
+
+The runtime roles read `_prisma_migrations` and cannot write it (migration
+`20261005090000_runtime_roles_read_migration_history`): a runtime identity that could insert a row
+there could make a release report ready over a schema it does not have.
+
+**What the gate relies on in Railway — owner actions, not applied by this repository:**
+
+1. `dashboard` → Settings → Deploy → Healthcheck Path: `/api/health/ready` (was `/en/reset`).
+2. `admin` → Healthcheck Path: `/api/health/ready` (was `/en/login`).
+3. `api` → confirm the Healthcheck Path is `/health/ready`.
+4. `worker` → confirm a Healthcheck Path is set (`/`) and that `PORT` equals `WORKER_PORT`, which is
+   the port Railway probes.
+5. Consider raising the healthcheck timeout on those four services (below).
+
+Without a healthcheck path Railway switches traffic as soon as the process starts; the api scheduler
+and the worker still wait (that part is in-process), but requests are not held back.
+
+**When `migration-staging` takes longer than the healthcheck timeout (300 s).** Railway marks each new
+deployment that has not returned 2xx within the timeout as FAILED and leaves the previous deployment
+active. Nothing is lost: the migration job keeps running and finishes, and the previous release runs
+against the migrated schema, which every migration is written to allow (§4.2, OPERATIONS §6). But the
+new code does not go live by itself — redeploy the failed services once `migration-staging` has
+succeeded. Services whose deployment happened to start later may pass while earlier ones failed, so
+the environment can briefly run a mix of the two releases; each is compatible with the migrated
+schema, but check the deployment list and redeploy the failed ones. For a migration expected to take
+longer (a large backfill), raise the timeout first: the service setting, or the
+`RAILWAY_HEALTHCHECK_TIMEOUT_SEC` service variable.
+
+---
 
 ---
 
@@ -1214,7 +1275,8 @@ verified with `docs/RAILWAY-SMOKE-TEST.md`, and only then repeats for production
     before producers.
 13. **Deploy the public services** — `api`, then `dashboard`, `admin`, `web`.
 14. **Verify health.** `/health/live` and `/health/ready` on the API; the
-    worker's probe; each Next.js app renders.
+    worker's probe; `/api/health/ready` on the dashboard and admin (§4.4);
+    each Next.js app renders.
 15. **Smoke test.** `docs/RAILWAY-SMOKE-TEST.md`, every item.
 16. **Bootstrap the platform owner** — the exact command and the one-time MFA
     enrolment are §24 — and sign in to the Control Center with MFA. §25 must

@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { getPrisma, readSchemaReadiness, waitForSchema } from '@brandspace/database';
 import {
   createLogger,
   currentEnvironment,
@@ -121,18 +122,41 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop()
        * is an operator problem that the log makes visible.
        */
       const scheduler = new MaintenanceScheduler({ environment: currentEnvironment() });
-      await scheduler.start().catch((error: unknown) => {
-        startupLog.error('maintenance scheduler did not start', internalErrorFields(error));
-      });
+      const stopping = new AbortController();
 
       const shutdown = async (signal: string): Promise<void> => {
         startupLog.info('api stopping', { signal });
+        stopping.abort();
         scheduler.stop();
         await app.close();
         process.exit(0);
       };
       process.on('SIGTERM', () => void shutdown('SIGTERM'));
       process.on('SIGINT', () => void shutdown('SIGINT'));
+
+      /*
+       * THE SWEEPS START ONLY ONCE THE SCHEMA IS CURRENT (RAILWAY-DEPLOYMENT.md
+       * §4.4). Every sweep reads columns the newest migrations add; started
+       * against a database `migration-staging` has not finished, each pass
+       * fails and logs until it has — which is what happened when PR #47
+       * merged. The HTTP surface is already listening, so `/health/ready`
+       * answers 503 (`schema: down`) for the whole wait and Railway keeps the
+       * previous deployment serving.
+       */
+      const current = await waitForSchema({
+        read: () => readSchemaReadiness(getPrisma()),
+        signal: stopping.signal,
+        onWaiting: ({ pending, error }) =>
+          startupLog.warn('maintenance scheduler waiting for migrations', {
+            pending: pending.length,
+            next: pending[0],
+            ...(error ? internalErrorFields(error) : {}),
+          }),
+      });
+      if (!current) return;
+      await scheduler.start().catch((error: unknown) => {
+        startupLog.error('maintenance scheduler did not start', internalErrorFields(error));
+      });
     })
     .catch((e: unknown) => {
       console.error(e);
