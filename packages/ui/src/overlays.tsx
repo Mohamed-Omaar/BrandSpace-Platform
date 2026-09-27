@@ -145,7 +145,9 @@ export function useOverlayBehaviour({
   readonly trap?: boolean;
   /** Where focus goes on open, when not the first focusable element (a close button). */
   readonly initialFocusRef?: React.RefObject<HTMLElement | null> | undefined;
-}): void {
+}): React.RefObject<number | null> {
+  // This overlay's place in the stack while it is open, for the caller.
+  const entryId = useRef<number | null>(null);
   // The latest `onClose`, without re-registering: a caller passing an inline
   // arrow must not close and reopen the overlay on every render.
   const onCloseRef = useRef(onClose);
@@ -168,6 +170,7 @@ export function useOverlayBehaviour({
       close: () => onCloseRef.current(),
     };
     const displaced = overlayStack.open(entry, origin);
+    entryId.current = entry.id;
     syncKeyListener();
 
     // Move focus in. The container itself is focusable as a fallback, so an
@@ -180,6 +183,7 @@ export function useOverlayBehaviour({
     for (const other of displaced) other.close();
 
     return () => {
+      entryId.current = null;
       const above = overlayStack.close(entry.id);
       syncKeyListener();
       for (const other of above) other.close();
@@ -190,23 +194,33 @@ export function useOverlayBehaviour({
       if (!(active && overlayStack.anyContains(active))) restoreTo?.focus?.();
     };
   }, [open, containerRef, trap, initialFocusRef]);
+
+  return entryId;
 }
 
-/** Close when a pointer goes down outside `ref`. A convenience, never the only exit. */
+/**
+ * Close when a pointer goes down outside `ref`. A convenience, never the only
+ * exit. With `overlayId` (the stack entry of the surface `ref` belongs to), a
+ * pointer inside an overlay stacked ABOVE it does not count as outside: that
+ * overlay was opened from this one, and closing this one would close it too.
+ */
 export function useDismissOnOutsidePointer(
   ref: React.RefObject<HTMLElement | null>,
   open: boolean,
   onClose: () => void,
+  overlayId?: React.RefObject<number | null>,
 ): void {
   useEffect(() => {
     if (!open) return undefined;
     function onPointerDown(event: MouseEvent) {
       const node = ref.current;
+      const id = overlayId?.current ?? null;
+      if (id !== null && overlayStack.isAbove(id, event.target)) return;
       if (node && !node.contains(event.target as Node)) onClose();
     }
     document.addEventListener('mousedown', onPointerDown);
     return () => document.removeEventListener('mousedown', onPointerDown);
-  }, [ref, open, onClose]);
+  }, [ref, open, onClose, overlayId]);
 }
 
 /**
@@ -355,8 +369,13 @@ export function DropdownMenu({
    * items. Found by the P6-16 top-bar suite on the Create menu.
    */
   const [focusOnOpen, setFocusOnOpen] = useState<'first' | 'last' | null>(null);
-  useDismissOnOutsidePointer(wrapperRef, open, close);
-  useOverlayBehaviour({ open, onClose: close, containerRef: menuRef, trap: false });
+  const menuEntry = useOverlayBehaviour({
+    open,
+    onClose: close,
+    containerRef: menuRef,
+    trap: false,
+  });
+  useDismissOnOutsidePointer(wrapperRef, open, close, menuEntry);
   // AFTER `useOverlayBehaviour`, deliberately: that hook records where focus
   // came from (the trigger) so Escape can return it there, and it must record
   // it before this moves focus into the menu.

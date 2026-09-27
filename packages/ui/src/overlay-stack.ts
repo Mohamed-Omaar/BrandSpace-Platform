@@ -69,6 +69,17 @@ export class OverlayStack<Entry extends StackedOverlay> {
     return above;
   }
 
+  /**
+   * Is `node` inside an overlay stacked ABOVE `id`? A pointer going down in a
+   * confirmation opened from a menu is not a click "outside" the menu: the
+   * menu must stay, or closing it would take the confirmation with it.
+   */
+  isAbove(id: number, node: unknown): boolean {
+    const index = this.#entries.findIndex((entry) => entry.id === id);
+    if (index < 0) return false;
+    return this.#entries.slice(index + 1).some((entry) => entry.contains(node));
+  }
+
   /** Is `node` inside any open overlay? */
   anyContains(node: unknown): boolean {
     return this.#entries.some((entry) => entry.contains(node));

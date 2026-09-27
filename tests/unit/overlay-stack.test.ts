@@ -75,6 +75,20 @@ describe('OverlayStack', () => {
     expect(stack.entries).toEqual([]);
   });
 
+  it('a pointer inside an overlay stacked above is not "outside" the one beneath', () => {
+    const stack = new OverlayStack<Fake>();
+    const menu = overlay(1, 'menu', ['archive-item']);
+    const dialog = overlay(2, 'dialog', ['confirm-button']);
+    stack.open(menu, 'trigger');
+    stack.open(dialog, 'archive-item');
+    // Pressing Confirm must not close the menu — closing it would close the dialog.
+    expect(stack.isAbove(menu.id, 'confirm-button')).toBe(true);
+    // The page behind both is outside.
+    expect(stack.isAbove(menu.id, 'page')).toBe(false);
+    // Nothing is above the top.
+    expect(stack.isAbove(dialog.id, 'archive-item')).toBe(false);
+  });
+
   it('closing twice, or closing what is not open, changes nothing', () => {
     const stack = new OverlayStack<Fake>();
     const sheet = overlay(1, 'sheet');
