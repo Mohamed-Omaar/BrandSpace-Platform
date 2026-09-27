@@ -1,6 +1,13 @@
 import type React from 'react';
 import { notFound } from 'next/navigation';
-import { CONTENT_TOOLS, READ_ONLY_CONTENT_STATUSES } from '@brandspace/content';
+import {
+  CONTENT_TOOLS,
+  DEFAULT_POST_TIME,
+  READ_ONLY_CONTENT_STATUSES,
+  formatLocalTime,
+  nextDayKey,
+  readSlides,
+} from '@brandspace/content';
 import { CREATIVE_FORMATS } from '@brandspace/creative';
 import {
   brandIdQueryFilter,
@@ -50,6 +57,8 @@ import { CONTENT_TYPES } from '../content-types';
 import {
   cancelReviewAction,
   createManualDraftAction,
+  saveDraftAsTemplateAction,
+  scheduleFromStudioAction,
   duplicateContentAction,
   listCampaignOptionsAction,
   setContentCampaignAction,
@@ -664,6 +673,32 @@ export default async function ComposePage({
   const initialTemplateId = templates.some((template) => template.id === requestedTemplate)
     ? (requestedTemplate as string)
     : '';
+  /*
+   * B9 / F2 (Phase 2B-2) — what the Studio's inline date and time start from:
+   * the workspace's today and tomorrow, and the brand's default time (A10),
+   * else 09:00. Only for a post that exists and a member who may schedule.
+   */
+  const scheduling =
+    draft && workspace.permissionKeys.includes('content.schedule')
+      ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
+          const [zone, brand] = await Promise.all([
+            db.workspace.findUniqueOrThrow({
+              where: { id: workspace.workspaceId },
+              select: { timezone: true },
+            }),
+            db.brand.findFirst({
+              where: { id: draft.brandId, deletedAt: null },
+              select: { defaultPostTime: true },
+            }),
+          ]);
+          const today = formatLocalTime(now, zone.timezone).slice(0, 10);
+          return {
+            today,
+            tomorrow: nextDayKey(today),
+            defaultTime: brand?.defaultPostTime ?? DEFAULT_POST_TIME,
+          };
+        })
+      : null;
   const requestedGoal = single('goal');
   const initialGoal = POST_GOALS.includes(requestedGoal as never) ? (requestedGoal as string) : '';
 
@@ -724,6 +759,7 @@ export default async function ComposePage({
           assetIds: variant.assetIds,
           firstComment: variant.firstComment,
           coverAssetId: variant.coverAssetId,
+          slides: readSlides(variant.slides),
           updatedAt: variant.updatedAt.toISOString(),
         })),
       }
@@ -955,7 +991,10 @@ export default async function ComposePage({
             !composerDraft?.readOnly,
           // Q18 — spending credits also needs `copilot.use`.
           generate: maySpendCredits(workspace.permissionKeys, 'content.create'),
+          // E4 (Phase 2B-2) — "Save as template".
+          manageTemplates: workspace.permissionKeys.includes('templates.manage'),
         }}
+        scheduling={scheduling}
         creativeFormats={CREATIVE_FORMATS.map((format) => ({
           key: format.key,
           label: translate(format.labelKey as MessageKey),
@@ -970,6 +1009,8 @@ export default async function ComposePage({
           setCampaign: setContentCampaignAction,
           uploadMedia: uploadComposerMediaAction,
           createManualDraft: createManualDraftAction,
+          scheduleFromStudio: scheduleFromStudioAction,
+          saveAsTemplate: saveDraftAsTemplateAction,
           listCampaignOptions: listCampaignOptionsAction,
         }}
       />
@@ -1031,6 +1072,18 @@ function translateOptional(
 
 /** The draft editor's own vocabulary (D-284). */
 const EDITOR_KEYS = [
+  // Phase 2B-2 — carousel slide headlines (B9).
+  'editor.slides.headline',
+  'editor.slides.headlinePlaceholder',
+  // Phase 2B-2 — inline date and time, and "Save as template" (B9, E4).
+  'editor.schedule.date',
+  'editor.schedule.time',
+  'editor.schedule.submit',
+  'editor.schedule.todayHint',
+  'editor.template.save',
+  'editor.template.name',
+  'editor.template.hint',
+  'editor.template.confirm',
   'editor.next.schedule',
   'editor.next.needsApproval',
   'editor.changes.title',

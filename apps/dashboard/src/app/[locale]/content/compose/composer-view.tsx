@@ -62,6 +62,8 @@ export interface ComposerVariant {
   readonly firstComment?: string | null;
   /** PHASE 6 FINAL (D-285) — the cover image of a Reel or video. */
   readonly coverAssetId?: string | null;
+  /** B9 (Phase 2B-2) — a carousel's slide headlines, `{ assetId, headline }`. */
+  readonly slides?: readonly { readonly assetId: string; readonly headline: string }[];
   /** When the row last changed — the editor's "Saved …" and its version key. */
   readonly updatedAt: string;
 }
@@ -193,7 +195,15 @@ export interface ComposerViewProps {
     readBrain?: boolean;
     /** Q12 — may add knowledge (`brand_brain.edit`), the onboarding "learn" step. */
     teachBrain?: boolean;
+    /** E4 (Phase 2B-2) — may save a post as a template (`templates.manage`). */
+    manageTemplates?: boolean;
   };
+  /** B9 / F2 (Phase 2B-2) — today, tomorrow and the default time, for inline scheduling. */
+  readonly scheduling?: {
+    readonly today: string;
+    readonly tomorrow: string;
+    readonly defaultTime: string;
+  } | null;
   readonly tools: readonly string[];
   /** PHASE 6 FINAL (D-285) — the Creative Studio's sizes, for the media drawer. */
   readonly creativeFormats?: readonly { key: string; label: string }[];
@@ -261,6 +271,10 @@ export interface ComposerViewProps {
     resubmit(formData: FormData): Promise<void>;
     /** B-2 — a new draft from a published post, which cannot be edited. */
     duplicate?(formData: FormData): Promise<void>;
+    /** B9 (Phase 2B-2) — schedule from the Studio, inline. */
+    scheduleFromStudio?(formData: FormData): Promise<void>;
+    /** E4 (Phase 2B-2) — save the open post as a template. */
+    saveAsTemplate?(formData: FormData): Promise<void>;
     /**
      * WRITE THE POST YOURSELF — no model, no credits (D-224).
      *
@@ -330,6 +344,7 @@ export function ComposerView({
   expiredChannels = {},
   plannedFor = null,
   review = null,
+  scheduling = null,
 }: ComposerViewProps) {
   const router = useRouter();
   const fieldId = useId();
@@ -788,6 +803,7 @@ export function ComposerView({
           plannedDate={plannedDate}
           expiredChannels={expiredChannels}
           review={review}
+          scheduling={scheduling}
           canGenerateMedia={can.generateMedia ?? false}
           onTool={(variantId, tool, argument) => void runTool(variantId, tool, argument)}
           actions={actions}

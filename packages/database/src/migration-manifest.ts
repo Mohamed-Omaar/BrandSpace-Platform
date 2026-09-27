@@ -74,4 +74,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261006090000_templates_manage_permission',
   '20261006100000_content_template',
   '20261006110000_brand_publishing_defaults',
+  '20261006120000_content_variant_slides',
 ];

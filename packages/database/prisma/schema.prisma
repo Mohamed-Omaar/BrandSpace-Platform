@@ -3091,6 +3091,13 @@ model ContentVariant {
   /// brand or the shared shelf (trigger `content_variant_cover_scope`); deleting
   /// the asset clears it.
   coverAssetId String? @db.Uuid
+  /// B9 (Phase 2B-2) — ONE SHORT HEADLINE PER SLIDE of a carousel, as
+  /// `[{ assetId, headline }]` in the slides' order. `assetIds` stays the
+  /// canonical media order the connectors publish; this only carries text
+  /// aligned to it (owner answer D3: a slide is {image, headline}). Validated
+  /// at the boundary (`normaliseSlides`); NULL for every variant written before
+  /// it existed and for any post that is not a carousel.
+  slides       Json?
 
   platformOptions Json?
 

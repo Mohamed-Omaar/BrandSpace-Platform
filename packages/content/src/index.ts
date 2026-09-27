@@ -23,6 +23,8 @@ export type {
 } from './requests';
 
 export { ContentLibraryService, READ_ONLY_CONTENT_STATUSES } from './library';
+export { SLIDE_HEADLINE_MAX, SLIDES_MAX, normaliseSlides, readSlides } from './slides';
+export type { Slide } from './slides';
 
 /* Phase 2B-2 — post templates (prototype v90 E4 / B2). */
 export {

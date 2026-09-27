@@ -17,6 +17,7 @@ import {
 import { useRouter } from 'next/navigation';
 import type { MediaOptionView } from './media-picker';
 import { MediaSlides } from './media-slides';
+import { InlineSchedule } from './inline-schedule';
 import { MediaDrawer, type CreativeFormatOption } from './media-drawer';
 import { VariantPreview, previewLabels } from './variant-preview';
 import type { ComposerDraft, ComposerPlatform, ComposerVariant } from './composer-view';
@@ -73,7 +74,18 @@ export interface DraftEditorProps {
     readBrain?: boolean;
     /** Q12 — may add knowledge (`brand_brain.edit`), the onboarding "learn" step. */
     teachBrain?: boolean;
+    /** E4 (Phase 2B-2) — may save this post as a template (`templates.manage`). */
+    manageTemplates?: boolean;
   };
+  /**
+   * B9 / F2 (Phase 2B-2) — what the inline date and time start from: the
+   * workspace's today and tomorrow, and the brand's default time.
+   */
+  readonly scheduling?: {
+    readonly today: string;
+    readonly tomorrow: string;
+    readonly defaultTime: string;
+  } | null;
   /** D-288 — the approval policy and a changes request, when there is one. */
   readonly review?: {
     readonly requiresApproval: boolean;
@@ -105,6 +117,10 @@ export interface DraftEditorProps {
     uploadMedia(formData: FormData): Promise<void>;
     resubmit(formData: FormData): Promise<void>;
     duplicate?(formData: FormData): Promise<void>;
+    /** B9 (Phase 2B-2) — schedule from here, inline. */
+    scheduleFromStudio?(formData: FormData): Promise<void>;
+    /** E4 (Phase 2B-2) — save this post as a template. */
+    saveAsTemplate?(formData: FormData): Promise<void>;
   };
 }
 
@@ -115,7 +131,20 @@ interface LiveVariant {
   readonly firstComment: string;
   readonly assetIds: readonly string[];
   readonly cover: string | null;
+  /** B9 — slide headlines by image. */
+  readonly headlines: Readonly<Record<string, string>>;
 }
+
+const headlinesOf = (variant: ComposerVariant): Record<string, string> =>
+  Object.fromEntries((variant.slides ?? []).map((slide) => [slide.assetId, slide.headline]));
+
+/** Only the headlines of images still on the slides, blank ones left out. */
+const headlineKey = (headlines: Readonly<Record<string, string>>, assetIds: readonly string[]) =>
+  assetIds
+    .map((id) => [id, (headlines[id] ?? '').trim()] as const)
+    .filter(([, headline]) => headline !== '')
+    .map(([id, headline]) => `${id}:${headline}`)
+    .join('|');
 
 const hashtagTextOf = (variant: ComposerVariant) =>
   variant.hashtags.map((tag) => `#${tag}`).join(' ');
@@ -134,6 +163,7 @@ function liveOf(
     firstComment: variant.firstComment ?? '',
     assetIds: variant.assetIds,
     cover: variant.coverAssetId ?? null,
+    headlines: headlinesOf(variant),
   };
 }
 
@@ -156,6 +186,7 @@ export function DraftEditor({
   plannedDate = null,
   expiredChannels = {},
   review = null,
+  scheduling = null,
   onTool,
   actions,
 }: DraftEditorProps) {
@@ -197,7 +228,9 @@ export function DraftEditor({
       value.hashtagText.trim() !== hashtagTextOf(variant) ||
       value.firstComment !== (variant.firstComment ?? '') ||
       value.assetIds.join(',') !== variant.assetIds.join(',') ||
-      value.cover !== (variant.coverAssetId ?? null)
+      value.cover !== (variant.coverAssetId ?? null) ||
+      headlineKey(value.headlines, value.assetIds) !==
+        headlineKey(headlinesOf(variant), variant.assetIds)
     );
   };
   const anyDirty = draft.variants.some(isDirty);
@@ -752,6 +785,10 @@ export function DraftEditor({
                       onChange={(assetIds) => change(variant, { assetIds })}
                       onCoverChange={(cover) => change(variant, { cover })}
                       onOpenDrawer={(replace) => setDrawer({ variantId: variant.id, replace })}
+                      headlines={value.headlines}
+                      onHeadlineChange={(assetId, headline) =>
+                        change(variant, { headlines: { ...value.headlines, [assetId]: headline } })
+                      }
                     />
                     {pending?.variantId === variant.id ? (
                       <p className="cs-hint" role="status" data-testid="media-generating">
@@ -938,6 +975,39 @@ export function DraftEditor({
                   {t['editor.next.schedule']}
                 </Link>
               ) : null}
+              {can.manageTemplates && actions.saveAsTemplate ? (
+                /*
+                 * E4 — SAVE AS TEMPLATE, a disclosure like Archive beside it:
+                 * the name is the one thing a template needs that the post
+                 * does not already say.
+                 */
+                <details data-testid="save-as-template">
+                  <summary className="cs-ghost-button cs-compact">
+                    {t['editor.template.save']}
+                  </summary>
+                  <form action={actions.saveAsTemplate} className="cs-field">
+                    <input type="hidden" name="locale" value={locale} />
+                    <input type="hidden" name="itemId" value={draft.id} />
+                    <label htmlFor={`${fieldId}-template-name`}>{t['editor.template.name']}</label>
+                    <input
+                      id={`${fieldId}-template-name`}
+                      name="name"
+                      required
+                      maxLength={80}
+                      dir="auto"
+                      data-testid="save-as-template-name"
+                    />
+                    <p className="cs-hint">{t['editor.template.hint']}</p>
+                    <button
+                      type="submit"
+                      className="cs-dark-button"
+                      data-testid="save-as-template-submit"
+                    >
+                      {t['editor.template.confirm']}
+                    </button>
+                  </form>
+                </details>
+              ) : null}
               {can.submit && draft.status === 'IN_REVIEW' && draft.openApprovalId ? (
                 <form action={actions.cancelReview}>
                   <input type="hidden" name="locale" value={locale} />
@@ -975,6 +1045,30 @@ export function DraftEditor({
                 </details>
               ) : null}
             </div>
+
+            {/*
+              B9 / F2 (Phase 2B-2) — THE DATE AND TIME, INLINE, wherever the
+              Schedule link above is offered: the same states, the same
+              permission, the same service call. The link stays for the
+              calendar view.
+            */}
+            {scheduling &&
+            actions.scheduleFromStudio &&
+            can.schedule &&
+            ((draft.status === 'DRAFT' && review && !review.requiresApproval) ||
+              draft.status === 'APPROVED') ? (
+              <InlineSchedule
+                locale={locale}
+                itemId={draft.id}
+                today={scheduling.today}
+                tomorrow={scheduling.tomorrow}
+                defaultTime={scheduling.defaultTime}
+                plannedDate={plannedDate}
+                disabled={anyDirty}
+                action={actions.scheduleFromStudio}
+                t={t}
+              />
+            ) : null}
 
             {can.edit && tools.includes('tone') ? (
               <div className="cs-field">

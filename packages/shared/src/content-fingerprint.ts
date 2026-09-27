@@ -51,6 +51,25 @@ export interface FingerprintedVariant {
   readonly firstComment: string | null;
   readonly linkUrl: string | null;
   readonly assetIds: readonly string[];
+  /**
+   * B9 (Phase 2B-2) — the carousel's slide headlines, as stored. Part of what
+   * a reviewer approved. OPTIONAL AND ADDITIVE: a variant with none hashes
+   * exactly as it did before slides existed, so no approval recorded earlier
+   * changes meaning.
+   */
+  readonly slides?: unknown;
+}
+
+/** The headlines as `[assetId, headline]` pairs, in order; malformed entries are ignored. */
+function slideMaterial(slides: unknown): [string, string][] {
+  if (!Array.isArray(slides)) return [];
+  const out: [string, string][] = [];
+  for (const entry of slides as unknown[]) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { assetId, headline } = entry as Record<string, unknown>;
+    if (typeof assetId === 'string' && typeof headline === 'string') out.push([assetId, headline]);
+  }
+  return out;
 }
 
 /** `{ item, variants: { [variantId]: hash } }`, as stored on the approval. */
@@ -82,6 +101,8 @@ export function variantFingerprint(variant: FingerprintedVariant): string {
       variant.firstComment ?? '',
       variant.linkUrl ?? '',
       [...variant.assetIds],
+      // Only when there are slides, so every earlier hash is unchanged.
+      ...(slideMaterial(variant.slides).length > 0 ? [slideMaterial(variant.slides)] : []),
     ]),
   );
 }

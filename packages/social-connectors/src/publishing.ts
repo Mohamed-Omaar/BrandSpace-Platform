@@ -1591,6 +1591,7 @@ export class PublishPipelineService {
           firstComment: true,
           linkUrl: true,
           assetIds: true,
+          slides: true,
         },
       });
       if (!variantsNow.some((variant) => variant.id === job.contentVariantId)) {

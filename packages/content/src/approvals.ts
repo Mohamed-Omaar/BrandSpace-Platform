@@ -665,6 +665,7 @@ export class ContentApprovalService {
                 firstComment: true,
                 linkUrl: true,
                 assetIds: true,
+                slides: true,
               },
             }),
           )

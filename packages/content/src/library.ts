@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Prisma } from '@brandspace/database';
+import { Prisma } from '@brandspace/database';
 import {
   writeAuditEvent,
   type ContentItem,
@@ -18,6 +18,7 @@ import { ContentApprovalService } from './approvals';
 import { findPlatform, resolveDialect, type ContentDialect, type ContentPolicy } from './policy';
 import { ContentMediaResolver } from './media';
 import { validateVariant } from './validation';
+import { normaliseSlides, readSlides, slidesSchema, type Slide } from './slides';
 import {
   ContentTemplateService,
   applyTemplateToDraft,
@@ -388,6 +389,8 @@ export class ContentLibraryService {
       readonly firstComment?: string | null;
       readonly linkUrl?: string | null;
       readonly assetIds?: readonly string[];
+      /** B9 — slide headlines, e.g. carried by "Make a new copy". */
+      readonly slides?: readonly { assetId: string; headline: string }[];
     }[];
     readonly campaignId?: string | null;
     readonly pillar?: string | null;
@@ -598,6 +601,15 @@ export class ContentLibraryService {
             firstComment: variant.firstComment ?? null,
             linkUrl: variant.linkUrl ?? null,
             assetIds: resolvedMedia.get(variant.platformKey) ?? [],
+            ...(variant.slides && variant.slides.length > 0
+              ? (() => {
+                  const slides = normaliseSlides(
+                    parseSlides(variant.slides),
+                    resolvedMedia.get(variant.platformKey) ?? [],
+                  );
+                  return slides ? { slides: slides as Prisma.InputJsonValue } : {};
+                })()
+              : {}),
             characterCount: validation.characterCount,
             validationState: validation.state,
             ...(validation.errors.length > 0
@@ -660,6 +672,13 @@ export class ContentLibraryService {
      * it; an id must be an IMAGE this variant's brand may use, READY and CLEAN.
      */
     coverAssetId?: string | null | undefined;
+    /**
+     * B9 (Phase 2B-2) — the carousel's slide headlines, `{ assetId, headline }`
+     * per image. Undefined leaves them (re-aligned to the images if those
+     * changed); anything else replaces them. Validated, then normalised against
+     * the variant's images (`normaliseSlides`).
+     */
+    slides?: readonly { assetId: string; headline: string }[] | undefined;
     actorUserId: string;
     actorBrandScope: readonly string[];
     /** Q8 — whether this editor may schedule decides what an edit does to a scheduled post. */
@@ -730,10 +749,28 @@ export class ContentLibraryService {
       cover = resolved.id;
     }
 
+    /*
+     * B9 — THE HEADLINES FOLLOW THE IMAGES. New headlines are validated at the
+     * boundary; stored ones are re-aligned when the images change, so a removed
+     * image takes its headline with it and a reordered one keeps its own.
+     */
+    let slides: Slide[] | null | undefined;
+    if (input.slides !== undefined || media !== undefined) {
+      const requested =
+        input.slides === undefined ? readSlides(variant.slides) : parseSlides(input.slides);
+      slides = normaliseSlides(
+        requested,
+        media === undefined ? variant.assetIds : media.map((asset) => asset.id),
+      );
+    }
+
     const updated = await this.db.contentVariant.update({
       where: { id: variant.id },
       data: {
         body: input.body,
+        ...(slides === undefined
+          ? {}
+          : { slides: slides === null ? Prisma.DbNull : (slides as Prisma.InputJsonValue) }),
         ...(cover === undefined ? {} : { coverAssetId: cover }),
         ...(media === undefined ? {} : { assetIds: media.map((asset) => asset.id) }),
         ...(input.hashtags ? { hashtags: [...input.hashtags] } : {}),
@@ -759,6 +796,7 @@ export class ContentLibraryService {
         characterCount: validation.characterCount,
         validationState: validation.state,
         ...(media === undefined ? {} : { mediaCount: media.length }),
+        ...(slides === undefined ? {} : { slideHeadlines: slides?.length ?? 0 }),
         ...(cover === undefined ? {} : { cover: cover === null ? 'cleared' : 'set' }),
       },
     });
@@ -1113,4 +1151,15 @@ export class ContentLibraryService {
     });
     return { outcome: 'ARCHIVED' };
   }
+}
+
+/** B9 — slide headlines from a caller, validated; a bad one refuses the edit. */
+function parseSlides(value: readonly { assetId: string; headline: string }[]): Slide[] {
+  const parsed = slidesSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new AppError('VALIDATION_FAILED', 'A slide headline is too long or malformed.', {
+      field: 'slides',
+    });
+  }
+  return parsed.data;
 }

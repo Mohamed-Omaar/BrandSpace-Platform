@@ -220,3 +220,49 @@ test.describe('D7 · AI suggestions off hides the Home recommendations card only
     await expect(page.getByTestId('home-recommended')).toHaveCount(0);
   });
 });
+
+test.describe('B9 · the Studio: inline date and time, and "Save as template"', () => {
+  test('a new post is proposed for tomorrow at the brand default, today proposes nothing, and it schedules', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const { slug, brandId } = await ownWorkspace('studio');
+    await withPlatformPrisma((prisma) =>
+      prisma.brand.update({ where: { id: brandId }, data: { defaultPostTime: '11:15' } }),
+    );
+    await enter(page, slug);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?mode=write`);
+    await page.getByTestId('content-brief').fill('Written for the inline schedule.');
+    await page.getByTestId('content-write-manual').click();
+    await page.waitForURL(/\/en\/content\/compose\?item=/);
+
+    const form = page.getByTestId('editor-schedule-inline');
+    await expect(form).toBeVisible();
+    const date = page.getByTestId('editor-schedule-date');
+    const time = page.getByTestId('editor-schedule-time');
+    const tomorrow = await date.inputValue();
+    await expect(time).toHaveValue('11:15');
+    const today = (await date.getAttribute('min')) ?? '';
+    expect(tomorrow > today).toBe(true);
+    await date.fill(today);
+    await expect(time).toHaveValue('');
+    await expect(page.getByTestId('editor-schedule-today')).toBeVisible();
+    await date.fill(tomorrow);
+    await expect(time).toHaveValue('11:15');
+
+    // Save as template, from the post.
+    await page.getByTestId('save-as-template').locator('summary').click();
+    await page.getByTestId('save-as-template-name').fill('From the Studio');
+    await page.getByTestId('save-as-template-submit').click();
+    await page.waitForURL(/ok=TEMPLATE_SAVED/);
+
+    await page.getByTestId('editor-schedule-submit').click();
+    await page.waitForURL(/ok=CONTENT_SCHEDULED/);
+    await expect(page.getByTestId('editor-schedule-inline')).toHaveCount(0);
+
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/publishing`);
+    await expect(page.getByTestId(`templates-${brandId}`)).toContainText('From the Studio');
+  });
+});

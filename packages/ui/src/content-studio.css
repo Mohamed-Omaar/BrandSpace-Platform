@@ -787,6 +787,29 @@
   outline: 2px dashed var(--cs-purple);
 }
 
+/*
+ * B9 (Phase 2B-2) — a carousel slide's headline, under its image name. An
+ * APPROVED DESIGN-SYSTEM EXTENSION (UI-FIDELITY §6.3): the composer's own field
+ * shape (radius, padding, type) on the card's surface so it reads against the
+ * slide row's soft fill. No new colour: the card surface and `--cs-ink`.
+ */
+.cs-slide-headline {
+  inline-size: 100%;
+  min-inline-size: 12rem;
+  border: 0;
+  outline: 0;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--cs-ink);
+  border-radius: 13px;
+  padding: 8px 10px;
+  font-size: 10px;
+}
+
+.cs-slide-headline:focus-visible {
+  outline: 2px solid var(--cs-purple);
+  outline-offset: 1px;
+}
+
 .cs-slide-actions {
   display: flex;
   flex-wrap: wrap;
