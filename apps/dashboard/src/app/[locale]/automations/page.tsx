@@ -65,13 +65,25 @@ export const dynamic = 'force-dynamic';
 function conditionChoicesFor(
   field: ConditionField,
   locale: string,
-  brands: readonly { readonly id: string; readonly name: string }[],
+  catalogues: {
+    readonly brands: readonly { readonly id: string; readonly name: string }[];
+    readonly campaigns: readonly { readonly id: string; readonly name: string }[];
+    readonly members: readonly { readonly id: string; readonly name: string }[];
+  },
 ): readonly { readonly value: string; readonly label: string }[] {
   const t = translator(locale);
   const contract = CONDITION_FIELD_CONTRACTS[field];
 
   if (contract.catalogue === 'brands') {
-    return brands.map((brand) => ({ value: brand.id, label: brand.name }));
+    return catalogues.brands.map((brand) => ({ value: brand.id, label: brand.name }));
+  }
+  // B12 + G13 option (a) — the brand's live campaigns, and the workspace's
+  // ACTIVE members (a post's author is one of them).
+  if (contract.catalogue === 'campaigns') {
+    return catalogues.campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name }));
+  }
+  if (contract.catalogue === 'members') {
+    return catalogues.members.map((member) => ({ value: member.id, label: member.name }));
   }
   if (contract.catalogue === 'metricKeys') {
     return INGESTED_METRIC_KEYS.map((key) => ({
@@ -85,6 +97,12 @@ function conditionChoicesFor(
     return contract.options.map((value) => ({
       value,
       label: t(`content.status.${value}` as MessageKey),
+    }));
+  }
+  if (field === 'content.type') {
+    return contract.options.map((value) => ({
+      value,
+      label: t(`content.type.${value}` as MessageKey),
     }));
   }
   if (field === 'publish.provider') {
@@ -140,8 +158,36 @@ export default async function AutomationsPage({
     }),
   );
   const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
+  /*
+   * B12 + G13 option (a) — the campaign and person catalogues, read through
+   * the same brand scope as everything else here. A campaign outside the
+   * member's brands, or a member who has left, is never offered.
+   */
+  const { campaigns, members } = await inWorkspace(workspace.workspaceId, async ({ db }) => ({
+    campaigns: await db.campaign.findMany({
+      where: {
+        workspaceId: workspace.workspaceId,
+        deletedAt: null,
+        ...brandIdQueryFilter({ brandId: selectedBrand?.id, brandScope: workspace.brandScope }),
+      },
+      select: { id: true, name: true },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      take: 200,
+    }),
+    members: (
+      await db.membership.findMany({
+        where: { workspaceId: workspace.workspaceId, status: 'ACTIVE' },
+        select: { userId: true, user: { select: { name: true, email: true } } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: 200,
+      })
+    ).map((membership) => ({
+      id: membership.userId,
+      name: membership.user.name ?? membership.user.email,
+    })),
+  }));
   const conditionChoices = (field: ConditionField): readonly { value: string; label: string }[] =>
-    conditionChoicesFor(field, locale, brands);
+    conditionChoicesFor(field, locale, { brands, campaigns, members });
 
   const { rules, runs } = await inAnalytics(workspace.workspaceId, async (services) => {
     const engine = await services.automations();

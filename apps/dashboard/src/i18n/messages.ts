@@ -2266,6 +2266,11 @@ export const messages = {
     'automations.field.content.pillar': 'محور المحتوى',
     'automations.field.content.platformCount': 'عدد المنصات',
     'automations.field.content.hasCampaign': 'مرتبط بحملة',
+    // B12 + G13 option (a) — campaign, format and person (the post's author).
+    'automations.field.content.campaignId': 'الحملة',
+    'automations.field.content.type': 'التنسيق',
+    'automations.field.content.authorUserId': 'كاتب المنشور',
+    'automations.valueUnavailable': 'لم يعد متاحًا',
     'automations.field.publish.provider': 'المنصة',
     'automations.field.publish.failureClass': 'نوع الإخفاق',
     'automations.field.metric.key': 'مفتاح المؤشر',
@@ -5207,6 +5212,11 @@ export const messages = {
     'automations.field.content.pillar': 'Content pillar',
     'automations.field.content.platformCount': 'Platform count',
     'automations.field.content.hasCampaign': 'Has a campaign',
+    // B12 + G13 option (a) — campaign, format and person (the post's author).
+    'automations.field.content.campaignId': 'Campaign',
+    'automations.field.content.type': 'Format',
+    'automations.field.content.authorUserId': 'Post author',
+    'automations.valueUnavailable': 'No longer available',
     'automations.field.publish.provider': 'Platform',
     'automations.field.publish.failureClass': 'Failure class',
     'automations.field.metric.key': 'Metric key',
