@@ -246,7 +246,11 @@ test.describe('B11 · campaign results', () => {
     await expect(card).toContainText('10%');
     const caption = card.getByTitle(`${long} · avg engagement`);
     await expect(caption).toBeVisible();
-    // A long name stays on one line, cut with an ellipsis, inside the card.
+    // A long name stays on one line, cut with an ellipsis, inside the card. The
+    // card spans the row on a desktop, where this name fits; measure it on a
+    // narrow window, where it cannot.
+    await page.setViewportSize({ width: 420, height: 900 });
+    await expect(caption).toBeVisible();
     const fits = await caption.evaluate((el) => ({
       nowrap: getComputedStyle(el).whiteSpace === 'nowrap',
       clipped: el.scrollWidth > el.clientWidth,
@@ -257,6 +261,7 @@ test.describe('B11 · campaign results', () => {
     }));
     expect(fits).toEqual({ nowrap: true, clipped: true, inside: true });
 
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(`${DASHBOARD_BASE_URL}/ar/campaigns`);
     await expect(page.getByTestId('campaign-best')).toContainText('أفضل حملة');
     await expect(page.getByTestId('campaign-best')).toContainText('10%');

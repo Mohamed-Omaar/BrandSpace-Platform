@@ -247,6 +247,11 @@ export function MetricCard({
         flexDirection: 'column',
         gap: spacingTokens.sm,
         justifyContent: 'flex-start',
+        // A one-line hint is cut, not measured: without this the card's grid
+        // and flex ancestors size to the whole unbroken line and the card
+        // overflows its row instead of showing the ellipsis. Only the cut hint
+        // needs it, so every other metric card lays out as before.
+        ...(hintTitle ? { minInlineSize: 0 } : {}),
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: spacingTokens.sm }}>
@@ -256,7 +261,14 @@ export function MetricCard({
             figure below it should be doing alone. */}
         <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>{label}</span>
       </div>
-      <div style={{ display: 'grid', gap: 0, marginBlockStart: spacingTokens.sm }}>
+      <div
+        style={{
+          display: 'grid',
+          gap: 0,
+          marginBlockStart: spacingTokens.sm,
+          ...(hintTitle ? { minInlineSize: 0 } : {}),
+        }}
+      >
         {/*
          * THE VALUE MUST NEVER SET THE CARD'S WIDTH.
          *
@@ -292,7 +304,13 @@ export function MetricCard({
           </span>
         )}
         <div
-          style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: spacingTokens.xs }}
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: spacingTokens.xs,
+            ...(hintTitle ? { minInlineSize: 0 } : {}),
+          }}
         >
           {trend && !unavailable ? (
             <span
