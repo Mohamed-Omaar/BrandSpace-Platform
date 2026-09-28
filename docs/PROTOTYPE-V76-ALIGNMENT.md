@@ -539,6 +539,30 @@ Strategy page):** the Strategy page's display lists — audience, key messages a
 only and reach no generation (the goal that prefills the objective is read through `writingGoal`, D-360),
 which is why the grounding guard names the page as a non-generative reader.
 
+### 9.2 How Phase 2C-2 was built
+
+- **Colours and logo (D1; D-362, D-368).** Look & voice edits the brand's palette and primary logo
+  through the same brand-profile save, model and `brand.profile.updated` audit event as Settings →
+  Brand. Editing needs `brand.manage` (the E3 deviation). A logo is uploaded through the ordinary asset
+  pipeline and set only once it is READY and CLEAN; the server now refuses any logo that is not a
+  ready, clean, unarchived IMAGE of this workspace and brand (or a shared one), from either screen.
+- **Typography v2 (D2; D-363).** `{ en: { heading, body }, ar: { heading, body } }`, each slot a
+  catalogue key or an uploaded brand font. The v1 `{ heading, body }` value still reads, as the English
+  slots, until the next save; there is no data migration. Settings → Brand no longer writes fonts.
+- **Uploaded fonts (D2; D-364).** Migration `20261007110000_brand_font`. TTF, OTF, WOFF, WOFF2 up to
+  5 MiB, type proved by the bytes, font collections refused; at most four active per language, counted
+  under the brand-row lock; rename, replace (a new asset, the old one archived when nothing else uses
+  it) and remove (archive). A removed or unreadable font falls back to Inter or Cairo when read.
+- **The catalogue (D-365).** Ten SIL OFL families, self-hosted unmodified under
+  `apps/dashboard/public/fonts/`, listed in `DESIGN-SYSTEM.md` §3.1; the CSP is unchanged.
+- **Serving (D-367).** Uploaded fonts are served only by an authenticated, grant-bound route.
+- **Where the fonts apply (D-366).** The Look & voice samples and Creative's identity card. The
+  content's language picks the slot, never the interface's.
+
+**Deferred, recorded by owner decision (C): apply the brand fonts to Studio slide and template
+rendering when that surface exists.** Today the Studio has a caption preview only, and brand fonts are
+deliberately not applied to it.
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):

@@ -27,7 +27,7 @@ import {
   uploadSessionExpired,
   uploadSessionNotFound,
 } from './errors';
-import { checkAssetSignature, normaliseFileName, signatureIsKnown } from './file-safety';
+import { checkUploadedFile, normaliseFileName, signatureIsKnown } from './file-safety';
 import { kindForMimeType, maxBytesForKind, type AssetPolicy } from './policy';
 import { assetObjectKey, uploadStagingKey } from './storage-keys';
 
@@ -302,8 +302,16 @@ export class AssetUploadService {
      * the right basis for "may this workspace upload this kind of thing" and it
      * is the wrong basis for anything else. A signature mismatch is refused
      * before the object is written — nothing unverified is ever stored.
+     *
+     * A FONT'S NAME MUST AGREE TOO (Phase 2C-2): its extension has to name the
+     * same format the bytes are, so a renamed file is refused here as well as
+     * at the door.
      */
-    const signature = checkAssetSignature(session.declaredMimeType, input.bytes);
+    const signature = checkUploadedFile({
+      declaredMimeType: session.declaredMimeType,
+      fileName: session.declaredFileName,
+      bytes: input.bytes,
+    });
     if (!signature.ok) {
       await this.#abort(session.id, 'content_type_mismatch');
       throw contentTypeMismatch();

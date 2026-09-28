@@ -1,4 +1,5 @@
 import { AppError } from '@brandspace/shared';
+import { paletteFromForm } from './brand-look';
 
 /**
  * THE BRAND PROFILE DECODER.
@@ -29,7 +30,6 @@ export interface BrandProfileInput {
   readonly defaultLocale: 'AR' | 'EN';
   readonly supportedLocales: readonly ('AR' | 'EN')[];
   readonly colorPalette: readonly string[];
-  readonly typography: { readonly heading: string | null; readonly body: string | null };
   readonly primaryLogoAssetId: string | null;
   readonly secondaryLogoAssetId: string | null;
 }
@@ -90,6 +90,12 @@ export function websiteUrlFrom(formData: FormData): string | null {
   return websiteUrl;
 }
 
+/*
+ * TYPOGRAPHY IS NOT PART OF THIS FORM (Phase 2C-2, owner decision E). The four
+ * font slots are chosen in Brand Brain → Look & voice and written by the one v2
+ * writer; this decoder does not read them and the save below never sends them,
+ * so Settings → Brand cannot downgrade v2 to v1 or drop a slot.
+ */
 export function brandProfileFrom(formData: FormData): BrandProfileInput {
   const name = required(formData, 'name').trim();
   if (name.length < 2) throw new AppError('VALIDATION_FAILED', 'A brand name is required.');
@@ -116,23 +122,8 @@ export function brandProfileFrom(formData: FormData): BrandProfileInput {
 
   const websiteUrl = websiteUrlFrom(formData);
 
-  const colorPalette = [
-    ...new Set(
-      formData
-        .getAll('colorPalette')
-        .flatMap((value) => String(value).split(','))
-        .map((value) => value.trim())
-        .filter((value) => value !== ''),
-    ),
-  ];
-  for (const colour of colorPalette) {
-    if (!HEX.test(colour)) {
-      throw new AppError('VALIDATION_FAILED', `"${colour}" is not a colour.`);
-    }
-  }
-  if (colorPalette.length > 12) {
-    throw new AppError('VALIDATION_FAILED', 'A palette holds at most twelve colours.');
-  }
+  // The ONE palette rule, shared with Look & voice's swatches.
+  const colorPalette = paletteFromForm(formData);
 
   return {
     name,
@@ -142,10 +133,6 @@ export function brandProfileFrom(formData: FormData): BrandProfileInput {
     defaultLocale,
     supportedLocales: [...supported],
     colorPalette,
-    typography: {
-      heading: optionalText(formData, 'headingFont', 120),
-      body: optionalText(formData, 'bodyFont', 120),
-    },
     primaryLogoAssetId: optionalAssetId(formData, 'primaryLogoAssetId'),
     secondaryLogoAssetId: optionalAssetId(formData, 'secondaryLogoAssetId'),
   };
@@ -163,4 +150,32 @@ export function typographyFrom(value: unknown): { heading: string | null; body: 
   const read = (key: string): string | null =>
     typeof record[key] === 'string' && record[key] !== '' ? (record[key] as string) : null;
   return { heading: read('heading'), body: read('body') };
+}
+
+/**
+ * The Settings → Brand save, as a patch for `saveBrandProfile`. Typography is
+ * absent BY CONSTRUCTION: the slots stay exactly as Look & voice left them.
+ */
+export function profilePatchFrom(input: BrandProfileInput): {
+  readonly name: string;
+  readonly industry: string | null;
+  readonly description: string | null;
+  readonly websiteUrl: string | null;
+  readonly defaultLocale: 'AR' | 'EN';
+  readonly supportedLocales: readonly ('AR' | 'EN')[];
+  readonly colorPalette: readonly string[];
+  readonly primaryLogoAssetId: string | null;
+  readonly secondaryLogoAssetId: string | null;
+} {
+  return {
+    name: input.name,
+    industry: input.industry,
+    description: input.description,
+    websiteUrl: input.websiteUrl,
+    defaultLocale: input.defaultLocale,
+    supportedLocales: input.supportedLocales,
+    colorPalette: input.colorPalette,
+    primaryLogoAssetId: input.primaryLogoAssetId,
+    secondaryLogoAssetId: input.secondaryLogoAssetId,
+  };
 }

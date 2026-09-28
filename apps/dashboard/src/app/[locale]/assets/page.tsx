@@ -12,7 +12,8 @@ import { inWorkspace, requireWorkspacePage } from '../../../server/customer-cont
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inAssetLibrary } from '../../../server/assets-context';
-import { paletteFrom, typographyFrom } from '../../../server/brand-profile';
+import { paletteFrom } from '../../../server/brand-profile';
+import { brandKitFontNames } from '../../../server/brand-fonts';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
@@ -201,12 +202,12 @@ export default async function AssetsPage({
                 .catch(() => null),
             })),
         );
-        const fonts = typographyFrom(brand.typography);
         return {
           brandName: brand.name,
           logos,
           palette: paletteFrom(brand.colorPalette),
-          fonts: [fonts.heading, fonts.body].filter((font): font is string => !!font),
+          // Phase 2C-2: v1 names as before, or the four v2 slots' names.
+          fonts: await brandKitFontNames(services.db, kitBrandId, brand.typography),
         };
       })
     : null;

@@ -1,4 +1,5 @@
 export * from './brand-scope';
+export * from './brand-typography';
 export * from './clock';
 export * from './content-fingerprint';
 export * from './credit-spending';

@@ -1,4 +1,8 @@
-import { checkSignature as checkAgainst, type DetectedFormat } from '@brandspace/shared';
+import {
+  checkSignature as checkAgainst,
+  detectFormat,
+  type DetectedFormat,
+} from '@brandspace/shared';
 import { unsafeFileName } from './errors';
 
 /**
@@ -35,7 +39,9 @@ const EXPECTED_FORMAT: Readonly<Record<string, DetectedFormat | readonly Detecte
   'text/csv': 'text',
   'text/markdown': 'text',
   'font/woff2': 'woff2',
+  'font/woff': 'woff',
   'font/ttf': 'ttf',
+  'font/otf': 'otf',
 };
 
 /** Does the content match what the caller said it was? */
@@ -201,7 +207,9 @@ const EXTENSIONS_FOR_TYPE: Readonly<Record<string, readonly string[]>> = {
   'text/csv': ['csv'],
   'text/markdown': ['md', 'markdown'],
   'font/woff2': ['woff2'],
+  'font/woff': ['woff'],
   'font/ttf': ['ttf'],
+  'font/otf': ['otf'],
 };
 
 export function extensionMatchesType(mimeType: string, extension: string | null): boolean {
@@ -209,4 +217,117 @@ export function extensionMatchesType(mimeType: string, extension: string | null)
   if (!expected) return true;
   if (extension === null) return false;
   return expected.includes(extension);
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Fonts (Phase 2C-2): the TYPE comes from the bytes, and the name must agree.
+ * ---------------------------------------------------------------------------
+ *
+ * Browsers are unreliable about a font's media type: many send nothing, or a
+ * legacy alias such as `application/x-font-ttf`, or `application/octet-stream`.
+ * Trusting that header would refuse real fonts; trusting the extension alone
+ * would admit a renamed file. So for a font the FILE'S OWN SIGNATURE decides
+ * the type, the extension must name that same format, and a client header can
+ * never overrule the bytes: a header that names a DIFFERENT specific type is a
+ * mismatch, not a hint.
+ *
+ * A font COLLECTION (`ttcf`) is refused outright, whatever it is called.
+ */
+
+/** The one media type each font format is stored under. */
+const FONT_TYPE_FOR_FORMAT: Readonly<Partial<Record<DetectedFormat, string>>> = {
+  ttf: 'font/ttf',
+  otf: 'font/otf',
+  woff: 'font/woff',
+  woff2: 'font/woff2',
+};
+
+/**
+ * What a browser may send for a font without it meaning anything: nothing, the
+ * generic binary type, or a legacy alias of the SAME format. Each alias maps to
+ * the format it names, so an alias of one format on another format's bytes is
+ * still a mismatch.
+ */
+const GENERIC_TYPES = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
+const FONT_TYPE_ALIASES: Readonly<Record<string, DetectedFormat>> = {
+  'application/x-font-ttf': 'ttf',
+  'application/x-font-truetype': 'ttf',
+  'application/font-sfnt': 'ttf',
+  'font/sfnt': 'ttf',
+  'application/x-font-otf': 'otf',
+  'application/x-font-opentype': 'otf',
+  'application/font-woff': 'woff',
+  'application/x-font-woff': 'woff',
+  'application/font-woff2': 'woff2',
+};
+
+/** A font extension, lower-cased, or null. */
+function extensionOf(fileName: string): string | null {
+  const match = /\.([A-Za-z0-9]{1,8})$/.exec(fileName.trim());
+  return match ? match[1]!.toLowerCase() : null;
+}
+
+const FONT_EXTENSIONS = new Set(['ttf', 'otf', 'woff', 'woff2', 'ttc', 'otc']);
+
+export type FontTypeResolution =
+  | { readonly font: false }
+  | { readonly font: true; readonly ok: true; readonly mimeType: string }
+  | {
+      readonly font: true;
+      readonly ok: false;
+      readonly reason: 'font_collection' | 'extension_mismatch' | 'content_type_mismatch';
+    };
+
+/**
+ * Decide an upload's font type from its bytes. `{ font: false }` for anything
+ * that is neither a font by its bytes nor by its name — those keep the normal
+ * path, untouched.
+ */
+export function resolveFontType(input: {
+  readonly fileName: string;
+  readonly declaredMimeType: string;
+  readonly bytes: Uint8Array;
+}): FontTypeResolution {
+  const detected = detectFormat(input.bytes);
+  const extension = extensionOf(input.fileName);
+  const declared = input.declaredMimeType.trim().toLowerCase();
+  const declaredFont = declared.startsWith('font/') || declared in FONT_TYPE_ALIASES;
+  const looksLikeFont =
+    detected in FONT_TYPE_FOR_FORMAT ||
+    detected === 'ttc' ||
+    declaredFont ||
+    (extension !== null && FONT_EXTENSIONS.has(extension));
+  if (!looksLikeFont) return { font: false };
+
+  if (detected === 'ttc' || extension === 'ttc' || extension === 'otc') {
+    return { font: true, ok: false, reason: 'font_collection' };
+  }
+  const mimeType = FONT_TYPE_FOR_FORMAT[detected];
+  if (!mimeType) return { font: true, ok: false, reason: 'content_type_mismatch' };
+  if (!extensionMatchesType(mimeType, extension)) {
+    return { font: true, ok: false, reason: 'extension_mismatch' };
+  }
+  const agrees =
+    GENERIC_TYPES.has(declared) ||
+    declared === mimeType ||
+    FONT_TYPE_ALIASES[declared] === detected;
+  if (!agrees) return { font: true, ok: false, reason: 'content_type_mismatch' };
+  return { font: true, ok: true, mimeType };
+}
+
+/**
+ * The check `complete` runs on every upload: the signature against the declared
+ * type, and — for a font — the file name's extension against it too.
+ */
+export function checkUploadedFile(input: {
+  readonly declaredMimeType: string;
+  readonly fileName: string;
+  readonly bytes: Uint8Array;
+}): { readonly ok: boolean } {
+  if (!checkAssetSignature(input.declaredMimeType, input.bytes).ok) return { ok: false };
+  if (input.declaredMimeType.startsWith('font/')) {
+    return { ok: extensionMatchesType(input.declaredMimeType, extensionOf(input.fileName)) };
+  }
+  return { ok: true };
 }

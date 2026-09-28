@@ -20,6 +20,7 @@ import { currentEnvironment, requireWorkspacePage } from '../../../server/custom
 import { NoAccessPage } from '../../../components/no-access-page';
 import { analyticsEvidence, conflictNote } from '../../../server/learning-review';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
+import { lookDataFor } from '../../../server/brand-fonts';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { copilotHref } from '../../../server/copilot-surface';
@@ -657,6 +658,11 @@ export default async function BrandBrainPage({
           .replace('{total}', reviewNumber.format(areaCards.length))
           .replace('{sources}', reviewNumber.format(readySourceCount));
 
+  // Phase 2C-2 — Look & voice: colours, logo and fonts, for a member who may read the brand.
+  const look = can('brand.read')
+    ? await lookDataFor({ session: access.session, locale, brandId: brand.id })
+    : null;
+
   return (
     <WorkspaceShell
       /*
@@ -678,6 +684,16 @@ export default async function BrandBrainPage({
       permissionKeys={permissions}
     >
       {banner}
+      {look ? (
+        /*
+         * PHASE 2C-2 — @font-face for the Look & voice previews: the offered
+         * catalogue families (same-origin /fonts) and the brand's uploaded fonts
+         * this reader may read (the authenticated font route). Built from
+         * generated names and validated same-origin paths only; a declared face
+         * is fetched only when text renders in it.
+         */
+        <style data-testid="brand-look-fonts" dangerouslySetInnerHTML={{ __html: look.css }} />
+      ) : null}
       <BrandBrainView
         locale={locale}
         brandId={brand.id}
@@ -686,6 +702,15 @@ export default async function BrandBrainPage({
         layers={layers}
         missing={missing}
         voice={voice}
+        look={
+          look
+            ? {
+                data: look,
+                canManage: can('brand.manage'),
+                canUpload: can('assets.upload'),
+              }
+            : null
+        }
         initialTab={initialTab}
         focusCandidateId={typeof query['candidate'] === 'string' ? query['candidate'] : null}
         confident={confident.map((entry) => ({

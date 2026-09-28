@@ -189,6 +189,51 @@ font-weight: 800 }`, which made every form read as a stack of headings; and `bod
 browser's 16px rather than the demo's 15px. The ROOT stays at 16px in both cases, so every rem
 token still resolves to the pixel size it was measured at.
 
+### 3.1 Bundled brand fonts (Phase 2C-2)
+
+**These are BRAND fonts, not the interface font.** A brand chooses them for its four typography slots
+in Brand Brain → Look & voice. They are declared under scoped `@font-face` names (`bsf-<key>`), so the
+application's own interface stack above is unchanged: nothing here renders the dashboard in Inter or
+Cairo.
+
+**Self-hosted, same-origin, unmodified.** Every file is the upstream project's own build, byte for
+byte: no subsetting and no format conversion (IBM Plex, Lora and Playfair Display carry Reserved Font
+Names, which rules out modification). They live in `apps/dashboard/public/fonts/<family>/`, each
+beside its licence as `OFL.txt` (the upstream licence text, verbatim), and are served by the dashboard
+as static files under the existing `font-src 'self' data:` policy, with the security headers the
+middleware adds to every response. No font CDN is used. They are global application files: never a
+tenant asset, never copied into a workspace, never counted against a workspace's storage.
+
+**Licence verification.** Each family was checked against its upstream project's own licence file
+and against its google/fonts distribution (`OFL.txt` + `METADATA.pb` `license: "OFL"`): all ten are
+SIL Open Font License 1.1, which permits self-hosting, web embedding and redistribution bundled with
+software, provided the licence travels with the files and the fonts are not sold by themselves.
+
+| Family               | Upstream project                            | Source of the shipped files                                             | Files shipped (weights)                                                             | Licence                         |
+| -------------------- | ------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------- |
+| Inter                | https://github.com/rsms/inter               | Official Inter 4.1 release (`Inter-4.1.zip`, `web/`)                    | `InterVariable.woff2` (variable 100–900)                                            | OFL-1.1                         |
+| Poppins              | https://github.com/itfoundry/Poppins        | google/fonts `ofl/poppins` @ `23e54b51ddffbc7713c583748e3bd86f62b1fa4a` | `Poppins-Regular.ttf` (400), `Poppins-SemiBold.ttf` (600), `Poppins-Bold.ttf` (700) | OFL-1.1                         |
+| Montserrat           | https://github.com/JulietaUla/Montserrat    | google/fonts `ofl/montserrat` @ `23e54b5`                               | `Montserrat[wght].ttf` (variable 100–900)                                           | OFL-1.1                         |
+| Playfair Display     | https://github.com/clauseggers/Playfair     | google/fonts `ofl/playfairdisplay` @ `23e54b5`                          | `PlayfairDisplay[wght].ttf` (variable 400–900)                                      | OFL-1.1, RFN "Playfair Display" |
+| Lora                 | https://github.com/cyrealtype/Lora-Cyrillic | google/fonts `ofl/lora` @ `23e54b5`                                     | `Lora[wght].ttf` (variable 400–700)                                                 | OFL-1.1, RFN "Lora"             |
+| Cairo                | https://github.com/Gue3bara/Cairo           | google/fonts `ofl/cairo` @ `23e54b5`                                    | `Cairo[slnt,wght].ttf` (variable 200–1000)                                          | OFL-1.1                         |
+| Tajawal              | https://github.com/googlefonts/tajawal      | google/fonts `ofl/tajawal` @ `23e54b5`                                  | `Tajawal-Regular.ttf` (400), `Tajawal-Bold.ttf` (700) — no 600 upstream             | OFL-1.1                         |
+| IBM Plex Sans Arabic | https://github.com/IBM/plex                 | google/fonts `ofl/ibmplexsansarabic` @ `23e54b5`                        | `IBMPlexSansArabic-Regular.ttf` (400), `-SemiBold.ttf` (600), `-Bold.ttf` (700)     | OFL-1.1, RFN "Plex"             |
+| Almarai              | https://github.com/JuergenWillrodt/Almarai  | google/fonts `ofl/almarai` @ `23e54b5`                                  | `Almarai-Regular.ttf` (400), `Almarai-Bold.ttf` (700) — no 600 upstream             | OFL-1.1                         |
+| Amiri                | https://github.com/aliftype/amiri           | google/fonts `ofl/amiri` @ `23e54b5`                                    | `Amiri-Regular.ttf` (400), `Amiri-Bold.ttf` (700) — no 600 upstream                 | OFL-1.1                         |
+
+**Weights and styles.** Brand slots choose a FAMILY only; there is no weight or style control. The
+surfaces that draw brand fonts use 400, 600 and 700. Variable files cover their whole range; for the
+static families 600 uses the family's 700 by standard CSS font matching where upstream has no 600.
+Synthetic bold and italic are off (`font-synthesis: none`) wherever a brand font is applied. No italic
+file is shipped.
+
+**The catalogue and the defaults are configuration.** `assets.brandFonts.catalogue` selects which of
+the bundled keys brands are offered; `assets.brandFonts.defaults` is English `inter` and Arabic `cairo`,
+the fonts every slot falls back to. The files and their licences are packaging facts in
+`BUNDLED_FONTS` (`packages/shared/src/brand-typography.ts`); configuration can select among them but
+cannot name a file that is not bundled.
+
 ---
 
 ## 4. The application shell

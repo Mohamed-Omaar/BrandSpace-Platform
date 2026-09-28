@@ -47,7 +47,11 @@ export type DetectedFormat =
   | 'mp3'
   | 'wav'
   | 'woff2'
+  | 'woff'
   | 'ttf'
+  | 'otf'
+  /** A font COLLECTION (`ttcf`). Detected so it can be refused by name; nothing accepts it. */
+  | 'ttc'
   | 'unknown';
 
 /**
@@ -100,9 +104,16 @@ const SIGNATURES: readonly Signature[] = [
   { format: 'mp3', magic: [0xff, 0xf2] },
   // "wOF2".
   { format: 'woff2', magic: [0x77, 0x4f, 0x46, 0x32] },
+  // "wOFF" — WOFF 1.0 (W3C WOFF File Format 1.0 §3).
+  { format: 'woff', magic: [0x77, 0x4f, 0x46, 0x46] },
   // TrueType: the 0x00010000 version tag, or "true".
   { format: 'ttf', magic: [0x00, 0x01, 0x00, 0x00] },
   { format: 'ttf', magic: [0x74, 0x72, 0x75, 0x65] },
+  // "OTTO" — OpenType with CFF outlines (OpenType spec, table directory sfntVersion).
+  { format: 'otf', magic: [0x4f, 0x54, 0x54, 0x4f] },
+  // "ttcf" — a font collection. Recognised only so that it is REFUSED by name:
+  // no media type expects it (Phase 2C-2, owner decision on uploaded fonts).
+  { format: 'ttc', magic: [0x74, 0x74, 0x63, 0x66] },
 ];
 
 function matchesAt(bytes: Uint8Array, magic: readonly number[], offset: number): boolean {

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CREDIT_SPENDING_PERMISSION, maySpendCredits } from '@brandspace/shared';
+import { CREDIT_SPENDING_PERMISSION, fontFamilyValue, maySpendCredits } from '@brandspace/shared';
 import {
   Card,
   StateMessage,
@@ -19,6 +19,7 @@ import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
+import { brandTypographyFor } from '../../../server/brand-fonts';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { CreativeStudioView, type CreativeStudioLabels } from './creative-studio-view';
@@ -123,6 +124,16 @@ export default async function CreativeStudioPage({
         };
       })
     : null;
+
+  /*
+   * PHASE 2C-2 — the four typography slots as THIS reader sees them, with the
+   * @font-face rules for exactly those fonts (catalogue files from /fonts, an
+   * uploaded font only through the authenticated font route and only for a
+   * reader who may read it).
+   */
+  const fontView = brand
+    ? await brandTypographyFor({ session: access.session, locale, brandId: brand.id })
+    : null;
   const mayProfile = workspace.permissionKeys.includes('brand.read');
 
   const labels: CreativeStudioLabels = {
@@ -189,6 +200,12 @@ export default async function CreativeStudioPage({
         />
       ) : (
         <>
+          {fontView?.css ? (
+            <style
+              data-testid="creative-identity-font-faces"
+              dangerouslySetInnerHTML={{ __html: fontView.css }}
+            />
+          ) : null}
           {identity ? (
             <Card testId="creative-identity">
               <div style={{ display: 'grid', gap: spacingTokens.xs }}>
@@ -229,6 +246,61 @@ export default async function CreativeStudioPage({
                         </span>
                       </li>
                     ))}
+                  </ul>
+                ) : null}
+                {/*
+                  PHASE 2C-2 (owner decision C) — THE FOUR TYPOGRAPHY SLOTS, each
+                  a short sample drawn in its own font, independent of the
+                  interface language: this card has no content language to
+                  choose by, so it shows both. An uploaded font this reader
+                  cannot load is drawn in the language's default.
+                */}
+                {fontView ? (
+                  <ul
+                    data-testid="creative-identity-fonts"
+                    style={{
+                      display: 'grid',
+                      gap: spacingTokens.xs,
+                      margin: 0,
+                      padding: 0,
+                      listStyle: 'none',
+                    }}
+                  >
+                    {(['en', 'ar'] as const).flatMap((language) =>
+                      (['heading', 'body'] as const).map((role) => {
+                        const slot = fontView.resolved[language][role];
+                        return (
+                          <li
+                            key={`${language}-${role}`}
+                            data-testid={`creative-identity-font-${language}-${role}`}
+                            data-font-family={slot.cssFamily}
+                            style={{ display: 'grid', gap: '0.125rem' }}
+                          >
+                            <span
+                              style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
+                            >
+                              {t(`bb.look.slot.${language}.${role}` as MessageKey)} · {slot.name}
+                            </span>
+                            <span
+                              dir={language === 'ar' ? 'rtl' : 'ltr'}
+                              lang={language}
+                              style={{
+                                fontFamily: fontFamilyValue(slot, language),
+                                fontWeight: role === 'heading' ? 700 : 400,
+                                fontSynthesis: 'none',
+                                fontSize:
+                                  role === 'heading'
+                                    ? typographyTokens.h3.fontSize
+                                    : typographyTokens.bodySm.fontSize,
+                                lineHeight: 1.4,
+                              }}
+                            >
+                              {translator(language)(`bb.look.sample.${role}` as MessageKey)}
+                            </span>
+                          </li>
+                        );
+                      }),
+                    )}
                   </ul>
                 ) : null}
                 <span

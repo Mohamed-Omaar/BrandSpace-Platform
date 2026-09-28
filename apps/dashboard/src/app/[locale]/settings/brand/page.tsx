@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {
   Card,
   Field,
@@ -14,7 +15,8 @@ import {
 import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../../server/brand-context';
-import { paletteFrom, typographyFrom } from '../../../../server/brand-profile';
+import { paletteFrom } from '../../../../server/brand-profile';
+import { typographySummaryFor } from '../../../../server/brand-fonts';
 import { settingsNavItems } from '../../../../server/settings-nav';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
@@ -117,7 +119,9 @@ export default async function BrandProfilePage({
           take: 200,
           select: { id: true, name: true, brandId: true },
         });
-        return { brand, assets };
+        // Phase 2C-2 (E): the four font slots, NAMED only — chosen in Look & voice.
+        const fonts = await typographySummaryFor(db, selected.id, brand.typography);
+        return { brand, assets, fonts };
       })
     : null;
 
@@ -134,7 +138,6 @@ export default async function BrandProfilePage({
   }).map((item) => ({ href: item.href, label: t(item.labelKey), selected: item.selected }));
 
   const palette = paletteFrom(data?.brand.colorPalette);
-  const fonts = typographyFrom(data?.brand.typography);
 
   return (
     <WorkspaceShell
@@ -300,30 +303,36 @@ export default async function BrandProfilePage({
                 </fieldset>
               </div>
 
-              <div className="bs-form-row">
-                <Field label={t('brandProfile.headingFont')} htmlFor="brand-heading-font">
-                  <input
-                    className="bs-control"
-                    id="brand-heading-font"
-                    name="headingFont"
-                    defaultValue={fonts.heading ?? ''}
-                    maxLength={120}
-                    disabled={!mayManage}
-                    style={inputStyle()}
-                  />
-                </Field>
-                <Field label={t('brandProfile.bodyFont')} htmlFor="brand-body-font">
-                  <input
-                    className="bs-control"
-                    id="brand-body-font"
-                    name="bodyFont"
-                    defaultValue={fonts.body ?? ''}
-                    maxLength={120}
-                    disabled={!mayManage}
-                    style={inputStyle()}
-                  />
-                </Field>
-              </div>
+              {/*
+                PHASE 2C-2 (owner decision E): the four font slots are chosen in
+                Brand Brain → Look & voice and written by the one v2 writer. This
+                form no longer carries font fields, so saving it can never
+                overwrite or downgrade them; it only says what they are.
+              */}
+              {data?.fonts ? (
+                <div className="bs-form-row" data-testid="brand-profile-fonts">
+                  <Field label={t('brandProfile.fonts')} htmlFor="brand-fonts-summary">
+                    <p
+                      id="brand-fonts-summary"
+                      style={{ margin: 0, fontSize: typographyTokens.bodySm.fontSize }}
+                    >
+                      {t('brandProfile.fontsEn')
+                        .replace('{heading}', data.fonts.en.heading.name)
+                        .replace('{body}', data.fonts.en.body.name)}
+                      {' · '}
+                      {t('brandProfile.fontsAr')
+                        .replace('{heading}', data.fonts.ar.heading.name)
+                        .replace('{body}', data.fonts.ar.body.name)}{' '}
+                      <Link
+                        href={`/${locale}/brand-brain?brand=${selected?.id ?? ''}&tab=look`}
+                        data-testid="brand-profile-fonts-open"
+                      >
+                        {t('brandProfile.fontsOpen')}
+                      </Link>
+                    </p>
+                  </Field>
+                </div>
+              ) : null}
 
               <Field
                 label={t('brandProfile.palette')}

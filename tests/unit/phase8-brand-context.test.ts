@@ -152,8 +152,6 @@ describe('P8: the brand profile decoder fails closed', () => {
     description: 'A shop.',
     websiteUrl: 'https://northwind.example',
     defaultLocale: 'EN',
-    headingFont: 'Inter',
-    bodyFont: 'Inter',
     colorPalette: '#7935FE, #FFDD15',
     primaryLogoAssetId: '',
     secondaryLogoAssetId: '',
@@ -163,7 +161,18 @@ describe('P8: the brand profile decoder fails closed', () => {
     const decoded = brandProfileFrom(form(complete));
     expect(decoded.name).toBe('Northwind');
     expect(decoded.colorPalette).toEqual(['#7935FE', '#FFDD15']);
-    expect(decoded.typography).toEqual({ heading: 'Inter', body: 'Inter' });
+    /*
+     * REPLACED (Phase 2C-2, owner decision E). Old: the form carried
+     * `headingFont` / `bodyFont` and decoded `typography: { heading, body }`
+     * (v1). New: Settings → Brand carries no font fields and decodes no
+     * typography at all — the four v2 slots are chosen in Look & voice, and this
+     * save must never overwrite or downgrade them. A request that still sends
+     * the old fields is ignored for typography, never written.
+     */
+    expect('typography' in decoded).toBe(false);
+    expect(
+      'typography' in brandProfileFrom(form({ ...complete, headingFont: 'X', bodyFont: 'Y' })),
+    ).toBe(false);
     expect(decoded.primaryLogoAssetId).toBeNull();
   });
 

@@ -8,6 +8,7 @@ import { BrandChat } from './brand-chat';
 import { AreaDrawer, type QuestionFocus } from './area-drawer';
 import { ReviewInbox, type ConfidentPreviewEntry } from './review-inbox';
 import { VoiceCard } from './voice-card';
+import { LookCard, type LookViewData } from './look-card';
 import {
   Tabs,
   buttonClass,
@@ -222,6 +223,7 @@ export function BrandBrainView({
   layers,
   missing,
   voice,
+  look,
   initialTab,
   focusCandidateId,
   confident,
@@ -247,6 +249,16 @@ export function BrandBrainView({
   /** Q19 — the first unanswered key questions ("What's missing"). */
   missing: readonly MissingQuestionData[];
   voice: VoiceData;
+  /**
+   * Phase 2C-2 — colours, logo and fonts, with whether this member may change
+   * them (`brand.manage`) and upload files (`assets.upload`). Null without
+   * `brand.read`.
+   */
+  look: {
+    readonly data: LookViewData;
+    readonly canManage: boolean;
+    readonly canUpload: boolean;
+  } | null;
   initialTab: BrandBrainTab;
   /** `?candidate=` — the inbox opens on this candidate. */
   focusCandidateId: string | null;
@@ -745,6 +757,15 @@ export function BrandBrainView({
 
         {tab === 'look' ? (
           <section className="bb-bottom single" data-testid="brand-brain-look">
+            {look ? (
+              <LookCard
+                locale={locale}
+                brandId={brandId}
+                look={look.data}
+                canManage={look.canManage}
+                canUpload={look.canUpload}
+              />
+            ) : null}
             <VoiceCard
               locale={locale}
               brandId={brandId}

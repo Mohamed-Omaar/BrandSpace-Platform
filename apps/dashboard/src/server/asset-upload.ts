@@ -1,14 +1,14 @@
 import 'server-only';
 import { createLogger } from '@brandspace/shared';
 import { checksumOf } from '@brandspace/storage';
-import type { AssetActor } from '@brandspace/assets';
+import { contentTypeMismatch, resolveFontType, type AssetActor } from '@brandspace/assets';
 import {
   PROCESS_ASSET,
   enqueue,
   mayProcessInline,
   type ProcessAssetPayload,
 } from '@brandspace/jobs';
-import { inAssetLibrary } from './assets-context';
+import { inAssetLibrary, type AssetServices } from './assets-context';
 
 const log = createLogger({ context: { component: 'dashboard.asset-upload' } });
 
@@ -56,14 +56,49 @@ export interface UploadedAsset {
   readonly processingJobId: string | null;
 }
 
-export async function uploadIntoLibrary(input: {
+export interface UploadInput {
   readonly workspaceId: string;
   readonly actor: AssetActor;
   readonly file: File;
   readonly bytes: Uint8Array;
   readonly brandId: string | null;
   readonly folderId: string | null;
-}): Promise<UploadedAsset> {
+}
+
+/** The job `complete` created, for `dispatchProcessing` after the commit. */
+export interface CompletedUpload {
+  readonly assetId: string;
+  readonly job: { readonly id: string } | null;
+}
+
+/**
+ * INITIATE AND COMPLETE INSIDE A TRANSACTION THE CALLER ALREADY HOLDS.
+ *
+ * `uploadIntoLibrary` is this plus its own transaction plus the dispatch. A
+ * caller that must do more in the SAME transaction — Look & voice adds a font
+ * only after a limit check under a lock on the brand row (Phase 2C-2) — calls
+ * this with its own services and dispatches after its transaction commits.
+ * Nothing about the upload itself differs: the same service, the same checks.
+ */
+export async function uploadWithin(
+  services: Pick<AssetServices, 'upload'>,
+  input: UploadInput,
+): Promise<CompletedUpload> {
+  /*
+   * A FONT'S TYPE COMES FROM ITS BYTES (Phase 2C-2). Browsers send nothing, a
+   * generic type or a legacy alias for fonts; the signature decides the type,
+   * the extension must agree, and a header naming another type is refused. The
+   * same check runs again at `complete` and in the worker on the stored bytes.
+   */
+  const font = resolveFontType({
+    fileName: input.file.name,
+    declaredMimeType: input.file.type,
+    bytes: input.bytes,
+  });
+  if (font.font && !font.ok) throw contentTypeMismatch();
+  const declaredMimeType =
+    font.font && font.ok ? font.mimeType : input.file.type || 'application/octet-stream';
+
   const idempotencyKey = await uploadIdempotencyKey({
     workspaceId: input.workspaceId,
     brandId: input.brandId,
@@ -71,67 +106,82 @@ export async function uploadIntoLibrary(input: {
     bytes: input.bytes,
   });
 
-  const completed = await inAssetLibrary(input.workspaceId, async ({ upload }) => {
-    const service = await upload();
-    const started = await service.initiate({
-      brandId: input.brandId,
-      folderId: input.folderId,
-      fileName: input.file.name,
-      /*
-       * THE BROWSER'S TYPE, and it is trusted for exactly one thing: whether
-       * this workspace may upload this KIND of file. It decides no parser and
-       * no pipeline — the file's own SIGNATURE has to agree before anything is
-       * stored (docs/SECURITY.md §11.2).
-       */
-      mimeType: input.file.type || 'application/octet-stream',
-      sizeBytes: input.bytes.byteLength,
-      idempotencyKey,
-      actor: input.actor,
-    });
-    return service.complete({
-      sessionId: started.session.id,
-      bytes: input.bytes,
-      actor: input.actor,
-    });
+  const service = await services.upload();
+  const started = await service.initiate({
+    brandId: input.brandId,
+    folderId: input.folderId,
+    fileName: input.file.name,
+    /*
+     * THE BROWSER'S TYPE, and it is trusted for exactly one thing: whether
+     * this workspace may upload this KIND of file. It decides no parser and
+     * no pipeline — the file's own SIGNATURE has to agree before anything is
+     * stored (docs/SECURITY.md §11.2).
+     */
+    mimeType: declaredMimeType,
+    sizeBytes: input.bytes.byteLength,
+    idempotencyKey,
+    actor: input.actor,
   });
+  const completed = await service.complete({
+    sessionId: started.session.id,
+    bytes: input.bytes,
+    actor: input.actor,
+  });
+  return { assetId: completed.asset.id, job: completed.job ? { id: completed.job.id } : null };
+}
 
-  const job = completed.job;
-  if (job) {
-    const dispatch = await enqueue('media-processing', PROCESS_ASSET, {
-      kind: PROCESS_ASSET,
-      workspaceId: input.workspaceId,
-      requestedByUserId: input.actor.userId,
-      // The job row's id IS the natural key for this work. A second dispatch of
-      // the same row is refused by BullMQ rather than scanned twice.
-      idempotencyKey: `asset-${job.id}`,
-      processingJobId: job.id,
-    } satisfies ProcessAssetPayload);
+/** Hand a completed upload to the worker — after the transaction that made it commits. */
+export async function dispatchProcessing(input: {
+  readonly workspaceId: string;
+  readonly actor: AssetActor;
+  readonly job: { readonly id: string } | null;
+}): Promise<void> {
+  const job = input.job;
+  if (!job) return;
+  const dispatch = await enqueue('media-processing', PROCESS_ASSET, {
+    kind: PROCESS_ASSET,
+    workspaceId: input.workspaceId,
+    requestedByUserId: input.actor.userId,
+    // The job row's id IS the natural key for this work. A second dispatch of
+    // the same row is refused by BullMQ rather than scanned twice.
+    idempotencyKey: `asset-${job.id}`,
+    processingJobId: job.id,
+  } satisfies ProcessAssetPayload);
 
-    if (!dispatch.dispatched) {
-      if (!mayProcessInline()) {
-        /*
-         * PRODUCTION DOES NOT PROCESS INLINE. The row is already durable, so
-         * the reconciliation sweep will pick it up: the upload succeeded, the
-         * file reads PROCESSING, and the outage is the operator's to fix rather
-         * than the customer's to notice as a hung page. It also means an
-         * unscanned file stays quarantined rather than being rushed through on
-         * a request thread.
-         */
-        log.error('could not dispatch asset processing; leaving it for the sweep', {
-          workspaceId: input.workspaceId,
-          jobId: job.id,
-        });
-      } else {
-        log.warn('no queue configured; processing this upload inline (non-production only)', {
-          jobId: job.id,
-        });
-        await inAssetLibrary(input.workspaceId, async ({ processing }) => {
-          const service = await processing();
-          await service.process(job.id);
-        });
-      }
+  if (!dispatch.dispatched) {
+    if (!mayProcessInline()) {
+      /*
+       * PRODUCTION DOES NOT PROCESS INLINE. The row is already durable, so
+       * the reconciliation sweep will pick it up: the upload succeeded, the
+       * file reads PROCESSING, and the outage is the operator's to fix rather
+       * than the customer's to notice as a hung page. It also means an
+       * unscanned file stays quarantined rather than being rushed through on
+       * a request thread.
+       */
+      log.error('could not dispatch asset processing; leaving it for the sweep', {
+        workspaceId: input.workspaceId,
+        jobId: job.id,
+      });
+    } else {
+      log.warn('no queue configured; processing this upload inline (non-production only)', {
+        jobId: job.id,
+      });
+      await inAssetLibrary(input.workspaceId, async ({ processing }) => {
+        const service = await processing();
+        await service.process(job.id);
+      });
     }
   }
+}
 
-  return { assetId: completed.asset.id, processingJobId: job?.id ?? null };
+export async function uploadIntoLibrary(input: UploadInput): Promise<UploadedAsset> {
+  const completed = await inAssetLibrary(input.workspaceId, (services) =>
+    uploadWithin(services, input),
+  );
+  await dispatchProcessing({
+    workspaceId: input.workspaceId,
+    actor: input.actor,
+    job: completed.job,
+  });
+  return { assetId: completed.assetId, processingJobId: completed.job?.id ?? null };
 }

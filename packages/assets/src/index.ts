@@ -16,9 +16,12 @@ export {
 } from './policy';
 export {
   checkAssetSignature,
+  checkUploadedFile,
   extensionMatchesType,
   normaliseFileName,
+  resolveFontType,
   signatureIsKnown,
+  type FontTypeResolution,
   type NormalisedFileName,
 } from './file-safety';
 export {
@@ -92,3 +95,11 @@ export {
   publishableMediaNotFound,
 } from './publishable';
 export type { PublishMediaResolverOptions, ResolvedPublishMedia } from './publishable';
+export {
+  BrandFontService,
+  brandFontNotFound,
+  type BrandFontServiceOptions,
+  type BrandFontStatus,
+  type BrandFontView,
+  type PreviousAssetOutcome,
+} from './brand-fonts';

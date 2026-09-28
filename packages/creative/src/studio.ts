@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import {
   AppError,
   assertBrandInScope,
+  bundledFont,
   fenceUntrusted,
+  readStoredTypography,
   type Clock,
   systemClock,
 } from '@brandspace/shared';
@@ -55,8 +57,27 @@ export interface CreativeStudioOptions {
  * `{ heading, body }`; the generation route read it as an array, so every
  * image was sent no typography at all. Both shapes are read, duplicates
  * dropped; nothing is invented.
+ *
+ * PHASE 2C-2: the v2 four-slot shape is read too — its catalogue fonts by
+ * their family names. An uploaded font carries no name in the stored value,
+ * so it contributes nothing here rather than a guessed name.
  */
 export function brandTypography(value: unknown): readonly string[] {
+  const stored = readStoredTypography(value);
+  if (stored.version === 2) {
+    return [
+      ...new Set(
+        [
+          stored.slots.en.heading,
+          stored.slots.en.body,
+          stored.slots.ar.heading,
+          stored.slots.ar.body,
+        ]
+          .map((ref) => (ref?.kind === 'catalogue' ? bundledFont(ref.key)?.family : undefined))
+          .filter((family): family is string => typeof family === 'string'),
+      ),
+    ];
+  }
   const fonts: unknown[] = Array.isArray(value)
     ? value
     : typeof value === 'object' && value !== null

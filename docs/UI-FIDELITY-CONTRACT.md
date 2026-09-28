@@ -768,6 +768,31 @@ what deviates from the pinned demo.
 
 No new colour family, font, shadow style or interaction model.
 
+### 6.3.47 Prototype v90 Phase 2C-2 — Look & voice: colours, logo and the four font slots (D-362–D-368)
+
+APPROVED DESIGN-SYSTEM EXTENSIONS, composed from what already ships (§4.2 of `CLAUDE.md`). The v90
+prototype shows the Look & voice tab but no reference for its controls, so none of this is a demo port.
+
+- **The Look card** — the route's own `.bb-source` card (the same white card, 26 px radius and soft
+  shadow as the Voice card, §6.3.46), above the Voice card on the Look & voice tab. Four sections:
+  - **Colours** — a native colour input beside its hex text input in the drawer's control class, a
+    remove button per swatch, "Add colour" up to twelve.
+  - **Logo** — the current logo or an empty state, a native select of the brand's ready, clean images,
+    and a native file input to upload one.
+  - **Fonts** — four native selects (heading and body, English and Arabic), each with a sample line
+    drawn in the chosen font under its scoped name, and a fallback caption when the slot resolves to
+    the default.
+  - **Uploaded fonts** — per language, a list with the `.bb-badge` status badge (processing, ready,
+    failed, unavailable), rename, replace, and remove confirmed through the shared `Dialog`.
+- **Creative's identity card** — one caption-sized list of the four slots, each sample in its own font,
+  independent of the interface language (decision C).
+- **Settings → Brand** — the two font text inputs are replaced by a read-only summary of the four slots
+  and a link to Look & voice (decision E).
+
+No new colour family, interface font, shadow style or interaction model; nothing here animates. The
+brand fonts are loaded under scoped family names (`bsf-…`) only where they are sampled, so the
+interface's own font never changes.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
