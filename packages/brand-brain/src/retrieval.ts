@@ -282,14 +282,62 @@ export class BrandBrainRetriever {
 }
 
 /**
+ * A FIXED SET OF FACTS AS A GROUNDING — for a caller that already knows WHICH
+ * facts it may use (D10's rewrite: the variant's recorded facts, resolved by
+ * the grounding layer), rather than asking a question. Same precedence order,
+ * same fence, same budget and the same `facts` record as `retrieve`.
+ */
+export function contextFromFacts(
+  items: readonly {
+    readonly id: string;
+    readonly area: BrandKnowledgeArea;
+    readonly memory: BrandMemoryLayer;
+    readonly origin: BrandKnowledgeOrigin;
+    readonly version: number;
+    readonly status: string;
+    readonly title: unknown;
+    readonly body: unknown;
+  }[],
+  maxChars: number,
+): RetrievalContext {
+  const retrieved: RetrievedItem[] = items.map((item) => {
+    const title = localizedFrom(item.title as never);
+    const body = localizedFrom(item.body as never);
+    return {
+      id: item.id,
+      area: item.area,
+      memory: item.memory,
+      origin: item.origin,
+      version: item.version,
+      title: title.en ?? title.ar ?? '',
+      body: body.en ?? body.ar ?? '',
+      score: 1,
+      stale: item.status === 'STALE',
+    };
+  });
+  const { contextText, citations, usedItems } = buildContext(sortByPrecedence(retrieved), maxChars);
+  return {
+    items: usedItems,
+    facts: usedItems.map((item) => ({ itemId: item.id, version: item.version })),
+    contextText,
+    citations,
+    insufficient: usedItems.length === 0,
+  };
+}
+
+/**
  * Similarity, blended with a direct token overlap.
+ *
+ * EXPORTED (Phase 2C-3) for Brand Brain chat's Edit and Remove lookups, which
+ * reuse exactly this local scoring — no model, no network — rather than a
+ * second matcher.
  *
  * The hashed vector alone collides: two unrelated tokens can land in the same
  * dimension and manufacture a similarity that is not there. Requiring at least
  * one literal shared token is a cheap guard against confidently citing a
  * passage that shares no words with the question.
  */
-function score(
+export function score(
   text: string,
   query: readonly number[],
   questionTokens: ReadonlySet<string>,

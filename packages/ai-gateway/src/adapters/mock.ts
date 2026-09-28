@@ -395,6 +395,77 @@ function captionDocument(
   });
 }
 
+/*
+ * ---------------------------------------------------------------------------
+ * PHASE 2C-3 — the two conversational documents (Brand Brain Ask, Copilot)
+ * ---------------------------------------------------------------------------
+ *
+ * Brand Brain's Ask (D7) and the Copilot (D8) both run under `copilot.chat`
+ * and both now ask for JSON. The platform's own prompt prints the schema it
+ * wants, which is how the two are told apart — as `reasoningDocument` does.
+ *
+ * WHAT THE DOUBLE STANDS IN FOR, AND ITS LIMIT. A real model decides whether a
+ * request is a question, a job ("make 3 posts about …") or a request to save
+ * a fact. A development double cannot understand anything, so it looks at the
+ * request's FIRST WORD against three short, closed lists. It reads only the
+ * fenced customer block its own platform wrote, and the only thing that can
+ * change is which of three fixed shapes it returns: nothing can make it fail,
+ * stall, change model or return text that is not the brand's own selected
+ * material. It is DEVELOPMENT ONLY, like everything in this file.
+ */
+const JOB_WORDS =
+  /^(?:please\s+)?(?:make|create|write|draft|plan|generate|prepare)\b|^(?:اكتب|أنشئ|اصنع|جهز|حضر|خطط)/iu;
+const SAVE_WORDS = /^(?:please\s+)?(?:save|remember|store|add)\b|^(?:احفظ|تذكر|أضف|خزن)/iu;
+
+/** The customer's own words, from the fenced block the platform wrote. */
+function customerBlock(prompt: string, label: string): string {
+  const begin = prompt.indexOf(`--- BEGIN ${label}`);
+  if (begin < 0) return '';
+  const start = prompt.indexOf('\n', begin);
+  const end = prompt.indexOf(`--- END ${label} ---`, start);
+  return (end < 0 ? prompt.slice(start) : prompt.slice(start, end)).trim();
+}
+
+/** Brand Brain Ask (D7): `{"kind":"answer"|"job","answer":string}`. */
+function askDocument(prompt: string, context: readonly string[], maxOutputTokens: number): string {
+  const question = customerBlock(prompt, 'CUSTOMER QUESTION');
+  const material = answerFrom(context, maxOutputTokens).trim();
+  const job = JOB_WORDS.test(question);
+  return JSON.stringify({
+    kind: job ? 'job' : 'answer',
+    answer: (job ? question : material || question).slice(0, 4_000) || 'Noted.',
+  });
+}
+
+/**
+ * The Copilot's plan envelope (D8). No steps — the double never proposes an
+ * action — and a summary made of the selected brand material. A save request
+ * is flagged for the Brand Brain handoff; a question is flagged as a brand
+ * question, so a brand with nothing on it hears what is missing.
+ */
+function copilotDocument(
+  prompt: string,
+  context: readonly string[],
+  maxOutputTokens: number,
+): string {
+  const request = customerBlock(prompt, 'CUSTOMER REQUEST');
+  const material = answerFrom(
+    context.filter((block) => block.includes('BRAND BRAIN CONTEXT')),
+    maxOutputTokens,
+  )
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 400);
+  const save = SAVE_WORDS.test(request);
+  const text = material || 'Brand Brain has nothing on this yet.';
+  return JSON.stringify({
+    summary: { ar: text, en: text },
+    steps: [],
+    brandBrainQuestion: !save && !JOB_WORDS.test(request),
+    saveFact: save ? { title: request.slice(0, 120), body: request.slice(0, 2_000) } : null,
+  });
+}
+
 export class MockProviderAdapter implements AiProviderAdapter {
   readonly key = 'mock';
   readonly supportedModalities = MOCK_MODALITIES;
@@ -502,7 +573,11 @@ export class MockProviderAdapter implements AiProviderAdapter {
       ? request.taskKey === 'caption.generate'
         ? captionDocument(request.prompt, context, request.maxOutputTokens)
         : reasoningDocument(request.prompt, context, request.maxOutputTokens)
-      : null;
+      : request.taskKey === 'copilot.chat' && request.prompt.includes('{"kind":"answer"|"job"')
+        ? askDocument(request.prompt, context, request.maxOutputTokens)
+        : request.taskKey === 'copilot.chat' && request.prompt.includes('"steps":[{"toolKey"')
+          ? copilotDocument(request.prompt, context, request.maxOutputTokens)
+          : null;
 
     return {
       text:

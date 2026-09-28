@@ -27,7 +27,12 @@ export {
 } from './precedence';
 export type { OverwriteDecision, PrecedenceSubject } from './precedence';
 
-export { computeAreaCompletion, computeBrandCompletion, questionsForBrand } from './completion';
+export {
+  closestKeyQuestion,
+  computeAreaCompletion,
+  computeBrandCompletion,
+  questionsForBrand,
+} from './completion';
 export type {
   AreaCompletion,
   AreaCounts,
@@ -74,6 +79,7 @@ export {
   duplicateUpload,
   fileTooLarge,
   humanPrecedenceViolation,
+  knowledgeChangedSince,
   knowledgeNotFound,
   storageLimitReached,
   unsupportedFileType,
@@ -138,6 +144,7 @@ export {
   fenceUntrusted,
   indexVector,
   neutralizeInjection,
+  score,
   tokenize,
   usableKnowledgeWhere,
 } from './retrieval';
@@ -156,6 +163,8 @@ export {
   declaredPillarIdeas,
   declaredPillarKeys,
   groundingFor,
+  keyQuestionAnswered,
+  rewriteGroundingFor,
   writingFactsInAreas,
   writingGoal,
 } from './grounding';
@@ -169,11 +178,12 @@ export {
   parseValidUntil,
   workspaceKnowledgeAsOf,
 } from './validity';
-export type { Grounding, GroundingPurpose, GroundingRequest } from './grounding';
+export type { Grounding, GroundingPurpose, GroundingRequest, RewriteResolution } from './grounding';
 
 export { purgeExpiredChatContent } from './chat';
 export { BrandBrainChatService } from './chat';
-export type { ChatPolicy, ChatServiceOptions, ChatTurn } from './chat';
+export { askAnswerSchema, parseAskAnswer } from './chat';
+export type { AskKind, ChatPolicy, ChatServiceOptions, ChatTurn, MissingKnowledge } from './chat';
 
 export {
   BRAND_BRAIN_CONFIG_DOMAIN,
@@ -185,3 +195,27 @@ export type { BrandBrainPolicy, CatalogueReader, QuestionsPolicy, ReviewPolicy }
 
 export { confidenceExplanation, confidenceLabel } from './review';
 export type { ConfidenceExplanation, ConfidenceLabel, ConfidenceReason } from './review';
+
+export {
+  D10_CONTENT_STATUSES,
+  D10_HOME_STATUSES,
+  changeSignature,
+  contentWithFactChanges,
+  isFlagged,
+  keepFactChange,
+  loadCurrentUsage,
+  recordKnowledgeUsage,
+  refreshPlanFor,
+  usageChangeFor,
+  usageEntryOf,
+  usedInPostsCounts,
+  variantKnowledgeUsage,
+} from './usage';
+export type {
+  FactView,
+  UsageChange,
+  UsageChangeKind,
+  UsageRowState,
+  UsageState,
+  VariantUsageEntry,
+} from './usage';
