@@ -465,7 +465,24 @@ test.describe('accessibility', () => {
     await openBrandBrain(page);
     await ensureBrand(page);
     await page.getByTestId('area-card-IDENTITY').click();
-    await expect(page.getByTestId('area-drawer')).toBeVisible();
+    const drawer = page.getByTestId('area-drawer');
+    await expect(drawer).toBeVisible();
+    /*
+     * THE OPEN DRAWER, NOT THE OPENING ONE. MO5 brings the drawer's rows in one
+     * after another with a fade, and Phase 2C's key questions put more rows
+     * ahead of the facts, so a scan started at "visible" could read a fact row
+     * mid-fade and measure its blended, half-transparent colours. The state
+     * under test is the drawer at rest, so wait for its entrance to finish.
+     */
+    await expect
+      .poll(() =>
+        drawer.evaluate((element) =>
+          element
+            .getAnimations({ subtree: true })
+            .every((animation) => animation.playState !== 'running'),
+        ),
+      )
+      .toBe(true);
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
