@@ -1,9 +1,17 @@
 import 'server-only';
-import { BrandFontService, type AssetActor } from '@brandspace/assets';
+import { BrandFontService, type AssetActor, type BrandFontStatus } from '@brandspace/assets';
 import type { TenantScopedClient } from '@brandspace/database';
 import {
   allSlots,
+  bundledFont,
+  catalogueCssFamily,
+  catalogueFor,
   fontFaceCss,
+  slotsOf,
+  uploadedCssFamily,
+  type BrandFontLanguage,
+  type BrandFontRole,
+  type ResolvedSlot,
   readStoredTypography,
   resolveTypography,
   type BrandFontCatalogue,
@@ -12,6 +20,7 @@ import {
 } from '@brandspace/shared';
 import { assetPolicy, inAssetLibrary, type AssetServices } from './assets-context';
 import type { WorkspaceSession } from './customer-context';
+import { paletteFrom } from './brand-profile';
 
 /**
  * PHASE 2C-2 — BRAND FONTS IN THE DASHBOARD.
@@ -142,4 +151,177 @@ export async function brandKitFontNames(
   if (read.version === 0) return [];
   const resolved = await typographySummaryFor(db, brandId, stored);
   return [...new Set(allSlots(resolved).map((slot) => slot.name))];
+}
+
+/* ------------------------------------------------------------ Look & voice */
+
+export interface LookSlotView {
+  /** The select's value: the STORED choice (or the default when nothing is stored). */
+  readonly value: string;
+  /** The font the slot renders in for this reader, and whether that is a fallback. */
+  readonly name: string;
+  readonly cssFamily: string;
+  readonly fellBack: boolean;
+}
+
+export interface LookOption {
+  readonly value: string;
+  readonly label: string;
+  readonly cssFamily: string;
+  readonly uploaded: boolean;
+}
+
+export interface LookData {
+  readonly palette: readonly string[];
+  readonly logo: { readonly assetId: string; readonly url: string | null } | null;
+  /** The images that may be the logo: READY, CLEAN, this brand's or shared (D-193). */
+  readonly logoOptions: readonly { readonly id: string; readonly name: string }[];
+  readonly slots: Readonly<
+    Record<BrandFontLanguage, Readonly<Record<BrandFontRole, LookSlotView>>>
+  >;
+  readonly options: Readonly<Record<BrandFontLanguage, readonly LookOption[]>>;
+  readonly fonts: readonly {
+    readonly id: string;
+    readonly language: BrandFontLanguage;
+    readonly displayName: string;
+    readonly status: BrandFontStatus;
+  }[];
+  readonly maxPerLanguage: number;
+  readonly acceptFonts: string;
+  readonly acceptImages: string;
+  /**
+   * @font-face for the LOOK & VOICE TAB ONLY: every offered catalogue family
+   * and the brand's readable uploaded fonts, so a picker can preview the choice
+   * a person is making. A declared face is fetched only when text renders in it.
+   */
+  readonly css: string;
+}
+
+export async function lookDataFor(input: {
+  readonly session: WorkspaceSession;
+  readonly locale: string;
+  readonly brandId: string;
+}): Promise<LookData> {
+  const actor = assetActorOf(input.session);
+  return inAssetLibrary(input.session.workspace.workspaceId, async (services) => {
+    const brand = await services.db.brand.findFirst({
+      where: { id: input.brandId, deletedAt: null },
+      select: { colorPalette: true, typography: true, primaryLogoAssetId: true },
+    });
+    const policy = await services.policy();
+    const catalogue = catalogueOf(policy);
+    const fontsService = await brandFontServiceFrom(services, input.session.workspace.workspaceId);
+    const readable = await fontsService.readable({
+      brandId: input.brandId,
+      actor,
+      urlFor: (token) => fontUrl(input.locale, token),
+    });
+    const fonts = await fontsService.list(input.brandId, actor).catch(() => []);
+    const resolved = resolveTypography({
+      stored: brand?.typography ?? null,
+      catalogue,
+      readable,
+    });
+    const stored = slotsOf(readStoredTypography(brand?.typography ?? null));
+
+    const logoId = brand?.primaryLogoAssetId ?? null;
+    let logoUrl: string | null = null;
+    if (logoId) {
+      logoUrl = await services
+        .download()
+        .then((download) => download.grantFor({ assetId: logoId, actor, disposition: 'inline' }))
+        .then((issued) => `/${input.locale}/assets/file/${issued.grant.token}`)
+        .catch(() => null);
+    }
+
+    const slotView = (language: BrandFontLanguage, role: BrandFontRole): LookSlotView => {
+      const slot = resolved[language][role];
+      const ref = stored[language][role];
+      const value = ref
+        ? ref.kind === 'catalogue'
+          ? `catalogue:${ref.key}`
+          : `uploaded:${ref.brandFontId}`
+        : `catalogue:${slot.source === 'catalogue' ? slot.key : catalogue.defaults[language]}`;
+      return {
+        value,
+        name: slot.name,
+        cssFamily: slot.cssFamily,
+        fellBack: slot.fallback !== null && slot.fallback !== 'unset',
+      };
+    };
+
+    const options = (language: BrandFontLanguage): readonly LookOption[] => [
+      ...catalogueFor(catalogue, language).map((font) => ({
+        value: `catalogue:${font.key}`,
+        label: font.family,
+        cssFamily: catalogueCssFamily(font.key),
+        uploaded: false,
+      })),
+      ...fonts
+        .filter((font) => font.language === language)
+        .map((font) => ({
+          value: `uploaded:${font.id}`,
+          label: font.displayName,
+          cssFamily: uploadedCssFamily(font.id),
+          uploaded: true,
+        })),
+    ];
+
+    const previewSlots: ResolvedSlot[] = [
+      ...catalogue.catalogue.flatMap((key) => {
+        const font = bundledFont(key);
+        return font
+          ? [
+              {
+                source: 'catalogue' as const,
+                key: font.key,
+                name: font.family,
+                cssFamily: catalogueCssFamily(font.key),
+                fallback: null,
+              },
+            ]
+          : [];
+      }),
+      ...readable.map((font) => ({
+        source: 'uploaded' as const,
+        brandFontId: font.brandFontId,
+        name: font.displayName,
+        cssFamily: uploadedCssFamily(font.brandFontId),
+        fallback: null,
+      })),
+    ];
+
+    return {
+      palette: paletteFrom(brand?.colorPalette),
+      logo: logoId ? { assetId: logoId, url: logoUrl } : null,
+      logoOptions: await services.db.asset.findMany({
+        where: {
+          deletedAt: null,
+          archivedAt: null,
+          status: 'READY',
+          scanStatus: 'CLEAN',
+          kind: 'IMAGE',
+          OR: [{ brandId: input.brandId }, { brandId: null }],
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        take: 200,
+        select: { id: true, name: true },
+      }),
+      slots: {
+        en: { heading: slotView('en', 'heading'), body: slotView('en', 'body') },
+        ar: { heading: slotView('ar', 'heading'), body: slotView('ar', 'body') },
+      },
+      options: { en: options('en'), ar: options('ar') },
+      fonts: fonts.map((font) => ({
+        id: font.id,
+        language: font.language,
+        displayName: font.displayName,
+        status: font.status,
+      })),
+      maxPerLanguage: policy.brandFonts.maxUploadedPerLanguage,
+      acceptFonts: '.ttf,.otf,.woff,.woff2,' + policy.upload.allowedMimeTypes.font.join(','),
+      acceptImages: policy.upload.allowedMimeTypes.image.join(','),
+      css: fontFaceCss({ used: previewSlots, readable }),
+    };
+  });
 }

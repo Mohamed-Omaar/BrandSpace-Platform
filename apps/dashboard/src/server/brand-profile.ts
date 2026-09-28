@@ -1,4 +1,5 @@
 import { AppError } from '@brandspace/shared';
+import { paletteFromForm } from './brand-look';
 
 /**
  * THE BRAND PROFILE DECODER.
@@ -121,23 +122,8 @@ export function brandProfileFrom(formData: FormData): BrandProfileInput {
 
   const websiteUrl = websiteUrlFrom(formData);
 
-  const colorPalette = [
-    ...new Set(
-      formData
-        .getAll('colorPalette')
-        .flatMap((value) => String(value).split(','))
-        .map((value) => value.trim())
-        .filter((value) => value !== ''),
-    ),
-  ];
-  for (const colour of colorPalette) {
-    if (!HEX.test(colour)) {
-      throw new AppError('VALIDATION_FAILED', `"${colour}" is not a colour.`);
-    }
-  }
-  if (colorPalette.length > 12) {
-    throw new AppError('VALIDATION_FAILED', 'A palette holds at most twelve colours.');
-  }
+  // The ONE palette rule, shared with Look & voice's swatches.
+  const colorPalette = paletteFromForm(formData);
 
   return {
     name,

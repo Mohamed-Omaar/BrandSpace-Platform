@@ -27,8 +27,8 @@ import { archiveKnowledgeAction, createKnowledgeAction, updateKnowledgeAction } 
  * shadow) with the drawer's controls: an approved design-system extension, no
  * new visual language (UI-FIDELITY-CONTRACT §6.3.46).
  *
- * Logo, colours and fonts join this tab in Phase 2C-2; until then the brand
- * profile holds them (`brand.manage`, the E3 deviation).
+ * Colours, logo and fonts sit above it on the same tab (Phase 2C-2, the Look
+ * card, `brand.manage` — the E3 deviation).
  */
 export function VoiceCard({
   locale,
