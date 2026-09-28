@@ -305,6 +305,23 @@ new release is back:
 affected customers (or archive the expired facts that matter) before routing traffic to it. Never drop
 the columns to "undo" the migrations (§6); the next forward release reads them again unchanged.
 
+### 6.5 Phase 2C-2: `brand_font` and typography v2 on an application rollback (D-363, D-364)
+
+`20261007110000_brand_font` only ADDS a table, so it is safe while the previous release is live. If the
+application is rolled back past Phase 2C-2:
+
+- The previous release does not read `brand_font`, and reads a v2 `brand.typography` value
+  (`{ en, ar }`) as no fonts, so the asset kit, Creative's identity card and generation show no brand
+  fonts until the new release returns. Nothing is deleted.
+- **The previous release's Settings → Brand save rewrites `brand.typography` as a v1
+  `{ heading, body }`.** A brand saved there during the rollback loses its four slots and, once the new
+  release is back, reads its v1 names as the English slots (the "legacy name" fallback). Uploaded
+  fonts themselves are kept in `brand_font` and can be chosen again from Look & voice.
+
+**Release note for the operator:** if a rollback past Phase 2C-2 is needed, tell customers that font
+choices made in Look & voice may need to be picked again. Never drop the table to "undo" the migration
+(§6).
+
 ---
 
 ## 7. Secret rotation

@@ -257,6 +257,16 @@ BYPASSED, so a plain parent id is an existence oracle over the whole platform. P
 index on `(workspaceId, brandId, validUntil)`. Neither migration changes a policy or a grant: the
 columns sit on tables already under tenant RLS.
 
+**Phase 2C-2 addition (D-364).** `brand_font` (migration `20261007110000_brand_font`) records a
+brand's uploaded font: `workspaceId`, `brandId`, `assetId`, `language` (`Locale`), `displayName`
+(1–80 characters after trimming, a `CHECK`), `createdByUserId`, timestamps and `archivedAt`. Composite
+foreign keys to `brand(workspaceId,id)` and `asset(workspaceId,id)`, both `CASCADE`; unique on
+`(workspaceId, brandId, assetId)`; indexed on `(workspaceId, brandId, language)`. A trigger
+(`brand_font_asset_scope`, not `SECURITY DEFINER`) refuses an asset that is not a `FONT` of the same
+workspace and brand. ENABLE + FORCE RLS with the `tenant_isolation` and `platform_access` policies. The
+four-per-language limit is counted under the brand-row lock, not by a constraint, because it counts
+ACTIVE rows only and is configuration. The typography slots themselves stay in `brand.typography` JSON.
+
 The first three are F-80; the rest are F-83, found by asking the catalogue about the whole module
 rather than the four tables F-80 happened to name. `brand_source_document`,
 `brand_brain_conversation` and `brand_knowledge_item` each carry the `@@unique([workspaceId, id])`

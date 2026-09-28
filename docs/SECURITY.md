@@ -3137,6 +3137,20 @@ previous customer's invoices on a shared machine.
 `Strict-Transport-Security` is sent **in production only**. Over http it means nothing, and from a
 developer's machine it would pin `localhost` to https in their browser for two years.
 
+### 39.2a Phase 2C-2 — fonts, and the CSP that did not change (D-365, D-367)
+
+`font-src 'self' data:` is unchanged. The ten catalogue families are static files under the
+dashboard's own `/fonts/`; the middleware lets them through without a session redirect and still sets
+every security header on them.
+
+An UPLOADED font is tenant data and is never a static file. `/[locale]/assets/font/<grant>` requires a
+session with `assets.read` AND `brand.read`, redeems an HMAC grant bound to the storage key, the
+workspace, the content type and an expiry against the SESSION's workspace, and serves only a READY,
+CLEAN, unarchived `FONT` asset that an active `brand_font` of a live brand inside the member's
+BrandScope points to, whose type is still the one pinned in the grant. It answers with that type,
+`nosniff`, a sandboxing CSP, `Cross-Origin-Resource-Policy: same-origin` and
+`Cache-Control: private, max-age=<the grant's remaining life>`. Anything else is a bare `404`.
+
 ### 39.3 The environment contract is now actually run
 
 `parseEnv` and the schema behind it have been in this repository since Phase 1, and until Phase 10 the
