@@ -282,6 +282,19 @@ const NON_GENERATIVE_READERS: ReadonlyMap<string, string> = new Map([
     'apps/dashboard/src/server/candidate-review.ts',
     'SETUP STATE: whether a review happens inside unfinished setup',
   ],
+  /*
+   * PHASE 2C-3 (Item 4). Both are named with their reason; neither builds a
+   * prompt. The one generative consequence of a changed fact — the D10
+   * rewrite — asks the layer (`rewriteGroundingFor`) and is checked below.
+   */
+  [
+    'packages/brand-brain/src/usage.ts',
+    'D9/D10 USAGE: records the grounding output and compares recorded versions with stored state (changed, replaced, expired, removed) for the Studio, Home and "Used in N posts"; never a prompt',
+  ],
+  [
+    'apps/dashboard/src/app/[locale]/brand-brain/chat-actions.ts',
+    'MANAGEMENT (non-generative): the chat’s Edit and Remove lookup — the local lexical score, expired facts included, no model — and the fresh version after a changed-since answer',
+  ],
 ]);
 
 /** The switch's own editor and its words: they read and write `brand.useBrandBrain` itself. */
@@ -309,7 +322,7 @@ const WRITING_RULE =
   /\b(usableKnowledgeWhere|workspaceKnowledgeAsOf|knowledgeAsOf|knowledgeAsOfSafe)\s*\(/;
 const THE_SWITCH = /\buseBrandBrain\b/;
 const ASKS_THE_LAYER =
-  /\b(groundingFor|brandBrainEnabledForWriting|writingFactsInAreas|declaredPillarKeys|declaredPillarIdeas|writingGoal)\s*\(/;
+  /\b(groundingFor|brandBrainEnabledForWriting|writingFactsInAreas|declaredPillarKeys|declaredPillarIdeas|writingGoal|rewriteGroundingFor|keyQuestionAnswered)\s*\(/;
 
 const sourceOf = (relative: string) => readFileSync(path.join(ROOT, relative), 'utf8');
 
@@ -372,5 +385,70 @@ describe('D-354 — generative Brand Brain knowledge access goes through the gro
     const { BRAND_GOAL_SELECT } = await import('@brandspace/brand-brain');
     const { GOAL_ITEM_SELECT } = await import('../../apps/dashboard/src/server/setup-wizard-state');
     expect(GOAL_ITEM_SELECT).toEqual(BRAND_GOAL_SELECT);
+  });
+});
+
+/*
+ * ---------------------------------------------------------------------------
+ * PHASE 2C-3 (Item 4) — the new generative paths ask the layer too
+ * ---------------------------------------------------------------------------
+ */
+describe('Phase 2C-3 — every new generative path is grounded by the one layer', () => {
+  it('the D10 rewrite (refresh_facts) grounds through rewriteGroundingFor, from the recorded ids', () => {
+    const studio = sourceOf('packages/content/src/studio.ts');
+    expect(studio).toMatch(/\brewriteGroundingFor\s*\(/);
+    expect(studio).toMatch(/recordedItemIds:\s*plan\.recordedItemIds/);
+    // It never falls back to a question-shaped lookup for the rewrite.
+    const refresh = studio.slice(studio.indexOf("if (input.tool === 'refresh_facts')"));
+    expect(refresh.slice(0, refresh.indexOf('} else {'))).not.toMatch(/\bgroundingFor\s*\(/);
+  });
+
+  it('usage is recorded ONLY from the grounding output, on every caption-writing path', () => {
+    const studio = sourceOf('packages/content/src/studio.ts');
+    const calls = studio.match(/recordKnowledgeUsage\([\s\S]*?\n\s{6,8}\);/g) ?? [];
+    // generate() and applyTool() — the Copilot's content.draft goes through generate().
+    expect(calls.length).toBe(2);
+    for (const call of calls) {
+      expect(call).toMatch(/facts:\s*retrieval\.enabled \? retrieval\.facts : \[\]/);
+    }
+    expect(sourceOf('packages/copilot/src/executors.ts')).toMatch(/context\.studio\.generate\(/);
+  });
+
+  it('no caption text, citation or similarity is read to decide usage or D10', () => {
+    // Code only: the comments explain what is NOT done, in those words.
+    const usage = sourceOf('packages/brand-brain/src/usage.ts')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+    for (const forbidden of [
+      /contentVariant\s*\.\s*find/,
+      /\bcitations\b/,
+      /\bindexVector\b/,
+      /\bcosineSimilarity\b/,
+      /\bscore\s*\(/,
+      /\btokenize\s*\(/,
+      /variant\.body/,
+    ]) {
+      expect(usage).not.toMatch(forbidden);
+    }
+    // The Home source and the Studio read the recorded rows, not the words.
+    expect(sourceOf('apps/dashboard/src/server/command-center.ts')).toMatch(
+      /contentWithFactChanges\(/,
+    );
+  });
+
+  it('Brand Brain Ask and the Copilot name what is missing through the layer', () => {
+    expect(sourceOf('packages/brand-brain/src/chat.ts')).toMatch(/\bkeyQuestionAnswered\s*\(/);
+    expect(sourceOf('packages/copilot/src/orchestrator.ts')).toMatch(/\bkeyQuestionAnswered\s*\(/);
+  });
+
+  it('Edit and Remove match with the local score — no model, no gateway, no credits', () => {
+    const knowledge = sourceOf('packages/brand-brain/src/knowledge.ts');
+    const match = knowledge.slice(knowledge.indexOf('async matchFacts('));
+    expect(match.slice(0, match.indexOf('\n  }\n'))).toMatch(/\bscore\s*\(/);
+    const actions = sourceOf('apps/dashboard/src/app/[locale]/brand-brain/chat-actions.ts');
+    for (const forbidden of [/gateway/i, /\bfetch\s*\(/, /taskKey/, /AiGateway/]) {
+      expect(actions).not.toMatch(forbidden);
+    }
+    expect(knowledge).not.toMatch(/@brandspace\/ai-gateway/);
   });
 });
