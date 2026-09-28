@@ -123,15 +123,15 @@ describe('owner decision D — the logo is checked on the server', () => {
     await expect(check(foreign)).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 
-  it('Settings → Brand runs the check for BOTH logo columns whenever one changes', () => {
-    const action = readFileSync(
-      path.resolve(
-        import.meta.dirname,
-        '../../apps/dashboard/src/app/[locale]/settings/brand/actions.ts',
-      ),
-      'utf8',
+  it('Settings → Brand and Look & voice run the check for BOTH logo columns whenever one changes', () => {
+    const read = (file: string) =>
+      readFileSync(path.resolve(import.meta.dirname, '../..', file), 'utf8');
+    const save = read('apps/dashboard/src/server/brand-profile-save.ts');
+    expect(save).toMatch(/\['primaryLogoAssetId', 'secondaryLogoAssetId'\] as const/);
+    expect(save).toMatch(/assertUsableLogo\(db, input\.brandId, next\)/);
+    // Settings → Brand saves through that one path.
+    expect(read('apps/dashboard/src/app/[locale]/settings/brand/actions.ts')).toMatch(
+      /saveBrandProfile\(db, \{/,
     );
-    expect(action).toMatch(/\['primaryLogoAssetId', 'secondaryLogoAssetId'\] as const/);
-    expect(action).toMatch(/assertUsableLogo\(db, brandId, next\)/);
   });
 });

@@ -3,12 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { notFound, redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { getPrisma, withWorkspace, writeAuditEvent } from '@brandspace/database';
+import { getPrisma, withWorkspace } from '@brandspace/database';
 import { assertBrandInScope, createLogger, internalErrorFields } from '@brandspace/shared';
 import { requireWorkspaceAction } from '../../../../server/customer-context';
 import { actionErrorCode } from '../../../../server/denial';
-import { brandProfileFrom } from '../../../../server/brand-profile';
-import { assertUsableLogo } from '../../../../server/brand-profile-save';
+import { brandProfileFrom, profilePatchFrom } from '../../../../server/brand-profile';
+import { saveBrandProfile } from '../../../../server/brand-profile-save';
 
 const log = createLogger({ context: { component: 'dashboard.brand-profile' } });
 
@@ -43,67 +43,26 @@ export async function saveBrandProfileAction(formData: FormData): Promise<void> 
 
     const input = brandProfileFrom(formData);
 
-    await withWorkspace(
+    /*
+     * THE ONE SAVE (server/brand-profile-save.ts), shared with Look & voice: the
+     * same brand row, the same `brand.profile.updated` audit event, the logo
+     * check (owner decision D) — and NO typography: the patch carries none, so
+     * the four v2 slots are left exactly as they are (owner decision E).
+     */
+    const saved = await withWorkspace(
       session.workspace.workspaceId,
-      async (db) => {
-        const before = await db.brand.findFirst({
-          where: { id: brandId, deletedAt: null },
-          select: {
-            name: true,
-            industry: true,
-            description: true,
-            websiteUrl: true,
-            defaultLocale: true,
-            supportedLocales: true,
-            colorPalette: true,
-            typography: true,
-            primaryLogoAssetId: true,
-            secondaryLogoAssetId: true,
-          },
-        });
-        // A brand that is not there, and one this member may not see, produce
-        // the same answer — the scope check above already made them the same.
-        if (!before) notFound();
-
-        // D (Phase 2C-2): a newly chosen logo must be a usable image of this brand.
-        for (const column of ['primaryLogoAssetId', 'secondaryLogoAssetId'] as const) {
-          const next = input[column];
-          if (next !== null && next !== before[column]) await assertUsableLogo(db, brandId, next);
-        }
-
-        await db.brand.update({
-          where: { id: brandId },
-          data: {
-            name: input.name,
-            industry: input.industry,
-            description: input.description,
-            websiteUrl: input.websiteUrl,
-            defaultLocale: input.defaultLocale,
-            supportedLocales: [...input.supportedLocales],
-            colorPalette: [...input.colorPalette],
-            typography: { ...input.typography },
-            primaryLogoAssetId: input.primaryLogoAssetId,
-            secondaryLogoAssetId: input.secondaryLogoAssetId,
-          },
-        });
-
-        // EVERY STATE CHANGE IS AUDITED (CLAUDE.md §5). The before/after are
-        // profile fields — a brand's own description of itself — and carry no
-        // secret, no token and nothing about another tenant.
-        await writeAuditEvent(db, session.workspace.workspaceId, {
-          action: 'brand.profile.updated',
-          actorType: 'USER',
-          actorId: session.customer.userId,
-          resourceType: 'brand',
-          resourceId: brandId,
+      (db) =>
+        saveBrandProfile(db, {
+          workspaceId: session.workspace.workspaceId,
+          actorUserId: session.customer.userId,
           brandId,
-          severity: 'NOTICE',
-          before,
-          after: { ...input, supportedLocales: [...input.supportedLocales] },
-        });
-      },
+          patch: profilePatchFrom(input),
+        }),
       { prisma: getPrisma() },
     );
+    // A brand that is not there, and one this member may not see, produce the
+    // same answer — the scope check above already made them the same.
+    if (saved === 'not_found') notFound();
 
     destination = `/${locale}/settings/brand?brand=${brandId}&ok=BRAND_PROFILE_SAVED`;
   } catch (error: unknown) {

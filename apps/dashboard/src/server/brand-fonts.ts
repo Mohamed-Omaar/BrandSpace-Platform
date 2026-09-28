@@ -4,6 +4,7 @@ import type { TenantScopedClient } from '@brandspace/database';
 import {
   allSlots,
   fontFaceCss,
+  readStoredTypography,
   resolveTypography,
   type BrandFontCatalogue,
   type ReadableUploadedFont,
@@ -123,4 +124,22 @@ export async function typographySummaryFor(
     format: 'truetype',
   }));
   return resolveTypography({ stored, catalogue: catalogueOf(policy), readable: named });
+}
+
+/**
+ * The Asset Library's brand-kit line. A brand still on the v1 shape shows its
+ * stored names as before; a v2 brand shows its four slots' names.
+ */
+export async function brandKitFontNames(
+  db: TenantScopedClient,
+  brandId: string,
+  stored: unknown,
+): Promise<readonly string[]> {
+  const read = readStoredTypography(stored);
+  if (read.version === 1) {
+    return [read.legacy.heading, read.legacy.body].filter((name): name is string => !!name);
+  }
+  if (read.version === 0) return [];
+  const resolved = await typographySummaryFor(db, brandId, stored);
+  return [...new Set(allSlots(resolved).map((slot) => slot.name))];
 }
