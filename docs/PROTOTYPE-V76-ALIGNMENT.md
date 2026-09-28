@@ -521,8 +521,8 @@ only after its security design is approved. Each part is its own branch from `st
   through its last day in the WORKSPACE's time zone; expired facts ground nothing and answer nothing, and
   stay visible and editable. Rolling the application back makes them usable again (`OPERATIONS.md` §6.4).
 - **Item 2 — key questions (Q19; D-357, revised D-361).** "Answered n of m" from configured questions, one
-  `itemKey` each, with industry Offers sets. **The shipped wording is a DRAFT pending owner review; the 2C-1 pull
-  request must not merge before it is approved.**
+  `itemKey` each, with industry Offers sets. The wording was drafted for owner review, revised, and is
+  **owner-approved** (2026-09-28, D-361).
 - **Item 2 — the one review inbox (D4, C1, 2.a; D-358).** One card at a time, oldest first; confidence
   label and why; old and new side by side; Option A precedence; a previewed, re-checked bulk accept.
 - **Item 2 — tabs and voice (D1, C4, 2.b; D-359).** Knowledge · Look & voice · Sources · Talk with the

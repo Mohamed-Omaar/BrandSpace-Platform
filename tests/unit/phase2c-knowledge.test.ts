@@ -139,7 +139,7 @@ describe('the configuration', () => {
   });
 });
 
-describe('Q19 — the draft key questions (pending owner review)', () => {
+describe('Q19 — the owner-approved key questions (D-361)', () => {
   const policy = brandBrainPolicyFrom(defaultPayload('brand-brain'));
   const AREAS = [
     'IDENTITY',

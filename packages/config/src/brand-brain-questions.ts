@@ -2,10 +2,9 @@
  * PHASE 2C (Q19) — THE KEY QUESTIONS BRAND BRAIN SHIPS WITH, as the
  * `brand-brain.questions` configuration defaults.
  *
- * ================================================================
- *   DRAFT — PENDING OWNER REVIEW. The owner reviews the wording in
- *   the Phase 2C-1 pull request; it must not merge before approval.
- * ================================================================
+ * OWNER-APPROVED WORDING (owner, 2026-09-28; D-357, D-361). Reviewed
+ * and revised in the Phase 2C-1 pull request; change a question only
+ * by an owner decision, or by activating a new configuration version.
  *
  * Configuration, not code: an operator replaces any of it by activating a new
  * `brand-brain` version in the Control Center, and the application reads only
