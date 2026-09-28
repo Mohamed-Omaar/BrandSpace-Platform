@@ -8,6 +8,7 @@ import { assertBrandInScope, createLogger, internalErrorFields } from '@brandspa
 import { requireWorkspaceAction } from '../../../../server/customer-context';
 import { actionErrorCode } from '../../../../server/denial';
 import { brandProfileFrom } from '../../../../server/brand-profile';
+import { assertUsableLogo } from '../../../../server/brand-profile-save';
 
 const log = createLogger({ context: { component: 'dashboard.brand-profile' } });
 
@@ -63,6 +64,12 @@ export async function saveBrandProfileAction(formData: FormData): Promise<void> 
         // A brand that is not there, and one this member may not see, produce
         // the same answer — the scope check above already made them the same.
         if (!before) notFound();
+
+        // D (Phase 2C-2): a newly chosen logo must be a usable image of this brand.
+        for (const column of ['primaryLogoAssetId', 'secondaryLogoAssetId'] as const) {
+          const next = input[column];
+          if (next !== null && next !== before[column]) await assertUsableLogo(db, brandId, next);
+        }
 
         await db.brand.update({
           where: { id: brandId },
