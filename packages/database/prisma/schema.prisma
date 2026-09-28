@@ -510,6 +510,7 @@ model Workspace {
   /// Phase 5B-2 — AI Content Studio.
   contentItems     ContentItem[]
   contentTemplates ContentTemplate[]
+  brandFonts       BrandFont[]
   contentVariants  ContentVariant[]
   calendarSlots    CalendarSlot[]
 
@@ -1906,6 +1907,7 @@ model Brand {
   /// Phase 5B-2 — AI Content Studio.
   contentItems     ContentItem[]
   contentTemplates ContentTemplate[]
+  brandFonts       BrandFont[]
   contentVariants  ContentVariant[]
   calendarSlots    CalendarSlot[]
 
@@ -2671,6 +2673,7 @@ model Asset {
   /// D-281. Conversations about this file.
   noteThreads NoteThread[]
   coverOf     ContentVariant[] @relation("ContentVariantCover")
+  brandFonts  BrandFont[]
 
   @@unique([workspaceId, id], name: "asset_workspace_scope")
   @@index([workspaceId, brandId, status])
@@ -3045,6 +3048,38 @@ model ContentItem {
 /// indexes in the migration (`WHERE "deletedAt" IS NULL`), which Prisma cannot
 /// model. Deleting is soft, so a post that came from a template keeps the
 /// audit trail that names it.
+/// PHASE 2C-2 (M3) — ONE UPLOADED BRAND FONT, as Look & voice manages it.
+///
+/// The FILE is an ordinary Asset of kind FONT — the same upload pipeline,
+/// signature checks, scan, quota and storage meter as any library file. This
+/// row is the LOGICAL font a brand uses: its language, the name people see,
+/// and whether it is still in use. Replacing the file repoints `assetId`;
+/// removing the font sets `archivedAt`. At most four ACTIVE fonts per brand and
+/// language, enforced by the service under a lock on the brand row.
+model BrandFont {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+  assetId     String @db.Uuid
+
+  language    Locale
+  displayName String
+
+  createdByUserId String? @db.Uuid
+
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
+  archivedAt DateTime? @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "brand_font_brand_fkey")
+  asset     Asset     @relation(fields: [workspaceId, assetId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "brand_font_asset_fkey")
+
+  @@unique([workspaceId, brandId, assetId])
+  @@index([workspaceId, brandId, language])
+  @@map("brand_font")
+}
+
 model ContentTemplate {
   id          String @id @default(uuid()) @db.Uuid
   workspaceId String @db.Uuid

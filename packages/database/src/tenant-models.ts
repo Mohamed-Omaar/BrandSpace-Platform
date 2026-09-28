@@ -80,6 +80,8 @@ export const STRICT_TENANT_MODELS = [
   'CalendarSlot',
   // Prototype v90 Phase 2B-2 (E4 / B2): reusable post templates, per brand.
   'ContentTemplate',
+  // Prototype v90 Phase 2C-2 (M3): uploaded brand fonts, per brand.
+  'BrandFont',
 
   // --- Phase 5B-3: Approvals, Activity Log, Notifications ------------------
   // The Activity Log adds no model: it is a read view over `AuditEvent`, which
@@ -345,6 +347,7 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   ContentVariant: 'content_variant',
   CalendarSlot: 'calendar_slot',
   ContentTemplate: 'content_template',
+  BrandFont: 'brand_font',
   Approval: 'approval',
   ApprovalPolicy: 'approval_policy',
   Notification: 'notification',
