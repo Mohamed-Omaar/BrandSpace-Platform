@@ -13,7 +13,8 @@ import {
   systemClock,
 } from '@brandspace/shared';
 import type { AiGateway, AiGatewayResult } from '@brandspace/ai-gateway';
-import { BrandBrainRetriever, fenceUntrusted, type Citation } from './retrieval';
+import { fenceUntrusted, type Citation } from './retrieval';
+import { groundingFor } from './grounding';
 import { conversationNotFound } from './errors';
 
 /**
@@ -43,7 +44,6 @@ import { conversationNotFound } from './errors';
 export interface ChatPolicy {
   readonly retentionDays: number;
   readonly maxContextItems: number;
-  readonly maxContextChunks: number;
   readonly maxContextChars: number;
 }
 
@@ -185,15 +185,15 @@ export class BrandBrainChatService {
       },
     });
 
-    const retrieval = await new BrandBrainRetriever({ db: this.#db }).retrieve({
+    // Q14 — approved facts only. `purpose: 'ask'`: this IS Brand Brain, so the
+    // brand's "Use Brand Brain" switch for writing does not apply here.
+    const retrieval = await groundingFor(this.#db, {
       brandId: input.brandId,
       question: input.message,
-      options: {
-        maxItems: this.#policy.maxContextItems,
-        maxChunks: this.#policy.maxContextChunks,
-        maxChars: this.#policy.maxContextChars,
-        area: input.area,
-      },
+      purpose: 'ask',
+      maxItems: this.#policy.maxContextItems,
+      maxChars: this.#policy.maxContextChars,
+      area: input.area,
     });
 
     if (retrieval.insufficient) {
@@ -284,7 +284,6 @@ export class BrandBrainChatService {
       after: {
         citations: retrieval.citations.length,
         knowledgeItems: retrieval.items.length,
-        documentChunks: retrieval.chunks.length,
       },
     });
 

@@ -128,14 +128,18 @@ export {
   indexVector,
   neutralizeInjection,
   tokenize,
+  usableKnowledgeWhere,
 } from './retrieval';
 export type {
   Citation,
+  GroundedFact,
   RetrievalContext,
   RetrievalOptions,
-  RetrievedChunk,
   RetrievedItem,
 } from './retrieval';
+
+export { brandBrainEnabledForWriting, groundingFor } from './grounding';
+export type { Grounding, GroundingPurpose, GroundingRequest } from './grounding';
 
 export { purgeExpiredChatContent } from './chat';
 export { BrandBrainChatService } from './chat';

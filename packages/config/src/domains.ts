@@ -854,6 +854,11 @@ const contentStudioSchema = z.object({
       maxDraftsPerBrand: z.number().int().positive().default(500),
       /** Bounds on the grounding context spent, mirroring Brand Brain's. */
       maxContextItems: z.number().int().min(1).max(100).default(12),
+      /**
+       * DEPRECATED (Phase 2C, Q14/Q20) and read by nothing. Kept so an activated
+       * `content` document still validates. Writing grounds on approved facts
+       * only; raw document chunks never reach a prompt.
+       */
       maxContextChunks: z.number().int().min(0).max(100).default(8),
       maxContextChars: z.number().int().min(500).max(200_000).default(12_000),
       /** Ceiling on the customer's own brief, so a prompt cannot be unbounded. */
@@ -1182,7 +1187,11 @@ const brandBrainSchema = z.object({
       retentionDays: z.number().int().min(1).max(3650).default(90),
       /** Retrieved knowledge items allowed into one answer context. */
       maxContextItems: z.number().int().min(1).max(100).default(12),
-      /** Retrieved document chunks allowed into one answer context. */
+      /**
+       * DEPRECATED (Phase 2C, Q14/Q20) and read by nothing. Kept so an activated
+       * `brand-brain` document still validates. Raw document chunks never reach
+       * an answer: Brand Brain grounds on approved facts only.
+       */
       maxContextChunks: z.number().int().min(0).max(100).default(8),
       /** Total characters of grounding text. A context window is finite. */
       maxContextChars: z.number().int().min(500).default(12_000),

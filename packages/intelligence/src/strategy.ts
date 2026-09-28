@@ -6,7 +6,11 @@ import {
   type TenantScopedClient,
 } from '@brandspace/database';
 import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway';
-import { BrandBrainRetriever, type RetrievalContext } from '@brandspace/brand-brain';
+import {
+  groundingFor,
+  usableKnowledgeWhere,
+  type Grounding as BrandBrainGrounding,
+} from '@brandspace/brand-brain';
 import {
   buildEvidencePackage,
   contentGapSchema,
@@ -145,7 +149,6 @@ export class StrategyService {
   readonly #policy: AnalyticsPolicy;
   readonly #queries: AnalyticsQueryService;
   readonly #gateway: AiGateway;
-  readonly #retriever: BrandBrainRetriever;
   readonly #minimumKnowledgeItems: number;
   readonly #denialSink: InsightDenialSink | undefined;
 
@@ -155,7 +158,6 @@ export class StrategyService {
     this.#policy = options.policy;
     this.#queries = options.queries;
     this.#gateway = options.gateway;
-    this.#retriever = new BrandBrainRetriever({ db: options.db });
     this.#minimumKnowledgeItems = options.minimumKnowledgeItems ?? DEFAULT_MINIMUM_KNOWLEDGE_ITEMS;
     this.#denialSink = options.denialSink;
   }
@@ -358,7 +360,13 @@ export class StrategyService {
      * performance data at all can still get a strategy from its own knowledge,
      * which is the right answer for a workspace that has not published yet.
      */
-    if (grounding.knowledgeItemCount < this.#minimumKnowledgeItems) {
+    /*
+     * ONLY WHILE BRAND BRAIN IS ON FOR WRITING. A brand that switched "Use
+     * Brand Brain" off asked for a strategy without its knowledge: it is
+     * generated ungrounded, and nothing refuses because the switch is off
+     * (owner, 2026-09-28, Phase 2C D9).
+     */
+    if (grounding.brandBrain && grounding.knowledgeItemCount < this.#minimumKnowledgeItems) {
       await writeAuditEvent(this.#db, this.#workspaceId, {
         action: 'strategy.refused',
         actorType: 'USER',
@@ -584,14 +592,14 @@ export class StrategyService {
     comparison?: AnalyticsPeriod | undefined;
     actorBrandScope: readonly string[];
   }): Promise<Grounding> {
-    const retrieval: RetrievalContext = await this.#retriever.retrieve({
+    // Approved facts only, never a document's raw text, and nothing at all
+    // when the brand switched Brand Brain off (Phase 2C, Q20 / D9).
+    const retrieval: BrandBrainGrounding = await groundingFor(this.#db, {
       brandId: input.brandId,
       question: input.objective,
-      options: {
-        maxItems: 16,
-        maxChunks: 6,
-        maxChars: 12_000,
-      },
+      purpose: 'writing',
+      maxItems: 16,
+      maxChars: 12_000,
     });
 
     const scope = { brandId: input.brandId };
@@ -629,7 +637,12 @@ export class StrategyService {
       brandScope: input.actorBrandScope,
     });
 
-    const absences = await this.#absences(input.brandId, input.period, input.actorBrandScope);
+    const absences = await this.#absences(
+      input.brandId,
+      input.period,
+      input.actorBrandScope,
+      retrieval.enabled,
+    );
 
     const evidence: EvidencePackage = buildEvidencePackage({
       period: input.period,
@@ -672,6 +685,7 @@ export class StrategyService {
     return {
       brandContext: retrieval.contextText,
       knowledgeItemCount: retrieval.items.length,
+      brandBrain: retrieval.enabled,
       evidence,
       basis,
     };
@@ -692,6 +706,8 @@ export class StrategyService {
     brandId: string,
     period: AnalyticsPeriod,
     brandScope: readonly string[],
+    /** The brand's "Use Brand Brain" switch: off, its declared pillars are not read. */
+    brandBrain: boolean,
   ): Promise<readonly { labelKey: string; note: string }[]> {
     const out: { labelKey: string; note: string }[] = [];
 
@@ -723,17 +739,20 @@ export class StrategyService {
     // A `goal.` key is the brand's GOAL (the Setup Wizard's first goal, D-277
     // §6), which shares the STRATEGY area but is not a content pillar: no post
     // is ever tagged with it, so counting it would report a permanent gap.
-    const declared = await this.#db.brandKnowledgeItem.findMany({
-      where: {
-        workspaceId: this.#workspaceId,
-        brandId,
-        area: 'STRATEGY',
-        status: { in: ['ACTIVE', 'STALE'] },
-        NOT: { itemKey: { startsWith: 'goal.' } },
-      },
-      select: { itemKey: true },
-      take: 20,
-    });
+    const declared = brandBrain
+      ? await this.#db.brandKnowledgeItem.findMany({
+          where: {
+            workspaceId: this.#workspaceId,
+            brandId,
+            area: 'STRATEGY',
+            // The same "usable fact" rule every writing path grounds on (Q20).
+            ...usableKnowledgeWhere(),
+            NOT: { itemKey: { startsWith: 'goal.' } },
+          },
+          select: { itemKey: true },
+          take: 20,
+        })
+      : [];
     for (const item of declared) {
       if (publishedPillars.has(item.itemKey)) continue;
       out.push({
@@ -812,6 +831,8 @@ export class StrategyService {
 interface Grounding {
   readonly brandContext: string;
   readonly knowledgeItemCount: number;
+  /** False when the brand switched "Use Brand Brain" off for writing. */
+  readonly brandBrain: boolean;
   readonly evidence: EvidencePackage;
   readonly basis: 'OWN_PERFORMANCE' | 'BRAND_CONTEXT' | 'CONTENT_HISTORY' | 'MIXED';
 }

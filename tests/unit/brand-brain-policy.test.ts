@@ -75,10 +75,11 @@ describe('the configuration document is mapped completely', () => {
         timeoutMs: 26_000,
       },
       staleness: { reviewIntervalDays: 88 },
+      // Phase 2C (Q14/Q20): `chat.maxContextChunks` is deprecated and read by
+      // nothing, so the reshaped policy no longer carries it.
       chat: {
         retentionDays: 12,
         maxContextItems: 13,
-        maxContextChunks: 14,
         maxContextChars: 1500,
       },
       stuckAfterSeconds: 444,

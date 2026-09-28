@@ -77,7 +77,8 @@ export function brandBrainPolicyFrom(document: BrandBrainConfig): BrandBrainPoli
     chat: {
       retentionDays: document.chat.retentionDays,
       maxContextItems: document.chat.maxContextItems,
-      maxContextChunks: document.chat.maxContextChunks,
+      // `chat.maxContextChunks` is DEPRECATED and deliberately not read (Q14):
+      // raw document chunks never reach an answer.
       maxContextChars: document.chat.maxContextChars,
     },
     stuckAfterSeconds: document.ingestion.stuckAfterSeconds,

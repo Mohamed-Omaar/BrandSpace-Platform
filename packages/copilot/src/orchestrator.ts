@@ -7,7 +7,7 @@ import {
   type TenantScopedClient,
 } from '@brandspace/database';
 import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway';
-import { BrandBrainRetriever } from '@brandspace/brand-brain';
+import { brandBrainEnabledForWriting, groundingFor } from '@brandspace/brand-brain';
 import {
   brandQueryFilter,
   fenceUntrusted,
@@ -92,6 +92,12 @@ const planResponseSchema = z.object({
     )
     .max(20)
     .default([]),
+  /**
+   * Set by the model ONLY while the brand has switched "Use Brand Brain" off,
+   * when the request asks about the brand's own facts (Phase 2C D8/D9). The
+   * turn then proposes nothing and the person is told where to ask instead.
+   */
+  brandBrainQuestion: z.boolean().default(false),
 });
 
 export interface OrchestratorOptions {
@@ -135,6 +141,13 @@ export interface TurnResult {
   readonly creditsChargedMilli: bigint;
   readonly correlationId: string;
   readonly replayed: boolean;
+  /**
+   * `brand_brain_off` when the brand switched "Use Brand Brain" off and the
+   * request was a question about the brand's facts: the dashboard shows the
+   * translated notice ("ask it in Brand Brain → Talk with the brand") in place
+   * of an answer, and no step is proposed. Null otherwise.
+   */
+  readonly notice: 'brand_brain_off' | null;
 }
 
 export class CopilotOrchestrator {
@@ -142,7 +155,6 @@ export class CopilotOrchestrator {
   readonly #workspaceId: string;
   readonly #policy: CopilotPolicy;
   readonly #gateway: AiGateway;
-  readonly #retriever: BrandBrainRetriever;
   readonly #clock: Clock;
 
   constructor(options: OrchestratorOptions) {
@@ -150,7 +162,6 @@ export class CopilotOrchestrator {
     this.#workspaceId = options.workspaceId;
     this.#policy = options.policy;
     this.#gateway = options.gateway;
-    this.#retriever = new BrandBrainRetriever({ db: options.db });
     this.#clock = options.clock ?? systemClock;
   }
 
@@ -290,7 +301,8 @@ export class CopilotOrchestrator {
     planKey: string | null;
   }): Promise<AiQuote> {
     const brandId = await this.#admitBrand(input.brandId, input.authorization);
-    const context = await this.#context(brandId, input.request);
+    const brandBrain = await this.#brandBrainEnabled(brandId);
+    const context = await this.#context(brandId, input.request, brandBrain);
     return this.#gateway.quote({
       workspaceId: this.#workspaceId,
       taskKey: 'copilot.chat',
@@ -306,6 +318,7 @@ export class CopilotOrchestrator {
           brandId !== null,
           'general',
           null,
+          brandBrain,
         ),
         untrustedContext: context ? [context] : [],
       },
@@ -404,8 +417,19 @@ export class CopilotOrchestrator {
     /* c8 ignore next -- the row was just written or already existed. */
     const correlationId = userMessage?.correlationId ?? randomUUID();
 
-    const history = await this.#history(session.id);
-    const context = await this.#context(brandId, input.request);
+    /*
+     * "USE BRAND BRAIN", END TO END (owner, 2026-09-28). The Copilot loads its
+     * context before it knows whether the request is a question or a writing
+     * job, so the switch is honoured for the WHOLE turn: no retrieval, no Brand
+     * Brain tool offered, and no earlier ASSISTANT turn replayed — an answer
+     * given while the switch was on may quote facts, and replaying it would
+     * carry them into this request. The person's own words are kept.
+     */
+    const brandBrain = await this.#brandBrainEnabled(brandId);
+    const history = (await this.#history(session.id)).filter(
+      (turn) => brandBrain || turn.role !== 'ASSISTANT',
+    );
+    const context = await this.#context(brandId, input.request, brandBrain);
     const subject = await this.#subjectContext(session, brandId);
 
     const result: AiGatewayResult = await this.#gateway.execute({
@@ -423,6 +447,7 @@ export class CopilotOrchestrator {
           brandId !== null,
           copilotSurface(session.surface),
           subject?.kind ?? null,
+          brandBrain,
         ),
         untrustedContext: [...(subject ? [subject.fenced] : []), ...(context ? [context] : [])],
       },
@@ -465,14 +490,21 @@ export class CopilotOrchestrator {
      * audited with every other tool a model reached for and may not have.
      */
     const allowed = new Set(
-      availableTools(input.authorization.permissionKeys, { brandBound: brandId !== null }).map(
-        (t) => t.key,
-      ),
+      availableTools(input.authorization.permissionKeys, {
+        brandBound: brandId !== null,
+        brandBrainEnabled: brandBrain,
+      }).map((t) => t.key),
     );
     const steps: ProposedStep[] = [];
     const rejectedToolKeys: string[] = [];
 
-    for (const step of parsed.steps) {
+    /*
+     * A BRAND QUESTION WHILE BRAND BRAIN IS OFF gets the notice, not an answer
+     * and not a plan: nothing the model wrote is offered as the brand's facts.
+     */
+    const notice = !brandBrain && parsed.brandBrainQuestion ? ('brand_brain_off' as const) : null;
+
+    for (const step of notice ? [] : parsed.steps) {
       if (!findTool(step.toolKey) || !allowed.has(step.toolKey)) {
         rejectedToolKeys.push(step.toolKey);
         continue;
@@ -543,6 +575,7 @@ export class CopilotOrchestrator {
       creditsChargedMilli: result.creditsChargedMilli,
       correlationId,
       replayed: result.replayed,
+      notice,
     };
   }
 
@@ -553,19 +586,27 @@ export class CopilotOrchestrator {
    * differently would let the assistant and the composer disagree about the same
    * brand, and a customer would have no way to tell which was right.
    */
-  async #context(brandId: string | null, question: string): Promise<string | null> {
-    if (!brandId) return null;
-    const retrieval = await this.#retriever.retrieve({
+  async #context(
+    brandId: string | null,
+    question: string,
+    brandBrain: boolean,
+  ): Promise<string | null> {
+    // Switched off: not even read (Phase 2C D9).
+    if (!brandId || !brandBrain) return null;
+    const grounding = await groundingFor(this.#db, {
       brandId,
       question,
-      options: {
-        maxItems: 10,
-        maxChunks: 4,
-        maxChars: Math.floor(this.#policy.conversation.maxContextChars / 2),
-      },
+      purpose: 'writing',
+      maxItems: 10,
+      maxChars: Math.floor(this.#policy.conversation.maxContextChars / 2),
     });
-    if (retrieval.items.length === 0 && retrieval.chunks.length === 0) return null;
-    return fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText);
+    if (!grounding.enabled || grounding.items.length === 0) return null;
+    return fenceUntrusted('BRAND BRAIN CONTEXT', grounding.contextText);
+  }
+
+  /** The brand's "Use Brand Brain" switch. A brand-less session has no Brand Brain. */
+  async #brandBrainEnabled(brandId: string | null): Promise<boolean> {
+    return brandId !== null && (await brandBrainEnabledForWriting(this.#db, brandId));
   }
 
   /** The session's subject as a fenced block, or null when it has none or is gone. */
@@ -604,8 +645,12 @@ export class CopilotOrchestrator {
     brandBound: boolean,
     surface: CopilotSurface,
     subjectKind: CopilotSubjectType | null,
+    brandBrain: boolean,
   ): string {
-    const tools = availableTools(authorization.permissionKeys, { brandBound });
+    const tools = availableTools(authorization.permissionKeys, {
+      brandBound,
+      brandBrainEnabled: brandBrain,
+    });
 
     return [
       SYSTEM_INSTRUCTION,
@@ -643,9 +688,18 @@ export class CopilotOrchestrator {
       'THE REQUEST:',
       fenceUntrusted('CUSTOMER REQUEST', request),
       '',
+      /*
+       * BRAND BRAIN IS OFF FOR THIS BRAND (Phase 2C D9). A fixed platform line,
+       * never customer text. The model holds no brand facts in this state; the
+       * flag lets it say a request was a brand question without answering it.
+       */
+      brandBound && !brandBrain
+        ? 'BRAND BRAIN IS TURNED OFF FOR THIS BRAND: you have no brand facts. If the request asks what the brand itself is, sells, charges, says or believes, set "brandBrainQuestion" to true and propose no steps.'
+        : '',
       'Respond with JSON exactly matching:',
       '{"summary":{"ar":string,"en":string},',
-      ' "steps":[{"toolKey":string,"arguments":object}]}',
+      ' "steps":[{"toolKey":string,"arguments":object}],',
+      ' "brandBrainQuestion":boolean}',
     ]
       .filter((line) => line !== '')
       .join('\n');

@@ -9,6 +9,7 @@ import {
   readSlides,
 } from '@brandspace/content';
 import { CREATIVE_FORMATS } from '@brandspace/creative';
+import { usableKnowledgeWhere } from '@brandspace/brand-brain';
 import {
   brandIdQueryFilter,
   brandScopeFilter,
@@ -437,11 +438,17 @@ export default async function ComposePage({
               select: GOAL_ITEM_SELECT,
             })
           : Promise.resolve(null),
+        /*
+         * Pillar ideas become an AI brief when picked, so they follow the
+         * writing rule (Phase 2C, Q20 / D9): usable facts only, and none from a
+         * brand that switched "Use Brand Brain" off.
+         */
         db.brandKnowledgeItem.findMany({
           where: {
             area: 'STRATEGY',
-            status: 'ACTIVE',
+            ...usableKnowledgeWhere(),
             NOT: { itemKey: { startsWith: 'goal.' } },
+            brand: { useBrandBrain: true },
             ...scope,
           },
           select: { id: true, title: true },

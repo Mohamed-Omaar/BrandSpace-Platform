@@ -41,7 +41,12 @@ export const contentPolicySchema = z.object({
     maxVariantsPerRequest: z.number().int().min(1),
     maxDraftsPerBrand: z.number().int().positive(),
     maxContextItems: z.number().int().min(1),
-    maxContextChunks: z.number().int().min(0),
+    /**
+     * DEPRECATED (Phase 2C, Q14/Q20). Still in the `content` configuration
+     * document so an activated version keeps validating; nothing reads it. Raw
+     * document chunks never ground writing, whatever this says.
+     */
+    maxContextChunks: z.number().int().min(0).optional(),
     maxContextChars: z.number().int().min(1),
     maxBriefChars: z.number().int().min(1),
   }),

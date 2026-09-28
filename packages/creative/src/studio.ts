@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
-import { AppError, assertBrandInScope, type Clock, systemClock } from '@brandspace/shared';
+import {
+  AppError,
+  assertBrandInScope,
+  fenceUntrusted,
+  type Clock,
+  systemClock,
+} from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
 import { writeAuditEvent } from '@brandspace/database';
 import type { AiGateway, AiGatewayResult } from '@brandspace/ai-gateway';
@@ -338,7 +344,16 @@ export class CreativeStudioService {
     if (identity.typography.length > 0) {
       lines.push(`Typographic character: ${identity.typography.join(', ')}.`);
     }
-    for (const line of identity.knowledge) lines.push(`Brand note: ${line}`);
+    /*
+     * FENCED (Phase 2C). The lines are the brand's approved facts, which makes
+     * them trustworthy as knowledge and still untrusted as instructions: one
+     * that reads like an order is neutralized like any other retrieved block.
+     * An image request has no separate context channel, so the fence sits in
+     * the prompt itself.
+     */
+    if (identity.knowledge.length > 0) {
+      lines.push(fenceUntrusted('BRAND BRAIN CONTEXT', identity.knowledge.join('\n')));
+    }
     lines.push('Do not render a logo, a wordmark or any brand lettering.');
     lines.push(`Request: ${brief}`);
     return lines.join('\n');

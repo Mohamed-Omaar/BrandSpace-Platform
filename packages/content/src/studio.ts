@@ -13,7 +13,12 @@ import {
   type Clock,
 } from '@brandspace/shared';
 import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway';
-import { BrandBrainRetriever, fenceUntrusted, type Citation } from '@brandspace/brand-brain';
+import {
+  fenceUntrusted,
+  groundingFor,
+  type Citation,
+  type Grounding,
+} from '@brandspace/brand-brain';
 import { briefTooLong, contentItemNotFound, unsupportedPlatform } from './errors';
 import { ContentLibraryService, type ContentLibraryOptions } from './library';
 import { preferenceInstructions, TONE_KEYS } from './suggestions';
@@ -204,7 +209,7 @@ export class ContentStudioService extends ContentLibraryService {
     this.#assertBrief(input.brief);
     this.assertPlatforms(input.platformKeys);
 
-    const retrieval = await this.#retrieve(input.brandId, input.brief);
+    const retrieval = await this.#ground(input.brandId, input.brief);
     return this.#gateway.quote({
       workspaceId: this.workspaceId,
       taskKey: 'caption.generate',
@@ -215,7 +220,7 @@ export class ContentStudioService extends ContentLibraryService {
           ...input,
           dialect: input.locale === 'AR' ? await this.resolveDialectFor(input.brandId) : undefined,
         }),
-        untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
+        untrustedContext: brandBrainContext(retrieval),
       },
     });
   }
@@ -284,7 +289,7 @@ export class ContentStudioService extends ContentLibraryService {
 
     const dialect = await this.resolveDialectFor(input.brandId);
     const expiresAt = resolveContentExpiry(this.policy, input.retention, this.#clock);
-    const retrieval = await this.#retrieve(input.brandId, input.brief);
+    const retrieval = await this.#ground(input.brandId, input.brief);
 
     /*
      * A REFUSAL IS FREE. No gateway call, no reservation, no credits — the
@@ -292,8 +297,12 @@ export class ContentStudioService extends ContentLibraryService {
      * nothing to be told. The draft is still created, empty and marked, so the
      * refusal is visible in the library rather than only in a toast that
      * disappeared.
+     *
+     * ONLY WHILE BRAND BRAIN IS ON FOR WRITING. A brand that switched it off in
+     * Settings → AI asked for ungrounded writing, so nothing refuses because
+     * the switch is off (owner, 2026-09-28, Phase 2C D9).
      */
-    if (retrieval.insufficient) {
+    if (retrieval.enabled && retrieval.insufficient) {
       const item = await this.#createItem({
         input,
         dialect,
@@ -324,7 +333,7 @@ export class ContentStudioService extends ContentLibraryService {
       input: {
         kind: 'text',
         prompt: await this.#generationPrompt({ ...input, dialect }),
-        untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
+        untrustedContext: brandBrainContext(retrieval),
       },
     });
 
@@ -373,7 +382,7 @@ export class ContentStudioService extends ContentLibraryService {
       variants: variants.length,
       citations: retrieval.citations.length,
       knowledgeItems: retrieval.items.length,
-      documentChunks: retrieval.chunks.length,
+      brandBrain: retrieval.enabled,
       dialect: dialect.key,
     });
 
@@ -554,7 +563,7 @@ export class ContentStudioService extends ContentLibraryService {
     if (!platform) throw unsupportedPlatform();
 
     const dialect = await this.resolveDialectFor(variant.brandId);
-    const retrieval = await this.#retrieve(variant.brandId, variant.body ?? '');
+    const retrieval = await this.#ground(variant.brandId, variant.body ?? '');
     const targetLocale = input.targetLocale ?? variant.locale;
 
     const instruction = [
@@ -581,7 +590,7 @@ export class ContentStudioService extends ContentLibraryService {
       request: {
         kind: 'text' as const,
         prompt: instruction,
-        untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
+        untrustedContext: brandBrainContext(retrieval),
       },
     };
   }
@@ -590,15 +599,17 @@ export class ContentStudioService extends ContentLibraryService {
     if (brief.length > this.policy.generation.maxBriefChars) throw briefTooLong();
   }
 
-  #retrieve(brandId: string, text: string) {
-    return new BrandBrainRetriever({ db: this.db }).retrieve({
+  /**
+   * WRITING GROUNDING (Phase 2C): approved facts only, never a document's raw
+   * text, and nothing at all when the brand switched Brand Brain off.
+   */
+  #ground(brandId: string, text: string): Promise<Grounding> {
+    return groundingFor(this.db, {
       brandId,
       question: text,
-      options: {
-        maxItems: this.policy.generation.maxContextItems,
-        maxChunks: this.policy.generation.maxContextChunks,
-        maxChars: this.policy.generation.maxContextChars,
-      },
+      purpose: 'writing',
+      maxItems: this.policy.generation.maxContextItems,
+      maxChars: this.policy.generation.maxContextChars,
     });
   }
 
@@ -796,4 +807,13 @@ function generationFailed(failureMessage: string | null): AppError {
     'CONFLICT',
     failureMessage ?? 'Content could not be generated. Please try again.',
   );
+}
+
+/**
+ * The Brand Brain block a writing request carries: the fenced facts, or NOTHING
+ * when the brand switched Brand Brain off — not even an empty fence, so an
+ * ungrounded request says nothing about the brand's knowledge at all.
+ */
+function brandBrainContext(grounding: Grounding): string[] {
+  return grounding.enabled ? [fenceUntrusted('BRAND BRAIN CONTEXT', grounding.contextText)] : [];
 }

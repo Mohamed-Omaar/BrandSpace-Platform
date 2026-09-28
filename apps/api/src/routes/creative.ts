@@ -7,6 +7,7 @@ import {
   type AssetPolicy,
 } from '@brandspace/assets';
 import { CreativeStudioService, brandTypography, findCreativeFormat } from '@brandspace/creative';
+import { usableKnowledgeWhere } from '@brandspace/brand-brain';
 import { createObjectStore, type ObjectStore } from '@brandspace/storage';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import type { PrismaClient } from '@brandspace/database';
@@ -224,6 +225,7 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
                 description: true,
                 colorPalette: true,
                 typography: true,
+                useBrandBrain: true,
               },
             });
             if (!brand) return null;
@@ -233,17 +235,24 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
              * canonical knowledge, and only a handful of lines: a prompt is not
              * a place to pour a knowledge base, and every line here is one the
              * brand's own people wrote or accepted.
+             *
+             * PHASE 2C (Q20, D9): the same "usable fact" rule every writing path
+             * grounds on — STALE is approved knowledge too — and nothing at all
+             * when the brand switched "Use Brand Brain" off. The studio fences
+             * the lines before they reach the prompt.
              */
-            const knowledge = await db.brandKnowledgeItem.findMany({
-              where: {
-                brandId: brand.id,
-                status: 'ACTIVE',
-                area: { in: ['IDENTITY', 'TONE_OF_VOICE'] },
-              },
-              orderBy: [{ area: 'asc' }, { itemKey: 'asc' }],
-              take: 6,
-              select: { body: true },
-            });
+            const knowledge = brand.useBrandBrain
+              ? await db.brandKnowledgeItem.findMany({
+                  where: {
+                    brandId: brand.id,
+                    ...usableKnowledgeWhere(),
+                    area: { in: ['IDENTITY', 'TONE_OF_VOICE'] },
+                  },
+                  orderBy: [{ area: 'asc' }, { itemKey: 'asc' }],
+                  take: 6,
+                  select: { body: true },
+                })
+              : [];
 
             const permissionKeys = [CREATE_PERMISSION, READ_PERMISSION];
             const uploads = new AssetUploadService({
