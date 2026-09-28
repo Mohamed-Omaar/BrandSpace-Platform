@@ -494,3 +494,83 @@ test.describe('Item 2 · C4 the Voice card', () => {
     await expect(page.getByTestId('voice-do')).toContainText('اذكر اسم الحي دائمًا');
   });
 });
+
+test.describe('Item 1 · the composer’s goal and pillar ideas are writing input (D-354)', () => {
+  /*
+   * Owner review of PR #52. Picking a goal or pillar idea puts its words into
+   * the AI brief, and the recommended goal is appended to the brief the model
+   * reads, so the composer reads them through the Brand Brain grounding layer:
+   * never an expired goal, and nothing at all while "Use Brand Brain" is off.
+   * The layer's rules are proven against PostgreSQL in
+   * tests/isolation/phase2c-grounding-layer.test.ts; this is the screen.
+   */
+  test('an expired goal and "Use Brand Brain" off each take the Brand Brain ideas away', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const { slug, brandId, workspaceId } = await ownWorkspace('bb-composer');
+    const seeded = await withPlatformPrisma(async (prisma) => {
+      const fact = (itemKey: string, title: string) =>
+        prisma.brandKnowledgeItem.create({
+          data: {
+            workspaceId,
+            brandId,
+            area: 'STRATEGY',
+            memory: 'STRATEGY',
+            origin: 'HUMAN',
+            status: 'ACTIVE',
+            itemKey,
+            title: { en: title },
+            body: { en: title },
+            version: 1,
+          },
+          select: { id: true },
+        });
+      // The objective's own English label, so the goal is recognised (D-278).
+      const goal = await fact('goal.primary', 'Launch something');
+      const pillar = await fact('pillar.recipes', 'Seasonal recipes');
+      return { goalId: goal.id, pillarId: pillar.id };
+    });
+    const compose = (mode: 'idea' | 'ai') =>
+      page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?mode=${mode}`);
+    const setGoalValidUntil = (validUntil: Date | null) =>
+      withPlatformPrisma((prisma) =>
+        prisma.brandKnowledgeItem.update({ where: { id: seeded.goalId }, data: { validUntil } }),
+      );
+    const setSwitch = (useBrandBrain: boolean) =>
+      withPlatformPrisma((prisma) =>
+        prisma.brand.update({ where: { id: brandId }, data: { useBrandBrain } }),
+      );
+
+    await enter(page, slug);
+
+    // Usable, and the switch on: both ideas, and the recommendation.
+    await compose('idea');
+    await expect(page.getByTestId('create-idea-goal')).toContainText('Launch something');
+    await expect(page.getByTestId(`create-idea-pillar-${seeded.pillarId}`)).toContainText(
+      'Seasonal recipes',
+    );
+    await compose('ai');
+    await expect(page.getByTestId('content-goal-recommended')).toBeVisible();
+
+    // The goal EXPIRED: no goal idea and no recommendation; the pillar stays.
+    await setGoalValidUntil(new Date('2000-01-01T00:00:00Z'));
+    await compose('idea');
+    await expect(page.getByTestId(`create-idea-pillar-${seeded.pillarId}`)).toBeVisible();
+    await expect(page.getByTestId('create-idea-goal')).toHaveCount(0);
+    await compose('ai');
+    await expect(page.getByTestId('content-brief')).toBeVisible();
+    await expect(page.getByTestId('content-goal-recommended')).toHaveCount(0);
+
+    // Usable again, but "Use Brand Brain" OFF: nothing from Brand Brain at all.
+    await setGoalValidUntil(null);
+    await setSwitch(false);
+    await compose('idea');
+    await expect(page.getByTestId('create-idea-goal')).toHaveCount(0);
+    await expect(page.getByTestId(`create-idea-pillar-${seeded.pillarId}`)).toHaveCount(0);
+    await compose('ai');
+    await expect(page.getByTestId('content-brief')).toBeVisible();
+    await expect(page.getByTestId('content-goal-recommended')).toHaveCount(0);
+  });
+});

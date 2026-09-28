@@ -144,14 +144,33 @@ describe('D-335 · the goal is read by its key while setup wrote it', () => {
     }
   });
 
+  /*
+   * REPLACED (owner review of PR #52, D-354): the Strategy page and the
+   * composer read the goal as WRITING input, so they read it through the Brand
+   * Brain grounding layer's `writingGoal`, whose `BRAND_GOAL_SELECT` is held
+   * equal to `GOAL_ITEM_SELECT` (tests/unit/phase2c-grounding.test.ts). Old:
+   * all three files named `GOAL_ITEM_SELECT`. New: setup reads with it; the two
+   * writing readers read through `writingGoal`, which selects with the same
+   * fields. Every reader still decodes with `storedGoal`, never by title alone.
+   */
   it('every reader asks through the one select and the one decoder', () => {
+    const setup = read('apps/dashboard/src/server/setup-wizard.ts');
+    expect(setup).toContain('GOAL_ITEM_SELECT');
+    for (const file of [
+      'apps/dashboard/src/app/[locale]/strategy/page.tsx',
+      'apps/dashboard/src/app/[locale]/content/compose/page.tsx',
+    ]) {
+      expect(read(file), file).toMatch(/\bwritingGoal\(/);
+    }
+    expect(read('packages/brand-brain/src/grounding.ts')).toMatch(
+      /export async function writingGoal[\s\S]*?select: BRAND_GOAL_SELECT/,
+    );
     for (const file of [
       'apps/dashboard/src/server/setup-wizard.ts',
       'apps/dashboard/src/app/[locale]/strategy/page.tsx',
       'apps/dashboard/src/app/[locale]/content/compose/page.tsx',
     ]) {
       const source = read(file);
-      expect(source, file).toContain('GOAL_ITEM_SELECT');
       expect(source, file).toContain('storedGoal(');
       expect(source, file).not.toContain('goalFromTitle(');
     }

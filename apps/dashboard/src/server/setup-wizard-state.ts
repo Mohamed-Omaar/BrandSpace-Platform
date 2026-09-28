@@ -208,8 +208,10 @@ export function goalFromTitle(
 /**
  * WHAT THE READERS ASK FOR THE GOAL ITEM (D-335): its title, where it came
  * from, the kind of its latest version, and the goal key the brand carries. One
- * select, so the four places that read the goal cannot come to read it
- * differently.
+ * select, so the places that read the goal cannot come to read it differently.
+ * The writing flows read the goal through the grounding layer (`writingGoal`,
+ * D-354), whose `BRAND_GOAL_SELECT` a unit test holds equal to this one; it is
+ * repeated here only so this module stays pure (no database package).
  */
 export const GOAL_ITEM_SELECT = {
   title: true,
