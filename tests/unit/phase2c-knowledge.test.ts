@@ -6,6 +6,7 @@ import {
   confidenceExplanation,
   confidenceLabel,
   isExpired,
+  itemKeySchema,
   knowledgeAsOf,
   localDateIn,
   parseValidUntil,
@@ -135,5 +136,64 @@ describe('the configuration', () => {
         },
       }),
     ).toThrow();
+  });
+});
+
+describe('Q19 — the draft key questions (pending owner review)', () => {
+  const policy = brandBrainPolicyFrom(defaultPayload('brand-brain'));
+  const AREAS = [
+    'IDENTITY',
+    'AUDIENCE',
+    'TONE_OF_VOICE',
+    'OFFERS',
+    'PROOF_POINTS',
+    'DO_DONT',
+    'COMPETITORS',
+    'GLOSSARY',
+    'STRATEGY',
+    'LEARNINGS',
+  ] as const;
+
+  it('asks something in every one of the ten areas, in both languages', () => {
+    for (const area of AREAS) {
+      const list = policy.questions.areas[area] ?? [];
+      expect(list.length, area).toBeGreaterThan(0);
+      for (const entry of list) {
+        expect((entry.prompt.en ?? '').trim(), `${area}.${entry.key}`).not.toBe('');
+        expect((entry.prompt.ar ?? '').trim(), `${area}.${entry.key}`).not.toBe('');
+        // Short enough to be a placeholder, and asking one thing.
+        expect((entry.prompt.en ?? '').length).toBeLessThanOrEqual(80);
+      }
+    }
+  });
+
+  it('has the four industry Offers sets the industries name', () => {
+    expect(Object.keys(policy.questions.offersSets).sort()).toEqual([
+      'beauty',
+      'fashion',
+      'food',
+      'services',
+    ]);
+  });
+
+  it('every question is answerable by a fact a person can add (its itemKey is a valid key)', () => {
+    const lists = [
+      ...Object.values(policy.questions.areas),
+      ...Object.values(policy.questions.offersSets),
+    ];
+    for (const list of lists) {
+      for (const entry of list ?? []) {
+        expect(itemKeySchema.safeParse(entry.itemKey).success, entry.itemKey).toBe(true);
+      }
+    }
+  });
+
+  it("lines up with the facts the product already writes: the setup goal and the Voice card's keys", () => {
+    expect(policy.questions.areas.STRATEGY?.map((entry) => entry.itemKey)).toContain(
+      'goal.primary',
+    );
+    expect(policy.questions.areas.TONE_OF_VOICE?.map((entry) => entry.itemKey)).toContain(
+      'voice.words',
+    );
   });
 });
