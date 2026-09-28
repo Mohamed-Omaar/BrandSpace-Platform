@@ -15,6 +15,7 @@ export {
   COPILOT_ENTITLEMENT_KEYS,
   COPILOT_TOOLS,
   COPILOT_TOOL_KEYS,
+  BRAND_BRAIN_TOOL_KEYS,
   availableTools,
   findTool,
   highestActionClass,

@@ -494,6 +494,51 @@ Recorded beside §8, not in it: §8 above is the owner's text and is unchanged.
 - **MO4's pill never changes size.** The owner's width/height exception is MO2's; MO4 slides a `clip-path` instead (D-349).
 - **§8.2 as built (D-353).** A committed drop is the only thing that calls the server, through `moveSlotAction` — the same `content.schedule` requirement and the same `CalendarService.reschedule` as the drawer's form, so F2, quota, approval, B-4, scope and the audit event all apply; it answers with the outcome instead of redirecting, so the post is drawn on its new day at once and a refusal puts it back with the reason in a toast. **Undo** is offered only while that toast shows (the toast host closes it on the next navigation) and carries the owner-approved precondition — the time the move put the post at — so a second Undo, one racing another move, or a replay changes nothing (`SLOT_MOVED_SINCE`); if the old time has passed, F2 refuses it and the post stays moved. **The keyboard path** is the post's drawer (open the chip, change the date and time, Reschedule) — unchanged and still the way to move a post without a pointer (WCAG 2.5.7); the result is announced by the toast host's live region. **The tray** keeps its Schedule button; dropping a draft opens the same dialog, dated. **The phone** gets the strip on the Agenda list, and so does the desktop Agenda view — the list has no day cells to drop on.
 
+## 9. Prototype v90: Phase 2C (Brand Brain v2)
+
+**Split (owner, 2026-09-28):** 2C-1 — items 1 (grounding) and 2 (knowledge, review, completeness) · 2C-2 —
+item 3 (Look & voice, fonts) · 2C-3 — item 4 (chat modes, Copilot, recorded usage, D10, "Used in N
+posts") · 2C-4 — item 5 (uploads) and item 6 (Performance, Home, Strategy). Website reading is a later PR,
+only after its security design is approved. Each part is its own branch from `staging`, never stacked.
+
+### 9.1 How Phase 2C-1 was built
+
+- **Item 1 — grounding (Q14, Q20; D-354).** One rule for what may ground AI writing,
+  `usableKnowledgeWhere()` (ACTIVE or STALE), and one entry point, `groundingFor`. Raw document chunks are
+  removed from the grounding retriever entirely (no `maxChunks` anywhere); only the ingestion pipeline reads
+  them, to propose PENDING candidates. The two `maxContextChunks` keys stay as DEPRECATED configuration.
+  Creative uses the same rule and fences its facts.
+- **Item 1 — "Use Brand Brain" (D9; D-355).** `Brand.useBrandBrain` (migration
+  `20261007090000_brand_use_brand_brain`) in Settings → AI. Off: captions, tools, Creative and Strategy
+  write ungrounded instead of refusing; the Copilot sees no fact in its context, its history or its tools,
+  and answers a brand question with a notice; Brand Brain's own chat is unaffected.
+- **Item 1 — one grounding layer (owner review of PR #52; D-360).** Creative, Strategy's pillar gaps, the
+  composer's goal and pillar ideas and its recommended goal, and the Strategy page's objective prefill read
+  Brand Brain through narrowly named helpers in `packages/brand-brain/src/grounding.ts`; no generative path
+  applies the usable-fact rule, the workspace's day or the switch itself, and a unit scan names every
+  non-generative reader with its reason.
+- **Item 2 — valid until (D6; D-356).** Migration `20261007100000_knowledge_valid_until`. A fact is valid
+  through its last day in the WORKSPACE's time zone; expired facts ground nothing and answer nothing, and
+  stay visible and editable. Rolling the application back makes them usable again (`OPERATIONS.md` §6.4).
+- **Item 2 — key questions (Q19; D-357, revised D-361).** "Answered n of m" from configured questions, one
+  `itemKey` each, with industry Offers sets. The wording was drafted for owner review, revised, and is
+  **owner-approved** (2026-09-28, D-361).
+- **Item 2 — the one review inbox (D4, C1, 2.a; D-358).** One card at a time, oldest first; confidence
+  label and why; old and new side by side; Option A precedence; a previewed, re-checked bulk accept.
+- **Item 2 — tabs and voice (D1, C4, 2.b; D-359).** Knowledge · Look & voice · Sources · Talk with the
+  brand; IDENTITY reads "About the business"; one Voice card over TONE_OF_VOICE and DO_DONT facts.
+
+**Known gaps, recorded by owner decision and NOT fixed in 2C-1:** nothing ever sets a fact to `STALE`
+(the usable rule admits it, nothing produces it); a re-ingested document reuses the BullMQ job id
+`ingest-<id>`; `sweepStuckJobs` is never called; ingestion failure sentences are English only; and
+`BRANDSPACE_WEBFONTS` is blocked by the dashboard's CSP.
+
+**Known gap, recorded by owner decision (review of PR #52) and to be fixed in 2C-4 (item 6 touches the
+Strategy page):** the Strategy page's display lists — audience, key messages and declared pillars — read
+`status: 'ACTIVE'` only, so an EXPIRED fact is still shown there and a STALE one is not. They are display
+only and reach no generation (the goal that prefills the objective is read through `writingGoal`, D-360),
+which is why the grounding guard names the page as a non-generative reader.
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):

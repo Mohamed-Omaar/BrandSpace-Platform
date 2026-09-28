@@ -5,8 +5,10 @@ import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import {
+  acceptConfidentSchema,
   checksumOf,
   createKnowledgeItemSchema,
+  parseValidUntil,
   rollbackSchema,
   updateKnowledgeItemSchema,
   type LocalizedText,
@@ -75,6 +77,18 @@ function backTo(formData: FormData): { readonly path: string; readonly step?: st
   return { path: '/onboarding', ...(WIZARD_STEPS.has(step) ? { step } : {}) };
 }
 
+/**
+ * D1 (Phase 2C) — the Brand Brain tab a form was posted from, so the redirect
+ * lands the person back where they were. A closed set; anything else is the
+ * default tab.
+ */
+const TABS = new Set(['knowledge', 'look', 'sources', 'chat']);
+
+function tabParam(formData: FormData): Record<string, string> {
+  const tab = String(formData.get('tab') ?? '');
+  return TABS.has(tab) && tab !== 'knowledge' ? { tab } : {};
+}
+
 function pageUrl(
   locale: string,
   params: Record<string, string> = {},
@@ -106,6 +120,43 @@ function localized(formData: FormData, prefix: string): LocalizedText {
     ...(en.length > 0 ? { en } : {}),
     ...(ar.length > 0 ? { ar } : {}),
   };
+}
+
+/**
+ * The fact's title. The Voice card's one-line rules (decision 2.b) send no
+ * title and ask for one made from the rule itself (`titleFromBody`), cut to
+ * the title's length; everywhere else a title is typed.
+ */
+function titleOf(formData: FormData): LocalizedText {
+  const typed = localized(formData, 'title');
+  if (typed.en || typed.ar || formData.get('titleFromBody') !== '1') return typed;
+  const body = localized(formData, 'body');
+  const cut = (text: string | undefined) => text?.slice(0, 120);
+  return {
+    ...(body.en ? { en: cut(body.en) } : {}),
+    ...(body.ar ? { ar: cut(body.ar) } : {}),
+  };
+}
+
+/**
+ * The new fact's key. Typed in the area drawer; for the Voice card's rules
+ * (decision 2.b) the form sends only the rule's PREFIX — `tone.`, `do.` or
+ * `dont.` — and the key is that prefix plus a short random suffix, so two
+ * rules never collide and the prefix is what files the rule. Any other prefix
+ * is refused by the key schema's own shape.
+ */
+const RULE_PREFIXES = new Set(['tone.', 'do.', 'dont.']);
+
+function itemKeyFrom(formData: FormData): string {
+  const typed = String(formData.get('itemKey') ?? '').trim();
+  if (typed.length > 0) return typed;
+  const prefix = String(formData.get('itemKeyPrefix') ?? '');
+  return RULE_PREFIXES.has(prefix) ? `${prefix}${randomUUID().slice(0, 8)}` : '';
+}
+
+/** D6 — the "valid until" field, only when the form carries it. */
+function validUntilField(formData: FormData): { validUntil?: string } {
+  return formData.has('validUntil') ? { validUntil: String(formData.get('validUntil') ?? '') } : {};
 }
 
 export async function createBrandAction(formData: FormData): Promise<void> {
@@ -146,9 +197,10 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
     const parsed = createKnowledgeItemSchema.parse({
       brandId: String(formData.get('brandId') ?? ''),
       area,
-      itemKey: String(formData.get('itemKey') ?? ''),
-      title: localized(formData, 'title'),
+      itemKey: itemKeyFrom(formData),
+      title: titleOf(formData),
       body: localized(formData, 'body'),
+      ...validUntilField(formData),
     });
 
     await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
@@ -160,11 +212,13 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
         body: parsed.body,
         actor: knowledgeActor(session),
         policy: (await policy()).staleness,
+        // D6 — a workspace-local calendar day, or none.
+        validUntil: parseValidUntil(parsed.validUntil),
       });
     });
-    destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area });
+    destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area, ...tabParam(formData) });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'create-knowledge', { area });
+    destination = failure(locale, error, 'create-knowledge', { area, ...tabParam(formData) });
   }
   revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);
@@ -178,11 +232,12 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
     const session = await requireWorkspaceAction(locale, 'brand_brain.edit');
     const parsed = updateKnowledgeItemSchema.parse({
       itemId: String(formData.get('itemId') ?? ''),
-      title: localized(formData, 'title'),
+      title: titleOf(formData),
       body: localized(formData, 'body'),
       ...(formData.get('changeReason')
         ? { changeReason: String(formData.get('changeReason')) }
         : {}),
+      ...validUntilField(formData),
     });
 
     await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
@@ -193,11 +248,15 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
         changeReason: parsed.changeReason,
         actor: knowledgeActor(session),
         policy: (await policy()).staleness,
+        // D6 — only a form that carries the field changes it; empty clears it.
+        ...(parsed.validUntil !== undefined
+          ? { validUntil: parseValidUntil(parsed.validUntil) }
+          : {}),
       });
     });
-    destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area });
+    destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area, ...tabParam(formData) });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'update-knowledge', { area });
+    destination = failure(locale, error, 'update-knowledge', { area, ...tabParam(formData) });
   }
   revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);
@@ -217,9 +276,9 @@ export async function archiveKnowledgeAction(formData: FormData): Promise<void> 
         actor: knowledgeActor(session),
       });
     });
-    destination = pageUrl(locale, { ok: 'KNOWLEDGE_ARCHIVED', area });
+    destination = pageUrl(locale, { ok: 'KNOWLEDGE_ARCHIVED', area, ...tabParam(formData) });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'archive-knowledge', { area });
+    destination = failure(locale, error, 'archive-knowledge', { area, ...tabParam(formData) });
   }
   revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);
@@ -313,6 +372,48 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
  * production the fallback is refused outright — see `mayProcessInline` — so the
  * old behaviour cannot return by accident or by a missing environment variable.
  */
+/**
+ * D4 + C1 — "ACCEPT THE CONFIDENT ONES", after the person saw the preview and
+ * confirmed. `brand_brain.review`, like every accept. The ids they confirmed go
+ * through `reviewCandidates` — the one bulk path, one transaction, every
+ * candidate through `reviewCandidate` — which re-checks each against the
+ * CONFIGURED threshold (never a number from the form) and skips conflicts and
+ * anything decided since the preview.
+ */
+export async function acceptConfidentCandidatesAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.review');
+    const parsed = acceptConfidentSchema.parse({
+      brandId: String(formData.get('brandId') ?? ''),
+      candidateIds: formData.getAll('candidateId').map(String),
+    });
+    const outcome = await inBrandBrain(
+      session.workspace.workspaceId,
+      async ({ knowledge, policy }) => {
+        const resolved = await policy();
+        return knowledge.reviewCandidates({
+          brandId: parsed.brandId,
+          candidateIds: parsed.candidateIds,
+          minimumConfidenceMilli: resolved.review.confidentAcceptMilli,
+          actor: knowledgeActor(session),
+          policy: resolved.staleness,
+        });
+      },
+    );
+    destination = pageUrl(locale, {
+      ok: 'CANDIDATES_ACCEPTED',
+      accepted: String(outcome.accepted.length),
+      skipped: String(outcome.skipped.length),
+    });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'accept-confident');
+  }
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}
+
 export async function uploadSourceAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');
@@ -394,9 +495,9 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
         });
       }
     }
-    destination = pageUrl(locale, { ok: 'SOURCE_UPLOADED', area }, back);
+    destination = pageUrl(locale, { ok: 'SOURCE_UPLOADED', area, ...tabParam(formData) }, back);
   } catch (error: unknown) {
-    destination = failure(locale, error, 'upload-source', { area }, back);
+    destination = failure(locale, error, 'upload-source', { area, ...tabParam(formData) }, back);
   }
   revalidatePath(`/${locale}/brand-brain`);
   revalidatePath(`/${locale}/onboarding`);

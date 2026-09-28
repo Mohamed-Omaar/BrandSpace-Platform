@@ -9,6 +9,7 @@ import {
   readSlides,
 } from '@brandspace/content';
 import { CREATIVE_FORMATS } from '@brandspace/creative';
+import { declaredPillarIdeas, writingGoal } from '@brandspace/brand-brain';
 import {
   brandIdQueryFilter,
   brandScopeFilter,
@@ -54,7 +55,7 @@ import {
   platformsByFormat,
   repurposeBrief,
 } from '../../../../server/create-post';
-import { GOAL_ITEM_KEY, GOAL_ITEM_SELECT, storedGoal } from '../../../../server/setup-wizard-state';
+import { GOAL_ITEM_KEY, storedGoal } from '../../../../server/setup-wizard-state';
 import { CreateEntry, IdeaPicker, RepurposePicker, type IdeaOption } from './create-entry';
 import { CONTENT_TYPES } from '../content-types';
 import {
@@ -426,26 +427,20 @@ export default async function ComposePage({
       `/${locale}/content/compose?${new URLSearchParams({ ...carry, mode: 'ai', ...params }).toString()}`;
     const found = await inWorkspace(workspace.workspaceId, async ({ db }) => {
       const [goal, pillars, empty, gaps] = await Promise.all([
+        /*
+         * THE GOAL AND PILLAR IDEAS ARE WRITING INPUT, NOT DISPLAY. Picking one
+         * puts its title into the AI brief (and the goal into the brief's goal
+         * line), so both are read through the Brand Brain grounding layer
+         * (D-354): usable facts only — never an expired one — and nothing from
+         * a brand that switched "Use Brand Brain" off (Q20, D6, D9).
+         */
         composingBrandId
-          ? db.brandKnowledgeItem.findFirst({
-              where: {
-                brandId: composingBrandId,
-                area: 'STRATEGY',
-                itemKey: GOAL_ITEM_KEY,
-                status: { in: ['ACTIVE', 'STALE'] },
-              },
-              select: GOAL_ITEM_SELECT,
-            })
+          ? writingGoal(db, { brandId: composingBrandId, itemKey: GOAL_ITEM_KEY })
           : Promise.resolve(null),
-        db.brandKnowledgeItem.findMany({
-          where: {
-            area: 'STRATEGY',
-            status: 'ACTIVE',
-            NOT: { itemKey: { startsWith: 'goal.' } },
-            ...scope,
-          },
-          select: { id: true, title: true },
-          take: 3,
+        declaredPillarIdeas(db, {
+          brandId: composingBrandId ?? undefined,
+          brandScope: workspace.brandScope,
+          maxItems: 3,
         }),
         workspace.permissionKeys.includes('campaigns.read')
           ? db.campaign.findMany({
@@ -590,20 +585,18 @@ export default async function ComposePage({
       ? requestedCampaign
       : '';
 
-  /* §19 — the recommended goal, from the brand's own first goal (D-278). */
+  /*
+   * §19 — the recommended goal, from the brand's own first goal (D-278). It
+   * preselects the post's goal, which is appended to the brief the model reads,
+   * so it is read through the grounding layer like any writing input: an
+   * expired goal, or a brand with "Use Brand Brain" off, recommends nothing.
+   */
   const recommendedGoal = composingBrandId
-    ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
-        const row = await db.brandKnowledgeItem.findFirst({
-          where: {
-            brandId: composingBrandId,
-            area: 'STRATEGY',
-            itemKey: GOAL_ITEM_KEY,
-            status: { in: ['ACTIVE', 'STALE'] },
-          },
-          select: GOAL_ITEM_SELECT,
-        });
-        return goalForObjective(storedGoal(row));
-      })
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) =>
+        goalForObjective(
+          storedGoal(await writingGoal(db, { brandId: composingBrandId, itemKey: GOAL_ITEM_KEY })),
+        ),
+      )
     : null;
   /*
    * D-295 — this member's ACCEPTED defaults for the brand, shown where they

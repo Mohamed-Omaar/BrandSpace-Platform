@@ -1400,7 +1400,8 @@ exception text can reach the address bar, the browser history or an access log. 
 provider response is refused with a neutral sentence that says nothing about there being a model.
 
 Audit events record **counts, never content**: how many variants, how many citations, how many
-knowledge items and chunks grounded it, and which dialect — never the brief and never a caption. A
+knowledge items grounded it (never a document chunk since Phase 2C, D-354) and whether Brand Brain was on
+for the brand, and which dialect — never the brief and never a caption. A
 draft caption is routinely the most commercially sensitive string in the record.
 
 ### 23.4 Credits

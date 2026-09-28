@@ -130,8 +130,11 @@ test.describe('Brand Brain screen', () => {
      * which is what the old assertion was for — and it is immune to whatever
      * the database already holds, because it measures a DIFFERENCE.
      */
-    const percent = await page.getByTestId('completion-percent').innerText();
-    expect(percent).toMatch(/^\d{1,3}%$/);
+    // Q19 (D-357): key questions "answered n of m", never a percentage — this
+    // replaces the old `completion-percent` /^\d{1,3}%$/ assertion.
+    const answeredText = await page.getByTestId('completion-answered').innerText();
+    expect(answeredText).toMatch(/^answered \d+ of \d+$/);
+    expect(answeredText).not.toContain('%');
 
     const itemsBefore = Number(await page.getByTestId('metric-items').innerText());
     expect(Number.isFinite(itemsBefore), 'the item metric must render a number').toBe(true);
@@ -462,7 +465,24 @@ test.describe('accessibility', () => {
     await openBrandBrain(page);
     await ensureBrand(page);
     await page.getByTestId('area-card-IDENTITY').click();
-    await expect(page.getByTestId('area-drawer')).toBeVisible();
+    const drawer = page.getByTestId('area-drawer');
+    await expect(drawer).toBeVisible();
+    /*
+     * THE OPEN DRAWER, NOT THE OPENING ONE. MO5 brings the drawer's rows in one
+     * after another with a fade, and Phase 2C's key questions put more rows
+     * ahead of the facts, so a scan started at "visible" could read a fact row
+     * mid-fade and measure its blended, half-transparent colours. The state
+     * under test is the drawer at rest, so wait for its entrance to finish.
+     */
+    await expect
+      .poll(() =>
+        drawer.evaluate((element) =>
+          element
+            .getAnimations({ subtree: true })
+            .every((animation) => animation.playState !== 'running'),
+        ),
+      )
+      .toBe(true);
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
@@ -631,6 +651,8 @@ test.describe('an upload is processed by the WORKER, not by the request', () => 
     await openBrandBrain(page);
     await ensureBrand(page);
 
+    // D1 (Phase 2C): uploads live on the Sources tab.
+    await page.getByTestId('tab-sources').click();
     const upload = page.getByTestId('upload-input');
     if (!(await upload.isVisible().catch(() => false))) test.skip();
 

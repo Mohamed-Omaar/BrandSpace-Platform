@@ -529,6 +529,9 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
 
         return reply.send({
           summary: result.turn.summary,
+          // Phase 2C D9 — a brand question while "Use Brand Brain" is off. A
+          // closed key the dashboard translates; never model text.
+          notice: result.turn.notice,
           rejectedToolKeys: result.turn.rejectedToolKeys,
           planId: result.created.plan.id,
           planHash: result.created.plan.planHash,

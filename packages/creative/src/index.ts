@@ -13,6 +13,8 @@
  * different feature could live there.
  */
 export {
+  CREATIVE_KNOWLEDGE_AREAS,
+  CREATIVE_KNOWLEDGE_LINES,
   CreativeStudioService,
   brandTypography,
   creativeBriefRequired,

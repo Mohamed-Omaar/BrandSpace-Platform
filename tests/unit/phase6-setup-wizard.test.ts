@@ -207,9 +207,21 @@ describe('D-277 §6 · the first goal lives in the brand’s strategy memory', (
     expect(GOAL_ITEM_KEY).toMatch(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/);
   });
 
+  /*
+   * REPLACED (owner review of PR #52, D-354): the strategy engine reads its
+   * declared pillars through the Brand Brain grounding layer. Old: the
+   * `goal.` exclusion was written in strategy.ts. New: strategy.ts asks
+   * `declaredPillarKeys`, which excludes `goal.` keys; the isolation suite
+   * (phase2c-grounding-layer) proves a goal is never returned as a pillar.
+   */
   it('the strategy engine does not count a goal as an unpublished content pillar', () => {
     const strategy = read('packages/intelligence/src/strategy.ts');
-    expect(strategy).toMatch(/NOT: \{ itemKey: \{ startsWith: 'goal\.' \} \}/);
+    expect(strategy).toMatch(/\bdeclaredPillarKeys\(/);
+    const layer = read('packages/brand-brain/src/grounding.ts');
+    expect(layer).toMatch(
+      /export async function declaredPillarKeys[\s\S]*?NOT: \{ itemKey: \{ startsWith: GOAL_KEY_PREFIX \} \}/,
+    );
+    expect(layer).toContain("export const GOAL_KEY_PREFIX = 'goal.';");
     expect(GOAL_KEY_PREFIX).toBe('goal.');
   });
 

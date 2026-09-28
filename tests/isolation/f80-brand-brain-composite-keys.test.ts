@@ -853,6 +853,13 @@ describe('the constraints are composite in the database catalogue', () => {
       'conflictsWithItemId',
       'SET NULL',
     ],
+    // Phase 2C (D4), composite from the start.
+    [
+      'brand_knowledge_item',
+      'brand_knowledge_item_superseded_fkey',
+      'supersededByItemId',
+      'SET NULL',
+    ],
     ['brand_knowledge_version', 'brand_knowledge_version_item_fkey', 'knowledgeItemId', 'CASCADE'],
   ] as const;
 
@@ -922,6 +929,9 @@ describe('the constraints are composite in the database catalogue', () => {
       ['brand_knowledge_candidate_target_fkey', ['targetItemId']],
       ['brand_knowledge_item_conflict_fkey', ['conflictsWithItemId']],
       ['brand_knowledge_item_source_fkey', ['sourceDocumentId']],
+      // PHASE 2C (D4): an archived fact points at the fact that replaced it,
+      // and nulls only that column when the replacement goes away.
+      ['brand_knowledge_item_superseded_fkey', ['supersededByItemId']],
     ]);
 
     for (const row of rows) {

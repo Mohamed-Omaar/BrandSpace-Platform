@@ -377,6 +377,9 @@ export function requiresConfirmation(actionClass: CopilotActionClass): boolean {
  * action somebody cannot take is the dead button §20 forbids, and hiding it
  * keeps the model from proposing plans that can only fail.
  */
+/** The tools that read Brand Brain knowledge, withheld while the brand's switch is off. */
+export const BRAND_BRAIN_TOOL_KEYS: ReadonlySet<string> = new Set(['brand.context']);
+
 export function availableTools(
   permissionKeys: readonly string[],
   options: {
@@ -388,10 +391,18 @@ export function availableTools(
      * permission-only callers that predate brand binding keep their meaning.
      */
     readonly brandBound?: boolean;
+    /**
+     * Has this brand switched "Use Brand Brain" off (Phase 2C D9)? Then the one
+     * tool that reads Brand Brain knowledge is not offered at all, so the model
+     * is never shown a way to reach the facts the switch withholds. Defaults to
+     * ON, the brand default.
+     */
+    readonly brandBrainEnabled?: boolean;
   } = {},
 ): readonly ToolDefinition[] {
   const held = new Set(permissionKeys);
   const brandBound = options.brandBound ?? true;
+  const brandBrainEnabled = options.brandBrainEnabled ?? true;
   /*
    * WIDENED TO `ToolDefinition[]` ON PURPOSE. Every tool in the registry today
    * declares `brandScope: 'required'`, so the literal type of the array narrows
@@ -412,7 +423,10 @@ export function availableTools(
    */
   if (!held.has('copilot.use')) return [];
   return (COPILOT_TOOLS as readonly ToolDefinition[]).filter(
-    (tool) => held.has(tool.permission) && (brandBound || tool.brandScope !== 'required'),
+    (tool) =>
+      held.has(tool.permission) &&
+      (brandBound || tool.brandScope !== 'required') &&
+      (brandBrainEnabled || !BRAND_BRAIN_TOOL_KEYS.has(tool.key)),
   );
 }
 

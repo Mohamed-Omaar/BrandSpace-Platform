@@ -277,6 +277,16 @@ export interface CandidateFact {
     readonly chunkIndex: number;
     readonly locator: string;
     readonly quote: string;
+    /**
+     * WHY THE CONFIDENCE IS WHAT IT IS (Phase 2C, D4), recorded when the
+     * candidate is made so the review inbox explains it from stored facts
+     * rather than reverse-engineering a number: how the area was matched, how
+     * many of its keywords the sentence holds, and whether it is the area the
+     * uploader aimed the document at.
+     */
+    readonly method?: 'keyword';
+    readonly keywordHits?: number;
+    readonly aimedArea?: boolean;
   }[];
 }
 
@@ -337,7 +347,14 @@ export class KeywordFactExtractor implements FactExtractor {
           body: { en: sentence },
           confidenceMilli: scored.confidenceMilli,
           evidence: [
-            { chunkIndex: chunk.index, locator: chunk.locator, quote: truncate(sentence, 300) },
+            {
+              chunkIndex: chunk.index,
+              locator: chunk.locator,
+              quote: truncate(sentence, 300),
+              method: 'keyword',
+              keywordHits: scored.keywordHits,
+              aimedArea: scored.area === input.targetArea,
+            },
           ],
         });
       }
@@ -362,7 +379,7 @@ const AREA_KEYWORDS: Readonly<Record<string, readonly string[]>> = {
 function scoreSentence(
   sentence: string,
   targetArea: BrandKnowledgeArea | null,
-): { area: BrandKnowledgeArea; confidenceMilli: number } | null {
+): { area: BrandKnowledgeArea; confidenceMilli: number; keywordHits: number } | null {
   const lower = sentence.toLowerCase();
   let best: { area: BrandKnowledgeArea; hits: number } | null = null;
 
@@ -377,7 +394,7 @@ function scoreSentence(
   // offers. It gets a LOW confidence, because that is what a guess deserves.
   if (!best) {
     if (!targetArea) return null;
-    return { area: targetArea, confidenceMilli: 400 };
+    return { area: targetArea, confidenceMilli: 400, keywordHits: 0 };
   }
 
   // Keyword hits map to confidence in fixed steps, so the number is
@@ -390,6 +407,7 @@ function scoreSentence(
     area: best.area,
     confidenceMilli:
       targetArea === best.area ? Math.min(950, confidenceMilli + 50) : confidenceMilli,
+    keywordHits: best.hits,
   };
 }
 

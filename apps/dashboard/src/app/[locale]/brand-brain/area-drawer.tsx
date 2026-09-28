@@ -1,21 +1,28 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   colorTokens,
   typographyTokens,
   CONTROL_CLASS,
   useOverlayBehaviour,
   usePresence,
+  visuallyHiddenStyle,
 } from '@brandspace/ui';
 import { translator } from '../../../i18n/messages';
-import type { AreaCardData, BrandBrainPermissions, CandidateData } from './brand-brain-view';
+import type { AreaCardData, BrandBrainPermissions } from './brand-brain-view';
 import {
   archiveKnowledgeAction,
   createKnowledgeAction,
-  reviewCandidateAction,
+  updateKnowledgeAction,
   uploadSourceAction,
 } from './actions';
+
+/** Q19 — the key question a person chose to answer: its fact key and its words. */
+export interface QuestionFocus {
+  readonly itemKey: string;
+  readonly prompt: string;
+}
 
 /**
  * The knowledge-area detail drawer.
@@ -36,25 +43,37 @@ import {
  *
  * EVERY CONTROL IS REAL OR ABSENT. A button that looks live and answers 404 is
  * worse than a missing one, so each block is gated on its own permission.
+ *
+ * PHASE 2C: the area's KEY QUESTIONS (Q19) with the unanswered ones turning
+ * into the add form's key and placeholder; "valid until" and an Edit form on
+ * each fact (D6); and NO review list — candidates are reviewed in the one inbox
+ * (D4), which this drawer links to.
  */
 export function AreaDrawer({
   locale,
   brandId,
   area: requestedArea,
-  candidates,
+  focus,
   permissions,
   onClose,
   onAskAbout,
+  onReview,
 }: {
   locale: string;
   brandId: string;
   area: AreaCardData | null;
-  candidates: readonly CandidateData[];
+  /** Set from "What's missing": the question to answer in the add form. */
+  focus: QuestionFocus | null;
   permissions: BrandBrainPermissions;
   onClose: () => void;
   onAskAbout: (area: string) => void;
+  /** D4 — open the one review inbox at this area's first candidate. */
+  onReview: (area: string) => void;
 }) {
   const t = translator(locale);
+  // The question being answered: from "What's missing", or chosen here.
+  const [chosen, setChosen] = useState<QuestionFocus | null>(focus);
+  useEffect(() => setChosen(focus), [focus, requestedArea?.area]);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const open = requestedArea !== null;
@@ -189,8 +208,10 @@ export function AreaDrawer({
           {/* The VALUE is translated on the server; this is its caption. */}
           <Field label={t('bb.fieldStatus')} value={area.statusLabel} testId="drawer-status" />
           <Field
-            label={t('bb.knowledgeItems')}
-            value={`${area.activeItems} / ${area.requiredItems}`}
+            label={t('bb.questionsAnswered')}
+            value={t('bb.answeredOf')
+              .replace('{answered}', String(area.answered))
+              .replace('{total}', String(area.total))}
             testId="drawer-count"
           />
           {area.pendingCandidates > 0 ? (
@@ -237,6 +258,56 @@ export function AreaDrawer({
           >
             {t('bb.chatOpen')}
           </button>
+        ) : null}
+
+        {/* --- Key questions (Q19) ------------------------------------------ */}
+        {area.questions.length > 0 ? (
+          <section data-testid="drawer-questions" style={{ display: 'grid', gap: 6 }}>
+            <h3 style={{ margin: 0, fontSize: typographyTokens.label.fontSize }}>
+              {t('bb.questionsAnswered')}
+            </h3>
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 4 }}>
+              {area.questions.map((question) => (
+                <li
+                  key={question.itemKey}
+                  data-testid={`drawer-question-${question.itemKey}`}
+                  data-answered={question.answered ? 'true' : 'false'}
+                  style={{ fontSize: typographyTokens.bodySm.fontSize }}
+                >
+                  <span aria-hidden="true">{question.answered ? '✓ ' : '○ '}</span>
+                  {question.answered || !permissions.edit ? (
+                    <span>
+                      {question.prompt}
+                      <span style={visuallyHiddenStyle()}>
+                        {' '}
+                        {question.answered ? t('bb.questionAnswered') : t('bb.questionOpen')}
+                      </span>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setChosen({ itemKey: question.itemKey, prompt: question.prompt })
+                      }
+                      data-testid={`drawer-answer-${question.itemKey}`}
+                      style={{
+                        border: 0,
+                        padding: 0,
+                        background: 'none',
+                        color: colorTokens.brandPurplePressed,
+                        textDecoration: 'underline',
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        textAlign: 'start',
+                      }}
+                    >
+                      {question.prompt}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
         ) : null}
 
         {/* --- Existing knowledge ------------------------------------------ */}
@@ -296,6 +367,28 @@ export function AreaDrawer({
                     {item.stale ? ` · ${t('bb.attention.stale_items')}` : ''}
                   </small>
                 </header>
+                {/*
+                  D6 — THE END DATE, AND WHAT IT MEANS NOW. Expired is not stale:
+                  a stale fact is still used in writing; an expired one never is.
+                */}
+                {item.expired ? (
+                  <small
+                    data-testid={`bb-expired-${item.id}`}
+                    style={{ fontWeight: 700, fontSize: typographyTokens.micro.fontSize }}
+                  >
+                    {t('bb.expired')}
+                  </small>
+                ) : item.validUntil ? (
+                  <small
+                    data-testid={`bb-valid-until-${item.id}`}
+                    style={{
+                      color: colorTokens.textMuted,
+                      fontSize: typographyTokens.micro.fontSize,
+                    }}
+                  >
+                    {t('bb.validUntilShown').replace('{date}', item.validUntil)}
+                  </small>
+                ) : null}
                 {item.provenance ? (
                   <small
                     data-testid={`bb-provenance-${item.id}`}
@@ -313,10 +406,88 @@ export function AreaDrawer({
                     fontSize: typographyTokens.bodySm.fontSize,
                     lineHeight: 1.6,
                     whiteSpace: 'pre-wrap',
+                    ...(item.expired ? { color: colorTokens.textMuted } : {}),
                   }}
                 >
                   {item.body}
                 </p>
+                {permissions.edit ? (
+                  /*
+                   * EDIT — a new version through the ordinary update path, with the
+                   * fact's end date beside its words (D6). A native disclosure, the
+                   * same pattern the review's "edit, then accept" uses.
+                   */
+                  <details data-testid={`edit-item-${item.id}`}>
+                    <summary
+                      style={{
+                        cursor: 'pointer',
+                        fontSize: typographyTokens.caption.fontSize,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {t('bb.editFact')}
+                    </summary>
+                    <form
+                      action={updateKnowledgeAction}
+                      style={{ display: 'grid', gap: 8, marginBlockStart: 8 }}
+                    >
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="area" value={area.area} />
+                      <input type="hidden" name="itemId" value={item.id} />
+                      <input
+                        className={CONTROL_CLASS}
+                        name="titleEn"
+                        defaultValue={item.edit.titleEn}
+                        aria-label={t('bb.newItem.titleEn')}
+                        dir="ltr"
+                        style={drawerInputStyle}
+                      />
+                      <input
+                        className={CONTROL_CLASS}
+                        name="titleAr"
+                        defaultValue={item.edit.titleAr}
+                        aria-label={t('bb.newItem.titleAr')}
+                        dir="rtl"
+                        style={drawerInputStyle}
+                      />
+                      <textarea
+                        className={CONTROL_CLASS}
+                        name="bodyEn"
+                        rows={3}
+                        defaultValue={item.edit.bodyEn}
+                        aria-label={t('bb.newItem.bodyEn')}
+                        dir="ltr"
+                        style={{ ...drawerInputStyle, resize: 'vertical' }}
+                      />
+                      <textarea
+                        className={CONTROL_CLASS}
+                        name="bodyAr"
+                        rows={3}
+                        defaultValue={item.edit.bodyAr}
+                        aria-label={t('bb.newItem.bodyAr')}
+                        dir="rtl"
+                        style={{ ...drawerInputStyle, resize: 'vertical' }}
+                      />
+                      <ValidUntilField
+                        id={`valid-until-${item.id}`}
+                        label={t('bb.validUntil')}
+                        hint={t('bb.validUntilHint')}
+                        defaultValue={item.validUntil ?? ''}
+                        testId={`valid-until-${item.id}`}
+                      />
+                      <button
+                        type="submit"
+                        data-testid={`save-item-${item.id}`}
+                        style={{
+                          ...reviewButtonStyle(colorTokens.ink, colorTokens.surface),
+                          justifySelf: 'start',
+                        }}
+                      >
+                        {t('common.save')}
+                      </button>
+                    </form>
+                  </details>
+                ) : null}
                 {permissions.remove ? (
                   <form action={archiveKnowledgeAction} style={{ justifySelf: 'start' }}>
                     <input type="hidden" name="locale" value={locale} />
@@ -345,221 +516,25 @@ export function AreaDrawer({
           )}
         </section>
 
-        {/* --- Review queue ------------------------------------------------- */}
-        {permissions.review ? (
+        {/* --- Review: the ONE inbox (D4) ---------------------------------- */}
+        {area.pendingCandidates > 0 ? (
           <section data-testid="drawer-review" style={{ display: 'grid', gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: typographyTokens.label.fontSize }}>
-              {t('bb.reviewTitle')}
-            </h3>
-            {candidates.length === 0 ? (
-              <p
+            <p style={{ margin: 0, fontSize: typographyTokens.bodySm.fontSize }}>
+              {t('bb.drawerWaiting').replace('{count}', String(area.pendingCandidates))}
+            </p>
+            {permissions.review ? (
+              <button
+                type="button"
+                data-testid="drawer-open-inbox"
+                onClick={() => onReview(area.area)}
                 style={{
-                  margin: 0,
-                  color: colorTokens.textMuted,
-                  fontSize: typographyTokens.bodySm.fontSize,
+                  ...reviewButtonStyle(colorTokens.ink, colorTokens.surface),
+                  justifySelf: 'start',
                 }}
               >
-                {t('bb.reviewNone')}
-              </p>
-            ) : (
-              candidates.map((candidate) => (
-                <article
-                  key={candidate.id}
-                  data-testid={`candidate-${candidate.id}`}
-                  style={{
-                    padding: 12,
-                    borderRadius: 14,
-                    background: colorTokens.surfaceLavender,
-                    display: 'grid',
-                    gap: 6,
-                  }}
-                >
-                  <b style={{ fontSize: typographyTokens.bodySm.fontSize }}>
-                    {candidate.title || candidate.itemKey}
-                  </b>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: typographyTokens.bodySm.fontSize,
-                      lineHeight: 1.55,
-                    }}
-                  >
-                    {candidate.body}
-                  </p>
-                  <small
-                    style={{
-                      color: colorTokens.textMuted,
-                      fontSize: typographyTokens.micro.fontSize,
-                    }}
-                  >
-                    {t('bb.reviewConfidence')}: {candidate.confidencePercent}%
-                    {candidate.replacesExisting ? ` · ${t('bb.reviewExisting')}` : ''}
-                  </small>
-                  {candidate.evidence.length > 0 ? (
-                    <small
-                      style={{
-                        color: colorTokens.textMuted,
-                        fontSize: typographyTokens.micro.fontSize,
-                      }}
-                    >
-                      {t('bb.reviewEvidence')}: {candidate.evidence.join(' / ')}
-                    </small>
-                  ) : null}
-                  {/*
-                    P6-11 — THE LEARNING LOOP'S EVIDENCE STEP, AT THE REVIEW
-                    STEP. An analytics learning says where it came from, the
-                    measurements it rests on, and a link back to the finding —
-                    so the person deciding can check the inference rather than
-                    trust a sentence. Same micro caption as the document
-                    evidence line above it; nothing new is drawn.
-                  */}
-                  {candidate.source === 'ANALYTICS' ? (
-                    <small
-                      data-testid={`candidate-source-${candidate.id}`}
-                      style={{
-                        color: colorTokens.textMuted,
-                        fontSize: typographyTokens.micro.fontSize,
-                      }}
-                    >
-                      {t('bb.reviewFromAnalytics')}
-                      {candidate.measured ? ` · ${candidate.measured}` : ''}
-                      {candidate.sourceHref ? (
-                        <>
-                          {' · '}
-                          <a
-                            href={candidate.sourceHref}
-                            data-testid={`candidate-insight-${candidate.id}`}
-                          >
-                            {t('bb.reviewOpenFinding')}
-                          </a>
-                        </>
-                      ) : null}
-                    </small>
-                  ) : null}
-                  {/*
-                    A CONFLICT IS SAID, NOT SILENTLY RESOLVED. Accepting a
-                    learning never changes the human fact it disagrees with —
-                    the learning lands in the lowest-authority memory and
-                    precedence keeps the human one on top — and the reviewer is
-                    told exactly that before they decide.
-                  */}
-                  {candidate.conflict ? (
-                    <small
-                      role="note"
-                      data-testid={`candidate-conflict-${candidate.id}`}
-                      style={{
-                        color: colorTokens.textPrimary,
-                        fontSize: typographyTokens.micro.fontSize,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {candidate.conflict}
-                    </small>
-                  ) : null}
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <form action={reviewCandidateAction}>
-                      <input type="hidden" name="locale" value={locale} />
-                      <input type="hidden" name="area" value={area.area} />
-                      <input type="hidden" name="candidateId" value={candidate.id} />
-                      <input type="hidden" name="decision" value="accept" />
-                      <button
-                        type="submit"
-                        data-testid={`accept-${candidate.id}`}
-                        style={reviewButtonStyle(colorTokens.ink, colorTokens.surface)}
-                      >
-                        {t('bb.reviewAccept')}
-                      </button>
-                    </form>
-                    <form action={reviewCandidateAction}>
-                      <input type="hidden" name="locale" value={locale} />
-                      <input type="hidden" name="area" value={area.area} />
-                      <input type="hidden" name="candidateId" value={candidate.id} />
-                      <input type="hidden" name="decision" value="reject" />
-                      <button
-                        type="submit"
-                        data-testid={`reject-${candidate.id}`}
-                        style={reviewButtonStyle(colorTokens.surfaceMuted, colorTokens.ink)}
-                      >
-                        {t('bb.reviewReject')}
-                      </button>
-                    </form>
-                  </div>
-                  {/*
-                    EDIT, THEN ACCEPT — the third of Accept / Edit / Dismiss.
-                    `accept_edited` has always been supported by the action and
-                    the service (which keeps the original extraction beside the
-                    reviewer's text); the drawer simply never offered it. A
-                    native disclosure, so it works without script and is
-                    keyboard-operable by default, holding the same inputs the
-                    "add knowledge" form below already uses.
-                  */}
-                  <details data-testid={`edit-${candidate.id}`}>
-                    <summary
-                      style={{
-                        cursor: 'pointer',
-                        fontSize: typographyTokens.caption.fontSize,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {t('bb.reviewEdit')}
-                    </summary>
-                    <form
-                      action={reviewCandidateAction}
-                      style={{ display: 'grid', gap: 8, marginBlockStart: 8 }}
-                    >
-                      <input type="hidden" name="locale" value={locale} />
-                      <input type="hidden" name="area" value={area.area} />
-                      <input type="hidden" name="candidateId" value={candidate.id} />
-                      <input type="hidden" name="decision" value="accept_edited" />
-                      <input
-                        className={CONTROL_CLASS}
-                        name="titleEn"
-                        defaultValue={candidate.edit.titleEn}
-                        aria-label={t('bb.reviewEditTitleEn')}
-                        dir="ltr"
-                        style={drawerInputStyle}
-                      />
-                      <input
-                        className={CONTROL_CLASS}
-                        name="titleAr"
-                        defaultValue={candidate.edit.titleAr}
-                        aria-label={t('bb.reviewEditTitleAr')}
-                        dir="rtl"
-                        style={drawerInputStyle}
-                      />
-                      <textarea
-                        className={CONTROL_CLASS}
-                        name="bodyEn"
-                        rows={3}
-                        defaultValue={candidate.edit.bodyEn}
-                        aria-label={t('bb.reviewEditBodyEn')}
-                        dir="ltr"
-                        style={{ ...drawerInputStyle, resize: 'vertical' }}
-                      />
-                      <textarea
-                        className={CONTROL_CLASS}
-                        name="bodyAr"
-                        rows={3}
-                        defaultValue={candidate.edit.bodyAr}
-                        aria-label={t('bb.reviewEditBodyAr')}
-                        dir="rtl"
-                        style={{ ...drawerInputStyle, resize: 'vertical' }}
-                      />
-                      <button
-                        type="submit"
-                        data-testid={`accept-edited-${candidate.id}`}
-                        style={{
-                          ...reviewButtonStyle(colorTokens.ink, colorTokens.surface),
-                          justifySelf: 'start',
-                        }}
-                      >
-                        {t('bb.reviewAcceptEdited')}
-                      </button>
-                    </form>
-                  </details>
-                </article>
-              ))
-            )}
+                {t('bb.intelReview')}
+              </button>
+            ) : null}
           </section>
         ) : null}
 
@@ -579,10 +554,21 @@ export function AreaDrawer({
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="brandId" value={brandId} />
             <input type="hidden" name="area" value={area.area} />
+            {chosen ? (
+              <p
+                data-testid="new-item-question"
+                style={{ margin: 0, fontSize: typographyTokens.bodySm.fontSize, fontWeight: 700 }}
+              >
+                {chosen.prompt}
+              </p>
+            ) : null}
             <input
+              // Q19 — a chosen question sets the key of the fact that answers it.
+              key={chosen?.itemKey ?? 'free'}
               className={CONTROL_CLASS}
               name="itemKey"
               required
+              defaultValue={chosen?.itemKey ?? ''}
               placeholder="identity.positioning"
               aria-label={t('bb.newItem.key')}
               data-testid="new-item-key"
@@ -607,7 +593,8 @@ export function AreaDrawer({
               className={CONTROL_CLASS}
               name="bodyEn"
               rows={3}
-              placeholder={t('bb.newItem.bodyEn')}
+              // Q19 — the question itself is the placeholder (D3).
+              placeholder={chosen?.prompt ?? t('bb.newItem.bodyEn')}
               aria-label={t('bb.newItem.bodyEn')}
               data-testid="new-item-body-en"
               style={{ ...drawerInputStyle, resize: 'vertical' }}
@@ -616,9 +603,16 @@ export function AreaDrawer({
               className={CONTROL_CLASS}
               name="bodyAr"
               rows={3}
-              placeholder={t('bb.newItem.bodyAr')}
+              placeholder={chosen?.prompt ?? t('bb.newItem.bodyAr')}
               aria-label={t('bb.newItem.bodyAr')}
               style={{ ...drawerInputStyle, resize: 'vertical' }}
+            />
+            <ValidUntilField
+              id="new-item-valid-until"
+              label={t('bb.validUntil')}
+              hint={t('bb.validUntilHint')}
+              defaultValue=""
+              testId="new-item-valid-until"
             />
             <button
               type="submit"
@@ -666,6 +660,48 @@ export function AreaDrawer({
         ) : null}
       </div>
     </>
+  );
+}
+
+/**
+ * D6 — "valid until": a native date input (a calendar day, no time), empty for
+ * "no end date". The hint says whose calendar it is — the workspace's.
+ */
+function ValidUntilField({
+  id,
+  label,
+  hint,
+  defaultValue,
+  testId,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  defaultValue: string;
+  testId: string;
+}) {
+  return (
+    <div style={{ display: 'grid', gap: 4 }}>
+      <label htmlFor={id} style={{ fontSize: typographyTokens.caption.fontSize, fontWeight: 700 }}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type="date"
+        name="validUntil"
+        className={CONTROL_CLASS}
+        defaultValue={defaultValue}
+        aria-describedby={`${id}-hint`}
+        data-testid={testId}
+        style={drawerInputStyle}
+      />
+      <small
+        id={`${id}-hint`}
+        style={{ color: colorTokens.textMuted, fontSize: typographyTokens.micro.fontSize }}
+      >
+        {hint}
+      </small>
+    </div>
   );
 }
 

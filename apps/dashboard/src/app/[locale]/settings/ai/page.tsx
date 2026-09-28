@@ -26,7 +26,8 @@ export const dynamic = 'force-dynamic';
  *
  * The language AI writes new drafts in, per brand — `Brand.defaultLocale`, the
  * one field the composer already starts from — and (Phase 2B-2, owner answer
- * D7) whether Home shows the brand's "Recommended by BrandSpace" card. `brand.manage`, one form per
+ * D7) whether Home shows the brand's "Recommended by BrandSpace" card, and (Phase 2C,
+ * D9) whether Brand Brain grounds the brand's AI writing. `brand.manage`, one form per
  * brand the member may see (one while multi-brand is off, D-327), under the
  * save bar (G1).
  *
@@ -52,7 +53,13 @@ export default async function AiSettingsPage({
     db.brand.findMany({
       where: { id: { in: accessible.map((brand) => brand.id) }, deletedAt: null },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, defaultLocale: true, aiSuggestionsEnabled: true },
+      select: {
+        id: true,
+        name: true,
+        defaultLocale: true,
+        aiSuggestionsEnabled: true,
+        useBrandBrain: true,
+      },
     }),
   );
 
@@ -100,7 +107,7 @@ export default async function AiSettingsPage({
               {brands.map((brand) => (
                 <li key={brand.id}>
                   <DraftForm
-                    key={`${brand.defaultLocale}:${String(brand.aiSuggestionsEnabled)}`}
+                    key={`${brand.defaultLocale}:${String(brand.aiSuggestionsEnabled)}:${String(brand.useBrandBrain)}`}
                     action={saveAiLanguageAction}
                     style={{ display: 'grid', gap: spacingTokens.sm }}
                     testId={`ai-form-${brand.id}`}
@@ -140,6 +147,17 @@ export default async function AiSettingsPage({
                       hint={t('aiSettings.suggestionsHint')}
                       checked={brand.aiSuggestionsEnabled}
                       testId={`ai-suggestions-${brand.id}`}
+                    />
+                    {/*
+                      Phase 2C (D9) — "Use Brand Brain": whether this brand's
+                      facts ground AI writing at all. The same CheckboxRow.
+                    */}
+                    <CheckboxRow
+                      name="useBrandBrain"
+                      label={t('aiSettings.useBrandBrain')}
+                      hint={t('aiSettings.useBrandBrainHint')}
+                      checked={brand.useBrandBrain}
+                      testId={`ai-use-brand-brain-${brand.id}`}
                     />
                   </DraftForm>
                 </li>

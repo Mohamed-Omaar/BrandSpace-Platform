@@ -4,236 +4,212 @@ import {
   areaDefinition,
   computeAreaCompletion,
   computeBrandCompletion,
+  questionsForBrand,
   type AreaCounts,
+  type KeyQuestion,
 } from '@brandspace/brand-brain';
+import type { BrandKnowledgeArea } from '@brandspace/database';
 
 /**
- * Completion — the number that replaces the demo's hard-coded 82%.
+ * COMPLETENESS IS KEY QUESTIONS PER AREA (Q19, Phase 2C; D-357).
  *
- * A percentage a customer reads as progress has to be defensible, so every rule
- * in `completion.ts` gets an assertion that fails if the rule is weakened. The
- * two that matter most:
+ * This file used to pin the Phase 5 percentage — per-area `minimumItems`
+ * ratios, a second-locale cap, a floored overall percent. Q19 replaced that
+ * rule with "answered n of m" per area and NO percentage and NO overall score,
+ * so those assertions were replaced by the ones below (owner decision Q19,
+ * recorded in D-357). What they protected still holds, in the new terms:
  *
- *   - AN UPLOAD MUST NOT MOVE THE NUMBER. Only ACTIVE items count, so a
- *     document that produced twenty candidates scores zero until a human
- *     accepts them. Otherwise "82%" would mean "we read some files".
- *   - ONE ITEM SHORT MUST NOT READ 100%. Flooring is what guarantees it.
+ *   - AN UPLOAD STILL MOVES NOTHING. A pending candidate answers no question;
+ *     only a usable fact does.
+ *   - NOTHING IS INFERRED. A question is answered exactly when a usable fact
+ *     with ITS `itemKey` exists in ITS area — not a similar text, not another
+ *     area, not an expired fact.
  */
 
-function counts(over: Partial<AreaCounts> & { area: AreaCounts['area'] }): AreaCounts {
+const q = (key: string, itemKey = key): KeyQuestion => ({
+  key,
+  itemKey,
+  prompt: { en: `Question ${key}?`, ar: `سؤال ${key}؟` },
+});
+
+function counts(
+  over: Partial<Omit<AreaCounts, 'answeredKeys'>> & {
+    area: BrandKnowledgeArea;
+    answered?: readonly string[];
+  },
+): AreaCounts {
+  const { answered, ...rest } = over;
   return {
-    activeItems: 0,
-    bilingualActiveItems: 0,
+    usableItems: answered?.length ?? 0,
     staleItems: 0,
+    expiredItems: 0,
     conflictedItems: 0,
     pendingCandidates: 0,
-    ...over,
+    answeredKeys: new Set(answered ?? []),
+    ...rest,
   };
 }
 
-describe('an area with nothing in it', () => {
-  it('is EMPTY and contributes zero', () => {
-    const result = computeAreaCompletion(counts({ area: 'IDENTITY' }));
-    expect(result.status).toBe('EMPTY');
-    expect(result.ratioMilli).toBe(0);
-  });
-});
+describe('one area', () => {
+  const questions = [
+    q('what', 'offers.what'),
+    q('prices', 'offers.prices'),
+    q('hours', 'offers.hours'),
+  ];
 
-describe('pending candidates are not knowledge', () => {
-  it('an area with only pending candidates is IN_PROGRESS, not complete', () => {
-    const result = computeAreaCompletion(counts({ area: 'IDENTITY', pendingCandidates: 20 }));
+  it('with nothing in it is EMPTY and answers nothing', () => {
+    const result = computeAreaCompletion(counts({ area: 'OFFERS' }), questions);
+    expect(result.status).toBe('EMPTY');
+    expect([result.answered, result.total]).toEqual([0, 3]);
+  });
+
+  it('counts a question as answered only by a usable fact with its own itemKey', () => {
+    const result = computeAreaCompletion(
+      counts({ area: 'OFFERS', answered: ['offers.what', 'offers.something-else'] }),
+      questions,
+    );
+    expect([result.answered, result.total]).toEqual([1, 3]);
+    expect(result.questions.map((question) => question.answered)).toEqual([true, false, false]);
     expect(result.status).toBe('IN_PROGRESS');
-    expect(result.ratioMilli).toBe(0);
+    expect(result.attention).toContain('unanswered_questions');
+  });
+
+  it('a pending candidate answers nothing — an upload moves no count', () => {
+    const result = computeAreaCompletion(
+      counts({ area: 'OFFERS', pendingCandidates: 20 }),
+      questions,
+    );
+    expect(result.answered).toBe(0);
+    expect(result.status).toBe('IN_PROGRESS');
     expect(result.attention).toContain('pending_review');
   });
 
-  it('AN UPLOAD ALONE NEVER MOVES OVERALL COMPLETION', () => {
-    // The rule the brief calls out by name: completion must follow approved
-    // knowledge, not the fact that a file was processed.
-    const withCandidates = computeBrandCompletion(
-      AREA_DEFINITIONS.map((d) => counts({ area: d.area, pendingCandidates: 10 })),
-    );
-    expect(withCandidates.percent).toBe(0);
-    expect(withCandidates.totalPendingCandidates).toBe(AREA_DEFINITIONS.length * 10);
-  });
-});
-
-describe('an area meeting its requirement', () => {
-  it('is COMPLETE at exactly the minimum', () => {
-    const required = areaDefinition('OFFERS').minimumItems;
-    const result = computeAreaCompletion(counts({ area: 'OFFERS', activeItems: required }));
-    expect(result.status).toBe('COMPLETE');
-    expect(result.ratioMilli).toBe(1000);
-  });
-
-  it('is IN_PROGRESS one item short', () => {
-    const required = areaDefinition('IDENTITY').minimumItems;
-    const result = computeAreaCompletion(counts({ area: 'IDENTITY', activeItems: required - 1 }));
-    expect(result.status).toBe('IN_PROGRESS');
-    expect(result.attention).toContain('missing_items');
-    expect(result.ratioMilli).toBeLessThan(1000);
-  });
-
-  it('caps the ratio at 1 — extra items do not earn more than complete', () => {
-    const required = areaDefinition('OFFERS').minimumItems;
-    const result = computeAreaCompletion(counts({ area: 'OFFERS', activeItems: required * 50 }));
-    expect(result.ratioMilli).toBe(1000);
-  });
-});
-
-describe('bilingual areas', () => {
-  it('TONE_OF_VOICE is not complete without both locales', () => {
-    // A tone of voice recorded only in English cannot ground Arabic
-    // generation, which is the failure a bilingual product must not hide.
-    const required = areaDefinition('TONE_OF_VOICE').minimumItems;
+  it('every question answered and nothing waiting is COMPLETE', () => {
     const result = computeAreaCompletion(
-      counts({ area: 'TONE_OF_VOICE', activeItems: required, bilingualActiveItems: 0 }),
-    );
-    expect(result.status).toBe('IN_PROGRESS');
-    expect(result.attention).toContain('missing_second_locale');
-  });
-
-  it('caps the RATIO too, so it cannot read 100% while unusable in Arabic', () => {
-    const required = areaDefinition('TONE_OF_VOICE').minimumItems;
-    const result = computeAreaCompletion(
-      counts({ area: 'TONE_OF_VOICE', activeItems: required * 10, bilingualActiveItems: 0 }),
-    );
-    expect(result.ratioMilli).toBeLessThan(1000);
-  });
-
-  it('is COMPLETE once one item carries both locales', () => {
-    const required = areaDefinition('TONE_OF_VOICE').minimumItems;
-    const result = computeAreaCompletion(
-      counts({ area: 'TONE_OF_VOICE', activeItems: required, bilingualActiveItems: 1 }),
+      counts({ area: 'OFFERS', answered: ['offers.what', 'offers.prices', 'offers.hours'] }),
+      questions,
     );
     expect(result.status).toBe('COMPLETE');
-    expect(result.ratioMilli).toBe(1000);
+    expect(result.attention).toEqual([]);
   });
 
-  it('does not require a second locale for areas that do not need one', () => {
-    const required = areaDefinition('IDENTITY').minimumItems;
+  it('every question answered but something waiting on a person NEEDS ATTENTION', () => {
+    for (const waiting of [
+      { staleItems: 1, reason: 'stale_items' },
+      { expiredItems: 1, reason: 'expired_items' },
+      { conflictedItems: 1, reason: 'unresolved_conflict' },
+      { pendingCandidates: 1, reason: 'pending_review' },
+    ] as const) {
+      const { reason, ...extra } = waiting;
+      const result = computeAreaCompletion(
+        counts({
+          area: 'OFFERS',
+          answered: ['offers.what', 'offers.prices', 'offers.hours'],
+          ...extra,
+        }),
+        questions,
+      );
+      expect(result.status, reason).toBe('NEEDS_ATTENTION');
+      expect(result.attention).toContain(reason);
+    }
+  });
+
+  it('an area with no configured questions is COMPLETE once it holds a usable fact', () => {
+    expect(computeAreaCompletion(counts({ area: 'LEARNINGS' }), []).status).toBe('EMPTY');
+    const result = computeAreaCompletion(counts({ area: 'LEARNINGS', answered: ['x'] }), []);
+    expect([result.answered, result.total, result.status]).toEqual([0, 0, 'COMPLETE']);
+  });
+
+  it('reports no percentage and no ratio of any kind', () => {
     const result = computeAreaCompletion(
-      counts({ area: 'IDENTITY', activeItems: required, bilingualActiveItems: 0 }),
+      counts({ area: 'OFFERS', answered: ['offers.what'] }),
+      questions,
     );
-    expect(result.status).toBe('COMPLETE');
+    expect(Object.keys(result)).not.toContain('ratioMilli');
+    expect(Object.keys(result)).not.toContain('percent');
   });
 });
 
-describe('NEEDS_ATTENTION is distinct from incomplete', () => {
-  it('a complete area with stale items needs attention', () => {
-    const required = areaDefinition('OFFERS').minimumItems;
-    const result = computeAreaCompletion(
-      counts({ area: 'OFFERS', activeItems: required, staleItems: 1 }),
+describe('the whole brand', () => {
+  const byArea = new Map<BrandKnowledgeArea, readonly KeyQuestion[]>([
+    ['IDENTITY', [q('what', 'identity.what'), q('who', 'identity.who')]],
+    ['OFFERS', [q('what', 'offers.what')]],
+  ]);
+
+  it('reports every area, whatever the database holds', () => {
+    expect(computeBrandCompletion([], byArea).areas).toHaveLength(AREA_DEFINITIONS.length);
+  });
+
+  it('carries NO overall score', () => {
+    const result = computeBrandCompletion([], byArea);
+    expect(Object.keys(result)).not.toContain('percent');
+  });
+
+  it("lists what's missing in area order, then question order", () => {
+    const result = computeBrandCompletion(
+      [counts({ area: 'IDENTITY', answered: ['identity.who'] })],
+      byArea,
     );
-    expect(result.status).toBe('NEEDS_ATTENTION');
-    expect(result.attention).toContain('stale_items');
-  });
-
-  it('a complete area with an unresolved conflict needs attention', () => {
-    const required = areaDefinition('OFFERS').minimumItems;
-    const result = computeAreaCompletion(
-      counts({ area: 'OFFERS', activeItems: required, conflictedItems: 1 }),
-    );
-    expect(result.status).toBe('NEEDS_ATTENTION');
-    expect(result.attention).toContain('unresolved_conflict');
-  });
-
-  it('stale items still COUNT toward completion — they are unconfirmed, not absent', () => {
-    const required = areaDefinition('OFFERS').minimumItems;
-    const result = computeAreaCompletion(
-      counts({ area: 'OFFERS', activeItems: required, staleItems: required }),
-    );
-    expect(result.ratioMilli).toBe(1000);
-  });
-});
-
-describe('overall completion', () => {
-  it('is 0 for a brand with nothing', () => {
-    expect(computeBrandCompletion([]).percent).toBe(0);
-  });
-
-  it('reports every area even when the input mentions none', () => {
-    // Ten cards render whatever the database holds.
-    const result = computeBrandCompletion([]);
-    expect(result.areas).toHaveLength(AREA_DEFINITIONS.length);
-  });
-
-  it('is 100 only when every counted area is complete', () => {
-    const full = AREA_DEFINITIONS.map((d) =>
-      counts({
-        area: d.area,
-        activeItems: Math.max(d.minimumItems, 1),
-        bilingualActiveItems: Math.max(d.minimumItems, 1),
-      }),
-    );
-    expect(computeBrandCompletion(full).percent).toBe(100);
-  });
-
-  it('IS NOT 100 when a single counted area is one item short', () => {
-    const full = AREA_DEFINITIONS.map((d) =>
-      counts({
-        area: d.area,
-        activeItems: d.area === 'IDENTITY' ? d.minimumItems - 1 : Math.max(d.minimumItems, 1),
-        bilingualActiveItems: Math.max(d.minimumItems, 1),
-      }),
-    );
-    expect(computeBrandCompletion(full).percent).toBeLessThan(100);
-  });
-
-  it('EXCLUDES learnings, so a new brand can still reach 100%', () => {
-    /*
-     * LEARNINGS is written back by the system from performance evidence
-     * (D-64). Counting it would mean a customer who did everything asked of
-     * them is permanently short of 100% through no fault of their own.
-     */
-    expect(areaDefinition('LEARNINGS').countsTowardCompletion).toBe(false);
-    const everythingButLearnings = AREA_DEFINITIONS.filter((d) => d.area !== 'LEARNINGS').map((d) =>
-      counts({
-        area: d.area,
-        activeItems: Math.max(d.minimumItems, 1),
-        bilingualActiveItems: Math.max(d.minimumItems, 1),
-      }),
-    );
-    expect(computeBrandCompletion(everythingButLearnings).percent).toBe(100);
-  });
-
-  it('FLOORS rather than rounds, so "nearly everything" never reads 100', () => {
-    const nearlyAll = AREA_DEFINITIONS.map((d) =>
-      counts({
-        area: d.area,
-        // One area at 99% of its requirement, the rest complete.
-        activeItems: d.area === 'PROOF_POINTS' ? d.minimumItems - 1 : Math.max(d.minimumItems, 1),
-        bilingualActiveItems: Math.max(d.minimumItems, 1),
-      }),
-    );
-    const percent = computeBrandCompletion(nearlyAll).percent;
-    expect(percent).toBeLessThan(100);
-    expect(percent).toBeGreaterThan(80);
-  });
-
-  it('lists the areas needing attention without listing empty ones', () => {
-    const result = computeBrandCompletion([
-      counts({ area: 'OFFERS', activeItems: 5, staleItems: 1 }),
-      counts({ area: 'GLOSSARY', activeItems: 0 }),
+    expect(result.missing.map((entry) => `${entry.area}:${entry.question.itemKey}`)).toEqual([
+      'IDENTITY:identity.what',
+      'OFFERS:offers.what',
     ]);
-    expect(result.areasNeedingAttention).toContain('OFFERS');
-    // An untouched area is not "needing attention" — it is simply not started,
-    // and reporting it as a problem would bury the ones that are.
-    expect(result.areasNeedingAttention).not.toContain('GLOSSARY');
   });
 
-  it('is deterministic', () => {
-    const input = AREA_DEFINITIONS.map((d) => counts({ area: d.area, activeItems: 2 }));
-    expect(computeBrandCompletion(input)).toEqual(computeBrandCompletion(input));
+  it('lists the areas with work waiting on a person, never merely unanswered ones', () => {
+    const result = computeBrandCompletion(
+      [
+        counts({ area: 'OFFERS', answered: ['offers.what'], staleItems: 1 }),
+        counts({ area: 'IDENTITY' }),
+      ],
+      byArea,
+    );
+    expect(result.areasNeedingAttention).toEqual(['OFFERS']);
   });
 
-  it('totals active items and pending candidates honestly', () => {
-    const result = computeBrandCompletion([
-      counts({ area: 'IDENTITY', activeItems: 7, pendingCandidates: 3 }),
-      counts({ area: 'OFFERS', activeItems: 5, pendingCandidates: 2 }),
-    ]);
-    expect(result.totalActiveItems).toBe(12);
+  it('totals usable facts and pending candidates honestly, and is deterministic', () => {
+    const input = [
+      counts({ area: 'IDENTITY', answered: ['a', 'b'], pendingCandidates: 3 }),
+      counts({ area: 'OFFERS', answered: ['c'], pendingCandidates: 2 }),
+    ];
+    const result = computeBrandCompletion(input, byArea);
+    expect(result.totalUsableItems).toBe(3);
     expect(result.totalPendingCandidates).toBe(5);
+    expect(computeBrandCompletion(input, byArea)).toEqual(result);
+  });
+});
+
+describe('the questions a brand is asked', () => {
+  const config = {
+    areas: { OFFERS: [q('general', 'offers.general')], IDENTITY: [q('what', 'identity.what')] },
+    offersSets: { food: [q('menu', 'offers.menu'), q('hours', 'offers.hours')] },
+  };
+
+  it("uses the industry's Offers set when the configuration has it", () => {
+    const questions = questionsForBrand(config, 'food');
+    expect(questions.get('OFFERS')?.map((question) => question.itemKey)).toEqual([
+      'offers.menu',
+      'offers.hours',
+    ]);
+    expect(questions.get('IDENTITY')?.map((question) => question.itemKey)).toEqual([
+      'identity.what',
+    ]);
+  });
+
+  it('falls back to the general Offers list — never an invented one — without a known set', () => {
+    for (const set of [null, 'no-such-set']) {
+      expect(
+        questionsForBrand(config, set)
+          .get('OFFERS')
+          ?.map((x) => x.itemKey),
+      ).toEqual(['offers.general']);
+    }
+  });
+
+  it('gives every area a list, empty where nothing is configured', () => {
+    const questions = questionsForBrand({ areas: {}, offersSets: {} }, null);
+    expect([...questions.keys()]).toEqual(AREA_DEFINITIONS.map((d) => d.area));
+    for (const list of questions.values()) expect(list).toEqual([]);
   });
 });
 

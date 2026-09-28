@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { writingGoal } from '@brandspace/brand-brain';
 import { maySpendCredits } from '@brandspace/shared';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
@@ -22,7 +23,6 @@ import { inAnalytics } from '../../../server/analytics-context';
 import { copilotHref } from '../../../server/copilot-surface';
 import {
   GOAL_ITEM_KEY,
-  GOAL_ITEM_SELECT,
   campaignObjectiveFor,
   goalLabels,
   storedGoal,
@@ -134,15 +134,13 @@ export default async function StrategyPage({
             take: 6,
             include: { evidence: { orderBy: { ordinal: 'asc' }, take: 8 } },
           }),
-          db.brandKnowledgeItem.findFirst({
-            where: {
-              brandId: brand.id,
-              area: 'STRATEGY',
-              itemKey: GOAL_ITEM_KEY,
-              status: { in: ['ACTIVE', 'STALE'] },
-            },
-            select: GOAL_ITEM_SELECT,
-          }),
+          /*
+           * THE GOAL PREFILLS THE OBJECTIVE the strategy is generated from, so
+           * it is writing input and is read through the Brand Brain grounding
+           * layer (D-354): never an expired goal, and none while the brand has
+           * "Use Brand Brain" off — the objective then starts empty.
+           */
+          writingGoal(db, { brandId: brand.id, itemKey: GOAL_ITEM_KEY }),
           db.brandKnowledgeItem.findMany({
             where: {
               brandId: brand.id,

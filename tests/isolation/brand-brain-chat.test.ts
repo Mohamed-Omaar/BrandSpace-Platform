@@ -42,7 +42,6 @@ const TASK_KEY = 'copilot.chat';
 const CHAT_POLICY: ChatPolicy = {
   retentionDays: 30,
   maxContextItems: 12,
-  maxContextChunks: 8,
   maxContextChars: 12_000,
 };
 

@@ -7,7 +7,10 @@ import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { inWorkspace, requireWorkspaceAction } from '../../../../server/customer-context';
 import { actionErrorCode } from '../../../../server/denial';
 import { saveBrandAiLanguage } from '../../../../server/brand-ai-language';
-import { saveBrandAiSuggestions } from '../../../../server/publishing-defaults';
+import {
+  saveBrandAiSuggestions,
+  saveBrandUseBrandBrain,
+} from '../../../../server/publishing-defaults';
 
 const log = createLogger({ context: { component: 'dashboard.ai-settings' } });
 
@@ -37,6 +40,11 @@ export async function saveAiLanguageAction(formData: FormData): Promise<void> {
       await saveBrandAiSuggestions(db, context, {
         brandId,
         enabled: formData.get('aiSuggestionsEnabled') === 'on',
+      });
+      // Phase 2C (D9) — "Use Brand Brain", in the same save.
+      await saveBrandUseBrandBrain(db, context, {
+        brandId,
+        enabled: formData.get('useBrandBrain') === 'on',
       });
     });
     destination = `/${locale}/settings/ai?ok=SETTINGS_SAVED`;

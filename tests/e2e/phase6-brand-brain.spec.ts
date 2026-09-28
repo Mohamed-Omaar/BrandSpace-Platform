@@ -180,7 +180,9 @@ test.describe('D-294 · the Brand Brain says what it knows', () => {
 
   test('a measured learning shows its evidence and its computed confidence', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
+    // D4 (Phase 2C): the one inbox shows a card at a time; this opens it on the
+    // learning under test instead of whichever candidate happens to be oldest.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain?candidate=${candidateId}`);
     const card = page.getByTestId(`intel-${candidateId}`);
     await expect(card).toContainText('From measured performance');
     await expect(page.getByTestId(`intel-evidence-${candidateId}`)).not.toBeEmpty();

@@ -20,6 +20,15 @@ import { localizedFrom } from './knowledge';
  * better than one at being explainable, and it is replaceable behind this
  * interface once a vendor is approved.
  *
+ * APPROVED FACTS ONLY, AND NEVER A DOCUMENT'S RAW TEXT (Q14, Q20; Phase 2C).
+ * This retriever is the GENERATIVE grounding path — Brand Brain's "Talk with
+ * the brand", captions, Studio tools, Copilot, Strategy and Creative. It reads
+ * `brand_knowledge_item` through `usableKnowledgeWhere()` and nothing else: no
+ * candidate, no version history, and no `brand_source_chunk`. Uploaded
+ * documents are SOURCES that propose pending facts through the ingestion
+ * pipeline; their text never reaches a writing prompt. There is deliberately no
+ * option to ask for chunks, so no caller can turn it back on.
+ *
  * SCOPING IS NOT THIS FILE'S JOB, AND THAT IS THE POINT. Every query runs on
  * the tenant-scoped client inside a workspace transaction, so RLS constrains it
  * whatever this code does. The `brandId` filter narrows WITHIN the tenant; it
@@ -38,18 +47,19 @@ export interface RetrievedItem {
   readonly stale: boolean;
 }
 
-export interface RetrievedChunk {
-  readonly id: string;
-  readonly sourceDocumentId: string;
-  readonly fileName: string;
-  readonly locator: string | null;
-  readonly text: string;
-  readonly score: number;
+/** One approved fact that grounded a request, at the exact version used. */
+export interface GroundedFact {
+  readonly itemId: string;
+  readonly version: number;
 }
 
 export interface RetrievalContext {
   readonly items: readonly RetrievedItem[];
-  readonly chunks: readonly RetrievedChunk[];
+  /**
+   * The facts in `contextText`, each at the version that was read — the set a
+   * generation is grounded on, so a caller can record it rather than infer it.
+   */
+  readonly facts: readonly GroundedFact[];
   /** The grounding text, bounded and ordered. Safe to put in a prompt. */
   readonly contextText: string;
   /** Citations for the answer. Only ids actually retrieved appear here. */
@@ -62,6 +72,11 @@ export interface RetrievalContext {
 }
 
 export interface Citation {
+  /**
+   * The retriever only ever produces `knowledge`. `document` remains in the
+   * type because drafts generated before Phase 2C stored document citations in
+   * `content_item.citations`, and the composer still reads those rows.
+   */
   readonly kind: 'knowledge' | 'document';
   readonly id: string;
   readonly area?: BrandKnowledgeArea;
@@ -72,10 +87,29 @@ export interface Citation {
 
 export interface RetrievalOptions {
   readonly maxItems: number;
-  readonly maxChunks: number;
   readonly maxChars: number;
   /** Narrow to one area, when the customer opened chat from a node or card. */
   readonly area?: BrandKnowledgeArea | undefined;
+}
+
+/**
+ * WHICH FACTS MAY GROUND AI WRITING — the one predicate, shared by every
+ * generative path (Q20).
+ *
+ * ACTIVE and STALE: STALE means "review due" and is still approved knowledge.
+ * Never DRAFT, PROPOSED or ARCHIVED, and never a candidate (another table).
+ * And NOT EXPIRED (D6): a fact with a "valid until" day before `asOf` — today
+ * in the workspace's time zone, from `knowledgeAsOf` — is never used in
+ * writing, whatever its status.
+ */
+export function usableKnowledgeWhere(asOf: Date): {
+  status: { in: ('ACTIVE' | 'STALE')[] };
+  OR: ({ validUntil: null } | { validUntil: { gte: Date } })[];
+} {
+  return {
+    status: { in: ['ACTIVE', 'STALE'] },
+    OR: [{ validUntil: null }, { validUntil: { gte: asOf } }],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +208,8 @@ export class BrandBrainRetriever {
     brandId: string;
     question: string;
     options: RetrievalOptions;
+    /** Today in the workspace's time zone (`knowledgeAsOf`): expired facts stay out. */
+    asOf: Date;
   }): Promise<RetrievalContext> {
     const query = indexVector(input.question);
     const questionTokens = new Set(tokenize(input.question));
@@ -181,7 +217,7 @@ export class BrandBrainRetriever {
     const items = await this.#db.brandKnowledgeItem.findMany({
       where: {
         brandId: input.brandId,
-        status: { in: ['ACTIVE', 'STALE'] },
+        ...usableKnowledgeWhere(input.asOf),
         ...(input.options.area ? { area: input.options.area } : {}),
       },
       select: {
@@ -231,58 +267,17 @@ export class BrandBrainRetriever {
       input.options.maxItems,
     );
 
-    const chunks =
-      input.options.maxChunks > 0
-        ? await this.#retrieveChunks(input.brandId, query, questionTokens, input.options.maxChunks)
-        : [];
-
-    const { contextText, citations, usedItems, usedChunks } = buildContext(
-      chosen,
-      chunks,
-      input.options.maxChars,
-    );
+    const { contextText, citations, usedItems } = buildContext(chosen, input.options.maxChars);
 
     return {
       items: usedItems,
-      chunks: usedChunks,
+      facts: usedItems.map((item) => ({ itemId: item.id, version: item.version })),
       contextText,
       citations,
       // "Nothing relevant" and "nothing at all" are both insufficient, and the
       // chat service says so rather than answering from the model's own priors.
-      insufficient: usedItems.length === 0 && usedChunks.length === 0,
+      insufficient: usedItems.length === 0,
     };
-  }
-
-  async #retrieveChunks(
-    brandId: string,
-    query: readonly number[],
-    questionTokens: ReadonlySet<string>,
-    max: number,
-  ): Promise<RetrievedChunk[]> {
-    const rows = await this.#db.brandSourceChunk.findMany({
-      where: { brandId, document: { status: 'READY', deletedAt: null } },
-      select: {
-        id: true,
-        sourceDocumentId: true,
-        text: true,
-        locator: true,
-        document: { select: { fileName: true } },
-      },
-      take: 1_000,
-    });
-
-    return rows
-      .map((row) => ({
-        id: row.id,
-        sourceDocumentId: row.sourceDocumentId,
-        fileName: row.document.fileName,
-        locator: row.locator,
-        text: row.text,
-        score: score(row.text, query, questionTokens),
-      }))
-      .filter((c) => c.score > 0)
-      .sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1))
-      .slice(0, max);
   }
 }
 
@@ -315,18 +310,15 @@ function score(
  */
 function buildContext(
   items: readonly RetrievedItem[],
-  chunks: readonly RetrievedChunk[],
   maxChars: number,
 ): {
   contextText: string;
   citations: Citation[];
   usedItems: RetrievedItem[];
-  usedChunks: RetrievedChunk[];
 } {
   const parts: string[] = [];
   const citations: Citation[] = [];
   const usedItems: RetrievedItem[] = [];
-  const usedChunks: RetrievedChunk[] = [];
   let budget = maxChars;
 
   for (const item of items) {
@@ -347,19 +339,5 @@ function buildContext(
     });
   }
 
-  for (const chunk of chunks) {
-    const block = fenceUntrusted(`SOURCE DOCUMENT ${chunk.fileName}`, chunk.text);
-    if (block.length > budget) break;
-    budget -= block.length;
-    parts.push(block);
-    usedChunks.push(chunk);
-    citations.push({
-      kind: 'document',
-      id: chunk.id,
-      label: chunk.fileName,
-      locator: chunk.locator,
-    });
-  }
-
-  return { contextText: parts.join('\n\n'), citations, usedItems, usedChunks };
+  return { contextText: parts.join('\n\n'), citations, usedItems };
 }

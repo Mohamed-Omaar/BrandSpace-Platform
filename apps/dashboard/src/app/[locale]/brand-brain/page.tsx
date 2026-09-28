@@ -5,10 +5,18 @@ import {
   ORB_AREAS,
   ORB_SLOTS,
   areaDefinition,
+  confidenceExplanation,
+  confidenceLabel,
+  isExpired,
+  isoDateOf,
   localizedFrom,
+  mayOverwrite,
   memoryRank,
+  questionsForBrand,
+  workspaceKnowledgeAsOf,
 } from '@brandspace/brand-brain';
-import { requireWorkspacePage } from '../../../server/customer-context';
+import { TenantOnboardingPolicySource, offersQuestionSetFor } from '@brandspace/onboarding';
+import { currentEnvironment, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { analyticsEvidence, conflictNote } from '../../../server/learning-review';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
@@ -21,9 +29,11 @@ import { statusMessage } from '../../../i18n/messages';
 import {
   BrandBrainView,
   type AreaCardData,
+  type BrandBrainTab,
   type CandidateData,
   type OrbNode,
   type SourceData,
+  type VoiceData,
 } from './brand-brain-view';
 
 /*
@@ -185,17 +195,47 @@ export default async function BrandBrainPage({
     );
   }
 
-  const { policy, completion, items, candidates, sources, sourceCount } = await inBrandBrain(
-    workspace.workspaceId,
-    async ({ knowledge, db, policy }) => {
-      const computed = await knowledge.completion(brand.id);
+  const { policy, completion, items, candidates, sources, sourceCount, asOf, confident } =
+    await inBrandBrain(workspace.workspaceId, async ({ knowledge, db, policy }) => {
+      /*
+       * Q19 — COMPLETENESS IS KEY QUESTIONS PER AREA, answered by usable facts
+       * (approved, not expired). The questions are configuration; Offers takes
+       * the set the brand's industry names (D-329). "Today" is the workspace's
+       * own calendar day (D6).
+       */
+      const resolved = await policy();
+      const [asOf, onboarding, brandRow] = await Promise.all([
+        workspaceKnowledgeAsOf(db),
+        new TenantOnboardingPolicySource(db, currentEnvironment()).load(),
+        db.brand.findFirst({ where: { id: brand.id }, select: { industry: true } }),
+      ]);
+      const computed = await knowledge.completion(
+        brand.id,
+        questionsForBrand(
+          resolved.questions,
+          offersQuestionSetFor(brandRow?.industry ?? null, onboarding.industries),
+        ),
+        asOf,
+      );
       return {
+        asOf,
+        /*
+         * D4 + C1 — the preview for "Accept the confident ones": the configured
+         * threshold, never a conflict. The same rule the action re-applies.
+         */
+        confident: can('brand_brain.review')
+          ? await knowledge.confidentCandidates({
+              brandId: brand.id,
+              minimumConfidenceMilli: resolved.review.confidentAcceptMilli,
+              brandScope: workspace.brandScope,
+            })
+          : [],
         /*
          * READ, NOT WRITTEN DOWN HERE. The retention window the chat notice
          * states is whatever an owner activated — see brand-brain-context.ts
          * for how it crosses the platform/tenant boundary (CLAUDE.md §2.2).
          */
-        policy: await policy(),
+        policy: resolved,
         completion: computed,
         items: await db.brandKnowledgeItem.findMany({
           where: { brandId: brand.id, status: { in: ['ACTIVE', 'STALE'] } },
@@ -226,6 +266,8 @@ export default async function BrandBrainPage({
             updatedAt: true,
             createdByUserId: true,
             sourceDocumentId: true,
+            // D6 — shown, and an expired fact says it is not used in writing.
+            validUntil: true,
           },
           // Bounded: a brand with thousands of items must not send them all to
           // a browser. The drawer pages the rest.
@@ -234,7 +276,8 @@ export default async function BrandBrainPage({
         candidates: can('brand_brain.review')
           ? await db.brandKnowledgeCandidate.findMany({
               where: { brandId: brand.id, status: 'PENDING' },
-              orderBy: { createdAt: 'desc' },
+              // D4 — the one inbox works through the queue oldest first.
+              orderBy: { createdAt: 'asc' },
               take: 50,
               select: {
                 id: true,
@@ -274,8 +317,7 @@ export default async function BrandBrainPage({
           where: { brandId: brand.id, deletedAt: null },
         }),
       };
-    },
-  );
+    });
 
   /*
    * D-294 — WHO ADDED A VALUE AND WHICH DOCUMENT IT CAME FROM, by name. Read
@@ -342,10 +384,20 @@ export default async function BrandBrainPage({
       description: t(`bb.area.${definition.messageKey}.desc` as MessageKey),
       status: area.status,
       statusLabel: t(`bb.status.${area.status}` as MessageKey),
-      activeItems: area.activeItems,
-      requiredItems: area.requiredItems,
+      activeItems: area.usableItems,
+      answered: area.answered,
+      total: area.total,
+      /*
+       * Q19 — the area's key questions, in the reader's language, each with
+       * the key of the fact that answers it: the drawer lists them and turns
+       * an unanswered one into the add form's key and placeholder.
+       */
+      questions: area.questions.map((question) => ({
+        itemKey: question.itemKey,
+        prompt: pick(question.prompt, locale),
+        answered: question.answered,
+      })),
       pendingCandidates: area.pendingCandidates,
-      ratioMilli: area.ratioMilli,
       attention: area.attention.map((reason) => t(`bb.attention.${reason}` as MessageKey)),
       items: (itemsByArea.get(area.area) ?? []).map((item) => ({
         id: item.id,
@@ -369,6 +421,15 @@ export default async function BrandBrainPage({
         memoryDepth: BRAND_MEMORY_LAYERS.length,
         version: item.version,
         stale: item.status === 'STALE',
+        /*
+         * D6 — the fact's last valid day (a workspace-local date), and whether
+         * that day has passed in the workspace's time zone. Separate from
+         * `stale`: a stale fact is still used in writing, an expired one never.
+         */
+        validUntil: item.validUntil ? isoDateOf(item.validUntil) : null,
+        expired: isExpired(item.validUntil, asOf),
+        // For "Edit": both languages, as stored.
+        edit: editableText(item.title, item.body),
         provenance: provenanceOf(item),
       })),
     };
@@ -406,10 +467,43 @@ export default async function BrandBrainPage({
     month: 'short',
     timeZone: 'UTC',
   });
+  /*
+   * D4 — WHAT A CANDIDATE WOULD REPLACE, side by side. Either the approved fact
+   * with its own key (accepting makes a new version of it) or the approved fact
+   * it contradicts (accepting archives it as superseded). And whether a plain
+   * accept is allowed at all: the SAME `mayOverwrite` the service applies — an
+   * analytics learning never replaces a human, document or setup fact (owner
+   * decision 2.a, D-65), so the inbox offers Reject or "Edit fact" instead.
+   */
+  const itemsById = new Map(items.map((item) => [item.id, item]));
+  const itemsByKey = new Map(items.map((item) => [`${item.area}:${item.itemKey}`, item]));
   const candidateData: CandidateData[] = candidates.map((candidate) => {
     const title = localizedFrom(candidate.extractedTitle);
     const body = localizedFrom(candidate.extractedBody);
     const fromAnalytics = candidate.sourceKind === 'ANALYTICS';
+    const replaced =
+      (candidate.conflictsWithItemId ? itemsById.get(candidate.conflictsWithItemId) : null) ??
+      (candidate.targetItemId ? itemsById.get(candidate.targetItemId) : null) ??
+      itemsByKey.get(`${candidate.area}:${candidate.itemKey}`) ??
+      null;
+    const acceptAllowed = replaced
+      ? mayOverwrite(
+          {
+            memory: replaced.memory,
+            origin: replaced.origin,
+            version: replaced.version,
+            id: replaced.id,
+          },
+          {
+            memory: areaDefinition(candidate.area).memory,
+            origin: fromAnalytics ? 'AI_INFERRED' : 'DOCUMENT',
+            version: replaced.version + 1,
+            id: candidate.id,
+          },
+        ).allowed
+      : true;
+    const label = confidenceLabel(candidate.confidenceMilli, policy.review);
+    const why = confidenceExplanation(candidate);
     /*
      * THE NUMBERS THE INFERENCE WAS DRAWN FROM, in the reader's own language
      * and number format. Parsed rather than cast (learning-review.ts): a row
@@ -428,6 +522,22 @@ export default async function BrandBrainPage({
       title: pick(title, locale),
       body: pick(body, locale),
       confidencePercent: Math.round(candidate.confidenceMilli / 10),
+      // D4 — High / Medium / Low from the CONFIGURED thresholds, and why.
+      confidenceLabel: t(`bb.confidence.${label}` as MessageKey),
+      confidenceWhy: t(`bb.confidence.why.${why.reason}` as MessageKey).replace(
+        '{hits}',
+        reviewNumber.format(why.keywordHits ?? 0),
+      ),
+      areaLabel: t(`bb.area.${areaDefinition(candidate.area).messageKey}` as MessageKey),
+      snippet: snippetOf(candidate.evidence),
+      replaced: replaced
+        ? {
+            area: replaced.area,
+            title: pick(localizedFrom(replaced.title), locale),
+            body: pick(localizedFrom(replaced.body), locale),
+          }
+        : null,
+      acceptAllowed,
       evidence: fromAnalytics ? [] : evidenceLabels(candidate.evidence),
       replacesExisting: candidate.targetItemId !== null,
       source: fromAnalytics ? 'ANALYTICS' : 'DOCUMENT',
@@ -497,16 +607,52 @@ export default async function BrandBrainPage({
     count: activeIn(memory),
     pending: memory === 'LEARNING' ? pendingLearnings : 0,
   }));
-  const gaps = areaCards
-    .filter((area) => area.status === 'EMPTY')
-    .map((area) => ({ area: area.area, label: area.label }));
+  /*
+   * Q19 — "WHAT'S MISSING": the first unanswered key questions, from the ONE
+   * completeness calculation. Clicking one opens its area with the question as
+   * the add form's placeholder and its key already set.
+   */
+  const cardLabel = new Map(areaCards.map((card) => [card.area, card.label]));
+  const missing = completion.missing.slice(0, 5).map((entry) => ({
+    area: entry.area,
+    areaLabel: cardLabel.get(entry.area) ?? entry.area,
+    itemKey: entry.question.itemKey,
+    prompt: pick(entry.question.prompt, locale),
+  }));
+
+  /*
+   * C4 + decision 2.b — THE VOICE CARD, from the one voice store: the
+   * TONE_OF_VOICE area. Voice words are the fact `voice.words`; the other
+   * TONE_OF_VOICE facts are tone facts; DO_DONT facts are Do (`do.*`) or Don't
+   * (`dont.*`) rules, and an older rule with neither prefix is listed as
+   * "unsorted" for someone to re-file. `Brand.voiceProfile` is not read.
+   */
+  const cardItems = (area: string) => areaCards.find((card) => card.area === area)?.items ?? [];
+  const voiceTone = cardItems('TONE_OF_VOICE');
+  const voiceRules = cardItems('DO_DONT');
+  const voice: VoiceData = {
+    words: voiceTone.find((item) => item.itemKey === 'voice.words') ?? null,
+    tone: voiceTone.filter((item) => item.itemKey !== 'voice.words'),
+    dos: voiceRules.filter((item) => item.itemKey.startsWith('do.')),
+    donts: voiceRules.filter((item) => item.itemKey.startsWith('dont.')),
+    unsorted: voiceRules.filter(
+      (item) => !item.itemKey.startsWith('do.') && !item.itemKey.startsWith('dont.'),
+    ),
+  };
+
+  const requestedTab = typeof query['tab'] === 'string' ? query['tab'] : '';
+  const initialTab: BrandBrainTab = (['knowledge', 'look', 'sources', 'chat'] as const).includes(
+    requestedTab as BrandBrainTab,
+  )
+    ? (requestedTab as BrandBrainTab)
+    : 'knowledge';
   const areasWithKnowledge = areaCards.filter((area) => area.activeItems > 0).length;
   const readySourceCount = sources.filter((source) => source.status === 'READY').length;
   const understanding =
-    completion.totalActiveItems === 0
+    completion.totalUsableItems === 0
       ? t('bb.understands.none')
       : t('bb.understands.some')
-          .replace('{facts}', reviewNumber.format(completion.totalActiveItems))
+          .replace('{facts}', reviewNumber.format(completion.totalUsableItems))
           .replace('{areas}', reviewNumber.format(areasWithKnowledge))
           .replace('{total}', reviewNumber.format(areaCards.length))
           .replace('{sources}', reviewNumber.format(readySourceCount));
@@ -538,11 +684,21 @@ export default async function BrandBrainPage({
         brandName={brand.name}
         understanding={understanding}
         layers={layers}
-        gaps={gaps}
+        missing={missing}
+        voice={voice}
+        initialTab={initialTab}
+        focusCandidateId={typeof query['candidate'] === 'string' ? query['candidate'] : null}
+        confident={confident.map((entry) => ({
+          id: entry.id,
+          title: pick(entry.title, locale) || entry.itemKey,
+          areaLabel: cardLabel.get(entry.area) ?? entry.area,
+          confidencePercent: Math.round(entry.confidenceMilli / 10),
+        }))}
         copilotHref={can('copilot.use') ? copilotHref(locale, 'brand_brain') : null}
         profileHref={can('brand.read') ? `/${locale}/settings/brand?brand=${brand.id}` : null}
-        completionPercent={completion.percent}
-        totalActiveItems={completion.totalActiveItems}
+        answered={completion.areas.reduce((sum, area) => sum + area.answered, 0)}
+        totalQuestions={completion.areas.reduce((sum, area) => sum + area.total, 0)}
+        totalActiveItems={completion.totalUsableItems}
         sourceCount={sourceCount}
         orbNodes={orbNodes}
         areas={areaCards}
@@ -616,6 +772,23 @@ function documentKind(fileName: string): string {
   if (extension === 'JPEG') return 'JPG';
   if (extension === 'MARKDOWN') return 'MD';
   return extension.slice(0, 4);
+}
+
+/** Both languages of a fact, for its Edit form. */
+function editableText(
+  title: unknown,
+  body: unknown,
+): { titleEn: string; titleAr: string; bodyEn: string; bodyAr: string } {
+  const t = localizedFrom(title as never);
+  const b = localizedFrom(body as never);
+  return { titleEn: t.en ?? '', titleAr: t.ar ?? '', bodyEn: b.en ?? '', bodyAr: b.ar ?? '' };
+}
+
+/** D4 — the source's own words the candidate came from: its first quote. */
+function snippetOf(evidence: unknown): string | null {
+  if (!Array.isArray(evidence)) return null;
+  const first = evidence[0] as Record<string, unknown> | undefined;
+  return first && typeof first['quote'] === 'string' ? first['quote'] : null;
 }
 
 /** The reader's locale, falling back to the other rather than rendering blank. */

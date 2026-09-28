@@ -23,9 +23,17 @@ describe('D-294 · Brand Brain says what it knows, in counts', () => {
     }
   });
 
-  it('only a MEASURED learning shows a confidence on the learnings card', () => {
-    expect(view).toMatch(
-      /candidate\.source === 'ANALYTICS' \?\s*\(\s*<p data-testid=\{`intel-confidence-/,
+  /*
+   * REPLACED (Phase 2C, D4 — owner decision on the Phase 2C report, D-358).
+   * Old rule: only a MEASURED (analytics) learning showed a confidence.
+   * New rule: every candidate in the one review inbox shows a confidence LABEL
+   * from the configured thresholds together with WHY — the reason recorded at
+   * extraction, or "not recorded" when nothing was.
+   */
+  it('every inbox candidate shows a confidence label and the recorded reason for it', () => {
+    const inbox = read('apps/dashboard/src/app/[locale]/brand-brain/review-inbox.tsx');
+    expect(inbox).toMatch(
+      /<p data-testid=\{`intel-confidence-\$\{current\.id\}`\}>\s*\{current\.confidenceLabel\}[^<]*\{current\.confidenceWhy\}/,
     );
   });
 

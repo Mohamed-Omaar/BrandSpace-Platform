@@ -1,6 +1,6 @@
 import type { Prisma, TenantScopedClient } from '@brandspace/database';
 import type { AnalyticsQueryService } from '@brandspace/analytics';
-import { BrandBrainRetriever } from '@brandspace/brand-brain';
+import { groundingFor } from '@brandspace/brand-brain';
 import type {
   CampaignService,
   ContentCalendarService,
@@ -231,12 +231,23 @@ const analyticsSummary: ToolExecutor = async (context, args) => {
 };
 
 const brandContext: ToolExecutor = async (context, args) => {
-  const retriever = new BrandBrainRetriever({ db: context.db });
-  const retrieval = await retriever.retrieve({
-    brandId: String(args['brandId']),
-    question: String(args['question']),
-    options: { maxItems: 10, maxChunks: 4, maxChars: 6_000 },
-  });
+  /*
+   * WRITING GROUNDING, SO THE BRAND'S SWITCH APPLIES HERE TOO (Phase 2C D9).
+   * The tool is not offered while "Use Brand Brain" is off; this is the second
+   * line, read live at execution, so a plan made before the switch changed
+   * reads nothing either. Approved facts only — never a document chunk.
+   */
+  const retrieval = await groundingFor(
+    context.db,
+    {
+      brandId: String(args['brandId']),
+      question: String(args['question']),
+      purpose: 'writing',
+      maxItems: 10,
+      maxChars: 6_000,
+    },
+    context.clock,
+  );
   /*
    * CITATIONS AND COUNTS, NOT THE KNOWLEDGE ITSELF.
    *
@@ -249,7 +260,7 @@ const brandContext: ToolExecutor = async (context, args) => {
   return {
     result: {
       knowledgeItems: retrieval.items.length,
-      documentChunks: retrieval.chunks.length,
+      brandBrain: retrieval.enabled,
       insufficient: retrieval.insufficient,
       citations: retrieval.citations.map((citation) => ({
         kind: citation.kind,

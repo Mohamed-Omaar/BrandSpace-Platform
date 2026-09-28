@@ -486,23 +486,47 @@ describe('staleness and completion', () => {
     expect(after.status).toBe('ACTIVE');
   });
 
+  /*
+   * Q19 (D-357): completeness is "answered n of m" per area from key questions,
+   * with no percentage. The two assertions on `completion.percent` (0–100, and
+   * unchanged by a pending candidate) became the answered counts below.
+   */
+  const QUESTIONS = new Map([
+    [
+      'COMPETITORS' as const,
+      [
+        {
+          key: 'rivals',
+          itemKey: 'competitors.backlog-answer',
+          prompt: { en: 'Who do you compete with?', ar: 'من منافسوك؟' },
+        },
+      ],
+    ],
+  ]);
+  const TODAY = new Date(Date.UTC(2026, 9, 1));
+
   it('completion counts only this brand, and reports every area', async () => {
-    const completion = await inA((svc) => svc.completion(fixtures.a.brandId));
+    const completion = await inA((svc) => svc.completion(fixtures.a.brandId, QUESTIONS, TODAY));
     expect(completion.areas).toHaveLength(10);
-    expect(completion.percent).toBeGreaterThanOrEqual(0);
-    expect(completion.percent).toBeLessThanOrEqual(100);
+    for (const area of completion.areas) {
+      expect(area.answered).toBeGreaterThanOrEqual(0);
+      expect(area.answered).toBeLessThanOrEqual(area.total);
+    }
   });
 
-  it('a pending candidate raises the review backlog without raising completion', async () => {
-    const key = uniqueKey('competitors.backlog');
+  it('a pending candidate raises the review backlog without answering a question', async () => {
+    const key = 'competitors.backlog-answer';
     const { before, after } = await inA(async (svc, db) => {
-      const first = await svc.completion(fixtures.a.brandId);
+      const first = await svc.completion(fixtures.a.brandId, QUESTIONS, TODAY);
       await createCandidate(db, key, 'pending text', 'COMPETITORS');
-      const second = await svc.completion(fixtures.a.brandId);
+      const second = await svc.completion(fixtures.a.brandId, QUESTIONS, TODAY);
       return { before: first, after: second };
     });
+    const answered = (c: typeof before) =>
+      c.areas.find((area) => area.area === 'COMPETITORS')?.answered;
     expect(after.totalPendingCandidates).toBeGreaterThan(before.totalPendingCandidates);
-    expect(after.percent).toBe(before.percent);
+    expect(answered(after)).toBe(answered(before));
+    expect(answered(after)).toBe(0);
   });
 });
 

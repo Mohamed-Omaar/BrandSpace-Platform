@@ -15,6 +15,7 @@ import {
 } from '@brandspace/shared';
 import { areaDefinition } from './areas';
 import { mayOverwrite } from './precedence';
+import { isExpired } from './validity';
 import {
   alreadyReviewed,
   candidateNotFound,
@@ -23,7 +24,12 @@ import {
   versionNotFound,
 } from './errors';
 import type { LocalizedText } from './schemas';
-import { type AreaCounts, computeBrandCompletion, type BrandCompletion } from './completion';
+import {
+  type AreaCounts,
+  type AreaQuestions,
+  computeBrandCompletion,
+  type BrandCompletion,
+} from './completion';
 
 /**
  * Knowledge governance — the write side of Brand Brain.
@@ -57,6 +63,17 @@ export interface KnowledgeActor {
   readonly brandScope: readonly string[];
 }
 
+/** Why "Accept the confident ones" left a confirmed candidate alone. */
+export type BulkSkipReason = 'not_eligible';
+
+export interface BrandKnowledgeCandidateSummary {
+  readonly id: string;
+  readonly area: BrandKnowledgeArea;
+  readonly itemKey: string;
+  readonly confidenceMilli: number;
+  readonly title: LocalizedText;
+}
+
 export interface KnowledgeServiceOptions {
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
@@ -85,11 +102,6 @@ export function localizedFrom(value: Prisma.JsonValue | null): LocalizedText {
   const en = typeof record['en'] === 'string' ? record['en'] : undefined;
   const ar = typeof record['ar'] === 'string' ? record['ar'] : undefined;
   return { en, ar };
-}
-
-function hasBothLocales(value: Prisma.JsonValue | null): boolean {
-  const text = localizedFrom(value);
-  return Boolean(text.en?.length) && Boolean(text.ar?.length);
 }
 
 export class BrandKnowledgeService {
@@ -129,6 +141,8 @@ export class BrandKnowledgeService {
      * through the human path.
      */
     origin?: 'HUMAN' | 'SETUP';
+    /** D6 — the optional last day (a workspace-local calendar date). */
+    validUntil?: Date | null | undefined;
   }): Promise<BrandKnowledgeItem> {
     // The brand is named by the caller here, so it is checked before anything
     // is written. An out-of-scope brand is a 404 shaped like a genuine miss.
@@ -152,6 +166,7 @@ export class BrandKnowledgeService {
         version: 1,
         lastReviewedAt: now,
         reviewDueAt: addDays(now, input.policy.reviewIntervalDays),
+        validUntil: input.validUntil ?? null,
       },
     });
 
@@ -201,6 +216,11 @@ export class BrandKnowledgeService {
     /** What is doing the writing. Defaults to a human edit. */
     incomingOrigin?: BrandKnowledgeOrigin;
     changeKind?: string;
+    /**
+     * D6 — the fact's last valid day. `undefined` leaves it as it is; `null`
+     * clears it. Setting it is part of THIS version, so the history shows it.
+     */
+    validUntil?: Date | null | undefined;
   }): Promise<BrandKnowledgeItem> {
     // D-132: BOTH tenancy checks are PREDICATES. RLS supplies the workspace
     // one; `brandIdQueryFilter` supplies the brand one, so a row outside the
@@ -255,6 +275,7 @@ export class BrandKnowledgeService {
         // conflict flag that referred to the previous text.
         conflictsWithItemId: null,
         status: existing.status === 'STALE' ? 'ACTIVE' : existing.status,
+        ...(input.validUntil !== undefined ? { validUntil: input.validUntil } : {}),
       },
     });
 
@@ -271,11 +292,16 @@ export class BrandKnowledgeService {
       resourceType: 'BrandKnowledgeItem',
       resourceId: updated.id,
       brandId: updated.brandId,
-      before: { version: existing.version, origin: existing.origin },
+      before: {
+        version: existing.version,
+        origin: existing.origin,
+        validUntil: existing.validUntil ? isoDay(existing.validUntil) : null,
+      },
       after: {
         version: updated.version,
         origin: updated.origin,
         reason: input.changeReason ?? null,
+        validUntil: updated.validUntil ? isoDay(updated.validUntil) : null,
       },
     });
 
@@ -348,6 +374,12 @@ export class BrandKnowledgeService {
     itemId: string;
     reason?: string | undefined;
     actor: KnowledgeActor;
+    /**
+     * D4 — the fact that replaced this one, when an accepted candidate that
+     * conflicted with it is what archived it. Recorded on the row; the version
+     * history is untouched.
+     */
+    supersededByItemId?: string | undefined;
   }): Promise<BrandKnowledgeItem> {
     // D-132, as in `upsert` above: the scope is part of the WHERE.
     const item = await this.db.brandKnowledgeItem.findFirst({
@@ -357,12 +389,17 @@ export class BrandKnowledgeService {
 
     const archived = await this.db.brandKnowledgeItem.update({
       where: { id: item.id },
-      data: { status: 'ARCHIVED', archivedAt: this.now(), version: { increment: 1 } },
+      data: {
+        status: 'ARCHIVED',
+        archivedAt: this.now(),
+        version: { increment: 1 },
+        ...(input.supersededByItemId ? { supersededByItemId: input.supersededByItemId } : {}),
+      },
     });
 
     await this.appendVersion(archived, {
       changedByUserId: input.actor.userId,
-      changeKind: 'archived',
+      changeKind: input.supersededByItemId ? 'superseded' : 'archived',
       changeReason: input.reason,
     });
 
@@ -373,7 +410,10 @@ export class BrandKnowledgeService {
       resourceType: 'BrandKnowledgeItem',
       resourceId: item.id,
       brandId: item.brandId,
-      after: { reason: input.reason ?? null },
+      after: {
+        reason: input.reason ?? null,
+        ...(input.supersededByItemId ? { supersededByItemId: input.supersededByItemId } : {}),
+      },
     });
 
     return archived;
@@ -619,6 +659,34 @@ export class BrandKnowledgeService {
           ? 'SETUP'
           : 'DOCUMENT';
 
+    /*
+     * D4 + OWNER DECISION 2.a (Option A; D-65 stands). A candidate that
+     * CONFLICTS with another approved fact (a different item) may only be
+     * accepted where the incoming knowledge is allowed to replace that fact —
+     * `mayOverwrite`, the same precedence rule every write obeys. Then the old
+     * fact is archived as superseded, through the normal archive path. Where it
+     * is not allowed — an analytics learning against a human, document or
+     * setup fact — a plain accept is REFUSED: the reviewer rejects it, or edits
+     * the fact itself as an ordinary human edit.
+     */
+    const conflicting = candidate.conflictsWithItemId
+      ? await this.db.brandKnowledgeItem.findFirst({
+          where: { id: candidate.conflictsWithItemId, status: { in: ['ACTIVE', 'STALE'] } },
+        })
+      : null;
+    if (conflicting) {
+      const replace = mayOverwrite(
+        {
+          memory: conflicting.memory,
+          origin: conflicting.origin,
+          version: conflicting.version,
+          id: conflicting.id,
+        },
+        { memory: definition.memory, origin: acceptedOrigin, version: 1, id: candidate.id },
+      );
+      if (!replace.allowed) throw humanPrecedenceViolation();
+    }
+
     let itemId: string;
     let version: number;
 
@@ -690,6 +758,15 @@ export class BrandKnowledgeService {
       },
     });
 
+    if (conflicting && conflicting.id !== itemId) {
+      await this.archiveItem({
+        itemId: conflicting.id,
+        reason: 'superseded_by_review',
+        actor: input.actor,
+        supersededByItemId: itemId,
+      });
+    }
+
     await writeAuditEvent(this.db, this.workspaceId, {
       action: 'brand_brain.candidate.accepted',
       actorType: 'USER',
@@ -708,6 +785,133 @@ export class BrandKnowledgeService {
     });
 
     return { itemId, version };
+  }
+
+  /**
+   * THE ONE BULK PATH — "Accept the confident ones" (D4, C1).
+   *
+   * Not a second way to approve: every accepted candidate goes through
+   * `reviewCandidate` above, with its precedence checks, version and audit
+   * event, inside the caller's ONE transaction — so a failure part-way leaves
+   * nothing accepted. The caller previews `confidentCandidates` first and the
+   * person confirms; the ids they confirmed are re-checked here, and anything
+   * that no longer qualifies is SKIPPED and reported, never accepted:
+   *
+   *   - not PENDING any more (somebody else decided it);
+   *   - below the configured confidence threshold;
+   *   - a CONFLICT — it names an approved fact it contradicts, or it would
+   *     replace an approved fact with the same key. A conflict is a decision a
+   *     person makes looking at both, never one made in bulk.
+   */
+  async reviewCandidates(input: {
+    brandId: string;
+    candidateIds: readonly string[];
+    minimumConfidenceMilli: number;
+    actor: KnowledgeActor;
+    policy: StalenessPolicy;
+  }): Promise<{
+    readonly accepted: readonly string[];
+    readonly skipped: readonly { readonly id: string; readonly reason: BulkSkipReason }[];
+  }> {
+    assertBrandInScope(input.actor.brandScope, input.brandId);
+    const eligible = new Set(
+      (
+        await this.confidentCandidates({
+          brandId: input.brandId,
+          minimumConfidenceMilli: input.minimumConfidenceMilli,
+          brandScope: input.actor.brandScope,
+        })
+      ).map((candidate) => candidate.id),
+    );
+    const accepted: string[] = [];
+    const skipped: { id: string; reason: BulkSkipReason }[] = [];
+    for (const id of [...new Set(input.candidateIds)]) {
+      if (!eligible.has(id)) {
+        skipped.push({ id, reason: 'not_eligible' });
+        continue;
+      }
+      await this.reviewCandidate({
+        candidateId: id,
+        decision: 'accept',
+        actor: input.actor,
+        policy: input.policy,
+      });
+      accepted.push(id);
+    }
+    await writeAuditEvent(this.db, this.workspaceId, {
+      action: 'brand_brain.candidate.bulk_accepted',
+      actorType: 'USER',
+      actorId: input.actor.userId,
+      resourceType: 'Brand',
+      resourceId: input.brandId,
+      brandId: input.brandId,
+      after: {
+        accepted: accepted.length,
+        skipped: skipped.length,
+        minimumConfidenceMilli: input.minimumConfidenceMilli,
+      },
+    });
+    return { accepted, skipped };
+  }
+
+  /**
+   * The preview for "Accept the confident ones": PENDING candidates at or above
+   * the threshold that conflict with nothing approved. The same rule
+   * `reviewCandidates` re-applies when the person confirms.
+   */
+  async confidentCandidates(input: {
+    brandId: string;
+    minimumConfidenceMilli: number;
+    brandScope: readonly string[];
+    take?: number;
+  }): Promise<BrandKnowledgeCandidateSummary[]> {
+    const candidates = await this.db.brandKnowledgeCandidate.findMany({
+      where: {
+        brandId: input.brandId,
+        status: 'PENDING',
+        confidenceMilli: { gte: input.minimumConfidenceMilli },
+        conflictsWithItemId: null,
+        ...brandIdQueryFilter({ brandScope: input.brandScope }),
+      },
+      orderBy: [{ confidenceMilli: 'desc' }, { createdAt: 'asc' }],
+      take: input.take ?? 100,
+      select: {
+        id: true,
+        area: true,
+        itemKey: true,
+        targetItemId: true,
+        confidenceMilli: true,
+        extractedTitle: true,
+      },
+    });
+    if (candidates.length === 0) return [];
+    // A candidate that would REPLACE an approved fact with the same key is a
+    // conflict too: that fact is on screen beside it only in the inbox.
+    // Expired facts count: they are still approved knowledge a person chose,
+    // and replacing one is a decision to make looking at it.
+    const approved = await this.db.brandKnowledgeItem.findMany({
+      where: {
+        brandId: input.brandId,
+        status: { in: ['ACTIVE', 'STALE'] },
+        OR: candidates.map((candidate) => ({ area: candidate.area, itemKey: candidate.itemKey })),
+      },
+      select: { id: true, area: true, itemKey: true },
+    });
+    const taken = new Set(approved.map((item) => `${item.area}:${item.itemKey}`));
+    const approvedIds = new Set(approved.map((item) => item.id));
+    return candidates
+      .filter(
+        (candidate) =>
+          !taken.has(`${candidate.area}:${candidate.itemKey}`) &&
+          !(candidate.targetItemId && approvedIds.has(candidate.targetItemId)),
+      )
+      .map((candidate) => ({
+        id: candidate.id,
+        area: candidate.area,
+        itemKey: candidate.itemKey,
+        confidenceMilli: candidate.confidenceMilli,
+        title: localizedFrom(candidate.extractedTitle),
+      }));
   }
 
   /**
@@ -739,8 +943,12 @@ export class BrandKnowledgeService {
     });
   }
 
-  /** Per-area counts, computed in the database rather than in memory. */
-  async areaCounts(brandId: string): Promise<AreaCounts[]> {
+  /**
+   * Per-area counts for completeness (Q19): usable, stale, expired, conflicted
+   * and pending, and the keys of the usable facts — which is what answers a
+   * key question. `asOf` is today in the workspace's time zone (D6).
+   */
+  async areaCounts(brandId: string, asOf: Date): Promise<AreaCounts[]> {
     const now = this.now();
     const [items, candidates] = await Promise.all([
       this.db.brandKnowledgeItem.findMany({
@@ -748,10 +956,10 @@ export class BrandKnowledgeService {
         select: {
           area: true,
           status: true,
-          title: true,
-          body: true,
+          itemKey: true,
           reviewDueAt: true,
           conflictsWithItemId: true,
+          validUntil: true,
         },
       }),
       this.db.brandKnowledgeCandidate.groupBy({
@@ -761,60 +969,60 @@ export class BrandKnowledgeService {
       }),
     ]);
 
-    const pendingByArea = new Map<BrandKnowledgeArea, number>(
-      candidates.map((c) => [c.area, c._count._all]),
-    );
-    const byArea = new Map<BrandKnowledgeArea, AreaCounts>();
+    type Mutable = {
+      usableItems: number;
+      staleItems: number;
+      expiredItems: number;
+      conflictedItems: number;
+      pendingCandidates: number;
+      answeredKeys: Set<string>;
+    };
+    const byArea = new Map<BrandKnowledgeArea, Mutable>();
+    const bucket = (area: BrandKnowledgeArea): Mutable => {
+      let current = byArea.get(area);
+      if (!current) {
+        current = {
+          usableItems: 0,
+          staleItems: 0,
+          expiredItems: 0,
+          conflictedItems: 0,
+          pendingCandidates: 0,
+          answeredKeys: new Set(),
+        };
+        byArea.set(area, current);
+      }
+      return current;
+    };
 
     for (const item of items) {
-      const current =
-        byArea.get(item.area) ??
-        ({
-          area: item.area,
-          activeItems: 0,
-          bilingualActiveItems: 0,
-          staleItems: 0,
-          conflictedItems: 0,
-          pendingCandidates: pendingByArea.get(item.area) ?? 0,
-        } satisfies AreaCounts);
-
-      // A STALE item still counts as active knowledge — it is real, it is just
-      // unconfirmed. Excluding it would drop a brand's completion the moment a
-      // review window lapsed, which reads as data loss to the customer.
-      const isStale =
-        item.status === 'STALE' || (item.reviewDueAt !== null && item.reviewDueAt < now);
-
-      byArea.set(item.area, {
-        ...current,
-        activeItems: current.activeItems + 1,
-        bilingualActiveItems:
-          current.bilingualActiveItems +
-          (hasBothLocales(item.title) && hasBothLocales(item.body) ? 1 : 0),
-        staleItems: current.staleItems + (isStale ? 1 : 0),
-        conflictedItems: current.conflictedItems + (item.conflictsWithItemId ? 1 : 0),
-      });
-    }
-
-    // Areas with candidates but no items must still appear, or a queue waiting
-    // on review would be invisible on the card.
-    for (const [area, count] of pendingByArea) {
-      if (!byArea.has(area)) {
-        byArea.set(area, {
-          area,
-          activeItems: 0,
-          bilingualActiveItems: 0,
-          staleItems: 0,
-          conflictedItems: 0,
-          pendingCandidates: count,
-        });
+      const current = bucket(item.area);
+      if (item.conflictsWithItemId) current.conflictedItems += 1;
+      // EXPIRED IS NOT USABLE: it answers no question and grounds nothing, but
+      // it is still shown ("Expired · not used in writing") and counted here.
+      if (isExpired(item.validUntil, asOf)) {
+        current.expiredItems += 1;
+        continue;
+      }
+      current.usableItems += 1;
+      current.answeredKeys.add(item.itemKey);
+      // STALE is separate from expiry: review due, still usable.
+      if (item.status === 'STALE' || (item.reviewDueAt !== null && item.reviewDueAt < now)) {
+        current.staleItems += 1;
       }
     }
+    for (const candidate of candidates) {
+      bucket(candidate.area).pendingCandidates = candidate._count._all;
+    }
 
-    return [...byArea.values()];
+    return [...byArea.entries()].map(([area, counts]) => ({ area, ...counts }));
   }
 
-  async completion(brandId: string): Promise<BrandCompletion> {
-    return computeBrandCompletion(await this.areaCounts(brandId));
+  async completion(
+    brandId: string,
+    questions: AreaQuestions,
+    asOf: Date,
+  ): Promise<BrandCompletion> {
+    return computeBrandCompletion(await this.areaCounts(brandId, asOf), questions);
   }
 
   /** Append a version row. Private: every mutation above must go through it. */
@@ -848,6 +1056,7 @@ export class BrandKnowledgeService {
         title: item.title as Prisma.InputJsonValue,
         body: item.body as Prisma.InputJsonValue,
         confidenceMilli: item.confidenceMilli,
+        validUntil: item.validUntil,
         ...evidence,
         changedByUserId: meta.changedByUserId,
         changeKind: meta.changeKind,
@@ -859,4 +1068,8 @@ export class BrandKnowledgeService {
 
 function addDays(from: Date, days: number): Date {
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function isoDay(value: Date): string {
+  return value.toISOString().slice(0, 10);
 }

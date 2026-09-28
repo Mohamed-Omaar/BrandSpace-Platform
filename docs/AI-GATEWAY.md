@@ -660,6 +660,13 @@ the schema, not in the prompt.
 
 ### 14.1 Retrieval
 
+> **Phase 2C (D-354, D-355) — what may ground AI writing.** Only APPROVED facts (`usableKnowledgeWhere()`:
+> ACTIVE or STALE) ever reach a generative prompt, through one entry point, `groundingFor`. Document chunks
+> are SOURCE material for the ingestion pipeline, which proposes PENDING candidates from them; they are never
+> retrieved into a prompt, and the retriever has no option to ask for them. A brand's Settings → AI "Use Brand
+> Brain" switch withholds every fact from writing (the Copilot end to end); Brand Brain's own chat is not
+> affected. Steps 1–3 below describe the original chunk-embedding design and are superseded on that point.
+
 1. **Ingest:** documents are chunked with overlap, embedded via `brand.retrieve`, and stored in
    `BrandKnowledge` with `workspaceId` and `brandId`.
 2. **Query:** the user's intent is embedded; ANN search runs **with the workspace and brand predicate inside

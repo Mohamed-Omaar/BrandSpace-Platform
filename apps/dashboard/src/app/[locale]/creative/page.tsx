@@ -8,7 +8,13 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { CREATIVE_FORMATS, brandTypography } from '@brandspace/creative';
+import { writingFactsInAreas } from '@brandspace/brand-brain';
+import {
+  CREATIVE_FORMATS,
+  CREATIVE_KNOWLEDGE_AREAS,
+  CREATIVE_KNOWLEDGE_LINES,
+  brandTypography,
+} from '@brandspace/creative';
 import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
@@ -88,8 +94,10 @@ export default async function CreativeStudioPage({
    * D-301 (§26) — WHAT THE IMAGE WILL DRAW ON, shown before it is asked for:
    * the brand's own palette and type from its profile, and how many approved
    * identity / voice notes Brand Brain contributes — the same selection the
-   * generation route reads (ACTIVE, IDENTITY or TONE_OF_VOICE, at most six).
-   * Counted, never scored; nothing here is sent anywhere.
+   * generation route reads, through the same grounding-layer call
+   * (`writingFactsInAreas`: usable facts, the workspace's day, the brand's "Use
+   * Brand Brain" switch; IDENTITY or TONE_OF_VOICE, at most six). Counted,
+   * never scored; nothing here is sent anywhere.
    */
   const identity = brand
     ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
@@ -97,13 +105,13 @@ export default async function CreativeStudioPage({
           where: { id: brand.id, deletedAt: null },
           select: { colorPalette: true, typography: true },
         });
-        const notes = await db.brandKnowledgeItem.count({
-          where: {
+        const notes = (
+          await writingFactsInAreas(db, {
             brandId: brand.id,
-            status: 'ACTIVE',
-            area: { in: ['IDENTITY', 'TONE_OF_VOICE'] },
-          },
-        });
+            areas: CREATIVE_KNOWLEDGE_AREAS,
+            maxItems: CREATIVE_KNOWLEDGE_LINES,
+          })
+        ).length;
         const strings = (value: unknown): string[] =>
           Array.isArray(value)
             ? value.filter((entry): entry is string => typeof entry === 'string')
@@ -111,7 +119,7 @@ export default async function CreativeStudioPage({
         return {
           palette: strings(row?.colorPalette).slice(0, 8),
           typography: brandTypography(row?.typography),
-          notes: Math.min(notes, 6),
+          notes,
         };
       })
     : null;

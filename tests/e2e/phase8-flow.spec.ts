@@ -198,8 +198,9 @@ test('3 · brand brain shows this brand knowledge', async ({ page }) => {
 
   await expect(page.getByTestId('brand-brain-hero')).toBeVisible();
   await expect(page.getByTestId('area-grid')).toBeVisible();
-  // A completion figure the screen computed from real rows, not a placeholder.
-  await expect(page.getByTestId('completion-percent')).not.toBeEmpty();
+  // Key questions answered, computed from real rows — "answered n of m" (Q19,
+  // D-357), never a percentage and never a placeholder.
+  await expect(page.getByTestId('completion-answered')).toHaveText(/^answered \d+ of \d+$/);
 });
 
 // ---------------------------------------------------------------------------
@@ -807,31 +808,26 @@ test('14 · a learning is proposed and reaches the governed Brand Brain queue', 
   /*
    * AND IT IS STILL WAITING FOR A HUMAN. A count alone would not distinguish a
    * governed candidate from a learning that had been written straight into the
-   * brand, so the journey opens the review drawer and checks the candidate is
-   * sitting there with accept AND reject still to be chosen between.
+   * brand, so the journey reads the card the ONE review inbox is showing (D4,
+   * Phase 2C — it replaced the per-area drawer list this step used to open)
+   * and checks it is sitting there with Reject, and Accept or — where a human
+   * fact outranks it (D-65) — the precedence note, still to be decided.
    */
-  const reviewButton = page.locator('[data-testid^="intel-review-"]').first();
-  const candidateId = (await reviewButton.getAttribute('data-testid'))?.replace(
-    'intel-review-',
-    '',
-  );
-  expect(candidateId, 'the queued candidate has an id to review').toBeTruthy();
-  await reviewButton.click();
-  await expect(page.getByTestId('area-drawer')).toBeVisible();
-  await expect(page.getByTestId('drawer-review')).toBeVisible();
-  await expect(page.getByTestId(`candidate-${candidateId}`)).toBeVisible();
-  await expect(page.getByTestId(`accept-${candidateId}`)).toBeVisible();
-  await expect(page.getByTestId(`reject-${candidateId}`)).toBeVisible();
+  const card = page.getByTestId('intel-card').locator('.bb-learning').first();
+  const cardId = (await card.getAttribute('data-testid'))?.replace('intel-', '');
+  expect(cardId, 'the queued candidate is on the inbox card').toBeTruthy();
+  await expect(page.getByTestId(`reject-${cardId}`)).toBeVisible();
+  await expect(
+    page.getByTestId(`accept-${cardId}`).or(page.getByTestId(`inbox-precedence-${cardId}`)),
+  ).toBeVisible();
 });
 
 /**
- * How many candidates Brand Brain's review card is currently holding.
- *
- * COUNTED FROM THE REVIEW BUTTONS rather than from the rows. `intel-review-`
- * is one per candidate and cannot collide with the card's own id — and CSS
- * has no "attribute does not equal" selector to have excluded it with.
+ * How many candidates Brand Brain's review inbox is holding — its own count
+ * (D4, Phase 2C), which replaced counting one review button per candidate.
  */
 async function brandBrainCandidateCount(page: Page): Promise<number> {
   await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
-  return page.locator('[data-testid^="intel-review-"]').count();
+  const text = await page.getByTestId('review-inbox-count').innerText();
+  return Number(/\d+/.exec(text)?.[0] ?? '0');
 }

@@ -121,3 +121,43 @@ export async function saveBrandAiSuggestions(
     after: { aiSuggestionsEnabled: input.enabled },
   });
 }
+
+/**
+ * SETTINGS → AI: "Use Brand Brain" (prototype v90 D9, Phase 2C). Off, no Brand
+ * Brain fact grounds this brand's AI writing — captions, Studio tools, Creative,
+ * Strategy and the Copilot, end to end — and each of them writes without it
+ * rather than refusing. Brand Brain's own "Talk with the brand" is unaffected.
+ * Enforced where the grounding is read (`groundingFor`); this only records the
+ * choice, with the same scope check and audit shape as the switch above.
+ */
+export async function saveBrandUseBrandBrain(
+  db: TenantScopedClient,
+  context: {
+    readonly workspaceId: string;
+    readonly actorUserId: string;
+    readonly brandScope: readonly string[];
+  },
+  input: { readonly brandId: string; readonly enabled: boolean },
+): Promise<void> {
+  assertBrandInScope(context.brandScope, input.brandId);
+  const before = await db.brand.findFirst({
+    where: { id: input.brandId, workspaceId: context.workspaceId, deletedAt: null },
+    select: { useBrandBrain: true },
+  });
+  if (!before) throw new AppError('NOT_FOUND', 'Brand not found.');
+  if (before.useBrandBrain === input.enabled) return;
+  await db.brand.update({
+    where: { id: input.brandId },
+    data: { useBrandBrain: input.enabled },
+  });
+  await writeAuditEvent(db, context.workspaceId, {
+    action: 'brand.use_brand_brain.changed',
+    actorType: 'USER',
+    actorId: context.actorUserId,
+    resourceType: 'brand',
+    resourceId: input.brandId,
+    brandId: input.brandId,
+    before,
+    after: { useBrandBrain: input.enabled },
+  });
+}
