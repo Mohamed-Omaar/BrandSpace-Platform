@@ -1101,3 +1101,13 @@ input.bb-chat-input::placeholder {
     transform: none;
   }
 }
+
+/*
+ * PHASE 2C (D1, D4) — A ROW OF ONE. With Sources on its own tab the bottom row
+ * holds a single card (the review inbox; the Voice card; the sources card), so
+ * it spans the row instead of leaving the demo's second column empty. Layout
+ * only: the cards themselves are the demo's, unchanged. UI-FIDELITY-CONTRACT §4.
+ */
+.bb-bottom.single {
+  grid-template-columns: 1fr;
+}

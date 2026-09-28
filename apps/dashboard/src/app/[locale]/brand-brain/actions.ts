@@ -77,6 +77,18 @@ function backTo(formData: FormData): { readonly path: string; readonly step?: st
   return { path: '/onboarding', ...(WIZARD_STEPS.has(step) ? { step } : {}) };
 }
 
+/**
+ * D1 (Phase 2C) — the Brand Brain tab a form was posted from, so the redirect
+ * lands the person back where they were. A closed set; anything else is the
+ * default tab.
+ */
+const TABS = new Set(['knowledge', 'look', 'sources', 'chat']);
+
+function tabParam(formData: FormData): Record<string, string> {
+  const tab = String(formData.get('tab') ?? '');
+  return TABS.has(tab) && tab !== 'knowledge' ? { tab } : {};
+}
+
 function pageUrl(
   locale: string,
   params: Record<string, string> = {},
@@ -108,6 +120,38 @@ function localized(formData: FormData, prefix: string): LocalizedText {
     ...(en.length > 0 ? { en } : {}),
     ...(ar.length > 0 ? { ar } : {}),
   };
+}
+
+/**
+ * The fact's title. The Voice card's one-line rules (decision 2.b) send no
+ * title and ask for one made from the rule itself (`titleFromBody`), cut to
+ * the title's length; everywhere else a title is typed.
+ */
+function titleOf(formData: FormData): LocalizedText {
+  const typed = localized(formData, 'title');
+  if (typed.en || typed.ar || formData.get('titleFromBody') !== '1') return typed;
+  const body = localized(formData, 'body');
+  const cut = (text: string | undefined) => text?.slice(0, 120);
+  return {
+    ...(body.en ? { en: cut(body.en) } : {}),
+    ...(body.ar ? { ar: cut(body.ar) } : {}),
+  };
+}
+
+/**
+ * The new fact's key. Typed in the area drawer; for the Voice card's rules
+ * (decision 2.b) the form sends only the rule's PREFIX — `tone.`, `do.` or
+ * `dont.` — and the key is that prefix plus a short random suffix, so two
+ * rules never collide and the prefix is what files the rule. Any other prefix
+ * is refused by the key schema's own shape.
+ */
+const RULE_PREFIXES = new Set(['tone.', 'do.', 'dont.']);
+
+function itemKeyFrom(formData: FormData): string {
+  const typed = String(formData.get('itemKey') ?? '').trim();
+  if (typed.length > 0) return typed;
+  const prefix = String(formData.get('itemKeyPrefix') ?? '');
+  return RULE_PREFIXES.has(prefix) ? `${prefix}${randomUUID().slice(0, 8)}` : '';
 }
 
 /** D6 — the "valid until" field, only when the form carries it. */
@@ -153,8 +197,8 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
     const parsed = createKnowledgeItemSchema.parse({
       brandId: String(formData.get('brandId') ?? ''),
       area,
-      itemKey: String(formData.get('itemKey') ?? ''),
-      title: localized(formData, 'title'),
+      itemKey: itemKeyFrom(formData),
+      title: titleOf(formData),
       body: localized(formData, 'body'),
       ...validUntilField(formData),
     });
@@ -172,9 +216,9 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
         validUntil: parseValidUntil(parsed.validUntil),
       });
     });
-    destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area });
+    destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area, ...tabParam(formData) });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'create-knowledge', { area });
+    destination = failure(locale, error, 'create-knowledge', { area, ...tabParam(formData) });
   }
   revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);
@@ -188,7 +232,7 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
     const session = await requireWorkspaceAction(locale, 'brand_brain.edit');
     const parsed = updateKnowledgeItemSchema.parse({
       itemId: String(formData.get('itemId') ?? ''),
-      title: localized(formData, 'title'),
+      title: titleOf(formData),
       body: localized(formData, 'body'),
       ...(formData.get('changeReason')
         ? { changeReason: String(formData.get('changeReason')) }
@@ -210,9 +254,9 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
           : {}),
       });
     });
-    destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area });
+    destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area, ...tabParam(formData) });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'update-knowledge', { area });
+    destination = failure(locale, error, 'update-knowledge', { area, ...tabParam(formData) });
   }
   revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);
@@ -232,9 +276,9 @@ export async function archiveKnowledgeAction(formData: FormData): Promise<void> 
         actor: knowledgeActor(session),
       });
     });
-    destination = pageUrl(locale, { ok: 'KNOWLEDGE_ARCHIVED', area });
+    destination = pageUrl(locale, { ok: 'KNOWLEDGE_ARCHIVED', area, ...tabParam(formData) });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'archive-knowledge', { area });
+    destination = failure(locale, error, 'archive-knowledge', { area, ...tabParam(formData) });
   }
   revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);
@@ -451,9 +495,9 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
         });
       }
     }
-    destination = pageUrl(locale, { ok: 'SOURCE_UPLOADED', area }, back);
+    destination = pageUrl(locale, { ok: 'SOURCE_UPLOADED', area, ...tabParam(formData) }, back);
   } catch (error: unknown) {
-    destination = failure(locale, error, 'upload-source', { area }, back);
+    destination = failure(locale, error, 'upload-source', { area, ...tabParam(formData) }, back);
   }
   revalidatePath(`/${locale}/brand-brain`);
   revalidatePath(`/${locale}/onboarding`);

@@ -435,6 +435,7 @@ test.describe('the fixture is what the baseline was taken against', () => {
      */
     await expect(page.getByTestId('metric-items')).toHaveText(String(expected.knowledgeItems));
     await expect(page.getByTestId('metric-sources')).toHaveText(String(expected.sourceDocuments));
-    await expect(page.getByTestId('completion-percent')).toHaveText(/^\d{1,3}%$/);
+    // Q19 (D-357): "answered n of m", never a percentage.
+    await expect(page.getByTestId('completion-answered')).toHaveText(/^answered \d+ of \d+$/);
   });
 });
