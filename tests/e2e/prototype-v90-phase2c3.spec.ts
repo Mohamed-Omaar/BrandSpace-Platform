@@ -228,7 +228,11 @@ async function changeFact(
         ...(change.body ? { body: { en: change.body } } : {}),
         ...(change.validUntil !== undefined ? { validUntil: change.validUntil } : {}),
         ...(change.status
-          ? { status: change.status, archivedAt: new Date(), supersededByItemId: change.supersededByItemId ?? null }
+          ? {
+              status: change.status,
+              archivedAt: new Date(),
+              supersededByItemId: change.supersededByItemId ?? null,
+            }
           : {}),
       },
     });
@@ -353,9 +357,7 @@ test.describe('D7 · Brand Brain chat — Ask and the Copilot handoff', () => {
       expect(await posts()).toBe(0);
       await page.getByTestId('chat-send-to-copilot').click();
       // The Copilot opens with the request written in, and nothing runs.
-      await expect(page.getByTestId('copilot-request')).toHaveValue(
-        'make 3 posts about cold brew',
-      );
+      await expect(page.getByTestId('copilot-request')).toHaveValue('make 3 posts about cold brew');
       await expect(page.getByTestId('copilot-plan')).toHaveCount(0);
       expect(await posts()).toBe(0);
     });
@@ -488,8 +490,9 @@ test.describe('D7 · Edit and Remove — local matching, explicit choice, change
     await page.getByTestId('chat-remove-go').click();
     await expect(page.getByTestId('chat-removed')).toBeVisible();
     const status = () =>
-      withPlatformPrisma(async (prisma) =>
-        (await prisma.brandKnowledgeItem.findUniqueOrThrow({ where: { id: fact.id } })).status,
+      withPlatformPrisma(
+        async (prisma) =>
+          (await prisma.brandKnowledgeItem.findUniqueOrThrow({ where: { id: fact.id } })).status,
       );
     expect(await status()).toBe('ARCHIVED');
     await noSeriousViolations(page, '[data-testid="brand-chat"]');
@@ -522,7 +525,7 @@ test.describe('D8 · the Copilot answers from the same facts and never saves one
     await page.getByTestId('copilot-request').fill('What are your prices?');
     await page.getByTestId('copilot-propose').click();
     await expect(page.getByTestId('copilot-brand-missing')).toContainText(
-      "Brand Brain doesn’t have",
+      'Brand Brain doesn’t have',
       { timeout: 60_000 },
     );
 
@@ -661,7 +664,10 @@ test.describe('D10 · a used fact changed, expired or was replaced', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
     const quote = (await (await quoted).json()) as { estimateMilli: string };
     expect(Number(quote.estimateMilli)).toBeGreaterThan(0);
-    await expect(page.getByTestId(`fact-change-${offer.id}`)).toHaveAttribute('data-kind', 'expired');
+    await expect(page.getByTestId(`fact-change-${offer.id}`)).toHaveAttribute(
+      'data-kind',
+      'expired',
+    );
     const rewrite = page.getByTestId('fact-rewrite');
     await expect(rewrite).toHaveText(/^Rewrite without this fact · about [\d.,]+ credits$/);
 

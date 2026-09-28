@@ -315,9 +315,7 @@ export async function loadCurrentUsage(
     const found = versions.find(
       (entry) => entry.knowledgeItemId === itemId && entry.version === version,
     );
-    return found
-      ? { title: localizedFrom(found.title), body: localizedFrom(found.body) }
-      : null;
+    return found ? { title: localizedFrom(found.title), body: localizedFrom(found.body) } : null;
   };
 
   return rows.map((row) => {
