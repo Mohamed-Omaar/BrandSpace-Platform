@@ -90,6 +90,24 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   /*
+   * PHASE 2C-2 — THE BUNDLED BRAND FONTS (`public/fonts/**`). Global,
+   * licence-bundled application files, not tenant data: served same-origin as
+   * static files, never redirected to a locale and never behind a session, but
+   * with the same security headers as every other response. They are the same
+   * bytes for everyone, so unlike a page they may be cached.
+   */
+  if (pathname.startsWith('/fonts/')) {
+    const response = NextResponse.next();
+    const headers = securityHeaders({
+      nonce: Buffer.from(crypto.randomUUID()).toString('base64'),
+      rendering: 'dynamic',
+    });
+    for (const [key, value] of Object.entries(headers)) response.headers.set(key, value);
+    response.headers.set('Cache-Control', 'public, max-age=86400');
+    return response;
+  }
+
+  /*
    * ROUTE HANDLERS ARE NOT PAGES AND HAVE NO LOCALE.
    *
    * `/api/*` is a machine endpoint: the Brand Brain chat proxy posts to it as
@@ -112,5 +130,9 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next|favicon.ico|.*\\..*).*)'],
+  /*
+   * Pages (no dot in the path) and the bundled fonts. Other static files are
+   * left to the framework as before.
+   */
+  matcher: ['/((?!_next|favicon.ico|.*\\..*).*)', '/fonts/:path*'],
 };
