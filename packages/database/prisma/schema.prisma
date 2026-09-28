@@ -1796,6 +1796,10 @@ enum BrandIngestionStage {
 enum BrandCandidateSource {
   DOCUMENT
   ANALYTICS
+  /// Phase 2C-3 (M4a, D7) — a member with `brand_brain.edit` but not
+  /// `brand_brain.review` proposed this fact ("Send for review"). No document,
+  /// no insight; `proposedByUserId` names the person (M4b CHECK).
+  MEMBER
 }
 
 enum BrandCandidateStatus {
