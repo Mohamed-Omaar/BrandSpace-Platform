@@ -188,6 +188,20 @@ describe('Q19 — the draft key questions (pending owner review)', () => {
     }
   });
 
+  it('keeps separate facts in separate questions (owner review of PR #52)', () => {
+    const keys = (set: string) =>
+      (policy.questions.offersSets[set] ?? []).map((entry) => entry.itemKey);
+    // Opening hours and the current offer; delivery and returns; services and products.
+    expect(keys('food')).toEqual(expect.arrayContaining(['offers.hours', 'offers.current']));
+    expect(keys('fashion')).toEqual(expect.arrayContaining(['offers.delivery', 'offers.returns']));
+    expect(keys('beauty')).toEqual(expect.arrayContaining(['offers.services', 'offers.products']));
+    const prompt = (set: string, itemKey: string) =>
+      policy.questions.offersSets[set]?.find((entry) => entry.itemKey === itemKey)?.prompt.en ?? '';
+    expect(prompt('food', 'offers.hours')).not.toMatch(/offer/i);
+    expect(prompt('fashion', 'offers.delivery')).not.toMatch(/return/i);
+    expect(prompt('beauty', 'offers.services')).not.toMatch(/product/i);
+  });
+
   it("lines up with the facts the product already writes: the setup goal and the Voice card's keys", () => {
     expect(policy.questions.areas.STRATEGY?.map((entry) => entry.itemKey)).toContain(
       'goal.primary',

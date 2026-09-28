@@ -59,7 +59,12 @@ export const BRAND_BRAIN_QUESTIONS: DefaultBrandBrainQuestions = {
         'What makes you different?',
         'ما الذي يميّزك عن غيرك؟',
       ),
-      question('where', 'identity.location', 'Where do you operate?', 'أين تعمل؟'),
+      question(
+        'where',
+        'identity.location',
+        'Where are you based, or where do you serve customers?',
+        'أين يقع نشاطك أو أين تقدّم خدماتك؟',
+      ),
     ],
     AUDIENCE: [
       question('primary', 'audience.primary', 'Who is your main customer?', 'من هو عميلك الأساسي؟'),
@@ -83,7 +88,7 @@ export const BRAND_BRAIN_QUESTIONS: DefaultBrandBrainQuestions = {
         'Which words describe your voice?',
         'ما الكلمات التي تصف أسلوبك؟',
       ),
-      question('formality', 'voice.formality', 'Formal or casual?', 'رسمي أم ودّي؟'),
+      question('formality', 'voice.formality', 'Formal or friendly?', 'هل أسلوبك رسمي أم ودّي؟'),
       question(
         'language',
         'voice.language',
@@ -94,7 +99,12 @@ export const BRAND_BRAIN_QUESTIONS: DefaultBrandBrainQuestions = {
     OFFERS: [
       question('what', 'offers.what', 'What do you sell?', 'ماذا تبيع؟'),
       question('prices', 'offers.prices', 'What are your prices?', 'ما أسعارك؟'),
-      question('current', 'offers.current', 'What offer is running now?', 'ما العرض الحالي؟'),
+      question(
+        'current',
+        'offers.current',
+        'Is there an offer running now? What is it?',
+        'هل لديك عرض حالي؟ وما هو؟',
+      ),
     ],
     PROOF_POINTS: [
       question(
@@ -106,8 +116,8 @@ export const BRAND_BRAIN_QUESTIONS: DefaultBrandBrainQuestions = {
       question(
         'testimonial',
         'proof.testimonial',
-        'What does a happy customer say?',
-        'ماذا يقول عميل راضٍ؟',
+        'What do happy customers say about you?',
+        'ماذا يقول عنك عملاؤك الراضون؟',
       ),
       question(
         'credentials',
@@ -122,7 +132,7 @@ export const BRAND_BRAIN_QUESTIONS: DefaultBrandBrainQuestions = {
         'never',
         'dont.never',
         'What must a post never say?',
-        'ما الذي لا يقوله منشور أبدًا؟',
+        'ما الذي يجب ألا يقوله أي منشور أبدًا؟',
       ),
     ],
     COMPETITORS: [
@@ -157,8 +167,8 @@ export const BRAND_BRAIN_QUESTIONS: DefaultBrandBrainQuestions = {
       question(
         'pillars',
         'strategy.pillars',
-        'Which topics should you post about?',
-        'ما المواضيع التي تنشر عنها؟',
+        'Which main topics should you post about?',
+        'ما المواضيع الأساسية التي تنشر عنها؟',
       ),
     ],
     LEARNINGS: [
@@ -177,15 +187,17 @@ export const BRAND_BRAIN_QUESTIONS: DefaultBrandBrainQuestions = {
     ],
   },
   offersSets: {
-    // Appendix B D3's own example for food: what you sell / prices / hours & offers.
+    // Appendix B D3's own example for food: what you sell / prices / hours / offers —
+    // opening hours and the current offer are two facts, so two questions (owner review).
     food: [
       question('menu', 'offers.menu', 'What is on your menu?', 'ماذا تقدّم في قائمتك؟'),
       question('prices', 'offers.prices', 'What are your prices?', 'ما أسعارك؟'),
+      question('hours', 'offers.hours', 'What are your opening hours?', 'ما مواعيد العمل؟'),
       question(
-        'hours',
-        'offers.hours',
-        'What are your hours and current offers?',
-        'ما مواعيد العمل والعروض الحالية؟',
+        'current',
+        'offers.current',
+        'Is there an offer running now? What is it?',
+        'هل لديك عرض حالي؟ وما هو؟',
       ),
     ],
     fashion: [
@@ -197,19 +209,21 @@ export const BRAND_BRAIN_QUESTIONS: DefaultBrandBrainQuestions = {
       ),
       question('prices', 'offers.prices', 'What is your price range?', 'ما نطاق أسعارك؟'),
       question('sizes', 'offers.sizes', 'Which sizes do you carry?', 'ما المقاسات المتوفرة؟'),
-      question(
-        'delivery',
-        'offers.delivery',
-        'How do delivery and returns work?',
-        'كيف يتم التوصيل والاسترجاع؟',
-      ),
+      question('delivery', 'offers.delivery', 'How does delivery work?', 'كيف يتم التوصيل؟'),
+      question('returns', 'offers.returns', 'What is your return policy?', 'ما سياسة الاسترجاع؟'),
     ],
     beauty: [
       question(
         'treatments',
         'offers.services',
-        'Which treatments or products do you offer?',
-        'ما العلاجات أو المنتجات التي تقدّمها؟',
+        'Which treatments or services do you offer?',
+        'ما العلاجات أو الخدمات التي تقدّمها؟',
+      ),
+      question(
+        'products',
+        'offers.products',
+        'Which products do you sell?',
+        'ما المنتجات التي تبيعها؟',
       ),
       question('prices', 'offers.prices', 'What are your prices?', 'ما أسعارك؟'),
       question('booking', 'offers.booking', 'How do customers book?', 'كيف يحجز العملاء؟'),
