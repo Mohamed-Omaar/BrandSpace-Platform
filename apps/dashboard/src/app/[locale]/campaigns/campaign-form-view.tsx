@@ -1,5 +1,6 @@
 import {
   Card,
+  PlatformIcon,
   Field,
   buttonStyle,
   colorTokens,
@@ -8,6 +9,7 @@ import {
   spacingTokens,
   textareaStyle,
   typographyTokens,
+  socialPlatformFromKey,
 } from '@brandspace/ui';
 import type { MessageKey } from '../../../i18n/messages';
 import { CAMPAIGN_OBJECTIVES, CAMPAIGN_STATUSES } from '../../../server/campaign-form';
@@ -247,6 +249,13 @@ export function CampaignFormView({
                   defaultChecked={values.channels.includes(platform.key)}
                   data-testid={`campaign-channel-${platform.key}`}
                 />
+                {socialPlatformFromKey(platform.key) ? (
+                  <PlatformIcon
+                    platform={socialPlatformFromKey(platform.key)!}
+                    size={16}
+                    tone="brand"
+                  />
+                ) : null}
                 {platform.label}
               </label>
             ))}
