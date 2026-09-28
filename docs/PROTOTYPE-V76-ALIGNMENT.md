@@ -494,6 +494,25 @@ Recorded beside §8, not in it: §8 above is the owner's text and is unchanged.
 - **MO4's pill never changes size.** The owner's width/height exception is MO2's; MO4 slides a `clip-path` instead (D-349).
 - **§8.2 as built (D-353).** A committed drop is the only thing that calls the server, through `moveSlotAction` — the same `content.schedule` requirement and the same `CalendarService.reschedule` as the drawer's form, so F2, quota, approval, B-4, scope and the audit event all apply; it answers with the outcome instead of redirecting, so the post is drawn on its new day at once and a refusal puts it back with the reason in a toast. **Undo** is offered only while that toast shows (the toast host closes it on the next navigation) and carries the owner-approved precondition — the time the move put the post at — so a second Undo, one racing another move, or a replay changes nothing (`SLOT_MOVED_SINCE`); if the old time has passed, F2 refuses it and the post stays moved. **The keyboard path** is the post's drawer (open the chip, change the date and time, Reschedule) — unchanged and still the way to move a post without a pointer (WCAG 2.5.7); the result is announced by the toast host's live region. **The tray** keeps its Schedule button; dropping a draft opens the same dialog, dated. **The phone** gets the strip on the Agenda list, and so does the desktop Agenda view — the list has no day cells to drop on.
 
+## 9. Prototype v90: Phase 2C (Brand Brain v2)
+
+**Split (owner, 2026-09-28):** 2C-1 — items 1 (grounding) and 2 (knowledge, review, completeness) · 2C-2 —
+item 3 (Look & voice, fonts) · 2C-3 — item 4 (chat modes, Copilot, recorded usage, D10, "Used in N
+posts") · 2C-4 — item 5 (uploads) and item 6 (Performance, Home, Strategy). Website reading is a later PR,
+only after its security design is approved. Each part is its own branch from `staging`, never stacked.
+
+### 9.1 How Phase 2C-1 was built
+
+- **Item 1 — grounding (Q14, Q20; D-354).** One rule for what may ground AI writing,
+  `usableKnowledgeWhere()` (ACTIVE or STALE), and one entry point, `groundingFor`. Raw document chunks are
+  removed from the grounding retriever entirely (no `maxChunks` anywhere); only the ingestion pipeline reads
+  them, to propose PENDING candidates. The two `maxContextChunks` keys stay as DEPRECATED configuration.
+  Creative uses the same rule and fences its facts.
+- **Item 1 — "Use Brand Brain" (D9; D-355).** `Brand.useBrandBrain` (migration
+  `20261007090000_brand_use_brand_brain`) in Settings → AI. Off: captions, tools, Creative and Strategy
+  write ungrounded instead of refusing; the Copilot sees no fact in its context, its history or its tools,
+  and answers a brand question with a notice; Brand Brain's own chat is unaffected.
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):

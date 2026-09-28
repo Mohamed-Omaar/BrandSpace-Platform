@@ -735,6 +735,15 @@ APPROVED DESIGN-SYSTEM EXTENSION composed from what already ships:
 No new colour family, font, shadow style or interaction model: the drag replaces native drag and drop
 with pointer events, as §8.2 says, and the drawer's date-and-time form remains the keyboard path.
 
+### 6.3.45 Prototype v90 Phase 2C-1 — "Use Brand Brain" in Settings → AI, and the Copilot's notice (D9, D-355)
+
+- **Settings → AI** gains one `CheckboxRow` under "AI suggestions on Home", with its hint line, inside
+  the same `DraftForm` and save bar.
+- **The Copilot** shows the "Brand Brain is turned off for Copilot in this brand" notice as an ordinary
+  assistant message in the conversation list — the same bubble every answer uses.
+
+No new component, colour, font, shadow or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
