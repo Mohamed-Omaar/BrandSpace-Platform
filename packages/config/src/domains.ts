@@ -1363,7 +1363,14 @@ const assetsSchema = z.object({
               'text/csv',
               'text/markdown',
             ]),
-          font: z.array(z.string().min(1)).default(['font/woff2', 'font/ttf']),
+          /*
+           * Phase 2C-2 (D2): OTF and WOFF join TTF and WOFF2. A font COLLECTION
+           * (`ttcf`) is never admitted, whatever an operator lists here: no
+           * signature expectation exists for it.
+           */
+          font: z
+            .array(z.string().min(1))
+            .default(['font/woff2', 'font/woff', 'font/ttf', 'font/otf']),
         })
         .default({}),
 
@@ -1415,7 +1422,8 @@ const assetsSchema = z.object({
             .int()
             .positive()
             .max(MAX_STORED_FILE_BYTES)
-            .default(10 * 1024 * 1024),
+            // Phase 2C-2 (D2): exactly 5 MiB (5 × 1024 × 1024 bytes), not 5,000,000.
+            .default(5 * 1024 * 1024),
         })
         .default({}),
 

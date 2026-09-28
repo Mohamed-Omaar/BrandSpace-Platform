@@ -16,9 +16,12 @@ export {
 } from './policy';
 export {
   checkAssetSignature,
+  checkUploadedFile,
   extensionMatchesType,
   normaliseFileName,
+  resolveFontType,
   signatureIsKnown,
+  type FontTypeResolution,
   type NormalisedFileName,
 } from './file-safety';
 export {

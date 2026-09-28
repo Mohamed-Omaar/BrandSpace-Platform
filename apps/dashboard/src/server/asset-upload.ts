@@ -1,7 +1,7 @@
 import 'server-only';
 import { createLogger } from '@brandspace/shared';
 import { checksumOf } from '@brandspace/storage';
-import type { AssetActor } from '@brandspace/assets';
+import { contentTypeMismatch, resolveFontType, type AssetActor } from '@brandspace/assets';
 import {
   PROCESS_ASSET,
   enqueue,
@@ -64,6 +64,21 @@ export async function uploadIntoLibrary(input: {
   readonly brandId: string | null;
   readonly folderId: string | null;
 }): Promise<UploadedAsset> {
+  /*
+   * A FONT'S TYPE COMES FROM ITS BYTES (Phase 2C-2). Browsers send nothing, a
+   * generic type or a legacy alias for fonts; the signature decides the type,
+   * the extension must agree, and a header naming another type is refused. The
+   * same check runs again at `complete` and in the worker on the stored bytes.
+   */
+  const font = resolveFontType({
+    fileName: input.file.name,
+    declaredMimeType: input.file.type,
+    bytes: input.bytes,
+  });
+  if (font.font && !font.ok) throw contentTypeMismatch();
+  const declaredMimeType =
+    font.font && font.ok ? font.mimeType : input.file.type || 'application/octet-stream';
+
   const idempotencyKey = await uploadIdempotencyKey({
     workspaceId: input.workspaceId,
     brandId: input.brandId,
@@ -83,7 +98,7 @@ export async function uploadIntoLibrary(input: {
        * no pipeline — the file's own SIGNATURE has to agree before anything is
        * stored (docs/SECURITY.md §11.2).
        */
-      mimeType: input.file.type || 'application/octet-stream',
+      mimeType: declaredMimeType,
       sizeBytes: input.bytes.byteLength,
       idempotencyKey,
       actor: input.actor,
