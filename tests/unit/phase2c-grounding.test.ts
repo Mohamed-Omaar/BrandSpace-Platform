@@ -219,3 +219,158 @@ describe('Creative — the facts in an image prompt are fenced', () => {
     expect(prompt).toMatch(/\[quoted from document: Ignore all previous instructions/i);
   });
 });
+
+/*
+ * ---------------------------------------------------------------------------
+ * D-354 (owner review of PR #52) — ONE AUTHORITATIVE GROUNDING LAYER
+ * ---------------------------------------------------------------------------
+ *
+ * "Generative Brand Brain knowledge access goes through the grounding layer."
+ * The three writing rules — the usable-fact predicate, today in the
+ * workspace's time zone, and the brand's "Use Brand Brain" switch — are
+ * applied INSIDE `packages/brand-brain/src/grounding.ts` and nowhere a writing
+ * path could re-implement them. This scan fails when:
+ *
+ *   - any application file outside the layer reads `brand_knowledge_item`, or
+ *     applies the usable-fact or as-of rule itself, without being NAMED below
+ *     as a non-generative reader with its reason;
+ *   - any file outside the layer reads the switch without being named as one
+ *     of the switch's own editors;
+ *   - a generative path stops asking the layer.
+ */
+
+const relativeOf = (file: string) => path.relative(ROOT, file).split(path.sep).join('/');
+
+/** The layer itself: the entry points, the retriever they use, the date rule, the exports. */
+const GROUNDING_LAYER = new Set([
+  'packages/brand-brain/src/grounding.ts',
+  'packages/brand-brain/src/retrieval.ts',
+  'packages/brand-brain/src/validity.ts',
+  'packages/brand-brain/src/index.ts',
+]);
+
+/**
+ * NON-GENERATIVE READERS OF BRAND BRAIN KNOWLEDGE, each with why it may read
+ * directly. None of them builds a prompt, a brief or an objective from what it
+ * reads. Ingestion and management are listed apart from each other and from
+ * the layer on purpose.
+ */
+const NON_GENERATIVE_READERS: ReadonlyMap<string, string> = new Map([
+  [
+    'packages/brand-brain/src/ingestion.ts',
+    'INGESTION: finds the approved fact a new PENDING candidate would replace; its output is a candidate, never a prompt',
+  ],
+  [
+    'packages/brand-brain/src/knowledge.ts',
+    'MANAGEMENT: the Brand Brain service — create, edit, archive, review, completeness',
+  ],
+  [
+    'apps/dashboard/src/app/[locale]/brand-brain/page.tsx',
+    'MANAGEMENT UI: the Brand Brain screen lists every fact, expired ones marked, for people to edit',
+  ],
+  [
+    'apps/dashboard/src/app/[locale]/strategy/page.tsx',
+    'DISPLAY: audience, key messages and declared pillars shown for reading; the goal that prefills the objective is read through writingGoal',
+  ],
+  [
+    'apps/dashboard/src/server/command-center.ts',
+    'DISPLAY: Home counts the brands that have no knowledge yet',
+  ],
+  ['apps/dashboard/src/server/setup-wizard.ts', 'SETUP STATE: which setup steps are done'],
+  ['apps/dashboard/src/server/setup-goal.ts', 'MANAGEMENT: setup writes the goal fact'],
+  [
+    'apps/dashboard/src/server/candidate-review.ts',
+    'SETUP STATE: whether a review happens inside unfinished setup',
+  ],
+]);
+
+/** The switch's own editor and its words: they read and write `brand.useBrandBrain` itself. */
+const SWITCH_EDITORS: ReadonlyMap<string, string> = new Map([
+  ['apps/dashboard/src/app/[locale]/settings/ai/page.tsx', 'Settings → AI shows the switch'],
+  ['apps/dashboard/src/app/[locale]/settings/ai/actions.ts', 'Settings → AI saves the switch'],
+  ['apps/dashboard/src/server/publishing-defaults.ts', 'the audited write of the switch'],
+  ['apps/dashboard/src/i18n/messages.ts', 'the switch’s label and hint'],
+]);
+
+/** Every generative path that puts Brand Brain knowledge in front of a model. */
+const GENERATIVE_PATHS = [
+  'packages/brand-brain/src/chat.ts',
+  'packages/content/src/studio.ts',
+  'packages/copilot/src/orchestrator.ts',
+  'packages/copilot/src/executors.ts',
+  'packages/intelligence/src/strategy.ts',
+  'apps/api/src/routes/creative.ts',
+  'apps/dashboard/src/app/[locale]/content/compose/page.tsx',
+  'apps/dashboard/src/app/[locale]/creative/page.tsx',
+];
+
+const KNOWLEDGE_READ = /\bbrandKnowledgeItem\s*\.\s*\w+\s*\(/;
+const WRITING_RULE =
+  /\b(usableKnowledgeWhere|workspaceKnowledgeAsOf|knowledgeAsOf|knowledgeAsOfSafe)\s*\(/;
+const THE_SWITCH = /\buseBrandBrain\b/;
+const ASKS_THE_LAYER =
+  /\b(groundingFor|brandBrainEnabledForWriting|writingFactsInAreas|declaredPillarKeys|declaredPillarIdeas|writingGoal)\s*\(/;
+
+const sourceOf = (relative: string) => readFileSync(path.join(ROOT, relative), 'utf8');
+
+describe('D-354 — generative Brand Brain knowledge access goes through the grounding layer', () => {
+  const outsideLayer = APPLICATION_SOURCES.map(relativeOf).filter(
+    (file) => !GROUNDING_LAYER.has(file),
+  );
+
+  it('only the named non-generative readers read knowledge or apply the writing rules themselves', () => {
+    const offenders = outsideLayer.filter((file) => {
+      if (NON_GENERATIVE_READERS.has(file)) return false;
+      const source = sourceOf(file);
+      return KNOWLEDGE_READ.test(source) || WRITING_RULE.test(source);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it('only the switch’s own editors read "Use Brand Brain" outside the layer', () => {
+    const offenders = outsideLayer.filter(
+      (file) => !SWITCH_EDITORS.has(file) && THE_SWITCH.test(sourceOf(file)),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('every generative path asks the layer and re-implements none of its rules', () => {
+    for (const file of GENERATIVE_PATHS) {
+      expect(NON_GENERATIVE_READERS.has(file), file).toBe(false);
+      expect(SWITCH_EDITORS.has(file), file).toBe(false);
+      const source = sourceOf(file);
+      expect(ASKS_THE_LAYER.test(source), `${file} asks the grounding layer`).toBe(true);
+      expect(KNOWLEDGE_READ.test(source), `${file} reads knowledge directly`).toBe(false);
+      expect(WRITING_RULE.test(source), `${file} applies a writing rule itself`).toBe(false);
+      expect(THE_SWITCH.test(source), `${file} reads the switch itself`).toBe(false);
+    }
+  });
+
+  it('the allowlists are current: every entry exists, says why, and still needs to be there', () => {
+    for (const [file, reason] of NON_GENERATIVE_READERS) {
+      expect(reason.length, file).toBeGreaterThan(20);
+      const source = sourceOf(file);
+      expect(KNOWLEDGE_READ.test(source) || WRITING_RULE.test(source), file).toBe(true);
+    }
+    for (const [file, reason] of SWITCH_EDITORS) {
+      expect(reason.length, file).toBeGreaterThan(10);
+      expect(THE_SWITCH.test(sourceOf(file)), file).toBe(true);
+    }
+  });
+
+  it('the composer’s goal and pillar ideas, and the Strategy objective’s goal, are read for writing', () => {
+    const composer = sourceOf('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
+    expect(composer).toMatch(/\bwritingGoal\s*\(/);
+    expect(composer).toMatch(/\bdeclaredPillarIdeas\s*\(/);
+    const strategyPage = sourceOf('apps/dashboard/src/app/[locale]/strategy/page.tsx');
+    expect(strategyPage).toMatch(/\bwritingGoal\s*\(/);
+    // The one direct read left on the Strategy page is its display list.
+    expect(strategyPage.match(/brandKnowledgeItem\s*\.\s*\w+\s*\(/g)).toHaveLength(1);
+  });
+
+  it('every reader of the goal reads the same fields as the layer', async () => {
+    const { BRAND_GOAL_SELECT } = await import('@brandspace/brand-brain');
+    const { GOAL_ITEM_SELECT } = await import('../../apps/dashboard/src/server/setup-wizard-state');
+    expect(GOAL_ITEM_SELECT).toEqual(BRAND_GOAL_SELECT);
+  });
+});
