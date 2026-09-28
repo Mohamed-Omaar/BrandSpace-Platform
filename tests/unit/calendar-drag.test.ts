@@ -209,6 +209,8 @@ describe('the engine: only a committed drop calls anything', () => {
     expect(end.slice(0, end.indexOf('// ---- mouse'))).toContain(
       "const outcome = commit ? dropOutcome(target, g.fromDay) : 'cancel';",
     );
+    // At release it looks again under the pointer, in case the page moved under it.
+    expect(engine).toContain('if (commit && gesture?.lifted) move(gesture.x, gesture.y);');
     // Moving and hovering only describe.
     const move = engine.slice(
       engine.indexOf('const move = (x: number'),

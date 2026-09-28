@@ -23,6 +23,16 @@ async function hold(page: Page, ms: number): Promise<void> {
   await page.waitForTimeout(ms);
 }
 
+/** The strip slides up over 300 ms; aim at a day once it has arrived. */
+async function stripSettled(page: Page): Promise<void> {
+  const strip = page.getByTestId('calendar-drop-strip');
+  await expect(strip).toBeVisible();
+  // `fill: both` keeps a finished entrance listed, so ask whether it has finished.
+  await expect
+    .poll(() => strip.evaluate((el) => el.getAnimations().every((a) => a.playState === 'finished')))
+    .toBe(true);
+}
+
 const listChip = (page: Page, slotId: string) =>
   page.getByTestId('calendar-agenda').getByTestId(`calendar-post-${slotId}`);
 
@@ -63,6 +73,7 @@ test.describe('§8.2 · dragging a post with a finger (phone)', () => {
     await expect(days.last()).toHaveAttribute('data-drop-day', utcDay(13));
 
     const target = page.getByTestId(`calendar-strip-${to}`);
+    await stripSettled(page);
     await touch.moveOnto(target);
     await expect(target).toHaveAttribute('data-drop-over', 'ok');
     await expect(page.getByTestId('calendar-drag-label')).toHaveText(`${dayWords(to)} · 12:00`);
@@ -125,6 +136,7 @@ test.describe('§8.2 · dragging a post with a finger (phone)', () => {
     const touch = await finger(page);
     await touch.start(listChip(page, post.slotId));
     await expect(page.getByTestId('calendar-drag-copy')).toBeVisible();
+    await stripSettled(page);
     await touch.moveOnto(page.getByTestId(`calendar-strip-${utcDay(0)}`));
     await touch.end();
 

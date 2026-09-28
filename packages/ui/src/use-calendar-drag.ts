@@ -242,6 +242,10 @@ export function useCalendarDrag(
     };
 
     const end = (commit: boolean) => {
+      // The drop is where the pointer IS at release, not where it last moved:
+      // the page may have moved under a still finger (the phone's strip slides
+      // up beneath it), so look again before deciding.
+      if (commit && gesture?.lifted) move(gesture.x, gesture.y);
       const g = gesture;
       gesture = null;
       if (!g) return;
