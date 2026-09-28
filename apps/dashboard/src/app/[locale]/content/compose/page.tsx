@@ -9,7 +9,7 @@ import {
   readSlides,
 } from '@brandspace/content';
 import { CREATIVE_FORMATS } from '@brandspace/creative';
-import { usableKnowledgeWhere } from '@brandspace/brand-brain';
+import { usableKnowledgeWhere, workspaceKnowledgeAsOf } from '@brandspace/brand-brain';
 import {
   brandIdQueryFilter,
   brandScopeFilter,
@@ -446,7 +446,7 @@ export default async function ComposePage({
         db.brandKnowledgeItem.findMany({
           where: {
             area: 'STRATEGY',
-            ...usableKnowledgeWhere(),
+            ...usableKnowledgeWhere(await workspaceKnowledgeAsOf(db)),
             NOT: { itemKey: { startsWith: 'goal.' } },
             brand: { useBrandBrain: true },
             ...scope,

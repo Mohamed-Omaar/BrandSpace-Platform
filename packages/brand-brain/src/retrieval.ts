@@ -98,9 +98,18 @@ export interface RetrievalOptions {
  *
  * ACTIVE and STALE: STALE means "review due" and is still approved knowledge.
  * Never DRAFT, PROPOSED or ARCHIVED, and never a candidate (another table).
+ * And NOT EXPIRED (D6): a fact with a "valid until" day before `asOf` — today
+ * in the workspace's time zone, from `knowledgeAsOf` — is never used in
+ * writing, whatever its status.
  */
-export function usableKnowledgeWhere(): { status: { in: ('ACTIVE' | 'STALE')[] } } {
-  return { status: { in: ['ACTIVE', 'STALE'] } };
+export function usableKnowledgeWhere(asOf: Date): {
+  status: { in: ('ACTIVE' | 'STALE')[] };
+  OR: ({ validUntil: null } | { validUntil: { gte: Date } })[];
+} {
+  return {
+    status: { in: ['ACTIVE', 'STALE'] },
+    OR: [{ validUntil: null }, { validUntil: { gte: asOf } }],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +208,8 @@ export class BrandBrainRetriever {
     brandId: string;
     question: string;
     options: RetrievalOptions;
+    /** Today in the workspace's time zone (`knowledgeAsOf`): expired facts stay out. */
+    asOf: Date;
   }): Promise<RetrievalContext> {
     const query = indexVector(input.question);
     const questionTokens = new Set(tokenize(input.question));
@@ -206,7 +217,7 @@ export class BrandBrainRetriever {
     const items = await this.#db.brandKnowledgeItem.findMany({
       where: {
         brandId: input.brandId,
-        ...usableKnowledgeWhere(),
+        ...usableKnowledgeWhere(input.asOf),
         ...(input.options.area ? { area: input.options.area } : {}),
       },
       select: {

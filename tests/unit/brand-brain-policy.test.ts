@@ -82,6 +82,10 @@ describe('the configuration document is mapped completely', () => {
         maxContextItems: 13,
         maxContextChars: 1500,
       },
+      // Phase 2C (D4, Q19): the review thresholds and the key questions, from
+      // the same document — the schema defaults here, since this one sets none.
+      review: { highMilli: 850, mediumMilli: 700, confidentAcceptMilli: 850 },
+      questions: document.questions,
       stuckAfterSeconds: 444,
     });
   });

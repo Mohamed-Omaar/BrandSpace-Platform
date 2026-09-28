@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BRAND_BRAIN_QUESTIONS } from './brand-brain-questions';
 import { ABSOLUTE_MAX_PASSWORD_LENGTH, ABSOLUTE_MIN_PASSWORD_LENGTH } from '@brandspace/shared';
 
 /**
@@ -1064,6 +1065,60 @@ const contentStudioSchema = z.object({
  * plan-tunable version of them would make the same badge mean different things
  * to different customers. They live in `packages/brand-brain/src/areas.ts`.
  */
+/*
+ * PHASE 2C (Q19) — ONE KEY QUESTION: a short prompt in both languages and the
+ * `itemKey` of the one fact that answers it. The keys are unique within a list,
+ * so two questions can never be answered by the same fact by accident.
+ */
+const keyQuestion = z.object({
+  key: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+  itemKey: z.string().regex(/^[a-z][a-z0-9_.-]{0,79}$/),
+  prompt: z.object({ en: z.string().min(1).max(160), ar: z.string().min(1).max(160) }),
+});
+
+const keyQuestionList = z
+  .array(keyQuestion)
+  .max(12)
+  .superRefine((list, context) => {
+    const keys = new Set<string>();
+    const items = new Set<string>();
+    for (const question of list) {
+      if (keys.has(question.key) || items.has(question.itemKey)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Question "${question.key}" repeats a key or an answering fact.`,
+        });
+      }
+      keys.add(question.key);
+      items.add(question.itemKey);
+    }
+  });
+
+const KNOWLEDGE_AREAS = [
+  'IDENTITY',
+  'AUDIENCE',
+  'TONE_OF_VOICE',
+  'OFFERS',
+  'PROOF_POINTS',
+  'DO_DONT',
+  'COMPETITORS',
+  'GLOSSARY',
+  'STRATEGY',
+  'LEARNINGS',
+] as const;
+
+/** One question list per area, each defaulting to what `BRAND_BRAIN_QUESTIONS` holds. */
+function keyQuestionAreas() {
+  return Object.fromEntries(
+    KNOWLEDGE_AREAS.map((area) => [
+      area,
+      keyQuestionList.default(
+        (BRAND_BRAIN_QUESTIONS.areas[area] ?? []) as z.infer<typeof keyQuestionList>,
+      ),
+    ]),
+  ) as Record<(typeof KNOWLEDGE_AREAS)[number], z.ZodDefault<typeof keyQuestionList>>;
+}
+
 const brandBrainSchema = z.object({
   upload: z
     .object({
@@ -1195,6 +1250,47 @@ const brandBrainSchema = z.object({
       maxContextChunks: z.number().int().min(0).max(100).default(8),
       /** Total characters of grounding text. A context window is finite. */
       maxContextChars: z.number().int().min(500).default(12_000),
+    })
+    .default({}),
+
+  /*
+   * PHASE 2C (prototype v90 D4, C1) — THE REVIEW INBOX.
+   *
+   * A candidate's confidence reads High at or above `highMilli`, Medium at or
+   * above `mediumMilli`, Low below it (the owner's D4 thresholds: 85 / 70).
+   * "Accept the confident ones" offers candidates at or above
+   * `confidentAcceptMilli` — never a conflict, always previewed and confirmed,
+   * and always through the one review path.
+   */
+  review: z
+    .object({
+      highMilli: z.number().int().min(0).max(1000).default(850),
+      mediumMilli: z.number().int().min(0).max(1000).default(700),
+      confidentAcceptMilli: z.number().int().min(0).max(1000).default(850),
+    })
+    .refine((value) => value.mediumMilli <= value.highMilli, {
+      message: 'Medium confidence cannot start above High.',
+    })
+    .default({}),
+
+  /*
+   * PHASE 2C (Q19, prototype v90 D3) — KEY QUESTIONS PER AREA.
+   *
+   * Completeness is "answered n of m" per area: no percentage, no overall
+   * score. Each question names the `itemKey` of the one fact that answers it,
+   * so answering is a lookup, never a guess. Offers questions depend on the
+   * brand's industry: an industry names its set in `onboarding.industries`
+   * (`offersQuestionSet`, D-329), and that set replaces the general Offers
+   * list for that brand. An empty list asks nothing.
+   */
+  questions: z
+    .object({
+      areas: z.object(keyQuestionAreas()).default({}),
+      offersSets: z
+        .record(z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/), keyQuestionList)
+        .default(
+          BRAND_BRAIN_QUESTIONS.offersSets as Record<string, z.infer<typeof keyQuestionList>>,
+        ),
     })
     .default({}),
 });

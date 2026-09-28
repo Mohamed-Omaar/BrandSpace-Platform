@@ -430,6 +430,10 @@ export class BrandIngestionService {
               chunkId: chunkIdByIndex.get(e.chunkIndex) ?? null,
               locator: e.locator,
               quote: e.quote,
+              // D4 (Phase 2C): why the confidence is what it is, for the inbox.
+              ...(e.method ? { method: e.method } : {}),
+              ...(e.keywordHits !== undefined ? { keywordHits: e.keywordHits } : {}),
+              ...(e.aimedArea !== undefined ? { aimedArea: e.aimedArea } : {}),
             })) as Prisma.InputJsonValue,
           },
         });

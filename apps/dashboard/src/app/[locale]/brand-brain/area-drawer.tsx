@@ -189,8 +189,10 @@ export function AreaDrawer({
           {/* The VALUE is translated on the server; this is its caption. */}
           <Field label={t('bb.fieldStatus')} value={area.statusLabel} testId="drawer-status" />
           <Field
-            label={t('bb.knowledgeItems')}
-            value={`${area.activeItems} / ${area.requiredItems}`}
+            label={t('bb.questionsAnswered')}
+            value={t('bb.answeredOf')
+              .replace('{answered}', String(area.answered))
+              .replace('{total}', String(area.total))}
             testId="drawer-count"
           />
           {area.pendingCandidates > 0 ? (

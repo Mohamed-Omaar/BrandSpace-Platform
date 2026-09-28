@@ -5,8 +5,10 @@ import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import {
+  acceptConfidentSchema,
   checksumOf,
   createKnowledgeItemSchema,
+  parseValidUntil,
   rollbackSchema,
   updateKnowledgeItemSchema,
   type LocalizedText,
@@ -108,6 +110,11 @@ function localized(formData: FormData, prefix: string): LocalizedText {
   };
 }
 
+/** D6 — the "valid until" field, only when the form carries it. */
+function validUntilField(formData: FormData): { validUntil?: string } {
+  return formData.has('validUntil') ? { validUntil: String(formData.get('validUntil') ?? '') } : {};
+}
+
 export async function createBrandAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
@@ -149,6 +156,7 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
       itemKey: String(formData.get('itemKey') ?? ''),
       title: localized(formData, 'title'),
       body: localized(formData, 'body'),
+      ...validUntilField(formData),
     });
 
     await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
@@ -160,6 +168,8 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
         body: parsed.body,
         actor: knowledgeActor(session),
         policy: (await policy()).staleness,
+        // D6 — a workspace-local calendar day, or none.
+        validUntil: parseValidUntil(parsed.validUntil),
       });
     });
     destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area });
@@ -183,6 +193,7 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
       ...(formData.get('changeReason')
         ? { changeReason: String(formData.get('changeReason')) }
         : {}),
+      ...validUntilField(formData),
     });
 
     await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
@@ -193,6 +204,10 @@ export async function updateKnowledgeAction(formData: FormData): Promise<void> {
         changeReason: parsed.changeReason,
         actor: knowledgeActor(session),
         policy: (await policy()).staleness,
+        // D6 — only a form that carries the field changes it; empty clears it.
+        ...(parsed.validUntil !== undefined
+          ? { validUntil: parseValidUntil(parsed.validUntil) }
+          : {}),
       });
     });
     destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area });
@@ -313,6 +328,48 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
  * production the fallback is refused outright — see `mayProcessInline` — so the
  * old behaviour cannot return by accident or by a missing environment variable.
  */
+/**
+ * D4 + C1 — "ACCEPT THE CONFIDENT ONES", after the person saw the preview and
+ * confirmed. `brand_brain.review`, like every accept. The ids they confirmed go
+ * through `reviewCandidates` — the one bulk path, one transaction, every
+ * candidate through `reviewCandidate` — which re-checks each against the
+ * CONFIGURED threshold (never a number from the form) and skips conflicts and
+ * anything decided since the preview.
+ */
+export async function acceptConfidentCandidatesAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.review');
+    const parsed = acceptConfidentSchema.parse({
+      brandId: String(formData.get('brandId') ?? ''),
+      candidateIds: formData.getAll('candidateId').map(String),
+    });
+    const outcome = await inBrandBrain(
+      session.workspace.workspaceId,
+      async ({ knowledge, policy }) => {
+        const resolved = await policy();
+        return knowledge.reviewCandidates({
+          brandId: parsed.brandId,
+          candidateIds: parsed.candidateIds,
+          minimumConfidenceMilli: resolved.review.confidentAcceptMilli,
+          actor: knowledgeActor(session),
+          policy: resolved.staleness,
+        });
+      },
+    );
+    destination = pageUrl(locale, {
+      ok: 'CANDIDATES_ACCEPTED',
+      accepted: String(outcome.accepted.length),
+      skipped: String(outcome.skipped.length),
+    });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'accept-confident');
+  }
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}
+
 export async function uploadSourceAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   const area = String(formData.get('area') ?? '');

@@ -1,16 +1,13 @@
 import 'server-only';
 import { notFound } from 'next/navigation';
 import {
-  AREA_DEFINITIONS,
   BrandIngestionService,
   BrandKnowledgeService,
   ExtractorRegistry,
   TenantBrandBrainPolicySource,
-  computeBrandCompletion,
   createObjectStore,
   defaultExtractors,
   localizedFrom,
-  type AreaCompletion,
   type BrandBrainPolicy,
   type CatalogueReader,
   type ObjectStore,
@@ -179,23 +176,5 @@ export async function requireBrand(
 export { assertBrandInScope, brandScopeFilter };
 
 /** Area presentation, joined to computed completion. */
-export interface AreaView extends AreaCompletion {
-  readonly messageKey: string;
-}
-
-export function areaViews(completion: readonly AreaCompletion[]): AreaView[] {
-  const byArea = new Map(completion.map((c) => [c.area, c]));
-  return AREA_DEFINITIONS.map((definition) => {
-    const computed = byArea.get(definition.area);
-    // `computeBrandCompletion` always returns every area, so this is a
-    // belt-and-braces default rather than an expected branch.
-    return {
-      ...(computed ?? computeBrandCompletion([]).areas[0]!),
-      area: definition.area,
-      messageKey: definition.messageKey,
-    };
-  });
-}
-
 export { localizedFrom };
 export type { BrandKnowledgeArea };

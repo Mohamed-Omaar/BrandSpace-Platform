@@ -7,8 +7,11 @@ import {
   areaDefinition,
   localizedFrom,
   memoryRank,
+  questionsForBrand,
+  workspaceKnowledgeAsOf,
 } from '@brandspace/brand-brain';
-import { requireWorkspacePage } from '../../../server/customer-context';
+import { TenantOnboardingPolicySource, offersQuestionSetFor } from '@brandspace/onboarding';
+import { currentEnvironment, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { analyticsEvidence, conflictNote } from '../../../server/learning-review';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
@@ -188,14 +191,33 @@ export default async function BrandBrainPage({
   const { policy, completion, items, candidates, sources, sourceCount } = await inBrandBrain(
     workspace.workspaceId,
     async ({ knowledge, db, policy }) => {
-      const computed = await knowledge.completion(brand.id);
+      /*
+       * Q19 — COMPLETENESS IS KEY QUESTIONS PER AREA, answered by usable facts
+       * (approved, not expired). The questions are configuration; Offers takes
+       * the set the brand's industry names (D-329). "Today" is the workspace's
+       * own calendar day (D6).
+       */
+      const resolved = await policy();
+      const [asOf, onboarding, brandRow] = await Promise.all([
+        workspaceKnowledgeAsOf(db),
+        new TenantOnboardingPolicySource(db, currentEnvironment()).load(),
+        db.brand.findFirst({ where: { id: brand.id }, select: { industry: true } }),
+      ]);
+      const computed = await knowledge.completion(
+        brand.id,
+        questionsForBrand(
+          resolved.questions,
+          offersQuestionSetFor(brandRow?.industry ?? null, onboarding.industries),
+        ),
+        asOf,
+      );
       return {
         /*
          * READ, NOT WRITTEN DOWN HERE. The retention window the chat notice
          * states is whatever an owner activated — see brand-brain-context.ts
          * for how it crosses the platform/tenant boundary (CLAUDE.md §2.2).
          */
-        policy: await policy(),
+        policy: resolved,
         completion: computed,
         items: await db.brandKnowledgeItem.findMany({
           where: { brandId: brand.id, status: { in: ['ACTIVE', 'STALE'] } },
@@ -342,10 +364,10 @@ export default async function BrandBrainPage({
       description: t(`bb.area.${definition.messageKey}.desc` as MessageKey),
       status: area.status,
       statusLabel: t(`bb.status.${area.status}` as MessageKey),
-      activeItems: area.activeItems,
-      requiredItems: area.requiredItems,
+      activeItems: area.usableItems,
+      answered: area.answered,
+      total: area.total,
       pendingCandidates: area.pendingCandidates,
-      ratioMilli: area.ratioMilli,
       attention: area.attention.map((reason) => t(`bb.attention.${reason}` as MessageKey)),
       items: (itemsByArea.get(area.area) ?? []).map((item) => ({
         id: item.id,
@@ -503,10 +525,10 @@ export default async function BrandBrainPage({
   const areasWithKnowledge = areaCards.filter((area) => area.activeItems > 0).length;
   const readySourceCount = sources.filter((source) => source.status === 'READY').length;
   const understanding =
-    completion.totalActiveItems === 0
+    completion.totalUsableItems === 0
       ? t('bb.understands.none')
       : t('bb.understands.some')
-          .replace('{facts}', reviewNumber.format(completion.totalActiveItems))
+          .replace('{facts}', reviewNumber.format(completion.totalUsableItems))
           .replace('{areas}', reviewNumber.format(areasWithKnowledge))
           .replace('{total}', reviewNumber.format(areaCards.length))
           .replace('{sources}', reviewNumber.format(readySourceCount));
@@ -541,8 +563,9 @@ export default async function BrandBrainPage({
         gaps={gaps}
         copilotHref={can('copilot.use') ? copilotHref(locale, 'brand_brain') : null}
         profileHref={can('brand.read') ? `/${locale}/settings/brand?brand=${brand.id}` : null}
-        completionPercent={completion.percent}
-        totalActiveItems={completion.totalActiveItems}
+        answered={completion.areas.reduce((sum, area) => sum + area.answered, 0)}
+        totalQuestions={completion.areas.reduce((sum, area) => sum + area.total, 0)}
+        totalActiveItems={completion.totalUsableItems}
         sourceCount={sourceCount}
         orbNodes={orbNodes}
         areas={areaCards}

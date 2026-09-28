@@ -7,7 +7,7 @@ import {
   type AssetPolicy,
 } from '@brandspace/assets';
 import { CreativeStudioService, brandTypography, findCreativeFormat } from '@brandspace/creative';
-import { usableKnowledgeWhere } from '@brandspace/brand-brain';
+import { usableKnowledgeWhere, workspaceKnowledgeAsOf } from '@brandspace/brand-brain';
 import { createObjectStore, type ObjectStore } from '@brandspace/storage';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import type { PrismaClient } from '@brandspace/database';
@@ -245,7 +245,7 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
               ? await db.brandKnowledgeItem.findMany({
                   where: {
                     brandId: brand.id,
-                    ...usableKnowledgeWhere(),
+                    ...usableKnowledgeWhere(await workspaceKnowledgeAsOf(db)),
                     area: { in: ['IDENTITY', 'TONE_OF_VOICE'] },
                   },
                   orderBy: [{ area: 'asc' }, { itemKey: 'asc' }],

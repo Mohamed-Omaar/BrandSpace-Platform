@@ -58,12 +58,23 @@ export const itemKeySchema = z
     'An item key is lowercase alphanumeric segments separated by . _ or -',
   );
 
+/**
+ * D6 (Phase 2C) — "valid until" as the form sends it: `YYYY-MM-DD`, or empty for
+ * "no end date". It is a WORKSPACE-LOCAL calendar day; `parseValidUntil` turns
+ * it into the `DATE` value, and refuses a day that does not exist.
+ */
+export const validUntilInputSchema = z.union([
+  z.literal(''),
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'A date must be YYYY-MM-DD.'),
+]);
+
 export const createKnowledgeItemSchema = z.object({
   brandId: z.string().uuid(),
   area: areaSchema,
   itemKey: itemKeySchema,
   title: localizedTextSchema(MAX_TITLE_CHARS),
   body: localizedTextSchema(MAX_BODY_CHARS),
+  validUntil: validUntilInputSchema.optional(),
 });
 
 export const updateKnowledgeItemSchema = z.object({
@@ -71,6 +82,14 @@ export const updateKnowledgeItemSchema = z.object({
   title: localizedTextSchema(MAX_TITLE_CHARS),
   body: localizedTextSchema(MAX_BODY_CHARS),
   changeReason: trimmed(MAX_REASON_CHARS).optional(),
+  /** Absent leaves the end date as it is; empty clears it. */
+  validUntil: validUntilInputSchema.optional(),
+});
+
+/** D4 — "Accept the confident ones": the candidates the person saw and confirmed. */
+export const acceptConfidentSchema = z.object({
+  brandId: z.string().uuid(),
+  candidateIds: z.array(z.string().uuid()).min(1).max(100),
 });
 
 export const reviewCandidateSchema = z

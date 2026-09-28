@@ -593,13 +593,17 @@ export class CopilotOrchestrator {
   ): Promise<string | null> {
     // Switched off: not even read (Phase 2C D9).
     if (!brandId || !brandBrain) return null;
-    const grounding = await groundingFor(this.#db, {
-      brandId,
-      question,
-      purpose: 'writing',
-      maxItems: 10,
-      maxChars: Math.floor(this.#policy.conversation.maxContextChars / 2),
-    });
+    const grounding = await groundingFor(
+      this.#db,
+      {
+        brandId,
+        question,
+        purpose: 'writing',
+        maxItems: 10,
+        maxChars: Math.floor(this.#policy.conversation.maxContextChars / 2),
+      },
+      this.#clock,
+    );
     if (!grounding.enabled || grounding.items.length === 0) return null;
     return fenceUntrusted('BRAND BRAIN CONTEXT', grounding.contextText);
   }

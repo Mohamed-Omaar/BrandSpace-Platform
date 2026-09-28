@@ -9,6 +9,7 @@ import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway
 import {
   groundingFor,
   usableKnowledgeWhere,
+  workspaceKnowledgeAsOf,
   type Grounding as BrandBrainGrounding,
 } from '@brandspace/brand-brain';
 import {
@@ -33,6 +34,7 @@ import {
   assertBrandInScope,
   brandIdQueryFilter,
   fenceUntrusted,
+  systemClock,
   type Clock,
 } from '@brandspace/shared';
 import { generationFailed, insufficientGrounding, strategyNotFound } from './errors';
@@ -151,6 +153,8 @@ export class StrategyService {
   readonly #gateway: AiGateway;
   readonly #minimumKnowledgeItems: number;
   readonly #denialSink: InsightDenialSink | undefined;
+  /** Whose "today" decides which facts have expired (D6). */
+  readonly #clock: Clock;
 
   constructor(options: StrategyServiceOptions) {
     this.#db = options.db;
@@ -160,6 +164,7 @@ export class StrategyService {
     this.#gateway = options.gateway;
     this.#minimumKnowledgeItems = options.minimumKnowledgeItems ?? DEFAULT_MINIMUM_KNOWLEDGE_ITEMS;
     this.#denialSink = options.denialSink;
+    this.#clock = options.clock ?? systemClock;
   }
 
   /** Record a rejection where it survives the throw. Its own failure is swallowed. */
@@ -594,13 +599,17 @@ export class StrategyService {
   }): Promise<Grounding> {
     // Approved facts only, never a document's raw text, and nothing at all
     // when the brand switched Brand Brain off (Phase 2C, Q20 / D9).
-    const retrieval: BrandBrainGrounding = await groundingFor(this.#db, {
-      brandId: input.brandId,
-      question: input.objective,
-      purpose: 'writing',
-      maxItems: 16,
-      maxChars: 12_000,
-    });
+    const retrieval: BrandBrainGrounding = await groundingFor(
+      this.#db,
+      {
+        brandId: input.brandId,
+        question: input.objective,
+        purpose: 'writing',
+        maxItems: 16,
+        maxChars: 12_000,
+      },
+      this.#clock,
+    );
 
     const scope = { brandId: input.brandId };
     const summary = await this.#queries.summary({
@@ -745,8 +754,8 @@ export class StrategyService {
             workspaceId: this.#workspaceId,
             brandId,
             area: 'STRATEGY',
-            // The same "usable fact" rule every writing path grounds on (Q20).
-            ...usableKnowledgeWhere(),
+            // The same "usable fact" rule every writing path grounds on (Q20, D6).
+            ...usableKnowledgeWhere(await workspaceKnowledgeAsOf(this.#db, this.#clock)),
             NOT: { itemKey: { startsWith: 'goal.' } },
           },
           select: { itemKey: true },

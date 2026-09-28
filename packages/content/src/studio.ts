@@ -604,13 +604,17 @@ export class ContentStudioService extends ContentLibraryService {
    * text, and nothing at all when the brand switched Brand Brain off.
    */
   #ground(brandId: string, text: string): Promise<Grounding> {
-    return groundingFor(this.db, {
-      brandId,
-      question: text,
-      purpose: 'writing',
-      maxItems: this.policy.generation.maxContextItems,
-      maxChars: this.policy.generation.maxContextChars,
-    });
+    return groundingFor(
+      this.db,
+      {
+        brandId,
+        question: text,
+        purpose: 'writing',
+        maxItems: this.policy.generation.maxContextItems,
+        maxChars: this.policy.generation.maxContextChars,
+      },
+      this.#clock,
+    );
   }
 
   /**

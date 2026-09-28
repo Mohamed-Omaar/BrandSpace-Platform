@@ -237,13 +237,17 @@ const brandContext: ToolExecutor = async (context, args) => {
    * line, read live at execution, so a plan made before the switch changed
    * reads nothing either. Approved facts only — never a document chunk.
    */
-  const retrieval = await groundingFor(context.db, {
-    brandId: String(args['brandId']),
-    question: String(args['question']),
-    purpose: 'writing',
-    maxItems: 10,
-    maxChars: 6_000,
-  });
+  const retrieval = await groundingFor(
+    context.db,
+    {
+      brandId: String(args['brandId']),
+      question: String(args['question']),
+      purpose: 'writing',
+      maxItems: 10,
+      maxChars: 6_000,
+    },
+    context.clock,
+  );
   /*
    * CITATIONS AND COUNTS, NOT THE KNOWLEDGE ITSELF.
    *

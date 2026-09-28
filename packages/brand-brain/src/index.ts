@@ -27,13 +27,16 @@ export {
 } from './precedence';
 export type { OverwriteDecision, PrecedenceSubject } from './precedence';
 
-export { computeAreaCompletion, computeBrandCompletion } from './completion';
+export { computeAreaCompletion, computeBrandCompletion, questionsForBrand } from './completion';
 export type {
   AreaCompletion,
   AreaCounts,
+  AreaQuestions,
   AreaStatus,
   AttentionReason,
   BrandCompletion,
+  KeyQuestion,
+  MissingQuestion,
 } from './completion';
 
 export {
@@ -41,6 +44,7 @@ export {
   MAX_CHAT_MESSAGE_CHARS,
   MAX_REASON_CHARS,
   MAX_TITLE_CHARS,
+  acceptConfidentSchema,
   areaSchema,
   chatMessageSchema,
   createKnowledgeItemSchema,
@@ -50,6 +54,7 @@ export {
   reviewCandidateSchema,
   rollbackSchema,
   updateKnowledgeItemSchema,
+  validUntilInputSchema,
 } from './schemas';
 export type {
   ChatMessageInput,
@@ -76,7 +81,13 @@ export {
 } from './errors';
 
 export { BrandKnowledgeService, localizedFrom } from './knowledge';
-export type { KnowledgeActor, KnowledgeServiceOptions, StalenessPolicy } from './knowledge';
+export type {
+  BrandKnowledgeCandidateSummary,
+  BulkSkipReason,
+  KnowledgeActor,
+  KnowledgeServiceOptions,
+  StalenessPolicy,
+} from './knowledge';
 
 export {
   FilesystemObjectStore,
@@ -139,6 +150,16 @@ export type {
 } from './retrieval';
 
 export { brandBrainEnabledForWriting, groundingFor } from './grounding';
+export {
+  calendarDate,
+  isExpired,
+  isoDateOf,
+  knowledgeAsOf,
+  knowledgeAsOfSafe,
+  localDateIn,
+  parseValidUntil,
+  workspaceKnowledgeAsOf,
+} from './validity';
 export type { Grounding, GroundingPurpose, GroundingRequest } from './grounding';
 
 export { purgeExpiredChatContent } from './chat';
@@ -151,4 +172,7 @@ export {
   brandBrainPolicyFrom,
   resolveBrandBrainPolicy,
 } from './policy';
-export type { BrandBrainPolicy, CatalogueReader } from './policy';
+export type { BrandBrainPolicy, CatalogueReader, QuestionsPolicy, ReviewPolicy } from './policy';
+
+export { confidenceExplanation, confidenceLabel } from './review';
+export type { ConfidenceExplanation, ConfidenceLabel, ConfidenceReason } from './review';

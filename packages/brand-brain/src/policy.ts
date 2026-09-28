@@ -4,7 +4,9 @@ import {
   type ConfigurationService,
   type Environment,
 } from '@brandspace/config';
+import type { BrandKnowledgeArea } from '@brandspace/database';
 import type { ChatPolicy } from './chat';
+import type { KeyQuestion } from './completion';
 import type { ExtractionLimits } from './extraction';
 import type { IngestionPolicy } from './ingestion';
 import type { StalenessPolicy } from './knowledge';
@@ -37,11 +39,26 @@ import type { StalenessPolicy } from './knowledge';
 
 export const BRAND_BRAIN_CONFIG_DOMAIN = 'brand-brain';
 
+/** Phase 2C (D4) — the review inbox's confidence labels and bulk threshold. */
+export interface ReviewPolicy {
+  readonly highMilli: number;
+  readonly mediumMilli: number;
+  readonly confidentAcceptMilli: number;
+}
+
+/** Phase 2C (Q19) — the configured key questions, before a brand's industry picks its Offers set. */
+export interface QuestionsPolicy {
+  readonly areas: Readonly<Partial<Record<BrandKnowledgeArea, readonly KeyQuestion[]>>>;
+  readonly offersSets: Readonly<Record<string, readonly KeyQuestion[]>>;
+}
+
 export interface BrandBrainPolicy {
   readonly ingestion: IngestionPolicy;
   readonly extraction: ExtractionLimits;
   readonly staleness: StalenessPolicy;
   readonly chat: ChatPolicy;
+  readonly review: ReviewPolicy;
+  readonly questions: QuestionsPolicy;
   /** An ingestion job older than this is stuck, and the sweep reconciles it. */
   readonly stuckAfterSeconds: number;
 }
@@ -81,6 +98,12 @@ export function brandBrainPolicyFrom(document: BrandBrainConfig): BrandBrainPoli
       // raw document chunks never reach an answer.
       maxContextChars: document.chat.maxContextChars,
     },
+    review: {
+      highMilli: document.review.highMilli,
+      mediumMilli: document.review.mediumMilli,
+      confidentAcceptMilli: document.review.confidentAcceptMilli,
+    },
+    questions: { areas: document.questions.areas, offersSets: document.questions.offersSets },
     stuckAfterSeconds: document.ingestion.stuckAfterSeconds,
   };
 }

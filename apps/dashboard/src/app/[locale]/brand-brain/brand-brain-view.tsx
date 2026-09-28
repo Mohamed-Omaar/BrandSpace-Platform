@@ -82,9 +82,10 @@ export interface AreaCardData {
   readonly status: 'COMPLETE' | 'NEEDS_ATTENTION' | 'IN_PROGRESS' | 'EMPTY';
   readonly statusLabel: string;
   readonly activeItems: number;
-  readonly requiredItems: number;
+  /** Q19 — "answered n of m": the area's key questions with a usable answer. */
+  readonly answered: number;
+  readonly total: number;
   readonly pendingCandidates: number;
-  readonly ratioMilli: number;
   readonly attention: readonly string[];
   readonly items: readonly AreaItemData[];
 }
@@ -163,7 +164,8 @@ export function BrandBrainView({
   gaps,
   copilotHref,
   profileHref,
-  completionPercent,
+  answered,
+  totalQuestions,
   totalActiveItems,
   sourceCount,
   orbNodes,
@@ -185,7 +187,9 @@ export function BrandBrainView({
   copilotHref: string | null;
   /** D-298 (§11) — the brand's identity, one click from its knowledge; null without `brand.read`. */
   profileHref: string | null;
-  completionPercent: number;
+  /** Q19 — key questions answered across every area, and how many there are. No score. */
+  answered: number;
+  totalQuestions: number;
   totalActiveItems: number;
   sourceCount: number;
   orbNodes: readonly OrbNode[];
@@ -333,27 +337,26 @@ export function BrandBrainView({
           data-chat-open={chatOpen ? 'true' : 'false'}
         >
           <div className="bb-stats-view" data-testid="stats-view">
+            {/*
+              Q19 (D-357) — KEY QUESTIONS, ANSWERED n OF m. No percentage, no
+              progress bar and no overall score: the demo's 82% card keeps its
+              place and its type, and now counts questions a fact answers.
+            */}
             <div className="bb-completion" data-testid="completion-card">
               <small>{t('bb.completion')}</small>
               <div className="bb-completion-big">
-                <b data-testid="completion-percent">{completionPercent}%</b>
+                <b data-testid="completion-answered">
+                  {t('bb.answeredOf')
+                    .replace('{answered}', String(answered))
+                    .replace('{total}', String(totalQuestions))}
+                </b>
                 <span>
-                  {completionPercent >= 70
+                  {totalQuestions > 0 && answered === totalQuestions
                     ? t('bb.completionStrong')
-                    : completionPercent > 0
+                    : answered > 0
                       ? t('bb.completionBuilding')
                       : t('bb.completionEmpty')}
                 </span>
-              </div>
-              <div
-                className="bb-progress"
-                role="progressbar"
-                aria-valuenow={completionPercent}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={t('bb.completion')}
-              >
-                <i style={{ width: `${completionPercent}%` }} />
               </div>
             </div>
 

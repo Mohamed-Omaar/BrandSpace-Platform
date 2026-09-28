@@ -80,7 +80,7 @@ describe('Q14 / Q20 — raw document chunks never reach a generative path', () =
     const calls: string[] = [];
     const db = {
       brand: {
-        findFirst: async () => ({ useBrandBrain: true }),
+        findFirst: async () => ({ useBrandBrain: true, workspace: { timezone: 'UTC' } }),
       },
       brandKnowledgeItem: {
         findMany: async (args: { where: Record<string, unknown> }) => {
@@ -100,18 +100,25 @@ describe('Q14 / Q20 — raw document chunks never reach a generative path', () =
       maxChunks: 8,
     });
     expect(grounding.enabled).toBe(true);
-    expect(calls).toEqual([JSON.stringify({ brandId: 'brand', ...usableKnowledgeWhere() })]);
+    expect(calls).toHaveLength(1);
+    const where = JSON.parse(calls[0]!) as Record<string, unknown>;
+    expect(where['brandId']).toBe('brand');
+    expect(where['status']).toEqual(usableKnowledgeWhere(new Date()).status);
+    // D6: the expiry half is always there.
+    expect(where['OR']).toHaveLength(2);
     expect(Object.keys(grounding)).not.toContain('chunks');
   });
 
   it('only ACTIVE and STALE facts are usable', () => {
-    expect(usableKnowledgeWhere()).toEqual({ status: { in: ['ACTIVE', 'STALE'] } });
+    expect(usableKnowledgeWhere(new Date()).status).toEqual({ in: ['ACTIVE', 'STALE'] });
   });
 });
 
 describe('D9 — "Use Brand Brain" off', () => {
   const brandBrainOff = {
-    brand: { findFirst: async () => ({ useBrandBrain: false }) },
+    brand: {
+      findFirst: async () => ({ useBrandBrain: false, workspace: { timezone: 'UTC' } }),
+    },
     brandKnowledgeItem: {
       findMany: async () => {
         throw new Error('the knowledge table must not be read while the switch is off');
@@ -134,7 +141,9 @@ describe('D9 — "Use Brand Brain" off', () => {
     let read = false;
     await groundingFor(
       {
-        brand: { findFirst: async () => ({ useBrandBrain: false }) },
+        brand: {
+          findFirst: async () => ({ useBrandBrain: false, workspace: { timezone: 'UTC' } }),
+        },
         brandKnowledgeItem: {
           findMany: async () => {
             read = true;
