@@ -6,8 +6,14 @@ import {
   type AssetActor,
   type AssetPolicy,
 } from '@brandspace/assets';
-import { CreativeStudioService, brandTypography, findCreativeFormat } from '@brandspace/creative';
-import { usableKnowledgeWhere, workspaceKnowledgeAsOf } from '@brandspace/brand-brain';
+import {
+  CREATIVE_KNOWLEDGE_AREAS,
+  CREATIVE_KNOWLEDGE_LINES,
+  CreativeStudioService,
+  brandTypography,
+  findCreativeFormat,
+} from '@brandspace/creative';
+import { writingFactsInAreas } from '@brandspace/brand-brain';
 import { createObjectStore, type ObjectStore } from '@brandspace/storage';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import type { PrismaClient } from '@brandspace/database';
@@ -225,7 +231,6 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
                 description: true,
                 colorPalette: true,
                 typography: true,
-                useBrandBrain: true,
               },
             });
             if (!brand) return null;
@@ -236,23 +241,17 @@ export function registerCreativeRoutes(app: FastifyInstance): void {
              * a place to pour a knowledge base, and every line here is one the
              * brand's own people wrote or accepted.
              *
-             * PHASE 2C (Q20, D9): the same "usable fact" rule every writing path
-             * grounds on — STALE is approved knowledge too — and nothing at all
-             * when the brand switched "Use Brand Brain" off. The studio fences
-             * the lines before they reach the prompt.
+             * PHASE 2C (Q20, D9; D-354): read through the ONE grounding layer,
+             * which applies the usable-fact rule (STALE is approved knowledge
+             * too; expired is not), the workspace's day, and the brand's "Use
+             * Brand Brain" switch — nothing at all when it is off. The studio
+             * fences the lines before they reach the prompt.
              */
-            const knowledge = brand.useBrandBrain
-              ? await db.brandKnowledgeItem.findMany({
-                  where: {
-                    brandId: brand.id,
-                    ...usableKnowledgeWhere(await workspaceKnowledgeAsOf(db)),
-                    area: { in: ['IDENTITY', 'TONE_OF_VOICE'] },
-                  },
-                  orderBy: [{ area: 'asc' }, { itemKey: 'asc' }],
-                  take: 6,
-                  select: { body: true },
-                })
-              : [];
+            const knowledge = await writingFactsInAreas(db, {
+              brandId: brand.id,
+              areas: CREATIVE_KNOWLEDGE_AREAS,
+              maxItems: CREATIVE_KNOWLEDGE_LINES,
+            });
 
             const permissionKeys = [CREATE_PERMISSION, READ_PERMISSION];
             const uploads = new AssetUploadService({

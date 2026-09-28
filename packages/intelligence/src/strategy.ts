@@ -7,9 +7,8 @@ import {
 } from '@brandspace/database';
 import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway';
 import {
+  declaredPillarKeys,
   groundingFor,
-  usableKnowledgeWhere,
-  workspaceKnowledgeAsOf,
   type Grounding as BrandBrainGrounding,
 } from '@brandspace/brand-brain';
 import {
@@ -646,12 +645,7 @@ export class StrategyService {
       brandScope: input.actorBrandScope,
     });
 
-    const absences = await this.#absences(
-      input.brandId,
-      input.period,
-      input.actorBrandScope,
-      retrieval.enabled,
-    );
+    const absences = await this.#absences(input.brandId, input.period, input.actorBrandScope);
 
     const evidence: EvidencePackage = buildEvidencePackage({
       period: input.period,
@@ -715,8 +709,6 @@ export class StrategyService {
     brandId: string,
     period: AnalyticsPeriod,
     brandScope: readonly string[],
-    /** The brand's "Use Brand Brain" switch: off, its declared pillars are not read. */
-    brandBrain: boolean,
   ): Promise<readonly { labelKey: string; note: string }[]> {
     const out: { labelKey: string; note: string }[] = [];
 
@@ -744,29 +736,17 @@ export class StrategyService {
       publishedInWindow.flatMap((item) => (item.pillar ? [item.pillar] : [])),
     );
 
-    // The pillars the brand DECLARED, read from its own approved knowledge.
-    // A `goal.` key is the brand's GOAL (the Setup Wizard's first goal, D-277
-    // §6), which shares the STRATEGY area but is not a content pillar: no post
-    // is ever tagged with it, so counting it would report a permanent gap.
-    const declared = brandBrain
-      ? await this.#db.brandKnowledgeItem.findMany({
-          where: {
-            workspaceId: this.#workspaceId,
-            brandId,
-            area: 'STRATEGY',
-            // The same "usable fact" rule every writing path grounds on (Q20, D6).
-            ...usableKnowledgeWhere(await workspaceKnowledgeAsOf(this.#db, this.#clock)),
-            NOT: { itemKey: { startsWith: 'goal.' } },
-          },
-          select: { itemKey: true },
-          take: 20,
-        })
-      : [];
-    for (const item of declared) {
-      if (publishedPillars.has(item.itemKey)) continue;
+    // The pillars the brand DECLARED, read through the Brand Brain grounding
+    // layer (D-354), which applies the usable-fact rule, the workspace's day and
+    // the brand's "Use Brand Brain" switch — off, no pillar is read. Goals
+    // (`goal.` keys, D-277 §6) share the STRATEGY area but are not pillars: no
+    // post is ever tagged with one, so counting it would report a permanent gap.
+    const declared = await declaredPillarKeys(this.#db, { brandId, maxItems: 20 }, this.#clock);
+    for (const itemKey of declared) {
+      if (publishedPillars.has(itemKey)) continue;
       out.push({
         labelKey: 'content.pillar_unpublished',
-        note: `no post in this period used the declared pillar "${item.itemKey}"`,
+        note: `no post in this period used the declared pillar "${itemKey}"`,
       });
     }
 

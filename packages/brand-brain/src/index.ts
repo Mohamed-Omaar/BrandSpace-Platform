@@ -149,7 +149,16 @@ export type {
   RetrievedItem,
 } from './retrieval';
 
-export { brandBrainEnabledForWriting, groundingFor } from './grounding';
+export {
+  BRAND_GOAL_SELECT,
+  GOAL_KEY_PREFIX,
+  brandBrainEnabledForWriting,
+  declaredPillarIdeas,
+  declaredPillarKeys,
+  groundingFor,
+  writingFactsInAreas,
+  writingGoal,
+} from './grounding';
 export {
   calendarDate,
   isExpired,

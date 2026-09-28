@@ -1,12 +1,15 @@
 import type { BrandKnowledgeArea, TenantScopedClient } from '@brandspace/database';
-import { systemClock, type Clock } from '@brandspace/shared';
-import { BrandBrainRetriever, type RetrievalContext } from './retrieval';
-import { knowledgeAsOfSafe } from './validity';
+import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
+import { BrandBrainRetriever, usableKnowledgeWhere, type RetrievalContext } from './retrieval';
+import { knowledgeAsOfSafe, workspaceKnowledgeAsOf } from './validity';
 
 /**
- * THE ONE ENTRY POINT FOR BRAND BRAIN GROUNDING (Phase 2C, item 1).
+ * THE ONE GROUNDING LAYER FOR BRAND BRAIN (Phase 2C, item 1; D-354).
  *
- * Every path that puts Brand Brain knowledge in front of a model asks here:
+ * Every path that puts Brand Brain knowledge in front of a model asks this
+ * module — `groundingFor` for a question-shaped lookup, and the narrowly named
+ * helpers at the end of the file for the few writing paths that need a fixed
+ * selection rather than a ranked one:
  * Brand Brain's own "Talk with the brand", the Content Studio (generation and
  * its inline tools), the Copilot, Strategy and the Creative Studio. What they
  * get back is decided in one place:
@@ -94,4 +97,144 @@ export async function groundingFor(
     asOf: knowledgeAsOfSafe(brand?.timezone ?? 'UTC', clock.now()),
   });
   return { ...retrieval, enabled: true };
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * NON-LEXICAL WRITING LOOKUPS (owner review of PR #52)
+ * ---------------------------------------------------------------------------
+ *
+ * Some writing paths do not ask a question; they need a FIXED selection of
+ * facts: the Creative Studio's identity and voice lines, the pillars Strategy
+ * checks for gaps, the pillar ideas and the goal the composer turns into a
+ * brief. They live here, beside `groundingFor`, so the three writing rules are
+ * applied in ONE module and no caller re-implements them:
+ *
+ *   - `usableKnowledgeWhere` — ACTIVE or STALE, never expired;
+ *   - `asOf` — today in the WORKSPACE's time zone (D6);
+ *   - the brand's "Use Brand Brain" switch (D9) — a brand that turned it off
+ *     contributes nothing, and neither does a deleted one.
+ *
+ * The switch is a condition of the same query (`brand.useBrandBrain`), so a
+ * lookup across several brands honours each brand's own switch. Each helper
+ * selects only what its callers use: none of them widens what a caller sees.
+ */
+
+/** Keys under `goal.` are a brand's GOALS (D-277 §6, D-335) — never a content pillar. */
+export const GOAL_KEY_PREFIX = 'goal.';
+
+/**
+ * What a reader of the brand's goal asks for (D-335): its title, where it came
+ * from, the kind of its latest version, and the goal key the brand carries.
+ * The dashboard's `GOAL_ITEM_SELECT` IS this object, so every reader of the
+ * goal reads it the same way.
+ */
+export const BRAND_GOAL_SELECT = {
+  title: true,
+  origin: true,
+  versions: { orderBy: { version: 'desc' }, take: 1, select: { changeKind: true } },
+  brand: { select: { primaryGoalKey: true } },
+} as const;
+
+/** The usable-fact rule plus the switch, as one query condition. */
+async function writingKnowledgeWhere(db: TenantScopedClient, clock: Clock) {
+  return {
+    ...usableKnowledgeWhere(await workspaceKnowledgeAsOf(db, clock)),
+    brand: { useBrandBrain: true, deletedAt: null },
+  };
+}
+
+/**
+ * CREATIVE: the brand's usable facts in the given areas, in a stable order
+ * (area, then key), at most `maxItems`. Bodies only — the image prompt fences
+ * them (`@brandspace/creative`).
+ */
+export async function writingFactsInAreas(
+  db: TenantScopedClient,
+  request: {
+    readonly brandId: string;
+    readonly areas: readonly BrandKnowledgeArea[];
+    readonly maxItems: number;
+  },
+  clock: Clock = systemClock,
+): Promise<readonly { readonly body: unknown }[]> {
+  return db.brandKnowledgeItem.findMany({
+    where: {
+      brandId: request.brandId,
+      area: { in: [...request.areas] },
+      ...(await writingKnowledgeWhere(db, clock)),
+    },
+    orderBy: [{ area: 'asc' }, { itemKey: 'asc' }],
+    take: request.maxItems,
+    select: { body: true },
+  });
+}
+
+/**
+ * STRATEGY: the KEYS of the content pillars a brand declared — its usable
+ * STRATEGY facts that are not goals. Keys only: a gap is "no post used this
+ * pillar", and a post carries the pillar's key.
+ */
+export async function declaredPillarKeys(
+  db: TenantScopedClient,
+  request: { readonly brandId: string; readonly maxItems: number },
+  clock: Clock = systemClock,
+): Promise<readonly string[]> {
+  const rows = await db.brandKnowledgeItem.findMany({
+    where: {
+      brandId: request.brandId,
+      area: 'STRATEGY',
+      ...(await writingKnowledgeWhere(db, clock)),
+      NOT: { itemKey: { startsWith: GOAL_KEY_PREFIX } },
+    },
+    select: { itemKey: true },
+    take: request.maxItems,
+  });
+  return rows.map((row) => row.itemKey);
+}
+
+/**
+ * THE COMPOSER: pillar IDEAS — each becomes an AI brief when picked. One brand,
+ * or every brand in the member's scope; each brand's own switch applies.
+ */
+export async function declaredPillarIdeas(
+  db: TenantScopedClient,
+  request: {
+    readonly brandId?: string | undefined;
+    readonly brandScope?: readonly string[] | null | undefined;
+    readonly maxItems: number;
+  },
+  clock: Clock = systemClock,
+): Promise<readonly { readonly id: string; readonly title: unknown }[]> {
+  return db.brandKnowledgeItem.findMany({
+    where: {
+      area: 'STRATEGY',
+      ...(await writingKnowledgeWhere(db, clock)),
+      NOT: { itemKey: { startsWith: GOAL_KEY_PREFIX } },
+      ...brandIdQueryFilter({ brandId: request.brandId, brandScope: request.brandScope }),
+    },
+    select: { id: true, title: true },
+    take: request.maxItems,
+  });
+}
+
+/**
+ * THE BRAND'S GOAL, FOR WRITING: the composer and Strategy turn it into a brief
+ * or an objective. Null when it is expired, not approved, or the brand turned
+ * Brand Brain off — a writing flow then simply has no recommended goal.
+ */
+export async function writingGoal(
+  db: TenantScopedClient,
+  request: { readonly brandId: string; readonly itemKey: string },
+  clock: Clock = systemClock,
+) {
+  return db.brandKnowledgeItem.findFirst({
+    where: {
+      brandId: request.brandId,
+      area: 'STRATEGY',
+      itemKey: request.itemKey,
+      ...(await writingKnowledgeWhere(db, clock)),
+    },
+    select: BRAND_GOAL_SELECT,
+  });
 }

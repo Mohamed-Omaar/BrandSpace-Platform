@@ -388,3 +388,12 @@ export class CreativeStudioService {
     return this.#clock.now();
   }
 }
+
+/**
+ * WHAT BRAND BRAIN CONTRIBUTES TO AN IMAGE PROMPT (AC-28.1): identity and voice,
+ * at most six lines. The generation route reads exactly this selection through
+ * the Brand Brain grounding layer (`writingFactsInAreas`), and the Creative page
+ * counts the same one, so the two cannot disagree.
+ */
+export const CREATIVE_KNOWLEDGE_AREAS = ['IDENTITY', 'TONE_OF_VOICE'] as const;
+export const CREATIVE_KNOWLEDGE_LINES = 6;
