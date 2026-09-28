@@ -512,6 +512,21 @@ only after its security design is approved. Each part is its own branch from `st
   `20261007090000_brand_use_brand_brain`) in Settings → AI. Off: captions, tools, Creative and Strategy
   write ungrounded instead of refusing; the Copilot sees no fact in its context, its history or its tools,
   and answers a brand question with a notice; Brand Brain's own chat is unaffected.
+- **Item 2 — valid until (D6; D-356).** Migration `20261007100000_knowledge_valid_until`. A fact is valid
+  through its last day in the WORKSPACE's time zone; expired facts ground nothing and answer nothing, and
+  stay visible and editable. Rolling the application back makes them usable again (`OPERATIONS.md` §6.4).
+- **Item 2 — key questions (Q19; D-357).** "Answered n of m" from configured questions, one `itemKey`
+  each, with industry Offers sets. **The shipped wording is a DRAFT pending owner review; the 2C-1 pull
+  request must not merge before it is approved.**
+- **Item 2 — the one review inbox (D4, C1, 2.a; D-358).** One card at a time, oldest first; confidence
+  label and why; old and new side by side; Option A precedence; a previewed, re-checked bulk accept.
+- **Item 2 — tabs and voice (D1, C4, 2.b; D-359).** Knowledge · Look & voice · Sources · Talk with the
+  brand; IDENTITY reads "About the business"; one Voice card over TONE_OF_VOICE and DO_DONT facts.
+
+**Known gaps, recorded by owner decision and NOT fixed in 2C-1:** nothing ever sets a fact to `STALE`
+(the usable rule admits it, nothing produces it); a re-ingested document reuses the BullMQ job id
+`ingest-<id>`; `sweepStuckJobs` is never called; ingestion failure sentences are English only; and
+`BRANDSPACE_WEBFONTS` is blocked by the dashboard's CSP.
 
 ## Appendix — prototype decisions (v76)
 

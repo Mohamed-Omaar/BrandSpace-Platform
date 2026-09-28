@@ -245,7 +245,17 @@ BYPASSED, so a plain parent id is an existence oracle over the whole platform. P
 | `brand_knowledge_candidate.targetItemId`     | `brand_knowledge_item(workspaceId,id)`     | `SET NULL ("targetItemId")`        |
 | `brand_knowledge_item.sourceDocumentId`      | `brand_source_document(workspaceId,id)`    | `SET NULL ("sourceDocumentId")`    |
 | `brand_knowledge_item.conflictsWithItemId`   | `brand_knowledge_item(workspaceId,id)`     | `SET NULL ("conflictsWithItemId")` |
+| `brand_knowledge_item.supersededByItemId`    | `brand_knowledge_item(workspaceId,id)`     | `SET NULL ("supersededByItemId")`  |
 | `brand_knowledge_version.knowledgeItemId`    | `brand_knowledge_item(workspaceId,id)`     | `CASCADE`                          |
+
+**Phase 2C-1 additions (D-355, D-356, D-358).** `brand.useBrandBrain BOOLEAN NOT NULL DEFAULT true`
+(migration `20261007090000_brand_use_brand_brain`) is the Settings → AI switch. Migration
+`20261007100000_knowledge_valid_until` adds `validUntil DATE` to `brand_knowledge_item` and
+`brand_knowledge_version` (a workspace-local calendar day; NULL means no end date), and
+`brand_knowledge_item.supersededByItemId`, composite like its siblings with a column-scoped
+`ON DELETE SET NULL ("supersededByItemId")`, a `CHECK` that a fact never supersedes itself, and an
+index on `(workspaceId, brandId, validUntil)`. Neither migration changes a policy or a grant: the
+columns sit on tables already under tenant RLS.
 
 The first three are F-80; the rest are F-83, found by asking the catalogue about the whole module
 rather than the four tables F-80 happened to name. `brand_source_document`,

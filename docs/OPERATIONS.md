@@ -286,6 +286,25 @@ replay an older index definition by hand.
   with the posts that hold two slots (for example, cancel the older FAILED slot, keeping its jobs), and
   only then recreates the index — reviewed like any destructive change (§6).
 
+### 6.4 Phase 2C-1: "Use Brand Brain" and "valid until" on an application rollback (D-355, D-356)
+
+Both migrations only ADD columns with safe defaults, so they are safe while the previous release is live,
+and rolling the APPLICATION back needs no database change — but two customer promises lapse until the
+new release is back:
+
+- **`20261007090000_brand_use_brand_brain`** (`brand.useBrandBrain`, default `true`). The previous
+  release does not read the column, so a brand that switched Brand Brain off is grounded on its approved
+  facts again by captions, tools, Creative, Strategy and the Copilot.
+- **`20261007100000_knowledge_valid_until`** (`validUntil` on `brand_knowledge_item` and
+  `brand_knowledge_version`, `brand_knowledge_item.supersededByItemId`). The previous release does not
+  read `validUntil`, so **an EXPIRED fact is usable again and grounds AI writing** until the new release
+  returns, or until someone clears the date or archives the fact. A fact archived as superseded stays
+  archived; the previous release simply ignores the link.
+
+**Release note for the operator:** if the application must be rolled back past Phase 2C-1, tell the
+affected customers (or archive the expired facts that matter) before routing traffic to it. Never drop
+the columns to "undo" the migrations (§6); the next forward release reads them again unchanged.
+
 ---
 
 ## 7. Secret rotation
