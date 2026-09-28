@@ -109,7 +109,9 @@ export function ReviewInbox({
             {current.areaLabel} ·{' '}
             {current.source === 'ANALYTICS'
               ? t('bb.learningFromPerformance')
-              : t('bb.learningFromDocument')}{' '}
+              : current.source === 'MEMBER'
+                ? t('bb.learningFromMember')
+                : t('bb.learningFromDocument')}{' '}
             ·{' '}
             <span data-testid="review-inbox-position">
               {t('bb.inboxPosition')
@@ -157,9 +159,14 @@ export function ReviewInbox({
           {current.measured ? (
             <p data-testid={`intel-evidence-${current.id}`}>{current.measured}</p>
           ) : null}
-          <p data-testid={`intel-confidence-${current.id}`}>
-            {current.confidenceLabel} · {current.confidencePercent}% — {current.confidenceWhy}
-          </p>
+          {current.source === 'MEMBER' ? (
+            // D7 — a person's own words carry no confidence; who sent it does.
+            <p data-testid={`intel-proposed-by-${current.id}`}>{current.proposedBy}</p>
+          ) : (
+            <p data-testid={`intel-confidence-${current.id}`}>
+              {current.confidenceLabel} · {current.confidencePercent}% — {current.confidenceWhy}
+            </p>
+          )}
           {current.source === 'ANALYTICS' ? <p>{t('bb.learningAcceptNote')}</p> : null}
           {current.conflict ? (
             <p role="note" data-testid={`candidate-conflict-${current.id}`}>

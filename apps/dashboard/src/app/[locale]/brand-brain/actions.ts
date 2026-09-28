@@ -19,7 +19,11 @@ import {
   mayProcessInline,
   type IngestSourceDocumentPayload,
 } from '@brandspace/jobs';
-import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
+import {
+  type WorkspaceSession,
+  holdsPermission,
+  requireWorkspaceAction,
+} from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 import { brandLocaleAtCreation } from '../../../server/brand-ai-language';
@@ -203,7 +207,27 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
       ...validUntilField(formData),
     });
 
+    /*
+     * D7 (Phase 2C-3, decision 4.b) — ONE ADD RULE, HERE AND IN THE CHAT.
+     * Adding an APPROVED fact needs `brand_brain.edit` AND
+     * `brand_brain.review`; a member with edit alone sends the fact for review
+     * — a PENDING MEMBER candidate in the one inbox — and no ACTIVE fact is
+     * created. (A candidate carries no end date; the reviewer sets one when
+     * accepting, through Edit details.)
+     */
+    const approve = holdsPermission(session.workspace, 'brand_brain.review');
     await inBrandBrain(session.workspace.workspaceId, async ({ knowledge, policy }) => {
+      if (!approve) {
+        await knowledge.proposeFact({
+          brandId: parsed.brandId,
+          area: parsed.area as never,
+          itemKey: parsed.itemKey,
+          title: parsed.title,
+          body: parsed.body,
+          actor: knowledgeActor(session),
+        });
+        return;
+      }
       await knowledge.createItem({
         brandId: parsed.brandId,
         area: parsed.area as never,
@@ -216,7 +240,11 @@ export async function createKnowledgeAction(formData: FormData): Promise<void> {
         validUntil: parseValidUntil(parsed.validUntil),
       });
     });
-    destination = pageUrl(locale, { ok: 'KNOWLEDGE_SAVED', area, ...tabParam(formData) });
+    destination = pageUrl(locale, {
+      ok: approve ? 'KNOWLEDGE_SAVED' : 'KNOWLEDGE_SENT_FOR_REVIEW',
+      area,
+      ...tabParam(formData),
+    });
   } catch (error: unknown) {
     destination = failure(locale, error, 'create-knowledge', { area, ...tabParam(formData) });
   }

@@ -400,6 +400,18 @@ export function AreaDrawer({
                     {item.provenance}
                   </small>
                 ) : null}
+                {/* D6 remainder — from recorded usage (M5), never from caption text. */}
+                <small
+                  data-testid={`bb-used-in-${item.id}`}
+                  style={{
+                    color: colorTokens.textMuted,
+                    fontSize: typographyTokens.micro.fontSize,
+                  }}
+                >
+                  {item.usedInPosts === 1
+                    ? t('bb.usedInOnePost')
+                    : t('bb.usedInPosts').replace('{count}', String(item.usedInPosts))}
+                </small>
                 <p
                   style={{
                     margin: 0,
@@ -607,13 +619,27 @@ export function AreaDrawer({
               aria-label={t('bb.newItem.bodyAr')}
               style={{ ...drawerInputStyle, resize: 'vertical' }}
             />
-            <ValidUntilField
-              id="new-item-valid-until"
-              label={t('bb.validUntil')}
-              hint={t('bb.validUntilHint')}
-              defaultValue=""
-              testId="new-item-valid-until"
-            />
+            {/*
+              D7 (decision 4.b) — the same Add rule as the chat. With review
+              rights the fact is approved now and may carry an end date; with
+              edit alone it is SENT FOR REVIEW, and the reviewer sets the date.
+            */}
+            {permissions.review ? (
+              <ValidUntilField
+                id="new-item-valid-until"
+                label={t('bb.validUntil')}
+                hint={t('bb.validUntilHint')}
+                defaultValue=""
+                testId="new-item-valid-until"
+              />
+            ) : (
+              <p
+                data-testid="new-item-review-note"
+                style={{ margin: 0, fontSize: typographyTokens.micro.fontSize }}
+              >
+                {t('bb.sendForReviewNote')}
+              </p>
+            )}
             <button
               type="submit"
               data-testid="save-knowledge"
@@ -622,7 +648,7 @@ export function AreaDrawer({
                 justifySelf: 'start',
               }}
             >
-              {t('common.save')}
+              {permissions.review ? t('bb.addApprove') : t('bb.sendForReview')}
             </button>
           </form>
         ) : null}

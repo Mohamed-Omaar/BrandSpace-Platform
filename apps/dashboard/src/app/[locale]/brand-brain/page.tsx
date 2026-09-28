@@ -14,6 +14,7 @@ import {
   memoryRank,
   questionsForBrand,
   workspaceKnowledgeAsOf,
+  usedInPostsCounts,
 } from '@brandspace/brand-brain';
 import { TenantOnboardingPolicySource, offersQuestionSetFor } from '@brandspace/onboarding';
 import { currentEnvironment, requireWorkspacePage } from '../../../server/customer-context';
@@ -36,6 +37,7 @@ import {
   type SourceData,
   type VoiceData,
 } from './brand-brain-view';
+import type { ChatStart } from './brand-chat';
 
 /*
  * The approved demo's stylesheet, transcribed. It is imported here rather than
@@ -196,129 +198,146 @@ export default async function BrandBrainPage({
     );
   }
 
-  const { policy, completion, items, candidates, sources, sourceCount, asOf, confident } =
-    await inBrandBrain(workspace.workspaceId, async ({ knowledge, db, policy }) => {
+  const {
+    policy,
+    completion,
+    items,
+    candidates,
+    sources,
+    sourceCount,
+    asOf,
+    confident,
+    usedInPosts,
+  } = await inBrandBrain(workspace.workspaceId, async ({ knowledge, db, policy }) => {
+    /*
+     * Q19 — COMPLETENESS IS KEY QUESTIONS PER AREA, answered by usable facts
+     * (approved, not expired). The questions are configuration; Offers takes
+     * the set the brand's industry names (D-329). "Today" is the workspace's
+     * own calendar day (D6).
+     */
+    const resolved = await policy();
+    const [asOf, onboarding, brandRow] = await Promise.all([
+      workspaceKnowledgeAsOf(db),
+      new TenantOnboardingPolicySource(db, currentEnvironment()).load(),
+      db.brand.findFirst({ where: { id: brand.id }, select: { industry: true } }),
+    ]);
+    const computed = await knowledge.completion(
+      brand.id,
+      questionsForBrand(
+        resolved.questions,
+        offersQuestionSetFor(brandRow?.industry ?? null, onboarding.industries),
+      ),
+      asOf,
+    );
+    return {
+      asOf,
       /*
-       * Q19 — COMPLETENESS IS KEY QUESTIONS PER AREA, answered by usable facts
-       * (approved, not expired). The questions are configuration; Offers takes
-       * the set the brand's industry names (D-329). "Today" is the workspace's
-       * own calendar day (D6).
+       * D4 + C1 — the preview for "Accept the confident ones": the configured
+       * threshold, never a conflict. The same rule the action re-applies.
        */
-      const resolved = await policy();
-      const [asOf, onboarding, brandRow] = await Promise.all([
-        workspaceKnowledgeAsOf(db),
-        new TenantOnboardingPolicySource(db, currentEnvironment()).load(),
-        db.brand.findFirst({ where: { id: brand.id }, select: { industry: true } }),
-      ]);
-      const computed = await knowledge.completion(
-        brand.id,
-        questionsForBrand(
-          resolved.questions,
-          offersQuestionSetFor(brandRow?.industry ?? null, onboarding.industries),
-        ),
-        asOf,
-      );
-      return {
-        asOf,
-        /*
-         * D4 + C1 — the preview for "Accept the confident ones": the configured
-         * threshold, never a conflict. The same rule the action re-applies.
-         */
-        confident: can('brand_brain.review')
-          ? await knowledge.confidentCandidates({
-              brandId: brand.id,
-              minimumConfidenceMilli: resolved.review.confidentAcceptMilli,
-              brandScope: workspace.brandScope,
-            })
-          : [],
-        /*
-         * READ, NOT WRITTEN DOWN HERE. The retention window the chat notice
-         * states is whatever an owner activated — see brand-brain-context.ts
-         * for how it crosses the platform/tenant boundary (CLAUDE.md §2.2).
-         */
-        policy: resolved,
-        completion: computed,
-        items: await db.brandKnowledgeItem.findMany({
-          where: { brandId: brand.id, status: { in: ['ACTIVE', 'STALE'] } },
-          orderBy: [{ area: 'asc' }, { itemKey: 'asc' }],
-          select: {
-            id: true,
-            area: true,
-            itemKey: true,
-            title: true,
-            body: true,
-            origin: true,
-            /*
-             * THE MEMORY LAYER (P6-07).
-             *
-             * The screen showed WHERE an item came from — human, document, AI —
-             * and never WHICH OF THE FOUR MEMORIES it lives in. That is half the
-             * model, and the half that decides precedence: Canonical outranks
-             * Strategy outranks Content outranks Learning, always, and not as a
-             * tie-break (`memoryRank`). A reader could see that a fact was
-             * AI-inferred but not that it sat in the lowest-authority layer and
-             * therefore could never overwrite anything above it.
-             */
-            memory: true,
-            version: true,
-            status: true,
-            confidenceMilli: true,
-            // D-294 — provenance on every value: when, who, from what.
-            updatedAt: true,
-            createdByUserId: true,
-            sourceDocumentId: true,
-            // D6 — shown, and an expired fact says it is not used in writing.
-            validUntil: true,
-          },
-          // Bounded: a brand with thousands of items must not send them all to
-          // a browser. The drawer pages the rest.
-          take: 400,
-        }),
-        candidates: can('brand_brain.review')
-          ? await db.brandKnowledgeCandidate.findMany({
-              where: { brandId: brand.id, status: 'PENDING' },
-              // D4 — the one inbox works through the queue oldest first.
-              orderBy: { createdAt: 'asc' },
-              take: 50,
-              select: {
-                id: true,
-                area: true,
-                itemKey: true,
-                extractedTitle: true,
-                extractedBody: true,
-                confidenceMilli: true,
-                evidence: true,
-                targetItemId: true,
-                /*
-                 * P6-11 — WHERE IT CAME FROM AND WHAT IT CONTRADICTS. The queue
-                 * showed neither, so an analytics inference and a document
-                 * extract looked identical, and a learning that disagreed with
-                 * a human-approved fact was presented as if it did not.
-                 */
-                sourceKind: true,
-                insightId: true,
-                conflictsWithItemId: true,
-              },
-            })
-          : [],
-        sources: await db.brandSourceDocument.findMany({
-          where: { brandId: brand.id, deletedAt: null },
-          orderBy: { createdAt: 'desc' },
-          take: 25,
-          select: {
-            id: true,
-            fileName: true,
-            status: true,
-            pageCount: true,
-            chunkCount: true,
-            failureMessage: true,
-          },
-        }),
-        sourceCount: await db.brandSourceDocument.count({
-          where: { brandId: brand.id, deletedAt: null },
-        }),
-      };
-    });
+      confident: can('brand_brain.review')
+        ? await knowledge.confidentCandidates({
+            brandId: brand.id,
+            minimumConfidenceMilli: resolved.review.confidentAcceptMilli,
+            brandScope: workspace.brandScope,
+          })
+        : [],
+      /*
+       * READ, NOT WRITTEN DOWN HERE. The retention window the chat notice
+       * states is whatever an owner activated — see brand-brain-context.ts
+       * for how it crosses the platform/tenant boundary (CLAUDE.md §2.2).
+       */
+      policy: resolved,
+      completion: computed,
+      items: await db.brandKnowledgeItem.findMany({
+        where: { brandId: brand.id, status: { in: ['ACTIVE', 'STALE'] } },
+        orderBy: [{ area: 'asc' }, { itemKey: 'asc' }],
+        select: {
+          id: true,
+          area: true,
+          itemKey: true,
+          title: true,
+          body: true,
+          origin: true,
+          /*
+           * THE MEMORY LAYER (P6-07).
+           *
+           * The screen showed WHERE an item came from — human, document, AI —
+           * and never WHICH OF THE FOUR MEMORIES it lives in. That is half the
+           * model, and the half that decides precedence: Canonical outranks
+           * Strategy outranks Content outranks Learning, always, and not as a
+           * tie-break (`memoryRank`). A reader could see that a fact was
+           * AI-inferred but not that it sat in the lowest-authority layer and
+           * therefore could never overwrite anything above it.
+           */
+          memory: true,
+          version: true,
+          status: true,
+          confidenceMilli: true,
+          // D-294 — provenance on every value: when, who, from what.
+          updatedAt: true,
+          createdByUserId: true,
+          sourceDocumentId: true,
+          // D6 — shown, and an expired fact says it is not used in writing.
+          validUntil: true,
+        },
+        // Bounded: a brand with thousands of items must not send them all to
+        // a browser. The drawer pages the rest.
+        take: 400,
+      }),
+      candidates: can('brand_brain.review')
+        ? await db.brandKnowledgeCandidate.findMany({
+            where: { brandId: brand.id, status: 'PENDING' },
+            // D4 — the one inbox works through the queue oldest first.
+            orderBy: { createdAt: 'asc' },
+            take: 50,
+            select: {
+              id: true,
+              area: true,
+              itemKey: true,
+              extractedTitle: true,
+              extractedBody: true,
+              confidenceMilli: true,
+              evidence: true,
+              targetItemId: true,
+              /*
+               * P6-11 — WHERE IT CAME FROM AND WHAT IT CONTRADICTS. The queue
+               * showed neither, so an analytics inference and a document
+               * extract looked identical, and a learning that disagreed with
+               * a human-approved fact was presented as if it did not.
+               */
+              sourceKind: true,
+              insightId: true,
+              conflictsWithItemId: true,
+              // D7 (Phase 2C-3) — who sent a MEMBER proposal for review.
+              proposedByUserId: true,
+            },
+          })
+        : [],
+      sources: await db.brandSourceDocument.findMany({
+        where: { brandId: brand.id, deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 25,
+        select: {
+          id: true,
+          fileName: true,
+          status: true,
+          pageCount: true,
+          chunkCount: true,
+          failureMessage: true,
+        },
+      }),
+      sourceCount: await db.brandSourceDocument.count({
+        where: { brandId: brand.id, deletedAt: null },
+      }),
+      /*
+       * D6 remainder (Phase 2C-3) — "Used in N posts": distinct posts, not
+       * deleted or archived, whose CURRENT recorded usage (M5) holds the fact
+       * at any version. A count only; no post is named.
+       */
+      usedInPosts: await usedInPostsCounts(db, { brandId: brand.id }),
+    };
+  });
 
   /*
    * D-294 — WHO ADDED A VALUE AND WHICH DOCUMENT IT CAME FROM, by name. Read
@@ -327,7 +346,12 @@ export default async function BrandBrainPage({
    */
   const provenanceNames = await inBrandBrain(workspace.workspaceId, async ({ db }) => {
     const userIds = [
-      ...new Set(items.flatMap((item) => (item.createdByUserId ? [item.createdByUserId] : []))),
+      ...new Set([
+        ...items.flatMap((item) => (item.createdByUserId ? [item.createdByUserId] : [])),
+        ...candidates.flatMap((candidate) =>
+          candidate.proposedByUserId ? [candidate.proposedByUserId] : [],
+        ),
+      ]),
     ];
     const documentIds = [
       ...new Set(items.flatMap((item) => (item.sourceDocumentId ? [item.sourceDocumentId] : []))),
@@ -432,6 +456,7 @@ export default async function BrandBrainPage({
         // For "Edit": both languages, as stored.
         edit: editableText(item.title, item.body),
         provenance: provenanceOf(item),
+        usedInPosts: usedInPosts.get(item.id) ?? 0,
       })),
     };
   });
@@ -482,6 +507,8 @@ export default async function BrandBrainPage({
     const title = localizedFrom(candidate.extractedTitle);
     const body = localizedFrom(candidate.extractedBody);
     const fromAnalytics = candidate.sourceKind === 'ANALYTICS';
+    // D7 — a member's own proposal ("Send for review"): lands as HUMAN.
+    const fromMember = candidate.sourceKind === 'MEMBER';
     const replaced =
       (candidate.conflictsWithItemId ? itemsById.get(candidate.conflictsWithItemId) : null) ??
       (candidate.targetItemId ? itemsById.get(candidate.targetItemId) : null) ??
@@ -497,7 +524,7 @@ export default async function BrandBrainPage({
           },
           {
             memory: areaDefinition(candidate.area).memory,
-            origin: fromAnalytics ? 'AI_INFERRED' : 'DOCUMENT',
+            origin: fromAnalytics ? 'AI_INFERRED' : fromMember ? 'HUMAN' : 'DOCUMENT',
             version: replaced.version + 1,
             id: candidate.id,
           },
@@ -539,9 +566,17 @@ export default async function BrandBrainPage({
           }
         : null,
       acceptAllowed,
-      evidence: fromAnalytics ? [] : evidenceLabels(candidate.evidence),
+      evidence: fromAnalytics || fromMember ? [] : evidenceLabels(candidate.evidence),
       replacesExisting: candidate.targetItemId !== null,
-      source: fromAnalytics ? 'ANALYTICS' : 'DOCUMENT',
+      source: fromAnalytics ? 'ANALYTICS' : fromMember ? 'MEMBER' : 'DOCUMENT',
+      proposedBy: fromMember
+        ? t('bb.reviewProposedBy').replace(
+            '{name}',
+            (candidate.proposedByUserId &&
+              provenanceNames.people.get(candidate.proposedByUserId)) ||
+              t('bb.reviewProposedByMember'),
+          )
+        : null,
       sourceHref:
         fromAnalytics && candidate.insightId && can('strategy.read')
           ? `/${locale}/intelligence?brand=${brand.id}&insight=${candidate.insightId}`
@@ -641,7 +676,50 @@ export default async function BrandBrainPage({
     ),
   };
 
-  const requestedTab = typeof query['tab'] === 'string' ? query['tab'] : '';
+  /*
+   * D7 / D8 / D9 (Phase 2C-3) — the chat can open in a mode, prefilled:
+   * `?tab=chat&mode=add&area=…&title=…&body=…&key=…` from the Copilot's "save
+   * this fact" handoff or a miss in Ask, and `?tab=chat&mode=edit&fact=<id>`
+   * from the Studio's "Fix it". A prefill is only a starting point: nothing is
+   * saved until the person presses the button, and the server checks their
+   * permission then. A fact id this reader cannot see simply opens Edit empty.
+   */
+  const param = (key: string, max: number): string | null =>
+    typeof query[key] === 'string' ? (query[key] as string).slice(0, max) : null;
+  const requestedMode = param('mode', 10);
+  const fixFactId = param('fact', 40);
+  const fixFact =
+    requestedMode === 'edit' && can('brand_brain.edit') && fixFactId
+      ? (items.find((item) => item.id === fixFactId) ?? null)
+      : null;
+  const chatStart: ChatStart | null =
+    requestedMode === 'add' && can('brand_brain.edit')
+      ? {
+          mode: 'add',
+          area: param('area', 40),
+          title: param('title', 200),
+          body: param('body', 2_000),
+          itemKey: param('key', 120),
+        }
+      : requestedMode === 'edit' && can('brand_brain.edit')
+        ? {
+            mode: 'edit',
+            fact: fixFact
+              ? {
+                  id: fixFact.id,
+                  area: fixFact.area,
+                  itemKey: fixFact.itemKey,
+                  version: fixFact.version,
+                  title: localizedFrom(fixFact.title),
+                  body: localizedFrom(fixFact.body),
+                  validUntil: fixFact.validUntil ? isoDateOf(fixFact.validUntil) : null,
+                  expired: isExpired(fixFact.validUntil, asOf),
+                }
+              : null,
+          }
+        : null;
+
+  const requestedTab = chatStart ? 'chat' : typeof query['tab'] === 'string' ? query['tab'] : '';
   const initialTab: BrandBrainTab = (['knowledge', 'look', 'sources', 'chat'] as const).includes(
     requestedTab as BrandBrainTab,
   )
@@ -730,6 +808,7 @@ export default async function BrandBrainPage({
         candidates={candidateData}
         sources={sourceData}
         retentionDays={policy.chat.retentionDays}
+        chatStart={chatStart}
         permissions={{
           edit: can('brand_brain.edit'),
           upload: can('brand_brain.upload'),
