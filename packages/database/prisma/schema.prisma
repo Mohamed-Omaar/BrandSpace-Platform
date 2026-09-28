@@ -1870,6 +1870,11 @@ model Brand {
   /// Settings → AI: Home shows the "Recommended by BrandSpace" card for this
   /// brand. Only that card (owner answer D7).
   aiSuggestionsEnabled   Boolean  @default(true)
+  /// Settings → AI "Use Brand Brain" (prototype v90 D9, Phase 2C). Off: no
+  /// Brand Brain fact reaches captions, Studio tools, Creative, Strategy or the
+  /// Copilot (its turn context, its tools and the drafts it writes). Brand
+  /// Brain's own "Talk with the brand" is not affected (owner, 2026-09-28).
+  useBrandBrain          Boolean  @default(true)
 
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
