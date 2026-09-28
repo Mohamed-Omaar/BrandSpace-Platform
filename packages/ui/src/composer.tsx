@@ -14,6 +14,7 @@ import { Card } from './surfaces';
 import { AbstractMedia, Avatar, MediaChip } from './media';
 import { AlertIcon, PaperclipIcon } from './icons';
 import { SocialPostPreview } from './social-post-preview';
+import { SegmentPill } from './segment-pill';
 import {
   PLATFORM_FORMATS,
   defaultFormat,
@@ -529,6 +530,7 @@ export function PostComposer({
                   background: colorTokens.surfaceMuted,
                 }}
               >
+                <SegmentPill selector='[aria-pressed="true"]' />
                 {PLATFORM_FORMATS[platform].map((option) => (
                   <button
                     key={option}

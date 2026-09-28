@@ -1469,7 +1469,12 @@ export const messages = {
     'calendar.scheduleTitle': 'إضافة إلى التقويم',
     'calendar.scheduleDraft': 'المسودة',
     'calendar.pastDay': 'مضى هذا اليوم. اختر اليوم أو يومًا لاحقًا.',
-    'calendar.moveFromPost': 'على الهاتف، افتح المنشور لنقله إلى يوم آخر.',
+    'calendar.moveFromPost': 'اضغط مطولًا على منشور، ثم اسحبه إلى يومه الجديد.',
+    'calendar.drag.pastDay': 'مضى هذا اليوم — لا يمكن استخدامه',
+    'calendar.drag.strip': 'أفلته على يوم',
+    'calendar.drag.moved': 'نُقل إلى {when}.',
+    'calendar.drag.undo': 'تراجع',
+    'calendar.drag.undone': 'أُعيد إلى {when}.',
     'calendar.scheduleDate': 'التاريخ',
     'calendar.scheduleTime': 'الوقت',
     'calendar.suggestedTime': 'وقت مقترح',
@@ -1873,6 +1878,7 @@ export const messages = {
     'notifications.feed.error': 'تعذر تحميل الإشعارات. حاول بعد قليل.',
     'notifications.feed.mentioned': 'أشار إليك {name}',
     'notifications.feed.someone': 'شخص ما',
+    'notifications.incoming.open': 'فتح',
     'notifications.generic': 'هناك ما يحتاج انتباهك',
     'notifications.eyebrow': 'نشاطك التجاري',
     'notifications.subtitle': 'ما يخصّك من تنبيهات، وما زال بانتظار انتباهك.',
@@ -2034,6 +2040,7 @@ export const messages = {
       'لا تملك المنصة مصدر اتجاهات أو منافسين خارجيًا. كل اقتراح هنا مبني على بيانات مساحة عملك وحدها.',
     'insights.accept': 'اعتماد',
     'insights.dismiss': 'استبعاد',
+    'toast.dismiss': 'إغلاق الإشعار',
     'insights.anomalyBaseline': 'خط الأساس',
     'insights.anomalyObserved': 'القيمة المرصودة',
     'insights.anomalyThreshold': 'الحد المعتمد',
@@ -4410,7 +4417,12 @@ export const messages = {
     'calendar.scheduleTitle': 'Add to the calendar',
     'calendar.scheduleDraft': 'Draft',
     'calendar.pastDay': 'That day has passed. Choose today or a later day.',
-    'calendar.moveFromPost': 'On a phone, open a post to move it to another day.',
+    'calendar.moveFromPost': 'Press and hold a post, then drag it to its new day.',
+    'calendar.drag.pastDay': 'This day has passed — it can’t be used',
+    'calendar.drag.strip': 'Drop on a day',
+    'calendar.drag.moved': 'Moved to {when}.',
+    'calendar.drag.undo': 'Undo',
+    'calendar.drag.undone': 'Moved back to {when}.',
     'calendar.scheduleDate': 'Date',
     'calendar.scheduleTime': 'Time',
     'calendar.suggestedTime': 'Suggested time',
@@ -4828,6 +4840,7 @@ export const messages = {
     'notifications.feed.error': 'Notifications could not be loaded. Try again in a moment.',
     'notifications.feed.mentioned': '{name} mentioned you',
     'notifications.feed.someone': 'Someone',
+    'notifications.incoming.open': 'Open',
     'notifications.generic': 'Something needs your attention',
     'notifications.eyebrow': 'Your business',
     'notifications.subtitle': 'What concerns you, and what is still waiting on your attention.',
@@ -5003,6 +5016,7 @@ export const messages = {
       'BrandSpace has no external trend or competitor source. Every suggestion here rests on your own data alone.',
     'insights.accept': 'Accept',
     'insights.dismiss': 'Dismiss',
+    'toast.dismiss': 'Dismiss notification',
     'insights.anomalyBaseline': 'Baseline',
     'insights.anomalyObserved': 'Observed',
     'insights.anomalyThreshold': 'Threshold',
@@ -6024,6 +6038,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     en: 'That time has already passed or is too soon. Choose a later time.',
     ar: 'هذا الوقت مضى أو قريب جدًا. اختر وقتًا لاحقًا.',
   },
+  // §8.2 (Phase 2B-2b) — an Undo that found the post somewhere else.
+  SLOT_MOVED_SINCE: {
+    en: 'This post has moved since, so Undo changed nothing.',
+    ar: 'نُقل هذا المنشور منذ ذلك الحين، لذا لم يغيّر التراجع شيئًا.',
+  },
   // D-332 (owner decision) — an explicit Retry never publishes a post late.
   PUBLISH_DEADLINE_PASSED: {
     en: 'This post’s time has passed, so it won’t be published late. Make a new copy to schedule it again.',
@@ -6512,6 +6531,19 @@ function deniedActionText(code: string, locale: string): string | null {
   return OWNER_ONLY_PERMISSIONS.includes(key)
     ? fill('perms.denied.ownerOnly')
     : `${fill('perms.denied.you')} ${fill('perms.denied.hintOwner')}`;
+}
+
+/**
+ * C8 (Phase 2B-2b) — A `?ok=` CODE AS A TOAST. The same words `statusMessage`
+ * gives the banner, handed to the shell's `ToastHost` instead; an unknown code
+ * shows nothing, exactly as the banner did.
+ */
+export function successFlash(
+  code: string | null | undefined,
+  locale: string,
+): { readonly tone: 'success'; readonly message: string } | undefined {
+  const message = statusMessage(code, locale);
+  return message === null ? undefined : { tone: 'success', message };
 }
 
 export function statusMessage(

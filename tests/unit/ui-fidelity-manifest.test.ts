@@ -281,7 +281,13 @@ describe('the Brand Brain stylesheet is a transcription of the snapshot', () => 
     '.bb-hero': ['-webkit-backdrop-filter:blur(18px)'],
     // A `<button>` does not inherit the page's font or colour; the demo's card
     // is a button too and relies on a global reset this app does not have.
-    '.bb-card': ['font:inherit', 'color:inherit'],
+    '.bb-card': [
+      'font:inherit',
+      'color:inherit',
+      // D-348 (Phase 2B-2b, owner answer 9): §8 MO14 overrides this route's
+      // pinned MOTION — the card lifts over 220 ms, on the shared tokens.
+      'transition:transformvar(--bs-motion-hover)var(--bs-ease-out),box-shadowvar(--bs-motion-hover)var(--bs-ease-out)',
+    ],
   };
 
   /**
@@ -294,6 +300,8 @@ describe('the Brand Brain stylesheet is a transcription of the snapshot', () => 
    */
   const ALLOWED_OMISSIONS: Record<string, readonly string[]> = {
     '.bb-progress i': ['width:82%'],
+    // D-348: the demo's 0.2 s lift, replaced by §8 MO14's 220 ms (above).
+    '.bb-card': ['transition:transform0.2s,box-shadow0.2s'],
   };
 
   it.each(SELECTORS)('%s keeps every declaration the demo gives it', (selector) => {

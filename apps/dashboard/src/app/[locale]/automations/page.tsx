@@ -27,7 +27,7 @@ import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { copilotHref } from '../../../server/copilot-surface';
 import { inAnalytics } from '../../../server/analytics-context';
-import { statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import { statusMessage, translator, type MessageKey, successFlash } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import Link from 'next/link';
 import { AutomationForm, type AutomationFormInitial } from './automation-form';
@@ -343,6 +343,7 @@ export default async function AutomationsPage({
 
   return (
     <WorkspaceShell
+      flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
       heading={t('automations.title')}
@@ -354,9 +355,6 @@ export default async function AutomationsPage({
       permissionKeys={workspace.permissionKeys}
     >
       <Stack gap={spacingTokens.lg}>
-        {ok ? (
-          <CustomerBanner tone="success">{statusMessage(ok, locale) ?? ok}</CustomerBanner>
-        ) : null}
         {error ? (
           <CustomerBanner tone="error">{statusMessage(error, locale) ?? error}</CustomerBanner>
         ) : null}

@@ -32,6 +32,8 @@
   --bs-brand-yellow-tint: #fff9db;
 
   --bs-surface: #ffffff;
+  /* `drawerAlpha` in tokens.ts: the notifications sheet's glass, reused by menus (MO5). */
+  --bs-surface-glass: rgba(255, 255, 255, 0.96);
   --bs-surface-soft: #f8f8f9;
   --bs-surface-warm: #f7f6f4;
   --bs-surface-lavender: #f8f5ff;
@@ -136,6 +138,45 @@
   --bs-duration-slow: 320ms;
   --bs-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --bs-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /*
+   * §8 MOTION (prototype v105, Phase 2B-2b). Named for WHAT moves, so a
+   * component asks for "the menu's rows" rather than for a number, and the
+   * numbers are §8's exactly. `tokens.ts` mirrors them for the Web Animations
+   * API; `motion-tokens.test.ts` keeps the two equal.
+   */
+  --bs-motion-page: 440ms; /* MO1 a block entering */
+  --bs-motion-page-late: 300ms; /* MO1 blocks after the 7th */
+  --bs-motion-page-step: 45ms; /* MO1 stagger */
+  --bs-motion-pill: 440ms; /* MO2 the sidebar pill */
+  --bs-motion-collapse: 380ms; /* MO3 the sidebar column */
+  --bs-motion-label-out: 110ms; /* MO3 labels fade out */
+  --bs-motion-label-in: 220ms; /* MO3 labels fade in */
+  --bs-motion-label-in-delay: 150ms; /* MO3 … after the width */
+  --bs-motion-seg: 380ms; /* MO4 the segmented pill */
+  --bs-motion-menu-in: 200ms; /* MO5 a menu, listbox, popover or sheet opens */
+  --bs-motion-menu-row: 220ms; /* MO5 its rows */
+  --bs-motion-menu-row-step: 22ms; /* MO5 row stagger */
+  --bs-motion-menu-out: 180ms; /* MO5 it closes */
+  --bs-motion-dialog: 300ms; /* MO6 the dialog */
+  --bs-motion-veil: 260ms; /* MO6 its veil */
+  --bs-motion-copilot: 340ms; /* MO7 the Copilot panel */
+  --bs-motion-toast-in: 420ms; /* MO8 a toast enters; its check draws */
+  --bs-motion-toast-step: 50ms; /* MO8 content stagger */
+  --bs-motion-toast-check-delay: 160ms; /* MO8 */
+  --bs-motion-toast-out: 280ms; /* MO8 a toast leaves */
+  --bs-motion-bar: 800ms; /* MO11 a bar grows */
+  --bs-motion-bar-step: 35ms; /* MO11 bar stagger */
+  --bs-motion-line: 1000ms; /* MO11 a line draws */
+  --bs-motion-dot: 360ms; /* MO11 dots and labels pop */
+  --bs-motion-dot-step: 40ms; /* MO11 dot stagger */
+  --bs-motion-count: 650ms; /* MO12 a KPI counts up */
+  --bs-motion-loop: 1600ms; /* MO13 shimmer and pulse */
+  --bs-motion-hover: 220ms; /* MO14 a card lifts */
+  --bs-motion-drag-lift: 180ms; /* §8.2 a post lifts */
+  --bs-motion-drop: 360ms; /* §8.2 it flies into place */
+  --bs-motion-settle: 300ms; /* §8.2 others slide; a cancel glides back */
+  --bs-motion-state: 200ms; /* colour/background/border state feedback (≤ 200 ms) */
 
   --bs-z-sticky: 10;
   --bs-z-drawer: 40;
@@ -333,13 +374,19 @@ html {
  * Motion is a preference, not a decision the design gets to make. Honoured
  * ONCE, here, so no component has to remember (WCAG 2.3.3).
  */
+/*
+ * §8.0 (Phase 2B-2b, owner-approved): reduced motion turns motion OFF, not
+ * faster. The old rule shrank durations to 0.01 ms, which still ran every
+ * animation, left `animation-delay` alone and never reached the Web Animations
+ * API. Now nothing animates and the end state is there at once; every JS
+ * animation asks `prefersReducedMotion()` (`motion.ts`) before it starts.
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation: none !important;
+    transition: none !important;
     scroll-behavior: auto !important;
   }
 }
@@ -470,7 +517,15 @@ h4 {
     background: rgba(255, 255, 255, 0.78);
     backdrop-filter: blur(24px);
     box-shadow: var(--bs-shadow-shell);
-    transition: grid-template-columns var(--bs-duration-slow) var(--bs-ease-out);
+  }
+
+  /*
+   * MO3 — the column animates (380 ms) only when the reader toggled it; a
+   * stored "collapsed" applied on load snaps into place. The one layout
+   * property §8 lets animate.
+   */
+  [data-sidebar-motion] .bs-shell {
+    transition: grid-template-columns var(--bs-motion-collapse) var(--bs-ease-out);
   }
 
   /*
@@ -836,34 +891,55 @@ html[dir='rtl'] input[type='week'] {
   background: var(--bs-surface-muted);
 }
 
-/* A card that lifts on hover, for grids of navigable things. */
-.bs-liftable {
+/*
+ * MO14 — A CLICKABLE CARD LIFTS 2 px with a softer, larger shadow (220 ms).
+ * `.bs-liftable` is a flat item (a list row, a tile): it takes the card's
+ * shadow. `.bs-card-liftable` is a surface card, already resting on the card
+ * shadow: it takes the shell's, larger and softer again. No new shadow.
+ */
+.bs-liftable,
+.bs-card-liftable {
   transition:
-    box-shadow var(--bs-duration-base) var(--bs-ease-out),
-    transform var(--bs-duration-base) var(--bs-ease-out);
+    box-shadow var(--bs-motion-hover) var(--bs-ease-out),
+    transform var(--bs-motion-hover) var(--bs-ease-out);
 }
 
 .bs-liftable:hover {
-  box-shadow: var(--bs-shadow-raised);
+  box-shadow: var(--bs-shadow-card);
   transform: translateY(-2px);
 }
 
-/* Buttons and chips get the same treatment without a bespoke class each. */
-.bs-pressable {
-  transition:
-    background-color var(--bs-duration-fast) var(--bs-ease-out),
-    box-shadow var(--bs-duration-fast) var(--bs-ease-out),
-    transform var(--bs-duration-instant) var(--bs-ease-out);
-}
-
-.bs-pressable:active:not(:disabled) {
-  transform: translateY(1px);
+.bs-card-liftable:hover {
+  box-shadow: var(--bs-shadow-shell);
+  transform: translateY(-2px);
 }
 
 /*
- * A slow brand pulse for the Copilot's processing state.
+ * Buttons and chips get the same state feedback without a bespoke class each.
+ * MO14: NO PRESS MOTION (owner, Phase 2B-2b answer 9) — the 1 px push on
+ * `:active` is gone, and with it the `transform` transition. A tile that is
+ * both pressable and liftable keeps its lift: this shorthand used to override
+ * `.bs-liftable`'s, so the workspace tiles jumped instead of lifting.
+ */
+.bs-pressable {
+  transition:
+    background-color var(--bs-duration-fast) var(--bs-ease-out),
+    box-shadow var(--bs-duration-fast) var(--bs-ease-out);
+}
+
+.bs-pressable.bs-liftable,
+.bs-pressable.bs-card-liftable {
+  transition:
+    background-color var(--bs-duration-fast) var(--bs-ease-out),
+    box-shadow var(--bs-motion-hover) var(--bs-ease-out),
+    transform var(--bs-motion-hover) var(--bs-ease-out);
+}
+
+/*
+ * MO13 — "READING" PULSES: opacity 1 → .55 over 1.6 s (the Copilot's
+ * processing spark, Brand Brain reading a question, a source being read).
  *
- * The reduced-motion block above already neutralises this for anyone who asked
+ * The reduced-motion block above already turns this off for anyone who asked
  * for less motion, so it needs no media query of its own.
  */
 @keyframes bs-pulse {
@@ -872,12 +948,37 @@ html[dir='rtl'] input[type='week'] {
     opacity: 1;
   }
   50% {
-    opacity: 0.35;
+    opacity: 0.55;
   }
 }
 
 .bs-pulse {
-  animation: bs-pulse 1.4s var(--bs-ease-out) infinite;
+  animation: bs-pulse var(--bs-motion-loop) var(--bs-ease-in-out) infinite;
+}
+
+/*
+ * MO13 — "GENERATING" SHIMMERS: a soft light band across the placeholder, a
+ * 1.6 s linear loop. `background-position` is §8's one exception for it; the
+ * band is the surface's own sunken and muted greys, no new colour.
+ */
+@keyframes bs-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.bs-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--bs-surface-sunken) 0%,
+    var(--bs-surface-muted) 50%,
+    var(--bs-surface-sunken) 100%
+  );
+  background-size: 200% 100%;
+  animation: bs-shimmer var(--bs-motion-loop) linear infinite;
 }
 
 /*
@@ -1081,6 +1182,424 @@ html[dir='rtl'] input[type='week'] {
 }
 
 /*
+ * MO3 — labels leave before the column shrinks (110 ms) and arrive after it
+ * grows (220 ms, 150 ms late). Opacity only; the labels' own space is taken
+ * away by the collapse itself.
+ */
+[data-sidebar-state='collapsing'] :is(.bs-nav-label, .bs-brand-text, .bs-rail-copy) {
+  opacity: 0;
+  transition: opacity var(--bs-motion-label-out) var(--bs-ease-out);
+}
+
+@keyframes bs-label-in {
+  from {
+    opacity: 0;
+  }
+}
+
+[data-sidebar-motion][data-sidebar-state='expanded']
+  :is(.bs-nav-label, .bs-brand-text, .bs-rail-copy) {
+  animation: bs-label-in var(--bs-motion-label-in) var(--bs-ease-out)
+    var(--bs-motion-label-in-delay) both;
+}
+
+/*
+ * MO1 — A PAGE'S TOP-LEVEL BLOCKS ENTER ONE AFTER ANOTHER: opacity, a 10 px
+ * rise and a 6 px blur clearing, 440 ms, 45 ms apart; from the 8th block on,
+ * 300 ms and no blur, starting with the 7th. Blocks are the page flow's own
+ * children (the hero, the actions row) and the section stack's. Never on a
+ * flow already on screen when the gate opened (`data-entered`, app-shell.tsx).
+ *
+ * §8.0: never `filter` on an element with `backdrop-filter` — nor on one
+ * holding glass, whose blur the filter would flatten — so those blocks take
+ * the rise without the blur.
+ */
+@keyframes bs-page-in {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+    filter: blur(6px);
+  }
+}
+
+@keyframes bs-page-in-plain {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+}
+
+[data-page-enter] .bs-page-flow:not([data-entered]) > :not(.bs-section-stack),
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > * {
+  animation: bs-page-in var(--bs-motion-page) var(--bs-ease-out) both;
+}
+
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(1) {
+  animation-delay: calc(var(--bs-motion-page-step) * 1);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(2) {
+  animation-delay: calc(var(--bs-motion-page-step) * 2);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(3) {
+  animation-delay: calc(var(--bs-motion-page-step) * 3);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(4) {
+  animation-delay: calc(var(--bs-motion-page-step) * 4);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(5) {
+  animation-delay: calc(var(--bs-motion-page-step) * 5);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(n + 6) {
+  animation-delay: calc(var(--bs-motion-page-step) * 6);
+}
+[data-page-enter] .bs-page-flow:not([data-entered]) .bs-section-stack > :nth-child(n + 7) {
+  animation-name: bs-page-in-plain;
+  animation-duration: var(--bs-motion-page-late);
+}
+
+[data-page-enter]
+  .bs-page-flow:not([data-entered])
+  > :not(.bs-section-stack):is(
+    .bb-hero,
+    [style*='backdrop-filter'],
+    :has(.bb-hero, [style*='backdrop-filter'])
+  ),
+[data-page-enter]
+  .bs-page-flow:not([data-entered])
+  .bs-section-stack
+  > :is(.bb-hero, [style*='backdrop-filter'], :has(.bb-hero, [style*='backdrop-filter'])) {
+  animation-name: bs-page-in-plain;
+}
+
+/*
+ * MO4 — THE SEGMENTED PILL (`segment-pill.tsx`). A full-size layer clipped to
+ * the selected segment; the clip slides. Once placed, the segments sit above
+ * it and the selected one stops painting its own fill and shadow.
+ */
+.bs-seg-pill,
+.bs-seg-pill-fill {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.bs-seg-pill {
+  z-index: 0;
+  visibility: hidden;
+}
+
+[data-seg='placed'] > .bs-seg-pill {
+  visibility: visible;
+}
+
+[data-seg='placed'] > :not(.bs-seg-pill) {
+  position: relative;
+  z-index: 1;
+}
+
+[data-seg='placed']
+  > :is([aria-current='page'], [aria-pressed='true'], [aria-selected='true']):not(.bs-seg-pill) {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/*
+ * MO5 — A MENU, LISTBOX, POPOVER, SHEET OR DRAWER OPENS: the container fades
+ * in, grows from .97 and settles 4 px (180–200 ms, origin at its trigger; one
+ * that opens upward rises), then its rows enter in order — opacity, a 3 px
+ * blur clearing and a 3 px rise, 220 ms, 22 ms apart, capped at the 6th row.
+ * Closing is the Web Animations API (`usePresence`, motion.ts): the container
+ * fades with a 4 px lift over 180 ms while its rows blur to 4 px.
+ * Origins: `--bs-pop-origin`, set per surface.
+ */
+@keyframes bs-pop-in {
+  from {
+    opacity: 0;
+    scale: 0.97;
+    translate: 0 var(--bs-pop-from, -4px);
+  }
+}
+
+@keyframes bs-row-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+    translate: 0 3px;
+  }
+}
+
+.bs-pop {
+  transform-origin: var(--bs-pop-origin, top center);
+  animation: bs-pop-in var(--bs-motion-menu-in) var(--bs-ease-out) both;
+}
+
+/* The origin is the trigger's side, mirrored for Arabic. */
+.bs-pop[data-origin='end'] {
+  --bs-pop-origin: top right;
+}
+.bs-pop[data-origin='start'] {
+  --bs-pop-origin: top left;
+}
+[dir='rtl'] .bs-pop[data-origin='end'] {
+  --bs-pop-origin: top left;
+}
+[dir='rtl'] .bs-pop[data-origin='start'] {
+  --bs-pop-origin: top right;
+}
+
+/* A menu opening upward rises into place. */
+.bs-pop.bs-pop-up {
+  --bs-pop-from: 4px;
+  --bs-pop-origin: bottom center;
+}
+.bs-pop.bs-pop-up[data-origin='end'] {
+  --bs-pop-origin: bottom right;
+}
+.bs-pop.bs-pop-up[data-origin='start'] {
+  --bs-pop-origin: bottom left;
+}
+[dir='rtl'] .bs-pop.bs-pop-up[data-origin='end'] {
+  --bs-pop-origin: bottom left;
+}
+[dir='rtl'] .bs-pop.bs-pop-up[data-origin='start'] {
+  --bs-pop-origin: bottom right;
+}
+
+.bs-pop > :not(.bs-pop-static) {
+  animation: bs-row-in var(--bs-motion-menu-row) var(--bs-ease-out) both;
+}
+.bs-pop > :nth-child(2) {
+  animation-delay: calc(var(--bs-motion-menu-row-step) * 1);
+}
+.bs-pop > :nth-child(3) {
+  animation-delay: calc(var(--bs-motion-menu-row-step) * 2);
+}
+.bs-pop > :nth-child(4) {
+  animation-delay: calc(var(--bs-motion-menu-row-step) * 3);
+}
+.bs-pop > :nth-child(5) {
+  animation-delay: calc(var(--bs-motion-menu-row-step) * 4);
+}
+.bs-pop > :nth-child(n + 6) {
+  animation-delay: calc(var(--bs-motion-menu-row-step) * 5);
+}
+
+/* A surface leaving is inert: its close already happened (§8.0). */
+[data-leaving] {
+  pointer-events: none;
+}
+
+/*
+ * MO6 — A MODAL: the dialog fades, grows from .98 and rises 8 px (300 ms);
+ * its veil fades in while its backdrop blur goes 0 → 3 px (260 ms, the owner's
+ * exception).
+ */
+@keyframes bs-dialog-in {
+  from {
+    opacity: 0;
+    scale: 0.98;
+    translate: 0 8px;
+  }
+}
+
+@keyframes bs-veil-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+}
+
+.bs-dialog-in {
+  animation: bs-dialog-in var(--bs-motion-dialog) var(--bs-ease-out) both;
+}
+
+.bs-veil {
+  backdrop-filter: blur(3px);
+  animation: bs-veil-in var(--bs-motion-veil) var(--bs-ease-out) both;
+}
+
+/*
+ * MO7 — THE COPILOT PANEL enters with opacity, a .98 → 1 grow and a 16 px
+ * rise (340 ms), from its bottom end corner.
+ */
+@keyframes bs-copilot-in {
+  from {
+    opacity: 0;
+    scale: 0.98;
+    translate: 0 16px;
+  }
+}
+
+.bs-copilot-in {
+  transform-origin: bottom right;
+  animation: bs-copilot-in var(--bs-motion-copilot) var(--bs-ease-out) both;
+}
+
+[dir='rtl'] .bs-copilot-in {
+  transform-origin: bottom left;
+}
+
+/*
+ * MO8 — A TOAST ENTERS from 12 px below with a fade while its contents unblur
+ * (6 px → 0, 420 ms, 50 ms apart); a success check draws itself (420 ms,
+ * 160 ms late). It leaves by rising 14 px with a fade while its contents blur
+ * to 6 px (280 ms) — the Web Animations API, `toast-host.tsx`.
+ */
+@keyframes bs-toast-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
+@keyframes bs-toast-part-in {
+  from {
+    filter: blur(6px);
+  }
+}
+
+@keyframes bs-check-draw {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.bs-toast-in {
+  animation: bs-toast-in var(--bs-motion-toast-in) var(--bs-ease-out) both;
+}
+.bs-toast-in > * {
+  animation: bs-toast-part-in var(--bs-motion-toast-in) var(--bs-ease-out) both;
+}
+.bs-toast-in > :nth-child(2) {
+  animation-delay: calc(var(--bs-motion-toast-step) * 1);
+}
+.bs-toast-in > :nth-child(3) {
+  animation-delay: calc(var(--bs-motion-toast-step) * 2);
+}
+.bs-toast-in > :nth-child(n + 4) {
+  animation-delay: calc(var(--bs-motion-toast-step) * 3);
+}
+.bs-toast-in [data-toast-check] path {
+  stroke-dasharray: 24;
+  animation: bs-check-draw var(--bs-motion-toast-in) var(--bs-ease-out)
+    var(--bs-motion-toast-check-delay) both;
+}
+
+/*
+ * MO11 — CHARTS ON PAGE ENTRY. Bars grow from their start edge (a 0 → 1 scale
+ * on the inline axis, 800 ms, 35 ms apart, up to the 14th); a line series
+ * draws from the reading start (a clip-path, 1000 ms); its dots and value
+ * labels pop in after it (360 ms, 40 ms apart). `--i` is each mark's index.
+ */
+@keyframes bs-bar-grow {
+  from {
+    scale: 0 1;
+  }
+}
+
+@keyframes bs-line-draw {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+
+@keyframes bs-line-draw-rtl {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+}
+
+@keyframes bs-dot-pop {
+  from {
+    opacity: 0;
+    scale: 0.4;
+  }
+}
+
+.bs-chart-bar {
+  transform-origin: left center;
+  animation: bs-bar-grow var(--bs-motion-bar) var(--bs-ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 13) * var(--bs-motion-bar-step));
+}
+.bs-chart-bar[data-dir='rtl'] {
+  transform-origin: right center;
+}
+
+.bs-chart-line {
+  animation: bs-line-draw var(--bs-motion-line) var(--bs-ease-out) both;
+}
+.bs-chart-line[data-dir='rtl'] {
+  animation-name: bs-line-draw-rtl;
+}
+
+.bs-chart-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bs-dot-pop var(--bs-motion-dot) var(--bs-ease-out) both;
+  animation-delay: calc(var(--bs-motion-line) + var(--i, 0) * var(--bs-motion-dot-step));
+}
+
+/*
+ * MO12 — A KPI COUNTS UP (`count-up.tsx`). The element's own text is the
+ * exact server value throughout — for assistive technology, for the layout's
+ * width and for anything that reads the page — and is only made transparent
+ * while the counting copy is drawn over it.
+ */
+.bs-count {
+  position: relative;
+}
+
+.bs-count[data-counting] > .bs-count-final {
+  opacity: 0;
+}
+
+.bs-count[data-counting]::after {
+  content: attr(data-display);
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  white-space: nowrap;
+}
+
+/*
+ * MO2 — THE RAIL'S PILL. One ink pill per navigation list, placed on the
+ * current item by script; its colour, radius and shadow are exactly the ones
+ * the item used to paint on itself (D-59). Once placed, the item stops
+ * painting its own, and sits above the pill.
+ */
+.bs-nav-pill {
+  position: absolute;
+  inset-block-start: 0;
+  /* PHYSICAL on purpose: script places it by `getBoundingClientRect` offsets,
+     which are physical in both directions, so the origin must be too. */
+  left: 0;
+  z-index: 0;
+  inline-size: 0;
+  block-size: 0;
+  border-radius: var(--bs-radius-control);
+  background: var(--bs-ink);
+  box-shadow: var(--bs-shadow-nav-active);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.bs-nav-list[data-pill='placed'] > .bs-nav-pill {
+  visibility: visible;
+}
+
+.bs-nav-list a {
+  z-index: 1;
+}
+
+.bs-nav-list[data-pill='placed'] a[aria-current='page'] {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/*
  * A collapsed rail keeps the brand MARK and drops the wordmark, exactly as
  * `.app-shell.sidebar-collapsed .brand-name` does. Hiding the whole brand left
  * the rail headed by nothing but a chevron.
@@ -1135,7 +1654,16 @@ html[dir='rtl'] input[type='week'] {
   scrollbar-color: #9a9aa2 transparent;
   border: 1px solid transparent;
   border-radius: var(--bs-radius-control);
-  background: var(--bs-surface);
+  /*
+   * MO5 (owner answer 9): menus and listboxes are GLASS, frosted from the
+   * first frame — the notifications sheet's material, not a new one. The
+   * blur lives here, so the entrance never puts `filter` on this element;
+   * only its rows blur (§8.0).
+   */
+  background: var(--bs-surface-glass);
+  /* Unprefixed only: with the \`-webkit-\` twin beside it the build keeps just
+     the prefixed one, which Chrome ignores (the glass read as \`none\`). */
+  backdrop-filter: blur(24px);
   box-shadow: 0 14px 36px rgba(17, 17, 20, 0.14);
 }
 
@@ -1275,4 +1803,112 @@ select option {
   select:not([multiple])::picker-icon {
     color: var(--bs-text-muted);
   }
+}
+
+/*
+ * §8.2 (Phase 2B-2b) — THE CALENDAR DRAG. The engine is `useCalendarDrag`;
+ * these are its looks. Motion stays on the compositor (translate, scale,
+ * rotate, opacity) except where §8's exceptions name it: the lift's deeper
+ * shadow, a day's dashed outline, and the status pulse's `box-shadow`. The
+ * reduced-motion block turns all of it off; the drag itself still works.
+ */
+
+/* LIFT — the floating copy: scale 1.04, rotate −1.5°, a deeper shadow, 180 ms.
+   `translate` is not transitioned: the copy follows the pointer exactly. */
+.bs-drag-copy {
+  pointer-events: none;
+  box-sizing: border-box;
+  cursor: grabbing;
+  transition:
+    scale var(--bs-motion-drag-lift) var(--bs-ease-out),
+    rotate var(--bs-motion-drag-lift) var(--bs-ease-out),
+    box-shadow var(--bs-motion-drag-lift) var(--bs-ease-out);
+}
+
+.bs-drag-copy.bs-drag-lifted {
+  scale: 1.04;
+  rotate: -1.5deg;
+  box-shadow: var(--bs-shadow-overlay);
+}
+
+/* The spot it came from stays, as a dashed placeholder. */
+.bs-drag-origin {
+  border: 1px dashed var(--bs-brand-purple-border) !important;
+  background: transparent !important;
+}
+
+.bs-drag-origin > * {
+  visibility: hidden;
+}
+
+/* OVER A DAY — one that takes it is light purple and dashed; a day that has
+   passed is grey with a red dashed outline. Days outside the month take nothing. */
+[data-drop-over='ok'] {
+  background-color: var(--bs-brand-purple-tint) !important;
+  outline: 2px dashed var(--bs-brand-purple);
+  outline-offset: -2px;
+}
+
+[data-drop-over='past'] {
+  background-color: var(--bs-surface-sunken) !important;
+  outline: 2px dashed var(--bs-danger);
+  outline-offset: -2px;
+}
+
+[data-dragging] [data-drop-day] {
+  transition: background-color var(--bs-motion-state) var(--bs-ease-out);
+}
+
+/* The words under the copy: "Wed 21 · 18:00", or that the day can't be used. */
+.bs-drag-label {
+  position: absolute;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-start: 0;
+  padding: 3px 8px;
+  border-radius: var(--bs-radius-full);
+  background: var(--bs-ink);
+  color: var(--bs-ink-ink);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
+  rotate: 1.5deg;
+}
+
+.bs-drag-label:empty {
+  display: none;
+}
+
+.bs-drag-label[data-state='past'] {
+  background: var(--bs-danger);
+}
+
+/* PHONE — the glass strip of the next 14 days slides up from the bottom. The
+   glass is the dropdown panel's; `backdrop-filter` unprefixed only (§8.0). */
+@keyframes bs-strip-in {
+  from {
+    opacity: 0;
+    translate: 0 100%;
+  }
+}
+
+.bs-drag-strip {
+  background: var(--bs-surface-glass);
+  backdrop-filter: blur(24px);
+  animation: bs-strip-in var(--bs-motion-settle) var(--bs-ease-out) both;
+}
+
+/* "If the move changed the post's status, its card pulses once" — one beat of
+   the MO13 rhythm, as a ring (§8's box-shadow exception for the status pulse). */
+@keyframes bs-status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(121, 53, 254, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(121, 53, 254, 0);
+  }
+}
+
+.bs-status-pulse {
+  animation: bs-status-pulse var(--bs-motion-loop) var(--bs-ease-out) 1;
 }

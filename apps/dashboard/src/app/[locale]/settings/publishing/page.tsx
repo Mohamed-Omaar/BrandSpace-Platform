@@ -27,6 +27,7 @@ import {
   statusMessage,
   translator,
   type MessageKey,
+  successFlash,
 } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { CONTENT_TYPES } from '../../content/content-types';
@@ -127,6 +128,7 @@ export default async function PublishingDefaultsPage({
 
   return (
     <WorkspaceShell
+      flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
       heading={t('settings.publishing')}
@@ -136,9 +138,6 @@ export default async function PublishingDefaultsPage({
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
-      {ok && statusMessage(ok, locale) && (
-        <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
-      )}
       <SettingsSplit
         navLabel={t('settings.navLabel')}
         items={settingsNavItems({

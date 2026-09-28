@@ -91,7 +91,11 @@ describe('D-290 · the screen', () => {
 
   it('drag is never the only way: every tray row has a Schedule button', () => {
     expect(view).toContain('calendar-tray-schedule-');
-    expect(grid).toContain('onDropDay');
+    // REPLACED (Phase 2B-2b item 10, §8.2, D-353): was `grid` contains
+    // 'onDropDay' — native drop handlers on each day. Pointer drag replaced
+    // native drag and drop by the owner's §8.2; each day now says it can take
+    // a post, and `useCalendarDrag` commits the drop.
+    expect(grid).toContain("{ 'data-drop-day': day.key, 'data-drop-state': dropStateOf(day) }");
   });
 
   it('the post opens in a side sheet with a real preview', () => {

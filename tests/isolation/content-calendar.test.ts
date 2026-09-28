@@ -758,3 +758,101 @@ describe('the library and the calendar agree about a scheduled item', () => {
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 });
+
+describe('§8.2 (Phase 2B-2b) — Undo moves a post back only while it is where the move put it', () => {
+  it('moves back through the same path; a second Undo changes nothing', async () => {
+    const contentItemId = await makeDraft('Undo once');
+    const original = futureLocal(9);
+    const { slot } = await inA((calendar) =>
+      calendar.schedule({ contentItemId, localTime: original, ...actor() }),
+    );
+    const movedTo = futureLocal(10);
+    await inA((calendar) =>
+      calendar.reschedule({ slotId: slot.id, localTime: movedTo, ...actor() }),
+    );
+
+    const undone = await inA((calendar) =>
+      calendar.reschedule({
+        slotId: slot.id,
+        localTime: original,
+        expectedLocalTime: movedTo,
+        ...actor(),
+      }),
+    );
+    expect(undone.slot.scheduledLocalTime).toBe(original);
+
+    await expect(
+      inA((calendar) =>
+        calendar.reschedule({
+          slotId: slot.id,
+          localTime: original,
+          expectedLocalTime: movedTo,
+          ...actor(),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'CONFLICT', publicDetails: { reason: 'slot_moved_since' } });
+
+    // One move and one Undo were recorded — the replay wrote nothing.
+    const moves = await withWorkspace(
+      fixtures.a.workspaceId,
+      (db) =>
+        db.auditEvent.count({ where: { action: 'content.rescheduled', resourceId: slot.id } }),
+      { prisma: app },
+    );
+    expect(moves).toBe(2);
+  });
+
+  it('two Undos racing each other: exactly one moves the post', async () => {
+    const contentItemId = await makeDraft('Undo race');
+    const original = futureLocal(9);
+    const { slot } = await inA((calendar) =>
+      calendar.schedule({ contentItemId, localTime: original, ...actor() }),
+    );
+    const movedTo = futureLocal(11);
+    await inA((calendar) =>
+      calendar.reschedule({ slotId: slot.id, localTime: movedTo, ...actor() }),
+    );
+
+    const undo = () =>
+      inA((calendar) =>
+        calendar.reschedule({
+          slotId: slot.id,
+          localTime: original,
+          expectedLocalTime: movedTo,
+          ...actor(),
+        }),
+      );
+    const outcomes = await Promise.allSettled([undo(), undo()]);
+    expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toHaveLength(1);
+  });
+
+  it('Undo meets the rules as they stand now: a time that has passed is refused, and nothing moves', async () => {
+    const contentItemId = await makeDraft('Undo too late');
+    const { slot } = await inA((calendar) =>
+      calendar.schedule({ contentItemId, localTime: futureLocal(9), ...actor() }),
+    );
+    const movedTo = futureLocal(12);
+    await inA((calendar) =>
+      calendar.reschedule({ slotId: slot.id, localTime: movedTo, ...actor() }),
+    );
+
+    const yesterday = new Date(Date.now() - 24 * 3_600_000).toISOString().slice(0, 10);
+    await expect(
+      inA((calendar) =>
+        calendar.reschedule({
+          slotId: slot.id,
+          localTime: `${yesterday}T09:00`,
+          expectedLocalTime: movedTo,
+          ...actor(),
+        }),
+      ),
+    ).rejects.toMatchObject({ publicDetails: { reason: 'schedule_in_past' } });
+    const still = await withWorkspace(
+      fixtures.a.workspaceId,
+      (db) => db.calendarSlot.findUniqueOrThrow({ where: { id: slot.id } }),
+      { prisma: app },
+    );
+    expect(still.scheduledLocalTime).toBe(movedTo);
+  });
+});

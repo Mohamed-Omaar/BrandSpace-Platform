@@ -17,7 +17,7 @@ import { requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
-import { statusMessage, translator } from '../../../i18n/messages';
+import { statusMessage, translator, successFlash } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { CAMPAIGN_STATUSES } from '../../../server/campaign-form';
 import { bestCampaign, formatRateMilli } from '../../../server/best-campaign';
@@ -120,6 +120,7 @@ export default async function CampaignsPage({
 
   return (
     <WorkspaceShell
+      flash={successFlash(single('ok'), locale)}
       brandContext={brandContext}
       locale={locale}
       heading={t('campaigns.title')}
@@ -145,9 +146,6 @@ export default async function CampaignsPage({
         <CustomerBanner tone="error">
           {statusMessage(single('error'), locale, single('ref'))}
         </CustomerBanner>
-      )}
-      {single('ok') && statusMessage(single('ok'), locale) && (
-        <CustomerBanner tone="success">{statusMessage(single('ok'), locale)}</CustomerBanner>
       )}
 
       {best ? (

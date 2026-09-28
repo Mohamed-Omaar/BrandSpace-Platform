@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { flushSync } from 'react-dom';
 import {
   Banner,
   Button,
+  CalendarDropStrip,
   ContentCalendar,
   Dialog,
   Field,
@@ -19,9 +21,15 @@ import {
   inputStyle,
   spacingTokens,
   typographyTokens,
+  showToast,
+  stripDayKeys,
+  useCalendarDrag,
   type CalendarDay,
+  type DropState,
   type PostRecord,
 } from '@brandspace/ui';
+import type { MoveSlotResult } from './actions';
+import { pendingMoves, withMoves } from './optimistic-moves';
 import { VariantPreview, previewLabels } from '../content/compose/variant-preview';
 import { CopilotLink } from '../../../components/copilot-link';
 
@@ -183,6 +191,17 @@ export interface CalendarViewProps {
   readonly actions: {
     schedule(formData: FormData): Promise<void>;
     reschedule(formData: FormData): Promise<void>;
+    /**
+     * §8.2 — a dragged move, or its Undo: the same reschedule, answering with
+     * the outcome instead of redirecting (`moveSlotAction`).
+     */
+    move?(input: {
+      readonly locale: string;
+      readonly slotId: string;
+      readonly date: string;
+      readonly time: string;
+      readonly expectedLocalTime?: string | undefined;
+    }): Promise<MoveSlotResult>;
     cancel(formData: FormData): Promise<void>;
     submitForReview?(formData: FormData): Promise<void>;
   };
@@ -270,41 +289,183 @@ export function CalendarView({
   };
 
   /*
-   * B7 — A PLANNED POST DRAGGED TO ANOTHER DAY keeps its time: the same
-   * reschedule action the drawer's form posts, with the new date. Drag is
-   * never the only way (WCAG 2.5.7) — the drawer has the date and time form.
+   * §8.2 (Phase 2B-2b) — THE POINTER DRAG. `useCalendarDrag` lifts, previews
+   * and cancels; nothing here runs until a drop is COMMITTED on a day that can
+   * take it. A post dragged to another day keeps its time and goes through
+   * `actions.move` — the same reschedule, so F2, quota, approval, B-4, scope
+   * and the audit event all apply. Drag is never the only way (WCAG 2.5.7):
+   * the drawer has the date and time form.
    */
-  const moveSlotTo = (slotId: string, day: string) => {
-    const slot = slots.find((candidate) => candidate.slotId === slotId);
-    if (!slot || !canSchedule || slot.reschedulable === false) return;
-    if (today !== '' && day < today) {
-      setPastDayNotice(true);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const [moves, setMoves] = useState<ReadonlyMap<string, string>>(new Map());
+  const moveTo = (slotId: string, day: string | null) =>
+    flushSync(() =>
+      setMoves((current) => {
+        const next = new Map(current);
+        if (day === null) next.delete(slotId);
+        else next.set(slotId, day);
+        return next;
+      }),
+    );
+  // Once the server's slots say the same, an override has nothing left to do.
+  useEffect(() => {
+    setMoves((current) =>
+      pendingMoves(current, (id) => slots.find((slot) => slot.slotId === id)?.date),
+    );
+  }, [slots]);
+  const shownDays = useMemo(
+    () =>
+      withMoves(days, moves, (postId) => slots.find((slot) => slot.slotId === postId)?.time ?? ''),
+    [days, moves, slots],
+  );
+
+  // A YYYY-MM-DD in the reader's language, Western digits (§4): the short
+  // weekday, the day number and the whole date. Composed from parts, so it
+  // reads "Wed 21" — a single format would say "21 Wed" in English.
+  const dayParts = (dayKey: string) => {
+    const [year, monthNumber, dayNumber] = dayKey.split('-').map(Number);
+    const date = new Date(Date.UTC(year ?? 0, (monthNumber ?? 1) - 1, dayNumber ?? 1));
+    const format = (options: Intl.DateTimeFormatOptions) =>
+      new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
+        ...options,
+        timeZone: 'UTC',
+      }).format(date);
+    return {
+      weekday: format({ weekday: 'short' }),
+      label: format({ day: 'numeric' }),
+      longLabel: format({ weekday: 'long', day: 'numeric', month: 'long' }),
+    };
+  };
+  const dayName = (dayKey: string) => {
+    const parts = dayParts(dayKey);
+    return `${parts.weekday} ${parts.label}`;
+  };
+  const whenOf = (dayKey: string, time: string) =>
+    time ? `${dayName(dayKey)} · ${time}` : dayName(dayKey);
+
+  /*
+   * "If the move changed the post's status, its card pulses once" — checked
+   * when the server's days arrive, against the status the post had before.
+   */
+  const pulseAfter = useRef<{ slotId: string; status: string } | null>(null);
+  useEffect(() => {
+    const pending = pulseAfter.current;
+    if (!pending) return;
+    const post = days
+      .flatMap((day) => day.posts)
+      .find((candidate) => candidate.id === pending.slotId);
+    if (!post || post.status === pending.status) return;
+    pulseAfter.current = null;
+    for (const chip of pageRef.current?.querySelectorAll<HTMLElement>(
+      `[data-drag-payload="slot:${CSS.escape(pending.slotId)}"]`,
+    ) ?? []) {
+      chip.classList.remove('bs-status-pulse');
+      void chip.offsetWidth;
+      chip.classList.add('bs-status-pulse');
+    }
+  }, [days]);
+
+  const refuse = (message: string) =>
+    showToast({ tone: 'error', message, testId: 'calendar-move-refused' });
+
+  /** Undo: back where it was, through the same path, under the rules as they stand now. */
+  const undoMove = async (
+    slotId: string,
+    from: { date: string; time: string },
+    movedTo: { date: string; localTime: string },
+  ) => {
+    if (!actions.move) return;
+    moveTo(slotId, from.date);
+    const result = await actions.move({
+      locale,
+      slotId,
+      date: from.date,
+      time: from.time,
+      // Only while it is still where the move put it: a second Undo, or one
+      // racing another move, changes nothing.
+      expectedLocalTime: movedTo.localTime,
+    });
+    if (!result.ok) {
+      // It stays moved, and the reason is said.
+      moveTo(slotId, movedTo.date);
+      refuse(result.message);
       return;
     }
-    setPastDayNotice(false);
-    if (slot.date === day) return;
-    const form = new FormData();
-    form.set('locale', locale);
-    form.set('month', month);
-    form.set('slotId', slot.slotId);
-    form.set('date', day);
-    form.set('time', slot.time);
-    startTransition(() => {
-      void actions.reschedule(form);
+    showToast({
+      tone: 'success',
+      message: (t['calendar.drag.undone'] ?? '{when}').replace(
+        '{when}',
+        whenOf(from.date, from.time),
+      ),
     });
   };
 
-  const onDrop = (day: string, data: string) => {
-    if (data.startsWith('slot:')) moveSlotTo(data.slice('slot:'.length), day);
-    else openScheduleFor(data.startsWith('item:') ? data.slice('item:'.length) : data, day);
+  const commitMove = async (slot: SlotDetail, day: string, status: string) => {
+    if (!actions.move) return;
+    const from = { date: slot.date, time: slot.time };
+    const result = await actions.move({ locale, slotId: slot.slotId, date: day, time: slot.time });
+    if (!result.ok) {
+      moveTo(slot.slotId, null);
+      refuse(result.message);
+      return;
+    }
+    pulseAfter.current = { slotId: slot.slotId, status };
+    showToast({
+      tone: 'success',
+      message: (t['calendar.drag.moved'] ?? '{when}').replace('{when}', whenOf(day, slot.time)),
+      action: {
+        label: t['calendar.drag.undo'] ?? '',
+        testId: 'calendar-undo',
+        onAction: () => {
+          void undoMove(slot.slotId, from, { date: day, localTime: result.localTime });
+        },
+      },
+    });
   };
 
-  /** B7 — only a post that can still move is draggable, and only for a scheduler. */
+  const onDrop = (payload: string, day: string): 'moved' | 'opened' | 'ignored' => {
+    if (payload.startsWith('item:')) {
+      openScheduleFor(payload.slice('item:'.length), day);
+      return 'opened';
+    }
+    const slotId = payload.startsWith('slot:') ? payload.slice('slot:'.length) : '';
+    const slot = slots.find((candidate) => candidate.slotId === slotId);
+    if (!slot || !canSchedule || slot.reschedulable === false || !actions.move) return 'ignored';
+    if (today !== '' && day < today) {
+      setPastDayNotice(true);
+      return 'ignored';
+    }
+    setPastDayNotice(false);
+    if (slot.date === day) return 'ignored';
+    const status =
+      days.flatMap((d) => d.posts).find((post) => post.id === slot.slotId)?.status ?? '';
+    // Drawn on its new day at once; the server's answer confirms or reverts it.
+    moveTo(slot.slotId, day);
+    void commitMove(slot, day, status);
+    return 'moved';
+  };
+
+  const { dragging } = useCalendarDrag(pageRef, {
+    onDrop,
+    onRefused: () => setPastDayNotice(true),
+    describe: (payload: string, day: string, state: DropState) => {
+      if (state === 'past') return t['calendar.drag.pastDay'] ?? '';
+      const slot = payload.startsWith('slot:')
+        ? slots.find((candidate) => candidate.slotId === payload.slice('slot:'.length))
+        : undefined;
+      return whenOf(day, slot?.time ?? '');
+    },
+  });
+
+  /** B7 — only a post that can still move can be dragged, and only by a scheduler. */
   const postDragData = (post: PostRecord): string | undefined => {
     if (!canSchedule) return undefined;
     const slot = slots.find((candidate) => candidate.slotId === post.id);
     return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;
   };
+
+  // §8.2 — the phone's strip: the next 14 days from today, in the workspace's zone.
+  const stripDays = today ? stripDayKeys(today).map((key) => ({ key, ...dayParts(key) })) : [];
 
   const filterQuery = new URLSearchParams(
     Object.entries(filters).filter(([, value]) => value !== ''),
@@ -331,7 +492,11 @@ export function CalendarView({
       : `${t['calendar.quota']}: ${quotaUsed} / ${quotaLimit}`;
 
   return (
-    <div data-testid="calendar-page" style={{ display: 'grid', gap: spacingTokens.lg }}>
+    <div
+      ref={pageRef}
+      data-testid="calendar-page"
+      style={{ display: 'grid', gap: spacingTokens.lg }}
+    >
       {pastDayNotice ? (
         <Banner tone="warning" testId="calendar-past-day">
           {t['calendar.pastDay']}
@@ -339,7 +504,7 @@ export function CalendarView({
       ) : null}
       <ContentCalendar
         periodLabel={periodLabel}
-        days={days}
+        days={shownDays}
         labels={{ ...labels, postsOnDay: (count) => `${count} ${postsOnDayLabel}` }}
         busy={pending}
         onPrevious={() => goTo(previousMonth)}
@@ -383,8 +548,15 @@ export function CalendarView({
         }
         {...(canSchedule
           ? {
-              onDropDay: onDrop,
+              dropTargets: true,
               postDragData,
+              ...(dragging && stripDays.length > 0
+                ? {
+                    dropStrip: (
+                      <CalendarDropStrip days={stripDays} title={t['calendar.drag.strip'] ?? ''} />
+                    ),
+                  }
+                : {}),
               // B7 — "new post" on an empty day: the scheduling dialog, dated.
               onCreateOnDay: (day: string) => {
                 setPastDayNotice(false);
@@ -473,6 +645,17 @@ export function CalendarView({
         }
       />
 
+      {/* §8.2 — the hint under the phone's list: a long-press lifts a post. */}
+      {canSchedule ? (
+        <p
+          className="bs-narrow-only"
+          data-testid="calendar-move-note"
+          style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+        >
+          {t['calendar.moveFromPost']}
+        </p>
+      ) : null}
+
       {/*
         D-290 — ONE QUIET LINE, NEVER A POPUP: a weekday nothing went on for
         the last whole weeks, from real slots. Nothing is said when the
@@ -532,14 +715,6 @@ export function CalendarView({
               >
                 {t['calendar.tray.hint']}
               </p>
-              {/* B7 / M7 — a phone has no drag; moving is done from the post itself. */}
-              <p
-                className="bs-narrow-only"
-                data-testid="calendar-move-note"
-                style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
-              >
-                {t['calendar.moveFromPost']}
-              </p>
               <ul
                 style={{
                   listStyle: 'none',
@@ -555,13 +730,10 @@ export function CalendarView({
                 {(trayExpanded ? drafts : drafts.slice(0, TRAY_PREVIEW)).map((draft) => (
                   <li
                     key={draft.id}
-                    draggable
+                    // B7 / §8.2 — `item:` says a tray draft; a post already
+                    // planned carries `slot:`. Dropping one opens the dialog.
+                    data-drag-payload={`item:${draft.id}`}
                     data-testid={`calendar-tray-${draft.id}`}
-                    onDragStart={(event) => {
-                      // B7 — `item:` says a tray draft; a post already planned carries `slot:`.
-                      event.dataTransfer.setData('text/plain', `item:${draft.id}`);
-                      event.dataTransfer.effectAllowed = 'copy';
-                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',

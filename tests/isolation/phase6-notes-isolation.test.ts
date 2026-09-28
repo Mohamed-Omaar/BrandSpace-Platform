@@ -39,6 +39,32 @@ interface Fixture {
   readonly contentItemId: string;
 }
 
+/** Another ACTIVE member of `workspaceId`, as the owner role. */
+async function addMember(workspaceId: string, label: string): Promise<string> {
+  const user = await platform.user.create({
+    data: {
+      email: `notes-${label}-${crypto.randomUUID()}@example.local`,
+      name: label,
+      status: 'ACTIVE',
+      timezone: 'UTC',
+    },
+  });
+  const role = await platform.role.findFirstOrThrow({
+    where: { key: 'workspace_owner', realm: 'WORKSPACE', workspaceId: null },
+    select: { id: true },
+  });
+  await platform.membership.create({
+    data: {
+      workspaceId,
+      userId: user.id,
+      roleId: role.id,
+      status: 'ACTIVE',
+      acceptedAt: new Date(),
+    },
+  });
+  return user.id;
+}
+
 async function freshWorkspace(label: string): Promise<Fixture> {
   const run = crypto.randomUUID();
   const user = await platform.user.create({
@@ -214,8 +240,15 @@ describe('P6-05 · a conversation belongs to exactly one workspace', () => {
   it('a mention in B is never counted for a person in A', async () => {
     const a = await freshWorkspace('mention-a');
     const b = await freshWorkspace('mention-b');
+    /*
+     * MO10 (Phase 2B-2b, owner option A, D-352): a person naming themselves is
+     * not a mention to them, so the mention here is written by ANOTHER member
+     * of B — this used to be B's owner naming themselves. What the test proves
+     * is unchanged: B's mention is counted in B and never from A.
+     */
+    const writer = await addMember(b.workspaceId, 'mention-writer');
     await serviceFor(b.workspaceId).startThread({
-      actor: actorFor(b),
+      actor: actorFor(b, { userId: writer }),
       subject: { type: 'CONTENT_ITEM', contentItemId: b.contentItemId },
       body: 'naming B',
       mentionedUserIds: [b.userId],
@@ -469,8 +502,15 @@ describe('P6-05 · the conversation behaves like a conversation', () => {
     });
 
     const service = serviceFor(fixture.workspaceId);
+    /*
+     * MO10 (Phase 2B-2b, owner option A, D-352): the note naming both of them is
+     * written by a THIRD member — it used to be written by one of the two it
+     * names, whose own mention no longer counts. Each still has one unread
+     * mention, and marking one read still leaves the other's alone.
+     */
+    const writer = await addMember(fixture.workspaceId, 'read-state-writer');
     const { threadId } = await service.startThread({
-      actor: actorFor(fixture),
+      actor: actorFor(fixture, { userId: writer }),
       subject: { type: 'CONTENT_ITEM', contentItemId: fixture.contentItemId },
       body: 'both of you',
       mentionedUserIds: [fixture.userId, other.id],

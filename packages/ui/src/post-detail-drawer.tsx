@@ -109,6 +109,9 @@ export function PostDetailDrawer({
         data-testid={testId}
         data-post-id={post.id}
         tabIndex={-1}
+        // MO5: opens from its trigger's side, rows in order.
+        className="bs-pop"
+        data-origin="end"
         style={{
           position: 'fixed',
           insetBlock: layoutTokens.shellInset,

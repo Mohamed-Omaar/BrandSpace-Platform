@@ -299,7 +299,7 @@ export function BrandChat({
         ))}
 
         {busy ? (
-          <p className="bb-chat-message brain typing" data-testid="chat-busy">
+          <p className="bb-chat-message brain typing bs-pulse" data-testid="chat-busy">
             {labels.thinking}
           </p>
         ) : null}

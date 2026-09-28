@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
 import { AlertIcon, CheckIcon, EmptyBoxIcon, InfoIcon, LockIcon, SearchIcon } from './icons';
@@ -113,19 +114,45 @@ export function Toast({
   children,
   onDismiss,
   dismissLabel,
+  action,
+  announce = true,
+  className,
+  icon,
   testId,
 }: {
   readonly tone: Tone;
   readonly children: ReactNode;
   readonly onDismiss?: (() => void) | undefined;
   readonly dismissLabel?: string | undefined;
+  /**
+   * One action beside the message — "Undo" after a move (§8.2), or "Open" on
+   * an incoming mention (MO10), which is a link because it goes somewhere.
+   */
+  readonly action?:
+    | {
+        readonly label: string;
+        readonly onAction: () => void;
+        readonly href?: string | undefined;
+        readonly testId?: string | undefined;
+      }
+    | undefined;
+  /** In place of the tone's icon — the sender's initial on an incoming mention. */
+  readonly icon?: ReactNode;
+  /**
+   * `false` inside `ToastHost`, whose own region is the live one: a live
+   * region inserted together with its words is not reliably announced, so the
+   * host keeps one that is always there.
+   */
+  readonly announce?: boolean | undefined;
+  /** `bs-toast-in` from `ToastHost`: MO8's entrance. */
+  readonly className?: string | undefined;
   readonly testId?: string | undefined;
 }) {
   const style = toneStyle(tone);
   return (
     <div
-      role="status"
-      aria-live="polite"
+      {...(announce ? { role: 'status', 'aria-live': 'polite' as const } : {})}
+      className={className}
       data-testid={testId ?? 'toast'}
       style={{
         display: 'flex',
@@ -141,15 +168,59 @@ export function Toast({
         color: colorTokens.textPrimary,
       }}
     >
-      <span style={{ color: style.color, flexShrink: 0, display: 'inline-flex' }}>
-        {style.icon}
+      <span
+        // MO8: a success check draws itself.
+        {...(tone === 'success' ? { 'data-toast-check': '' } : {})}
+        style={{ color: style.color, flexShrink: 0, display: 'inline-flex' }}
+      >
+        {icon ?? style.icon}
       </span>
       <span style={{ minInlineSize: 0, flex: 1 }}>{children}</span>
+      {action?.href ? (
+        <Link
+          href={action.href}
+          onClick={action.onAction}
+          data-testid={action.testId}
+          className="bs-control"
+          style={{
+            flexShrink: 0,
+            alignSelf: 'center',
+            ...typographyTokens.bodySm,
+            fontWeight: 600,
+            color: colorTokens.brandPurplePressed,
+            textDecoration: 'none',
+          }}
+        >
+          {action.label}
+        </Link>
+      ) : action ? (
+        <button
+          type="button"
+          onClick={action.onAction}
+          data-testid={action.testId}
+          className="bs-control"
+          style={{
+            flexShrink: 0,
+            background: 'transparent',
+            border: 0,
+            padding: 0,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            ...typographyTokens.bodySm,
+            fontWeight: 600,
+            color: colorTokens.brandPurplePressed,
+            minBlockSize: '24px',
+          }}
+        >
+          {action.label}
+        </button>
+      ) : null}
       {onDismiss && dismissLabel ? (
         <button
           type="button"
           onClick={onDismiss}
           aria-label={dismissLabel}
+          data-testid={`${testId ?? 'toast'}-dismiss`}
           style={{
             background: 'transparent',
             border: 0,
@@ -295,6 +366,8 @@ export function Skeleton({
     <span
       aria-hidden="true"
       data-testid="skeleton"
+      // MO13: a placeholder for something being generated or loaded shimmers.
+      className="bs-shimmer"
       style={{
         display: 'block',
         inlineSize: width,

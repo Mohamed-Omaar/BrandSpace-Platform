@@ -15,7 +15,7 @@ import { CheckboxRow } from '../../../../components/checkbox-row';
 import { brandContextFor, listAccessibleBrands } from '../../../../server/brand-context';
 import { settingsNavItems } from '../../../../server/settings-nav';
 import { saveBarLabels } from '../../../../server/save-bar-labels';
-import { statusMessage, translator } from '../../../../i18n/messages';
+import { statusMessage, translator, successFlash } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { saveAiLanguageAction } from './actions';
 
@@ -63,6 +63,7 @@ export default async function AiSettingsPage({
 
   return (
     <WorkspaceShell
+      flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
       heading={t('settings.ai')}
@@ -72,9 +73,6 @@ export default async function AiSettingsPage({
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
-      {ok && statusMessage(ok, locale) && (
-        <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
-      )}
       <SettingsSplit
         navLabel={t('settings.navLabel')}
         items={settingsNavItems({

@@ -775,12 +775,21 @@ describe('B7 · calendar: drag a post, a new post on a day, no unscheduling once
     expect(view).toContain(
       'return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;',
     );
-    expect(view).toContain("form.set('time', slot.time);");
+    // REPLACED (Phase 2B-2b item 10, §8.2, D-353): these read the native
+    // drag — `form.set('time', slot.time)` into the reschedule form, the
+    // tray's and the chip's `dataTransfer.setData`, and `draggable: true`.
+    // The owner's §8.2 replaced native drag and drop with pointer events; the
+    // rules they guarded are unchanged and asserted on the new path: the drop
+    // keeps the post's time, a past day is refused, and the payloads are the
+    // same `slot:` / `item:` strings.
+    expect(view).toContain(
+      'const result = await actions.move({ locale, slotId: slot.slotId, date: day, time: slot.time });',
+    );
     expect(view).toMatch(/if \(today !== '' && day < today\) \{\s*setPastDayNotice\(true\);/);
-    expect(view).toContain("event.dataTransfer.setData('text/plain', `item:${draft.id}`);");
+    expect(view).toContain('data-drag-payload={`item:${draft.id}`}');
     const chip = read('packages/ui/src/post-card.tsx');
-    expect(chip).toContain('draggable: true');
-    expect(chip).toContain("event.dataTransfer.setData('text/plain', dragData);");
+    expect(chip).toContain("'data-drag-payload': dragData,");
+    expect(chip).not.toContain('draggable');
   });
 
   it('"new post" is offered only on an empty day that has not passed', () => {

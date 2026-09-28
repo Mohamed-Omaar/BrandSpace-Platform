@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
 import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
+import { statusMessage } from '../../apps/dashboard/src/i18n/messages';
 
 /**
  * Approvals, the Activity Log, Notifications and the Command Center, end to end
@@ -88,6 +89,38 @@ async function submitAndSettle(page: Page, selector: string, marker: RegExp): Pr
 }
 
 /**
+ * `submitAndSettle` for the POST PAGE, which says "done" with a toast.
+ *
+ * C8 (Phase 2B-2b, owner-approved): `/content/compose` takes `ok=` off the
+ * address once its toast is shown, so the address ends where it started and
+ * neither "the URL moved" nor "the URL says ok=" is a signal there any more.
+ * The same two waits as above; the second watches the toast for the action's
+ * words, and a refusal still fails at once with the URL it produced.
+ */
+async function submitAndToast(page: Page, selector: string, code: string): Promise<void> {
+  await expect(async () => {
+    const sent = page
+      .waitForRequest((request) => request.method() === 'POST', { timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    await page.locator(selector).first().click();
+    expect(await sent, 'the click never reached the server').toBe(true);
+  }).toPass({ timeout: 30_000 });
+
+  await expect
+    .poll(
+      async () => {
+        const url = page.url();
+        if (/[?&]error=/.test(url)) return `refused: ${url}`;
+        const toast = page.getByTestId('toast');
+        return (await toast.count()) > 0 ? await toast.textContent() : `waiting: ${url}`;
+      },
+      { message: 'the form did not submit', timeout: 60_000 },
+    )
+    .toContain(statusMessage(code, 'en'));
+}
+
+/**
  * Open the reviewable fixture in the composer.
  *
  * FOUND BY ITS TITLE, the way a person would find it. The library shows the
@@ -164,8 +197,7 @@ test.describe('the approval workflow', () => {
     await expect(page.getByTestId('composer-status')).toHaveText(/Draft/i, { timeout: 15_000 });
 
     // 1. Submit for review.
-    await submitAndSettle(page, '[data-testid="submit-for-review"]', /ok=SUBMITTED|error=/);
-    expect(page.url()).toMatch(/ok=SUBMITTED/);
+    await submitAndToast(page, '[data-testid="submit-for-review"]', 'SUBMITTED');
 
     // 2. It is in the queue, and the queue offers no verdict — the reader
     //    submitted it, and the brand forbids self-approval.
@@ -209,8 +241,7 @@ test.describe('the approval workflow', () => {
 
     await openReviewableDraft(page);
     await expect(page.getByTestId('composer-status')).toHaveText(/Draft/i, { timeout: 15_000 });
-    await submitAndSettle(page, '[data-testid="submit-for-review"]', /ok=SUBMITTED|error=/);
-    expect(page.url()).toMatch(/ok=SUBMITTED/);
+    await submitAndToast(page, '[data-testid="submit-for-review"]', 'SUBMITTED');
 
     // 6. Now the verdict is offered, and taking it approves the content.
     await page.goto(`${DASHBOARD_BASE_URL}/en/approvals`);

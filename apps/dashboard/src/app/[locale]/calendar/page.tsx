@@ -36,10 +36,16 @@ import {
   statusMessage,
   translator,
   type MessageKey,
+  successFlash,
 } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { CalendarView, type SchedulableDraft, type SlotDetail } from './calendar-view';
-import { cancelScheduleAction, rescheduleContentAction, scheduleContentAction } from './actions';
+import {
+  cancelScheduleAction,
+  moveSlotAction,
+  rescheduleContentAction,
+  scheduleContentAction,
+} from './actions';
 import { submitForReviewAction } from '../content/actions';
 
 export const dynamic = 'force-dynamic';
@@ -695,7 +701,6 @@ export default async function CalendarPage({
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
   const reference = single('ref');
-  const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? statusMessage(error, locale, reference) : null;
 
   const brandContext = await brandContextFor(workspace, '/calendar');
@@ -719,6 +724,7 @@ export default async function CalendarPage({
 
   return (
     <WorkspaceShell
+      flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
       heading={translate('calendar.title')}
@@ -729,7 +735,6 @@ export default async function CalendarPage({
       customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
       {/*
         THE MONTH'S BLOCKED POSTS, COUNTED — and `warning` rather than `error`,
@@ -870,6 +875,7 @@ export default async function CalendarPage({
         actions={{
           schedule: scheduleContentAction,
           reschedule: rescheduleContentAction,
+          move: moveSlotAction,
           cancel: cancelScheduleAction,
           submitForReview: submitForReviewAction,
         }}
@@ -893,6 +899,11 @@ const CALENDAR_KEYS = [
   'calendar.scheduleDate',
   'calendar.pastDay',
   'calendar.moveFromPost',
+  'calendar.drag.pastDay',
+  'calendar.drag.strip',
+  'calendar.drag.moved',
+  'calendar.drag.undo',
+  'calendar.drag.undone',
   'calendar.scheduleTime',
   'calendar.suggestedTime',
   'calendar.scheduleSubmit',

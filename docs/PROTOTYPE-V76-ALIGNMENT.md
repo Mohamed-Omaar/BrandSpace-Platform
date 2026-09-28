@@ -485,6 +485,15 @@ Replaces native HTML drag and drop with pointer events, so it also works on touc
 - **Phone.** The calendar is a list, so a long-press lifts the post and a glass strip with the next 14 days slides up from the bottom; dropping on a day moves it. The hint under the list reads "Press and hold a post, then drag it to its new day."
 - **Rules.** Published posts can't be dragged. Dragging needs `content.schedule`, and the server re-checks every move with the existing scheduling rules (F2 no-past, quota, approval). In view-as, a drag is refused with "Preview only".
 
+### 8.3 Implementation notes and known gaps (Phase 2B-2b)
+
+Recorded beside §8, not in it: §8 above is the owner's text and is unchanged.
+
+- **MO10 is mentions only (owner option A, D-352).** A mention by another person appears on the next page the reader opens, once per browser tab. **Known gap — replies and "note" events are not incoming:** nothing writes a notification for them and nothing records who should hear about them, so there is no reliable sender-and-recipient pair to show. Doing it needs a delivery decision first (a notification row per recipient, or a polled feed), which is out of this phase.
+- **View-as does not exist yet (owner answer 2).** When it is built, a view-as session must drop `content.schedule`, so the calendar's existing check refuses a drag — and every other move — with "Preview only".
+- **MO4's pill never changes size.** The owner's width/height exception is MO2's; MO4 slides a `clip-path` instead (D-349).
+- **§8.2 as built (D-353).** A committed drop is the only thing that calls the server, through `moveSlotAction` — the same `content.schedule` requirement and the same `CalendarService.reschedule` as the drawer's form, so F2, quota, approval, B-4, scope and the audit event all apply; it answers with the outcome instead of redirecting, so the post is drawn on its new day at once and a refusal puts it back with the reason in a toast. **Undo** is offered only while that toast shows (the toast host closes it on the next navigation) and carries the owner-approved precondition — the time the move put the post at — so a second Undo, one racing another move, or a replay changes nothing (`SLOT_MOVED_SINCE`); if the old time has passed, F2 refuses it and the post stays moved. **The keyboard path** is the post's drawer (open the chip, change the date and time, Reschedule) — unchanged and still the way to move a post without a pointer (WCAG 2.5.7); the result is announced by the toast host's live region. **The tray** keeps its Schedule button; dropping a draft opens the same dialog, dated. **The phone** gets the strip on the Agenda list, and so does the desktop Agenda view — the list has no day cells to drop on.
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):

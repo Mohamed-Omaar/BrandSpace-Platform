@@ -945,7 +945,8 @@ export function CopilotPanel({
       />
       <aside
         ref={measure}
-        className="bs-copilot-panel"
+        // MO7: enters from its bottom end corner (340 ms).
+        className="bs-copilot-panel bs-copilot-in"
         role={isSheet ? 'dialog' : 'complementary'}
         aria-modal={isSheet ? true : undefined}
         aria-label={labels.title}
@@ -1020,6 +1021,8 @@ export function CopilotDrawer({
         aria-label={labels.title}
         data-testid={testId}
         tabIndex={-1}
+        // MO7: enters from its bottom end corner (340 ms).
+        className="bs-copilot-in"
         style={{
           position: 'fixed',
           insetBlock: layoutTokens.shellInset,

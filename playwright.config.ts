@@ -378,6 +378,8 @@ export default defineConfig({
         // files for review and belongs only to `visual-review` (F-33). The
         // Phase 6 set ran here because its name was not on the list above.
         /\.screenshots\.spec\.ts$/,
+        // §8.2 (Phase 2B-2b item 10): the finger drag belongs to the phone.
+        /calendar-touch\.spec\.ts$/,
       ],
       use: {
         ...devices['Desktop Chrome'],
@@ -393,6 +395,9 @@ export default defineConfig({
         // files for review and belongs only to `visual-review` (F-33). The
         // Phase 6 set ran here because its name was not on the list above.
         /\.screenshots\.spec\.ts$/,
+        // §8.2 (Phase 2B-2b item 10): the mouse drag on the month belongs to
+        // the desktop; this project runs the REAL touch drag instead.
+        /calendar-mouse\.spec\.ts$/,
       ],
       use: { ...devices['Pixel 5'], launchOptions },
     },

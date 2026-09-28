@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import {
   AppShell,
   BrandMark,
@@ -32,6 +32,7 @@ import {
   type ShellNavSection,
   type Tone,
   initialsFrom,
+  ToastHost,
 } from '@brandspace/ui';
 import { switchLocalePath } from '../i18n/locale-path';
 import { customerRoleName, translator, type MessageKey } from '../i18n/messages';
@@ -45,6 +46,7 @@ import { NotificationsBell } from './notifications-bell';
 import { loadNotificationFeed } from '../app/[locale]/notifications/feed';
 import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
+import { incomingMentions } from '../server/incoming-mentions';
 import { getCustomer, getCustomerAuth, getSessionToken } from '../server/customer-context';
 import { businessSwitcherModel } from '../server/business-switcher';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
@@ -307,6 +309,7 @@ export async function WorkspaceShell({
   availableWorkspaces = [],
   brandContext,
   focus = false,
+  flash,
   children,
 }: {
   locale: string;
@@ -361,6 +364,12 @@ export async function WorkspaceShell({
    * own, exactly as without it.
    */
   focus?: boolean | undefined;
+  /**
+   * C8 (Phase 2B-2b) — THIS REQUEST'S SUCCESS, as a toast rather than a
+   * banner: the page resolves its `?ok=` code to words and passes them here;
+   * the shell's one `ToastHost` shows them and takes `ok` off the address.
+   */
+  flash?: { readonly tone: 'success'; readonly message: string } | undefined;
   children: ReactNode;
 }) {
   const t = translator(locale);
@@ -808,6 +817,15 @@ export async function WorkspaceShell({
         </div>
       ) : null}
       <div className="bs-section-stack">{children}</div>
+      {/* `useSearchParams` in the host needs a boundary on a prerendered route. */}
+      <Suspense fallback={null}>
+        <ToastHost
+          flash={flash}
+          dismissLabel={t('toast.dismiss')}
+          incoming={await incomingMentions(locale)}
+          openLabel={t('notifications.incoming.open')}
+        />
+      </Suspense>
     </AppShell>
   );
 }

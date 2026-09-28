@@ -26,6 +26,7 @@ import {
   statusMessage,
   translator,
   type MessageKey,
+  successFlash,
 } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
@@ -323,6 +324,7 @@ export default async function PublishingPage({
 
   return (
     <WorkspaceShell
+      flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
       heading={t('publishingHub.title')}
@@ -333,7 +335,6 @@ export default async function PublishingPage({
       customerName={session.customer.name ?? session.customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      {ok ? <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner> : null}
       {error ? (
         <CustomerBanner tone="error">{statusMessage(error, locale, reference)}</CustomerBanner>
       ) : null}

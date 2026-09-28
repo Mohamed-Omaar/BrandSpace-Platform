@@ -13,6 +13,7 @@
  */
 export { NotesService, NOTE_MANAGE_PERMISSION, NOTE_PERMISSION } from './notes';
 export type {
+  IncomingMention,
   NoteActor,
   NoteInbox,
   NoteInboxEntry,

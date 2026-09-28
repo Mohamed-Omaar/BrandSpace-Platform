@@ -10,6 +10,7 @@ import {
   colorTokens,
   spacingTokens,
   typographyTokens,
+  SegmentPill,
 } from '@brandspace/ui';
 import type { FeedItem, FeedKind } from '../app/[locale]/notifications/feed';
 
@@ -102,6 +103,8 @@ export function NotificationsBell({
           aria-label={strings.title}
           style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}
         >
+          {/* MO4: the chosen tab's pill slides between tabs. */}
+          <SegmentPill selector='[aria-selected="true"]' />
           {tabs.map((entry) => (
             <button
               key={entry.key}

@@ -5,6 +5,7 @@ import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { withPlatformPrisma } from './platform-prisma';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
+import { mouseDrag } from './pointer-drag';
 
 /**
  * PHASE 6 FINAL · D-277 §32, D-290 — THE CALENDAR AS A PLANNING SURFACE.
@@ -115,24 +116,27 @@ test.describe('D-290 · the calendar', () => {
   test('dropping a tray post on a day opens the same dialog with that day filled in', async ({
     page,
   }) => {
-    test.skip(test.info().project.name.includes('mobile'), 'drag is a desktop gesture');
+    test.skip(
+      test.info().project.name.includes('mobile'),
+      'the month grid is a desktop view; the phone’s drag is prototype-v90-phase2b2b-calendar-touch.spec.ts',
+    );
     const { itemId } = await draft();
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
-    // F2 — a day that has not passed: the grid's last day is never before today.
-    const day = page.locator('[data-testid^="calendar-day-"]:not([data-past])').last();
-    const dayKey = ((await day.getAttribute('data-testid')) ?? '').replace('calendar-day-', '');
     /*
-     * THE REAL HTML5 DRAG EVENTS, carrying one DataTransfer from the tray row
-     * to the day: the tray sits below the grid, and a pointer drag that has
-     * to scroll the page mid-gesture is a test of the harness, not the page.
+     * REPLACED (Phase 2B-2b item 10, §8.2, D-353): this dispatched the native
+     * HTML5 drag events with one DataTransfer. §8.2 replaced native drag and
+     * drop with pointer events, so it is now a REAL mouse drag — on a screen
+     * tall enough to hold the grid and the tray below it without scrolling.
      */
-    const transfer = await page.evaluateHandle(() => new DataTransfer());
-    await page.getByTestId(`calendar-tray-${itemId}`).dispatchEvent('dragstart', {
-      dataTransfer: transfer,
-    });
-    await day.dispatchEvent('dragover', { dataTransfer: transfer });
-    await day.dispatchEvent('drop', { dataTransfer: transfer });
+    await page.setViewportSize({ width: 1280, height: 2200 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
+    await expect(page.locator('[data-testid="calendar-page"][data-drag-ready]')).toBeVisible();
+    // F2 — a day of the month that has not passed: the month's last day never has.
+    const day = page
+      .locator('[data-testid^="calendar-day-"][data-drop-state="ok"]:not([data-past])')
+      .last();
+    const dayKey = ((await day.getAttribute('data-testid')) ?? '').replace('calendar-day-', '');
+    await mouseDrag(page, page.getByTestId(`calendar-tray-${itemId}`), day);
     await expect(page.getByTestId('calendar-schedule-dialog')).toBeVisible();
     await expect(page.getByTestId('schedule-item')).toHaveValue(itemId);
     await expect(page.getByTestId('schedule-date')).toHaveValue(dayKey);
@@ -141,18 +145,19 @@ test.describe('D-290 · the calendar', () => {
   test('F2: dropping a post on a day that has passed says so and opens nothing', async ({
     page,
   }) => {
-    test.skip(test.info().project.name.includes('mobile'), 'drag is a desktop gesture');
+    test.skip(
+      test.info().project.name.includes('mobile'),
+      'the month grid is a desktop view; the phone’s drag is prototype-v90-phase2b2b-calendar-touch.spec.ts',
+    );
     const { itemId } = await draft();
     await signIn(page);
+    // REPLACED (item 10, §8.2, D-353): native drag events → a real mouse drag.
+    await page.setViewportSize({ width: 1280, height: 2200 });
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
-    const past = page.locator('[data-testid^="calendar-day-"][data-past="true"]');
+    await expect(page.locator('[data-testid="calendar-page"][data-drag-ready]')).toBeVisible();
+    const past = page.locator('[data-testid^="calendar-day-"][data-drop-state="past"]');
     test.skip((await past.count()) === 0, 'the month on screen starts today');
-    const transfer = await page.evaluateHandle(() => new DataTransfer());
-    await page.getByTestId(`calendar-tray-${itemId}`).dispatchEvent('dragstart', {
-      dataTransfer: transfer,
-    });
-    await past.first().dispatchEvent('dragover', { dataTransfer: transfer });
-    await past.first().dispatchEvent('drop', { dataTransfer: transfer });
+    await mouseDrag(page, page.getByTestId(`calendar-tray-${itemId}`), past.first());
     await expect(page.getByTestId('calendar-past-day')).toContainText('That day has passed');
     await expect(page.getByTestId('calendar-schedule-dialog')).toHaveCount(0);
   });
@@ -191,12 +196,17 @@ test.describe('D-290 · the calendar', () => {
   test('B7: a scheduled post dragged to another day moves there, at the same time', async ({
     page,
   }) => {
-    test.skip(test.info().project.name.includes('mobile'), 'drag is a desktop gesture');
+    test.skip(
+      test.info().project.name.includes('mobile'),
+      'the month grid is a desktop view; the phone’s drag is prototype-v90-phase2b2b-calendar-touch.spec.ts',
+    );
     const { itemId, words } = await draft();
     // A chip on the grid shows the post's TITLE, not its words.
     const title = words.replace('Tray words', 'Tray post');
     const { month, day } = nextMonth();
     await signIn(page);
+    // The whole month on screen: a pointer drag does not scroll (item 10).
+    await page.setViewportSize({ width: 1280, height: 1600 });
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
     await page.getByTestId(`calendar-tray-schedule-${itemId}`).click();
     await page.getByTestId('schedule-date').fill(day(10));
@@ -209,16 +219,19 @@ test.describe('D-290 · the calendar', () => {
     const chip = page
       .getByTestId(`calendar-day-${day(10)}`)
       .locator('[data-testid^="calendar-post-"]', { hasText: title });
-    await expect(chip).toHaveAttribute('draggable', 'true');
+    /*
+     * REPLACED (Phase 2B-2b item 10, §8.2, D-353): was `draggable="true"`, the
+     * native drag events, and a wait for `?ok=CONTENT_RESCHEDULED`. §8.2 moved
+     * the drag to pointer events and answers a drop with a toast (and Undo)
+     * instead of a redirect; the rule — it moves, at the same time — is
+     * asserted exactly as before, after a reload.
+     */
+    await expect(chip).toHaveAttribute('data-drag-payload', /^slot:/);
+    await expect(page.locator('[data-testid="calendar-page"][data-drag-ready]')).toBeVisible();
 
     const target = page.getByTestId(`calendar-day-${day(20)}`);
-    const transfer = await page.evaluateHandle(() => new DataTransfer());
-    await chip.dispatchEvent('dragstart', { dataTransfer: transfer });
-    await target.dispatchEvent('dragover', { dataTransfer: transfer });
-    await Promise.all([
-      page.waitForURL(/[?&]ok=CONTENT_RESCHEDULED/),
-      target.dispatchEvent('drop', { dataTransfer: transfer }),
-    ]);
+    await mouseDrag(page, chip, target);
+    await expect(page.getByTestId('toast')).toContainText('Moved to');
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
     const moved = page
       .getByTestId(`calendar-day-${day(20)}`)

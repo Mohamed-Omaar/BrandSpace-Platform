@@ -21,6 +21,8 @@ import {
 } from './tokens';
 import { Button, buttonStyle } from './primitives';
 import { ChevronDownIcon, CloseIcon } from './icons';
+import { OverlayStack, type StackedOverlay } from './overlay-stack';
+import { usePresence } from './motion-hooks';
 
 /**
  * Overlay behaviour: tooltip, dropdown menu, dialog, confirmation.
@@ -50,7 +52,83 @@ function focusableWithin(root: HTMLElement): HTMLElement[] {
 }
 
 /**
- * Escape-to-close, focus trap, and focus restoration for an open overlay.
+ * C8 (Phase 2B-2b) — THE ONE RECORD OF WHAT IS OPEN. Every managed overlay
+ * registers here through `useOverlayBehaviour`; see `overlay-stack.ts` for the
+ * rule. Module state, because there is one document: a provider would let two
+ * trees keep two stacks, which is the bug this replaces.
+ */
+interface ManagedOverlay extends StackedOverlay {
+  readonly trap: boolean;
+  readonly container: () => HTMLElement | null;
+}
+
+const overlayStack = new OverlayStack<ManagedOverlay>();
+let nextOverlayId = 1;
+
+/*
+ * WHERE AN OVERLAY WAS OPENED FROM. Focus, when the opener holds it (a keyboard
+ * user, or a click in a browser that focuses buttons); otherwise the last
+ * element a pointer went down on — Safari and Firefox on macOS do not focus a
+ * clicked button, and without this a dialog asked from a sheet would read as
+ * "opened from outside" and close the sheet.
+ */
+let lastPointerTarget: EventTarget | null = null;
+if (typeof document !== 'undefined') {
+  document.addEventListener(
+    'pointerdown',
+    (event) => {
+      lastPointerTarget = event.target;
+    },
+    true,
+  );
+}
+
+function openedFrom(): unknown {
+  const active = document.activeElement;
+  return active && active !== document.body ? active : lastPointerTarget;
+}
+
+/*
+ * ONE keydown listener for every overlay, so exactly one of them hears Escape:
+ * the top one. Only the top one traps Tab, too — a sheet underneath a dialog
+ * must not pull focus back into itself.
+ */
+function onOverlayKeyDown(event: KeyboardEvent): void {
+  const top = overlayStack.top();
+  if (!top) return;
+  if (event.key === 'Escape') {
+    event.stopPropagation();
+    top.close();
+    return;
+  }
+  if (!top.trap || event.key !== 'Tab') return;
+  const node = top.container();
+  if (!node) return;
+  const focusable = focusableWithin(node);
+  if (focusable.length === 0) {
+    event.preventDefault();
+    return;
+  }
+  const firstItem = focusable[0]!;
+  const lastItem = focusable[focusable.length - 1]!;
+  const active = document.activeElement;
+  if (event.shiftKey && (active === firstItem || active === node)) {
+    event.preventDefault();
+    lastItem.focus();
+  } else if (!event.shiftKey && active === lastItem) {
+    event.preventDefault();
+    firstItem.focus();
+  }
+}
+
+function syncKeyListener(): void {
+  document.removeEventListener('keydown', onOverlayKeyDown, true);
+  if (overlayStack.entries.length > 0) document.addEventListener('keydown', onOverlayKeyDown, true);
+}
+
+/**
+ * Escape-to-close, focus trap, and focus restoration for an open overlay —
+ * and, since C8, its place in the shared overlay stack.
  *
  * One hook, used by the drawer, the dialog and the menu, so the three cannot
  * drift apart — which is exactly how one of them ends up without a trap.
@@ -60,75 +138,90 @@ export function useOverlayBehaviour({
   onClose,
   containerRef,
   trap = true,
+  initialFocusRef,
 }: {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly containerRef: React.RefObject<HTMLElement | null>;
   readonly trap?: boolean;
-}): void {
-  const restoreRef = useRef<HTMLElement | null>(null);
+  /** Where focus goes on open, when not the first focusable element (a close button). */
+  readonly initialFocusRef?: React.RefObject<HTMLElement | null> | undefined;
+}): React.RefObject<number | null> {
+  // This overlay's place in the stack while it is open, for the caller.
+  const entryId = useRef<number | null>(null);
+  // The latest `onClose`, without re-registering: a caller passing an inline
+  // arrow must not close and reopen the overlay on every render.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return undefined;
 
-    restoreRef.current = document.activeElement as HTMLElement | null;
+    const restoreTo = document.activeElement as HTMLElement | null;
+    const origin = openedFrom();
     const container = containerRef.current;
+    const entry: ManagedOverlay = {
+      id: nextOverlayId++,
+      trap,
+      container: () => containerRef.current,
+      contains: (node) => {
+        const surface = containerRef.current ?? container;
+        return surface !== null && node instanceof Node && surface.contains(node);
+      },
+      close: () => onCloseRef.current(),
+    };
+    const displaced = overlayStack.open(entry, origin);
+    entryId.current = entry.id;
+    syncKeyListener();
+
     // Move focus in. The container itself is focusable as a fallback, so an
     // overlay whose content is not yet interactive still receives focus.
-    const first = container ? focusableWithin(container)[0] : null;
+    const first = initialFocusRef?.current ?? (container ? focusableWithin(container)[0] : null);
     (first ?? container)?.focus();
 
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
-        return;
-      }
-      if (!trap || event.key !== 'Tab') return;
-      const node = containerRef.current;
-      if (!node) return;
-      const focusable = focusableWithin(node);
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      const firstItem = focusable[0]!;
-      const lastItem = focusable[focusable.length - 1]!;
-      const active = document.activeElement;
-      if (event.shiftKey && (active === firstItem || active === node)) {
-        event.preventDefault();
-        lastItem.focus();
-      } else if (!event.shiftKey && active === lastItem) {
-        event.preventDefault();
-        firstItem.focus();
-      }
-    }
+    // Opened from outside: whatever was open closes (after focus moved here,
+    // so their focus restoration below leaves it here).
+    for (const other of displaced) other.close();
 
-    document.addEventListener('keydown', onKeyDown, true);
     return () => {
-      document.removeEventListener('keydown', onKeyDown, true);
+      entryId.current = null;
+      const above = overlayStack.close(entry.id);
+      syncKeyListener();
+      for (const other of above) other.close();
       // Restore focus to whatever opened this, so the keyboard user resumes
-      // where they were rather than at the top of the document.
-      restoreRef.current?.focus?.();
+      // where they were rather than at the top of the document — unless focus
+      // already lives in another open overlay (the one that displaced this).
+      const active = document.activeElement;
+      if (!(active && overlayStack.anyContains(active))) restoreTo?.focus?.();
     };
-  }, [open, onClose, containerRef, trap]);
+  }, [open, containerRef, trap, initialFocusRef]);
+
+  return entryId;
 }
 
-/** Close when a pointer goes down outside `ref`. A convenience, never the only exit. */
+/**
+ * Close when a pointer goes down outside `ref`. A convenience, never the only
+ * exit. With `overlayId` (the stack entry of the surface `ref` belongs to), a
+ * pointer inside an overlay stacked ABOVE it does not count as outside: that
+ * overlay was opened from this one, and closing this one would close it too.
+ */
 export function useDismissOnOutsidePointer(
   ref: React.RefObject<HTMLElement | null>,
   open: boolean,
   onClose: () => void,
+  overlayId?: React.RefObject<number | null>,
 ): void {
   useEffect(() => {
     if (!open) return undefined;
     function onPointerDown(event: MouseEvent) {
       const node = ref.current;
+      const id = overlayId?.current ?? null;
+      if (id !== null && overlayStack.isAbove(id, event.target)) return;
       if (node && !node.contains(event.target as Node)) onClose();
     }
     document.addEventListener('mousedown', onPointerDown);
     return () => document.removeEventListener('mousedown', onPointerDown);
-  }, [ref, open, onClose]);
+  }, [ref, open, onClose, overlayId]);
 }
 
 /**
@@ -277,8 +370,15 @@ export function DropdownMenu({
    * items. Found by the P6-16 top-bar suite on the Create menu.
    */
   const [focusOnOpen, setFocusOnOpen] = useState<'first' | 'last' | null>(null);
-  useDismissOnOutsidePointer(wrapperRef, open, close);
-  useOverlayBehaviour({ open, onClose: close, containerRef: menuRef, trap: false });
+  const menuEntry = useOverlayBehaviour({
+    open,
+    onClose: close,
+    containerRef: menuRef,
+    trap: false,
+  });
+  useDismissOnOutsidePointer(wrapperRef, open, close, menuEntry);
+  // MO5: the menu leaves (180 ms) after it has closed.
+  const { present, leaving } = usePresence(open, menuRef);
   // AFTER `useOverlayBehaviour`, deliberately: that hook records where focus
   // came from (the trigger) so Escape can return it there, and it must record
   // it before this moves focus into the menu.
@@ -398,7 +498,7 @@ export function DropdownMenu({
           <ChevronDownIcon size={16} />
         )}
       </button>
-      {open ? (
+      {present ? (
         <div
           id={id}
           ref={menuRef}
@@ -423,7 +523,9 @@ export function DropdownMenu({
                 : items[(index - 1 + items.length) % items.length];
             next?.focus();
           }}
-          className="bs-dropdown-menu bs-dropdown-panel"
+          className={`bs-dropdown-menu bs-dropdown-panel bs-pop${placement === 'block-start' ? ' bs-pop-up' : ''}`}
+          data-origin={align}
+          {...(leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
           style={{
             position: 'absolute',
             insetBlockStart: placement === 'block-end' ? 'calc(100% + 6px)' : undefined,
@@ -481,6 +583,8 @@ export function Dialog({
   return (
     <div
       data-testid={testId ? `${testId}-scrim` : 'dialog-scrim'}
+      // MO6: the veil fades in while its backdrop blur goes 0 → 3 px.
+      className="bs-veil"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -503,6 +607,8 @@ export function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         data-testid={testId ?? 'dialog'}
         tabIndex={-1}
+        // MO6: the dialog fades, grows from .98 and rises 8 px.
+        className="bs-dialog-in"
         style={{
           inlineSize: '100%',
           maxInlineSize: '30rem',
@@ -805,10 +911,13 @@ export function SideSheet({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   useOverlayBehaviour({ open, onClose, containerRef: panelRef });
-  if (!open) return null;
+  // MO5: the sheet leaves (180 ms) after it has closed.
+  const { present, leaving } = usePresence(open, panelRef);
+  if (!present) return null;
   return (
     <div
       data-testid={`${testId}-scrim`}
+      {...(leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -826,6 +935,9 @@ export function SideSheet({
         aria-labelledby={titleId}
         data-testid={testId}
         tabIndex={-1}
+        // MO5: opens from its trigger's side (the top bar's end), rows in order.
+        className="bs-pop"
+        data-origin="end"
         style={{
           position: 'fixed',
           insetBlock: layoutTokens.shellInset,

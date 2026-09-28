@@ -21,6 +21,7 @@ import {
   scheduleQuotaExceeded,
   scheduleTooFarAhead,
   scheduleTooSoon,
+  slotMovedSince,
   slotNotReschedulable,
   transitionNotAllowed,
 } from './errors';
@@ -374,11 +375,22 @@ export class ContentCalendarService {
     localTime: string;
     actorUserId: string;
     actorBrandScope: readonly string[];
+    /**
+     * §8.2 UNDO (Phase 2B-2b, owner-approved precondition): move only if the
+     * slot is still at this local time — where the move being undone put it.
+     * Checked up front AND in the conditional write, so an Undo that runs
+     * twice, or races another move, changes nothing the second time. Every
+     * other rule (F2, quota, approval, B-4, scope) applies exactly as to any
+     * move, as the rules stand now.
+     */
+    expectedLocalTime?: string | undefined;
   }): Promise<CalendarSlotView> {
     const slot = await this.#requireSlot(input.slotId, input.actorBrandScope);
     if (slot.status === 'CANCELLED') throw calendarSlotNotFound();
     // B-4 — only a plan that has not started going out can move.
     if (!RESCHEDULABLE_SLOT_STATUSES.includes(slot.status)) throw slotNotReschedulable();
+    const expected = input.expectedLocalTime;
+    if (expected !== undefined && slot.scheduledLocalTime !== expected) throw slotMovedSince();
 
     const instant = this.#resolveInstant(input.localTime);
     await this.#assertDayHasRoom(instant, slot.id);
@@ -401,7 +413,11 @@ export class ContentCalendarService {
      * started publishing in the meantime matches nothing and is not moved.
      */
     const claimed = await this.#db.calendarSlot.updateMany({
-      where: { id: slot.id, status: { in: [...RESCHEDULABLE_SLOT_STATUSES] } },
+      where: {
+        id: slot.id,
+        status: { in: [...RESCHEDULABLE_SLOT_STATUSES] },
+        ...(expected !== undefined ? { scheduledLocalTime: expected } : {}),
+      },
       data: {
         scheduledAtUtc: instant,
         scheduledLocalTime: input.localTime,
@@ -410,7 +426,9 @@ export class ContentCalendarService {
         timezone: this.#timezone,
       },
     });
-    if (claimed.count === 0) throw slotNotReschedulable();
+    if (claimed.count === 0) {
+      throw expected !== undefined ? slotMovedSince() : slotNotReschedulable();
+    }
     const moved = await this.#db.calendarSlot.findUniqueOrThrow({ where: { id: slot.id } });
 
     await this.#audit('content.rescheduled', moved, input.actorUserId, {
@@ -436,7 +454,12 @@ export class ContentCalendarService {
    */
   async #replan(
     slot: CalendarSlot,
-    input: { slotId: string; localTime: string; actorUserId: string },
+    input: {
+      slotId: string;
+      localTime: string;
+      actorUserId: string;
+      expectedLocalTime?: string | undefined;
+    },
     instant: Date,
   ): Promise<CalendarSlotView> {
     const item = await this.#db.contentItem.findUnique({ where: { id: slot.contentItemId } });
@@ -472,8 +495,16 @@ export class ContentCalendarService {
     if (!(await this.#quota.consume(usageIdempotencyKey))) throw scheduleQuotaExceeded();
 
     const claimed = await this.#db.calendarSlot.updateMany({
-      // The attempt this key was derived from must still be the slot's.
-      where: { id: slot.id, status: 'PLANNED', rescheduleAttempt: slot.rescheduleAttempt },
+      // The attempt this key was derived from must still be the slot's — and,
+      // for an Undo, the time the move being undone put it at.
+      where: {
+        id: slot.id,
+        status: 'PLANNED',
+        rescheduleAttempt: slot.rescheduleAttempt,
+        ...(input.expectedLocalTime !== undefined
+          ? { scheduledLocalTime: input.expectedLocalTime }
+          : {}),
+      },
       data: {
         status: 'SCHEDULED',
         scheduledAtUtc: instant,
@@ -482,7 +513,9 @@ export class ContentCalendarService {
         usageIdempotencyKey,
       },
     });
-    if (claimed.count === 0) throw slotNotReschedulable();
+    if (claimed.count === 0) {
+      throw input.expectedLocalTime !== undefined ? slotMovedSince() : slotNotReschedulable();
+    }
     await this.#db.contentItem.update({ where: { id: item.id }, data: { status: 'SCHEDULED' } });
     const moved = await this.#db.calendarSlot.findUniqueOrThrow({ where: { id: slot.id } });
     await this.#audit('content.rescheduled', moved, input.actorUserId, {

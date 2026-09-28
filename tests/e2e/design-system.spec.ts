@@ -180,6 +180,13 @@ test.describe('the sidebar collapses, remembers, and stays reachable', () => {
   }) => {
     await signInAndEnterWorkspace(page);
     await page.click('[data-testid="toggle-sidebar"]');
+    /*
+     * MO3 (§8, D-349): the rail's labels fade out BEFORE it collapses (110 ms),
+     * so "a collapsed item" exists only once the state says collapsed — focusing
+     * one during the fade focused the expanded link, which the collapsed rail
+     * then replaces. The precondition is waited for; the assertion is unchanged.
+     */
+    await expect(page.getByTestId('app-shell')).toHaveAttribute('data-sidebar-state', 'collapsed');
     // WCAG 1.4.13: content available on hover must also be available on focus.
     const item = page.getByTestId('nav-content');
     await item.focus();
