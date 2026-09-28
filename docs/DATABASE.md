@@ -267,6 +267,46 @@ workspace and brand. ENABLE + FORCE RLS with the `tenant_isolation` and `platfor
 four-per-language limit is counted under the brand-row lock, not by a constraint, because it counts
 ACTIVE rows only and is configuration. The typography slots themselves stay in `brand.typography` JSON.
 
+**Phase 2C-3 additions (M4a, M4b, M5; D-369 – D-383).**
+
+- **M4a — `20261008090000_candidate_source_member`.** `ALTER TYPE "BrandCandidateSource" ADD VALUE
+'MEMBER'`. Its own migration because a value added by `ADD VALUE` cannot be used in the transaction
+  that added it, and M4b's CHECK uses it. A MEMBER candidate is a fact a member proposed with
+  `brand_brain.edit` but without `brand_brain.review` ("Send for review"); it waits in the one review
+  inbox and, accepted, lands as `HUMAN`. Not a simple rollback: see `OPERATIONS.md` §6.6.
+- **M4b — `20261008091000_candidate_member_check`.** `brand_knowledge_candidate.proposedByUserId UUID
+NULL` — an actor id like `reviewedByUserId`, with no foreign key to the identity table — and
+  `brand_knowledge_candidate_source_is_present` replaced by a CHECK with three branches: DOCUMENT needs
+  `sourceDocumentId`; ANALYTICS needs `insightId`; MEMBER has NEITHER and needs `proposedByUserId`. A
+  self-check refuses a half-applied version. No row is rewritten.
+- **M5 — `20261008100000_content_knowledge_usage`.** One tenant-owned, brand-scoped table: which Brand
+  Brain facts, at which version, AI writing used for a content variant (D9), and the "Keep as is"
+  dismissal per use (D10).
+
+| Column                                                         | Meaning                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `workspaceId`, `brandId`                                       | Tenant and brand keys; composite FK to `brand(workspaceId,id)`, `CASCADE`.                                                                                                                                                                                   |
+| `contentItemId`, `contentVariantId`                            | The post and the variant; composite FKs to `content_item` / `content_variant` `(workspaceId,id)`, `CASCADE`.                                                                                                                                                 |
+| `knowledgeItemId`                                              | The fact; composite FK to `brand_knowledge_item(workspaceId,id)`, `CASCADE` (facts are archived, never deleted).                                                                                                                                             |
+| `knowledgeVersion`                                             | The exact version the prompt carried (`CHECK >= 1`). Its text stays readable in the append-only `brand_knowledge_version`; deliberately not a foreign key, so a fact whose history lacks a row (seeded or imported data) never makes a caption fail to save. |
+| `aiRequestId`                                                  | The AI request that wrote the caption; no FK, like `content_variant.aiRequestId`.                                                                                                                                                                            |
+| `recordedAt`, `supersededAt`                                   | When the use was recorded; when a later AI write of the variant replaced it. The CURRENT set is `supersededAt IS NULL`.                                                                                                                                      |
+| `dismissedChangeSignature`, `dismissedByUserId`, `dismissedAt` | "Keep as is": the exact change dismissed (sha256 hex, `CHECK`), by whom, when — all three or none (`CHECK`).                                                                                                                                                 |
+
+Indexes: a **partial unique** `(contentVariantId, knowledgeItemId) WHERE supersededAt IS NULL` (one current
+use of a fact per variant; history is unbounded), `(workspaceId, contentVariantId, supersededAt)`,
+a partial `(workspaceId, brandId, knowledgeItemId) WHERE supersededAt IS NULL` for "Used in N posts",
+and `(workspaceId, contentItemId)`. A scope trigger (`content_knowledge_usage_scope`, not `SECURITY
+DEFINER`) refuses a variant that is not a variant of `contentItemId`, a post of another brand, or a
+fact of another brand. ENABLE + FORCE RLS with `tenant_isolation` and `platform_access`; `SELECT,
+INSERT, UPDATE, DELETE` to both runtime roles; a self-check refuses a half-applied version. No row is
+inserted and **there is no backfill**: a post written before this release has no usage.
+
+**Deletion and history.** Editing or archiving a fact only ADDS versions, so a use keeps naming the
+version it used. Superseded rows are kept. A variant or a post that is hard-deleted takes its rows with
+it (`CASCADE`); a post's soft delete (`deletedAt`) leaves them, and every reader excludes deleted posts
+until the purge removes the post. Archived posts are excluded from "Used in N posts".
+
 The first three are F-80; the rest are F-83, found by asking the catalogue about the whole module
 rather than the four tables F-80 happened to name. `brand_source_document`,
 `brand_brain_conversation` and `brand_knowledge_item` each carry the `@@unique([workspaceId, id])`
