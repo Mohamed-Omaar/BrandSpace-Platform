@@ -2281,6 +2281,12 @@ model BrandKnowledgeCandidate {
 
   status BrandCandidateStatus @default(PENDING)
 
+  /// Phase 2C-3 (M4b, D7) — the member who proposed a MEMBER candidate
+  /// ("Send for review"). Required for MEMBER and absent otherwise by the
+  /// `brand_knowledge_candidate_source_is_present` CHECK. An actor id like
+  /// `reviewedByUserId`: no foreign key to the identity table.
+  proposedByUserId String? @db.Uuid
+
   reviewedByUserId String?   @db.Uuid
   reviewedAt       DateTime? @db.Timestamptz(6)
   reviewReason     String?
