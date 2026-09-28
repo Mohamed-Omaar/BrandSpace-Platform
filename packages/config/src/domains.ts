@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { BRAND_BRAIN_QUESTIONS } from './brand-brain-questions';
-import { ABSOLUTE_MAX_PASSWORD_LENGTH, ABSOLUTE_MIN_PASSWORD_LENGTH } from '@brandspace/shared';
+import {
+  ABSOLUTE_MAX_PASSWORD_LENGTH,
+  ABSOLUTE_MIN_PASSWORD_LENGTH,
+  BUNDLED_FONTS,
+  BUNDLED_FONT_KEYS,
+} from '@brandspace/shared';
 
 /**
  * Configuration domains and their schemas.
@@ -1575,6 +1580,54 @@ const assetsSchema = z.object({
       purgeExpiredSessionsAfterHours: z.number().int().min(1).max(720).default(24),
     })
     .default({}),
+
+  /**
+   * PHASE 2C-2 (item 3) — THE BRAND FONTS LOOK & VOICE OFFERS.
+   *
+   * `catalogue` names the fonts BUNDLED with the application that brands may
+   * choose (the files and their licences are packaging facts in
+   * `@brandspace/shared` BUNDLED_FONTS; configuration can only select among
+   * them). `defaults` are the fonts every slot falls back to. Uploaded fonts are
+   * ordinary FONT assets; at most `maxUploadedPerLanguage` ACTIVE ones per brand
+   * and language (owner: four).
+   */
+  brandFonts: z
+    .object({
+      catalogue: z
+        .array(z.enum(BUNDLED_FONT_KEYS))
+        .min(1)
+        .default([...BUNDLED_FONT_KEYS])
+        .refine((keys) => new Set(keys).size === keys.length, {
+          message: 'A font is listed twice.',
+        }),
+      defaults: z
+        .object({
+          en: z.enum(BUNDLED_FONT_KEYS).default('inter'),
+          ar: z.enum(BUNDLED_FONT_KEYS).default('cairo'),
+        })
+        .default({}),
+      maxUploadedPerLanguage: z.number().int().min(0).max(4).default(4),
+    })
+    .default({})
+    .superRefine((value, context) => {
+      for (const language of ['en', 'ar'] as const) {
+        const key = value.defaults[language];
+        const font = BUNDLED_FONTS.find((candidate) => candidate.key === key);
+        if (!font || font.language !== language) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['defaults', language],
+            message: `The ${language} default must be a ${language} font.`,
+          });
+        } else if (!value.catalogue.includes(key)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['defaults', language],
+            message: 'A default font must be in the catalogue.',
+          });
+        }
+      }
+    }),
 });
 
 // --- Integrations -----------------------------------------------------------

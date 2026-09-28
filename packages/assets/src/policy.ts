@@ -83,6 +83,12 @@ export interface AssetPolicy {
     readonly purgeDeletedAfterDays: number;
     readonly purgeExpiredSessionsAfterHours: number;
   };
+  /** Phase 2C-2 — the bundled fonts offered to brands, the defaults, the upload limit. */
+  readonly brandFonts: {
+    readonly catalogue: readonly string[];
+    readonly defaults: { readonly en: string; readonly ar: string };
+    readonly maxUploadedPerLanguage: number;
+  };
 }
 
 /**
@@ -124,6 +130,11 @@ export function assetPolicyFrom(document: AssetsConfig): AssetPolicy {
     retention: {
       purgeDeletedAfterDays: document.retention.purgeDeletedAfterDays,
       purgeExpiredSessionsAfterHours: document.retention.purgeExpiredSessionsAfterHours,
+    },
+    brandFonts: {
+      catalogue: [...document.brandFonts.catalogue],
+      defaults: { en: document.brandFonts.defaults.en, ar: document.brandFonts.defaults.ar },
+      maxUploadedPerLanguage: document.brandFonts.maxUploadedPerLanguage,
     },
   };
 }
