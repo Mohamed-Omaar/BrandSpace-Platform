@@ -293,6 +293,8 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
               actorUserId: caller.userId,
               actorBrandScope: caller.brandScope,
               planKey,
+              // D7 — so a question nothing answers names what is missing.
+              keyQuestions: policy.questions,
             }),
           { prisma: tenantPrisma },
         );
@@ -302,6 +304,11 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
           // The BODY of the assistant message, and nothing about how it was
           // produced: no model key, no provider, no prompt, no request id.
           answer: turn.assistantMessage.body,
+          // D7 (Phase 2C-3) — answer, job (hand it to the Copilot) or missing;
+          // the areas come from retrieval, never from the model.
+          kind: turn.kind,
+          areas: turn.areas,
+          missing: turn.missing,
           citations: turn.citations,
           insufficientKnowledge: turn.insufficientKnowledge,
           replayed: turn.replayed,
