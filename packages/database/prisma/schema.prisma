@@ -2005,6 +2005,18 @@ model BrandKnowledgeItem {
   /// it. D-65: a conflict is SURFACED, never silently resolved.
   conflictsWithItemId String? @db.Uuid
 
+  /// D6 (Phase 2C) — "valid until": a LOCAL CALENDAR DATE in the workspace's
+  /// time zone, never an instant. The fact is valid through the whole of that
+  /// day and expired from the next local midnight; an expired fact is never
+  /// used in writing (`usableKnowledgeWhere`). Separate from STALE, which only
+  /// means "review due". Null = no end date.
+  validUntil DateTime? @db.Date
+
+  /// D4 (Phase 2C) — the item that replaced this one when an accepted
+  /// candidate that conflicted with it archived it. Set only together with
+  /// ARCHIVED, through the normal archive path; the history is untouched.
+  supersededByItemId String? @db.Uuid
+
   createdAt  DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
   archivedAt DateTime? @db.Timestamptz(6)
@@ -2032,6 +2044,10 @@ model BrandKnowledgeItem {
   conflictsWith BrandKnowledgeItem?  @relation("BrandKnowledgeConflict", fields: [workspaceId, conflictsWithItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_item_conflict_fkey")
   conflicting   BrandKnowledgeItem[] @relation("BrandKnowledgeConflict")
 
+  /// COMPOSITE and column-scoped SET NULL, exactly like `conflictsWith` above.
+  supersededBy BrandKnowledgeItem?  @relation("BrandKnowledgeSupersede", fields: [workspaceId, supersededByItemId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "brand_knowledge_item_superseded_fkey")
+  supersedes   BrandKnowledgeItem[] @relation("BrandKnowledgeSupersede")
+
   /// Phase 7 — where an insight cited this piece of approved brand knowledge,
   /// and the inferred learnings that were recorded as disagreeing with it.
   insightEvidence     InsightEvidence[]
@@ -2048,6 +2064,7 @@ model BrandKnowledgeItem {
   @@index([workspaceId, brandId, area, status])
   @@index([workspaceId, brandId, status, memory])
   @@index([workspaceId, brandId, reviewDueAt])
+  @@index([workspaceId, brandId, validUntil])
   @@map("brand_knowledge_item")
 }
 
@@ -2076,6 +2093,10 @@ model BrandKnowledgeVersion {
 
   confidenceMilli Int?
   evidence        Json?
+
+  /// D6 (Phase 2C) — the item's "valid until" as of this version, so the
+  /// history shows when an end date was set, moved or cleared.
+  validUntil DateTime? @db.Date
 
   /// Who made this version and why. `changeReason` is reviewer-supplied text,
   /// not customer content, and is shown back in the history.
