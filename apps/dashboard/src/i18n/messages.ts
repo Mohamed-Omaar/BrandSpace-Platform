@@ -584,6 +584,9 @@ export const messages = {
     'aiSettings.suggestions': 'اقتراحات الذكاء الاصطناعي في الصفحة الرئيسية',
     'aiSettings.suggestionsHint':
       'تعرض بطاقة «توصيات BrandSpace» في الصفحة الرئيسية لهذه العلامة. عند الإيقاف تختفي البطاقة وحدها.',
+    'aiSettings.useBrandBrain': 'استخدام عقل العلامة في الكتابة',
+    'aiSettings.useBrandBrainHint':
+      'عند الإيقاف لا تصل أي حقيقة من عقل العلامة إلى النصوص وأدوات الاستوديو والتصاميم والاستراتيجية والمساعد، وتُكتب دون الاستناد إليها. يظل «تحدّث مع العلامة» في عقل العلامة يعمل.',
     'settings.country': 'الدولة',
     'settings.city': 'المدينة',
     'settings.cityNone': 'اختر مدينة',
@@ -2212,8 +2215,9 @@ export const messages = {
     'copilot.undoUntil': 'يمكن التراجع حتى',
     'copilot.failureOther': 'تعذّر إكماله',
     'copilot.inspection.title': 'ما وجده المساعد',
-    'copilot.inspection.brandContext':
-      '{items} من عناصر المعرفة المعتمدة و{chunks} من مقاطع المستندات ذات صلة.',
+    'copilot.inspection.brandContext': '{items} من عناصر المعرفة المعتمدة ذات صلة.',
+    'copilot.notice.brandBrainOff':
+      'عقل العلامة متوقف عن العمل مع المساعد في هذه العلامة. اسأل عنه في عقل العلامة ← تحدّث مع العلامة.',
     'copilot.inspection.nothing': 'لم يُعثر على شيء.',
     'copilot.inspection.approvals':
       '{pending} بانتظار المراجعة · {mine} مُسندة إليك · {anyone} لأي مراجع',
@@ -3509,6 +3513,9 @@ export const messages = {
     'aiSettings.suggestions': 'AI suggestions on Home',
     'aiSettings.suggestionsHint':
       'Shows the “Recommended by BrandSpace” card on Home for this brand. Turning it off hides that card only.',
+    'aiSettings.useBrandBrain': 'Use Brand Brain',
+    'aiSettings.useBrandBrainHint':
+      'When off, no Brand Brain fact reaches captions, Studio tools, Creative, Strategy or the Copilot, and they write without it. Brand Brain’s own “Talk with the brand” keeps working.',
     'settings.country': 'Country',
     'settings.city': 'City',
     'settings.cityNone': 'Choose a city',
@@ -5200,8 +5207,9 @@ export const messages = {
     'copilot.undoUntil': 'Can be undone until',
     'copilot.failureOther': 'it could not be completed',
     'copilot.inspection.title': 'What the Copilot found',
-    'copilot.inspection.brandContext':
-      '{items} approved knowledge items and {chunks} document passages are relevant.',
+    'copilot.inspection.brandContext': '{items} approved knowledge items are relevant.',
+    'copilot.notice.brandBrainOff':
+      'Brand Brain is turned off for Copilot in this brand. Ask it in Brand Brain → Talk with the brand.',
     'copilot.inspection.nothing': 'Nothing was found.',
     'copilot.inspection.approvals':
       '{pending} waiting for review · {mine} assigned to you · {anyone} for any reviewer',

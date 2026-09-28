@@ -68,6 +68,8 @@ interface InspectionCall {
 
 interface PlanResponse {
   readonly summary?: { ar: string; en: string };
+  /** Phase 2C D9: a brand question while the brand's "Use Brand Brain" is off. */
+  readonly notice?: 'brand_brain_off' | null;
   readonly planId?: string;
   readonly planHash?: string;
   readonly requiresConfirmation?: boolean;
@@ -251,7 +253,14 @@ export function CopilotView({
       setPlan(result);
       setToken(result.confirmationToken ?? null);
       setNow(Date.now());
-      const summary = locale === 'ar' ? result.summary?.ar : result.summary?.en;
+      // A brand question while Brand Brain is off is answered with the notice,
+      // in the reader's language, never with the model's words (Phase 2C D9).
+      const summary =
+        result.notice === 'brand_brain_off'
+          ? t('copilot.notice.brandBrainOff')
+          : locale === 'ar'
+            ? result.summary?.ar
+            : result.summary?.en;
       if (summary) {
         setMessages((current) => [
           ...current,
@@ -768,9 +777,10 @@ function InspectionLines({
       break;
     case 'brand.context':
       lines.push(
-        t('copilot.inspection.brandContext', '')
-          .replace('{items}', number.format(Number(result['knowledgeItems'] ?? 0)))
-          .replace('{chunks}', number.format(Number(result['documentChunks'] ?? 0))),
+        t('copilot.inspection.brandContext', '').replace(
+          '{items}',
+          number.format(Number(result['knowledgeItems'] ?? 0)),
+        ),
       );
       break;
     case 'content.search':
