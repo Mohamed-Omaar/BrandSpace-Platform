@@ -512,6 +512,11 @@ only after its security design is approved. Each part is its own branch from `st
   `20261007090000_brand_use_brand_brain`) in Settings → AI. Off: captions, tools, Creative and Strategy
   write ungrounded instead of refusing; the Copilot sees no fact in its context, its history or its tools,
   and answers a brand question with a notice; Brand Brain's own chat is unaffected.
+- **Item 1 — one grounding layer (owner review of PR #52; D-360).** Creative, Strategy's pillar gaps, the
+  composer's goal and pillar ideas and its recommended goal, and the Strategy page's objective prefill read
+  Brand Brain through narrowly named helpers in `packages/brand-brain/src/grounding.ts`; no generative path
+  applies the usable-fact rule, the workspace's day or the switch itself, and a unit scan names every
+  non-generative reader with its reason.
 - **Item 2 — valid until (D6; D-356).** Migration `20261007100000_knowledge_valid_until`. A fact is valid
   through its last day in the WORKSPACE's time zone; expired facts ground nothing and answer nothing, and
   stay visible and editable. Rolling the application back makes them usable again (`OPERATIONS.md` §6.4).
