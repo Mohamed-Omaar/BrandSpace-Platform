@@ -95,3 +95,11 @@ export {
   publishableMediaNotFound,
 } from './publishable';
 export type { PublishMediaResolverOptions, ResolvedPublishMedia } from './publishable';
+export {
+  BrandFontService,
+  brandFontNotFound,
+  type BrandFontServiceOptions,
+  type BrandFontStatus,
+  type BrandFontView,
+  type PreviousAssetOutcome,
+} from './brand-fonts';
