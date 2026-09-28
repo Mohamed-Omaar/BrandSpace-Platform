@@ -14,6 +14,7 @@ import {
   resolveContentExpiry,
 } from '@brandspace/content';
 import { NOTE_MANAGE_PERMISSION } from '@brandspace/collaboration';
+import { keepFactChange } from '@brandspace/brand-brain';
 import { systemClock } from '@brandspace/shared';
 import { parseContentType } from './content-types';
 import {
@@ -360,6 +361,39 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
     destination = failure(locale, error, 'saveVariant', '/compose', { item: itemId });
   }
   revalidatePath(`/${locale}/content`);
+  redirect(destination);
+}
+
+/**
+ * D10 (Phase 2C-3) — "KEEP AS IS": the person saw that a Brand Brain fact this
+ * caption used changed, expired or was removed, and chose to leave the caption.
+ * Exactly THAT change is dismissed (its signature, re-derived on the server
+ * from stored state); a later, different change alerts again. `content.edit`,
+ * the post's normal status guard, the member's brand scope; audited. No model,
+ * no credit, and the caption is not touched.
+ */
+export async function keepFactChangeAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const itemId = String(formData.get('itemId') ?? '');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'content.edit');
+    await inContentStudio(session.workspace.workspaceId, async ({ db }) =>
+      keepFactChange(db, {
+        workspaceId: session.workspace.workspaceId,
+        contentVariantId: String(formData.get('variantId') ?? ''),
+        knowledgeItemId: String(formData.get('knowledgeItemId') ?? ''),
+        signature: String(formData.get('signature') ?? ''),
+        actorUserId: session.customer.userId,
+        brandScope: session.workspace.brandScope,
+      }),
+    );
+    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'FACT_CHANGE_KEPT' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'keepFactChange', '/compose', { item: itemId });
+  }
+  revalidatePath(`/${locale}/content`);
+  revalidatePath(`/${locale}/overview`);
   redirect(destination);
 }
 

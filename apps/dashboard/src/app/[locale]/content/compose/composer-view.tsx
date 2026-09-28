@@ -66,6 +66,33 @@ export interface ComposerVariant {
   readonly slides?: readonly { readonly assetId: string; readonly headline: string }[];
   /** When the row last changed — the editor's "Saved …" and its version key. */
   readonly updatedAt: string;
+  /**
+   * D9 (Phase 2C-3) — the Brand Brain facts the CURRENT AI version of this
+   * variant recorded (M5), with what became of each since (D10). Empty when
+   * nothing was recorded: Brand Brain off, no fact, or a post from before.
+   */
+  readonly knowledge?: readonly VariantKnowledgeView[];
+}
+
+/** One recorded fact, as the Studio shows it (D9/D10). */
+export interface VariantKnowledgeView {
+  readonly knowledgeItemId: string;
+  readonly areaLabel: string;
+  /** The version the caption used. */
+  readonly usedVersion: number;
+  readonly state: 'current' | 'changed' | 'replaced' | 'expired' | 'removed';
+  /** The fact's title now; null for a removed fact ("Removed fact"). */
+  readonly title: string | null;
+  /** The title of the version the caption used (old → new). */
+  readonly usedTitle: string | null;
+  /** For changed: the new title; for replaced: the replacement's. */
+  readonly newTitle: string | null;
+  /** The change's signature, for "Keep as is"; null when nothing changed. */
+  readonly signature: string | null;
+  /** An undismissed change on a post D10 acts on: the banner shows it. */
+  readonly flagged: boolean;
+  /** "Fix it" — Brand Brain Edit on this fact; null without `brand_brain.edit`. */
+  readonly fixHref: string | null;
 }
 
 export interface ComposerDraft {
@@ -95,6 +122,8 @@ export interface ComposerDraft {
   readonly insufficientKnowledge: boolean;
   readonly citations: readonly { readonly label: string }[];
   readonly variants: readonly ComposerVariant[];
+  /** D9 — whether the brand's "Use Brand Brain" is on (the Studio's off notice). */
+  readonly brandBrainOn?: boolean;
   /**
    * B-2 — publishing or published: a record of what was sent. Opened
    * read-only, with "Duplicate" as the way to a new version.
@@ -204,6 +233,8 @@ export interface ComposerViewProps {
     teachBrain?: boolean;
     /** E4 (Phase 2B-2) — may save a post as a template (`templates.manage`). */
     manageTemplates?: boolean;
+    /** D10 (Phase 2C-3) — may rewrite a caption whose fact changed (`content.edit` + `copilot.use`). */
+    rewriteFacts?: boolean;
   };
   /** Item 9 (Phase 2B-2) — a FAILED post: what the Publishing screen would say about it. */
   readonly failed?: { readonly message: string } | null;
@@ -284,6 +315,8 @@ export interface ComposerViewProps {
     scheduleFromStudio?(formData: FormData): Promise<void>;
     /** E4 (Phase 2B-2) — save the open post as a template. */
     saveAsTemplate?(formData: FormData): Promise<void>;
+    /** D10 (Phase 2C-3) — "Keep as is" on one changed Brand Brain fact. */
+    keepFactChange?(formData: FormData): Promise<void>;
     /**
      * WRITE THE POST YOURSELF — no model, no credits (D-224).
      *

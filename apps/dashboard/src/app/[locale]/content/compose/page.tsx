@@ -9,7 +9,13 @@ import {
   readSlides,
 } from '@brandspace/content';
 import { CREATIVE_FORMATS } from '@brandspace/creative';
-import { declaredPillarIdeas, writingGoal } from '@brandspace/brand-brain';
+import {
+  areaDefinition,
+  brandBrainEnabledForWriting,
+  declaredPillarIdeas,
+  variantKnowledgeUsage,
+  writingGoal,
+} from '@brandspace/brand-brain';
 import {
   brandIdQueryFilter,
   brandScopeFilter,
@@ -62,6 +68,7 @@ import {
   cancelReviewAction,
   createManualDraftAction,
   saveDraftAsTemplateAction,
+  keepFactChangeAction,
   scheduleFromStudioAction,
   duplicateContentAction,
   listCampaignOptionsAction,
@@ -75,6 +82,7 @@ import {
 import {
   ComposerView,
   type ComposerDraft,
+  type VariantKnowledgeView,
   type ComposerPlatform,
   type ComposerTemplate,
   type ContentLocale,
@@ -764,6 +772,51 @@ export default async function ComposePage({
     allowsFirstComment: platform.allowsFirstComment,
   }));
 
+  /*
+   * D9 / D10 (Phase 2C-3) — WHAT EACH VARIANT'S CURRENT AI VERSION RECORDED,
+   * and what became of each fact since. Read from the M5 usage rows only —
+   * never from the caption's words — through the member's brand scope. The
+   * "Use Brand Brain" switch is read through the grounding layer, for the
+   * off notice.
+   */
+  const knowledgeUsage = draft
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) => ({
+        byVariant: await variantKnowledgeUsage(db, {
+          variantIds: draft.variants.map((variant) => variant.id),
+          brandScope: workspace.brandScope,
+        }),
+        brandBrainOn: await brandBrainEnabledForWriting(db, draft.brandId),
+      }))
+    : null;
+  const mayFixFacts = workspace.permissionKeys.includes('brand_brain.edit');
+  const localizedPick = (text: { en?: string | undefined; ar?: string | undefined } | null) =>
+    text ? ((locale === 'ar' ? (text.ar ?? text.en) : (text.en ?? text.ar)) ?? '') : null;
+  const knowledgeOf = (variantId: string): VariantKnowledgeView[] =>
+    (knowledgeUsage?.byVariant.get(variantId) ?? []).map((entry) => {
+      // Fix it opens the fact as it stands — the replacement, when there is one.
+      const fixTarget = entry.state === 'replaced' ? entry.replacementId : entry.knowledgeItemId;
+      return {
+        knowledgeItemId: entry.knowledgeItemId,
+        areaLabel: translate(`bb.area.${areaDefinition(entry.area).messageKey}` as MessageKey),
+        usedVersion: entry.usedVersion,
+        state: entry.state,
+        title: localizedPick(entry.title),
+        usedTitle: localizedPick(entry.usedTitle),
+        newTitle: localizedPick(entry.newTitle),
+        signature: entry.change?.signature ?? null,
+        flagged: entry.flagged,
+        fixHref:
+          mayFixFacts && entry.state !== 'removed' && fixTarget && draft
+            ? `/${locale}/brand-brain?${new URLSearchParams({
+                brand: draft.brandId,
+                tab: 'chat',
+                mode: 'edit',
+                fact: fixTarget,
+              }).toString()}`
+            : null,
+      };
+    });
+
   const composerDraft: ComposerDraft | null = draft
     ? {
         id: draft.id,
@@ -797,7 +850,9 @@ export default async function ComposePage({
           coverAssetId: variant.coverAssetId,
           slides: readSlides(variant.slides),
           updatedAt: variant.updatedAt.toISOString(),
+          knowledge: knowledgeOf(variant.id),
         })),
+        brandBrainOn: knowledgeUsage?.brandBrainOn ?? true,
       }
     : null;
 
@@ -1028,6 +1083,10 @@ export default async function ComposePage({
           generate: maySpendCredits(workspace.permissionKeys, 'content.create'),
           // E4 (Phase 2B-2) — "Save as template".
           manageTemplates: workspace.permissionKeys.includes('templates.manage'),
+          // D10 (Phase 2C-3) — the rewrite spends credits: `content.edit` AND
+          // `copilot.use`, on a post that is not published or publishing.
+          rewriteFacts:
+            maySpendCredits(workspace.permissionKeys, 'content.edit') && !composerDraft?.readOnly,
         }}
         scheduling={scheduling}
         failed={failed}
@@ -1047,6 +1106,7 @@ export default async function ComposePage({
           createManualDraft: createManualDraftAction,
           scheduleFromStudio: scheduleFromStudioAction,
           saveAsTemplate: saveDraftAsTemplateAction,
+          keepFactChange: keepFactChangeAction,
           listCampaignOptions: listCampaignOptionsAction,
         }}
       />
@@ -1172,6 +1232,23 @@ const EDITOR_KEYS = [
   'editor.brain.basedOn',
   'editor.brain.noSources',
   'editor.brain.open',
+  'editor.facts.used',
+  'editor.facts.usedOne',
+  'editor.facts.none',
+  'editor.facts.off',
+  'editor.facts.state.current',
+  'editor.facts.state.changed',
+  'editor.facts.state.replaced',
+  'editor.facts.state.expired',
+  'editor.facts.state.removed',
+  'editor.facts.fix',
+  'editor.facts.removedFact',
+  'editor.facts.bannerTitle',
+  'editor.facts.expiredInvalid',
+  'editor.facts.removedInvalid',
+  'editor.facts.keep',
+  'editor.facts.rewriteNew',
+  'editor.facts.rewriteWithout',
   'editor.insufficientBody',
   'editor.insufficient.add',
   'editor.approvedWarning',

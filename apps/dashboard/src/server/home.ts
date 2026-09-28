@@ -80,6 +80,8 @@ export const ATTENTION_ACTIONS: Readonly<Record<string, string>> = {
   'notes-mentions': 'open',
   'performance-above': 'open',
   'performance-below': 'open',
+  // D10 (Phase 2C-3) — a used Brand Brain fact changed: rewrite or keep it.
+  'brand-brain-fact-changed': 'rewrite',
 };
 
 /**

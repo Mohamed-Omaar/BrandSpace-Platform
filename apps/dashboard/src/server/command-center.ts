@@ -4,6 +4,7 @@ import type { CustomerWorkspaceContext } from '@brandspace/auth';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { EXPIRING_SOON_MS } from '@brandspace/social-connectors';
 import { AUTOMATION_ACTIONS } from '@brandspace/automation';
+import { contentWithFactChanges } from '@brandspace/brand-brain';
 
 /**
  * WHAT NEEDS A PERSON, RIGHT NOW, IN THIS WORKSPACE (P6-04).
@@ -688,6 +689,31 @@ async function automationsWaiting(
 }
 
 /**
+ * D10 (Phase 2C-3) — SCHEDULED OR IN-REVIEW POSTS WHOSE CAPTION USED A BRAND
+ * BRAIN FACT THAT HAS SINCE CHANGED, EXPIRED OR BEEN REMOVED.
+ *
+ * From the RECORDED usage (M5) and the facts' stored versions and state only —
+ * never by reading the captions — through `usageChangeFor`, the one rule the
+ * Studio uses too, and within the member's brand scope. A change somebody
+ * chose to keep ("Keep as is") is not counted. Surfaced, never acted on: the
+ * post stays scheduled and nothing blocks it from publishing. One post links
+ * straight to it; several link to the posts list.
+ */
+async function factChangesWaiting(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+): Promise<AttentionItem | null> {
+  const items = await contentWithFactChanges(db, { brandScope: session.brandScope });
+  if (items.length === 0) return null;
+  return {
+    kind: 'brand-brain-fact-changed',
+    severity: 'waiting',
+    count: items.length,
+    href: items.length === 1 ? `/content/compose?item=${items[0]}` : '/content',
+  };
+}
+
+/**
  * Every source, in one place, with the permission each one needs.
  *
  * A SOURCE THE MEMBER MAY NOT SEE IS NOT RUN. The rail already hides links a
@@ -725,6 +751,9 @@ const SOURCES: readonly {
   { permissions: ['content.read'], run: calendarGaps },
   // Q18 — the balance is shown to the people who spend it.
   { permissions: ['credits.read', 'billing.read', 'copilot.use'], run: creditsRunningOut },
+  // D10 (Phase 2C-3) — offered to those who can act on it: edit the post and
+  // spend the rewrite's credits (and open the post, `content.read`).
+  { permissions: ['content.read', 'content.edit', 'copilot.use'], run: factChangesWaiting },
 ];
 
 /**
