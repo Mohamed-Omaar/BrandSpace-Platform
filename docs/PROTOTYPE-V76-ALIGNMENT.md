@@ -533,6 +533,12 @@ only after its security design is approved. Each part is its own branch from `st
 `ingest-<id>`; `sweepStuckJobs` is never called; ingestion failure sentences are English only; and
 `BRANDSPACE_WEBFONTS` is blocked by the dashboard's CSP.
 
+**Known gap, recorded by owner decision (review of PR #52) and to be fixed in 2C-4 (item 6 touches the
+Strategy page):** the Strategy page's display lists — audience, key messages and declared pillars — read
+`status: 'ACTIVE'` only, so an EXPIRED fact is still shown there and a STALE one is not. They are display
+only and reach no generation (the goal that prefills the objective is read through `writingGoal`, D-360),
+which is why the grounding guard names the page as a non-generative reader.
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):
