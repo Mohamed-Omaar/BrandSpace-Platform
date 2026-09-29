@@ -429,6 +429,20 @@ export async function knowledgeSignatureFor(
   return knowledgeSignatureOf(rows.map((row) => ({ itemId: row.id, version: row.version })));
 }
 
+/**
+ * D13 — WHETHER "BRAND BRAIN CHANGED" SINCE A STRATEGY WAS GENERATED: its
+ * stored signature differs from the current one. A strategy with NO stored
+ * signature (older than M7) has no baseline and never alerts. Reads only.
+ */
+export async function brandBrainChangedSince(
+  db: TenantScopedClient,
+  request: { readonly brandId: string; readonly storedSignature: string | null | undefined },
+  clock: Clock = systemClock,
+): Promise<boolean> {
+  if (typeof request.storedSignature !== 'string') return false;
+  return request.storedSignature !== (await knowledgeSignatureFor(db, request, clock));
+}
+
 /** The signature's arithmetic, on its own so it can be checked without a database. */
 export function knowledgeSignatureOf(
   facts: readonly { readonly itemId: string; readonly version: number }[],

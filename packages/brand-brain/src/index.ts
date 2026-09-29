@@ -182,6 +182,7 @@ export type {
 export {
   BRAND_GOAL_SELECT,
   GOAL_KEY_PREFIX,
+  brandBrainChangedSince,
   brandBrainEnabledForWriting,
   declaredPillarIdeas,
   declaredPillarKeys,

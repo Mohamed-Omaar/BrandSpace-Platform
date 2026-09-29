@@ -390,7 +390,7 @@ describe('D-354 — generative Brand Brain knowledge access goes through the gro
     // compares the layer's signature.
     expect(strategyPage.match(/brandKnowledgeItem\s*\.\s*\w+\s*\(/g)).toBeNull();
     expect(strategyPage).toMatch(/\busableFactsForDisplay\s*\(/);
-    expect(strategyPage).toMatch(/\bknowledgeSignatureFor\s*\(/);
+    expect(strategyPage).toMatch(/\bbrandBrainChangedSince\s*\(/);
   });
 
   it('every reader of the goal reads the same fields as the layer', async () => {

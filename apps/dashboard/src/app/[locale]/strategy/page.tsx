@@ -1,5 +1,9 @@
 import Link from 'next/link';
-import { knowledgeSignatureFor, usableFactsForDisplay, writingGoal } from '@brandspace/brand-brain';
+import {
+  brandBrainChangedSince,
+  usableFactsForDisplay,
+  writingGoal,
+} from '@brandspace/brand-brain';
 import { maySpendCredits } from '@brandspace/shared';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
@@ -159,9 +163,10 @@ export default async function StrategyPage({
          * facts now. A strategy with no stored signature (older than M7) has
          * no baseline and never alerts. Reading this writes nothing.
          */
-        const knowledgeChanged =
-          typeof accepted?.knowledgeSignature === 'string' &&
-          accepted.knowledgeSignature !== (await knowledgeSignatureFor(db, { brandId: brand.id }));
+        const knowledgeChanged = await brandBrainChangedSince(db, {
+          brandId: brand.id,
+          storedSignature: accepted?.knowledgeSignature,
+        });
         return { accepted, proposals, goal, knowledge, knowledgeChanged };
       })
     : null;
