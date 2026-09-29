@@ -101,3 +101,24 @@ function hash(value: string): string {
   }
   return out.toString(16).padStart(8, '0');
 }
+
+/**
+ * D13 (Phase 2C-4, owner decision Option 1) — "Brand Brain changed", accepted
+ * as it stands: the strategy's stored knowledge baseline becomes the current
+ * one, through the API's Strategy mutation (`strategy.manage`, re-checked there
+ * too). Audited with the previous and the new value; acknowledging what is
+ * already current changes nothing. A later change to the usable facts raises
+ * the alert again.
+ */
+export async function acknowledgeKnowledgeChangeAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  await requireWorkspace(locale, 'strategy.manage');
+  const insightId = String(formData.get('insightId') ?? '');
+  const brandId = String(formData.get('brandId') ?? '');
+  const back = `/${locale}/strategy?brand=${encodeURIComponent(brandId)}`;
+
+  const response = await callPhase7Api('/v1/strategy/acknowledge-knowledge', { insightId });
+  if (!response.ok) redirect(`${back}&error=${codeFrom(response.payload)}`);
+  revalidatePath(`/${locale}/strategy`);
+  redirect(`${back}&ok=STRATEGY_KNOWLEDGE_ACKNOWLEDGED`);
+}

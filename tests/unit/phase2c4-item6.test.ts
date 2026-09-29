@@ -125,3 +125,35 @@ describe('Item 5 — the Remove dialog offers Drop only with brand_brain.edit', 
     );
   });
 });
+
+describe('D13 acknowledge (owner decision Option 1) — strategy.manage, server-side', () => {
+  it('the button is offered only with strategy.manage, inside the alert', () => {
+    const page = source('apps/dashboard/src/app/[locale]/strategy/page.tsx');
+    expect(page).toMatch(/\{mayManage && data\.accepted \? \(/);
+    expect(page).toMatch(/action=\{acknowledgeKnowledgeChangeAction\}/);
+    expect(page).toMatch(/const mayManage = may\('strategy\.manage'\)/);
+  });
+
+  it('the action and the route both require strategy.manage', () => {
+    const actions = source('apps/dashboard/src/app/[locale]/strategy/actions.ts');
+    expect(actions).toMatch(
+      /acknowledgeKnowledgeChangeAction[\s\S]*?requireWorkspace\(locale, 'strategy\.manage'\)/,
+    );
+    const routes = source('apps/api/src/routes/analytics.ts');
+    expect(routes).toMatch(
+      /'\/v1\/strategy\/acknowledge-knowledge',\s*\{\s*scope: 'workspace',\s*permission: STRATEGY_MANAGE/,
+    );
+  });
+
+  it('re-baselines to the layer’s current signature, conditionally, and audits both values', () => {
+    const domain = source('packages/intelligence/src/knowledge-acknowledge.ts');
+    expect(domain).toMatch(/knowledgeSignatureFor\(db, \{ brandId: strategy\.brandId \}, clock\)/);
+    expect(domain).toMatch(/if \(current === previous\) return \{ acknowledged: false/);
+    expect(domain).toMatch(/where: \{ id: strategy\.id, knowledgeSignature: previous \}/);
+    expect(domain).toMatch(/before: \{ knowledgeBaseline: previous \}/);
+    expect(domain).toMatch(/after: \{ knowledgeBaseline: current \}/);
+    // No client-only dismissal anywhere on the page.
+    const page = source('apps/dashboard/src/app/[locale]/strategy/page.tsx');
+    expect(page).not.toMatch(/localStorage|sessionStorage|document\.cookie/);
+  });
+});

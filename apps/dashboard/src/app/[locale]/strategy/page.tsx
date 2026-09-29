@@ -48,7 +48,12 @@ import {
   type MessageKey,
 } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
-import { generateStrategyAction, proposeLearningsAction, reviewInsightAction } from './actions';
+import {
+  acknowledgeKnowledgeChangeAction,
+  generateStrategyAction,
+  proposeLearningsAction,
+  reviewInsightAction,
+} from './actions';
 
 import { EmptyAction } from '../../../components/empty-action';
 
@@ -242,6 +247,29 @@ export default async function StrategyPage({
                   <Link href={brainHref} data-testid="strategy-brain-changed-review">
                     {t('strategy.brainChanged.review')}
                   </Link>
+                  {mayManage && data.accepted ? (
+                    /*
+                     * D13 ACKNOWLEDGE (owner decision Option 1): re-baselines
+                     * the accepted strategy on the current facts, server-side,
+                     * `strategy.manage`. Not offered without it.
+                     */
+                    <form
+                      action={acknowledgeKnowledgeChangeAction}
+                      style={{ display: 'inline', marginInlineStart: spacingTokens.sm }}
+                    >
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="brandId" value={brand.id} />
+                      <input type="hidden" name="insightId" value={data.accepted.id} />
+                      <button
+                        type="submit"
+                        className={buttonClass('ghost')}
+                        style={buttonStyle('ghost', 'sm')}
+                        data-testid="strategy-brain-changed-acknowledge"
+                      >
+                        {t('strategy.brainChanged.acknowledge')}
+                      </button>
+                    </form>
+                  ) : null}
                 </CustomerBanner>
               </div>
             ) : null}

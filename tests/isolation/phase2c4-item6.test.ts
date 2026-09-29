@@ -17,7 +17,7 @@ import {
   createAnalyticsRegistry,
   parseAnalyticsPolicy,
 } from '@brandspace/analytics';
-import { StrategyService } from '@brandspace/intelligence';
+import { StrategyService, acknowledgeKnowledgeChange } from '@brandspace/intelligence';
 import { attentionItems } from '../../apps/dashboard/src/server/command-center';
 import { buildServer } from '../../apps/api/src/server';
 import {
@@ -66,7 +66,7 @@ const actor = (permissionKeys: readonly string[] = ['brand_brain.edit', 'brand_b
 
 /* ------------------------------------------------------------ members + HTTP */
 
-const tokens = { edit: '', review: '', none: '' };
+const tokens = { edit: '', review: '', none: '', manage: '', readOnly: '' };
 
 async function memberWithKeys(keys: readonly string[], label: string): Promise<string> {
   const run = randomUUID().slice(0, 8);
@@ -210,6 +210,11 @@ beforeAll(async () => {
     'review',
   );
   tokens.none = await memberWithKeys(['workspace.read', 'brand_brain.read'], 'none');
+  tokens.manage = await memberWithKeys(
+    ['workspace.read', 'strategy.read', 'strategy.manage'],
+    'manage',
+  );
+  tokens.readOnly = await memberWithKeys(['workspace.read', 'strategy.read'], 'read');
   server = await buildServer();
   await server.ready();
 }, 90_000);
@@ -672,6 +677,168 @@ describe('D13 — the Strategy engine stores the signature it generated on', () 
   it('older insights have no signature', async () => {
     const row = await platform.insight.findUniqueOrThrow({ where: { id: fixtures.a.insightId } });
     expect(row.knowledgeSignature).toBeNull();
+  });
+});
+
+/* ======================================================================== */
+
+describe('D13 — acknowledge re-baselines the accepted strategy (owner decision Option 1)', () => {
+  const changedSince = (stored: string | null) =>
+    inA((db) =>
+      brandBrainChangedSince(db, { brandId: fixtures.a.brandId, storedSignature: stored }),
+    );
+  const acknowledgements = (insightId: string) =>
+    platform.auditEvent.findMany({
+      where: { resourceId: insightId, action: 'strategy.knowledge_change.acknowledged' },
+      orderBy: { occurredAt: 'asc' },
+    });
+
+  /** An ACCEPTED strategy whose stored baseline is stale: the alert is showing. */
+  async function staleStrategy(): Promise<{ id: string; stored: string }> {
+    const stored = knowledgeSignatureOf([{ itemId: randomUUID(), version: 1 }]);
+    const insight = await inA((db) =>
+      db.insight.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          type: 'STRATEGY',
+          status: 'ACCEPTED',
+          basis: 'BRAND_CONTEXT',
+          title: { en: 'Strategy' },
+          body: {},
+          periodStart: new Date('2026-09-01T00:00:00Z'),
+          periodEnd: new Date('2026-09-30T00:00:00Z'),
+          generatedByUserId: fixtures.a.userId,
+          knowledgeSignature: stored,
+        },
+      }),
+    );
+    expect(await changedSince(stored)).toBe(true);
+    return { id: insight.id, stored };
+  }
+
+  const acknowledge = (insightId: string, brandScope: readonly string[] = []) =>
+    inA((db) =>
+      acknowledgeKnowledgeChange(db, {
+        workspaceId: fixtures.a.workspaceId,
+        insightId,
+        actorUserId: fixtures.a.userId,
+        brandScope,
+      }),
+    );
+
+  it('clears the alert, audited with the previous and the new baseline', async () => {
+    const { id, stored } = await staleStrategy();
+    const result = await acknowledge(id);
+    expect(result.acknowledged).toBe(true);
+    const row = await platform.insight.findUniqueOrThrow({ where: { id } });
+    const current = await inA((db) => knowledgeSignatureFor(db, { brandId: fixtures.a.brandId }));
+    expect(row.knowledgeSignature).toBe(current);
+    expect(await changedSince(row.knowledgeSignature)).toBe(false);
+
+    const events = await acknowledgements(id);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actorType: 'USER',
+      actorId: fixtures.a.userId,
+      resourceType: 'Insight',
+      brandId: fixtures.a.brandId,
+      before: { knowledgeBaseline: stored },
+      after: { knowledgeBaseline: current },
+    });
+  });
+
+  it('acknowledging an already-current baseline is a no-op — no write, no audit', async () => {
+    const { id } = await staleStrategy();
+    await acknowledge(id);
+    const before = await platform.insight.findUniqueOrThrow({ where: { id } });
+    const again = await acknowledge(id);
+    expect(again.acknowledged).toBe(false);
+    const after = await platform.insight.findUniqueOrThrow({ where: { id } });
+    expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
+    expect(await acknowledgements(id)).toHaveLength(1);
+  });
+
+  it('a later change to the usable facts raises the alert again', async () => {
+    const { id } = await staleStrategy();
+    await acknowledge(id);
+    const row = await platform.insight.findUniqueOrThrow({ where: { id } });
+    await inA((db) =>
+      knowledge(db).createItem({
+        brandId: fixtures.a.brandId,
+        area: 'PROOF_POINTS',
+        itemKey: `proof.after-ack-${randomUUID().slice(0, 6)}`,
+        title: { en: 'Approved after the acknowledgement' },
+        body: { en: 'A new usable fact.' },
+        actor: actor(),
+        policy: STALENESS,
+      }),
+    );
+    expect(await changedSince(row.knowledgeSignature)).toBe(true);
+  });
+
+  it('a strategy with no baseline, another workspace or another brand scope: nothing written', async () => {
+    const legacy = await inA((db) =>
+      db.insight.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          type: 'STRATEGY',
+          status: 'ACCEPTED',
+          basis: 'BRAND_CONTEXT',
+          title: { en: 'Old strategy' },
+          body: {},
+          periodStart: new Date('2026-08-01T00:00:00Z'),
+          periodEnd: new Date('2026-08-31T00:00:00Z'),
+        },
+      }),
+    );
+    expect((await acknowledge(legacy.id)).acknowledged).toBe(false);
+    expect(
+      (await platform.insight.findUniqueOrThrow({ where: { id: legacy.id } })).knowledgeSignature,
+    ).toBeNull();
+
+    const { id, stored } = await staleStrategy();
+    await expect(acknowledge(id, [randomUUID()])).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      inB((db) =>
+        acknowledgeKnowledgeChange(db, {
+          workspaceId: fixtures.b.workspaceId,
+          insightId: id,
+          actorUserId: fixtures.b.userId,
+          brandScope: [],
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect((await platform.insight.findUniqueOrThrow({ where: { id } })).knowledgeSignature).toBe(
+      stored,
+    );
+  });
+
+  it('the route needs strategy.manage: refused without it, re-baselines with it', async () => {
+    const { id, stored } = await staleStrategy();
+    expect(
+      (await post('/v1/strategy/acknowledge-knowledge', tokens.readOnly, { insightId: id })).status,
+    ).toBe(404);
+    expect(
+      (await post('/v1/strategy/acknowledge-knowledge', tokens.none, { insightId: id })).status,
+    ).toBe(404);
+    expect((await platform.insight.findUniqueOrThrow({ where: { id } })).knowledgeSignature).toBe(
+      stored,
+    );
+    expect(await acknowledgements(id)).toHaveLength(0);
+
+    const response = await post('/v1/strategy/acknowledge-knowledge', tokens.manage, {
+      insightId: id,
+    });
+    expect(response.status).toBe(200);
+    expect(response.body['acknowledged']).toBe(true);
+    expect(await acknowledgements(id)).toHaveLength(1);
+    const again = await post('/v1/strategy/acknowledge-knowledge', tokens.manage, {
+      insightId: id,
+    });
+    expect(again.body['acknowledged']).toBe(false);
+    expect(await acknowledgements(id)).toHaveLength(1);
   });
 });
 

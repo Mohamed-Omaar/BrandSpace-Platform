@@ -6,7 +6,11 @@ import {
   TenantAnalyticsPolicySource,
   createAnalyticsRegistry,
 } from '@brandspace/analytics';
-import { LearningWriteBackService, StrategyService } from '@brandspace/intelligence';
+import {
+  LearningWriteBackService,
+  StrategyService,
+  acknowledgeKnowledgeChange,
+} from '@brandspace/intelligence';
 import { BrandKnowledgeService } from '@brandspace/brand-brain';
 import { resolveContentExpiry, resolveContentPolicy } from '@brandspace/content';
 import { withWorkspace, getPrisma } from '@brandspace/database';
@@ -431,6 +435,54 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
         return reply.send({ insightId: insight.id, status: insight.status });
       } catch (error: unknown) {
         return fail(reply, 'insight review', error);
+      }
+    },
+  );
+
+  /**
+   * D13 ACKNOWLEDGE (PHASE 2C-4, owner decision Option 1) — "Brand Brain
+   * changed", accepted as it stands.
+   *
+   * A Strategy mutation beside `/v1/insights/review`, on the same permission:
+   * `strategy.manage`. It re-baselines the ACCEPTED strategy's stored
+   * knowledge signature to the current one (`acknowledgeKnowledgeChange`),
+   * audited with the previous and the new value; nothing to acknowledge writes
+   * nothing. No credits, no model, no migration.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/strategy/acknowledge-knowledge',
+    {
+      scope: 'workspace',
+      permission: STRATEGY_MANAGE,
+      confirmation: 'not_required',
+      rateLimit: 'workspace.write',
+    },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, STRATEGY_MANAGE);
+      if (!caller) return;
+
+      const parsed = writeBackSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      }
+
+      try {
+        const result = await withWorkspace(
+          caller.workspaceId,
+          (db) =>
+            acknowledgeKnowledgeChange(db, {
+              workspaceId: caller.workspaceId,
+              insightId: parsed.data.insightId,
+              actorUserId: caller.userId,
+              brandScope: caller.brandScope,
+            }),
+          { prisma: getPrisma() },
+        );
+        return reply.send({ acknowledged: result.acknowledged });
+      } catch (error: unknown) {
+        return fail(reply, 'strategy knowledge acknowledge', error);
       }
     },
   );

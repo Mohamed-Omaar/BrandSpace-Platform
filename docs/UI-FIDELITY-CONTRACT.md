@@ -841,6 +841,9 @@ ships (§4.2 of `CLAUDE.md`), and the owner may refine them in the final parity 
 - **Uploading** — the demo's ink submit reads "Uploading…" and is disabled while the file travels.
 - **Performance** — "Save as learning" on an insight line is the screen's ghost `sm` button; the saved
   state is a muted caption.
+- **Strategy "Brand Brain changed"** — the screen's existing `CustomerBanner` with the Brand Brain
+  link and, for `strategy.manage` only, "Reviewed — keep this strategy" as the screen's ghost `sm`
+  button beside it (D-398, owner decision Option 1).
 
 No new colour family, font, shadow style, motion or interaction model.
 

@@ -2327,6 +2327,7 @@ export const messages = {
     'strategy.brainChanged.body':
       'تغيّرت الحقائق المعتمدة منذ إنشاء هذه الاستراتيجية — عُدّلت حقيقة أو انتهت صلاحيتها أو أُرشفت أو اعتُمدت حقيقة جديدة. راجعها، أو أنشئ استراتيجية جديدة أدناه.',
     'strategy.brainChanged.review': 'افتح عقل العلامة',
+    'strategy.brainChanged.acknowledge': 'تمّت المراجعة — أبقِ الاستراتيجية',
     'strategy.audienceEmpty': 'لا يحتوي عقل العلامة على جمهور معتمد بعد.',
     'strategy.messagesEmpty': 'لا يحتوي عقل العلامة على عروض أو أدلة إثبات معتمدة بعد.',
     'strategy.addKnowledge': 'أضف معرفة',
@@ -5560,6 +5561,7 @@ export const messages = {
     'strategy.brainChanged.body':
       'The approved facts changed since this strategy was generated — a fact was edited, expired or archived, or a new one was approved. Review them, or generate a new strategy below.',
     'strategy.brainChanged.review': 'Open Brand Brain',
+    'strategy.brainChanged.acknowledge': 'Reviewed — keep this strategy',
     'strategy.audienceEmpty': 'Brand Brain has no approved audience yet.',
     'strategy.messagesEmpty': 'Brand Brain has no approved offers or proof points yet.',
     'strategy.addKnowledge': 'Add knowledge',
@@ -6845,6 +6847,10 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   LEARNING_NOTHING_TO_SAVE: {
     en: 'The numbers behind this insight do not support a learning yet, so nothing was saved.',
     ar: 'الأرقام وراء هذه الرؤية لا تدعم درسًا مستفادًا بعد، لذا لم يُحفظ شيء.',
+  },
+  STRATEGY_KNOWLEDGE_ACKNOWLEDGED: {
+    en: 'Noted. This strategy now counts the current Brand Brain as reviewed; a later change will alert again.',
+    ar: 'تم. أصبحت هذه الاستراتيجية تعدّ عقل العلامة الحالي مُراجَعًا، وسيظهر التنبيه مجددًا عند أي تغيير لاحق.',
   },
   SOURCE_READ_AGAIN: {
     en: 'Reading the document again. New proposals will wait for your review.',

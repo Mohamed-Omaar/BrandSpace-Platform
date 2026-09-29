@@ -642,7 +642,9 @@ plus the Strategy display-list fix. Migrations M6 and M7, schema only. Website r
   `brand-brain-missing` on Home.
 - **D13 (D-398, D-400).** The usable-knowledge signature, stored on generated STRATEGY and
   MONTHLY_PLAN insights (M7); "Brand Brain changed" when it no longer matches; NULL never alerts.
-  **Acknowledge is held for an owner decision** — not defined in the approved docs.
+  **Acknowledge (owner decision Option 1):** "Reviewed — keep this strategy" re-baselines the accepted
+  strategy on the current signature, server-side, `strategy.manage` only, audited with the previous and
+  new value; a no-op when already current; a later fact change alerts again.
 - **Strategy display lists (D-399).** The usable rule, through the grounding layer.
 
 **Still open from §9.1, by owner decision:** nothing sets a fact to `STALE`; `sweepStuckJobs` is never

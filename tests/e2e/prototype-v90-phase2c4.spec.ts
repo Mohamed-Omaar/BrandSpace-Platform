@@ -1010,6 +1010,58 @@ test.describe('D13 · Strategy — "Brand Brain changed" only when usable facts 
     await expect(page.getByTestId('strategy-brain-changed')).toHaveCount(0);
   });
 
+  test('acknowledge clears the alert, a later fact change re-alerts; no button without strategy.manage', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    // The member is an analyst: `strategy.read`, never `strategy.manage`.
+    const target = await world('strategy-ack', { roleKey: 'analyst' });
+    const fact = await seedAudience(target, { key: 'audience.primary', title: 'Bakery founders' });
+    const strategyId = await acceptedStrategy(target, await currentSignature(target));
+    await withPlatformPrisma((prisma) =>
+      prisma.brandKnowledgeItem.update({
+        where: { id: fact },
+        data: { version: 2, title: { en: 'Bakery and café founders' } },
+      }),
+    );
+    const strategyUrl = `${DASHBOARD_BASE_URL}/en/strategy`;
+
+    // Without strategy.manage: the alert, and no way to acknowledge it.
+    await enter(page, target, { as: 'member' });
+    await page.goto(strategyUrl);
+    await expect(page.getByTestId('strategy-brain-changed')).toBeVisible();
+    await expect(page.getByTestId('strategy-brain-changed-acknowledge')).toHaveCount(0);
+
+    // The owner acknowledges: the stored baseline becomes the current one.
+    await page.context().clearCookies();
+    await enter(page, target);
+    await page.goto(strategyUrl);
+    const acknowledge = page.getByTestId('strategy-brain-changed-acknowledge');
+    await expect(acknowledge).toBeVisible();
+    await acknowledge.focus();
+    await page.keyboard.press('Enter');
+    await page.waitForURL(/ok=STRATEGY_KNOWLEDGE_ACKNOWLEDGED/);
+    await expect(page.getByTestId('strategy-brain-changed')).toHaveCount(0);
+    const stored = await withPlatformPrisma((prisma) =>
+      prisma.insight.findUniqueOrThrow({
+        where: { id: strategyId },
+        select: { knowledgeSignature: true },
+      }),
+    );
+    expect(stored.knowledgeSignature).toBe(await currentSignature(target));
+
+    // A later change to a usable fact: the alert returns.
+    await withPlatformPrisma((prisma) =>
+      prisma.brandKnowledgeItem.update({
+        where: { id: fact },
+        data: { version: 3, title: { en: 'Bakery, café and patisserie founders' } },
+      }),
+    );
+    await page.goto(strategyUrl);
+    await expect(page.getByTestId('strategy-brain-changed')).toBeVisible();
+  });
+
   test('the display lists show usable STALE facts and hide expired ones', async ({
     page,
     isMobile,
