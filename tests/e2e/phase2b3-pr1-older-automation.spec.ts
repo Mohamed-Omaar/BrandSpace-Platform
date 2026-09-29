@@ -44,8 +44,42 @@ async function seedRule(
   return id;
 }
 
+/**
+ * A run SKIPPED because a value its rule names is no longer available (D-408).
+ * Written the way the engine records one; the screen must not call it
+ * "Conditions did not hold" and must not show the raw code.
+ */
+async function seedValueUnavailableRun(ws: OwnWorkspace, ruleId: string): Promise<string> {
+  const id = randomUUID();
+  const now = new Date();
+  await withPlatformPrisma((prisma) =>
+    prisma.automationRun.create({
+      data: {
+        id,
+        workspaceId: ws.workspaceId,
+        brandId: ws.brandId,
+        ruleId,
+        status: 'SKIPPED',
+        failureCode: 'condition_value_unavailable',
+        triggerType: 'CONTENT_APPROVED',
+        idempotencyKey: `e2e-stale-${id}`,
+        actionType: 'NOTIFY',
+        correlationId: randomUUID(),
+        finishedAt: now,
+        durationMs: 0,
+      },
+    }),
+  );
+  return id;
+}
+
+const STALE_EN =
+  "Skipped — something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.";
+const STALE_AR =
+  'تم التخطي — شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.';
+
 test.describe('Phase 2B-3 PR 1 · older automations', () => {
-  test('the caption and the trigger name, in English and in Arabic (RTL)', async ({
+  test('the caption, the trigger name and a stale-value skip, in English and in Arabic (RTL)', async ({
     page,
     isMobile,
   }) => {
@@ -53,6 +87,7 @@ test.describe('Phase 2B-3 PR 1 · older automations', () => {
     const ws = await ownWorkspace('older-auto');
     const older = await seedRule(ws, { name: 'Old anomaly note', triggerType: 'ANOMALY_DETECTED' });
     const current = await seedRule(ws, { name: 'Approval note', triggerType: 'CONTENT_APPROVED' });
+    const staleRun = await seedValueUnavailableRun(ws, current);
     await enter(page, ws.slug);
 
     // --- English, left to right ---------------------------------------------
@@ -69,6 +104,15 @@ test.describe('Phase 2B-3 PR 1 · older automations', () => {
     await expect(
       page.getByTestId('automation-trigger').locator('option[value="ANOMALY_DETECTED"]'),
     ).toHaveCount(0);
+    // A stale-value skip: its own label and the localized reason, no raw code.
+    await expect(page.getByTestId(`automation-run-status-${staleRun}`)).toHaveText('Skipped');
+    await expect(page.getByTestId(`automation-run-failure-${staleRun}`)).toHaveText(STALE_EN);
+    await expect(page.getByTestId(`automation-run-${staleRun}`)).not.toContainText(
+      'Conditions did not hold',
+    );
+    await expect(page.getByTestId(`automation-run-${staleRun}`)).not.toContainText(
+      'condition_value_unavailable',
+    );
     await noSeriousViolations(page);
 
     // --- Arabic, right to left ----------------------------------------------
@@ -77,6 +121,14 @@ test.describe('Phase 2B-3 PR 1 · older automations', () => {
     await expect(page.getByTestId('automation-rules')).toContainText('عند رصد تغيّر غير معتاد');
     await expect(page.getByTestId(`automation-older-${older}`)).toContainText('(أتمتة أقدم)');
     await expect(page.getByTestId(`automation-older-${current}`)).toHaveCount(0);
+    await expect(page.getByTestId(`automation-run-status-${staleRun}`)).toHaveText('تم التخطي');
+    await expect(page.getByTestId(`automation-run-failure-${staleRun}`)).toHaveText(STALE_AR);
+    await expect(page.getByTestId(`automation-run-${staleRun}`)).not.toContainText(
+      'لم تتحقق الشروط',
+    );
+    await expect(page.getByTestId(`automation-run-${staleRun}`)).not.toContainText(
+      'condition_value_unavailable',
+    );
     await noSeriousViolations(page);
   });
 });

@@ -30,6 +30,7 @@ import {
 import { providerForPlatformKey } from '@brandspace/social-connectors';
 import { ALL_PERMISSIONS, ROLE_DEFINITIONS } from '@brandspace/shared';
 import { messages } from '../../apps/dashboard/src/i18n/messages';
+import { runPresentation } from '../../apps/dashboard/src/server/automation-run-display';
 
 /**
  * PHASE 2B-3, PR 1 — THE FOUNDATION: registry parity, the typed action
@@ -468,5 +469,81 @@ describe('older-automation classification', () => {
     expect(page).toContain("t('automations.olderAutomation')");
     // The authoring form offers only authorable pairs.
     expect(page).toContain('isAuthorablePair(trigger.type, action.type)');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A stale-value skip reads as what it is (owner review of PR 1, D-408)
+// ---------------------------------------------------------------------------
+
+describe('run history: a condition_value_unavailable skip has its own label and reason', () => {
+  const EN =
+    "Skipped — something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.";
+  const AR =
+    'تم التخطي — شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.';
+
+  it('maps the skip to a distinct badge and the localized reason, never the raw code', () => {
+    const shown = runPresentation({
+      status: 'SKIPPED',
+      failureCode: 'condition_value_unavailable',
+    });
+    expect(shown).toEqual({
+      statusKey: 'automations.status.valueUnavailable',
+      reason: { kind: 'message', key: 'automations.failure.condition_value_unavailable' },
+    });
+    expect(shown.statusKey).not.toBe('automations.status.SKIPPED');
+  });
+
+  it('carries the exact owner copy in en and ar, and a badge that is not "Conditions did not hold"', () => {
+    expect(messages.en['automations.failure.condition_value_unavailable']).toBe(EN);
+    expect(messages.ar['automations.failure.condition_value_unavailable']).toBe(AR);
+    expect(messages.en['automations.status.valueUnavailable']).toBe('Skipped');
+    expect(messages.ar['automations.status.valueUnavailable']).toBe('تم التخطي');
+    expect(messages.en['automations.status.valueUnavailable']).not.toBe(
+      messages.en['automations.status.SKIPPED'],
+    );
+    expect(messages.ar['automations.status.valueUnavailable']).not.toBe(
+      messages.ar['automations.status.SKIPPED'],
+    );
+    for (const copy of [EN, AR]) expect(copy).not.toContain('condition_value_unavailable');
+  });
+
+  it('leaves every other run exactly as it read before', () => {
+    // A plain condition skip keeps "Conditions did not hold" and no reason line.
+    expect(runPresentation({ status: 'SKIPPED', failureCode: null })).toEqual({
+      statusKey: 'automations.status.SKIPPED',
+      reason: { kind: 'none' },
+    });
+    // Every other code keeps the generic "Reason: {code}" line.
+    for (const [status, code] of [
+      ['SKIPPED', 'something_else'],
+      ['BLOCKED_BY_POLICY', 'daily_ceiling_reached'],
+      ['BLOCKED_BY_AUTHORIZATION', 'creator_lost_permission'],
+      ['FAILED', 'unknown_action'],
+      ['BLOCKED_BY_POLICY', 'condition_value_unavailable'],
+    ] as const) {
+      expect(runPresentation({ status, failureCode: code })).toEqual({
+        statusKey: `automations.status.${status}`,
+        reason: { kind: 'generic', code },
+      });
+    }
+    // A member's own skip still has no reason line.
+    expect(runPresentation({ status: 'CANCELLED', failureCode: 'skipped_by_member' })).toEqual({
+      statusKey: 'automations.status.CANCELLED',
+      reason: { kind: 'none' },
+    });
+    // And the generic reason copy itself is untouched.
+    expect(messages.en['automations.failure']).toBe('Reason: {code}');
+    expect(messages.ar['automations.failure']).toBe('السبب: {code}');
+  });
+
+  it('the run history renders through the presentation, not the raw status', () => {
+    const page = readFileSync(
+      path.join(root, 'apps/dashboard/src/app/[locale]/automations/page.tsx'),
+      'utf8',
+    );
+    expect(page).toContain('const shown = runPresentation(run);');
+    expect(page).toContain('label={t(shown.statusKey as MessageKey)}');
+    expect(page).not.toContain('label={t(`automations.status.${run.status}` as MessageKey)}');
   });
 });

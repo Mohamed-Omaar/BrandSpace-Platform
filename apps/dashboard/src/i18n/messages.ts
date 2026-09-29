@@ -2624,6 +2624,7 @@ export const messages = {
     'automations.status.FAILED': 'فشلت',
     // B12 — the only writer of CANCELLED is a person pressing Skip.
     'automations.status.CANCELLED': 'تم التخطي',
+    'automations.status.valueUnavailable': 'تم التخطي',
     'campaigns.title': 'الحملات',
     'campaigns.empty': 'لا توجد حملات بعد.',
     'campaigns.objective.AWARENESS': 'الوعي',
@@ -2650,6 +2651,8 @@ export const messages = {
     'automations.deleteConfirmBody': 'ستتوقف هذه القاعدة ولن تعمل مجددًا. يبقى سجل تشغيلها.',
     'automations.deleteConfirmSubmit': 'احذف هذه القاعدة',
     'automations.failure': 'السبب: {code}',
+    'automations.failure.condition_value_unavailable':
+      'تم التخطي — شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.',
     'automations.confirmNeedsPermission': 'ينتظر تأكيد عضو يملك صلاحية النشر.',
     'automations.brandFilter': 'القواعد والتشغيلات للعلامة {brand}.',
     'notifications.template.analytics.anomaly_detected': 'تغيّر غير معتاد في الأداء',
@@ -5876,6 +5879,7 @@ export const messages = {
     'automations.status.FAILED': 'Failed',
     // B12 — the only writer of CANCELLED is a person pressing Skip.
     'automations.status.CANCELLED': 'Skipped',
+    'automations.status.valueUnavailable': 'Skipped',
     'campaigns.title': 'Campaigns',
     'campaigns.empty': 'No campaigns yet.',
     'campaigns.objective.AWARENESS': 'Awareness',
@@ -5903,6 +5907,8 @@ export const messages = {
       'This rule stops and will not run again. Its run history is kept.',
     'automations.deleteConfirmSubmit': 'Delete this rule',
     'automations.failure': 'Reason: {code}',
+    'automations.failure.condition_value_unavailable':
+      "Skipped — something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.",
     'automations.confirmNeedsPermission': 'Waiting for a member who may publish to confirm it.',
     'automations.brandFilter': 'Rules and runs for {brand}.',
     'notifications.template.analytics.anomaly_detected': 'An unusual change in performance',

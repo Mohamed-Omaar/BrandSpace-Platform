@@ -28,6 +28,7 @@ import { inWorkspace, requireWorkspacePage } from '../../../server/customer-cont
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { copilotHref } from '../../../server/copilot-surface';
+import { runPresentation } from '../../../server/automation-run-display';
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey, successFlash } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -817,58 +818,71 @@ export default async function AutomationsPage({
               style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '0.25rem' }}
               data-testid="automation-runs"
             >
-              {runs.map((run) => (
-                <li
-                  key={run.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: spacingTokens.md,
-                    ...typographyTokens.caption,
-                    color: colorTokens.textSecondary,
-                  }}
-                >
-                  <span style={{ display: 'grid', gap: '0.125rem' }}>
-                    <span>
-                      {t(`automations.trigger.${run.triggerType}` as MessageKey)} →{' '}
-                      {t(`automations.action.${run.actionType}` as MessageKey)}
+              {runs.map((run) => {
+                const shown = runPresentation(run);
+                return (
+                  <li
+                    key={run.id}
+                    data-testid={`automation-run-${run.id}`}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: spacingTokens.md,
+                      ...typographyTokens.caption,
+                      color: colorTokens.textSecondary,
+                    }}
+                  >
+                    <span style={{ display: 'grid', gap: '0.125rem' }}>
+                      <span>
+                        {t(`automations.trigger.${run.triggerType}` as MessageKey)} →{' '}
+                        {t(`automations.action.${run.actionType}` as MessageKey)}
+                      </span>
+                      {/*
+                      THE REASON LINE (Phase 2B-3 PR 1, D-408). A run skipped
+                      because a value its rule names is gone reads as that, in
+                      words, with what to do; every other reason is unchanged.
+                    */}
+                      {shown.reason.kind === 'generic' ? (
+                        <span data-testid={`automation-run-failure-${run.id}`}>
+                          {t('automations.failure').replace('{code}', shown.reason.code)}
+                        </span>
+                      ) : shown.reason.kind === 'message' ? (
+                        <span data-testid={`automation-run-failure-${run.id}`}>
+                          {t(shown.reason.key)}
+                        </span>
+                      ) : null}
+                      {proposals.has(run.id) ? (
+                        <span data-testid={`automation-proposal-${run.id}`}>
+                          <strong>{t('automations.previewTitle')}</strong>
+                          {' — '}
+                          {t('automations.previewRule').replace(
+                            '{rule}',
+                            proposals.get(run.id)?.rule ?? '—',
+                          )}
+                          {' · '}
+                          {proposals.get(run.id)?.content
+                            ? t('automations.previewContent').replace(
+                                '{content}',
+                                proposals.get(run.id)?.content ?? '',
+                              )
+                            : t('automations.previewUnknown')}
+                        </span>
+                      ) : null}
                     </span>
-                    {run.failureCode && run.failureCode !== 'skipped_by_member' ? (
-                      <span data-testid={`automation-run-failure-${run.id}`}>
-                        {t('automations.failure').replace('{code}', run.failureCode)}
-                      </span>
-                    ) : null}
-                    {proposals.has(run.id) ? (
-                      <span data-testid={`automation-proposal-${run.id}`}>
-                        <strong>{t('automations.previewTitle')}</strong>
-                        {' — '}
-                        {t('automations.previewRule').replace(
-                          '{rule}',
-                          proposals.get(run.id)?.rule ?? '—',
-                        )}
-                        {' · '}
-                        {proposals.get(run.id)?.content
-                          ? t('automations.previewContent').replace(
-                              '{content}',
-                              proposals.get(run.id)?.content ?? '',
-                            )
-                          : t('automations.previewUnknown')}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span style={{ display: 'flex', gap: spacingTokens.sm }}>
-                    <StatusBadge
-                      tone={
-                        run.status === 'SUCCEEDED'
-                          ? 'success'
-                          : run.status === 'FAILED' || run.status === 'BLOCKED_BY_AUTHORIZATION'
-                            ? 'warning'
-                            : 'neutral'
-                      }
-                      label={t(`automations.status.${run.status}` as MessageKey)}
-                    />
-                    <span>{stamp.format(run.startedAt)}</span>
-                    {/*
+                    <span style={{ display: 'flex', gap: spacingTokens.sm }}>
+                      <StatusBadge
+                        tone={
+                          run.status === 'SUCCEEDED'
+                            ? 'success'
+                            : run.status === 'FAILED' || run.status === 'BLOCKED_BY_AUTHORIZATION'
+                              ? 'warning'
+                              : 'neutral'
+                        }
+                        label={t(shown.statusKey as MessageKey)}
+                        testId={`automation-run-status-${run.id}`}
+                      />
+                      <span>{stamp.format(run.startedAt)}</span>
+                      {/*
                       THE BUTTON A PROPOSED EXTERNAL ACTION WAITS FOR, AND ONLY
                       WHILE ITS WINDOW IS OPEN (R3-4).
 
@@ -883,16 +897,17 @@ export default async function AutomationsPage({
                       It posts the RUN's id and nothing else — the credential is
                       fetched server-side and never reaches this page.
                     */}
-                    {proposals.has(run.id) && !mayPublish ? (
-                      <span>{t('automations.confirmNeedsPermission')}</span>
-                    ) : null}
-                    {proposals.has(run.id) && mayPublish ? (
-                      // B12 — decided in "Needs you" above, not here.
-                      <span>{t('automations.decideAbove')}</span>
-                    ) : null}
-                  </span>
-                </li>
-              ))}
+                      {proposals.has(run.id) && !mayPublish ? (
+                        <span>{t('automations.confirmNeedsPermission')}</span>
+                      ) : null}
+                      {proposals.has(run.id) && mayPublish ? (
+                        // B12 — decided in "Needs you" above, not here.
+                        <span>{t('automations.decideAbove')}</span>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>
