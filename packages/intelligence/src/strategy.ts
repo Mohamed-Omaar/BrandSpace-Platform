@@ -9,6 +9,7 @@ import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway
 import {
   declaredPillarKeys,
   groundingFor,
+  knowledgeSignatureFor,
   type Grounding as BrandBrainGrounding,
 } from '@brandspace/brand-brain';
 import {
@@ -516,6 +517,17 @@ export class StrategyService {
     /** PROVENANCE (P7-R9): the accepted strategy this was generated from. */
     sourceInsightId?: string | undefined;
   }): Promise<Insight> {
+    /*
+     * D13 (Phase 2C-4, M7) — THE BRAND BRAIN THIS PLAN WAS WRITTEN ON: the
+     * layer's signature of the brand's usable facts, stored on the STRATEGY and
+     * MONTHLY_PLAN the Strategy page shows, so the page can say "Brand Brain
+     * changed" only when the approved facts actually did. Other insight types
+     * carry none. Written here, with the insight, never on a page view.
+     */
+    const knowledgeSignature =
+      input.type === 'STRATEGY' || input.type === 'MONTHLY_PLAN'
+        ? await knowledgeSignatureFor(this.#db, { brandId: input.input.brandId }, this.#clock)
+        : null;
     const insight = await this.#db.insight.create({
       data: {
         workspaceId: this.#workspaceId,
@@ -542,6 +554,7 @@ export class StrategyService {
          * means it can only ever point inside this workspace (D-112).
          */
         ...(input.sourceInsightId ? { sourceInsightId: input.sourceInsightId } : {}),
+        ...(knowledgeSignature ? { knowledgeSignature } : {}),
         generatedByUserId: input.input.actorUserId,
         idempotencyKey: input.input.idempotencyKey,
         expiresAt: input.input.expiresAt,

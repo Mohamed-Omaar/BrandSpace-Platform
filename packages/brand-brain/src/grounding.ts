@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { BrandKnowledgeArea, TenantScopedClient } from '@brandspace/database';
 import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
 import {
@@ -382,4 +383,94 @@ export async function keyQuestionAnswered(
     select: { id: true },
   });
   return found !== null;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * PHASE 2C-4 (Item 6) — the Strategy page's two readers
+ * ---------------------------------------------------------------------------
+ */
+
+/**
+ * D13 — THE SIGNATURE OF A BRAND'S USABLE KNOWLEDGE.
+ *
+ * Lowercase hex SHA-256 over the brand's usable facts as `itemId:version`
+ * pairs, SORTED (so the order they are read in cannot change it) and joined by
+ * a newline. "Usable" is THIS layer's rule — `usableKnowledgeWhere`: ACTIVE or
+ * STALE (so reviewed and not archived), and not expired as of today in the
+ * WORKSPACE's time zone. It deliberately ignores the brand's "Use Brand Brain"
+ * switch: it describes what the brand has approved, not whether writing reads
+ * it.
+ *
+ * So it changes when a usable fact gets a new version, is archived, expires,
+ * or a new fact is approved — and does not change for a PENDING candidate, a
+ * re-read that only proposes, a page view, or a fact that was not usable
+ * anyway. The Strategy engine stores it on the STRATEGY and MONTHLY_PLAN it
+ * generates (M7); the Strategy page compares it with this.
+ *
+ * Reads ids and versions only — no title, no body: nothing here reaches a
+ * prompt.
+ */
+export async function knowledgeSignatureFor(
+  db: TenantScopedClient,
+  request: { readonly brandId: string },
+  clock: Clock = systemClock,
+): Promise<string> {
+  const brand = await brandGroundingFacts(db, request.brandId);
+  const rows = brand
+    ? await db.brandKnowledgeItem.findMany({
+        where: {
+          brandId: request.brandId,
+          ...usableKnowledgeWhere(knowledgeAsOfSafe(brand.timezone, clock.now())),
+        },
+        select: { id: true, version: true },
+      })
+    : [];
+  return knowledgeSignatureOf(rows.map((row) => ({ itemId: row.id, version: row.version })));
+}
+
+/** The signature's arithmetic, on its own so it can be checked without a database. */
+export function knowledgeSignatureOf(
+  facts: readonly { readonly itemId: string; readonly version: number }[],
+): string {
+  const lines = facts.map((fact) => `${fact.itemId}:${fact.version}`).sort();
+  return createHash('sha256').update(lines.join('\n'), 'utf8').digest('hex');
+}
+
+/**
+ * THE STRATEGY PAGE'S DISPLAY LISTS — audience, key messages and declared
+ * pillars (the §9.1 fix). They used `status: 'ACTIVE'`, so an EXPIRED fact
+ * was still shown and a STALE one (usable, only due for review) was not. They
+ * now read the SAME usable rule writing uses, with today in the workspace's
+ * time zone. Display only: the page builds no prompt from these, so the
+ * brand's "Use Brand Brain" switch does not hide them — a brand that writes
+ * ungrounded still shows the approved knowledge it has.
+ */
+export async function usableFactsForDisplay(
+  db: TenantScopedClient,
+  request: {
+    readonly brandId: string;
+    readonly areas: readonly BrandKnowledgeArea[];
+    readonly take: number;
+  },
+  clock: Clock = systemClock,
+): Promise<
+  readonly {
+    readonly id: string;
+    readonly area: BrandKnowledgeArea;
+    readonly title: unknown;
+    readonly body: unknown;
+  }[]
+> {
+  return db.brandKnowledgeItem.findMany({
+    where: {
+      brandId: request.brandId,
+      area: { in: [...request.areas] },
+      ...usableKnowledgeWhere(await workspaceKnowledgeAsOf(db, clock)),
+      NOT: { itemKey: { startsWith: GOAL_KEY_PREFIX } },
+    },
+    orderBy: { updatedAt: 'desc' },
+    select: { id: true, area: true, title: true, body: true },
+    take: request.take,
+  });
 }

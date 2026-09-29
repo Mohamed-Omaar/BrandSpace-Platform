@@ -51,6 +51,9 @@ const APPLICATION_SOURCES = ['apps', 'packages'].flatMap((top) =>
 const CHUNK_READERS = new Set([
   'packages/brand-brain/src/ingestion.ts',
   'packages/database/src/tenant-models.ts',
+  // Phase 2C-4 (D5): Remove DELETES a removed source's chunks. It selects no
+  // chunk text and returns only a count; nothing it touches reaches a prompt.
+  'packages/brand-brain/src/sources.ts',
 ]);
 
 describe('Q14 / Q20 — raw document chunks never reach a generative path', () => {
@@ -269,10 +272,6 @@ const NON_GENERATIVE_READERS: ReadonlyMap<string, string> = new Map([
     'MANAGEMENT UI: the Brand Brain screen lists every fact, expired ones marked, for people to edit',
   ],
   [
-    'apps/dashboard/src/app/[locale]/strategy/page.tsx',
-    'DISPLAY: audience, key messages and declared pillars shown for reading; the goal that prefills the objective is read through writingGoal',
-  ],
-  [
     'apps/dashboard/src/server/command-center.ts',
     'DISPLAY: Home counts the brands that have no knowledge yet',
   ],
@@ -290,6 +289,14 @@ const NON_GENERATIVE_READERS: ReadonlyMap<string, string> = new Map([
   [
     'packages/brand-brain/src/usage.ts',
     'D9/D10 USAGE: records the grounding output and compares recorded versions with stored state (changed, replaced, expired, removed) for the Studio, Home and "Used in N posts"; never a prompt',
+  ],
+  /*
+   * PHASE 2C-4 (Item 5). The Strategy page left this list: its display lists
+   * now ask the layer (`usableFactsForDisplay`, the §9.1 fix).
+   */
+  [
+    'packages/brand-brain/src/sources.ts',
+    'SOURCES (D5): which approved facts a document currently owns — the counts and list on the Sources tab and what Drop archives through archiveItem; never a prompt',
   ],
   [
     'apps/dashboard/src/app/[locale]/brand-brain/chat-actions.ts',
@@ -377,8 +384,13 @@ describe('D-354 — generative Brand Brain knowledge access goes through the gro
     expect(composer).toMatch(/\bdeclaredPillarIdeas\s*\(/);
     const strategyPage = sourceOf('apps/dashboard/src/app/[locale]/strategy/page.tsx');
     expect(strategyPage).toMatch(/\bwritingGoal\s*\(/);
-    // The one direct read left on the Strategy page is its display list.
-    expect(strategyPage.match(/brandKnowledgeItem\s*\.\s*\w+\s*\(/g)).toHaveLength(1);
+    // Phase 2C-4 (§9.1 fix): the display lists ask the layer too, so the page
+    // reads Brand Brain knowledge through the layer only — no direct read left
+    // (it had exactly one, the ACTIVE-only display list), and the D13 alert
+    // compares the layer's signature.
+    expect(strategyPage.match(/brandKnowledgeItem\s*\.\s*\w+\s*\(/g)).toBeNull();
+    expect(strategyPage).toMatch(/\busableFactsForDisplay\s*\(/);
+    expect(strategyPage).toMatch(/\bknowledgeSignatureFor\s*\(/);
   });
 
   it('every reader of the goal reads the same fields as the layer', async () => {

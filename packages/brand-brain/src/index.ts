@@ -187,7 +187,10 @@ export {
   declaredPillarKeys,
   groundingFor,
   keyQuestionAnswered,
+  knowledgeSignatureFor,
+  knowledgeSignatureOf,
   rewriteGroundingFor,
+  usableFactsForDisplay,
   writingFactsInAreas,
   writingGoal,
 } from './grounding';

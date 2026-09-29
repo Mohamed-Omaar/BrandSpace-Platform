@@ -2316,6 +2316,11 @@ export const messages = {
     'strategy.noneAccepted':
       'لا يُستخدم شيء هنا قبل أن يعتمد شخصٌ استراتيجية. اطلب مقترحًا أدناه — يبقى مقترحًا حتى تعتمده.',
     'strategy.fromBrandBrain': 'من عقل العلامة',
+    // D13 (Phase 2C-4) — the approved facts this strategy was written on changed.
+    'strategy.brainChanged.title': 'تغيّر عقل العلامة.',
+    'strategy.brainChanged.body':
+      'تغيّرت الحقائق المعتمدة منذ إنشاء هذه الاستراتيجية — عُدّلت حقيقة أو انتهت صلاحيتها أو أُرشفت أو اعتُمدت حقيقة جديدة. راجعها، أو أنشئ استراتيجية جديدة أدناه.',
+    'strategy.brainChanged.review': 'افتح عقل العلامة',
     'strategy.audienceEmpty': 'لا يحتوي عقل العلامة على جمهور معتمد بعد.',
     'strategy.messagesEmpty': 'لا يحتوي عقل العلامة على عروض أو أدلة إثبات معتمدة بعد.',
     'strategy.addKnowledge': 'أضف معرفة',
@@ -5538,6 +5543,11 @@ export const messages = {
     'strategy.noneAccepted':
       'Nothing here is used until a person accepts a strategy. Ask for a proposal below — it stays a proposal until you accept it.',
     'strategy.fromBrandBrain': 'From Brand Brain',
+    // D13 (Phase 2C-4) — the approved facts this strategy was written on changed.
+    'strategy.brainChanged.title': 'Brand Brain changed.',
+    'strategy.brainChanged.body':
+      'The approved facts changed since this strategy was generated — a fact was edited, expired or archived, or a new one was approved. Review them, or generate a new strategy below.',
+    'strategy.brainChanged.review': 'Open Brand Brain',
     'strategy.audienceEmpty': 'Brand Brain has no approved audience yet.',
     'strategy.messagesEmpty': 'Brand Brain has no approved offers or proof points yet.',
     'strategy.addKnowledge': 'Add knowledge',

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { writingGoal } from '@brandspace/brand-brain';
+import { knowledgeSignatureFor, usableFactsForDisplay, writingGoal } from '@brandspace/brand-brain';
 import { maySpendCredits } from '@brandspace/shared';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
@@ -141,19 +141,28 @@ export default async function StrategyPage({
            * "Use Brand Brain" off — the objective then starts empty.
            */
           writingGoal(db, { brandId: brand.id, itemKey: GOAL_ITEM_KEY }),
-          db.brandKnowledgeItem.findMany({
-            where: {
-              brandId: brand.id,
-              area: { in: ['AUDIENCE', 'OFFERS', 'PROOF_POINTS', 'STRATEGY'] },
-              status: 'ACTIVE',
-              NOT: { itemKey: { startsWith: 'goal.' } },
-            },
-            orderBy: { updatedAt: 'desc' },
-            select: { id: true, area: true, title: true, body: true },
+          /*
+           * THE DISPLAY LISTS (§9.1 fix, Phase 2C-4): the grounding layer's
+           * usable rule — ACTIVE or STALE, not expired as of the workspace's
+           * day — instead of `status: 'ACTIVE'`, which showed an expired fact
+           * and hid a STALE one. Display only; no prompt is built from these.
+           */
+          usableFactsForDisplay(db, {
+            brandId: brand.id,
+            areas: ['AUDIENCE', 'OFFERS', 'PROOF_POINTS', 'STRATEGY'],
             take: 40,
           }),
         ]);
-        return { accepted, proposals, goal, knowledge };
+        /*
+         * D13 (Phase 2C-4) — "BRAND BRAIN CHANGED", from the signature the
+         * accepted strategy was generated on (M7) against the brand's usable
+         * facts now. A strategy with no stored signature (older than M7) has
+         * no baseline and never alerts. Reading this writes nothing.
+         */
+        const knowledgeChanged =
+          typeof accepted?.knowledgeSignature === 'string' &&
+          accepted.knowledgeSignature !== (await knowledgeSignatureFor(db, { brandId: brand.id }));
+        return { accepted, proposals, goal, knowledge, knowledgeChanged };
       })
     : null;
 
@@ -220,6 +229,18 @@ export default async function StrategyPage({
           />
         ) : (
           <>
+            {data.knowledgeChanged ? (
+              <div data-testid="strategy-brain-changed">
+                <CustomerBanner tone="warning">
+                  <strong>{t('strategy.brainChanged.title')}</strong>{' '}
+                  {t('strategy.brainChanged.body')}{' '}
+                  <Link href={brainHref} data-testid="strategy-brain-changed-review">
+                    {t('strategy.brainChanged.review')}
+                  </Link>
+                </CustomerBanner>
+              </div>
+            ) : null}
+
             {/* ------------------------------------------ CURRENT OBJECTIVE */}
             <Card testId="strategy-objective">
               <SectionHeader
