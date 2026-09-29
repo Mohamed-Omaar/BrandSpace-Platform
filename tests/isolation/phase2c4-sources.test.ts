@@ -723,7 +723,9 @@ describe('source ownership — the CURRENT version decides', () => {
       'brand_brain.edit',
     ]);
     expect(dropped.archivedItemIds).not.toContain(itemId);
-    const fact = await platform.brandKnowledgeItem.findUniqueOrThrow({ where: { id: itemId as string } });
+    const fact = await platform.brandKnowledgeItem.findUniqueOrThrow({
+      where: { id: itemId as string },
+    });
     expect(fact.status).toBe('ACTIVE');
   });
 });

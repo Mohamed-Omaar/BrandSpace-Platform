@@ -351,7 +351,10 @@ export class BrandIngestionService {
     const ofThisKey = generations.filter(
       (row) =>
         row.idempotencyKey === idempotencyKey ||
-        GENERATION_PATTERN.test(row.idempotencyKey.slice(idempotencyKey.length)),
+        // The prefix checked here too, byte for byte: the query's `startsWith`
+        // only narrows the read and is not trusted to have escaped `_` or `%`.
+        (row.idempotencyKey.startsWith(idempotencyKey) &&
+          GENERATION_PATTERN.test(row.idempotencyKey.slice(idempotencyKey.length))),
     );
     const live = ofThisKey.find((row) => row.deletedAt === null) ?? null;
     if (live) return { key: live.idempotencyKey, live };
