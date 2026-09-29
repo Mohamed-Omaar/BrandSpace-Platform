@@ -242,6 +242,7 @@ export function BrandBrainView({
   retentionDays,
   permissions,
   chatStart = null,
+  initialFocus = null,
 }: {
   locale: string;
   brandId: string;
@@ -289,11 +290,19 @@ export function BrandBrainView({
   permissions: BrandBrainPermissions;
   /** D7/D8/D9 — the chat opens in Add (a handoff) or Edit ("Fix it"), prefilled. */
   chatStart?: ChatStart | null;
+  /** D12 (Phase 2C-4) — Home's missing-question link: this area, this question. */
+  initialFocus?: {
+    readonly area: string;
+    readonly itemKey: string;
+    readonly prompt: string;
+  } | null;
 }) {
   const t = translator(locale);
   const [tab, setTabState] = useState<BrandBrainTab>(initialTab);
-  const [openArea, setOpenArea] = useState<string | null>(null);
-  const [focus, setFocus] = useState<QuestionFocus | null>(null);
+  const [openArea, setOpenArea] = useState<string | null>(initialFocus?.area ?? null);
+  const [focus, setFocus] = useState<QuestionFocus | null>(
+    initialFocus ? { itemKey: initialFocus.itemKey, prompt: initialFocus.prompt } : null,
+  );
   const [chatArea, setChatArea] = useState<string | null>(null);
   const [inboxArea, setInboxArea] = useState<string | null>(null);
   const [pendingDrop, setPendingDrop] = useState<{ file: File; area: string | null } | null>(null);

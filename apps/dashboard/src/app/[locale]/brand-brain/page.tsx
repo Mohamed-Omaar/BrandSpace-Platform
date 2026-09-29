@@ -780,6 +780,26 @@ export default async function BrandBrainPage({
           }
         : null;
 
+  /*
+   * D12 (Phase 2C-4) — Home's "Brand Brain is missing: <question>" links here
+   * with `?area=…&question=<key>`: the area opens with that question as the
+   * add form's placeholder, exactly as clicking it under "What's missing"
+   * does. Only a configured question of that area is honoured; anything else
+   * opens nothing.
+   */
+  const askedArea = param('area', 40);
+  const askedQuestion = param('question', 120);
+  const initialFocus =
+    askedArea && askedQuestion && !chatStart
+      ? (() => {
+          const card = areaCards.find((entry) => entry.area === askedArea);
+          const question = card?.questions.find((entry) => entry.itemKey === askedQuestion);
+          return card && question
+            ? { area: card.area, itemKey: question.itemKey, prompt: question.prompt }
+            : null;
+        })()
+      : null;
+
   const requestedTab = chatStart ? 'chat' : typeof query['tab'] === 'string' ? query['tab'] : '';
   const initialTab: BrandBrainTab = (['knowledge', 'look', 'sources', 'chat'] as const).includes(
     requestedTab as BrandBrainTab,
@@ -851,6 +871,7 @@ export default async function BrandBrainPage({
             : null
         }
         initialTab={initialTab}
+        initialFocus={initialFocus}
         focusCandidateId={typeof query['candidate'] === 'string' ? query['candidate'] : null}
         confident={confident.map((entry) => ({
           id: entry.id,

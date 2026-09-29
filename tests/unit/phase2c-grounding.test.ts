@@ -273,7 +273,7 @@ const NON_GENERATIVE_READERS: ReadonlyMap<string, string> = new Map([
   ],
   [
     'apps/dashboard/src/server/command-center.ts',
-    'DISPLAY: Home counts the brands that have no knowledge yet',
+    'DISPLAY: Home counts the brands that have no knowledge yet, and names the first unanswered key question from the Q19 completeness (D12, Phase 2C-4)',
   ],
   ['apps/dashboard/src/server/setup-wizard.ts', 'SETUP STATE: which setup steps are done'],
   ['apps/dashboard/src/server/setup-goal.ts', 'MANAGEMENT: setup writes the goal fact'],

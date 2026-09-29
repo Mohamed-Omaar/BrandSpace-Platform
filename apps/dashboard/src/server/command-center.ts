@@ -1,10 +1,22 @@
-import { brandIdScopeFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
+import {
+  brandIdScopeFilter,
+  brandScopeFilter,
+  currentEnvironment,
+  systemClock,
+} from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
 import type { CustomerWorkspaceContext } from '@brandspace/auth';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { EXPIRING_SOON_MS } from '@brandspace/social-connectors';
 import { AUTOMATION_ACTIONS } from '@brandspace/automation';
-import { contentWithFactChanges } from '@brandspace/brand-brain';
+import {
+  BrandKnowledgeService,
+  TenantBrandBrainPolicySource,
+  contentWithFactChanges,
+  questionsForBrand,
+  workspaceKnowledgeAsOf,
+} from '@brandspace/brand-brain';
+import { TenantOnboardingPolicySource, offersQuestionSetFor } from '@brandspace/onboarding';
 
 /**
  * WHAT NEEDS A PERSON, RIGHT NOW, IN THIS WORKSPACE (P6-04).
@@ -87,6 +99,13 @@ export interface AttentionItem {
   readonly date?: Date | undefined;
   /** A second moment, when the sentence compares two. */
   readonly secondDate?: Date | undefined;
+  /**
+   * D12 (Phase 2C-4) — a `detail` that exists in both languages (a configured
+   * key question), so the page prints the reader's own rather than one the
+   * server picked.
+   */
+  readonly localizedDetail?:
+    { readonly en?: string | undefined; readonly ar?: string | undefined } | undefined;
 }
 
 const SEVERITY_ORDER: Record<AttentionSeverity, number> = {
@@ -280,18 +299,20 @@ async function brandsWithNoKnowledge(
  */
 
 /**
- * Proposed learnings and facts waiting in the Brand Brain review queue.
+ * D12 (PHASE 2C-4) — "BRAND BRAIN · N FACTS WAITING FOR YOUR REVIEW".
  *
- * THE HUMAN-REVIEW STEP OF THE LEARNING LOOP. An analytics inference and a
- * fact extracted from an uploaded document both land as a PENDING candidate,
- * and neither reaches Brand Brain until a person accepts, edits or dismisses
- * it (D-150). A queue nobody knows is there is how the loop silently stops at
- * "propose", so the count belongs on the screen everybody lands on.
+ * Every PENDING candidate in the brands this member can see, WHATEVER its
+ * source — a document (DOCUMENT), a measured learning (ANALYTICS) or a
+ * colleague's proposal (MEMBER) — because all of them wait in the ONE review
+ * inbox and are cleared there. `brand_brain.review`, because that is who can
+ * clear them.
  *
- * `brand_brain.review`, because that is who can clear it — somebody who can
- * only READ Brand Brain would be shown a task they cannot do.
+ * IT REPLACES `learnings-pending`, which counted the same PENDING rows and
+ * linked to the same inbox: two rows for one piece of work is the duplicate
+ * Home must not show. Nothing unique was lost — the count, the permission and
+ * the destination are the same; the sentence now says what they are.
  */
-async function learningsPending(
+async function brandBrainReviewWaiting(
   db: TenantScopedClient,
   session: CustomerWorkspaceContext,
 ): Promise<AttentionItem | null> {
@@ -304,7 +325,63 @@ async function learningsPending(
   });
   return count === 0
     ? null
-    : { kind: 'learnings-pending', severity: 'waiting', count, href: '/brand-brain' };
+    : { kind: 'brand-brain-review-waiting', severity: 'waiting', count, href: '/brand-brain' };
+}
+
+/**
+ * D12 (PHASE 2C-4) — "BRAND BRAIN IS MISSING: <question>".
+ *
+ * From the ONE completeness calculation the Brand Brain hero uses (Q19): the
+ * configured key questions, the industry's Offers set, and "answered" meaning
+ * a usable fact (approved, not expired as of the workspace's day). The first
+ * brand the member can see — oldest first — that has an unanswered question
+ * gives its FIRST missing question, in the order "What's missing" lists them.
+ * No configured questions, or none missing: no row. `brand_brain.edit`
+ * (answering is adding a fact); the link opens that brand's area with the
+ * question as the add form's placeholder.
+ */
+async function brandBrainMissing(
+  db: TenantScopedClient,
+  session: CustomerWorkspaceContext,
+): Promise<AttentionItem | null> {
+  const brands = await db.brand.findMany({
+    where: {
+      workspaceId: session.workspaceId,
+      deletedAt: null,
+      ...brandScopeFilter(session.brandScope),
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, industry: true },
+    take: 20,
+  });
+  if (brands.length === 0) return null;
+
+  const environment = currentEnvironment();
+  const [policy, onboarding, asOf] = await Promise.all([
+    new TenantBrandBrainPolicySource(db, environment).load(),
+    new TenantOnboardingPolicySource(db, environment).load(),
+    workspaceKnowledgeAsOf(db),
+  ]);
+  const knowledge = new BrandKnowledgeService({ db, workspaceId: session.workspaceId });
+  for (const brand of brands) {
+    const questions = questionsForBrand(
+      policy.questions,
+      offersQuestionSetFor(brand.industry ?? null, onboarding.industries),
+    );
+    const completion = await knowledge.completion(brand.id, questions, asOf);
+    const first = completion.missing[0];
+    if (!first) continue;
+    return {
+      kind: 'brand-brain-missing',
+      severity: 'notice',
+      count: completion.missing.length,
+      href: `/brand-brain?brand=${brand.id}&area=${first.area}&question=${encodeURIComponent(
+        first.question.itemKey,
+      )}`,
+      localizedDetail: first.question.prompt,
+    };
+  }
+  return null;
 }
 
 /** The insight types Marketing Intelligence presents — the page's own list. */
@@ -744,7 +821,10 @@ const SOURCES: readonly {
   { permissions: ['automation.read'], run: automationsWaiting },
   { permissions: ['brand_brain.read'], run: brandsWithNoKnowledge },
   // P6-11 — Pulse.
-  { permissions: ['brand_brain.review'], run: learningsPending },
+  // D12 (Phase 2C-4) — folds the older `learnings-pending` row into one.
+  { permissions: ['brand_brain.review'], run: brandBrainReviewWaiting },
+  // D12 — the destination route needs `brand_brain.read`; answering, `.edit`.
+  { permissions: ['brand_brain.read', 'brand_brain.edit'], run: brandBrainMissing },
   { permissions: ['strategy.read'], run: insightsUnreviewed },
   { permissions: ['integrations.read', 'publishing.read'], run: connectionsExpiring },
   { permissions: ['campaigns.read'], run: campaignsWithoutContent },

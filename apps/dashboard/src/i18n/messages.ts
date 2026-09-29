@@ -115,8 +115,10 @@ export const messages = {
      * P6-11 — PULSE. The Learn/Improve half of the attention list: each one a
      * real condition measured against real rows, never a score.
      */
-    'attention.learnings-pending':
-      '{count} من الدروس والحقائق المقترحة بانتظار مراجعتك في عقل العلامة.',
+    // D12 (Phase 2C-4) — the one review inbox, every source; replaces learnings-pending.
+    'attention.brand-brain-review-waiting': 'عقل العلامة · {count} من الحقائق بانتظار مراجعتك.',
+    'attention.brand-brain-review-waiting.one': 'عقل العلامة · حقيقة واحدة بانتظار مراجعتك.',
+    'attention.brand-brain-missing': 'عقل العلامة ينقصه: {detail}',
     'attention.insights-new': '{count} من نتائج ذكاء التسويق لم يطّلع عليها أحد بعد.',
     'attention.connection-expiring':
       'ينتهي وصول {count} من الحسابات المتصلة خلال يوم أو انتهى بالفعل. حدّث الاتصال قبل أن يفشل النشر.',
@@ -3269,8 +3271,10 @@ export const messages = {
      * P6-11 — PULSE. The Learn/Improve half of the attention list: each one a
      * real condition measured against real rows, never a score.
      */
-    'attention.learnings-pending':
-      '{count} proposed learnings and facts are waiting for your review in Brand Brain.',
+    // D12 (Phase 2C-4) — the one review inbox, every source; replaces learnings-pending.
+    'attention.brand-brain-review-waiting': 'Brand Brain · {count} facts waiting for your review',
+    'attention.brand-brain-review-waiting.one': 'Brand Brain · 1 fact waiting for your review',
+    'attention.brand-brain-missing': 'Brand Brain is missing: {detail}',
     'attention.insights-new':
       '{count} Marketing Intelligence findings have not been looked at yet.',
     'attention.connection-expiring':
