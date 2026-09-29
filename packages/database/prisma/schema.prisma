@@ -5185,6 +5185,17 @@ model AutomationRule {
   /// Advisory, for operators: when a sweep last actually looked at this rule.
   lastEvaluatedAt  DateTime? @db.Timestamptz(6)
 
+  /// PHASE 2B-3 (G13) — THE NO-BACKFILL BOUNDARY (OD-21). Set when the rule is
+  /// created, enabled or has its trigger settings changed; an event produced
+  /// before it does not reach this rule. NULL (every rule stored before 2B-3)
+  /// means no boundary, which is the behaviour those rules always had.
+  armedAt      DateTime? @db.Timestamptz(6)
+  /// PHASE 2B-3 (G13) — the due-date producers' durable cursor: subjects due
+  /// after it and not after now are the next to evaluate. NULL = not started;
+  /// the producer initialises it from `armedAt` and fires nothing for what was
+  /// already due. Unused by every trigger that exists before 2B-3.
+  dueWatermark DateTime? @db.Timestamptz(6)
+
   /// Optimistic concurrency, for the same reason `campaign` carries one.
   version Int @default(1)
 
