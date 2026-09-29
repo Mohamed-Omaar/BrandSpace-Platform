@@ -1040,6 +1040,15 @@ export const messages = {
     'bb.failure.extraction_failed': 'تعذّرت معالجة هذا الملف. حاول رفعه مرة أخرى.',
     'bb.failure.object_missing': 'تعذّر قراءة الملف المرفوع.',
     'bb.failure.stuck_timeout': 'استغرقت معالجة هذا الملف وقتًا أطول من المسموح.',
+    // Phase 2C-4 — refused at upload, by the bytes themselves.
+    'bb.failure.file_too_large': 'هذا الملف أكبر من الحجم المسموح به للمصادر.',
+    'bb.failure.ooxml_content_types_missing': 'هذا الملف ليس مستند Word أو PowerPoint سليمًا.',
+    'bb.failure.ooxml_main_part_missing': 'هذا الملف ليس مستند Word أو PowerPoint سليمًا.',
+    'bb.failure.ooxml_type_mismatch':
+      'محتوى الملف لا يطابق نوعه. ارفع مستند Word بصيغة .docx أو عرض PowerPoint بصيغة .pptx.',
+    'bb.failure.text_not_utf8':
+      'هذا الملف النصي ليس بترميز UTF-8. احفظه بترميز UTF-8 وارفعه مجددًا.',
+    'bb.failure.text_contains_nul': 'هذا الملف لا يبدو ملفًا نصيًا.',
     'bb.source.QUARANTINED': 'محجوز',
     'bb.reviewTitle': 'مراجعة المعرفة',
     'bb.reviewNone': 'لا توجد عناصر بانتظار المراجعة.',
@@ -4166,6 +4175,15 @@ export const messages = {
     'bb.failure.extraction_failed': 'This file could not be processed. Try uploading it again.',
     'bb.failure.object_missing': 'The uploaded file could not be read.',
     'bb.failure.stuck_timeout': 'This file took longer to process than we allow.',
+    // Phase 2C-4 — refused at upload, by the bytes themselves.
+    'bb.failure.file_too_large': 'This file is larger than the size allowed for sources.',
+    'bb.failure.ooxml_content_types_missing': 'This is not a valid Word or PowerPoint document.',
+    'bb.failure.ooxml_main_part_missing': 'This is not a valid Word or PowerPoint document.',
+    'bb.failure.ooxml_type_mismatch':
+      "This file's contents don't match its type. Upload a Word .docx or a PowerPoint .pptx.",
+    'bb.failure.text_not_utf8':
+      'This text file is not UTF-8. Save it as UTF-8 and upload it again.',
+    'bb.failure.text_contains_nul': "This file doesn't look like a text file.",
     'bb.source.QUARANTINED': 'Quarantined',
     'bb.reviewTitle': 'Knowledge review',
     'bb.reviewNone': 'Nothing is waiting for review.',
@@ -6716,8 +6734,29 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     ar: 'تم الرفض. لم تتغيّر المعرفة المعتمدة.',
   },
   SOURCE_UPLOADED: {
-    en: 'Document processed. Extracted knowledge is waiting for review.',
-    ar: 'تمت معالجة المستند. المعرفة المستخرجة بانتظار المراجعة.',
+    en: 'Document uploaded. It is being read now; what it proposes will wait for your review.',
+    ar: 'تم رفع المستند. تجري قراءته الآن، وما يقترحه سينتظر مراجعتك.',
+  },
+  // Phase 2C-4 (D5) — the row says why, in the reader's language.
+  SOURCE_REFUSED: {
+    en: "This file couldn't be added. The reason is shown on its row in Sources.",
+    ar: 'تعذّرت إضافة هذا الملف. السبب ظاهر في صفّه ضمن المصادر.',
+  },
+  SOURCE_ALREADY_FAILED: {
+    en: 'This file is already in Sources and failed. Its reason is shown on its row — read it again or remove it first.',
+    ar: 'هذا الملف موجود في المصادر وقد فشل. سببه ظاهر في صفّه — أعد قراءته أو أزله أولًا.',
+  },
+  SOURCE_READ_AGAIN: {
+    en: 'Reading the document again. New proposals will wait for your review.',
+    ar: 'تجري قراءة المستند مرة أخرى. ستنتظر الاقتراحات الجديدة مراجعتك.',
+  },
+  SOURCE_REMOVED: {
+    en: 'Source removed. Its approved facts were kept.',
+    ar: 'أُزيل المصدر. احتُفظ بحقائقه المعتمدة.',
+  },
+  SOURCE_REMOVED_DROPPED: {
+    en: 'Source removed, and the facts that came from it were archived.',
+    ar: 'أُزيل المصدر، وأُرشفت الحقائق التي جاءت منه.',
   },
   ASSET_UPLOADED: {
     en: 'File uploaded. It becomes available for use once the security scan passes.',

@@ -845,6 +845,12 @@ export default async function BrandBrainPage({
   );
 }
 
+/** English sentences older releases stored in `failureMessage`, and their keys. */
+const LEGACY_FAILURE_SENTENCES: Readonly<Record<string, string>> = {
+  'The uploaded file could not be read.': 'object_missing',
+  'Processing took too long and was stopped.': 'stuck_timeout',
+};
+
 /**
  * A stored failure reason, in the reader's language.
  *
@@ -854,7 +860,14 @@ export default async function BrandBrainPage({
  */
 function failureText(reason: string | null, t: (key: MessageKey) => string): string {
   if (!reason) return t('bb.failure.extraction_failed');
-  const key = `bb.failure.${reason}` as MessageKey;
+  /*
+   * PHASE 2C-4 — TWO OLDER ROWS STORED ENGLISH SENTENCES, not keys: a missing
+   * object and the stuck-job sweep. Both now store their key; a row written
+   * before that is mapped to the same key here, derived from what it already
+   * holds, so an Arabic reader never sees the English sentence.
+   */
+  const legacy = LEGACY_FAILURE_SENTENCES[reason];
+  const key = `bb.failure.${legacy ?? reason}` as MessageKey;
   // `translator` returns undefined for a key the catalogue does not have. The
   // cast above is what makes that possible, so the check is not defensive
   // noise — it is the guard the cast removed.
