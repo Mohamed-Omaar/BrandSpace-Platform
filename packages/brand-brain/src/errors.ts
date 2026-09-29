@@ -90,3 +90,20 @@ export function fileTooLarge(): AppError {
 export function storageLimitReached(): AppError {
   return new AppError('QUOTA_EXCEEDED', 'This workspace has reached its storage limit.');
 }
+
+/**
+ * Phase 2C-4 — an upload the bytes refused, for a reason with no older error
+ * of its own (a damaged or undeclared Office package, text that is not UTF-8).
+ * The stable reason travels in the public details; the screen translates it.
+ */
+export function sourceRefused(reason: string): AppError {
+  return new AppError('VALIDATION_FAILED', 'This file could not be accepted.', { reason });
+}
+
+/**
+ * Phase 2C-4 — Read again while a read is still running, or on a file that was
+ * refused before anything was stored (there is nothing to read).
+ */
+export function readAgainUnavailable(): AppError {
+  return new AppError('CONFLICT', 'This source cannot be read again right now.');
+}

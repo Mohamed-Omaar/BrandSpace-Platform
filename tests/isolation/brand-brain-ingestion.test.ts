@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
+import { contentTypesFor } from '../support/ooxml';
 import { withWorkspace } from '@brandspace/database';
 import { UsageService } from '@brandspace/entitlements';
 import {
@@ -435,7 +436,9 @@ describe('failure states are honest and safe', () => {
     expect(result.after?.status).toBe('FAILED');
     expect(result.jobAfter?.stage).toBe('FAILED');
     // No path, no library name, no stack fragment.
-    expect(result.after?.failureMessage).toBe('The uploaded file could not be read.');
+    // A REASON KEY the screen translates (Phase 2C-4: it used to store an
+    // English sentence, which an Arabic reader saw in English).
+    expect(result.after?.failureMessage).toBe('object_missing');
     expect(result.after?.failureMessage).not.toMatch(/\/|Error|at\s/);
     // The internal code is kept for operators, separately.
     expect(result.jobAfter?.failureCode).toBe('object_missing');
@@ -468,7 +471,7 @@ describe('failure states are honest and safe', () => {
 
     expect(reconciled.count).toBeGreaterThan(0);
     expect(reconciled.stage).toBe('FAILED');
-    expect(reconciled.message).toBe('Processing took too long and was stopped.');
+    expect(reconciled.message).toBe('stuck_timeout');
   });
 
   it('a retryable failure leaves the document PROCESSING, not FAILED', async () => {
@@ -554,7 +557,7 @@ function docxBytes(
 ): Uint8Array {
   const body = paragraphs.map((text) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`).join('');
   return zipSync({
-    '[Content_Types].xml': strToU8('<?xml version="1.0"?><Types/>'),
+    '[Content_Types].xml': contentTypesFor('docx'),
     'word/document.xml': strToU8(
       `<?xml version="1.0"?><w:document xmlns:w="x"><w:body>${body}</w:body></w:document>`,
     ),
@@ -659,9 +662,15 @@ describe('the formats customers actually have', () => {
     ).rejects.toThrow(/do not match its type/i);
   });
 
-  it('fails a macro-bearing document TERMINALLY, with a reason key and no retry', async () => {
-    const { result, job } = await inAWithRealExtractors(async (svc, db) => {
-      const { job: queued } = await svc.upload({
+  it('refuses a macro-bearing document AT THE DOOR, as a FAILED row with a reason key', async () => {
+    /*
+     * Phase 2C-4: the OOXML check walks the archive's central directory under
+     * the same guards the reader uses, so a macro payload is refused before a
+     * byte is stored — a FAILED row the customer can see, never a job. (It
+     * used to be accepted, stored and failed by the worker.)
+     */
+    const { result, jobs, size } = await inAWithRealExtractors(async (svc, db, store) => {
+      const received = await svc.receive({
         brandId: fixtures.a.brandId,
         fileName: 'macro.docx',
         mimeType: DOCX_TYPE,
@@ -673,20 +682,23 @@ describe('the formats customers actually have', () => {
         // Unrestricted, which is what every membership carries today (F-74).
         actorBrandScope: [],
       });
-      const processed = await svc.process(queued.id);
       return {
-        result: processed,
-        job: await db.brandIngestionJob.findUniqueOrThrow({ where: { id: queued.id } }),
+        result: received,
+        jobs: await db.brandIngestionJob.count({
+          where: { sourceDocumentId: received.document.id },
+        }),
+        size: store.size,
       };
     });
 
-    expect(result.status).toBe('FAILED');
+    expect(result.outcome).toBe('refused');
+    expect(result.document.status).toBe('FAILED');
     // A REASON KEY, never a sentence and never a parser's own words.
-    expect(result.failureMessage).toBe('archive_unsafe_entry');
-    // TERMINAL on the first attempt: retrying a bad file costs another parse
-    // and reaches the same answer, while the customer watches PROCESSING.
-    expect(job.stage).toBe('FAILED');
-    expect(job.attempts).toBe(1);
+    expect(result.document.failureMessage).toBe('archive_unsafe_entry');
+    expect(result.document.byteSize).toBe(0);
+    expect(result.job).toBeNull();
+    expect(jobs).toBe(0);
+    expect(size).toBe(0);
   });
 
   it('says a scanned PDF has no text layer rather than recording an empty one', async () => {

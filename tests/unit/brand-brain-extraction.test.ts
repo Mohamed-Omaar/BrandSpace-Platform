@@ -1,4 +1,5 @@
 import { zipSync, strToU8 } from 'fflate';
+import { contentTypesFor } from '../support/ooxml';
 import { describe, expect, it } from 'vitest';
 import {
   DocxExtractor,
@@ -48,7 +49,7 @@ function docx(
 ): Uint8Array {
   const body = paragraphs.map((text) => `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`).join('');
   return zipSync({
-    '[Content_Types].xml': strToU8('<?xml version="1.0"?><Types/>'),
+    '[Content_Types].xml': contentTypesFor('docx'),
     'word/document.xml': strToU8(
       `<?xml version="1.0"?><w:document xmlns:w="x"><w:body>${body}</w:body></w:document>`,
     ),
@@ -58,7 +59,7 @@ function docx(
 
 function pptx(slides: readonly (readonly string[])[]): Uint8Array {
   const entries: Record<string, Uint8Array> = {
-    '[Content_Types].xml': strToU8('<?xml version="1.0"?><Types/>'),
+    '[Content_Types].xml': contentTypesFor('pptx'),
   };
   slides.forEach((runs, index) => {
     const body = runs.map((text) => `<a:p><a:r><a:t>${text}</a:t></a:r></a:p>`).join('');
@@ -218,7 +219,7 @@ describe('Word documents', () => {
      * the attack is trying to make it allocate.
      */
     const bomb = zipSync({
-      '[Content_Types].xml': strToU8('<?xml version="1.0"?><Types/>'),
+      '[Content_Types].xml': contentTypesFor('docx'),
       'word/document.xml': new Uint8Array(2 * 1024 * 1024),
     });
     expect(bomb.byteLength).toBeLessThan(100 * 1024);
@@ -275,6 +276,7 @@ describe('Word documents', () => {
      * scanner does not recognise and leaves alone.
      */
     const bytes = zipSync({
+      '[Content_Types].xml': contentTypesFor('docx'),
       'word/document.xml': strToU8(
         `<?xml version="1.0"?><!DOCTYPE d [<!ENTITY lol "ha"><!ENTITY lol2 "&lol;&lol;&lol;">]>` +
           `<w:document xmlns:w="x"><w:body><w:p><w:r><w:t>&lol2;</w:t></w:r></w:p></w:body></w:document>`,
@@ -311,7 +313,9 @@ describe('PowerPoint documents', () => {
     // which silently reorders the deck and makes every locator past slide 9
     // point at the wrong slide.
     const slides = Array.from({ length: 11 }, (_unused, index) => [`Slide body ${index + 1}`]);
-    const result = await extractor.extract({
+    // A page ceiling above the deck's length: this test is about ORDER. The
+    // ceiling itself (Phase 2C-4) is exercised on its own below.
+    const result = await new PptxExtractor({ ...LIMITS, maxPages: 20 }).extract({
       bytes: pptx(slides),
       mimeType: PPTX_TYPE,
       fileName: 'long.pptx',

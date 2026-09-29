@@ -63,6 +63,66 @@ const PPTX_TYPE =
   'application/vnd.openxmlformats-officedocument.presentationml.presentation' as const;
 
 /**
+ * PHASE 2C-4 — WHAT THE PACKAGE SAYS ITS MAIN PART IS.
+ *
+ * ZIP MAGIC IS NOT A FORMAT. `PK\x03\x04` opens a Word file, a PowerPoint
+ * file, a spreadsheet, a JAR and every other ZIP, so the signature check alone
+ * would let an `.xlsx` or a generic archive renamed `.docx` reach the reader.
+ * An OOXML package declares its main part in `[Content_Types].xml` (ECMA-376
+ * Part 2, the Open Packaging Conventions); that declaration is what makes a
+ * package a Word document or a presentation, and it must agree with the type
+ * the upload was declared as.
+ *
+ * Reading it inflates exactly ONE small part. Every central-directory entry is
+ * still walked through `readParts`' filter, so the entry-count, path, size and
+ * compression-ratio guards all run first; nothing else is inflated.
+ */
+const MAIN_PART_TYPE = {
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml',
+} as const;
+
+export type OoxmlKind = keyof typeof MAIN_PART_TYPE;
+
+const CONTENT_TYPES_PART = '[Content_Types].xml';
+
+/** The package kind `[Content_Types].xml` declares, or the reason it declares none. */
+function kindFromContentTypes(part: ArchivePart | undefined): OoxmlKind {
+  if (!part) throw new ExtractionFailedError('ooxml_content_types_missing');
+  const declared = new Set(
+    [...part.xml.matchAll(/\bContentType\s*=\s*(["'])([^"']*)\1/g)].map((match) =>
+      decodeXmlText(match[2] ?? '')
+        .trim()
+        .toLowerCase(),
+    ),
+  );
+  const docx = declared.has(MAIN_PART_TYPE.docx);
+  const pptx = declared.has(MAIN_PART_TYPE.pptx);
+  if (docx && pptx) throw new ExtractionFailedError('ooxml_type_mismatch');
+  if (docx) return 'docx';
+  if (pptx) return 'pptx';
+  // Another OOXML main part — a spreadsheet, a macro-enabled or template
+  // variant — is a DIFFERENT format; no main part at all is a malformed one.
+  const otherMain = [...declared].some((type) => type.endsWith('.main+xml'));
+  throw new ExtractionFailedError(otherMain ? 'ooxml_type_mismatch' : 'ooxml_main_part_missing');
+}
+
+/**
+ * The OOXML kind a package declares — the bounded upload check (Phase 2C-4).
+ * Throws `ExtractionFailedError` for a hostile, malformed or undeclared package.
+ */
+export function declaredOoxmlKind(bytes: Uint8Array, limits: ExtractionLimits): OoxmlKind {
+  const parts = readParts(bytes, (name) => name === CONTENT_TYPES_PART, limits);
+  return kindFromContentTypes(parts.find((part) => part.name === CONTENT_TYPES_PART));
+}
+
+function requireKind(bytes: Uint8Array, limits: ExtractionLimits, wanted: OoxmlKind): void {
+  if (declaredOoxmlKind(bytes, limits) !== wanted) {
+    throw new ExtractionFailedError('ooxml_type_mismatch');
+  }
+}
+
+/**
  * Decode the five predefined XML entities and bounded numeric references.
  *
  * Numeric references are capped at the Unicode range and anything outside it is
@@ -208,8 +268,19 @@ export class DocxExtractor implements TextExtractor {
     return mimeType === DOCX_TYPE;
   }
 
+  validate(bytes: Uint8Array): void {
+    requireKind(bytes, this.#limits, 'docx');
+  }
+
   async extract(input: ExtractionInput): Promise<ExtractedText> {
-    const parts = readParts(input.bytes, (name) => name === 'word/document.xml', this.#limits);
+    const parts = readParts(
+      input.bytes,
+      (name) => name === 'word/document.xml' || name === CONTENT_TYPES_PART,
+      this.#limits,
+    );
+    if (kindFromContentTypes(parts.find((part) => part.name === CONTENT_TYPES_PART)) !== 'docx') {
+      throw new ExtractionFailedError('ooxml_type_mismatch');
+    }
     const document = parts.find((part) => part.name === 'word/document.xml');
     if (!document) throw new ExtractionFailedError('document_part_missing');
 
@@ -241,12 +312,27 @@ export class PptxExtractor implements TextExtractor {
     return mimeType === PPTX_TYPE;
   }
 
+  validate(bytes: Uint8Array): void {
+    requireKind(bytes, this.#limits, 'pptx');
+  }
+
   async extract(input: ExtractionInput): Promise<ExtractedText> {
-    const parts = readParts(
+    /*
+     * PHASE 2C-4 — `extraction.maxPages` BOUNDS SLIDES as it bounds PDF pages:
+     * the slides past it are not read, and not inflated either — the filter
+     * declines them before fflate touches their bytes. No separate setting.
+     */
+    const all = readParts(
       input.bytes,
-      (name) => /^ppt\/slides\/slide\d+\.xml$/.test(name),
+      (name) =>
+        name === CONTENT_TYPES_PART ||
+        (/^ppt\/slides\/slide\d+\.xml$/.test(name) && slideNumber(name) <= this.#limits.maxPages),
       this.#limits,
     );
+    if (kindFromContentTypes(all.find((part) => part.name === CONTENT_TYPES_PART)) !== 'pptx') {
+      throw new ExtractionFailedError('ooxml_type_mismatch');
+    }
+    const parts = all.filter((part) => part.name !== CONTENT_TYPES_PART);
     if (parts.length === 0) throw new ExtractionFailedError('document_part_missing');
 
     // Numeric slide order, not lexicographic: `slide10` follows `slide9`.

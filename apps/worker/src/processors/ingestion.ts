@@ -1,12 +1,12 @@
 import {
   BrandIngestionService,
-  ExtractorRegistry,
   TenantBrandBrainPolicySource,
   createObjectStore,
-  defaultExtractors,
+  extractSourceDocument,
+  extractorRegistryFor,
   type ObjectStore,
 } from '@brandspace/brand-brain';
-import { withWorkspace } from '@brandspace/database';
+import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { createLogger, currentEnvironment } from '@brandspace/shared';
 import type { IngestSourceDocumentPayload } from '@brandspace/jobs';
 
@@ -40,22 +40,54 @@ function objectStore(): ObjectStore {
 }
 
 export async function processIngestionJob(payload: IngestSourceDocumentPayload): Promise<void> {
-  const result = await withWorkspace(payload.workspaceId, async (db) => {
-    // The SAME configuration the dashboard reads, through the same tenant-side
-    // projection. A worker with its own ceilings would be a second set of
-    // settings an operator cannot see (CLAUDE.md §2.2).
-    const policy = await new TenantBrandBrainPolicySource(db, currentEnvironment()).load();
-
-    const ingestion = new BrandIngestionService({
+  /*
+   * PHASE 2C-4 — THREE SHORT STEPS, AND THE PARSE IS IN NONE OF THEM'S
+   * TRANSACTION.
+   *
+   * This used to run the whole pipeline inside ONE `withWorkspace` transaction:
+   * the tenant connection, its RLS context and its row locks were held while
+   * pdf.js walked up to `extraction.maxPages` pages for up to
+   * `extraction.timeoutMs`. Now:
+   *
+   *   1. a short transaction reads the configuration and claims the job;
+   *   2. the stored bytes are read and extracted with NO database access, under
+   *      the configured wall-clock bound for the whole document;
+   *   3. a second short transaction writes the chunks, the PENDING candidates
+   *      and the final state — atomically, or not at all.
+   *
+   * A crash between 1 and 3 leaves the job EXTRACTING, which BullMQ's stalled
+   * detection redelivers and `process` re-runs from the start: phase 3 rewrites
+   * chunks and PENDING candidates idempotently, as it always has.
+   */
+  const service = (db: TenantScopedClient, policy: Awaited<ReturnType<typeof loadPolicy>>) =>
+    new BrandIngestionService({
       db,
       workspaceId: payload.workspaceId,
       store: objectStore(),
       policy: policy.ingestion,
-      extractors: new ExtractorRegistry(await defaultExtractors(policy.extraction)),
+      extractors: policy.extractors,
     });
 
-    return ingestion.process(payload.ingestionJobId);
+  const { policy, started } = await withWorkspace(payload.workspaceId, async (db) => {
+    // The SAME configuration the dashboard reads, through the same tenant-side
+    // projection. A worker with its own ceilings would be a second set of
+    // settings an operator cannot see (CLAUDE.md §2.2).
+    const loaded = await loadPolicy(db);
+    return {
+      policy: loaded,
+      started: await service(db, loaded).startProcessing(payload.ingestionJobId),
+    };
   });
+
+  const outcome = await extractSourceDocument({
+    store: objectStore(),
+    extractors: policy.extractors,
+    started,
+  });
+
+  const result = await withWorkspace(payload.workspaceId, async (db) =>
+    service(db, policy).finishProcessing(started, outcome),
+  );
 
   log.info('source document processed', {
     // Identifiers and counts. No file name, no extracted text, no customer
@@ -67,4 +99,10 @@ export async function processIngestionJob(payload: IngestSourceDocumentPayload):
     candidates: result.candidatesCreated,
     ...(result.failureMessage ? { failureReason: result.failureMessage } : {}),
   });
+}
+
+/** The activated Brand Brain policy, and the extractor registry built from its limits. */
+async function loadPolicy(db: TenantScopedClient) {
+  const policy = await new TenantBrandBrainPolicySource(db, currentEnvironment()).load();
+  return { ...policy, extractors: await extractorRegistryFor(policy.extraction) };
 }
