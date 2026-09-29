@@ -4270,6 +4270,16 @@ enum AutomationTrigger {
   ANOMALY_DETECTED
   METRIC_THRESHOLD_CROSSED
   SCHEDULED_TIME
+  /// Phase 2B-3 (G13). Declared ahead of their producers and NOT authorable
+  /// until each producer ships (D-173); see `AUTOMATION_TRIGGERS`.
+  POST_FAILED
+  REVIEW_WAITING_24H
+  CAMPAIGN_STARTED
+  CAMPAIGN_ENDED
+  WEEKLY_ENGAGEMENT_DROPPED
+  SCHEDULE_GAP
+  POST_TOP_10_PERCENT
+  FACT_EXPIRING
 }
 
 /// What a rule may DO. Also closed, and deliberately small.
