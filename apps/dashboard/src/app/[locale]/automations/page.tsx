@@ -292,7 +292,11 @@ export default async function AutomationsPage({
           orderBy: [{ name: 'asc' }, { id: 'asc' }],
           take: 200,
         }),
-        members: await memberCatalogueFor(db, { workspaceId: workspace.workspaceId, brandId }),
+        members: await memberCatalogueFor(db, {
+          workspaceId: workspace.workspaceId,
+          brandId,
+          viewerBrandScope: workspace.brandScope,
+        }),
       });
     }
     return byBrand;

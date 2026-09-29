@@ -1,4 +1,5 @@
 import type { TenantScopedClient } from '@brandspace/database';
+import { brandInScope } from '@brandspace/shared';
 import { CONDITION_FIELD_CONTRACTS, type AutomationCondition } from './registry';
 
 /**
@@ -37,8 +38,26 @@ export interface MemberChoice {
  */
 export async function memberCatalogueFor(
   db: TenantScopedClient,
-  input: { readonly workspaceId: string; readonly brandId: string; readonly take?: number },
+  input: {
+    readonly workspaceId: string;
+    readonly brandId: string;
+    /** The VIEWER'S BrandScope: a brand they cannot see has no member list. */
+    readonly viewerBrandScope: readonly string[];
+    readonly take?: number;
+  },
 ): Promise<readonly MemberChoice[]> {
+  /*
+   * THE BRAND MUST BE THIS WORKSPACE'S AND THE VIEWER'S. Otherwise the members
+   * with an unrestricted scope would be listed "for" a brand id from anywhere —
+   * a list for a brand the caller has no business naming.
+   */
+  if (!UUID.test(input.brandId) || !brandInScope(input.viewerBrandScope, input.brandId)) return [];
+  const brand = await db.brand.findFirst({
+    where: { id: input.brandId, workspaceId: input.workspaceId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!brand) return [];
+
   const rows = await db.membership.findMany({
     where: {
       workspaceId: input.workspaceId,
