@@ -629,7 +629,27 @@ export class PublishPipelineService {
     }
 
     const adapter = this.#registry.get(job.provider);
-    const attemptNumber = job.attemptCount + 1;
+    /*
+     * PR 0 — THE NEXT NUMBER AFTER THE HIGHEST ONE RECORDED, never
+     * `attemptCount + 1`.
+     *
+     * `attemptCount` is the retry BUDGET's counter, and until PR 0 every human
+     * retry reset it to 0 while the attempt history kept its rows — so the
+     * next attempt re-used number 1. It was numbered BEFORE the provider call
+     * and recorded AFTER it, so the provider was called, the record collided
+     * with `@@unique([workspaceId, publishJobId, attemptNumber])`, the worker's
+     * transaction rolled the claim back to QUEUED, and a redelivery called the
+     * provider again. Jobs already reset by the old code still carry that
+     * mismatch, which is why the history — not the counter — decides.
+     *
+     * NO RACE: only the one execution that won the QUEUED → PUBLISHING claim
+     * above reaches this line for this job.
+     */
+    const lastAttempt = await this.#db.publishAttempt.aggregate({
+      where: { workspaceId: this.#workspaceId, publishJobId: job.id },
+      _max: { attemptNumber: true },
+    });
+    const attemptNumber = (lastAttempt._max.attemptNumber ?? 0) + 1;
     const startedAt = this.#clock.now();
 
     /*
@@ -802,6 +822,21 @@ export class PublishPipelineService {
    * due at the same instant; without jitter they arrive together and are rate
    * limited together, which is the outage extending itself.
    */
+  /**
+   * PR 0 — A FRESH BUDGET FOR A HUMAN DECISION, WITHOUT REWINDING THE HISTORY.
+   *
+   * `retry`, `retryOnReconnectedAccount` and `resolveVerification(NOT_PUBLISHED)`
+   * used to write `attemptCount: 0`. The count is part of the attempt history
+   * the next provider attempt is numbered from, and rewinding it re-used
+   * attempt number 1 (see `execute`). So the count stays where it is and the
+   * CEILING moves instead: the job gets exactly `retry.maxAttempts` more
+   * attempts, which is the budget a reset gave it, and `attemptCount <=
+   * maxAttempts` (the table's CHECK) still holds.
+   */
+  #freshBudget(job: PublishJob): { maxAttempts: number } {
+    return { maxAttempts: job.attemptCount + this.#policy.retry.maxAttempts };
+  }
+
   async #scheduleRetry(
     job: PublishJob,
     failureClass: PublishFailureClass,
@@ -810,10 +845,22 @@ export class PublishPipelineService {
     retryAfterSeconds?: number,
   ): Promise<ExecuteResult> {
     const retry = this.#policy.retry;
+    /*
+     * THE BACKOFF COUNTS FROM THE LATEST BUDGET, NOT FROM THE WHOLE HISTORY.
+     *
+     * A human retry used to reset `attemptCount`, so the first automatic retry
+     * after it waited the INITIAL step. The count is no longer reset (PR 0); the
+     * budget is granted by extending `maxAttempts` by the policy's own number
+     * (`#freshBudget`), so the attempts spent inside the current budget are
+     * `attemptCount - (maxAttempts - retry.maxAttempts)` — exactly the old
+     * count while the policy is unchanged, and never below 1 if it was edited.
+     */
+    const budgetStart = Math.max(0, job.maxAttempts - retry.maxAttempts);
+    const attemptsInBudget = Math.max(1, attemptCount - budgetStart);
     const base =
       retryAfterSeconds ??
       Math.min(
-        retry.initialBackoffSeconds * Math.pow(retry.backoffMultiplier, attemptCount - 1),
+        retry.initialBackoffSeconds * Math.pow(retry.backoffMultiplier, attemptsInBudget - 1),
         retry.maxBackoffSeconds,
       );
     /*
@@ -1179,9 +1226,8 @@ export class PublishPipelineService {
       data: {
         status: 'QUEUED',
         // A PERSON DECIDED TO SEND IT, so the budget starts again — same rule
-        // as a manual retry, and for the same reason.
-        attemptCount: 0,
-        maxAttempts: this.#policy.retry.maxAttempts,
+        // as a manual retry, and for the same reason. The history does not.
+        ...this.#freshBudget(job),
         nextAttemptAt: now,
         completedAt: null,
         claimedAt: null,
@@ -1303,10 +1349,10 @@ export class PublishPipelineService {
       where: { id: job.id },
       data: {
         status: 'QUEUED',
-        // THE ATTEMPT BUDGET IS RESET, because a human deciding to try again is
-        // a new decision, not a continuation of the automatic schedule.
-        attemptCount: 0,
-        maxAttempts: this.#policy.retry.maxAttempts,
+        // A FRESH ATTEMPT BUDGET, because a human deciding to try again is a
+        // new decision, not a continuation of the automatic schedule. The
+        // history is not rewound (PR 0): see `#freshBudget`.
+        ...this.#freshBudget(job),
         nextAttemptAt: now,
         completedAt: null,
         claimedAt: null,
@@ -1404,8 +1450,7 @@ export class PublishPipelineService {
         socialConnectionId: replacement.id,
         idempotencyKey,
         status: 'QUEUED',
-        attemptCount: 0,
-        maxAttempts: this.#policy.retry.maxAttempts,
+        ...this.#freshBudget(job),
         nextAttemptAt: now,
         completedAt: null,
         claimedAt: null,

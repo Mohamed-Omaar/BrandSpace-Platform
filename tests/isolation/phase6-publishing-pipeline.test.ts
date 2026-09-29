@@ -481,7 +481,10 @@ describe('cancellation and manual retry', () => {
     );
     expect(result.status).toBe('QUEUED');
     const after = await readJob(jobId);
-    expect(after?.attemptCount).toBe(0);
+    // PR 0: the history is never rewound. The fresh budget is the same number
+    // of attempts a reset used to give, granted by extending the ceiling.
+    expect(after?.attemptCount).toBe(before?.attemptCount);
+    expect(after?.maxAttempts).toBe((before?.attemptCount ?? 0) + policy.retry.maxAttempts);
     expect(after?.failureClass).toBeNull();
   });
 
