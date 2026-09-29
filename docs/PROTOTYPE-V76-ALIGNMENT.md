@@ -654,6 +654,41 @@ new one). **Closed here:** the English ingestion failure sentences (reason keys,
 `ingest-<id>` reuse for Read again, and the Strategy display lists. **Not started:** website reading
 (after its security review) and the D-366 Studio font gap.
 
+## 10. Fix PR 1 — reliability and security fixes from the alignment audit
+
+**Branch:** `fix/audit-reliability-security` from `staging` @ `8dff777` · **PR target:** `staging`, never `main`.
+**Source:** the prototype alignment audit on `8dff777` (findings S1–S12) and the owner's approval of the Fix PR 1
+report (2026-09-29). One commit per item.
+
+### 10.1 Fixed here
+
+- **F1 — S1, stalled PUBLISHING posts (D-410).** The stale-claim verification is dispatched under
+  `verify-<key>-<claimedAt>`; it used to be `verify:<key>`, which `enqueue` refuses, so it was never sent.
+- **F2 — S5, Brand Brain ingestion stuck in PROCESSING (D-413).** One queue id per attempt, a compare-and-set
+  claim, an attempt-fenced final save, and the stuck-job sweep wired into the maintenance scheduler (running
+  stages only). **Closes two §9.4 gaps:** "`sweepStuckJobs` is never called" and "the retry of a transient
+  ingestion failure re-queues the SAME job row".
+- **F3 — S3, notes visibility (D-409).** A thread needs its subject's read permission as well as
+  `content.read`: campaign `campaigns.read`, asset `assets.read`, brand `brand_brain.read`.
+- **F4 — S4, confirmation held by the server (D-411).** Disconnect and pack checkout require `confirm: true`;
+  every `confirmation: 'required'` route names its mechanism (`confirmedBy`).
+- **F5 — S2, automation NOTIFY templates (D-412).** A NOTIFY rule sends `automation.notice` only; a stored rule
+  naming anything else fails closed with a reason in Run history.
+
+### 10.2 Still open, and where each goes
+
+| Item                                                                                             | What is open                                                                                                                                                                                                                       | Where it goes                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **F6** — BrandScope NULL (audit S2's root cause in `resolveRecipients`; D-408's 2,000-row limit) | `membership.brandScope` and `invitation.brandScope` are nullable; SQL array filters drop NULL, so an owner written by onboarding misses `automation.confirmation_required`, automation NOTIFY and `brand_brain.learning_proposed`. | **Before 2B-3 PR 5 (asks-first).** Approach approved in principle: ONE atomic migration following D-112 (NO FORCE → SET DEFAULT '{}' → UPDATE → SET NOT NULL → FORCE + a check that FORCE is back), plus `@default([])` on both schema fields. |
+| **F7** — automation authority gaps (audit S8)                                                    | A proposal from a disabled or deleted rule is still confirmable; a rule can be created or enabled for an archived brand; editing conditions or trigger settings does not re-check the editor's action permission.                  | **Final review before launch.**                                                                                                                                                                                                                |
+| **F8** — fail-open gates (audit S10)                                                             | `channelGate` is optional in `ContentCalendarService`; the edit-status / withdraw reads take no lock — the approval fingerprint is the backstop for the review race, and a `FOR UPDATE` on `content_item` would close both races.  | **Final review before launch** (including the `FOR UPDATE` lock).                                                                                                                                                                              |
+| Asset-processing twin of F2                                                                      | The same-id retry, a non-atomic claim, and `reclaimStuckJobs` with no caller, in `packages/assets`.                                                                                                                                | **Final review before launch.**                                                                                                                                                                                                                |
+| The rule creator's authority at confirm                                                          | Confirming an asks-first proposal re-checks the CONFIRMER's authority, not the rule creator's.                                                                                                                                     | **2B-3, with the asks-first work.**                                                                                                                                                                                                            |
+| `markStale`                                                                                      | Nothing sets a fact to STALE (§9.1). Reported in the Fix PR 1 report; not wired.                                                                                                                                                   | Unchanged — open by owner decision (§9.4).                                                                                                                                                                                                     |
+| A verification lookup that throws                                                                | Leaves the post VERIFICATION_PENDING and is not asked again automatically (D-410).                                                                                                                                                 | Unchanged — open.                                                                                                                                                                                                                              |
+
+---
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):
