@@ -29,13 +29,14 @@ function sources(dir: string): string[] {
   return out;
 }
 
-/** Each `enqueue(` call with the text of its `idempotencyKey:` expression. */
+/** Each `enqueue(` / `enqueueReplacingFinished(` call with its `idempotencyKey:` expression. */
 function enqueueKeys(): { file: string; key: string }[] {
   const found: { file: string; key: string }[] = [];
   for (const base of ['apps', 'packages']) {
     for (const file of sources(path.join(root, base))) {
       const text = readFileSync(file, 'utf8');
-      const calls = text.split(/\benqueue\(/).slice(1);
+      // `enqueueReplacingFinished` (D-413) dispatches through `enqueue` too.
+      const calls = text.split(/\benqueue(?:ReplacingFinished)?\(/).slice(1);
       for (const call of calls) {
         const body = call.slice(0, call.indexOf('});') + 1);
         const match = /idempotencyKey:\s*([^\n]+)/.exec(body);

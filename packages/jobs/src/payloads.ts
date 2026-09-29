@@ -28,6 +28,23 @@ import type { TenantJobPayload } from './queues';
 export interface IngestSourceDocumentPayload extends TenantJobPayload {
   readonly kind: 'brand-brain.ingest-source-document';
   readonly ingestionJobId: string;
+  /**
+   * The attempt this message may claim, counting from 1 (Fix PR 1 · F2,
+   * D-413). The consumer claims the row only while it is QUEUED with exactly
+   * `attempt - 1` attempts spent, so a replayed or duplicate message for an
+   * earlier attempt does nothing. Optional so a message queued by the previous
+   * release still claims a QUEUED row, once.
+   */
+  readonly attempt?: number;
+}
+
+/**
+ * The queue id of ONE ingestion attempt (D-413). No colon (BullMQ). One id per
+ * attempt, because BullMQ keeps finished jobs and ignores a re-add of an id it
+ * still holds: a retry dispatched under the first attempt's id never ran.
+ */
+export function ingestionJobKey(ingestionJobId: string, attempt: number): string {
+  return `ingest-${ingestionJobId}-${attempt}`;
 }
 
 /**

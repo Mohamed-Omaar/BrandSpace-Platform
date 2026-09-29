@@ -18,6 +18,7 @@ export {
 } from './queues';
 export {
   INGEST_SOURCE_DOCUMENT,
+  ingestionJobKey,
   PROCESS_ASSET,
   PUBLISH_SOCIAL_POST,
   VERIFY_SOCIAL_POST,
@@ -40,6 +41,7 @@ export {
 export {
   closeQueues,
   enqueue,
+  enqueueReplacingFinished,
   mayProcessInline,
   queueFor,
   queueUrl,

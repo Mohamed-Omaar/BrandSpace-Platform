@@ -1983,6 +1983,9 @@ export const messages = {
     'activity.action.automation.confirmation_refused': 'رُفض تأكيد أتمتة',
     'activity.action.brand_brain.source.uploaded': 'رُفع مستند إلى عقل العلامة',
     'activity.action.brand_brain.source.processed': 'عولج مستند في عقل العلامة',
+    'activity.action.brand_brain.source.retry_scheduled':
+      'تعثّرت قراءة مستند في عقل العلامة، وستُعاد المحاولة',
+    'activity.action.brand_brain.source.failed': 'تعذّرت قراءة مستند في عقل العلامة',
     'activity.action.brand_brain.knowledge.created': 'أُضيفت معرفة للعلامة',
     'activity.action.brand_brain.knowledge.updated': 'عُدّلت معرفة العلامة',
     'activity.action.brand_brain.knowledge.rolled_back': 'استُعيدت نسخة سابقة من معرفة العلامة',
@@ -5208,6 +5211,9 @@ export const messages = {
     'activity.action.automation.confirmation_refused': 'An automation confirmation was refused',
     'activity.action.brand_brain.source.uploaded': 'A document was uploaded to Brand Brain',
     'activity.action.brand_brain.source.processed': 'A Brand Brain document was processed',
+    'activity.action.brand_brain.source.retry_scheduled':
+      'Reading a Brand Brain document stalled, and will be tried again',
+    'activity.action.brand_brain.source.failed': 'A Brand Brain document could not be read',
     'activity.action.brand_brain.knowledge.created': 'Brand knowledge was added',
     'activity.action.brand_brain.knowledge.updated': 'Brand knowledge was edited',
     'activity.action.brand_brain.knowledge.rolled_back':

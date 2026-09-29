@@ -129,6 +129,46 @@ export async function enqueue<Payload extends { readonly idempotencyKey: string 
   }
 }
 
+/**
+ * Dispatch a job whose id may already name a FINISHED job (Fix PR 1 · F2,
+ * D-413).
+ *
+ * BullMQ keeps finished jobs (`removeOnComplete`, `removeOnFail`) and silently
+ * ignores an add whose id already exists, whatever state that job is in. So a
+ * reconciler re-dispatching a row that is due again — the same attempt, after
+ * its message threw before the claim and exhausted BullMQ's own retries — would
+ * report success and queue nothing, for as long as the old job was kept.
+ *
+ * A job that is still WAITING, DELAYED or ACTIVE is left exactly where it is,
+ * so a sweep racing a live dispatch still adds nothing. Only a completed or
+ * failed one is removed first. That is safe only because the DATABASE, not
+ * Redis, decides what runs: the consumer claims its row with a compare-and-set
+ * on the attempt the message names, so a second delivery of anything does
+ * nothing.
+ */
+export async function enqueueReplacingFinished<Payload extends { readonly idempotencyKey: string }>(
+  name: QueueName,
+  jobName: string,
+  payload: Payload,
+): Promise<EnqueueResult> {
+  if (!queueUrl()) return { dispatched: false };
+  if (payload.idempotencyKey.includes(':')) return enqueue(name, jobName, payload);
+  try {
+    const existing = await queueFor(name).getJob(payload.idempotencyKey);
+    if (existing && ((await existing.isCompleted()) || (await existing.isFailed()))) {
+      await existing.remove();
+    }
+  } catch (error: unknown) {
+    log.error('could not inspect a finished job before re-dispatching it', {
+      queue: name,
+      job: jobName,
+      reason: error instanceof Error ? error.name : 'unknown',
+    });
+    return { dispatched: false };
+  }
+  return enqueue(name, jobName, payload);
+}
+
 /** Close the process-wide connection. Used by tests and by shutdown handlers. */
 export async function closeQueues(): Promise<void> {
   for (const queue of queues.values()) await queue.close();
