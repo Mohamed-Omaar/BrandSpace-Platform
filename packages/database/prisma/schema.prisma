@@ -2144,8 +2144,8 @@ model BrandSourceDocument {
   mimeType   String
   byteSize   Int
   /// SHA-256 of the content. Duplicate protection is a UNIQUE constraint on
-  /// it per brand, so re-uploading the same file is idempotent by identity
-  /// rather than by filename.
+  /// it per brand over LIVE rows (M6), so re-uploading the same file is
+  /// idempotent by identity rather than by filename.
   checksum   String
   /// Opaque object-storage key. Never a URL, never a signed one: a signature
   /// in a database column is a credential with a long life.
@@ -2187,7 +2187,10 @@ model BrandSourceDocument {
   /// and a workspace-scoped key is what stops another tenant's document id from
   /// being referenceable at all.
   @@unique([workspaceId, id], name: "brand_source_document_workspace_scope")
-  @@unique([workspaceId, brandId, checksum])
+  /// ONE LIVE DOCUMENT PER BRAND AND CHECKSUM (Phase 2C-4, M6). A PARTIAL
+  /// unique index in the migration (`WHERE "deletedAt" IS NULL`), which Prisma
+  /// cannot model: a removed source releases its checksum, so the same file can
+  /// be uploaded again; a FAILED one is live and keeps it.
   @@unique([workspaceId, idempotencyKey])
   @@index([workspaceId, brandId, status])
   @@index([workspaceId, brandId, createdAt(sort: Desc)])
