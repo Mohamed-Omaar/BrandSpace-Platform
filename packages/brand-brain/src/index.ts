@@ -170,6 +170,15 @@ export type {
   RetrievedItem,
 } from './retrieval';
 
+export { removeSource, sourceKnowledge } from './sources';
+export type {
+  SourceFact,
+  SourceKnowledge,
+  SourcePending,
+  SourceRemovalMode,
+  SourceRemovalResult,
+} from './sources';
+
 export {
   BRAND_GOAL_SELECT,
   GOAL_KEY_PREFIX,

@@ -13,9 +13,11 @@ import {
   mayOverwrite,
   memoryRank,
   questionsForBrand,
+  sourceKnowledge,
   workspaceKnowledgeAsOf,
   usedInPostsCounts,
 } from '@brandspace/brand-brain';
+import { formatBytes } from '../../../components/format-bytes';
 import { TenantOnboardingPolicySource, offersQuestionSetFor } from '@brandspace/onboarding';
 import { currentEnvironment, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
@@ -321,6 +323,10 @@ export default async function BrandBrainPage({
         select: {
           id: true,
           fileName: true,
+          mimeType: true,
+          byteSize: true,
+          storageKey: true,
+          createdAt: true,
           status: true,
           pageCount: true,
           chunkCount: true,
@@ -604,12 +610,67 @@ export default async function BrandBrainPage({
     };
   });
 
+  /*
+   * D5 (Phase 2C-4) — WHAT EACH SOURCE IS RESPONSIBLE FOR: the approved facts
+   * whose CURRENT version came from it and the proposals it is waiting on
+   * (`sourceKnowledge`, the one ownership rule), and whether a read is running.
+   */
+  const sourceIds = sources.map((source) => source.id);
+  const { owned, runningReads } = await inBrandBrain(workspace.workspaceId, async ({ db }) => ({
+    owned: await sourceKnowledge(db, {
+      brandId: brand.id,
+      documentIds: sourceIds,
+      brandScope: workspace.brandScope,
+    }),
+    runningReads: new Set(
+      (
+        await db.brandIngestionJob.findMany({
+          where: {
+            sourceDocumentId: { in: sourceIds },
+            stage: { in: ['QUEUED', 'EXTRACTING', 'CHUNKING', 'EXTRACTING_FACTS'] },
+          },
+          select: { sourceDocumentId: true },
+        })
+      ).map((job) => job.sourceDocumentId),
+    ),
+  }));
+  const areaLabelOf = (area: string) =>
+    t(`bb.area.${areaDefinition(area as never).messageKey}` as MessageKey);
+  const uploadedOn = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+    dateStyle: 'medium',
+  });
+
   const sourceData: SourceData[] = sources.map((source) => ({
     id: source.id,
     fileName: source.fileName,
     kind: documentKind(source.fileName),
     status: source.status,
     statusLabel: t(`bb.source.${source.status}` as MessageKey),
+    meta: [
+      sourceTypeLabel(source.mimeType, t),
+      formatBytes(source.byteSize, locale),
+      uploadedOn.format(source.createdAt),
+    ].join(' · '),
+    approvedCount: owned.get(source.id)?.facts.length ?? 0,
+    pendingCount: owned.get(source.id)?.pending.length ?? 0,
+    facts: (owned.get(source.id)?.facts ?? []).map((fact) => ({
+      id: fact.itemId,
+      title: pick(localizedFrom(fact.title as never), locale) || fact.itemKey,
+      areaLabel: areaLabelOf(fact.area),
+      stateLabel: isExpired(fact.validUntil, asOf)
+        ? t('bb.source.state.expired')
+        : t(`bb.source.state.${fact.status}` as MessageKey),
+    })),
+    pending: (owned.get(source.id)?.pending ?? []).map((candidate) => ({
+      id: candidate.candidateId,
+      title: pick(localizedFrom(candidate.title as never), locale) || candidate.itemKey,
+      areaLabel: areaLabelOf(candidate.area),
+      stateLabel: t('bb.source.state.PENDING'),
+    })),
+    // Stored bytes, and no read in flight: a file refused at the door has
+    // nothing to read, and a second read waits for the first.
+    canReadAgain: source.byteSize > 0 && source.storageKey !== '' && !runningReads.has(source.id),
+    reading: runningReads.has(source.id),
     /*
      * A FAILURE IS TRANSLATED, NOT ECHOED.
      *
@@ -874,6 +935,22 @@ function failureText(reason: string | null, t: (key: MessageKey) => string): str
   const translated = t(key) as string | undefined;
   return translated ?? t('bb.failure.extraction_failed');
 }
+
+/** The source's type in words, from the type it was accepted as (Phase 2C-4). */
+function sourceTypeLabel(mimeType: string, t: (key: MessageKey) => string): string {
+  const key = SOURCE_TYPE_KEYS[mimeType];
+  return key ? t(key) : t('bb.source.type.other');
+}
+
+const SOURCE_TYPE_KEYS: Readonly<Record<string, MessageKey>> = {
+  'application/pdf': 'bb.source.type.pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'bb.source.type.docx',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+    'bb.source.type.pptx',
+  'text/plain': 'bb.source.type.text',
+  'text/csv': 'bb.source.type.csv',
+  'text/markdown': 'bb.source.type.markdown',
+};
 
 /**
  * The badge the demo prints in the corner of a source row.

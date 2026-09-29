@@ -8,7 +8,10 @@ import {
   acceptConfidentSchema,
   checksumOf,
   createKnowledgeItemSchema,
+  documentNotFound,
   parseValidUntil,
+  readAgainUnavailable,
+  removeSource,
   rollbackSchema,
   updateKnowledgeItemSchema,
   type LocalizedText,
@@ -24,7 +27,7 @@ import {
   requireWorkspaceAction,
 } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
-import { inBrandBrain } from '../../../server/brand-brain-context';
+import { inBrandBrain, objectStore } from '../../../server/brand-brain-context';
 import { brandLocaleAtCreation } from '../../../server/brand-ai-language';
 import { createBrandFor } from '../../../server/brand-creation';
 import { applyCandidateReview, reviewCandidateInputFrom } from '../../../server/candidate-review';
@@ -589,4 +592,115 @@ function isUniqueViolation(error: unknown): boolean {
   return (
     typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'P2002'
   );
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A source id from the form: a uuid, or the action stops before any read. */
+function sourceIdFrom(formData: FormData): string {
+  const id = String(formData.get('documentId') ?? '');
+  if (!UUID.test(id)) throw documentNotFound();
+  return id;
+}
+
+/**
+ * READ AGAIN (Phase 2C-4, D5) — `brand_brain.upload`.
+ *
+ * The same document through the same pipeline, as a NEW ingestion job: a
+ * fresh row, so a fresh `ingest-<id>` dispatch id that no finished BullMQ job
+ * already holds. Refused while a read is still running (the existing
+ * one-live-job index answers a double click) and for a file refused before
+ * storage. The worker does the reading; what it proposes is PENDING only.
+ */
+export async function readAgainSourceAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.upload');
+    const documentId = sourceIdFrom(formData);
+    let job: { id: string };
+    try {
+      ({ job } = await inBrandBrain(session.workspace.workspaceId, async ({ ingestion }) =>
+        (await ingestion()).readAgain({
+          documentId,
+          actorUserId: session.customer.userId,
+          actorBrandScope: session.workspace.brandScope,
+        }),
+      ));
+    } catch (error: unknown) {
+      // Two presses at once: the loser meets `brand_ingestion_job_one_live`.
+      if (isUniqueViolation(error)) throw readAgainUnavailable();
+      throw error;
+    }
+    const dispatch = await enqueue('media-processing', INGEST_SOURCE_DOCUMENT, {
+      kind: INGEST_SOURCE_DOCUMENT,
+      workspaceId: session.workspace.workspaceId,
+      requestedByUserId: session.customer.userId,
+      idempotencyKey: `ingest-${job.id}`,
+      ingestionJobId: job.id,
+    } satisfies IngestSourceDocumentPayload);
+    if (!dispatch.dispatched) {
+      log.error('could not dispatch a re-read; leaving it for the reconciliation sweep', {
+        workspaceId: session.workspace.workspaceId,
+        jobId: job.id,
+      });
+    }
+    destination = pageUrl(locale, { ok: 'SOURCE_READ_AGAIN', tab: 'sources' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'read-again-source', { tab: 'sources' });
+  }
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}
+
+/**
+ * REMOVE A SOURCE (Phase 2C-4, D5) — `brand_brain.upload`; "Drop its facts"
+ * also needs `brand_brain.edit`, checked here AND by `removeSource`, so a
+ * crafted POST from a member who was only offered "Keep" is refused.
+ *
+ * The stored object is deleted AFTER the transaction commits: a removal that
+ * rolled back must still find its bytes. If that delete fails the object is
+ * orphaned — already refunded, so it is not counted against the customer — and
+ * the failure is logged for the operator.
+ */
+export async function removeSourceAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.upload');
+    const mode = String(formData.get('mode') ?? 'keep') === 'drop' ? 'drop' : 'keep';
+    if (mode === 'drop' && !holdsPermission(session.workspace, 'brand_brain.edit')) {
+      await requireWorkspaceAction(locale, 'brand_brain.edit');
+    }
+    const documentId = sourceIdFrom(formData);
+    const removed = await inBrandBrain(session.workspace.workspaceId, async ({ db, usage }) =>
+      removeSource(db, {
+        workspaceId: session.workspace.workspaceId,
+        documentId,
+        mode,
+        actor: knowledgeActor(session),
+        usage,
+      }),
+    );
+    if (removed.storageKeyToDelete) {
+      await objectStore()
+        .delete(removed.storageKeyToDelete)
+        .catch((error: unknown) =>
+          log.error('could not delete a removed source object; it is orphaned', {
+            workspaceId: session.workspace.workspaceId,
+            documentId: removed.documentId,
+            ...internalErrorFields(error),
+          }),
+        );
+    }
+    destination = pageUrl(locale, {
+      ok: mode === 'drop' ? 'SOURCE_REMOVED_DROPPED' : 'SOURCE_REMOVED',
+      tab: 'sources',
+    });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'remove-source', { tab: 'sources' });
+  }
+  revalidatePath(`/${locale}/brand-brain`);
+  revalidatePath(`/${locale}`);
+  redirect(destination);
 }

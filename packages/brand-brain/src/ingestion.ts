@@ -629,6 +629,22 @@ export class BrandIngestionService {
     });
     if (!document) throw documentNotFound();
 
+    const started: StartedIngestion = {
+      jobId: job.id,
+      documentId: document.id,
+      brandId: document.brandId,
+      storageKey: document.storageKey,
+      mimeType: document.mimeType,
+      fileName: document.fileName,
+      targetArea: document.targetArea ?? null,
+      attempt: job.attempts + 1,
+      maxAttempts: job.maxAttempts,
+      removed: document.deletedAt !== null,
+    };
+    // A document removed while its job waited (Phase 2C-4): nothing is claimed
+    // and nothing is parsed; Remove already ended the job.
+    if (started.removed) return started;
+
     const now = this.#clock.now();
     await this.#db.brandIngestionJob.update({
       where: { id: job.id },
@@ -639,17 +655,7 @@ export class BrandIngestionService {
       data: { status: 'PROCESSING' },
     });
 
-    return {
-      jobId: job.id,
-      documentId: document.id,
-      brandId: document.brandId,
-      storageKey: document.storageKey,
-      mimeType: document.mimeType,
-      fileName: document.fileName,
-      targetArea: document.targetArea ?? null,
-      attempt: job.attempts + 1,
-      maxAttempts: job.maxAttempts,
-    };
+    return started;
   }
 
   /**
@@ -661,6 +667,26 @@ export class BrandIngestionService {
     started: StartedIngestion,
     outcome: ExtractionOutcome,
   ): Promise<ProcessResult> {
+    /*
+     * REMOVED WHILE IT WAS BEING READ (Phase 2C-4). Remove soft-deleted the
+     * document, cleared its chunks, superseded its proposals and ended this
+     * job; writing the extraction now would bring them back for a source that
+     * no longer exists. Nothing is written.
+     */
+    const current = await this.#db.brandSourceDocument.findUnique({
+      where: { id: started.documentId },
+      select: { deletedAt: true },
+    });
+    if (started.removed || !current || current.deletedAt !== null) {
+      return {
+        documentId: started.documentId,
+        status: 'FAILED',
+        chunksCreated: 0,
+        candidatesCreated: 0,
+        failureMessage: 'source_removed',
+      };
+    }
+
     if (!outcome.ok) {
       /*
        * RETRYING A BAD FILE IS NOT A FIX. A malformed archive, a PDF with no
@@ -926,6 +952,8 @@ export interface StartedIngestion {
   /** This attempt's number, counting from 1. */
   readonly attempt: number;
   readonly maxAttempts: number;
+  /** The document was removed before the job ran: nothing is read or written. */
+  readonly removed: boolean;
 }
 
 /** What the extraction produced: the text, or a stable reason and whether it is final. */
@@ -953,6 +981,7 @@ export async function extractSourceDocument(input: {
   readonly extractors: ExtractorRegistry;
   readonly started: StartedIngestion;
 }): Promise<ExtractionOutcome> {
+  if (input.started.removed) return { ok: false, reason: 'source_removed', terminal: true };
   let bytes: Uint8Array | null;
   try {
     bytes = await input.store.get(input.started.storageKey);
