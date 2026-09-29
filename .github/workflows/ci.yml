@@ -283,7 +283,14 @@ jobs:
     # means more of those running against each other — the interleaving the
     # serial mode exists to prevent. A faster suite that fails intermittently is
     # worth less than a slower one that does not.
-    timeout-minutes: 45
+    #
+    # RAISED FROM 45 TO 60 IN PHASE 2C-4, ON MEASUREMENT AGAIN. Run #333 (the
+    # last green run before it, PR #54) took 41m10s in the Playwright step and
+    # 43m54s for the job: 66 seconds of headroom. Phase 2C-4 adds journeys that
+    # wait for the real worker to read uploaded documents, and run #334 was
+    # cancelled by this ceiling with 1,005 of 1,016 tests finished and none
+    # failed. Nothing was removed to fit, for the reason given above.
+    timeout-minutes: 60
 
     services:
       postgres:
