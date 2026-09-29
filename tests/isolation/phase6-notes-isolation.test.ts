@@ -129,7 +129,15 @@ function actorFor(fixture: Fixture, overrides: Partial<NoteActor> = {}): NoteAct
   return {
     userId: fixture.userId,
     // Every role that reads content also triages notes (Q12, `notes.manage`).
-    permissionKeys: ['content.read', 'notes.manage'],
+    // D-409: each thread also needs its subject's read permission; this suite is
+    // about tenancy and brand scope, so its actors hold the subject keys.
+    permissionKeys: [
+      'content.read',
+      'notes.manage',
+      'campaigns.read',
+      'assets.read',
+      'brand_brain.read',
+    ],
     brandScope: [],
     ...overrides,
   };

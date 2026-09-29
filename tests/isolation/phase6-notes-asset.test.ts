@@ -45,7 +45,9 @@ const service = (db: TenantScopedClient) =>
 const actor = (overrides: Partial<NoteActor> = {}): NoteActor => ({
   userId: fixtures.a.userId,
   // Every role that reads content also triages notes (Q12, `notes.manage`).
-  permissionKeys: ['content.read', 'notes.manage'],
+  // D-409: and a thread needs its subject's read permission too — this suite
+  // is about asset threads and brand scope, so it holds the subject keys.
+  permissionKeys: ['content.read', 'notes.manage', 'assets.read', 'brand_brain.read'],
   brandScope: [],
   ...overrides,
 });

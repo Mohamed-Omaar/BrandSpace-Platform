@@ -51,8 +51,10 @@ test.beforeAll(async () => {
       where: { email: loaded.customer.email },
       select: { id: true },
     });
+    // The Copywriter, who may read the brand's Brain and so may write in a
+    // BRAND thread (D-409). It was the Viewer, who no longer can.
     const colleague = await prisma.user.findFirstOrThrow({
-      where: { email: loaded.customer.viewerEmail },
+      where: { email: loaded.customer.copywriterEmail },
       select: { id: true },
     });
     const thread = await prisma.noteThread.create({

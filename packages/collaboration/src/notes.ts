@@ -1,4 +1,4 @@
-import { AppError, brandIdQueryFilter, brandIdScopeFilter } from '@brandspace/shared';
+import { AppError, brandIdQueryFilter, brandIdScopeFilter, brandInScope } from '@brandspace/shared';
 import type { Clock } from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
 
@@ -196,11 +196,50 @@ export const NOTE_PERMISSION = 'content.read';
  */
 export const NOTE_MANAGE_PERMISSION = 'notes.manage';
 
+/**
+ * WHO MAY SEE A THREAD: THE PEOPLE WHO MAY READ WHAT IT IS ABOUT (Fix PR 1 · F3,
+ * D-409, owner decision).
+ *
+ * `NOTE_PERMISSION` is still what it takes to be in the room at all. On top of
+ * it, each thread needs its SUBJECT's own read permission. Before this, every
+ * holder of `content.read` saw every campaign, asset and brand thread in their
+ * brands — the Viewer (Q12) and the Copywriter included — though neither can
+ * open a campaign, and the Viewer cannot open an asset or Brand Brain.
+ *
+ * AND, NEVER OR: a Designer holds `assets.read` and `brand_brain.read` but not
+ * `content.read`, and gains nothing here. No new permission; brand scope is
+ * unchanged and applied as before.
+ */
+export const NOTE_SUBJECT_READ_PERMISSION: Readonly<Record<NoteSubjectType, string>> = {
+  CONTENT_ITEM: 'content.read',
+  CAMPAIGN: 'campaigns.read',
+  ASSET: 'assets.read',
+  BRAND: 'brand_brain.read',
+};
+
+const NOTE_SUBJECT_TYPES: readonly NoteSubjectType[] = [
+  'CONTENT_ITEM',
+  'CAMPAIGN',
+  'ASSET',
+  'BRAND',
+];
+
+/** The subject types whose threads this member may see — empty without `NOTE_PERMISSION`. */
+export function readableNoteSubjectTypes(permissionKeys: readonly string[]): NoteSubjectType[] {
+  if (!permissionKeys.includes(NOTE_PERMISSION)) return [];
+  return NOTE_SUBJECT_TYPES.filter((type) =>
+    permissionKeys.includes(NOTE_SUBJECT_READ_PERMISSION[type]),
+  );
+}
+
 /** The longest a single note may be. */
 const MAX_BODY = 4_000;
 
 /** How many people one note may name. */
 const MAX_MENTIONS = 20;
+
+/** How many people the mention picker offers — the size of the old workspace-wide list. */
+const MENTION_CANDIDATES = 100;
 
 export class NotesService {
   readonly #db: TenantScopedClient;
@@ -230,6 +269,14 @@ export class NotesService {
 
   #requirePermission(actor: NoteActor): void {
     if (!actor.permissionKeys.includes(NOTE_PERMISSION)) throw this.#notFound();
+  }
+
+  /**
+   * D-409 — a subject the member may not read is a MISS, shaped exactly like
+   * one: the thread about it is not theirs to know about.
+   */
+  #requireReadableSubject(type: NoteSubjectType, actor: NoteActor): void {
+    if (!readableNoteSubjectTypes(actor.permissionKeys).includes(type)) throw this.#notFound();
   }
 
   /** Q12 — triage needs `notes.manage`. Asked AFTER the thread is found. */
@@ -346,18 +393,62 @@ export class NotesService {
    * resolve are DROPPED rather than rejected: a mention of somebody who left
    * should not make the note unpostable.
    */
-  async #resolvableMentions(userIds: readonly string[]): Promise<readonly string[]> {
+  async #resolvableMentions(
+    userIds: readonly string[],
+    subjectType: NoteSubjectType,
+    brandId: string,
+  ): Promise<readonly string[]> {
     const wanted = [...new Set(userIds)].slice(0, MAX_MENTIONS);
     if (wanted.length === 0) return [];
+    const members = await this.#readersOf(subjectType, brandId, { userIds: wanted });
+    return members.map((m) => m.userId);
+  }
+
+  /**
+   * D-409 — THE MEMBERS WHO COULD READ A THREAD ABOUT THIS SUBJECT, in this
+   * brand: active, holding `NOTE_PERMISSION` AND the subject's permission, with
+   * a BrandScope that admits the brand. Mentions, the assignee and the picker
+   * all read this one population, so nobody can be named into, or pointed at, a
+   * thread they could not open.
+   *
+   * THE SCOPE IS DECIDED IN CODE, by `brandInScope`, not by an SQL array filter:
+   * a NULL scope (how an owner's membership is usually written) means every
+   * brand, and `isEmpty`/`has` both drop NULL rows.
+   */
+  async #readersOf(
+    subjectType: NoteSubjectType,
+    brandId: string,
+    options: { readonly userIds?: readonly string[]; readonly take?: number } = {},
+  ): Promise<readonly { readonly userId: string; readonly name: string }[]> {
     const members = await this.#db.membership.findMany({
       where: {
         workspaceId: this.#workspaceId,
-        userId: { in: [...wanted] },
         status: 'ACTIVE',
+        ...(options.userIds ? { userId: { in: [...options.userIds] } } : {}),
+        AND: [
+          { role: { permissions: { some: { permission: { key: NOTE_PERMISSION } } } } },
+          {
+            role: {
+              permissions: {
+                some: { permission: { key: NOTE_SUBJECT_READ_PERMISSION[subjectType] } },
+              },
+            },
+          },
+        ],
       },
-      select: { userId: true },
+      select: {
+        userId: true,
+        brandScope: true,
+        user: { select: { name: true, email: true } },
+      },
+      orderBy: { acceptedAt: 'asc' },
     });
-    return members.map((m) => m.userId);
+    const readers = members.filter((member) => brandInScope(member.brandScope, brandId));
+    return readers.slice(0, options.take ?? readers.length).map((member) => ({
+      userId: member.userId,
+      // The name, or the address when somebody has not set one.
+      name: member.user.name?.trim() || member.user.email,
+    }));
   }
 
   /** The thread, if this actor may see it. 404 otherwise, identically shaped. */
@@ -367,6 +458,9 @@ export class NotesService {
         id: threadId,
         workspaceId: this.#workspaceId,
         ...brandIdScopeFilter(actor.brandScope),
+        // D-409: a thread about something this member may not read is a miss —
+        // BEFORE any triage check, so it never answers FORBIDDEN.
+        subjectType: { in: readableNoteSubjectTypes(actor.permissionKeys) },
       },
     });
     if (!thread) throw this.#notFound();
@@ -390,11 +484,20 @@ export class NotesService {
   }): Promise<{ readonly threadId: string; readonly noteId: string }> {
     this.#requirePermission(input.actor);
     const body = this.#validBody(input.body);
+    this.#requireReadableSubject(input.subject.type, input.actor);
     const brandId = await this.#brandForSubject(input.subject, input.actor);
     // Pointing a new thread at somebody is triage (Q12).
     if ((input.assignedToUserId ?? null) !== null) this.#requireManage(input.actor);
-    const mentions = await this.#resolvableMentions(input.mentionedUserIds ?? []);
-    const assignee = await this.#validAssignee(input.assignedToUserId ?? null);
+    const mentions = await this.#resolvableMentions(
+      input.mentionedUserIds ?? [],
+      input.subject.type,
+      brandId,
+    );
+    const assignee = await this.#validAssignee(
+      input.assignedToUserId ?? null,
+      input.subject.type,
+      brandId,
+    );
 
     const now = this.#clock.now();
     const thread = await this.#db.noteThread.create({
@@ -435,7 +538,11 @@ export class NotesService {
     const thread = await this.#threadFor(input.threadId, input.actor);
     // Replying to a RESOLVED thread reopens it, which is triage (Q12).
     if (thread.status === 'RESOLVED') this.#requireManage(input.actor);
-    const mentions = await this.#resolvableMentions(input.mentionedUserIds ?? []);
+    const mentions = await this.#resolvableMentions(
+      input.mentionedUserIds ?? [],
+      thread.subjectType as NoteSubjectType,
+      thread.brandId,
+    );
 
     const now = this.#clock.now();
     /*
@@ -522,7 +629,11 @@ export class NotesService {
     this.#requirePermission(input.actor);
     const thread = await this.#threadFor(input.threadId, input.actor);
     this.#requireManage(input.actor);
-    const assignee = await this.#validAssignee(input.assignedToUserId);
+    const assignee = await this.#validAssignee(
+      input.assignedToUserId,
+      thread.subjectType as NoteSubjectType,
+      thread.brandId,
+    );
 
     await this.#db.noteThread.update({
       where: { id: thread.id },
@@ -583,6 +694,7 @@ export class NotesService {
   /** Every thread about one subject, newest activity first. */
   async threadsFor(subject: NoteSubject, actor: NoteActor): Promise<readonly NoteThreadSummary[]> {
     this.#requirePermission(actor);
+    this.#requireReadableSubject(subject.type, actor);
     // Resolving the subject first is what refuses a subject in another
     // workspace, or one outside this member's brand scope, before any thread is
     // read — rather than returning an empty list, which would not distinguish
@@ -672,6 +784,8 @@ export class NotesService {
           authorUserId: { not: actor.userId },
           thread: {
             ...brandIdScopeFilter(actor.brandScope),
+            // D-409: only threads about something this member may read.
+            subjectType: { in: readableNoteSubjectTypes(actor.permissionKeys) },
             // The inbox cannot list a thread about deleted content, so the dot
             // must not count one either — the two always agree.
             NOT: { contentItem: { is: { deletedAt: { not: null } } } },
@@ -708,6 +822,8 @@ export class NotesService {
       workspaceId: this.#workspaceId,
       AND: [
         ...scope.AND,
+        // D-409: only threads about something this member may read.
+        { subjectType: { in: readableNoteSubjectTypes(actor.permissionKeys) } },
         // A thread about a deleted content item has nowhere to link to.
         { NOT: { contentItem: { is: { deletedAt: { not: null } } } } },
         // Nor does one about a deleted asset (D-281).
@@ -838,6 +954,8 @@ export class NotesService {
           authorUserId: { not: actor.userId },
           thread: {
             ...brandIdScopeFilter(actor.brandScope),
+            // D-409: the same rows the dot counts.
+            subjectType: { in: readableNoteSubjectTypes(actor.permissionKeys) },
             NOT: { contentItem: { is: { deletedAt: { not: null } } } },
           },
         },
@@ -922,8 +1040,26 @@ export class NotesService {
         assignedToUserId: actor.userId,
         status: 'OPEN',
         ...brandIdScopeFilter(actor.brandScope),
+        // D-409 — and nothing without `NOTE_PERMISSION` (an empty list matches nothing).
+        subjectType: { in: readableNoteSubjectTypes(actor.permissionKeys) },
       },
     });
+  }
+
+  /**
+   * D-409 — the people this member may name in, or point at, a thread about
+   * this subject: exactly the population the service accepts when the note is
+   * written, so the picker never offers somebody who would be silently dropped.
+   * A subject the member cannot read is the usual miss.
+   */
+  async mentionCandidates(
+    subject: NoteSubject,
+    actor: NoteActor,
+  ): Promise<readonly { readonly userId: string; readonly name: string }[]> {
+    this.#requirePermission(actor);
+    this.#requireReadableSubject(subject.type, actor);
+    const brandId = await this.#brandForSubject(subject, actor);
+    return this.#readersOf(subject.type, brandId, { take: MENTION_CANDIDATES });
   }
 
   // --- internals ----------------------------------------------------------
@@ -939,10 +1075,17 @@ export class NotesService {
     return body;
   }
 
-  /** An assignee must be an active member here, or nobody. */
-  async #validAssignee(userId: string | null): Promise<string | null> {
+  /**
+   * An assignee must be an active member who could read the thread (D-409),
+   * or nobody. Anybody else is refused exactly as a non-member is.
+   */
+  async #validAssignee(
+    userId: string | null,
+    subjectType: NoteSubjectType,
+    brandId: string,
+  ): Promise<string | null> {
     if (userId === null) return null;
-    const [member] = await this.#resolvableMentions([userId]);
+    const [member] = await this.#resolvableMentions([userId], subjectType, brandId);
     if (!member) {
       throw new AppError('VALIDATION_FAILED', 'That person is not in this workspace.', {
         field: 'assignedToUserId',
