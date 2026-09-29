@@ -4296,6 +4296,16 @@ enum AutomationActionType {
   PLACE_ON_CALENDAR
   /// EXTERNAL. Always proposes; never executes without a human confirmation.
   PROPOSE_PUBLISH
+  /// Phase 2B-3 (G13). Declared ahead of their implementations and neither
+  /// authorable nor executable until each ships; see `AUTOMATION_ACTIONS`.
+  SCHEDULE_NEXT_FREE_SLOT
+  NOTIFY_PERSON
+  ADD_TO_CAMPAIGN
+  REMIND_REVIEWER
+  DRAFT_IDEAS
+  MAKE_DRAFT_COPY
+  RETRY_PUBLISH
+  PAUSE_CAMPAIGN
 }
 
 enum AutomationRunStatus {

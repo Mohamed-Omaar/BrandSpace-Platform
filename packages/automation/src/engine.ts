@@ -1458,6 +1458,22 @@ export class AutomationEngine {
       /* c8 ignore next 3 -- the external action never reaches this switch. */
       case 'PROPOSE_PUBLISH':
         throw unknownTriggerOrAction();
+
+      /*
+       * PHASE 2B-3 (G13) — DECLARED, NOT EXECUTABLE. The values exist so the
+       * database and the client agree about the enum; each action is wired in
+       * the PR that implements it. Until then a stored rule naming one fails
+       * closed here, exactly as an unknown action would.
+       */
+      case 'SCHEDULE_NEXT_FREE_SLOT':
+      case 'NOTIFY_PERSON':
+      case 'ADD_TO_CAMPAIGN':
+      case 'REMIND_REVIEWER':
+      case 'DRAFT_IDEAS':
+      case 'MAKE_DRAFT_COPY':
+      case 'RETRY_PUBLISH':
+      case 'PAUSE_CAMPAIGN':
+        throw unknownTriggerOrAction();
     }
   }
 
