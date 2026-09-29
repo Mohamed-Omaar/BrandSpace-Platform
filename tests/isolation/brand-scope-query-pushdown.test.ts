@@ -187,6 +187,10 @@ const calendar = <T>(fn: (s: ContentCalendarService) => Promise<T>) =>
           workspaceId: fixtures.a.workspaceId,
           policy: CONTENT_POLICY,
           timezone: 'UTC',
+          // PR 0: the gate is required. Approval is not this suite's subject.
+          approvalGate: {
+            policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }),
+          },
           // This suite only READS the month view, so the quota is never
           // consumed. A throwing stub makes that explicit: if a future
           // assertion schedules something here, it fails loudly rather than
@@ -476,6 +480,10 @@ const watchedCalendar = <T>(fn: (s: ContentCalendarService) => Promise<T>) => {
           workspaceId: fixtures.a.workspaceId,
           policy: CONTENT_POLICY,
           timezone: 'UTC',
+          // PR 0: the gate is required. Approval is not this suite's subject.
+          approvalGate: {
+            policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }),
+          },
           quota: {
             limit: async () => null,
             consume: async () => {

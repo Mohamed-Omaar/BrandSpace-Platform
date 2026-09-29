@@ -169,6 +169,13 @@ function portsFor(
            * idempotency keys behind it.
            */
           quota: createScheduleQuota({ db, workspaceId, environment }),
+          /*
+           * PR 0 — THE SAME BRAND APPROVAL GATE THE DASHBOARD USES. Without
+           * it this calendar fell back to a workspace-wide setting, so
+           * `PLACE_ON_CALENDAR` could schedule an unapproved post of a brand
+           * that requires approval. The approvals domain is the one answer.
+           */
+          approvalGate: new ContentApprovalService({ db, workspaceId, policy }),
         });
         const view = await calendar.schedule({
           contentItemId: input.contentItemId,

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace } from '@brandspace/database';
 import { UsageService, QUOTA_FEATURES } from '@brandspace/entitlements';
 import {
+  ContentApprovalService,
   ContentCalendarService,
   ContentLibraryService,
   formatLocalTime,
@@ -154,6 +155,10 @@ function inA<T>(
           workspaceId: fixtures.a.workspaceId,
           policy: CONTENT_POLICY,
           timezone: zone,
+          // PR 0: the gate is required. Approval is not this suite's subject.
+          approvalGate: {
+            policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }),
+          },
           quota: quota(),
         }),
         db,
@@ -402,11 +407,13 @@ describe('AC-14.5 — the plan quota is enforced, and refunded', () => {
 
 describe('AC-14.6 — approval, when the policy requires it', () => {
   it('refuses an unapproved item while the gate is on, and admits an approved one', async () => {
-    const strict: ContentPolicy = {
-      ...CONTENT_POLICY,
-      calendar: { ...CONTENT_POLICY.calendar, requireApprovalBeforeScheduling: true },
-    };
-
+    /*
+     * PR 0 — THE GATE IS THE APPROVALS DOMAIN'S, NOT A CALENDAR SETTING.
+     * This used to switch `content.calendar.requireApprovalBeforeScheduling`
+     * on and rely on the calendar's own fallback, which PR 0 removes. The
+     * fixture brand's `approval_policy` row requires approval, and the real
+     * `ContentApprovalService.policyForBrand` is what now answers.
+     */
     const contentItemId = await makeDraft('Needs a reviewer');
 
     const withGate = <T>(fn: (calendar: ContentCalendarService) => Promise<T>): Promise<T> =>
@@ -417,9 +424,14 @@ describe('AC-14.6 — approval, when the policy requires it', () => {
             new ContentCalendarService({
               db,
               workspaceId: fixtures.a.workspaceId,
-              policy: strict,
+              policy: CONTENT_POLICY,
               timezone: ZONE,
               quota: quota(),
+              approvalGate: new ContentApprovalService({
+                db,
+                workspaceId: fixtures.a.workspaceId,
+                policy: CONTENT_POLICY,
+              }),
             }),
           ),
         { prisma: app },

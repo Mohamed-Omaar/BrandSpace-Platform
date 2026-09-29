@@ -127,6 +127,8 @@ function executorContext(
       workspaceId: fixtures.a.workspaceId,
       policy: contentPolicy,
       timezone: 'UTC',
+      // PR 0: the gate is required. Approval is not this suite's subject.
+      approvalGate: { policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }) },
       quota: { limit: async () => null, consume: async () => true, refund: async () => undefined },
     }),
     retention: { subscriptionActive: true },
@@ -147,6 +149,8 @@ function undoCollaborators(db: TenantScopedClient) {
       workspaceId: fixtures.a.workspaceId,
       policy: contentPolicy,
       timezone: 'UTC',
+      // PR 0: the gate is required. Approval is not this suite's subject.
+      approvalGate: { policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }) },
       quota: { limit: async () => null, consume: async () => true, refund: async () => undefined },
     }),
     library: new ContentLibraryService({

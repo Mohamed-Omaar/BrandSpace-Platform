@@ -218,7 +218,8 @@ async function executionContextFor(input: {
  * creates the slot and the jobs and hands them over — the same path the calendar
  * sweep uses, so there is one publishing pipeline rather than two.
  */
-function externalActions(db: TenantScopedClient): ExternalActionPort {
+// Exported for tests/isolation/pr0-calendar-approval-gate.test.ts (PR 0).
+export function externalActions(db: TenantScopedClient): ExternalActionPort {
   return {
     async publishNow(input) {
       const environment = currentEnvironment();
@@ -265,6 +266,15 @@ function externalActions(db: TenantScopedClient): ExternalActionPort {
         quota: scheduleQuota(db, input.workspaceId),
         // Q9 (D-332): a channel whose every account was revoked is refused.
         channelGate: unreachableChannelGate(db, input.workspaceId),
+        // PR 0: THE BRAND'S OWN APPROVAL POLICY. This calendar was built without
+        // it, so publish-now fell back to a workspace-wide setting and could
+        // put an unapproved post of a brand that requires approval on the
+        // calendar — while the comment below said the brand policy applied.
+        approvalGate: new ContentApprovalService({
+          db,
+          workspaceId: input.workspaceId,
+          policy: contentPolicy,
+        }),
       });
 
       /*
@@ -780,6 +790,12 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
                   timezone: workspace?.timezone ?? 'UTC',
                   quota: scheduleQuota(db, caller.workspaceId),
                   channelGate: unreachableChannelGate(db, caller.workspaceId),
+                  // PR 0: required on every calendar. Undo only cancels.
+                  approvalGate: new ContentApprovalService({
+                    db,
+                    workspaceId: caller.workspaceId,
+                    policy: contentPolicy,
+                  }),
                 }),
                 // THE CONTENT DOMAIN'S OWN ARCHIVE (P7-R4). The undo no longer
                 // knows how to write a content row.

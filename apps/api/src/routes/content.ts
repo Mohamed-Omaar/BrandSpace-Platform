@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  ContentApprovalService,
   ContentCalendarService,
   ContentStudioService,
   contentGenerateRequestSchema,
@@ -258,6 +259,8 @@ async function studioFor(caller: Caller, db: Parameters<Parameters<typeof withWo
       quota: scheduleQuota(db, caller.workspaceId),
       // Q9 (D-332): a channel whose every account was revoked is refused.
       channelGate: unreachableChannelGate(db, caller.workspaceId),
+      // PR 0: the one brand approval policy, required on every calendar.
+      approvalGate: new ContentApprovalService({ db, workspaceId: caller.workspaceId, policy }),
     }),
   });
 }
