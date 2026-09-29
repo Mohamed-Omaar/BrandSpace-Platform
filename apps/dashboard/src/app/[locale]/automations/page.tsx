@@ -16,8 +16,10 @@ import {
   AUTOMATION_TRIGGERS,
   CONDITION_FIELDS,
   CONDITION_FIELD_CONTRACTS,
-  actionSupportsTrigger,
   conditionFieldsFor,
+  isAuthorablePair,
+  isOlderAutomation,
+  memberCatalogueFor,
   type ConditionField,
 } from '@brandspace/automation';
 import { INGESTED_METRIC_KEYS } from '@brandspace/analytics';
@@ -108,7 +110,7 @@ function conditionChoicesFor(
       label: t(`content.type.${value}` as MessageKey),
     }));
   }
-  if (field === 'publish.provider') {
+  if (field === 'publish.provider' || field === 'content.channels') {
     return contract.options.map((value) => ({
       value,
       label: t(`integrations.provider.${value.toLowerCase()}` as MessageKey),
@@ -161,36 +163,6 @@ export default async function AutomationsPage({
     }),
   );
   const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
-  /*
-   * B12 + G13 option (a) — the campaign and person catalogues, read through
-   * the same brand scope as everything else here. A campaign outside the
-   * member's brands, or a member who has left, is never offered.
-   */
-  const { campaigns, members } = await inWorkspace(workspace.workspaceId, async ({ db }) => ({
-    campaigns: await db.campaign.findMany({
-      where: {
-        workspaceId: workspace.workspaceId,
-        deletedAt: null,
-        ...brandIdQueryFilter({ brandId: selectedBrand?.id, brandScope: workspace.brandScope }),
-      },
-      select: { id: true, name: true },
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
-      take: 200,
-    }),
-    members: (
-      await db.membership.findMany({
-        where: { workspaceId: workspace.workspaceId, status: 'ACTIVE' },
-        select: { userId: true, user: { select: { name: true, email: true } } },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        take: 200,
-      })
-    ).map((membership) => ({
-      id: membership.userId,
-      name: membership.user.name ?? membership.user.email,
-    })),
-  }));
-  const conditionChoices = (field: ConditionField): readonly { value: string; label: string }[] =>
-    conditionChoicesFor(field, locale, { brands, campaigns, members });
 
   const { rules, runs, needsYou } = await inAnalytics(workspace.workspaceId, async (services) => {
     const engine = await services.automations();
@@ -288,6 +260,60 @@ export default async function AutomationsPage({
    */
   const editId = typeof query['edit'] === 'string' ? query['edit'] : null;
   const editing = mayManage && editId ? (rules.find((rule) => rule.id === editId) ?? null) : null;
+
+  /*
+   * THE CAMPAIGN AND PERSON CATALOGUES, PER RULE BRAND (Phase 2B-3 PR 1).
+   *
+   * A condition's campaign must be one of THE RULE'S BRAND, and its person an
+   * ACTIVE member whose BrandScope admits that brand — the same predicates a
+   * run applies before it evaluates (`conditionValuesResolve`), so the screen
+   * never offers a value the run would then refuse as unavailable. An edited
+   * rule's brand is fixed; a new rule's brand is picked in the form, which
+   * switches between these lists.
+   */
+  const catalogueBrandIds = editing ? [editing.brandId] : formBrands.map((brand) => brand.id);
+  const catalogueByBrand = await inWorkspace(workspace.workspaceId, async ({ db }) => {
+    const byBrand = new Map<
+      string,
+      {
+        campaigns: readonly { id: string; name: string }[];
+        members: readonly { id: string; name: string }[];
+      }
+    >();
+    for (const brandId of catalogueBrandIds) {
+      byBrand.set(brandId, {
+        campaigns: await db.campaign.findMany({
+          where: {
+            workspaceId: workspace.workspaceId,
+            deletedAt: null,
+            ...brandIdQueryFilter({ brandId, brandScope: workspace.brandScope }),
+          },
+          select: { id: true, name: true },
+          orderBy: [{ name: 'asc' }, { id: 'asc' }],
+          take: 200,
+        }),
+        members: await memberCatalogueFor(db, { workspaceId: workspace.workspaceId, brandId }),
+      });
+    }
+    return byBrand;
+  });
+  const conditionChoices = (
+    field: ConditionField,
+    brandId: string | undefined,
+  ): readonly { value: string; label: string }[] =>
+    conditionChoicesFor(field, locale, {
+      brands,
+      campaigns: (brandId ? catalogueByBrand.get(brandId)?.campaigns : undefined) ?? [],
+      members: (brandId ? catalogueByBrand.get(brandId)?.members : undefined) ?? [],
+    });
+  /** A brand-dependent catalogue, one list per brand the form can pick. */
+  const perBrand = (field: ConditionField) =>
+    CONDITION_FIELD_CONTRACTS[field].catalogue === 'campaigns' ||
+    CONDITION_FIELD_CONTRACTS[field].catalogue === 'members'
+      ? Object.fromEntries(
+          catalogueBrandIds.map((brandId) => [brandId, conditionChoices(field, brandId)]),
+        )
+      : undefined;
   const editInitial: AutomationFormInitial | null = editing
     ? (() => {
         const trigger = (editing.triggerConfig ?? {}) as Record<string, unknown>;
@@ -547,11 +573,19 @@ export default async function AutomationsPage({
               initial={editInitial ?? undefined}
               cancelHref={`/${locale}/automations`}
               brands={formBrands.map((brand) => ({ id: brand.id, name: brand.name }))}
-              triggers={AUTOMATION_TRIGGERS.map((trigger) => ({
+              /*
+                ONLY WHAT IS AUTHORABLE (Phase 2B-3 PR 1). A trigger or action
+                registered as not authorable is never offered for a new rule;
+                an edited rule keeps its own, which the form names and never
+                posts.
+              */
+              triggers={AUTOMATION_TRIGGERS.filter(
+                (trigger) => trigger.authorable || trigger.type === editing?.triggerType,
+              ).map((trigger) => ({
                 type: trigger.type,
                 label: t(`automations.trigger.${trigger.type}` as MessageKey),
                 actionTypes: AUTOMATION_ACTIONS.filter((action) =>
-                  actionSupportsTrigger(action.type, trigger.type),
+                  isAuthorablePair(trigger.type, action.type),
                 ).map((action) => action.type),
                 conditionFields: [...conditionFieldsFor(trigger.type)],
                 needsSchedule: trigger.type === 'SCHEDULED_TIME',
@@ -582,6 +616,7 @@ export default async function AutomationsPage({
               conditionCatalogue={Object.fromEntries(
                 CONDITION_FIELDS.map((field) => {
                   const contract = CONDITION_FIELD_CONTRACTS[field];
+                  const optionsByBrand = perBrand(field);
                   return [
                     field,
                     {
@@ -591,7 +626,8 @@ export default async function AutomationsPage({
                         value: operator,
                         label: t(`automations.operator.${operator}` as MessageKey),
                       })),
-                      options: conditionChoices(field),
+                      options: conditionChoices(field, catalogueBrandIds[0]),
+                      ...(optionsByBrand ? { optionsByBrand } : {}),
                     },
                   ];
                 }),
@@ -677,6 +713,21 @@ export default async function AutomationsPage({
                       {t(`automations.trigger.${rule.triggerType}` as MessageKey)} →{' '}
                       {t(`automations.action.${rule.actionType}` as MessageKey)}
                     </span>
+                    {/*
+                      AN OLDER AUTOMATION SAYS SO (Phase 2B-3 PR 1). A rule whose
+                      trigger or action a new rule could not use any more keeps
+                      its place in the list and its controls; the caption is why
+                      a person cannot make another one like it.
+                    */}
+                    {isOlderAutomation(rule) ? (
+                      <span
+                        data-testid={`automation-older-${rule.id}`}
+                        style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+                      >
+                        {' '}
+                        {t('automations.olderAutomation')}
+                      </span>
+                    ) : null}
                   </span>
                   <span style={{ display: 'flex', gap: spacingTokens.sm, alignItems: 'center' }}>
                     <StatusBadge

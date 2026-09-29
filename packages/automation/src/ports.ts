@@ -109,7 +109,23 @@ export interface TimezonePort {
   timezoneFor(workspaceId: string): Promise<string>;
 }
 
+/**
+ * PHASE 2B-3 (PR 1) — IS THE WORKSPACE ENTITLED TO THIS FEATURE, NOW?
+ *
+ * Asked on every run for every key the action declares in `entitlements`, so a
+ * plan change takes effect on the next run rather than on the next edit. The
+ * implementation is the same `EntitlementService` over `TenantCatalogueSource`
+ * the Copilot's gate uses: one answer to "is this plan allowed this".
+ *
+ * AN ACTION THAT DECLARES AN ENTITLEMENT AND FINDS NO PORT IS REFUSED. Every
+ * action that ships today declares none, so for them the port is never asked.
+ */
+export interface EntitlementPort {
+  allows(featureKey: string): Promise<boolean>;
+}
+
 export interface AutomationPorts {
+  readonly entitlements?: EntitlementPort | undefined;
   readonly notifications?: NotificationPort | undefined;
   readonly approvals?: ApprovalPort | undefined;
   readonly calendar?: CalendarPort | undefined;

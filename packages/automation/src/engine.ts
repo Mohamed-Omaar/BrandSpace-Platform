@@ -30,6 +30,7 @@ import {
   triggerActionIncompatible,
   unknownTriggerOrAction,
 } from './errors';
+import { CONDITION_VALUE_UNAVAILABLE, conditionValuesResolve } from './condition-values';
 import type { AutomationPolicy } from './policy';
 import type { AutomationPorts } from './ports';
 import {
@@ -41,6 +42,8 @@ import {
   findAction,
   findTrigger,
   isExternalAction,
+  satisfiesActionPermissions,
+  type ActionDefinition,
   type AutomationCondition,
 } from './registry';
 
@@ -330,6 +333,13 @@ export class AutomationEngine {
     const trigger = findTrigger(input.triggerType);
     const action = findAction(input.actionType);
     if (!trigger || !action) throw unknownTriggerOrAction();
+    /*
+     * PHASE 2B-3 (PR 1) — ONLY WHAT IS AUTHORABLE MAY BE WRITTEN. A trigger or
+     * action that is registered but not authorable is refused with the same
+     * error an unknown one gets: to a person writing a new rule, it does not
+     * exist. Stored rules that already use one are untouched.
+     */
+    if (!trigger.authorable || !action.authorable) throw unknownTriggerOrAction();
 
     /*
      * THE PAIR MUST BE REACHABLE. An action that operates on a content item
@@ -346,7 +356,9 @@ export class AutomationEngine {
     // ACTION needs. Holding `automation.manage` is not a way to acquire
     // `publishing.manage` by writing a rule that uses it.
     if (!input.actor.permissionKeys.includes('automation.manage')) throw creatorLacksAuthority();
-    if (!input.actor.permissionKeys.includes(action.permission)) throw creatorLacksAuthority();
+    if (!satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)) {
+      throw creatorLacksAuthority();
+    }
 
     const conditions = conditionsSchema.parse(input.conditions);
     if (conditions.length > this.#policy.limits.maxConditionsPerRule) {
@@ -447,7 +459,10 @@ export class AutomationEngine {
      * switch on a rule that performs it either — otherwise "enable" would be a way
      * to exercise somebody else's authority through a rule they wrote.
      */
-    if (input.enabled === true && !input.actor.permissionKeys.includes(action.permission)) {
+    if (
+      input.enabled === true &&
+      !satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)
+    ) {
       throw creatorLacksAuthority();
     }
 
@@ -575,7 +590,10 @@ export class AutomationEngine {
       triggerConfig !== undefined && !sameJson(triggerConfig, existing.triggerConfig);
     const actionConfigChanged =
       actionConfig !== undefined && !sameJson(actionConfig, existing.actionConfig);
-    if (actionConfigChanged && !input.actor.permissionKeys.includes(action.permission)) {
+    if (
+      actionConfigChanged &&
+      !satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)
+    ) {
       throw creatorLacksAuthority();
     }
 
@@ -732,7 +750,7 @@ export class AutomationEngine {
     take?: number | undefined;
   }): Promise<readonly AutomationRun[]> {
     const actionable = AUTOMATION_ACTIONS.filter((action) =>
-      input.permissionKeys.includes(action.permission),
+      satisfiesActionPermissions(input.permissionKeys, action.permissions),
     ).map((action) => action.type);
     if (actionable.length === 0) return [];
     return this.#db.automationRun.findMany({
@@ -777,7 +795,7 @@ export class AutomationEngine {
     if (!rule) throw automationConfirmationRejected();
     const action = findAction(rule.actionType);
     if (!action) throw automationConfirmationRejected();
-    if (!input.actor.permissionKeys.includes(action.permission)) {
+    if (!satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)) {
       await this.#auditRefusal({
         runId: run.id,
         brandId: run.brandId,
@@ -1003,6 +1021,20 @@ export class AutomationEngine {
 
     // --- The conditions ------------------------------------------------------
     const conditions = (rule.conditions as unknown as AutomationCondition[]) ?? [];
+    /*
+     * PHASE 2B-3 (PR 1) — A VALUE THE RULE NAMES MUST STILL RESOLVE. A deleted
+     * campaign, an archived brand, or a person who left or lost this brand
+     * would otherwise make a negative condition match everything. The run does
+     * not evaluate; it says why. See `conditionValuesResolve`.
+     */
+    const resolvable = await conditionValuesResolve(this.#db, {
+      workspaceId: this.#workspaceId,
+      brandId: rule.brandId,
+      conditions,
+    });
+    if (!resolvable) {
+      return this.#finish(rule, run, 'SKIPPED', { failureCode: CONDITION_VALUE_UNAVAILABLE });
+    }
     const held = evaluateConditions(conditions, event.facts);
     if (!held) {
       // A CONDITION THAT DID NOT HOLD IS A COMPLETE, SUCCESSFUL EVALUATION.
@@ -1014,8 +1046,15 @@ export class AutomationEngine {
     // --- THE AUTHORITY, RE-RESOLVED, EVERY TIME ------------------------------
     const actor = await input.resolveActor(rule.createdByUserId);
     const action = findAction(rule.actionType);
-    /* c8 ignore next -- a stored rule always names a registry action. */
-    if (!action) return this.#finish(rule, run, 'FAILED', { failureCode: 'unknown_action' });
+    /*
+     * A stored rule always names a registry action unless a row was written
+     * around the engine; a registered action that is not executable has no code
+     * behind it. Both fail closed, with the same code, BEFORE an asks-first
+     * action could reach AWAITING_CONFIRMATION.
+     */
+    if (!action?.executable) {
+      return this.#finish(rule, run, 'FAILED', { failureCode: 'unknown_action' });
+    }
 
     if (!actor) {
       return this.#finish(rule, run, 'BLOCKED_BY_AUTHORIZATION', {
@@ -1023,7 +1062,7 @@ export class AutomationEngine {
         failureCode: 'creator_no_longer_a_member',
       });
     }
-    if (!actor.permissionKeys.includes(action.permission)) {
+    if (!satisfiesActionPermissions(actor.permissionKeys, action.permissions)) {
       return this.#finish(rule, run, 'BLOCKED_BY_AUTHORIZATION', {
         conditionsHeld: true,
         failureCode: 'creator_lost_permission',
@@ -1038,6 +1077,15 @@ export class AutomationEngine {
       return this.#finish(rule, run, 'BLOCKED_BY_AUTHORIZATION', {
         conditionsHeld: true,
         failureCode: 'creator_lost_brand_scope',
+      });
+    }
+
+    // --- AND THE WORKSPACE'S ENTITLEMENT, RE-RESOLVED, EVERY TIME ------------
+    const notEntitled = await this.#entitlementRefusal(action);
+    if (notEntitled) {
+      return this.#finish(rule, run, 'BLOCKED_BY_POLICY', {
+        conditionsHeld: true,
+        failureCode: notEntitled,
       });
     }
 
@@ -1194,8 +1242,9 @@ export class AutomationEngine {
     if (!rule) throw automationConfirmationRejected();
 
     const action = findAction(rule.actionType);
-    if (!action) throw automationConfirmationRejected();
-    if (!input.actor.permissionKeys.includes(action.permission)) {
+    // A registered action with no code behind it has nothing to confirm.
+    if (!action?.executable) throw automationConfirmationRejected();
+    if (!satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)) {
       await this.#auditRefusal({
         runId: run.id,
         brandId: run.brandId,
@@ -1271,8 +1320,9 @@ export class AutomationEngine {
     if (!rule) throw automationConfirmationRejected();
 
     const action = findAction(rule.actionType);
-    if (!action) throw automationConfirmationRejected();
-    if (!input.actor.permissionKeys.includes(action.permission)) {
+    // A registered action with no code behind it has nothing to confirm.
+    if (!action?.executable) throw automationConfirmationRejected();
+    if (!satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)) {
       await this.#auditRefusal({
         runId: run.id,
         brandId: run.brandId,
@@ -1282,6 +1332,19 @@ export class AutomationEngine {
       throw automationConfirmationRejected();
     }
     if (!brandInScope(input.actor.brandScope, run.brandId)) throw automationConfirmationRejected();
+    /*
+     * THE WORKSPACE'S ENTITLEMENT, AGAIN, AT THE MOMENT THE ACTION HAPPENS. A
+     * plan that lost the feature while the run waited does not perform it.
+     */
+    if (await this.#entitlementRefusal(action)) {
+      await this.#auditRefusal({
+        runId: run.id,
+        brandId: run.brandId,
+        actorUserId: input.actor.userId,
+        reason: 'workspace_not_entitled',
+      });
+      throw automationConfirmationRejected();
+    }
 
     const now = this.#clock.now();
     const claimed = await this.#db.automationRun.updateMany({
@@ -1581,6 +1644,24 @@ export class AutomationEngine {
         return job?.contentItemId ?? null;
       }
     }
+  }
+
+  /**
+   * WHY THE WORKSPACE MAY NOT PERFORM THIS ACTION NOW — or null when it may.
+   *
+   * Every key the action declares, asked live. An action that declares none
+   * (every action that ships today) is never refused here and never asks the
+   * port. One that declares some and finds no port wired is refused: a surface
+   * that cannot answer the question does not get to assume the answer is yes.
+   */
+  async #entitlementRefusal(action: ActionDefinition): Promise<string | null> {
+    if (action.entitlements.length === 0) return null;
+    const port = this.#ports.entitlements;
+    if (!port) return 'entitlement_unavailable';
+    for (const key of action.entitlements) {
+      if (!(await port.allows(key))) return 'not_entitled';
+    }
+    return null;
   }
 
   async #finish(

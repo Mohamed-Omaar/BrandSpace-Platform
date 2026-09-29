@@ -138,7 +138,8 @@ describe('the engine paths', () => {
     const skip = body('skipRun');
     const confirm = body('confirmRun');
     for (const check of [
-      'if (!input.actor.permissionKeys.includes(action.permission)) {',
+      // Phase 2B-3 (PR 1): the typed contract, through its one reader.
+      'if (!satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)) {',
       'if (!brandInScope(input.actor.brandScope, run.brandId)) throw automationConfirmationRejected();',
     ]) {
       expect(skip).toContain(check);
@@ -155,7 +156,7 @@ describe('the screens', () => {
     expect(source).toContain("{ permissions: ['automation.read'], run: automationsWaiting },");
     const body = source.slice(source.indexOf('async function automationsWaiting('));
     expect(body.slice(0, body.indexOf('\n}\n'))).toContain(
-      'session.permissionKeys.includes(action.permission)',
+      'satisfiesActionPermissions(session.permissionKeys, action.permissions)',
     );
   });
 

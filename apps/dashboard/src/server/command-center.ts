@@ -8,7 +8,7 @@ import type { TenantScopedClient } from '@brandspace/database';
 import type { CustomerWorkspaceContext } from '@brandspace/auth';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { EXPIRING_SOON_MS } from '@brandspace/social-connectors';
-import { AUTOMATION_ACTIONS } from '@brandspace/automation';
+import { AUTOMATION_ACTIONS, satisfiesActionPermissions } from '@brandspace/automation';
 import {
   BrandKnowledgeService,
   TenantBrandBrainPolicySource,
@@ -747,7 +747,7 @@ async function automationsWaiting(
   session: CustomerWorkspaceContext,
 ): Promise<AttentionItem | null> {
   const actionable = AUTOMATION_ACTIONS.filter((action) =>
-    session.permissionKeys.includes(action.permission),
+    satisfiesActionPermissions(session.permissionKeys, action.permissions),
   ).map((action) => action.type);
   if (actionable.length === 0) return null;
   const count = await db.automationRun.count({

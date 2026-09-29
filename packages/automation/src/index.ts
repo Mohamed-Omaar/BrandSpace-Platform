@@ -8,7 +8,13 @@
  * run — the same boundary the Copilot enforces, reached by a different door.
  */
 
-export { contractedFieldsFor, gatherFacts } from './facts';
+export { channelForPlatformKey, contractedFieldsFor, gatherFacts } from './facts';
+export {
+  CONDITION_VALUE_UNAVAILABLE,
+  conditionValuesResolve,
+  memberCatalogueFor,
+} from './condition-values';
+export type { MemberChoice } from './condition-values';
 export { evaluateThresholdRule } from './threshold-producer';
 export type { ThresholdOutcome, ThresholdRuleRow } from './threshold-producer';
 export type { FactEvent, MetricWindowPort } from './facts';
@@ -28,12 +34,23 @@ export {
   CONDITION_FIELD_TRIGGERS,
   evaluateCondition,
   evaluateConditions,
+  actionPermissionKeys,
   findAction,
+  findPlannedAction,
   findTrigger,
+  isAuthorablePair,
   isExternalAction,
+  isOlderAutomation,
+  PLANNED_AUTOMATION_ACTIONS,
+  PLANNED_AUTOMATION_TRIGGERS,
+  RETIRED_AUTOMATION_TRIGGERS,
+  satisfiesActionPermissions,
 } from './registry';
 export type {
   ActionDefinition,
+  ActionPermissions,
+  PlannedActionDefinition,
+  PlannedTriggerDefinition,
   AutomationCondition,
   ConditionField,
   ConditionFieldContract,
@@ -81,6 +98,7 @@ export type {
   ApprovalPort,
   AutomationPorts,
   CalendarPort,
+  EntitlementPort,
   NotificationPort,
   PublishPort,
   TimezonePort,

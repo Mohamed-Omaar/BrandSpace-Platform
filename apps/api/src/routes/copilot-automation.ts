@@ -1,8 +1,8 @@
 import {
   AutomationEngine,
-  actionSupportsTrigger,
   findAction,
-  findTrigger,
+  isAuthorablePair,
+  satisfiesActionPermissions,
   type AutomationPolicy,
 } from '@brandspace/automation';
 import type {
@@ -23,19 +23,18 @@ import type { TenantScopedClient } from '@brandspace/database';
 
 /**
  * The automations registry's verdict on a rule the Copilot proposes: both keys
- * are real, the action can run on what the trigger produces, and the CALLER
- * holds the action's own permission — the three things `createRule` refuses on,
- * asked before the plan is shown so a customer is never asked to confirm a rule
- * the engine would then refuse.
+ * are real AND AUTHORABLE, the action can run on what the trigger produces, and
+ * the CALLER holds the action's own permissions — the things `createRule`
+ * refuses on, asked before the plan is shown so a customer is never asked to
+ * confirm a rule the engine would then refuse.
  */
 export const automationRuleCheck: AutomationRuleCheck = {
   admissible({ triggerType, actionType, permissionKeys }) {
     const action = findAction(actionType);
     return (
-      findTrigger(triggerType) !== undefined &&
       action !== undefined &&
-      actionSupportsTrigger(actionType as never, triggerType as never) &&
-      permissionKeys.includes(action.permission)
+      isAuthorablePair(triggerType, actionType) &&
+      satisfiesActionPermissions(permissionKeys, action.permissions)
     );
   },
 };

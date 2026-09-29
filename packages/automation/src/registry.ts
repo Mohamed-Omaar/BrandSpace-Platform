@@ -88,6 +88,23 @@ export interface TriggerDefinition {
    * delayed redelivery look like a new event and run the rule twice.
    */
   readonly timeBucketed: boolean;
+  /**
+   * PHASE 2B-3 (PR 1) — IS THIS EVENT ADDRESSED TO ONE RULE?
+   *
+   * A domain event belongs to the brand and every listening rule sees it; a
+   * rule-derived event is computed from one rule's own configuration and goes
+   * to that rule alone. The database says the same thing in
+   * `automation_event_rule_addressed_when_derived`, and a unit test holds the
+   * two to one list.
+   */
+  readonly ruleAddressed: boolean;
+  /**
+   * MAY A NEW RULE BE WRITTEN ON THIS TRIGGER? Asked by `createRule`, the
+   * authoring screen and the Copilot's rule check. A stored rule on a trigger
+   * that is not authorable keeps running, and the rule list captions it as an
+   * older automation.
+   */
+  readonly authorable: boolean;
   readonly messageKey: string;
 }
 
@@ -100,6 +117,8 @@ export const AUTOMATION_TRIGGERS = [
     refType: 'ContentItem',
     contentItemVia: 'direct',
     timeBucketed: false,
+    ruleAddressed: false,
+    authorable: true,
     messageKey: 'contentApproved',
   },
   {
@@ -108,6 +127,8 @@ export const AUTOMATION_TRIGGERS = [
     refType: 'CalendarSlot',
     contentItemVia: 'calendarSlot',
     timeBucketed: false,
+    ruleAddressed: false,
+    authorable: true,
     messageKey: 'contentScheduled',
   },
   {
@@ -116,6 +137,8 @@ export const AUTOMATION_TRIGGERS = [
     refType: 'PublishJob',
     contentItemVia: 'publishJob',
     timeBucketed: false,
+    ruleAddressed: false,
+    authorable: true,
     messageKey: 'postPublished',
   },
   {
@@ -124,6 +147,8 @@ export const AUTOMATION_TRIGGERS = [
     refType: 'AnalyticsIngestionRun',
     contentItemVia: null,
     timeBucketed: false,
+    ruleAddressed: false,
+    authorable: true,
     messageKey: 'analyticsRefreshed',
   },
   {
@@ -139,6 +164,8 @@ export const AUTOMATION_TRIGGERS = [
     refType: 'MetricObservation',
     contentItemVia: null,
     timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
     messageKey: 'metricThreshold',
   },
   {
@@ -152,9 +179,101 @@ export const AUTOMATION_TRIGGERS = [
     refType: null,
     contentItemVia: null,
     timeBucketed: true,
+    ruleAddressed: true,
+    authorable: true,
     messageKey: 'scheduledTime',
   },
 ] as const satisfies readonly TriggerDefinition[];
+
+/**
+ * PHASE 2B-3 (G13) — TRIGGERS THAT ARE DECLARED AND NOT YET AUTHORABLE.
+ *
+ * THE DATABASE ALREADY KNOWS THESE VALUES (M1a) AND THE OUTBOX CHECKS ALREADY
+ * NAME THEIR REFERENCES (M1c). This table is the code's half of the same
+ * statement: what each one references and whether it is addressed to one rule.
+ *
+ * NOT IN `AUTOMATION_TRIGGERS`, ON PURPOSE (D-173). A trigger with no producer
+ * is one a customer could write a rule on and watch never fire, so `findTrigger`
+ * does not return these: `createRule` refuses them, `actionSupportsTrigger`
+ * fails closed on them and the authoring screen never lists them. Each one moves
+ * into `AUTOMATION_TRIGGERS` in the pull request that ships its producer.
+ */
+export interface PlannedTriggerDefinition {
+  readonly type: AutomationTrigger;
+  readonly refType: string | null;
+  readonly ruleAddressed: boolean;
+  readonly authorable: false;
+  readonly executable: false;
+}
+
+export const PLANNED_AUTOMATION_TRIGGERS = [
+  // A domain event: one publish attempt that failed, for every listening rule.
+  {
+    type: 'POST_FAILED',
+    refType: 'PublishAttempt',
+    ruleAddressed: false,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'REVIEW_WAITING_24H',
+    refType: 'Approval',
+    ruleAddressed: true,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'CAMPAIGN_STARTED',
+    refType: 'Campaign',
+    ruleAddressed: true,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'CAMPAIGN_ENDED',
+    refType: 'Campaign',
+    ruleAddressed: true,
+    authorable: false,
+    executable: false,
+  },
+  // A change of a rule's own state, so there is no row to point at.
+  {
+    type: 'WEEKLY_ENGAGEMENT_DROPPED',
+    refType: null,
+    ruleAddressed: true,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'SCHEDULE_GAP',
+    refType: null,
+    ruleAddressed: true,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'POST_TOP_10_PERCENT',
+    refType: 'ContentItem',
+    ruleAddressed: true,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'FACT_EXPIRING',
+    refType: 'BrandKnowledgeItem',
+    ruleAddressed: true,
+    authorable: false,
+    executable: false,
+  },
+] as const satisfies readonly PlannedTriggerDefinition[];
+
+/**
+ * TRIGGERS THE DATABASE ENUM KEEPS AND THE REGISTRY RETIRED. Named so the
+ * parity test can say every enum value is accounted for exactly once.
+ */
+export const RETIRED_AUTOMATION_TRIGGERS = [
+  'ANOMALY_DETECTED',
+] as const satisfies readonly AutomationTrigger[];
 
 /**
  * THE FIELDS A CONDITION MAY READ. A closed list, resolved by code.
@@ -172,6 +291,8 @@ export const CONDITION_FIELDS = [
   'content.campaignId',
   'content.type',
   'content.authorUserId',
+  // Phase 2B-3 (PR 1) — the post's channels, as a SET of providers.
+  'content.channels',
   'publish.provider',
   'publish.failureClass',
   'metric.key',
@@ -220,6 +341,7 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
   'content.campaignId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
   'content.type': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
   'content.authorUserId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
+  'content.channels': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
   // Only the publish job carries these.
   'publish.provider': ['POST_PUBLISHED'],
   'publish.failureClass': ['POST_PUBLISHED'],
@@ -249,6 +371,9 @@ export const CONDITION_OPERATORS = [
   'not_in',
   'is_true',
   'is_false',
+  // Phase 2B-3 (PR 1) — membership of ONE value in a SET-valued fact.
+  'includes',
+  'excludes',
 ] as const;
 export type ConditionOperator = (typeof CONDITION_OPERATORS)[number];
 
@@ -275,7 +400,7 @@ export type ConditionOperator = (typeof CONDITION_OPERATORS)[number];
  * from it; the engine validates against it INDEPENDENTLY, on create and on
  * update, because a server that trusts a form is a server with no validation.
  */
-export type ConditionValueKind = 'string' | 'number' | 'boolean';
+export type ConditionValueKind = 'string' | 'number' | 'boolean' | 'stringSet';
 
 export interface ConditionFieldContract {
   /** The runtime type of the fact, and therefore of any literal compared to it. */
@@ -407,6 +532,18 @@ const NUMBER_OPERATORS = ['equals', 'not_equals', 'greater_than', 'less_than'] a
  */
 const BOOLEAN_OPERATORS = ['is_true', 'is_false'] as const;
 
+/**
+ * PHASE 2B-3 (PR 1) — A SET FACT is asked whether it contains ONE value.
+ *
+ * `content.channels` is every provider a post has a variant for, so "equals
+ * INSTAGRAM" has no meaning for a post on three channels, and `in` would ask
+ * the wrong way round (is the fact one of these?). `includes` / `excludes`
+ * take a single value from the field's closed set. A fact that is not a set —
+ * missing, null, or anything else — makes BOTH false: fail closed, never
+ * widened.
+ */
+const STRING_SET_OPERATORS = ['includes', 'excludes'] as const;
+
 /** EXHAUSTIVE BY TYPE: TypeScript refuses the file if a field is missing. */
 export const CONDITION_FIELD_CONTRACTS: Record<ConditionField, ConditionFieldContract> = {
   'brand.id': {
@@ -470,6 +607,17 @@ export const CONDITION_FIELD_CONTRACTS: Record<ConditionField, ConditionFieldCon
     options: null,
     catalogue: 'members',
     failsClosedWhenUnresolved: true,
+  },
+  /*
+   * PHASE 2B-3 (PR 1) — THE G13 CHANNEL CONDITION. Every channel the post has
+   * a variant for, as providers. `publish.provider` stays for the rules that
+   * already use it; a new G13 rule names channels here.
+   */
+  'content.channels': {
+    kind: 'stringSet',
+    operators: STRING_SET_OPERATORS,
+    options: SOCIAL_PROVIDER_OPTIONS,
+    catalogue: null,
   },
   'publish.provider': {
     kind: 'string',
@@ -556,6 +704,13 @@ function conditionValueRejected(
     case 'less_than':
       return contract.kind !== 'number' || typeof value !== 'number' || !Number.isFinite(value);
 
+    // ONE value, from the closed set, against a SET-valued field and no other.
+    case 'includes':
+    case 'excludes':
+      if (contract.kind !== 'stringSet') return true;
+      if (typeof value !== 'string' || value.length === 0) return true;
+      return contract.options !== null && !contract.options.includes(value);
+
     case 'equals':
     case 'not_equals':
       if (contract.kind === 'number') return typeof value !== 'number' || !Number.isFinite(value);
@@ -581,6 +736,46 @@ export type AutomationCondition = z.infer<typeof conditionSchema>;
 
 export const conditionsSchema = z.array(conditionSchema).max(20).default([]);
 
+/**
+ * PHASE 2B-3 (PR 1, Correction 1) — A TYPED PERMISSION REQUIREMENT.
+ *
+ * `allOf`: every key must be held. `anyOf`: at least one must be held, when the
+ * list is not empty. Both halves apply together.
+ *
+ * ONLY `ADD_TO_CAMPAIGN` NEEDS `anyOf` — attaching a post to a campaign is the
+ * content author's act or the campaign manager's (D-318). Every other action,
+ * shipped or planned, is `allOf`, and every shipped action lists exactly the
+ * one permission it has always required.
+ */
+export interface ActionPermissions {
+  readonly allOf: readonly string[];
+  readonly anyOf: readonly string[];
+}
+
+/**
+ * DOES THIS PERSON HOLD WHAT THE ACTION REQUIRES?
+ *
+ * ONE ANSWER, asked by every door: authoring, enabling, re-configuring, every
+ * run, the "needs you" queue, skipping, confirming. A requirement that names no
+ * permission at all is a declaration mistake, and it FAILS CLOSED rather than
+ * admitting everybody.
+ */
+export function satisfiesActionPermissions(
+  permissionKeys: readonly string[],
+  permissions: ActionPermissions,
+): boolean {
+  if (permissions.allOf.length === 0 && permissions.anyOf.length === 0) return false;
+  if (!permissions.allOf.every((key) => permissionKeys.includes(key))) return false;
+  return (
+    permissions.anyOf.length === 0 || permissions.anyOf.some((key) => permissionKeys.includes(key))
+  );
+}
+
+/** Every permission key an action's requirement names, for parity tests. */
+export function actionPermissionKeys(permissions: ActionPermissions): readonly string[] {
+  return [...permissions.allOf, ...permissions.anyOf];
+}
+
 export interface ActionDefinition {
   readonly type: AutomationActionType;
   readonly config: z.ZodTypeAny;
@@ -593,8 +788,34 @@ export interface ActionDefinition {
    * and a person decides, exactly as a Copilot plan does.
    */
   readonly actionClass: CopilotActionClass;
-  /** The workspace permission the rule's CREATOR must still hold at RUN time. */
-  readonly permission: string;
+  /**
+   * PHASE 2B-3 (PR 1) — WHAT THE ACTION REQUIRES, DECLARED ONCE.
+   *
+   * The permissions the rule's author needs to write, enable or re-configure
+   * it, and the rule's CREATOR must still hold, live, on every run. Held to
+   * `satisfiesActionPermissions`, the only reader.
+   */
+  readonly permissions: ActionPermissions;
+  /**
+   * The plan features the WORKSPACE must be entitled to, re-resolved on every
+   * run through the `EntitlementPort`. Empty for every action that ships
+   * today: the only plan control on them is the scheduled-post quota, which is
+   * consumed inside the calendar's own `schedule()` and is not declared here a
+   * second time.
+   */
+  readonly entitlements: readonly string[];
+  /** Does performing it spend AI credits? */
+  readonly spendsCredits: boolean;
+  /**
+   * DOES A PERSON DECIDE FIRST? True exactly where `actionClass` is
+   * `EXTERNAL_OR_DESTRUCTIVE`, and the CHECK
+   * `automation_rule_external_requires_confirmation` names the same set.
+   */
+  readonly asksFirst: boolean;
+  /** May a NEW rule be written with it? See `TriggerDefinition.authorable`. */
+  readonly authorable: boolean;
+  /** Is there code that performs it? A run of one that is not fails closed. */
+  readonly executable: boolean;
   /**
    * Does this action operate on a CONTENT ITEM?
    *
@@ -616,7 +837,12 @@ export const AUTOMATION_ACTIONS = [
     // Notifying members about their own workspace's events needs no more than
     // being able to see the workspace; the notification carries a pointer, and
     // following it applies the ordinary permission checks.
-    permission: 'workspace.read',
+    permissions: { allOf: ['workspace.read'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: true,
+    executable: true,
     // A notification points at whatever fired the rule, whatever that is.
     needsContentItem: false,
     messageKey: 'notify',
@@ -625,7 +851,12 @@ export const AUTOMATION_ACTIONS = [
     type: 'SUBMIT_FOR_APPROVAL',
     config: emptyConfig,
     actionClass: 'INTERNAL_REVERSIBLE',
-    permission: 'content.submit',
+    permissions: { allOf: ['content.submit'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: true,
+    executable: true,
     needsContentItem: true,
     messageKey: 'submitForApproval',
   },
@@ -641,7 +872,12 @@ export const AUTOMATION_ACTIONS = [
       hourLocal: z.number().int().min(0).max(23).optional(),
     }),
     actionClass: 'INTERNAL_REVERSIBLE',
-    permission: 'content.schedule',
+    permissions: { allOf: ['content.schedule'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: true,
+    executable: true,
     needsContentItem: true,
     messageKey: 'placeOnCalendar',
   },
@@ -658,11 +894,141 @@ export const AUTOMATION_ACTIONS = [
      * require confirmation, so no future editor can switch it off.
      */
     actionClass: 'EXTERNAL_OR_DESTRUCTIVE',
-    permission: 'publishing.manage',
+    permissions: { allOf: ['publishing.manage'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: true,
+    authorable: true,
+    executable: true,
     needsContentItem: true,
     messageKey: 'proposePublish',
   },
 ] as const satisfies readonly ActionDefinition[];
+
+/**
+ * PHASE 2B-3 (G13) — ACTIONS THAT ARE DECLARED AND NOT YET AUTHORABLE OR
+ * EXECUTABLE.
+ *
+ * WHAT IS DECIDED NOW is what each one will REQUIRE: its permissions, its
+ * entitlements, whether it spends credits and whether a person decides first.
+ * Declaring that before the code exists means the pull request that implements
+ * an action cannot quietly choose a weaker requirement — the declaration is
+ * already reviewed, and a unit test pins it.
+ *
+ * NOT IN `AUTOMATION_ACTIONS`, ON PURPOSE. `findAction` does not return these,
+ * so a rule naming one cannot be created, the Copilot cannot propose one, and a
+ * stored row naming one (which only direct SQL could produce) fails closed at
+ * run time exactly as an unknown action does.
+ */
+export interface PlannedActionDefinition {
+  readonly type: AutomationActionType;
+  readonly actionClass: CopilotActionClass;
+  readonly permissions: ActionPermissions;
+  readonly entitlements: readonly string[];
+  readonly spendsCredits: boolean;
+  readonly asksFirst: boolean;
+  readonly authorable: false;
+  readonly executable: false;
+}
+
+export const PLANNED_AUTOMATION_ACTIONS = [
+  {
+    type: 'SCHEDULE_NEXT_FREE_SLOT',
+    actionClass: 'INTERNAL_REVERSIBLE',
+    permissions: { allOf: ['content.schedule'], anyOf: [] },
+    // The scheduled-post quota is consumed inside the calendar's `schedule()`.
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'NOTIFY_PERSON',
+    actionClass: 'READ_ONLY',
+    permissions: { allOf: ['workspace.read'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'ADD_TO_CAMPAIGN',
+    actionClass: 'INTERNAL_REVERSIBLE',
+    /*
+     * THE ONE `anyOf` (Correction 1). Attaching a post to a campaign is an act
+     * of the post's author or of the campaign's manager (D-318), and either
+     * permission is enough. It attaches only; it never detaches or moves.
+     */
+    permissions: { allOf: [], anyOf: ['content.create', 'campaigns.manage'] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'REMIND_REVIEWER',
+    actionClass: 'READ_ONLY',
+    permissions: { allOf: ['content.submit'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'DRAFT_IDEAS',
+    actionClass: 'INTERNAL_REVERSIBLE',
+    // STRICT: both. A designer holds `copilot.use` and not `content.create`.
+    permissions: { allOf: ['content.create', 'copilot.use'], anyOf: [] },
+    entitlements: ['limit.automation_ai_actions'],
+    spendsCredits: true,
+    asksFirst: false,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'MAKE_DRAFT_COPY',
+    actionClass: 'INTERNAL_REVERSIBLE',
+    permissions: { allOf: ['content.create'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'RETRY_PUBLISH',
+    actionClass: 'EXTERNAL_OR_DESTRUCTIVE',
+    permissions: { allOf: ['publishing.manage'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: true,
+    authorable: false,
+    executable: false,
+  },
+  {
+    type: 'PAUSE_CAMPAIGN',
+    actionClass: 'EXTERNAL_OR_DESTRUCTIVE',
+    permissions: { allOf: ['campaigns.manage'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: true,
+    authorable: false,
+    executable: false,
+  },
+] as const satisfies readonly PlannedActionDefinition[];
+
+const PLANNED_ACTIONS_BY_TYPE = new Map<string, PlannedActionDefinition>(
+  PLANNED_AUTOMATION_ACTIONS.map((action) => [action.type, action]),
+);
+
+/** A declared, not-yet-executable action's requirement, or undefined. */
+export function findPlannedAction(type: string): PlannedActionDefinition | undefined {
+  return PLANNED_ACTIONS_BY_TYPE.get(type);
+}
 
 const TRIGGERS_BY_TYPE = new Map<string, TriggerDefinition>(
   AUTOMATION_TRIGGERS.map((trigger) => [trigger.type, trigger]),
@@ -701,9 +1067,44 @@ export function actionSupportsTrigger(
   return trigger.contentItemVia !== null;
 }
 
-/** Does this action leave the platform, and therefore need a person? */
+/**
+ * Does this action leave the platform, and therefore need a person?
+ *
+ * Read from the declared `asksFirst`, which a unit test holds equal to
+ * `actionClass === 'EXTERNAL_OR_DESTRUCTIVE'` — so for every action that ships
+ * the answer is the one it has always been.
+ */
 export function isExternalAction(type: AutomationActionType): boolean {
-  return findAction(type)?.actionClass === 'EXTERNAL_OR_DESTRUCTIVE';
+  return findAction(type)?.asksFirst === true;
+}
+
+/**
+ * IS THIS STORED RULE AN OLDER AUTOMATION — one a new rule could not be
+ * written as any more?
+ *
+ * True when its trigger or its action is not in the authorable registry, or is
+ * there and marked `authorable: false`. The rule still exists, still lists, and
+ * runs exactly as far as its trigger and action allow; the rule list captions it
+ * so a person is not left wondering why they cannot make another one.
+ */
+export function isOlderAutomation(input: {
+  readonly triggerType: string;
+  readonly actionType: string;
+}): boolean {
+  const trigger = findTrigger(input.triggerType);
+  const action = findAction(input.actionType);
+  return !trigger?.authorable || !action?.authorable;
+}
+
+/** May a NEW rule be written on this trigger with this action? */
+export function isAuthorablePair(triggerType: string, actionType: string): boolean {
+  const trigger = findTrigger(triggerType);
+  const action = findAction(actionType);
+  return (
+    trigger?.authorable === true &&
+    action?.authorable === true &&
+    actionSupportsTrigger(action.type, trigger.type)
+  );
 }
 
 /**
@@ -753,6 +1154,15 @@ export function evaluateCondition(
     case 'not_in':
       return Array.isArray(condition.value) && typeof actual === 'string'
         ? !condition.value.includes(actual)
+        : false;
+    // A fact that is not a set answers neither: fail closed, never widened.
+    case 'includes':
+      return Array.isArray(actual) && typeof condition.value === 'string'
+        ? actual.includes(condition.value)
+        : false;
+    case 'excludes':
+      return Array.isArray(actual) && typeof condition.value === 'string'
+        ? !actual.includes(condition.value)
         : false;
   }
 }
