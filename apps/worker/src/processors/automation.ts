@@ -15,7 +15,11 @@ import {
   ContentCalendarService,
   TenantContentPolicySource,
 } from '@brandspace/content';
-import { createScheduleQuota } from '@brandspace/entitlements';
+import {
+  createScheduleQuota,
+  EntitlementService,
+  TenantCatalogueSource,
+} from '@brandspace/entitlements';
 import { NotificationService, resolveRecipients } from '@brandspace/notifications';
 import type { EvaluateAutomationPayload } from '@brandspace/jobs';
 import { createLogger, currentEnvironment, systemClock } from '@brandspace/shared';
@@ -184,6 +188,24 @@ function portsFor(
           actorBrandScope: input.actorBrandScope,
         });
         return { slotId: view.slot.id };
+      },
+    },
+    /*
+     * PHASE 2B-3 (PR 1) — THE WORKSPACE'S ENTITLEMENTS, ASKED ON EVERY RUN for
+     * each key the action declares. The same service over the same tenant-side
+     * catalogue projection the Copilot's gate reads, so one plan gives one
+     * answer on every surface. No action that ships today declares a key.
+     */
+    entitlements: {
+      async allows(featureKey: string) {
+        const service = new EntitlementService({
+          // A scoped client is a PrismaClient minus the connection-lifecycle
+          // and transaction methods, which is the surface this service uses.
+          prisma: db as never,
+          catalogueSource: new TenantCatalogueSource(db as never, environment),
+          environment,
+        });
+        return service.can(workspaceId, featureKey);
       },
     },
     timezone: {

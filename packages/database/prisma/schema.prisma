@@ -4270,6 +4270,16 @@ enum AutomationTrigger {
   ANOMALY_DETECTED
   METRIC_THRESHOLD_CROSSED
   SCHEDULED_TIME
+  /// Phase 2B-3 (G13). Declared ahead of their producers and NOT authorable
+  /// until each producer ships (D-173); see `AUTOMATION_TRIGGERS`.
+  POST_FAILED
+  REVIEW_WAITING_24H
+  CAMPAIGN_STARTED
+  CAMPAIGN_ENDED
+  WEEKLY_ENGAGEMENT_DROPPED
+  SCHEDULE_GAP
+  POST_TOP_10_PERCENT
+  FACT_EXPIRING
 }
 
 /// What a rule may DO. Also closed, and deliberately small.
@@ -4286,6 +4296,16 @@ enum AutomationActionType {
   PLACE_ON_CALENDAR
   /// EXTERNAL. Always proposes; never executes without a human confirmation.
   PROPOSE_PUBLISH
+  /// Phase 2B-3 (G13). Declared ahead of their implementations and neither
+  /// authorable nor executable until each ships; see `AUTOMATION_ACTIONS`.
+  SCHEDULE_NEXT_FREE_SLOT
+  NOTIFY_PERSON
+  ADD_TO_CAMPAIGN
+  REMIND_REVIEWER
+  DRAFT_IDEAS
+  MAKE_DRAFT_COPY
+  RETRY_PUBLISH
+  PAUSE_CAMPAIGN
 }
 
 enum AutomationRunStatus {
@@ -5164,6 +5184,17 @@ model AutomationRule {
   nextEvaluationAt DateTime  @default(now()) @db.Timestamptz(6)
   /// Advisory, for operators: when a sweep last actually looked at this rule.
   lastEvaluatedAt  DateTime? @db.Timestamptz(6)
+
+  /// PHASE 2B-3 (G13) — THE NO-BACKFILL BOUNDARY (OD-21). Set when the rule is
+  /// created, enabled or has its trigger settings changed; an event produced
+  /// before it does not reach this rule. NULL (every rule stored before 2B-3)
+  /// means no boundary, which is the behaviour those rules always had.
+  armedAt      DateTime? @db.Timestamptz(6)
+  /// PHASE 2B-3 (G13) — the due-date producers' durable cursor: subjects due
+  /// after it and not after now are the next to evaluate. NULL = not started;
+  /// the producer initialises it from `armedAt` and fires nothing for what was
+  /// already due. Unused by every trigger that exists before 2B-3.
+  dueWatermark DateTime? @db.Timestamptz(6)
 
   /// Optimistic concurrency, for the same reason `campaign` carries one.
   version Int @default(1)

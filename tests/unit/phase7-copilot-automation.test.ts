@@ -3,6 +3,7 @@ import { defaultPayload } from '@brandspace/config';
 import {
   AUTOMATION_ACTIONS,
   AUTOMATION_TRIGGERS,
+  actionPermissionKeys,
   CONDITION_FIELDS,
   CONDITION_OPERATORS,
   conditionsSchema,
@@ -301,7 +302,10 @@ describe('the automation registry is CLOSED, and small on purpose', () => {
   it('every action names a real permission and every trigger has a config schema', () => {
     const known = new Set(ALL_PERMISSIONS.map((p) => p.key));
     for (const action of AUTOMATION_ACTIONS) {
-      expect(known, `${action.type} -> ${action.permission}`).toContain(action.permission);
+      // Phase 2B-3 (PR 1): every key the typed requirement names, and at least one.
+      const keys = actionPermissionKeys(action.permissions);
+      expect(keys.length, `${action.type} names a permission`).toBeGreaterThan(0);
+      for (const key of keys) expect(known, `${action.type} -> ${key}`).toContain(key);
       expect(action.config.parse, `${action.type} config`).toBeTypeOf('function');
     }
     for (const trigger of AUTOMATION_TRIGGERS) {

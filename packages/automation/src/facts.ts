@@ -1,6 +1,10 @@
 import type { TenantScopedClient } from '@brandspace/database';
 import { metricThresholdConfigSchema } from './schedule';
-import { CONDITION_FIELD_TRIGGERS, type ConditionField } from './registry';
+import {
+  CONDITION_FIELD_CONTRACTS,
+  CONDITION_FIELD_TRIGGERS,
+  type ConditionField,
+} from './registry';
 import type { AutomationTrigger } from '@brandspace/database';
 
 /**
@@ -141,6 +145,7 @@ async function addContentFacts(
       contentType: true,
       createdByUserId: true,
       _count: { select: { variants: true } },
+      variants: { select: { platformKey: true } },
     },
   });
   if (!item) return;
@@ -151,6 +156,19 @@ async function addContentFacts(
   // B12 + G13 option (a) — campaign, format and person.
   facts['content.campaignId'] = item.campaignId;
   facts['content.type'] = item.contentType;
+  /*
+   * PHASE 2B-3 (PR 1) — THE POST'S CHANNELS, AS A SET OF PROVIDERS. Always an
+   * array (possibly empty) once the item resolves, so `excludes` means "no
+   * variant on that channel" rather than "we could not tell". A platform key
+   * no provider publishes through is not a channel and is left out.
+   */
+  facts['content.channels'] = [
+    ...new Set(
+      item.variants
+        .map((variant) => channelForPlatformKey(variant.platformKey))
+        .filter((channel): channel is string => channel !== null),
+    ),
+  ].sort();
   /*
    * THE AUTHOR, ONLY WHILE THEY ARE AN ACTIVE MEMBER. A post whose author has
    * left, been suspended or was never recorded resolves to NULL, and
@@ -165,6 +183,21 @@ async function addContentFacts(
         })
       )?.userId ?? null)
     : null;
+}
+
+/**
+ * The provider a content platform key publishes through, or null.
+ *
+ * THE SAME ANSWER AS `providerForPlatformKey` in `@brandspace/social-connectors`
+ * — a provider's platform key is its own name in lower case — computed from the
+ * closed provider set this package already declares, so the automation package
+ * takes no dependency on the one that publishes. A unit test holds the two
+ * equal for every provider and for keys neither knows.
+ */
+export function channelForPlatformKey(platformKey: string): string | null {
+  const options = CONDITION_FIELD_CONTRACTS['content.channels'].options ?? [];
+  const wanted = platformKey.toLowerCase();
+  return options.find((provider) => provider.toLowerCase() === wanted) ?? null;
 }
 
 /**

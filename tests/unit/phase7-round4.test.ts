@@ -75,6 +75,11 @@ function satisfyingCondition(
       return { condition: { field, operator, value: [match as string] }, fact: match };
     case 'not_in':
       return { condition: { field, operator, value: [other as string] }, fact: match };
+    // Phase 2B-3 (PR 1) — ONE value against a SET-valued fact.
+    case 'includes':
+      return { condition: { field, operator, value: match as string }, fact: [match] };
+    case 'excludes':
+      return { condition: { field, operator, value: other as string }, fact: [match] };
   }
 }
 

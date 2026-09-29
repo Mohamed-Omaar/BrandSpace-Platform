@@ -84,4 +84,7 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261008100000_content_knowledge_usage',
   '20261009090000_brand_source_live_checksum',
   '20261009100000_insight_knowledge_signature',
+  '20261010090000_automation_g13_trigger_values',
+  '20261010091000_automation_g13_action_values',
+  '20261010092000_automation_g13_checks_and_state',
 ];

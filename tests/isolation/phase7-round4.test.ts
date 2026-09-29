@@ -309,7 +309,12 @@ describe('R4-1: the contract’s value kinds match the real facts', () => {
     for (const field of Object.keys(facts) as ConditionField[]) {
       const value = facts[field];
       if (value === null || value === undefined) continue;
-      expect({ field, kind: typeof value }).toEqual({
+      // Phase 2B-3 (PR 1): a `stringSet` fact is an array whose every member is a string.
+      const kind =
+        Array.isArray(value) && value.every((member) => typeof member === 'string')
+          ? 'stringSet'
+          : typeof value;
+      expect({ field, kind }).toEqual({
         field,
         kind: CONDITION_FIELD_CONTRACTS[field].kind,
       });

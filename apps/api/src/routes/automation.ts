@@ -26,6 +26,7 @@ import {
   automationDenialSink,
   configurationService,
   currentEnvironment,
+  entitlementGate,
   fail,
   resolveCaller,
 } from './phase7-context';
@@ -277,8 +278,12 @@ export function registerAutomationRoutes(app: FastifyInstance): void {
               db,
               workspaceId: caller.workspaceId,
               policy,
-              // THE PUBLISH PORT, on this surface and only this one.
-              ports: { publishing: publishPort(db) },
+              // THE PUBLISH PORT, on this surface and only this one — and the
+              // entitlement gate, asked again at the moment the action happens.
+              ports: {
+                publishing: publishPort(db),
+                entitlements: entitlementGate(db, caller.workspaceId),
+              },
               // A REFUSED CONFIRMATION MUST OUTLIVE THE TRANSACTION THAT REFUSED
               // IT. See `automationDenialSink`.
               denialSink: automationDenialSink(caller.workspaceId),

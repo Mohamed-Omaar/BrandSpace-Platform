@@ -72,10 +72,16 @@ export interface ConditionChoice {
  */
 export interface ConditionFieldOption {
   readonly label: string;
-  readonly kind: 'string' | 'number' | 'boolean';
+  readonly kind: 'string' | 'number' | 'boolean' | 'stringSet';
   readonly operators: readonly ConditionChoice[];
   /** Closed or catalogued choices; empty means a free value control. */
   readonly options: readonly ConditionChoice[];
+  /**
+   * Phase 2B-3 (PR 1) — for a catalogue that depends on the RULE'S BRAND (its
+   * campaigns, the members admitted to it), one list per brand the form can
+   * pick. Replaces `options` for the brand currently selected.
+   */
+  readonly optionsByBrand?: Readonly<Record<string, readonly ConditionChoice[]>>;
 }
 
 export interface AutomationFormLabels {
@@ -168,6 +174,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
   );
   const [conditionField, setConditionField] = useState(initial?.condition?.field ?? '');
   const [conditionOperator, setConditionOperator] = useState(initial?.condition?.operator ?? '');
+  const [brandId, setBrandId] = useState(props.brands[0]?.id ?? '');
   const keepConditions = (initial?.extraConditions ?? 0) > 0;
 
   const trigger = useMemo(
@@ -175,7 +182,15 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
     [props.triggers, triggerType],
   );
 
-  const catalogued = conditionField === '' ? undefined : props.conditionCatalogue[conditionField];
+  const declared = conditionField === '' ? undefined : props.conditionCatalogue[conditionField];
+  /*
+   * A BRAND-DEPENDENT CATALOGUE FOLLOWS THE BRAND BEING WRITTEN FOR. An edited
+   * rule's brand is fixed and its lists arrive already scoped to it.
+   */
+  const catalogued =
+    declared && declared.optionsByBrand && !editing
+      ? { ...declared, options: declared.optionsByBrand[brandId] ?? [] }
+      : declared;
   /*
    * A SAVED VALUE THAT IS NO LONGER OFFERED STAYS SELECTED. A campaign that was
    * archived, or a person who left, is not in today's list — but the rule still
@@ -289,7 +304,13 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
             <>
               <label style={FIELD}>
                 <span style={caption}>{props.labels.brand}</span>
-                <select name="brandId" className="bs-control" data-testid="automation-brand">
+                <select
+                  name="brandId"
+                  className="bs-control"
+                  data-testid="automation-brand"
+                  value={brandId}
+                  onChange={(event) => setBrandId(event.target.value)}
+                >
                   {props.brands.map((brand) => (
                     <option key={brand.id} value={brand.id}>
                       {brand.name}
