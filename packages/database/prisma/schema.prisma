@@ -4672,6 +4672,12 @@ model Insight {
   /// the insight is arithmetic rather than inference.
   confidenceMilli Int?
 
+  /// PHASE 2C-4 (M7, D13) — SHA-256 of the brand's usable facts (sorted
+  /// `itemId:version`) when a STRATEGY or MONTHLY_PLAN was generated. Null for
+  /// every older row and every other type, and a null never raises "Brand
+  /// Brain changed". See `knowledgeSignatureFor` in the grounding layer.
+  knowledgeSignature String?
+
   generatedByUserId String?   @db.Uuid
   reviewedByUserId  String?   @db.Uuid
   reviewedAt        DateTime? @db.Timestamptz(6)
