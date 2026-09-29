@@ -429,6 +429,8 @@ describe('Q8 · editing a SCHEDULED post without content.schedule takes it off t
       workspaceId: fixtures.a.workspaceId,
       policy: CONTENT_POLICY,
       timezone: 'UTC',
+      // PR 0: the gate is required. Approval is not this suite's subject.
+      approvalGate: { policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }) },
       quota,
     });
   }

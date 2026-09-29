@@ -160,6 +160,10 @@ describe('the confirmation contract rests on READ_ONLY meaning read-only', () =>
             workspaceId: fixtures.a.workspaceId,
             policy: contentPolicy,
             timezone: 'UTC',
+            // PR 0: the gate is required. Approval is not this suite's subject.
+            approvalGate: {
+              policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }),
+            },
             // A quota that would refuse everything. A READ_ONLY tool must never
             // reach it, so making it hostile costs nothing and would surface a
             // tool that tried to schedule.

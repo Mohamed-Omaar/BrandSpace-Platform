@@ -79,11 +79,17 @@ export interface CalendarOptions {
    * Phase 5B-3. Supplies the per-brand approval policy so AC-14.6's gate reads
    * what the customer configured rather than one workspace-wide default.
    *
-   * OPTIONAL, and the fallback is the activated `content.calendar` value, so a
-   * caller that has not wired Approvals behaves exactly as 5B-2 did rather than
-   * failing or — far worse — silently letting unapproved content through.
+   * REQUIRED (PR 0). It used to be optional, with the activated
+   * `content.calendar.requireApprovalBeforeScheduling` as the fallback — a
+   * DIFFERENT value from the approvals default `policyForBrand` resolves, and
+   * one that ignores the brand's own choice. The automation worker's
+   * `PLACE_ON_CALENDAR` and the Copilot's publish-now both built a calendar
+   * without it, so a brand that requires approval could have an unapproved
+   * post scheduled through either door. There is now one answer, the
+   * approvals domain's `ContentApprovalService.policyForBrand`, and a calendar
+   * cannot be built without it.
    */
-  readonly approvalGate?: ApprovalGate;
+  readonly approvalGate: ApprovalGate;
   /**
    * Q9 (D-332). Answers which of a post's channels can reach NO account at
    * all because every account for it was revoked or disabled. Scheduling and
@@ -218,7 +224,7 @@ export class ContentCalendarService {
   readonly #quota: ScheduleQuota;
   readonly #clock: Clock;
   readonly #channelGate: ChannelGate | undefined;
-  readonly #approvalGate: ApprovalGate | undefined;
+  readonly #approvalGate: ApprovalGate;
 
   constructor(options: CalendarOptions) {
     this.#db = options.db;
@@ -234,17 +240,14 @@ export class ContentCalendarService {
   /**
    * AC-14.6 — is approval required before THIS brand's content may be planned?
    *
-   * PER BRAND FIRST, the activated default second (Phase 5B-3). D-120 shipped
-   * this as one workspace-wide switch that was off because nothing could grant
-   * approval; now that the workflow exists, ROADMAP scope item 6's "policy per
-   * brand" is what a customer actually configures. The old configuration value
-   * remains the default for a brand that has not chosen.
+   * PER BRAND FIRST, the activated approvals default second (Phase 5B-3) —
+   * both decided by the approvals domain, never here. D-120 shipped this as one
+   * workspace-wide switch that was off because nothing could grant approval;
+   * now that the workflow exists, ROADMAP scope item 6's "policy per brand" is
+   * what a customer actually configures. There is no local fallback (PR 0).
    */
   async #approvalRequired(brandId: string): Promise<boolean> {
-    if (this.#approvalGate) {
-      return (await this.#approvalGate.policyForBrand(brandId)).requireApprovalBeforeScheduling;
-    }
-    return this.#policy.calendar.requireApprovalBeforeScheduling;
+    return (await this.#approvalGate.policyForBrand(brandId)).requireApprovalBeforeScheduling;
   }
 
   /** The zone every wall-clock on this calendar is expressed in. */

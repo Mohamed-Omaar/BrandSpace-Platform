@@ -436,6 +436,10 @@ describe('rescheduling a FAILED post', () => {
             workspaceId: fixtures.b.workspaceId,
             policy: contentPolicy,
             timezone: 'UTC',
+            // PR 0: the gate is required. Approval is not this suite's subject.
+            approvalGate: {
+              policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }),
+            },
             quota: {
               limit: async () => null,
               consume: async () => true,
