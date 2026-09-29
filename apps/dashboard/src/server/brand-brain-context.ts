@@ -3,10 +3,9 @@ import { notFound } from 'next/navigation';
 import {
   BrandIngestionService,
   BrandKnowledgeService,
-  ExtractorRegistry,
   TenantBrandBrainPolicySource,
   createObjectStore,
-  defaultExtractors,
+  extractorRegistryFor,
   localizedFrom,
   type BrandBrainPolicy,
   type CatalogueReader,
@@ -115,10 +114,11 @@ export async function inBrandBrain<T>(
             limitGb: await scoped.entitlements.limit(workspaceId, QUOTA_FEATURES.storageGb),
           },
           // Built per call, because the extractors carry the configured limits
-          // and those change when an owner activates a new version. pdf.js is
-          // imported lazily inside `defaultExtractors`, so a request that never
-          // reaches a PDF never loads it.
-          extractors: new ExtractorRegistry(await defaultExtractors(resolved.extraction)),
+          // and those change when an owner activates a new version. HERE they
+          // only VALIDATE an upload (signature, OOXML main part, UTF-8) — the
+          // dashboard never parses a document (Phase 2C-4); pdf.js is imported
+          // lazily and a request never reaches it.
+          extractors: await extractorRegistryFor(resolved.extraction),
         });
       },
     }),

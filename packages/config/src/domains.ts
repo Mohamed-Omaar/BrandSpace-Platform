@@ -1157,11 +1157,19 @@ const brandBrainSchema = z.object({
           'text/csv',
           'text/markdown',
         ]),
+      /**
+       * PHASE 2C-4 (D5): EXACTLY 20 MiB — `20 * 1024 * 1024` = 20,971,520
+       * bytes, binary, never the decimal 20,000,000. A file of exactly this size
+       * is accepted; one byte more is refused, and the refusal is recorded as a
+       * FAILED source row with the reason `file_too_large`. The dashboard's
+       * request-body ceiling sits above this so the file reaches the check;
+       * that ceiling is transport, this is the rule.
+       */
       maxFileBytes: z
         .number()
         .int()
         .positive()
-        .default(25 * 1024 * 1024),
+        .default(20 * 1024 * 1024),
       /** Per-brand ceiling on live source documents. */
       maxDocumentsPerBrand: z.number().int().positive().default(200),
     })

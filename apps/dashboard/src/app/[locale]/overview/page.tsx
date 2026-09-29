@@ -99,8 +99,12 @@ function attentionSentence(
     item.count === 1 && optionalMessage(locale, `${counted}.one`) !== null
       ? `${counted}.one`
       : counted;
-  const detail =
-    item.detail !== undefined && METRIC_DETAIL.has(item.kind)
+  const detail = item.localizedDetail
+    ? // D12 — a configured key question: the reader's language, the other if absent.
+      ((locale === 'ar'
+        ? (item.localizedDetail.ar ?? item.localizedDetail.en)
+        : (item.localizedDetail.en ?? item.localizedDetail.ar)) ?? '')
+    : item.detail !== undefined && METRIC_DETAIL.has(item.kind)
       ? t(`analytics.metric.${item.detail}` as never)
       : (item.detail ?? '');
   return t(key as never)

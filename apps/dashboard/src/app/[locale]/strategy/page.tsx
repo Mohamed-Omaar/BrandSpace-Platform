@@ -1,5 +1,9 @@
 import Link from 'next/link';
-import { writingGoal } from '@brandspace/brand-brain';
+import {
+  brandBrainChangedSince,
+  usableFactsForDisplay,
+  writingGoal,
+} from '@brandspace/brand-brain';
 import { maySpendCredits } from '@brandspace/shared';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
@@ -44,7 +48,12 @@ import {
   type MessageKey,
 } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
-import { generateStrategyAction, proposeLearningsAction, reviewInsightAction } from './actions';
+import {
+  acknowledgeKnowledgeChangeAction,
+  generateStrategyAction,
+  proposeLearningsAction,
+  reviewInsightAction,
+} from './actions';
 
 import { EmptyAction } from '../../../components/empty-action';
 
@@ -141,19 +150,29 @@ export default async function StrategyPage({
            * "Use Brand Brain" off — the objective then starts empty.
            */
           writingGoal(db, { brandId: brand.id, itemKey: GOAL_ITEM_KEY }),
-          db.brandKnowledgeItem.findMany({
-            where: {
-              brandId: brand.id,
-              area: { in: ['AUDIENCE', 'OFFERS', 'PROOF_POINTS', 'STRATEGY'] },
-              status: 'ACTIVE',
-              NOT: { itemKey: { startsWith: 'goal.' } },
-            },
-            orderBy: { updatedAt: 'desc' },
-            select: { id: true, area: true, title: true, body: true },
+          /*
+           * THE DISPLAY LISTS (§9.1 fix, Phase 2C-4): the grounding layer's
+           * usable rule — ACTIVE or STALE, not expired as of the workspace's
+           * day — instead of `status: 'ACTIVE'`, which showed an expired fact
+           * and hid a STALE one. Display only; no prompt is built from these.
+           */
+          usableFactsForDisplay(db, {
+            brandId: brand.id,
+            areas: ['AUDIENCE', 'OFFERS', 'PROOF_POINTS', 'STRATEGY'],
             take: 40,
           }),
         ]);
-        return { accepted, proposals, goal, knowledge };
+        /*
+         * D13 (Phase 2C-4) — "BRAND BRAIN CHANGED", from the signature the
+         * accepted strategy was generated on (M7) against the brand's usable
+         * facts now. A strategy with no stored signature (older than M7) has
+         * no baseline and never alerts. Reading this writes nothing.
+         */
+        const knowledgeChanged = await brandBrainChangedSince(db, {
+          brandId: brand.id,
+          storedSignature: accepted?.knowledgeSignature,
+        });
+        return { accepted, proposals, goal, knowledge, knowledgeChanged };
       })
     : null;
 
@@ -220,6 +239,41 @@ export default async function StrategyPage({
           />
         ) : (
           <>
+            {data.knowledgeChanged ? (
+              <div data-testid="strategy-brain-changed">
+                <CustomerBanner tone="warning">
+                  <strong>{t('strategy.brainChanged.title')}</strong>{' '}
+                  {t('strategy.brainChanged.body')}{' '}
+                  <Link href={brainHref} data-testid="strategy-brain-changed-review">
+                    {t('strategy.brainChanged.review')}
+                  </Link>
+                  {mayManage && data.accepted ? (
+                    /*
+                     * D13 ACKNOWLEDGE (owner decision Option 1): re-baselines
+                     * the accepted strategy on the current facts, server-side,
+                     * `strategy.manage`. Not offered without it.
+                     */
+                    <form
+                      action={acknowledgeKnowledgeChangeAction}
+                      style={{ display: 'inline', marginInlineStart: spacingTokens.sm }}
+                    >
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="brandId" value={brand.id} />
+                      <input type="hidden" name="insightId" value={data.accepted.id} />
+                      <button
+                        type="submit"
+                        className={buttonClass('ghost')}
+                        style={buttonStyle('ghost', 'sm')}
+                        data-testid="strategy-brain-changed-acknowledge"
+                      >
+                        {t('strategy.brainChanged.acknowledge')}
+                      </button>
+                    </form>
+                  ) : null}
+                </CustomerBanner>
+              </div>
+            ) : null}
+
             {/* ------------------------------------------ CURRENT OBJECTIVE */}
             <Card testId="strategy-objective">
               <SectionHeader

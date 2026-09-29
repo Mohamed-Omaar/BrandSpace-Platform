@@ -8,6 +8,7 @@
  */
 
 export { StrategyService } from './strategy';
+export { acknowledgeKnowledgeChange } from './knowledge-acknowledge';
 export type { StrategyInput, StrategyResult, StrategyServiceOptions } from './strategy';
 
 export {

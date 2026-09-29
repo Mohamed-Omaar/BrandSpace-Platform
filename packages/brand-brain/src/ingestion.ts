@@ -7,13 +7,21 @@ import {
   type TenantScopedClient,
 } from '@brandspace/database';
 import { QUOTA_FEATURES, QuotaExceededError, type UsageService } from '@brandspace/entitlements';
-import { AppError, assertBrandInScope, type Clock, systemClock } from '@brandspace/shared';
+import {
+  AppError,
+  assertBrandInScope,
+  brandIdQueryFilter,
+  type Clock,
+  systemClock,
+} from '@brandspace/shared';
 import type { ExtractorRegistry } from './extraction';
 import {
   chunkText,
   ExtractionFailedError,
   ExtractionUnsupportedError,
   KeywordFactExtractor,
+  type ExtractedText,
+  type ExtractionFailureReason,
   type FactExtractor,
 } from './extraction';
 import { buildStorageKey, checksumOf, type ObjectStore } from './storage';
@@ -22,6 +30,8 @@ import {
   documentNotFound,
   duplicateUpload,
   fileTooLarge,
+  readAgainUnavailable,
+  sourceRefused,
   storageLimitReached,
   unsupportedFileType,
 } from './errors';
@@ -101,6 +111,33 @@ export interface UploadInput {
 }
 
 /**
+ * WHY AN UPLOAD WAS REFUSED — a stable key the dashboard translates (Phase
+ * 2C-4). The same keys a processing failure stores, plus the three only the
+ * door can raise. Never a sentence, never a library's words.
+ */
+export type UploadRefusalReason =
+  'unsupported_format' | 'file_too_large' | 'content_does_not_match_type' | ExtractionFailureReason;
+
+/**
+ * What `receive()` did with one upload.
+ *
+ *   - `queued`   — accepted: bytes stored and charged, a job queued.
+ *   - `refused`  — the bytes failed validation: a FAILED row with the reason,
+ *                  nothing stored, nothing charged, no job.
+ *   - `existing` — this request, or these bytes, already have a live row: it
+ *                  is returned as it stands (a replayed request, or a live
+ *                  FAILED row holding the checksum), and nothing is written.
+ */
+export type ReceiveOutcome = 'queued' | 'refused' | 'existing';
+
+export interface ReceiveResult {
+  readonly outcome: ReceiveOutcome;
+  readonly document: BrandSourceDocument;
+  /** The document's latest job; null for a row refused before storage. */
+  readonly job: BrandIngestionJob | null;
+}
+
+/**
  * The failures where a second attempt could plausibly succeed.
  *
  * Everything absent from this set is a property of the file and goes terminal
@@ -143,7 +180,12 @@ export class BrandIngestionService {
   }
 
   /**
-   * Accept an upload and queue it for processing.
+   * Accept an upload and queue it for processing — THE STRICT FORM.
+   *
+   * Every refusal is thrown as a typed error and nothing is written. The
+   * dashboard uses `receive()`, which records a refusal as a visible FAILED
+   * row instead (Phase 2C-4); both share the one validation and the one accept
+   * path below, so there is still exactly one way a source gets stored.
    *
    * Validation happens BEFORE a byte is stored. Writing the object first and
    * validating after would leave orphaned objects behind every rejected upload,
@@ -156,8 +198,104 @@ export class BrandIngestionService {
     // one is, and nothing is read, stored or counted on the way there.
     assertBrandInScope(input.actorBrandScope, input.brandId);
 
-    if (!this.#policy.allowedMimeTypes.includes(input.mimeType)) throw unsupportedFileType();
-    if (input.bytes.byteLength > this.#policy.maxFileBytes) throw fileTooLarge();
+    const refusal = this.#refusalFor(input);
+    if (refusal) throw refusalError(refusal);
+
+    const checksum = await checksumOf(input.bytes);
+    const request = await this.#resolveRequest(input.idempotencyKey);
+    if (request.live) {
+      // REQUEST idempotency: a retry of an upload whose response was lost.
+      const job = await this.#latestJob(request.live.id);
+      if (job) return { document: request.live, job };
+      throw duplicateUpload();
+    }
+
+    // FILE identity: the same document uploaded twice.
+    const duplicate = await this.#liveDuplicate(input.brandId, checksum);
+    if (duplicate) throw duplicateUpload();
+
+    await this.#assertRoomForDocument(input.brandId);
+    return this.#accept(input, checksum, request.key);
+  }
+
+  /**
+   * THE PRODUCT'S UPLOAD (Phase 2C-4): accept, refuse VISIBLY, or return what
+   * already exists — and never answer a repeat with a raw constraint error.
+   *
+   * A REFUSED FILE BECOMES A FAILED ROW. Unsupported type, oversize, a
+   * signature or OOXML type that disagrees with the declared type, text that is
+   * not UTF-8: each is recorded as a source with `status = FAILED`, the stable
+   * reason in `failureMessage`, `byteSize = 0` and an empty storage key. No
+   * byte is stored and no quota is charged, so it costs nothing, and it yields
+   * no chunk, no candidate and no fact. The customer sees WHY, in their own
+   * language, on the row, instead of a banner that disappears.
+   *
+   * A FAILED ROW IS LIVE, so under M6 it holds its checksum. Uploading the same
+   * bytes again — the same request, or another area, or another screen —
+   * returns THAT row (`existing`) through the duplicate path, with its reason:
+   * nothing new is written, nothing is charged twice, and no unique index is
+   * ever reached. To try again the person uses Read again (a file that failed
+   * DURING processing) or removes the row and uploads again.
+   *
+   * A live source that is NOT failed is still refused as a duplicate, with the
+   * typed CONFLICT the screen already translates.
+   */
+  async receive(input: UploadInput): Promise<ReceiveResult> {
+    assertBrandInScope(input.actorBrandScope, input.brandId);
+
+    const checksum = await checksumOf(input.bytes);
+    const request = await this.#resolveRequest(input.idempotencyKey);
+    if (request.live) {
+      return {
+        outcome: 'existing',
+        document: request.live,
+        job: await this.#latestJob(request.live.id),
+      };
+    }
+
+    const duplicate = await this.#liveDuplicate(input.brandId, checksum);
+    if (duplicate) {
+      if (duplicate.status !== 'FAILED') throw duplicateUpload();
+      return {
+        outcome: 'existing',
+        document: duplicate,
+        job: await this.#latestJob(duplicate.id),
+      };
+    }
+
+    await this.#assertRoomForDocument(input.brandId);
+
+    const refusal = this.#refusalFor(input);
+    if (refusal) {
+      const document = await this.#recordRefusal(input, checksum, request.key, refusal);
+      return { outcome: 'refused', document, job: null };
+    }
+
+    const accepted = await this.#accept(input, checksum, request.key);
+    return { outcome: 'queued', ...accepted };
+  }
+
+  /**
+   * WHAT THE BYTES ARE, DECIDED BY THE BYTES (Phase 2C-4).
+   *
+   * In order, cheapest first: the configured allow-list (and an extractor that
+   * can read the type), the exact configured size ceiling, the magic-number
+   * signature, then the reading extractor's own bounded check — for DOCX and
+   * PPTX the package's declared main part (`[Content_Types].xml`, one small
+   * part inflated under the configured archive limits), for text a strict
+   * UTF-8 decode of the whole file with NUL refused. The browser's type and
+   * the file's extension choose WHICH checks apply; they never pass one.
+   */
+  #refusalFor(input: UploadInput): UploadRefusalReason | null {
+    if (
+      !this.#policy.allowedMimeTypes.includes(input.mimeType) ||
+      !this.#extractors.supports(input.mimeType)
+    ) {
+      // Configuration may allow a type nothing can read; refusing at the door
+      // is honest, where accepting would leave a document stuck in FAILED.
+      return 'unsupported_format';
+    }
+    if (input.bytes.byteLength > this.#policy.maxFileBytes) return 'file_too_large';
 
     /*
      * THE BYTES DECIDE WHAT THE FILE IS, NOT THE CALLER.
@@ -170,41 +308,133 @@ export class BrandIngestionService {
      * of upload bug there is, so the signature has to agree before anything is
      * stored. See file-signature.ts.
      */
-    const signature = checkSignature(input.mimeType, input.bytes);
-    if (!signature.ok) throw contentTypeMismatch();
+    if (!checkSignature(input.mimeType, input.bytes).ok) return 'content_does_not_match_type';
 
-    if (!this.#extractors.supports(input.mimeType)) {
-      // Configuration allows the type but nothing can read it. Refusing at the
-      // door is honest; accepting would produce a document stuck in FAILED and
-      // a customer who thinks the product is broken.
-      throw unsupportedFileType();
+    try {
+      this.#extractors.validate({ bytes: input.bytes, mimeType: input.mimeType });
+    } catch (error: unknown) {
+      if (error instanceof ExtractionFailedError) return error.reason;
+      if (error instanceof ExtractionUnsupportedError) return 'unsupported_format';
+      throw error;
     }
+    return null;
+  }
 
-    // REQUEST idempotency: a retry of an upload whose response was lost.
-    const replay = await this.#db.brandSourceDocument.findFirst({
-      where: { idempotencyKey: input.idempotencyKey },
+  /**
+   * THE REQUEST KEY, AND WHAT A REMOVED SOURCE DOES TO IT (Phase 2C-4).
+   *
+   * `idempotencyKey` is unique per workspace across EVERY row, removed ones
+   * included, and the dashboard derives it from the bytes. So once a source is
+   * removed, uploading the same file again would replay the removed row — or,
+   * had the replay ignored it, fail on the index. And the storage charge is
+   * keyed on it too, so a new upload wearing the old key would be taken as a
+   * replay of the old charge and stored without being counted.
+   *
+   * A removed row therefore ENDS its key's generation: the next upload with the
+   * same key is recorded as `<key>#2`, the one after the next removal as
+   * `<key>#3`. A retried request still lands on the same live row (the chain is
+   * read from the database, not from the client), the charge key follows the
+   * generation, and no schema changes. A live row at any generation is the
+   * request's replay.
+   */
+  async #resolveRequest(
+    idempotencyKey: string,
+  ): Promise<{ key: string; live: BrandSourceDocument | null }> {
+    const generations = await this.#db.brandSourceDocument.findMany({
+      where: {
+        OR: [
+          { idempotencyKey },
+          { idempotencyKey: { startsWith: `${idempotencyKey}${GENERATION_SEPARATOR}` } },
+        ],
+      },
     });
-    if (replay) {
-      const job = await this.#db.brandIngestionJob.findFirst({
-        where: { sourceDocumentId: replay.id },
-        orderBy: { queuedAt: 'desc' },
-      });
-      if (job) return { document: replay, job };
-    }
+    const ofThisKey = generations.filter(
+      (row) =>
+        row.idempotencyKey === idempotencyKey ||
+        // The prefix checked here too, byte for byte: the query's `startsWith`
+        // only narrows the read and is not trusted to have escaped `_` or `%`.
+        (row.idempotencyKey.startsWith(idempotencyKey) &&
+          GENERATION_PATTERN.test(row.idempotencyKey.slice(idempotencyKey.length))),
+    );
+    const live = ofThisKey.find((row) => row.deletedAt === null) ?? null;
+    if (live) return { key: live.idempotencyKey, live };
+    if (ofThisKey.length === 0) return { key: idempotencyKey, live: null };
+    return {
+      key: `${idempotencyKey}${GENERATION_SEPARATOR}${ofThisKey.length + 1}`,
+      live: null,
+    };
+  }
 
-    const checksum = await checksumOf(input.bytes);
-
-    // FILE identity: the same document uploaded twice.
-    const duplicate = await this.#db.brandSourceDocument.findFirst({
-      where: { brandId: input.brandId, checksum, deletedAt: null },
+  async #latestJob(documentId: string): Promise<BrandIngestionJob | null> {
+    return this.#db.brandIngestionJob.findFirst({
+      where: { sourceDocumentId: documentId },
+      orderBy: { queuedAt: 'desc' },
     });
-    if (duplicate) throw duplicateUpload();
+  }
 
+  async #liveDuplicate(brandId: string, checksum: string): Promise<BrandSourceDocument | null> {
+    return this.#db.brandSourceDocument.findFirst({
+      where: { brandId, checksum, deletedAt: null },
+    });
+  }
+
+  async #assertRoomForDocument(brandId: string): Promise<void> {
     const liveCount = await this.#db.brandSourceDocument.count({
-      where: { brandId: input.brandId, deletedAt: null },
+      where: { brandId, deletedAt: null },
     });
     if (liveCount >= this.#policy.maxDocumentsPerBrand) throw storageLimitReached();
+  }
 
+  /** A refused upload, recorded: FAILED, zero bytes, nothing stored, nothing charged. */
+  async #recordRefusal(
+    input: UploadInput,
+    checksum: string,
+    requestKey: string,
+    reason: UploadRefusalReason,
+  ): Promise<BrandSourceDocument> {
+    const document = await this.#db.brandSourceDocument.create({
+      data: {
+        workspaceId: this.#workspaceId,
+        brandId: input.brandId,
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        // Nothing was stored, so nothing is counted — here or in the quota.
+        byteSize: 0,
+        checksum,
+        // No object exists for this row; an empty key names none.
+        storageKey: '',
+        status: 'FAILED',
+        failureMessage: reason,
+        idempotencyKey: requestKey,
+        uploadedByUserId: input.actorUserId,
+        ...(input.targetArea ? { targetArea: input.targetArea } : {}),
+      },
+    });
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'brand_brain.source.refused',
+      actorType: 'USER',
+      actorId: input.actorUserId,
+      resourceType: 'BrandSourceDocument',
+      resourceId: document.id,
+      brandId: input.brandId,
+      // The size ATTEMPTED is metadata, kept here and not on the row, whose
+      // `byteSize` means stored bytes. The content never enters an audit event.
+      after: {
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        attemptedBytes: input.bytes.byteLength,
+        reason,
+      },
+    });
+    return document;
+  }
+
+  /** The one accept path: charge, record, store, queue, audit. */
+  async #accept(
+    input: UploadInput,
+    checksum: string,
+    requestKey: string,
+  ): Promise<{ document: BrandSourceDocument; job: BrandIngestionJob }> {
     /*
      * B-8 — A SOURCE DOCUMENT IS STORAGE, AND IT IS COUNTED LIKE ANY FILE.
      *
@@ -216,7 +446,7 @@ export class BrandIngestionService {
      * workspace and this upload, so a retried request is charged once; the
      * replay above returns before reaching it.
      */
-    await this.#chargeStorage(input.bytes.byteLength, input.idempotencyKey);
+    await this.#chargeStorage(input.bytes.byteLength, requestKey);
 
     const now = this.#clock.now();
 
@@ -232,7 +462,7 @@ export class BrandIngestionService {
         // carry its id, which is what keeps one object per document.
         storageKey: 'pending',
         status: 'UPLOADED',
-        idempotencyKey: input.idempotencyKey,
+        idempotencyKey: requestKey,
         uploadedByUserId: input.actorUserId,
         ...(input.targetArea ? { targetArea: input.targetArea } : {}),
       },
@@ -279,6 +509,70 @@ export class BrandIngestionService {
     return { document: stored, job };
   }
 
+  /**
+   * READ AGAIN (Phase 2C-4, D5) — re-process THE SAME document through the
+   * same pipeline, as a NEW job.
+   *
+   * A NEW `brand_ingestion_job` ROW, NOT THE OLD ONE RE-QUEUED. The dispatch's
+   * BullMQ job id is `ingest-<job row id>`, and BullMQ keeps finished jobs and
+   * refuses a duplicate id — so re-queuing the previous row would dispatch an id
+   * Redis still holds, and the read would silently never run. A fresh row gets
+   * a fresh id, and the existing partial unique index
+   * (`brand_ingestion_job_one_live`) keeps it to one job in flight per
+   * document: a second Read again while one runs is refused, not doubled.
+   *
+   * Only once the previous read is TERMINAL (completed or failed), and only for
+   * a document whose bytes were stored — a file refused at the door has
+   * nothing to read; it is removed and uploaded again. What the read produces
+   * is decided by `process()`: PENDING proposals only, reviewed candidates
+   * left alone, approved knowledge never touched.
+   */
+  async readAgain(input: {
+    readonly documentId: string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+  }): Promise<{ document: BrandSourceDocument; job: BrandIngestionJob }> {
+    const document = await this.#db.brandSourceDocument.findFirst({
+      where: {
+        id: input.documentId,
+        deletedAt: null,
+        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+      },
+    });
+    if (!document) throw documentNotFound();
+    if (document.byteSize === 0 || document.storageKey === '') throw readAgainUnavailable();
+
+    const previous = await this.#latestJob(document.id);
+    if (previous && !TERMINAL_STAGES.has(previous.stage)) throw readAgainUnavailable();
+
+    const job = await this.#db.brandIngestionJob.create({
+      data: {
+        workspaceId: this.#workspaceId,
+        brandId: document.brandId,
+        sourceDocumentId: document.id,
+        stage: 'QUEUED',
+        maxAttempts: this.#policy.maxAttempts,
+        queuedAt: this.#clock.now(),
+      },
+    });
+    const queued = await this.#db.brandSourceDocument.update({
+      where: { id: document.id },
+      data: { status: 'UPLOADED', failureMessage: null },
+    });
+
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'brand_brain.source.read_again',
+      actorType: 'USER',
+      actorId: input.actorUserId,
+      resourceType: 'BrandSourceDocument',
+      resourceId: document.id,
+      brandId: document.brandId,
+      after: { jobId: job.id, previousJobId: previous?.id ?? null },
+    });
+
+    return { document: queued, job };
+  }
+
   async #chargeStorage(bytes: number, idempotencyKey: string): Promise<void> {
     if (!this.#storage) {
       throw new AppError('INTERNAL', 'Uploading a source document requires the storage quota.');
@@ -300,7 +594,7 @@ export class BrandIngestionService {
   }
 
   /**
-   * Run one queued job to completion.
+   * Run one queued job to completion, in ONE database context.
    *
    * IDEMPOTENT AND SAFE TO RETRY (CLAUDE.md §5). Chunks and candidates for the
    * document are cleared before they are rewritten, so a job that died halfway
@@ -308,8 +602,28 @@ export class BrandIngestionService {
    * partial run. Clearing candidates is deliberately limited to PENDING ones:
    * a candidate a human already reviewed is a DECISION, and a retry must never
    * erase it.
+   *
+   * THE WORKER DOES NOT CALL THIS (Phase 2C-4). It runs the same three phases
+   * — `startProcessing`, `extractSourceDocument`, `finishProcessing` — with the
+   * extraction OUTSIDE any database transaction, so a tenant transaction is
+   * never held open for the length of a parse. This composition is kept for
+   * callers that already hold one short-lived context and a small document.
    */
   async process(jobId: string): Promise<ProcessResult> {
+    const started = await this.startProcessing(jobId);
+    const outcome = await extractSourceDocument({
+      store: this.#store,
+      extractors: this.#extractors,
+      started,
+    });
+    return this.finishProcessing(started, outcome);
+  }
+
+  /**
+   * PHASE 1 of 3 — claim the job: EXTRACTING, one more attempt, the document
+   * PROCESSING. A short write, committed before any byte is parsed.
+   */
+  async startProcessing(jobId: string): Promise<StartedIngestion> {
     const job = await this.#db.brandIngestionJob.findUnique({ where: { id: jobId } });
     if (!job) throw documentNotFound();
 
@@ -317,6 +631,22 @@ export class BrandIngestionService {
       where: { id: job.sourceDocumentId },
     });
     if (!document) throw documentNotFound();
+
+    const started: StartedIngestion = {
+      jobId: job.id,
+      documentId: document.id,
+      brandId: document.brandId,
+      storageKey: document.storageKey,
+      mimeType: document.mimeType,
+      fileName: document.fileName,
+      targetArea: document.targetArea ?? null,
+      attempt: job.attempts + 1,
+      maxAttempts: job.maxAttempts,
+      removed: document.deletedAt !== null,
+    };
+    // A document removed while its job waited (Phase 2C-4): nothing is claimed
+    // and nothing is parsed; Remove already ended the job.
+    if (started.removed) return started;
 
     const now = this.#clock.now();
     await this.#db.brandIngestionJob.update({
@@ -328,28 +658,64 @@ export class BrandIngestionService {
       data: { status: 'PROCESSING' },
     });
 
+    return started;
+  }
+
+  /**
+   * PHASE 3 of 3 — persist what the extraction produced, atomically, in one
+   * short transaction: the chunks, the PENDING candidates and the READY state,
+   * or the failure and whether it is terminal.
+   */
+  async finishProcessing(
+    started: StartedIngestion,
+    outcome: ExtractionOutcome,
+  ): Promise<ProcessResult> {
+    /*
+     * REMOVED WHILE IT WAS BEING READ (Phase 2C-4). Remove soft-deleted the
+     * document, cleared its chunks, superseded its proposals and ended this
+     * job; writing the extraction now would bring them back for a source that
+     * no longer exists. Nothing is written.
+     */
+    const current = await this.#db.brandSourceDocument.findUnique({
+      where: { id: started.documentId },
+      select: { deletedAt: true },
+    });
+    if (started.removed || !current || current.deletedAt !== null) {
+      return {
+        documentId: started.documentId,
+        status: 'FAILED',
+        chunksCreated: 0,
+        candidatesCreated: 0,
+        failureMessage: 'source_removed',
+      };
+    }
+
+    if (!outcome.ok) {
+      /*
+       * RETRYING A BAD FILE IS NOT A FIX. A malformed archive, a PDF with no
+       * text layer and a format nothing can read are all properties of the file
+       * itself: a second attempt costs the platform another parse and reaches
+       * the same answer a minute later, while the customer watches a document
+       * that says PROCESSING and never resolves. Only genuinely transient
+       * failures — storage, a timeout — earn a retry.
+       */
+      const terminal =
+        outcome.terminal ||
+        !RETRYABLE_REASONS.has(outcome.reason) ||
+        started.attempt >= started.maxAttempts;
+      return this.#fail(
+        started.jobId,
+        started.documentId,
+        outcome.reason,
+        outcome.reason,
+        terminal,
+      );
+    }
+
+    const extracted = outcome.extracted;
     try {
-      const bytes = await this.#store.get(document.storageKey);
-      if (!bytes) {
-        // The row exists and the object does not. Real, and worth its own
-        // message: retrying cannot fix it, so it goes terminal immediately.
-        return this.#fail(
-          job.id,
-          document.id,
-          'The uploaded file could not be read.',
-          'object_missing',
-          true,
-        );
-      }
-
-      const extracted = await this.#extractors.extract({
-        bytes,
-        mimeType: document.mimeType,
-        fileName: document.fileName,
-      });
-
       await this.#db.brandIngestionJob.update({
-        where: { id: job.id },
+        where: { id: started.jobId },
         data: { stage: 'CHUNKING' },
       });
 
@@ -361,13 +727,15 @@ export class BrandIngestionService {
 
       // Idempotent rewrite. Chunks are derived data — deleting and recreating
       // them loses nothing, and is what makes a retry produce one clean set.
-      await this.#db.brandSourceChunk.deleteMany({ where: { sourceDocumentId: document.id } });
+      await this.#db.brandSourceChunk.deleteMany({
+        where: { sourceDocumentId: started.documentId },
+      });
       if (chunks.length > 0) {
         await this.#db.brandSourceChunk.createMany({
           data: chunks.map((chunk) => ({
             workspaceId: this.#workspaceId,
-            brandId: document.brandId,
-            sourceDocumentId: document.id,
+            brandId: started.brandId,
+            sourceDocumentId: started.documentId,
             chunkIndex: chunk.index,
             text: chunk.text,
             locator: chunk.locator,
@@ -376,23 +744,23 @@ export class BrandIngestionService {
       }
 
       await this.#db.brandIngestionJob.update({
-        where: { id: job.id },
+        where: { id: started.jobId },
         data: { stage: 'EXTRACTING_FACTS', chunksCreated: chunks.length },
       });
 
       const facts = await this.#facts.extract({
         chunks,
-        targetArea: document.targetArea ?? null,
+        targetArea: started.targetArea,
         minimumConfidenceMilli: this.#policy.minimumCandidateConfidenceMilli,
       });
 
       // Only PENDING candidates are cleared. A reviewed one is a decision.
       await this.#db.brandKnowledgeCandidate.deleteMany({
-        where: { sourceDocumentId: document.id, status: 'PENDING' },
+        where: { sourceDocumentId: started.documentId, status: 'PENDING' },
       });
 
       const storedChunks = await this.#db.brandSourceChunk.findMany({
-        where: { sourceDocumentId: document.id },
+        where: { sourceDocumentId: started.documentId },
         select: { id: true, chunkIndex: true },
       });
       const chunkIdByIndex = new Map(storedChunks.map((c) => [c.chunkIndex, c.id]));
@@ -401,10 +769,12 @@ export class BrandIngestionService {
       for (const fact of facts) {
         // A candidate whose key already has a REVIEWED candidate would
         // re-propose something a human settled. Skipped rather than re-raised.
+        // This is also why Read again never duplicates approved knowledge: a
+        // key this document already had ACCEPTED is not proposed again.
         const settled = await this.#db.brandKnowledgeCandidate.findFirst({
           where: {
-            brandId: document.brandId,
-            sourceDocumentId: document.id,
+            brandId: started.brandId,
+            sourceDocumentId: started.documentId,
             itemKey: fact.itemKey,
             status: { in: ['ACCEPTED', 'EDITED_ACCEPTED', 'REJECTED'] },
           },
@@ -412,14 +782,14 @@ export class BrandIngestionService {
         if (settled) continue;
 
         const existing = await this.#db.brandKnowledgeItem.findFirst({
-          where: { brandId: document.brandId, area: fact.area, itemKey: fact.itemKey },
+          where: { brandId: started.brandId, area: fact.area, itemKey: fact.itemKey },
         });
 
         await this.#db.brandKnowledgeCandidate.create({
           data: {
             workspaceId: this.#workspaceId,
-            brandId: document.brandId,
-            sourceDocumentId: document.id,
+            brandId: started.brandId,
+            sourceDocumentId: started.documentId,
             ...(existing ? { targetItemId: existing.id } : {}),
             area: fact.area,
             itemKey: fact.itemKey,
@@ -441,7 +811,7 @@ export class BrandIngestionService {
       }
 
       await this.#db.brandIngestionJob.update({
-        where: { id: job.id },
+        where: { id: started.jobId },
         data: {
           stage: 'COMPLETED',
           candidatesCreated: created,
@@ -451,7 +821,7 @@ export class BrandIngestionService {
         },
       });
       await this.#db.brandSourceDocument.update({
-        where: { id: document.id },
+        where: { id: started.documentId },
         data: {
           status: 'READY',
           pageCount: extracted.pageCount,
@@ -466,55 +836,29 @@ export class BrandIngestionService {
         action: 'brand_brain.source.processed',
         actorType: 'SYSTEM',
         resourceType: 'BrandSourceDocument',
-        resourceId: document.id,
-        brandId: document.brandId,
+        resourceId: started.documentId,
+        brandId: started.brandId,
         after: { chunks: chunks.length, candidates: created },
       });
 
       return {
-        documentId: document.id,
+        documentId: started.documentId,
         status: 'READY',
         chunksCreated: chunks.length,
         candidatesCreated: created,
         failureMessage: null,
       };
-    } catch (error) {
-      /*
-       * THE CUSTOMER-FACING MESSAGE IS WRITTEN HERE, NOT DERIVED FROM THE
-       * ERROR. An extractor's message can carry a file path, a library
-       * version or a stack fragment, and none of that belongs on a customer's
-       * screen (docs/SECURITY.md). The internal code is kept separately for
-       * operators.
-       */
-      const unsupported = error instanceof ExtractionUnsupportedError;
-      /*
-       * A REASON KEY, NOT A SENTENCE.
-       *
-       * This used to store English prose in `failureMessage`, which the screen
-       * then printed verbatim — hard-coded user-facing copy that an Arabic
-       * reader saw in English (CLAUDE.md §4). It now stores a stable key the
-       * dashboard translates, and the keys distinguish failures a customer can
-       * act on: a damaged archive, a scan with no text layer and a file that is
-       * simply too big all deserve different advice.
-       */
-      const reason: string = unsupported
-        ? 'unsupported_format'
-        : error instanceof ExtractionFailedError
-          ? error.reason
-          : 'extraction_failed';
-
-      /*
-       * RETRYING A BAD FILE IS NOT A FIX. A malformed archive, a PDF with no
-       * text layer and a format nothing can read are all properties of the file
-       * itself: a second attempt costs the platform another parse and reaches
-       * the same answer a minute later, while the customer watches a document
-       * that says PROCESSING and never resolves. Only genuinely transient
-       * failures — storage, a timeout — earn a retry.
-       */
-      const terminal =
-        unsupported || !RETRYABLE_REASONS.has(reason) || job.attempts + 1 >= job.maxAttempts;
-
-      return this.#fail(job.id, document.id, reason, reason, terminal);
+    } catch {
+      // Chunking and proposing are our own code over text already read; a
+      // failure here is ours, stored as the general reason key, never as the
+      // error's words.
+      return this.#fail(
+        started.jobId,
+        started.documentId,
+        'extraction_failed',
+        'extraction_failed',
+        started.attempt >= started.maxAttempts,
+      );
     }
   }
 
@@ -543,7 +887,8 @@ export class BrandIngestionService {
         await this.#fail(
           job.id,
           job.sourceDocumentId,
-          'Processing took too long and was stopped.',
+          // A reason KEY, like every other failure (Phase 2C-4).
+          'stuck_timeout',
           'stuck_timeout',
           job.attempts >= job.maxAttempts,
         );
@@ -595,6 +940,97 @@ export class BrandIngestionService {
       candidatesCreated: 0,
       failureMessage: customerMessage,
     };
+  }
+}
+
+/** What `startProcessing` claimed: everything the extraction needs, and no client. */
+export interface StartedIngestion {
+  readonly jobId: string;
+  readonly documentId: string;
+  readonly brandId: string;
+  readonly storageKey: string;
+  readonly mimeType: string;
+  readonly fileName: string;
+  readonly targetArea: BrandKnowledgeArea | null;
+  /** This attempt's number, counting from 1. */
+  readonly attempt: number;
+  readonly maxAttempts: number;
+  /** The document was removed before the job ran: nothing is read or written. */
+  readonly removed: boolean;
+}
+
+/** What the extraction produced: the text, or a stable reason and whether it is final. */
+export type ExtractionOutcome =
+  | { readonly ok: true; readonly extracted: ExtractedText }
+  | { readonly ok: false; readonly reason: string; readonly terminal: boolean };
+
+/**
+ * PHASE 2 of 3 — read the stored bytes and extract their text, with NO
+ * database access at all (Phase 2C-4).
+ *
+ * THIS IS THE ONLY PLACE UNTRUSTED DOCUMENT BYTES ARE PARSED, and the worker is
+ * the only process that calls it: it takes an object store and an extractor
+ * registry and nothing else, so it cannot hold, open or extend a tenant
+ * transaction while a parse runs up to `extraction.timeoutMs`. The registry
+ * the worker passes carries that timeout for the whole operation.
+ *
+ * THE CUSTOMER-FACING REASON IS DECIDED HERE, NOT DERIVED FROM THE ERROR. An
+ * extractor's message can carry a file path, a library version or a stack
+ * fragment, and none of that belongs on a customer's screen (docs/SECURITY.md).
+ * A stable key is returned instead, which the dashboard translates.
+ */
+export async function extractSourceDocument(input: {
+  readonly store: ObjectStore;
+  readonly extractors: ExtractorRegistry;
+  readonly started: StartedIngestion;
+}): Promise<ExtractionOutcome> {
+  if (input.started.removed) return { ok: false, reason: 'source_removed', terminal: true };
+  let bytes: Uint8Array | null;
+  try {
+    bytes = await input.store.get(input.started.storageKey);
+  } catch {
+    return { ok: false, reason: 'extraction_failed', terminal: false };
+  }
+  // The row exists and the object does not. Retrying cannot fix it.
+  if (!bytes) return { ok: false, reason: 'object_missing', terminal: true };
+
+  try {
+    const extracted = await input.extractors.extract({
+      bytes,
+      mimeType: input.started.mimeType,
+      fileName: input.started.fileName,
+    });
+    return { ok: true, extracted };
+  } catch (error: unknown) {
+    if (error instanceof ExtractionUnsupportedError) {
+      return { ok: false, reason: 'unsupported_format', terminal: true };
+    }
+    if (error instanceof ExtractionFailedError) {
+      return { ok: false, reason: error.reason, terminal: false };
+    }
+    return { ok: false, reason: 'extraction_failed', terminal: false };
+  }
+}
+
+/** A job in one of these stages is finished; Read again may start another. */
+const TERMINAL_STAGES: ReadonlySet<string> = new Set(['COMPLETED', 'FAILED']);
+
+/** How a removed source's request key starts its next generation (`<key>#2`). */
+const GENERATION_SEPARATOR = '#';
+const GENERATION_PATTERN = /^#\d+$/;
+
+/** The strict `upload()`'s typed error for each refusal reason. */
+function refusalError(reason: UploadRefusalReason) {
+  switch (reason) {
+    case 'unsupported_format':
+      return unsupportedFileType();
+    case 'file_too_large':
+      return fileTooLarge();
+    case 'content_does_not_match_type':
+    case 'ooxml_type_mismatch':
+      return contentTypeMismatch();
+    default:
+      return sourceRefused(reason);
   }
 }
 

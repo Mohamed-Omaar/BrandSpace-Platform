@@ -266,7 +266,7 @@ describe('P6-11 · a brand-scoped member still gets a Command Center', () => {
     const scoped = sessionA({ brandScope: [brand] });
     const items = await inA((db) => attentionItems(db, scoped));
     const kinds = items.map((item) => item.kind);
-    expect(kinds).toContain('learnings-pending');
+    expect(kinds).toContain('brand-brain-review-waiting');
     expect(kinds).toContain('campaign-empty');
     // The brand has no knowledge: the source that used to throw now answers.
     expect(kinds).toContain('brand-brain-empty');
@@ -278,39 +278,39 @@ describe('P6-11 · a brand-scoped member still gets a Command Center', () => {
 
 describe('P6-11 · learnings waiting for review', () => {
   it('counts this workspace’s pending candidates and never another’s', async () => {
-    const before = await countA('learnings-pending');
+    const before = await countA('brand-brain-review-waiting');
     await learningIn(inB, fixtures.b.workspaceId, fixtures.b.brandId, fixtures.b.userId);
     await learningIn(inB, fixtures.b.workspaceId, fixtures.b.brandId, fixtures.b.userId);
-    await expectBothLayers('learnings-pending', before);
+    await expectBothLayers('brand-brain-review-waiting', before);
 
     await learningIn(inA, fixtures.a.workspaceId, fixtures.a.brandId, fixtures.a.userId);
-    await expectBothLayers('learnings-pending', before + 1);
+    await expectBothLayers('brand-brain-review-waiting', before + 1);
   });
 
   it('honours brand scope', async () => {
     const scoped = sessionA({ brandScope: [fixtures.a.brandId] });
-    const before = await countA('learnings-pending', scoped);
-    const unrestrictedBefore = await countA('learnings-pending');
+    const before = await countA('brand-brain-review-waiting', scoped);
+    const unrestrictedBefore = await countA('brand-brain-review-waiting');
     await learningIn(inA, fixtures.a.workspaceId, otherBrandId, fixtures.a.userId);
-    expect(await countA('learnings-pending', scoped)).toBe(before);
-    expect(await countA('learnings-pending')).toBe(unrestrictedBefore + 1);
+    expect(await countA('brand-brain-review-waiting', scoped)).toBe(before);
+    expect(await countA('brand-brain-review-waiting')).toBe(unrestrictedBefore + 1);
   });
 
   it('is not run for a member who cannot review', async () => {
     const readOnly = sessionA({
       permissionKeys: ALL_PERMISSIONS.filter((key) => key !== 'brand_brain.review'),
     });
-    expect(await countA('learnings-pending', readOnly)).toBe(0);
+    expect(await countA('brand-brain-review-waiting', readOnly)).toBe(0);
   });
 
   it('stops counting a candidate once a person has decided on it', async () => {
-    const before = await countA('learnings-pending');
+    const before = await countA('brand-brain-review-waiting');
     const id = await learningIn(inA, fixtures.a.workspaceId, fixtures.a.brandId, fixtures.a.userId);
-    expect(await countA('learnings-pending')).toBe(before + 1);
+    expect(await countA('brand-brain-review-waiting')).toBe(before + 1);
     await inA((db) =>
       db.brandKnowledgeCandidate.update({ where: { id }, data: { status: 'REJECTED' } }),
     );
-    expect(await countA('learnings-pending')).toBe(before);
+    expect(await countA('brand-brain-review-waiting')).toBe(before);
   });
 });
 

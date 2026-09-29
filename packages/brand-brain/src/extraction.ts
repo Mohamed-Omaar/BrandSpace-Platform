@@ -54,6 +54,13 @@ export interface ExtractedText {
 
 export interface TextExtractor {
   supports(mimeType: string): boolean;
+  /**
+   * PHASE 2C-4 — IS THIS FILE REALLY WHAT THIS EXTRACTOR READS? Cheap, bounded
+   * checks on the actual bytes, run at upload before anything is stored and
+   * again by the worker on the stored bytes. Throws `ExtractionFailedError`
+   * with a stable reason; parses nothing it does not have to.
+   */
+  validate?(bytes: Uint8Array): void;
   extract(input: ExtractionInput): Promise<ExtractedText>;
 }
 
@@ -85,7 +92,13 @@ export type ExtractionFailureReason =
   | 'pdf_unreadable'
   | 'pdf_has_no_text_layer'
   | 'extraction_timed_out'
-  | 'content_does_not_match_type';
+  | 'content_does_not_match_type'
+  // Phase 2C-4 — what upload validation refuses on the bytes themselves.
+  | 'ooxml_content_types_missing'
+  | 'ooxml_main_part_missing'
+  | 'ooxml_type_mismatch'
+  | 'text_not_utf8'
+  | 'text_contains_nul';
 
 export class ExtractionFailedError extends Error {
   constructor(
@@ -137,8 +150,13 @@ export class PlainTextExtractor implements TextExtractor {
     this.#limits = limits;
   }
 
+  validate(bytes: Uint8Array): void {
+    strictUtf8(bytes);
+  }
+
   async extract(input: ExtractionInput): Promise<ExtractedText> {
-    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(input.bytes);
+    // The WHOLE file, strictly: a text source is UTF-8 or it is not text.
+    const decoded = strictUtf8(input.bytes);
     // Bounded like every other format. A 25 MB text file is admissible by the
     // upload policy and would otherwise be chunked in full.
     const text = decoded.slice(0, this.#limits.maxTextChars);
@@ -163,9 +181,17 @@ export class PlainTextExtractor implements TextExtractor {
  */
 export class ExtractorRegistry {
   readonly #extractors: TextExtractor[];
+  readonly #timeoutMs: number | null;
 
-  constructor(extractors: readonly TextExtractor[]) {
+  /**
+   * `timeoutMs` — PHASE 2C-4: `extraction.timeoutMs` as a wall-clock bound on
+   * the WHOLE extraction of one document (validation and parsing, every
+   * format), not only between PDF pages. Omitted, there is no registry-level
+   * bound (the unit suites that exercise one extractor at a time).
+   */
+  constructor(extractors: readonly TextExtractor[], options: { readonly timeoutMs?: number } = {}) {
     this.#extractors = [...extractors];
+    this.#timeoutMs = options.timeoutMs ?? null;
   }
 
   register(extractor: TextExtractor): void {
@@ -176,10 +202,69 @@ export class ExtractorRegistry {
     return this.#extractors.some((e) => e.supports(mimeType));
   }
 
+  /**
+   * Upload validation: the extractor that will read this type checks that the
+   * bytes really are that type (Phase 2C-4). Throws `ExtractionUnsupportedError`
+   * for a type nothing reads and `ExtractionFailedError` with a stable reason
+   * otherwise.
+   */
+  validate(input: { readonly bytes: Uint8Array; readonly mimeType: string }): void {
+    const extractor = this.#extractors.find((e) => e.supports(input.mimeType));
+    if (!extractor) throw new ExtractionUnsupportedError(input.mimeType);
+    extractor.validate?.(input.bytes);
+  }
+
   async extract(input: ExtractionInput): Promise<ExtractedText> {
     const extractor = this.#extractors.find((e) => e.supports(input.mimeType));
     if (!extractor) throw new ExtractionUnsupportedError(input.mimeType);
-    return extractor.extract(input);
+    // The worker re-checks the STORED bytes: what was validated at upload is
+    // what is parsed, and a row written by an older release is checked too.
+    const run = async (): Promise<ExtractedText> => {
+      extractor.validate?.(input.bytes);
+      return extractor.extract(input);
+    };
+    const limit = this.#timeoutMs;
+    if (limit === null) return run();
+
+    /*
+     * ONE DEADLINE FOR THE WHOLE DOCUMENT. The race ends the wait when the
+     * budget is spent. Synchronous work — an archive read, a UTF-8 decode —
+     * cannot be pre-empted inside one process, so it is bounded by the archive
+     * and size limits instead, and a result that arrives after the deadline is
+     * still refused: the budget is a promise about wall-clock time, and a late
+     * answer breaks it the same way a missing one does.
+     */
+    const started = Date.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new ExtractionFailedError('extraction_timed_out')), limit);
+    });
+    try {
+      const result = await Promise.race([run(), deadline]);
+      if (Date.now() - started > limit) throw new ExtractionFailedError('extraction_timed_out');
+      return result;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+/**
+ * A text source, decoded strictly (Phase 2C-4).
+ *
+ * TEXT HAS NO MAGIC NUMBER. A PDF or an Office file announces itself in its
+ * first bytes; a text file only IS text if every byte of it decodes. So the
+ * ENTIRE file is decoded with a fatal decoder — the signature check's 64 KB
+ * sample is not enough to call a file text — a NUL byte is refused (no text
+ * format carries one, and it is how a binary file passes a lenient decode),
+ * and an optional UTF-8 byte-order mark is stripped (the decoder's default).
+ */
+export function strictUtf8(bytes: Uint8Array): string {
+  if (bytes.includes(0)) throw new ExtractionFailedError('text_contains_nul');
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch (error: unknown) {
+    throw new ExtractionFailedError('text_not_utf8', error);
   }
 }
 
@@ -470,4 +555,14 @@ export async function defaultExtractors(limits: ExtractionLimits): Promise<TextE
     new PptxExtractor(limits),
     new PdfExtractor(limits),
   ];
+}
+
+/**
+ * The registry the product uses: the default extractors, with the configured
+ * `extraction.timeoutMs` bounding each document's whole extraction (Phase
+ * 2C-4). The dashboard (upload validation) and the worker (parsing) build the
+ * same one, from the same activated configuration.
+ */
+export async function extractorRegistryFor(limits: ExtractionLimits): Promise<ExtractorRegistry> {
+  return new ExtractorRegistry(await defaultExtractors(limits), { timeoutMs: limits.timeoutMs });
 }

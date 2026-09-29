@@ -8,7 +8,10 @@ import {
   acceptConfidentSchema,
   checksumOf,
   createKnowledgeItemSchema,
+  documentNotFound,
   parseValidUntil,
+  readAgainUnavailable,
+  removeSource,
   rollbackSchema,
   updateKnowledgeItemSchema,
   type LocalizedText,
@@ -16,7 +19,6 @@ import {
 import {
   INGEST_SOURCE_DOCUMENT,
   enqueue,
-  mayProcessInline,
   type IngestSourceDocumentPayload,
 } from '@brandspace/jobs';
 import {
@@ -25,7 +27,7 @@ import {
   requireWorkspaceAction,
 } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
-import { inBrandBrain } from '../../../server/brand-brain-context';
+import { inBrandBrain, objectStore } from '../../../server/brand-brain-context';
 import { brandLocaleAtCreation } from '../../../server/brand-ai-language';
 import { createBrandFor } from '../../../server/brand-creation';
 import { applyCandidateReview, reviewCandidateInputFrom } from '../../../server/candidate-review';
@@ -394,11 +396,10 @@ export async function reviewCandidateAction(formData: FormData): Promise<void> {
  * sweep in `apps/api` finds the unclaimed row and dispatches it again
  * (docs/ARCHITECTURE.md §9).
  *
- * OUTSIDE PRODUCTION, and only there, a missing `REDIS_URL` falls back to
- * running the pipeline here. A developer trying an upload should not need a
- * Redis container, and an end-to-end run should not need one either. In
- * production the fallback is refused outright — see `mayProcessInline` — so the
- * old behaviour cannot return by accident or by a missing environment variable.
+ * AND NOT OUTSIDE PRODUCTION EITHER (Phase 2C-4). A missing `REDIS_URL` used
+ * to fall back to running the pipeline here in development; untrusted document
+ * bytes are now parsed only by the media-processing worker, in every
+ * environment, and an undispatched upload waits for the sweep.
  */
 /**
  * D4 + C1 — "ACCEPT THE CONFIDENT ONES", after the person saw the preview and
@@ -466,68 +467,240 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
      * second upload rather than replaying. A checksum over the bytes, scoped to
      * the workspace, the brand and the area the customer chose, answers "is
      * this the same request?" correctly: the same file to the same place is a
-     * replay, and anything else is a new upload.
+     * replay, and anything else is a new upload. (A REMOVED source ends the
+     * key's generation — the service records the next upload as `<key>#2`.)
      */
     const checksum = await checksumOf(bytes);
     const idempotencyKey = `ui:${session.workspace.workspaceId}:${brandId}:${
       targetArea ?? 'auto'
     }:${checksum}`;
 
-    const queued = await inBrandBrain(session.workspace.workspaceId, async ({ ingestion }) => {
-      const service = await ingestion();
-      const { job } = await service.upload({
-        brandId,
-        fileName: file.name,
-        // The browser's type, not the extension. Both are attacker-controlled,
-        // which is why the allow-list is checked against a fixed set and the
-        // file's own SIGNATURE has to agree before anything is stored.
-        mimeType: file.type || 'application/octet-stream',
-        bytes,
-        targetArea: targetArea as never,
-        idempotencyKey,
-        actorUserId: session.customer.userId,
-        actorBrandScope: session.workspace.brandScope,
-      });
-      return job;
-    });
+    const input = {
+      brandId,
+      fileName: file.name,
+      mimeType: declaredSourceType(file),
+      bytes,
+      targetArea: targetArea as never,
+      idempotencyKey,
+      actorUserId: session.customer.userId,
+      actorBrandScope: session.workspace.brandScope,
+    };
+    const receive = () =>
+      inBrandBrain(session.workspace.workspaceId, async ({ ingestion }) =>
+        (await ingestion()).receive(input),
+      );
 
-    const dispatch = await enqueue('media-processing', INGEST_SOURCE_DOCUMENT, {
-      kind: INGEST_SOURCE_DOCUMENT,
-      workspaceId: session.workspace.workspaceId,
-      requestedByUserId: session.customer.userId,
-      // The job row's id IS the natural key for this work. A second dispatch
-      // of the same row is refused by BullMQ rather than parsed twice.
-      idempotencyKey: `ingest-${queued.id}`,
-      ingestionJobId: queued.id,
-    } satisfies IngestSourceDocumentPayload);
+    /*
+     * A RACE IS ANSWERED BY THE DUPLICATE PATH, NEVER BY THE INDEX'S ERROR.
+     * Two identical uploads at the same instant both pass the service's
+     * look-up, and the loser's insert meets a unique index (M6's live checksum,
+     * or the request key). That aborts its transaction, so it is run once more
+     * in a fresh one — where the winner's row now exists and is returned or
+     * refused exactly as a later upload would be.
+     */
+    let received: Awaited<ReturnType<typeof receive>>;
+    try {
+      received = await receive();
+    } catch (error: unknown) {
+      if (!isUniqueViolation(error)) throw error;
+      received = await receive();
+    }
 
-    if (!dispatch.dispatched) {
-      if (!mayProcessInline()) {
-        /*
-         * PRODUCTION DOES NOT PROCESS INLINE. The row is already durable, so
-         * the reconciliation sweep will pick it up: the upload succeeded, the
-         * document reads PROCESSING, and the outage is the operator's to fix
-         * rather than the customer's to notice as a slow page.
-         */
+    const job = received.job;
+    if (job && job.stage === 'QUEUED') {
+      /*
+       * WORKER ONLY (Phase 2C-4). Untrusted document bytes are parsed only by
+       * the media-processing worker. The historical non-production fallback
+       * that ran the parser HERE, inside the request, when no queue was
+       * configured is gone: a missing dispatch now waits for the
+       * reconciliation sweep in every environment, and the upload still
+       * succeeded — the row is durable and reads Queued.
+       */
+      const dispatch = await enqueue('media-processing', INGEST_SOURCE_DOCUMENT, {
+        kind: INGEST_SOURCE_DOCUMENT,
+        workspaceId: session.workspace.workspaceId,
+        requestedByUserId: session.customer.userId,
+        // The job row's id IS the natural key for this work. A second dispatch
+        // of the same row is refused by BullMQ rather than parsed twice.
+        idempotencyKey: `ingest-${job.id}`,
+        ingestionJobId: job.id,
+      } satisfies IngestSourceDocumentPayload);
+      if (!dispatch.dispatched) {
         log.error('could not dispatch ingestion; leaving it for the reconciliation sweep', {
           workspaceId: session.workspace.workspaceId,
-          jobId: queued.id,
-        });
-      } else {
-        log.warn('no queue configured; processing this upload inline (non-production only)', {
-          jobId: queued.id,
-        });
-        await inBrandBrain(session.workspace.workspaceId, async ({ ingestion }) => {
-          const service = await ingestion();
-          await service.process(queued.id);
+          jobId: job.id,
         });
       }
     }
-    destination = pageUrl(locale, { ok: 'SOURCE_UPLOADED', area, ...tabParam(formData) }, back);
+
+    const failed = received.document.status === 'FAILED';
+    destination = pageUrl(
+      locale,
+      failed
+        ? {
+            // The row carries the reason, in the reader's language; the banner
+            // says only that this file did not become a usable source.
+            error: received.outcome === 'refused' ? 'SOURCE_REFUSED' : 'SOURCE_ALREADY_FAILED',
+            source: received.document.id,
+            area,
+            ...tabParam(formData),
+          }
+        : { ok: 'SOURCE_UPLOADED', area, ...tabParam(formData) },
+      back,
+    );
   } catch (error: unknown) {
     destination = failure(locale, error, 'upload-source', { area, ...tabParam(formData) }, back);
   }
   revalidatePath(`/${locale}/brand-brain`);
   revalidatePath(`/${locale}/onboarding`);
+  redirect(destination);
+}
+
+/**
+ * THE TYPE THE UPLOAD IS DECLARED AS — which checks apply, never which pass.
+ *
+ * The browser's type when it gave one the configuration can name; otherwise the
+ * type the extension names, because browsers disagree about `.md` and `.csv`
+ * (an empty type, `text/x-markdown`, a spreadsheet type). Either way it only
+ * CHOOSES the checks: the service decides from the bytes — the signature, the
+ * OOXML main part, a strict UTF-8 decode — and refuses a file whose bytes
+ * disagree. `.doc` and `.ppt` map to their own legacy types, which nothing
+ * reads, so they are refused as unsupported.
+ */
+function declaredSourceType(file: File): string {
+  const byExtension: Record<string, string> = {
+    pdf: 'application/pdf',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    txt: 'text/plain',
+    csv: 'text/csv',
+    md: 'text/markdown',
+    markdown: 'text/markdown',
+    doc: 'application/msword',
+    ppt: 'application/vnd.ms-powerpoint',
+  };
+  const browser = file.type.trim().toLowerCase();
+  const extension = /\.([A-Za-z0-9]{1,10})$/.exec(file.name)?.[1]?.toLowerCase() ?? '';
+  const fromExtension = byExtension[extension];
+  const known = new Set(Object.values(byExtension));
+  if (known.has(browser)) return browser;
+  return fromExtension ?? (browser || 'application/octet-stream');
+}
+
+/** A PostgreSQL unique violation, as Prisma reports it (P2002), from a racing twin. */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'P2002'
+  );
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A source id from the form: a uuid, or the action stops before any read. */
+function sourceIdFrom(formData: FormData): string {
+  const id = String(formData.get('documentId') ?? '');
+  if (!UUID.test(id)) throw documentNotFound();
+  return id;
+}
+
+/**
+ * READ AGAIN (Phase 2C-4, D5) — `brand_brain.upload`.
+ *
+ * The same document through the same pipeline, as a NEW ingestion job: a
+ * fresh row, so a fresh `ingest-<id>` dispatch id that no finished BullMQ job
+ * already holds. Refused while a read is still running (the existing
+ * one-live-job index answers a double click) and for a file refused before
+ * storage. The worker does the reading; what it proposes is PENDING only.
+ */
+export async function readAgainSourceAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.upload');
+    const documentId = sourceIdFrom(formData);
+    let job: { id: string };
+    try {
+      ({ job } = await inBrandBrain(session.workspace.workspaceId, async ({ ingestion }) =>
+        (await ingestion()).readAgain({
+          documentId,
+          actorUserId: session.customer.userId,
+          actorBrandScope: session.workspace.brandScope,
+        }),
+      ));
+    } catch (error: unknown) {
+      // Two presses at once: the loser meets `brand_ingestion_job_one_live`.
+      if (isUniqueViolation(error)) throw readAgainUnavailable();
+      throw error;
+    }
+    const dispatch = await enqueue('media-processing', INGEST_SOURCE_DOCUMENT, {
+      kind: INGEST_SOURCE_DOCUMENT,
+      workspaceId: session.workspace.workspaceId,
+      requestedByUserId: session.customer.userId,
+      idempotencyKey: `ingest-${job.id}`,
+      ingestionJobId: job.id,
+    } satisfies IngestSourceDocumentPayload);
+    if (!dispatch.dispatched) {
+      log.error('could not dispatch a re-read; leaving it for the reconciliation sweep', {
+        workspaceId: session.workspace.workspaceId,
+        jobId: job.id,
+      });
+    }
+    destination = pageUrl(locale, { ok: 'SOURCE_READ_AGAIN', tab: 'sources' });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'read-again-source', { tab: 'sources' });
+  }
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}
+
+/**
+ * REMOVE A SOURCE (Phase 2C-4, D5) — `brand_brain.upload`; "Drop its facts"
+ * also needs `brand_brain.edit`, checked here AND by `removeSource`, so a
+ * crafted POST from a member who was only offered "Keep" is refused.
+ *
+ * The stored object is deleted AFTER the transaction commits: a removal that
+ * rolled back must still find its bytes. If that delete fails the object is
+ * orphaned — already refunded, so it is not counted against the customer — and
+ * the failure is logged for the operator.
+ */
+export async function removeSourceAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.upload');
+    const mode = String(formData.get('mode') ?? 'keep') === 'drop' ? 'drop' : 'keep';
+    if (mode === 'drop' && !holdsPermission(session.workspace, 'brand_brain.edit')) {
+      await requireWorkspaceAction(locale, 'brand_brain.edit');
+    }
+    const documentId = sourceIdFrom(formData);
+    const removed = await inBrandBrain(session.workspace.workspaceId, async ({ db, usage }) =>
+      removeSource(db, {
+        workspaceId: session.workspace.workspaceId,
+        documentId,
+        mode,
+        actor: knowledgeActor(session),
+        usage,
+      }),
+    );
+    if (removed.storageKeyToDelete) {
+      await objectStore()
+        .delete(removed.storageKeyToDelete)
+        .catch((error: unknown) =>
+          log.error('could not delete a removed source object; it is orphaned', {
+            workspaceId: session.workspace.workspaceId,
+            documentId: removed.documentId,
+            ...internalErrorFields(error),
+          }),
+        );
+    }
+    destination = pageUrl(locale, {
+      ok: mode === 'drop' ? 'SOURCE_REMOVED_DROPPED' : 'SOURCE_REMOVED',
+      tab: 'sources',
+    });
+  } catch (error: unknown) {
+    destination = failure(locale, error, 'remove-source', { tab: 'sources' });
+  }
+  revalidatePath(`/${locale}/brand-brain`);
+  revalidatePath(`/${locale}`);
   redirect(destination);
 }

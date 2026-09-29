@@ -1272,3 +1272,141 @@ input.bb-chat-input::placeholder {
 .bb-bottom.single {
   grid-template-columns: 1fr;
 }
+
+/*
+ * PHASE 2C-4 (D5) — ONE SOURCE AND WHAT IT IS RESPONSIBLE FOR. An APPROVED
+ * DESIGN-SYSTEM EXTENSION (CLAUDE.md §4.2; UI-FIDELITY-CONTRACT §6): the demo's
+ * Sources card describes counts, a facts list, Read again and Remove but never
+ * drew them. The `.bb-doc` row above is untouched; these rules sit under it and
+ * reuse only values this sheet already carries — the card's 8–10 px type scale,
+ * `--bb-muted`, the row's #f6f6f7 and #fff, the 10–15 px radii, the ink button
+ * and the failed red. No new colour, radius, shadow or font.
+ */
+ul.bb-source-list {
+  list-style: none;
+  padding: 0;
+}
+
+.bb-doc-item {
+  display: grid;
+  gap: 6px;
+}
+
+.bb-doc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-inline: 12px;
+}
+
+.bb-doc-meta small,
+.bb-doc-detail small,
+.bb-doc-detail p {
+  color: var(--bb-muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.bb-doc-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.bb-doc-actions form {
+  display: contents;
+}
+
+.bb-doc-action {
+  border: 0;
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: #f6f6f7;
+  color: #111114;
+  font-size: 9px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.bb-doc-action:focus-visible,
+.bb-upload button[type='submit']:focus-visible {
+  outline: 2px solid #111114;
+  outline-offset: 2px;
+}
+
+.bb-upload button[type='submit']:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.bb-doc-detail {
+  display: grid;
+  gap: 6px;
+  margin-inline: 12px;
+  padding: 12px;
+  border-radius: 15px;
+  background: #fff;
+  border: 1px solid #f6f6f7;
+}
+
+.bb-doc-detail h5 {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.bb-doc-detail ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bb-doc-detail b {
+  display: block;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.bb-doc-detail p {
+  margin: 0;
+}
+
+.bb-remove-choice fieldset {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.bb-remove-choice legend {
+  margin-block-end: 8px;
+  font-weight: 800;
+}
+
+.bb-remove-choice label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border-radius: 15px;
+  background: #f6f6f7;
+  cursor: pointer;
+}
+
+.bb-remove-choice b,
+.bb-remove-choice small {
+  display: block;
+}
+
+.bb-remove-choice small {
+  margin-top: 3px;
+  color: var(--bb-muted);
+}

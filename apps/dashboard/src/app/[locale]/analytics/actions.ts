@@ -67,3 +67,34 @@ function codeFrom(payload: unknown): string {
   const error = (payload as { error?: { code?: unknown } } | null)?.error;
   return typeof error?.code === 'string' ? error.code : 'INTERNAL';
 }
+
+/**
+ * D11 (PHASE 2C-4) — "SAVE AS LEARNING" ON ONE PERFORMANCE INSIGHT CARD.
+ *
+ * `brand_brain.edit` (owner decision 6.a), re-checked here and by the API.
+ * It asks `apps/api`'s per-card route, which runs the SAME
+ * `proposeFromInsight` as the batch route: what it saves is a PENDING
+ * LEARNINGS candidate from ANALYTICS, carrying the insight, in the one review
+ * inbox — never approved here. Saving the same insight again finds the
+ * pending candidate the first save made and creates nothing (the existing
+ * duplicate rule). An insight whose numbers support no learning says so.
+ */
+export async function saveInsightLearningAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  await requireWorkspace(locale, 'brand_brain.edit');
+  const brandId = String(formData.get('brandId') ?? '');
+  const insightId = String(formData.get('insightId') ?? '');
+  const range = String(formData.get('range') ?? '');
+  const back = `/${locale}/analytics?brand=${encodeURIComponent(brandId)}${
+    /^\d{1,3}$/.test(range) ? `&range=${range}` : ''
+  }`;
+
+  const response = await callPhase7Api('/v1/insights/save-learning', { insightId });
+  if (!response.ok) redirect(`${back}&error=${codeFrom(response.payload)}`);
+  const payload = response.payload as { proposed?: unknown } | null;
+  revalidatePath(`/${locale}/analytics`);
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(
+    `${back}&ok=${Number(payload?.proposed ?? 0) > 0 ? 'LEARNING_SAVED' : 'LEARNING_NOTHING_TO_SAVE'}`,
+  );
+}

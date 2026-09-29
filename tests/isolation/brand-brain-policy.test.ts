@@ -248,7 +248,7 @@ describe('the configured policy changes what the services actually do', () => {
     await activatePolicy();
 
     const store = new InMemoryObjectStore();
-    // Comfortably under the 25 MB schema default, comfortably over the 512 the
+    // Comfortably under the 20 MiB schema default, comfortably over the 512 the
     // owner activated. Under the old hard-coded policy this upload succeeded.
     const bytes = Buffer.alloc(2_048, 0x61);
 

@@ -307,6 +307,25 @@ version it used. Superseded rows are kept. A variant or a post that is hard-dele
 it (`CASCADE`); a post's soft delete (`deletedAt`) leaves them, and every reader excludes deleted posts
 until the purge removes the post. Archived posts are excluded from "Used in N posts".
 
+**Phase 2C-4 additions (M6, M7; D-384 – D-401).**
+
+- **M6 — `20261009090000_brand_source_live_checksum`.** Schema only, NOT additive: the unique index
+  `brand_source_document_workspaceId_brandId_checksum_key` on `(workspaceId, brandId, checksum)` is
+  replaced, in one transaction, by the partial unique index `brand_source_document_live_checksum_key` on
+  the same key `WHERE "deletedAt" IS NULL`. Two LIVE documents with one checksum in a brand stay
+  impossible; a removed (soft-deleted) source releases its checksum so the same file can be uploaded
+  again; a FAILED row is live and holds it (the same bytes again return that row, D-389). The Prisma
+  model no longer declares the unique (Prisma cannot model a partial index). Rollback: `OPERATIONS.md`
+  §6.7.
+- **M7 — `20261009100000_insight_knowledge_signature`.** Schema only, additive:
+  `insight."knowledgeSignature" TEXT NULL` — lowercase hex SHA-256 of the brand's usable facts (sorted
+  `itemId:version`) that a STRATEGY or MONTHLY_PLAN was generated on (D-398). NULL for every older row
+  and every other insight type; NULL never raises "Brand Brain changed". No backfill.
+- **No new column for failures or removal.** A refused upload is a `brand_source_document` row with
+  `status = FAILED`, `byteSize = 0`, `storageKey = ''` and the reason key in `failureMessage`; a removed
+  source is `deletedAt`; a removed source's PENDING candidates are `SUPERSEDED` with `reviewReason =
+'source_removed'`; a re-upload after removal takes the request key `<key>#2` (D-390).
+
 The first three are F-80; the rest are F-83, found by asking the catalogue about the whole module
 rather than the four tables F-80 happened to name. `brand_source_document`,
 `brand_brain_conversation` and `brand_knowledge_item` each carry the `@@unique([workspaceId, id])`

@@ -28,7 +28,7 @@ import { inAnalytics } from '../../../server/analytics-context';
 import { evidenceRefs, statusMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { analyticsNextSteps, latestShift } from '../../../server/performance-patterns';
 import { measuredChanges, parseExplanation, pickText } from '../../../server/analytics-story';
-import { explainPeriodAction } from './actions';
+import { explainPeriodAction, saveInsightLearningAction } from './actions';
 import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 
@@ -92,6 +92,8 @@ export default async function AnalyticsPage({
   const mayExport = workspace.permissionKeys.includes('analytics.export');
   // Q18 — explaining a period spends credits, so it also needs `copilot.use`.
   const mayExplain = maySpendCredits(workspace.permissionKeys, 'analytics.explain');
+  // D11 (Phase 2C-4) — saving an insight as a learning proposes a fact.
+  const mayLearn = workspace.permissionKeys.includes('brand_brain.edit');
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
 
@@ -269,8 +271,42 @@ export default async function AnalyticsPage({
         })
       : null;
 
-    return { summary, series, byProvider, topPosts, insights, period, shift, explanation };
+    /*
+     * D11 (Phase 2C-4) — WHAT EACH INSIGHT HAS ALREADY BEEN SAVED AS: the
+     * LEARNINGS candidates carrying its id, read only for a member who may
+     * save one (`brand_brain.edit`). PENDING reads "saved · waiting for
+     * review"; an accepted one reads "saved".
+     */
+    const learnings =
+      insights.length > 0 && workspace.permissionKeys.includes('brand_brain.edit')
+        ? await services.db.brandKnowledgeCandidate.findMany({
+            where: {
+              insightId: { in: insights.map((insight) => insight.id) },
+              area: 'LEARNINGS',
+              status: { in: ['PENDING', 'ACCEPTED', 'EDITED_ACCEPTED'] },
+            },
+            select: { insightId: true, status: true },
+          })
+        : [];
+
+    return {
+      summary,
+      series,
+      byProvider,
+      topPosts,
+      insights,
+      period,
+      shift,
+      explanation,
+      learnings,
+    };
   });
+
+  const learningState = (insightId: string): 'none' | 'pending' | 'accepted' => {
+    const rows = data.learnings.filter((row) => row.insightId === insightId);
+    if (rows.some((row) => row.status === 'PENDING')) return 'pending';
+    return rows.length > 0 ? 'accepted' : 'none';
+  };
 
   const nextSteps = analyticsNextSteps({
     absences: [...data.summary.metrics.map((metric) => metric.absent), data.series.absent],
@@ -765,6 +801,16 @@ export default async function AnalyticsPage({
                       {t(`insights.basis.${insight.basis}` as MessageKey)} ·{' '}
                       {stamp.format(insight.createdAt)}
                     </Link>
+                    {mayLearn ? (
+                      <SaveAsLearning
+                        locale={locale}
+                        brandId={brand.id}
+                        insightId={insight.id}
+                        range={days}
+                        state={learningState(insight.id)}
+                        t={t}
+                      />
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -782,6 +828,56 @@ export default async function AnalyticsPage({
         ) : null}
       </Stack>
     </WorkspaceShell>
+  );
+}
+
+/**
+ * D11 (Phase 2C-4) — "Save as learning" on one insight, or what it was saved
+ * as. A plain form, like every other form on this screen; the button is shown
+ * only to a member with `brand_brain.edit` and only while nothing from this
+ * insight is waiting or approved, and the action re-checks both.
+ */
+function SaveAsLearning({
+  locale,
+  brandId,
+  insightId,
+  range,
+  state,
+  t,
+}: {
+  readonly locale: string;
+  readonly brandId: string;
+  readonly insightId: string;
+  readonly range: number;
+  readonly state: 'none' | 'pending' | 'accepted';
+  readonly t: (key: MessageKey) => string;
+}) {
+  if (state !== 'none') {
+    return (
+      <span
+        data-testid={`insight-learning-${insightId}`}
+        style={{ marginInlineStart: spacingTokens.sm, color: colorTokens.textSecondary }}
+      >
+        {' · '}
+        {state === 'pending' ? t('insights.learningPending') : t('insights.learningSaved')}
+      </span>
+    );
+  }
+  return (
+    <form action={saveInsightLearningAction} style={{ display: 'inline' }}>
+      <input type="hidden" name="locale" value={locale} />
+      <input type="hidden" name="brandId" value={brandId} />
+      <input type="hidden" name="insightId" value={insightId} />
+      <input type="hidden" name="range" value={String(range)} />
+      <button
+        type="submit"
+        className={buttonClass('ghost')}
+        style={{ ...buttonStyle('ghost', 'sm'), marginInlineStart: spacingTokens.sm }}
+        data-testid={`insight-save-learning-${insightId}`}
+      >
+        {t('insights.saveAsLearning')}
+      </button>
+    </form>
   );
 }
 

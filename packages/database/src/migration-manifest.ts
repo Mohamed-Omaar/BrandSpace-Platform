@@ -82,4 +82,6 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261008090000_candidate_source_member',
   '20261008091000_candidate_member_check',
   '20261008100000_content_knowledge_usage',
+  '20261009090000_brand_source_live_checksum',
+  '20261009100000_insight_knowledge_signature',
 ];

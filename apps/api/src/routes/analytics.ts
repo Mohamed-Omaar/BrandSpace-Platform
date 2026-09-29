@@ -6,7 +6,11 @@ import {
   TenantAnalyticsPolicySource,
   createAnalyticsRegistry,
 } from '@brandspace/analytics';
-import { LearningWriteBackService, StrategyService } from '@brandspace/intelligence';
+import {
+  LearningWriteBackService,
+  StrategyService,
+  acknowledgeKnowledgeChange,
+} from '@brandspace/intelligence';
 import { BrandKnowledgeService } from '@brandspace/brand-brain';
 import { resolveContentExpiry, resolveContentPolicy } from '@brandspace/content';
 import { withWorkspace, getPrisma } from '@brandspace/database';
@@ -436,6 +440,54 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
   );
 
   /**
+   * D13 ACKNOWLEDGE (PHASE 2C-4, owner decision Option 1) — "Brand Brain
+   * changed", accepted as it stands.
+   *
+   * A Strategy mutation beside `/v1/insights/review`, on the same permission:
+   * `strategy.manage`. It re-baselines the ACCEPTED strategy's stored
+   * knowledge signature to the current one (`acknowledgeKnowledgeChange`),
+   * audited with the previous and the new value; nothing to acknowledge writes
+   * nothing. No credits, no model, no migration.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/strategy/acknowledge-knowledge',
+    {
+      scope: 'workspace',
+      permission: STRATEGY_MANAGE,
+      confirmation: 'not_required',
+      rateLimit: 'workspace.write',
+    },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, STRATEGY_MANAGE);
+      if (!caller) return;
+
+      const parsed = writeBackSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      }
+
+      try {
+        const result = await withWorkspace(
+          caller.workspaceId,
+          (db) =>
+            acknowledgeKnowledgeChange(db, {
+              workspaceId: caller.workspaceId,
+              insightId: parsed.data.insightId,
+              actorUserId: caller.userId,
+              brandScope: caller.brandScope,
+            }),
+          { prisma: getPrisma() },
+        );
+        return reply.send({ acknowledged: result.acknowledged });
+      } catch (error: unknown) {
+        return fail(reply, 'strategy knowledge acknowledge', error);
+      }
+    },
+  );
+
+  /**
    * PROPOSE LEARNINGS FROM AN INSIGHT — D-64's return path, closed.
    *
    * IT WRITES CANDIDATES, NOT KNOWLEDGE. Everything it produces lands in the same
@@ -498,6 +550,77 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
         });
       } catch (error: unknown) {
         return fail(reply, 'learning write-back', error);
+      }
+    },
+  );
+
+  /**
+   * D11 (PHASE 2C-4) — "SAVE AS LEARNING" ON ONE PERFORMANCE INSIGHT CARD.
+   *
+   * THE SAME DOMAIN OPERATION AS THE ROUTE ABOVE — `proposeFromInsight`, so the
+   * same rules, the same PENDING LEARNINGS candidates (`sourceKind = ANALYTICS`,
+   * the insight recorded), the same existing duplicate rule (a PENDING
+   * candidate for the same insight and key is returned, never created twice)
+   * and the same audit event. What differs is WHO may ask: this per-card
+   * action is `brand_brain.edit` (owner decision 6.a) — saving a learning
+   * PROPOSES a fact, which is what an editor may do; it never approves one,
+   * which stays `brand_brain.review` in the one inbox. The batch route above
+   * keeps its own `brand_brain.review` contract, unchanged.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/insights/save-learning',
+    {
+      scope: 'workspace',
+      permission: 'brand_brain.edit',
+      rateLimit: 'workspace.write',
+    },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, 'brand_brain.edit');
+      if (!caller) return;
+
+      const parsed = writeBackSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      }
+
+      try {
+        const result = await withWorkspace(
+          caller.workspaceId,
+          async (db) => {
+            const policy = await new TenantAnalyticsPolicySource(db, currentEnvironment()).load();
+            const queries = new AnalyticsQueryService({
+              db,
+              workspaceId: caller.workspaceId,
+              policy,
+              registry: createAnalyticsRegistry({ environment: currentEnvironment() }),
+            });
+            const learning = new LearningWriteBackService({
+              db,
+              workspaceId: caller.workspaceId,
+              policy,
+              queries,
+              knowledge: new BrandKnowledgeService({ db, workspaceId: caller.workspaceId }),
+            });
+            return learning.proposeFromInsight({
+              insightId: parsed.data.insightId,
+              actorBrandScope: caller.brandScope,
+            });
+          },
+          { prisma: getPrisma() },
+        );
+
+        // An insight outside the caller's workspace or scope is the same miss.
+        if (result.skipped.some((entry) => entry.reason === 'insight_not_found')) {
+          return reply.code(404).send({ error: { code: 'NOT_FOUND' } });
+        }
+        return reply.send({
+          proposed: result.proposed.length,
+          created: result.proposed.filter((entry) => entry.created).length,
+        });
+      } catch (error: unknown) {
+        return fail(reply, 'save learning', error);
       }
     },
   );

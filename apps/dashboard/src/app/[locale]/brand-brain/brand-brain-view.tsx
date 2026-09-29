@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { BrandOrb, type OrbNode } from './brand-orb';
 import { BrandChat, type ChatStart } from './brand-chat';
@@ -9,6 +10,7 @@ import { AreaDrawer, type QuestionFocus } from './area-drawer';
 import { ReviewInbox, type ConfidentPreviewEntry } from './review-inbox';
 import { VoiceCard } from './voice-card';
 import { LookCard, type LookViewData } from './look-card';
+import { SourceRow, type SourceRowData } from './source-row';
 import {
   Tabs,
   buttonClass,
@@ -183,15 +185,8 @@ export interface CandidateData {
   };
 }
 
-export interface SourceData {
-  readonly id: string;
-  readonly fileName: string;
-  readonly status: string;
-  readonly statusLabel: string;
-  readonly detail: string;
-  /** The three- or four-letter badge the demo prints in `.bb-doc i`. */
-  readonly kind: string;
-}
+/** One source row — see `source-row.tsx` (Phase 2C-4, D5). */
+export type SourceData = SourceRowData;
 
 export interface BrandBrainPermissions {
   readonly edit: boolean;
@@ -247,6 +242,7 @@ export function BrandBrainView({
   retentionDays,
   permissions,
   chatStart = null,
+  initialFocus = null,
 }: {
   locale: string;
   brandId: string;
@@ -294,11 +290,19 @@ export function BrandBrainView({
   permissions: BrandBrainPermissions;
   /** D7/D8/D9 — the chat opens in Add (a handoff) or Edit ("Fix it"), prefilled. */
   chatStart?: ChatStart | null;
+  /** D12 (Phase 2C-4) — Home's missing-question link: this area, this question. */
+  initialFocus?: {
+    readonly area: string;
+    readonly itemKey: string;
+    readonly prompt: string;
+  } | null;
 }) {
   const t = translator(locale);
   const [tab, setTabState] = useState<BrandBrainTab>(initialTab);
-  const [openArea, setOpenArea] = useState<string | null>(null);
-  const [focus, setFocus] = useState<QuestionFocus | null>(null);
+  const [openArea, setOpenArea] = useState<string | null>(initialFocus?.area ?? null);
+  const [focus, setFocus] = useState<QuestionFocus | null>(
+    initialFocus ? { itemKey: initialFocus.itemKey, prompt: initialFocus.prompt } : null,
+  );
   const [chatArea, setChatArea] = useState<string | null>(null);
   const [inboxArea, setInboxArea] = useState<string | null>(null);
   const [pendingDrop, setPendingDrop] = useState<{ file: File; area: string | null } | null>(null);
@@ -824,31 +828,28 @@ export function BrandBrainView({
                     data-testid="upload-input"
                     aria-label={t('bb.uploadChoose')}
                   />
-                  <button type="submit" data-testid="upload-submit" formAction={uploadFormAction}>
-                    {t('bb.upload')}
-                  </button>
+                  <UploadSubmit label={t('bb.upload')} pendingLabel={t('bb.uploading')} />
                   <small>{t('bb.uploadHint')}</small>
                 </form>
               ) : null}
 
-              <div className="bb-source-list">
-                {sources.length === 0 ? (
+              {sources.length === 0 ? (
+                <div className="bb-source-list">
                   <p className="bb-source-empty">{t('bb.sourcesNone')}</p>
-                ) : (
-                  sources.map((source) => (
-                    <div className="bb-doc" key={source.id} data-testid={`source-${source.id}`}>
-                      <i aria-hidden="true">{source.kind}</i>
-                      <span>
-                        <b>{source.fileName}</b>
-                        <small>{source.detail}</small>
-                      </span>
-                      <span className={source.status === 'FAILED' ? 'failed' : undefined}>
-                        {source.statusLabel}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
+                </div>
+              ) : (
+                <ul className="bb-source-list" data-testid="source-list">
+                  {sources.map((source) => (
+                    <SourceRow
+                      key={source.id}
+                      locale={locale}
+                      source={source}
+                      canUpload={permissions.upload}
+                      canDrop={permissions.upload && permissions.edit}
+                    />
+                  ))}
+                </ul>
+              )}
             </div>
           </section>
         ) : null}
@@ -876,6 +877,26 @@ export function BrandBrainView({
  * client bundle never pulls the server module graph in.
  */
 import { uploadSourceAction as uploadFormAction } from './actions';
+
+/**
+ * The upload button, with its in-flight state (Phase 2C-4): "Uploading…" and
+ * disabled while the file travels, so a 20 MiB document does not read as a
+ * button that did nothing, and a second press cannot send it twice.
+ */
+function UploadSubmit({ label, pendingLabel }: { label: string; pendingLabel: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      data-testid="upload-submit"
+      formAction={uploadFormAction}
+      disabled={pending}
+      aria-busy={pending}
+    >
+      {pending ? pendingLabel : label}
+    </button>
+  );
+}
 
 export type { MessageKey };
 export type { OrbNode };

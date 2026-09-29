@@ -115,8 +115,10 @@ export const messages = {
      * P6-11 — PULSE. The Learn/Improve half of the attention list: each one a
      * real condition measured against real rows, never a score.
      */
-    'attention.learnings-pending':
-      '{count} من الدروس والحقائق المقترحة بانتظار مراجعتك في عقل العلامة.',
+    // D12 (Phase 2C-4) — the one review inbox, every source; replaces learnings-pending.
+    'attention.brand-brain-review-waiting': 'عقل العلامة · {count} من الحقائق بانتظار مراجعتك.',
+    'attention.brand-brain-review-waiting.one': 'عقل العلامة · حقيقة واحدة بانتظار مراجعتك.',
+    'attention.brand-brain-missing': 'عقل العلامة ينقصه: {detail}',
     'attention.insights-new': '{count} من نتائج ذكاء التسويق لم يطّلع عليها أحد بعد.',
     'attention.connection-expiring':
       'ينتهي وصول {count} من الحسابات المتصلة خلال يوم أو انتهى بالفعل. حدّث الاتصال قبل أن يفشل النشر.',
@@ -1015,7 +1017,8 @@ export const messages = {
     'bb.sourcesNone': 'لم تُرفع أي مستندات بعد.',
     'bb.upload': 'رفع مستند',
     'bb.uploadChoose': 'اختر ملفًا',
-    'bb.uploadHint': 'PDF أو Word أو PowerPoint أو نص أو CSV — حتى الحجم المسموح به.',
+    'bb.uploadHint':
+      'PDF أو Word (.docx) أو PowerPoint (.pptx) أو نص أو CSV أو Markdown — حتى الحجم المسموح به.',
     'bb.source.READY': 'جاهز',
     'bb.source.PROCESSING': 'قيد المعالجة',
     'bb.source.UPLOADED': 'بانتظار المعالجة',
@@ -1040,7 +1043,50 @@ export const messages = {
     'bb.failure.extraction_failed': 'تعذّرت معالجة هذا الملف. حاول رفعه مرة أخرى.',
     'bb.failure.object_missing': 'تعذّر قراءة الملف المرفوع.',
     'bb.failure.stuck_timeout': 'استغرقت معالجة هذا الملف وقتًا أطول من المسموح.',
+    // Phase 2C-4 — refused at upload, by the bytes themselves.
+    'bb.failure.file_too_large': 'هذا الملف أكبر من الحجم المسموح به للمصادر.',
+    'bb.failure.ooxml_content_types_missing': 'هذا الملف ليس مستند Word أو PowerPoint سليمًا.',
+    'bb.failure.ooxml_main_part_missing': 'هذا الملف ليس مستند Word أو PowerPoint سليمًا.',
+    'bb.failure.ooxml_type_mismatch':
+      'محتوى الملف لا يطابق نوعه. ارفع مستند Word بصيغة .docx أو عرض PowerPoint بصيغة .pptx.',
+    'bb.failure.text_not_utf8':
+      'هذا الملف النصي ليس بترميز UTF-8. احفظه بترميز UTF-8 وارفعه مجددًا.',
+    'bb.failure.text_contains_nul': 'هذا الملف لا يبدو ملفًا نصيًا.',
     'bb.source.QUARANTINED': 'محجوز',
+    // Phase 2C-4 (D5) — one source and what it is responsible for.
+    'bb.uploading': 'جارٍ الرفع…',
+    'bb.source.approvedCount': '{n} معتمدة',
+    'bb.source.pendingCount': '{n} بانتظار المراجعة',
+    'bb.source.showDetails': 'الحقائق',
+    'bb.source.hideDetails': 'إخفاء الحقائق',
+    'bb.source.readAgain': 'اقرأ مجددًا',
+    'bb.source.reading': 'تجري القراءة…',
+    'bb.source.remove': 'إزالة',
+    'bb.source.removeTitle': 'إزالة «{name}»؟',
+    'bb.source.removeBody':
+      'يُزال المستند ونصّه المستخرج، وتُلغى اقتراحاته التي لم تُراجع بعد، وتُعاد مساحته إلى حصة التخزين.',
+    'bb.source.removeChoose': 'ماذا نفعل بحقائقه المعتمدة؟',
+    'bb.source.keep': 'احتفظ بحقائقه',
+    'bb.source.keepHint': 'تبقى الحقائق المعتمدة كما هي وتستمر في العمل.',
+    'bb.source.drop': 'أسقط حقائقه',
+    'bb.source.dropHint':
+      'تُؤرشف الحقائق التي ما زالت نسختها الحالية آتية من هذا المستند ({n}). الحقائق التي عدّلها أحد بعدها تبقى.',
+    'bb.source.removeConfirm': 'إزالة المصدر',
+    'bb.source.factsTitle': 'حقائق معتمدة من هذا المصدر',
+    'bb.source.pendingTitle': 'بانتظار المراجعة',
+    'bb.source.noFacts': 'لا توجد حقائق معتمدة آتية من هذا المصدر.',
+    'bb.source.noPending': 'لا شيء من هذا المصدر بانتظار المراجعة.',
+    'bb.source.state.ACTIVE': 'معتمدة',
+    'bb.source.state.STALE': 'معتمدة · حان موعد مراجعتها',
+    'bb.source.state.expired': 'منتهية الصلاحية · لا تُستخدم في الكتابة',
+    'bb.source.state.PENDING': 'بانتظار المراجعة',
+    'bb.source.type.pdf': 'مستند PDF',
+    'bb.source.type.docx': 'مستند Word',
+    'bb.source.type.pptx': 'عرض PowerPoint',
+    'bb.source.type.text': 'نص',
+    'bb.source.type.csv': 'جدول CSV',
+    'bb.source.type.markdown': 'ملف Markdown',
+    'bb.source.type.other': 'ملف',
     'bb.reviewTitle': 'مراجعة المعرفة',
     'bb.reviewNone': 'لا توجد عناصر بانتظار المراجعة.',
     'bb.reviewAccept': 'اعتماد',
@@ -2224,6 +2270,10 @@ export const messages = {
     'insights.anomalyBaseline': 'خط الأساس',
     'insights.anomalyObserved': 'القيمة المرصودة',
     'insights.anomalyThreshold': 'الحد المعتمد',
+    // D11 (Phase 2C-4) — one insight card, saved as a pending learning.
+    'insights.saveAsLearning': 'احفظه كدرس مستفاد',
+    'insights.learningPending': 'حُفظ كدرس مستفاد · بانتظار المراجعة',
+    'insights.learningSaved': 'حُفظ كدرس مستفاد',
     'insights.proposeLearnings': 'اقترح دروسًا لعقل العلامة',
     'insights.proposeLearningsHint':
       'تُضاف كمقترحات بانتظار مراجعة بشرية، ولا تُكتب في عقل العلامة مباشرة.',
@@ -2272,6 +2322,12 @@ export const messages = {
     'strategy.noneAccepted':
       'لا يُستخدم شيء هنا قبل أن يعتمد شخصٌ استراتيجية. اطلب مقترحًا أدناه — يبقى مقترحًا حتى تعتمده.',
     'strategy.fromBrandBrain': 'من عقل العلامة',
+    // D13 (Phase 2C-4) — the approved facts this strategy was written on changed.
+    'strategy.brainChanged.title': 'تغيّر عقل العلامة.',
+    'strategy.brainChanged.body':
+      'تغيّرت الحقائق المعتمدة منذ إنشاء هذه الاستراتيجية — عُدّلت حقيقة أو انتهت صلاحيتها أو أُرشفت أو اعتُمدت حقيقة جديدة. راجعها، أو أنشئ استراتيجية جديدة أدناه.',
+    'strategy.brainChanged.review': 'افتح عقل العلامة',
+    'strategy.brainChanged.acknowledge': 'تمّت المراجعة — أبقِ الاستراتيجية',
     'strategy.audienceEmpty': 'لا يحتوي عقل العلامة على جمهور معتمد بعد.',
     'strategy.messagesEmpty': 'لا يحتوي عقل العلامة على عروض أو أدلة إثبات معتمدة بعد.',
     'strategy.addKnowledge': 'أضف معرفة',
@@ -3216,8 +3272,10 @@ export const messages = {
      * P6-11 — PULSE. The Learn/Improve half of the attention list: each one a
      * real condition measured against real rows, never a score.
      */
-    'attention.learnings-pending':
-      '{count} proposed learnings and facts are waiting for your review in Brand Brain.',
+    // D12 (Phase 2C-4) — the one review inbox, every source; replaces learnings-pending.
+    'attention.brand-brain-review-waiting': 'Brand Brain · {count} facts waiting for your review',
+    'attention.brand-brain-review-waiting.one': 'Brand Brain · 1 fact waiting for your review',
+    'attention.brand-brain-missing': 'Brand Brain is missing: {detail}',
     'attention.insights-new':
       '{count} Marketing Intelligence findings have not been looked at yet.',
     'attention.connection-expiring':
@@ -4140,7 +4198,8 @@ export const messages = {
     'bb.sourcesNone': 'No documents have been uploaded yet.',
     'bb.upload': 'Upload document',
     'bb.uploadChoose': 'Choose a file',
-    'bb.uploadHint': 'PDF, Word, PowerPoint, text or CSV \u2014 up to the allowed size.',
+    'bb.uploadHint':
+      'PDF, Word (.docx), PowerPoint (.pptx), text, CSV or Markdown \u2014 up to the allowed size.',
     'bb.source.READY': 'Ready',
     'bb.source.PROCESSING': 'Processing',
     'bb.source.UPLOADED': 'Queued',
@@ -4166,7 +4225,50 @@ export const messages = {
     'bb.failure.extraction_failed': 'This file could not be processed. Try uploading it again.',
     'bb.failure.object_missing': 'The uploaded file could not be read.',
     'bb.failure.stuck_timeout': 'This file took longer to process than we allow.',
+    // Phase 2C-4 — refused at upload, by the bytes themselves.
+    'bb.failure.file_too_large': 'This file is larger than the size allowed for sources.',
+    'bb.failure.ooxml_content_types_missing': 'This is not a valid Word or PowerPoint document.',
+    'bb.failure.ooxml_main_part_missing': 'This is not a valid Word or PowerPoint document.',
+    'bb.failure.ooxml_type_mismatch':
+      "This file's contents don't match its type. Upload a Word .docx or a PowerPoint .pptx.",
+    'bb.failure.text_not_utf8':
+      'This text file is not UTF-8. Save it as UTF-8 and upload it again.',
+    'bb.failure.text_contains_nul': "This file doesn't look like a text file.",
     'bb.source.QUARANTINED': 'Quarantined',
+    // Phase 2C-4 (D5) — one source and what it is responsible for.
+    'bb.uploading': 'Uploading…',
+    'bb.source.approvedCount': '{n} approved',
+    'bb.source.pendingCount': '{n} pending',
+    'bb.source.showDetails': 'Facts',
+    'bb.source.hideDetails': 'Hide facts',
+    'bb.source.readAgain': 'Read again',
+    'bb.source.reading': 'Reading…',
+    'bb.source.remove': 'Remove',
+    'bb.source.removeTitle': 'Remove “{name}”?',
+    'bb.source.removeBody':
+      'The document and its extracted text are removed, its unreviewed proposals are withdrawn, and its space goes back to your storage.',
+    'bb.source.removeChoose': 'What should happen to its approved facts?',
+    'bb.source.keep': 'Keep its facts',
+    'bb.source.keepHint': 'Approved facts stay exactly as they are and keep working.',
+    'bb.source.drop': 'Drop its facts',
+    'bb.source.dropHint':
+      'Archives the facts whose current version still comes from this document ({n}). Facts someone changed since are kept.',
+    'bb.source.removeConfirm': 'Remove source',
+    'bb.source.factsTitle': 'Approved facts from this source',
+    'bb.source.pendingTitle': 'Waiting for review',
+    'bb.source.noFacts': 'No approved facts come from this source.',
+    'bb.source.noPending': 'Nothing from this source is waiting for review.',
+    'bb.source.state.ACTIVE': 'Approved',
+    'bb.source.state.STALE': 'Approved · review due',
+    'bb.source.state.expired': 'Expired · not used in writing',
+    'bb.source.state.PENDING': 'Waiting for review',
+    'bb.source.type.pdf': 'PDF',
+    'bb.source.type.docx': 'Word',
+    'bb.source.type.pptx': 'PowerPoint',
+    'bb.source.type.text': 'Text',
+    'bb.source.type.csv': 'CSV',
+    'bb.source.type.markdown': 'Markdown',
+    'bb.source.type.other': 'File',
     'bb.reviewTitle': 'Knowledge review',
     'bb.reviewNone': 'Nothing is waiting for review.',
     'bb.reviewAccept': 'Accept',
@@ -5400,6 +5502,10 @@ export const messages = {
     'insights.anomalyBaseline': 'Baseline',
     'insights.anomalyObserved': 'Observed',
     'insights.anomalyThreshold': 'Threshold',
+    // D11 (Phase 2C-4) — one insight card, saved as a pending learning.
+    'insights.saveAsLearning': 'Save as learning',
+    'insights.learningPending': 'Saved as learning · waiting for review',
+    'insights.learningSaved': 'Saved as learning',
     'insights.proposeLearnings': 'Propose learnings for Brand Brain',
     'insights.proposeLearningsHint':
       'Added as proposals for human review. Nothing is written into Brand Brain directly.',
@@ -5450,6 +5556,12 @@ export const messages = {
     'strategy.noneAccepted':
       'Nothing here is used until a person accepts a strategy. Ask for a proposal below — it stays a proposal until you accept it.',
     'strategy.fromBrandBrain': 'From Brand Brain',
+    // D13 (Phase 2C-4) — the approved facts this strategy was written on changed.
+    'strategy.brainChanged.title': 'Brand Brain changed.',
+    'strategy.brainChanged.body':
+      'The approved facts changed since this strategy was generated — a fact was edited, expired or archived, or a new one was approved. Review them, or generate a new strategy below.',
+    'strategy.brainChanged.review': 'Open Brand Brain',
+    'strategy.brainChanged.acknowledge': 'Reviewed — keep this strategy',
     'strategy.audienceEmpty': 'Brand Brain has no approved audience yet.',
     'strategy.messagesEmpty': 'Brand Brain has no approved offers or proof points yet.',
     'strategy.addKnowledge': 'Add knowledge',
@@ -6716,8 +6828,41 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     ar: 'تم الرفض. لم تتغيّر المعرفة المعتمدة.',
   },
   SOURCE_UPLOADED: {
-    en: 'Document processed. Extracted knowledge is waiting for review.',
-    ar: 'تمت معالجة المستند. المعرفة المستخرجة بانتظار المراجعة.',
+    en: 'Document uploaded. It is being read now; what it proposes will wait for your review.',
+    ar: 'تم رفع المستند. تجري قراءته الآن، وما يقترحه سينتظر مراجعتك.',
+  },
+  // Phase 2C-4 (D5) — the row says why, in the reader's language.
+  SOURCE_REFUSED: {
+    en: "This file couldn't be added. The reason is shown on its row in Sources.",
+    ar: 'تعذّرت إضافة هذا الملف. السبب ظاهر في صفّه ضمن المصادر.',
+  },
+  SOURCE_ALREADY_FAILED: {
+    en: 'This file is already in Sources and failed. Its reason is shown on its row — read it again or remove it first.',
+    ar: 'هذا الملف موجود في المصادر وقد فشل. سببه ظاهر في صفّه — أعد قراءته أو أزله أولًا.',
+  },
+  LEARNING_SAVED: {
+    en: 'Saved as a learning. It waits in the Brand Brain review inbox and is not used until someone approves it.',
+    ar: 'حُفظ كدرس مستفاد. ينتظر في صندوق مراجعة عقل العلامة ولا يُستخدم حتى يعتمده أحد.',
+  },
+  LEARNING_NOTHING_TO_SAVE: {
+    en: 'The numbers behind this insight do not support a learning yet, so nothing was saved.',
+    ar: 'الأرقام وراء هذه الرؤية لا تدعم درسًا مستفادًا بعد، لذا لم يُحفظ شيء.',
+  },
+  STRATEGY_KNOWLEDGE_ACKNOWLEDGED: {
+    en: 'Noted. This strategy now counts the current Brand Brain as reviewed; a later change will alert again.',
+    ar: 'تم. أصبحت هذه الاستراتيجية تعدّ عقل العلامة الحالي مُراجَعًا، وسيظهر التنبيه مجددًا عند أي تغيير لاحق.',
+  },
+  SOURCE_READ_AGAIN: {
+    en: 'Reading the document again. New proposals will wait for your review.',
+    ar: 'تجري قراءة المستند مرة أخرى. ستنتظر الاقتراحات الجديدة مراجعتك.',
+  },
+  SOURCE_REMOVED: {
+    en: 'Source removed. Its approved facts were kept.',
+    ar: 'أُزيل المصدر. احتُفظ بحقائقه المعتمدة.',
+  },
+  SOURCE_REMOVED_DROPPED: {
+    en: 'Source removed, and the facts that came from it were archived.',
+    ar: 'أُزيل المصدر، وأُرشفت الحقائق التي جاءت منه.',
   },
   ASSET_UPLOADED: {
     en: 'File uploaded. It becomes available for use once the security scan passes.',

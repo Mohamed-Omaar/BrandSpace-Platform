@@ -71,7 +71,9 @@ export const ATTENTION_ACTIONS: Readonly<Record<string, string>> = {
   'content-in-review': 'review',
   'automations-waiting': 'review',
   'brand-brain-empty': 'teach',
-  'learnings-pending': 'review',
+  // D12 (Phase 2C-4) — replaces `learnings-pending`: one row for the one inbox.
+  'brand-brain-review-waiting': 'review',
+  'brand-brain-missing': 'teach',
   'insights-new': 'open',
   'campaign-empty': 'plan',
   'calendar-gap': 'plan',

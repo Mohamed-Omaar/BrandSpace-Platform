@@ -126,8 +126,8 @@ function serverEnv(app: keyof typeof PORTS): Record<string, string> {
   // the admin app never sets it, so a showcase route there stays a 404.
   if (app === 'dashboard') {
     env['BRANDSPACE_DESIGN_SHOWCASE'] = '1';
-    // So the upload DISPATCHES rather than taking the non-production inline
-    // fallback. The suite is meant to exercise the path production takes.
+    // So the upload DISPATCHES to the worker — since Phase 2C-4 the only
+    // process that parses a document, in every environment.
     env['REDIS_URL'] = process.env['REDIS_URL'] ?? 'redis://127.0.0.1:6379/1';
     // Brand Brain chat is proxied to the API service. Without this the proxy
     // answers an honest 503 and the chat suite would be testing the fallback.

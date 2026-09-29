@@ -81,6 +81,8 @@ export {
   humanPrecedenceViolation,
   knowledgeChangedSince,
   knowledgeNotFound,
+  readAgainUnavailable,
+  sourceRefused,
   storageLimitReached,
   unsupportedFileType,
   versionNotFound,
@@ -113,6 +115,8 @@ export {
   PlainTextExtractor,
   chunkText,
   defaultExtractors,
+  extractorRegistryFor,
+  strictUtf8,
 } from './extraction';
 export type {
   CandidateFact,
@@ -125,17 +129,27 @@ export type {
   FactExtractor,
   TextExtractor,
 } from './extraction';
-export { DocxExtractor, PptxExtractor } from './extract-ooxml';
+export { DocxExtractor, PptxExtractor, declaredOoxmlKind } from './extract-ooxml';
+export type { OoxmlKind } from './extract-ooxml';
 export { PdfExtractor } from './extract-pdf';
 export { checkSignature, detectFormat } from './file-signature';
 export type { DetectedFormat, SignatureCheck } from './file-signature';
 
-export { BrandIngestionService, findUnclaimedIngestionJobs } from './ingestion';
+export {
+  BrandIngestionService,
+  extractSourceDocument,
+  findUnclaimedIngestionJobs,
+} from './ingestion';
 export type {
+  ExtractionOutcome,
   IngestionPolicy,
   IngestionServiceOptions,
   ProcessResult,
+  ReceiveOutcome,
+  ReceiveResult,
+  StartedIngestion,
   UploadInput,
+  UploadRefusalReason,
 } from './ingestion';
 
 export {
@@ -156,15 +170,28 @@ export type {
   RetrievedItem,
 } from './retrieval';
 
+export { removeSource, sourceKnowledge } from './sources';
+export type {
+  SourceFact,
+  SourceKnowledge,
+  SourcePending,
+  SourceRemovalMode,
+  SourceRemovalResult,
+} from './sources';
+
 export {
   BRAND_GOAL_SELECT,
   GOAL_KEY_PREFIX,
+  brandBrainChangedSince,
   brandBrainEnabledForWriting,
   declaredPillarIdeas,
   declaredPillarKeys,
   groundingFor,
   keyQuestionAnswered,
+  knowledgeSignatureFor,
+  knowledgeSignatureOf,
   rewriteGroundingFor,
+  usableFactsForDisplay,
   writingFactsInAreas,
   writingGoal,
 } from './grounding';
