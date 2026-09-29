@@ -533,8 +533,7 @@ only after its security design is approved. Each part is its own branch from `st
 `ingest-<id>`; `sweepStuckJobs` is never called; ingestion failure sentences are English only; and
 `BRANDSPACE_WEBFONTS` is blocked by the dashboard's CSP.
 
-**Known gap, recorded by owner decision (review of PR #52) and to be fixed in 2C-4 (item 6 touches the
-Strategy page):** the Strategy page's display lists — audience, key messages and declared pillars — read
+**Known gap, recorded by owner decision (review of PR #52) and FIXED in 2C-4 (§9.4, D-399):** the Strategy page's display lists — audience, key messages and declared pillars — read
 `status: 'ACTIVE'` only, so an EXPIRED fact is still shown there and a STALE one is not. They are display
 only and reach no generation (the goal that prefills the objective is read through `writingGoal`, D-360),
 which is why the grounding guard names the page as a non-generative reader.
@@ -613,6 +612,45 @@ kind column, and no migration was added for it); a job-like request that matches
 **Not started, by scope:** item 5 (Sources/uploads), item 6 (Performance, Home D12, Strategy D13),
 M6, M7, website reading, the Strategy display-list fix, the D-366 Studio font gap, and the §9.1 known
 gaps (STALE producer, `ingest-<id>` reuse, `sweepStuckJobs`, English ingestion sentences, webfonts CSP).
+
+### 9.4 How Phase 2C-4 was built
+
+Item 5 (Sources: uploads, D5 — uploads only) and item 6 (D11 Performance, D12 Home, D13 Strategy),
+plus the Strategy display-list fix. Migrations M6 and M7, schema only. Website reading is not built.
+
+- **Uploads (D5; D-384 – D-387).** PDF, DOCX, PPTX, plain text, CSV and Markdown, exactly
+  `20 * 1024 * 1024` bytes (the configured default), `.doc`/`.ppt` refused. The bytes decide: signature,
+  the OOXML package's declared main part (one small part read under the existing archive guards), a
+  strict UTF-8 decode of the whole text file. Parsing happens only in the media-processing worker —
+  the dashboard's inline fallback is gone — and outside any tenant transaction (claim, extract with no
+  database, persist). `maxPages` bounds PPTX slides; `timeoutMs` bounds the whole extraction. The
+  dashboard's transport ceiling is 24 MiB.
+- **FAILED rows (D-388 – D-390).** A refused upload is a visible FAILED row (0 bytes, nothing stored or
+  charged) with a stable reason key in both languages; the same bytes again return that row, never a
+  constraint error; a removed source ends its request key's generation so the file can come back.
+- **Per source (D-391, D-401).** Type, size, date, approved and pending counts, the facts and proposals
+  it is responsible for — a fact belongs to a source only while its CURRENT version came from it.
+- **Read again (D-392).** A new ingestion job row, so a new `ingest-<id>`: it really runs; PENDING only;
+  nothing approved duplicated.
+- **Remove (D-393, D-394).** Soft delete, chunks deleted, PENDING proposals SUPERSEDED, stored bytes
+  refunded once through B-8. Keep leaves facts alone; Drop (`brand_brain.upload` + `brand_brain.edit`)
+  archives only currently owned facts through `archiveItem`, and D10 applies as it is.
+- **M6 (D-395).** The live-checksum partial unique index.
+- **D11 (D-396).** "Save as learning" per Performance insight card, `brand_brain.edit`, the same
+  `proposeFromInsight`; the batch route keeps `brand_brain.review`.
+- **D12 (D-397).** `brand-brain-review-waiting` (replaces `learnings-pending`) and
+  `brand-brain-missing` on Home.
+- **D13 (D-398, D-400).** The usable-knowledge signature, stored on generated STRATEGY and
+  MONTHLY_PLAN insights (M7); "Brand Brain changed" when it no longer matches; NULL never alerts.
+  **Acknowledge is held for an owner decision** — not defined in the approved docs.
+- **Strategy display lists (D-399).** The usable rule, through the grounding layer.
+
+**Still open from §9.1, by owner decision:** nothing sets a fact to `STALE`; `sweepStuckJobs` is never
+called; `BRANDSPACE_WEBFONTS` is blocked by the dashboard's CSP; the BullMQ `verify:` job id; the retry
+of a transient ingestion failure re-queues the SAME job row (Read again is not affected — it creates a
+new one). **Closed here:** the English ingestion failure sentences (reason keys, legacy rows mapped),
+`ingest-<id>` reuse for Read again, and the Strategy display lists. **Not started:** website reading
+(after its security review) and the D-366 Studio font gap.
 
 ## Appendix — prototype decisions (v76)
 

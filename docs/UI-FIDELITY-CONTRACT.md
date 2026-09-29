@@ -821,6 +821,29 @@ ships (§4.2 of `CLAUDE.md`), and the owner may refine them in the final parity 
 
 No new colour family, font, shadow style or interaction model.
 
+### 6.3.49 Prototype v90 Phase 2C-4 — the source row's detail, Read again, Remove (Keep/Drop), the upload state and "Save as learning" (D-384 – D-401)
+
+APPROVED DESIGN-SYSTEM EXTENSIONS. The demo's Sources card describes counts per source, a facts list,
+Read again and Remove with keep or drop, but draws none of them; each is composed from what already
+ships (§4.2 of `CLAUDE.md`), and the owner may refine them in the final parity pass.
+
+- **The row** — the demo's `.bb-doc` (badge, name over detail, status) is unchanged. Beneath it,
+  `.bb-doc-meta`: type · stored size · upload date · N approved · N pending in the card's 9 px muted
+  caption, and `.bb-doc-actions` — Facts (a disclosure, `aria-expanded`/`aria-controls`), Read again and
+  Remove as small buttons in the row's own #f6f6f7 / ink values and 10 px radius, with a visible focus
+  ring. A FAILED row's detail line carries the reason in the reader's language. "Reading…" is a
+  `role="status"` caption while a job is queued or running.
+- **The facts disclosure** — `.bb-doc-detail`: a white panel in the row's 15 px radius listing the
+  approved facts the source currently owns (area · state, expired ones marked) and its pending
+  proposals, each with an empty sentence.
+- **Remove** — the shared `Dialog`: title, what removal does, and a `fieldset` of two radio cards (Keep
+  its facts / Drop its facts, the latter only for `brand_brain.edit`), Cancel and Remove source.
+- **Uploading** — the demo's ink submit reads "Uploading…" and is disabled while the file travels.
+- **Performance** — "Save as learning" on an insight line is the screen's ghost `sm` button; the saved
+  state is a muted caption.
+
+No new colour family, font, shadow style, motion or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

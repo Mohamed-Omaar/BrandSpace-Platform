@@ -439,6 +439,25 @@ the changed-fact banner and Home's changed-fact item are absent while the previo
 
 ---
 
+### 6.7 Phase 2C-4: the live-checksum index (M6) and the knowledge signature (M7) (D-395, D-400)
+
+`20261009090000_brand_source_live_checksum` replaces the unique index on `brand_source_document
+(workspaceId, brandId, checksum)` with a partial unique index on the same key `WHERE "deletedAt" IS
+NULL`, so a removed source releases its checksum.
+
+- **Rolling the APPLICATION back is safe** without touching the index. The previous release reads and
+  writes live rows only, its duplicate check already filters `deletedAt IS NULL`, and it has no Remove.
+  Removed sources stay removed; FAILED rows written by this release read as FAILED with a reason the
+  previous release shows through its general message.
+- **The index is forward-only once a file has come back.** As soon as a brand holds a removed document
+  and a live one with the same checksum, the older, stricter index cannot be recreated — the rows it
+  would forbid are correct history. Never replay the old definition by hand; if the stricter rule were
+  ever wanted, it is a NEW, reviewed migration that first decides what happens to those rows (§6).
+
+`20261009100000_insight_knowledge_signature` adds a nullable column. The previous release ignores it;
+dropping it loses only the baselines, after which every strategy reads as "no baseline" and never
+alerts.
+
 ## 7. Secret rotation
 
 **Platform capability.** Every provider credential is a REFERENCE in configuration and a row in the
