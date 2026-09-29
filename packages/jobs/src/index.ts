@@ -21,6 +21,7 @@ export {
   PROCESS_ASSET,
   PUBLISH_SOCIAL_POST,
   VERIFY_SOCIAL_POST,
+  verifySocialPostJobKey,
   type IngestSourceDocumentPayload,
   type MediaProcessingPayload,
   type ProcessAssetPayload,

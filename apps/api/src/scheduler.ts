@@ -36,6 +36,7 @@ import {
   PUBLISH_SOCIAL_POST,
   VERIFY_SOCIAL_POST,
   enqueue,
+  verifySocialPostJobKey,
   type BackfillAnalyticsPayload,
   type EvaluateAutomationPayload,
   type IngestAnalyticsPayload,
@@ -602,19 +603,26 @@ export class MaintenanceScheduler {
     const staleBefore = new Date(now.getTime() - lease.claimLeaseSeconds * 1_000);
     const stale = await platform.publishJob.findMany({
       where: { status: 'PUBLISHING', claimedAt: { lt: staleBefore } },
-      select: { id: true, workspaceId: true, idempotencyKey: true },
+      select: { id: true, workspaceId: true, idempotencyKey: true, claimedAt: true },
       orderBy: { claimedAt: 'asc' },
       take: lease.staleClaimBatchSize,
     });
 
     let recovered = 0;
     for (const job of stale) {
+      // The query above only returns claimed rows; the guard satisfies the type.
+      if (!job.claimedAt) continue;
       const result = await enqueue('publish-jobs', VERIFY_SOCIAL_POST, {
         kind: VERIFY_SOCIAL_POST,
         workspaceId: job.workspaceId,
-        // A DISTINCT QUEUE ID FROM THE PUBLISH MESSAGE for the same job, so a
-        // verification is never de-duplicated against the publish that stalled.
-        idempotencyKey: `verify:${job.idempotencyKey}`,
+        /*
+         * ONE QUEUE ID PER STALLED CLAIM, AND NO COLON (D-410). It used to be
+         * `verify:<key>`, which `enqueue` refuses — BullMQ cannot use a `:` in a
+         * job id — so no verification was ever sent and a post whose worker
+         * died stayed PUBLISHING. `verifySocialPostJobKey` says why the prefix
+         * and the claim time are there.
+         */
+        idempotencyKey: verifySocialPostJobKey(job.idempotencyKey, job.claimedAt),
         publishJobId: job.id,
       } satisfies VerifySocialPostPayload);
       if (result.dispatched) recovered += 1;

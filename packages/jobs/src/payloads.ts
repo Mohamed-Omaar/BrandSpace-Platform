@@ -118,6 +118,24 @@ export const PUBLISH_SOCIAL_POST = 'social.publish-post' as const;
 export const VERIFY_SOCIAL_POST = 'social.verify-post' as const;
 
 /**
+ * The queue id of the verification sent for ONE stalled claim (D-143, D-410).
+ *
+ * NO COLON. BullMQ refuses a custom job id containing `:`, and `enqueue`
+ * refuses it first; the recovery used to be keyed `verify:<key>`, so every
+ * verification was refused and a post whose worker died stayed PUBLISHING.
+ *
+ * `verify-` keeps it distinct from the publish message for the same job
+ * (`<key>-<nextAttemptAt>`), so a verification is never de-duplicated against
+ * the publish that stalled. The CLAIM TIME makes it distinct per stall: BullMQ
+ * keeps finished jobs, so a job that is verified, sent again and stalls again
+ * needs a new id, while every sweep that sees the SAME stalled claim builds the
+ * same id and adds nothing.
+ */
+export function verifySocialPostJobKey(publishIdempotencyKey: string, claimedAt: Date): string {
+  return `verify-${publishIdempotencyKey}-${claimedAt.getTime()}`;
+}
+
+/**
  * Pull one connection's analytics for one window — Phase 7.
  *
  * THE PAYLOAD IS A POINTER, for the third time in this file and for the same
