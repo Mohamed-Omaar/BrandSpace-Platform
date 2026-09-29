@@ -88,7 +88,7 @@ async function submit(
         triggerConfig,
         conditions: conditions as never,
         actionType: 'NOTIFY',
-        actionConfig: { templateKey: 'automation.confirmation_required' },
+        actionConfig: { templateKey: 'automation.notice' },
         actor: ACTOR(),
       }),
     );

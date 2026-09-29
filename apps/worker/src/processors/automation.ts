@@ -114,7 +114,9 @@ function portsFor(
         });
         const delivered = await service.create({
           userIds,
-          templateKey: input.templateKey as never,
+          // A closed union of real templates (D-412) — no cast, so the compiler
+          // proves every key an automation can send is one the catalogue has.
+          templateKey: input.templateKey,
           brandId: input.brandId,
           resourceType: input.resourceType,
           resourceId: input.resourceId,

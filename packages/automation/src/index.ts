@@ -21,6 +21,7 @@ export type { FactEvent, MetricWindowPort } from './facts';
 
 export {
   AUTOMATION_ACTIONS,
+  AUTOMATION_NOTIFY_TEMPLATES,
   AUTOMATION_TRIGGERS,
   actionSupportsTrigger,
   CONDITION_FIELDS,
@@ -39,8 +40,10 @@ export {
   findPlannedAction,
   findTrigger,
   isAuthorablePair,
+  isAutomationNotifyTemplate,
   isExternalAction,
   isOlderAutomation,
+  NOTIFY_TEMPLATE_NOT_ALLOWED,
   PLANNED_AUTOMATION_ACTIONS,
   PLANNED_AUTOMATION_TRIGGERS,
   RETIRED_AUTOMATION_TRIGGERS,
@@ -49,6 +52,8 @@ export {
 export type {
   ActionDefinition,
   ActionPermissions,
+  AutomationNotificationTemplate,
+  AutomationNotifyTemplate,
   PlannedActionDefinition,
   PlannedTriggerDefinition,
   AutomationCondition,

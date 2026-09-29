@@ -826,12 +826,49 @@ export interface ActionDefinition {
   readonly messageKey: string;
 }
 
+/**
+ * WHAT A NOTIFY RULE MAY SEND — exactly one template (Fix PR 1 · F5, D-412).
+ *
+ * The rule's `templateKey` used to be any string up to 60 characters. The
+ * Automations screen always wrote `automation.notice`, but the Copilot's rule
+ * tool could store any key, and at run time an unknown one made the mute
+ * filter lose its category, so everyone who had switched ANY category off was
+ * muted — while a known one outside this set let a rule send a notice nobody
+ * can switch off (a workspace deletion, say) to every publisher.
+ *
+ * `automation.notice` is the one template written for this action (P6-12),
+ * and people mute it with Settings → Notifications → Automations.
+ * `tests/unit/fix-pr1-notify-templates.test.ts` holds each key here to a
+ * non-null category in the notifications catalogue.
+ */
+export const AUTOMATION_NOTIFY_TEMPLATES = ['automation.notice'] as const;
+export type AutomationNotifyTemplate = (typeof AUTOMATION_NOTIFY_TEMPLATES)[number];
+
+/**
+ * Every template the automation engine sends: what a NOTIFY rule may name,
+ * and the engine's own confirmation request for an asks-first run, which no
+ * rule chooses.
+ */
+export type AutomationNotificationTemplate =
+  AutomationNotifyTemplate | 'automation.confirmation_required';
+
+export function isAutomationNotifyTemplate(value: unknown): value is AutomationNotifyTemplate {
+  return (AUTOMATION_NOTIFY_TEMPLATES as readonly unknown[]).includes(value);
+}
+
+/**
+ * A stored NOTIFY rule whose template is outside the set ends FAILED with this
+ * code before anything is sent (D-412); Run history says why in the reader's
+ * language.
+ */
+export const NOTIFY_TEMPLATE_NOT_ALLOWED = 'notify_template_not_allowed';
+
 export const AUTOMATION_ACTIONS = [
   {
     type: 'NOTIFY',
     config: z.object({
-      /** A notification template key. A closed set in `@brandspace/notifications`. */
-      templateKey: z.string().min(1).max(60),
+      /** One of `AUTOMATION_NOTIFY_TEMPLATES` — a closed set, refused otherwise. */
+      templateKey: z.enum(AUTOMATION_NOTIFY_TEMPLATES),
     }),
     actionClass: 'READ_ONLY',
     // Notifying members about their own workspace's events needs no more than

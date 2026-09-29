@@ -2653,6 +2653,8 @@ export const messages = {
     'automations.failure': 'السبب: {code}',
     'automations.failure.condition_value_unavailable':
       'تم التخطي — شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.',
+    'automations.failure.notify_template_not_allowed':
+      'لم يُرسل — تذكر هذه الأتمتة إشعارًا لا يمكن للأتمتة إرساله. احذفها وأنشئها من جديد.',
     'automations.confirmNeedsPermission': 'ينتظر تأكيد عضو يملك صلاحية النشر.',
     'automations.brandFilter': 'القواعد والتشغيلات للعلامة {brand}.',
     'notifications.template.analytics.anomaly_detected': 'تغيّر غير معتاد في الأداء',
@@ -5909,6 +5911,8 @@ export const messages = {
     'automations.failure': 'Reason: {code}',
     'automations.failure.condition_value_unavailable':
       "Skipped — something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.",
+    'automations.failure.notify_template_not_allowed':
+      "Not sent — this automation names a notification that automations can't send. Delete it and create it again.",
     'automations.confirmNeedsPermission': 'Waiting for a member who may publish to confirm it.',
     'automations.brandFilter': 'Rules and runs for {brand}.',
     'notifications.template.analytics.anomaly_detected': 'An unusual change in performance',
