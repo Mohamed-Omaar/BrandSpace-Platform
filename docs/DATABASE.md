@@ -1830,6 +1830,35 @@ ordering, is what needs raising.
 
 ---
 
+### 18.9 Phase 2B-3 PR 1 — the G13 vocabulary, schema only (D-404)
+
+**Sixteen enum values, three wider CHECKs, two nullable columns, no data.**
+
+- `AutomationTrigger` gains POST_FAILED, REVIEW_WAITING_24H, CAMPAIGN_STARTED,
+  CAMPAIGN_ENDED, WEEKLY_ENGAGEMENT_DROPPED, SCHEDULE_GAP, POST_TOP_10_PERCENT and
+  FACT_EXPIRING; `AutomationActionType` gains SCHEDULE_NEXT_FREE_SLOT,
+  NOTIFY_PERSON, ADD_TO_CAMPAIGN, REMIND_REVIEWER, DRAFT_IDEAS, MAKE_DRAFT_COPY,
+  RETRY_PUBLISH and PAUSE_CAMPAIGN. Each set is its own migration (D-379). The code
+  registry declares them as PLANNED — not authorable, not executable — until the
+  pull request that ships each one's producer or action (D-406).
+- `automation_event_ref_matches_trigger` names each new trigger's reference:
+  POST_FAILED → `PublishAttempt`, REVIEW_WAITING_24H → `Approval`, CAMPAIGN_STARTED
+  and CAMPAIGN_ENDED → `Campaign`, POST_TOP_10_PERCENT → `ContentItem`,
+  FACT_EXPIRING → `BrandKnowledgeItem`; WEEKLY_ENGAGEMENT_DROPPED and SCHEDULE_GAP
+  carry none. `ELSE FALSE` stays, so ANOMALY_DETECTED is still unrepresentable.
+- `automation_event_rule_addressed_when_derived` requires `ruleId` for the seven
+  rule-derived new triggers and forbids it on POST_FAILED, a domain event.
+- `automation_rule_external_requires_confirmation` covers PROPOSE_PUBLISH,
+  RETRY_PUBLISH and PAUSE_CAMPAIGN.
+
+| Column         | Meaning                                                                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `armedAt`      | NULL. The no-backfill boundary the G13 producers will set when a rule is created, enabled or re-configured. NULL means no boundary.     |
+| `dueWatermark` | NULL. The due-date producers' durable cursor. NULL means not started; a producer initialises it from `armedAt` and fires nothing stale. |
+
+Nothing reads either column yet, and every existing row satisfies the wider
+constraints unchanged.
+
 ## 19. Phase 9 — Commerce & Onboarding
 
 Thirteen models: eight tenant-owned commercial tables, two platform-owned, three identity-scoped.
