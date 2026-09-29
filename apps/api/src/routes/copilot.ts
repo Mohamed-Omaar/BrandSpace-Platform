@@ -623,6 +623,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
       scope: 'workspace',
       permission: COPILOT_PERMISSION,
       confirmation: 'required',
+      confirmedBy: 'single_use_token',
       rateLimit: 'workspace.write',
       idempotent: true,
     },
@@ -757,6 +758,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
       scope: 'workspace',
       permission: COPILOT_PERMISSION,
       confirmation: 'required',
+      confirmedBy: 'explicit_decision',
       rateLimit: 'workspace.write',
     },
     async (req, reply) => {

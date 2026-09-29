@@ -99,6 +99,13 @@ const selectionTokenSchema = z.object({
   selectionToken: z.string().min(1).max(512),
 });
 
+/**
+ * A high-impact action's confirmation, held on the server (CLAUDE.md §2.5;
+ * Fix PR 1 · F4, D-411) — the same `confirm: true` subscription cancel
+ * requires.
+ */
+const confirmSchema = z.object({ confirm: z.literal(true) });
+
 const chooseTargetSchema = selectionTokenSchema.extend({
   externalAccountId: z.string().min(1).max(256),
 });
@@ -326,6 +333,7 @@ export function registerSocialRoutes(app: FastifyInstance): void {
       scope: 'workspace',
       permission: CONNECT_PERMISSION,
       confirmation: 'required',
+      confirmedBy: 'provider_consent',
       idempotent: false,
     },
     async (req, reply) => {
@@ -404,6 +412,7 @@ export function registerSocialRoutes(app: FastifyInstance): void {
     {
       scope: 'public',
       confirmation: 'required',
+      confirmedBy: 'provider_consent',
       idempotent: true,
     },
     async (req, reply) => {
@@ -554,6 +563,7 @@ export function registerSocialRoutes(app: FastifyInstance): void {
       scope: 'workspace',
       permission: CONNECT_PERMISSION,
       confirmation: 'required',
+      confirmedBy: 'provider_consent',
       idempotent: false,
     },
     async (req, reply) => {
@@ -649,6 +659,7 @@ export function registerSocialRoutes(app: FastifyInstance): void {
       scope: 'workspace',
       permission: CONNECT_PERMISSION,
       confirmation: 'required',
+      confirmedBy: 'confirm_field',
       idempotent: true,
     },
     async (req, reply) => {
@@ -656,6 +667,15 @@ export function registerSocialRoutes(app: FastifyInstance): void {
       if (!caller) return;
       const { connectionId } = req.params as { connectionId?: string };
       if (!connectionId) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      /*
+       * THE CONFIRMATION IS HELD HERE, NOT ONLY ON THE SCREEN (Fix PR 1 · F4,
+       * D-411). The dashboard's two steps (B-9) protected the dashboard; this
+       * route is reachable with a customer's own session, and a single request
+       * used to disconnect. Without `confirm: true` nothing is sent.
+       */
+      if (!confirmSchema.safeParse(req.body ?? {}).success) {
+        return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      }
 
       try {
         const view = await connectionServiceFor(caller.workspaceId, (service) =>

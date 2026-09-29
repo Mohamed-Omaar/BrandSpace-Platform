@@ -37,9 +37,42 @@ export interface RouteContract {
   readonly entitlement?: string;
   /** High-impact actions require an explicit confirmation policy — CLAUDE.md §2.5. */
   readonly confirmation?: 'required' | 'not_required';
+  /**
+   * HOW the server holds a `required` confirmation (Fix PR 1 · F4, D-411).
+   * Mandatory whenever `confirmation` is `'required'`: registration refuses a
+   * route that declares the policy without naming the mechanism, because the
+   * declaration alone is metadata and enforces nothing — which is how
+   * disconnect and pack checkout came to be one-step on the server.
+   */
+  readonly confirmedBy?: ConfirmationMechanism;
   readonly rateLimit?: string;
   readonly idempotent?: boolean;
 }
+
+/**
+ * The ways a route that declares `confirmation: 'required'` actually holds it.
+ *
+ * - `confirm_field` — the request body must carry `confirm: true`
+ *   (`z.literal(true)` in the route's own schema); the dashboard sends it only
+ *   from its confirming step. A request without it is 422 and nothing happens.
+ * - `single_use_token` — a confirmation token issued by an earlier step and
+ *   spent once (automation and Copilot confirmations).
+ * - `proof_of_possession` — a live authenticator code or the password, checked
+ *   through the counted step-up (two-step verification).
+ * - `provider_consent` — the confirmation happens on the provider's own screen
+ *   (OAuth consent, a hosted checkout page) and the route only starts or
+ *   finishes that hand-off.
+ * - `explicit_decision` — the request IS the member's explicit decision on a
+ *   thing already shown to them, with no second step (an insight verdict,
+ *   undoing one's own Copilot plan, a downgrade at period end, starting an
+ *   enrolment that does nothing until it is proven).
+ */
+export type ConfirmationMechanism =
+  | 'confirm_field'
+  | 'single_use_token'
+  | 'proof_of_possession'
+  | 'provider_consent'
+  | 'explicit_decision';
 
 export interface RegisteredRoute {
   readonly method: string;
@@ -79,6 +112,12 @@ export function route(
       `Route ${method} ${url} has scope "${contract.scope}" but declares no permission. ` +
         `Non-public routes must name the permission they require. ` +
         `("internal" is the exception: it is a service caller, authenticated by token.)`,
+    );
+  }
+  if (contract.confirmation === 'required' && !contract.confirmedBy) {
+    throw new Error(
+      `Route ${method} ${url} requires confirmation but does not name how it is enforced ` +
+        `(confirmedBy). See CLAUDE.md §2.5.`,
     );
   }
   registry.push({ method, url, contract });

@@ -260,6 +260,7 @@ export function registerAutomationRoutes(app: FastifyInstance): void {
       scope: 'workspace',
       permission: CONFIRM_PERMISSION,
       confirmation: 'required',
+      confirmedBy: 'single_use_token',
       rateLimit: 'workspace.write',
       idempotent: true,
     },

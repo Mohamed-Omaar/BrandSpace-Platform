@@ -69,6 +69,11 @@ const openPackSchema = z.object({
   packKey: z.string().min(1).max(64),
   idempotencyKey: z.string().min(8).max(128).optional(),
   locale: localeSchema,
+  /**
+   * CLAUDE.md §2.5 (Fix PR 1 · F4, D-411): buying is confirmed on the server
+   * too. Only the dashboard's "Continue to payment" sends it (B-10).
+   */
+  confirm: z.literal(true),
 });
 
 const planChangeSchema = z.object({
@@ -235,7 +240,13 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
     app,
     'POST',
     '/v1/commerce/checkout/subscription',
-    { scope: 'workspace', permission: MANAGE, confirmation: 'required', idempotent: true },
+    {
+      scope: 'workspace',
+      permission: MANAGE,
+      confirmation: 'required',
+      confirmedBy: 'provider_consent',
+      idempotent: true,
+    },
     async (req, reply) => {
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
@@ -276,7 +287,13 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
     app,
     'POST',
     '/v1/commerce/checkout/pack',
-    { scope: 'workspace', permission: MANAGE, confirmation: 'required', idempotent: true },
+    {
+      scope: 'workspace',
+      permission: MANAGE,
+      confirmation: 'required',
+      confirmedBy: 'confirm_field',
+      idempotent: true,
+    },
     async (req, reply) => {
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
@@ -557,7 +574,13 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
     app,
     'POST',
     '/v1/commerce/subscription/downgrade',
-    { scope: 'workspace', permission: MANAGE, confirmation: 'required', idempotent: true },
+    {
+      scope: 'workspace',
+      permission: MANAGE,
+      confirmation: 'required',
+      confirmedBy: 'explicit_decision',
+      idempotent: true,
+    },
     async (req, reply) => {
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
@@ -619,7 +642,13 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
     app,
     'POST',
     '/v1/commerce/subscription/cancel',
-    { scope: 'workspace', permission: MANAGE, confirmation: 'required', idempotent: true },
+    {
+      scope: 'workspace',
+      permission: MANAGE,
+      confirmation: 'required',
+      confirmedBy: 'confirm_field',
+      idempotent: true,
+    },
     async (req, reply) => {
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
