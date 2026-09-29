@@ -110,3 +110,18 @@ describe('D11 — Save as learning is brand_brain.edit per card; the batch route
     expect(actions).toMatch(/requireWorkspace\(locale, 'brand_brain\.edit'\)/);
   });
 });
+
+describe('Item 5 — the Remove dialog offers Drop only with brand_brain.edit', () => {
+  it('the view passes upload AND edit, and the row renders Drop only then', () => {
+    const view = source('apps/dashboard/src/app/[locale]/brand-brain/brand-brain-view.tsx');
+    expect(view).toMatch(/canDrop=\{permissions\.upload && permissions\.edit\}/);
+    expect(view).toMatch(/canUpload=\{permissions\.upload\}/);
+    const row = source('apps/dashboard/src/app/[locale]/brand-brain/source-row.tsx');
+    expect(row).toMatch(/\{canDrop \? \(\s*<label>/);
+    expect(row).toMatch(/\{canUpload && source\.canReadAgain \? \(/);
+    const actions = source('apps/dashboard/src/app/[locale]/brand-brain/actions.ts');
+    expect(actions).toMatch(
+      /mode === 'drop' && !holdsPermission\(session\.workspace, 'brand_brain\.edit'\)/,
+    );
+  });
+});
