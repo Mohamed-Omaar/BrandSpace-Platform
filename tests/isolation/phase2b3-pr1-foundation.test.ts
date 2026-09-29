@@ -632,7 +632,7 @@ describe('a value the rule names that no longer resolves ends the run SKIPPED, n
     ).id;
   }
 
-  async function member(brandScope: string[]): Promise<string> {
+  async function member(brandScope: string[] | null): Promise<string> {
     const user = await platform.user.create({
       data: { email: `pr1-${randomUUID()}@example.test`, timezone: 'UTC' },
       select: { id: true },
@@ -647,7 +647,7 @@ describe('a value the rule names that no longer resolves ends the run SKIPPED, n
         userId: user.id,
         roleId: role.id,
         status: 'ACTIVE',
-        brandScope,
+        ...(brandScope === null ? {} : { brandScope }),
       },
     });
     return user.id;
@@ -716,6 +716,13 @@ describe('a value the rule names that no longer resolves ends the run SKIPPED, n
 
     await setMembership(person, { status: 'SUSPENDED' });
     expect(shape(await runOnce(rule, { facts }))).toEqual(stale);
+
+    // A member with NO scope value at all (NULL = every brand) resolves.
+    const unscoped = await notEquals('content.authorUserId', await member(null));
+    expect(shape(await runOnce(unscoped, { facts }))).toEqual({
+      status: 'SUCCEEDED',
+      failureCode: null,
+    });
 
     // A member of ANOTHER workspace is not a member of this one.
     const foreign = await notEquals('content.authorUserId', fixtures.b.userId);
@@ -796,7 +803,8 @@ describe('a value the rule names that no longer resolves ends the run SKIPPED, n
 // ---------------------------------------------------------------------------
 
 describe('the member picker lists members whose BrandScope admits the rule’s brand', () => {
-  async function member(status: 'ACTIVE' | 'SUSPENDED' | 'INVITED', brandScope: string[]) {
+  /** `null` writes NO scope at all — the column's NULL, which means every brand. */
+  async function member(status: 'ACTIVE' | 'SUSPENDED' | 'INVITED', brandScope: string[] | null) {
     const user = await platform.user.create({
       data: {
         email: `pr1-picker-${randomUUID()}@example.test`,
@@ -815,7 +823,7 @@ describe('the member picker lists members whose BrandScope admits the rule’s b
         userId: user.id,
         roleId: role.id,
         status,
-        brandScope,
+        ...(brandScope === null ? {} : { brandScope }),
       },
     });
     return user.id;
@@ -823,6 +831,8 @@ describe('the member picker lists members whose BrandScope admits the rule’s b
 
   it('unrestricted and brand-scoped ACTIVE members in; other brands and inactive members out', async () => {
     const unrestricted = await member('ACTIVE', []);
+    // How an owner's membership is usually written: no scope column value.
+    const noScope = await member('ACTIVE', null);
     const scopedHere = await member('ACTIVE', [fixtures.a.brandId]);
     const scopedElsewhere = await member('ACTIVE', [otherBrandId]);
     const suspended = await member('SUSPENDED', []);
@@ -839,6 +849,7 @@ describe('the member picker lists members whose BrandScope admits the rule’s b
     ).map((choice) => choice.id);
     expect(listed).toContain(fixtures.a.userId);
     expect(listed).toContain(unrestricted);
+    expect(listed).toContain(noScope);
     expect(listed).toContain(scopedHere);
     expect(listed).not.toContain(scopedElsewhere);
     expect(listed).not.toContain(suspended);

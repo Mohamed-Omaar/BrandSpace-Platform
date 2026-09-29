@@ -58,18 +58,32 @@ export async function memberCatalogueFor(
   });
   if (!brand) return [];
 
+  /*
+   * THE SCOPE IS DECIDED BY `brandInScope`, NOT BY AN ARRAY FILTER IN SQL. The
+   * column is nullable and NULL means "every brand" — how an owner's membership
+   * is usually written — and a SQL `cardinality(...) = 0` or `@>` is NULL, not
+   * true, for a NULL array, so a query-side filter silently dropped exactly the
+   * members with the widest access. The canonical predicate treats NULL and
+   * empty alike.
+   */
   const rows = await db.membership.findMany({
-    where: {
-      workspaceId: input.workspaceId,
-      status: 'ACTIVE',
-      OR: [{ brandScope: { isEmpty: true } }, { brandScope: { has: input.brandId } }],
+    where: { workspaceId: input.workspaceId, status: 'ACTIVE' },
+    select: {
+      userId: true,
+      brandScope: true,
+      user: { select: { name: true, email: true } },
     },
-    select: { userId: true, user: { select: { name: true, email: true } } },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    take: Math.max(1, Math.min(input.take ?? 200, 200)),
+    take: MEMBER_SCAN_LIMIT,
   });
-  return rows.map((row) => ({ id: row.userId, name: row.user.name ?? row.user.email }));
+  return rows
+    .filter((row) => brandInScope(row.brandScope, input.brandId))
+    .slice(0, Math.max(1, Math.min(input.take ?? 200, 200)))
+    .map((row) => ({ id: row.userId, name: row.user.name ?? row.user.email }));
 }
+
+/** An upper bound on the members read per picker; far above any plan's seats. */
+const MEMBER_SCAN_LIMIT = 2_000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -143,15 +157,17 @@ export async function conditionValuesResolve(
 
   if (wanted.members.size > 0) {
     const ids = [...wanted.members];
-    const found = await db.membership.count({
-      where: {
-        workspaceId: input.workspaceId,
-        userId: { in: ids },
-        status: 'ACTIVE',
-        OR: [{ brandScope: { isEmpty: true } }, { brandScope: { has: input.brandId } }],
-      },
+    const members = await db.membership.findMany({
+      where: { workspaceId: input.workspaceId, userId: { in: ids }, status: 'ACTIVE' },
+      select: { userId: true, brandScope: true },
     });
-    if (found !== ids.length) return false;
+    // `brandInScope`, for the same NULL-means-every-brand reason as the picker.
+    const admitted = new Set(
+      members
+        .filter((member) => brandInScope(member.brandScope, input.brandId))
+        .map((member) => member.userId),
+    );
+    if (ids.some((id) => !admitted.has(id))) return false;
   }
 
   return true;
