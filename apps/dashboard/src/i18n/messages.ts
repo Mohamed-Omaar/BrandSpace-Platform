@@ -2268,6 +2268,10 @@ export const messages = {
     'insights.anomalyBaseline': 'خط الأساس',
     'insights.anomalyObserved': 'القيمة المرصودة',
     'insights.anomalyThreshold': 'الحد المعتمد',
+    // D11 (Phase 2C-4) — one insight card, saved as a pending learning.
+    'insights.saveAsLearning': 'احفظه كدرس مستفاد',
+    'insights.learningPending': 'حُفظ كدرس مستفاد · بانتظار المراجعة',
+    'insights.learningSaved': 'حُفظ كدرس مستفاد',
     'insights.proposeLearnings': 'اقترح دروسًا لعقل العلامة',
     'insights.proposeLearningsHint':
       'تُضاف كمقترحات بانتظار مراجعة بشرية، ولا تُكتب في عقل العلامة مباشرة.',
@@ -5493,6 +5497,10 @@ export const messages = {
     'insights.anomalyBaseline': 'Baseline',
     'insights.anomalyObserved': 'Observed',
     'insights.anomalyThreshold': 'Threshold',
+    // D11 (Phase 2C-4) — one insight card, saved as a pending learning.
+    'insights.saveAsLearning': 'Save as learning',
+    'insights.learningPending': 'Saved as learning · waiting for review',
+    'insights.learningSaved': 'Saved as learning',
     'insights.proposeLearnings': 'Propose learnings for Brand Brain',
     'insights.proposeLearningsHint':
       'Added as proposals for human review. Nothing is written into Brand Brain directly.',
@@ -6825,6 +6833,14 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   SOURCE_ALREADY_FAILED: {
     en: 'This file is already in Sources and failed. Its reason is shown on its row — read it again or remove it first.',
     ar: 'هذا الملف موجود في المصادر وقد فشل. سببه ظاهر في صفّه — أعد قراءته أو أزله أولًا.',
+  },
+  LEARNING_SAVED: {
+    en: 'Saved as a learning. It waits in the Brand Brain review inbox and is not used until someone approves it.',
+    ar: 'حُفظ كدرس مستفاد. ينتظر في صندوق مراجعة عقل العلامة ولا يُستخدم حتى يعتمده أحد.',
+  },
+  LEARNING_NOTHING_TO_SAVE: {
+    en: 'The numbers behind this insight do not support a learning yet, so nothing was saved.',
+    ar: 'الأرقام وراء هذه الرؤية لا تدعم درسًا مستفادًا بعد، لذا لم يُحفظ شيء.',
   },
   SOURCE_READ_AGAIN: {
     en: 'Reading the document again. New proposals will wait for your review.',
