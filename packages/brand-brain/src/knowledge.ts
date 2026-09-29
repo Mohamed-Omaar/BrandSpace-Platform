@@ -16,10 +16,12 @@ import {
 import { areaDefinition } from './areas';
 import { mayOverwrite } from './precedence';
 import { isExpired } from './validity';
+import { indexVector, score, tokenize } from './retrieval';
 import {
   alreadyReviewed,
   candidateNotFound,
   humanPrecedenceViolation,
+  knowledgeChangedSince,
   knowledgeNotFound,
   versionNotFound,
 } from './errors';
@@ -221,6 +223,15 @@ export class BrandKnowledgeService {
      * clears it. Setting it is part of THIS version, so the history shows it.
      */
     validUntil?: Date | null | undefined;
+    /**
+     * D7 (Phase 2C-3) — an OPTIONAL concurrency precondition: the version the
+     * person was looking at. When given, the write happens only if the fact is
+     * still at that version, checked by the write itself (a conditional
+     * UPDATE in this transaction), so two people editing at once cannot lose
+     * each other's work: the second is told "changed since" and nothing is
+     * written. Callers that omit it keep their behaviour exactly.
+     */
+    expectedVersion?: number | undefined;
   }): Promise<BrandKnowledgeItem> {
     // D-132: BOTH tenancy checks are PREDICATES. RLS supplies the workspace
     // one; `brandIdQueryFilter` supplies the brand one, so a row outside the
@@ -232,6 +243,9 @@ export class BrandKnowledgeService {
       where: { id: input.itemId, ...brandIdQueryFilter({ brandScope: input.actor.brandScope }) },
     });
     if (!existing) throw knowledgeNotFound();
+    if (input.expectedVersion !== undefined && existing.version !== input.expectedVersion) {
+      throw knowledgeChangedSince(input.expectedVersion);
+    }
 
     const incomingOrigin = input.incomingOrigin ?? 'HUMAN';
     const decision = mayOverwrite(
@@ -251,33 +265,49 @@ export class BrandKnowledgeService {
     if (!decision.allowed) throw humanPrecedenceViolation();
 
     const now = this.now();
-    const updated = await this.db.brandKnowledgeItem.update({
-      where: { id: existing.id },
-      data: {
-        title: toJson(input.title),
-        body: toJson(input.body),
-        /*
-         * THE ROW SAYS WHO WROTE WHAT IT NOW SAYS (D-335). The origin is the
-         * effective origin of THIS write, not of the row's first one: a person
-         * editing a SETUP or DOCUMENT fact makes it HUMAN, and a document
-         * accepted on the setup wizard's Review step makes it SETUP. Keeping
-         * the old origin would let a later lower-authority write replace text
-         * a person wrote, because `mayOverwrite` would still see the old
-         * origin. `appendVersion` copies the updated row, so the version
-         * carries the same origin as the item it represents.
-         */
-        origin: incomingOrigin,
-        version: { increment: 1 },
-        // A human editing an item has just reviewed it, by definition.
-        lastReviewedAt: now,
-        reviewDueAt: addDays(now, input.policy.reviewIntervalDays),
-        // An edit resolves the staleness that prompted it, and clears a
-        // conflict flag that referred to the previous text.
-        conflictsWithItemId: null,
-        status: existing.status === 'STALE' ? 'ACTIVE' : existing.status,
-        ...(input.validUntil !== undefined ? { validUntil: input.validUntil } : {}),
-      },
-    });
+    const data = {
+      title: toJson(input.title),
+      body: toJson(input.body),
+      /*
+       * THE ROW SAYS WHO WROTE WHAT IT NOW SAYS (D-335). The origin is the
+       * effective origin of THIS write, not of the row's first one: a person
+       * editing a SETUP or DOCUMENT fact makes it HUMAN, and a document
+       * accepted on the setup wizard's Review step makes it SETUP. Keeping
+       * the old origin would let a later lower-authority write replace text
+       * a person wrote, because `mayOverwrite` would still see the old
+       * origin. `appendVersion` copies the updated row, so the version
+       * carries the same origin as the item it represents.
+       */
+      origin: incomingOrigin,
+      version: { increment: 1 },
+      // A human editing an item has just reviewed it, by definition.
+      lastReviewedAt: now,
+      reviewDueAt: addDays(now, input.policy.reviewIntervalDays),
+      // An edit resolves the staleness that prompted it, and clears a
+      // conflict flag that referred to the previous text.
+      conflictsWithItemId: null,
+      status: existing.status === 'STALE' ? 'ACTIVE' : existing.status,
+      ...(input.validUntil !== undefined ? { validUntil: input.validUntil } : {}),
+    } satisfies Prisma.BrandKnowledgeItemUncheckedUpdateManyInput;
+
+    let updated: BrandKnowledgeItem;
+    if (input.expectedVersion === undefined) {
+      updated = await this.db.brandKnowledgeItem.update({ where: { id: existing.id }, data });
+    } else {
+      /*
+       * THE PRECONDITION IS PART OF THE WRITE. The read above answers the
+       * common case; this conditional UPDATE is what decides a race — it takes
+       * the row lock and matches only while the version is still the expected
+       * one, so a concurrent edit that committed first makes this write no
+       * rows, and nothing is overwritten.
+       */
+      const written = await this.db.brandKnowledgeItem.updateMany({
+        where: { id: existing.id, version: input.expectedVersion },
+        data,
+      });
+      if (written.count !== 1) throw knowledgeChangedSince(input.expectedVersion);
+      updated = await this.db.brandKnowledgeItem.findUniqueOrThrow({ where: { id: existing.id } });
+    }
 
     await this.appendVersion(updated, {
       changedByUserId: input.actor.userId,
@@ -417,6 +447,222 @@ export class BrandKnowledgeService {
     });
 
     return archived;
+  }
+
+  /**
+   * UNDO A REMOVE — Brand Brain chat's Remove mode (D7, Phase 2C-3).
+   *
+   * Undo is the ordinary `rollback` to the version before the archive, and ONLY
+   * for the archive the person just made: the fact must still be ARCHIVED and
+   * still at `archivedVersion`. The precondition is checked by a conditional
+   * UPDATE in THIS transaction — it takes the row lock and matches nothing if
+   * the fact was restored, edited or archived again since — so a second click,
+   * or an Undo after somebody else's change, writes nothing and is told
+   * "changed since". The generic `rollback` keeps its meaning for every other
+   * caller; the wrapper also clears `archivedAt`, which the rollback does not
+   * touch, because the fact is no longer archived.
+   */
+  async undoArchive(input: {
+    itemId: string;
+    archivedVersion: number;
+    actor: KnowledgeActor;
+    policy: StalenessPolicy;
+  }): Promise<BrandKnowledgeItem> {
+    const claimed = await this.db.brandKnowledgeItem.updateMany({
+      where: {
+        id: input.itemId,
+        status: 'ARCHIVED',
+        version: input.archivedVersion,
+        ...brandIdQueryFilter({ brandScope: input.actor.brandScope }),
+      },
+      data: { archivedAt: null },
+    });
+    if (claimed.count !== 1) {
+      // A fact outside the member's scope, or one that never existed, is the
+      // same miss; one that exists but moved on is "changed since".
+      const visible = await this.db.brandKnowledgeItem.findFirst({
+        where: { id: input.itemId, ...brandIdQueryFilter({ brandScope: input.actor.brandScope }) },
+        select: { id: true },
+      });
+      if (!visible) throw knowledgeNotFound();
+      throw knowledgeChangedSince(input.archivedVersion);
+    }
+    return this.rollback({
+      itemId: input.itemId,
+      toVersion: input.archivedVersion - 1,
+      reason: 'Undo remove',
+      actor: input.actor,
+      policy: input.policy,
+    });
+  }
+
+  /**
+   * SEND FOR REVIEW — a MEMBER candidate (D7, Phase 2C-3; migrations M4a/M4b).
+   *
+   * A member who may EDIT Brand Brain but may not REVIEW it does not create an
+   * approved fact: they propose one, into the one review inbox, exactly where a
+   * document's facts wait. `sourceKind = MEMBER`, no document, no insight, and
+   * `proposedByUserId` names them (the M4b CHECK requires it). Accepting it
+   * later is the ordinary `reviewCandidate` by somebody with
+   * `brand_brain.review`, and the fact lands as HUMAN — a person wrote it.
+   *
+   * The caller decides WHO may call this (`brand_brain.edit`); nothing here
+   * reads a permission, so no screen can widen it.
+   */
+  async proposeFact(input: {
+    brandId: string;
+    area: BrandKnowledgeArea;
+    itemKey: string;
+    title: LocalizedText;
+    body: LocalizedText;
+    actor: KnowledgeActor;
+  }): Promise<{ readonly candidateId: string }> {
+    assertBrandInScope(input.actor.brandScope, input.brandId);
+    const target = await this.db.brandKnowledgeItem.findFirst({
+      where: { brandId: input.brandId, area: input.area, itemKey: input.itemKey },
+      select: { id: true },
+    });
+    const candidate = await this.db.brandKnowledgeCandidate.create({
+      data: {
+        workspaceId: this.workspaceId,
+        brandId: input.brandId,
+        sourceKind: 'MEMBER',
+        sourceDocumentId: null,
+        insightId: null,
+        proposedByUserId: input.actor.userId,
+        targetItemId: target?.id ?? null,
+        area: input.area,
+        itemKey: input.itemKey,
+        extractedTitle: toJson(input.title),
+        extractedBody: toJson(input.body),
+        // A person's statement is not a probability; the inbox shows who
+        // proposed it instead of a confidence (D-358 stays for documents).
+        confidenceMilli: 1000,
+        evidence: { method: 'member' },
+        status: 'PENDING',
+      },
+      select: { id: true },
+    });
+    await writeAuditEvent(this.db, this.workspaceId, {
+      action: 'brand_brain.fact.proposed',
+      actorType: 'USER',
+      actorId: input.actor.userId,
+      resourceType: 'BrandKnowledgeCandidate',
+      resourceId: candidate.id,
+      brandId: input.brandId,
+      after: { area: input.area, itemKey: input.itemKey, replaces: target !== null },
+    });
+    return { candidateId: candidate.id };
+  }
+
+  /**
+   * THE MANAGEMENT LOOKUP for Brand Brain chat's Edit and Remove modes (D7).
+   *
+   * NOT GROUNDING, AND NEVER A PROMPT: it finds the facts a person may want to
+   * change, and they choose one. So it reads what grounding never does —
+   * EXPIRED facts, which a person can still edit (D-356) — and never an
+   * archived one, which there is nothing left to edit or remove. The matching
+   * is the retriever's own local lexical `score`: overlapping words and the
+   * deterministic local vector, no model, no network, no credits.
+   */
+  async matchFacts(input: {
+    brandId: string;
+    query: string;
+    limit: number;
+    brandScope: readonly string[];
+  }): Promise<
+    readonly {
+      readonly id: string;
+      readonly area: BrandKnowledgeArea;
+      readonly itemKey: string;
+      readonly version: number;
+      readonly title: LocalizedText;
+      readonly body: LocalizedText;
+      readonly validUntil: Date | null;
+    }[]
+  > {
+    assertBrandInScope(input.brandScope, input.brandId);
+    const vector = indexVector(input.query);
+    const tokens = new Set(tokenize(input.query));
+    const rows = await this.db.brandKnowledgeItem.findMany({
+      where: { brandId: input.brandId, status: { in: ['ACTIVE', 'STALE'] } },
+      select: {
+        id: true,
+        area: true,
+        itemKey: true,
+        version: true,
+        title: true,
+        body: true,
+        validUntil: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      // The retriever's ceiling, for the same reason.
+      take: 500,
+    });
+    return rows
+      .map((row) => {
+        const title = localizedFrom(row.title);
+        const body = localizedFrom(row.body);
+        const text = [title.en, title.ar, body.en, body.ar, row.itemKey.replace(/[._-]/g, ' ')]
+          .filter(Boolean)
+          .join(' ');
+        return { row, title, body, relevance: score(text, vector, tokens) };
+      })
+      .filter((entry) => entry.relevance > 0)
+      .sort((a, b) => b.relevance - a.relevance)
+      .slice(0, input.limit)
+      .map(({ row, title, body }) => ({
+        id: row.id,
+        area: row.area,
+        itemKey: row.itemKey,
+        version: row.version,
+        title,
+        body,
+        validUntil: row.validUntil,
+      }));
+  }
+
+  /**
+   * Facts by id for MANAGEMENT screens (D7: "Fix it" opens Edit on one fact; a
+   * changed-since answer shows the fresh version). ACTIVE or STALE, expired
+   * included; read through the member's brand scope as a predicate. Never a
+   * prompt.
+   */
+  async factsById(input: { itemIds: readonly string[]; brandScope: readonly string[] }): Promise<
+    readonly {
+      readonly id: string;
+      readonly brandId: string;
+      readonly area: BrandKnowledgeArea;
+      readonly itemKey: string;
+      readonly version: number;
+      readonly title: LocalizedText;
+      readonly body: LocalizedText;
+      readonly validUntil: Date | null;
+    }[]
+  > {
+    if (input.itemIds.length === 0) return [];
+    const rows = await this.db.brandKnowledgeItem.findMany({
+      where: {
+        id: { in: [...input.itemIds] },
+        status: { in: ['ACTIVE', 'STALE'] },
+        ...brandIdQueryFilter({ brandScope: input.brandScope }),
+      },
+      select: {
+        id: true,
+        brandId: true,
+        area: true,
+        itemKey: true,
+        version: true,
+        title: true,
+        body: true,
+        validUntil: true,
+      },
+    });
+    return rows.map((row) => ({
+      ...row,
+      title: localizedFrom(row.title),
+      body: localizedFrom(row.body),
+    }));
   }
 
   /**
@@ -652,12 +898,15 @@ export class BrandKnowledgeService {
      * SETUP (D-335) — the same rank as DOCUMENT, so nothing about what may
      * overwrite it changes; only the label says where it was accepted.
      */
+    // A MEMBER candidate (Phase 2C-3) is a person's own statement: HUMAN.
     const acceptedOrigin: BrandKnowledgeOrigin =
-      candidate.sourceKind === 'ANALYTICS'
-        ? 'AI_INFERRED'
-        : input.acceptedInSetup === true
-          ? 'SETUP'
-          : 'DOCUMENT';
+      candidate.sourceKind === 'MEMBER'
+        ? 'HUMAN'
+        : candidate.sourceKind === 'ANALYTICS'
+          ? 'AI_INFERRED'
+          : input.acceptedInSetup === true
+            ? 'SETUP'
+            : 'DOCUMENT';
 
     /*
      * D4 + OWNER DECISION 2.a (Option A; D-65 stands). A candidate that
@@ -871,6 +1120,9 @@ export class BrandKnowledgeService {
         status: 'PENDING',
         confidenceMilli: { gte: input.minimumConfidenceMilli },
         conflictsWithItemId: null,
+        // A member's proposal is judged one at a time: "confident" is about
+        // what an extractor measured, and a person's words carry no score.
+        sourceKind: { not: 'MEMBER' },
         ...brandIdQueryFilter({ brandScope: input.brandScope }),
       },
       orderBy: [{ confidenceMilli: 'desc' }, { createdAt: 'asc' }],

@@ -1,5 +1,6 @@
 import type { BrandKnowledgeArea } from '@brandspace/database';
 import { AREA_DEFINITIONS } from './areas';
+import { indexVector, score, tokenize } from './retrieval';
 import type { LocalizedText } from './schemas';
 
 /**
@@ -208,4 +209,50 @@ export function questionsForBrand(
   const industrySet = offersQuestionSet ? config.offersSets[offersQuestionSet] : undefined;
   if (industrySet && industrySet.length > 0) out.set('OFFERS', industrySet);
   return out;
+}
+
+/**
+ * THE KEY QUESTION A REQUEST IS CLOSEST TO (Phase 2C-3, D7/D8) — so a question
+ * Brand Brain cannot answer can say WHAT is missing and in which area, and link
+ * to it. Every configured list is considered (each area's, and every industry
+ * set of Offers), narrowed to one area when the chat was opened on one. The
+ * retriever's own local lexical `score`: no model, no credits. Null when no
+ * question shares a word with the request.
+ */
+export function closestKeyQuestion(
+  request: string,
+  config: {
+    readonly areas: Readonly<Partial<Record<BrandKnowledgeArea, readonly KeyQuestion[]>>>;
+    readonly offersSets: Readonly<Record<string, readonly KeyQuestion[]>>;
+  },
+  area?: BrandKnowledgeArea,
+): MissingQuestion | null {
+  const vector = indexVector(request);
+  const tokens = new Set(tokenize(request));
+  const pool: MissingQuestion[] = [
+    ...AREA_DEFINITIONS.flatMap((definition) =>
+      (config.areas[definition.area] ?? []).map((question) => ({
+        area: definition.area,
+        question,
+      })),
+    ),
+    ...Object.values(config.offersSets).flatMap((set) =>
+      set.map((question) => ({ area: 'OFFERS' as BrandKnowledgeArea, question })),
+    ),
+  ].filter((entry) => area === undefined || entry.area === area);
+  let best: { entry: MissingQuestion; relevance: number } | null = null;
+  for (const entry of pool) {
+    const text = [
+      entry.question.prompt.en,
+      entry.question.prompt.ar,
+      entry.question.itemKey.replace(/[._-]/g, ' '),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const relevance = score(text, vector, tokens);
+    if (relevance > 0 && (best === null || relevance > best.relevance)) {
+      best = { entry, relevance };
+    }
+  }
+  return best?.entry ?? null;
 }

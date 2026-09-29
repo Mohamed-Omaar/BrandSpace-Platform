@@ -1,9 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   Banner,
   Button,
+  buttonClass,
+  buttonStyle,
   Card,
   CopilotBody,
   SectionHeader,
@@ -69,7 +72,22 @@ interface InspectionCall {
 interface PlanResponse {
   readonly summary?: { ar: string; en: string };
   /** Phase 2C D9: a brand question while the brand's "Use Brand Brain" is off. */
-  readonly notice?: 'brand_brain_off' | null;
+  /** Phase 2C-3 D8: `brand_brain_missing` — a brand question nothing usable answers. */
+  readonly notice?: 'brand_brain_off' | 'brand_brain_missing' | null;
+  /** D8 — the knowledge areas this turn's brand facts came from (retrieval, not the model). */
+  readonly brandFactAreas?: readonly string[];
+  /** D8 — the key question that would answer it, when one matches. */
+  readonly missing?: {
+    readonly area: string;
+    readonly itemKey: string;
+    readonly question: { readonly en?: string; readonly ar?: string };
+  } | null;
+  /** D8 — "save this fact": handed to Brand Brain → Add, never saved here. */
+  readonly saveFact?: {
+    readonly area: string | null;
+    readonly title: string | null;
+    readonly body: string | null;
+  } | null;
   readonly planId?: string;
   readonly planHash?: string;
   readonly requiresConfirmation?: boolean;
@@ -156,6 +174,27 @@ export function CopilotView({
   /** A key that may not exist (a machine value's label): the value itself if not. */
   const tOr = (key: string, fallback: string): string =>
     (dictionary as Record<string, string>)[key] ?? fallback;
+
+  /*
+   * D8 (Phase 2C-3) — BRAND ANSWERS NAME THEIR AREA; A MISSING FACT IS SAID IN
+   * THE PRODUCT'S WORDS. The area names are translated from closed keys the
+   * server returned from retrieval — never taken from the model's text.
+   */
+  const areaLabel = (area: string): string =>
+    tOr(
+      `bb.area.${area.toLowerCase().replace(/_([a-z])/g, (_all, c: string) => c.toUpperCase())}`,
+      area,
+    );
+  const missingSentence = (missing: PlanResponse['missing'] | null): string => {
+    if (!missing) return t('copilot.notice.brandBrainMissing');
+    const question =
+      (locale === 'ar'
+        ? (missing.question.ar ?? missing.question.en)
+        : (missing.question.en ?? missing.question.ar)) ?? '';
+    return t('copilot.notice.brandBrainMissingNamed')
+      .replace('{question}', question)
+      .replace('{area}', areaLabel(missing.area));
+  };
 
   const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
     maximumFractionDigits: 2,
@@ -258,9 +297,13 @@ export function CopilotView({
       const summary =
         result.notice === 'brand_brain_off'
           ? t('copilot.notice.brandBrainOff')
-          : locale === 'ar'
-            ? result.summary?.ar
-            : result.summary?.en;
+          : result.notice === 'brand_brain_missing'
+            ? missingSentence(result.missing ?? null)
+            : result.saveFact
+              ? t('copilot.saveFact.summary')
+              : locale === 'ar'
+                ? result.summary?.ar
+                : result.summary?.en;
       if (summary) {
         setMessages((current) => [
           ...current,
@@ -426,7 +469,55 @@ export function CopilotView({
       </p>
 
       {plan && steps.length === 0 ? (
-        <StateMessage kind="no-results" title={t('copilot.planEmpty')} />
+        <div data-testid="copilot-answered" style={{ display: 'grid', gap: spacingTokens.sm }}>
+          {/* D8 — where the brand facts in this answer came from. */}
+          {(plan.brandFactAreas?.length ?? 0) > 0 && !plan.notice ? (
+            <p
+              data-testid="copilot-brand-areas"
+              style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+            >
+              {t('copilot.brandAreas').replace(
+                '{areas}',
+                (plan.brandFactAreas ?? []).map(areaLabel).join(' · '),
+              )}
+            </p>
+          ) : null}
+          {plan.notice === 'brand_brain_missing' ? (
+            <Banner tone="info" testId="copilot-brand-missing">
+              {missingSentence(plan.missing ?? null)}
+            </Banner>
+          ) : null}
+          {/*
+            D8 — THE COPILOT NEVER SAVES A FACT. A save request becomes this
+            card: a link into Brand Brain's chat, Add mode, prefilled. Nothing
+            is saved until the person adds it there, with their own permission.
+          */}
+          {plan.saveFact ? (
+            <Banner tone="info" testId="copilot-save-handoff">
+              <span style={{ display: 'grid', gap: spacingTokens.xs }}>
+                <span>{t('copilot.saveFact.body')}</span>
+                <Link
+                  href={`/${locale}/brand-brain?${new URLSearchParams({
+                    brand: brand.id,
+                    tab: 'chat',
+                    mode: 'add',
+                    ...(plan.saveFact.area ? { area: plan.saveFact.area } : {}),
+                    ...(plan.saveFact.title ? { title: plan.saveFact.title } : {}),
+                    ...(plan.saveFact.body ? { body: plan.saveFact.body } : {}),
+                  }).toString()}`}
+                  className={buttonClass('neutral')}
+                  style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
+                  data-testid="copilot-save-handoff-link"
+                >
+                  {t('copilot.saveFact.open')}
+                </Link>
+              </span>
+            </Banner>
+          ) : null}
+          {plan.notice || plan.saveFact ? null : (
+            <StateMessage kind="no-results" title={t('copilot.planEmpty')} />
+          )}
+        </div>
       ) : null}
 
       {plan && (plan.rejectedToolKeys?.length ?? 0) > 0 ? (

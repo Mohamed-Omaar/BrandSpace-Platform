@@ -2,12 +2,22 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   writeAuditEvent,
+  type BrandKnowledgeArea,
   type CopilotSession,
   type Locale,
   type TenantScopedClient,
 } from '@brandspace/database';
 import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway';
-import { brandBrainEnabledForWriting, groundingFor } from '@brandspace/brand-brain';
+import {
+  BRAND_KNOWLEDGE_AREAS,
+  brandBrainEnabledForWriting,
+  closestKeyQuestion,
+  groundingFor,
+  keyQuestionAnswered,
+  type Grounding,
+  type KeyQuestion,
+  type MissingKnowledge,
+} from '@brandspace/brand-brain';
 import {
   brandQueryFilter,
   fenceUntrusted,
@@ -98,6 +108,20 @@ const planResponseSchema = z.object({
    * turn then proposes nothing and the person is told where to ask instead.
    */
   brandBrainQuestion: z.boolean().default(false),
+  /**
+   * D8 (Phase 2C-3) — the person asked the Copilot to SAVE a fact. The Copilot
+   * never writes Brand Brain knowledge: it proposes nothing and the dashboard
+   * hands off to Brand Brain → Add, prefilled with these fields. Whatever the
+   * model sends is bounded here and saved by nobody until a person adds it.
+   */
+  saveFact: z
+    .object({
+      area: z.enum(BRAND_KNOWLEDGE_AREAS as unknown as [string, ...string[]]).nullish(),
+      title: z.string().trim().max(120).nullish(),
+      body: z.string().trim().max(2_000).nullish(),
+    })
+    .nullish()
+    .transform((value) => value ?? null),
 });
 
 export interface OrchestratorOptions {
@@ -128,6 +152,21 @@ export interface TurnInput {
   readonly locale: Locale;
   /** When the conversation turn may be purged (D-116/D-117). */
   readonly expiresAt: Date | null;
+  /**
+   * D8 — the configured key questions, so a brand question Brand Brain cannot
+   * answer names what is missing. Optional: without it the notice is generic.
+   */
+  readonly keyQuestions?: {
+    readonly areas: Readonly<Partial<Record<BrandKnowledgeArea, readonly KeyQuestion[]>>>;
+    readonly offersSets: Readonly<Record<string, readonly KeyQuestion[]>>;
+  };
+}
+
+/** D8 — a fact the person asked the Copilot to save, for Brand Brain → Add. */
+export interface SaveFactHandoff {
+  readonly area: BrandKnowledgeArea | null;
+  readonly title: string | null;
+  readonly body: string | null;
 }
 
 export interface TurnResult {
@@ -147,7 +186,17 @@ export interface TurnResult {
    * translated notice ("ask it in Brand Brain → Talk with the brand") in place
    * of an answer, and no step is proposed. Null otherwise.
    */
-  readonly notice: 'brand_brain_off' | null;
+  /**
+   * D8 (Phase 2C-3) — `brand_brain_missing` when a brand question found no
+   * usable fact: the dashboard says so (naming the key question and area in
+   * `missing` when one matches) instead of the model's words.
+   */
+  readonly notice: 'brand_brain_off' | 'brand_brain_missing' | null;
+  /** D8 — the knowledge areas the brand facts in this turn came from (retrieval, not the model). */
+  readonly brandFactAreas: readonly BrandKnowledgeArea[];
+  readonly missing: MissingKnowledge | null;
+  /** D8 — a save request, handed to Brand Brain → Add. Never saved here. */
+  readonly saveFact: SaveFactHandoff | null;
 }
 
 export class CopilotOrchestrator {
@@ -302,7 +351,11 @@ export class CopilotOrchestrator {
   }): Promise<AiQuote> {
     const brandId = await this.#admitBrand(input.brandId, input.authorization);
     const brandBrain = await this.#brandBrainEnabled(brandId);
-    const context = await this.#context(brandId, input.request, brandBrain);
+    const grounding = await this.#context(brandId, input.request, brandBrain);
+    const context =
+      grounding && grounding.items.length > 0
+        ? fenceUntrusted('BRAND BRAIN CONTEXT', grounding.contextText)
+        : null;
     return this.#gateway.quote({
       workspaceId: this.#workspaceId,
       taskKey: 'copilot.chat',
@@ -429,7 +482,11 @@ export class CopilotOrchestrator {
     const history = (await this.#history(session.id)).filter(
       (turn) => brandBrain || turn.role !== 'ASSISTANT',
     );
-    const context = await this.#context(brandId, input.request, brandBrain);
+    const grounding = await this.#context(brandId, input.request, brandBrain);
+    const context =
+      grounding && grounding.items.length > 0
+        ? fenceUntrusted('BRAND BRAIN CONTEXT', grounding.contextText)
+        : null;
     const subject = await this.#subjectContext(session, brandId);
 
     const result: AiGatewayResult = await this.#gateway.execute({
@@ -502,9 +559,37 @@ export class CopilotOrchestrator {
      * A BRAND QUESTION WHILE BRAND BRAIN IS OFF gets the notice, not an answer
      * and not a plan: nothing the model wrote is offered as the brand's facts.
      */
-    const notice = !brandBrain && parsed.brandBrainQuestion ? ('brand_brain_off' as const) : null;
+    /*
+     * D8 — A SAVE REQUEST IS HANDED OFF, NEVER PERFORMED. There is no Copilot
+     * tool that writes Brand Brain knowledge, and a turn that asked to save a
+     * fact proposes no step at all: the person adds it in Brand Brain, where
+     * their own permission decides whether it is approved or sent for review.
+     */
+    const saveFact: SaveFactHandoff | null =
+      brandId !== null && parsed.saveFact
+        ? {
+            area: (parsed.saveFact.area as BrandKnowledgeArea | null | undefined) ?? null,
+            title: parsed.saveFact.title || null,
+            body: parsed.saveFact.body || null,
+          }
+        : null;
+    /*
+     * D8 — A BRAND QUESTION NOTHING USABLE ANSWERS says so, in the product's
+     * words: never the model's guess. With the switch off, D-355's notice.
+     */
+    const factAreas = grounding ? areasOf(grounding) : [];
+    const notice =
+      !brandBrain && parsed.brandBrainQuestion
+        ? ('brand_brain_off' as const)
+        : brandBrain && parsed.brandBrainQuestion && !saveFact && factAreas.length === 0
+          ? ('brand_brain_missing' as const)
+          : null;
+    const missing =
+      notice === 'brand_brain_missing' && brandId !== null
+        ? await this.#missing(brandId, input.request, input.keyQuestions)
+        : null;
 
-    for (const step of notice ? [] : parsed.steps) {
+    for (const step of notice || saveFact ? [] : parsed.steps) {
       if (!findTool(step.toolKey) || !allowed.has(step.toolKey)) {
         rejectedToolKeys.push(step.toolKey);
         continue;
@@ -576,7 +661,33 @@ export class CopilotOrchestrator {
       correlationId,
       replayed: result.replayed,
       notice,
+      brandFactAreas: notice ? [] : factAreas,
+      missing,
+      saveFact,
     };
+  }
+
+  /** D8 — the key question a brand question matches, when no usable fact answers it. */
+  async #missing(
+    brandId: string,
+    request: string,
+    keyQuestions: TurnInput['keyQuestions'],
+  ): Promise<MissingKnowledge | null> {
+    if (!keyQuestions) return null;
+    const closest = closestKeyQuestion(request, keyQuestions);
+    if (!closest) return null;
+    const answered = await keyQuestionAnswered(
+      this.#db,
+      { brandId, area: closest.area, itemKey: closest.question.itemKey },
+      this.#clock,
+    );
+    return answered
+      ? null
+      : {
+          area: closest.area,
+          itemKey: closest.question.itemKey,
+          question: closest.question.prompt,
+        };
   }
 
   /**
@@ -590,7 +701,7 @@ export class CopilotOrchestrator {
     brandId: string | null,
     question: string,
     brandBrain: boolean,
-  ): Promise<string | null> {
+  ): Promise<Grounding | null> {
     // Switched off: not even read (Phase 2C D9).
     if (!brandId || !brandBrain) return null;
     const grounding = await groundingFor(
@@ -604,8 +715,7 @@ export class CopilotOrchestrator {
       },
       this.#clock,
     );
-    if (!grounding.enabled || grounding.items.length === 0) return null;
-    return fenceUntrusted('BRAND BRAIN CONTEXT', grounding.contextText);
+    return grounding.enabled ? grounding : null;
   }
 
   /** The brand's "Use Brand Brain" switch. A brand-less session has no Brand Brain. */
@@ -700,12 +810,31 @@ export class CopilotOrchestrator {
       brandBound && !brandBrain
         ? 'BRAND BRAIN IS TURNED OFF FOR THIS BRAND: you have no brand facts. If the request asks what the brand itself is, sells, charges, says or believes, set "brandBrainQuestion" to true and propose no steps.'
         : '',
+      /*
+       * D8 (Phase 2C-3). Fixed platform lines. Brand questions are answered
+       * from the fenced facts only, naming their area; a request to SAVE a
+       * fact is never performed here — it is flagged for Brand Brain.
+       */
+      brandBound && brandBrain
+        ? 'If the request asks what the brand itself is, sells, charges, says or believes, set "brandBrainQuestion" to true and answer ONLY from the BRAND BRAIN CONTEXT, naming the knowledge area each fact comes from; if it is not there, say Brand Brain does not have it.'
+        : '',
+      brandBound
+        ? 'You cannot save, add or change brand facts. If the request asks to save, remember or add a fact about the brand, propose NO steps and set "saveFact" to {"area":string|null,"title":string,"body":string} so the person can add it in Brand Brain.'
+        : '',
       'Respond with JSON exactly matching:',
       '{"summary":{"ar":string,"en":string},',
       ' "steps":[{"toolKey":string,"arguments":object}],',
-      ' "brandBrainQuestion":boolean}',
+      ' "brandBrainQuestion":boolean,',
+      ' "saveFact":null|{"area":string|null,"title":string,"body":string}}',
     ]
       .filter((line) => line !== '')
       .join('\n');
   }
+}
+
+/** The distinct knowledge areas of a grounding, in order. */
+function areasOf(grounding: Grounding): BrandKnowledgeArea[] {
+  const out: BrandKnowledgeArea[] = [];
+  for (const item of grounding.items) if (!out.includes(item.area)) out.push(item.area);
+  return out;
 }

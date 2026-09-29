@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { BrandOrb, type OrbNode } from './brand-orb';
-import { BrandChat } from './brand-chat';
+import { BrandChat, type ChatStart } from './brand-chat';
 import { AreaDrawer, type QuestionFocus } from './area-drawer';
 import { ReviewInbox, type ConfidentPreviewEntry } from './review-inbox';
 import { VoiceCard } from './voice-card';
@@ -86,6 +86,11 @@ export interface AreaItemData {
   };
   /** D-294 — "Updated 3 Sep 2026 · by Sara · from brand-guide.pdf". */
   readonly provenance: string;
+  /**
+   * D6 remainder (Phase 2C-3) — distinct live posts whose current recorded
+   * usage holds this fact (M5). A count; no post is named.
+   */
+  readonly usedInPosts: number;
 }
 
 /** C4 + decision 2.b — the one Voice card, from TONE_OF_VOICE and DO_DONT facts. */
@@ -159,8 +164,10 @@ export interface CandidateData {
   readonly acceptAllowed: boolean;
   readonly evidence: readonly string[];
   readonly replacesExisting: boolean;
-  /** P6-11 — an analytics inference or a document extract. */
-  readonly source: 'ANALYTICS' | 'DOCUMENT';
+  /** P6-11 — an analytics inference or a document extract; D7 — or a member's proposal. */
+  readonly source: 'ANALYTICS' | 'DOCUMENT' | 'MEMBER';
+  /** D7 — "Proposed by Sara", for a MEMBER candidate; null otherwise. */
+  readonly proposedBy: string | null;
   /** The finding an analytics learning was drawn from, when the reader may open it. */
   readonly sourceHref: string | null;
   /** The measurements behind an analytics learning, as a translated sentence. */
@@ -239,6 +246,7 @@ export function BrandBrainView({
   sources,
   retentionDays,
   permissions,
+  chatStart = null,
 }: {
   locale: string;
   brandId: string;
@@ -284,6 +292,8 @@ export function BrandBrainView({
    */
   retentionDays: number;
   permissions: BrandBrainPermissions;
+  /** D7/D8/D9 — the chat opens in Add (a handoff) or Edit ("Fix it"), prefilled. */
+  chatStart?: ChatStart | null;
 }) {
   const t = translator(locale);
   const [tab, setTabState] = useState<BrandBrainTab>(initialTab);
@@ -559,6 +569,11 @@ export function BrandBrainView({
               </div>
 
               <BrandChat
+                locale={locale}
+                areas={areas.map((entry) => ({ area: entry.area, label: entry.label }))}
+                modes={{ edit: permissions.edit, review: permissions.review }}
+                copilotHref={copilotHref}
+                start={chatStart}
                 brandId={brandId}
                 area={chatArea}
                 areaLabel={chatAreaLabel}

@@ -1,0 +1,21 @@
+-- PHASE 2C-3 (M4a) — `BrandCandidateSource.MEMBER`: a fact a member proposed from
+-- Brand Brain's chat or Knowledge tab while holding `brand_brain.edit` but not
+-- `brand_brain.review` ("Send for review", D7).
+--
+-- SCHEMA ONLY, ADDITIVE. One enum value. No row is inserted, updated or
+-- rewritten: no customer data, no sample data, no backfill.
+--
+-- ITS OWN MIGRATION ON PURPOSE. PostgreSQL does not allow a value added by
+-- `ALTER TYPE … ADD VALUE` to be USED in the transaction that added it, and the
+-- CHECK that constrains MEMBER candidates (M4b,
+-- `20261008091000_candidate_member_check`) uses it. Prisma applies each
+-- migration in its own transaction, so M4b sees this value committed.
+--
+-- NOT A SIMPLE ROLLBACK. Nothing reads or writes MEMBER until the new release
+-- does; but once it has written a MEMBER candidate, a previous release whose
+-- Prisma client does not know the value cannot safely decode that row. Before
+-- rolling the application back past this release, run the documented forward
+-- corrective procedure in docs/OPERATIONS.md §6.6. An enum value cannot be
+-- dropped in place; the value itself stays.
+
+ALTER TYPE "BrandCandidateSource" ADD VALUE IF NOT EXISTS 'MEMBER';

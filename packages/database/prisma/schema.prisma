@@ -511,6 +511,7 @@ model Workspace {
   contentItems     ContentItem[]
   contentTemplates ContentTemplate[]
   brandFonts       BrandFont[]
+  knowledgeUsages  ContentKnowledgeUsage[]
   contentVariants  ContentVariant[]
   calendarSlots    CalendarSlot[]
 
@@ -1796,6 +1797,10 @@ enum BrandIngestionStage {
 enum BrandCandidateSource {
   DOCUMENT
   ANALYTICS
+  /// Phase 2C-3 (M4a, D7) — a member with `brand_brain.edit` but not
+  /// `brand_brain.review` proposed this fact ("Send for review"). No document,
+  /// no insight; `proposedByUserId` names the person (M4b CHECK).
+  MEMBER
 }
 
 enum BrandCandidateStatus {
@@ -1908,6 +1913,7 @@ model Brand {
   contentItems     ContentItem[]
   contentTemplates ContentTemplate[]
   brandFonts       BrandFont[]
+  knowledgeUsages  ContentKnowledgeUsage[]
   contentVariants  ContentVariant[]
   calendarSlots    CalendarSlot[]
 
@@ -2038,6 +2044,8 @@ model BrandKnowledgeItem {
 
   versions   BrandKnowledgeVersion[]
   candidates BrandKnowledgeCandidate[]
+  /// Phase 2C-3 (M5, D9) — the variants whose AI writing used this fact.
+  usages     ContentKnowledgeUsage[]
 
   /// COMPOSITE (D-99, D-112, F-83), and a SELF-reference, so the oracle it
   /// closed was the sharpest kind: "is this id a knowledge item somewhere on
@@ -2276,6 +2284,12 @@ model BrandKnowledgeCandidate {
   evidence        Json
 
   status BrandCandidateStatus @default(PENDING)
+
+  /// Phase 2C-3 (M4b, D7) — the member who proposed a MEMBER candidate
+  /// ("Send for review"). Required for MEMBER and absent otherwise by the
+  /// `brand_knowledge_candidate_source_is_present` CHECK. An actor id like
+  /// `reviewedByUserId`: no foreign key to the identity table.
+  proposedByUserId String? @db.Uuid
 
   reviewedByUserId String?   @db.Uuid
   reviewedAt       DateTime? @db.Timestamptz(6)
@@ -3009,11 +3023,12 @@ model ContentItem {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   brand     Brand     @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "content_item_brand_fkey")
 
-  variants      ContentVariant[]
-  calendarSlots CalendarSlot[]
-  approvals     Approval[]
+  variants        ContentVariant[]
+  calendarSlots   CalendarSlot[]
+  knowledgeUsages ContentKnowledgeUsage[]
+  approvals       Approval[]
   /// Phase 6 — one job per (slot, connection, variant).
-  publishJobs   PublishJob[]
+  publishJobs     PublishJob[]
 
   /// Phase 7 — the campaign this item belongs to, and the analytics it earned.
   campaign           Campaign?           @relation(fields: [workspaceId, campaignId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "content_item_campaign_fkey")
@@ -3188,7 +3203,9 @@ model ContentVariant {
   item      ContentItem @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "content_variant_item_fkey")
   cover     Asset?      @relation("ContentVariantCover", fields: [workspaceId, coverAssetId], references: [workspaceId, id], onDelete: SetNull, onUpdate: NoAction, map: "content_variant_cover_fkey")
 
-  publishJobs PublishJob[]
+  publishJobs     PublishJob[]
+  /// Phase 2C-3 (M5, D9) — the Brand Brain facts AI writing used for it.
+  knowledgeUsages ContentKnowledgeUsage[]
 
   /// Phase 6 (D-112). The composite target `publish_job.contentVariantId`
   /// points at. Added rather than assumed: a plain key to a tenant-owned parent
@@ -3202,6 +3219,53 @@ model ContentVariant {
   @@index([workspaceId, coverAssetId])
   @@index([expiresAt])
   @@map("content_variant")
+}
+
+/// TENANT-OWNED, BRAND-SCOPED — Phase 2C-3 (M5, D9/D10). Which Brand Brain
+/// facts, at which VERSION, AI writing actually used for a content variant.
+///
+/// Written ONLY from what the grounding layer returned and the prompt carried
+/// (`Grounding.facts`), in the same transaction as the generated caption —
+/// never reconstructed from caption text, citations or similarity. The CURRENT
+/// set of a variant is its rows with `supersededAt` null; the next AI
+/// generation supersedes them and history is kept. A manual edit changes
+/// nothing here. No backfill: older posts have no rows.
+///
+/// "Keep as is" (D10) stores the dismissed change signature on the use it
+/// dismisses; a later, different change has a different signature.
+model ContentKnowledgeUsage {
+  id          String @id @default(uuid()) @db.Uuid
+  workspaceId String @db.Uuid
+  brandId     String @db.Uuid
+
+  contentItemId    String @db.Uuid
+  contentVariantId String @db.Uuid
+  knowledgeItemId  String @db.Uuid
+  /// The exact version the prompt carried. Its text stays readable in the
+  /// append-only version history; not a foreign key (see the migration).
+  knowledgeVersion Int
+
+  /// The AI request that wrote the caption. No foreign key, like the variant's.
+  aiRequestId String? @db.Uuid
+
+  recordedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  /// Set when a later AI generation of the variant replaced this use.
+  supersededAt DateTime? @db.Timestamptz(6)
+
+  /// D10 "Keep as is": the change signature dismissed, by whom and when.
+  dismissedChangeSignature String?
+  dismissedByUserId        String?   @db.Uuid
+  dismissedAt              DateTime? @db.Timestamptz(6)
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  brand     Brand              @relation(fields: [workspaceId, brandId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "content_knowledge_usage_brand_fkey")
+  item      ContentItem        @relation(fields: [workspaceId, contentItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "content_knowledge_usage_item_fkey")
+  variant   ContentVariant     @relation(fields: [workspaceId, contentVariantId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "content_knowledge_usage_variant_fkey")
+  knowledge BrandKnowledgeItem @relation(fields: [workspaceId, knowledgeItemId], references: [workspaceId, id], onDelete: Cascade, onUpdate: NoAction, map: "content_knowledge_usage_knowledge_fkey")
+
+  @@index([workspaceId, contentVariantId, supersededAt])
+  @@index([workspaceId, contentItemId])
+  @@map("content_knowledge_usage")
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. When a content item goes out — docs/DATABASE.md

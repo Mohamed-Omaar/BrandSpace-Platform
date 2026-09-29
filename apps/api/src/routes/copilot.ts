@@ -38,6 +38,7 @@ import {
   resolvePublishingPolicy,
   unreachableChannelGate,
 } from '@brandspace/social-connectors';
+import { resolveBrandBrainPolicy } from '@brandspace/brand-brain';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { PUBLISH_SOCIAL_POST, enqueue, type PublishSocialPostPayload } from '@brandspace/jobs';
 import { AppError, systemClock } from '@brandspace/shared';
@@ -425,6 +426,17 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
           currentEnvironment(),
         );
         const expiresAt = resolveContentExpiry(contentPolicy, facts, systemClock);
+        /*
+         * D8 (Phase 2C-3) — the configured key questions, so a brand question
+         * Brand Brain cannot answer names what is missing. Configuration, read
+         * like every other policy; unavailable means the plain notice.
+         */
+        const keyQuestions = await resolveBrandBrainPolicy(
+          configurationService(),
+          currentEnvironment(),
+        )
+          .then((policy) => policy.questions)
+          .catch(() => undefined);
 
         const result = await withWorkspace(
           caller.workspaceId,
@@ -457,6 +469,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
               idempotencyKey: body.idempotencyKey,
               locale: 'EN',
               expiresAt,
+              ...(keyQuestions ? { keyQuestions } : {}),
             });
 
             const plans = new CopilotPlanService({
@@ -532,6 +545,12 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
           // Phase 2C D9 — a brand question while "Use Brand Brain" is off. A
           // closed key the dashboard translates; never model text.
           notice: result.turn.notice,
+          // D8 (Phase 2C-3) — the areas the brand facts came from (retrieval,
+          // never the model), what is missing, and a save request handed to
+          // Brand Brain → Add. Closed keys and the person's own words only.
+          brandFactAreas: result.turn.brandFactAreas,
+          missing: result.turn.missing,
+          saveFact: result.turn.saveFact,
           rejectedToolKeys: result.turn.rejectedToolKeys,
           planId: result.created.plan.id,
           planHash: result.created.plan.planHash,

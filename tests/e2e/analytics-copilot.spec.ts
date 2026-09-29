@@ -83,7 +83,7 @@ const RANGE = 'range=90';
  * Racing costs nothing in rigour: both outcomes are still asserted by the
  * caller, and a genuinely hung request still fails at the ceiling.
  */
-async function settle(page: Page): Promise<'plan' | 'refused' | 'neither'> {
+async function settle(page: Page): Promise<'plan' | 'refused' | 'answered' | 'neither'> {
   const plan = page
     .getByTestId('copilot-plan')
     .waitFor({ state: 'visible', timeout: 60_000 })
@@ -94,7 +94,19 @@ async function settle(page: Page): Promise<'plan' | 'refused' | 'neither'> {
     .waitFor({ state: 'visible', timeout: 60_000 })
     .then(() => 'refused' as const)
     .catch(() => 'neither' as const);
-  return Promise.race([plan, refused]);
+  /*
+   * PHASE 2C-3 (D8) — THE THIRD SETTLED STATE: an answer with no step to
+   * confirm. The development double now answers in the plan envelope with no
+   * steps (it never proposes an action), so a turn can settle as an answer. It
+   * is treated like the refusal branch: nothing executed, nothing to confirm,
+   * and the page is scanned for anything it must not disclose.
+   */
+  const answered = page
+    .getByTestId('copilot-answered')
+    .waitFor({ state: 'visible', timeout: 60_000 })
+    .then(() => 'answered' as const)
+    .catch(() => 'neither' as const);
+  return Promise.race([plan, refused, answered]);
 }
 
 /*

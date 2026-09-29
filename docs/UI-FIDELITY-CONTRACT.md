@@ -793,6 +793,34 @@ No new colour family, interface font, shadow style or interaction model; nothing
 brand fonts are loaded under scoped family names (`bsf-…`) only where they are sampled, so the
 interface's own font never changes.
 
+### 6.3.48 Prototype v90 Phase 2C-3 — Brand Brain chat modes, the Studio's recorded facts and the changed-fact banner (D-376–D-378, D-383)
+
+APPROVED DESIGN-SYSTEM EXTENSIONS. No demo exists for any of them; each is composed from what already
+ships (§4.2 of `CLAUDE.md`), and the owner may refine them in the final parity pass.
+
+- **Chat modes** — Ask · Add · Edit · Remove as a `role="radiogroup"` row directly under the chat's
+  context pill, in the chat's own suggestion-chip style (`.bb-chat-modes`: the same border, radius,
+  padding and type as `.bb-chat-suggestions button`; the chosen mode takes the context pill's purple
+  tint). Arrow keys move the choice (mirrored in Arabic); focus stays on the radio. The row wraps rather
+  than scrolls. A member without `brand_brain.edit` gets no row — only Ask.
+- **Add, Edit and Remove** — forms rendered as a brain bubble (`.bb-chat-message.brain`) INSIDE the one
+  scrolling list, so the panel's fixed box and the demo's geometry are unchanged; fields use the chat's
+  dark palette; the action button takes the user bubble's purple gradient and the send button's radius.
+  Edit shows the current text struck through above the new text. Add hides the composer (its fields are
+  in the form); Edit and Remove turn the composer into the lookup.
+- **Ask results** — "From Brand Brain · <areas>" in the citation caption style; a job is a bubble with a
+  "Send to Copilot" action; a miss names the key question with an "Add it now" link.
+- **The Studio's "Used N Brand Brain facts"** — under the draft's "Using … Brand Brain" disclosure in
+  the context column: a section kicker and the Issues list's rhythm (`.cs-brain-fact-list`), each fact
+  with its area, recorded version and state, and "Fix it" as the composer's compact ghost button.
+- **The changed-fact banner** — the composer's `cs-notice warning` at the top of the editor column:
+  old (struck through) → new, or "no longer valid for writing", a compact "Keep as is" per fact and one
+  `cs-dark-button` Rewrite whose label carries the quoted credits.
+- **Copilot** — "From Brand Brain · …" as a caption line; the missing notice and the save handoff as the
+  shared `Banner` with a neutral button link.
+
+No new colour family, font, shadow style or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

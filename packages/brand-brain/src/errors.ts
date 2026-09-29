@@ -43,6 +43,19 @@ export function alreadyReviewed(): AppError {
   return new AppError('CONFLICT', 'This candidate has already been reviewed.');
 }
 
+/**
+ * D7 (Phase 2C-3) — the fact moved on since the person opened it: an Edit with
+ * a stale `expectedVersion`, or an Undo that is no longer the latest change.
+ * `expectedLockVersion` is what maps it to the public `CONCURRENT_EDIT` code, so
+ * the screen says "changed since" and offers the fresh version rather than a
+ * retry that would overwrite somebody's work.
+ */
+export function knowledgeChangedSince(expectedVersion: number): AppError {
+  return new AppError('CONFLICT', 'This fact changed since it was opened.', {
+    expectedLockVersion: expectedVersion,
+  });
+}
+
 export function versionNotFound(): AppError {
   return new AppError('NOT_FOUND', 'Version not found.');
 }

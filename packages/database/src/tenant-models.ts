@@ -82,6 +82,9 @@ export const STRICT_TENANT_MODELS = [
   'ContentTemplate',
   // Prototype v90 Phase 2C-2 (M3): uploaded brand fonts, per brand.
   'BrandFont',
+  // Prototype v90 Phase 2C-3 (M5): which Brand Brain facts, at which version,
+  // AI writing used for each content variant (D9/D10).
+  'ContentKnowledgeUsage',
 
   // --- Phase 5B-3: Approvals, Activity Log, Notifications ------------------
   // The Activity Log adds no model: it is a read view over `AuditEvent`, which
@@ -348,6 +351,7 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   CalendarSlot: 'calendar_slot',
   ContentTemplate: 'content_template',
   BrandFont: 'brand_font',
+  ContentKnowledgeUsage: 'content_knowledge_usage',
   Approval: 'approval',
   ApprovalPolicy: 'approval_policy',
   Notification: 'notification',

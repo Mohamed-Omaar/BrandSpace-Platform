@@ -123,6 +123,8 @@ const CAPTION = (echo: string) =>
     variants: [{ platformKey: 'instagram', body: `A caption. ${echo}`, hashtags: [] }],
   });
 const TOOL_BODY = (echo: string) => JSON.stringify({ body: `Rewritten. ${echo}`, hashtags: [] });
+/** Phase 2C-3 (D7) — Ask answers in its structured shape; the facts it saw, echoed. */
+const ASK = (echo: string) => JSON.stringify({ kind: 'answer', answer: `Answer. ${echo}` });
 
 /** A Copilot plan whose summary AND tool arguments repeat what the model saw. */
 const PLAN = (brandQuestion: boolean) => (echo: string) =>
@@ -335,7 +337,7 @@ describe('Q14 / Q20 — approved facts only, never raw document text', () => {
       new BrandBrainChatService({
         db,
         workspaceId: fixtures.a.workspaceId,
-        gateway: gateway(record, (echo) => echo),
+        gateway: gateway(record, ASK),
         policy: { retentionDays: 30, maxContextItems: 12, maxContextChars: 12_000 },
       }).send({
         brandId: fixtures.a.brandId,
@@ -485,7 +487,7 @@ describe('D9 — "Use Brand Brain" off', () => {
       new BrandBrainChatService({
         db,
         workspaceId: fixtures.a.workspaceId,
-        gateway: gateway(record, (echo) => echo),
+        gateway: gateway(record, ASK),
         policy: { retentionDays: 30, maxContextItems: 12, maxContextChars: 12_000 },
       }).send({
         brandId: fixtures.a.brandId,

@@ -563,6 +563,57 @@ which is why the grounding guard names the page as a non-generative reader.
 rendering when that surface exists.** Today the Studio has a caption preview only, and brand fonts are
 deliberately not applied to it.
 
+### 9.3 How Phase 2C-3 was built
+
+Item 4 only: Brand Brain chat modes and the Copilot handoff (D7), the Copilot's brand answers (D8),
+recorded fact usage (D9), a used fact that changed, expired or was removed (D10), and "Used in N posts"
+(the D6 remainder). Migrations M4a, M4b and M5, schema only.
+
+- **Recorded usage (D9; D-369, D-370, D-380).** Migration `20261008100000_content_knowledge_usage`.
+  What a variant's AI caption used is written from the grounding layer's own output — fact ids and
+  versions the prompt carried — in the caption's transaction: the composer's generation and the
+  Copilot's `content.draft` (both `generate`), and the caption-writing Studio tools including the new
+  `refresh_facts`. Never from text. The current set is superseded by the next AI write; history is
+  kept; a manual edit keeps the record; Brand Brain off or no fact records nothing; no backfill.
+- **"Used N Brand Brain facts" and Fix it (D9).** In the Studio's context column for the variant on
+  screen, each fact with its area, recorded version and state (current, changed since, replaced,
+  expired, removed — "Removed fact" shows no text). Fix it opens Brand Brain's chat in Edit on that fact
+  (`brand_brain.edit`, re-checked on save).
+- **"Used in N posts" (D6; D-371).** Distinct, live, non-archived posts whose current usage holds the
+  fact, at any version, on each fact in the area drawer.
+- **D10 (D-372 – D-375).** One rule, `usageChangeFor`: changed (title or body — a metadata-only version
+  bump is not a change), replaced (a usable `supersededByItemId`), expired (the workspace day), removed.
+  Flagged on DRAFT, IN_REVIEW, APPROVED and SCHEDULED posts; never on PUBLISHING or PUBLISHED. The
+  Studio banner shows old → new, old → replacement or "no longer valid for writing", with the contextual
+  Rewrite (`refresh_facts` on the existing tool and quote path, grounded only on the recorded facts, one
+  charge and one write per change set) and Keep as is (dismisses that exact signature; a new change
+  alerts again). Home "Needs you" gains `brand-brain-fact-changed` for SCHEDULED and IN_REVIEW posts
+  (`content.edit` + `copilot.use`); nothing is unscheduled or blocked.
+- **Chat modes (D7; D-376 – D-378, D-383).** Ask · Add · Edit · Remove. Ask is one structured answer
+  (`answer` or `job`) — a job offers "Send to Copilot", prefilled through `CopilotLink`, nothing run; a
+  miss is free and names the key question and area. Add & approve needs `brand_brain.edit` and
+  `brand_brain.review`; edit alone sends a MEMBER candidate for review (migrations
+  `20261008090000_candidate_source_member`, `20261008091000_candidate_member_check`) — in the chat and
+  the Knowledge tab alike. Edit and Remove use the local `score`, show up to three, act only on the one
+  chosen; Edit saves over `expectedVersion`; Undo restores only the archive just made. Area cards
+  refresh without a reload.
+- **Copilot (D8; D-381).** Brand answers name their areas; a missing fact is said in the product's
+  words; a save request is handed to Brand Brain → Add, prefilled, and nothing is saved. No Copilot
+  tool writes knowledge. D-355's "off" notice is unchanged.
+- **Rollback (D-379).** M5 is additive. M4a/M4b are NOT simply rollback-safe once a MEMBER candidate
+  exists: `OPERATIONS.md` §6.6 documents the forward corrective procedure and its exact SQL, as
+  documentation only.
+
+**Readings the owner may correct:** CHANGES_REQUESTED, FAILED and ARCHIVED posts are not flagged by D10
+(the list given was DRAFT, IN_REVIEW, APPROVED, SCHEDULED); MEMBER proposals are left out of "Accept the
+confident ones"; a replayed job in Ask reads as its one-sentence restatement (the message table has no
+kind column, and no migration was added for it); a job-like request that matches no fact gets the free
+"missing" answer rather than the job card (Ask makes no model call when nothing usable matches).
+
+**Not started, by scope:** item 5 (Sources/uploads), item 6 (Performance, Home D12, Strategy D13),
+M6, M7, website reading, the Strategy display-list fix, the D-366 Studio font gap, and the §9.1 known
+gaps (STALE producer, `ingest-<id>` reuse, `sweepStuckJobs`, English ingestion sentences, webfonts CSP).
+
 ## Appendix — prototype decisions (v76)
 
 Short form of each decision (the full prototype lives in the BrandSpace design canvas, v76):

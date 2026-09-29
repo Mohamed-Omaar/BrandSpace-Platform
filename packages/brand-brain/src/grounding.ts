@@ -1,6 +1,11 @@
 import type { BrandKnowledgeArea, TenantScopedClient } from '@brandspace/database';
 import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
-import { BrandBrainRetriever, usableKnowledgeWhere, type RetrievalContext } from './retrieval';
+import {
+  BrandBrainRetriever,
+  contextFromFacts,
+  usableKnowledgeWhere,
+  type RetrievalContext,
+} from './retrieval';
 import { knowledgeAsOfSafe, workspaceKnowledgeAsOf } from './validity';
 
 /**
@@ -237,4 +242,144 @@ export async function writingGoal(
     },
     select: BRAND_GOAL_SELECT,
   });
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * D10 REWRITE (Phase 2C-3) — "Rewrite with the new fact" / "without this fact"
+ * ---------------------------------------------------------------------------
+ */
+
+/** What became of one fact a variant recorded, for the rewrite's audit trail. */
+export interface RewriteResolution {
+  readonly recordedItemId: string;
+  /** The fact that grounds the rewrite in its place, or null when dropped. */
+  readonly usedItemId: string | null;
+  readonly outcome: 'current' | 'replacement' | 'dropped';
+}
+
+/**
+ * THE REWRITE'S GROUNDING STARTS FROM WHAT THE VARIANT RECORDED — and from
+ * nothing else. It is not a question: it does not look for other relevant
+ * facts, so a rewrite can never pull in a fact the caption did not use. For
+ * each recorded fact id:
+ *
+ *   - still usable (D-354's rule, today in the workspace's zone) → its CURRENT
+ *     version;
+ *   - archived, with a `supersededByItemId` replacement that is usable → the
+ *     replacement's current version (one step, as recorded by the review);
+ *   - anything else — expired, archived with no usable replacement, never
+ *     approved — is DROPPED.
+ *
+ * A pending candidate, an unreviewed fact or a raw chunk cannot appear: only
+ * `brand_knowledge_item` rows passing `usableKnowledgeWhere` are read for the
+ * prompt. The brand's switch applies as for all writing: off gives an empty,
+ * disabled grounding and the knowledge table is not read.
+ */
+export async function rewriteGroundingFor(
+  db: TenantScopedClient,
+  request: {
+    readonly brandId: string;
+    readonly recordedItemIds: readonly string[];
+    readonly maxChars: number;
+  },
+  clock: Clock = systemClock,
+): Promise<Grounding & { readonly resolutions: readonly RewriteResolution[] }> {
+  const brand = await brandGroundingFacts(db, request.brandId);
+  if (brand?.useBrandBrain !== true) {
+    return {
+      ...DISABLED,
+      resolutions: request.recordedItemIds.map((recordedItemId) => ({
+        recordedItemId,
+        usedItemId: null,
+        outcome: 'dropped' as const,
+      })),
+    };
+  }
+  const asOf = knowledgeAsOfSafe(brand.timezone, clock.now());
+  const recorded = [...new Set(request.recordedItemIds)];
+  const select = {
+    id: true,
+    area: true,
+    memory: true,
+    origin: true,
+    version: true,
+    status: true,
+    title: true,
+    body: true,
+  } as const;
+
+  const usable = await db.brandKnowledgeItem.findMany({
+    where: { brandId: request.brandId, id: { in: recorded }, ...usableKnowledgeWhere(asOf) },
+    select,
+  });
+  const usableIds = new Set(usable.map((item) => item.id));
+  const archived = await db.brandKnowledgeItem.findMany({
+    where: {
+      brandId: request.brandId,
+      id: { in: recorded.filter((id) => !usableIds.has(id)) },
+      status: 'ARCHIVED',
+      supersededByItemId: { not: null },
+    },
+    select: { id: true, supersededByItemId: true },
+  });
+  const replacements = await db.brandKnowledgeItem.findMany({
+    where: {
+      brandId: request.brandId,
+      id: { in: archived.map((item) => item.supersededByItemId as string) },
+      ...usableKnowledgeWhere(asOf),
+    },
+    select,
+  });
+  const replacementById = new Map(replacements.map((item) => [item.id, item]));
+
+  const chosen = new Map(usable.map((item) => [item.id, item]));
+  const resolutions: RewriteResolution[] = recorded.map((recordedItemId) => {
+    if (usableIds.has(recordedItemId)) {
+      return { recordedItemId, usedItemId: recordedItemId, outcome: 'current' };
+    }
+    const next = archived.find((item) => item.id === recordedItemId)?.supersededByItemId;
+    const replacement = next ? replacementById.get(next) : undefined;
+    if (replacement) {
+      chosen.set(replacement.id, replacement);
+      return { recordedItemId, usedItemId: replacement.id, outcome: 'replacement' };
+    }
+    return { recordedItemId, usedItemId: null, outcome: 'dropped' };
+  });
+
+  return {
+    ...contextFromFacts([...chosen.values()], request.maxChars),
+    enabled: true,
+    resolutions,
+  };
+}
+
+/**
+ * WHETHER A KEY QUESTION IS ANSWERED FOR ASKING (Phase 2C-3, D7/D8): a usable
+ * fact (D-354, today in the workspace's zone) with that key exists in that
+ * area. Brand Brain's Ask and the Copilot use it to say plainly what is
+ * MISSING — "Brand Brain doesn't have Prices yet (Offers)" — only when it is.
+ * A yes/no, never text: nothing read here reaches a prompt.
+ */
+export async function keyQuestionAnswered(
+  db: TenantScopedClient,
+  request: {
+    readonly brandId: string;
+    readonly area: BrandKnowledgeArea;
+    readonly itemKey: string;
+  },
+  clock: Clock = systemClock,
+): Promise<boolean> {
+  const brand = await brandGroundingFacts(db, request.brandId);
+  if (!brand) return false;
+  const found = await db.brandKnowledgeItem.findFirst({
+    where: {
+      brandId: request.brandId,
+      area: request.area,
+      itemKey: request.itemKey,
+      ...usableKnowledgeWhere(knowledgeAsOfSafe(brand.timezone, clock.now())),
+    },
+    select: { id: true },
+  });
+  return found !== null;
 }

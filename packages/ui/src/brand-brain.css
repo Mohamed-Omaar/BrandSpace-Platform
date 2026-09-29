@@ -639,6 +639,167 @@ input.bb-chat-input {
   line-height: 1.4;
 }
 
+/*
+ * PHASE 2C-3 (D7) — THE CHAT'S FOUR MODES. An APPROVED DESIGN-SYSTEM
+ * EXTENSION (UI-FIDELITY-CONTRACT §6): the demo has no mode switch, so it is
+ * composed from the panel's own parts — the suggestion chip for the radio
+ * group, the brain bubble for the forms, the context pill's purple for the
+ * chosen mode and the send button's shape for actions. No new colour, font,
+ * shadow or motion; every value below already appears in this block.
+ */
+.bb-chat-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 4px;
+}
+
+.bb-chat-modes button {
+  flex: none;
+  border: 1px solid #36363f;
+  border-radius: 999px;
+  padding: 7px 9px;
+  background: transparent;
+  color: #c8c8cf;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bb-chat-modes button[aria-checked='true'] {
+  border-color: rgba(121, 53, 254, 0.8);
+  background: rgba(121, 53, 254, 0.18);
+  color: #fff;
+}
+
+.bb-chat-modes button:focus-visible,
+.bb-chat-panel :is(button, select, input, textarea):focus-visible,
+.bb-chat-action:focus-visible,
+.bb-chat-link:focus-visible {
+  outline: 2px solid #c9adff;
+  outline-offset: 2px;
+}
+
+.bb-chat-panel {
+  display: grid;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.bb-chat-panel form {
+  display: grid;
+  gap: 8px;
+}
+
+.bb-chat-panel p {
+  margin: 0;
+}
+
+.bb-chat-panel label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: #cfcfd6;
+}
+
+.bb-chat-panel :is(select, input, textarea) {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #36363f;
+  border-radius: 11px;
+  padding: 8px 10px;
+  background: #111114;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.bb-chat-matches {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bb-chat-match {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  border: 1px solid #36363f;
+  border-radius: 11px;
+  padding: 8px 10px;
+  background: transparent;
+  color: #eeeef2;
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.bb-chat-match:hover {
+  border-color: rgba(121, 53, 254, 0.8);
+}
+
+.bb-chat-match small,
+.bb-chat-old small,
+.bb-chat-areas {
+  display: block;
+  color: #92929d;
+  font-size: 10px;
+}
+
+.bb-chat-old {
+  display: grid;
+  gap: 2px;
+  color: #cfcfd6;
+}
+
+.bb-chat-old s {
+  color: #92929d;
+}
+
+.bb-chat-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.bb-chat-action {
+  display: inline-flex;
+  justify-self: start;
+  align-items: center;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 11px;
+  padding: 9px 12px;
+  background: linear-gradient(135deg, var(--bb-purple), #5b1fd6);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.bb-chat-action[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.bb-chat-link {
+  border: 0;
+  padding: 0;
+  margin-top: 6px;
+  background: transparent;
+  color: #c9adff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* --- the ten knowledge areas, below the hero ------------------------------ */
 
 .bb-section-title {

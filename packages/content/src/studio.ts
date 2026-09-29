@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Prisma } from '@brandspace/database';
 import {
   writeAuditEvent,
@@ -16,10 +17,18 @@ import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway
 import {
   fenceUntrusted,
   groundingFor,
+  recordKnowledgeUsage,
+  refreshPlanFor,
+  rewriteGroundingFor,
   type Citation,
   type Grounding,
 } from '@brandspace/brand-brain';
-import { briefTooLong, contentItemNotFound, unsupportedPlatform } from './errors';
+import {
+  briefTooLong,
+  contentItemNotFound,
+  contentNotEditable,
+  unsupportedPlatform,
+} from './errors';
 import { ContentLibraryService, type ContentLibraryOptions } from './library';
 import { preferenceInstructions, TONE_KEYS } from './suggestions';
 import { findPlatform, type ContentDialect } from './policy';
@@ -92,6 +101,10 @@ export const CONTENT_TOOLS = [
   'tone',
   'translate',
   'hashtags',
+  // Phase 2C-3 (D10) — "Rewrite with the new fact" / "Rewrite without this
+  // fact". Offered only from the Studio's changed-fact banner, never as a
+  // generic inline action; grounded on the variant's RECORDED facts only.
+  'refresh_facts',
 ] as const;
 export type ContentTool = (typeof CONTENT_TOOLS)[number];
 
@@ -111,7 +124,21 @@ const TOOL_DIRECTIVE: Record<ContentTool, string> = {
   // DISCARDED below: this tool may not change a word the person wrote.
   hashtags:
     'Keep the caption exactly as it is. Propose hashtags that fit it and the brand, within the platform limit.',
+  refresh_facts: [
+    'Some brand facts this caption relied on have changed, been replaced or are no longer valid.',
+    'Rewrite the caption so every fact it states comes from the reference material, which holds',
+    'the current facts it may use. Remove any claim the reference material does not support.',
+    'Keep its language, voice, length and structure; change nothing else.',
+  ].join(' '),
 };
+
+/** D10 — the statuses a changed-fact rewrite may touch (mirrors Brand Brain's rule). */
+const REFRESH_STATUSES: readonly ContentItem['status'][] = [
+  'DRAFT',
+  'IN_REVIEW',
+  'APPROVED',
+  'SCHEDULED',
+];
 
 /**
  * AN AI CAROUSEL STARTS AS AN OUTLINE (Phase 6 final, D-277 §23, D-300).
@@ -376,6 +403,27 @@ export class ContentStudioService extends ContentLibraryService {
       template,
     });
 
+    /*
+     * D9 (Phase 2C-3) — WHAT EACH VARIANT USED, RECORDED WITH IT. Exactly the
+     * facts the grounding layer returned and this prompt carried, at their
+     * versions, in the same transaction as the variants: a failure writes
+     * neither. Brand Brain off, or no fact, records nothing.
+     */
+    for (const variant of variants) {
+      await recordKnowledgeUsage(
+        this.db,
+        {
+          workspaceId: this.workspaceId,
+          brandId: item.brandId,
+          contentItemId: item.id,
+          contentVariantId: variant.id,
+          facts: retrieval.enabled ? retrieval.facts : [],
+          aiRequestId: result.requestId,
+        },
+        this.#clock,
+      );
+    }
+
     await this.#audit(item, input.actorUserId, {
       // Counts, never content, and never the brief (docs/SECURITY.md §11).
       ...(template ? { templateId: template.id } : {}),
@@ -418,19 +466,36 @@ export class ContentStudioService extends ContentLibraryService {
     /** Q8 — whether this editor may schedule decides what the edit does to a scheduled post. */
     actorPermissionKeys: readonly string[];
   }): Promise<{ variant: ContentVariant; aiRequestId: string; creditsChargedMilli: bigint }> {
-    const { variant, platform, dialect, targetLocale, request } = await this.#toolRequest(input);
+    const { variant, platform, dialect, targetLocale, request, retrieval, refreshKey } =
+      await this.#toolRequest({ ...input, lockForRewrite: input.tool === 'refresh_facts' });
 
     const result = await this.#gateway.execute({
       workspaceId: this.workspaceId,
       userId: input.actorUserId,
       taskKey: 'caption.generate',
       planKey: input.planKey,
-      idempotencyKey: `content-tool:${input.idempotencyKey}`,
+      /*
+       * D10 — A REWRITE OF THE SAME CHANGES IS THE SAME REQUEST. Its key is
+       * derived on the server from the variant and the exact changes being
+       * answered, so a double click, a retry or a second tab reaches the SAME
+       * gateway request — one reservation, one charge — whatever key the
+       * browser sent. Every other tool keeps the client's key.
+       */
+      idempotencyKey: refreshKey ?? `content-tool:${input.idempotencyKey}`,
       input: request,
     });
 
     if (result.status !== 'SUCCEEDED' || !result.output || result.output.kind !== 'text') {
       throw generationFailed(result.failureMessage);
+    }
+
+    /*
+     * A REPLAYED EDIT IS NOT WRITTEN TWICE. The gateway handed back a request
+     * this variant already carries: the words, the usage set and the approval
+     * consequences were written when it first ran.
+     */
+    if (result.replayed && variant.aiRequestId === result.requestId) {
+      return { variant, aiRequestId: result.requestId, creditsChargedMilli: 0n };
     }
 
     const parsed = parseGeneratedContent(result.output.text, {
@@ -474,6 +539,27 @@ export class ContentStudioService extends ContentLibraryService {
         bodyPurgedAt: null,
       },
     });
+
+    /*
+     * D9 — A TOOL THAT REWROTE THE CAPTION REPLACES WHAT IT RECORDED, in this
+     * transaction: exactly the facts this prompt carried (none when Brand
+     * Brain is off). The hashtag tool keeps the person's words, so the words'
+     * record stands.
+     */
+    if (!hashtagsOnly) {
+      await recordKnowledgeUsage(
+        this.db,
+        {
+          workspaceId: this.workspaceId,
+          brandId: variant.brandId,
+          contentItemId: variant.contentItemId,
+          contentVariantId: variant.id,
+          facts: retrieval.enabled ? retrieval.facts : [],
+          aiRequestId: result.requestId,
+        },
+        this.#clock,
+      );
+    }
 
     await writeAuditEvent(this.db, this.workspaceId, {
       action: `content.variant.${input.tool}`,
@@ -547,6 +633,8 @@ export class ContentStudioService extends ContentLibraryService {
     argument?: string | undefined;
     targetLocale?: Locale | undefined;
     actorBrandScope: readonly string[];
+    /** D10 — the rewrite itself (never its quote) holds the variant's row. */
+    lockForRewrite?: boolean | undefined;
   }) {
     // D-132: the scope is a PREDICATE, so an out-of-scope variant is never read.
     const variant = await this.db.contentVariant.findFirst({
@@ -563,7 +651,58 @@ export class ContentStudioService extends ContentLibraryService {
     if (!platform) throw unsupportedPlatform();
 
     const dialect = await this.resolveDialectFor(variant.brandId);
-    const retrieval = await this.#ground(variant.brandId, variant.body ?? '');
+    let retrieval: Grounding;
+    let refreshKey: string | null = null;
+    if (input.tool === 'refresh_facts') {
+      /*
+       * ONE REWRITE AT A TIME PER VARIANT. The row is locked for the rest of
+       * this transaction — the plan, the model call and the write — so a
+       * second tab or a double click waits, then finds nothing left to
+       * rewrite and is refused before any credit is reserved. The quote never
+       * locks. The scope was proved by the read above; the lock repeats the
+       * workspace predicate like every raw statement here.
+       */
+      if (input.lockForRewrite) {
+        await this.db.$queryRaw`
+          SELECT "id" FROM "content_variant"
+          WHERE "id" = ${variant.id}::uuid AND "workspaceId" = ${this.workspaceId}::uuid
+          FOR UPDATE
+        `;
+      }
+      /*
+       * D10 — ONLY A POST STILL ON ITS WAY, ONLY WHEN SOMETHING CHANGED, AND
+       * ONLY THE FACTS IT RECORDED. Refused before the model is called, so a
+       * refusal costs nothing: a published or publishing post (B-2 above), a
+       * status D10 does not act on, or a variant with no undismissed change —
+       * which is also what a second tab finds once the first rewrite landed.
+       */
+      const item = await this.db.contentItem.findUnique({
+        where: { id: variant.contentItemId },
+        select: { status: true },
+      });
+      if (!item || !REFRESH_STATUSES.includes(item.status)) throw contentNotEditable();
+      const plan = await refreshPlanFor(this.db, { contentVariantId: variant.id }, this.#clock);
+      if (plan.flaggedSignatures.length === 0) {
+        throw new AppError('CONFLICT', 'Nothing this caption used has changed.', {
+          expectedLockVersion: 0,
+        });
+      }
+      retrieval = await rewriteGroundingFor(
+        this.db,
+        {
+          brandId: variant.brandId,
+          recordedItemIds: plan.recordedItemIds,
+          maxChars: this.policy.generation.maxContextChars,
+        },
+        this.#clock,
+      );
+      refreshKey = `content-tool:refresh_facts:${variant.id}:${createHash('sha256')
+        .update(plan.flaggedSignatures.join(','))
+        .digest('hex')
+        .slice(0, 40)}`;
+    } else {
+      retrieval = await this.#ground(variant.brandId, variant.body ?? '');
+    }
     const targetLocale = input.targetLocale ?? variant.locale;
 
     const instruction = [
@@ -587,6 +726,8 @@ export class ContentStudioService extends ContentLibraryService {
       platform,
       dialect,
       targetLocale,
+      retrieval,
+      refreshKey,
       request: {
         kind: 'text' as const,
         prompt: instruction,

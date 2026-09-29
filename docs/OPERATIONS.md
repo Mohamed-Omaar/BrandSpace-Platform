@@ -322,6 +322,121 @@ application is rolled back past Phase 2C-2:
 choices made in Look & voice may need to be picked again. Never drop the table to "undo" the migration
 (§6).
 
+### 6.6 Phase 2C-3: MEMBER candidates, recorded usage, and an application rollback (D-369 – D-383)
+
+Three migrations, with **different** rollback characteristics. Do not treat them alike.
+
+- **`20261008100000_content_knowledge_usage` (M5)** only ADDS a table. The previous release neither reads
+  nor writes it, so an application rollback needs no database change: the Studio shows no "Used N Brand
+  Brain facts", Home shows no changed-fact item and "Used in N posts" disappears until the new release is
+  back. The rows are kept and are read again, unchanged, by the next forward release. Never drop the
+  table to "undo" the migration (§6).
+- **`20261008090000_candidate_source_member` (M4a)** adds the value `MEMBER` to the enum
+  `"BrandCandidateSource"`, and **`20261008091000_candidate_member_check` (M4b)** adds
+  `brand_knowledge_candidate.proposedByUserId` and the MEMBER branch of the candidate CHECK. Both are
+  safe while the previous release is live — it never writes `MEMBER` and never sets the column — **but
+  they are NOT simply rollback-safe once the new release has written a MEMBER candidate** ("Send for
+  review", D-377):
+  - the previous release's Prisma client does not know the value `MEMBER` and **fails when it decodes
+    such a row**: its review inbox (`status = 'PENDING'`) and its "accept the confident ones" preview
+    both read pending candidates with their `sourceKind`, so ONE pending MEMBER candidate breaks the
+    Brand Brain page for that brand;
+  - **PostgreSQL cannot remove an enum value in place**, and §6's policy forbids a down script.
+
+**The procedure, in this order** (the same shape as §6.2):
+
+1. **Do not route traffic to the previous release yet.** Keep the current release serving, or put the
+   product in maintenance, while steps 2–3 happen.
+2. **Ship a forward corrective migration**, reviewed like any other and deployed through the normal
+   `prisma migrate deploy` path (never by hand, §6.1). It **rejects every PENDING MEMBER candidate** —
+   the reviewer is recorded as nobody (`reviewedByUserId` NULL), the reason as `release_rollback`, and
+   one `brand_brain.candidate.rejected` audit event is written per candidate (actor `SYSTEM`) naming the
+   candidate, its area and key, and why. **Nothing is deleted**: the candidate rows, their proposer
+   (`proposedByUserId`), their proposed text and the original `brand_brain.fact.proposed` audit events all
+   stay. The enum value stays defined.
+3. **Verify** that `SELECT count(*) FROM "brand_knowledge_candidate" WHERE "sourceKind" = 'MEMBER' AND
+"status" = 'PENDING'` is `0`.
+4. **Only then** may the previous application release serve traffic.
+
+**What the previous release can and cannot decode afterwards — verified against the previous release's
+code (`staging` at the Phase 2C-2 merge).** Every list it reads is filtered to PENDING (the review inbox,
+the confident-candidates preview, the setup wizard's review step — which also filters
+`sourceKind = 'DOCUMENT'`), is a count or a group-by that decodes no `sourceKind`, or selects only
+`brandId` (`setupReviewInProgress`), or is filtered by a document or an insight that a MEMBER row does
+not have (ingestion, `proposeLearning`). So after step 2 no list, count or page of the previous release
+decodes a MEMBER row. The ONE remaining read is a review submitted for a specific candidate id
+(`reviewCandidate` loads the whole row): a stale review form for a MEMBER candidate that was open before
+the rollback would fail with a server error instead of "already reviewed". Nothing is written by that
+failure. The rejected MEMBER rows become readable again, unchanged, when the new release returns; the
+members whose proposals were rejected by step 2 must send them again.
+
+**The exact SQL of that future corrective migration.** It is documented here and deliberately **not**
+added to the migration chain; nothing in this repository runs it, no application script, worker or job
+implements it, and it must never be run by hand against a real database. `brand_knowledge_candidate` and
+`audit_event` are under FORCE row-level security, which binds even their owner (the migrator role), so
+FORCE is lifted for the statements and put back in the same transaction, then asserted rather than
+assumed — exactly as §6.2's corrective migration does.
+
+```sql
+-- Forward corrective migration: before an application rollback past Phase 2C-3,
+-- reject every PENDING MEMBER candidate so the previous release (which does not
+-- know BrandCandidateSource.MEMBER) never decodes one. Nothing is deleted; each
+-- rejection is audited. Run only as a reviewed migration through
+-- `prisma migrate deploy`, never by hand.
+BEGIN;
+
+ALTER TABLE "brand_knowledge_candidate" NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE "audit_event" NO FORCE ROW LEVEL SECURITY;
+
+-- The audit trail first: one event per candidate being rejected, written while
+-- the candidates are still PENDING so the same predicate selects them.
+INSERT INTO "audit_event"
+  ("id", "workspaceId", "occurredAt", "actorType", "action", "resourceType",
+   "resourceId", "brandId", "severity", "outcome", "reason", "after")
+SELECT gen_random_uuid(), c."workspaceId", now(), 'SYSTEM',
+       'brand_brain.candidate.rejected', 'BrandKnowledgeCandidate',
+       c."id", c."brandId", 'NOTICE', 'SUCCESS', 'release_rollback',
+       jsonb_build_object('area', c."area", 'itemKey', c."itemKey",
+                          'sourceKind', 'MEMBER', 'reason', 'release_rollback')
+  FROM "brand_knowledge_candidate" c
+ WHERE c."sourceKind" = 'MEMBER' AND c."status" = 'PENDING';
+
+UPDATE "brand_knowledge_candidate"
+   SET "status" = 'REJECTED',
+       "reviewedAt" = now(),
+       "reviewReason" = 'release_rollback'
+ WHERE "sourceKind" = 'MEMBER' AND "status" = 'PENDING';
+
+ALTER TABLE "brand_knowledge_candidate" FORCE ROW LEVEL SECURITY;
+ALTER TABLE "audit_event" FORCE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM "brand_knowledge_candidate"
+     WHERE "sourceKind" = 'MEMBER' AND "status" = 'PENDING'
+  ) THEN
+    RAISE EXCEPTION 'a PENDING MEMBER candidate remains';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+     WHERE oid IN ('"brand_knowledge_candidate"'::regclass, '"audit_event"'::regclass)
+       AND (relrowsecurity IS NOT TRUE OR relforcerowsecurity IS NOT TRUE)
+  ) THEN
+    RAISE EXCEPTION 'RLS must be ENABLED and FORCED after this migration';
+  END IF;
+END $$;
+
+COMMIT;
+```
+
+(As in §6.2, Prisma runs a migration file inside its own transaction; in the actual migration file the
+explicit `BEGIN`/`COMMIT` lines are omitted. `gen_random_uuid()` is built into PostgreSQL 13+.)
+
+**Release note for the operator:** tell the affected workspaces that facts sent for review in the new
+release were declined by the rollback and need sending again once it is back; "Used N Brand Brain facts",
+the changed-fact banner and Home's changed-fact item are absent while the previous release serves.
+
 ---
 
 ## 7. Secret rotation

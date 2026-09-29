@@ -705,6 +705,46 @@
   gap: 8px;
 }
 
+/*
+ * PHASE 2C-3 (D9/D10) — "Used N Brand Brain facts" and the changed-fact
+ * banner's list. An approved design-system extension: the Issues list's
+ * rhythm and the existing muted and purple tokens; no new colour or type.
+ */
+.cs-brain-facts {
+  display: grid;
+  gap: 6px;
+}
+
+.cs-brain-fact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.cs-brain-fact-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cs-brain-fact-list small {
+  color: var(--cs-muted);
+  font-weight: 700;
+}
+
+.cs-brain-fact-list s {
+  color: var(--cs-muted);
+}
+
+.cs-inline-form {
+  display: inline-flex;
+}
+
 /* Friendly validation, each line with its fix beside it (D-277 §21). */
 .cs-issues {
   list-style: none;

@@ -20,7 +20,12 @@ import { MediaSlides } from './media-slides';
 import { InlineSchedule } from './inline-schedule';
 import { MediaDrawer, type CreativeFormatOption } from './media-drawer';
 import { VariantPreview, previewLabels } from './variant-preview';
-import type { ComposerDraft, ComposerPlatform, ComposerVariant } from './composer-view';
+import type {
+  ComposerDraft,
+  ComposerPlatform,
+  ComposerVariant,
+  VariantKnowledgeView,
+} from './composer-view';
 
 /**
  * THE DRAFT EDITOR (Phase 6 final, D-277 §20-§22 and §27, D-284).
@@ -76,6 +81,8 @@ export interface DraftEditorProps {
     teachBrain?: boolean;
     /** E4 (Phase 2B-2) — may save this post as a template (`templates.manage`). */
     manageTemplates?: boolean;
+    /** D10 (Phase 2C-3) — may rewrite with AI: `content.edit` AND `copilot.use`. */
+    rewriteFacts?: boolean;
   };
   /**
    * B9 / F2 (Phase 2B-2) — what the inline date and time start from: the
@@ -123,6 +130,8 @@ export interface DraftEditorProps {
     scheduleFromStudio?(formData: FormData): Promise<void>;
     /** E4 (Phase 2B-2) — save this post as a template. */
     saveAsTemplate?(formData: FormData): Promise<void>;
+    /** D10 (Phase 2C-3) — "Keep as is" on one changed fact. */
+    keepFactChange?(formData: FormData): Promise<void>;
   };
 }
 
@@ -387,6 +396,53 @@ export function DraftEditor({
   const estimate = estimates[estimateKey];
 
   /*
+   * D10 (Phase 2C-3) — A FACT THIS CAPTION USED CHANGED, EXPIRED OR WAS
+   * REMOVED. The banner lists the active variant's undismissed changes; its
+   * Rewrite is priced by the SAME quote path the rewrite reserves against
+   * (`/api/content/tool/quote`, tool `refresh_facts`) — never a fixed price.
+   */
+  const flaggedFacts: readonly VariantKnowledgeView[] =
+    activeVariant?.knowledge?.filter((entry) => entry.flagged) ?? [];
+  const [refreshEstimates, setRefreshEstimates] = useState<Readonly<Record<string, string>>>({});
+  const refreshKey =
+    activeVariant && flaggedFacts.length > 0
+      ? `${activeVariant.id}:${activeVariant.updatedAt}:${flaggedFacts
+          .map((entry) => entry.signature)
+          .join(',')}`
+      : '';
+  const canQuoteRefresh = can.rewriteFacts === true && can.edit && refreshKey !== '';
+  useEffect(() => {
+    if (!canQuoteRefresh || !activeVariant || refreshKey in refreshEstimates) return;
+    let current = true;
+    fetch('/api/content/tool-quote', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ variantId: activeVariant.id, tool: 'refresh_facts' }),
+    })
+      .then(async (response) =>
+        response.ok ? ((await response.json()) as { estimateMilli?: string }) : null,
+      )
+      .then((payload) => {
+        if (current && payload?.estimateMilli) {
+          setRefreshEstimates((all) => ({ ...all, [refreshKey]: String(payload.estimateMilli) }));
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [canQuoteRefresh, activeVariant, refreshKey, refreshEstimates]);
+  const refreshEstimate = refreshEstimates[refreshKey];
+  // "with the new fact" when a newer or replacement fact exists; otherwise "without".
+  const rewriteWithNew = flaggedFacts.some(
+    (entry) => entry.state === 'changed' || entry.state === 'replaced',
+  );
+  const factTitle = (entry: VariantKnowledgeView, which: 'used' | 'now' | 'new') =>
+    (which === 'used' ? entry.usedTitle : which === 'new' ? entry.newTitle : entry.title) ??
+    t['editor.facts.removedFact'] ??
+    '';
+
+  /*
    * Q10 — WHO TO ASK. "Automatic" sends the review to the default reviewer the
    * service picks (the first name below); choosing a name asks that person.
    * Either way anyone who may approve for the brand can decide it.
@@ -477,6 +533,55 @@ export function DraftEditor({
             </Link>
           ) : null}
         </details>
+
+        {/*
+          D9 (Phase 2C-3) — "USED N BRAND BRAIN FACTS", for the variant on
+          screen: exactly what its current AI version recorded (M5), at the
+          version it used, and what each is now. Never read from the words.
+        */}
+        {activeVariant ? (
+          <section className="cs-brain-facts" data-testid="variant-facts">
+            <span className="cs-section-kicker" data-testid="variant-facts-count">
+              {(activeVariant.knowledge?.length ?? 0) === 0
+                ? draft.brandBrainOn === false
+                  ? t['editor.facts.off']
+                  : t['editor.facts.none']
+                : (activeVariant.knowledge?.length ?? 0) === 1
+                  ? t['editor.facts.usedOne']
+                  : fill(t['editor.facts.used'] ?? '{count}', {
+                      count: String(activeVariant.knowledge?.length ?? 0),
+                    })}
+            </span>
+            {(activeVariant.knowledge?.length ?? 0) > 0 ? (
+              <ul className="cs-brain-fact-list">
+                {(activeVariant.knowledge ?? []).map((entry) => (
+                  <li
+                    key={entry.knowledgeItemId}
+                    data-testid={`variant-fact-${entry.knowledgeItemId}`}
+                    data-state={entry.state}
+                  >
+                    <b>{factTitle(entry, 'now')}</b>
+                    <small>
+                      {entry.areaLabel} · v{entry.usedVersion} ·{' '}
+                      <span data-testid={`variant-fact-state-${entry.knowledgeItemId}`}>
+                        {t[`editor.facts.state.${entry.state}`]}
+                      </span>
+                    </small>
+                    {entry.fixHref ? (
+                      <Link
+                        className="cs-ghost-button cs-compact"
+                        href={entry.fixHref}
+                        data-testid={`variant-fact-fix-${entry.knowledgeItemId}`}
+                      >
+                        {t['editor.facts.fix']}
+                      </Link>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
 
         {draft.insufficientKnowledge ? (
           <div className="cs-notice warning" role="status" data-testid="content-insufficient">
@@ -569,6 +674,84 @@ export function DraftEditor({
                 </button>
               </form>
             ) : null}
+          </div>
+        ) : null}
+
+        {/*
+          D10 (Phase 2C-3) — A FACT THIS CAPTION USED CHANGED, EXPIRED OR WAS
+          REMOVED. Old → new, old → replacement, or "no longer valid for
+          writing"; Rewrite (quoted, never automatic) or Keep as is. The post is
+          never unscheduled and never blocked from publishing by this.
+        */}
+        {activeVariant && flaggedFacts.length > 0 && can.edit ? (
+          <div
+            className="cs-notice warning"
+            role="status"
+            data-testid="fact-change-banner"
+            data-variant={activeVariant.id}
+          >
+            <b>{t['editor.facts.bannerTitle']}</b>
+            <ul className="cs-brain-fact-list">
+              {flaggedFacts.map((entry) => (
+                <li
+                  key={entry.knowledgeItemId}
+                  data-testid={`fact-change-${entry.knowledgeItemId}`}
+                  data-kind={entry.state}
+                >
+                  {entry.state === 'changed' || entry.state === 'replaced' ? (
+                    <span>
+                      <s>{factTitle(entry, 'used')}</s> → <b>{factTitle(entry, 'new')}</b>
+                    </span>
+                  ) : (
+                    <span>
+                      <s>{factTitle(entry, 'used')}</s> ·{' '}
+                      {entry.state === 'expired'
+                        ? t['editor.facts.expiredInvalid']
+                        : t['editor.facts.removedInvalid']}
+                    </span>
+                  )}
+                  {actions.keepFactChange && entry.signature ? (
+                    <form action={actions.keepFactChange} className="cs-inline-form">
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="itemId" value={draft.id} />
+                      <input type="hidden" name="variantId" value={activeVariant.id} />
+                      <input type="hidden" name="knowledgeItemId" value={entry.knowledgeItemId} />
+                      <input type="hidden" name="signature" value={entry.signature} />
+                      <button
+                        type="submit"
+                        className="cs-ghost-button cs-compact"
+                        data-testid={`fact-keep-${entry.knowledgeItemId}`}
+                      >
+                        {t['editor.facts.keep']}
+                      </button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {can.rewriteFacts ? (
+              <button
+                type="button"
+                className="cs-dark-button"
+                disabled={busy !== null || isDirty(activeVariant) || refreshEstimate === undefined}
+                data-testid="fact-rewrite"
+                data-with-new={rewriteWithNew ? 'true' : 'false'}
+                onClick={() => onTool(activeVariant.id, 'refresh_facts')}
+              >
+                {busy === `${activeVariant.id}:refresh_facts`
+                  ? t['content.tool.running']
+                  : fill(
+                      (rewriteWithNew
+                        ? t['editor.facts.rewriteNew']
+                        : t['editor.facts.rewriteWithout']) ?? '{credits}',
+                      {
+                        credits:
+                          refreshEstimate === undefined ? '…' : formatCredits(refreshEstimate),
+                      },
+                    )}
+              </button>
+            ) : null}
+            {isDirty(activeVariant) ? <p className="cs-hint">{t['editor.ai.saveFirst']}</p> : null}
           </div>
         ) : null}
 
