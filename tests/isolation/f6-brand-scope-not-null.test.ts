@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { commercePolicyFrom, type CommercePolicy } from '@brandspace/billing';
 import { findPlan, readPlanCatalogue } from '@brandspace/entitlements';
+import { memberCatalogueFor } from '@brandspace/automation';
 import { notifyLearningReviewers } from '@brandspace/intelligence';
 import { resolveRecipients } from '@brandspace/notifications';
 import { WorkspaceOnboardingService } from '@brandspace/onboarding';
@@ -202,5 +203,22 @@ describe('F6 · an owner written by onboarding', () => {
     );
     expect(recipients.map((row) => row.userId)).toContain(onboarded.ownerUserId);
     expect(recipients.map((row) => row.userId)).not.toContain(onboarded.restrictedUserId);
+  });
+
+  it('is offered by the member picker, which now asks the database for the scope (D2)', async () => {
+    const list = (brandId: string) =>
+      inWorkspace(onboarded.workspaceId, (db) =>
+        memberCatalogueFor(db, {
+          workspaceId: onboarded.workspaceId,
+          brandId,
+          viewerBrandScope: [],
+        }),
+      ).then((choices) => choices.map((choice) => choice.id));
+    const here = await list(onboarded.brandId);
+    expect(here).toContain(onboarded.ownerUserId);
+    expect(here).not.toContain(onboarded.restrictedUserId);
+    expect(await list(onboarded.otherBrandId)).toEqual(
+      expect.arrayContaining([onboarded.ownerUserId, onboarded.restrictedUserId]),
+    );
   });
 });

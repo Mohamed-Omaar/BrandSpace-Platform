@@ -78,3 +78,16 @@ describe('F6 — the brandScope migration', () => {
     expect(schema).not.toMatch(/^ {2}brandScope String\[\] @db\.Uuid$/m);
   });
 });
+
+describe('F6 D2 — the member picker filters by scope in SQL', () => {
+  it('asks the database for an empty-or-this-brand scope, with no scan limit left', () => {
+    const source = readFileSync(
+      path.join(root, 'packages/automation/src/condition-values.ts'),
+      'utf8',
+    );
+    expect(source).toContain(
+      'OR: [{ brandScope: { isEmpty: true } }, { brandScope: { has: input.brandId } }]',
+    );
+    expect(source).not.toMatch(/MEMBER_SCAN_LIMIT|2_000/);
+  });
+});

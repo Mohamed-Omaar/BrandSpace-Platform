@@ -59,31 +59,30 @@ export async function memberCatalogueFor(
   if (!brand) return [];
 
   /*
-   * THE SCOPE IS DECIDED BY `brandInScope`, NOT BY AN ARRAY FILTER IN SQL. The
-   * column is nullable and NULL means "every brand" — how an owner's membership
-   * is usually written — and a SQL `cardinality(...) = 0` or `@>` is NULL, not
-   * true, for a NULL array, so a query-side filter silently dropped exactly the
-   * members with the widest access. The canonical predicate treats NULL and
-   * empty alike.
+   * THE SCOPE IS A QUERY PREDICATE (F6, owner decision D2). An empty scope is
+   * every brand, a non-empty one must name this brand — `brandInScope`'s rule,
+   * asked in SQL. It could not be while `brandScope` was nullable: a NULL array
+   * makes both arms NULL, not true, and dropped exactly the members with the
+   * widest access (the owner onboarding wrote without a scope), so this used to
+   * read up to 2,000 ACTIVE members and filter them in code. Since
+   * `20261013090000_brand_scope_not_null` the column is never NULL, so the
+   * database returns only the members who belong in the list, already capped.
    */
   const rows = await db.membership.findMany({
-    where: { workspaceId: input.workspaceId, status: 'ACTIVE' },
+    where: {
+      workspaceId: input.workspaceId,
+      status: 'ACTIVE',
+      OR: [{ brandScope: { isEmpty: true } }, { brandScope: { has: input.brandId } }],
+    },
     select: {
       userId: true,
-      brandScope: true,
       user: { select: { name: true, email: true } },
     },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    take: MEMBER_SCAN_LIMIT,
+    take: Math.max(1, Math.min(input.take ?? 200, 200)),
   });
-  return rows
-    .filter((row) => brandInScope(row.brandScope, input.brandId))
-    .slice(0, Math.max(1, Math.min(input.take ?? 200, 200)))
-    .map((row) => ({ id: row.userId, name: row.user.name ?? row.user.email }));
+  return rows.map((row) => ({ id: row.userId, name: row.user.name ?? row.user.email }));
 }
-
-/** An upper bound on the members read per picker; far above any plan's seats. */
-const MEMBER_SCAN_LIMIT = 2_000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -161,7 +160,8 @@ export async function conditionValuesResolve(
       where: { workspaceId: input.workspaceId, userId: { in: ids }, status: 'ACTIVE' },
       select: { userId: true, brandScope: true },
     });
-    // `brandInScope`, for the same NULL-means-every-brand reason as the picker.
+    // `brandInScope` — the same rule the picker asks in SQL, here over the few
+    // members the rule names, read by id.
     const admitted = new Set(
       members
         .filter((member) => brandInScope(member.brandScope, input.brandId))
