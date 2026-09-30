@@ -40,6 +40,8 @@ const G13_PAIRS: Record<string, readonly string[]> = {
   ],
   ADD_TO_CAMPAIGN: ['CONTENT_APPROVED'],
   MAKE_DRAFT_COPY: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
+  // Phase 2B-3 PR 3 — the reminder, on the one trigger that names a review.
+  REMIND_REVIEWER: ['REVIEW_WAITING_24H'],
 };
 
 describe('the compatibility table', () => {
@@ -47,7 +49,7 @@ describe('the compatibility table', () => {
     for (const [type, triggers] of Object.entries(G13_PAIRS)) {
       expect(findAction(type)?.authoringTriggers, type).toEqual(triggers);
     }
-    expect(Object.values(G13_PAIRS).flat()).toHaveLength(13);
+    expect(Object.values(G13_PAIRS).flat()).toHaveLength(14);
   });
 
   it('no legacy action may ever be authored on POST_FAILED', () => {
@@ -191,6 +193,9 @@ describe('the typed outcomes', () => {
       content_unavailable: 'SKIPPED',
       source_campaign_unavailable: 'BLOCKED_BY_POLICY',
       draft_limit_reached: 'BLOCKED_BY_POLICY',
+      // Phase 2B-3 PR 3 — REMIND_REVIEWER (owner decision D).
+      occurrence_stale: 'SKIPPED',
+      no_eligible_reviewer: 'BLOCKED_BY_POLICY',
     });
     expect(isActionOutcomeCode('no_free_day')).toBe(true);
     expect(isActionOutcomeCode('toString')).toBe(false);
@@ -215,6 +220,7 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'NOTIFY_PERSON',
       'ADD_TO_CAMPAIGN',
       'MAKE_DRAFT_COPY',
+      'REMIND_REVIEWER',
     ]);
   });
 
@@ -251,6 +257,7 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'POST_FAILED × NOTIFY_PERSON',
       'POST_FAILED × MAKE_DRAFT_COPY',
       'REVIEW_WAITING_24H × NOTIFY_PERSON',
+      'REVIEW_WAITING_24H × REMIND_REVIEWER',
       'CAMPAIGN_STARTED × NOTIFY_PERSON',
       'CAMPAIGN_ENDED × NOTIFY_PERSON',
       'SCHEDULE_GAP × NOTIFY_PERSON',

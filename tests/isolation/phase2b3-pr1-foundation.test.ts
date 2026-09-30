@@ -578,8 +578,8 @@ describe('existing stored rules of every shape behave exactly as before', () => 
           triggerType: 'CONTENT_APPROVED',
           triggerConfig: {},
           conditions: [],
-          // Phase 2B-3 PR 2: ADD_TO_CAMPAIGN ships; REMIND_REVIEWER stays planned (D3).
-          actionType: 'REMIND_REVIEWER' as never,
+          // Phase 2B-3 PR 3: REMIND_REVIEWER ships (D3); DRAFT_IDEAS is still planned.
+          actionType: 'DRAFT_IDEAS' as never,
           actionConfig: {},
           actor: actor({ permissionKeys: [...EVERYTHING, 'content.create', 'campaigns.manage'] }),
         }),
@@ -603,13 +603,9 @@ describe('existing stored rules of every shape behave exactly as before', () => 
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
 
     entitlementQuestions = [];
-    for (const actionType of [
-      'RETRY_PUBLISH',
-      'PAUSE_CAMPAIGN',
-      'DRAFT_IDEAS',
-      // Phase 2B-3 PR 2: in place of ADD_TO_CAMPAIGN, which now ships.
-      'REMIND_REVIEWER',
-    ]) {
+    // Phase 2B-3 PR 3: the three actions still planned. REMIND_REVIEWER now
+    // executes; its runs are proved in phase2b3-pr3-remind-reviewer.
+    for (const actionType of ['RETRY_PUBLISH', 'PAUSE_CAMPAIGN', 'DRAFT_IDEAS']) {
       const planned = await inA((db) =>
         db.automationRule.create({
           data: {

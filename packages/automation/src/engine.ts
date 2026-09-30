@@ -193,6 +193,9 @@ export interface TriggerEvent {
  * What an internal action did: acted (with what it produced), or — for a G13
  * action — declined with a typed reason (`ACTION_OUTCOME_STATUS`).
  */
+/** A canonical uuid: the only kind of id sent to a `::uuid` cast. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 type PerformResult =
   | {
       readonly metadata: Prisma.InputJsonValue;
@@ -1758,7 +1761,43 @@ export class AutomationEngine {
         };
       }
 
-      case 'REMIND_REVIEWER':
+      /*
+       * PHASE 2B-3 PR 3 — REMIND THE REVIEWER. The review the event names is
+       * read FOR SHARE, bound to the workspace and the RULE'S brand, so a
+       * verdict (`decide` takes the row FOR UPDATE) waits for this run rather
+       * than landing beside it. Decided or withdrawn: SKIPPED
+       * `occurrence_stale`. Nobody who may decide it: BLOCKED
+       * `no_eligible_reviewer`, and nothing is sent.
+       */
+      case 'REMIND_REVIEWER': {
+        const remindReviewers = this.#ports.approvals?.remindReviewers;
+        if (!remindReviewers) throw unknownTriggerOrAction();
+        const approvalId = event.refType === 'Approval' ? event.refId : null;
+        // Never sent to the database unless it is a uuid: a malformed id would
+        // abort the run's whole transaction rather than end one run.
+        if (!approvalId || !UUID_PATTERN.test(approvalId)) return { outcome: 'occurrence_stale' };
+        const open = await this.#db.$queryRaw<{ pending: boolean }[]>`
+          SELECT ("status" = 'PENDING') AS "pending"
+            FROM "approval"
+           WHERE "id" = ${approvalId}::uuid
+             AND "workspaceId" = ${this.#workspaceId}::uuid
+             AND "brandId" = ${rule.brandId}::uuid
+             FOR SHARE`;
+        if (open[0]?.pending !== true) return { outcome: 'occurrence_stale' };
+        const result = await remindReviewers.call(this.#ports.approvals, {
+          workspaceId: this.#workspaceId,
+          brandId: rule.brandId,
+          approvalId,
+          idempotencyKey,
+        });
+        if (result.kind === 'refused') return { outcome: result.reason };
+        return {
+          metadata: { recipients: result.recipients },
+          resourceType: 'Approval',
+          resourceId: approvalId,
+        };
+      }
+
       case 'DRAFT_IDEAS':
       case 'RETRY_PUBLISH':
       case 'PAUSE_CAMPAIGN':

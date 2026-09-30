@@ -96,8 +96,8 @@ describe('registry parity with the database enums', () => {
       'WEEKLY_ENGAGEMENT_DROPPED',
       'POST_TOP_10_PERCENT',
     ]);
-    // Phase 2B-3 PR 2: four G13 actions ship with their settings; the rest
-    // stay planned (REMIND_REVIEWER moves to PR 3, owner decision D3).
+    // Phase 2B-3 PR 2: four G13 actions ship with their settings; PR 3 ships
+    // REMIND_REVIEWER (owner decision D3); the rest stay planned.
     expect(AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
       'NOTIFY',
       'SUBMIT_FOR_APPROVAL',
@@ -107,9 +107,9 @@ describe('registry parity with the database enums', () => {
       'NOTIFY_PERSON',
       'ADD_TO_CAMPAIGN',
       'MAKE_DRAFT_COPY',
+      'REMIND_REVIEWER',
     ]);
     expect(PLANNED_AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
-      'REMIND_REVIEWER',
       'DRAFT_IDEAS',
       'RETRY_PUBLISH',
       'PAUSE_CAMPAIGN',
@@ -468,9 +468,10 @@ describe('older-automation classification', () => {
     expect(isOlderAutomation({ triggerType: 'REVIEW_WAITING_24H', actionType: 'NOTIFY' })).toBe(
       true,
     );
-    expect(
-      isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'REMIND_REVIEWER' }),
-    ).toBe(true);
+    // A planned action (REMIND_REVIEWER ships in PR 3, so DRAFT_IDEAS stands in).
+    expect(isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'DRAFT_IDEAS' })).toBe(
+      true,
+    );
     expect(isOlderAutomation({ triggerType: 'NOT_A_TRIGGER', actionType: 'NOTIFY' })).toBe(true);
   });
 

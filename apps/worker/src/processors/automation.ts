@@ -6,6 +6,7 @@ import {
   campaignTargetResolves,
   gatherFacts,
   type AutomationActor,
+  type AutomationNotificationTemplate,
   type AutomationPorts,
   type MetricWindowPort,
   type TriggerEvent,
@@ -287,6 +288,40 @@ function portsFor(
       },
     },
     approvals: {
+      /*
+       * PHASE 2B-3 PR 3 — REMIND THE REVIEWERS, with `approval.reminder` fixed
+       * here (owner decision B): who comes from the approvals service's own
+       * reviewer rule, asked now; what is the post's title and a link to the
+       * review, exactly as `approval.requested` (decision C); through the one
+       * notification writer, so a reviewer who muted review notices is not
+       * reminded either. NOT `resolveRecipients`.
+       */
+      async remindReviewers(input) {
+        const policy = await new TenantContentPolicySource(db, environment).load();
+        const target = await new ContentApprovalService({
+          db,
+          workspaceId,
+          policy,
+        }).reviewReminderRecipients(input.approvalId);
+        if (!target || target.brandId !== input.brandId) {
+          return { kind: 'refused', reason: 'occurrence_stale' };
+        }
+        if (target.recipientUserIds.length === 0) {
+          return { kind: 'refused', reason: 'no_eligible_reviewer' };
+        }
+        const templateKey: AutomationNotificationTemplate = 'approval.reminder';
+        const delivered = await new NotificationService({ db, workspaceId }).create({
+          userIds: [...target.recipientUserIds],
+          templateKey,
+          payload: { itemTitle: target.itemTitle },
+          linkPath: `/approvals?review=${target.approvalId}`,
+          brandId: target.brandId,
+          resourceType: 'Approval',
+          resourceId: target.approvalId,
+          idempotencyKey: input.idempotencyKey,
+        });
+        return { kind: 'reminded', recipients: delivered };
+      },
       async submitForApproval(input) {
         const policy = await new TenantContentPolicySource(db, environment).load();
         const approvals = new ContentApprovalService({ db, workspaceId, policy });

@@ -301,6 +301,8 @@ describe('the automation registry is CLOSED, and small on purpose', () => {
       'NOTIFY_PERSON',
       'ADD_TO_CAMPAIGN',
       'MAKE_DRAFT_COPY',
+      // Phase 2B-3 PR 3 — the reviewer reminder joins it.
+      'REMIND_REVIEWER',
     ]);
   });
 

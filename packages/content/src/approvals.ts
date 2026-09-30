@@ -1296,6 +1296,63 @@ export class ContentApprovalService {
   }
 
   /**
+   * PHASE 2B-3 PR 3 — WHO IS REMINDED OF A REVIEW STILL WAITING.
+   *
+   * The same answer `submit()` gives to "who is told about this review",
+   * asked again NOW rather than remembered: people join, leave, lose
+   * `content.approve` or their access to the brand while a review waits.
+   *
+   *   1. The eligible reviewers of the approval's brand, from
+   *      `eligibleReviewers` — ACTIVE, `content.approve`, the brand in scope
+   *      (NULL scope is unrestricted) — minus the person who asked and the
+   *      post's author, who may not decide it (D-122).
+   *   2. If the review is assigned and the assignee is still one of them, the
+   *      assignee alone.
+   *   3. Otherwise every one of them. An assignee who is no longer eligible is
+   *      never reminded.
+   *
+   * Null when the review is not open. An empty list means nobody can decide
+   * it right now; the caller decides what that means.
+   */
+  async reviewReminderRecipients(approvalId: string): Promise<{
+    readonly approvalId: string;
+    readonly brandId: string;
+    readonly itemTitle: string;
+    readonly recipientUserIds: readonly string[];
+  } | null> {
+    const approval = await this.#db.approval.findFirst({
+      where: { id: approvalId, workspaceId: this.#workspaceId, status: 'PENDING' },
+      select: {
+        id: true,
+        brandId: true,
+        contentItemId: true,
+        requestedByUserId: true,
+        assignedToUserId: true,
+      },
+    });
+    if (!approval) return null;
+    const item = approval.contentItemId
+      ? await this.#db.contentItem.findFirst({
+          where: { id: approval.contentItemId, workspaceId: this.#workspaceId },
+          select: { title: true, createdByUserId: true },
+        })
+      : null;
+    const eligible = await this.eligibleReviewers({
+      brandId: approval.brandId,
+      excludeUserIds: [approval.requestedByUserId, item?.createdByUserId ?? null],
+    });
+    return {
+      approvalId: approval.id,
+      brandId: approval.brandId,
+      itemTitle: item?.title ?? '',
+      recipientUserIds: reviewReminderChoice({
+        eligible,
+        assignedToUserId: approval.assignedToUserId,
+      }),
+    };
+  }
+
+  /**
    * Q10 (D-325) — THE DEFAULT REVIEWER: the first eligible approver who is
    * neither the person submitting nor the post's author. D-122 bars BOTH from
    * deciding, so assigning either would ask the one person who may not answer
@@ -1361,4 +1418,17 @@ export class ContentApprovalService {
       reason,
     });
   }
+}
+
+/**
+ * PHASE 2B-3 PR 3 — THE REMINDER'S RECIPIENTS, from the eligible reviewers
+ * asked just now: the assignee alone while they are one of them, otherwise all
+ * of them. An assignee who is no longer eligible is never used.
+ */
+export function reviewReminderChoice(input: {
+  readonly eligible: readonly string[];
+  readonly assignedToUserId: string | null;
+}): readonly string[] {
+  const assignee = input.assignedToUserId;
+  return assignee && input.eligible.includes(assignee) ? [assignee] : [...input.eligible];
 }

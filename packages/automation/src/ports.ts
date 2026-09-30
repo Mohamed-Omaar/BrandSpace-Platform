@@ -65,6 +65,23 @@ export interface NotificationPort {
 }
 
 export interface ApprovalPort {
+  /**
+   * PHASE 2B-3 PR 3 — REMIND THE REVIEWERS of a review still waiting, with
+   * `approval.reminder` (owner decisions B and C): the assigned reviewer if
+   * still eligible, else every eligible reviewer of the brand; the post's
+   * title and a link to the review, exactly as `approval.requested`. The
+   * engine has already read the review FOR SHARE and found it PENDING.
+   */
+  remindReviewers?(input: {
+    readonly workspaceId: string;
+    /** The RULE's brand: a review of any other brand is not this rule's. */
+    readonly brandId: string;
+    readonly approvalId: string;
+    readonly idempotencyKey: string;
+  }): Promise<
+    | { readonly kind: 'reminded'; readonly recipients: number }
+    | { readonly kind: 'refused'; readonly reason: 'occurrence_stale' | 'no_eligible_reviewer' }
+  >;
   /** Move an eligible draft into the review queue, as the rule's creator. */
   submitForApproval(input: {
     readonly workspaceId: string;

@@ -1058,7 +1058,11 @@ export type AutomationNotifyTemplate = (typeof AUTOMATION_NOTIFY_TEMPLATES)[numb
  * rule chooses.
  */
 export type AutomationNotificationTemplate =
-  AutomationNotifyTemplate | 'automation.confirmation_required';
+  | AutomationNotifyTemplate
+  | 'automation.confirmation_required'
+  // Phase 2B-3 PR 3 (owner decision B) — fixed in the reminder port; never a
+  // NOTIFY rule's choice, which stays `AUTOMATION_NOTIFY_TEMPLATES`.
+  | 'approval.reminder';
 
 export function isAutomationNotifyTemplate(value: unknown): value is AutomationNotifyTemplate {
   return (AUTOMATION_NOTIFY_TEMPLATES as readonly unknown[]).includes(value);
@@ -1256,6 +1260,28 @@ export const AUTOMATION_ACTIONS = [
     needsContentItem: true,
     messageKey: 'makeDraftCopy',
   },
+  /*
+   * PHASE 2B-3 PR 3 — REMIND THE REVIEWER of a review still waiting. The
+   * requirement PR 1 declared and pinned (D-405): `content.submit`, the
+   * authority to ask for a review, which is what a reminder repeats. No
+   * settings: who is reminded is decided at run time from who can decide it.
+   */
+  {
+    type: 'REMIND_REVIEWER',
+    config: emptyConfig,
+    actionClass: 'READ_ONLY',
+    permissions: { allOf: ['content.submit'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: true,
+    authoringTriggers: ['REVIEW_WAITING_24H'],
+    catalogue: 'g13',
+    executable: true,
+    // Its target is the review the event names, not a post.
+    needsContentItem: false,
+    messageKey: 'remindReviewer',
+  },
 ] as const satisfies readonly ActionDefinition[];
 
 /**
@@ -1285,16 +1311,6 @@ export interface PlannedActionDefinition {
 }
 
 export const PLANNED_AUTOMATION_ACTIONS = [
-  {
-    type: 'REMIND_REVIEWER',
-    actionClass: 'READ_ONLY',
-    permissions: { allOf: ['content.submit'], anyOf: [] },
-    entitlements: [],
-    spendsCredits: false,
-    asksFirst: false,
-    authorable: false,
-    executable: false,
-  },
   {
     type: 'DRAFT_IDEAS',
     actionClass: 'INTERNAL_REVERSIBLE',
@@ -1439,6 +1455,10 @@ export const ACTION_OUTCOME_STATUS = {
   content_unavailable: 'SKIPPED',
   source_campaign_unavailable: 'BLOCKED_BY_POLICY',
   draft_limit_reached: 'BLOCKED_BY_POLICY',
+  // Phase 2B-3 PR 3 — the review was decided or withdrawn before the reminder.
+  occurrence_stale: 'SKIPPED',
+  // Phase 2B-3 PR 3 — nobody can decide the review right now (decision D).
+  no_eligible_reviewer: 'BLOCKED_BY_POLICY',
 } as const satisfies Record<string, 'SKIPPED' | 'BLOCKED_BY_POLICY'>;
 export type ActionOutcomeCode = keyof typeof ACTION_OUTCOME_STATUS;
 

@@ -74,6 +74,15 @@ const COPY: Record<string, readonly [string, string]> = {
     'No copy made — this brand has reached its limit of drafts.',
     'لم تُنشأ نسخة — بلغت هذه العلامة التجارية الحد الأقصى للمسودات.',
   ],
+  // Phase 2B-3 PR 3 — approved as written (owner decision D).
+  occurrence_stale: [
+    'Skipped — what started this automation had changed by the time it ran.',
+    'تم التخطي — تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
+  ],
+  no_eligible_reviewer: [
+    'Not sent — no one who can review this post is available right now.',
+    'لم يُرسل — لا يوجد حاليًا من يمكنه مراجعة هذا المنشور.',
+  ],
   creator_no_longer_a_member: [
     'Not run — the person who created this automation is no longer a member of the workspace.',
     'لم تُشغَّل — منشئ هذه الأتمتة لم يعد عضوًا في مساحة العمل.',
