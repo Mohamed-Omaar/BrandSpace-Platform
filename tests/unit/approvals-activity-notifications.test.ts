@@ -271,6 +271,9 @@ describe('the notification catalogue is closed and fully translated', () => {
         'approval.requested',
         // B-3 — an edit withdrew the review the reviewer was asked for.
         'approval.withdrawn_after_edit',
+        // Phase 2B-3 PR 3 — a review still open after its wait, reminded by
+        // the REMIND_REVIEWER action only.
+        'approval.reminder',
         // Phase 6 — Social Publishing. Three, not one per state: a queued post
         // becoming a publishing post is not news, and notifying on every
         // transition is how an inbox stops being read.

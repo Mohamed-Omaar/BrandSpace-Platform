@@ -28,6 +28,13 @@ export const NOTIFICATION_TEMPLATES = {
    * the reviewers who were asked. The author sends it again when ready.
    */
   'approval.withdrawn_after_edit': { severity: 'info' },
+  /**
+   * Phase 2B-3 PR 3 — a review is still open after its wait, and an automation
+   * the workspace wrote asked for the reviewers to be reminded. Goes to the
+   * reviewers who can decide it, never to anyone else. Sent only by the
+   * REMIND_REVIEWER action, never by a NOTIFY rule (D-412 is unchanged).
+   */
+  'approval.reminder': { severity: 'info' },
 
   /*
    * Phase 6 — Social Publishing.

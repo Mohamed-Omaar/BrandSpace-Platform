@@ -2125,6 +2125,7 @@ export const messages = {
     'notifications.template.approval.rejected': 'رُفض منشورك',
     'notifications.template.approval.withdrawn_after_edit':
       'عُدّل منشور كان بانتظار مراجعتك، فسُحب طلب المراجعة',
+    'notifications.template.approval.reminder': 'لا يزال منشور بانتظار مراجعتك',
     'notifications.template.publishing.published': 'تم نشر منشورك',
     'notifications.template.publishing.failed': 'فشل نشر منشورك',
     'notifications.template.calendar.unplanned_by_timezone_change':
@@ -5408,6 +5409,7 @@ export const messages = {
     'notifications.template.approval.rejected': 'Your post was turned down',
     'notifications.template.approval.withdrawn_after_edit':
       'A post waiting for your review was edited, so the review was withdrawn',
+    'notifications.template.approval.reminder': 'A post is still waiting for your review',
     'notifications.template.publishing.published': 'Your post was published',
     'notifications.template.publishing.failed': 'Your post could not be published',
     'notifications.template.calendar.unplanned_by_timezone_change':
