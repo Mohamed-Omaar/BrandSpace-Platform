@@ -3678,6 +3678,11 @@ enum PublishAttemptOutcome {
   /// The request left and the answer did not come back. Resolved by asking the
   /// provider what happened, never by sending again.
   INDETERMINATE
+  /// Phase 2B-3 PR 2 (M2). The pipeline refused the job BEFORE any request was
+  /// sent — the connection is gone, the account was revoked, the content
+  /// changed. Numbered after the highest attempt; the job's `attemptCount` is
+  /// untouched, because nothing was spent.
+  PREFLIGHT_REFUSED
 }
 
 /// A customer's authorization to publish to one external account.
