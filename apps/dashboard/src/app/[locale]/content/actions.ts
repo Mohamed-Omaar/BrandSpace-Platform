@@ -10,7 +10,6 @@ import {
   SCHEDULE_IN_PAST_REASON,
   TEMPLATES_MANAGE_PERMISSION,
   readRetentionFacts,
-  readSlides,
   resolveContentExpiry,
 } from '@brandspace/content';
 import { NOTE_MANAGE_PERMISSION } from '@brandspace/collaboration';
@@ -842,37 +841,16 @@ export async function duplicateContentAction(formData: FormData): Promise<void> 
   let destination: string;
   try {
     const session = await requireWorkspaceAction(locale, 'content.create');
-    // Q21 — a copy is a new post; filing it where the original was is attaching.
-    const mayFile = mayAttachCampaign(session.workspace.permissionKeys);
+    // Q21 — a copy is a new post; filing it where the original was is attaching,
+    // which `duplicateItem` decides from these same permissions (D-318).
     const copyId = await inContentStudio(session.workspace.workspaceId, async (services) => {
       const [library, policy] = await Promise.all([services.library(), services.policy()]);
-      const source = await library.getItem(itemId, session.workspace.brandScope);
       const facts = await readRetentionFacts(services.db, session.workspace.workspaceId);
-      const created = await library.createManualItem({
-        brandId: source.brandId,
-        title: translator(locale)('content.duplicateTitle').replace('{title}', source.title),
-        contentType: source.contentType,
-        locale: source.primaryLocale,
-        variants: source.variants
-          .filter((variant) => variant.locale === source.primaryLocale)
-          .map((variant) => ({
-            platformKey: variant.platformKey,
-            body: variant.body ?? '',
-            hashtags: variant.hashtags,
-            // A first comment travels only to a platform that still takes one:
-            // the operator may have switched it off since it was written.
-            firstComment: policy.platforms.find((p) => p.key === variant.platformKey)
-              ?.allowsFirstComment
-              ? variant.firstComment
-              : null,
-            linkUrl: variant.linkUrl,
-            assetIds: variant.assetIds,
-            // B9 — the slide headlines travel with their images.
-            slides: readSlides(variant.slides),
-          })),
-        campaignId: mayFile ? source.campaignId : null,
-        pillar: source.pillar,
-        tags: source.tags,
+      // Phase 2B-3 PR 2: the one duplicate path, shared with the automation.
+      const created = await library.duplicateItem({
+        sourceItemId: itemId,
+        titleFor: (title) => translator(locale)('content.duplicateTitle').replace('{title}', title),
+        actorPermissionKeys: session.workspace.permissionKeys,
         idempotencyKey: `duplicate:${token}`,
         expiresAt: resolveContentExpiry(policy, facts, systemClock),
         ...actorOf(session),

@@ -16,7 +16,8 @@ import {
   AUTOMATION_TRIGGERS,
   CONDITION_FIELDS,
   CONDITION_FIELD_CONTRACTS,
-  conditionFieldsFor,
+  authorableConditionFieldsFor,
+  conditionFieldsForRule,
   isAuthorablePair,
   isOlderAutomation,
   memberCatalogueFor,
@@ -358,6 +359,9 @@ export default async function AutomationsPage({
             editing.actionType === 'PLACE_ON_CALENDAR'
               ? (number(action['offsetHours']) ?? 24)
               : null,
+          brandId: editing.brandId,
+          actionUserId: typeof action['userId'] === 'string' ? action['userId'] : null,
+          actionCampaignId: typeof action['campaignId'] === 'string' ? action['campaignId'] : null,
           condition: first
             ? { field: first.field, operator: first.operator, value: first.value ?? null }
             : null,
@@ -592,7 +596,16 @@ export default async function AutomationsPage({
                 actionTypes: AUTOMATION_ACTIONS.filter((action) =>
                   isAuthorablePair(trigger.type, action.type),
                 ).map((action) => action.type),
-                conditionFields: [...conditionFieldsFor(trigger.type)],
+                /*
+                  Phase 2B-3 PR 2 — a NEW rule is offered its trigger's G13
+                  conditions; the rule being EDITED the fields its own action
+                  may name (a stored rule keeps what its trigger produces).
+                */
+                conditionFields: [
+                  ...(editing && trigger.type === editing.triggerType
+                    ? conditionFieldsForRule(editing)
+                    : authorableConditionFieldsFor(trigger.type)),
+                ],
                 needsSchedule: trigger.type === 'SCHEDULED_TIME',
                 needsThreshold: trigger.type === 'METRIC_THRESHOLD_CROSSED',
               }))}
@@ -637,6 +650,24 @@ export default async function AutomationsPage({
                   ];
                 }),
               )}
+              actionPeopleByBrand={Object.fromEntries(
+                catalogueBrandIds.map((brandId) => [
+                  brandId,
+                  (catalogueByBrand.get(brandId)?.members ?? []).map((member) => ({
+                    value: member.id,
+                    label: member.name,
+                  })),
+                ]),
+              )}
+              actionCampaignsByBrand={Object.fromEntries(
+                catalogueBrandIds.map((brandId) => [
+                  brandId,
+                  (catalogueByBrand.get(brandId)?.campaigns ?? []).map((campaign) => ({
+                    value: campaign.id,
+                    label: campaign.name,
+                  })),
+                ]),
+              )}
               metrics={INGESTED_METRIC_KEYS.map((key) => ({
                 key,
                 label: t(`analytics.metric.${key}` as MessageKey),
@@ -649,6 +680,10 @@ export default async function AutomationsPage({
                 submit: editInitial ? t('automations.save') : t('automations.create'),
                 description: t('automations.descriptionLabel'),
                 offsetHours: t('automations.offsetHoursLabel'),
+                actionPerson: t('automations.actionPersonLabel'),
+                actionCampaign: t('automations.actionCampaignLabel'),
+                chooseTrigger: t('automations.chooseTrigger'),
+                chooseAction: t('automations.chooseAction'),
                 conditionsKept: t('automations.conditionsKept'),
                 valueUnavailable: t('automations.valueUnavailable'),
                 cancel: t('automations.cancelEdit'),
@@ -838,15 +873,12 @@ export default async function AutomationsPage({
                         {t(`automations.action.${run.actionType}` as MessageKey)}
                       </span>
                       {/*
-                      THE REASON LINE (Phase 2B-3 PR 1, D-408). A run skipped
-                      because a value its rule names is gone reads as that, in
-                      words, with what to do; every other reason is unchanged.
+                      THE REASON LINE, ALWAYS IN WORDS (Phase 2B-3 PR 2, D5-B).
+                      Every code a run can end with is translated by
+                      `runPresentation`; a code it does not know reads as the
+                      approved fallback, never as the code itself.
                     */}
-                      {shown.reason.kind === 'generic' ? (
-                        <span data-testid={`automation-run-failure-${run.id}`}>
-                          {t('automations.failure').replace('{code}', shown.reason.code)}
-                        </span>
-                      ) : shown.reason.kind === 'message' ? (
+                      {shown.reason.kind === 'message' ? (
                         <span data-testid={`automation-run-failure-${run.id}`}>
                           {t(shown.reason.key)}
                         </span>

@@ -20,7 +20,12 @@ import { withPlatformPrisma } from './platform-prisma';
 
 async function seedRule(
   ws: OwnWorkspace,
-  input: { name: string; triggerType: 'ANOMALY_DETECTED' | 'CONTENT_APPROVED' },
+  input: {
+    name: string;
+    triggerType: 'ANOMALY_DETECTED' | 'CONTENT_APPROVED';
+    /** Phase 2B-3 PR 2: a CURRENT rule is a G13 rule ("make a draft copy"). */
+    actionType?: 'NOTIFY' | 'MAKE_DRAFT_COPY';
+  },
 ): Promise<string> {
   const id = randomUUID();
   await withPlatformPrisma((prisma) =>
@@ -34,8 +39,9 @@ async function seedRule(
         triggerType: input.triggerType,
         triggerConfig: {},
         conditions: [],
-        actionType: 'NOTIFY',
-        actionConfig: { templateKey: 'automation.notice' },
+        actionType: input.actionType ?? 'NOTIFY',
+        actionConfig:
+          (input.actionType ?? 'NOTIFY') === 'NOTIFY' ? { templateKey: 'automation.notice' } : {},
         maxRunsPerDay: 0,
         createdByUserId: ws.ownerId,
       },
@@ -86,7 +92,11 @@ test.describe('Phase 2B-3 PR 1 · older automations', () => {
     test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
     const ws = await ownWorkspace('older-auto');
     const older = await seedRule(ws, { name: 'Old anomaly note', triggerType: 'ANOMALY_DETECTED' });
-    const current = await seedRule(ws, { name: 'Approval note', triggerType: 'CONTENT_APPROVED' });
+    const current = await seedRule(ws, {
+      name: 'Approval copy',
+      triggerType: 'CONTENT_APPROVED',
+      actionType: 'MAKE_DRAFT_COPY',
+    });
     const staleRun = await seedValueUnavailableRun(ws, current);
     await enter(page, ws.slug);
 

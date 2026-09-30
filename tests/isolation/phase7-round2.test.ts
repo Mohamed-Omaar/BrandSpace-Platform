@@ -760,6 +760,8 @@ describe('A1: the automation outbox carries a real domain event to a rule', () =
       'CONTENT_APPROVED',
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
+      // Phase 2B-3 PR 2 — the publishing pipeline's one FAILED writer.
+      'POST_FAILED',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
@@ -773,11 +775,13 @@ describe('A1: the automation outbox carries a real domain event to a rule', () =
 
   it('a domain event becomes an outbox row, and the SAME event twice is one row', async () => {
     const itemId = fixtures.a.contentItemId;
+    // Phase 2B-3 PR 2: an approval is identified by its cycle — the approval row.
+    const approvalId = randomUUID();
     const first = await inA((db) =>
       recordAutomationEvent(
         db,
         fixtures.a.workspaceId,
-        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem' },
+        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem', approvalId },
         { brandId: fixtures.a.brandId, refId: itemId },
       ),
     );
@@ -785,17 +789,21 @@ describe('A1: the automation outbox carries a real domain event to a rule', () =
       recordAutomationEvent(
         db,
         fixtures.a.workspaceId,
-        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem' },
+        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem', approvalId },
         { brandId: fixtures.a.brandId, refId: itemId },
       ),
     );
     expect(first).toBe(true);
-    // "Item X was approved" is ONE event however many times anything notices it.
+    // "Item X was approved in this cycle" is ONE event however many times
+    // anything notices it.
     expect(second).toBe(false);
     expect(
       await inA((db) =>
         db.automationEvent.count({
-          where: { workspaceId: fixtures.a.workspaceId, dedupeKey: `CONTENT_APPROVED:${itemId}` },
+          where: {
+            workspaceId: fixtures.a.workspaceId,
+            dedupeKey: `CONTENT_APPROVED:${approvalId}`,
+          },
         }),
       ),
     ).toBe(1);

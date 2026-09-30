@@ -635,8 +635,13 @@ describe('F2 · no scheduling in the past; new posts default to tomorrow 09:00',
     // A10 (Phase 2B-2): the brand's own default time first, when one brand is
     // in view; then G6 (D-329): the country's first SUGGESTED time when an
     // operator configured some; otherwise the ordinary 09:00, exactly as before.
-    expect(page).toContain(
-      'defaultTime={brandDefaultTime ?? suggested.times[0] ?? DEFAULT_POST_TIME}',
+    // Phase 2B-3 PR 2 (OD-8): the same order, now in ONE shared function the
+    // "next free slot" automation uses too.
+    expect(page).toMatch(
+      /defaultTime=\{defaultPublishingTime\(\{\s*brandDefaultTime,\s*suggestedTimes: suggested\.times,\s*\}\)\}/,
+    );
+    expect(read('packages/content/src/calendar-markers.ts')).toContain(
+      'return input.brandDefaultTime ?? input.suggestedTimes[0] ?? DEFAULT_POST_TIME;',
     );
     // …except on today, where 09:00 may have passed: no time is proposed.
     const calendarView = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');

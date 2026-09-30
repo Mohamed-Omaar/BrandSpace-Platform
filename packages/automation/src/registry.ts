@@ -78,7 +78,7 @@ export interface TriggerDefinition {
    * other three name an EXPLICIT, SAFE MAPPING the engine resolves with a scoped
    * query rather than by assuming the ids interchange.
    */
-  readonly contentItemVia: 'direct' | 'calendarSlot' | 'publishJob' | null;
+  readonly contentItemVia: 'direct' | 'calendarSlot' | 'publishJob' | 'publishAttempt' | null;
   /**
    * Does this trigger's identity come from a CLOCK rather than from a row?
    *
@@ -128,7 +128,7 @@ export const AUTOMATION_TRIGGERS = [
     contentItemVia: 'calendarSlot',
     timeBucketed: false,
     ruleAddressed: false,
-    authorable: true,
+    authorable: false,
     messageKey: 'contentScheduled',
   },
   {
@@ -141,6 +141,22 @@ export const AUTOMATION_TRIGGERS = [
     authorable: true,
     messageKey: 'postPublished',
   },
+  /*
+   * PHASE 2B-3 PR 2 — ONE PUBLISH JOB REACHED FAILED. A domain event for every
+   * listening rule on the brand, produced by the pipeline's one FAILED writer
+   * and referencing the attempt that concluded the failure; the content item
+   * is reached through that attempt's job.
+   */
+  {
+    type: 'POST_FAILED',
+    config: emptyConfig,
+    refType: 'PublishAttempt',
+    contentItemVia: 'publishAttempt',
+    timeBucketed: false,
+    ruleAddressed: false,
+    authorable: true,
+    messageKey: 'postFailed',
+  },
   {
     type: 'ANALYTICS_REFRESHED',
     config: emptyConfig,
@@ -148,7 +164,7 @@ export const AUTOMATION_TRIGGERS = [
     contentItemVia: null,
     timeBucketed: false,
     ruleAddressed: false,
-    authorable: true,
+    authorable: false,
     messageKey: 'analyticsRefreshed',
   },
   {
@@ -165,7 +181,7 @@ export const AUTOMATION_TRIGGERS = [
     contentItemVia: null,
     timeBucketed: false,
     ruleAddressed: true,
-    authorable: true,
+    authorable: false,
     messageKey: 'metricThreshold',
   },
   {
@@ -180,7 +196,7 @@ export const AUTOMATION_TRIGGERS = [
     contentItemVia: null,
     timeBucketed: true,
     ruleAddressed: true,
-    authorable: true,
+    authorable: false,
     messageKey: 'scheduledTime',
   },
 ] as const satisfies readonly TriggerDefinition[];
@@ -207,14 +223,6 @@ export interface PlannedTriggerDefinition {
 }
 
 export const PLANNED_AUTOMATION_TRIGGERS = [
-  // A domain event: one publish attempt that failed, for every listening rule.
-  {
-    type: 'POST_FAILED',
-    refType: 'PublishAttempt',
-    ruleAddressed: false,
-    authorable: false,
-    executable: false,
-  },
   {
     type: 'REVIEW_WAITING_24H',
     refType: 'Approval',
@@ -328,23 +336,34 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
     'CONTENT_APPROVED',
     'CONTENT_SCHEDULED',
     'POST_PUBLISHED',
+    'POST_FAILED',
     'ANALYTICS_REFRESHED',
     'METRIC_THRESHOLD_CROSSED',
     'SCHEDULED_TIME',
   ],
   // Reachable wherever a content item is reachable — which is exactly where
   // `contentItemVia` is not null.
-  'content.status': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.pillar': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.platformCount': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.hasCampaign': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.campaignId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.type': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.authorUserId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.channels': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  // Only the publish job carries these.
+  'content.status': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.pillar': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.platformCount': [
+    'CONTENT_APPROVED',
+    'CONTENT_SCHEDULED',
+    'POST_PUBLISHED',
+    'POST_FAILED',
+  ],
+  'content.hasCampaign': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.campaignId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.type': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.authorUserId': [
+    'CONTENT_APPROVED',
+    'CONTENT_SCHEDULED',
+    'POST_PUBLISHED',
+    'POST_FAILED',
+  ],
+  'content.channels': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  // Only the publish job carries these. A failed post carries its class.
   'publish.provider': ['POST_PUBLISHED'],
-  'publish.failureClass': ['POST_PUBLISHED'],
+  'publish.failureClass': ['POST_PUBLISHED', 'POST_FAILED'],
   // Only the threshold trigger, because only it names the metric and the window
   // the numbers are measured over.
   'metric.key': ['METRIC_THRESHOLD_CROSSED'],
@@ -360,6 +379,62 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
  */
 export function conditionFieldsFor(trigger: AutomationTrigger): readonly ConditionField[] {
   return CONDITION_FIELDS.filter((field) => CONDITION_FIELD_TRIGGERS[field].includes(trigger));
+}
+
+/**
+ * PHASE 2B-3 PR 2 — THE CONDITIONS A NEW G13 RULE MAY NAME, PER TRIGGER.
+ *
+ * NARROWER THAN WHAT THE TRIGGER PRODUCES, ON PURPOSE. A G13 rule reads the
+ * post's channels, campaign, format and author; a failed post also its failure
+ * class. `content.status`, `content.pillar`, `content.platformCount`,
+ * `brand.id` and `publish.provider` are still produced — stored rules that name
+ * them keep evaluating — but a new rule is not offered them.
+ *
+ * Every list is a subset of the produced table (a unit test holds it), so a
+ * field offered here is always a field the gatherer emits.
+ */
+const G13_CONTENT_CONDITION_FIELDS = [
+  'content.channels',
+  'content.campaignId',
+  'content.hasCampaign',
+  'content.type',
+  'content.authorUserId',
+] as const satisfies readonly ConditionField[];
+
+export const AUTHORING_CONDITION_FIELDS: Partial<
+  Record<AutomationTrigger, readonly ConditionField[]>
+> = {
+  CONTENT_APPROVED: G13_CONTENT_CONDITION_FIELDS,
+  POST_PUBLISHED: G13_CONTENT_CONDITION_FIELDS,
+  POST_FAILED: [...G13_CONTENT_CONDITION_FIELDS, 'publish.failureClass'],
+};
+
+/**
+ * The fields a NEW G13 rule on this trigger may name. A trigger without its own
+ * list offers what it produces, as before.
+ */
+export function authorableConditionFieldsFor(
+  trigger: AutomationTrigger,
+): readonly ConditionField[] {
+  return AUTHORING_CONDITION_FIELDS[trigger] ?? conditionFieldsFor(trigger);
+}
+
+/**
+ * THE FIELDS THIS RULE MAY NAME — on create and on every edit.
+ *
+ * A G13 rule is held to the G13 list for its trigger. A rule on a pre-G13
+ * action keeps the whole produced table, so a stored rule (and, before the
+ * catalogue flip, a new one on the old catalogue) can keep every condition it
+ * could always name. After the flip every new rule is a G13 rule, so this is
+ * the per-trigger list for everything a person can write.
+ */
+export function conditionFieldsForRule(rule: {
+  readonly triggerType: AutomationTrigger;
+  readonly actionType: AutomationActionType;
+}): readonly ConditionField[] {
+  return findAction(rule.actionType)?.catalogue === 'g13'
+    ? authorableConditionFieldsFor(rule.triggerType)
+    : conditionFieldsFor(rule.triggerType);
 }
 
 export const CONDITION_OPERATORS = [
@@ -670,8 +745,14 @@ export type ConditionRejection = 'field' | 'operator' | 'value';
 export function conditionRejection(
   condition: AutomationCondition,
   trigger: AutomationTrigger,
+  /**
+   * Phase 2B-3 PR 2 — the fields this door accepts: a new or current rule is
+   * held to `authorableConditionFieldsFor`, an older one to what its trigger
+   * produces (the default).
+   */
+  fields: readonly ConditionField[] = conditionFieldsFor(trigger),
 ): ConditionRejection | null {
-  if (!CONDITION_FIELD_TRIGGERS[condition.field].includes(trigger)) return 'field';
+  if (!fields.includes(condition.field)) return 'field';
   const contract = CONDITION_FIELD_CONTRACTS[condition.field];
   if (!contract.operators.includes(condition.operator)) return 'operator';
   return conditionValueRejected(contract, condition) ? 'value' : null;
@@ -814,6 +895,19 @@ export interface ActionDefinition {
   readonly asksFirst: boolean;
   /** May a NEW rule be written with it? See `TriggerDefinition.authorable`. */
   readonly authorable: boolean;
+  /**
+   * PHASE 2B-3 PR 2 — THE TRIGGERS A NEW RULE MAY PAIR IT WITH. The authoring
+   * compatibility table, declared per action: `isAuthorablePair` asks it, and
+   * nothing else does. A stored rule on any other supported pair keeps running
+   * (`actionSupportsTrigger` is the executability half).
+   */
+  readonly authoringTriggers: readonly AutomationTrigger[];
+  /**
+   * PHASE 2B-3 PR 2 — WHICH CATALOGUE IT BELONGS TO: the four actions that
+   * shipped before G13, or a G13 action. A G13 rule names the G13 conditions
+   * (`conditionFieldsForRule`).
+   */
+  readonly catalogue: 'legacy' | 'g13';
   /** Is there code that performs it? A run of one that is not fails closed. */
   readonly executable: boolean;
   /**
@@ -863,6 +957,16 @@ export function isAutomationNotifyTemplate(value: unknown): value is AutomationN
  */
 export const NOTIFY_TEMPLATE_NOT_ALLOWED = 'notify_template_not_allowed';
 
+/** The triggers the four pre-G13 actions were authored with. */
+const LEGACY_AUTHORING_TRIGGERS = [
+  'CONTENT_APPROVED',
+  'CONTENT_SCHEDULED',
+  'POST_PUBLISHED',
+  'ANALYTICS_REFRESHED',
+  'METRIC_THRESHOLD_CROSSED',
+  'SCHEDULED_TIME',
+] as const satisfies readonly AutomationTrigger[];
+
 export const AUTOMATION_ACTIONS = [
   {
     type: 'NOTIFY',
@@ -878,7 +982,10 @@ export const AUTOMATION_ACTIONS = [
     entitlements: [],
     spendsCredits: false,
     asksFirst: false,
-    authorable: true,
+    authorable: false,
+    // The catalogue it was authored in before G13; never POST_FAILED.
+    authoringTriggers: LEGACY_AUTHORING_TRIGGERS,
+    catalogue: 'legacy',
     executable: true,
     // A notification points at whatever fired the rule, whatever that is.
     needsContentItem: false,
@@ -892,7 +999,10 @@ export const AUTOMATION_ACTIONS = [
     entitlements: [],
     spendsCredits: false,
     asksFirst: false,
-    authorable: true,
+    authorable: false,
+    // The catalogue it was authored in before G13; never POST_FAILED.
+    authoringTriggers: LEGACY_AUTHORING_TRIGGERS,
+    catalogue: 'legacy',
     executable: true,
     needsContentItem: true,
     messageKey: 'submitForApproval',
@@ -913,7 +1023,10 @@ export const AUTOMATION_ACTIONS = [
     entitlements: [],
     spendsCredits: false,
     asksFirst: false,
-    authorable: true,
+    authorable: false,
+    // The catalogue it was authored in before G13; never POST_FAILED.
+    authoringTriggers: LEGACY_AUTHORING_TRIGGERS,
+    catalogue: 'legacy',
     executable: true,
     needsContentItem: true,
     messageKey: 'placeOnCalendar',
@@ -935,10 +1048,90 @@ export const AUTOMATION_ACTIONS = [
     entitlements: [],
     spendsCredits: false,
     asksFirst: true,
-    authorable: true,
+    authorable: false,
+    // The catalogue it was authored in before G13; never POST_FAILED.
+    authoringTriggers: LEGACY_AUTHORING_TRIGGERS,
+    catalogue: 'legacy',
     executable: true,
     needsContentItem: true,
     messageKey: 'proposePublish',
+  },
+  /*
+   * PHASE 2B-3 PR 2 — THE G13 ACTIONS, with their settings and their pairing.
+   * Each becomes executable and authorable in the commit that ships its
+   * executor; the requirements are the ones PR 1 declared and pinned.
+   */
+  {
+    type: 'SCHEDULE_NEXT_FREE_SLOT',
+    config: emptyConfig,
+    actionClass: 'INTERNAL_REVERSIBLE',
+    permissions: { allOf: ['content.schedule'], anyOf: [] },
+    // The scheduled-post quota is consumed inside the calendar's `schedule()`.
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: true,
+    authoringTriggers: ['CONTENT_APPROVED'],
+    catalogue: 'g13',
+    executable: true,
+    needsContentItem: true,
+    messageKey: 'scheduleNextFreeSlot',
+  },
+  {
+    type: 'NOTIFY_PERSON',
+    config: z.object({
+      /** One member, chosen by the author; validated on save and on every run. */
+      userId: z.string().uuid(),
+    }),
+    actionClass: 'READ_ONLY',
+    permissions: { allOf: ['workspace.read'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: true,
+    authoringTriggers: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
+    catalogue: 'g13',
+    executable: true,
+    needsContentItem: false,
+    messageKey: 'notifyPerson',
+  },
+  {
+    type: 'ADD_TO_CAMPAIGN',
+    config: z.object({
+      /** One campaign of the rule's brand; validated on save and on every run. */
+      campaignId: z.string().uuid(),
+    }),
+    actionClass: 'INTERNAL_REVERSIBLE',
+    /*
+     * THE ONE `anyOf` (Correction 1). Attaching a post to a campaign is an act
+     * of the post's author or of the campaign's manager (D-318), and either
+     * permission is enough. It attaches only; it never detaches or moves.
+     */
+    permissions: { allOf: [], anyOf: ['content.create', 'campaigns.manage'] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: true,
+    authoringTriggers: ['CONTENT_APPROVED'],
+    catalogue: 'g13',
+    executable: true,
+    needsContentItem: true,
+    messageKey: 'addToCampaign',
+  },
+  {
+    type: 'MAKE_DRAFT_COPY',
+    config: emptyConfig,
+    actionClass: 'INTERNAL_REVERSIBLE',
+    permissions: { allOf: ['content.create'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: true,
+    authoringTriggers: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
+    catalogue: 'g13',
+    executable: true,
+    needsContentItem: true,
+    messageKey: 'makeDraftCopy',
   },
 ] as const satisfies readonly ActionDefinition[];
 
@@ -970,42 +1163,6 @@ export interface PlannedActionDefinition {
 
 export const PLANNED_AUTOMATION_ACTIONS = [
   {
-    type: 'SCHEDULE_NEXT_FREE_SLOT',
-    actionClass: 'INTERNAL_REVERSIBLE',
-    permissions: { allOf: ['content.schedule'], anyOf: [] },
-    // The scheduled-post quota is consumed inside the calendar's `schedule()`.
-    entitlements: [],
-    spendsCredits: false,
-    asksFirst: false,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'NOTIFY_PERSON',
-    actionClass: 'READ_ONLY',
-    permissions: { allOf: ['workspace.read'], anyOf: [] },
-    entitlements: [],
-    spendsCredits: false,
-    asksFirst: false,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'ADD_TO_CAMPAIGN',
-    actionClass: 'INTERNAL_REVERSIBLE',
-    /*
-     * THE ONE `anyOf` (Correction 1). Attaching a post to a campaign is an act
-     * of the post's author or of the campaign's manager (D-318), and either
-     * permission is enough. It attaches only; it never detaches or moves.
-     */
-    permissions: { allOf: [], anyOf: ['content.create', 'campaigns.manage'] },
-    entitlements: [],
-    spendsCredits: false,
-    asksFirst: false,
-    authorable: false,
-    executable: false,
-  },
-  {
     type: 'REMIND_REVIEWER',
     actionClass: 'READ_ONLY',
     permissions: { allOf: ['content.submit'], anyOf: [] },
@@ -1022,16 +1179,6 @@ export const PLANNED_AUTOMATION_ACTIONS = [
     permissions: { allOf: ['content.create', 'copilot.use'], anyOf: [] },
     entitlements: ['limit.automation_ai_actions'],
     spendsCredits: true,
-    asksFirst: false,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'MAKE_DRAFT_COPY',
-    actionClass: 'INTERNAL_REVERSIBLE',
-    permissions: { allOf: ['content.create'], anyOf: [] },
-    entitlements: [],
-    spendsCredits: false,
     asksFirst: false,
     authorable: false,
     executable: false,
@@ -1140,8 +1287,40 @@ export function isAuthorablePair(triggerType: string, actionType: string): boole
   return (
     trigger?.authorable === true &&
     action?.authorable === true &&
+    action.authoringTriggers.includes(trigger.type) &&
     actionSupportsTrigger(action.type, trigger.type)
   );
+}
+
+/**
+ * PHASE 2B-3 PR 2 — WHY AN ACTION ENDED WITHOUT ACTING, and how the run reads.
+ *
+ * A G13 executor that finds nothing to do, or a reason it may not, returns one
+ * of these codes instead of throwing: `SKIPPED` when there was nothing to do
+ * (the post already has a time, is already in a campaign, is under review),
+ * `BLOCKED_BY_POLICY` when something stands in the way that a person can fix.
+ * Run history localizes every one of them.
+ */
+export const ACTION_OUTCOME_STATUS = {
+  already_has_time: 'SKIPPED',
+  no_free_day: 'BLOCKED_BY_POLICY',
+  approval_required: 'BLOCKED_BY_POLICY',
+  schedule_quota_reached: 'BLOCKED_BY_POLICY',
+  channel_disconnected: 'BLOCKED_BY_POLICY',
+  not_schedulable: 'BLOCKED_BY_POLICY',
+  recipient_unavailable: 'BLOCKED_BY_POLICY',
+  campaign_unavailable: 'BLOCKED_BY_POLICY',
+  already_in_campaign: 'SKIPPED',
+  content_in_review: 'SKIPPED',
+  content_not_editable: 'SKIPPED',
+  content_unavailable: 'SKIPPED',
+  source_campaign_unavailable: 'BLOCKED_BY_POLICY',
+  draft_limit_reached: 'BLOCKED_BY_POLICY',
+} as const satisfies Record<string, 'SKIPPED' | 'BLOCKED_BY_POLICY'>;
+export type ActionOutcomeCode = keyof typeof ACTION_OUTCOME_STATUS;
+
+export function isActionOutcomeCode(value: unknown): value is ActionOutcomeCode {
+  return typeof value === 'string' && Object.hasOwn(ACTION_OUTCOME_STATUS, value);
 }
 
 /**

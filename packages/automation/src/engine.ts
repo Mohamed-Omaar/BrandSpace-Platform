@@ -27,26 +27,33 @@ import {
   creatorLacksAuthority,
   ruleLimitReached,
   tooManyConditions,
+  automationTargetNotFound,
   triggerActionIncompatible,
   unknownTriggerOrAction,
 } from './errors';
 import { CONDITION_VALUE_UNAVAILABLE, conditionValuesResolve } from './condition-values';
+import { campaignTargetResolves, personTargetResolves } from './action-targets';
 import type { AutomationPolicy } from './policy';
 import type { AutomationPorts } from './ports';
 import {
+  ACTION_OUTCOME_STATUS,
   AUTOMATION_ACTIONS,
   actionSupportsTrigger,
+  conditionFieldsForRule,
   conditionRejection,
   conditionsSchema,
   evaluateConditions,
   findAction,
   findTrigger,
+  isAuthorablePair,
   isAutomationNotifyTemplate,
   isExternalAction,
   NOTIFY_TEMPLATE_NOT_ALLOWED,
   satisfiesActionPermissions,
   type ActionDefinition,
+  type ActionOutcomeCode,
   type AutomationCondition,
+  type ConditionField,
 } from './registry';
 
 /**
@@ -168,9 +175,30 @@ export interface TriggerEvent {
    * in, and it is no longer asked to be an identity it cannot carry.
    */
   readonly eventKey?: string | null;
+  /**
+   * PHASE 2B-3 PR 2 — WHEN THE EVENT HAPPENED: the outbox row's `createdAt`.
+   *
+   * Compared with the rule's `armedAt` (OD-21, no backfill): an event that
+   * happened before the rule was created, switched on, or had its trigger
+   * settings changed does not reach it. Absent for a caller that composed the
+   * event itself, which keeps the behaviour it always had.
+   */
+  readonly occurredAt?: Date | null;
   /** The facts a condition may read. Gathered by the caller, never queried here. */
   readonly facts: Readonly<Record<string, unknown>>;
 }
+
+/**
+ * What an internal action did: acted (with what it produced), or — for a G13
+ * action — declined with a typed reason (`ACTION_OUTCOME_STATUS`).
+ */
+type PerformResult =
+  | {
+      readonly metadata: Prisma.InputJsonValue;
+      readonly resourceType?: string;
+      readonly resourceId?: string;
+    }
+  | { readonly outcome: ActionOutcomeCode };
 
 export interface RunOutcome {
   readonly run: AutomationRun | null;
@@ -353,6 +381,11 @@ export class AutomationEngine {
     if (!actionSupportsTrigger(input.actionType, input.triggerType)) {
       throw triggerActionIncompatible();
     }
+    // PHASE 2B-3 PR 2 — AND THE PAIR MUST BE ONE THE CATALOGUE OFFERS
+    // (`authoringTriggers`, the compatibility table).
+    if (!isAuthorablePair(input.triggerType, input.actionType)) {
+      throw triggerActionIncompatible();
+    }
 
     // The creator must hold BOTH the authoring permission and the permission the
     // ACTION needs. Holding `automation.manage` is not a way to acquire
@@ -381,10 +414,11 @@ export class AutomationEngine {
      * gatherer is held to by the parity test — so "offered", "accepted" and
      * "produced" are one list rather than three.
      */
-    this.#requireEvaluableConditions(conditions, input.triggerType);
+    this.#requireEvaluableConditions(conditions, input.triggerType, conditionFieldsForRule(input));
 
     const triggerConfig = trigger.config.parse(input.triggerConfig) as Prisma.InputJsonValue;
     const actionConfig = action.config.parse(input.actionConfig) as Prisma.InputJsonValue;
+    await this.#requireActionTargets(action.type, actionConfig, input.brandId);
 
     const workspaceCount = await this.#db.automationRule.count({
       where: { workspaceId: this.#workspaceId, deletedAt: null },
@@ -420,6 +454,8 @@ export class AutomationEngine {
         // than relying on a default.
         requiresConfirmationForExternal: true,
         createdByUserId: input.actor.userId,
+        // Phase 2B-3 PR 2 — listening from now on, never for what came before.
+        armedAt: this.#clock.now(),
       },
     });
 
@@ -488,12 +524,22 @@ export class AutomationEngine {
      * against `existing.triggerType` is validating against the trigger the
      * conditions will actually be evaluated under.
      */
-    if (conditions) this.#requireEvaluableConditions(conditions, existing.triggerType);
+    if (conditions) {
+      this.#requireEvaluableConditions(
+        conditions,
+        existing.triggerType,
+        conditionFieldsForRule(existing),
+      );
+    }
 
+    // Phase 2B-3 PR 2 — switching a rule ON re-arms it: while it was off it
+    // was not listening, and what happened then is not replayed into it.
+    const switchedOn = input.enabled === true && !existing.enabled;
     const rule = await this.#db.automationRule.update({
       where: { id: existing.id },
       data: {
         ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+        ...(switchedOn ? { armedAt: this.#clock.now() } : {}),
         ...(input.name === undefined ? {} : { name: input.name.trim().slice(0, 120) }),
         ...(conditions === undefined
           ? {}
@@ -578,7 +624,13 @@ export class AutomationEngine {
     if (conditions && conditions.length > this.#policy.limits.maxConditionsPerRule) {
       throw tooManyConditions(this.#policy.limits.maxConditionsPerRule);
     }
-    if (conditions) this.#requireEvaluableConditions(conditions, existing.triggerType);
+    if (conditions) {
+      this.#requireEvaluableConditions(
+        conditions,
+        existing.triggerType,
+        conditionFieldsForRule(existing),
+      );
+    }
 
     const triggerConfig =
       input.triggerConfig === undefined
@@ -597,6 +649,10 @@ export class AutomationEngine {
       !satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)
     ) {
       throw creatorLacksAuthority();
+    }
+    // PHASE 2B-3 PR 2 — a new person or campaign is validated like a new rule's.
+    if (actionConfigChanged && actionConfig !== undefined) {
+      await this.#requireActionTargets(action.type, actionConfig, existing.brandId);
     }
 
     const name = input.name === undefined ? undefined : input.name.trim().slice(0, 120);
@@ -651,7 +707,13 @@ export class AutomationEngine {
         ...(triggerConfig === undefined ? {} : { triggerConfig }),
         ...(actionConfig === undefined ? {} : { actionConfig }),
         ...(triggerConfigChanged
-          ? { nextEvaluationAt: now, thresholdBreached: null, thresholdEvaluatedAt: null }
+          ? {
+              nextEvaluationAt: now,
+              thresholdBreached: null,
+              thresholdEvaluatedAt: null,
+              // Phase 2B-3 PR 2 — a new trigger setting listens from now on.
+              armedAt: now,
+            }
           : {}),
         updatedByUserId: input.actor.userId,
         version: { increment: 1 },
@@ -891,6 +953,17 @@ export class AutomationEngine {
     if (!rule.enabled || rule.deletedAt)
       return { run: null, status: 'NOT_RUN', confirmationToken: null };
 
+    /*
+     * PHASE 2B-3 PR 2 — NO BACKFILL (OD-21). A rule reacts to what happens
+     * after it is armed: created, switched on, or given new trigger settings.
+     * An event older than that is not a run the rule skipped — the rule was
+     * not listening — so nothing is recorded, exactly like a disabled rule. A
+     * rule stored before PR 2 has no `armedAt` and keeps its behaviour.
+     */
+    if (rule.armedAt && event.occurredAt && event.occurredAt < rule.armedAt) {
+      return { run: null, status: 'NOT_RUN', confirmationToken: null };
+    }
+
     const triggerConfig = (rule.triggerConfig ?? {}) as Record<string, unknown>;
     const idempotencyKey = runIdempotencyKeyFor({
       ruleId: rule.id,
@@ -1113,6 +1186,18 @@ export class AutomationEngine {
     // --- Internal actions run ------------------------------------------------
     try {
       const result = await this.#performInternal(rule, run, event, actor);
+      /*
+       * PHASE 2B-3 PR 2 — AN ACTION THAT DID NOT ACT SAYS WHY. A G13 executor
+       * returns a typed outcome rather than throwing: SKIPPED when there was
+       * nothing to do, BLOCKED_BY_POLICY when something a person can fix
+       * stood in the way. Either way nothing was changed.
+       */
+      if ('outcome' in result) {
+        return this.#finish(rule, run, ACTION_OUTCOME_STATUS[result.outcome], {
+          conditionsHeld: true,
+          failureCode: result.outcome,
+        });
+      }
       return this.#finish(rule, run, 'SUCCEEDED', {
         conditionsHeld: true,
         actionResult: result.metadata,
@@ -1462,11 +1547,7 @@ export class AutomationEngine {
     run: AutomationRun,
     event: TriggerEvent,
     actor: AutomationActor,
-  ): Promise<{
-    metadata: Prisma.InputJsonValue;
-    resourceType?: string;
-    resourceId?: string;
-  }> {
+  ): Promise<PerformResult> {
     const config = (rule.actionConfig ?? {}) as Record<string, unknown>;
     const idempotencyKey = `automation-run:${run.id}`;
 
@@ -1547,12 +1628,115 @@ export class AutomationEngine {
        * the PR that implements it. Until then a stored rule naming one fails
        * closed here, exactly as an unknown action would.
        */
-      case 'SCHEDULE_NEXT_FREE_SLOT':
-      case 'NOTIFY_PERSON':
-      case 'ADD_TO_CAMPAIGN':
+      /*
+       * PHASE 2B-3 PR 2 — SCHEDULE IN THE NEXT FREE SLOT. The post the event
+       * names, resolved and bound like every content action; a post that is
+       * gone, out of the brand, or out of the creator's scope is SKIPPED
+       * rather than failed. Every reason the calendar gives not to schedule is
+       * a typed outcome.
+       */
+      case 'SCHEDULE_NEXT_FREE_SLOT': {
+        const scheduleNextFreeSlot = this.#ports.calendar?.scheduleNextFreeSlot;
+        if (!scheduleNextFreeSlot) throw unknownTriggerOrAction();
+        const contentItemId = await this.#resolveContentItem(rule, event, actor);
+        if (!contentItemId) return { outcome: 'content_unavailable' };
+        const result = await scheduleNextFreeSlot.call(this.#ports.calendar, {
+          workspaceId: this.#workspaceId,
+          contentItemId,
+          actorUserId: actor.userId,
+          actorBrandScope: actor.brandScope,
+          idempotencyKey,
+        });
+        if (result.kind === 'refused') return { outcome: result.reason };
+        return {
+          metadata: { slotId: result.slotId, localTime: result.localTime },
+          resourceType: 'CalendarSlot',
+          resourceId: result.slotId,
+        };
+      }
+
+      /*
+       * PHASE 2B-3 PR 2 (D4) — NOTIFY A CHOSEN PERSON. The member the rule names
+       * is re-checked on every run with the predicate the save used: still
+       * ACTIVE, and still able to see this brand. Anyone else ends the run
+       * BLOCKED `recipient_unavailable` and nobody is told anything.
+       */
+      case 'NOTIFY_PERSON': {
+        const notifyPerson = this.#ports.notifications?.notifyPerson;
+        if (!notifyPerson) throw unknownTriggerOrAction();
+        const userId = config['userId'];
+        const resolves = await personTargetResolves(this.#db, {
+          workspaceId: this.#workspaceId,
+          brandId: rule.brandId,
+          userId,
+        });
+        if (!resolves || typeof userId !== 'string') return { outcome: 'recipient_unavailable' };
+        const result = await notifyPerson.call(this.#ports.notifications, {
+          workspaceId: this.#workspaceId,
+          brandId: rule.brandId,
+          userId,
+          resourceType: event.refType ?? 'AutomationRun',
+          resourceId: event.refId ?? run.id,
+          idempotencyKey,
+        });
+        return { metadata: { recipients: result.recipients } };
+      }
+
+      /*
+       * PHASE 2B-3 PR 2 (D8) — ADD TO A CAMPAIGN, attach-only. The campaign is
+       * the rule's own setting, never anything the event names; the port
+       * applies the automation's precondition before the campaign service is
+       * asked, and a post in review is SKIPPED, never withdrawn.
+       */
+      case 'ADD_TO_CAMPAIGN': {
+        if (!this.#ports.campaigns) throw unknownTriggerOrAction();
+        const contentItemId = await this.#resolveContentItem(rule, event, actor);
+        if (!contentItemId) return { outcome: 'content_unavailable' };
+        const campaignId = config['campaignId'];
+        if (typeof campaignId !== 'string') return { outcome: 'campaign_unavailable' };
+        const result = await this.#ports.campaigns.addToCampaign({
+          workspaceId: this.#workspaceId,
+          contentItemId,
+          campaignId,
+          actorUserId: actor.userId,
+          actorBrandScope: actor.brandScope,
+          actorPermissionKeys: actor.permissionKeys,
+          idempotencyKey,
+        });
+        if (result.kind === 'refused') return { outcome: result.reason };
+        return {
+          metadata: { campaignId },
+          resourceType: 'ContentItem',
+          resourceId: contentItemId,
+        };
+      }
+
+      /*
+       * PHASE 2B-3 PR 2 — MAKE A DRAFT COPY of the post the event names. One
+       * copy per run: the run's key is the copy's idempotency key.
+       */
+      case 'MAKE_DRAFT_COPY': {
+        if (!this.#ports.content) throw unknownTriggerOrAction();
+        const contentItemId = await this.#resolveContentItem(rule, event, actor);
+        if (!contentItemId) return { outcome: 'content_unavailable' };
+        const result = await this.#ports.content.makeDraftCopy({
+          workspaceId: this.#workspaceId,
+          contentItemId,
+          actorUserId: actor.userId,
+          actorBrandScope: actor.brandScope,
+          actorPermissionKeys: actor.permissionKeys,
+          idempotencyKey: `duplicate:${idempotencyKey}`,
+        });
+        if (result.kind === 'refused') return { outcome: result.reason };
+        return {
+          metadata: { sourceItemId: contentItemId },
+          resourceType: 'ContentItem',
+          resourceId: result.contentItemId,
+        };
+      }
+
       case 'REMIND_REVIEWER':
       case 'DRAFT_IDEAS':
-      case 'MAKE_DRAFT_COPY':
       case 'RETRY_PUBLISH':
       case 'PAUSE_CAMPAIGN':
         throw unknownTriggerOrAction();
@@ -1662,6 +1846,20 @@ export class AutomationEngine {
         });
         return job?.contentItemId ?? null;
       }
+      // Phase 2B-3 PR 2 — POST_FAILED: the attempt, then its job, which carries
+      // the brand the scope predicate is asked about.
+      case 'publishAttempt': {
+        const attempt = await this.#db.publishAttempt.findFirst({
+          where: { id: event.refId, workspaceId: this.#workspaceId },
+          select: { publishJobId: true },
+        });
+        if (!attempt) return null;
+        const job = await this.#db.publishJob.findFirst({
+          where: { id: attempt.publishJobId, ...scoped },
+          select: { contentItemId: true },
+        });
+        return job?.contentItemId ?? null;
+      }
     }
   }
 
@@ -1763,9 +1961,10 @@ export class AutomationEngine {
   #requireEvaluableConditions(
     conditions: readonly AutomationCondition[],
     triggerType: AutomationTrigger,
+    fields: readonly ConditionField[],
   ): void {
     for (const condition of conditions) {
-      switch (conditionRejection(condition, triggerType)) {
+      switch (conditionRejection(condition, triggerType, fields)) {
         case 'field':
           throw conditionFieldNotProduced(condition.field);
         case 'operator':
@@ -1775,6 +1974,35 @@ export class AutomationEngine {
         case null:
           break;
       }
+    }
+  }
+
+  /**
+   * PHASE 2B-3 PR 2 — SAVE-TIME VALIDATION OF WHAT AN ACTION NAMES. The same
+   * predicate every run applies (`action-targets.ts`); a refusal is shaped like
+   * a genuine miss (D-132).
+   */
+  async #requireActionTargets(
+    actionType: AutomationActionType,
+    actionConfig: Prisma.InputJsonValue,
+    brandId: string,
+  ): Promise<void> {
+    const config = (actionConfig ?? {}) as Record<string, unknown>;
+    if (actionType === 'NOTIFY_PERSON') {
+      const ok = await personTargetResolves(this.#db, {
+        workspaceId: this.#workspaceId,
+        brandId,
+        userId: config['userId'],
+      });
+      if (!ok) throw automationTargetNotFound();
+    }
+    if (actionType === 'ADD_TO_CAMPAIGN') {
+      const ok = await campaignTargetResolves(this.#db, {
+        workspaceId: this.#workspaceId,
+        brandId,
+        campaignId: config['campaignId'],
+      });
+      if (!ok) throw automationTargetNotFound();
     }
   }
 

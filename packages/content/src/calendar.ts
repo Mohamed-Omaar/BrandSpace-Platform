@@ -8,16 +8,20 @@ import {
   type Prisma,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
+import { brandIdQueryFilter, isAppError, systemClock, type Clock } from '@brandspace/shared';
+import { lockCalendarCapacity } from './calendar-capacity-lock';
+import { defaultPublishingTime, suggestedPostingTimes } from './calendar-markers';
 import {
   alreadyScheduled,
   approvalRequiredBeforeScheduling,
   calendarSlotNotFound,
   channelDisconnected,
   contentItemNotFound,
+  DAY_IS_FULL_REASON,
   dayIsFull,
   invalidScheduleTime,
   nothingToSchedule,
+  SCHEDULE_QUOTA_EXCEEDED_REASON,
   scheduleQuotaExceeded,
   scheduleTooFarAhead,
   scheduleTooSoon,
@@ -26,7 +30,13 @@ import {
   transitionNotAllowed,
 } from './errors';
 import type { ContentPolicy } from './policy';
-import { formatLocalTime, instantForIntent, monthRangeUtc, resolveZonedTime } from './timezone';
+import {
+  formatLocalTime,
+  instantForIntent,
+  monthRangeUtc,
+  nextDayKey,
+  resolveZonedTime,
+} from './timezone';
 
 /**
  * The Content Calendar — docs/PRODUCT.md §5 module 6, AC-14.1 to AC-14.9.
@@ -119,6 +129,23 @@ export interface ScheduleInput {
   readonly actorUserId: string;
   readonly actorBrandScope: readonly string[];
 }
+
+/**
+ * PHASE 2B-3 PR 2 — why "schedule in the next free slot" did not schedule.
+ * Each is a stable code Run history translates; none of them changed anything.
+ */
+export type NextFreeSlotRefusal =
+  | 'already_has_time'
+  | 'no_free_day'
+  | 'approval_required'
+  | 'schedule_quota_reached'
+  | 'channel_disconnected'
+  | 'not_schedulable'
+  | 'content_unavailable';
+
+export type NextFreeSlotOutcome =
+  | { readonly kind: 'scheduled'; readonly view: CalendarSlotView; readonly localTime: string }
+  | { readonly kind: 'refused'; readonly reason: NextFreeSlotRefusal };
 
 export interface CalendarSlotView {
   readonly slot: CalendarSlot;
@@ -370,6 +397,144 @@ export class ContentCalendarService {
     );
 
     return { slot, item: updated, variants };
+  }
+
+  /**
+   * PHASE 2B-3 PR 2 (OD-8, D7) — SCHEDULE IN THE NEXT FREE SLOT.
+   *
+   * THE DAY: the first local day, starting TOMORROW, on which the post's brand
+   * has no live slot and the workspace is under its per-day cap — within the
+   * configured scheduling horizon. THE TIME: `defaultPublishingTime` — the
+   * brand's default, else the country's first suggested time, else 09:00 —
+   * the same answer the schedule dialog proposes. Then `schedule()`, so every
+   * rule a person's scheduling obeys applies unchanged: the approval gate,
+   * the schedulable states, captions, channels, lead time, horizon, the
+   * per-day cap and the plan's quota.
+   *
+   * A post that already has a time (a live slot) is not moved. Every other
+   * reason not to schedule is returned as a code rather than thrown, and
+   * nothing is written for it.
+   *
+   * UNDER THE WORKSPACE'S CALENDAR-CAPACITY LOCK (D7), taken before anything
+   * is read, so two automation runs cannot both pick the same "free" day or
+   * push a day past the cap. See `calendar-capacity-lock.ts`.
+   */
+  async scheduleNextFreeSlot(input: {
+    readonly contentItemId: string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+  }): Promise<NextFreeSlotOutcome> {
+    await lockCalendarCapacity(this.#db, this.#workspaceId);
+    const refused = (reason: NextFreeSlotRefusal): NextFreeSlotOutcome => ({
+      kind: 'refused',
+      reason,
+    });
+
+    const item = await this.#db.contentItem.findFirst({
+      where: {
+        id: input.contentItemId,
+        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+      },
+    });
+    if (!item || item.deletedAt) return refused('content_unavailable');
+    if (await this.#liveSlotFor(item.id)) return refused('already_has_time');
+
+    // The same gates `schedule()` applies, asked first so each has its reason.
+    if ((await this.#approvalRequired(item.brandId)) && item.status !== 'APPROVED') {
+      return refused('approval_required');
+    }
+    const rescheduling = item.status === RESCHEDULABLE_ITEM_STATUS;
+    if (!SCHEDULABLE_FROM.includes(item.status) && !rescheduling) return refused('not_schedulable');
+    if (rescheduling) {
+      const published = await this.#db.publishJob.count({
+        where: { workspaceId: this.#workspaceId, contentItemId: item.id, status: 'PUBLISHED' },
+      });
+      if (published > 0) return refused('not_schedulable');
+    }
+    const variants = await this.#db.contentVariant.findMany({
+      where: { contentItemId: item.id },
+      select: { platformKey: true },
+    });
+    if (variants.length === 0) return refused('not_schedulable');
+    if (this.#channelGate) {
+      const unreachable = await this.#channelGate.unreachableChannels(item.brandId, [
+        ...new Set(variants.map((variant) => variant.platformKey)),
+      ]);
+      if (unreachable.length > 0) return refused('channel_disconnected');
+    }
+
+    const time = await this.#defaultPublishingTimeFor(item.brandId);
+    const now = this.#clock.now();
+    const horizon = new Date(now.getTime() + this.#policy.calendar.maxDaysAhead * 24 * 3_600_000);
+    let dayKey = nextDayKey(formatLocalTime(now, this.#timezone).slice(0, 10));
+    for (
+      let step = 0;
+      step <= this.#policy.calendar.maxDaysAhead;
+      step += 1, dayKey = nextDayKey(dayKey)
+    ) {
+      const localTime = `${dayKey}T${time}`;
+      const instant = instantForIntent(localTime, this.#timezone);
+      // A wall-clock time that does not exist on this day (a DST gap).
+      if (!instant) continue;
+      if (instant.getTime() > horizon.getTime()) break;
+      if (!(await this.#dayIsFreeFor(item.brandId, instant))) continue;
+      try {
+        const view = await this.schedule({
+          contentItemId: item.id,
+          localTime,
+          actorUserId: input.actorUserId,
+          actorBrandScope: input.actorBrandScope,
+        });
+        return { kind: 'scheduled', view, localTime };
+      } catch (error: unknown) {
+        const reason = isAppError(error) ? error.publicDetails['reason'] : undefined;
+        // A person filled the day between the read and the write: try the next.
+        if (reason === DAY_IS_FULL_REASON) continue;
+        if (reason === SCHEDULE_QUOTA_EXCEEDED_REASON) return refused('schedule_quota_reached');
+        throw error;
+      }
+    }
+    return refused('no_free_day');
+  }
+
+  /**
+   * Is this local day free for the brand: no live slot of the brand on it,
+   * and the workspace under its per-day cap? The day's range is the one the
+   * cap itself is counted over (`#dayRange`).
+   */
+  async #dayIsFreeFor(brandId: string, instant: Date): Promise<boolean> {
+    const { dayStart, dayEnd } = this.#dayRange(instant);
+    const brandSlots = await this.#db.calendarSlot.count({
+      where: {
+        brandId,
+        scheduledAtUtc: { gte: dayStart, lt: dayEnd },
+        status: { notIn: ['CANCELLED', 'FAILED'] },
+      },
+    });
+    if (brandSlots > 0) return false;
+    const used = await this.#db.calendarSlot.count({
+      where: { scheduledAtUtc: { gte: dayStart, lt: dayEnd }, status: { not: 'CANCELLED' } },
+    });
+    return used < this.#policy.calendar.maxSlotsPerDay;
+  }
+
+  /** `defaultPublishingTime` for this brand, read from its row and the workspace's country. */
+  async #defaultPublishingTimeFor(brandId: string): Promise<string> {
+    const brand = await this.#db.brand.findFirst({
+      where: { id: brandId },
+      select: { defaultPostTime: true },
+    });
+    const workspace = await this.#db.workspace.findFirst({
+      where: { id: this.#workspaceId },
+      select: { country: true },
+    });
+    return defaultPublishingTime({
+      brandDefaultTime: brand?.defaultPostTime ?? null,
+      suggestedTimes: suggestedPostingTimes(this.#policy.calendar, {
+        measured: [],
+        country: workspace?.country ?? null,
+      }).times,
+    });
   }
 
   /** AC-14.8 — move a slot, and say so in the audit log. */
@@ -787,13 +952,7 @@ export class ContentCalendarService {
 
   /** The configured ceiling on one local day's plan. */
   async #assertDayHasRoom(instant: Date, excludingSlotId: string | null): Promise<void> {
-    const day = formatLocalTime(instant, this.#timezone).slice(0, 10);
-    const start = instantForIntent(`${day}T00:00`, this.#timezone);
-    // A day whose midnight does not exist is a DST gap at 00:00 — real, in a
-    // handful of zones. Counting from one minute later is correct and is not
-    // worth refusing the whole request over.
-    const dayStart = start ?? instant;
-    const dayEnd = new Date(dayStart.getTime() + 24 * 3_600_000);
+    const { dayStart, dayEnd } = this.#dayRange(instant);
 
     const used = await this.#db.calendarSlot.count({
       where: {
@@ -803,6 +962,21 @@ export class ContentCalendarService {
       },
     });
     if (used >= this.#policy.calendar.maxSlotsPerDay) throw dayIsFull();
+  }
+
+  /**
+   * The range one local day's cap is counted over: from the day's local
+   * midnight, for 24 hours. (A fixed 24 hours rather than the day's real
+   * length across a DST change — a recorded follow-up, unchanged here.)
+   */
+  #dayRange(instant: Date): { dayStart: Date; dayEnd: Date } {
+    const day = formatLocalTime(instant, this.#timezone).slice(0, 10);
+    const start = instantForIntent(`${day}T00:00`, this.#timezone);
+    // A day whose midnight does not exist is a DST gap at 00:00 — real, in a
+    // handful of zones. Counting from one minute later is correct and is not
+    // worth refusing the whole request over.
+    const dayStart = start ?? instant;
+    return { dayStart, dayEnd: new Date(dayStart.getTime() + 24 * 3_600_000) };
   }
 
   #audit(

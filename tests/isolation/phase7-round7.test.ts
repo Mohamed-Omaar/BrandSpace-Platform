@@ -702,11 +702,14 @@ describe('R7: timed and domain identity are untouched', () => {
   });
 
   it('a domain event is still identified by its reference', async () => {
+    // Phase 2B-3 PR 2: an approval's reference is the item; its identity is the
+    // approval cycle that decided it.
+    const approvalId = randomUUID();
     await inB((db) =>
       recordAutomationEvent(
         db,
         fixtures.b.workspaceId,
-        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem' },
+        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem', approvalId },
         { brandId, refId: contentItemId },
       ),
     );
@@ -714,7 +717,7 @@ describe('R7: timed and domain identity are untouched', () => {
       recordAutomationEvent(
         db,
         fixtures.b.workspaceId,
-        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem' },
+        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem', approvalId },
         { brandId, refId: contentItemId },
       ),
     );
@@ -730,7 +733,7 @@ describe('R7: timed and domain identity are untouched', () => {
       }),
     );
     expect(events).toHaveLength(1);
-    expect(events[0]?.dedupeKey).toBe(`CONTENT_APPROVED:${contentItemId}`);
+    expect(events[0]?.dedupeKey).toBe(`CONTENT_APPROVED:${approvalId}`);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await deliver({
@@ -739,7 +742,7 @@ describe('R7: timed and domain identity are untouched', () => {
         refId: contentItemId,
         ruleId: null,
         occurrence: null,
-        dedupeKey: `CONTENT_APPROVED:${contentItemId}`,
+        dedupeKey: `CONTENT_APPROVED:${approvalId}`,
       });
     }
     expect(await runsFor(domainRuleId)).toHaveLength(1);

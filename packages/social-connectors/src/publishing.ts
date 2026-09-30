@@ -284,6 +284,26 @@ export const RECONNECT_REQUIRED_CODE = 'preflight.reconnect_required';
 type PreflightOutcome =
   PublishFailureClass | typeof AWAITING_RECONNECT | typeof RECONNECT_TOO_LATE | null;
 
+/**
+ * PHASE 2B-3 PR 2 — which attempt a transition to FAILED concludes with (see
+ * `#concludingAttempt`). Every caller of `#fail` says which kind it is.
+ */
+type FailureEvidence =
+  | { readonly kind: 'attempt'; readonly attemptId: string }
+  | { readonly kind: 'preflight' }
+  | { readonly kind: 'verified' };
+const PREFLIGHT: FailureEvidence = { kind: 'preflight' };
+const VERIFIED: FailureEvidence = { kind: 'verified' };
+
+/** Ours, fixed and bounded: never the provider's words, never the content. */
+export const PREFLIGHT_REFUSED_SUMMARY = 'Refused before sending: no request was made.';
+/**
+ * D1 — explicit about the uncertainty. It does NOT say a request was made or
+ * that an answer came back; it says the send state is unknown.
+ */
+export const UNKNOWN_SEND_STATE_SUMMARY =
+  'The worker claim ended before its result was recorded; whether the request was sent is unknown.';
+
 export class PublishPipelineService {
   readonly #db: TenantScopedClient;
   readonly #workspaceId: string;
@@ -573,22 +593,26 @@ export class PublishPipelineService {
     const preflight = await this.#preflight(job);
     if (preflight === AWAITING_RECONNECT) return this.#holdForReconnect(job);
     if (preflight === RECONNECT_TOO_LATE) {
-      return this.#fail(job, 'NOT_CONNECTED', RECONNECT_REQUIRED_CODE, null);
+      return this.#fail(job, 'NOT_CONNECTED', RECONNECT_REQUIRED_CODE, null, PREFLIGHT);
     }
-    if (preflight) return this.#fail(job, preflight, `preflight.${preflight.toLowerCase()}`, null);
+    if (preflight)
+      return this.#fail(job, preflight, `preflight.${preflight.toLowerCase()}`, null, PREFLIGHT);
 
     const connection = await this.#db.socialConnection.findFirst({
       where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },
     });
-    if (!connection) return this.#fail(job, 'NOT_CONNECTED', 'preflight.not_connected', null);
+    if (!connection)
+      return this.#fail(job, 'NOT_CONNECTED', 'preflight.not_connected', null, PREFLIGHT);
 
     const credentials = await this.#credentialsFor(connection.id);
-    if (!credentials) return this.#fail(job, 'NOT_CONNECTED', 'preflight.no_credential', null);
+    if (!credentials)
+      return this.#fail(job, 'NOT_CONNECTED', 'preflight.no_credential', null, PREFLIGHT);
 
     const variant = await this.#db.contentVariant.findFirst({
       where: { id: job.contentVariantId, workspaceId: this.#workspaceId },
     });
-    if (!variant) return this.#fail(job, 'CONTENT_REJECTED', 'preflight.variant_missing', null);
+    if (!variant)
+      return this.#fail(job, 'CONTENT_REJECTED', 'preflight.variant_missing', null, PREFLIGHT);
 
     /*
      * MEDIA IS RESOLVED BEFORE THE PROVIDER IS CALLED (AC-29.3), and every
@@ -608,10 +632,10 @@ export class PublishPipelineService {
     let media: readonly PublishMedia[] = [];
     if (variant.assetIds.length > 0) {
       if (variant.assetIds.length > capabilities.maxMediaItems) {
-        return this.#fail(job, 'UNSUPPORTED', 'preflight.too_many_media', null);
+        return this.#fail(job, 'UNSUPPORTED', 'preflight.too_many_media', null, PREFLIGHT);
       }
       if (!this.#media) {
-        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_unavailable', null);
+        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_unavailable', null, PREFLIGHT);
       }
       try {
         media = await this.#media.resolve({
@@ -621,10 +645,10 @@ export class PublishPipelineService {
       } catch {
         // The reason is the port's and is not a customer's to read as prose: a
         // stable code goes on the job and the history screen translates it.
-        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_rejected', null);
+        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_rejected', null, PREFLIGHT);
       }
       if (media.length !== variant.assetIds.length) {
-        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_rejected', null);
+        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_rejected', null, PREFLIGHT);
       }
     }
 
@@ -645,11 +669,7 @@ export class PublishPipelineService {
      * NO RACE: only the one execution that won the QUEUED → PUBLISHING claim
      * above reaches this line for this job.
      */
-    const lastAttempt = await this.#db.publishAttempt.aggregate({
-      where: { workspaceId: this.#workspaceId, publishJobId: job.id },
-      _max: { attemptNumber: true },
-    });
-    const attemptNumber = (lastAttempt._max.attemptNumber ?? 0) + 1;
+    const attemptNumber = await this.#nextAttemptNumber(job.id);
     const startedAt = this.#clock.now();
 
     /*
@@ -673,7 +693,7 @@ export class PublishPipelineService {
       });
     } catch (error: unknown) {
       const failureClass = adapter.classifyError(error);
-      await this.#recordAttempt({
+      const attemptId = await this.#recordAttempt({
         job,
         attemptNumber,
         startedAt,
@@ -691,6 +711,7 @@ export class PublishPipelineService {
       });
       return this.#afterFailure(
         job,
+        attemptId,
         failureClass,
         `adapter.${failureClass.toLowerCase()}`,
         adapter,
@@ -714,7 +735,7 @@ export class PublishPipelineService {
     }
 
     const behaviour = FAILURE_BEHAVIOUR[outcome.failureClass];
-    await this.#recordAttempt({
+    const attemptId = await this.#recordAttempt({
       job,
       attemptNumber,
       startedAt,
@@ -731,6 +752,7 @@ export class PublishPipelineService {
 
     return this.#afterFailure(
       job,
+      attemptId,
       outcome.failureClass,
       outcome.failureCode,
       adapter,
@@ -751,6 +773,7 @@ export class PublishPipelineService {
    */
   async #afterFailure(
     job: PublishJob,
+    attemptId: string,
     failureClass: PublishFailureClass,
     failureCode: string,
     adapter: ReturnType<ConnectorRegistry['get']>,
@@ -809,7 +832,10 @@ export class PublishPipelineService {
     const attemptCount = job.attemptCount + 1;
     const exhausted = attemptCount >= job.maxAttempts;
     if (!behaviour.retryable || exhausted) {
-      return this.#fail(job, failureClass, failureCode, attemptCount);
+      return this.#fail(job, failureClass, failureCode, attemptCount, {
+        kind: 'attempt',
+        attemptId,
+      });
     }
 
     return this.#scheduleRetry(job, failureClass, failureCode, attemptCount, retryAfterSeconds);
@@ -967,8 +993,10 @@ export class PublishPipelineService {
     failureClass: PublishFailureClass,
     failureCode: string,
     attemptCount: number | null,
+    evidence: FailureEvidence,
   ): Promise<ExecuteResult> {
     const now = this.#clock.now();
+    const concludingAttemptId = await this.#concludingAttempt(job, failureClass, evidence);
     await this.#db.publishJob.update({
       where: { id: job.id },
       data: {
@@ -990,6 +1018,23 @@ export class PublishPipelineService {
       // provider's own words or the content it rejected.
       after: { provider: job.provider, failureClass, failureCode },
     });
+    /*
+     * PHASE 2B-3 PR 2 — THE AUTOMATION EVENT for "a post failed to publish".
+     *
+     * HERE, AND ONLY HERE, because `#fail` is the one writer of FAILED: every
+     * path — a provider refusal, an exhausted retry budget, a pre-flight
+     * refusal, a verification that could not be resolved — passes through it,
+     * and an automatic retry or a reconnect hold never does. One event per
+     * transition, keyed by the attempt that concluded it, so a redelivery of
+     * the same failure is the same event and a later failure of the same job
+     * (after a person retried it) is a new one.
+     */
+    await recordAutomationEvent(
+      this.#db,
+      this.#workspaceId,
+      { triggerType: 'POST_FAILED', refType: 'PublishAttempt' },
+      { brandId: job.brandId, refId: concludingAttemptId },
+    );
     await this.#notifier?.failed({
       jobId: job.id,
       contentItemId: job.contentItemId,
@@ -1057,10 +1102,12 @@ export class PublishPipelineService {
     const connection = await this.#db.socialConnection.findFirst({
       where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },
     });
-    if (!connection) return this.#fail(job, 'NOT_CONNECTED', 'verify.not_connected', null);
+    if (!connection)
+      return this.#fail(job, 'NOT_CONNECTED', 'verify.not_connected', null, VERIFIED);
 
     const credentials = await this.#credentialsFor(connection.id);
-    if (!credentials) return this.#fail(job, 'NOT_CONNECTED', 'verify.no_credential', null);
+    if (!credentials)
+      return this.#fail(job, 'NOT_CONNECTED', 'verify.no_credential', null, VERIFIED);
 
     let found: { externalPostId: string; externalPostUrl: string | null } | null;
     try {
@@ -1092,7 +1139,13 @@ export class PublishPipelineService {
      */
     const attemptCount = job.attemptCount;
     if (attemptCount >= job.maxAttempts) {
-      return this.#fail(job, job.failureClass ?? 'TIMEOUT', 'verify.exhausted', attemptCount);
+      return this.#fail(
+        job,
+        job.failureClass ?? 'TIMEOUT',
+        'verify.exhausted',
+        attemptCount,
+        VERIFIED,
+      );
     }
     await this.#db.publishJob.update({
       where: { id: job.id },
@@ -1162,6 +1215,19 @@ export class PublishPipelineService {
         externalPostId: current.externalPostId,
       };
     }
+
+    /*
+     * PHASE 2B-3 PR 2 (D1) — THE RECOVERY IS RECORDED AS AN ATTEMPT whose send
+     * state is unknown. Not a provider answer and not a claim that a request
+     * reached the platform: the worker holding the claim stopped, and nobody
+     * knows whether it sent. `verify()` below, and any failure it concludes
+     * with, cites this row.
+     */
+    const recovered = await this.#db.publishJob.findFirst({
+      where: { id: jobId, workspaceId: this.#workspaceId },
+    });
+    if (!recovered) throw publishJobNotFound();
+    await this.#recordUnknownSendState(recovered, recovered.claimedAt ?? now);
 
     await writeAuditEvent(this.#db, this.#workspaceId, {
       action: 'social.post.claim_recovered',
@@ -1777,14 +1843,19 @@ export class PublishPipelineService {
     job: PublishJob;
     attemptNumber: number;
     startedAt: Date;
-    outcome: 'SUCCEEDED' | 'RETRYABLE_FAILURE' | 'PERMANENT_FAILURE' | 'INDETERMINATE';
+    outcome:
+      | 'SUCCEEDED'
+      | 'RETRYABLE_FAILURE'
+      | 'PERMANENT_FAILURE'
+      | 'INDETERMINATE'
+      | 'PREFLIGHT_REFUSED';
     failureClass: PublishFailureClass | null;
     providerStatusCode: number | null;
     providerErrorCode: string | null;
     safeSummary: string | null;
-  }): Promise<void> {
+  }): Promise<string> {
     const finishedAt = this.#clock.now();
-    await this.#db.publishAttempt.create({
+    const attempt = await this.#db.publishAttempt.create({
       data: {
         workspaceId: this.#workspaceId,
         publishJobId: input.job.id,
@@ -1800,6 +1871,85 @@ export class PublishPipelineService {
         // is the one place a raw provider body would otherwise land.
         safeSummary: input.safeSummary === null ? null : input.safeSummary.slice(0, 500),
       },
+      select: { id: true },
+    });
+    return attempt.id;
+  }
+
+  /** The next attempt number after the highest one recorded (PR 0). */
+  async #nextAttemptNumber(jobId: string): Promise<number> {
+    const last = await this.#db.publishAttempt.aggregate({
+      where: { workspaceId: this.#workspaceId, publishJobId: jobId },
+      _max: { attemptNumber: true },
+    });
+    return (last._max.attemptNumber ?? 0) + 1;
+  }
+
+  /**
+   * PHASE 2B-3 PR 2 — THE ATTEMPT A FAILURE CONCLUDES WITH (owner decisions
+   * D1/D2). Every transition to FAILED names exactly one attempt row, so the
+   * history says which attempt ended the job and a "post failed" event has one
+   * stable thing to point at.
+   *
+   *   - A PROVIDER FAILURE concludes with the row the call itself recorded.
+   *   - A PRE-FLIGHT REFUSAL sent nothing, so there is no such row: one
+   *     `PREFLIGHT_REFUSED` row is written, numbered after the highest attempt
+   *     so far. `attemptCount` is NOT touched — no attempt of the budget was
+   *     spent — so `attemptCount <= maxAttempts` and every retry and
+   *     idempotency rule stay exactly as they were.
+   *   - A VERIFICATION FAILURE concludes with the attempt being verified: the
+   *     latest row, which is INDETERMINATE by construction (a job reaches
+   *     VERIFICATION_PENDING only after one is written — by a provider answer
+   *     that never came back, or by `recoverStaleClaim`). A job left
+   *     VERIFICATION_PENDING by a claim recovered BEFORE this release has no
+   *     such row; it gets the same unknown-send-state row `recoverStaleClaim`
+   *     now writes, because that is exactly what it was.
+   */
+  async #concludingAttempt(
+    job: PublishJob,
+    failureClass: PublishFailureClass,
+    evidence: FailureEvidence,
+  ): Promise<string> {
+    if (evidence.kind === 'attempt') return evidence.attemptId;
+    if (evidence.kind === 'preflight') {
+      const at = this.#clock.now();
+      return this.#recordAttempt({
+        job,
+        attemptNumber: await this.#nextAttemptNumber(job.id),
+        startedAt: at,
+        outcome: 'PREFLIGHT_REFUSED',
+        failureClass,
+        providerStatusCode: null,
+        providerErrorCode: null,
+        safeSummary: PREFLIGHT_REFUSED_SUMMARY,
+      });
+    }
+    const verified = await this.#db.publishAttempt.findFirst({
+      where: { workspaceId: this.#workspaceId, publishJobId: job.id },
+      orderBy: { attemptNumber: 'desc' },
+      select: { id: true, outcome: true },
+    });
+    if (verified?.outcome === 'INDETERMINATE') return verified.id;
+    return this.#recordUnknownSendState(job, job.claimedAt ?? this.#clock.now());
+  }
+
+  /**
+   * D1 — THE WORKER CLAIM ENDED WITH AN UNKNOWN SEND STATE. One INDETERMINATE
+   * row, class TIMEOUT, numbered after the highest attempt so far; no provider
+   * status or error code, because no answer was received, and a summary that
+   * says the send state is unknown rather than that a request was made.
+   * `attemptCount` is not touched.
+   */
+  async #recordUnknownSendState(job: PublishJob, startedAt: Date): Promise<string> {
+    return this.#recordAttempt({
+      job,
+      attemptNumber: await this.#nextAttemptNumber(job.id),
+      startedAt,
+      outcome: 'INDETERMINATE',
+      failureClass: 'TIMEOUT',
+      providerStatusCode: null,
+      providerErrorCode: null,
+      safeSummary: UNKNOWN_SEND_STATE_SUMMARY,
     });
   }
 

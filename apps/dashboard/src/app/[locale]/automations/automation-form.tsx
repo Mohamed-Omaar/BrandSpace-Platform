@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buttonStyle,
   colorTokens,
@@ -109,6 +109,15 @@ export interface AutomationFormLabels {
   /** B12 — the edit form's extra words. Only read in edit mode. */
   readonly description?: string;
   readonly offsetHours?: string;
+  /** Phase 2B-3 PR 2 — the G13 actions' own settings. */
+  readonly actionPerson: string;
+  readonly actionCampaign: string;
+  /**
+   * Phase 2B-3 PR 2 — the empty first option of the trigger and action pickers
+   * on a NEW rule, and what the browser says when either is left unchosen.
+   */
+  readonly chooseTrigger: string;
+  readonly chooseAction: string;
   readonly conditionsKept?: string;
   readonly valueUnavailable?: string;
   readonly cancel?: string;
@@ -140,6 +149,11 @@ export interface AutomationFormInitial {
   readonly windowDays: number | null;
   /** `PLACE_ON_CALENDAR`'s one setting a person chooses; null for other actions. */
   readonly offsetHours: number | null;
+  /** The rule's brand: its person and campaign lists are this brand's. */
+  readonly brandId: string;
+  /** Phase 2B-3 PR 2 — `NOTIFY_PERSON`'s person, `ADD_TO_CAMPAIGN`'s campaign. */
+  readonly actionUserId: string | null;
+  readonly actionCampaignId: string | null;
   readonly condition: {
     readonly field: string;
     readonly operator: string;
@@ -155,6 +169,14 @@ export interface AutomationFormProps {
   readonly actionLabels: Readonly<Record<string, string>>;
   /** Every condition field's contract, keyed by field. */
   readonly conditionCatalogue: Readonly<Record<string, ConditionFieldOption>>;
+  /**
+   * Phase 2B-3 PR 2 — WHO `NOTIFY_PERSON` MAY NAME AND WHICH CAMPAIGN
+   * `ADD_TO_CAMPAIGN` MAY NAME, per rule brand: the ACTIVE members whose scope
+   * admits the brand, and the brand's live campaigns — the predicates the engine
+   * applies on save and on every run.
+   */
+  readonly actionPeopleByBrand: Readonly<Record<string, readonly ConditionChoice[]>>;
+  readonly actionCampaignsByBrand: Readonly<Record<string, readonly ConditionChoice[]>>;
   readonly metrics: readonly { readonly key: string; readonly label: string }[];
   readonly labels: AutomationFormLabels;
   readonly action: (formData: FormData) => void | Promise<void>;
@@ -169,18 +191,60 @@ const FIELD: React.CSSProperties = { display: 'grid', gap: '0.25rem' };
 export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
   const initial = props.initial;
   const editing = initial !== undefined;
-  const [triggerType, setTriggerType] = useState(
-    initial?.triggerType ?? props.triggers[0]?.type ?? '',
-  );
+  /*
+   * NOTHING IS PRESELECTED ON A NEW RULE (Phase 2B-3 PR 2). The trigger and the
+   * action start empty, behind "Choose …", and the form will not post until a
+   * person has picked both. A preselected action was a silent default, and
+   * three of the G13 actions change content (schedule, file into a campaign,
+   * copy): a rule someone saved and switched on without looking at the action
+   * would do one of those to every post it matched.
+   */
+  const [triggerType, setTriggerType] = useState(initial?.triggerType ?? '');
   const [conditionField, setConditionField] = useState(initial?.condition?.field ?? '');
   const [conditionOperator, setConditionOperator] = useState(initial?.condition?.operator ?? '');
-  const [brandId, setBrandId] = useState(props.brands[0]?.id ?? '');
+  const [brandId, setBrandId] = useState(initial?.brandId ?? props.brands[0]?.id ?? '');
   const keepConditions = (initial?.extraConditions ?? 0) > 0;
 
   const trigger = useMemo(
-    () => props.triggers.find((option) => option.type === triggerType) ?? props.triggers[0],
+    () => props.triggers.find((option) => option.type === triggerType),
     [props.triggers, triggerType],
   );
+  /*
+   * THE ACTION IS CONTROLLED (Phase 2B-3 PR 2) because two of them carry a
+   * setting the form must show: the person to notify and the campaign. An
+   * action the new trigger does not offer is cleared, never swapped for the
+   * trigger's first one.
+   */
+  const [chosenAction, setChosenAction] = useState(initial?.actionType ?? '');
+  const actionType = editing
+    ? (initial?.actionType ?? '')
+    : (trigger?.actionTypes ?? []).includes(chosenAction)
+      ? chosenAction
+      : '';
+  /*
+   * LEFT UNCHOSEN, THE BROWSER SAYS SO IN THE PAGE'S LANGUAGE. `required` on
+   * the pickers is what stops the post; the message it shows is set here, from
+   * the same translated words as the empty option, rather than left to the
+   * browser's own language.
+   */
+  const triggerPicker = useRef<HTMLSelectElement>(null);
+  const actionPicker = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    triggerPicker.current?.setCustomValidity(triggerType === '' ? props.labels.chooseTrigger : '');
+  }, [triggerType, props.labels.chooseTrigger]);
+  useEffect(() => {
+    actionPicker.current?.setCustomValidity(actionType === '' ? props.labels.chooseAction : '');
+  }, [actionType, props.labels.chooseAction]);
+  /** The brand's list, plus the saved value when it is no longer offered. */
+  const targetChoices = (
+    byBrand: Readonly<Record<string, readonly ConditionChoice[]>>,
+    saved: string | null,
+  ): readonly ConditionChoice[] => {
+    const offered = byBrand[brandId] ?? [];
+    return saved && !offered.some((option) => option.value === saved)
+      ? [...offered, { value: saved, label: props.labels.valueUnavailable ?? saved }]
+      : offered;
+  };
 
   const declared = conditionField === '' ? undefined : props.conditionCatalogue[conditionField];
   /*
@@ -324,6 +388,8 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                   name="triggerType"
                   className="bs-control"
                   data-testid="automation-trigger"
+                  ref={triggerPicker}
+                  required
                   value={triggerType}
                   onChange={(event) => {
                     setTriggerType(event.target.value);
@@ -332,6 +398,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                     setConditionField('');
                   }}
                 >
+                  <option value="">{props.labels.chooseTrigger}</option>
                   {props.triggers.map((option) => (
                     <option key={option.type} value={option.type}>
                       {option.label}
@@ -348,7 +415,16 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
               incompatible pair cannot be selected rather than being refused
               after submit.
             */}
-                <select name="actionType" className="bs-control" data-testid="automation-action">
+                <select
+                  name="actionType"
+                  className="bs-control"
+                  data-testid="automation-action"
+                  ref={actionPicker}
+                  required
+                  value={actionType}
+                  onChange={(event) => setChosenAction(event.target.value)}
+                >
+                  <option value="">{props.labels.chooseAction}</option>
                   {(trigger?.actionTypes ?? []).map((type) => (
                     <option key={type} value={type}>
                       {props.actionLabels[type] ?? type}
@@ -372,6 +448,56 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
               style={inputStyle()}
               data-testid="automation-description"
             />
+          </label>
+        ) : null}
+
+        {/*
+          PHASE 2B-3 PR 2 — THE G13 ACTIONS' OWN SETTINGS. The person to notify
+          and the campaign are picked from lists built for the rule's brand, so
+          nothing typed becomes a target; the engine re-checks both on save and
+          on every run. A saved choice that is no longer offered stays selected
+          as "No longer available", so an edit never silently changes it.
+        */}
+        {actionType === 'NOTIFY_PERSON' ? (
+          <label style={FIELD}>
+            <span style={caption}>{props.labels.actionPerson}</span>
+            <select
+              name="actionUserId"
+              required
+              className="bs-control"
+              data-testid="automation-action-person"
+              defaultValue={initial?.actionUserId ?? undefined}
+              key={`person-${brandId}`}
+            >
+              {targetChoices(props.actionPeopleByBrand, initial?.actionUserId ?? null).map(
+                (option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+        ) : null}
+        {actionType === 'ADD_TO_CAMPAIGN' ? (
+          <label style={FIELD}>
+            <span style={caption}>{props.labels.actionCampaign}</span>
+            <select
+              name="actionCampaignId"
+              required
+              className="bs-control"
+              data-testid="automation-action-campaign"
+              defaultValue={initial?.actionCampaignId ?? undefined}
+              key={`campaign-${brandId}`}
+            >
+              {targetChoices(props.actionCampaignsByBrand, initial?.actionCampaignId ?? null).map(
+                (option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ),
+              )}
+            </select>
           </label>
         ) : null}
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { PrismaClient } from '@prisma/client';
+import type { AutomationRule, PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { defaultPayload } from '@brandspace/config';
@@ -13,6 +13,7 @@ import {
 } from '@brandspace/automation';
 import { NotificationService } from '@brandspace/notifications';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import { seedStoredRule } from './stored-automation-rule';
 
 /**
  * FIX PR 1 · F5 (D-412) — A NOTIFY RULE SENDS `automation.notice` AND NOTHING
@@ -66,17 +67,32 @@ const event = (): TriggerEvent => ({
   facts: { 'content.status': 'APPROVED' },
 });
 
-const createNotify = (templateKey: string) =>
+/**
+ * A STORED NOTIFY rule (Phase 2B-3 PR 2: NOTIFY is no longer offered for new
+ * rules; stored ones still run, and are still edited through
+ * `updateEditableRule`, which is now the door a template key can arrive by).
+ */
+const storedNotify = () =>
   inA((db) =>
-    engineFor(db, []).createRule({
+    seedStoredRule(db, {
+      workspaceId: fixtures.a.workspaceId,
       brandId: fixtures.a.brandId,
       name: `F5 ${randomUUID().slice(0, 8)}`,
       triggerType: 'CONTENT_APPROVED',
-      triggerConfig: {},
-      conditions: [],
       actionType: 'NOTIFY',
-      actionConfig: { templateKey },
+      actionConfig: { templateKey: 'automation.notice' },
+      createdByUserId: fixtures.a.userId,
       enabled: true,
+    }),
+  );
+
+/** Edit a stored NOTIFY rule's template, as the edit screen or an API would. */
+const editTemplate = (rule: AutomationRule, templateKey: string) =>
+  inA((db) =>
+    engineFor(db, []).updateEditableRule({
+      ruleId: rule.id,
+      expectedVersion: rule.version,
+      actionConfig: { templateKey },
       actor: owner(),
     }),
   );
@@ -98,15 +114,37 @@ describe('F5 · writing a NOTIFY rule accepts automation.notice only', () => {
     'approval.requested',
     'not.a.template',
     '',
-  ])('refuses %j, and writes no rule', async (templateKey) => {
-    const before = await inA((db) => db.automationRule.count());
-    await expect(createNotify(templateKey)).rejects.toThrow();
-    expect(await inA((db) => db.automationRule.count())).toBe(before);
+  ])('refuses %j, and leaves the stored template as it was', async (templateKey) => {
+    const rule = await storedNotify();
+    await expect(editTemplate(rule, templateKey)).rejects.toThrow();
+    const row = await inA((db) => db.automationRule.findUniqueOrThrow({ where: { id: rule.id } }));
+    expect(row.actionConfig).toEqual({ templateKey: 'automation.notice' });
+    expect(row.version).toBe(rule.version);
   });
 
   it('accepts automation.notice', async () => {
-    const rule = await createNotify('automation.notice');
+    const rule = await editTemplate(await storedNotify(), 'automation.notice');
     expect((rule.actionConfig as { templateKey: string }).templateKey).toBe('automation.notice');
+  });
+
+  it('and no NEW NOTIFY rule is written at all (Phase 2B-3 PR 2)', async () => {
+    const before = await inA((db) => db.automationRule.count());
+    await expect(
+      inA((db) =>
+        engineFor(db, []).createRule({
+          brandId: fixtures.a.brandId,
+          name: `F5 ${randomUUID().slice(0, 8)}`,
+          triggerType: 'CONTENT_APPROVED',
+          triggerConfig: {},
+          conditions: [],
+          actionType: 'NOTIFY',
+          actionConfig: { templateKey: 'automation.notice' },
+          enabled: true,
+          actor: owner(),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    expect(await inA((db) => db.automationRule.count())).toBe(before);
   });
 });
 
@@ -114,7 +152,7 @@ describe('F5 · a stored rule outside the set fails closed at run time', () => {
   it.each(['workspace.deletion_requested', 'not.a.template'])(
     'a rule naming %j ends FAILED notify_template_not_allowed, and nothing is sent',
     async (templateKey) => {
-      const rule = await createNotify('automation.notice');
+      const rule = await storedNotify();
       // A row written before the set was enforced, or around the engine.
       const stored = await inA((db) =>
         db.automationRule.update({
@@ -137,7 +175,7 @@ describe('F5 · a stored rule outside the set fails closed at run time', () => {
   );
 
   it('a rule naming automation.notice still sends it', async () => {
-    const rule = await createNotify('automation.notice');
+    const rule = await storedNotify();
     const notified: string[] = [];
     const outcome = await inA((db) =>
       engineFor(db, notified).run({ rule, event: event(), resolveActor: async () => owner() }),

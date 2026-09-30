@@ -43,6 +43,23 @@ export interface NotificationPort {
     readonly resourceId: string;
     readonly idempotencyKey: string;
   }): Promise<{ readonly recipients: number }>;
+  /**
+   * PHASE 2B-3 PR 2 (owner decision D4) — notify ONE member the rule names.
+   *
+   * The same notice legacy NOTIFY sends — `automation.notice`, fixed here and
+   * not a parameter — through the one notification writer, so the member's own
+   * mute setting applies. No payload, no rule name, no link: a pointer to the
+   * row the event names, exactly as NOTIFY. The engine has already checked that
+   * the member is ACTIVE and may see the brand.
+   */
+  notifyPerson?(input: {
+    readonly workspaceId: string;
+    readonly brandId: string;
+    readonly userId: string;
+    readonly resourceType: string;
+    readonly resourceId: string;
+    readonly idempotencyKey: string;
+  }): Promise<{ readonly recipients: number }>;
 }
 
 export interface ApprovalPort {
@@ -77,6 +94,89 @@ export interface CalendarPort {
     readonly actorBrandScope: readonly string[];
     readonly idempotencyKey: string;
   }): Promise<{ readonly slotId: string }>;
+  /**
+   * PHASE 2B-3 PR 2 — schedule the item in the brand's next free slot, as the
+   * rule's creator, under the calendar's own rules and the workspace's
+   * calendar-capacity lock. A reason not to schedule comes back as a code;
+   * nothing is written for it.
+   */
+  scheduleNextFreeSlot?(input: {
+    readonly workspaceId: string;
+    readonly contentItemId: string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+    readonly idempotencyKey: string;
+  }): Promise<
+    | { readonly kind: 'scheduled'; readonly slotId: string; readonly localTime: string }
+    | {
+        readonly kind: 'refused';
+        readonly reason:
+          | 'already_has_time'
+          | 'no_free_day'
+          | 'approval_required'
+          | 'schedule_quota_reached'
+          | 'channel_disconnected'
+          | 'not_schedulable'
+          | 'content_unavailable';
+      }
+  >;
+}
+
+/**
+ * PHASE 2B-3 PR 2 (owner decision D8) — ADD A POST TO A CAMPAIGN, attach-only.
+ *
+ * The automation's own precondition comes FIRST, and the campaign service's
+ * general `setContentCampaign` is called only when every part of it holds: the
+ * post has no campaign, is not waiting for review (a review is never withdrawn
+ * by an automation), can still be edited, and the campaign the rule names is
+ * still a live campaign of the post's brand. Otherwise a code, and no change.
+ */
+export interface CampaignPort {
+  addToCampaign(input: {
+    readonly workspaceId: string;
+    readonly contentItemId: string;
+    /** The rule's configured campaign — never anything the event names. */
+    readonly campaignId: string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+    readonly actorPermissionKeys: readonly string[];
+    readonly idempotencyKey: string;
+  }): Promise<
+    | { readonly kind: 'attached' }
+    | {
+        readonly kind: 'refused';
+        readonly reason:
+          | 'content_unavailable'
+          | 'already_in_campaign'
+          | 'content_in_review'
+          | 'content_not_editable'
+          | 'campaign_unavailable';
+      }
+  >;
+}
+
+/**
+ * PHASE 2B-3 PR 2 — MAKE A DRAFT COPY of the post the event names, through the
+ * content library's one duplicate path (`duplicateItem`), as the rule's
+ * creator: a new draft with its own identity, keeping the source's title, its
+ * campaign (D-318) and nothing of its lifecycle. Idempotent on the run.
+ */
+export interface ContentCopyPort {
+  makeDraftCopy(input: {
+    readonly workspaceId: string;
+    readonly contentItemId: string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+    readonly actorPermissionKeys: readonly string[];
+    readonly idempotencyKey: string;
+  }): Promise<
+    | { readonly kind: 'copied'; readonly contentItemId: string }
+    | {
+        readonly kind: 'refused';
+        readonly reason:
+          'content_unavailable' | 'source_campaign_unavailable' | 'draft_limit_reached';
+      }
+  >;
 }
 
 export interface PublishPort {
@@ -132,6 +232,8 @@ export interface AutomationPorts {
   readonly notifications?: NotificationPort | undefined;
   readonly approvals?: ApprovalPort | undefined;
   readonly calendar?: CalendarPort | undefined;
+  readonly campaigns?: CampaignPort | undefined;
+  readonly content?: ContentCopyPort | undefined;
   readonly publishing?: PublishPort | undefined;
   readonly timezone?: TimezonePort | undefined;
 }

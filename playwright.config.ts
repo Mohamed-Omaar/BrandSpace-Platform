@@ -315,8 +315,16 @@ export default defineConfig({
   // so the key is omitted entirely to fall back to Playwright's default.
   ...(process.env['CI'] ? { workers: 2 } : {}),
   // 'dot' keeps CI logs short; the HTML report is uploaded only on failure.
+  // The JSON report is per-test execution evidence, uploaded on EVERY CI run.
+  // It has its own directory: the HTML reporter clears `playwright-report/`
+  // and failure handling writes into `test-results/`, and neither may take a
+  // passing run's evidence with it.
   reporter: process.env['CI']
-    ? [['dot'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
+    ? [
+        ['dot'],
+        ['html', { open: 'never', outputFolder: 'playwright-report' }],
+        ['json', { outputFile: 'playwright-json/results.json' }],
+      ]
     : [['list']],
   timeout: 30_000,
   expect: {

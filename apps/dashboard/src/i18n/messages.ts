@@ -2618,6 +2618,11 @@ export const messages = {
     'automations.action.SUBMIT_FOR_APPROVAL': 'إرسال للمراجعة',
     'automations.action.PLACE_ON_CALENDAR': 'وضع في التقويم',
     'automations.action.PROPOSE_PUBLISH': 'اقتراح النشر (يتطلب موافقة)',
+    'automations.trigger.POST_FAILED': 'عند فشل نشر منشور',
+    'automations.action.SCHEDULE_NEXT_FREE_SLOT': 'جدولة في أول موعد متاح',
+    'automations.action.NOTIFY_PERSON': 'تنبيه شخص محدد',
+    'automations.action.ADD_TO_CAMPAIGN': 'إضافة إلى حملة',
+    'automations.action.MAKE_DRAFT_COPY': 'إنشاء نسخة مسودة',
     'automations.status.RUNNING': 'قيد التشغيل',
     'automations.status.SUCCEEDED': 'نجحت',
     'automations.status.SKIPPED': 'لم تتحقق الشروط',
@@ -2628,6 +2633,11 @@ export const messages = {
     // B12 — the only writer of CANCELLED is a person pressing Skip.
     'automations.status.CANCELLED': 'تم التخطي',
     'automations.status.valueUnavailable': 'تم التخطي',
+    'automations.actionPersonLabel': 'الشخص المراد تنبيهه',
+    'automations.actionCampaignLabel': 'الحملة',
+    'automations.chooseTrigger': 'اختر حدثًا',
+    'automations.chooseAction': 'اختر إجراءً',
+    'automations.status.actionSkipped': 'تم التخطي',
     'campaigns.title': 'الحملات',
     'campaigns.empty': 'لا توجد حملات بعد.',
     'campaigns.objective.AWARENESS': 'الوعي',
@@ -2653,11 +2663,46 @@ export const messages = {
     'automations.deleteConfirm': 'حذف…',
     'automations.deleteConfirmBody': 'ستتوقف هذه القاعدة ولن تعمل مجددًا. يبقى سجل تشغيلها.',
     'automations.deleteConfirmSubmit': 'احذف هذه القاعدة',
-    'automations.failure': 'السبب: {code}',
     'automations.failure.condition_value_unavailable':
       'تم التخطي — شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.',
     'automations.failure.notify_template_not_allowed':
       'لم يُرسل — تذكر هذه الأتمتة إشعارًا لا يمكن للأتمتة إرساله. احذفها وأنشئها من جديد.',
+    'automations.failure.already_has_time':
+      'تم التخطي — لهذا المنشور موعد محدد بالفعل، لذلك لم يُنقل.',
+    'automations.failure.no_free_day': 'لم تتم الجدولة — لم يُعثر على يوم متاح ضمن نافذة الجدولة.',
+    'automations.failure.approval_required':
+      'لم تتم الجدولة — تتطلب هذه العلامة التجارية الاعتماد قبل الجدولة، والمنشور غير معتمد.',
+    'automations.failure.schedule_quota_reached':
+      'لم تتم الجدولة — تم بلوغ حد المنشورات المجدولة في خطتك.',
+    'automations.failure.channel_disconnected':
+      'لم تتم الجدولة — إحدى قنوات هذا المنشور ليس لها حساب متصل.',
+    'automations.failure.not_schedulable': 'لم تتم الجدولة — حالة المنشور لا تسمح بجدولته.',
+    'automations.failure.recipient_unavailable':
+      'لم يُرسل — الشخص الذي تنبّهه هذه الأتمتة لم يعد عضوًا نشطًا له صلاحية على هذه العلامة التجارية. عدّل القاعدة واختر شخصًا آخر.',
+    'automations.failure.campaign_unavailable':
+      'لم تتم الإضافة — الحملة التي تضيف إليها هذه الأتمتة المنشورات لم تعد موجودة أو ليست ضمن هذه العلامة التجارية. عدّل القاعدة واختر حملة حالية.',
+    'automations.failure.already_in_campaign':
+      'تم التخطي — هذا المنشور ضمن حملة بالفعل. تضيف الأتمتة فقط المنشورات التي ليست ضمن أي حملة.',
+    'automations.failure.content_in_review':
+      'تم التخطي — هذا المنشور بانتظار المراجعة، لذلك لم يُعدَّل.',
+    'automations.failure.content_not_editable':
+      'تم التخطي — هذا المنشور قيد النشر أو منشور بالفعل ولا يمكن تعديله.',
+    'automations.failure.content_unavailable':
+      'تم التخطي — المنشور المعني بهذا الحدث لم يعد متاحًا.',
+    'automations.failure.source_campaign_unavailable':
+      'لم تُنشأ نسخة — حملة المنشور الأصلي لم تعد موجودة.',
+    'automations.failure.draft_limit_reached':
+      'لم تُنشأ نسخة — بلغت هذه العلامة التجارية الحد الأقصى للمسودات.',
+    'automations.failure.creator_no_longer_a_member':
+      'لم تُشغَّل — منشئ هذه الأتمتة لم يعد عضوًا في مساحة العمل.',
+    'automations.failure.creator_lost_permission':
+      'لم تُشغَّل — منشئ هذه الأتمتة لم تعد لديه صلاحية هذا الإجراء.',
+    'automations.failure.creator_lost_brand_scope':
+      'لم تُشغَّل — منشئ هذه الأتمتة لم يعد لديه وصول إلى هذه العلامة التجارية.',
+    'automations.failure.workspace_pending_deletion': 'لم تُشغَّل — مساحة العمل هذه مجدولة للحذف.',
+    'automations.failure.daily_ceiling_reached':
+      'لم تُشغَّل — بلغت هذه الأتمتة حدها اليومي من مرات التشغيل.',
+    'automations.failure.fallback': 'حدث خطأ أثناء تشغيل هذه الأتمتة.',
     'automations.confirmNeedsPermission': 'ينتظر تأكيد عضو يملك صلاحية النشر.',
     'automations.brandFilter': 'القواعد والتشغيلات للعلامة {brand}.',
     'notifications.template.analytics.anomaly_detected': 'تغيّر غير معتاد في الأداء',
@@ -5878,6 +5923,11 @@ export const messages = {
     'automations.action.SUBMIT_FOR_APPROVAL': 'Submit for review',
     'automations.action.PLACE_ON_CALENDAR': 'Place on the calendar',
     'automations.action.PROPOSE_PUBLISH': 'Propose publishing (needs confirmation)',
+    'automations.trigger.POST_FAILED': 'When a post fails to publish',
+    'automations.action.SCHEDULE_NEXT_FREE_SLOT': 'Schedule in the next free slot',
+    'automations.action.NOTIFY_PERSON': 'Notify a chosen person',
+    'automations.action.ADD_TO_CAMPAIGN': 'Add to a campaign',
+    'automations.action.MAKE_DRAFT_COPY': 'Make a draft copy',
     'automations.status.RUNNING': 'Running',
     'automations.status.SUCCEEDED': 'Succeeded',
     'automations.status.SKIPPED': 'Conditions did not hold',
@@ -5888,6 +5938,11 @@ export const messages = {
     // B12 — the only writer of CANCELLED is a person pressing Skip.
     'automations.status.CANCELLED': 'Skipped',
     'automations.status.valueUnavailable': 'Skipped',
+    'automations.actionPersonLabel': 'Person to notify',
+    'automations.actionCampaignLabel': 'Campaign',
+    'automations.chooseTrigger': 'Choose an event',
+    'automations.chooseAction': 'Choose an action',
+    'automations.status.actionSkipped': 'Skipped',
     'campaigns.title': 'Campaigns',
     'campaigns.empty': 'No campaigns yet.',
     'campaigns.objective.AWARENESS': 'Awareness',
@@ -5914,11 +5969,49 @@ export const messages = {
     'automations.deleteConfirmBody':
       'This rule stops and will not run again. Its run history is kept.',
     'automations.deleteConfirmSubmit': 'Delete this rule',
-    'automations.failure': 'Reason: {code}',
     'automations.failure.condition_value_unavailable':
       "Skipped — something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.",
     'automations.failure.notify_template_not_allowed':
       "Not sent — this automation names a notification that automations can't send. Delete it and create it again.",
+    'automations.failure.already_has_time':
+      "Skipped — this post already has a date and time, so it wasn't moved.",
+    'automations.failure.no_free_day':
+      'Not scheduled — no free day was found within the scheduling window.',
+    'automations.failure.approval_required':
+      "Not scheduled — this brand requires approval before scheduling, and the post isn't approved.",
+    'automations.failure.schedule_quota_reached':
+      "Not scheduled — your plan's limit on scheduled posts has been reached.",
+    'automations.failure.channel_disconnected':
+      "Not scheduled — one of this post's channels has no connected account.",
+    'automations.failure.not_schedulable':
+      "Not scheduled — the post isn't in a state that can be scheduled.",
+    'automations.failure.recipient_unavailable':
+      'Not sent — the person this automation notifies is no longer an active member with access to this brand. Edit the rule to choose someone else.',
+    'automations.failure.campaign_unavailable':
+      "Not added — the campaign this automation adds posts to no longer exists or isn't in this brand. Edit the rule to choose a current one.",
+    'automations.failure.already_in_campaign':
+      'Skipped — this post is already in a campaign. Automations only add posts that have none.',
+    'automations.failure.content_in_review':
+      "Skipped — this post is waiting for review, so it wasn't changed.",
+    'automations.failure.content_not_editable':
+      "Skipped — this post is publishing or already published and can't be changed.",
+    'automations.failure.content_unavailable':
+      'Skipped — the post this event is about is no longer available.',
+    'automations.failure.source_campaign_unavailable':
+      "No copy made — the original post's campaign no longer exists.",
+    'automations.failure.draft_limit_reached':
+      'No copy made — this brand has reached its limit of drafts.',
+    'automations.failure.creator_no_longer_a_member':
+      'Not run — the person who created this automation is no longer a member of the workspace.',
+    'automations.failure.creator_lost_permission':
+      'Not run — the person who created this automation no longer has permission for this action.',
+    'automations.failure.creator_lost_brand_scope':
+      'Not run — the person who created this automation no longer has access to this brand.',
+    'automations.failure.workspace_pending_deletion':
+      'Not run — this workspace is scheduled for deletion.',
+    'automations.failure.daily_ceiling_reached':
+      'Not run — this automation reached its daily limit of runs.',
+    'automations.failure.fallback': 'Something went wrong running this automation.',
     'automations.confirmNeedsPermission': 'Waiting for a member who may publish to confirm it.',
     'automations.brandFilter': 'Rules and runs for {brand}.',
     'notifications.template.analytics.anomaly_detected': 'An unusual change in performance',

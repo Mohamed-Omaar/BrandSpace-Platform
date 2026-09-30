@@ -87,4 +87,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261010090000_automation_g13_trigger_values',
   '20261010091000_automation_g13_action_values',
   '20261010092000_automation_g13_checks_and_state',
+  '20261011090000_publish_attempt_preflight_refused',
 ];

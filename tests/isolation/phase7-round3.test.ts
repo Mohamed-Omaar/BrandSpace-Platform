@@ -422,7 +422,8 @@ describe('R3-3: the condition registry and the runtime agree, field by field', (
     const actor: AutomationActor = {
       userId: fixtures.a.userId,
       roleKey: 'workspace_owner',
-      permissionKeys: ['workspace.read', 'automation.manage'],
+      // Phase 2B-3 PR 2: written as a G13 rule, which needs content.create.
+      permissionKeys: ['workspace.read', 'automation.manage', 'content.create'],
       brandScope: [],
     };
 
@@ -433,13 +434,13 @@ describe('R3-3: the condition registry and the runtime agree, field by field', (
         engine(db).createRule({
           brandId: fixtures.a.brandId,
           name: `impossible ${randomUUID()}`,
-          triggerType: 'SCHEDULED_TIME',
-          triggerConfig: { hourLocal: 9, daysOfWeek: [] },
+          triggerType: 'CONTENT_APPROVED',
+          triggerConfig: {},
           conditions: [
-            { field: 'content.status' as ConditionField, operator: 'equals', value: 'APPROVED' },
+            { field: 'metric.value' as ConditionField, operator: 'greater_than', value: 1 },
           ],
-          actionType: 'NOTIFY',
-          actionConfig: { templateKey: 'automation.notice' },
+          actionType: 'MAKE_DRAFT_COPY',
+          actionConfig: {},
           enabled: false,
           actor,
         }),
@@ -451,13 +452,13 @@ describe('R3-3: the condition registry and the runtime agree, field by field', (
       engine(db).createRule({
         brandId: fixtures.a.brandId,
         name: `possible ${randomUUID()}`,
-        triggerType: 'SCHEDULED_TIME',
-        triggerConfig: { hourLocal: 9, daysOfWeek: [] },
+        triggerType: 'CONTENT_APPROVED',
+        triggerConfig: {},
         conditions: [
-          { field: 'brand.id' as ConditionField, operator: 'equals', value: fixtures.a.brandId },
+          { field: 'content.type' as ConditionField, operator: 'equals', value: 'POST' },
         ],
-        actionType: 'NOTIFY',
-        actionConfig: { templateKey: 'automation.notice' },
+        actionType: 'MAKE_DRAFT_COPY',
+        actionConfig: {},
         enabled: false,
         actor,
       }),

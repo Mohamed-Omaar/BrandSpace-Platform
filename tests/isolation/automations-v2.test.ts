@@ -22,6 +22,7 @@ import {
 } from './fixtures';
 import type { CustomerWorkspaceContext } from '@brandspace/auth';
 import { attentionItems } from '../../apps/dashboard/src/server/command-center';
+import { seedStoredRule } from './stored-automation-rule';
 
 /**
  * B12 + G13 OPTION (a) (Phase 2B-2b) — AUTOMATIONS v2, AGAINST REAL POSTGRESQL.
@@ -91,6 +92,11 @@ const engine = (db: TenantScopedClient, workspaceId = fixtures.a.workspaceId) =>
     },
   });
 
+/**
+ * A STORED rule of a pre-G13 shape (Phase 2B-3 PR 2: no new rule may take one
+ * any more; every stored one is still edited, run and confirmed exactly as
+ * before, which is what this suite is about).
+ */
 async function rule(input: {
   triggerType?: 'CONTENT_APPROVED' | 'SCHEDULED_TIME' | 'METRIC_THRESHOLD_CROSSED';
   actionType?: 'NOTIFY' | 'PLACE_ON_CALENDAR' | 'PROPOSE_PUBLISH';
@@ -99,7 +105,8 @@ async function rule(input: {
   brandId?: string;
 }) {
   return inA((db) =>
-    engine(db).createRule({
+    seedStoredRule(db, {
+      workspaceId: fixtures.a.workspaceId,
       brandId: input.brandId ?? fixtures.a.brandId,
       name: `v2 ${randomUUID().slice(0, 8)}`,
       triggerType: input.triggerType ?? 'CONTENT_APPROVED',
@@ -107,7 +114,7 @@ async function rule(input: {
       conditions: [],
       actionType: input.actionType ?? 'NOTIFY',
       actionConfig: input.actionConfig ?? { templateKey: 'automation.notice' },
-      actor: actor(),
+      createdByUserId: fixtures.a.userId,
     }),
   );
 }

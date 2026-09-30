@@ -1,7 +1,7 @@
 import {
-  DEFAULT_POST_TIME,
   RESCHEDULABLE_SLOT_STATUSES,
   calendarMarkers,
+  defaultPublishingTime,
   formatLocalTime,
   nextDayKey,
   partsInZone,
@@ -767,7 +767,10 @@ export default async function CalendarPage({
         locale={locale}
         today={todayKey}
         tomorrow={nextDayKey(todayKey)}
-        defaultTime={brandDefaultTime ?? suggested.times[0] ?? DEFAULT_POST_TIME}
+        defaultTime={defaultPublishingTime({
+          brandDefaultTime,
+          suggestedTimes: suggested.times,
+        })}
         suggestedTimes={suggested.times}
         preselectDate={requestedDate && requestedDate >= todayKey ? requestedDate : undefined}
         preselectItemId={single('item')}

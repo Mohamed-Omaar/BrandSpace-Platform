@@ -53,6 +53,7 @@ export {
   liveSlotWhere,
   scheduleUsageKey,
 } from './calendar';
+export { calendarCapacityLockKey, lockCalendarCapacity } from './calendar-capacity-lock';
 export { WorkspaceTimezoneService, timezoneChangeEffects } from './timezone-change';
 export type { TimezoneChangeActor, TimezoneChangeEffect } from './timezone-change';
 export type {
@@ -60,6 +61,8 @@ export type {
   CalendarOptions,
   ChannelGate,
   CalendarSlotView,
+  NextFreeSlotOutcome,
+  NextFreeSlotRefusal,
   ScheduleInput,
   ScheduleQuota,
 } from './calendar';
@@ -93,7 +96,7 @@ export {
   resolveZonedTime,
 } from './timezone';
 export type { LocalParts, ZonedResolution } from './timezone';
-export { calendarMarkers, suggestedPostingTimes } from './calendar-markers';
+export { calendarMarkers, defaultPublishingTime, suggestedPostingTimes } from './calendar-markers';
 export type { CalendarMarker, SuggestedTimeSource } from './calendar-markers';
 
 export {
@@ -131,6 +134,10 @@ export {
   CHANNEL_DISCONNECTED_REASON,
   DECISION_NOTE_REQUIRED_REASON,
   SCHEDULE_IN_PAST_REASON,
+  DAY_IS_FULL_REASON,
+  DRAFT_LIMIT_REACHED_REASON,
+  SCHEDULE_QUOTA_EXCEEDED_REASON,
+  SOURCE_CAMPAIGN_UNAVAILABLE_REASON,
   decisionNoteRequired,
   alreadyScheduled,
   approvalRequiredBeforeScheduling,

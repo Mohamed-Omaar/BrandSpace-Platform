@@ -750,12 +750,16 @@ export class ContentApprovalService {
      *
      * ONLY ON APPROVAL. `REQUEST_CHANGES` and `REJECT` are not this trigger, and
      * a rule listening for an approval must not fire on a rejection.
+     *
+     * ONCE PER APPROVAL CYCLE (Phase 2B-3 PR 2). The approval row IS the cycle,
+     * so its id is the event's identity: the same verdict noticed twice is one
+     * event, and the same post approved again in a later cycle is a new one.
      */
     if (input.verdict === 'APPROVE') {
       await recordAutomationEvent(
         this.#db,
         this.#workspaceId,
-        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem' },
+        { triggerType: 'CONTENT_APPROVED', refType: 'ContentItem', approvalId: approval.id },
         { brandId: approval.brandId, refId: item.id },
       );
     }

@@ -1,4 +1,5 @@
 import type { ContentPolicy } from './policy';
+import { DEFAULT_POST_TIME } from './timezone';
 
 /**
  * G6 / Q7 (prototype v94 Phase 2B-1, D-329) — WHAT A COUNTRY AND AN INDUSTRY
@@ -68,4 +69,18 @@ export function suggestedPostingTimes(
     return { times: [...configured.times].sort(), source: 'configured' };
   }
   return { times: [], source: 'none' };
+}
+
+/**
+ * PHASE 2B-3 PR 2 (OD-8) — THE TIME A POST IS PROPOSED FOR WHEN NOBODY CHOSE
+ * ONE: the brand's own default time, else the first suggested time for the
+ * workspace's country, else 09:00. ONE function, so the calendar's schedule
+ * dialog and "schedule in the next free slot" can never propose different
+ * times for the same brand.
+ */
+export function defaultPublishingTime(input: {
+  readonly brandDefaultTime: string | null;
+  readonly suggestedTimes: readonly string[];
+}): string {
+  return input.brandDefaultTime ?? input.suggestedTimes[0] ?? DEFAULT_POST_TIME;
 }

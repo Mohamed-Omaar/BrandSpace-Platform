@@ -141,12 +141,14 @@ async function main(): Promise<void> {
         /*
          * AND THE SAME RULE FOR THE AUTOMATION RULES THE SUITE AUTHORS.
          *
-         * Seven of them are created per run — one per trigger and condition
-         * shape the authoring form offers — and nothing removed them, so the
-         * fixture brand accumulated seven more every time. `maxRulesPerBrand`
-         * is twenty by configuration, so the third run in a row hit the
-         * ceiling and every authoring test failed with a limit refusal that
-         * had nothing to do with what it was testing.
+         * Eight of them are written per run — four created through the
+         * authoring form and, since Phase 2B-3 PR 2, four older rules (a
+         * schedule, a threshold, a number condition) seeded and then edited
+         * through it — and nothing removed them once, so the fixture brand
+         * accumulated more every time. `maxRulesPerBrand` is twenty by
+         * configuration, so a few runs in a row hit the ceiling and every
+         * authoring test failed with a limit refusal that had nothing to do
+         * with what it was testing.
          *
          * THE CEILING IS NOT THE BUG — it is the product working. The bug was
          * a fixture that grew without bound, and the fix is the one the

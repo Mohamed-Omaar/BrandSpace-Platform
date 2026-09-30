@@ -458,6 +458,30 @@ NULL`, so a removed source releases its checksum.
 dropping it loses only the baselines, after which every strategy reads as "no baseline" and never
 alerts.
 
+### 6.8 Phase 2B-3: the G13 enum values and `PREFLIGHT_REFUSED` are forward-only (D-404, D-414)
+
+M1a (`20261010090000_automation_g13_trigger_values`), M1b
+(`20261010091000_automation_g13_action_values`) and M2
+(`20261011090000_publish_attempt_preflight_refused`) only ADD enum values; M1c
+(`20261010092000_automation_g13_checks_and_state`) widens CHECKs and adds two nullable columns. All four
+are safe while the previous release is live. **PostgreSQL cannot remove an enum value in place**, and
+§6's policy forbids a down script, so none of them is reversed — ever. (M1a's, M1b's and M1c's comments
+point at §6.3 for this caveat; this section is where it is written down. Applied migrations are never edited,
+§6.1.)
+
+- **Rolling the APPLICATION back from Phase 2B-3 PR 2 needs no database change.** Nothing in the previous
+  release decodes a `publish_attempt.outcome` (its only read of the table is the highest
+  `attemptNumber`), so `PREFLIGHT_REFUSED` rows are inert to it. They stay, immutable (DATABASE.md
+  §17.3), and the next forward release reads them again.
+- **What lapses until the new release is back:** failures stop concluding with an attempt row and stop
+  raising POST_FAILED; a stored rule on a G13 action (NOTIFY_PERSON, ADD_TO_CAMPAIGN,
+  SCHEDULE_NEXT_FREE_SLOT, MAKE_DRAFT_COPY) is not executable in the previous release, so its runs act on
+  nothing — one that reaches its action is recorded FAILED `unknown_action`; `armedAt` is ignored, so an
+  enabled rule may react to an event from before it was armed; CONTENT_APPROVED is keyed by item again.
+  No data is lost or rewritten by any of these.
+- **Never "undo" M2 by rewriting rows.** `publish_attempt` is immutable by trigger for every role; the
+  evidence is correct history.
+
 ## 7. Secret rotation
 
 **Platform capability.** Every provider credential is a REFERENCE in configuration and a row in the

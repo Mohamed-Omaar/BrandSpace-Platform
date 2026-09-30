@@ -209,10 +209,14 @@ describe('an action that needs a content item may only be paired with a trigger 
   it('every content action is refused against every reference-less trigger', () => {
     const contentActions = AUTOMATION_ACTIONS.filter((action) => action.needsContentItem);
     // A guard against the registry quietly losing the flag.
+    // Phase 2B-3 PR 2: three G13 actions operate on the post as well.
     expect(contentActions.map((action) => action.type)).toEqual([
       'SUBMIT_FOR_APPROVAL',
       'PLACE_ON_CALENDAR',
       'PROPOSE_PUBLISH',
+      'SCHEDULE_NEXT_FREE_SLOT',
+      'ADD_TO_CAMPAIGN',
+      'MAKE_DRAFT_COPY',
     ]);
 
     for (const action of contentActions) {

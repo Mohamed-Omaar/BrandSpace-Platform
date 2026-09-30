@@ -169,13 +169,30 @@ export interface PreviewContext {
   readonly automationRules?: AutomationRuleCheck | undefined;
 }
 
-/** Is this trigger/action pair real, compatible, and within the caller's authority? */
+/** One trigger/action pairing a new rule may be written with. */
+export interface AutomationRulePair {
+  readonly triggerType: string;
+  readonly actionType: string;
+}
+
+/**
+ * THE AUTOMATIONS REGISTRY, AS THE COPILOT SEES IT — injected, never copied.
+ *
+ * `authorablePairs` is what the rule tool OFFERS and `admissible` is what it
+ * ACCEPTS; both come from the registry's one authoring gate
+ * (`isAuthorablePair`), so this package holds no trigger or action name of its
+ * own and cannot keep proposing a pairing the registry has retired
+ * (Phase 2B-3 PR 2). `admissible` also asks the caller's authority for the
+ * action, which the offer does not: every person is told the same catalogue,
+ * and a pair they may not perform is refused when it is chosen.
+ */
 export interface AutomationRuleCheck {
   admissible(input: {
     readonly triggerType: string;
     readonly actionType: string;
     readonly permissionKeys: readonly string[];
   }): boolean;
+  authorablePairs(): readonly AutomationRulePair[];
 }
 
 // ---------------------------------------------------------------------------

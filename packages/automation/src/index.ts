@@ -15,13 +15,19 @@ export {
   memberCatalogueFor,
 } from './condition-values';
 export type { MemberChoice } from './condition-values';
+export { campaignTargetResolves, personTargetResolves } from './action-targets';
 export { evaluateThresholdRule } from './threshold-producer';
 export type { ThresholdOutcome, ThresholdRuleRow } from './threshold-producer';
 export type { FactEvent, MetricWindowPort } from './facts';
 
 export {
+  ACTION_OUTCOME_STATUS,
+  AUTHORING_CONDITION_FIELDS,
   AUTOMATION_ACTIONS,
   AUTOMATION_NOTIFY_TEMPLATES,
+  authorableConditionFieldsFor,
+  conditionFieldsForRule,
+  isActionOutcomeCode,
   AUTOMATION_TRIGGERS,
   actionSupportsTrigger,
   CONDITION_FIELDS,
@@ -51,6 +57,7 @@ export {
 } from './registry';
 export type {
   ActionDefinition,
+  ActionOutcomeCode,
   ActionPermissions,
   AutomationNotificationTemplate,
   AutomationNotifyTemplate,
@@ -103,6 +110,8 @@ export type {
   ApprovalPort,
   AutomationPorts,
   CalendarPort,
+  CampaignPort,
+  ContentCopyPort,
   EntitlementPort,
   NotificationPort,
   PublishPort,
@@ -112,11 +121,13 @@ export type {
 export {
   AUTOMATION_RULE_NAME_TAKEN_REASON,
   AUTOMATION_RULE_VERSION_CONFLICT_REASON,
+  actionConfigInvalid,
   automationConfirmationRejected,
   automationRuleNameTaken,
   automationRuleNotFound,
   automationRuleVersionConflict,
   automationRunNotFound,
+  automationTargetNotFound,
   conditionFieldMissing,
   conditionFieldNotProduced,
   conditionFieldUnknown,

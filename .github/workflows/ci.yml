@@ -436,6 +436,44 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # Execution evidence on EVERY run, pass or fail: which test ran, in which
+      # project, with what result and how many retries. Separate from the
+      # failure-only artifact above, and evidence only — it never decides
+      # whether the job passes. Absent when the job failed before Playwright ran.
+      - name: Upload Playwright JSON results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-json
+          path: playwright-json/results.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # The same evidence, readable in the job log: one line per test of the
+      # Phase 2B-3 PR 2 spec — project | title | status | retry. It only reads
+      # the report and can never fail the job.
+      - name: Print Phase 2B-3 PR 2 spec results
+        if: always()
+        continue-on-error: true
+        run: |
+          node -e "
+          const fs = require('fs');
+          const file = 'playwright-json/results.json';
+          if (!fs.existsSync(file)) { console.log('E2E-EVIDENCE no ' + file); process.exit(0); }
+          const report = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const walk = (suite) => {
+            for (const spec of suite.specs ?? []) {
+              if (!spec.file.endsWith('phase2b3-pr2-g13-authoring.spec.ts')) continue;
+              for (const test of spec.tests) {
+                const last = test.results.at(-1);
+                console.log(['E2E-EVIDENCE', test.projectName, spec.title, last ? last.status : 'not run', last ? last.retry : '-'].join(' | '));
+              }
+            }
+            for (const child of suite.suites ?? []) walk(child);
+          };
+          for (const suite of report.suites ?? []) walk(suite);
+          "
+
   # ---------------------------------------------------------------------------
   # Nothing resembling a credential may enter the repository.
   # ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ packages/database/prisma/migrations/
 **/next-env.d.ts
 
 playwright-report/
+playwright-json/
 test-results/
 
 # The owner-approved visual reference, vendored verbatim (see docs/visual-reference/README.md).

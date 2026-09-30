@@ -24,6 +24,7 @@ import {
   platformRoleClient,
   type IsolationFixtures,
 } from './fixtures';
+import { seedStoredRule } from './stored-automation-rule';
 
 /**
  * PHASE 2B-3, PR 1 — THE FOUNDATION, AGAINST REAL POSTGRESQL.
@@ -336,7 +337,7 @@ describe('M1c — the outbox and rule CHECKs know the G13 values', () => {
     }
   });
 
-  it('armedAt and dueWatermark are NULL on existing and new rules alike', async () => {
+  it('armedAt and dueWatermark are NULL on existing rules; a new rule is armed when created', async () => {
     const existing = await inA((db) =>
       db.automationRule.findFirstOrThrow({
         where: { id: fixtures.a.automationRuleId },
@@ -351,15 +352,15 @@ describe('M1c — the outbox and rule CHECKs know the G13 values', () => {
         triggerType: 'CONTENT_APPROVED',
         triggerConfig: {},
         conditions: [],
-        actionType: 'NOTIFY',
-        actionConfig: { templateKey: 'automation.notice' },
-        actor: actor(),
+        // Phase 2B-3 PR 2: a new rule is a G13 rule.
+        actionType: 'MAKE_DRAFT_COPY',
+        actionConfig: {},
+        actor: actor({ permissionKeys: [...EVERYTHING, 'content.create'] }),
       }),
     );
-    expect({ armedAt: created.armedAt, dueWatermark: created.dueWatermark }).toEqual({
-      armedAt: null,
-      dueWatermark: null,
-    });
+    // Phase 2B-3 PR 2 (OD-21): a new rule listens from the moment it exists.
+    expect(created.armedAt).toBeInstanceOf(Date);
+    expect(created.dueWatermark).toBeNull();
   });
 });
 
@@ -373,6 +374,7 @@ function eventFor(triggerType: string, ruleId: string): TriggerEvent {
     CONTENT_APPROVED: ['ContentItem', fixtures.a.contentItemId],
     CONTENT_SCHEDULED: ['CalendarSlot', fixtures.a.calendarSlotId],
     POST_PUBLISHED: ['PublishJob', fixtures.a.publishJobId],
+    POST_FAILED: ['PublishAttempt', fixtures.a.publishAttemptId],
     ANALYTICS_REFRESHED: ['AnalyticsIngestionRun', fixtures.a.analyticsRunId],
     METRIC_THRESHOLD_CROSSED: ['MetricObservation', fixtures.a.metricObservationId],
     SCHEDULED_TIME: [null, null],
@@ -393,6 +395,7 @@ const CONFIGS: Record<string, unknown> = {
   CONTENT_APPROVED: {},
   CONTENT_SCHEDULED: {},
   POST_PUBLISHED: {},
+  POST_FAILED: {},
   ANALYTICS_REFRESHED: {},
   METRIC_THRESHOLD_CROSSED: { metricKey: 'impressions', direction: 'above', threshold: 1 },
   SCHEDULED_TIME: { hourLocal: 9 },
@@ -402,7 +405,13 @@ const CONFIGS: Record<string, unknown> = {
   PROPOSE_PUBLISH: {},
 };
 
-/** Stored DISABLED, so no sweep in any suite ever reaches it; run as enabled. */
+/**
+ * Stored DISABLED, so no sweep in any suite ever reaches it; run as enabled.
+ *
+ * SEEDED AS A STORED RULE (Phase 2B-3 PR 2), not written through `createRule`:
+ * these tests are about how rules that already exist behave, and several of
+ * the shapes walked here are no longer ones a NEW rule may take.
+ */
 async function storedRule(input: {
   triggerType: string;
   actionType: string;
@@ -410,15 +419,16 @@ async function storedRule(input: {
   brandId?: string;
 }): Promise<AutomationRule> {
   return inA((db) =>
-    engine(db).createRule({
+    seedStoredRule(db, {
+      workspaceId: fixtures.a.workspaceId,
       brandId: input.brandId ?? fixtures.a.brandId,
       name: `pr1 ${input.triggerType} ${input.actionType} ${randomUUID().slice(0, 8)}`,
-      triggerType: input.triggerType as never,
+      triggerType: input.triggerType,
       triggerConfig: CONFIGS[input.triggerType],
       conditions: input.conditions ?? [],
-      actionType: input.actionType as never,
+      actionType: input.actionType,
       actionConfig: CONFIGS[input.actionType],
-      actor: actor(),
+      createdByUserId: fixtures.a.userId,
     }),
   );
 }
@@ -449,17 +459,21 @@ describe('existing stored rules of every shape behave exactly as before', () => 
     entitlementQuestions = [];
     let walked = 0;
     for (const trigger of AUTOMATION_TRIGGERS) {
-      for (const action of AUTOMATION_ACTIONS) {
+      // The shapes that existed before G13; the G13 actions have their own
+      // suites (Phase 2B-3 PR 2).
+      for (const action of AUTOMATION_ACTIONS.filter((entry) => entry.type in EXPECTED)) {
         if (!actionSupportsTrigger(action.type, trigger.type)) continue;
         const rule = await storedRule({ triggerType: trigger.type, actionType: action.type });
         const outcome = await runOnce(rule);
         expect(outcome.status, `${trigger.type} × ${action.type}`).toBe(EXPECTED[action.type]);
         expect(outcome.run?.failureCode ?? null, `${trigger.type} × ${action.type}`).toBeNull();
-        expect(isOlderAutomation(rule)).toBe(false);
+        // Captioned exactly when a new rule could not take this shape.
+        expect(isOlderAutomation(rule)).toBe(!(trigger.authorable && action.authorable));
         walked += 1;
       }
     }
-    expect(walked).toBe(15);
+    // Phase 2B-3 PR 2: 15 → 19, POST_FAILED × the four shipped actions.
+    expect(walked).toBe(19);
     expect(entitlementQuestions).toEqual([]);
   });
 
@@ -551,7 +565,8 @@ describe('existing stored rules of every shape behave exactly as before', () => 
           triggerType: 'CONTENT_APPROVED',
           triggerConfig: {},
           conditions: [],
-          actionType: 'ADD_TO_CAMPAIGN' as never,
+          // Phase 2B-3 PR 2: ADD_TO_CAMPAIGN ships; REMIND_REVIEWER stays planned (D3).
+          actionType: 'REMIND_REVIEWER' as never,
           actionConfig: {},
           actor: actor({ permissionKeys: [...EVERYTHING, 'content.create', 'campaigns.manage'] }),
         }),
@@ -562,6 +577,8 @@ describe('existing stored rules of every shape behave exactly as before', () => 
         engine(db).createRule({
           brandId: fixtures.a.brandId,
           name: `pr1 planned ${randomUUID().slice(0, 8)}`,
+          // Phase 2B-3 PR 2: POST_FAILED is authorable, but never with a
+          // pre-G13 action.
           triggerType: 'POST_FAILED' as never,
           triggerConfig: {},
           conditions: [],
@@ -577,7 +594,8 @@ describe('existing stored rules of every shape behave exactly as before', () => 
       'RETRY_PUBLISH',
       'PAUSE_CAMPAIGN',
       'DRAFT_IDEAS',
-      'ADD_TO_CAMPAIGN',
+      // Phase 2B-3 PR 2: in place of ADD_TO_CAMPAIGN, which now ships.
+      'REMIND_REVIEWER',
     ]) {
       const planned = await inA((db) =>
         db.automationRule.create({

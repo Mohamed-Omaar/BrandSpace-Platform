@@ -28,8 +28,27 @@ export function unsupportedDialect(): AppError {
 }
 
 /** The brand has as many live drafts as the activated policy allows. */
+/** Phase 2B-3 PR 2 — lets a "make a draft copy" automation say which limit stopped it. */
+export const DRAFT_LIMIT_REACHED_REASON = 'draft_limit_reached';
+
 export function draftLimitReached(): AppError {
-  return new AppError('QUOTA_EXCEEDED', 'This brand has reached its limit of saved drafts.');
+  return new AppError('QUOTA_EXCEEDED', 'This brand has reached its limit of saved drafts.', {
+    reason: DRAFT_LIMIT_REACHED_REASON,
+  });
+}
+
+/**
+ * Phase 2B-3 PR 2 — the post being copied is filed under a campaign that no
+ * longer exists (deleted or archived). The copy is not made rather than made
+ * without its campaign: a campaign is never silently dropped. NOT_FOUND, as
+ * the duplicate path has always answered it.
+ */
+export const SOURCE_CAMPAIGN_UNAVAILABLE_REASON = 'source_campaign_unavailable';
+
+export function sourceCampaignUnavailable(): AppError {
+  return new AppError('NOT_FOUND', 'Content not found.', {
+    reason: SOURCE_CAMPAIGN_UNAVAILABLE_REASON,
+  });
 }
 
 /**
@@ -100,8 +119,13 @@ export function scheduleTooFarAhead(): AppError {
 }
 
 /** One day's plan is full, per the activated policy. */
+/** Phase 2B-3 PR 2 — lets "the next free slot" tell a full day from a spent plan. */
+export const DAY_IS_FULL_REASON = 'day_is_full';
+
 export function dayIsFull(): AppError {
-  return new AppError('QUOTA_EXCEEDED', 'That day already has as many posts as it can hold.');
+  return new AppError('QUOTA_EXCEEDED', 'That day already has as many posts as it can hold.', {
+    reason: DAY_IS_FULL_REASON,
+  });
 }
 
 /**
@@ -111,10 +135,14 @@ export function dayIsFull(): AppError {
  * prompt, so the criterion's "rejected with an upgrade prompt" is satisfied by
  * the existing path rather than by a second one.
  */
+/** Phase 2B-3 PR 2 — the plan's scheduled-post ceiling, told apart from a full day. */
+export const SCHEDULE_QUOTA_EXCEEDED_REASON = 'schedule_quota_exceeded';
+
 export function scheduleQuotaExceeded(): AppError {
   return new AppError(
     'QUOTA_EXCEEDED',
     'This plan has reached its scheduled posts for this month.',
+    { reason: SCHEDULE_QUOTA_EXCEEDED_REASON },
   );
 }
 

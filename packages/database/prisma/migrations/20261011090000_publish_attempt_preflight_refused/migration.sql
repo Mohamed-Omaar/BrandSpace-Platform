@@ -1,0 +1,26 @@
+-- PHASE 2B-3 PR 2 (M2) — a publish attempt can record a PRE-FLIGHT REFUSAL.
+--
+-- SCHEMA ONLY, ADDITIVE. One value on "PublishAttemptOutcome". No row is
+-- inserted, updated or rewritten: no customer data, no sample data, no backfill.
+-- An empty database receives the value and nothing else.
+--
+-- WHY. Every transition of a publish job to FAILED now concludes with exactly
+-- one attempt row, so a "post failed" automation has one stable thing to name
+-- (owner decisions D1/D2 for PR 2). A job the pipeline refused BEFORE any
+-- request was sent (the connection is gone, the account was revoked, the
+-- content changed) has no provider attempt to cite; it gets a row of this
+-- outcome instead. The row numbers itself after the highest attempt so far and
+-- leaves the job's `attemptCount` alone, so `attemptCount <= maxAttempts` and
+-- every retry and idempotency rule is exactly what it was. The existing
+-- `publish_attempt_failure_class_matches_outcome` CHECK already requires a
+-- failure class on it (it is not 'SUCCEEDED').
+--
+-- ITS OWN MIGRATION ON PURPOSE (the D-379 pattern): a value added by
+-- `ALTER TYPE … ADD VALUE` cannot be used in the transaction that added it.
+--
+-- NOT A SIMPLE ROLLBACK. An enum value cannot be dropped in place. The previous
+-- release never writes it; a row the new release writes with it cannot be
+-- decoded by a previous release's Prisma client (the same forward-only caveat
+-- as M1a, docs/OPERATIONS.md §6.8).
+
+ALTER TYPE "PublishAttemptOutcome" ADD VALUE IF NOT EXISTS 'PREFLIGHT_REFUSED';

@@ -160,6 +160,18 @@ export function triggerConfigInvalid(triggerType: string, parameter: string): Ap
 }
 
 /**
+ * PHASE 2B-3 PR 2 — an action setting the screen renders (the person to
+ * notify, the campaign) arrived missing or blank. Refused rather than
+ * defaulted, exactly as a trigger parameter is.
+ */
+export function actionConfigInvalid(actionType: string, parameter: string): AppError {
+  return new AppError('VALIDATION_FAILED', 'That automation is missing something it needs.', {
+    actionType,
+    parameter,
+  });
+}
+
+/**
  * B12 (Phase 2B-2b) — the rule changed since the editor read it. A stale edit is
  * refused rather than written over somebody else's, and nothing is stored.
  */
@@ -177,3 +189,13 @@ export function automationRuleNameTaken(): AppError {
   });
 }
 export const AUTOMATION_RULE_NAME_TAKEN_REASON = 'automation_rule_name_taken';
+
+/**
+ * PHASE 2B-3 PR 2 — THE PERSON OR CAMPAIGN AN ACTION NAMES IS NOT ONE THE RULE
+ * MAY NAME. Shaped exactly like a genuine miss (D-132): whether the id belongs
+ * to another brand, another workspace, a departed member or nothing at all is
+ * not the author's to learn from the refusal.
+ */
+export function automationTargetNotFound(): AppError {
+  return new AppError('NOT_FOUND', 'That person or campaign was not found.');
+}

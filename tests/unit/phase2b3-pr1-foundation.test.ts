@@ -76,16 +76,17 @@ describe('registry parity with the database enums', () => {
   });
 
   it('the shipped catalogue is exactly what it was; the G13 values are planned', () => {
+    // Phase 2B-3 PR 2: POST_FAILED ships with its producer.
     expect(AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
       'CONTENT_APPROVED',
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
+      'POST_FAILED',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
     ]);
     expect(PLANNED_AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
-      'POST_FAILED',
       'REVIEW_WAITING_24H',
       'CAMPAIGN_STARTED',
       'CAMPAIGN_ENDED',
@@ -94,13 +95,21 @@ describe('registry parity with the database enums', () => {
       'POST_TOP_10_PERCENT',
       'FACT_EXPIRING',
     ]);
-    expect(PLANNED_AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
+    // Phase 2B-3 PR 2: four G13 actions ship with their settings; the rest
+    // stay planned (REMIND_REVIEWER moves to PR 3, owner decision D3).
+    expect(AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
+      'NOTIFY',
+      'SUBMIT_FOR_APPROVAL',
+      'PLACE_ON_CALENDAR',
+      'PROPOSE_PUBLISH',
       'SCHEDULE_NEXT_FREE_SLOT',
       'NOTIFY_PERSON',
       'ADD_TO_CAMPAIGN',
+      'MAKE_DRAFT_COPY',
+    ]);
+    expect(PLANNED_AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
       'REMIND_REVIEWER',
       'DRAFT_IDEAS',
-      'MAKE_DRAFT_COPY',
       'RETRY_PUBLISH',
       'PAUSE_CAMPAIGN',
     ]);
@@ -164,22 +173,25 @@ describe('every shipped action requires EXACTLY what it required before', () => 
     PROPOSE_PUBLISH: 'publishing.manage',
   };
 
+  /** Phase 2B-3 PR 2: the four actions that shipped before G13. */
+  const LEGACY = AUTOMATION_ACTIONS.filter((action) => action.type in BEFORE);
+
   it('allOf with one element, no anyOf, no entitlements, no credits', () => {
-    expect(AUTOMATION_ACTIONS.map((action) => action.type).sort()).toEqual(
-      Object.keys(BEFORE).sort(),
-    );
-    for (const action of AUTOMATION_ACTIONS) {
+    expect(LEGACY.map((action) => action.type).sort()).toEqual(Object.keys(BEFORE).sort());
+    for (const action of LEGACY) {
       expect(action.permissions, action.type).toEqual({ allOf: [BEFORE[action.type]], anyOf: [] });
       expect(action.entitlements, action.type).toEqual([]);
       expect(action.spendsCredits, action.type).toBe(false);
-      expect(action.authorable, action.type).toBe(true);
+      // Phase 2B-3 PR 2 (the G13 flip): no NEW rule is written with a pre-G13
+      // action, and every stored one still runs.
+      expect(action.authorable, action.type).toBe(false);
       expect(action.executable, action.type).toBe(true);
     }
   });
 
   it('for EVERY role, the new check answers what the old `includes` answered', () => {
     for (const role of ROLE_DEFINITIONS) {
-      for (const action of AUTOMATION_ACTIONS) {
+      for (const action of LEGACY) {
         const before = role.permissionKeys.includes(BEFORE[action.type] as string);
         expect(
           satisfiesActionPermissions(role.permissionKeys, action.permissions),
@@ -199,9 +211,15 @@ describe('every shipped action requires EXACTLY what it required before', () => 
   });
 });
 
+/**
+ * A G13 action's declaration, wherever it lives: shipped (Phase 2B-3 PR 2) or
+ * still planned. The requirement is the same either way.
+ */
+const declared = (type: string) => findAction(type) ?? findPlannedAction(type);
+
 describe('the declared G13 requirements (Correction 1)', () => {
   it('ADD_TO_CAMPAIGN is anyOf [content.create, campaigns.manage] — the only anyOf', () => {
-    expect(findPlannedAction('ADD_TO_CAMPAIGN')?.permissions).toEqual({
+    expect(declared('ADD_TO_CAMPAIGN')?.permissions).toEqual({
       allOf: [],
       anyOf: ['content.create', 'campaigns.manage'],
     });
@@ -228,7 +246,7 @@ describe('the declared G13 requirements (Correction 1)', () => {
       PAUSE_CAMPAIGN: ['campaigns.manage'],
     };
     for (const [type, allOf] of Object.entries(expected)) {
-      const action = findPlannedAction(type);
+      const action = declared(type);
       expect(action?.permissions, type).toEqual({ allOf, anyOf: [] });
       expect(action?.entitlements, type).toEqual([]);
       expect(action?.spendsCredits, type).toBe(false);
@@ -267,7 +285,7 @@ describe('the declared G13 requirements (Correction 1)', () => {
 });
 
 describe('allOf / anyOf evaluation', () => {
-  const addToCampaign = findPlannedAction('ADD_TO_CAMPAIGN')?.permissions as ActionPermissions;
+  const addToCampaign = declared('ADD_TO_CAMPAIGN')?.permissions as ActionPermissions;
   const draftIdeas = findPlannedAction('DRAFT_IDEAS')?.permissions as ActionPermissions;
   const role = (key: string): readonly string[] =>
     ROLE_DEFINITIONS.find((definition) => definition.key === key)?.permissionKeys ?? [];
@@ -336,6 +354,7 @@ describe('the stringSet kind and content.channels', () => {
       'CONTENT_APPROVED',
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
+      'POST_FAILED',
     ]);
   });
 
@@ -429,20 +448,25 @@ describe('older-automation classification', () => {
   });
 
   it('every shipped, supported pair is NOT an older automation', () => {
+    // Phase 2B-3 PR 2: a shipped trigger or action may be executable without
+    // being authorable (authorability and executability are separate); a pair
+    // is current exactly when both halves are authorable.
     for (const trigger of AUTOMATION_TRIGGERS) {
       for (const action of AUTOMATION_ACTIONS) {
         expect(
           isOlderAutomation({ triggerType: trigger.type, actionType: action.type }),
           `${trigger.type} × ${action.type}`,
-        ).toBe(false);
+        ).toBe(!(trigger.authorable && action.authorable));
       }
     }
   });
 
   it('a rule naming anything not authorable is captioned, whichever half it is', () => {
-    expect(isOlderAutomation({ triggerType: 'POST_FAILED', actionType: 'NOTIFY' })).toBe(true);
+    expect(isOlderAutomation({ triggerType: 'REVIEW_WAITING_24H', actionType: 'NOTIFY' })).toBe(
+      true,
+    );
     expect(
-      isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'ADD_TO_CAMPAIGN' }),
+      isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'REMIND_REVIEWER' }),
     ).toBe(true);
     expect(isOlderAutomation({ triggerType: 'NOT_A_TRIGGER', actionType: 'NOTIFY' })).toBe(true);
   });
@@ -514,17 +538,22 @@ describe('run history: a condition_value_unavailable skip has its own label and 
       statusKey: 'automations.status.SKIPPED',
       reason: { kind: 'none' },
     });
-    // Every other code keeps the generic "Reason: {code}" line.
-    for (const [status, code] of [
-      ['SKIPPED', 'something_else'],
-      ['BLOCKED_BY_POLICY', 'daily_ceiling_reached'],
-      ['BLOCKED_BY_AUTHORIZATION', 'creator_lost_permission'],
-      ['FAILED', 'unknown_action'],
-      ['BLOCKED_BY_POLICY', 'condition_value_unavailable'],
+    // Phase 2B-3 PR 2 (D5-B): every other code keeps its badge and reads in
+    // words — its own where §13 gives one, the fallback otherwise — never raw.
+    for (const [status, code, key] of [
+      ['SKIPPED', 'something_else', 'automations.failure.fallback'],
+      ['BLOCKED_BY_POLICY', 'daily_ceiling_reached', 'automations.failure.daily_ceiling_reached'],
+      [
+        'BLOCKED_BY_AUTHORIZATION',
+        'creator_lost_permission',
+        'automations.failure.creator_lost_permission',
+      ],
+      ['FAILED', 'unknown_action', 'automations.failure.fallback'],
+      ['BLOCKED_BY_POLICY', 'condition_value_unavailable', 'automations.failure.fallback'],
     ] as const) {
       expect(runPresentation({ status, failureCode: code })).toEqual({
         statusKey: `automations.status.${status}`,
-        reason: { kind: 'generic', code },
+        reason: { kind: 'message', key },
       });
     }
     // A member's own skip still has no reason line.
@@ -532,9 +561,9 @@ describe('run history: a condition_value_unavailable skip has its own label and 
       statusKey: 'automations.status.CANCELLED',
       reason: { kind: 'none' },
     });
-    // And the generic reason copy itself is untouched.
-    expect(messages.en['automations.failure']).toBe('Reason: {code}');
-    expect(messages.ar['automations.failure']).toBe('السبب: {code}');
+    // And no reason line anywhere prints a code: the generic line is gone.
+    expect(messages.en).not.toHaveProperty('automations.failure');
+    expect(messages.ar).not.toHaveProperty('automations.failure');
   });
 
   it('the run history renders through the presentation, not the raw status', () => {

@@ -3,6 +3,7 @@ import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import {
   AutomationEngine,
   TenantAutomationPolicySource,
+  campaignTargetResolves,
   gatherFacts,
   type AutomationActor,
   type AutomationPorts,
@@ -11,9 +12,16 @@ import {
 } from '@brandspace/automation';
 import { createMetricWindowPort } from '@brandspace/analytics';
 import {
+  CampaignService,
   ContentApprovalService,
   ContentCalendarService,
+  ContentLibraryService,
+  DRAFT_LIMIT_REACHED_REASON,
+  READ_ONLY_CONTENT_STATUSES,
+  SOURCE_CAMPAIGN_UNAVAILABLE_REASON,
   TenantContentPolicySource,
+  readRetentionFacts,
+  resolveContentExpiry,
 } from '@brandspace/content';
 import {
   createScheduleQuota,
@@ -22,7 +30,13 @@ import {
 } from '@brandspace/entitlements';
 import { NotificationService, resolveRecipients } from '@brandspace/notifications';
 import type { EvaluateAutomationPayload } from '@brandspace/jobs';
-import { createLogger, currentEnvironment, systemClock } from '@brandspace/shared';
+import {
+  brandInScope,
+  createLogger,
+  currentEnvironment,
+  isAppError,
+  systemClock,
+} from '@brandspace/shared';
 import { unreachableChannelGate } from '@brandspace/social-connectors';
 
 /**
@@ -90,6 +104,46 @@ function portsFor(
   workspaceId: string,
   environment: Environment,
 ): AutomationPorts {
+  /**
+   * The calendar every automation schedules through: the tenant's content
+   * policy and zone, the real scheduled-post quota, the brand's approval gate
+   * and the channel gate — exactly what a person's scheduling obeys.
+   */
+  async function calendarFor(): Promise<ContentCalendarService> {
+    const policy = await new TenantContentPolicySource(db, environment).load();
+    const workspace = await db.workspace.findFirst({
+      where: { id: workspaceId },
+      select: { timezone: true },
+    });
+    return new ContentCalendarService({
+      db,
+      workspaceId,
+      policy,
+      // Q9 (D-332): a channel whose every account was revoked is refused.
+      channelGate: unreachableChannelGate(db, workspaceId),
+      timezone: workspace?.timezone ?? 'UTC',
+      /*
+       * THE QUOTA IS REAL (P7-R6), and an automation is subject to it
+       * exactly as a person is. A rule that could schedule past a plan's
+       * monthly ceiling would be a way to buy headroom by writing a rule.
+       *
+       * It USED to be three no-op methods under this very comment. The
+       * shared implementation now lives in `@brandspace/entitlements`, where
+       * every surface can reach it, so there is one answer to "may this
+       * workspace schedule another post?" and the same usage ledger rows and
+       * idempotency keys behind it.
+       */
+      quota: createScheduleQuota({ db, workspaceId, environment }),
+      /*
+       * PR 0 — THE SAME BRAND APPROVAL GATE THE DASHBOARD USES. Without
+       * it this calendar fell back to a workspace-wide setting, so
+       * `PLACE_ON_CALENDAR` could schedule an unapproved post of a brand
+       * that requires approval. The approvals domain is the one answer.
+       */
+      approvalGate: new ContentApprovalService({ db, workspaceId, policy }),
+    });
+  }
+
   return {
     notifications: {
       async notify(input) {
@@ -126,6 +180,109 @@ function portsFor(
         });
         return { recipients: delivered };
       },
+      /*
+       * PHASE 2B-3 PR 2 (D4) — ONE MEMBER, NAMED BY THE RULE and re-checked by
+       * the engine on this run. NOT `resolveRecipients`: nobody is looked up by
+       * permission here, so the rule reaches exactly the person it names. The
+       * same template and the same writer as NOTIFY, so their mute applies.
+       */
+      async notifyPerson(input) {
+        const delivered = await new NotificationService({ db, workspaceId }).create({
+          userIds: [input.userId],
+          templateKey: 'automation.notice',
+          brandId: input.brandId,
+          resourceType: input.resourceType,
+          resourceId: input.resourceId,
+          // NO PAYLOAD, as NOTIFY: a pointer, followed under ordinary checks.
+          idempotencyKey: input.idempotencyKey,
+        });
+        return { recipients: delivered };
+      },
+    },
+    /*
+     * PHASE 2B-3 PR 2 (D8) — ADD TO A CAMPAIGN, attach-only. The automation's
+     * own precondition, in this order, and `setContentCampaign` only when all
+     * of it holds — so its general behaviour (moving, detaching, withdrawing a
+     * review) is never reached from a rule:
+     *
+     *   1. the post is there, and inside the creator's scope;
+     *   2. it has NO campaign — an automation never moves a post;
+     *   3. it is not waiting for review — an automation never withdraws one;
+     *   4. it can still be edited (not publishing or published);
+     *   5. the campaign the rule names is still a live campaign of its brand.
+     *
+     * No review-withdrawal port is given to the campaign service, so even a
+     * post that went into review after step 3 is refused, not withdrawn.
+     */
+    campaigns: {
+      async addToCampaign(input) {
+        const item = await db.contentItem.findFirst({
+          where: { id: input.contentItemId, workspaceId, deletedAt: null },
+          select: { brandId: true, campaignId: true, status: true },
+        });
+        if (!item || !brandInScope(input.actorBrandScope, item.brandId)) {
+          return { kind: 'refused', reason: 'content_unavailable' };
+        }
+        if (item.campaignId !== null) return { kind: 'refused', reason: 'already_in_campaign' };
+        if (item.status === 'IN_REVIEW') return { kind: 'refused', reason: 'content_in_review' };
+        if (READ_ONLY_CONTENT_STATUSES.includes(item.status)) {
+          return { kind: 'refused', reason: 'content_not_editable' };
+        }
+        const campaignLive = await campaignTargetResolves(db, {
+          workspaceId,
+          brandId: item.brandId,
+          campaignId: input.campaignId,
+        });
+        if (!campaignLive) return { kind: 'refused', reason: 'campaign_unavailable' };
+        await new CampaignService({ db, workspaceId }).setContentCampaign({
+          contentItemId: input.contentItemId,
+          campaignId: input.campaignId,
+          actor: { userId: input.actorUserId, brandScope: input.actorBrandScope },
+          actorPermissionKeys: input.actorPermissionKeys,
+        });
+        return { kind: 'attached' };
+      },
+    },
+    /*
+     * PHASE 2B-3 PR 2 — MAKE A DRAFT COPY through the library's one duplicate
+     * path, as the creator, with the content retention every new draft gets.
+     * The two reasons the library can refuse a copy become codes; anything
+     * else fails the run as before.
+     */
+    content: {
+      async makeDraftCopy(input) {
+        const source = await db.contentItem.findFirst({
+          where: { id: input.contentItemId, workspaceId, deletedAt: null },
+          select: { brandId: true },
+        });
+        if (!source || !brandInScope(input.actorBrandScope, source.brandId)) {
+          return { kind: 'refused', reason: 'content_unavailable' };
+        }
+        const policy = await new TenantContentPolicySource(db, environment).load();
+        const facts = await readRetentionFacts(db, workspaceId);
+        try {
+          const copy = await new ContentLibraryService({ db, workspaceId, policy }).duplicateItem({
+            sourceItemId: input.contentItemId,
+            // The source's own title: the dashboard's "(copy)" is a
+            // translation the worker has no reader's language for.
+            actorUserId: input.actorUserId,
+            actorBrandScope: input.actorBrandScope,
+            actorPermissionKeys: input.actorPermissionKeys,
+            expiresAt: resolveContentExpiry(policy, facts, systemClock),
+            idempotencyKey: input.idempotencyKey,
+          });
+          return { kind: 'copied', contentItemId: copy.item.id };
+        } catch (error: unknown) {
+          const reason = isAppError(error) ? error.publicDetails['reason'] : undefined;
+          if (reason === SOURCE_CAMPAIGN_UNAVAILABLE_REASON) {
+            return { kind: 'refused', reason: 'source_campaign_unavailable' };
+          }
+          if (reason === DRAFT_LIMIT_REACHED_REASON) {
+            return { kind: 'refused', reason: 'draft_limit_reached' };
+          }
+          throw error;
+        }
+      },
     },
     approvals: {
       async submitForApproval(input) {
@@ -150,39 +307,25 @@ function portsFor(
       },
     },
     calendar: {
+      /*
+       * PHASE 2B-3 PR 2 — "schedule in the next free slot": the SAME calendar
+       * as `placeOnCalendar` — the real quota, the brand's approval gate, the
+       * channel gate — so an automation schedules under exactly the rules a
+       * person does, plus the workspace's calendar-capacity lock.
+       */
+      async scheduleNextFreeSlot(input) {
+        const calendar = await calendarFor();
+        const outcome = await calendar.scheduleNextFreeSlot({
+          contentItemId: input.contentItemId,
+          actorUserId: input.actorUserId,
+          actorBrandScope: input.actorBrandScope,
+        });
+        return outcome.kind === 'scheduled'
+          ? { kind: 'scheduled', slotId: outcome.view.slot.id, localTime: outcome.localTime }
+          : outcome;
+      },
       async placeOnCalendar(input) {
-        const policy = await new TenantContentPolicySource(db, environment).load();
-        const workspace = await db.workspace.findFirst({
-          where: { id: workspaceId },
-          select: { timezone: true },
-        });
-        const calendar = new ContentCalendarService({
-          db,
-          workspaceId,
-          policy,
-          // Q9 (D-332): a channel whose every account was revoked is refused.
-          channelGate: unreachableChannelGate(db, workspaceId),
-          timezone: workspace?.timezone ?? 'UTC',
-          /*
-           * THE QUOTA IS REAL (P7-R6), and an automation is subject to it
-           * exactly as a person is. A rule that could schedule past a plan's
-           * monthly ceiling would be a way to buy headroom by writing a rule.
-           *
-           * It USED to be three no-op methods under this very comment. The
-           * shared implementation now lives in `@brandspace/entitlements`, where
-           * every surface can reach it, so there is one answer to "may this
-           * workspace schedule another post?" and the same usage ledger rows and
-           * idempotency keys behind it.
-           */
-          quota: createScheduleQuota({ db, workspaceId, environment }),
-          /*
-           * PR 0 — THE SAME BRAND APPROVAL GATE THE DASHBOARD USES. Without
-           * it this calendar fell back to a workspace-wide setting, so
-           * `PLACE_ON_CALENDAR` could schedule an unapproved post of a brand
-           * that requires approval. The approvals domain is the one answer.
-           */
-          approvalGate: new ContentApprovalService({ db, workspaceId, policy }),
-        });
+        const calendar = await calendarFor();
         const view = await calendar.schedule({
           contentItemId: input.contentItemId,
           localTime: input.localTime,
@@ -248,7 +391,18 @@ export async function processAutomationJob(payload: EvaluateAutomationPayload): 
       },
       { metrics: metricWindowPort(db, payload.workspaceId) },
     );
+    /*
+     * PHASE 2B-3 PR 2 — WHEN THE EVENT HAPPENED, read from the outbox row this
+     * message carries, so a rule armed after it does not act on it (OD-21).
+     * Read in this tenant transaction; a row that is gone reads as null, which
+     * keeps the engine's pre-2B-3 behaviour.
+     */
+    const outboxRow = await db.automationEvent.findFirst({
+      where: { id: payload.eventId, workspaceId: payload.workspaceId },
+      select: { createdAt: true },
+    });
     const event: TriggerEvent = {
+      occurredAt: outboxRow?.createdAt ?? null,
       type: payload.triggerType as TriggerEvent['type'],
       brandId: payload.brandId,
       refType: payload.refType,
