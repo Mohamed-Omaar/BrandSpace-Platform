@@ -31,7 +31,14 @@ export type DomainAutomationEvent =
   | { readonly triggerType: 'CONTENT_APPROVED'; readonly refType: 'ContentItem' }
   | { readonly triggerType: 'CONTENT_SCHEDULED'; readonly refType: 'CalendarSlot' }
   | { readonly triggerType: 'POST_PUBLISHED'; readonly refType: 'PublishJob' }
-  | { readonly triggerType: 'ANALYTICS_REFRESHED'; readonly refType: 'AnalyticsIngestionRun' };
+  | { readonly triggerType: 'ANALYTICS_REFRESHED'; readonly refType: 'AnalyticsIngestionRun' }
+  /**
+   * Phase 2B-3 PR 2 — one publish job reached FAILED. The reference is the
+   * ATTEMPT that concluded it (every FAILED transition names exactly one), so
+   * each failure is its own event: a job retried by a person and failing again
+   * is a second one.
+   */
+  | { readonly triggerType: 'POST_FAILED'; readonly refType: 'PublishAttempt' };
 
 export interface DomainAutomationEventInput {
   readonly brandId: string;

@@ -76,16 +76,17 @@ describe('registry parity with the database enums', () => {
   });
 
   it('the shipped catalogue is exactly what it was; the G13 values are planned', () => {
+    // Phase 2B-3 PR 2: POST_FAILED ships with its producer.
     expect(AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
       'CONTENT_APPROVED',
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
+      'POST_FAILED',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
     ]);
     expect(PLANNED_AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
-      'POST_FAILED',
       'REVIEW_WAITING_24H',
       'CAMPAIGN_STARTED',
       'CAMPAIGN_ENDED',
@@ -336,6 +337,7 @@ describe('the stringSet kind and content.channels', () => {
       'CONTENT_APPROVED',
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
+      'POST_FAILED',
     ]);
   });
 
@@ -429,7 +431,10 @@ describe('older-automation classification', () => {
   });
 
   it('every shipped, supported pair is NOT an older automation', () => {
-    for (const trigger of AUTOMATION_TRIGGERS) {
+    // Phase 2B-3 PR 2: a shipped trigger may be executable before it is
+    // authorable (POST_FAILED ships its producer first); only authorable ones
+    // are "current".
+    for (const trigger of AUTOMATION_TRIGGERS.filter((entry) => entry.authorable)) {
       for (const action of AUTOMATION_ACTIONS) {
         expect(
           isOlderAutomation({ triggerType: trigger.type, actionType: action.type }),

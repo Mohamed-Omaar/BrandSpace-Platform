@@ -996,7 +996,7 @@ export class PublishPipelineService {
     evidence: FailureEvidence,
   ): Promise<ExecuteResult> {
     const now = this.#clock.now();
-    await this.#concludingAttempt(job, failureClass, evidence);
+    const concludingAttemptId = await this.#concludingAttempt(job, failureClass, evidence);
     await this.#db.publishJob.update({
       where: { id: job.id },
       data: {
@@ -1018,6 +1018,23 @@ export class PublishPipelineService {
       // provider's own words or the content it rejected.
       after: { provider: job.provider, failureClass, failureCode },
     });
+    /*
+     * PHASE 2B-3 PR 2 — THE AUTOMATION EVENT for "a post failed to publish".
+     *
+     * HERE, AND ONLY HERE, because `#fail` is the one writer of FAILED: every
+     * path — a provider refusal, an exhausted retry budget, a pre-flight
+     * refusal, a verification that could not be resolved — passes through it,
+     * and an automatic retry or a reconnect hold never does. One event per
+     * transition, keyed by the attempt that concluded it, so a redelivery of
+     * the same failure is the same event and a later failure of the same job
+     * (after a person retried it) is a new one.
+     */
+    await recordAutomationEvent(
+      this.#db,
+      this.#workspaceId,
+      { triggerType: 'POST_FAILED', refType: 'PublishAttempt' },
+      { brandId: job.brandId, refId: concludingAttemptId },
+    );
     await this.#notifier?.failed({
       jobId: job.id,
       contentItemId: job.contentItemId,

@@ -760,6 +760,8 @@ describe('A1: the automation outbox carries a real domain event to a rule', () =
       'CONTENT_APPROVED',
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
+      // Phase 2B-3 PR 2 — the publishing pipeline's one FAILED writer.
+      'POST_FAILED',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',

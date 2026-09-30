@@ -96,6 +96,29 @@ export async function gatherFacts(
   }
 
   /*
+   * PHASE 2B-3 PR 2 — A FAILED POST: the attempt that concluded the failure
+   * reaches its job, and the job its content item. The class is the JOB'S —
+   * why the post failed — which for a verification failure can differ from
+   * the class of the attempt being verified.
+   */
+  if (event.refType === 'PublishAttempt' && event.refId) {
+    const attempt = await db.publishAttempt.findFirst({
+      where: { id: event.refId, workspaceId: event.workspaceId },
+      select: { publishJobId: true },
+    });
+    const job = attempt
+      ? await db.publishJob.findFirst({
+          where: { id: attempt.publishJobId, workspaceId: event.workspaceId },
+          select: { failureClass: true, contentItemId: true },
+        })
+      : null;
+    if (job) {
+      facts['publish.failureClass'] = job.failureClass;
+      await addContentFacts(db, event.workspaceId, job.contentItemId, facts);
+    }
+  }
+
+  /*
    * THE METRIC FACTS COME FROM THE RULE'S OWN WINDOW, THROUGH THE SAME PORT THE
    * PRODUCER USED.
    *

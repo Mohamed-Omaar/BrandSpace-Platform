@@ -1662,6 +1662,20 @@ export class AutomationEngine {
         });
         return job?.contentItemId ?? null;
       }
+      // Phase 2B-3 PR 2 — POST_FAILED: the attempt, then its job, which carries
+      // the brand the scope predicate is asked about.
+      case 'publishAttempt': {
+        const attempt = await this.#db.publishAttempt.findFirst({
+          where: { id: event.refId, workspaceId: this.#workspaceId },
+          select: { publishJobId: true },
+        });
+        if (!attempt) return null;
+        const job = await this.#db.publishJob.findFirst({
+          where: { id: attempt.publishJobId, ...scoped },
+          select: { contentItemId: true },
+        });
+        return job?.contentItemId ?? null;
+      }
     }
   }
 

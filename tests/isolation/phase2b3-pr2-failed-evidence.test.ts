@@ -251,6 +251,51 @@ const attempts = (jobId: string) =>
     }),
   );
 
+/**
+ * Every POST_FAILED event about this job, oldest first, with the attempt it
+ * names. A domain event: no rule address, the job's brand, keyed by attempt.
+ */
+async function failedEvents(jobId: string) {
+  return inA<
+    {
+      refId: string | null;
+      refType: string | null;
+      ruleId: string | null;
+      brandId: string;
+      dedupeKey: string;
+      attemptNumber: number | undefined;
+    }[]
+  >(async (db) => {
+    const rows = await db.publishAttempt.findMany({
+      where: { publishJobId: jobId },
+      select: { id: true, attemptNumber: true },
+    });
+    const numberOf = new Map(rows.map((row) => [row.id, row.attemptNumber]));
+    const events = await db.automationEvent.findMany({
+      where: { triggerType: 'POST_FAILED', refId: { in: rows.map((row) => row.id) } },
+      orderBy: { createdAt: 'asc' },
+      select: { refId: true, refType: true, ruleId: true, brandId: true, dedupeKey: true },
+    });
+    return events.map((event) => ({
+      ...event,
+      attemptNumber: event.refId ? numberOf.get(event.refId) : undefined,
+    }));
+  });
+}
+
+/** Exactly one POST_FAILED event, naming attempt `attemptNumber` of the job. */
+async function expectOneFailedEvent(jobId: string, attemptNumber: number): Promise<void> {
+  const events = await failedEvents(jobId);
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({
+    refType: 'PublishAttempt',
+    ruleId: null,
+    brandId: fixtures.a.brandId,
+    attemptNumber,
+  });
+  expect(events[0]?.dedupeKey).toBe(`POST_FAILED:${events[0]?.refId}`);
+}
+
 const LONG_AGO = new Date(Date.now() - 24 * 60 * 60 * 1_000);
 
 beforeAll(async () => {
@@ -322,6 +367,7 @@ describe('a provider failure concludes with the row the call recorded', () => {
       },
     ]);
     expect((await readJob(jobId)).attemptCount).toBe(1);
+    await expectOneFailedEvent(jobId, 1);
   });
 
   it('a retry budget spent on retryable failures: one row per call, the last concludes it', async () => {
@@ -342,6 +388,29 @@ describe('a provider failure concludes with the row the call recorded', () => {
     );
     expect(rows.every((row) => row.outcome === 'RETRYABLE_FAILURE')).toBe(true);
     expect(provider.calls).toBe(budget);
+    // The automatic retries before it were not failures of the post: ONE event.
+    await expectOneFailedEvent(jobId, budget);
+  });
+
+  it('an automatic retry is not a failure: no event while the job is QUEUED', async () => {
+    const provider = scriptedProvider(['RATE_LIMITED']);
+    const jobId = await seedJob();
+    const result = await inPipeline(provider, (pipeline) => pipeline.execute(jobId));
+    expect(result.status).toBe('QUEUED');
+    expect(await failedEvents(jobId)).toEqual([]);
+  });
+
+  it('failing again after a person retried it is a second, distinct event', async () => {
+    const provider = scriptedProvider(['CONTENT_REJECTED', 'CONTENT_REJECTED']);
+    const jobId = await seedJob();
+    await inPipeline(provider, (pipeline) => pipeline.execute(jobId));
+    await inPipeline(provider, (pipeline) =>
+      pipeline.retry({ jobId, actorUserId: fixtures.a.userId, brandScope: [] }),
+    );
+    await inPipeline(provider, (pipeline) => pipeline.execute(jobId));
+    const events = await failedEvents(jobId);
+    expect(events.map((event) => event.attemptNumber)).toEqual([1, 2]);
+    expect(new Set(events.map((event) => event.dedupeKey)).size).toBe(2);
   });
 });
 
@@ -369,6 +438,7 @@ describe('D2 — a pre-flight refusal writes one PREFLIGHT_REFUSED row', () => {
     ]);
     const job = await readJob(jobId);
     expect(job).toMatchObject({ attemptCount: 0, failureCode: 'preflight.approval_revoked' });
+    await expectOneFailedEvent(jobId, 1);
   });
 
   it('after a real attempt: numbered after it, attemptCount unchanged, no number reused', async () => {
@@ -395,6 +465,7 @@ describe('D2 — a pre-flight refusal writes one PREFLIGHT_REFUSED row', () => {
     const job = await readJob(jobId);
     expect(job.attemptCount).toBe(1);
     expect(job.attemptCount).toBeLessThanOrEqual(job.maxAttempts);
+    await expectOneFailedEvent(jobId, 2);
   });
 
   it('a duplicate delivery after the refusal adds nothing', async () => {
@@ -409,6 +480,7 @@ describe('D2 — a pre-flight refusal writes one PREFLIGHT_REFUSED row', () => {
     );
     expect(again.status).toBe('FAILED');
     expect(await attempts(jobId)).toHaveLength(1);
+    await expectOneFailedEvent(jobId, 1);
   });
 });
 
@@ -442,6 +514,8 @@ describe('D1 — a recovered stale claim records an unknown send state', () => {
     expect(rows[1]?.safeSummary).toContain('is unknown');
     expect(rows[1]?.safeSummary).not.toMatch(/\b(responded|received|delivered|published)\b/i);
     expect((await readJob(jobId)).attemptCount).toBe(1);
+    // Waiting for a person is not a failure: no event.
+    expect(await failedEvents(jobId)).toEqual([]);
   });
 
   it('a claim that is not stale records nothing', async () => {
@@ -477,6 +551,7 @@ describe('D1 — a recovered stale claim records an unknown send state', () => {
     expect(rows).toHaveLength(max + 1);
     expect(rows.at(-1)).toMatchObject({ attemptNumber: max + 1, outcome: 'INDETERMINATE' });
     expect(provider.calls).toBe(0);
+    await expectOneFailedEvent(jobId, max + 1);
   });
 });
 
@@ -494,6 +569,7 @@ describe('a verification failure concludes with the attempt being verified', () 
     expect(result.status).toBe('FAILED');
     expect((await attempts(jobId)).map((row) => row.outcome)).toEqual(['INDETERMINATE']);
     expect((await readJob(jobId)).attemptCount).toBe(1);
+    await expectOneFailedEvent(jobId, 1);
   });
 
   it('a job recovered before this release, with no such row, gets the D1 row once', async () => {
@@ -512,6 +588,7 @@ describe('a verification failure concludes with the attempt being verified', () 
       [2, 'INDETERMINATE'],
     ]);
     expect((await readJob(jobId)).attemptCount).toBe(1);
+    await expectOneFailedEvent(jobId, 2);
   });
 });
 
@@ -531,15 +608,25 @@ describe('the invariants hold across everything this suite wrote', () => {
     expect(Number(row?.over)).toBe(0);
   });
 
-  it('every FAILED job this suite produced concludes with at least one attempt', async () => {
-    const [row] = await inA<{ bare: bigint }[]>(
+  it('every FAILED job this suite produced has an attempt and a POST_FAILED event naming it', async () => {
+    const [row] = await inA<{ bare: bigint; silent: bigint }[]>(
       (db) =>
         db.$queryRaw`
-          SELECT count(*)::bigint AS "bare" FROM "publish_job" j
-           WHERE j."status" = 'FAILED' AND j."idempotencyKey" LIKE 'pr2-evidence-%'
-             AND NOT EXISTS (SELECT 1 FROM "publish_attempt" a WHERE a."publishJobId" = j."id")
+          SELECT
+            (SELECT count(*) FROM "publish_job" j
+              WHERE j."status" = 'FAILED' AND j."idempotencyKey" LIKE 'pr2-evidence-%'
+                AND NOT EXISTS (SELECT 1 FROM "publish_attempt" a WHERE a."publishJobId" = j."id")
+            )::bigint AS "bare",
+            (SELECT count(*) FROM "publish_job" j
+              WHERE j."status" = 'FAILED' AND j."idempotencyKey" LIKE 'pr2-evidence-%'
+                AND NOT EXISTS (
+                  SELECT 1 FROM "automation_event" e
+                    JOIN "publish_attempt" a ON a."id" = e."refId"
+                   WHERE e."triggerType" = 'POST_FAILED' AND a."publishJobId" = j."id")
+            )::bigint AS "silent"
         `,
     );
     expect(Number(row?.bare)).toBe(0);
+    expect(Number(row?.silent)).toBe(0);
   });
 });

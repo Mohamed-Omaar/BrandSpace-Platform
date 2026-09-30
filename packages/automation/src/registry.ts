@@ -78,7 +78,7 @@ export interface TriggerDefinition {
    * other three name an EXPLICIT, SAFE MAPPING the engine resolves with a scoped
    * query rather than by assuming the ids interchange.
    */
-  readonly contentItemVia: 'direct' | 'calendarSlot' | 'publishJob' | null;
+  readonly contentItemVia: 'direct' | 'calendarSlot' | 'publishJob' | 'publishAttempt' | null;
   /**
    * Does this trigger's identity come from a CLOCK rather than from a row?
    *
@@ -140,6 +140,22 @@ export const AUTOMATION_TRIGGERS = [
     ruleAddressed: false,
     authorable: true,
     messageKey: 'postPublished',
+  },
+  /*
+   * PHASE 2B-3 PR 2 — ONE PUBLISH JOB REACHED FAILED. A domain event for every
+   * listening rule on the brand, produced by the pipeline's one FAILED writer
+   * and referencing the attempt that concluded the failure; the content item
+   * is reached through that attempt's job.
+   */
+  {
+    type: 'POST_FAILED',
+    config: emptyConfig,
+    refType: 'PublishAttempt',
+    contentItemVia: 'publishAttempt',
+    timeBucketed: false,
+    ruleAddressed: false,
+    authorable: false,
+    messageKey: 'postFailed',
   },
   {
     type: 'ANALYTICS_REFRESHED',
@@ -207,14 +223,6 @@ export interface PlannedTriggerDefinition {
 }
 
 export const PLANNED_AUTOMATION_TRIGGERS = [
-  // A domain event: one publish attempt that failed, for every listening rule.
-  {
-    type: 'POST_FAILED',
-    refType: 'PublishAttempt',
-    ruleAddressed: false,
-    authorable: false,
-    executable: false,
-  },
   {
     type: 'REVIEW_WAITING_24H',
     refType: 'Approval',
@@ -328,23 +336,34 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
     'CONTENT_APPROVED',
     'CONTENT_SCHEDULED',
     'POST_PUBLISHED',
+    'POST_FAILED',
     'ANALYTICS_REFRESHED',
     'METRIC_THRESHOLD_CROSSED',
     'SCHEDULED_TIME',
   ],
   // Reachable wherever a content item is reachable — which is exactly where
   // `contentItemVia` is not null.
-  'content.status': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.pillar': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.platformCount': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.hasCampaign': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.campaignId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.type': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.authorUserId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  'content.channels': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED'],
-  // Only the publish job carries these.
+  'content.status': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.pillar': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.platformCount': [
+    'CONTENT_APPROVED',
+    'CONTENT_SCHEDULED',
+    'POST_PUBLISHED',
+    'POST_FAILED',
+  ],
+  'content.hasCampaign': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.campaignId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.type': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.authorUserId': [
+    'CONTENT_APPROVED',
+    'CONTENT_SCHEDULED',
+    'POST_PUBLISHED',
+    'POST_FAILED',
+  ],
+  'content.channels': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  // Only the publish job carries these. A failed post carries its class.
   'publish.provider': ['POST_PUBLISHED'],
-  'publish.failureClass': ['POST_PUBLISHED'],
+  'publish.failureClass': ['POST_PUBLISHED', 'POST_FAILED'],
   // Only the threshold trigger, because only it names the metric and the window
   // the numbers are measured over.
   'metric.key': ['METRIC_THRESHOLD_CROSSED'],

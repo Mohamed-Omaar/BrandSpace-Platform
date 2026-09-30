@@ -24,6 +24,7 @@ import {
   platformRoleClient,
   type IsolationFixtures,
 } from './fixtures';
+import { seedStoredRule } from './stored-automation-rule';
 
 /**
  * PHASE 2B-3, PR 1 — THE FOUNDATION, AGAINST REAL POSTGRESQL.
@@ -373,6 +374,7 @@ function eventFor(triggerType: string, ruleId: string): TriggerEvent {
     CONTENT_APPROVED: ['ContentItem', fixtures.a.contentItemId],
     CONTENT_SCHEDULED: ['CalendarSlot', fixtures.a.calendarSlotId],
     POST_PUBLISHED: ['PublishJob', fixtures.a.publishJobId],
+    POST_FAILED: ['PublishAttempt', fixtures.a.publishAttemptId],
     ANALYTICS_REFRESHED: ['AnalyticsIngestionRun', fixtures.a.analyticsRunId],
     METRIC_THRESHOLD_CROSSED: ['MetricObservation', fixtures.a.metricObservationId],
     SCHEDULED_TIME: [null, null],
@@ -393,6 +395,7 @@ const CONFIGS: Record<string, unknown> = {
   CONTENT_APPROVED: {},
   CONTENT_SCHEDULED: {},
   POST_PUBLISHED: {},
+  POST_FAILED: {},
   ANALYTICS_REFRESHED: {},
   METRIC_THRESHOLD_CROSSED: { metricKey: 'impressions', direction: 'above', threshold: 1 },
   SCHEDULED_TIME: { hourLocal: 9 },
@@ -402,7 +405,13 @@ const CONFIGS: Record<string, unknown> = {
   PROPOSE_PUBLISH: {},
 };
 
-/** Stored DISABLED, so no sweep in any suite ever reaches it; run as enabled. */
+/**
+ * Stored DISABLED, so no sweep in any suite ever reaches it; run as enabled.
+ *
+ * SEEDED AS A STORED RULE (Phase 2B-3 PR 2), not written through `createRule`:
+ * these tests are about how rules that already exist behave, and several of
+ * the shapes walked here are no longer ones a NEW rule may take.
+ */
 async function storedRule(input: {
   triggerType: string;
   actionType: string;
@@ -410,15 +419,16 @@ async function storedRule(input: {
   brandId?: string;
 }): Promise<AutomationRule> {
   return inA((db) =>
-    engine(db).createRule({
+    seedStoredRule(db, {
+      workspaceId: fixtures.a.workspaceId,
       brandId: input.brandId ?? fixtures.a.brandId,
       name: `pr1 ${input.triggerType} ${input.actionType} ${randomUUID().slice(0, 8)}`,
-      triggerType: input.triggerType as never,
+      triggerType: input.triggerType,
       triggerConfig: CONFIGS[input.triggerType],
       conditions: input.conditions ?? [],
-      actionType: input.actionType as never,
+      actionType: input.actionType,
       actionConfig: CONFIGS[input.actionType],
-      actor: actor(),
+      createdByUserId: fixtures.a.userId,
     }),
   );
 }
@@ -455,11 +465,13 @@ describe('existing stored rules of every shape behave exactly as before', () => 
         const outcome = await runOnce(rule);
         expect(outcome.status, `${trigger.type} × ${action.type}`).toBe(EXPECTED[action.type]);
         expect(outcome.run?.failureCode ?? null, `${trigger.type} × ${action.type}`).toBeNull();
-        expect(isOlderAutomation(rule)).toBe(false);
+        // Captioned exactly when a new rule could not take this shape.
+        expect(isOlderAutomation(rule)).toBe(!(trigger.authorable && action.authorable));
         walked += 1;
       }
     }
-    expect(walked).toBe(15);
+    // Phase 2B-3 PR 2: 15 → 19, POST_FAILED × the four shipped actions.
+    expect(walked).toBe(19);
     expect(entitlementQuestions).toEqual([]);
   });
 
