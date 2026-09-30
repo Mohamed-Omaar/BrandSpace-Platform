@@ -178,8 +178,11 @@ export function actionConfigFrom(formData: FormData, actionType: string): Record
       return { userId: picked('actionUserId') };
     case 'ADD_TO_CAMPAIGN':
       return { campaignId: picked('actionCampaignId') };
+    // Phase 2B-3 PR 3 — REMIND_REVIEWER: who is reminded is decided at run
+    // time, never chosen.
     case 'SCHEDULE_NEXT_FREE_SLOT':
     case 'MAKE_DRAFT_COPY':
+    case 'REMIND_REVIEWER':
       return {};
     default:
       throw unknownTriggerOrAction();

@@ -10,8 +10,8 @@ import { withPlatformPrisma } from './platform-prisma';
  *
  * One case per language, each in a workspace of its own:
  *
- *   - the trigger picker offers exactly the three G13 triggers, and none of
- *     the four retired ones;
+ *   - the trigger picker offers the three G13 triggers (and, since PR 3, the
+ *     five timed ones after them), and none of the four retired ones;
  *   - each trigger offers exactly its G13 actions (the compatibility table);
  *   - "Notify a chosen person" and "Add to a campaign" show their picker,
  *     the next Tab stop after the action; the other two need none;
@@ -203,12 +203,17 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     ),
   ).toBe(0);
 
-  // --- The catalogue: exactly the three G13 triggers ---------------------------
+  // --- The catalogue: the three G13 triggers, then PR 3's five timed ones -------
   expect(await values(page, 'automation-trigger')).toEqual([
     '',
     'CONTENT_APPROVED',
     'POST_PUBLISHED',
     'POST_FAILED',
+    'REVIEW_WAITING_24H',
+    'CAMPAIGN_STARTED',
+    'CAMPAIGN_ENDED',
+    'SCHEDULE_GAP',
+    'FACT_EXPIRING',
   ]);
   await expect(page.getByTestId('automation-trigger')).toContainText(copy.trigger);
 
