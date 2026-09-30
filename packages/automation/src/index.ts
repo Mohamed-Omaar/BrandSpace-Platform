@@ -121,6 +121,7 @@ export type {
 export {
   AUTOMATION_RULE_NAME_TAKEN_REASON,
   AUTOMATION_RULE_VERSION_CONFLICT_REASON,
+  actionConfigInvalid,
   automationConfirmationRejected,
   automationRuleNameTaken,
   automationRuleNotFound,

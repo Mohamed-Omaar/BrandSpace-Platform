@@ -161,11 +161,14 @@ describe('P6-12 · every word the Copilot screen can show exists in both languag
 
 describe('P6-12 · a NOTIFY rule says what it is', () => {
   it('authoring uses its own template, which is declared and translated', () => {
+    // Phase 2B-3 PR 2: no new NOTIFY rule is authored; the G13 "notify a chosen
+    // person" sends the same notice, fixed in its worker port, and the screen's
+    // action settings come from the decoder, never a hard-coded template.
     const actions = readFileSync('apps/dashboard/src/app/[locale]/automations/actions.ts', 'utf8');
-    expect(actions).toContain("templateKey: 'automation.notice'");
-    expect(actions).not.toMatch(
-      /NOTIFY'\s*\?\s*\{\s*templateKey: 'automation\.confirmation_required'/,
-    );
+    expect(actions).toContain('actionConfigFrom(formData, actionType)');
+    expect(actions).not.toContain('automation.confirmation_required');
+    const worker = readFileSync('apps/worker/src/processors/automation.ts', 'utf8');
+    expect(worker).toContain("templateKey: 'automation.notice'");
     expect(NOTIFICATION_TEMPLATE_KEYS).toContain('automation.notice');
     for (const locale of ['en', 'ar'] as const) {
       const catalogue = messages[locale] as Record<string, string>;

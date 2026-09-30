@@ -160,6 +160,18 @@ export function triggerConfigInvalid(triggerType: string, parameter: string): Ap
 }
 
 /**
+ * PHASE 2B-3 PR 2 — an action setting the screen renders (the person to
+ * notify, the campaign) arrived missing or blank. Refused rather than
+ * defaulted, exactly as a trigger parameter is.
+ */
+export function actionConfigInvalid(actionType: string, parameter: string): AppError {
+  return new AppError('VALIDATION_FAILED', 'That automation is missing something it needs.', {
+    actionType,
+    parameter,
+  });
+}
+
+/**
  * B12 (Phase 2B-2b) — the rule changed since the editor read it. A stale edit is
  * refused rather than written over somebody else's, and nothing is stored.
  */

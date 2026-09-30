@@ -1,11 +1,13 @@
 import {
   CONDITION_FIELD_CONTRACTS,
   CONDITION_OPERATORS,
+  actionConfigInvalid,
   conditionFieldMissing,
   conditionFieldUnknown,
   conditionOperatorNotAllowed,
   conditionValueInvalid,
   triggerConfigInvalid,
+  unknownTriggerOrAction,
   type AutomationCondition,
   type ConditionField,
   type ConditionOperator,
@@ -152,6 +154,36 @@ export function triggerConfigFrom(
   }
 
   return {};
+}
+
+/**
+ * PHASE 2B-3 PR 2 — THE ACTION'S OWN SETTINGS, READ FROM THE FORM.
+ *
+ * Replaces the `NOTIFY ? {templateKey} : PLACE_ON_CALENDAR ? {offsetHours: 24}
+ * : {}` the create action used to hard-code. Each G13 action's setting is a
+ * picker the screen renders — the person to notify, the campaign — so a
+ * missing or blank one is refused, never defaulted; the ids are validated by
+ * the engine against the rule's brand. An action a new rule cannot take is
+ * refused here too, before the engine is asked.
+ */
+export function actionConfigFrom(formData: FormData, actionType: string): Record<string, unknown> {
+  const picked = (name: string): string => {
+    const entry = formData.get(name);
+    const value = entry === null ? '' : String(entry).trim();
+    if (value === '') throw actionConfigInvalid(actionType, name);
+    return value;
+  };
+  switch (actionType) {
+    case 'NOTIFY_PERSON':
+      return { userId: picked('actionUserId') };
+    case 'ADD_TO_CAMPAIGN':
+      return { campaignId: picked('actionCampaignId') };
+    case 'SCHEDULE_NEXT_FREE_SLOT':
+    case 'MAKE_DRAFT_COPY':
+      return {};
+    default:
+      throw unknownTriggerOrAction();
+  }
 }
 
 /**

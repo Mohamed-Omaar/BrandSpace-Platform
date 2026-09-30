@@ -10,7 +10,11 @@ import {
 import type { AutomationActionType, AutomationTrigger } from '@brandspace/database';
 import { requireWorkspace } from '../../../server/customer-context';
 import { inAnalytics, callPhase7Api } from '../../../server/analytics-context';
-import { conditionsFrom, triggerConfigFrom } from '../../../server/automation-form';
+import {
+  actionConfigFrom,
+  conditionsFrom,
+  triggerConfigFrom,
+} from '../../../server/automation-form';
 
 /**
  * Automation authoring actions.
@@ -48,6 +52,7 @@ export async function createAutomationAction(formData: FormData): Promise<void> 
   const session = await requireWorkspace(locale, 'automation.manage');
   const brandId = String(formData.get('brandId') ?? '');
   const triggerType = String(formData.get('triggerType') ?? '');
+  const actionType = String(formData.get('actionType') ?? '');
 
   try {
     /*
@@ -60,6 +65,8 @@ export async function createAutomationAction(formData: FormData): Promise<void> 
      */
     const triggerConfig = triggerConfigFrom(formData, triggerType);
     const conditions = conditionsFrom(formData);
+    // Phase 2B-3 PR 2 — the person or campaign the action names, from its picker.
+    const actionConfig = actionConfigFrom(formData, actionType);
 
     await inAnalytics(session.workspace.workspaceId, async (services) => {
       const engine = await services.automations();
@@ -69,16 +76,8 @@ export async function createAutomationAction(formData: FormData): Promise<void> 
         triggerType: triggerType as AutomationTrigger,
         triggerConfig,
         conditions: conditions as never,
-        actionType: String(formData.get('actionType') ?? '') as AutomationActionType,
-        // `NOTIFY` is the only action with a required parameter, and its value is
-        // a template key from the closed catalogue rather than customer text —
-        // its OWN template (P6-12), not the "waiting for your confirmation" one.
-        actionConfig:
-          formData.get('actionType') === 'NOTIFY'
-            ? { templateKey: 'automation.notice' }
-            : formData.get('actionType') === 'PLACE_ON_CALENDAR'
-              ? { offsetHours: 24 }
-              : {},
+        actionType: actionType as AutomationActionType,
+        actionConfig,
         // DISABLED. Enabling is a separate, deliberate act.
         enabled: false,
         actor: {
@@ -108,9 +107,10 @@ export async function createAutomationAction(formData: FormData): Promise<void> 
  *
  * TWO THINGS ARE LEFT EXACTLY AS THEY ARE unless the form really shows them:
  * conditions the one-condition control cannot display (`conditionsMode=keep`),
- * and action settings nobody can choose on this screen. Only `PLACE_ON_CALENDAR`
- * has a setting a person chooses, its offset; the rest of the stored action
- * settings are carried over untouched.
+ * and action settings nobody can choose on this screen. `PLACE_ON_CALENDAR`'s
+ * offset, and (Phase 2B-3 PR 2) the person `NOTIFY_PERSON` notifies and the
+ * campaign `ADD_TO_CAMPAIGN` adds to, are settings a person chooses; the rest
+ * of the stored action settings are carried over untouched.
  */
 export async function updateAutomationAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
@@ -130,7 +130,9 @@ export async function updateAutomationAction(formData: FormData): Promise<void> 
               ...(rule.actionConfig as Record<string, unknown>),
               offsetHours: offsetHoursFrom(formData),
             }
-          : undefined;
+          : rule.actionType === 'NOTIFY_PERSON' || rule.actionType === 'ADD_TO_CAMPAIGN'
+            ? actionConfigFrom(formData, rule.actionType)
+            : undefined;
       await engine.updateEditableRule({
         ruleId: rule.id,
         expectedVersion: Number(formData.get('version')),

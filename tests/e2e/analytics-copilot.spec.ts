@@ -5,6 +5,7 @@ import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
 import { statusMessage } from '../../apps/dashboard/src/i18n/messages';
+import { withPlatformPrisma } from './platform-prisma';
 
 /**
  * Analytics, strategy, the Copilot and automations in a real browser — Phase 7.
@@ -444,6 +445,51 @@ async function automationDone(page: Page, code: string): Promise<void> {
     .toContain(words);
 }
 
+/**
+ * PHASE 2B-3 PR 2 — AN OLDER AUTOMATION, SEEDED AS IT IS STORED.
+ *
+ * No new rule may be written on a schedule, a threshold, or with a pre-G13
+ * action any more; every stored one is still listed, edited and switched on.
+ * The suite's coverage of those controls therefore goes through the EDIT form
+ * of a seeded rule. Named `E2E …`, so `seed-analytics` clears it next run.
+ */
+async function seedOlderRule(input: {
+  name: string;
+  triggerType: 'SCHEDULED_TIME' | 'METRIC_THRESHOLD_CROSSED' | 'CONTENT_APPROVED';
+  triggerConfig: Record<string, unknown>;
+}): Promise<string> {
+  const loaded = credentials();
+  return withPlatformPrisma(async (prisma) => {
+    const owner = await prisma.user.findFirstOrThrow({
+      where: { email: loaded.customer.email },
+      select: { id: true },
+    });
+    const rule = await prisma.automationRule.create({
+      data: {
+        workspaceId: loaded.customer.workspaceId,
+        brandId: brandFixtures(loaded).primaryBrandId,
+        name: input.name,
+        enabled: false,
+        triggerType: input.triggerType,
+        triggerConfig: input.triggerConfig as never,
+        conditions: [],
+        actionType: 'NOTIFY',
+        actionConfig: { templateKey: 'automation.notice' },
+        maxRunsPerDay: 0,
+        createdByUserId: owner.id,
+      },
+      select: { id: true },
+    });
+    return rule.id;
+  });
+}
+
+/** Open a rule's edit form. */
+async function editRule(page: Page, ruleId: string, locale = 'en'): Promise<void> {
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations?edit=${ruleId}`);
+  await expect(page.getByTestId('automation-edit-form')).toBeVisible();
+}
+
 test.describe('automations', () => {
   test('a rule can be created, is listed, and starts DISABLED', async ({ page }) => {
     /*
@@ -467,23 +513,21 @@ test.describe('automations', () => {
     await expect(rules).toContainText(name);
   });
 
-  test('A SCHEDULED RULE IS FULLY AUTHORABLE, and is created with its hour', async ({ page }) => {
+  test('AN OLDER SCHEDULED RULE IS STILL EDITABLE, with its hour and days', async ({ page }) => {
     /*
-     * THE DEFECT THIS COVERS (R3-1). The form rendered every trigger and posted
-     * `triggerConfig: {}` whatever you chose — so "every day at a time" could be
-     * selected and the time could not be given, and `createRule` refused the
-     * rule with a validation error naming a field the screen had never shown.
-     * Two of the six authorable triggers were, in practice, unauthorable.
+     * THE DEFECT THIS COVERED (R3-1): the form posted `triggerConfig: {}`, so a
+     * schedule could be chosen and its time could not be given. Phase 2B-3 PR 2
+     * retired the schedule trigger from NEW rules; a stored one still carries
+     * its hour and days, and the edit form still sets them.
      */
-    await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
-
-    const form = page.getByTestId('automation-form');
-    await expect(form).toBeVisible();
-
     const name = `E2E scheduled ${Date.now()}`;
-    await form.locator('input[name="name"]').fill(name);
-    await page.getByTestId('automation-trigger').selectOption('SCHEDULED_TIME');
+    const ruleId = await seedOlderRule({
+      name,
+      triggerType: 'SCHEDULED_TIME',
+      triggerConfig: { hourLocal: 7, daysOfWeek: [] },
+    });
+    await signIn(page);
+    await editRule(page, ruleId);
 
     // THE SCHEDULE FIELDS APPEAR because the trigger needs them, and the
     // threshold fields do not.
@@ -491,15 +535,17 @@ test.describe('automations', () => {
     await expect(page.getByTestId('automation-threshold')).toHaveCount(0);
 
     await page.getByTestId('automation-hour').selectOption('9');
-    await form.locator('input[name="daysOfWeek"][value="1"]').check();
-    await page.getByTestId('automation-submit').click();
-    await automationDone(page, 'AUTOMATION_CREATED');
+    await page
+      .locator('[data-testid="automation-edit-form"] input[name="daysOfWeek"][value="1"]')
+      .check();
+    await page.getByTestId('automation-edit-submit').click();
+    await automationDone(page, 'AUTOMATION_UPDATED');
 
     const rules = page.getByTestId('automation-rules');
     await expect(rules).toContainText(name);
+    await expect(page.getByTestId(`automation-older-${ruleId}`)).toBeVisible();
 
-    // AND IT ENABLES, which is the second, deliberate act — a rule that could be
-    // created but never enabled would be the same defect one step along.
+    // AND IT ENABLES, which is the second, deliberate act.
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
     await automationDone(page, 'AUTOMATION_UPDATED');
@@ -508,16 +554,17 @@ test.describe('automations', () => {
     ).toContainText(/disable/i);
   });
 
-  test('A THRESHOLD RULE IS FULLY AUTHORABLE, with metric, direction and number', async ({
+  test('AN OLDER THRESHOLD RULE IS STILL EDITABLE, with metric, direction and number', async ({
     page,
   }) => {
-    await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
-
-    const form = page.getByTestId('automation-form');
     const name = `E2E threshold ${Date.now()}`;
-    await form.locator('input[name="name"]').fill(name);
-    await page.getByTestId('automation-trigger').selectOption('METRIC_THRESHOLD_CROSSED');
+    const ruleId = await seedOlderRule({
+      name,
+      triggerType: 'METRIC_THRESHOLD_CROSSED',
+      triggerConfig: { metricKey: 'impressions', direction: 'below', threshold: 5, windowDays: 30 },
+    });
+    await signIn(page);
+    await editRule(page, ruleId);
 
     await expect(page.getByTestId('automation-threshold')).toBeVisible();
     await expect(page.getByTestId('automation-schedule')).toHaveCount(0);
@@ -526,8 +573,8 @@ test.describe('automations', () => {
     await page.getByTestId('automation-direction').selectOption('above');
     await page.getByTestId('automation-threshold-value').fill('1000');
     await page.getByTestId('automation-window').fill('7');
-    await page.getByTestId('automation-submit').click();
-    await automationDone(page, 'AUTOMATION_CREATED');
+    await page.getByTestId('automation-edit-submit').click();
+    await automationDone(page, 'AUTOMATION_UPDATED');
 
     await expect(page.getByTestId('automation-rules')).toContainText(name);
 
@@ -545,71 +592,76 @@ test.describe('automations', () => {
      * `required` — the customer is told at the control they left empty rather
      * than by a server error naming a field they never saw.
      */
-    await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
-
-    const form = page.getByTestId('automation-form');
     const name = `E2E invalid ${Date.now()}`;
-    await form.locator('input[name="name"]').fill(name);
-    await page.getByTestId('automation-trigger').selectOption('METRIC_THRESHOLD_CROSSED');
-    // Deliberately leaving the threshold empty.
-    await page.getByTestId('automation-submit').click();
+    const ruleId = await seedOlderRule({
+      name,
+      triggerType: 'METRIC_THRESHOLD_CROSSED',
+      triggerConfig: { metricKey: 'followers', direction: 'above', threshold: 5 },
+    });
+    await signIn(page);
+    await editRule(page, ruleId);
+    // Deliberately emptying the threshold.
+    await page.getByTestId('automation-threshold-value').fill('');
+    await page.getByTestId('automation-edit-submit').click();
     await page.waitForTimeout(500);
 
     const invalid = await page
       .getByTestId('automation-threshold-value')
       .evaluate((node) => (node as HTMLInputElement).validity.valueMissing);
     expect(invalid).toBe(true);
-    await expect(page.getByTestId('automation-rules')).not.toContainText(name);
+    await expect(page.getByTestId('automation-edit-form')).toBeVisible();
   });
 
   test('AN INCOMPATIBLE TRIGGER/ACTION PAIR IS NEVER OFFERED', async ({ page }) => {
     /*
-     * `actionSupportsTrigger` rejects an action that needs a content item on a
-     * trigger that has none. The screen used to let both be selected
-     * independently and refuse afterwards; now the action simply is not in the
-     * list, so the pair cannot be chosen.
+     * Phase 2B-3 PR 2: the pairs a new rule may take are exactly the eight G13
+     * pairs. An action the trigger is not paired with is simply not in the
+     * list, so an impossible rule cannot be chosen.
      */
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
 
-    await page.getByTestId('automation-trigger').selectOption('SCHEDULED_TIME');
-    const scheduledActions = await page
+    await page.getByTestId('automation-trigger').selectOption('POST_PUBLISHED');
+    const publishedActions = await page
       .getByTestId('automation-action')
       .locator('option')
       .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
-    expect(scheduledActions).toContain('NOTIFY');
-    expect(scheduledActions).not.toContain('SUBMIT_FOR_APPROVAL');
-    expect(scheduledActions).not.toContain('PLACE_ON_CALENDAR');
+    expect(publishedActions).toEqual(['NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
 
-    // And a trigger that DOES reach a content item offers them.
+    // And the approval trigger offers all four.
     await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
     const approvedActions = await page
       .getByTestId('automation-action')
       .locator('option')
       .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
-    expect(approvedActions).toContain('SUBMIT_FOR_APPROVAL');
+    expect(approvedActions).toEqual([
+      'SCHEDULE_NEXT_FREE_SLOT',
+      'NOTIFY_PERSON',
+      'ADD_TO_CAMPAIGN',
+      'MAKE_DRAFT_COPY',
+    ]);
   });
 
   test('A CONDITION FIELD IS OFFERED ONLY WHERE THE RUNTIME PRODUCES IT', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
 
-    await page.getByTestId('automation-trigger').selectOption('SCHEDULED_TIME');
-    const timed = await page
+    await page.getByTestId('automation-trigger').selectOption('POST_FAILED');
+    const failed = await page
       .getByTestId('automation-condition-field')
       .locator('option')
       .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
-    // Only the brand, plus the "no condition" default.
-    expect(timed.filter((value) => value !== '')).toEqual(['brand.id']);
+    // A failed post carries its failure class; no rule is offered a raw status.
+    expect(failed).toContain('publish.failureClass');
+    expect(failed).not.toContain('content.status');
 
-    await page.getByTestId('automation-trigger').selectOption('METRIC_THRESHOLD_CROSSED');
-    const metric = await page
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    const approved = await page
       .getByTestId('automation-condition-field')
       .locator('option')
       .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
-    expect(metric).toContain('metric.changeMilli');
-    expect(metric).not.toContain('content.status');
+    expect(approved).toContain('content.channels');
+    expect(approved).not.toContain('publish.failureClass');
   });
 
   /*
@@ -623,10 +675,17 @@ test.describe('automations', () => {
    * listed, enabled — and false for ever.
    */
   test('A NUMERIC CONDITION OFFERS MAGNITUDE, AND A NUMBER INPUT', async ({ page }) => {
+    // Phase 2B-3 PR 2: a number field is an older rule's, so it is set in the
+    // edit of one.
+    const name = `E2E numeric ${Date.now()}`;
+    const ruleId = await seedOlderRule({
+      name,
+      triggerType: 'CONTENT_APPROVED',
+      triggerConfig: {},
+    });
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await editRule(page, ruleId);
 
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
     await page.getByTestId('automation-condition-field').selectOption('content.platformCount');
 
     const operators = await page
@@ -641,12 +700,10 @@ test.describe('automations', () => {
     const value = page.getByTestId('automation-condition-value');
     await expect(value).toHaveAttribute('type', 'number');
 
-    const name = `E2E numeric ${Date.now()}`;
-    await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
     await page.getByTestId('automation-condition-operator').selectOption('greater_than');
     await value.fill('1');
-    await page.getByTestId('automation-submit').click();
-    await automationDone(page, 'AUTOMATION_CREATED');
+    await page.getByTestId('automation-edit-submit').click();
+    await automationDone(page, 'AUTOMATION_UPDATED');
 
     // IT WAS ACCEPTED, and it enables — the engine validated field, operator
     // and value kind, and none of them was refused.
@@ -697,8 +754,9 @@ test.describe('automations', () => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
 
+    // Phase 2B-3 PR 2: the post's FORMAT, a closed field a new rule is offered.
     await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
-    await page.getByTestId('automation-condition-field').selectOption('content.status');
+    await page.getByTestId('automation-condition-field').selectOption('content.type');
 
     const operators = await page
       .getByTestId('automation-condition-operator')
@@ -707,22 +765,22 @@ test.describe('automations', () => {
     expect(operators).toEqual(['equals', 'not_equals', 'in', 'not_in']);
 
     const value = page.getByTestId('automation-condition-value');
-    // A PICKER, so a status that does not exist cannot be entered at all.
+    // A PICKER, so a format that does not exist cannot be entered at all.
     await expect(value).toHaveJSProperty('tagName', 'SELECT');
-    const statuses = await value
+    const formats = await value
       .locator('option')
       .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
-    expect(statuses).toContain('APPROVED');
-    expect(statuses).toContain('PARTIALLY_PUBLISHED');
+    expect(formats).toContain('POST');
+    expect(formats).toContain('CAROUSEL');
     // AND THE LABELS ARE COPY, not enum names (§4: no hard-coded user copy).
     const labels = await value
       .locator('option')
       .evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ''));
-    expect(labels).toContain('Partially published');
+    expect(labels).toContain('Carousel');
 
     const name = `E2E string ${Date.now()}`;
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
-    await value.selectOption('APPROVED');
+    await value.selectOption('POST');
     await page.getByTestId('automation-submit').click();
     await automationDone(page, 'AUTOMATION_CREATED');
     await expect(page.getByTestId('automation-rules')).toContainText(name);
@@ -740,7 +798,7 @@ test.describe('automations', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
 
     await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
-    await page.getByTestId('automation-condition-field').selectOption('content.status');
+    await page.getByTestId('automation-condition-field').selectOption('content.type');
     await page.getByTestId('automation-condition-operator').selectOption('in');
 
     const value = page.getByTestId('automation-condition-value');
@@ -748,7 +806,7 @@ test.describe('automations', () => {
 
     const name = `E2E list ${Date.now()}`;
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
-    await value.selectOption(['APPROVED', 'SCHEDULED']);
+    await value.selectOption(['POST', 'REEL']);
     await page.getByTestId('automation-submit').click();
     await automationDone(page, 'AUTOMATION_CREATED');
 
@@ -769,10 +827,10 @@ test.describe('automations', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
 
     await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
-    await page.getByTestId('automation-condition-field').selectOption('content.platformCount');
-    await page.getByTestId('automation-condition-operator').selectOption('greater_than');
+    await page.getByTestId('automation-condition-field').selectOption('content.type');
+    await page.getByTestId('automation-condition-operator').selectOption('in');
 
-    // `greater_than` is meaningless on a boolean, and must not survive.
+    // `in` is meaningless on a boolean, and must not survive.
     await page.getByTestId('automation-condition-field').selectOption('content.hasCampaign');
     await expect(page.getByTestId('automation-condition-operator')).toHaveValue('is_true');
   });
@@ -800,12 +858,12 @@ test.describe('automations', () => {
       .evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ''));
     for (const label of operatorLabels) expect(label).toMatch(/[\u0600-\u06FF]/);
 
-    await page.getByTestId('automation-condition-field').selectOption('content.status');
-    const statusLabels = await page
+    await page.getByTestId('automation-condition-field').selectOption('content.type');
+    const formatLabels = await page
       .getByTestId('automation-condition-value')
       .locator('option')
       .evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ''));
-    for (const label of statusLabels) expect(label).toMatch(/[\u0600-\u06FF]/);
+    for (const label of formatLabels) expect(label).toMatch(/[\u0600-\u06FF]/);
   });
 
   test('the run history is present, or SAYS it is empty rather than showing nothing', async ({

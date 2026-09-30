@@ -116,10 +116,11 @@ describe('F5 · Run history says why, in both languages', () => {
     );
   });
 
-  it('any other FAILED run reads exactly as before', () => {
+  it('any other FAILED run keeps its badge and reads the approved fallback, never the code', () => {
+    // Phase 2B-3 PR 2 (D5-B): no raw code in Run history.
     expect(runPresentation({ status: 'FAILED', failureCode: 'unknown_action' })).toEqual({
       statusKey: 'automations.status.FAILED',
-      reason: { kind: 'generic', code: 'unknown_action' },
+      reason: { kind: 'message', key: 'automations.failure.fallback' },
     });
   });
 });

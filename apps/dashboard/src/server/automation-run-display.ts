@@ -1,27 +1,57 @@
-import { CONDITION_VALUE_UNAVAILABLE, NOTIFY_TEMPLATE_NOT_ALLOWED } from '@brandspace/automation';
+import {
+  ACTION_OUTCOME_STATUS,
+  CONDITION_VALUE_UNAVAILABLE,
+  NOTIFY_TEMPLATE_NOT_ALLOWED,
+  isActionOutcomeCode,
+  type ActionOutcomeCode,
+} from '@brandspace/automation';
 
 /**
  * HOW ONE RUN READS IN "RUN HISTORY" — its badge and its reason line.
  *
- * Every run keeps the presentation it always had: the badge is its status and
- * the reason line is the generic "Reason: {code}" (a member's own skip has no
- * reason line). TWO CASES READ DIFFERENTLY. The first (Phase 2B-3 PR 1, D-408): a run
- * SKIPPED because a value its rule names is no longer available was never
- * evaluated, so "Conditions did not hold" would be untrue and the raw code says
- * nothing to a person. It gets its own badge and a localized reason telling the
- * person what to do. The second (Fix PR 1 · F5, D-412) is below.
+ * NO NORMAL USER SEES A RAW CODE (Phase 2B-3 PR 2, owner decision D5-B). Every
+ * code a run can end with is translated, through this one function:
  *
- * Returns message keys and the code, never copy: the screen translates.
+ *   - a run SKIPPED because a value its rule names is no longer available keeps
+ *     its own badge and reason (PR 1, D-408);
+ *   - a NOTIFY rule naming a template automations may not send keeps its
+ *     reason under the FAILED badge (Fix PR 1 · F5, D-412);
+ *   - a G13 action that did not act says why: an action-level SKIPPED gets the
+ *     "Skipped" badge, never "Conditions did not hold"; a BLOCKED one keeps its
+ *     BLOCKED badge;
+ *   - the five existing codes a PR 2 rule can reach — the creator no longer a
+ *     member, without the permission, without the brand; the workspace pending
+ *     deletion; the daily limit — each have their words;
+ *   - ANY OTHER CODE reads "Something went wrong running this automation."
+ *
+ * A condition that did not hold still reads "Conditions did not hold" with no
+ * reason line, and a member's own skip still has none.
+ *
+ * Returns message keys, never copy: the screen translates.
  */
 export type RunReason =
-  | { readonly kind: 'none' }
-  | { readonly kind: 'generic'; readonly code: string }
-  | {
-      readonly kind: 'message';
-      readonly key:
-        | 'automations.failure.condition_value_unavailable'
-        | 'automations.failure.notify_template_not_allowed';
-    };
+  { readonly kind: 'none' } | { readonly kind: 'message'; readonly key: RunReasonKey };
+
+export type RunReasonKey =
+  | 'automations.failure.condition_value_unavailable'
+  | 'automations.failure.notify_template_not_allowed'
+  | `automations.failure.${ActionOutcomeCode}`
+  | `automations.failure.${ExistingReachableCode}`
+  | 'automations.failure.fallback';
+
+/** The existing codes a PR 2 rule can normally reach (§13 of the PR 2 report). */
+export const EXISTING_REACHABLE_CODES = [
+  'creator_no_longer_a_member',
+  'creator_lost_permission',
+  'creator_lost_brand_scope',
+  'workspace_pending_deletion',
+  'daily_ceiling_reached',
+] as const;
+type ExistingReachableCode = (typeof EXISTING_REACHABLE_CODES)[number];
+
+function isExistingReachableCode(code: string): code is ExistingReachableCode {
+  return (EXISTING_REACHABLE_CODES as readonly string[]).includes(code);
+}
 
 export interface RunPresentation {
   readonly statusKey: string;
@@ -32,28 +62,37 @@ export function runPresentation(run: {
   readonly status: string;
   readonly failureCode: string | null;
 }): RunPresentation {
-  if (run.status === 'SKIPPED' && run.failureCode === CONDITION_VALUE_UNAVAILABLE) {
+  const status = `automations.status.${run.status}`;
+  const code = run.failureCode;
+
+  if (code === null || code === 'skipped_by_member') {
+    return { statusKey: status, reason: { kind: 'none' } };
+  }
+  if (run.status === 'SKIPPED' && code === CONDITION_VALUE_UNAVAILABLE) {
     return {
       statusKey: 'automations.status.valueUnavailable',
       reason: { kind: 'message', key: 'automations.failure.condition_value_unavailable' },
     };
   }
-  /*
-   * FIX PR 1 · F5 (D-412): a NOTIFY rule naming a template automations may not
-   * send. The run did fail — the badge stays "Failed" — and the reason says
-   * what to do, in the reader's language, instead of the raw code.
-   */
-  if (run.status === 'FAILED' && run.failureCode === NOTIFY_TEMPLATE_NOT_ALLOWED) {
+  if (run.status === 'FAILED' && code === NOTIFY_TEMPLATE_NOT_ALLOWED) {
     return {
       statusKey: 'automations.status.FAILED',
       reason: { kind: 'message', key: 'automations.failure.notify_template_not_allowed' },
     };
   }
-  return {
-    statusKey: `automations.status.${run.status}`,
-    reason:
-      run.failureCode && run.failureCode !== 'skipped_by_member'
-        ? { kind: 'generic', code: run.failureCode }
-        : { kind: 'none' },
-  };
+  /*
+   * A G13 ACTION THAT DID NOT ACT. The code decides the badge only together
+   * with the status it is recorded under, so a code that somehow arrived with
+   * another status reads as the fallback rather than as something it is not.
+   */
+  if (isActionOutcomeCode(code) && ACTION_OUTCOME_STATUS[code] === run.status) {
+    return {
+      statusKey: run.status === 'SKIPPED' ? 'automations.status.actionSkipped' : status,
+      reason: { kind: 'message', key: `automations.failure.${code}` },
+    };
+  }
+  if (isExistingReachableCode(code)) {
+    return { statusKey: status, reason: { kind: 'message', key: `automations.failure.${code}` } };
+  }
+  return { statusKey: status, reason: { kind: 'message', key: 'automations.failure.fallback' } };
 }

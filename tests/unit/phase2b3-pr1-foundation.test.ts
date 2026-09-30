@@ -538,17 +538,22 @@ describe('run history: a condition_value_unavailable skip has its own label and 
       statusKey: 'automations.status.SKIPPED',
       reason: { kind: 'none' },
     });
-    // Every other code keeps the generic "Reason: {code}" line.
-    for (const [status, code] of [
-      ['SKIPPED', 'something_else'],
-      ['BLOCKED_BY_POLICY', 'daily_ceiling_reached'],
-      ['BLOCKED_BY_AUTHORIZATION', 'creator_lost_permission'],
-      ['FAILED', 'unknown_action'],
-      ['BLOCKED_BY_POLICY', 'condition_value_unavailable'],
+    // Phase 2B-3 PR 2 (D5-B): every other code keeps its badge and reads in
+    // words — its own where §13 gives one, the fallback otherwise — never raw.
+    for (const [status, code, key] of [
+      ['SKIPPED', 'something_else', 'automations.failure.fallback'],
+      ['BLOCKED_BY_POLICY', 'daily_ceiling_reached', 'automations.failure.daily_ceiling_reached'],
+      [
+        'BLOCKED_BY_AUTHORIZATION',
+        'creator_lost_permission',
+        'automations.failure.creator_lost_permission',
+      ],
+      ['FAILED', 'unknown_action', 'automations.failure.fallback'],
+      ['BLOCKED_BY_POLICY', 'condition_value_unavailable', 'automations.failure.fallback'],
     ] as const) {
       expect(runPresentation({ status, failureCode: code })).toEqual({
         statusKey: `automations.status.${status}`,
-        reason: { kind: 'generic', code },
+        reason: { kind: 'message', key },
       });
     }
     // A member's own skip still has no reason line.
@@ -556,9 +561,9 @@ describe('run history: a condition_value_unavailable skip has its own label and 
       statusKey: 'automations.status.CANCELLED',
       reason: { kind: 'none' },
     });
-    // And the generic reason copy itself is untouched.
-    expect(messages.en['automations.failure']).toBe('Reason: {code}');
-    expect(messages.ar['automations.failure']).toBe('السبب: {code}');
+    // And no reason line anywhere prints a code: the generic line is gone.
+    expect(messages.en).not.toHaveProperty('automations.failure');
+    expect(messages.ar).not.toHaveProperty('automations.failure');
   });
 
   it('the run history renders through the presentation, not the raw status', () => {
