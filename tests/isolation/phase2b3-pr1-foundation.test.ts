@@ -337,7 +337,7 @@ describe('M1c — the outbox and rule CHECKs know the G13 values', () => {
     }
   });
 
-  it('armedAt and dueWatermark are NULL on existing and new rules alike', async () => {
+  it('armedAt and dueWatermark are NULL on existing rules; a new rule is armed when created', async () => {
     const existing = await inA((db) =>
       db.automationRule.findFirstOrThrow({
         where: { id: fixtures.a.automationRuleId },
@@ -357,10 +357,9 @@ describe('M1c — the outbox and rule CHECKs know the G13 values', () => {
         actor: actor(),
       }),
     );
-    expect({ armedAt: created.armedAt, dueWatermark: created.dueWatermark }).toEqual({
-      armedAt: null,
-      dueWatermark: null,
-    });
+    // Phase 2B-3 PR 2 (OD-21): a new rule listens from the moment it exists.
+    expect(created.armedAt).toBeInstanceOf(Date);
+    expect(created.dueWatermark).toBeNull();
   });
 });
 

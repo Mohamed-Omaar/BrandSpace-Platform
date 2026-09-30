@@ -168,6 +168,15 @@ export interface TriggerEvent {
    * in, and it is no longer asked to be an identity it cannot carry.
    */
   readonly eventKey?: string | null;
+  /**
+   * PHASE 2B-3 PR 2 — WHEN THE EVENT HAPPENED: the outbox row's `createdAt`.
+   *
+   * Compared with the rule's `armedAt` (OD-21, no backfill): an event that
+   * happened before the rule was created, switched on, or had its trigger
+   * settings changed does not reach it. Absent for a caller that composed the
+   * event itself, which keeps the behaviour it always had.
+   */
+  readonly occurredAt?: Date | null;
   /** The facts a condition may read. Gathered by the caller, never queried here. */
   readonly facts: Readonly<Record<string, unknown>>;
 }
@@ -420,6 +429,8 @@ export class AutomationEngine {
         // than relying on a default.
         requiresConfirmationForExternal: true,
         createdByUserId: input.actor.userId,
+        // Phase 2B-3 PR 2 — listening from now on, never for what came before.
+        armedAt: this.#clock.now(),
       },
     });
 
@@ -490,10 +501,14 @@ export class AutomationEngine {
      */
     if (conditions) this.#requireEvaluableConditions(conditions, existing.triggerType);
 
+    // Phase 2B-3 PR 2 — switching a rule ON re-arms it: while it was off it
+    // was not listening, and what happened then is not replayed into it.
+    const switchedOn = input.enabled === true && !existing.enabled;
     const rule = await this.#db.automationRule.update({
       where: { id: existing.id },
       data: {
         ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
+        ...(switchedOn ? { armedAt: this.#clock.now() } : {}),
         ...(input.name === undefined ? {} : { name: input.name.trim().slice(0, 120) }),
         ...(conditions === undefined
           ? {}
@@ -651,7 +666,13 @@ export class AutomationEngine {
         ...(triggerConfig === undefined ? {} : { triggerConfig }),
         ...(actionConfig === undefined ? {} : { actionConfig }),
         ...(triggerConfigChanged
-          ? { nextEvaluationAt: now, thresholdBreached: null, thresholdEvaluatedAt: null }
+          ? {
+              nextEvaluationAt: now,
+              thresholdBreached: null,
+              thresholdEvaluatedAt: null,
+              // Phase 2B-3 PR 2 — a new trigger setting listens from now on.
+              armedAt: now,
+            }
           : {}),
         updatedByUserId: input.actor.userId,
         version: { increment: 1 },
@@ -890,6 +911,17 @@ export class AutomationEngine {
     // query above: a rule disabled between the read and the run must not fire.
     if (!rule.enabled || rule.deletedAt)
       return { run: null, status: 'NOT_RUN', confirmationToken: null };
+
+    /*
+     * PHASE 2B-3 PR 2 — NO BACKFILL (OD-21). A rule reacts to what happens
+     * after it is armed: created, switched on, or given new trigger settings.
+     * An event older than that is not a run the rule skipped — the rule was
+     * not listening — so nothing is recorded, exactly like a disabled rule. A
+     * rule stored before PR 2 has no `armedAt` and keeps its behaviour.
+     */
+    if (rule.armedAt && event.occurredAt && event.occurredAt < rule.armedAt) {
+      return { run: null, status: 'NOT_RUN', confirmationToken: null };
+    }
 
     const triggerConfig = (rule.triggerConfig ?? {}) as Record<string, unknown>;
     const idempotencyKey = runIdempotencyKeyFor({

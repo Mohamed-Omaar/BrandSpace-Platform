@@ -248,7 +248,18 @@ export async function processAutomationJob(payload: EvaluateAutomationPayload): 
       },
       { metrics: metricWindowPort(db, payload.workspaceId) },
     );
+    /*
+     * PHASE 2B-3 PR 2 — WHEN THE EVENT HAPPENED, read from the outbox row this
+     * message carries, so a rule armed after it does not act on it (OD-21).
+     * Read in this tenant transaction; a row that is gone reads as null, which
+     * keeps the engine's pre-2B-3 behaviour.
+     */
+    const outboxRow = await db.automationEvent.findFirst({
+      where: { id: payload.eventId, workspaceId: payload.workspaceId },
+      select: { createdAt: true },
+    });
     const event: TriggerEvent = {
+      occurredAt: outboxRow?.createdAt ?? null,
       type: payload.triggerType as TriggerEvent['type'],
       brandId: payload.brandId,
       refType: payload.refType,
