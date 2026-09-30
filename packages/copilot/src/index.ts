@@ -52,6 +52,7 @@ export type {
   ExecutorResult,
   ExternalActionPort,
   AutomationRuleCheck,
+  AutomationRulePair,
   AutomationRulePort,
   PreviewContext,
   ToolExecutor,
@@ -71,7 +72,7 @@ export type {
 export { CopilotUndoService } from './undo';
 export type { CompensationKind, UndoCollaborators, UndoOutcome, UndoServiceOptions } from './undo';
 
-export { CopilotOrchestrator } from './orchestrator';
+export { CopilotOrchestrator, automationRuleCatalogueLines } from './orchestrator';
 export type { OrchestratorOptions, TurnInput, TurnResult } from './orchestrator';
 
 export {

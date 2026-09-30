@@ -372,6 +372,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
               workspaceId: caller.workspaceId,
               policy,
               gateway: gateway(),
+              automationRules: automationRuleCheck,
             });
             /*
              * THE LIVE AUTHORIZATION, BEFORE A SESSION EXISTS (P7-R1). The
@@ -470,6 +471,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
               workspaceId: caller.workspaceId,
               policy,
               gateway: gateway(),
+              automationRules: automationRuleCheck,
             });
             const turn = await orchestrator.turn({
               sessionId: body.sessionId,

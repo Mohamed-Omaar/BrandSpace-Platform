@@ -30,6 +30,7 @@ import type { LiveAuthorization } from './authorization';
 import type { CopilotPolicy } from './policy';
 import { availableTools, findTool } from './tools';
 import type { ProposedStep } from './plans';
+import type { AutomationRuleCheck } from './executors';
 import { COPILOT_SURFACES, copilotSurface, type CopilotSurface } from './surfaces';
 import {
   SUBJECT_NOUN,
@@ -130,6 +131,30 @@ export interface OrchestratorOptions {
   readonly policy: CopilotPolicy;
   readonly gateway: AiGateway;
   readonly clock?: Clock;
+  /**
+   * Phase 2B-3 PR 2 — the automations registry's authorable catalogue, so the
+   * prompt offers `automation.create_rule` exactly the pairs the plan will
+   * accept. Injected for the same reason as the plan's check (ARCHITECTURE
+   * §4.1). Absent, no pair is offered, and a proposed rule is still refused
+   * when its plan is built.
+   */
+  readonly automationRules?: AutomationRuleCheck | undefined;
+}
+
+/**
+ * THE PAIRS `automation.create_rule` IS OFFERED — one line each, in the
+ * registry's order, straight from the injected catalogue. Platform text, never
+ * customer text, and no name in it is written here.
+ */
+export function automationRuleCatalogueLines(
+  check: AutomationRuleCheck | undefined,
+): readonly string[] {
+  const pairs = check?.authorablePairs() ?? [];
+  if (pairs.length === 0) return [];
+  return [
+    'automation.create_rule accepts ONLY these triggerType -> actionType pairs; propose no other:',
+    ...pairs.map((pair) => `  ${pair.triggerType} -> ${pair.actionType}`),
+  ];
 }
 
 export interface TurnInput {
@@ -205,6 +230,7 @@ export class CopilotOrchestrator {
   readonly #policy: CopilotPolicy;
   readonly #gateway: AiGateway;
   readonly #clock: Clock;
+  readonly #automationRules: AutomationRuleCheck | undefined;
 
   constructor(options: OrchestratorOptions) {
     this.#db = options.db;
@@ -212,6 +238,7 @@ export class CopilotOrchestrator {
     this.#policy = options.policy;
     this.#gateway = options.gateway;
     this.#clock = options.clock ?? systemClock;
+    this.#automationRules = options.automationRules;
   }
 
   /**
@@ -789,6 +816,9 @@ export class CopilotOrchestrator {
         (tool) =>
           `- ${tool.key} (${tool.actionClass}${tool.spendsCredits ? ', spends credits' : ''})`,
       ),
+      ...(tools.some((tool) => tool.key === 'automation.create_rule')
+        ? automationRuleCatalogueLines(this.#automationRules)
+        : []),
       '',
       history.length > 0 ? 'CONVERSATION SO FAR:' : '',
       /*
