@@ -1859,6 +1859,35 @@ ordering, is what needs raising.
 Nothing reads either column yet, and every existing row satisfies the wider
 constraints unchanged.
 
+### 18.10 Phase 2B-3 PR 2 — `PREFLIGHT_REFUSED`, schema only (M2, D-414)
+
+**One enum value. No table, no column, no index, no row written.**
+
+`20261011090000_publish_attempt_preflight_refused` is a single
+`ALTER TYPE "PublishAttemptOutcome" ADD VALUE IF NOT EXISTS 'PREFLIGHT_REFUSED'`,
+in a migration of its own because a value added by `ADD VALUE` cannot be used in
+the transaction that added it (D-379). An empty database receives the value and
+nothing else; there is no backfill and no data rewrite.
+
+| Outcome             | Written when                                                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PREFLIGHT_REFUSED` | NEW. The job was refused before any request was sent. `attemptNumber` = highest + 1; `attemptCount` unchanged; no provider status or error code.     |
+| `INDETERMINATE`     | Existing value, new writer: `recoverStaleClaim`, when a worker's claim ended before its result was recorded — TIMEOUT, send state stated as unknown. |
+
+- **Constraints unchanged.** `publish_attempt_failure_class_matches_outcome`
+  already requires a `failureClass` on every outcome other than SUCCEEDED, so
+  both rows carry one; `publish_attempt_number_positive` and the unique
+  `(workspaceId, publishJobId, attemptNumber)` hold because the number is always
+  the highest so far plus one.
+- **`attemptCount` is not the attempt number.** A pre-flight or recovery row does
+  not count as a provider attempt, so `attemptCount <= maxAttempts`, every retry
+  budget and every idempotency key are exactly what they were.
+- The rows are as immutable as every other `publish_attempt` (§17.3).
+- **The previous release** never writes the value, and nothing in it decodes an
+  attempt's `outcome` (its attempt read is `aggregate` of `attemptNumber`), so an
+  application rollback needs no database change. The value cannot be removed in
+  place: forward-only, OPERATIONS.md §6.8.
+
 ## 19. Phase 9 — Commerce & Onboarding
 
 Thirteen models: eight tenant-owned commercial tables, two platform-owned, three identity-scoped.
