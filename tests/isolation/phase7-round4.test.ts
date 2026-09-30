@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { defaultPayload } from '@brandspace/config';
 import { closeQueues } from '@brandspace/jobs';
@@ -25,6 +25,7 @@ import {
   platformRoleClient,
   type IsolationFixtures,
 } from './fixtures';
+import { seedStoredRule } from './stored-automation-rule';
 
 /**
  * PHASE 7 REMEDIATION, ROUND 4, ON REAL POSTGRESQL.
@@ -82,38 +83,69 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('R4-1: the condition contract is enforced server-side', () => {
-  /** A rule with no conditions, so an update is the only thing adding them. */
-  async function bareRule(triggerType: 'CONTENT_APPROVED' | 'SCHEDULED_TIME'): Promise<string> {
+  /*
+   * PHASE 2B-3 PR 2 — TWO KINDS OF RULE, ONE CONTRACT.
+   *
+   * A NEW rule is a G13 rule, written through `createRule` and held to its
+   * trigger's G13 fields; a STORED rule of a pre-G13 shape is edited through
+   * `updateRule` and held to everything its trigger produces. Both doors run
+   * the SAME field/operator/value contract, so each refusal below is asked of
+   * the door that can still reach it — and the G13 table is asked of BOTH
+   * doors, which must answer alike.
+   */
+  // Every rule this block writes is retired after its test, so the per-brand
+  // ceiling stays a ceiling on one test's rules, not on the whole block's.
+  afterEach(async () => {
+    await inA((db) =>
+      db.automationRule.updateMany({
+        where: {
+          workspaceId: fixtures.a.workspaceId,
+          name: { startsWith: 'r4 ' },
+          deletedAt: null,
+        },
+        data: { deletedAt: new Date(), enabled: false },
+      }),
+    );
+  });
+
+  const G13_ACTOR = (): AutomationActor => ({
+    ...ACTOR(),
+    permissionKeys: [...ACTOR().permissionKeys, 'content.create'],
+  });
+
+  /** A stored rule with no conditions, so an update is the only thing adding them. */
+  async function bareRule(
+    triggerType: 'CONTENT_APPROVED' | 'SCHEDULED_TIME',
+    actionType: 'NOTIFY' | 'MAKE_DRAFT_COPY' = 'NOTIFY',
+  ): Promise<string> {
     const rule = await inA((db) =>
-      engineOn(db).createRule({
+      seedStoredRule(db, {
+        workspaceId: fixtures.a.workspaceId,
         brandId: fixtures.a.brandId,
         name: `r4 ${randomUUID()}`,
         triggerType,
         triggerConfig: triggerType === 'SCHEDULED_TIME' ? { hourLocal: 9, daysOfWeek: [] } : {},
-        conditions: [],
-        actionType: 'NOTIFY',
-        actionConfig: { templateKey: 'automation.notice' },
-        actor: ACTOR(),
+        actionType,
+        actionConfig: actionType === 'NOTIFY' ? { templateKey: 'automation.notice' } : {},
+        createdByUserId: fixtures.a.userId,
       }),
     );
     return rule.id;
   }
 
-  const create = async (
-    triggerType: 'CONTENT_APPROVED' | 'SCHEDULED_TIME',
-    conditions: readonly AutomationCondition[],
-  ): Promise<string> => {
+  /** `createRule` for a G13 rule: CONTENT_APPROVED × MAKE_DRAFT_COPY. */
+  const create = async (conditions: readonly AutomationCondition[]): Promise<string> => {
     try {
       await inA((db) =>
         engineOn(db).createRule({
           brandId: fixtures.a.brandId,
           name: `r4 ${randomUUID()}`,
-          triggerType,
-          triggerConfig: triggerType === 'SCHEDULED_TIME' ? { hourLocal: 9, daysOfWeek: [] } : {},
+          triggerType: 'CONTENT_APPROVED',
+          triggerConfig: {},
           conditions: conditions as never,
-          actionType: 'NOTIFY',
-          actionConfig: { templateKey: 'automation.notice' },
-          actor: ACTOR(),
+          actionType: 'MAKE_DRAFT_COPY',
+          actionConfig: {},
+          actor: G13_ACTOR(),
         }),
       );
       return 'OK';
@@ -128,7 +160,7 @@ describe('R4-1: the condition contract is enforced server-side', () => {
   ): Promise<string> => {
     try {
       await inA((db) =>
-        engineOn(db).updateRule({ ruleId, conditions: conditions as never, actor: ACTOR() }),
+        engineOn(db).updateRule({ ruleId, conditions: conditions as never, actor: G13_ACTOR() }),
       );
       return 'OK';
     } catch (error: unknown) {
@@ -137,11 +169,89 @@ describe('R4-1: the condition contract is enforced server-side', () => {
   };
 
   /**
-   * THE CASES, and which door each one must be refused at. The point of the
-   * table is the LAST assertion in this block: create and update must return
-   * the SAME answer for every row, because until this round they did not.
+   * THE G13 CASES — a new rule's fields, every refusal kind. Asked of
+   * `createRule` and of `updateRule` on a stored G13 rule: the SAME answer.
    */
-  const refusals: readonly {
+  const g13Refusals: readonly { readonly why: string; readonly condition: AutomationCondition }[] =
+    [
+      {
+        why: 'a field this trigger never produces',
+        condition: { field: 'metric.value', operator: 'greater_than', value: 1 },
+      },
+      {
+        why: 'magnitude on an identity field',
+        condition: { field: 'content.campaignId', operator: 'greater_than', value: 5 },
+      },
+      {
+        why: 'a boolean test on a string field',
+        condition: { field: 'content.type', operator: 'is_true' },
+      },
+      {
+        why: 'membership asked the wrong way round of a set field',
+        condition: { field: 'content.channels', operator: 'in', value: ['X'] },
+      },
+      {
+        why: 'the string "true" against a boolean fact',
+        condition: { field: 'content.hasCampaign', operator: 'equals', value: 'true' },
+      },
+      {
+        why: 'a lone string where a list is required',
+        condition: { field: 'content.type', operator: 'in', value: 'POST' },
+      },
+      {
+        why: 'an empty list',
+        condition: { field: 'content.type', operator: 'not_in', value: [] },
+      },
+      {
+        why: 'a format outside the closed set',
+        condition: { field: 'content.type', operator: 'equals', value: 'NEARLY_A_POST' },
+      },
+      {
+        why: 'a channel outside the closed set',
+        condition: { field: 'content.channels', operator: 'includes', value: 'MYSPACE' },
+      },
+    ];
+
+  for (const testCase of g13Refusals) {
+    it(`createRule refuses ${testCase.why}`, async () => {
+      expect(await create([testCase.condition])).toBe('VALIDATION_FAILED');
+    });
+  }
+
+  /**
+   * THE HOLE THIS CLOSES. `updateRule` schema-parsed the supplied conditions and
+   * stored them, and did nothing else — so every rule `createRule` refused was
+   * reachable in two calls instead of one: create it bare, then PATCH in the
+   * condition that was never authorable.
+   */
+  it('updateRule cannot introduce anything createRule would refuse', async () => {
+    for (const testCase of g13Refusals) {
+      const ruleId = await bareRule('CONTENT_APPROVED', 'MAKE_DRAFT_COPY');
+      const viaCreate = await create([testCase.condition]);
+      const viaUpdate = await update(ruleId, [testCase.condition]);
+      expect({ why: testCase.why, viaUpdate }).toEqual({
+        why: testCase.why,
+        viaUpdate: viaCreate,
+      });
+      expect(viaUpdate).toBe('VALIDATION_FAILED');
+
+      // AND NOTHING WAS STORED. A refusal that still wrote the row would be the
+      // same defect wearing an error message.
+      const stored = await inA((db) =>
+        db.automationRule.findFirstOrThrow({
+          where: { id: ruleId, workspaceId: fixtures.a.workspaceId },
+          select: { conditions: true },
+        }),
+      );
+      expect(stored.conditions).toEqual([]);
+    }
+  });
+
+  /**
+   * THE PRE-G13 CASES — fields a stored rule keeps, every refusal kind, on the
+   * only door a stored rule has: `updateRule`.
+   */
+  const storedRefusals: readonly {
     readonly why: string;
     readonly trigger: 'CONTENT_APPROVED' | 'SCHEDULED_TIME';
     readonly condition: AutomationCondition;
@@ -193,31 +303,10 @@ describe('R4-1: the condition contract is enforced server-side', () => {
     },
   ];
 
-  for (const testCase of refusals) {
-    it(`createRule refuses ${testCase.why}`, async () => {
-      expect(await create(testCase.trigger, [testCase.condition])).toBe('VALIDATION_FAILED');
-    });
-  }
-
-  /**
-   * THE HOLE THIS CLOSES. `updateRule` schema-parsed the supplied conditions and
-   * stored them, and did nothing else — so every rule `createRule` refused was
-   * reachable in two calls instead of one: create it bare, then PATCH in the
-   * condition that was never authorable.
-   */
-  it('updateRule cannot introduce anything createRule would refuse', async () => {
-    for (const testCase of refusals) {
+  for (const testCase of storedRefusals) {
+    it(`updateRule of a stored rule refuses ${testCase.why}`, async () => {
       const ruleId = await bareRule(testCase.trigger);
-      const viaCreate = await create(testCase.trigger, [testCase.condition]);
-      const viaUpdate = await update(ruleId, [testCase.condition]);
-      expect({ why: testCase.why, viaUpdate }).toEqual({
-        why: testCase.why,
-        viaUpdate: viaCreate,
-      });
-      expect(viaUpdate).toBe('VALIDATION_FAILED');
-
-      // AND NOTHING WAS STORED. A refusal that still wrote the row would be the
-      // same defect wearing an error message.
+      expect(await update(ruleId, [testCase.condition])).toBe('VALIDATION_FAILED');
       const stored = await inA((db) =>
         db.automationRule.findFirstOrThrow({
           where: { id: ruleId, workspaceId: fixtures.a.workspaceId },
@@ -225,8 +314,8 @@ describe('R4-1: the condition contract is enforced server-side', () => {
         }),
       );
       expect(stored.conditions).toEqual([]);
-    }
-  });
+    });
+  }
 
   it('updateRule validates against the rule’s OWN trigger, not a supplied one', async () => {
     const ruleId = await bareRule('SCHEDULED_TIME');
@@ -241,24 +330,48 @@ describe('R4-1: the condition contract is enforced server-side', () => {
   });
 
   it('stores a numeric, a boolean, a string and a list condition, unchanged', async () => {
+    // A stored rule keeps every kind its trigger produces, numbers included.
     const conditions: readonly AutomationCondition[] = [
       { field: 'content.platformCount', operator: 'greater_than', value: 1 },
       { field: 'content.hasCampaign', operator: 'is_true' },
       { field: 'content.pillar', operator: 'equals', value: 'education' },
       { field: 'content.status', operator: 'in', value: ['APPROVED', 'SCHEDULED'] },
     ];
-    expect(await create('CONTENT_APPROVED', conditions)).toBe('OK');
+    const ruleId = await bareRule('CONTENT_APPROVED');
+    expect(await update(ruleId, conditions)).toBe('OK');
 
     const rule = await inA((db) =>
       db.automationRule.findFirstOrThrow({
-        where: { workspaceId: fixtures.a.workspaceId, triggerType: 'CONTENT_APPROVED' },
-        orderBy: { createdAt: 'desc' },
+        where: { id: ruleId, workspaceId: fixtures.a.workspaceId },
         select: { conditions: true },
       }),
     );
     // THE LITERAL SURVIVES THE ROUND TRIP. A number that came back as a string,
     // or a list that came back as a string, is the whole defect.
     expect(rule.conditions).toEqual(conditions);
+  });
+
+  it('a NEW rule stores a boolean, a string, a list and a set condition, unchanged', async () => {
+    const conditions: readonly AutomationCondition[] = [
+      { field: 'content.hasCampaign', operator: 'is_true' },
+      { field: 'content.type', operator: 'equals', value: 'POST' },
+      { field: 'content.type', operator: 'in', value: ['POST', 'REEL'] },
+      { field: 'content.channels', operator: 'includes', value: 'INSTAGRAM' },
+    ];
+    const name = `r4 new ${randomUUID()}`;
+    const created = await inA((db) =>
+      engineOn(db).createRule({
+        brandId: fixtures.a.brandId,
+        name,
+        triggerType: 'CONTENT_APPROVED',
+        triggerConfig: {},
+        conditions: conditions as never,
+        actionType: 'MAKE_DRAFT_COPY',
+        actionConfig: {},
+        actor: G13_ACTOR(),
+      }),
+    );
+    expect(created.conditions).toEqual(conditions);
   });
 });
 
@@ -505,17 +618,19 @@ describe('R4-1: a numeric, a boolean, a string and a list condition each really 
       });
 
     for (const kind of kinds) {
+      // A STORED rule (Phase 2B-3 PR 2): a new rule may not name these
+      // fields any more; a stored one still evaluates every kind.
       const rule = await inA((db) =>
-        engineWithPort(db).createRule({
+        seedStoredRule(db, {
+          workspaceId: fixtures.a.workspaceId,
           brandId: fixtures.a.brandId,
           name: `r4 ${kind.label} ${randomUUID()}`,
           triggerType: 'CONTENT_APPROVED',
-          triggerConfig: {},
-          conditions: [kind.condition] as never,
+          conditions: [kind.condition],
           actionType: 'NOTIFY',
           actionConfig: { templateKey: 'automation.notice' },
+          createdByUserId: fixtures.a.userId,
           enabled: true,
-          actor: ACTOR(),
         }),
       );
 

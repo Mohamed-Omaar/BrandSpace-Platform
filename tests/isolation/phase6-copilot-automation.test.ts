@@ -29,6 +29,7 @@ import {
   copilotAutomationPort,
 } from '../../apps/api/src/routes/copilot-automation';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import { seedStoredRule } from './stored-automation-rule';
 
 /**
  * PHASE 6 · P6-12 — THE COPILOT MAY COMPOSE AN AUTOMATION, AND MAY NOT TURN IT ON.
@@ -181,9 +182,10 @@ const ruleStep = (brandId: string, overrides: Record<string, unknown> = {}) => (
   arguments: {
     brandId,
     name: `Copilot rule ${randomUUID().slice(0, 6)}`,
+    // Phase 2B-3 PR 2: a rule a person can write today (the G13 catalogue).
     triggerType: 'CONTENT_APPROVED',
-    actionType: 'PLACE_ON_CALENDAR',
-    actionConfig: { offsetHours: 24 },
+    actionType: 'SCHEDULE_NEXT_FREE_SLOT',
+    actionConfig: {},
     ...overrides,
   },
 });
@@ -297,14 +299,15 @@ describe('P6-12 · a composed rule is created, confirmed, audited — and switch
 
   it('never reaches a confirm button for an impossible trigger/action pair', async () => {
     const auth = await authorization();
-    // PLACE_ON_CALENDAR needs a content item; SCHEDULED_TIME carries none.
+    // Both halves are authorable; the pair is not in the compatibility table
+    // (the next free slot is scheduled only when a post is approved).
     const code = await refusal(
       inA((db) =>
         plans(db).createPlan({
           sessionId: fixtures.a.copilotSessionId,
           brandId: fixtures.a.brandId,
           authorization: auth,
-          steps: [ruleStep(fixtures.a.brandId, { triggerType: 'SCHEDULED_TIME' })],
+          steps: [ruleStep(fixtures.a.brandId, { triggerType: 'POST_PUBLISHED' })],
           summary: { ar: 'قاعدة', en: 'A rule' },
           estimatedCreditsMilli: 0n,
           expiresAt: null,
@@ -316,11 +319,11 @@ describe('P6-12 · a composed rule is created, confirmed, audited — and switch
   });
 
   it('refuses a rule whose ACTION the caller may not perform, before anything is shown', async () => {
-    // Holds automation.manage, but not publishing.manage: PROPOSE_PUBLISH is out.
+    // Holds automation.manage, but not content.schedule: the next free slot is out.
     const auth = await authorization();
     const narrowed = {
       ...auth,
-      permissionKeys: auth.permissionKeys.filter((key) => key !== 'publishing.manage'),
+      permissionKeys: auth.permissionKeys.filter((key) => key !== 'content.schedule'),
     };
     const code = await refusal(
       inA((db) =>
@@ -328,9 +331,7 @@ describe('P6-12 · a composed rule is created, confirmed, audited — and switch
           sessionId: fixtures.a.copilotSessionId,
           brandId: fixtures.a.brandId,
           authorization: narrowed,
-          steps: [
-            ruleStep(fixtures.a.brandId, { actionType: 'PROPOSE_PUBLISH', actionConfig: {} }),
-          ],
+          steps: [ruleStep(fixtures.a.brandId)],
           summary: { ar: 'قاعدة', en: 'A rule' },
           estimatedCreditsMilli: 0n,
           expiresAt: null,
@@ -524,17 +525,15 @@ describe('P6-12 · the automations list keeps the brand it was asked for', () =>
       });
       return brand.id;
     });
-    const auth = await authorization();
     await inA((db) =>
-      engine(db).createRule({
+      seedStoredRule(db, {
+        workspaceId: fixtures.a.workspaceId,
         brandId: other,
         name: 'Other brand rule',
         triggerType: 'CONTENT_APPROVED',
-        triggerConfig: {},
-        conditions: [],
         actionType: 'NOTIFY',
         actionConfig: { templateKey: 'automation.notice' },
-        actor: auth,
+        createdByUserId: fixtures.a.userId,
       }),
     );
     // A member scoped to BOTH brands, looking at brand A.

@@ -14,6 +14,7 @@ import {
   type TriggerEvent,
 } from '@brandspace/automation';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import { seedStoredRule } from './stored-automation-rule';
 
 /**
  * Phase 7 — the AUTOMATION ENGINE, exercised on real PostgreSQL.
@@ -131,33 +132,64 @@ function triggerEvent(overrides: Partial<TriggerEvent> = {}): TriggerEvent {
   };
 }
 
+/**
+ * A STORED, enabled rule of a pre-G13 shape (Phase 2B-3 PR 2). No new rule may
+ * take one any more; every stored one still runs exactly as below, which is
+ * what the run tests in this suite are about.
+ */
 async function newRule(input: {
   name?: string;
   actionType?: 'NOTIFY' | 'PROPOSE_PUBLISH';
   conditions?: unknown;
-  actor?: AutomationActor;
 }) {
+  const actionType = input.actionType ?? 'NOTIFY';
+  return inA((db) =>
+    seedStoredRule(db, {
+      workspaceId: fixtures.a.workspaceId,
+      brandId: fixtures.a.brandId,
+      name: input.name ?? `Rule ${randomUUID().slice(0, 8)}`,
+      triggerType: 'CONTENT_APPROVED',
+      conditions: input.conditions ?? [],
+      actionType,
+      actionConfig: actionType === 'NOTIFY' ? { templateKey: 'automation.notice' } : {},
+      createdByUserId: fixtures.a.userId,
+      enabled: true,
+    }),
+  );
+}
+
+/**
+ * WRITING a rule, through `createRule`, as a G13 rule a person can write
+ * today: "make a draft copy" when a post is approved.
+ */
+async function authorRule(input: { conditions?: unknown; actor?: AutomationActor }) {
   const recorded: Recorded = { notified: [], published: [] };
   return inA((db) =>
     engineFor(db, recorded).createRule({
       brandId: fixtures.a.brandId,
-      name: input.name ?? `Rule ${randomUUID().slice(0, 8)}`,
+      name: `Rule ${randomUUID().slice(0, 8)}`,
       triggerType: 'CONTENT_APPROVED',
       triggerConfig: {},
       conditions: input.conditions ?? [],
-      actionType: input.actionType ?? 'NOTIFY',
-      actionConfig: { templateKey: 'automation.notice' },
+      actionType: 'MAKE_DRAFT_COPY',
+      actionConfig: {},
       enabled: true,
-      actor: input.actor ?? owner(),
+      actor:
+        input.actor ?? owner({ permissionKeys: [...owner().permissionKeys, 'content.create'] }),
     }),
   );
 }
 
 describe('a rule cannot be created beyond what its author may do', () => {
   it("a brand outside the author's scope is a 404-shaped miss", async () => {
-    await expect(newRule({ actor: owner({ brandScope: [randomUUID()] }) })).rejects.toMatchObject({
-      code: 'NOT_FOUND',
-    });
+    await expect(
+      authorRule({
+        actor: owner({
+          permissionKeys: [...owner().permissionKeys, 'content.create'],
+          brandScope: [randomUUID()],
+        }),
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it("ANOTHER TENANT's brand is refused identically", async () => {
@@ -170,26 +202,27 @@ describe('a rule cannot be created beyond what its author may do', () => {
           triggerType: 'CONTENT_APPROVED',
           triggerConfig: {},
           conditions: [],
-          actionType: 'NOTIFY',
-          actionConfig: { templateKey: 'automation.notice' },
-          actor: owner({ brandScope: [fixtures.a.brandId] }),
+          actionType: 'MAKE_DRAFT_COPY',
+          actionConfig: {},
+          actor: owner({
+            permissionKeys: [...owner().permissionKeys, 'content.create'],
+            brandScope: [fixtures.a.brandId],
+          }),
         }),
       ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('an author who cannot perform the action cannot write a rule that performs it', async () => {
+    // MAKE_DRAFT_COPY needs `content.create`, which this author does not hold.
     await expect(
-      newRule({
-        actionType: 'PROPOSE_PUBLISH',
-        actor: owner({ permissionKeys: ['automation.manage', 'workspace.read'] }),
-      }),
-    ).rejects.toThrow();
+      authorRule({ actor: owner({ permissionKeys: ['automation.manage', 'workspace.read'] }) }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('a condition naming a field outside the closed registry is refused', async () => {
     await expect(
-      newRule({
+      authorRule({
         conditions: [{ field: 'raw_sql', operator: 'equals', value: 'DROP TABLE' }],
       }),
     ).rejects.toThrow();

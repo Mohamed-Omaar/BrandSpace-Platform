@@ -11,6 +11,7 @@ import {
 } from '@brandspace/automation';
 import { conditionsFrom, triggerConfigFrom } from '../../apps/dashboard/src/server/automation-form';
 import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import { seedStoredRule } from './stored-automation-rule';
 
 /**
  * PHASE 7 REMEDIATION, ROUND 5, ON REAL POSTGRESQL.
@@ -46,7 +47,8 @@ const inB = <T>(fn: (db: TenantScopedClient) => Promise<T>) =>
 const ACTOR = (): AutomationActor => ({
   userId: fixtures.b.userId,
   roleKey: 'workspace_owner',
-  permissionKeys: ['workspace.read', 'automation.manage'],
+  // Phase 2B-3 PR 2: new rules are G13 rules; "make a draft copy" needs content.create.
+  permissionKeys: ['workspace.read', 'automation.manage', 'content.create'],
   brandScope: [],
 });
 
@@ -70,25 +72,77 @@ function form(entries: Record<string, string | readonly string[]>): FormData {
   return data;
 }
 
-/** Exactly what `createAutomationAction` does: decode, then create. */
+/**
+ * Exactly what `createAutomationAction` does: decode, then create — for a rule
+ * a person can write today (Phase 2B-3 PR 2: CONTENT_APPROVED × "make a draft
+ * copy", a G13 rule).
+ */
 async function submit(
-  triggerType: 'CONTENT_APPROVED' | 'SCHEDULED_TIME' | 'METRIC_THRESHOLD_CROSSED',
   entries: Record<string, string | readonly string[]>,
   name = `r5 ${randomUUID()}`,
 ): Promise<string> {
   try {
     const data = form(entries);
-    const triggerConfig = triggerConfigFrom(data, triggerType);
+    const triggerConfig = triggerConfigFrom(data, 'CONTENT_APPROVED');
     const conditions = conditionsFrom(data);
     await inB((db) =>
       engineOn(db).createRule({
         brandId,
         name,
-        triggerType,
+        triggerType: 'CONTENT_APPROVED',
         triggerConfig,
         conditions: conditions as never,
-        actionType: 'NOTIFY',
-        actionConfig: { templateKey: 'automation.notice' },
+        actionType: 'MAKE_DRAFT_COPY',
+        actionConfig: {},
+        actor: ACTOR(),
+      }),
+    );
+    return 'OK';
+  } catch (error: unknown) {
+    return isAppError(error) ? error.code : `UNEXPECTED: ${String(error)}`;
+  }
+}
+
+/** A STORED rule of a pre-G13 shape — the only way one exists after the G13 flip. */
+async function stored(input: {
+  triggerType: 'CONTENT_APPROVED' | 'SCHEDULED_TIME' | 'METRIC_THRESHOLD_CROSSED';
+  triggerConfig?: unknown;
+  conditions?: unknown;
+  name?: string;
+}) {
+  return inB((db) =>
+    seedStoredRule(db, {
+      workspaceId: fixtures.b.workspaceId,
+      brandId,
+      name: input.name ?? `r5 ${randomUUID()}`,
+      triggerType: input.triggerType,
+      triggerConfig: input.triggerConfig ?? {},
+      conditions: input.conditions ?? [],
+      actionType: 'NOTIFY',
+      actionConfig: { templateKey: 'automation.notice' },
+      createdByUserId: fixtures.b.userId,
+    }),
+  );
+}
+
+/**
+ * Exactly what `updateAutomationAction` does with a stored rule's TRIGGER
+ * settings: decode them for the trigger the rule really has, then edit. This is
+ * the door a schedule or a threshold still arrives by (an older automation's
+ * edit form).
+ */
+async function editTrigger(
+  rule: { id: string; version: number; triggerType: string },
+  entries: Record<string, string | readonly string[]>,
+): Promise<string> {
+  try {
+    const data = form(entries);
+    const triggerConfig = triggerConfigFrom(data, rule.triggerType);
+    await inB((db) =>
+      engineOn(db).updateEditableRule({
+        ruleId: rule.id,
+        expectedVersion: rule.version,
+        triggerConfig,
         actor: ACTOR(),
       }),
     );
@@ -158,6 +212,7 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
    */
   const malformed: readonly {
     readonly why: string;
+    /** CONTENT_APPROVED goes through the create door; the others edit a stored rule. */
     readonly triggerType: 'CONTENT_APPROVED' | 'SCHEDULED_TIME' | 'METRIC_THRESHOLD_CROSSED';
     readonly entries: Record<string, string | readonly string[]>;
   }[] = [
@@ -211,7 +266,7 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
     {
       why: 'an empty membership list',
       triggerType: 'CONTENT_APPROVED',
-      entries: { conditionField: 'content.status', conditionOperator: 'in', conditionValue: '' },
+      entries: { conditionField: 'content.type', conditionOperator: 'in', conditionValue: '' },
     },
     {
       why: 'a threshold left blank',
@@ -273,32 +328,48 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
     const anchor = `r5 anchor ${randomUUID()}`;
     expect(
       await submit(
-        'CONTENT_APPROVED',
         {
-          conditionField: 'content.status',
+          conditionField: 'content.type',
           conditionOperator: 'in',
-          conditionValue: ['APPROVED'],
+          conditionValue: ['POST'],
         },
         anchor,
       ),
     ).toBe('OK');
+    // Stored rules whose trigger settings the other cases try to edit.
+    const timed = await stored({
+      triggerType: 'SCHEDULED_TIME',
+      triggerConfig: { hourLocal: 9, daysOfWeek: [] },
+      conditions: [{ field: 'brand.id', operator: 'equals', value: brandId }],
+    });
+    const threshold = await stored({
+      triggerType: 'METRIC_THRESHOLD_CROSSED',
+      triggerConfig: { metricKey: 'followers', direction: 'above', threshold: 100 },
+      conditions: [{ field: 'metric.value', operator: 'greater_than', value: 0 }],
+    });
 
     const before = await rules();
-    expect(before.length).toBe(1);
-    expect(before[0]?.conditions).toEqual([
-      { field: 'content.status', operator: 'in', value: ['APPROVED'] },
+    expect(before.length).toBe(3);
+    expect(before.find((rule) => rule.name === anchor)?.conditions).toEqual([
+      { field: 'content.type', operator: 'in', value: ['POST'] },
     ]);
 
     for (const testCase of malformed) {
-      const outcome = await submit(testCase.triggerType, testCase.entries);
+      const outcome =
+        testCase.triggerType === 'CONTENT_APPROVED'
+          ? await submit(testCase.entries)
+          : await editTrigger(
+              testCase.triggerType === 'SCHEDULED_TIME' ? timed : threshold,
+              testCase.entries,
+            );
       expect({ why: testCase.why, outcome }).toEqual({
         why: testCase.why,
         outcome: 'VALIDATION_FAILED',
       });
     }
 
-    // NOTHING WAS CREATED. A refusal that still wrote a row would be the same
-    // defect wearing an error message.
+    // NOTHING WAS CREATED, AND NO STORED RULE MOVED. A refusal that still
+    // wrote a row would be the same defect wearing an error message.
     const after = await rules();
     expect(after).toEqual(before);
 
@@ -325,17 +396,21 @@ describe('R5: a request the decoder refuses leaves the database untouched', () =
 describe('R5: an ordinary submission still creates exactly the rule it describes', () => {
   it('a scheduled rule stores the hour and days the customer chose', async () => {
     const name = `r5 scheduled ${randomUUID()}`;
+    const rule = await stored({
+      triggerType: 'SCHEDULED_TIME',
+      triggerConfig: { hourLocal: 7, daysOfWeek: [] },
+      name,
+    });
     expect(
-      await submit(
-        'SCHEDULED_TIME',
+      await editTrigger(
+        rule,
         // THE PICKER ALWAYS RENDERS, so a real submission always carries it.
         { conditionField: '', hourLocal: '9', daysOfWeek: ['1', '3'] },
-        name,
       ),
     ).toBe('OK');
 
-    const stored = (await rules()).find((rule) => rule.name === name);
-    expect(stored?.triggerConfig).toEqual({ hourLocal: 9, daysOfWeek: [1, 3] });
+    const after = (await rules()).find((row) => row.name === name);
+    expect(after?.triggerConfig).toEqual({ hourLocal: 9, daysOfWeek: [1, 3] });
   });
 
   it('a threshold rule with no window takes the registry default of seven', async () => {
@@ -345,16 +420,22 @@ describe('R5: an ordinary submission still creates exactly the rule it describes
      * lands — which is the only way the default stays in one place.
      */
     const name = `r5 threshold ${randomUUID()}`;
+    const rule = await stored({
+      triggerType: 'METRIC_THRESHOLD_CROSSED',
+      triggerConfig: { metricKey: 'followers', direction: 'above', threshold: 100, windowDays: 30 },
+      name,
+    });
     expect(
-      await submit(
-        'METRIC_THRESHOLD_CROSSED',
-        { conditionField: '', metricKey: 'followers', direction: 'below', threshold: '500' },
-        name,
-      ),
+      await editTrigger(rule, {
+        conditionField: '',
+        metricKey: 'followers',
+        direction: 'below',
+        threshold: '500',
+      }),
     ).toBe('OK');
 
-    const stored = (await rules()).find((rule) => rule.name === name);
-    expect(stored?.triggerConfig).toEqual({
+    const after = (await rules()).find((row) => row.name === name);
+    expect(after?.triggerConfig).toEqual({
       metricKey: 'followers',
       direction: 'below',
       threshold: 500,
@@ -365,31 +446,30 @@ describe('R5: an ordinary submission still creates exactly the rule it describes
   it('a deliberate zero is stored as a zero', async () => {
     // Zero was never forbidden — it just has to be TYPED rather than inferred
     // from a blank box.
+    // A number field is a stored rule's (Phase 2B-3 PR 2), so the zero is
+    // typed into the edit of one.
     const name = `r5 zero ${randomUUID()}`;
+    const rule = await stored({ triggerType: 'CONTENT_APPROVED', name });
     expect(
-      await submit(
-        'CONTENT_APPROVED',
-        {
-          conditionField: 'content.platformCount',
-          conditionOperator: 'greater_than',
-          conditionValue: '0',
-        },
-        name,
-      ),
+      await patch(rule.id, {
+        conditionField: 'content.platformCount',
+        conditionOperator: 'greater_than',
+        conditionValue: '0',
+      }),
     ).toBe('OK');
 
-    const stored = (await rules()).find((rule) => rule.name === name);
-    expect(stored?.conditions).toEqual([
+    const after = (await rules()).find((row) => row.name === name);
+    expect(after?.conditions).toEqual([
       { field: 'content.platformCount', operator: 'greater_than', value: 0 },
     ]);
   });
 
   it('an empty picker is an intentional choice, and stores an unconditional rule', async () => {
     const name = `r5 unconditional ${randomUUID()}`;
-    expect(await submit('CONTENT_APPROVED', { conditionField: '' }, name)).toBe('OK');
+    expect(await submit({ conditionField: '' }, name)).toBe('OK');
 
-    const stored = (await rules()).find((rule) => rule.name === name);
-    expect(stored?.conditions).toEqual([]);
+    const after = (await rules()).find((rule) => rule.name === name);
+    expect(after?.conditions).toEqual([]);
   });
 });
 
@@ -408,17 +488,11 @@ describe('R5: a refused decode cannot widen a rule that already exists', () => {
      * caller exists, not after.
      */
     const name = `r5 editable ${randomUUID()}`;
-    expect(
-      await submit(
-        'CONTENT_APPROVED',
-        {
-          conditionField: 'content.status',
-          conditionOperator: 'in',
-          conditionValue: ['APPROVED', 'SCHEDULED'],
-        },
-        name,
-      ),
-    ).toBe('OK');
+    await stored({
+      triggerType: 'CONTENT_APPROVED',
+      conditions: [{ field: 'content.status', operator: 'in', value: ['APPROVED', 'SCHEDULED'] }],
+      name,
+    });
 
     const created = (await rules()).find((rule) => rule.name === name);
     if (!created) throw new Error('the rule was not created');
@@ -450,17 +524,11 @@ describe('R5: a refused decode cannot widen a rule that already exists', () => {
     // The distinction the whole round rests on: `''` is an answer, and it is
     // the only input that may make a rule unconditional.
     const name = `r5 clearable ${randomUUID()}`;
-    expect(
-      await submit(
-        'CONTENT_APPROVED',
-        {
-          conditionField: 'content.pillar',
-          conditionOperator: 'equals',
-          conditionValue: 'education',
-        },
-        name,
-      ),
-    ).toBe('OK');
+    await stored({
+      triggerType: 'CONTENT_APPROVED',
+      conditions: [{ field: 'content.pillar', operator: 'equals', value: 'education' }],
+      name,
+    });
 
     const created = (await rules()).find((rule) => rule.name === name);
     if (!created) throw new Error('the rule was not created');

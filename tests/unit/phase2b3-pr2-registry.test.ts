@@ -3,6 +3,7 @@ import {
   ACTION_OUTCOME_STATUS,
   AUTHORING_CONDITION_FIELDS,
   AUTOMATION_ACTIONS,
+  AUTOMATION_TRIGGERS,
   CONDITION_FIELD_TRIGGERS,
   authorableConditionFieldsFor,
   conditionFieldsFor,
@@ -11,6 +12,8 @@ import {
   findAction,
   findTrigger,
   isActionOutcomeCode,
+  isAuthorablePair,
+  isOlderAutomation,
   type AutomationCondition,
 } from '@brandspace/automation';
 
@@ -177,5 +180,66 @@ describe('the typed outcomes', () => {
     expect(isActionOutcomeCode('no_free_day')).toBe(true);
     expect(isActionOutcomeCode('toString')).toBe(false);
     expect(isActionOutcomeCode(undefined)).toBe(false);
+  });
+});
+
+describe('the G13 flip — exactly what a new rule may be written as', () => {
+  it('three triggers and four actions are authorable, by name', () => {
+    expect(AUTOMATION_TRIGGERS.filter((t) => t.authorable).map((t) => t.type)).toEqual([
+      'CONTENT_APPROVED',
+      'POST_PUBLISHED',
+      'POST_FAILED',
+    ]);
+    expect(AUTOMATION_ACTIONS.filter((a) => a.authorable).map((a) => a.type)).toEqual([
+      'SCHEDULE_NEXT_FREE_SLOT',
+      'NOTIFY_PERSON',
+      'ADD_TO_CAMPAIGN',
+      'MAKE_DRAFT_COPY',
+    ]);
+  });
+
+  it('the retired four and four are registered, executable and not authorable', () => {
+    for (const type of [
+      'CONTENT_SCHEDULED',
+      'ANALYTICS_REFRESHED',
+      'METRIC_THRESHOLD_CROSSED',
+      'SCHEDULED_TIME',
+    ]) {
+      expect(findTrigger(type)?.authorable, type).toBe(false);
+    }
+    for (const type of ['NOTIFY', 'SUBMIT_FOR_APPROVAL', 'PLACE_ON_CALENDAR', 'PROPOSE_PUBLISH']) {
+      expect(findAction(type)?.authorable, type).toBe(false);
+      expect(findAction(type)?.executable, type).toBe(true);
+    }
+  });
+
+  it('the authorable pairs are exactly the eight approved ones', () => {
+    const pairs: string[] = [];
+    for (const trigger of AUTOMATION_TRIGGERS) {
+      for (const action of AUTOMATION_ACTIONS) {
+        if (isAuthorablePair(trigger.type, action.type))
+          pairs.push(`${trigger.type} × ${action.type}`);
+      }
+    }
+    expect(pairs).toEqual([
+      'CONTENT_APPROVED × SCHEDULE_NEXT_FREE_SLOT',
+      'CONTENT_APPROVED × NOTIFY_PERSON',
+      'CONTENT_APPROVED × ADD_TO_CAMPAIGN',
+      'CONTENT_APPROVED × MAKE_DRAFT_COPY',
+      'POST_PUBLISHED × NOTIFY_PERSON',
+      'POST_PUBLISHED × MAKE_DRAFT_COPY',
+      'POST_FAILED × NOTIFY_PERSON',
+      'POST_FAILED × MAKE_DRAFT_COPY',
+    ]);
+  });
+
+  it('every stored legacy shape is an older automation; every G13 pair is not', () => {
+    expect(isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'NOTIFY' })).toBe(true);
+    expect(isOlderAutomation({ triggerType: 'SCHEDULED_TIME', actionType: 'NOTIFY_PERSON' })).toBe(
+      true,
+    );
+    expect(isOlderAutomation({ triggerType: 'POST_FAILED', actionType: 'MAKE_DRAFT_COPY' })).toBe(
+      false,
+    );
   });
 });

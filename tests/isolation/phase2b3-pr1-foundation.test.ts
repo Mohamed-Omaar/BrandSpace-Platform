@@ -352,9 +352,10 @@ describe('M1c — the outbox and rule CHECKs know the G13 values', () => {
         triggerType: 'CONTENT_APPROVED',
         triggerConfig: {},
         conditions: [],
-        actionType: 'NOTIFY',
-        actionConfig: { templateKey: 'automation.notice' },
-        actor: actor(),
+        // Phase 2B-3 PR 2: a new rule is a G13 rule.
+        actionType: 'MAKE_DRAFT_COPY',
+        actionConfig: {},
+        actor: actor({ permissionKeys: [...EVERYTHING, 'content.create'] }),
       }),
     );
     // Phase 2B-3 PR 2 (OD-21): a new rule listens from the moment it exists.

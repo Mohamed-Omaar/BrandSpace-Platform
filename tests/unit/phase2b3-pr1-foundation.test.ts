@@ -182,7 +182,9 @@ describe('every shipped action requires EXACTLY what it required before', () => 
       expect(action.permissions, action.type).toEqual({ allOf: [BEFORE[action.type]], anyOf: [] });
       expect(action.entitlements, action.type).toEqual([]);
       expect(action.spendsCredits, action.type).toBe(false);
-      expect(action.authorable, action.type).toBe(true);
+      // Phase 2B-3 PR 2 (the G13 flip): no NEW rule is written with a pre-G13
+      // action, and every stored one still runs.
+      expect(action.authorable, action.type).toBe(false);
       expect(action.executable, action.type).toBe(true);
     }
   });

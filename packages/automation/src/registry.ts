@@ -128,7 +128,7 @@ export const AUTOMATION_TRIGGERS = [
     contentItemVia: 'calendarSlot',
     timeBucketed: false,
     ruleAddressed: false,
-    authorable: true,
+    authorable: false,
     messageKey: 'contentScheduled',
   },
   {
@@ -164,7 +164,7 @@ export const AUTOMATION_TRIGGERS = [
     contentItemVia: null,
     timeBucketed: false,
     ruleAddressed: false,
-    authorable: true,
+    authorable: false,
     messageKey: 'analyticsRefreshed',
   },
   {
@@ -181,7 +181,7 @@ export const AUTOMATION_TRIGGERS = [
     contentItemVia: null,
     timeBucketed: false,
     ruleAddressed: true,
-    authorable: true,
+    authorable: false,
     messageKey: 'metricThreshold',
   },
   {
@@ -196,7 +196,7 @@ export const AUTOMATION_TRIGGERS = [
     contentItemVia: null,
     timeBucketed: true,
     ruleAddressed: true,
-    authorable: true,
+    authorable: false,
     messageKey: 'scheduledTime',
   },
 ] as const satisfies readonly TriggerDefinition[];
@@ -982,7 +982,7 @@ export const AUTOMATION_ACTIONS = [
     entitlements: [],
     spendsCredits: false,
     asksFirst: false,
-    authorable: true,
+    authorable: false,
     // The catalogue it was authored in before G13; never POST_FAILED.
     authoringTriggers: LEGACY_AUTHORING_TRIGGERS,
     catalogue: 'legacy',
@@ -999,7 +999,7 @@ export const AUTOMATION_ACTIONS = [
     entitlements: [],
     spendsCredits: false,
     asksFirst: false,
-    authorable: true,
+    authorable: false,
     // The catalogue it was authored in before G13; never POST_FAILED.
     authoringTriggers: LEGACY_AUTHORING_TRIGGERS,
     catalogue: 'legacy',
@@ -1023,7 +1023,7 @@ export const AUTOMATION_ACTIONS = [
     entitlements: [],
     spendsCredits: false,
     asksFirst: false,
-    authorable: true,
+    authorable: false,
     // The catalogue it was authored in before G13; never POST_FAILED.
     authoringTriggers: LEGACY_AUTHORING_TRIGGERS,
     catalogue: 'legacy',
@@ -1048,7 +1048,7 @@ export const AUTOMATION_ACTIONS = [
     entitlements: [],
     spendsCredits: false,
     asksFirst: true,
-    authorable: true,
+    authorable: false,
     // The catalogue it was authored in before G13; never POST_FAILED.
     authoringTriggers: LEGACY_AUTHORING_TRIGGERS,
     catalogue: 'legacy',

@@ -142,9 +142,9 @@ describe('what arms a rule', () => {
         triggerType: 'CONTENT_APPROVED',
         triggerConfig: {},
         conditions: [],
-        actionType: 'NOTIFY',
-        actionConfig: { templateKey: 'automation.notice' },
-        actor: actor(),
+        actionType: 'MAKE_DRAFT_COPY',
+        actionConfig: {},
+        actor: { ...actor(), permissionKeys: [...actor().permissionKeys, 'content.create'] },
       }),
     );
     expect(rule.armedAt).toEqual(now);
