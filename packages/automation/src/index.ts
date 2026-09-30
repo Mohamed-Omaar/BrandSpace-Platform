@@ -54,6 +54,8 @@ export {
   PLANNED_AUTOMATION_TRIGGERS,
   RETIRED_AUTOMATION_TRIGGERS,
   satisfiesActionPermissions,
+  DUE_EVENT_DEFINITIONS,
+  TIMED_PRODUCER_LIMITS,
 } from './registry';
 export type {
   ActionDefinition,
@@ -90,6 +92,21 @@ export {
   timedRuleIsDue,
 } from './schedule';
 export type { LocalMoment, ThresholdTransition } from './schedule';
+// Phase 2B-3 PR 3 — the timed G13 producers' arithmetic and delivery re-check.
+export {
+  dayKeyInEventKey,
+  dayKeyOf,
+  edgeTransitionSinceArming,
+  localDayKey,
+  nextVisitAt,
+  producerCeiling,
+  producerFloor,
+  selectDue,
+  shiftDayKey,
+} from './due-events';
+export type { DueCandidate, LocalCalendarPort } from './due-events';
+export { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
+export type { OccurrenceCheck } from './occurrence';
 export type {
   AutomationActor,
   AutomationDenialSink,

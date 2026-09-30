@@ -22,6 +22,7 @@ import {
   TenantContentPolicySource,
   readRetentionFacts,
   resolveContentExpiry,
+  instantForIntent,
 } from '@brandspace/content';
 import {
   createScheduleQuota,
@@ -361,6 +362,11 @@ function portsFor(
         });
         return workspace?.timezone ?? 'UTC';
       },
+    },
+    // Phase 2B-3 PR 3 — local 00:00 for the timed events' delivery re-check, from
+    // the platform's one zoned-time resolver.
+    calendarDays: {
+      localMidnight: (dayKey, timezone) => instantForIntent(`${dayKey}T00:00`, timezone),
     },
     // NO PUBLISH PORT HERE. See the file comment: the confirmation arrives in
     // `apps/api`, with a person's session behind it, and the port is wired there.

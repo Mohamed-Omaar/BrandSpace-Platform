@@ -1,3 +1,5 @@
+import type { LocalCalendarPort } from './due-events';
+
 /**
  * THE PORTS AN AUTOMATION ACTION REACHES THE PRODUCT THROUGH.
  *
@@ -236,4 +238,9 @@ export interface AutomationPorts {
   readonly content?: ContentCopyPort | undefined;
   readonly publishing?: PublishPort | undefined;
   readonly timezone?: TimezonePort | undefined;
+  /**
+   * Phase 2B-3 PR 3 — local 00:00 on a calendar day, for the delivery re-check
+   * of the timed G13 events. Absent, an event that needs it fails closed.
+   */
+  readonly calendarDays?: LocalCalendarPort | undefined;
 }

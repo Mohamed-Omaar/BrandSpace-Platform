@@ -78,7 +78,14 @@ export interface TriggerDefinition {
    * other three name an EXPLICIT, SAFE MAPPING the engine resolves with a scoped
    * query rather than by assuming the ids interchange.
    */
-  readonly contentItemVia: 'direct' | 'calendarSlot' | 'publishJob' | 'publishAttempt' | null;
+  readonly contentItemVia:
+    | 'direct'
+    | 'calendarSlot'
+    | 'publishJob'
+    | 'publishAttempt'
+    // Phase 2B-3 PR 3 — REVIEW_WAITING_24H: the approval, then its post.
+    | 'approval'
+    | null;
   /**
    * Does this trigger's identity come from a CLOCK rather than from a row?
    *
@@ -109,6 +116,49 @@ export interface TriggerDefinition {
 }
 
 const emptyConfig = z.object({}).default({});
+
+/**
+ * PHASE 2B-3 PR 3 — WHAT THE TIMED G13 EVENTS MEAN, held here and nowhere else.
+ *
+ * These four are the events' own definitions (owner answer to §34 item 5): the
+ * names say "24 hours", "3 days" and "within 7 days", and moving them into plan
+ * or customer configuration would change what the event IS, not how often it
+ * runs. They are read by the producers and by the delivery re-check alike, so
+ * the two can never disagree about what "still waiting" means.
+ */
+export const DUE_EVENT_DEFINITIONS = {
+  /** REVIEW_WAITING_24H — a review still open this long after it was asked for. */
+  reviewWaitHours: 24,
+  /** SCHEDULE_GAP — the local calendar days, starting tomorrow, that must hold a post. */
+  scheduleGapDays: 3,
+  /** FACT_EXPIRING — `validUntil` within [today, today + (days − 1)], local days. */
+  factExpiryWindowDays: 7,
+} as const;
+
+/**
+ * PHASE 2B-3 PR 3 — HOW MUCH ONE SWEEP DOES FOR ONE RULE (owner decision A).
+ *
+ * `maxOccurrencesPerVisit`: new events one rule may produce in one visit. More
+ * than that continues on the next sweep from where this one stopped — nothing
+ * is dropped, and one rule with a backlog cannot hold a sweep.
+ *
+ * `campaignBoundaryMaxLatenessHours`: a campaign start or end that passed more
+ * than this long before the sweep saw it is not announced — after an outage,
+ * "your campaign started" days late is noise, not news. The watermark moves past
+ * it and the sweep logs how many it skipped. Only the campaign events: a review
+ * still waiting and a fact still expiring are re-checked when they are
+ * delivered, so a late one is still true.
+ *
+ * `watermarkLagSeconds`: the cursor never moves closer to "now" than this. A
+ * write whose transaction began before the sweep read and committed after it
+ * carries an earlier timestamp; keeping the cursor behind lets the next sweep
+ * still see it. The event key makes a second sighting a no-op.
+ */
+export const TIMED_PRODUCER_LIMITS = {
+  maxOccurrencesPerVisit: 25,
+  campaignBoundaryMaxLatenessHours: 24,
+  watermarkLagSeconds: 120,
+} as const;
 
 export const AUTOMATION_TRIGGERS = [
   {

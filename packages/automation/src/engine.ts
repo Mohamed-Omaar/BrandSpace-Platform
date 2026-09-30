@@ -32,6 +32,7 @@ import {
   unknownTriggerOrAction,
 } from './errors';
 import { CONDITION_VALUE_UNAVAILABLE, conditionValuesResolve } from './condition-values';
+import { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
 import { campaignTargetResolves, personTargetResolves } from './action-targets';
 import type { AutomationPolicy } from './policy';
 import type { AutomationPorts } from './ports';
@@ -1094,6 +1095,27 @@ export class AutomationEngine {
       return this.#finish(rule, run, 'BLOCKED_BY_POLICY', { failureCode: 'daily_ceiling_reached' });
     }
 
+    // --- Phase 2B-3 PR 3: the occurrence still holds -------------------------
+    // A timed event is about a row that can change before the event is run: a
+    // review decided, a campaign archived, the empty days filled. Re-read, and
+    // skip — before any condition or action — when it no longer holds.
+    const holds = await occurrenceStillHolds(this.#db, {
+      workspaceId: this.#workspaceId,
+      brandId: rule.brandId,
+      triggerType: event.type,
+      refId: event.refId,
+      eventKey: event.eventKey ?? null,
+      now,
+      timezone: () =>
+        this.#ports.timezone
+          ? this.#ports.timezone.timezoneFor(this.#workspaceId)
+          : Promise.resolve('UTC'),
+      calendar: this.#ports.calendarDays,
+    });
+    if (!holds) {
+      return this.#finish(rule, run, 'SKIPPED', { failureCode: OCCURRENCE_STALE });
+    }
+
     // --- The conditions ------------------------------------------------------
     const conditions = (rule.conditions as unknown as AutomationCondition[]) ?? [];
     /*
@@ -1859,6 +1881,15 @@ export class AutomationEngine {
           select: { contentItemId: true },
         });
         return job?.contentItemId ?? null;
+      }
+      // Phase 2B-3 PR 3 — REVIEW_WAITING_24H: the review cycle carries the brand
+      // the scope predicate is asked about, and names its post.
+      case 'approval': {
+        const approval = await this.#db.approval.findFirst({
+          where: { id: event.refId, ...scoped },
+          select: { contentItemId: true },
+        });
+        return approval?.contentItemId ?? null;
       }
     }
   }
