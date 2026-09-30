@@ -11,7 +11,8 @@ import { withPlatformPrisma } from './platform-prisma';
  * One case per language, each in a workspace of its own:
  *
  *   - the trigger picker offers the three G13 triggers (and, since PR 3, the
- *     five timed ones after them), and none of the four retired ones;
+ *     five timed ones after them; since PR 4, the two analytics events), and
+ *     none of the four retired ones;
  *   - each trigger offers exactly its G13 actions (the compatibility table);
  *   - "Notify a chosen person" and "Add to a campaign" show their picker,
  *     the next Tab stop after the action; the other two need none;
@@ -214,6 +215,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     'CAMPAIGN_ENDED',
     'SCHEDULE_GAP',
     'FACT_EXPIRING',
+    'WEEKLY_ENGAGEMENT_DROPPED',
+    'POST_TOP_10_PERCENT',
   ]);
   await expect(page.getByTestId('automation-trigger')).toContainText(copy.trigger);
 

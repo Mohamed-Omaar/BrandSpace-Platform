@@ -11,7 +11,8 @@ import { withPlatformPrisma } from './platform-prisma';
  * One case per language, each in a workspace of its own:
  *
  *   - the trigger picker offers the three PR 2 triggers and the five timed
- *     ones, in the registry's order, with the approved words;
+ *     ones (and, since PR 4, the two analytics events after them), in the
+ *     registry's order, with the approved words;
  *   - each timed trigger offers exactly its actions and its conditions: the
  *     waiting review its post's fields and "Remind the reviewer"; a campaign
  *     boundary the campaign, chosen from the brand's own; the schedule gap and
@@ -160,6 +161,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     'CAMPAIGN_ENDED',
     'SCHEDULE_GAP',
     'FACT_EXPIRING',
+    'WEEKLY_ENGAGEMENT_DROPPED',
+    'POST_TOP_10_PERCENT',
   ]);
   for (const label of copy.triggers) await expect(trigger).toContainText(label);
 

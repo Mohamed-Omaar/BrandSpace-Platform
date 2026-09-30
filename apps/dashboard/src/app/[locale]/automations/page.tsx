@@ -21,6 +21,7 @@ import {
   isAuthorablePair,
   isOlderAutomation,
   memberCatalogueFor,
+  triggerAvailable,
   type ConditionField,
 } from '@brandspace/automation';
 import { INGESTED_METRIC_KEYS } from '@brandspace/analytics';
@@ -166,30 +167,35 @@ export default async function AutomationsPage({
   );
   const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
 
-  const { rules, runs, needsYou } = await inAnalytics(workspace.workspaceId, async (services) => {
-    const engine = await services.automations();
-    return {
-      rules: await engine.listRules({
-        brandId: selectedBrand?.id,
-        brandScope: workspace.brandScope,
-      }),
-      runs: await engine.listRuns({
-        brandId: selectedBrand?.id,
-        brandScope: workspace.brandScope,
-        take: 25,
-      }),
-      /*
-       * B12 (Phase 2B-2b) — "NEEDS YOU": every open asks-first run this person
-       * could decide — only actions whose permission they hold — not merely the
-       * ones among the last 25 runs.
-       */
-      needsYou: await engine.awaitingRuns({
-        brandId: selectedBrand?.id,
-        brandScope: workspace.brandScope,
-        permissionKeys: workspace.permissionKeys,
-      }),
-    };
-  });
+  const { rules, runs, needsYou, automationPolicy } = await inAnalytics(
+    workspace.workspaceId,
+    async (services) => {
+      const engine = await services.automations();
+      return {
+        /** Phase 2B-3 PR 4 — which analytics events have their thresholds set. */
+        automationPolicy: await services.automationPolicy(),
+        rules: await engine.listRules({
+          brandId: selectedBrand?.id,
+          brandScope: workspace.brandScope,
+        }),
+        runs: await engine.listRuns({
+          brandId: selectedBrand?.id,
+          brandScope: workspace.brandScope,
+          take: 25,
+        }),
+        /*
+         * B12 (Phase 2B-2b) — "NEEDS YOU": every open asks-first run this person
+         * could decide — only actions whose permission they hold — not merely the
+         * ones among the last 25 runs.
+         */
+        needsYou: await engine.awaitingRuns({
+          brandId: selectedBrand?.id,
+          brandScope: workspace.brandScope,
+          permissionKeys: workspace.permissionKeys,
+        }),
+      };
+    },
+  );
 
   /*
    * WHAT A PROPOSED PUBLISH WOULD PUBLISH (P6-12). The confirm button used to
@@ -608,6 +614,12 @@ export default async function AutomationsPage({
                 ],
                 needsSchedule: trigger.type === 'SCHEDULED_TIME',
                 needsThreshold: trigger.type === 'METRIC_THRESHOLD_CROSSED',
+                /*
+                  Phase 2B-3 PR 4 — the same verdict `createRule` refuses on:
+                  an analytics event without its operator thresholds is shown
+                  but cannot be chosen.
+                */
+                unavailable: !triggerAvailable(automationPolicy, trigger.type),
               }))}
               actionLabels={Object.fromEntries(
                 AUTOMATION_ACTIONS.map((action) => [
@@ -684,6 +696,7 @@ export default async function AutomationsPage({
                 actionCampaign: t('automations.actionCampaignLabel'),
                 chooseTrigger: t('automations.chooseTrigger'),
                 chooseAction: t('automations.chooseAction'),
+                triggerUnavailable: t('automations.triggerUnavailable'),
                 conditionsKept: t('automations.conditionsKept'),
                 valueUnavailable: t('automations.valueUnavailable'),
                 cancel: t('automations.cancelEdit'),
