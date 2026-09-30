@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buttonStyle,
   colorTokens,
@@ -112,6 +112,12 @@ export interface AutomationFormLabels {
   /** Phase 2B-3 PR 2 — the G13 actions' own settings. */
   readonly actionPerson: string;
   readonly actionCampaign: string;
+  /**
+   * Phase 2B-3 PR 2 — the empty first option of the trigger and action pickers
+   * on a NEW rule, and what the browser says when either is left unchosen.
+   */
+  readonly chooseTrigger: string;
+  readonly chooseAction: string;
   readonly conditionsKept?: string;
   readonly valueUnavailable?: string;
   readonly cancel?: string;
@@ -185,31 +191,50 @@ const FIELD: React.CSSProperties = { display: 'grid', gap: '0.25rem' };
 export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
   const initial = props.initial;
   const editing = initial !== undefined;
-  const [triggerType, setTriggerType] = useState(
-    initial?.triggerType ?? props.triggers[0]?.type ?? '',
-  );
+  /*
+   * NOTHING IS PRESELECTED ON A NEW RULE (Phase 2B-3 PR 2). The trigger and the
+   * action start empty, behind "Choose …", and the form will not post until a
+   * person has picked both. A preselected action was a silent default, and
+   * three of the G13 actions change content (schedule, file into a campaign,
+   * copy): a rule someone saved and switched on without looking at the action
+   * would do one of those to every post it matched.
+   */
+  const [triggerType, setTriggerType] = useState(initial?.triggerType ?? '');
   const [conditionField, setConditionField] = useState(initial?.condition?.field ?? '');
   const [conditionOperator, setConditionOperator] = useState(initial?.condition?.operator ?? '');
   const [brandId, setBrandId] = useState(initial?.brandId ?? props.brands[0]?.id ?? '');
   const keepConditions = (initial?.extraConditions ?? 0) > 0;
 
   const trigger = useMemo(
-    () => props.triggers.find((option) => option.type === triggerType) ?? props.triggers[0],
+    () => props.triggers.find((option) => option.type === triggerType),
     [props.triggers, triggerType],
   );
   /*
    * THE ACTION IS CONTROLLED (Phase 2B-3 PR 2) because two of them carry a
    * setting the form must show: the person to notify and the campaign. An
-   * action the new trigger does not offer falls back to its first one.
+   * action the new trigger does not offer is cleared, never swapped for the
+   * trigger's first one.
    */
-  const [chosenAction, setChosenAction] = useState(
-    initial?.actionType ?? trigger?.actionTypes[0] ?? '',
-  );
+  const [chosenAction, setChosenAction] = useState(initial?.actionType ?? '');
   const actionType = editing
     ? (initial?.actionType ?? '')
     : (trigger?.actionTypes ?? []).includes(chosenAction)
       ? chosenAction
-      : (trigger?.actionTypes[0] ?? '');
+      : '';
+  /*
+   * LEFT UNCHOSEN, THE BROWSER SAYS SO IN THE PAGE'S LANGUAGE. `required` on
+   * the pickers is what stops the post; the message it shows is set here, from
+   * the same translated words as the empty option, rather than left to the
+   * browser's own language.
+   */
+  const triggerPicker = useRef<HTMLSelectElement>(null);
+  const actionPicker = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    triggerPicker.current?.setCustomValidity(triggerType === '' ? props.labels.chooseTrigger : '');
+  }, [triggerType, props.labels.chooseTrigger]);
+  useEffect(() => {
+    actionPicker.current?.setCustomValidity(actionType === '' ? props.labels.chooseAction : '');
+  }, [actionType, props.labels.chooseAction]);
   /** The brand's list, plus the saved value when it is no longer offered. */
   const targetChoices = (
     byBrand: Readonly<Record<string, readonly ConditionChoice[]>>,
@@ -363,6 +388,8 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                   name="triggerType"
                   className="bs-control"
                   data-testid="automation-trigger"
+                  ref={triggerPicker}
+                  required
                   value={triggerType}
                   onChange={(event) => {
                     setTriggerType(event.target.value);
@@ -371,6 +398,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                     setConditionField('');
                   }}
                 >
+                  <option value="">{props.labels.chooseTrigger}</option>
                   {props.triggers.map((option) => (
                     <option key={option.type} value={option.type}>
                       {option.label}
@@ -391,9 +419,12 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                   name="actionType"
                   className="bs-control"
                   data-testid="automation-action"
+                  ref={actionPicker}
+                  required
                   value={actionType}
                   onChange={(event) => setChosenAction(event.target.value)}
                 >
+                  <option value="">{props.labels.chooseAction}</option>
                   {(trigger?.actionTypes ?? []).map((type) => (
                     <option key={type} value={type}>
                       {props.actionLabels[type] ?? type}

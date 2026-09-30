@@ -682,6 +682,8 @@ export default async function AutomationsPage({
                 offsetHours: t('automations.offsetHoursLabel'),
                 actionPerson: t('automations.actionPersonLabel'),
                 actionCampaign: t('automations.actionCampaignLabel'),
+                chooseTrigger: t('automations.chooseTrigger'),
+                chooseAction: t('automations.chooseAction'),
                 conditionsKept: t('automations.conditionsKept'),
                 valueUnavailable: t('automations.valueUnavailable'),
                 cancel: t('automations.cancelEdit'),

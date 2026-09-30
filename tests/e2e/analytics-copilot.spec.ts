@@ -522,6 +522,10 @@ test.describe('automations', () => {
 
     const name = `E2E rule ${Date.now()}`;
     await form.locator('input[name="name"]').fill(name);
+    // Nothing is chosen for the author (Phase 2B-3 PR 2): the trigger and the
+    // action are picked, never inherited.
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await chooseHarmlessAction(page);
     await form.locator('button[type="submit"]').first().click();
     await automationDone(page, 'AUTOMATION_CREATED');
 
@@ -643,7 +647,8 @@ test.describe('automations', () => {
       .getByTestId('automation-action')
       .locator('option')
       .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
-    expect(publishedActions).toEqual(['NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
+    // The empty "Choose an action" leads every list (Phase 2B-3 PR 2).
+    expect(publishedActions).toEqual(['', 'NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
 
     // And the approval trigger offers all four.
     await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
@@ -652,6 +657,7 @@ test.describe('automations', () => {
       .locator('option')
       .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
     expect(approvedActions).toEqual([
+      '',
       'SCHEDULE_NEXT_FREE_SLOT',
       'NOTIFY_PERSON',
       'ADD_TO_CAMPAIGN',
@@ -799,6 +805,7 @@ test.describe('automations', () => {
     const name = `E2E string ${Date.now()}`;
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
     await value.selectOption('POST');
+    await chooseHarmlessAction(page);
     await page.getByTestId('automation-submit').click();
     await automationDone(page, 'AUTOMATION_CREATED');
     await expect(page.getByTestId('automation-rules')).toContainText(name);
@@ -1079,6 +1086,8 @@ test.describe('P6-12 · copilot and automations', () => {
     const form = page.getByTestId('automation-form');
     const name = `E2E delete ${Date.now()}`;
     await form.locator('input[name="name"]').fill(name);
+    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await chooseHarmlessAction(page);
     await page.getByTestId('automation-submit').click();
     await automationDone(page, 'AUTOMATION_CREATED');
 

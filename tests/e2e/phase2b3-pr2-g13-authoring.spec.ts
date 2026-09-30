@@ -133,6 +133,8 @@ const COPY = {
     ],
     person: 'Person to notify',
     campaign: 'Campaign',
+    chooseTrigger: 'Choose an event',
+    chooseAction: 'Choose an action',
     older: '(older automation)',
     skipped: 'Skipped',
     inReview: "Skipped — this post is waiting for review, so it wasn't changed.",
@@ -147,6 +149,8 @@ const COPY = {
     actions: ['جدولة في أول موعد متاح', 'تنبيه شخص محدد', 'إضافة إلى حملة', 'إنشاء نسخة مسودة'],
     person: 'الشخص المراد تنبيهه',
     campaign: 'الحملة',
+    chooseTrigger: 'اختر حدثًا',
+    chooseAction: 'اختر إجراءً',
     older: '(أتمتة أقدم)',
     skipped: 'تم التخطي',
     inReview: 'تم التخطي — هذا المنشور بانتظار المراجعة، لذلك لم يُعدَّل.',
@@ -162,8 +166,46 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations`);
   if (locale === 'ar') await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 
+  // --- Nothing is chosen for the author, and nothing is saved unchosen ---------
+  const trigger = page.getByTestId('automation-trigger');
+  const action = page.getByTestId('automation-action');
+  await expect(trigger).toHaveValue('');
+  await expect(action).toHaveValue('');
+  await expect(trigger.locator('option').first()).toHaveText(copy.chooseTrigger);
+  await expect(action.locator('option').first()).toHaveText(copy.chooseAction);
+  // With no trigger there is no action to offer but the empty one.
+  expect(await values(page, 'automation-action')).toEqual(['']);
+  await noSeriousViolations(page);
+
+  const unchosen = `G13 unchosen ${locale} ${randomUUID().slice(0, 6)}`;
+  await page.getByTestId('automation-name').fill(unchosen);
+  await page.getByTestId('automation-submit').focus();
+  await page.keyboard.press('Enter');
+  // The browser refuses, in the page's language, and the form stays.
+  const message = (testId: string) =>
+    page.getByTestId(testId).evaluate((node) => (node as HTMLSelectElement).validationMessage);
+  expect(await message('automation-trigger')).toBe(copy.chooseTrigger);
+  expect(await message('automation-action')).toBe(copy.chooseAction);
+  await expect(page).not.toHaveURL(/[?&](ok|error)=/);
+  // A trigger alone is still not enough.
+  await trigger.selectOption('CONTENT_APPROVED');
+  await expect(action).toHaveValue('');
+  await page.getByTestId('automation-submit').focus();
+  await page.keyboard.press('Enter');
+  expect(await message('automation-trigger')).toBe('');
+  expect(await message('automation-action')).toBe(copy.chooseAction);
+  await expect(page).not.toHaveURL(/[?&](ok|error)=/);
+  expect(
+    await withPlatformPrisma((prisma) =>
+      prisma.automationRule.count({
+        where: { workspaceId: seeded.ws.workspaceId, name: unchosen },
+      }),
+    ),
+  ).toBe(0);
+
   // --- The catalogue: exactly the three G13 triggers ---------------------------
   expect(await values(page, 'automation-trigger')).toEqual([
+    '',
     'CONTENT_APPROVED',
     'POST_PUBLISHED',
     'POST_FAILED',
@@ -172,10 +214,11 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
 
   // --- Each trigger's actions: the compatibility table ------------------------
   await page.getByTestId('automation-trigger').selectOption('POST_FAILED');
-  expect(await values(page, 'automation-action')).toEqual(['NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
+  expect(await values(page, 'automation-action')).toEqual(['', 'NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
   expect(await values(page, 'automation-condition-field')).toContain('publish.failureClass');
   await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
   expect(await values(page, 'automation-action')).toEqual([
+    '',
     'SCHEDULE_NEXT_FREE_SLOT',
     'NOTIFY_PERSON',
     'ADD_TO_CAMPAIGN',
@@ -186,8 +229,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   }
 
   // --- The action's own settings, and the keyboard reaches them ---------------
-  const action = page.getByTestId('automation-action');
-  await expect(action).toHaveValue('SCHEDULE_NEXT_FREE_SLOT');
+  // Changing the trigger kept no action for the author either.
+  await expect(action).toHaveValue('');
   await expect(page.getByTestId('automation-action-person')).toHaveCount(0);
   await expect(page.getByTestId('automation-action-campaign')).toHaveCount(0);
 
