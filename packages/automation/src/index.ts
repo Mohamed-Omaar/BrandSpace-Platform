@@ -107,6 +107,17 @@ export {
 export type { DueCandidate, KnowledgeValidityPort, LocalCalendarPort } from './due-events';
 export { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
 export {
+  ENGAGEMENTS_METRIC,
+  IMPRESSIONS_METRIC,
+  brandTopPostPopulation,
+  brandWeeklyEngagement,
+  readOnce,
+  topShareOf,
+  weeklyDropVerdict,
+  weeklyEngagementWindows,
+} from './analytics-events';
+export type { RankedPost, SharedReads, UtcWindow, WeeklyWindows } from './analytics-events';
+export {
   BOUNDARY_CAMPAIGN_STATUSES,
   SCHEDULE_GAP_SLOT_STATUSES,
   advanceDueWatermark,

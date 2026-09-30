@@ -30,11 +30,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const at = (iso: string) => new Date(iso);
 
 describe('the event definitions and the owner-decided bounds', () => {
-  it('the four event meanings live in the registry, as the owner decided', () => {
+  it('the event meanings live in the registry, as the owner decided', () => {
     expect(DUE_EVENT_DEFINITIONS).toEqual({
       reviewWaitHours: 24,
       scheduleGapDays: 3,
       factExpiryWindowDays: 7,
+      // Phase 2B-3 PR 4 — the analytics events' own meanings.
+      weeklyDropPercent: 20,
+      topPostSharePercent: 10,
     });
   });
 

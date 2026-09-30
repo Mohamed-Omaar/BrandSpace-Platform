@@ -133,6 +133,13 @@ export const DUE_EVENT_DEFINITIONS = {
   scheduleGapDays: 3,
   /** FACT_EXPIRING — `validUntil` within [today, today + (days − 1)], local days. */
   factExpiryWindowDays: 7,
+  /**
+   * Phase 2B-3 PR 4 — WEEKLY_ENGAGEMENT_DROPPED: the last settled week's
+   * engagements at least this many percent below the week before (§34 item 5).
+   */
+  weeklyDropPercent: 20,
+  /** Phase 2B-3 PR 4 — POST_TOP_10_PERCENT: the share of ranked posts that is "top". */
+  topPostSharePercent: 10,
 } as const;
 
 /**
