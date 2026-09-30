@@ -552,6 +552,63 @@ round.
 
 No data is lost or rewritten.
 
+### 6.11 F6: `brandScope` never NULL — the lock timeout and what to do if it fires (D-442, D-443)
+
+`20261013090000_brand_scope_not_null` is ONE explicit transaction. It takes ACCESS EXCLUSIVE on
+`membership` and `invitation` from its first `ALTER TABLE` until COMMIT, so while it runs every
+request that reads a membership — every signed-in request — waits. It is quick: about 60 ms on a few
+thousand rows, about 9 s on 500,000 memberships of which half were NULL, nearly all of it the
+backfill.
+
+**The lock timeout.** The migration starts with `SET LOCAL lock_timeout = '5s'` (owner decision D1).
+If a long transaction holds a lock on either table, the migration does not queue every request behind
+itself: after five seconds it stops with `canceling statement due to lock timeout`, and the whole
+transaction rolls back — FORCE was never left lifted, no row changed, the column stays nullable.
+
+**If it times out:**
+
+1. **Nothing is broken, and nothing is urgent.** The application keeps working on the old schema:
+   every reader treats NULL and `{}` the same (`brandInScope` and the scope filters), so the only
+   effect of waiting is that owners stored NULL still miss the three `resolveRecipients` notices
+   (`automation.confirmation_required`, a NOTIFY rule's `automation.notice`,
+   `brand_brain.learning_proposed`), as they did before.
+2. **Tell Prisma the attempt rolled back** — it records a failed migration and refuses to deploy
+   past it:
+
+   ```sh
+   pnpm --filter @brandspace/database exec prisma migrate resolve --rolled-back 20261013090000_brand_scope_not_null
+   ```
+
+   Run it with `DATABASE_MIGRATION_URL` pointing at the migrator role for that environment, from a
+   trusted operator shell. This only updates `_prisma_migrations`; it runs no SQL on the tables.
+   It is NOT the replay §6.1 forbids: a timed-out F6 never committed, so nothing of it was applied.
+   Confirm that first — `attnotnull` still false and FORCE still on:
+
+   ```sql
+   SELECT c.relname, c.relforcerowsecurity, a.attnotnull
+     FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'brandScope'
+    WHERE c.relname IN ('membership', 'invitation');
+   ```
+
+3. **Find what held the lock** before retrying, if it may still be there:
+
+   ```sql
+   SELECT pid, state, xact_start, left(query, 80) AS query
+     FROM pg_stat_activity
+    WHERE xact_start < now() - interval '5 seconds' AND datname = current_database()
+    ORDER BY xact_start;
+   ```
+
+4. **Redeploy** (the normal release path runs `prisma migrate deploy`). The migration runs from the
+   start; it is safe to run again.
+
+Never raise the timeout inside the applied file (§6.1), and never run the statements by hand
+outside one transaction: FORCE must never be observable as lifted.
+
+**Rolling the application back after F6** needs no database change. The previous release's inserts
+leave the column out and now get `{}`; it reads `{}` exactly as it read NULL. Forward-only (§6): no
+down script; NULL cannot be restored and would mean the same thing.
+
 ## 7. Secret rotation
 
 **Platform capability.** Every provider credential is a REFERENCE in configuration and a row in the
