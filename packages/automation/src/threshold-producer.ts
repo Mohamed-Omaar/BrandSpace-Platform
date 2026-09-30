@@ -159,10 +159,10 @@ export async function evaluateThresholdRule(input: {
 }
 
 /** Move the remembered side, but only if nobody moved it first. */
-async function moveState(
+export async function moveState(
   db: TenantScopedClient,
   workspaceId: string,
-  rule: ThresholdRuleRow,
+  rule: Pick<ThresholdRuleRow, 'id' | 'thresholdBreached' | 'thresholdCycle'>,
   next: { breached: boolean; cycle: number; now: Date },
 ): Promise<boolean> {
   const moved = await db.automationRule.updateMany({

@@ -35,6 +35,7 @@ const G13_PAIRS: Record<string, readonly string[]> = {
     'REVIEW_WAITING_24H',
     'CAMPAIGN_STARTED',
     'CAMPAIGN_ENDED',
+    'SCHEDULE_GAP',
   ],
   ADD_TO_CAMPAIGN: ['CONTENT_APPROVED'],
   MAKE_DRAFT_COPY: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
@@ -45,7 +46,7 @@ describe('the compatibility table', () => {
     for (const [type, triggers] of Object.entries(G13_PAIRS)) {
       expect(findAction(type)?.authoringTriggers, type).toEqual(triggers);
     }
-    expect(Object.values(G13_PAIRS).flat()).toHaveLength(11);
+    expect(Object.values(G13_PAIRS).flat()).toHaveLength(12);
   });
 
   it('no legacy action may ever be authored on POST_FAILED', () => {
@@ -94,6 +95,7 @@ describe('the conditions a new rule may name', () => {
       REVIEW_WAITING_24H: G13,
       CAMPAIGN_STARTED: ['campaign.id'],
       CAMPAIGN_ENDED: ['campaign.id'],
+      SCHEDULE_GAP: [],
     });
   });
 
@@ -203,6 +205,7 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'REVIEW_WAITING_24H',
       'CAMPAIGN_STARTED',
       'CAMPAIGN_ENDED',
+      'SCHEDULE_GAP',
     ]);
     expect(AUTOMATION_ACTIONS.filter((a) => a.authorable).map((a) => a.type)).toEqual([
       'SCHEDULE_NEXT_FREE_SLOT',
@@ -247,6 +250,7 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'REVIEW_WAITING_24H × NOTIFY_PERSON',
       'CAMPAIGN_STARTED × NOTIFY_PERSON',
       'CAMPAIGN_ENDED × NOTIFY_PERSON',
+      'SCHEDULE_GAP × NOTIFY_PERSON',
     ]);
   });
 

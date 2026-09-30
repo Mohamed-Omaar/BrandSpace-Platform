@@ -86,13 +86,13 @@ describe('registry parity with the database enums', () => {
       'REVIEW_WAITING_24H',
       'CAMPAIGN_STARTED',
       'CAMPAIGN_ENDED',
+      'SCHEDULE_GAP',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
     ]);
     expect(PLANNED_AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
       'WEEKLY_ENGAGEMENT_DROPPED',
-      'SCHEDULE_GAP',
       'POST_TOP_10_PERCENT',
       'FACT_EXPIRING',
     ]);

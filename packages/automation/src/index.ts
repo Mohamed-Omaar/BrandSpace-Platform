@@ -108,11 +108,15 @@ export type { DueCandidate, LocalCalendarPort } from './due-events';
 export { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
 export {
   BOUNDARY_CAMPAIGN_STATUSES,
+  SCHEDULE_GAP_SLOT_STATUSES,
   advanceDueWatermark,
   campaignBoundary,
   produceCampaignEnded,
   produceCampaignStarted,
   produceReviewWaiting,
+  produceScheduleGap,
+  scheduleGapIsOpen,
+  scheduleGapWindow,
 } from './due-producers';
 export type { DueProducerContext, DueRuleRow, DueVisit } from './due-producers';
 export type { OccurrenceCheck } from './occurrence';

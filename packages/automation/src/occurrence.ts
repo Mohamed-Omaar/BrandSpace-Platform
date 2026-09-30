@@ -1,6 +1,6 @@
 import type { AutomationTrigger, TenantScopedClient } from '@brandspace/database';
 import { dayKeyInEventKey, dayKeyOf, type LocalCalendarPort } from './due-events';
-import { BOUNDARY_CAMPAIGN_STATUSES } from './due-producers';
+import { BOUNDARY_CAMPAIGN_STATUSES, scheduleGapIsOpen, scheduleGapWindow } from './due-producers';
 import { DUE_EVENT_DEFINITIONS } from './registry';
 
 /**
@@ -82,6 +82,25 @@ export async function occurrenceStillHolds(
       const date =
         check.triggerType === 'CAMPAIGN_STARTED' ? campaign?.startDate : campaign?.endDate;
       return !!date && dayKeyOf(date) === dayKey;
+    }
+    /*
+     * A GAP STILL OPEN: nothing of the rule's brand planned or scheduled in the
+     * next days as they are NOW. Without the calendar the window cannot be
+     * computed, and the run fails closed.
+     */
+    case 'SCHEDULE_GAP': {
+      if (!check.calendar) return false;
+      const window = scheduleGapWindow({
+        now: check.now,
+        timezone: await check.timezone(),
+        calendar: check.calendar,
+      });
+      if (!window) return false;
+      return scheduleGapIsOpen(db, {
+        workspaceId: check.workspaceId,
+        brandId: check.brandId,
+        window,
+      });
     }
     default:
       return true;

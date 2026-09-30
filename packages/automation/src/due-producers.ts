@@ -1,7 +1,9 @@
 import { recordRuleAutomationEvent, type TenantScopedClient } from '@brandspace/database';
 import { DUE_EVENT_DEFINITIONS, TIMED_PRODUCER_LIMITS } from './registry';
+import { moveState } from './threshold-producer';
 import {
   dayKeyOf,
+  edgeTransitionSinceArming,
   localDayKey,
   producerCeiling,
   producerFloor,
@@ -391,3 +393,120 @@ export const produceCampaignStarted = (context: DueProducerContext): Promise<Due
   produceCampaignBoundaries('CAMPAIGN_STARTED', context);
 export const produceCampaignEnded = (context: DueProducerContext): Promise<DueVisit> =>
   produceCampaignBoundaries('CAMPAIGN_ENDED', context);
+
+// ---------------------------------------------------------------------------
+// SCHEDULE_GAP
+// ---------------------------------------------------------------------------
+
+/** What counts as "something scheduled": on the calendar, not yet publishing. */
+export const SCHEDULE_GAP_SLOT_STATUSES = ['PLANNED', 'SCHEDULED'] as const;
+
+/**
+ * THE NEXT `scheduleGapDays` LOCAL DAYS, STARTING TOMORROW: from local 00:00
+ * tomorrow up to (not including) local 00:00 on the day after the last one.
+ * Real local days in the workspace's zone — not 72 hours, and not UTC days — so
+ * a day that is 23 or 25 hours long is that long here too.
+ */
+export function scheduleGapWindow(input: {
+  readonly now: Date;
+  readonly timezone: string;
+  readonly calendar: LocalCalendarPort;
+}): { readonly from: Date; readonly to: Date } | null {
+  const tomorrow = shiftDayKey(localDayKey(input.now, input.timezone), 1);
+  const from = input.calendar.localMidnight(tomorrow, input.timezone);
+  const to = input.calendar.localMidnight(
+    shiftDayKey(tomorrow, DUE_EVENT_DEFINITIONS.scheduleGapDays),
+    input.timezone,
+  );
+  return from && to ? { from, to } : null;
+}
+
+/** Is nothing of the brand planned or scheduled in the window? One indexed probe. */
+export async function scheduleGapIsOpen(
+  db: TenantScopedClient,
+  input: {
+    readonly workspaceId: string;
+    readonly brandId: string;
+    readonly window: { readonly from: Date; readonly to: Date };
+  },
+): Promise<boolean> {
+  const slot = await db.calendarSlot.findFirst({
+    where: {
+      workspaceId: input.workspaceId,
+      brandId: input.brandId,
+      status: { in: [...SCHEDULE_GAP_SLOT_STATUSES] },
+      scheduledAtUtc: { gte: input.window.from, lt: input.window.to },
+    },
+    select: { id: true },
+  });
+  return slot === null;
+}
+
+/**
+ * The brand's calendar going empty for the next few days — a STATE, not a
+ * moment (owner decision A: nothing is replayed after an outage; only the state
+ * now matters).
+ *
+ * EDGE-TRIGGERED on the D-177 memory, moved by the same compare-and-set as the
+ * threshold producer: filled → empty fires once; empty → still empty is steady;
+ * empty → filled re-arms by advancing the cycle, so the next gap is a new
+ * event. The event is `SCHEDULE_GAP:<ruleId>:<cycle>`.
+ *
+ * NO BACKFILL: memory recorded before the current arming counts as none, so the
+ * first look after arming only ESTABLISHES the state. Establishing also advances
+ * the cycle, so a cycle whose key was used before a switch-off can never be
+ * handed out again and swallowed as a duplicate.
+ */
+export async function produceScheduleGap(context: DueProducerContext): Promise<DueVisit> {
+  const { db, workspaceId, rule, now, timezone, calendar } = context;
+  if (!rule.armedAt) return NOTHING;
+  const window = scheduleGapWindow({ now, timezone, calendar });
+  if (!window) return NOTHING;
+  // The window moves at the next local midnight — the start of tomorrow.
+  const next = window.from;
+
+  const empty = await scheduleGapIsOpen(db, { workspaceId, brandId: rule.brandId, window });
+  const transition = edgeTransitionSinceArming({
+    armedAt: rule.armedAt,
+    evaluatedAt: rule.thresholdEvaluatedAt,
+    previous: rule.thresholdBreached,
+    current: empty,
+  });
+
+  switch (transition.kind) {
+    case 'unmeasured':
+    case 'steady':
+      return { ...NOTHING, next };
+    case 'establish':
+      await moveState(db, workspaceId, rule, {
+        breached: transition.breached,
+        cycle: rule.thresholdCycle + 1,
+        now,
+      });
+      return { ...NOTHING, next };
+    case 'rearm':
+      await moveState(db, workspaceId, rule, {
+        breached: false,
+        cycle: rule.thresholdCycle + 1,
+        now,
+      });
+      return { ...NOTHING, next };
+    case 'fire': {
+      // The claim, then the event, with nothing between them that can decline:
+      // both commit or neither does (D-186). A lost claim writes nothing.
+      const claimed = await moveState(db, workspaceId, rule, {
+        breached: true,
+        cycle: rule.thresholdCycle,
+        now,
+      });
+      if (!claimed) return { ...NOTHING, next };
+      const wrote = await recordRuleAutomationEvent(db, workspaceId, {
+        triggerType: 'SCHEDULE_GAP',
+        brandId: rule.brandId,
+        ruleId: rule.id,
+        cycle: rule.thresholdCycle,
+      });
+      return { ...NOTHING, produced: wrote ? 1 : 0, next };
+    }
+  }
+}

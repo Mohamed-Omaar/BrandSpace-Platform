@@ -248,6 +248,20 @@ export const AUTOMATION_TRIGGERS = [
     authorable: true,
     messageKey: 'campaignEnded',
   },
+  /*
+   * PHASE 2B-3 PR 3 — the brand's calendar going empty for the next few local
+   * days. Rule-derived and edge-triggered; a state has no row to point at.
+   */
+  {
+    type: 'SCHEDULE_GAP',
+    config: emptyConfig,
+    refType: null,
+    contentItemVia: null,
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'scheduleGap',
+  },
   {
     type: 'ANALYTICS_REFRESHED',
     config: emptyConfig,
@@ -317,13 +331,6 @@ export const PLANNED_AUTOMATION_TRIGGERS = [
   // A change of a rule's own state, so there is no row to point at.
   {
     type: 'WEEKLY_ENGAGEMENT_DROPPED',
-    refType: null,
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'SCHEDULE_GAP',
     refType: null,
     ruleAddressed: true,
     authorable: false,
@@ -427,6 +434,7 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
     'REVIEW_WAITING_24H',
     'CAMPAIGN_STARTED',
     'CAMPAIGN_ENDED',
+    'SCHEDULE_GAP',
   ],
   // Reachable wherever a content item is reachable — which is exactly where
   // `contentItemVia` is not null.
@@ -491,6 +499,8 @@ export const AUTHORING_CONDITION_FIELDS: Partial<
   // Which campaign (revised report §8); the brand is the rule's own.
   CAMPAIGN_STARTED: ['campaign.id'],
   CAMPAIGN_ENDED: ['campaign.id'],
+  // None: the gap is the condition (revised report §8).
+  SCHEDULE_GAP: [],
 };
 
 /**
@@ -1191,6 +1201,7 @@ export const AUTOMATION_ACTIONS = [
       'REVIEW_WAITING_24H',
       'CAMPAIGN_STARTED',
       'CAMPAIGN_ENDED',
+      'SCHEDULE_GAP',
     ],
     catalogue: 'g13',
     executable: true,

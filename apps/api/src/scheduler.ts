@@ -38,6 +38,7 @@ import {
   produceCampaignEnded,
   produceCampaignStarted,
   produceReviewWaiting,
+  produceScheduleGap,
   type DueProducerContext,
   type DueVisit,
   type LocalCalendarPort,
@@ -185,6 +186,7 @@ const DUE_PRODUCERS = [
   ['REVIEW_WAITING_24H', produceReviewWaiting],
   ['CAMPAIGN_STARTED', produceCampaignStarted],
   ['CAMPAIGN_ENDED', produceCampaignEnded],
+  ['SCHEDULE_GAP', produceScheduleGap],
 ] as const satisfies readonly (readonly [
   AutomationTrigger,
   (context: DueProducerContext) => Promise<DueVisit>,

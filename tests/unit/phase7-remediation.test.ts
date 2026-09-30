@@ -237,6 +237,8 @@ describe('an action that needs a content item may only be paired with a trigger 
       // Phase 2B-3 PR 3: the campaign boundaries reference the campaign.
       'CAMPAIGN_STARTED',
       'CAMPAIGN_ENDED',
+      // ...and the schedule gap is a state, with no row at all.
+      'SCHEDULE_GAP',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
@@ -248,6 +250,7 @@ describe('an action that needs a content item may only be paired with a trigger 
     expect(findTrigger('SCHEDULED_TIME')?.refType).toBeNull();
     expect(findTrigger('CAMPAIGN_STARTED')?.refType).toBe('Campaign');
     expect(findTrigger('CAMPAIGN_ENDED')?.refType).toBe('Campaign');
+    expect(findTrigger('SCHEDULE_GAP')?.refType).toBeNull();
   });
 
   it('ANOMALY_DETECTED IS NO LONGER AUTHORABLE, because nothing could ever fire it', () => {
