@@ -1,6 +1,16 @@
 import type { AutomationTrigger, TenantScopedClient } from '@brandspace/database';
-import { dayKeyInEventKey, dayKeyOf, type LocalCalendarPort } from './due-events';
-import { BOUNDARY_CAMPAIGN_STATUSES, scheduleGapIsOpen, scheduleGapWindow } from './due-producers';
+import {
+  dayKeyInEventKey,
+  dayKeyOf,
+  type KnowledgeValidityPort,
+  type LocalCalendarPort,
+} from './due-events';
+import {
+  BOUNDARY_CAMPAIGN_STATUSES,
+  expiringFactsWhere,
+  scheduleGapIsOpen,
+  scheduleGapWindow,
+} from './due-producers';
 import { DUE_EVENT_DEFINITIONS } from './registry';
 
 /**
@@ -36,6 +46,7 @@ export interface OccurrenceCheck {
   /** The workspace's zone, asked only when the trigger needs it. */
   readonly timezone: () => Promise<string>;
   readonly calendar?: LocalCalendarPort | undefined;
+  readonly knowledge?: KnowledgeValidityPort | undefined;
 }
 
 export async function occurrenceStillHolds(
@@ -101,6 +112,31 @@ export async function occurrenceStillHolds(
         brandId: check.brandId,
         window,
       });
+    }
+    /*
+     * A FACT STILL EXPIRING ON THAT DAY: still usable today by Brand Brain's
+     * rule, in the rule's brand, still in its last seven days, and its last day
+     * still the one the event was produced for. Archived, expired, withdrawn
+     * from review or given another date, it no longer holds. Without the
+     * knowledge port the rule cannot be asked, and the run fails closed.
+     */
+    case 'FACT_EXPIRING': {
+      const dayKey = dayKeyInEventKey(check.eventKey);
+      if (!check.refId || !dayKey || !check.knowledge) return false;
+      const asOf = check.knowledge.asOf(await check.timezone(), check.now);
+      const fact = await db.brandKnowledgeItem.findFirst({
+        where: {
+          id: check.refId,
+          ...expiringFactsWhere({
+            workspaceId: check.workspaceId,
+            brandId: check.brandId,
+            asOf,
+            knowledge: check.knowledge,
+          }),
+        },
+        select: { validUntil: true },
+      });
+      return !!fact?.validUntil && dayKeyOf(fact.validUntil) === dayKey;
     }
     default:
       return true;

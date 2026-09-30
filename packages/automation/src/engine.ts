@@ -1111,6 +1111,7 @@ export class AutomationEngine {
           ? this.#ports.timezone.timezoneFor(this.#workspaceId)
           : Promise.resolve('UTC'),
       calendar: this.#ports.calendarDays,
+      knowledge: this.#ports.knowledge,
     });
     if (!holds) {
       return this.#finish(rule, run, 'SKIPPED', { failureCode: OCCURRENCE_STALE });

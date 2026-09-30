@@ -104,15 +104,18 @@ export {
   selectDue,
   shiftDayKey,
 } from './due-events';
-export type { DueCandidate, LocalCalendarPort } from './due-events';
+export type { DueCandidate, KnowledgeValidityPort, LocalCalendarPort } from './due-events';
 export { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
 export {
   BOUNDARY_CAMPAIGN_STATUSES,
   SCHEDULE_GAP_SLOT_STATUSES,
   advanceDueWatermark,
   campaignBoundary,
+  expiringFactsWhere,
+  factWindowOpens,
   produceCampaignEnded,
   produceCampaignStarted,
+  produceFactExpiring,
   produceReviewWaiting,
   produceScheduleGap,
   scheduleGapIsOpen,

@@ -10,6 +10,7 @@ import {
   selectDue,
   shiftDayKey,
   type DueCandidate,
+  type KnowledgeValidityPort,
   type LocalCalendarPort,
 } from './due-events';
 
@@ -49,6 +50,8 @@ export interface DueProducerContext {
   readonly now: Date;
   readonly timezone: string;
   readonly calendar: LocalCalendarPort;
+  /** Brand Brain's usable-fact rule; without it FACT_EXPIRING produces nothing. */
+  readonly knowledge?: KnowledgeValidityPort | undefined;
 }
 
 export interface DueVisit {
@@ -509,4 +512,145 @@ export async function produceScheduleGap(context: DueProducerContext): Promise<D
       return { ...NOTHING, produced: wrote ? 1 : 0, next };
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// FACT_EXPIRING
+// ---------------------------------------------------------------------------
+
+const FACT_WINDOW_DAYS = DUE_EVENT_DEFINITIONS.factExpiryWindowDays;
+
+/**
+ * THE FACTS THAT ARE "EXPIRING": usable today by Brand Brain's own rule
+ * (ACTIVE or STALE, not expired — owner decision F), in the rule's brand, with
+ * a last valid day within `factExpiryWindowDays` local days of today: from
+ * today to today + 6, calendar days in the workspace's zone.
+ */
+export function expiringFactsWhere(input: {
+  readonly workspaceId: string;
+  readonly brandId: string;
+  readonly asOf: Date;
+  readonly knowledge: KnowledgeValidityPort;
+}) {
+  const last = dayKeyDate(shiftDayKey(dayKeyOf(input.asOf), FACT_WINDOW_DAYS - 1));
+  return {
+    workspaceId: input.workspaceId,
+    brandId: input.brandId,
+    AND: [input.knowledge.usableWhere(input.asOf), { validUntil: { gte: input.asOf, lte: last } }],
+  };
+}
+
+/** Local 00:00 on the first day a fact whose last day is `validUntil` is in the window. */
+export function factWindowOpens(input: {
+  readonly validUntil: string;
+  readonly timezone: string;
+  readonly calendar: LocalCalendarPort;
+}): Date | null {
+  return input.calendar.localMidnight(
+    shiftDayKey(input.validUntil, -(FACT_WINDOW_DAYS - 1)),
+    input.timezone,
+  );
+}
+
+/**
+ * WHEN THE FACT'S CURRENT `validUntil` WAS SET: the `recordedAt` of the first
+ * version after the last one that carried a different value. Versions are
+ * append-only snapshots of the fact after each change, so that is the change
+ * that gave the fact the date it has now. Two probes on
+ * `brand_knowledge_version_knowledgeItemId_version_key`.
+ */
+async function validUntilSetAt(
+  db: TenantScopedClient,
+  workspaceId: string,
+  knowledgeItemId: string,
+  validUntil: Date,
+): Promise<Date | null> {
+  const differing = await db.brandKnowledgeVersion.findFirst({
+    where: {
+      workspaceId,
+      knowledgeItemId,
+      OR: [{ validUntil: null }, { validUntil: { not: validUntil } }],
+    },
+    orderBy: { version: 'desc' },
+    select: { version: true },
+  });
+  const setter = await db.brandKnowledgeVersion.findFirst({
+    where: {
+      workspaceId,
+      knowledgeItemId,
+      validUntil,
+      version: { gt: differing?.version ?? 0 },
+    },
+    orderBy: { version: 'asc' },
+    select: { recordedAt: true },
+  });
+  return setter?.recordedAt ?? null;
+}
+
+/**
+ * A usable fact ENTERING its last seven days after the rule was armed (revised
+ * report §12). It enters at the later of local 00:00 on `validUntil − 6` — the
+ * window reaching it — and the moment its current date was set — the date
+ * moving it into the window. A fact already in the window when the rule was
+ * armed never fires; a later change of its date is a new occurrence, keyed
+ * `FACT_EXPIRING:<ruleId>:<itemId>:<validUntil>`.
+ *
+ * AFTER AN OUTAGE it may fire late (owner decision A): the delivery re-checks
+ * that the fact is still usable and still expiring on that day. Nothing about
+ * the fact but its id travels in the event, and no action here reads its text.
+ */
+export async function produceFactExpiring(context: DueProducerContext): Promise<DueVisit> {
+  const { db, workspaceId, rule, now, timezone, calendar, knowledge } = context;
+  const floor = producerFloor(rule);
+  if (!floor || !knowledge) return NOTHING;
+  const ceiling = producerCeiling(now);
+  const asOf = knowledge.asOf(timezone, now);
+  const lag = TIMED_PRODUCER_LIMITS.watermarkLagSeconds * 1_000;
+  const tomorrow = calendar.localMidnight(shiftDayKey(dayKeyOf(asOf), 1), timezone);
+  const atMidnight = tomorrow ? new Date(tomorrow.getTime() + lag) : null;
+  if (ceiling.getTime() <= floor.getTime()) return { ...NOTHING, next: atMidnight };
+
+  const facts = await db.brandKnowledgeItem.findMany({
+    where: expiringFactsWhere({ workspaceId, brandId: rule.brandId, asOf, knowledge }),
+    select: { id: true, validUntil: true },
+    orderBy: [{ validUntil: 'asc' }, { id: 'asc' }],
+  });
+
+  const candidates: (DueCandidate & { dayKey: string })[] = [];
+  for (const fact of facts) {
+    if (!fact.validUntil) continue;
+    const dayKey = dayKeyOf(fact.validUntil);
+    const opens = factWindowOpens({ validUntil: dayKey, timezone, calendar });
+    const setAt = await validUntilSetAt(db, workspaceId, fact.id, fact.validUntil);
+    // A fact whose date nobody can account for fails closed.
+    if (!opens || !setAt) continue;
+    const due = opens.getTime() >= setAt.getTime() ? opens : setAt;
+    candidates.push({ id: fact.id, due, dayKey });
+  }
+  const selection = selectDue({ candidates, floor, ceiling });
+
+  let produced = 0;
+  for (const candidate of selection.emit) {
+    const wrote = await recordRuleAutomationEvent(db, workspaceId, {
+      triggerType: 'FACT_EXPIRING',
+      brandId: rule.brandId,
+      ruleId: rule.id,
+      knowledgeItemId: candidate.id,
+      validUntil: candidate.dayKey,
+    });
+    if (wrote) produced += 1;
+  }
+  await advanceDueWatermark(db, workspaceId, rule.id, selection.watermark);
+
+  // Something set in the last moments falls due once it is behind the lag.
+  const soonest = candidates
+    .filter((candidate) => candidate.due.getTime() > ceiling.getTime())
+    .reduce<Date | null>(
+      (earliest, candidate) =>
+        !earliest || candidate.due.getTime() < earliest.getTime() ? candidate.due : earliest,
+      null,
+    );
+  const soon = soonest ? new Date(soonest.getTime() + lag) : null;
+  const next = soon && (!atMidnight || soon.getTime() < atMidnight.getTime()) ? soon : atMidnight;
+  return { produced, more: selection.more, next, skippedLate: 0 };
 }

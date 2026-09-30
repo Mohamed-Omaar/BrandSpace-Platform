@@ -2624,6 +2624,8 @@ export const messages = {
     'automations.trigger.CAMPAIGN_STARTED': 'عند بدء حملة',
     'automations.trigger.CAMPAIGN_ENDED': 'عند انتهاء حملة',
     'automations.trigger.SCHEDULE_GAP': 'عند عدم جدولة أي منشور للأيام الثلاثة القادمة',
+    'automations.trigger.FACT_EXPIRING':
+      'عند اقتراب انتهاء صلاحية معلومة في عقل العلامة خلال 7 أيام',
     'automations.action.SCHEDULE_NEXT_FREE_SLOT': 'جدولة في أول موعد متاح',
     'automations.action.NOTIFY_PERSON': 'تنبيه شخص محدد',
     'automations.action.ADD_TO_CAMPAIGN': 'إضافة إلى حملة',
@@ -5934,6 +5936,7 @@ export const messages = {
     'automations.trigger.CAMPAIGN_STARTED': 'When a campaign starts',
     'automations.trigger.CAMPAIGN_ENDED': 'When a campaign ends',
     'automations.trigger.SCHEDULE_GAP': 'When nothing is scheduled for the next 3 days',
+    'automations.trigger.FACT_EXPIRING': 'When a Brand Brain fact expires within 7 days',
     'automations.action.SCHEDULE_NEXT_FREE_SLOT': 'Schedule in the next free slot',
     'automations.action.NOTIFY_PERSON': 'Notify a chosen person',
     'automations.action.ADD_TO_CAMPAIGN': 'Add to a campaign',

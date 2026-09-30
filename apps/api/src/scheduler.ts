@@ -6,10 +6,12 @@ import {
 import {
   findStuckIngestionJobs,
   findUnclaimedIngestionJobs,
+  knowledgeAsOfSafe,
   purgeExpiredChatContent,
   recoverStuckIngestionJob,
   resolveBrandBrainPolicy,
   stuckIngestionThresholdSeconds,
+  usableKnowledgeWhere,
 } from '@brandspace/brand-brain';
 import { ConfigurationAiSource, purgeExpiredOutputs } from '@brandspace/ai-gateway';
 import {
@@ -37,10 +39,12 @@ import {
   nextVisitAt,
   produceCampaignEnded,
   produceCampaignStarted,
+  produceFactExpiring,
   produceReviewWaiting,
   produceScheduleGap,
   type DueProducerContext,
   type DueVisit,
+  type KnowledgeValidityPort,
   type LocalCalendarPort,
 } from '@brandspace/automation';
 import {
@@ -181,12 +185,19 @@ const DUE_CALENDAR: LocalCalendarPort = {
   localMidnight: (dayKey, timezone) => instantForIntent(`${dayKey}T00:00`, timezone),
 };
 
+/** Phase 2B-3 PR 3 — Brand Brain's one usable-fact rule (owner decision F). */
+const DUE_KNOWLEDGE: KnowledgeValidityPort = {
+  asOf: knowledgeAsOfSafe,
+  usableWhere: usableKnowledgeWhere,
+};
+
 /** Phase 2B-3 PR 3 — the timed G13 triggers, each with its producer. */
 const DUE_PRODUCERS = [
   ['REVIEW_WAITING_24H', produceReviewWaiting],
   ['CAMPAIGN_STARTED', produceCampaignStarted],
   ['CAMPAIGN_ENDED', produceCampaignEnded],
   ['SCHEDULE_GAP', produceScheduleGap],
+  ['FACT_EXPIRING', produceFactExpiring],
 ] as const satisfies readonly (readonly [
   AutomationTrigger,
   (context: DueProducerContext) => Promise<DueVisit>,
@@ -1491,6 +1502,7 @@ export class MaintenanceScheduler {
             now,
             timezone: zones.get(rule.workspaceId) ?? 'UTC',
             calendar: DUE_CALENDAR,
+            knowledge: DUE_KNOWLEDGE,
           });
 
           // The park, with the same `lte: now` guard as the producers above: a

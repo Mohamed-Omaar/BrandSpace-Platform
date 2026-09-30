@@ -87,6 +87,7 @@ describe('registry parity with the database enums', () => {
       'CAMPAIGN_STARTED',
       'CAMPAIGN_ENDED',
       'SCHEDULE_GAP',
+      'FACT_EXPIRING',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
@@ -94,7 +95,6 @@ describe('registry parity with the database enums', () => {
     expect(PLANNED_AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
       'WEEKLY_ENGAGEMENT_DROPPED',
       'POST_TOP_10_PERCENT',
-      'FACT_EXPIRING',
     ]);
     // Phase 2B-3 PR 2: four G13 actions ship with their settings; the rest
     // stay planned (REMIND_REVIEWER moves to PR 3, owner decision D3).

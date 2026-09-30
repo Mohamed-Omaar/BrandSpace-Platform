@@ -1,4 +1,4 @@
-import type { LocalCalendarPort } from './due-events';
+import type { KnowledgeValidityPort, LocalCalendarPort } from './due-events';
 
 /**
  * THE PORTS AN AUTOMATION ACTION REACHES THE PRODUCT THROUGH.
@@ -243,4 +243,9 @@ export interface AutomationPorts {
    * of the timed G13 events. Absent, an event that needs it fails closed.
    */
   readonly calendarDays?: LocalCalendarPort | undefined;
+  /**
+   * Phase 2B-3 PR 3 — Brand Brain's usable-fact rule, for the FACT_EXPIRING
+   * re-check. Absent, that event fails closed.
+   */
+  readonly knowledge?: KnowledgeValidityPort | undefined;
 }

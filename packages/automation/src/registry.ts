@@ -262,6 +262,20 @@ export const AUTOMATION_TRIGGERS = [
     authorable: true,
     messageKey: 'scheduleGap',
   },
+  /*
+   * PHASE 2B-3 PR 3 — a usable Brand Brain fact entering its last seven days.
+   * Rule-derived; the reference is the fact, and only its id travels.
+   */
+  {
+    type: 'FACT_EXPIRING',
+    config: emptyConfig,
+    refType: 'BrandKnowledgeItem',
+    contentItemVia: null,
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'factExpiring',
+  },
   {
     type: 'ANALYTICS_REFRESHED',
     config: emptyConfig,
@@ -339,13 +353,6 @@ export const PLANNED_AUTOMATION_TRIGGERS = [
   {
     type: 'POST_TOP_10_PERCENT',
     refType: 'ContentItem',
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'FACT_EXPIRING',
-    refType: 'BrandKnowledgeItem',
     ruleAddressed: true,
     authorable: false,
     executable: false,
@@ -435,6 +442,7 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
     'CAMPAIGN_STARTED',
     'CAMPAIGN_ENDED',
     'SCHEDULE_GAP',
+    'FACT_EXPIRING',
   ],
   // Reachable wherever a content item is reachable — which is exactly where
   // `contentItemVia` is not null.
@@ -501,6 +509,7 @@ export const AUTHORING_CONDITION_FIELDS: Partial<
   CAMPAIGN_ENDED: ['campaign.id'],
   // None: the gap is the condition (revised report §8).
   SCHEDULE_GAP: [],
+  FACT_EXPIRING: [],
 };
 
 /**
@@ -1202,6 +1211,7 @@ export const AUTOMATION_ACTIONS = [
       'CAMPAIGN_STARTED',
       'CAMPAIGN_ENDED',
       'SCHEDULE_GAP',
+      'FACT_EXPIRING',
     ],
     catalogue: 'g13',
     executable: true,

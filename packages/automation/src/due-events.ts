@@ -32,6 +32,24 @@ export interface LocalCalendarPort {
 }
 
 /** A due subject: when it fell due, and the id that breaks ties. */
+/**
+ * PHASE 2B-3 PR 3 — BRAND BRAIN'S ONE ANSWER TO "MAY THIS FACT BE USED TODAY?"
+ *
+ * Injected, not imported: this package does not depend on Brand Brain, and
+ * there must be exactly one copy of the rule (owner decision F — the existing
+ * usable rule: ACTIVE or STALE, and not expired). The API and the worker pass
+ * `knowledgeAsOfSafe` and `usableKnowledgeWhere` straight through.
+ */
+export interface KnowledgeValidityPort {
+  /** Today in the zone, as the `DATE` value a `validUntil` is compared with. */
+  asOf(timezone: string, now: Date): Date;
+  /** The predicate every generative path uses to choose facts. */
+  usableWhere(asOf: Date): {
+    status: { in: ('ACTIVE' | 'STALE')[] };
+    OR: ({ validUntil: null } | { validUntil: { gte: Date } })[];
+  };
+}
+
 export interface DueCandidate {
   readonly due: Date;
   readonly id: string;
