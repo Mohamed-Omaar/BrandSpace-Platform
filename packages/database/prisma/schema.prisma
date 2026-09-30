@@ -576,8 +576,10 @@ model Membership {
   userId String @db.Uuid
   roleId String @db.Uuid
 
-  /// null = all brands in the workspace; a non-empty array restricts the member.
-  brandScope String[] @db.Uuid
+  /// Empty = all brands in the workspace; a non-empty array restricts the member.
+  /// Never NULL (F6): an insert that omits it stores `{}` (migration
+  /// 20261013090000_brand_scope_not_null).
+  brandScope String[] @default([]) @db.Uuid
 
   status MembershipStatus @default(INVITED)
 
@@ -1006,8 +1008,9 @@ model Invitation {
   email  String
   roleId String @db.Uuid
 
-  /// null = all brands; a non-empty array restricts the future member.
-  brandScope String[] @db.Uuid
+  /// Empty = all brands; a non-empty array restricts the future member.
+  /// Never NULL (F6), as `Membership.brandScope`.
+  brandScope String[] @default([]) @db.Uuid
 
   tokenHash String           @unique
   status    InvitationStatus @default(PENDING)
