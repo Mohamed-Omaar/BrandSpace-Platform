@@ -436,6 +436,19 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # Execution evidence on EVERY run, pass or fail: which test ran, in which
+      # project, with what result and how many retries. Separate from the
+      # failure-only artifact above, and evidence only — it never decides
+      # whether the job passes. Absent when the job failed before Playwright ran.
+      - name: Upload Playwright JSON results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-json
+          path: playwright-json/results.json
+          retention-days: 7
+          if-no-files-found: ignore
+
   # ---------------------------------------------------------------------------
   # Nothing resembling a credential may enter the repository.
   # ---------------------------------------------------------------------------
