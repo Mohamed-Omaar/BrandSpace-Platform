@@ -166,6 +166,24 @@ function portsFor(
         });
         return { recipients: delivered };
       },
+      /*
+       * PHASE 2B-3 PR 2 (D4) — ONE MEMBER, NAMED BY THE RULE and re-checked by
+       * the engine on this run. NOT `resolveRecipients`: nobody is looked up by
+       * permission here, so the rule reaches exactly the person it names. The
+       * same template and the same writer as NOTIFY, so their mute applies.
+       */
+      async notifyPerson(input) {
+        const delivered = await new NotificationService({ db, workspaceId }).create({
+          userIds: [input.userId],
+          templateKey: 'automation.notice',
+          brandId: input.brandId,
+          resourceType: input.resourceType,
+          resourceId: input.resourceId,
+          // NO PAYLOAD, as NOTIFY: a pointer, followed under ordinary checks.
+          idempotencyKey: input.idempotencyKey,
+        });
+        return { recipients: delivered };
+      },
     },
     approvals: {
       async submitForApproval(input) {

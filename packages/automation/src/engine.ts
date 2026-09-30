@@ -1655,7 +1655,33 @@ export class AutomationEngine {
         };
       }
 
-      case 'NOTIFY_PERSON':
+      /*
+       * PHASE 2B-3 PR 2 (D4) — NOTIFY A CHOSEN PERSON. The member the rule names
+       * is re-checked on every run with the predicate the save used: still
+       * ACTIVE, and still able to see this brand. Anyone else ends the run
+       * BLOCKED `recipient_unavailable` and nobody is told anything.
+       */
+      case 'NOTIFY_PERSON': {
+        const notifyPerson = this.#ports.notifications?.notifyPerson;
+        if (!notifyPerson) throw unknownTriggerOrAction();
+        const userId = config['userId'];
+        const resolves = await personTargetResolves(this.#db, {
+          workspaceId: this.#workspaceId,
+          brandId: rule.brandId,
+          userId,
+        });
+        if (!resolves || typeof userId !== 'string') return { outcome: 'recipient_unavailable' };
+        const result = await notifyPerson.call(this.#ports.notifications, {
+          workspaceId: this.#workspaceId,
+          brandId: rule.brandId,
+          userId,
+          resourceType: event.refType ?? 'AutomationRun',
+          resourceId: event.refId ?? run.id,
+          idempotencyKey,
+        });
+        return { metadata: { recipients: result.recipients } };
+      }
+
       case 'ADD_TO_CAMPAIGN':
       case 'REMIND_REVIEWER':
       case 'DRAFT_IDEAS':

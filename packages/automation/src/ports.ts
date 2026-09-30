@@ -43,6 +43,23 @@ export interface NotificationPort {
     readonly resourceId: string;
     readonly idempotencyKey: string;
   }): Promise<{ readonly recipients: number }>;
+  /**
+   * PHASE 2B-3 PR 2 (owner decision D4) — notify ONE member the rule names.
+   *
+   * The same notice legacy NOTIFY sends — `automation.notice`, fixed here and
+   * not a parameter — through the one notification writer, so the member's own
+   * mute setting applies. No payload, no rule name, no link: a pointer to the
+   * row the event names, exactly as NOTIFY. The engine has already checked that
+   * the member is ACTIVE and may see the brand.
+   */
+  notifyPerson?(input: {
+    readonly workspaceId: string;
+    readonly brandId: string;
+    readonly userId: string;
+    readonly resourceType: string;
+    readonly resourceId: string;
+    readonly idempotencyKey: string;
+  }): Promise<{ readonly recipients: number }>;
 }
 
 export interface ApprovalPort {

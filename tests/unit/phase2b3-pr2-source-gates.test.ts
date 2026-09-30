@@ -15,12 +15,13 @@ import { describe, expect, it } from 'vitest';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
 const engine = readFileSync(path.join(root, 'packages/automation/src/engine.ts'), 'utf8');
+const worker = readFileSync(path.join(root, 'apps/worker/src/processors/automation.ts'), 'utf8');
 
-function methodBody(source: string, signature: string): string {
+/** From `signature` to the first `closing` after it (a member's closing brace). */
+function methodBody(source: string, signature: string, closing = '\n  }\n'): string {
   const start = source.indexOf(signature);
   expect(start, signature).toBeGreaterThan(-1);
-  // The body ends at the first line that closes a class member.
-  const end = source.indexOf('\n  }\n', start);
+  const end = source.indexOf(closing, start);
   expect(end, signature).toBeGreaterThan(start);
   return source.slice(start, end);
 }
@@ -28,5 +29,15 @@ function methodBody(source: string, signature: string): string {
 describe('no executor reads the rule’s conditions', () => {
   it('#performInternal', () => {
     expect(methodBody(engine, 'async #performInternal(')).not.toMatch(/conditions/);
+  });
+});
+
+describe('NOTIFY_PERSON reaches exactly the person it names (D4)', () => {
+  it('its worker port never looks recipients up, and always sends automation.notice', () => {
+    const port = methodBody(worker, 'async notifyPerson(', '\n      },\n');
+    expect(port).not.toMatch(/resolveRecipients/);
+    expect(port).toContain('userIds: [input.userId]');
+    expect(port).toContain("templateKey: 'automation.notice'");
+    expect(port).not.toMatch(/payload:|linkPath:/);
   });
 });
