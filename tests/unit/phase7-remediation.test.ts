@@ -241,6 +241,8 @@ describe('an action that needs a content item may only be paired with a trigger 
       'SCHEDULE_GAP',
       // ...and an expiring fact references the fact, never a post.
       'FACT_EXPIRING',
+      // Phase 2B-3 PR 4 — the weekly drop is a state, with no row.
+      'WEEKLY_ENGAGEMENT_DROPPED',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
@@ -254,6 +256,7 @@ describe('an action that needs a content item may only be paired with a trigger 
     expect(findTrigger('CAMPAIGN_ENDED')?.refType).toBe('Campaign');
     expect(findTrigger('SCHEDULE_GAP')?.refType).toBeNull();
     expect(findTrigger('FACT_EXPIRING')?.refType).toBe('BrandKnowledgeItem');
+    expect(findTrigger('WEEKLY_ENGAGEMENT_DROPPED')?.refType).toBeNull();
   });
 
   it('ANOMALY_DETECTED IS NO LONGER AUTHORABLE, because nothing could ever fire it', () => {

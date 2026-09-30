@@ -88,12 +88,12 @@ describe('registry parity with the database enums', () => {
       'CAMPAIGN_ENDED',
       'SCHEDULE_GAP',
       'FACT_EXPIRING',
+      'WEEKLY_ENGAGEMENT_DROPPED',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
     ]);
     expect(PLANNED_AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
-      'WEEKLY_ENGAGEMENT_DROPPED',
       'POST_TOP_10_PERCENT',
     ]);
     // Phase 2B-3 PR 2: four G13 actions ship with their settings; PR 3 ships

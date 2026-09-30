@@ -153,6 +153,23 @@ export type RuleAutomationEvent =
       readonly ruleId: string;
       readonly cycle: number;
     }
+  /**
+   * Phase 2B-3 PR 4 — the brand's weekly engagement went into "dropped", once
+   * per episode of the rule's edge memory (the cycle).
+   */
+  | {
+      readonly triggerType: 'WEEKLY_ENGAGEMENT_DROPPED';
+      readonly brandId: string;
+      readonly ruleId: string;
+      readonly cycle: number;
+    }
+  /** Phase 2B-3 PR 4 — a post ranked in the brand's top 10%, once per rule and post. */
+  | {
+      readonly triggerType: 'POST_TOP_10_PERCENT';
+      readonly brandId: string;
+      readonly ruleId: string;
+      readonly contentItemId: string;
+    }
   /** Phase 2B-3 PR 3 — a fact entered its expiry window, for the `validUntil` it had. */
   | {
       readonly triggerType: 'FACT_EXPIRING';
@@ -258,6 +275,20 @@ function ruleEventRow(input: RuleAutomationEvent): {
         refId: null,
         occurrence: null,
         dedupeKey: `SCHEDULE_GAP:${input.ruleId}:${input.cycle}`,
+      };
+    case 'WEEKLY_ENGAGEMENT_DROPPED':
+      return {
+        refType: null,
+        refId: null,
+        occurrence: null,
+        dedupeKey: `WEEKLY_ENGAGEMENT_DROPPED:${input.ruleId}:${input.cycle}`,
+      };
+    case 'POST_TOP_10_PERCENT':
+      return {
+        refType: 'ContentItem',
+        refId: input.contentItemId,
+        occurrence: null,
+        dedupeKey: `POST_TOP_10_PERCENT:${input.ruleId}:${input.contentItemId}`,
       };
     case 'FACT_EXPIRING':
       return {

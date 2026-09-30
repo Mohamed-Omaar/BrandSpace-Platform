@@ -106,6 +106,7 @@ export {
 } from './due-events';
 export type { DueCandidate, KnowledgeValidityPort, LocalCalendarPort } from './due-events';
 export { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
+export { produceWeeklyEngagementDropped } from './analytics-producers';
 export {
   ENGAGEMENTS_METRIC,
   IMPRESSIONS_METRIC,
@@ -132,7 +133,12 @@ export {
   scheduleGapIsOpen,
   scheduleGapWindow,
 } from './due-producers';
-export type { DueProducerContext, DueRuleRow, DueVisit } from './due-producers';
+export type {
+  AnalyticsEventInputs,
+  DueProducerContext,
+  DueRuleRow,
+  DueVisit,
+} from './due-producers';
 export type { OccurrenceCheck } from './occurrence';
 export type {
   AutomationActor,

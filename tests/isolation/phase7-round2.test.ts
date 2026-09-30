@@ -771,6 +771,8 @@ describe('A1: the automation outbox carries a real domain event to a rule', () =
       'CAMPAIGN_ENDED',
       'SCHEDULE_GAP',
       'FACT_EXPIRING',
+      // Phase 2B-3 PR 4 — the analytics producers.
+      'WEEKLY_ENGAGEMENT_DROPPED',
     ]);
     for (const trigger of AUTOMATION_TRIGGERS) {
       expect(producible.has(trigger.type), `${trigger.type} has no producer`).toBe(true);

@@ -283,6 +283,20 @@ export const AUTOMATION_TRIGGERS = [
     authorable: true,
     messageKey: 'factExpiring',
   },
+  /*
+   * PHASE 2B-3 PR 4 — the brand's last settled week at least 20% below the
+   * week before. Rule-derived and edge-triggered; a state has no row to point at.
+   */
+  {
+    type: 'WEEKLY_ENGAGEMENT_DROPPED',
+    config: emptyConfig,
+    refType: null,
+    contentItemVia: null,
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'weeklyEngagementDropped',
+  },
   {
     type: 'ANALYTICS_REFRESHED',
     config: emptyConfig,
@@ -349,14 +363,6 @@ export interface PlannedTriggerDefinition {
 }
 
 export const PLANNED_AUTOMATION_TRIGGERS = [
-  // A change of a rule's own state, so there is no row to point at.
-  {
-    type: 'WEEKLY_ENGAGEMENT_DROPPED',
-    refType: null,
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
   {
     type: 'POST_TOP_10_PERCENT',
     refType: 'ContentItem',
@@ -450,6 +456,7 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
     'CAMPAIGN_ENDED',
     'SCHEDULE_GAP',
     'FACT_EXPIRING',
+    'WEEKLY_ENGAGEMENT_DROPPED',
   ],
   // Reachable wherever a content item is reachable — which is exactly where
   // `contentItemVia` is not null.
@@ -517,6 +524,8 @@ export const AUTHORING_CONDITION_FIELDS: Partial<
   // None: the gap is the condition (revised report §8).
   SCHEDULE_GAP: [],
   FACT_EXPIRING: [],
+  // Phase 2B-3 PR 4 — none: the drop is the condition (revised report §8).
+  WEEKLY_ENGAGEMENT_DROPPED: [],
 };
 
 /**
@@ -1223,6 +1232,7 @@ export const AUTOMATION_ACTIONS = [
       'CAMPAIGN_ENDED',
       'SCHEDULE_GAP',
       'FACT_EXPIRING',
+      'WEEKLY_ENGAGEMENT_DROPPED',
     ],
     catalogue: 'g13',
     executable: true,

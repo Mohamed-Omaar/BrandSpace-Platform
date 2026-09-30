@@ -1116,6 +1116,7 @@ export class AutomationEngine {
       workspaceId: this.#workspaceId,
       brandId: rule.brandId,
       triggerType: event.type,
+      ruleId: rule.id,
       refId: event.refId,
       eventKey: event.eventKey ?? null,
       now,

@@ -39,6 +39,8 @@ export interface OccurrenceCheck {
   /** The RULE's brand — the only brand an occurrence may belong to. */
   readonly brandId: string;
   readonly triggerType: AutomationTrigger;
+  /** The rule the event is addressed to (rule-derived triggers). */
+  readonly ruleId?: string | null | undefined;
   readonly refId: string | null;
   /** The outbox `dedupeKey`, which carries the date a dated occurrence was for. */
   readonly eventKey: string | null;
@@ -137,6 +139,22 @@ export async function occurrenceStillHolds(
         select: { validUntil: true },
       });
       return !!fact?.validUntil && dayKeyOf(fact.validUntil) === dayKey;
+    }
+    /*
+     * PHASE 2B-3 PR 4 — STILL THE SAME "DROPPED" EPISODE: the rule's edge
+     * memory still says dropped, at the cycle the event was produced for. A
+     * recovery since (the cycle moved on) means the drop is over. The numbers
+     * are not re-read here: the drop was judged on settled weeks, which do not
+     * change between production and delivery.
+     */
+    case 'WEEKLY_ENGAGEMENT_DROPPED': {
+      const cycle = Number(check.eventKey?.split(':').at(-1));
+      if (!check.ruleId || !Number.isInteger(cycle)) return false;
+      const rule = await db.automationRule.findFirst({
+        where: { id: check.ruleId, workspaceId: check.workspaceId, brandId: check.brandId },
+        select: { thresholdBreached: true, thresholdCycle: true },
+      });
+      return rule?.thresholdBreached === true && rule.thresholdCycle === cycle;
     }
     default:
       return true;
