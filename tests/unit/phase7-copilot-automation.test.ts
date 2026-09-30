@@ -291,11 +291,16 @@ describe('the automation registry is CLOSED, and small on purpose', () => {
     ]) {
       expect(types).not.toContain(forbidden);
     }
+    // Phase 2B-3 PR 2: the four G13 actions join the closed list.
     expect(types).toEqual([
       'NOTIFY',
       'SUBMIT_FOR_APPROVAL',
       'PLACE_ON_CALENDAR',
       'PROPOSE_PUBLISH',
+      'SCHEDULE_NEXT_FREE_SLOT',
+      'NOTIFY_PERSON',
+      'ADD_TO_CAMPAIGN',
+      'MAKE_DRAFT_COPY',
     ]);
   });
 

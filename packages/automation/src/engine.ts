@@ -27,26 +27,33 @@ import {
   creatorLacksAuthority,
   ruleLimitReached,
   tooManyConditions,
+  automationTargetNotFound,
   triggerActionIncompatible,
   unknownTriggerOrAction,
 } from './errors';
 import { CONDITION_VALUE_UNAVAILABLE, conditionValuesResolve } from './condition-values';
+import { campaignTargetResolves, personTargetResolves } from './action-targets';
 import type { AutomationPolicy } from './policy';
 import type { AutomationPorts } from './ports';
 import {
+  ACTION_OUTCOME_STATUS,
   AUTOMATION_ACTIONS,
   actionSupportsTrigger,
+  conditionFieldsForRule,
   conditionRejection,
   conditionsSchema,
   evaluateConditions,
   findAction,
   findTrigger,
+  isAuthorablePair,
   isAutomationNotifyTemplate,
   isExternalAction,
   NOTIFY_TEMPLATE_NOT_ALLOWED,
   satisfiesActionPermissions,
   type ActionDefinition,
+  type ActionOutcomeCode,
   type AutomationCondition,
+  type ConditionField,
 } from './registry';
 
 /**
@@ -180,6 +187,18 @@ export interface TriggerEvent {
   /** The facts a condition may read. Gathered by the caller, never queried here. */
   readonly facts: Readonly<Record<string, unknown>>;
 }
+
+/**
+ * What an internal action did: acted (with what it produced), or — for a G13
+ * action — declined with a typed reason (`ACTION_OUTCOME_STATUS`).
+ */
+type PerformResult =
+  | {
+      readonly metadata: Prisma.InputJsonValue;
+      readonly resourceType?: string;
+      readonly resourceId?: string;
+    }
+  | { readonly outcome: ActionOutcomeCode };
 
 export interface RunOutcome {
   readonly run: AutomationRun | null;
@@ -362,6 +381,11 @@ export class AutomationEngine {
     if (!actionSupportsTrigger(input.actionType, input.triggerType)) {
       throw triggerActionIncompatible();
     }
+    // PHASE 2B-3 PR 2 — AND THE PAIR MUST BE ONE THE CATALOGUE OFFERS
+    // (`authoringTriggers`, the compatibility table).
+    if (!isAuthorablePair(input.triggerType, input.actionType)) {
+      throw triggerActionIncompatible();
+    }
 
     // The creator must hold BOTH the authoring permission and the permission the
     // ACTION needs. Holding `automation.manage` is not a way to acquire
@@ -390,10 +414,11 @@ export class AutomationEngine {
      * gatherer is held to by the parity test — so "offered", "accepted" and
      * "produced" are one list rather than three.
      */
-    this.#requireEvaluableConditions(conditions, input.triggerType);
+    this.#requireEvaluableConditions(conditions, input.triggerType, conditionFieldsForRule(input));
 
     const triggerConfig = trigger.config.parse(input.triggerConfig) as Prisma.InputJsonValue;
     const actionConfig = action.config.parse(input.actionConfig) as Prisma.InputJsonValue;
+    await this.#requireActionTargets(action.type, actionConfig, input.brandId);
 
     const workspaceCount = await this.#db.automationRule.count({
       where: { workspaceId: this.#workspaceId, deletedAt: null },
@@ -499,7 +524,13 @@ export class AutomationEngine {
      * against `existing.triggerType` is validating against the trigger the
      * conditions will actually be evaluated under.
      */
-    if (conditions) this.#requireEvaluableConditions(conditions, existing.triggerType);
+    if (conditions) {
+      this.#requireEvaluableConditions(
+        conditions,
+        existing.triggerType,
+        conditionFieldsForRule(existing),
+      );
+    }
 
     // Phase 2B-3 PR 2 — switching a rule ON re-arms it: while it was off it
     // was not listening, and what happened then is not replayed into it.
@@ -593,7 +624,13 @@ export class AutomationEngine {
     if (conditions && conditions.length > this.#policy.limits.maxConditionsPerRule) {
       throw tooManyConditions(this.#policy.limits.maxConditionsPerRule);
     }
-    if (conditions) this.#requireEvaluableConditions(conditions, existing.triggerType);
+    if (conditions) {
+      this.#requireEvaluableConditions(
+        conditions,
+        existing.triggerType,
+        conditionFieldsForRule(existing),
+      );
+    }
 
     const triggerConfig =
       input.triggerConfig === undefined
@@ -612,6 +649,10 @@ export class AutomationEngine {
       !satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)
     ) {
       throw creatorLacksAuthority();
+    }
+    // PHASE 2B-3 PR 2 — a new person or campaign is validated like a new rule's.
+    if (actionConfigChanged && actionConfig !== undefined) {
+      await this.#requireActionTargets(action.type, actionConfig, existing.brandId);
     }
 
     const name = input.name === undefined ? undefined : input.name.trim().slice(0, 120);
@@ -1145,6 +1186,18 @@ export class AutomationEngine {
     // --- Internal actions run ------------------------------------------------
     try {
       const result = await this.#performInternal(rule, run, event, actor);
+      /*
+       * PHASE 2B-3 PR 2 — AN ACTION THAT DID NOT ACT SAYS WHY. A G13 executor
+       * returns a typed outcome rather than throwing: SKIPPED when there was
+       * nothing to do, BLOCKED_BY_POLICY when something a person can fix
+       * stood in the way. Either way nothing was changed.
+       */
+      if ('outcome' in result) {
+        return this.#finish(rule, run, ACTION_OUTCOME_STATUS[result.outcome], {
+          conditionsHeld: true,
+          failureCode: result.outcome,
+        });
+      }
       return this.#finish(rule, run, 'SUCCEEDED', {
         conditionsHeld: true,
         actionResult: result.metadata,
@@ -1494,11 +1547,7 @@ export class AutomationEngine {
     run: AutomationRun,
     event: TriggerEvent,
     actor: AutomationActor,
-  ): Promise<{
-    metadata: Prisma.InputJsonValue;
-    resourceType?: string;
-    resourceId?: string;
-  }> {
+  ): Promise<PerformResult> {
     const config = (rule.actionConfig ?? {}) as Record<string, unknown>;
     const idempotencyKey = `automation-run:${run.id}`;
 
@@ -1809,9 +1858,10 @@ export class AutomationEngine {
   #requireEvaluableConditions(
     conditions: readonly AutomationCondition[],
     triggerType: AutomationTrigger,
+    fields: readonly ConditionField[],
   ): void {
     for (const condition of conditions) {
-      switch (conditionRejection(condition, triggerType)) {
+      switch (conditionRejection(condition, triggerType, fields)) {
         case 'field':
           throw conditionFieldNotProduced(condition.field);
         case 'operator':
@@ -1821,6 +1871,35 @@ export class AutomationEngine {
         case null:
           break;
       }
+    }
+  }
+
+  /**
+   * PHASE 2B-3 PR 2 — SAVE-TIME VALIDATION OF WHAT AN ACTION NAMES. The same
+   * predicate every run applies (`action-targets.ts`); a refusal is shaped like
+   * a genuine miss (D-132).
+   */
+  async #requireActionTargets(
+    actionType: AutomationActionType,
+    actionConfig: Prisma.InputJsonValue,
+    brandId: string,
+  ): Promise<void> {
+    const config = (actionConfig ?? {}) as Record<string, unknown>;
+    if (actionType === 'NOTIFY_PERSON') {
+      const ok = await personTargetResolves(this.#db, {
+        workspaceId: this.#workspaceId,
+        brandId,
+        userId: config['userId'],
+      });
+      if (!ok) throw automationTargetNotFound();
+    }
+    if (actionType === 'ADD_TO_CAMPAIGN') {
+      const ok = await campaignTargetResolves(this.#db, {
+        workspaceId: this.#workspaceId,
+        brandId,
+        campaignId: config['campaignId'],
+      });
+      if (!ok) throw automationTargetNotFound();
     }
   }
 

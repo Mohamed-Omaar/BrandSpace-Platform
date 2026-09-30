@@ -177,3 +177,13 @@ export function automationRuleNameTaken(): AppError {
   });
 }
 export const AUTOMATION_RULE_NAME_TAKEN_REASON = 'automation_rule_name_taken';
+
+/**
+ * PHASE 2B-3 PR 2 — THE PERSON OR CAMPAIGN AN ACTION NAMES IS NOT ONE THE RULE
+ * MAY NAME. Shaped exactly like a genuine miss (D-132): whether the id belongs
+ * to another brand, another workspace, a departed member or nothing at all is
+ * not the author's to learn from the refusal.
+ */
+export function automationTargetNotFound(): AppError {
+  return new AppError('NOT_FOUND', 'That person or campaign was not found.');
+}

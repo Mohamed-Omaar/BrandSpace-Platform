@@ -95,13 +95,21 @@ describe('registry parity with the database enums', () => {
       'POST_TOP_10_PERCENT',
       'FACT_EXPIRING',
     ]);
-    expect(PLANNED_AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
+    // Phase 2B-3 PR 2: four G13 actions ship with their settings; the rest
+    // stay planned (REMIND_REVIEWER moves to PR 3, owner decision D3).
+    expect(AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
+      'NOTIFY',
+      'SUBMIT_FOR_APPROVAL',
+      'PLACE_ON_CALENDAR',
+      'PROPOSE_PUBLISH',
       'SCHEDULE_NEXT_FREE_SLOT',
       'NOTIFY_PERSON',
       'ADD_TO_CAMPAIGN',
+      'MAKE_DRAFT_COPY',
+    ]);
+    expect(PLANNED_AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
       'REMIND_REVIEWER',
       'DRAFT_IDEAS',
-      'MAKE_DRAFT_COPY',
       'RETRY_PUBLISH',
       'PAUSE_CAMPAIGN',
     ]);
@@ -165,11 +173,12 @@ describe('every shipped action requires EXACTLY what it required before', () => 
     PROPOSE_PUBLISH: 'publishing.manage',
   };
 
+  /** Phase 2B-3 PR 2: the four actions that shipped before G13. */
+  const LEGACY = AUTOMATION_ACTIONS.filter((action) => action.type in BEFORE);
+
   it('allOf with one element, no anyOf, no entitlements, no credits', () => {
-    expect(AUTOMATION_ACTIONS.map((action) => action.type).sort()).toEqual(
-      Object.keys(BEFORE).sort(),
-    );
-    for (const action of AUTOMATION_ACTIONS) {
+    expect(LEGACY.map((action) => action.type).sort()).toEqual(Object.keys(BEFORE).sort());
+    for (const action of LEGACY) {
       expect(action.permissions, action.type).toEqual({ allOf: [BEFORE[action.type]], anyOf: [] });
       expect(action.entitlements, action.type).toEqual([]);
       expect(action.spendsCredits, action.type).toBe(false);
@@ -180,7 +189,7 @@ describe('every shipped action requires EXACTLY what it required before', () => 
 
   it('for EVERY role, the new check answers what the old `includes` answered', () => {
     for (const role of ROLE_DEFINITIONS) {
-      for (const action of AUTOMATION_ACTIONS) {
+      for (const action of LEGACY) {
         const before = role.permissionKeys.includes(BEFORE[action.type] as string);
         expect(
           satisfiesActionPermissions(role.permissionKeys, action.permissions),
@@ -200,9 +209,15 @@ describe('every shipped action requires EXACTLY what it required before', () => 
   });
 });
 
+/**
+ * A G13 action's declaration, wherever it lives: shipped (Phase 2B-3 PR 2) or
+ * still planned. The requirement is the same either way.
+ */
+const declared = (type: string) => findAction(type) ?? findPlannedAction(type);
+
 describe('the declared G13 requirements (Correction 1)', () => {
   it('ADD_TO_CAMPAIGN is anyOf [content.create, campaigns.manage] — the only anyOf', () => {
-    expect(findPlannedAction('ADD_TO_CAMPAIGN')?.permissions).toEqual({
+    expect(declared('ADD_TO_CAMPAIGN')?.permissions).toEqual({
       allOf: [],
       anyOf: ['content.create', 'campaigns.manage'],
     });
@@ -229,7 +244,7 @@ describe('the declared G13 requirements (Correction 1)', () => {
       PAUSE_CAMPAIGN: ['campaigns.manage'],
     };
     for (const [type, allOf] of Object.entries(expected)) {
-      const action = findPlannedAction(type);
+      const action = declared(type);
       expect(action?.permissions, type).toEqual({ allOf, anyOf: [] });
       expect(action?.entitlements, type).toEqual([]);
       expect(action?.spendsCredits, type).toBe(false);
@@ -268,7 +283,7 @@ describe('the declared G13 requirements (Correction 1)', () => {
 });
 
 describe('allOf / anyOf evaluation', () => {
-  const addToCampaign = findPlannedAction('ADD_TO_CAMPAIGN')?.permissions as ActionPermissions;
+  const addToCampaign = declared('ADD_TO_CAMPAIGN')?.permissions as ActionPermissions;
   const draftIdeas = findPlannedAction('DRAFT_IDEAS')?.permissions as ActionPermissions;
   const role = (key: string): readonly string[] =>
     ROLE_DEFINITIONS.find((definition) => definition.key === key)?.permissionKeys ?? [];
@@ -431,21 +446,23 @@ describe('older-automation classification', () => {
   });
 
   it('every shipped, supported pair is NOT an older automation', () => {
-    // Phase 2B-3 PR 2: a shipped trigger may be executable before it is
-    // authorable (POST_FAILED ships its producer first); only authorable ones
-    // are "current".
-    for (const trigger of AUTOMATION_TRIGGERS.filter((entry) => entry.authorable)) {
+    // Phase 2B-3 PR 2: a shipped trigger or action may be executable without
+    // being authorable (authorability and executability are separate); a pair
+    // is current exactly when both halves are authorable.
+    for (const trigger of AUTOMATION_TRIGGERS) {
       for (const action of AUTOMATION_ACTIONS) {
         expect(
           isOlderAutomation({ triggerType: trigger.type, actionType: action.type }),
           `${trigger.type} × ${action.type}`,
-        ).toBe(false);
+        ).toBe(!(trigger.authorable && action.authorable));
       }
     }
   });
 
   it('a rule naming anything not authorable is captioned, whichever half it is', () => {
-    expect(isOlderAutomation({ triggerType: 'POST_FAILED', actionType: 'NOTIFY' })).toBe(true);
+    expect(isOlderAutomation({ triggerType: 'REVIEW_WAITING_24H', actionType: 'NOTIFY' })).toBe(
+      true,
+    );
     expect(
       isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'ADD_TO_CAMPAIGN' }),
     ).toBe(true);

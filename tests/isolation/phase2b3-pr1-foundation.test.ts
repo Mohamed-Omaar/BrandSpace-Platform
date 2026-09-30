@@ -458,7 +458,9 @@ describe('existing stored rules of every shape behave exactly as before', () => 
     entitlementQuestions = [];
     let walked = 0;
     for (const trigger of AUTOMATION_TRIGGERS) {
-      for (const action of AUTOMATION_ACTIONS) {
+      // The shapes that existed before G13; the G13 actions have their own
+      // suites (Phase 2B-3 PR 2).
+      for (const action of AUTOMATION_ACTIONS.filter((entry) => entry.type in EXPECTED)) {
         if (!actionSupportsTrigger(action.type, trigger.type)) continue;
         const rule = await storedRule({ triggerType: trigger.type, actionType: action.type });
         const outcome = await runOnce(rule);
