@@ -190,6 +190,27 @@ async function world(expiresAt: Date, refreshToken: string | null) {
 const job = (id: string) => inA((db) => db.publishJob.findUniqueOrThrow({ where: { id } }));
 const attempts = (id: string) =>
   inA((db) => db.publishAttempt.count({ where: { publishJobId: id } }));
+const attemptRows = (id: string) =>
+  inA((db) =>
+    db.publishAttempt.findMany({
+      where: { publishJobId: id },
+      orderBy: { attemptNumber: 'asc' },
+      select: {
+        attemptNumber: true,
+        outcome: true,
+        failureClass: true,
+        providerStatusCode: true,
+        providerErrorCode: true,
+      },
+    }),
+  );
+const PREFLIGHT_ROW = {
+  attemptNumber: 1,
+  outcome: 'PREFLIGHT_REFUSED',
+  failureClass: 'NOT_CONNECTED',
+  providerStatusCode: null,
+  providerErrorCode: null,
+};
 const connection = (id: string) =>
   inA((db) => db.socialConnection.findUniqueOrThrow({ where: { id } }));
 const sweep = (at: Date) =>
@@ -239,8 +260,11 @@ describe('Review item 3 · the worker never sends an expired token', () => {
     expect(await job(w.jobId)).toMatchObject({
       failureClass: 'NOT_CONNECTED',
       failureCode: RECONNECT_REQUIRED_CODE,
+      attemptCount: 0,
     });
-    expect(await attempts(w.jobId)).toBe(0);
+    // Still nothing sent. Phase 2B-3 PR 2 (D2): the failure concludes with ONE
+    // pre-flight refusal row, which is not a provider attempt.
+    expect(await attemptRows(w.jobId)).toEqual([PREFLIGHT_ROW]);
   });
 
   it('held, then reconnected (a fresh token) before the deadline: publishes', async () => {
@@ -293,7 +317,9 @@ describe('Review item 3 · the publishing sweep refreshes first, through the exi
     expect(await job(w.jobId)).toMatchObject({
       status: 'FAILED',
       failureCode: RECONNECT_REQUIRED_CODE,
+      attemptCount: 0,
     });
-    expect(await attempts(w.jobId)).toBe(0);
+    // Phase 2B-3 PR 2 (D2): one pre-flight refusal row, no provider attempt.
+    expect(await attemptRows(w.jobId)).toEqual([PREFLIGHT_ROW]);
   });
 });
