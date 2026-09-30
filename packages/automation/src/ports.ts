@@ -122,6 +122,39 @@ export interface CalendarPort {
   >;
 }
 
+/**
+ * PHASE 2B-3 PR 2 (owner decision D8) — ADD A POST TO A CAMPAIGN, attach-only.
+ *
+ * The automation's own precondition comes FIRST, and the campaign service's
+ * general `setContentCampaign` is called only when every part of it holds: the
+ * post has no campaign, is not waiting for review (a review is never withdrawn
+ * by an automation), can still be edited, and the campaign the rule names is
+ * still a live campaign of the post's brand. Otherwise a code, and no change.
+ */
+export interface CampaignPort {
+  addToCampaign(input: {
+    readonly workspaceId: string;
+    readonly contentItemId: string;
+    /** The rule's configured campaign — never anything the event names. */
+    readonly campaignId: string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+    readonly actorPermissionKeys: readonly string[];
+    readonly idempotencyKey: string;
+  }): Promise<
+    | { readonly kind: 'attached' }
+    | {
+        readonly kind: 'refused';
+        readonly reason:
+          | 'content_unavailable'
+          | 'already_in_campaign'
+          | 'content_in_review'
+          | 'content_not_editable'
+          | 'campaign_unavailable';
+      }
+  >;
+}
+
 export interface PublishPort {
   /**
    * Publish, AFTER a human has confirmed this exact run.
@@ -175,6 +208,7 @@ export interface AutomationPorts {
   readonly notifications?: NotificationPort | undefined;
   readonly approvals?: ApprovalPort | undefined;
   readonly calendar?: CalendarPort | undefined;
+  readonly campaigns?: CampaignPort | undefined;
   readonly publishing?: PublishPort | undefined;
   readonly timezone?: TimezonePort | undefined;
 }

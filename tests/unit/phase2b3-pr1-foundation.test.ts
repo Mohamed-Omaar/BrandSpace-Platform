@@ -464,7 +464,7 @@ describe('older-automation classification', () => {
       true,
     );
     expect(
-      isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'ADD_TO_CAMPAIGN' }),
+      isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'REMIND_REVIEWER' }),
     ).toBe(true);
     expect(isOlderAutomation({ triggerType: 'NOT_A_TRIGGER', actionType: 'NOTIFY' })).toBe(true);
   });

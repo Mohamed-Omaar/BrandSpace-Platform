@@ -564,7 +564,8 @@ describe('existing stored rules of every shape behave exactly as before', () => 
           triggerType: 'CONTENT_APPROVED',
           triggerConfig: {},
           conditions: [],
-          actionType: 'ADD_TO_CAMPAIGN' as never,
+          // Phase 2B-3 PR 2: ADD_TO_CAMPAIGN ships; REMIND_REVIEWER stays planned (D3).
+          actionType: 'REMIND_REVIEWER' as never,
           actionConfig: {},
           actor: actor({ permissionKeys: [...EVERYTHING, 'content.create', 'campaigns.manage'] }),
         }),
@@ -575,6 +576,8 @@ describe('existing stored rules of every shape behave exactly as before', () => 
         engine(db).createRule({
           brandId: fixtures.a.brandId,
           name: `pr1 planned ${randomUUID().slice(0, 8)}`,
+          // Phase 2B-3 PR 2: POST_FAILED is authorable, but never with a
+          // pre-G13 action.
           triggerType: 'POST_FAILED' as never,
           triggerConfig: {},
           conditions: [],
@@ -590,7 +593,8 @@ describe('existing stored rules of every shape behave exactly as before', () => 
       'RETRY_PUBLISH',
       'PAUSE_CAMPAIGN',
       'DRAFT_IDEAS',
-      'ADD_TO_CAMPAIGN',
+      // Phase 2B-3 PR 2: in place of ADD_TO_CAMPAIGN, which now ships.
+      'REMIND_REVIEWER',
     ]) {
       const planned = await inA((db) =>
         db.automationRule.create({

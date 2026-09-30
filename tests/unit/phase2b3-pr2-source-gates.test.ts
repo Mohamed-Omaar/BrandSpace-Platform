@@ -41,3 +41,13 @@ describe('NOTIFY_PERSON reaches exactly the person it names (D4)', () => {
     expect(port).not.toMatch(/payload:|linkPath:/);
   });
 });
+
+describe('ADD_TO_CAMPAIGN never withdraws a review (D8)', () => {
+  it('its worker port checks review before calling, and gives the service no withdrawal port', () => {
+    const port = methodBody(worker, 'async addToCampaign(', '\n      },\n');
+    expect(port).toContain("item.status === 'IN_REVIEW'");
+    expect(port.indexOf("'content_in_review'")).toBeLessThan(port.indexOf('setContentCampaign'));
+    expect(port).toContain('new CampaignService({ db, workspaceId })');
+    expect(port).not.toMatch(/reviewWithdrawal|withdrawForEdit/);
+  });
+});

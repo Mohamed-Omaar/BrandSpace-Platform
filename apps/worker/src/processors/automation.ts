@@ -3,6 +3,7 @@ import { withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import {
   AutomationEngine,
   TenantAutomationPolicySource,
+  campaignTargetResolves,
   gatherFacts,
   type AutomationActor,
   type AutomationPorts,
@@ -11,8 +12,10 @@ import {
 } from '@brandspace/automation';
 import { createMetricWindowPort } from '@brandspace/analytics';
 import {
+  CampaignService,
   ContentApprovalService,
   ContentCalendarService,
+  READ_ONLY_CONTENT_STATUSES,
   TenantContentPolicySource,
 } from '@brandspace/content';
 import {
@@ -22,7 +25,7 @@ import {
 } from '@brandspace/entitlements';
 import { NotificationService, resolveRecipients } from '@brandspace/notifications';
 import type { EvaluateAutomationPayload } from '@brandspace/jobs';
-import { createLogger, currentEnvironment, systemClock } from '@brandspace/shared';
+import { brandInScope, createLogger, currentEnvironment, systemClock } from '@brandspace/shared';
 import { unreachableChannelGate } from '@brandspace/social-connectors';
 
 /**
@@ -183,6 +186,50 @@ function portsFor(
           idempotencyKey: input.idempotencyKey,
         });
         return { recipients: delivered };
+      },
+    },
+    /*
+     * PHASE 2B-3 PR 2 (D8) — ADD TO A CAMPAIGN, attach-only. The automation's
+     * own precondition, in this order, and `setContentCampaign` only when all
+     * of it holds — so its general behaviour (moving, detaching, withdrawing a
+     * review) is never reached from a rule:
+     *
+     *   1. the post is there, and inside the creator's scope;
+     *   2. it has NO campaign — an automation never moves a post;
+     *   3. it is not waiting for review — an automation never withdraws one;
+     *   4. it can still be edited (not publishing or published);
+     *   5. the campaign the rule names is still a live campaign of its brand.
+     *
+     * No review-withdrawal port is given to the campaign service, so even a
+     * post that went into review after step 3 is refused, not withdrawn.
+     */
+    campaigns: {
+      async addToCampaign(input) {
+        const item = await db.contentItem.findFirst({
+          where: { id: input.contentItemId, workspaceId, deletedAt: null },
+          select: { brandId: true, campaignId: true, status: true },
+        });
+        if (!item || !brandInScope(input.actorBrandScope, item.brandId)) {
+          return { kind: 'refused', reason: 'content_unavailable' };
+        }
+        if (item.campaignId !== null) return { kind: 'refused', reason: 'already_in_campaign' };
+        if (item.status === 'IN_REVIEW') return { kind: 'refused', reason: 'content_in_review' };
+        if (READ_ONLY_CONTENT_STATUSES.includes(item.status)) {
+          return { kind: 'refused', reason: 'content_not_editable' };
+        }
+        const campaignLive = await campaignTargetResolves(db, {
+          workspaceId,
+          brandId: item.brandId,
+          campaignId: input.campaignId,
+        });
+        if (!campaignLive) return { kind: 'refused', reason: 'campaign_unavailable' };
+        await new CampaignService({ db, workspaceId }).setContentCampaign({
+          contentItemId: input.contentItemId,
+          campaignId: input.campaignId,
+          actor: { userId: input.actorUserId, brandScope: input.actorBrandScope },
+          actorPermissionKeys: input.actorPermissionKeys,
+        });
+        return { kind: 'attached' };
       },
     },
     approvals: {

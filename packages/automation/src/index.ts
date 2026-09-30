@@ -110,6 +110,7 @@ export type {
   ApprovalPort,
   AutomationPorts,
   CalendarPort,
+  CampaignPort,
   EntitlementPort,
   NotificationPort,
   PublishPort,

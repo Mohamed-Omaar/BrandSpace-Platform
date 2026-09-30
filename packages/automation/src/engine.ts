@@ -1682,7 +1682,35 @@ export class AutomationEngine {
         return { metadata: { recipients: result.recipients } };
       }
 
-      case 'ADD_TO_CAMPAIGN':
+      /*
+       * PHASE 2B-3 PR 2 (D8) — ADD TO A CAMPAIGN, attach-only. The campaign is
+       * the rule's own setting, never anything the event names; the port
+       * applies the automation's precondition before the campaign service is
+       * asked, and a post in review is SKIPPED, never withdrawn.
+       */
+      case 'ADD_TO_CAMPAIGN': {
+        if (!this.#ports.campaigns) throw unknownTriggerOrAction();
+        const contentItemId = await this.#resolveContentItem(rule, event, actor);
+        if (!contentItemId) return { outcome: 'content_unavailable' };
+        const campaignId = config['campaignId'];
+        if (typeof campaignId !== 'string') return { outcome: 'campaign_unavailable' };
+        const result = await this.#ports.campaigns.addToCampaign({
+          workspaceId: this.#workspaceId,
+          contentItemId,
+          campaignId,
+          actorUserId: actor.userId,
+          actorBrandScope: actor.brandScope,
+          actorPermissionKeys: actor.permissionKeys,
+          idempotencyKey,
+        });
+        if (result.kind === 'refused') return { outcome: result.reason };
+        return {
+          metadata: { campaignId },
+          resourceType: 'ContentItem',
+          resourceId: contentItemId,
+        };
+      }
+
       case 'REMIND_REVIEWER':
       case 'DRAFT_IDEAS':
       case 'MAKE_DRAFT_COPY':

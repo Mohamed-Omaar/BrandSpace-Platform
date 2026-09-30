@@ -11,6 +11,7 @@ import {
   type AutomationActor,
   type AutomationPolicy,
 } from '@brandspace/automation';
+import { ContentApprovalService, parseContentPolicy } from '@brandspace/content';
 import { processAutomationJob } from '../../apps/worker/src/processors/automation';
 import {
   appRoleClient,
@@ -365,5 +366,185 @@ describe('NOTIFY_PERSON — notify a chosen person (D4)', () => {
     );
     expect(outcome.status).toBe('BLOCKED_BY_AUTHORIZATION');
     expect(outcome.run?.failureCode).toBe('creator_lost_permission');
+  });
+});
+
+describe('ADD_TO_CAMPAIGN — add to a campaign, attach-only (D8)', () => {
+  async function campaign(input: { brandId?: string } = {}): Promise<string> {
+    const row = await inA((db) =>
+      db.campaign.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: input.brandId ?? fixtures.a.brandId,
+          name: `pr2 actions campaign ${randomUUID().slice(0, 8)}`,
+          objective: 'AWARENESS',
+          status: 'ACTIVE',
+          createdByUserId: fixtures.a.userId,
+        },
+        select: { id: true },
+      }),
+    );
+    return row.id;
+  }
+  const itemRow = (itemId: string) =>
+    inA((db) =>
+      db.contentItem.findUniqueOrThrow({
+        where: { id: itemId },
+        select: { campaignId: true, status: true },
+      }),
+    );
+
+  it('a post with no campaign is attached to the configured one, and it is audited', async () => {
+    const campaignId = await campaign();
+    const rule = await createRule({ actionType: 'ADD_TO_CAMPAIGN', actionConfig: { campaignId } });
+    const itemId = await post();
+    await approve(itemId, 2);
+    expect(await runsOf(rule.id)).toEqual([
+      { status: 'SUCCEEDED', failureCode: null, resourceType: 'ContentItem', resourceId: itemId },
+    ]);
+    expect((await itemRow(itemId)).campaignId).toBe(campaignId);
+    const audit = await inA((db) =>
+      db.auditEvent.count({ where: { action: 'campaign.content_attached', resourceId: itemId } }),
+    );
+    expect(audit).toBe(1);
+  });
+
+  it('a post already in a campaign is SKIPPED and keeps its campaign', async () => {
+    const own = await campaign();
+    const configured = await campaign();
+    const rule = await createRule({
+      actionType: 'ADD_TO_CAMPAIGN',
+      actionConfig: { campaignId: configured },
+    });
+    const itemId = await post();
+    await inA((db) => db.contentItem.update({ where: { id: itemId }, data: { campaignId: own } }));
+    await approve(itemId);
+    expect((await runsOf(rule.id))[0]).toMatchObject({
+      status: 'SKIPPED',
+      failureCode: 'already_in_campaign',
+    });
+    expect((await itemRow(itemId)).campaignId).toBe(own);
+  });
+
+  it('a post waiting for review is SKIPPED content_in_review: no change, the review stays open', async () => {
+    const campaignId = await campaign();
+    const rule = await createRule({ actionType: 'ADD_TO_CAMPAIGN', actionConfig: { campaignId } });
+    const itemId = await post('DRAFT');
+    const approval = await inA((db) =>
+      new ContentApprovalService({
+        db,
+        workspaceId: fixtures.a.workspaceId,
+        policy: parseContentPolicy(defaultPayload('content')),
+      }).submit({
+        itemId,
+        actor: {
+          userId: fixtures.a.userId,
+          roleKey: 'workspace_owner',
+          permissionKeys: ['content.read', 'content.submit'],
+          brandScope: [],
+        },
+      }),
+    );
+    await approve(itemId);
+    expect((await runsOf(rule.id))[0]).toMatchObject({
+      status: 'SKIPPED',
+      failureCode: 'content_in_review',
+    });
+    expect(await itemRow(itemId)).toEqual({ campaignId: null, status: 'IN_REVIEW' });
+    const stillOpen = await inA((db) =>
+      db.approval.findUniqueOrThrow({ where: { id: approval.id }, select: { status: true } }),
+    );
+    expect(stillOpen.status).toBe('PENDING');
+  });
+
+  it('a post publishing or published is SKIPPED content_not_editable', async () => {
+    const campaignId = await campaign();
+    const rule = await createRule({ actionType: 'ADD_TO_CAMPAIGN', actionConfig: { campaignId } });
+    const itemId = await post();
+    await inA((db) =>
+      db.contentItem.update({ where: { id: itemId }, data: { status: 'PUBLISHED' } }),
+    );
+    await approve(itemId);
+    expect((await runsOf(rule.id))[0]).toMatchObject({
+      status: 'SKIPPED',
+      failureCode: 'content_not_editable',
+    });
+    expect((await itemRow(itemId)).campaignId).toBeNull();
+  });
+
+  it('the configured campaign deleted after the rule was saved: BLOCKED campaign_unavailable', async () => {
+    const campaignId = await campaign();
+    const rule = await createRule({ actionType: 'ADD_TO_CAMPAIGN', actionConfig: { campaignId } });
+    await inA((db) =>
+      db.campaign.update({ where: { id: campaignId }, data: { deletedAt: new Date() } }),
+    );
+    const itemId = await post();
+    await approve(itemId);
+    expect((await runsOf(rule.id))[0]).toMatchObject({
+      status: 'BLOCKED_BY_POLICY',
+      failureCode: 'campaign_unavailable',
+    });
+    expect((await itemRow(itemId)).campaignId).toBeNull();
+  });
+
+  it('a campaign of another brand or workspace is refused at save, shaped like a miss', async () => {
+    for (const campaignId of [await campaign({ brandId: otherBrandId }), fixtures.b.campaignId]) {
+      expect(
+        await refusalOf(() =>
+          createRule({ actionType: 'ADD_TO_CAMPAIGN', actionConfig: { campaignId } }),
+        ),
+      ).toBe('NOT_FOUND');
+    }
+  });
+
+  it('either content.create or campaigns.manage is enough; neither blocks the run', async () => {
+    const campaignId = await campaign();
+    const rule = await createRule({ actionType: 'ADD_TO_CAMPAIGN', actionConfig: { campaignId } });
+    const attached: string[] = [];
+    const run = (permissionKeys: string[]) =>
+      inA((db) =>
+        new AutomationEngine({
+          db,
+          workspaceId: fixtures.a.workspaceId,
+          policy,
+          ports: {
+            campaigns: {
+              addToCampaign: async (input) => {
+                attached.push(input.contentItemId);
+                return { kind: 'attached' };
+              },
+            },
+          },
+        }).run({
+          rule,
+          event: {
+            type: 'CONTENT_APPROVED',
+            brandId: fixtures.a.brandId,
+            refType: 'ContentItem',
+            refId: fixtures.a.contentItemId,
+            eventKey: `CONTENT_APPROVED:${randomUUID()}`,
+            facts: {},
+          },
+          resolveActor: async () => author({ permissionKeys }),
+        }),
+      );
+    expect((await run(['content.create'])).status).toBe('SUCCEEDED');
+    expect((await run(['campaigns.manage'])).status).toBe('SUCCEEDED');
+    const neither = await run(['workspace.read', 'automation.manage']);
+    expect(neither.status).toBe('BLOCKED_BY_AUTHORIZATION');
+    expect(neither.run?.failureCode).toBe('creator_lost_permission');
+    expect(attached).toHaveLength(2);
+  });
+
+  it('pairs with CONTENT_APPROVED only', async () => {
+    const campaignId = await campaign();
+    for (const triggerType of ['POST_PUBLISHED', 'POST_FAILED']) {
+      expect(
+        await refusalOf(() =>
+          createRule({ actionType: 'ADD_TO_CAMPAIGN', actionConfig: { campaignId }, triggerType }),
+        ),
+        triggerType,
+      ).toBe('VALIDATION_FAILED');
+    }
   });
 });
