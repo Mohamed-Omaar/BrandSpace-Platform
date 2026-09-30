@@ -1711,9 +1711,32 @@ export class AutomationEngine {
         };
       }
 
+      /*
+       * PHASE 2B-3 PR 2 — MAKE A DRAFT COPY of the post the event names. One
+       * copy per run: the run's key is the copy's idempotency key.
+       */
+      case 'MAKE_DRAFT_COPY': {
+        if (!this.#ports.content) throw unknownTriggerOrAction();
+        const contentItemId = await this.#resolveContentItem(rule, event, actor);
+        if (!contentItemId) return { outcome: 'content_unavailable' };
+        const result = await this.#ports.content.makeDraftCopy({
+          workspaceId: this.#workspaceId,
+          contentItemId,
+          actorUserId: actor.userId,
+          actorBrandScope: actor.brandScope,
+          actorPermissionKeys: actor.permissionKeys,
+          idempotencyKey: `duplicate:${idempotencyKey}`,
+        });
+        if (result.kind === 'refused') return { outcome: result.reason };
+        return {
+          metadata: { sourceItemId: contentItemId },
+          resourceType: 'ContentItem',
+          resourceId: result.contentItemId,
+        };
+      }
+
       case 'REMIND_REVIEWER':
       case 'DRAFT_IDEAS':
-      case 'MAKE_DRAFT_COPY':
       case 'RETRY_PUBLISH':
       case 'PAUSE_CAMPAIGN':
         throw unknownTriggerOrAction();

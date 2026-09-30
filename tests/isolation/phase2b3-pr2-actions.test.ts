@@ -11,7 +11,11 @@ import {
   type AutomationActor,
   type AutomationPolicy,
 } from '@brandspace/automation';
-import { ContentApprovalService, parseContentPolicy } from '@brandspace/content';
+import {
+  ContentApprovalService,
+  ContentLibraryService,
+  parseContentPolicy,
+} from '@brandspace/content';
 import { processAutomationJob } from '../../apps/worker/src/processors/automation';
 import {
   appRoleClient,
@@ -546,5 +550,226 @@ describe('ADD_TO_CAMPAIGN — add to a campaign, attach-only (D8)', () => {
         triggerType,
       ).toBe('VALIDATION_FAILED');
     }
+  });
+});
+
+describe('MAKE_DRAFT_COPY — make a draft copy', () => {
+  async function campaign(): Promise<string> {
+    const row = await inA((db) =>
+      db.campaign.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          name: `pr2 actions copy ${randomUUID().slice(0, 8)}`,
+          objective: 'AWARENESS',
+          status: 'ACTIVE',
+          createdByUserId: fixtures.a.userId,
+        },
+        select: { id: true },
+      }),
+    );
+    return row.id;
+  }
+  const copiesOf = (ruleId: string) =>
+    inA(async (db) => {
+      const runs = await db.automationRun.findMany({
+        where: { ruleId, status: 'SUCCEEDED' },
+        select: { resourceId: true },
+      });
+      return db.contentItem.findMany({
+        where: { id: { in: runs.map((run) => run.resourceId ?? '') } },
+        include: { variants: true },
+      });
+    });
+
+  it('a new DRAFT with the source’s title, words, format and campaign — once per event', async () => {
+    const campaignId = await campaign();
+    const rule = await createRule({ actionType: 'MAKE_DRAFT_COPY', actionConfig: {} });
+    const sourceId = await post();
+    await inA((db) =>
+      db.contentItem.update({
+        where: { id: sourceId },
+        data: { campaignId, pillar: 'education', tags: ['launch'], status: 'SCHEDULED' },
+      }),
+    );
+    const source = await inA((db) =>
+      db.contentItem.findUniqueOrThrow({ where: { id: sourceId }, include: { variants: true } }),
+    );
+    await approve(sourceId, 2);
+
+    const copies = await copiesOf(rule.id);
+    expect(copies).toHaveLength(1);
+    const [copy] = copies;
+    expect(copy).toMatchObject({
+      title: source.title,
+      brandId: source.brandId,
+      status: 'DRAFT',
+      origin: 'HUMAN',
+      contentType: source.contentType,
+      primaryLocale: source.primaryLocale,
+      campaignId,
+      pillar: 'education',
+      tags: ['launch'],
+      createdByUserId: fixtures.a.userId,
+    });
+    const copyId = copy?.id ?? '';
+    expect(copyId).not.toBe(sourceId);
+    expect(copy?.variants.map((variant) => [variant.platformKey, variant.body])).toEqual(
+      source.variants.map((variant) => [variant.platformKey, variant.body]),
+    );
+    // Nothing of the source's lifecycle: no slot, no approval.
+    const [slots, approvals] = await inA((db) =>
+      Promise.all([
+        db.calendarSlot.count({ where: { contentItemId: copyId } }),
+        db.approval.count({ where: { contentItemId: copyId } }),
+      ]),
+    );
+    expect([slots, approvals]).toEqual([0, 0]);
+    // And the source is untouched.
+    const after = await inA((db) => db.contentItem.findUniqueOrThrow({ where: { id: sourceId } }));
+    expect(after.status).toBe('SCHEDULED');
+  });
+
+  it('a source whose campaign no longer exists: BLOCKED source_campaign_unavailable, no copy', async () => {
+    const campaignId = await campaign();
+    const rule = await createRule({ actionType: 'MAKE_DRAFT_COPY', actionConfig: {} });
+    const sourceId = await post();
+    await inA((db) => db.contentItem.update({ where: { id: sourceId }, data: { campaignId } }));
+    await inA((db) =>
+      db.campaign.update({ where: { id: campaignId }, data: { deletedAt: new Date() } }),
+    );
+    await approve(sourceId);
+    expect(await runsOf(rule.id)).toEqual([
+      {
+        status: 'BLOCKED_BY_POLICY',
+        failureCode: 'source_campaign_unavailable',
+        resourceType: null,
+        resourceId: null,
+      },
+    ]);
+  });
+
+  it('a failed post is copied through its concluding attempt (POST_FAILED)', async () => {
+    const rule = await createRule({
+      actionType: 'MAKE_DRAFT_COPY',
+      actionConfig: {},
+      triggerType: 'POST_FAILED',
+    });
+    const event = await inA((db) =>
+      db.automationEvent.create({
+        data: {
+          workspaceId: fixtures.a.workspaceId,
+          brandId: fixtures.a.brandId,
+          triggerType: 'POST_FAILED',
+          refType: 'PublishAttempt',
+          refId: fixtures.a.publishAttemptId,
+          dedupeKey: `POST_FAILED:${fixtures.a.publishAttemptId}:${randomUUID()}`,
+          dispatchedAt: new Date(),
+        },
+      }),
+    );
+    await processAutomationJob({
+      kind: EVALUATE_AUTOMATION,
+      workspaceId: fixtures.a.workspaceId,
+      idempotencyKey: `automation-event-${event.id}`,
+      eventId: event.id,
+      eventKey: event.dedupeKey,
+      brandId: fixtures.a.brandId,
+      triggerType: 'POST_FAILED',
+      refType: 'PublishAttempt',
+      refId: fixtures.a.publishAttemptId,
+      ruleId: null,
+      occurrence: null,
+    });
+    const job = await inA((db) =>
+      db.publishJob.findUniqueOrThrow({ where: { id: fixtures.a.publishJobId } }),
+    );
+    const [copy] = await copiesOf(rule.id);
+    const source = await inA((db) =>
+      db.contentItem.findUniqueOrThrow({ where: { id: job.contentItemId } }),
+    );
+    expect(copy).toMatchObject({ title: source.title, status: 'DRAFT' });
+  });
+
+  it('the brand at its draft limit: the library refuses with a reason the run turns into BLOCKED', async () => {
+    const contentPolicy = parseContentPolicy(defaultPayload('content'));
+    const full = {
+      ...contentPolicy,
+      generation: { ...contentPolicy.generation, maxDraftsPerBrand: 1 },
+    };
+    const refusal = await inA((db) =>
+      new ContentLibraryService({ db, workspaceId: fixtures.a.workspaceId, policy: full })
+        .duplicateItem({
+          sourceItemId: fixtures.a.contentItemId,
+          actorUserId: fixtures.a.userId,
+          actorBrandScope: [],
+          actorPermissionKeys: ['content.create'],
+          expiresAt: null,
+          idempotencyKey: `duplicate:${randomUUID()}`,
+        })
+        .then(
+          () => 'OK',
+          (error: unknown) => (isAppError(error) ? error.publicDetails['reason'] : String(error)),
+        ),
+    );
+    expect(refusal).toBe('draft_limit_reached');
+
+    const rule = await createRule({ actionType: 'MAKE_DRAFT_COPY', actionConfig: {} });
+    const outcome = await inA((db) =>
+      new AutomationEngine({
+        db,
+        workspaceId: fixtures.a.workspaceId,
+        policy,
+        ports: {
+          content: {
+            makeDraftCopy: async () => ({ kind: 'refused', reason: 'draft_limit_reached' }),
+          },
+        },
+      }).run({
+        rule,
+        event: {
+          type: 'CONTENT_APPROVED',
+          brandId: fixtures.a.brandId,
+          refType: 'ContentItem',
+          refId: fixtures.a.contentItemId,
+          eventKey: `CONTENT_APPROVED:${randomUUID()}`,
+          facts: {},
+        },
+        resolveActor: async () => author(),
+      }),
+    );
+    expect(outcome.status).toBe('BLOCKED_BY_POLICY');
+    expect(outcome.run?.failureCode).toBe('draft_limit_reached');
+  });
+
+  it('a creator outside the source’s brand copies nothing', async () => {
+    const rule = await createRule({ actionType: 'MAKE_DRAFT_COPY', actionConfig: {} });
+    const outcome = await inA((db) =>
+      new AutomationEngine({
+        db,
+        workspaceId: fixtures.a.workspaceId,
+        policy,
+        ports: {
+          content: {
+            makeDraftCopy: async () => {
+              throw new Error('must not be called');
+            },
+          },
+        },
+      }).run({
+        rule,
+        event: {
+          type: 'CONTENT_APPROVED',
+          brandId: fixtures.a.brandId,
+          refType: 'ContentItem',
+          refId: fixtures.a.contentItemId,
+          eventKey: `CONTENT_APPROVED:${randomUUID()}`,
+          facts: {},
+        },
+        resolveActor: async () => author({ brandScope: [otherBrandId] }),
+      }),
+    );
+    expect(outcome.status).toBe('BLOCKED_BY_AUTHORIZATION');
+    expect(outcome.run?.failureCode).toBe('creator_lost_brand_scope');
   });
 });

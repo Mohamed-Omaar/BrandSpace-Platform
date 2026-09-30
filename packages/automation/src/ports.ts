@@ -155,6 +155,30 @@ export interface CampaignPort {
   >;
 }
 
+/**
+ * PHASE 2B-3 PR 2 — MAKE A DRAFT COPY of the post the event names, through the
+ * content library's one duplicate path (`duplicateItem`), as the rule's
+ * creator: a new draft with its own identity, keeping the source's title, its
+ * campaign (D-318) and nothing of its lifecycle. Idempotent on the run.
+ */
+export interface ContentCopyPort {
+  makeDraftCopy(input: {
+    readonly workspaceId: string;
+    readonly contentItemId: string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+    readonly actorPermissionKeys: readonly string[];
+    readonly idempotencyKey: string;
+  }): Promise<
+    | { readonly kind: 'copied'; readonly contentItemId: string }
+    | {
+        readonly kind: 'refused';
+        readonly reason:
+          'content_unavailable' | 'source_campaign_unavailable' | 'draft_limit_reached';
+      }
+  >;
+}
+
 export interface PublishPort {
   /**
    * Publish, AFTER a human has confirmed this exact run.
@@ -209,6 +233,7 @@ export interface AutomationPorts {
   readonly approvals?: ApprovalPort | undefined;
   readonly calendar?: CalendarPort | undefined;
   readonly campaigns?: CampaignPort | undefined;
+  readonly content?: ContentCopyPort | undefined;
   readonly publishing?: PublishPort | undefined;
   readonly timezone?: TimezonePort | undefined;
 }

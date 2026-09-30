@@ -11,6 +11,7 @@ import {
   contentItemNotFound,
   contentNotEditable,
   draftLimitReached,
+  sourceCampaignUnavailable,
   transitionNotAllowed,
   unsupportedPlatform,
 } from './errors';
@@ -653,6 +654,73 @@ export class ContentLibraryService {
     });
 
     return { item, variants: written, replayed: false };
+  }
+
+  /**
+   * DUPLICATE A POST (D-277 §15, D-282) — a NEW draft carrying the source's
+   * words, media, format, language, campaign and tags, through the ordinary
+   * manual-create path: the same platform checks, the same brand-scope check,
+   * the same audit. Moved here from the dashboard's action (Phase 2B-3 PR 2) so
+   * "make a new copy" and the "make a draft copy" automation are one path.
+   *
+   * The source is read under the actor's BrandScope, so a post they cannot
+   * open cannot be copied. NOTHING ABOUT ITS LIFECYCLE IS COPIED — no
+   * approval, no schedule, no publication: a copy is a draft with its own
+   * identity. Its CAMPAIGN travels for an actor who may file content under
+   * campaigns (D-318: `content.create` or `campaigns.manage`); a campaign that
+   * no longer exists refuses the copy rather than being silently dropped.
+   * A first comment travels only to a platform that still takes one.
+   */
+  async duplicateItem(input: {
+    readonly sourceItemId: string;
+    /** The copy's title from the source's: the dashboard adds its translated "(copy)". */
+    readonly titleFor?: (sourceTitle: string) => string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+    readonly actorPermissionKeys: readonly string[];
+    readonly expiresAt: Date | null;
+    readonly idempotencyKey: string;
+  }): Promise<{ item: ContentItem; variants: ContentVariant[]; replayed: boolean }> {
+    const source = await this.getItem(input.sourceItemId, input.actorBrandScope);
+    const mayFile =
+      input.actorPermissionKeys.includes('content.create') ||
+      input.actorPermissionKeys.includes('campaigns.manage');
+    const campaignId = mayFile ? source.campaignId : null;
+    if (campaignId) {
+      const live = await this.db.campaign.findFirst({
+        where: { id: campaignId, brandId: source.brandId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!live) throw sourceCampaignUnavailable();
+    }
+    return this.createManualItem({
+      brandId: source.brandId,
+      title: input.titleFor ? input.titleFor(source.title) : source.title,
+      contentType: source.contentType,
+      locale: source.primaryLocale,
+      variants: source.variants
+        .filter((variant) => variant.locale === source.primaryLocale)
+        .map((variant) => ({
+          platformKey: variant.platformKey,
+          body: variant.body ?? '',
+          hashtags: variant.hashtags,
+          firstComment: this.policy.platforms.find((p) => p.key === variant.platformKey)
+            ?.allowsFirstComment
+            ? variant.firstComment
+            : null,
+          linkUrl: variant.linkUrl,
+          assetIds: variant.assetIds,
+          // B9 — the slide headlines travel with their images.
+          slides: readSlides(variant.slides),
+        })),
+      campaignId,
+      pillar: source.pillar,
+      tags: source.tags,
+      idempotencyKey: input.idempotencyKey,
+      expiresAt: input.expiresAt,
+      actorUserId: input.actorUserId,
+      actorBrandScope: input.actorBrandScope,
+    });
   }
 
   /**

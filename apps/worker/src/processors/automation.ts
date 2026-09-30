@@ -15,8 +15,13 @@ import {
   CampaignService,
   ContentApprovalService,
   ContentCalendarService,
+  ContentLibraryService,
+  DRAFT_LIMIT_REACHED_REASON,
   READ_ONLY_CONTENT_STATUSES,
+  SOURCE_CAMPAIGN_UNAVAILABLE_REASON,
   TenantContentPolicySource,
+  readRetentionFacts,
+  resolveContentExpiry,
 } from '@brandspace/content';
 import {
   createScheduleQuota,
@@ -25,7 +30,13 @@ import {
 } from '@brandspace/entitlements';
 import { NotificationService, resolveRecipients } from '@brandspace/notifications';
 import type { EvaluateAutomationPayload } from '@brandspace/jobs';
-import { brandInScope, createLogger, currentEnvironment, systemClock } from '@brandspace/shared';
+import {
+  brandInScope,
+  createLogger,
+  currentEnvironment,
+  isAppError,
+  systemClock,
+} from '@brandspace/shared';
 import { unreachableChannelGate } from '@brandspace/social-connectors';
 
 /**
@@ -230,6 +241,47 @@ function portsFor(
           actorPermissionKeys: input.actorPermissionKeys,
         });
         return { kind: 'attached' };
+      },
+    },
+    /*
+     * PHASE 2B-3 PR 2 — MAKE A DRAFT COPY through the library's one duplicate
+     * path, as the creator, with the content retention every new draft gets.
+     * The two reasons the library can refuse a copy become codes; anything
+     * else fails the run as before.
+     */
+    content: {
+      async makeDraftCopy(input) {
+        const source = await db.contentItem.findFirst({
+          where: { id: input.contentItemId, workspaceId, deletedAt: null },
+          select: { brandId: true },
+        });
+        if (!source || !brandInScope(input.actorBrandScope, source.brandId)) {
+          return { kind: 'refused', reason: 'content_unavailable' };
+        }
+        const policy = await new TenantContentPolicySource(db, environment).load();
+        const facts = await readRetentionFacts(db, workspaceId);
+        try {
+          const copy = await new ContentLibraryService({ db, workspaceId, policy }).duplicateItem({
+            sourceItemId: input.contentItemId,
+            // The source's own title: the dashboard's "(copy)" is a
+            // translation the worker has no reader's language for.
+            actorUserId: input.actorUserId,
+            actorBrandScope: input.actorBrandScope,
+            actorPermissionKeys: input.actorPermissionKeys,
+            expiresAt: resolveContentExpiry(policy, facts, systemClock),
+            idempotencyKey: input.idempotencyKey,
+          });
+          return { kind: 'copied', contentItemId: copy.item.id };
+        } catch (error: unknown) {
+          const reason = isAppError(error) ? error.publicDetails['reason'] : undefined;
+          if (reason === SOURCE_CAMPAIGN_UNAVAILABLE_REASON) {
+            return { kind: 'refused', reason: 'source_campaign_unavailable' };
+          }
+          if (reason === DRAFT_LIMIT_REACHED_REASON) {
+            return { kind: 'refused', reason: 'draft_limit_reached' };
+          }
+          throw error;
+        }
       },
     },
     approvals: {

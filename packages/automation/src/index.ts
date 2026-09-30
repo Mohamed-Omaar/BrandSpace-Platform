@@ -111,6 +111,7 @@ export type {
   AutomationPorts,
   CalendarPort,
   CampaignPort,
+  ContentCopyPort,
   EntitlementPort,
   NotificationPort,
   PublishPort,
