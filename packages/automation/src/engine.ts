@@ -1628,7 +1628,33 @@ export class AutomationEngine {
        * the PR that implements it. Until then a stored rule naming one fails
        * closed here, exactly as an unknown action would.
        */
-      case 'SCHEDULE_NEXT_FREE_SLOT':
+      /*
+       * PHASE 2B-3 PR 2 — SCHEDULE IN THE NEXT FREE SLOT. The post the event
+       * names, resolved and bound like every content action; a post that is
+       * gone, out of the brand, or out of the creator's scope is SKIPPED
+       * rather than failed. Every reason the calendar gives not to schedule is
+       * a typed outcome.
+       */
+      case 'SCHEDULE_NEXT_FREE_SLOT': {
+        const scheduleNextFreeSlot = this.#ports.calendar?.scheduleNextFreeSlot;
+        if (!scheduleNextFreeSlot) throw unknownTriggerOrAction();
+        const contentItemId = await this.#resolveContentItem(rule, event, actor);
+        if (!contentItemId) return { outcome: 'content_unavailable' };
+        const result = await scheduleNextFreeSlot.call(this.#ports.calendar, {
+          workspaceId: this.#workspaceId,
+          contentItemId,
+          actorUserId: actor.userId,
+          actorBrandScope: actor.brandScope,
+          idempotencyKey,
+        });
+        if (result.kind === 'refused') return { outcome: result.reason };
+        return {
+          metadata: { slotId: result.slotId, localTime: result.localTime },
+          resourceType: 'CalendarSlot',
+          resourceId: result.slotId,
+        };
+      }
+
       case 'NOTIFY_PERSON':
       case 'ADD_TO_CAMPAIGN':
       case 'REMIND_REVIEWER':

@@ -90,6 +90,46 @@ function portsFor(
   workspaceId: string,
   environment: Environment,
 ): AutomationPorts {
+  /**
+   * The calendar every automation schedules through: the tenant's content
+   * policy and zone, the real scheduled-post quota, the brand's approval gate
+   * and the channel gate — exactly what a person's scheduling obeys.
+   */
+  async function calendarFor(): Promise<ContentCalendarService> {
+    const policy = await new TenantContentPolicySource(db, environment).load();
+    const workspace = await db.workspace.findFirst({
+      where: { id: workspaceId },
+      select: { timezone: true },
+    });
+    return new ContentCalendarService({
+      db,
+      workspaceId,
+      policy,
+      // Q9 (D-332): a channel whose every account was revoked is refused.
+      channelGate: unreachableChannelGate(db, workspaceId),
+      timezone: workspace?.timezone ?? 'UTC',
+      /*
+       * THE QUOTA IS REAL (P7-R6), and an automation is subject to it
+       * exactly as a person is. A rule that could schedule past a plan's
+       * monthly ceiling would be a way to buy headroom by writing a rule.
+       *
+       * It USED to be three no-op methods under this very comment. The
+       * shared implementation now lives in `@brandspace/entitlements`, where
+       * every surface can reach it, so there is one answer to "may this
+       * workspace schedule another post?" and the same usage ledger rows and
+       * idempotency keys behind it.
+       */
+      quota: createScheduleQuota({ db, workspaceId, environment }),
+      /*
+       * PR 0 — THE SAME BRAND APPROVAL GATE THE DASHBOARD USES. Without
+       * it this calendar fell back to a workspace-wide setting, so
+       * `PLACE_ON_CALENDAR` could schedule an unapproved post of a brand
+       * that requires approval. The approvals domain is the one answer.
+       */
+      approvalGate: new ContentApprovalService({ db, workspaceId, policy }),
+    });
+  }
+
   return {
     notifications: {
       async notify(input) {
@@ -150,39 +190,25 @@ function portsFor(
       },
     },
     calendar: {
+      /*
+       * PHASE 2B-3 PR 2 — "schedule in the next free slot": the SAME calendar
+       * as `placeOnCalendar` — the real quota, the brand's approval gate, the
+       * channel gate — so an automation schedules under exactly the rules a
+       * person does, plus the workspace's calendar-capacity lock.
+       */
+      async scheduleNextFreeSlot(input) {
+        const calendar = await calendarFor();
+        const outcome = await calendar.scheduleNextFreeSlot({
+          contentItemId: input.contentItemId,
+          actorUserId: input.actorUserId,
+          actorBrandScope: input.actorBrandScope,
+        });
+        return outcome.kind === 'scheduled'
+          ? { kind: 'scheduled', slotId: outcome.view.slot.id, localTime: outcome.localTime }
+          : outcome;
+      },
       async placeOnCalendar(input) {
-        const policy = await new TenantContentPolicySource(db, environment).load();
-        const workspace = await db.workspace.findFirst({
-          where: { id: workspaceId },
-          select: { timezone: true },
-        });
-        const calendar = new ContentCalendarService({
-          db,
-          workspaceId,
-          policy,
-          // Q9 (D-332): a channel whose every account was revoked is refused.
-          channelGate: unreachableChannelGate(db, workspaceId),
-          timezone: workspace?.timezone ?? 'UTC',
-          /*
-           * THE QUOTA IS REAL (P7-R6), and an automation is subject to it
-           * exactly as a person is. A rule that could schedule past a plan's
-           * monthly ceiling would be a way to buy headroom by writing a rule.
-           *
-           * It USED to be three no-op methods under this very comment. The
-           * shared implementation now lives in `@brandspace/entitlements`, where
-           * every surface can reach it, so there is one answer to "may this
-           * workspace schedule another post?" and the same usage ledger rows and
-           * idempotency keys behind it.
-           */
-          quota: createScheduleQuota({ db, workspaceId, environment }),
-          /*
-           * PR 0 — THE SAME BRAND APPROVAL GATE THE DASHBOARD USES. Without
-           * it this calendar fell back to a workspace-wide setting, so
-           * `PLACE_ON_CALENDAR` could schedule an unapproved post of a brand
-           * that requires approval. The approvals domain is the one answer.
-           */
-          approvalGate: new ContentApprovalService({ db, workspaceId, policy }),
-        });
+        const calendar = await calendarFor();
         const view = await calendar.schedule({
           contentItemId: input.contentItemId,
           localTime: input.localTime,

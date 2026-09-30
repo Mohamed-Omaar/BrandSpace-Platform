@@ -77,6 +77,32 @@ export interface CalendarPort {
     readonly actorBrandScope: readonly string[];
     readonly idempotencyKey: string;
   }): Promise<{ readonly slotId: string }>;
+  /**
+   * PHASE 2B-3 PR 2 — schedule the item in the brand's next free slot, as the
+   * rule's creator, under the calendar's own rules and the workspace's
+   * calendar-capacity lock. A reason not to schedule comes back as a code;
+   * nothing is written for it.
+   */
+  scheduleNextFreeSlot?(input: {
+    readonly workspaceId: string;
+    readonly contentItemId: string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+    readonly idempotencyKey: string;
+  }): Promise<
+    | { readonly kind: 'scheduled'; readonly slotId: string; readonly localTime: string }
+    | {
+        readonly kind: 'refused';
+        readonly reason:
+          | 'already_has_time'
+          | 'no_free_day'
+          | 'approval_required'
+          | 'schedule_quota_reached'
+          | 'channel_disconnected'
+          | 'not_schedulable'
+          | 'content_unavailable';
+      }
+  >;
 }
 
 export interface PublishPort {
