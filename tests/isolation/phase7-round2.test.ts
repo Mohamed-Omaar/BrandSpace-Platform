@@ -765,6 +765,12 @@ describe('A1: the automation outbox carries a real domain event to a rule', () =
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
+      // Phase 2B-3 PR 3 — the timed G13 producers on the maintenance sweep.
+      'REVIEW_WAITING_24H',
+      'CAMPAIGN_STARTED',
+      'CAMPAIGN_ENDED',
+      'SCHEDULE_GAP',
+      'FACT_EXPIRING',
     ]);
     for (const trigger of AUTOMATION_TRIGGERS) {
       expect(producible.has(trigger.type), `${trigger.type} has no producer`).toBe(true);

@@ -2125,6 +2125,7 @@ export const messages = {
     'notifications.template.approval.rejected': 'رُفض منشورك',
     'notifications.template.approval.withdrawn_after_edit':
       'عُدّل منشور كان بانتظار مراجعتك، فسُحب طلب المراجعة',
+    'notifications.template.approval.reminder': 'لا يزال منشور بانتظار مراجعتك',
     'notifications.template.publishing.published': 'تم نشر منشورك',
     'notifications.template.publishing.failed': 'فشل نشر منشورك',
     'notifications.template.calendar.unplanned_by_timezone_change':
@@ -2542,6 +2543,7 @@ export const messages = {
     'automations.day.5': 'الجمعة',
     'automations.day.6': 'السبت',
     'automations.field.brand.id': 'العلامة',
+    'automations.field.campaign.id': 'الحملة',
     'automations.field.content.status': 'حالة المحتوى',
     'automations.field.content.pillar': 'محور المحتوى',
     'automations.field.content.platformCount': 'عدد المنصات',
@@ -2619,10 +2621,17 @@ export const messages = {
     'automations.action.PLACE_ON_CALENDAR': 'وضع في التقويم',
     'automations.action.PROPOSE_PUBLISH': 'اقتراح النشر (يتطلب موافقة)',
     'automations.trigger.POST_FAILED': 'عند فشل نشر منشور',
+    'automations.trigger.REVIEW_WAITING_24H': 'عند انتظار منشور للمراجعة أكثر من 24 ساعة',
+    'automations.trigger.CAMPAIGN_STARTED': 'عند بدء حملة',
+    'automations.trigger.CAMPAIGN_ENDED': 'عند انتهاء حملة',
+    'automations.trigger.SCHEDULE_GAP': 'عند عدم جدولة أي منشور للأيام الثلاثة القادمة',
+    'automations.trigger.FACT_EXPIRING':
+      'عند اقتراب انتهاء صلاحية معلومة في عقل العلامة خلال 7 أيام',
     'automations.action.SCHEDULE_NEXT_FREE_SLOT': 'جدولة في أول موعد متاح',
     'automations.action.NOTIFY_PERSON': 'تنبيه شخص محدد',
     'automations.action.ADD_TO_CAMPAIGN': 'إضافة إلى حملة',
     'automations.action.MAKE_DRAFT_COPY': 'إنشاء نسخة مسودة',
+    'automations.action.REMIND_REVIEWER': 'تذكير المراجِع',
     'automations.status.RUNNING': 'قيد التشغيل',
     'automations.status.SUCCEEDED': 'نجحت',
     'automations.status.SKIPPED': 'لم تتحقق الشروط',
@@ -2693,6 +2702,9 @@ export const messages = {
       'لم تُنشأ نسخة — حملة المنشور الأصلي لم تعد موجودة.',
     'automations.failure.draft_limit_reached':
       'لم تُنشأ نسخة — بلغت هذه العلامة التجارية الحد الأقصى للمسودات.',
+    'automations.failure.occurrence_stale': 'تم التخطي — تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
+    'automations.failure.no_eligible_reviewer':
+      'لم يُرسل — لا يوجد حاليًا من يمكنه مراجعة هذا المنشور.',
     'automations.failure.creator_no_longer_a_member':
       'لم تُشغَّل — منشئ هذه الأتمتة لم يعد عضوًا في مساحة العمل.',
     'automations.failure.creator_lost_permission':
@@ -5401,6 +5413,7 @@ export const messages = {
     'notifications.template.approval.rejected': 'Your post was turned down',
     'notifications.template.approval.withdrawn_after_edit':
       'A post waiting for your review was edited, so the review was withdrawn',
+    'notifications.template.approval.reminder': 'A post is still waiting for your review',
     'notifications.template.publishing.published': 'Your post was published',
     'notifications.template.publishing.failed': 'Your post could not be published',
     'notifications.template.calendar.unplanned_by_timezone_change':
@@ -5847,6 +5860,7 @@ export const messages = {
     'automations.day.5': 'Fri',
     'automations.day.6': 'Sat',
     'automations.field.brand.id': 'Brand',
+    'automations.field.campaign.id': 'Campaign',
     'automations.field.content.status': 'Content status',
     'automations.field.content.pillar': 'Content pillar',
     'automations.field.content.platformCount': 'Platform count',
@@ -5924,10 +5938,16 @@ export const messages = {
     'automations.action.PLACE_ON_CALENDAR': 'Place on the calendar',
     'automations.action.PROPOSE_PUBLISH': 'Propose publishing (needs confirmation)',
     'automations.trigger.POST_FAILED': 'When a post fails to publish',
+    'automations.trigger.REVIEW_WAITING_24H': 'When a post waits for review for over 24 hours',
+    'automations.trigger.CAMPAIGN_STARTED': 'When a campaign starts',
+    'automations.trigger.CAMPAIGN_ENDED': 'When a campaign ends',
+    'automations.trigger.SCHEDULE_GAP': 'When nothing is scheduled for the next 3 days',
+    'automations.trigger.FACT_EXPIRING': 'When a Brand Brain fact expires within 7 days',
     'automations.action.SCHEDULE_NEXT_FREE_SLOT': 'Schedule in the next free slot',
     'automations.action.NOTIFY_PERSON': 'Notify a chosen person',
     'automations.action.ADD_TO_CAMPAIGN': 'Add to a campaign',
     'automations.action.MAKE_DRAFT_COPY': 'Make a draft copy',
+    'automations.action.REMIND_REVIEWER': 'Remind the reviewer',
     'automations.status.RUNNING': 'Running',
     'automations.status.SUCCEEDED': 'Succeeded',
     'automations.status.SKIPPED': 'Conditions did not hold',
@@ -6001,6 +6021,10 @@ export const messages = {
       "No copy made — the original post's campaign no longer exists.",
     'automations.failure.draft_limit_reached':
       'No copy made — this brand has reached its limit of drafts.',
+    'automations.failure.occurrence_stale':
+      'Skipped — what started this automation had changed by the time it ran.',
+    'automations.failure.no_eligible_reviewer':
+      'Not sent — no one who can review this post is available right now.',
     'automations.failure.creator_no_longer_a_member':
       'Not run — the person who created this automation is no longer a member of the workspace.',
     'automations.failure.creator_lost_permission':

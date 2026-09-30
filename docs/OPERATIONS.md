@@ -150,6 +150,29 @@ rather than a system of record:
 **Losing Redis entirely is therefore a degradation, not a data loss.** Flush it and let the sweep
 re-enqueue.
 
+### 5.1 Timed automations after an outage (Phase 2B-3 PR 3, D-427)
+
+The timed G13 producers (REVIEW_WAITING_24H, CAMPAIGN_STARTED, CAMPAIGN_ENDED, SCHEDULE_GAP,
+FACT_EXPIRING) run in the same maintenance sweep and keep their place in the database, not in memory.
+When the API comes back after an outage, nothing needs to be run by hand:
+
+- **Bounded catch-up.** Each rule produces at most **25** occurrences per visit
+  (`TIMED_PRODUCER_LIMITS.maxOccurrencesPerVisit`); a rule with more is due again at once and continues
+  from its cursor on the next sweep. Nothing is dropped, and the fair queue keeps one busy rule from
+  starving the others.
+- **Campaign starts and ends more than 24 hours old are not announced.** A boundary older than
+  `campaignBoundaryMaxLatenessHours` when the sweep reaches it is skipped and the cursor moves past it.
+  Each rule that skips some logs `timed automation occurrences skipped as late` with the count — the
+  line to look for after a long outage.
+- **Reviews still waiting and facts still expiring fire late**, because delivery re-checks that they are
+  still true; one that stopped being true in between ends SKIPPED `occurrence_stale`.
+- **A schedule gap is a state**: only whether the next three days are empty now matters, so an outage
+  produces at most one gap event per rule.
+- **Nothing before a rule's arming is produced**, however long the gap (D-417).
+
+Two API replicas sweeping at once are safe: the dedupe key keeps one event per occurrence and the cursor
+only moves forward. A sweep interrupted before its commit leaves neither events nor cursor behind.
+
 ---
 
 ## 6. Migrations — forward-fix, not rollback
@@ -481,6 +504,25 @@ point at §6.3 for this caveat; this section is where it is written down. Applie
   No data is lost or rewritten by any of these.
 - **Never "undo" M2 by rewriting rows.** `publish_attempt` is immutable by trigger for every role; the
   evidence is correct history.
+
+### 6.9 Phase 2B-3 PR 3: no migration; rolling the application back (D-434)
+
+PR 3 adds no migration (DATABASE.md §18.11), so **rolling the application back from PR 3 needs no
+database change**. What differs until the new release is back:
+
+- **No timed event is produced.** The previous release's sweep has no producer for the five timed
+  triggers; `dueWatermark` and the SCHEDULE_GAP edge memory are left as they are and resume on the way
+  forward (nothing before a rule's arming is produced, D-417).
+- **An event produced before the rollback and not yet delivered is delivered by the previous worker,
+  WITHOUT the occurrence re-check.** Its engine does not check the trigger: a NOTIFY_PERSON rule on a
+  timed trigger sends its `automation.notice` (with PR 2's live recipient check) even if the review was
+  decided in between; a REMIND_REVIEWER rule ends `FAILED unknown_action` and sends nothing, as every
+  non-executable action does there. To avoid either, let the outbox drain (the dispatch sweep, §5)
+  before rolling back.
+- **`approval.reminder` rows already written stay**; the previous release has no words for the key, so
+  the notification feed shows its generic headline and the notifications page shows the key.
+
+No data is lost or rewritten.
 
 ## 7. Secret rotation
 

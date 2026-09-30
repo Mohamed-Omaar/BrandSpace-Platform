@@ -78,7 +78,14 @@ export interface TriggerDefinition {
    * other three name an EXPLICIT, SAFE MAPPING the engine resolves with a scoped
    * query rather than by assuming the ids interchange.
    */
-  readonly contentItemVia: 'direct' | 'calendarSlot' | 'publishJob' | 'publishAttempt' | null;
+  readonly contentItemVia:
+    | 'direct'
+    | 'calendarSlot'
+    | 'publishJob'
+    | 'publishAttempt'
+    // Phase 2B-3 PR 3 — REVIEW_WAITING_24H: the approval, then its post.
+    | 'approval'
+    | null;
   /**
    * Does this trigger's identity come from a CLOCK rather than from a row?
    *
@@ -109,6 +116,49 @@ export interface TriggerDefinition {
 }
 
 const emptyConfig = z.object({}).default({});
+
+/**
+ * PHASE 2B-3 PR 3 — WHAT THE TIMED G13 EVENTS MEAN, held here and nowhere else.
+ *
+ * These four are the events' own definitions (owner answer to §34 item 5): the
+ * names say "24 hours", "3 days" and "within 7 days", and moving them into plan
+ * or customer configuration would change what the event IS, not how often it
+ * runs. They are read by the producers and by the delivery re-check alike, so
+ * the two can never disagree about what "still waiting" means.
+ */
+export const DUE_EVENT_DEFINITIONS = {
+  /** REVIEW_WAITING_24H — a review still open this long after it was asked for. */
+  reviewWaitHours: 24,
+  /** SCHEDULE_GAP — the local calendar days, starting tomorrow, that must hold a post. */
+  scheduleGapDays: 3,
+  /** FACT_EXPIRING — `validUntil` within [today, today + (days − 1)], local days. */
+  factExpiryWindowDays: 7,
+} as const;
+
+/**
+ * PHASE 2B-3 PR 3 — HOW MUCH ONE SWEEP DOES FOR ONE RULE (owner decision A).
+ *
+ * `maxOccurrencesPerVisit`: new events one rule may produce in one visit. More
+ * than that continues on the next sweep from where this one stopped — nothing
+ * is dropped, and one rule with a backlog cannot hold a sweep.
+ *
+ * `campaignBoundaryMaxLatenessHours`: a campaign start or end that passed more
+ * than this long before the sweep saw it is not announced — after an outage,
+ * "your campaign started" days late is noise, not news. The watermark moves past
+ * it and the sweep logs how many it skipped. Only the campaign events: a review
+ * still waiting and a fact still expiring are re-checked when they are
+ * delivered, so a late one is still true.
+ *
+ * `watermarkLagSeconds`: the cursor never moves closer to "now" than this. A
+ * write whose transaction began before the sweep read and committed after it
+ * carries an earlier timestamp; keeping the cursor behind lets the next sweep
+ * still see it. The event key makes a second sighting a no-op.
+ */
+export const TIMED_PRODUCER_LIMITS = {
+  maxOccurrencesPerVisit: 25,
+  campaignBoundaryMaxLatenessHours: 24,
+  watermarkLagSeconds: 120,
+} as const;
 
 export const AUTOMATION_TRIGGERS = [
   {
@@ -156,6 +206,75 @@ export const AUTOMATION_TRIGGERS = [
     ruleAddressed: false,
     authorable: true,
     messageKey: 'postFailed',
+  },
+  /*
+   * PHASE 2B-3 PR 3 — a review cycle still open `reviewWaitHours` after it was
+   * asked for. Rule-derived: the producer reads one rule's brand, and the event
+   * goes to that rule alone. The reference is the review cycle; the post is
+   * reached through it.
+   */
+  {
+    type: 'REVIEW_WAITING_24H',
+    config: emptyConfig,
+    refType: 'Approval',
+    contentItemVia: 'approval',
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'reviewWaiting24h',
+  },
+  /*
+   * PHASE 2B-3 PR 3 — a campaign's first day beginning, and its last day
+   * ending, in the workspace's zone. Rule-derived; the reference is the
+   * campaign, which reaches no single post.
+   */
+  {
+    type: 'CAMPAIGN_STARTED',
+    config: emptyConfig,
+    refType: 'Campaign',
+    contentItemVia: null,
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'campaignStarted',
+  },
+  {
+    type: 'CAMPAIGN_ENDED',
+    config: emptyConfig,
+    refType: 'Campaign',
+    contentItemVia: null,
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'campaignEnded',
+  },
+  /*
+   * PHASE 2B-3 PR 3 — the brand's calendar going empty for the next few local
+   * days. Rule-derived and edge-triggered; a state has no row to point at.
+   */
+  {
+    type: 'SCHEDULE_GAP',
+    config: emptyConfig,
+    refType: null,
+    contentItemVia: null,
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'scheduleGap',
+  },
+  /*
+   * PHASE 2B-3 PR 3 — a usable Brand Brain fact entering its last seven days.
+   * Rule-derived; the reference is the fact, and only its id travels.
+   */
+  {
+    type: 'FACT_EXPIRING',
+    config: emptyConfig,
+    refType: 'BrandKnowledgeItem',
+    contentItemVia: null,
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'factExpiring',
   },
   {
     type: 'ANALYTICS_REFRESHED',
@@ -223,27 +342,6 @@ export interface PlannedTriggerDefinition {
 }
 
 export const PLANNED_AUTOMATION_TRIGGERS = [
-  {
-    type: 'REVIEW_WAITING_24H',
-    refType: 'Approval',
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'CAMPAIGN_STARTED',
-    refType: 'Campaign',
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'CAMPAIGN_ENDED',
-    refType: 'Campaign',
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
   // A change of a rule's own state, so there is no row to point at.
   {
     type: 'WEEKLY_ENGAGEMENT_DROPPED',
@@ -253,22 +351,8 @@ export const PLANNED_AUTOMATION_TRIGGERS = [
     executable: false,
   },
   {
-    type: 'SCHEDULE_GAP',
-    refType: null,
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
-  {
     type: 'POST_TOP_10_PERCENT',
     refType: 'ContentItem',
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'FACT_EXPIRING',
-    refType: 'BrandKnowledgeItem',
     ruleAddressed: true,
     authorable: false,
     executable: false,
@@ -307,6 +391,8 @@ export const CONDITION_FIELDS = [
   'metric.value',
   'metric.changeMilli',
   'brand.id',
+  // Phase 2B-3 PR 3 — the campaign a start or end event is about.
+  'campaign.id',
 ] as const;
 export type ConditionField = (typeof CONDITION_FIELDS)[number];
 
@@ -330,6 +416,18 @@ export type ConditionField = (typeof CONDITION_FIELDS)[number];
  * EXHAUSTIVE BY TYPE: every `ConditionField` must appear, and TypeScript refuses
  * the file if one is missing.
  */
+/**
+ * The triggers whose reference reaches a content item (`contentItemVia` is not
+ * null). Phase 2B-3 PR 3 adds REVIEW_WAITING_24H: the review cycle names its post.
+ */
+const CONTENT_REACHABLE_TRIGGERS = [
+  'CONTENT_APPROVED',
+  'CONTENT_SCHEDULED',
+  'POST_PUBLISHED',
+  'POST_FAILED',
+  'REVIEW_WAITING_24H',
+] as const satisfies readonly AutomationTrigger[];
+
 export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly AutomationTrigger[]> = {
   // The brand is on every event, because `deliver` selects rules BY brand.
   'brand.id': [
@@ -340,27 +438,22 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
     'ANALYTICS_REFRESHED',
     'METRIC_THRESHOLD_CROSSED',
     'SCHEDULED_TIME',
+    'REVIEW_WAITING_24H',
+    'CAMPAIGN_STARTED',
+    'CAMPAIGN_ENDED',
+    'SCHEDULE_GAP',
+    'FACT_EXPIRING',
   ],
   // Reachable wherever a content item is reachable — which is exactly where
   // `contentItemVia` is not null.
-  'content.status': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
-  'content.pillar': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
-  'content.platformCount': [
-    'CONTENT_APPROVED',
-    'CONTENT_SCHEDULED',
-    'POST_PUBLISHED',
-    'POST_FAILED',
-  ],
-  'content.hasCampaign': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
-  'content.campaignId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
-  'content.type': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
-  'content.authorUserId': [
-    'CONTENT_APPROVED',
-    'CONTENT_SCHEDULED',
-    'POST_PUBLISHED',
-    'POST_FAILED',
-  ],
-  'content.channels': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.status': CONTENT_REACHABLE_TRIGGERS,
+  'content.pillar': CONTENT_REACHABLE_TRIGGERS,
+  'content.platformCount': CONTENT_REACHABLE_TRIGGERS,
+  'content.hasCampaign': CONTENT_REACHABLE_TRIGGERS,
+  'content.campaignId': CONTENT_REACHABLE_TRIGGERS,
+  'content.type': CONTENT_REACHABLE_TRIGGERS,
+  'content.authorUserId': CONTENT_REACHABLE_TRIGGERS,
+  'content.channels': CONTENT_REACHABLE_TRIGGERS,
   // Only the publish job carries these. A failed post carries its class.
   'publish.provider': ['POST_PUBLISHED'],
   'publish.failureClass': ['POST_PUBLISHED', 'POST_FAILED'],
@@ -369,6 +462,8 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
   'metric.key': ['METRIC_THRESHOLD_CROSSED'],
   'metric.value': ['METRIC_THRESHOLD_CROSSED'],
   'metric.changeMilli': ['METRIC_THRESHOLD_CROSSED'],
+  // Only the campaign boundaries, whose reference IS the campaign.
+  'campaign.id': ['CAMPAIGN_STARTED', 'CAMPAIGN_ENDED'],
 };
 
 /**
@@ -407,6 +502,14 @@ export const AUTHORING_CONDITION_FIELDS: Partial<
   CONTENT_APPROVED: G13_CONTENT_CONDITION_FIELDS,
   POST_PUBLISHED: G13_CONTENT_CONDITION_FIELDS,
   POST_FAILED: [...G13_CONTENT_CONDITION_FIELDS, 'publish.failureClass'],
+  // Phase 2B-3 PR 3 — the waiting post's own fields (revised report §8).
+  REVIEW_WAITING_24H: G13_CONTENT_CONDITION_FIELDS,
+  // Which campaign (revised report §8); the brand is the rule's own.
+  CAMPAIGN_STARTED: ['campaign.id'],
+  CAMPAIGN_ENDED: ['campaign.id'],
+  // None: the gap is the condition (revised report §8).
+  SCHEDULE_GAP: [],
+  FACT_EXPIRING: [],
 };
 
 /**
@@ -626,6 +729,17 @@ export const CONDITION_FIELD_CONTRACTS: Record<ConditionField, ConditionFieldCon
     operators: STRING_OPERATORS,
     options: null,
     catalogue: 'brands',
+  },
+  /*
+   * Phase 2B-3 PR 3 — the campaign a boundary event is about: one of the
+   * rule's brand's campaigns, validated and re-resolved exactly like
+   * `content.campaignId`.
+   */
+  'campaign.id': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: null,
+    catalogue: 'campaigns',
   },
   'content.status': {
     kind: 'string',
@@ -944,7 +1058,11 @@ export type AutomationNotifyTemplate = (typeof AUTOMATION_NOTIFY_TEMPLATES)[numb
  * rule chooses.
  */
 export type AutomationNotificationTemplate =
-  AutomationNotifyTemplate | 'automation.confirmation_required';
+  | AutomationNotifyTemplate
+  | 'automation.confirmation_required'
+  // Phase 2B-3 PR 3 (owner decision B) — fixed in the reminder port; never a
+  // NOTIFY rule's choice, which stays `AUTOMATION_NOTIFY_TEMPLATES`.
+  | 'approval.reminder';
 
 export function isAutomationNotifyTemplate(value: unknown): value is AutomationNotifyTemplate {
   return (AUTOMATION_NOTIFY_TEMPLATES as readonly unknown[]).includes(value);
@@ -1089,7 +1207,16 @@ export const AUTOMATION_ACTIONS = [
     spendsCredits: false,
     asksFirst: false,
     authorable: true,
-    authoringTriggers: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
+    authoringTriggers: [
+      'CONTENT_APPROVED',
+      'POST_PUBLISHED',
+      'POST_FAILED',
+      'REVIEW_WAITING_24H',
+      'CAMPAIGN_STARTED',
+      'CAMPAIGN_ENDED',
+      'SCHEDULE_GAP',
+      'FACT_EXPIRING',
+    ],
     catalogue: 'g13',
     executable: true,
     needsContentItem: false,
@@ -1133,6 +1260,28 @@ export const AUTOMATION_ACTIONS = [
     needsContentItem: true,
     messageKey: 'makeDraftCopy',
   },
+  /*
+   * PHASE 2B-3 PR 3 — REMIND THE REVIEWER of a review still waiting. The
+   * requirement PR 1 declared and pinned (D-405): `content.submit`, the
+   * authority to ask for a review, which is what a reminder repeats. No
+   * settings: who is reminded is decided at run time from who can decide it.
+   */
+  {
+    type: 'REMIND_REVIEWER',
+    config: emptyConfig,
+    actionClass: 'READ_ONLY',
+    permissions: { allOf: ['content.submit'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: false,
+    authorable: true,
+    authoringTriggers: ['REVIEW_WAITING_24H'],
+    catalogue: 'g13',
+    executable: true,
+    // Its target is the review the event names, not a post.
+    needsContentItem: false,
+    messageKey: 'remindReviewer',
+  },
 ] as const satisfies readonly ActionDefinition[];
 
 /**
@@ -1162,16 +1311,6 @@ export interface PlannedActionDefinition {
 }
 
 export const PLANNED_AUTOMATION_ACTIONS = [
-  {
-    type: 'REMIND_REVIEWER',
-    actionClass: 'READ_ONLY',
-    permissions: { allOf: ['content.submit'], anyOf: [] },
-    entitlements: [],
-    spendsCredits: false,
-    asksFirst: false,
-    authorable: false,
-    executable: false,
-  },
   {
     type: 'DRAFT_IDEAS',
     actionClass: 'INTERNAL_REVERSIBLE',
@@ -1316,6 +1455,10 @@ export const ACTION_OUTCOME_STATUS = {
   content_unavailable: 'SKIPPED',
   source_campaign_unavailable: 'BLOCKED_BY_POLICY',
   draft_limit_reached: 'BLOCKED_BY_POLICY',
+  // Phase 2B-3 PR 3 — the review was decided or withdrawn before the reminder.
+  occurrence_stale: 'SKIPPED',
+  // Phase 2B-3 PR 3 — nobody can decide the review right now (decision D).
+  no_eligible_reviewer: 'BLOCKED_BY_POLICY',
 } as const satisfies Record<string, 'SKIPPED' | 'BLOCKED_BY_POLICY'>;
 export type ActionOutcomeCode = keyof typeof ACTION_OUTCOME_STATUS;
 

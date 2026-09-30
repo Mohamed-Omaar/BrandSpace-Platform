@@ -1888,6 +1888,44 @@ nothing else; there is no backfill and no data rewrite.
   application rollback needs no database change. The value cannot be removed in
   place: forward-only, OPERATIONS.md §6.8.
 
+### 18.11 Phase 2B-3 PR 3 — the timed G13 triggers and the reviewer reminder, no schema change (D-427 – D-434)
+
+**No migration. No table, column, CHECK, index or enum value is added.** Everything PR 3 writes is
+rows in tables that already exist, under constraints that already exist.
+
+| What PR 3 uses                                                        | Added by         | For                                                                                    |
+| --------------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------- |
+| Trigger and action enum values (REVIEW_WAITING_24H … REMIND_REVIEWER) | M1a, M1b (D-404) | the five timed triggers and REMIND_REVIEWER                                            |
+| `automation_event_ref_matches_trigger`, rule-addressed CHECK          | M1c              | Approval / Campaign / null / BrandKnowledgeItem references, every event rule-addressed |
+| `automation_rule.armedAt`                                             | M1c, D-417       | the floor: nothing before the current arming is produced                               |
+| `automation_rule.dueWatermark`                                        | M1c              | the per-rule cursor of REVIEW, CAMPAIGN_* and FACT; moved forward only                 |
+| `thresholdBreached` / `thresholdCycle` / `thresholdEvaluatedAt`       | D-177            | SCHEDULE_GAP's edge memory, moved by compare-and-set                                   |
+| `automation_event_workspaceId_dedupeKey_key`                          | round 2 (§18.6)  | one row per occurrence across replicas and repeats                                     |
+
+**Dedupe keys** (`recordRuleAutomationEvent`, `packages/database/src/automation-events.ts`):
+
+| Trigger              | `refType`            | Key                                                  |
+| -------------------- | -------------------- | ---------------------------------------------------- |
+| `REVIEW_WAITING_24H` | `Approval`           | `REVIEW_WAITING_24H:<ruleId>:<approvalId>`           |
+| `CAMPAIGN_STARTED`   | `Campaign`           | `CAMPAIGN_STARTED:<ruleId>:<campaignId>:<startDate>` |
+| `CAMPAIGN_ENDED`     | `Campaign`           | `CAMPAIGN_ENDED:<ruleId>:<campaignId>:<endDate>`     |
+| `SCHEDULE_GAP`       | none                 | `SCHEDULE_GAP:<ruleId>:<cycle>`                      |
+| `FACT_EXPIRING`      | `BrandKnowledgeItem` | `FACT_EXPIRING:<ruleId>:<itemId>:<validUntil>`       |
+
+**Every read is tenant- and brand-scoped and indexed**: `approval_workspaceId_brandId_status_idx`,
+`campaign_workspaceId_brandId_startDate_endDate_idx`, `calendar_slot_workspaceId_brandId_scheduledAtUtc_idx`,
+`brand_knowledge_item_workspaceId_brandId_validUntil_idx`, `brand_knowledge_version_knowledgeItemId_version_key`,
+and the rule queue's `automation_rule_triggerType_enabled_nextEvaluationAt_idx`. The one raw statement is
+the reminder's `SELECT … FROM "approval" … FOR SHARE`, with explicit `id`, `workspaceId` and `brandId`
+predicates, under RLS.
+
+**`approval.reminder`** is a code catalogue entry: `notification.templateKey` is a string column, not an
+enum, so the template needs no schema. Reminder rows are ordinary `notification` rows keyed
+`automation-run:<runId>:<userId>`.
+
+**No database change is needed to roll the application back** from PR 3; what the previous release does
+with rows already written is in OPERATIONS.md §6.9.
+
 ## 19. Phase 9 — Commerce & Onboarding
 
 Thirteen models: eight tenant-owned commercial tables, two platform-owned, three identity-scoped.

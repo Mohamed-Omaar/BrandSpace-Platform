@@ -458,7 +458,20 @@ describe('existing stored rules of every shape behave exactly as before', () => 
   it('every shipped trigger × every action it supports, and the entitlement port is never asked', async () => {
     entitlementQuestions = [];
     let walked = 0;
-    for (const trigger of AUTOMATION_TRIGGERS) {
+    // Phase 2B-3 PR 3: the triggers that existed before the timed G13 ones,
+    // by name; each timed trigger has its own suite.
+    const PRE_PR3_TRIGGERS = [
+      'CONTENT_APPROVED',
+      'CONTENT_SCHEDULED',
+      'POST_PUBLISHED',
+      'POST_FAILED',
+      'ANALYTICS_REFRESHED',
+      'METRIC_THRESHOLD_CROSSED',
+      'SCHEDULED_TIME',
+    ];
+    for (const trigger of AUTOMATION_TRIGGERS.filter((entry) =>
+      PRE_PR3_TRIGGERS.includes(entry.type),
+    )) {
       // The shapes that existed before G13; the G13 actions have their own
       // suites (Phase 2B-3 PR 2).
       for (const action of AUTOMATION_ACTIONS.filter((entry) => entry.type in EXPECTED)) {
@@ -565,8 +578,8 @@ describe('existing stored rules of every shape behave exactly as before', () => 
           triggerType: 'CONTENT_APPROVED',
           triggerConfig: {},
           conditions: [],
-          // Phase 2B-3 PR 2: ADD_TO_CAMPAIGN ships; REMIND_REVIEWER stays planned (D3).
-          actionType: 'REMIND_REVIEWER' as never,
+          // Phase 2B-3 PR 3: REMIND_REVIEWER ships (D3); DRAFT_IDEAS is still planned.
+          actionType: 'DRAFT_IDEAS' as never,
           actionConfig: {},
           actor: actor({ permissionKeys: [...EVERYTHING, 'content.create', 'campaigns.manage'] }),
         }),
@@ -590,13 +603,9 @@ describe('existing stored rules of every shape behave exactly as before', () => 
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
 
     entitlementQuestions = [];
-    for (const actionType of [
-      'RETRY_PUBLISH',
-      'PAUSE_CAMPAIGN',
-      'DRAFT_IDEAS',
-      // Phase 2B-3 PR 2: in place of ADD_TO_CAMPAIGN, which now ships.
-      'REMIND_REVIEWER',
-    ]) {
+    // Phase 2B-3 PR 3: the three actions still planned. REMIND_REVIEWER now
+    // executes; its runs are proved in phase2b3-pr3-remind-reviewer.
+    for (const actionType of ['RETRY_PUBLISH', 'PAUSE_CAMPAIGN', 'DRAFT_IDEAS']) {
       const planned = await inA((db) =>
         db.automationRule.create({
           data: {

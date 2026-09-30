@@ -229,11 +229,18 @@ describe('an action that needs a content item may only be paired with a trigger 
     }
   });
 
-  it('the three triggers whose reference is NOT a content item are named explicitly', () => {
+  it('the triggers whose reference is NOT a content item are named explicitly', () => {
     const unreachable = AUTOMATION_TRIGGERS.filter((t) => t.contentItemVia === null).map(
       (t) => t.type,
     );
     expect(unreachable).toEqual([
+      // Phase 2B-3 PR 3: the campaign boundaries reference the campaign.
+      'CAMPAIGN_STARTED',
+      'CAMPAIGN_ENDED',
+      // ...and the schedule gap is a state, with no row at all.
+      'SCHEDULE_GAP',
+      // ...and an expiring fact references the fact, never a post.
+      'FACT_EXPIRING',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
@@ -243,6 +250,10 @@ describe('an action that needs a content item may only be paired with a trigger 
     expect(findTrigger('METRIC_THRESHOLD_CROSSED')?.refType).toBe('MetricObservation');
     expect(findTrigger('ANALYTICS_REFRESHED')?.refType).toBe('AnalyticsIngestionRun');
     expect(findTrigger('SCHEDULED_TIME')?.refType).toBeNull();
+    expect(findTrigger('CAMPAIGN_STARTED')?.refType).toBe('Campaign');
+    expect(findTrigger('CAMPAIGN_ENDED')?.refType).toBe('Campaign');
+    expect(findTrigger('SCHEDULE_GAP')?.refType).toBeNull();
+    expect(findTrigger('FACT_EXPIRING')?.refType).toBe('BrandKnowledgeItem');
   });
 
   it('ANOMALY_DETECTED IS NO LONGER AUTHORABLE, because nothing could ever fire it', () => {

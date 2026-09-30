@@ -82,21 +82,22 @@ describe('registry parity with the database enums', () => {
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
       'POST_FAILED',
+      // Phase 2B-3 PR 3 — each ships with its producer.
+      'REVIEW_WAITING_24H',
+      'CAMPAIGN_STARTED',
+      'CAMPAIGN_ENDED',
+      'SCHEDULE_GAP',
+      'FACT_EXPIRING',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
     ]);
     expect(PLANNED_AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
-      'REVIEW_WAITING_24H',
-      'CAMPAIGN_STARTED',
-      'CAMPAIGN_ENDED',
       'WEEKLY_ENGAGEMENT_DROPPED',
-      'SCHEDULE_GAP',
       'POST_TOP_10_PERCENT',
-      'FACT_EXPIRING',
     ]);
-    // Phase 2B-3 PR 2: four G13 actions ship with their settings; the rest
-    // stay planned (REMIND_REVIEWER moves to PR 3, owner decision D3).
+    // Phase 2B-3 PR 2: four G13 actions ship with their settings; PR 3 ships
+    // REMIND_REVIEWER (owner decision D3); the rest stay planned.
     expect(AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
       'NOTIFY',
       'SUBMIT_FOR_APPROVAL',
@@ -106,9 +107,9 @@ describe('registry parity with the database enums', () => {
       'NOTIFY_PERSON',
       'ADD_TO_CAMPAIGN',
       'MAKE_DRAFT_COPY',
+      'REMIND_REVIEWER',
     ]);
     expect(PLANNED_AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
-      'REMIND_REVIEWER',
       'DRAFT_IDEAS',
       'RETRY_PUBLISH',
       'PAUSE_CAMPAIGN',
@@ -355,6 +356,8 @@ describe('the stringSet kind and content.channels', () => {
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
       'POST_FAILED',
+      // Phase 2B-3 PR 3 — the waiting review names its post.
+      'REVIEW_WAITING_24H',
     ]);
   });
 
@@ -465,9 +468,10 @@ describe('older-automation classification', () => {
     expect(isOlderAutomation({ triggerType: 'REVIEW_WAITING_24H', actionType: 'NOTIFY' })).toBe(
       true,
     );
-    expect(
-      isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'REMIND_REVIEWER' }),
-    ).toBe(true);
+    // A planned action (REMIND_REVIEWER ships in PR 3, so DRAFT_IDEAS stands in).
+    expect(isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'DRAFT_IDEAS' })).toBe(
+      true,
+    );
     expect(isOlderAutomation({ triggerType: 'NOT_A_TRIGGER', actionType: 'NOTIFY' })).toBe(true);
   });
 

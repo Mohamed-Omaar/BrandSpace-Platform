@@ -119,6 +119,37 @@ export async function gatherFacts(
   }
 
   /*
+   * Phase 2B-3 PR 3 — REVIEW_WAITING_24H: the review cycle names its post, and
+   * the post's facts are what a condition on a waiting review reads.
+   */
+  if (event.refType === 'Approval' && event.refId) {
+    const approval = await db.approval.findFirst({
+      where: { id: event.refId, workspaceId: event.workspaceId },
+      select: { contentItemId: true },
+    });
+    if (approval?.contentItemId) {
+      await addContentFacts(db, event.workspaceId, approval.contentItemId, facts);
+    }
+  }
+
+  /*
+   * Phase 2B-3 PR 3 — CAMPAIGN_STARTED / CAMPAIGN_ENDED: the campaign itself,
+   * and only while it is still one of the event's brand's live campaigns.
+   */
+  if (event.refType === 'Campaign' && event.refId) {
+    const campaign = await db.campaign.findFirst({
+      where: {
+        id: event.refId,
+        workspaceId: event.workspaceId,
+        brandId: event.brandId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (campaign) facts['campaign.id'] = campaign.id;
+  }
+
+  /*
    * THE METRIC FACTS COME FROM THE RULE'S OWN WINDOW, THROUGH THE SAME PORT THE
    * PRODUCER USED.
    *

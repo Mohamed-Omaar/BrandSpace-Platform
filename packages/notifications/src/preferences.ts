@@ -45,6 +45,8 @@ const CATEGORY_OF: Readonly<Record<NotificationTemplateKey, NotificationCategory
   'approval.changes_requested': 'approvals',
   'approval.rejected': 'approvals',
   'approval.withdrawn_after_edit': 'approvals',
+  /** Phase 2B-3 PR 3 — muted with every other review notice. */
+  'approval.reminder': 'approvals',
   'publishing.published': 'publishing',
   'publishing.failed': 'publishing',
   /** Critical: nothing publishes on that account until someone acts (review item 17). */

@@ -276,6 +276,14 @@ const NON_GENERATIVE_READERS: ReadonlyMap<string, string> = new Map([
     'DISPLAY: Home counts the brands that have no knowledge yet, and names the first unanswered key question from the Q19 completeness (D12, Phase 2C-4)',
   ],
   ['apps/dashboard/src/server/setup-wizard.ts', 'SETUP STATE: which setup steps are done'],
+  [
+    'packages/automation/src/due-producers.ts',
+    'AUTOMATION TRIGGER (non-generative, Phase 2B-3 PR 3): FACT_EXPIRING selects usable facts in their last seven days through the injected usable rule — ids and dates only, never text, never a prompt',
+  ],
+  [
+    'packages/automation/src/occurrence.ts',
+    'AUTOMATION RE-CHECK (non-generative, Phase 2B-3 PR 3): at delivery, is that fact still usable and still expiring on that day — its date only, never text, never a prompt',
+  ],
   ['apps/dashboard/src/server/setup-goal.ts', 'MANAGEMENT: setup writes the goal fact'],
   [
     'apps/dashboard/src/server/candidate-review.ts',

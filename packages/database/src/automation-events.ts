@@ -96,10 +96,78 @@ export async function recordAutomationEvent(
 }
 
 /**
+ * An event DERIVED FROM ONE RULE — its schedule, its threshold, or (Phase 2B-3
+ * PR 3) a due date or a state read off that rule's brand — addressed to that
+ * rule alone. `automation_event_rule_addressed_when_derived` says the same in
+ * SQL.
+ */
+export type RuleAutomationEvent =
+  | {
+      readonly triggerType: 'SCHEDULED_TIME';
+      readonly brandId: string;
+      readonly ruleId: string;
+      readonly occurrence: string;
+    }
+  | {
+      readonly triggerType: 'METRIC_THRESHOLD_CROSSED';
+      readonly brandId: string;
+      readonly ruleId: string;
+      /**
+       * The reading the crossing was seen in. PROVENANCE, not identity —
+       * see `occurrenceKey`.
+       */
+      readonly refId: string;
+      /**
+       * THE ARMING THIS EVENT BELONGS TO (R3-2), supplied by the caller
+       * because only the sweep knows which cycle it just claimed.
+       *
+       * It is NOT the observation id, and that distinction is the whole
+       * finding: an observation id changes every time a new reading lands, so
+       * a key built from one de-duplicates a repeat until the metric is
+       * measured again and then fires the same crossing a second time. A cycle
+       * changes exactly when the rule re-arms, which is exactly when a second
+       * event is legitimate.
+       */
+      readonly occurrenceKey: string;
+    }
+  /** Phase 2B-3 PR 3 — one open review cycle passed its waiting time. */
+  | {
+      readonly triggerType: 'REVIEW_WAITING_24H';
+      readonly brandId: string;
+      readonly ruleId: string;
+      readonly approvalId: string;
+    }
+  /** Phase 2B-3 PR 3 — a campaign's start or end boundary, for the DATE it was on. */
+  | {
+      readonly triggerType: 'CAMPAIGN_STARTED' | 'CAMPAIGN_ENDED';
+      readonly brandId: string;
+      readonly ruleId: string;
+      readonly campaignId: string;
+      /** The campaign's `startDate` / `endDate`, `YYYY-MM-DD`. */
+      readonly dayKey: string;
+    }
+  /** Phase 2B-3 PR 3 — the brand's next days became empty; one per empty stretch. */
+  | {
+      readonly triggerType: 'SCHEDULE_GAP';
+      readonly brandId: string;
+      readonly ruleId: string;
+      readonly cycle: number;
+    }
+  /** Phase 2B-3 PR 3 — a fact entered its expiry window, for the `validUntil` it had. */
+  | {
+      readonly triggerType: 'FACT_EXPIRING';
+      readonly brandId: string;
+      readonly ruleId: string;
+      readonly knowledgeItemId: string;
+      /** `YYYY-MM-DD`. */
+      readonly validUntil: string;
+    };
+
+/**
  * Record an event DERIVED FROM A RULE'S OWN CONFIGURATION, addressed to that
  * rule.
  *
- * The two rule-derived triggers are not domain events and must not be delivered
+ * Rule-derived triggers are not domain events and must not be delivered
  * like them. A schedule and a threshold are read off one rule; handing the
  * result to every rule on the brand would fire a rule whose own configuration
  * says a different hour or a different number.
@@ -110,37 +178,9 @@ export async function recordAutomationEvent(
 export async function recordRuleAutomationEvent(
   db: TenantScopedClient,
   workspaceId: string,
-  input:
-    | {
-        readonly triggerType: 'SCHEDULED_TIME';
-        readonly brandId: string;
-        readonly ruleId: string;
-        readonly occurrence: string;
-      }
-    | {
-        readonly triggerType: 'METRIC_THRESHOLD_CROSSED';
-        readonly brandId: string;
-        readonly ruleId: string;
-        /**
-         * The reading the crossing was seen in. PROVENANCE, not identity —
-         * see `occurrenceKey`.
-         */
-        readonly refId: string;
-        /**
-         * THE ARMING THIS EVENT BELONGS TO (R3-2), supplied by the caller
-         * because only the sweep knows which cycle it just claimed.
-         *
-         * It is NOT the observation id, and that distinction is the whole
-         * finding: an observation id changes every time a new reading lands, so
-         * a key built from one de-duplicates a repeat until the metric is
-         * measured again and then fires the same crossing a second time. A cycle
-         * changes exactly when the rule re-arms, which is exactly when a second
-         * event is legitimate.
-         */
-        readonly occurrenceKey: string;
-      },
+  input: RuleAutomationEvent,
 ): Promise<boolean> {
-  const timed = input.triggerType === 'SCHEDULED_TIME';
+  const row = ruleEventRow(input);
   const created = await db.automationEvent.createMany({
     data: [
       {
@@ -148,22 +188,83 @@ export async function recordRuleAutomationEvent(
         brandId: input.brandId,
         triggerType: input.triggerType,
         ruleId: input.ruleId,
-        refType: timed ? null : 'MetricObservation',
-        refId: timed ? null : input.refId,
-        occurrence: timed ? input.occurrence : null,
-        /*
-         * THE RULE AND ITS OCCASION. A timed rule's occasion is the local hour it
-         * fired for, so a sweep that runs sixty times inside that hour writes ONE
-         * row; a threshold rule's occasion is its ARMING CYCLE, so every sweep
-         * while the metric stays past the line writes one row between them, and
-         * the cycle only advances when the metric goes back and crosses again.
-         */
-        dedupeKey: timed
-          ? `SCHEDULED_TIME:${input.ruleId}:${input.occurrence}`
-          : `METRIC_THRESHOLD_CROSSED:${input.occurrenceKey}`,
+        refType: row.refType,
+        refId: row.refId,
+        occurrence: row.occurrence,
+        dedupeKey: row.dedupeKey,
       },
     ],
     skipDuplicates: true,
   });
   return created.count > 0;
+}
+
+/**
+ * THE ROW EACH RULE-DERIVED EVENT IS, and — the part that matters — its
+ * `dedupeKey`, the identity `@@unique([workspaceId, dedupeKey])` enforces.
+ *
+ * A timed rule's occasion is the local hour it fired for, so a sweep that runs
+ * sixty times inside that hour writes ONE row; a threshold rule's occasion is
+ * its ARMING CYCLE, so every sweep while the metric stays past the line writes
+ * one row between them, and the cycle only advances when the metric goes back
+ * and crosses again.
+ *
+ * PHASE 2B-3 PR 3 — the timed G13 events carry their identity the same way,
+ * and it is the RULE plus the SUBJECT plus whatever makes a second occurrence
+ * legitimate (revised report §11): a review cycle once; a campaign boundary per
+ * DATE (a moved date is a new occurrence); a schedule gap per empty STRETCH; a
+ * fact per `validUntil` (a changed expiry is a new occurrence). Two scheduler
+ * replicas computing the same occurrence write one row between them.
+ */
+function ruleEventRow(input: RuleAutomationEvent): {
+  refType: string | null;
+  refId: string | null;
+  occurrence: string | null;
+  dedupeKey: string;
+} {
+  switch (input.triggerType) {
+    case 'SCHEDULED_TIME':
+      return {
+        refType: null,
+        refId: null,
+        occurrence: input.occurrence,
+        dedupeKey: `SCHEDULED_TIME:${input.ruleId}:${input.occurrence}`,
+      };
+    case 'METRIC_THRESHOLD_CROSSED':
+      return {
+        refType: 'MetricObservation',
+        refId: input.refId,
+        occurrence: null,
+        dedupeKey: `METRIC_THRESHOLD_CROSSED:${input.occurrenceKey}`,
+      };
+    case 'REVIEW_WAITING_24H':
+      return {
+        refType: 'Approval',
+        refId: input.approvalId,
+        occurrence: null,
+        dedupeKey: `REVIEW_WAITING_24H:${input.ruleId}:${input.approvalId}`,
+      };
+    case 'CAMPAIGN_STARTED':
+    case 'CAMPAIGN_ENDED':
+      return {
+        refType: 'Campaign',
+        refId: input.campaignId,
+        occurrence: null,
+        dedupeKey: `${input.triggerType}:${input.ruleId}:${input.campaignId}:${input.dayKey}`,
+      };
+    case 'SCHEDULE_GAP':
+      return {
+        refType: null,
+        refId: null,
+        occurrence: null,
+        dedupeKey: `SCHEDULE_GAP:${input.ruleId}:${input.cycle}`,
+      };
+    case 'FACT_EXPIRING':
+      return {
+        refType: 'BrandKnowledgeItem',
+        refId: input.knowledgeItemId,
+        occurrence: null,
+        dedupeKey: `FACT_EXPIRING:${input.ruleId}:${input.knowledgeItemId}:${input.validUntil}`,
+      };
+  }
 }

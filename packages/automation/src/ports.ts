@@ -1,3 +1,5 @@
+import type { KnowledgeValidityPort, LocalCalendarPort } from './due-events';
+
 /**
  * THE PORTS AN AUTOMATION ACTION REACHES THE PRODUCT THROUGH.
  *
@@ -63,6 +65,23 @@ export interface NotificationPort {
 }
 
 export interface ApprovalPort {
+  /**
+   * PHASE 2B-3 PR 3 — REMIND THE REVIEWERS of a review still waiting, with
+   * `approval.reminder` (owner decisions B and C): the assigned reviewer if
+   * still eligible, else every eligible reviewer of the brand; the post's
+   * title and a link to the review, exactly as `approval.requested`. The
+   * engine has already read the review FOR SHARE and found it PENDING.
+   */
+  remindReviewers?(input: {
+    readonly workspaceId: string;
+    /** The RULE's brand: a review of any other brand is not this rule's. */
+    readonly brandId: string;
+    readonly approvalId: string;
+    readonly idempotencyKey: string;
+  }): Promise<
+    | { readonly kind: 'reminded'; readonly recipients: number }
+    | { readonly kind: 'refused'; readonly reason: 'occurrence_stale' | 'no_eligible_reviewer' }
+  >;
   /** Move an eligible draft into the review queue, as the rule's creator. */
   submitForApproval(input: {
     readonly workspaceId: string;
@@ -236,4 +255,14 @@ export interface AutomationPorts {
   readonly content?: ContentCopyPort | undefined;
   readonly publishing?: PublishPort | undefined;
   readonly timezone?: TimezonePort | undefined;
+  /**
+   * Phase 2B-3 PR 3 — local 00:00 on a calendar day, for the delivery re-check
+   * of the timed G13 events. Absent, an event that needs it fails closed.
+   */
+  readonly calendarDays?: LocalCalendarPort | undefined;
+  /**
+   * Phase 2B-3 PR 3 — Brand Brain's usable-fact rule, for the FACT_EXPIRING
+   * re-check. Absent, that event fails closed.
+   */
+  readonly knowledge?: KnowledgeValidityPort | undefined;
 }
