@@ -2072,6 +2072,37 @@ const automationsSchema = z.object({
       runRetentionDays: z.number().int().min(1).max(365).default(90),
     })
     .default({}),
+
+  /*
+   * PHASE 2B-3 PR 4 — THE ANALYTICS EVENTS' OPERATOR THRESHOLDS (report §30).
+   *
+   * NO DEFAULTS, ON PURPOSE. An unset value means the event is not evaluated
+   * and the authoring screen shows it as not set up: a platform that guessed a
+   * "normal" engagement baseline would fire for a brand with ten likes a week
+   * and stay silent for one with ten thousand. What the events MEAN (a 20%
+   * drop, the top 10%) is not here — it is the typed registry's (owner
+   * decision, report §34 item 5).
+   */
+  events: z
+    .object({
+      weeklyEngagementDrop: z
+        .object({
+          /** The prior week's engagements must reach this before a drop is judged. */
+          minBaseline: z.number().int().min(1).max(1_000_000_000).optional(),
+        })
+        .default({}),
+      topPost: z
+        .object({
+          /** N: posts first published in the last N days are ranked. */
+          populationDays: z.number().int().min(1).max(365).optional(),
+          /** A post needs at least this many impressions to be ranked at all. */
+          minImpressions: z.number().int().min(1).max(1_000_000_000).optional(),
+          /** Fewer ranked posts than this and nothing is judged. */
+          minPopulation: z.number().int().min(1).max(10_000).optional(),
+        })
+        .default({}),
+    })
+    .default({}),
 });
 
 // --- Messaging, website, operations ----------------------------------------

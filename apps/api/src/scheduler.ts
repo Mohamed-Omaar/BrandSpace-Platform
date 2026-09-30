@@ -42,6 +42,10 @@ import {
   produceFactExpiring,
   produceReviewWaiting,
   produceScheduleGap,
+  produceTopPost,
+  produceWeeklyEngagementDropped,
+  resolveAutomationPolicy,
+  type AnalyticsEventInputs,
   type DueProducerContext,
   type DueVisit,
   type KnowledgeValidityPort,
@@ -198,6 +202,9 @@ const DUE_PRODUCERS = [
   ['CAMPAIGN_ENDED', produceCampaignEnded],
   ['SCHEDULE_GAP', produceScheduleGap],
   ['FACT_EXPIRING', produceFactExpiring],
+  // Phase 2B-3 PR 4 — the analytics events.
+  ['WEEKLY_ENGAGEMENT_DROPPED', produceWeeklyEngagementDropped],
+  ['POST_TOP_10_PERCENT', produceTopPost],
 ] as const satisfies readonly (readonly [
   AutomationTrigger,
   (context: DueProducerContext) => Promise<DueVisit>,
@@ -1435,17 +1442,36 @@ export class MaintenanceScheduler {
    * as functions of one rule; this is only the clock that visits them.
    */
   async #produceDueEvents(batch: number): Promise<number> {
+    const analytics = await this.#analyticsEventInputs();
     let produced = 0;
     for (const [triggerType, produce] of DUE_PRODUCERS) {
-      produced += await this.#produceDue(triggerType, produce, batch);
+      produced += await this.#produceDue(triggerType, produce, batch, analytics);
     }
     return produced;
+  }
+
+  /**
+   * Phase 2B-3 PR 4 — what the analytics events read, resolved ONCE per sweep:
+   * the operator thresholds (automations `events`, no defaults), analytics'
+   * own settling window, and a fresh map for the reads every rule of a brand
+   * shares in this sweep. Dropped when the sweep ends.
+   */
+  async #analyticsEventInputs(): Promise<AnalyticsEventInputs> {
+    const configuration = new ConfigurationService({ prisma: getPlatformClient() });
+    const automations = await resolveAutomationPolicy(configuration, this.#environment);
+    const analytics = await resolveAnalyticsPolicy(configuration, this.#environment);
+    return {
+      events: automations.events,
+      refreshWindowDays: analytics.ingestion.refreshWindowDays,
+      shared: new Map(),
+    };
   }
 
   async #produceDue(
     triggerType: (typeof DUE_PRODUCERS)[number][0],
     produce: (context: DueProducerContext) => Promise<DueVisit>,
     batch: number,
+    analytics: AnalyticsEventInputs,
   ): Promise<number> {
     const platform = getPlatformClient();
     const now = this.#clock.now();
@@ -1503,6 +1529,7 @@ export class MaintenanceScheduler {
             timezone: zones.get(rule.workspaceId) ?? 'UTC',
             calendar: DUE_CALENDAR,
             knowledge: DUE_KNOWLEDGE,
+            analytics,
           });
 
           // The park, with the same `lte: now` guard as the producers above: a

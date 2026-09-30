@@ -45,7 +45,7 @@ import { AppError, systemClock } from '@brandspace/shared';
 import { route } from '../route-contract';
 // ONE IMPLEMENTATION OF THE PLAN CEILING, shared with the automation route.
 import { scheduleQuota } from './schedule-quota';
-import { automationRuleCheck, copilotAutomationPort } from './copilot-automation';
+import { automationRuleCheckFor, copilotAutomationPort } from './copilot-automation';
 import {
   configurationService,
   copilotDenialSink,
@@ -135,6 +135,13 @@ const cancelSchema = z.object({ planId: z.string().uuid() });
 async function automationPort(db: TenantScopedClient, workspaceId: string) {
   const policy = await new TenantAutomationPolicySource(db, currentEnvironment()).load();
   return copilotAutomationPort({ db, workspaceId, policy });
+}
+
+/** The registry check under this environment's automation thresholds. */
+async function automationRules(db: TenantScopedClient) {
+  return automationRuleCheckFor(
+    await new TenantAutomationPolicySource(db, currentEnvironment()).load(),
+  );
 }
 
 /**
@@ -367,6 +374,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
           caller.workspaceId,
           async (db) => {
             const policy = await new TenantCopilotPolicySource(db, currentEnvironment()).load();
+            const automationRuleCheck = await automationRules(db);
             const orchestrator = new CopilotOrchestrator({
               db,
               workspaceId: caller.workspaceId,
@@ -466,6 +474,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
             if (!authorization) throw new AppError('NOT_FOUND', 'Conversation not found.');
 
             const policy = await new TenantCopilotPolicySource(db, currentEnvironment()).load();
+            const automationRuleCheck = await automationRules(db);
             const orchestrator = new CopilotOrchestrator({
               db,
               workspaceId: caller.workspaceId,

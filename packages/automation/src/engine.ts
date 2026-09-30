@@ -34,7 +34,7 @@ import {
 import { CONDITION_VALUE_UNAVAILABLE, conditionValuesResolve } from './condition-values';
 import { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
 import { campaignTargetResolves, personTargetResolves } from './action-targets';
-import type { AutomationPolicy } from './policy';
+import { triggerAvailable, type AutomationPolicy } from './policy';
 import type { AutomationPorts } from './ports';
 import {
   ACTION_OUTCOME_STATUS,
@@ -374,6 +374,12 @@ export class AutomationEngine {
      * exist. Stored rules that already use one are untouched.
      */
     if (!trigger.authorable || !action.authorable) throw unknownTriggerOrAction();
+    /*
+     * PHASE 2B-3 PR 4 — AN EVENT THE PLATFORM HAS NOT SET UP CANNOT BE WRITTEN.
+     * The analytics events need operator thresholds with no default; a rule
+     * written before they exist would be enabled and silent (report §30).
+     */
+    if (!triggerAvailable(this.#policy, trigger.type)) throw unknownTriggerOrAction();
 
     /*
      * THE PAIR MUST BE REACHABLE. An action that operates on a content item
@@ -539,6 +545,10 @@ export class AutomationEngine {
     // Phase 2B-3 PR 2 — switching a rule ON re-arms it: while it was off it
     // was not listening, and what happened then is not replayed into it.
     const switchedOn = input.enabled === true && !existing.enabled;
+    // Phase 2B-3 PR 4 — nor switched on while its event is not set up.
+    if (switchedOn && !triggerAvailable(this.#policy, existing.triggerType)) {
+      throw unknownTriggerOrAction();
+    }
     const rule = await this.#db.automationRule.update({
       where: { id: existing.id },
       data: {
@@ -1106,6 +1116,7 @@ export class AutomationEngine {
       workspaceId: this.#workspaceId,
       brandId: rule.brandId,
       triggerType: event.type,
+      ruleId: rule.id,
       refId: event.refId,
       eventKey: event.eventKey ?? null,
       now,

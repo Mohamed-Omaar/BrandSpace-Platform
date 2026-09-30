@@ -5,6 +5,7 @@ import {
   findAction,
   isAuthorablePair,
   satisfiesActionPermissions,
+  triggerAvailable,
   type AutomationPolicy,
 } from '@brandspace/automation';
 import type {
@@ -58,6 +59,24 @@ export const automationRuleCheck: AutomationRuleCheck = {
     );
   },
 };
+
+/**
+ * THE SAME CHECK, FOR THIS ENVIRONMENT'S THRESHOLDS (Phase 2B-3 PR 4). An
+ * analytics event whose operator thresholds are not all set is refused by
+ * `createRule` (`triggerAvailable`), so the Copilot neither offers it nor
+ * admits a rule on it — the D-425 parity: never ask a customer to confirm a
+ * rule the engine would refuse. What the route injects.
+ */
+export function automationRuleCheckFor(policy: AutomationPolicy): AutomationRuleCheck {
+  return {
+    authorablePairs: () =>
+      automationRuleCheck
+        .authorablePairs()
+        .filter((pair) => triggerAvailable(policy, pair.triggerType)),
+    admissible: (input) =>
+      triggerAvailable(policy, input.triggerType) && automationRuleCheck.admissible(input),
+  };
+}
 
 export type CopilotAutomationPort = AutomationRulePort & {
   deleteRule(input: { ruleId: string; actor: LiveAuthorization }): Promise<void>;

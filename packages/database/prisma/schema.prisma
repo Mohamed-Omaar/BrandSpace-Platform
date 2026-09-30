@@ -3980,6 +3980,10 @@ model PublishJob {
   /// one whose worker died mid-flight; this makes finding it a lookup rather
   /// than a scan of every publishing job on the platform.
   @@index([status, claimedAt])
+  /// Phase 2B-3 PR 4 (M3) — also a PARTIAL index, which Prisma cannot declare:
+  /// `publish_job_published_population_idx` on (workspaceId, brandId,
+  /// publishedAt) WHERE status = 'PUBLISHED', in migration
+  /// 20261012092000_publish_job_published_population_index.
   @@map("publish_job")
 }
 
@@ -4440,6 +4444,10 @@ model MetricObservation {
   @@index([workspaceId, publishJobId])
   /// Retention pruning walks this.
   @@index([periodStart])
+  /// Phase 2B-3 PR 4 (M3) — a brand's weekly engagement window at one
+  /// granularity, and one post's pooled readings. Built CONCURRENTLY.
+  @@index([workspaceId, brandId, metricKey, granularity, periodStart], map: "metric_observation_brand_metric_granularity_idx")
+  @@index([workspaceId, contentItemId, metricKey, granularity], map: "metric_observation_item_metric_granularity_idx")
   @@map("metric_observation")
 }
 

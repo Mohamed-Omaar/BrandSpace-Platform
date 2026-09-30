@@ -106,6 +106,18 @@ export {
 } from './due-events';
 export type { DueCandidate, KnowledgeValidityPort, LocalCalendarPort } from './due-events';
 export { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
+export { produceTopPost, produceWeeklyEngagementDropped } from './analytics-producers';
+export {
+  ENGAGEMENTS_METRIC,
+  IMPRESSIONS_METRIC,
+  brandTopPostPopulation,
+  brandWeeklyEngagement,
+  readOnce,
+  topShareOf,
+  weeklyDropVerdict,
+  weeklyEngagementWindows,
+} from './analytics-events';
+export type { RankedPost, SharedReads, UtcWindow, WeeklyWindows } from './analytics-events';
 export {
   BOUNDARY_CAMPAIGN_STATUSES,
   SCHEDULE_GAP_SLOT_STATUSES,
@@ -121,7 +133,12 @@ export {
   scheduleGapIsOpen,
   scheduleGapWindow,
 } from './due-producers';
-export type { DueProducerContext, DueRuleRow, DueVisit } from './due-producers';
+export type {
+  AnalyticsEventInputs,
+  DueProducerContext,
+  DueRuleRow,
+  DueVisit,
+} from './due-producers';
 export type { OccurrenceCheck } from './occurrence';
 export type {
   AutomationActor,
@@ -136,6 +153,7 @@ export {
   TenantAutomationPolicySource,
   parseAutomationPolicy,
   resolveAutomationPolicy,
+  triggerAvailable,
 } from './policy';
 export type { AutomationCatalogueReader, AutomationPolicy } from './policy';
 

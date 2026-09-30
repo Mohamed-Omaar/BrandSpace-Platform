@@ -1,5 +1,7 @@
 import { recordRuleAutomationEvent, type TenantScopedClient } from '@brandspace/database';
 import { DUE_EVENT_DEFINITIONS, TIMED_PRODUCER_LIMITS } from './registry';
+import type { SharedReads } from './analytics-events';
+import type { AutomationPolicy } from './policy';
 import { moveState } from './threshold-producer';
 import {
   dayKeyOf,
@@ -52,6 +54,19 @@ export interface DueProducerContext {
   readonly calendar: LocalCalendarPort;
   /** Brand Brain's usable-fact rule; without it FACT_EXPIRING produces nothing. */
   readonly knowledge?: KnowledgeValidityPort | undefined;
+  /**
+   * Phase 2B-3 PR 4 — what the analytics events read, resolved once per sweep:
+   * the operator thresholds, analytics' settling window, and the reads shared
+   * by every rule of a brand. Without it the analytics producers produce nothing.
+   */
+  readonly analytics?: AnalyticsEventInputs | undefined;
+}
+
+export interface AnalyticsEventInputs {
+  readonly events: AutomationPolicy['events'];
+  /** `analytics.ingestion.refreshWindowDays`: how many recent days are not settled yet. */
+  readonly refreshWindowDays: number;
+  readonly shared: SharedReads;
 }
 
 export interface DueVisit {

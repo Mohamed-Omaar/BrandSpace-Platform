@@ -30,6 +30,46 @@ export interface AutomationPolicy {
     readonly claimLeaseSeconds: number;
     readonly runRetentionDays: number;
   };
+  /**
+   * Phase 2B-3 PR 4 — the analytics events' operator thresholds. Every value
+   * is optional: unset means the event is not evaluated (`triggerAvailable`).
+   */
+  readonly events: {
+    readonly weeklyEngagementDrop: { readonly minBaseline?: number | undefined };
+    readonly topPost: {
+      readonly populationDays?: number | undefined;
+      readonly minImpressions?: number | undefined;
+      readonly minPopulation?: number | undefined;
+    };
+  };
+}
+
+/**
+ * CAN THIS TRIGGER BE EVALUATED WITH THE THRESHOLDS THIS ENVIRONMENT HAS?
+ *
+ * The two analytics events need operator thresholds with no default (report
+ * §30); until every one they read is set, the producer does not evaluate, a
+ * new rule on the event is refused, and the authoring screen shows it as not
+ * set up. Every other trigger is always available.
+ */
+export function triggerAvailable(
+  policy: Pick<AutomationPolicy, 'events'>,
+  triggerType: string,
+): boolean {
+  switch (triggerType) {
+    case 'WEEKLY_ENGAGEMENT_DROPPED':
+      return policy.events.weeklyEngagementDrop.minBaseline !== undefined;
+    case 'POST_TOP_10_PERCENT': {
+      const top = policy.events.topPost;
+      return (
+        top.populationDays !== undefined &&
+        top.minImpressions !== undefined &&
+        top.minPopulation !== undefined
+      );
+    }
+    default:
+      return true;
+  }
 }
 
 export function parseAutomationPolicy(payload: unknown): AutomationPolicy {

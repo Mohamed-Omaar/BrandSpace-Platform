@@ -49,6 +49,12 @@ export interface TriggerOption {
   readonly conditionFields: readonly string[];
   readonly needsSchedule: boolean;
   readonly needsThreshold: boolean;
+  /**
+   * Phase 2B-3 PR 4 — an analytics event whose operator thresholds are not all
+   * set: shown, so the customer knows it exists, but not choosable, because
+   * `createRule` would refuse it (`triggerAvailable`).
+   */
+  readonly unavailable?: boolean;
 }
 
 export interface ConditionChoice {
@@ -118,6 +124,8 @@ export interface AutomationFormLabels {
    */
   readonly chooseTrigger: string;
   readonly chooseAction: string;
+  /** Phase 2B-3 PR 4 — a trigger that is not available yet; `{trigger}` is its label. */
+  readonly triggerUnavailable: string;
   readonly conditionsKept?: string;
   readonly valueUnavailable?: string;
   readonly cancel?: string;
@@ -400,8 +408,10 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                 >
                   <option value="">{props.labels.chooseTrigger}</option>
                   {props.triggers.map((option) => (
-                    <option key={option.type} value={option.type}>
-                      {option.label}
+                    <option key={option.type} value={option.type} disabled={option.unavailable}>
+                      {option.unavailable
+                        ? props.labels.triggerUnavailable.replace('{trigger}', option.label)
+                        : option.label}
                     </option>
                   ))}
                 </select>
