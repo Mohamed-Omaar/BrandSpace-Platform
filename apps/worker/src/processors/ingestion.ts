@@ -15,10 +15,12 @@ import type { IngestSourceDocumentPayload } from '@brandspace/jobs';
  *
  * THE JOB IS A POINTER AND THE DATABASE IS THE STATE, which is what makes this
  * idempotent (CLAUDE.md §5). A duplicate delivery — BullMQ at-least-once, a
- * reconciler racing the producer, a retry after a lost acknowledgement — re-reads
- * the `brand_ingestion_job` row, finds it already RUNNING or done, and returns
- * without a second parse or a second set of candidates. `process()` owns that
- * check; nothing here needs to guess.
+ * reconciler racing the producer, a retry after a lost acknowledgement — claims
+ * nothing: `startProcessing` is one compare-and-set on the row being QUEUED on
+ * the attempt the message names (Fix PR 1 · F2, D-413), so a job that is
+ * running, finished or already on a later attempt is neither parsed again nor
+ * written again. This comment used to say so while the claim was an
+ * unconditional update; now it is true.
  *
  * THE WORKSPACE COMES FROM THE PAYLOAD, AND IS RE-APPLIED RATHER THAN TRUSTED.
  * `withWorkspace` sets the RLS context for the transaction, so a forged id in a
@@ -55,9 +57,10 @@ export async function processIngestionJob(payload: IngestSourceDocumentPayload):
    *   3. a second short transaction writes the chunks, the PENDING candidates
    *      and the final state — atomically, or not at all.
    *
-   * A crash between 1 and 3 leaves the job EXTRACTING, which BullMQ's stalled
-   * detection redelivers and `process` re-runs from the start: phase 3 rewrites
-   * chunks and PENDING candidates idempotently, as it always has.
+   * A crash between 1 and 3 leaves the job EXTRACTING. A redelivery claims
+   * nothing (the row is no longer QUEUED); the maintenance scheduler's stuck-job
+   * sweep hands the row back once its claim has gone silent, and the next
+   * attempt runs under its own id (D-413).
    */
   const service = (db: TenantScopedClient, policy: Awaited<ReturnType<typeof loadPolicy>>) =>
     new BrandIngestionService({
@@ -75,9 +78,19 @@ export async function processIngestionJob(payload: IngestSourceDocumentPayload):
     const loaded = await loadPolicy(db);
     return {
       policy: loaded,
-      started: await service(db, loaded).startProcessing(payload.ingestionJobId),
+      started: await service(db, loaded).startProcessing(payload.ingestionJobId, payload.attempt),
     };
   });
+
+  if (!started.claimed && !started.removed) {
+    // A replayed or duplicate message, or an older attempt: nothing to do.
+    log.info('ingestion message claimed nothing', {
+      workspaceId: payload.workspaceId,
+      jobId: payload.ingestionJobId,
+      ...(payload.attempt === undefined ? {} : { attempt: payload.attempt }),
+    });
+    return;
+  }
 
   const outcome = await extractSourceDocument({
     store: objectStore(),

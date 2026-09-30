@@ -6,7 +6,7 @@ import {
 } from '@brandspace/shared';
 import type { TenantScopedClient } from '@brandspace/database';
 import type { CustomerWorkspaceContext } from '@brandspace/auth';
-import { NOTE_PERMISSION } from '@brandspace/collaboration';
+import { NOTE_PERMISSION, readableNoteSubjectTypes } from '@brandspace/collaboration';
 import { EXPIRING_SOON_MS } from '@brandspace/social-connectors';
 import { AUTOMATION_ACTIONS, satisfiesActionPermissions } from '@brandspace/automation';
 import {
@@ -689,6 +689,8 @@ async function assignedThreads(
       assignedToUserId: userId,
       status: 'OPEN',
       ...brandIdScopeFilter(session.brandScope),
+      // D-409: only threads about something this member may read.
+      subjectType: { in: readableNoteSubjectTypes(session.permissionKeys) },
     },
   });
   return count === 0
@@ -722,6 +724,8 @@ async function unreadMentions(
         deletedAt: null,
         thread: {
           ...brandIdScopeFilter(session.brandScope),
+          // D-409: the same threads the Notes surface lists.
+          subjectType: { in: readableNoteSubjectTypes(session.permissionKeys) },
           NOT: { contentItem: { is: { deletedAt: { not: null } } } },
         },
       },

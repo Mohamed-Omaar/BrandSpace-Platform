@@ -392,6 +392,7 @@ export function registerAnalyticsRoutes(app: FastifyInstance): void {
       scope: 'workspace',
       permission: STRATEGY_MANAGE,
       confirmation: 'required',
+      confirmedBy: 'explicit_decision',
       rateLimit: 'workspace.write',
     },
     async (req, reply) => {

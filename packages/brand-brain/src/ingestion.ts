@@ -622,8 +622,16 @@ export class BrandIngestionService {
   /**
    * PHASE 1 of 3 — claim the job: EXTRACTING, one more attempt, the document
    * PROCESSING. A short write, committed before any byte is parsed.
+   *
+   * A REAL CLAIM (Fix PR 1 · F2, D-413). It used to be an unconditional update,
+   * so a redelivered message re-ran a job that was running or finished. Now it
+   * is ONE compare-and-set: the row must still be QUEUED with the attempts this
+   * start read — and, when the message names its attempt, exactly that one
+   * attempt short. Anything else claims nothing (`claimed: false`), and the
+   * later phases write nothing. Two deliveries of the same attempt race one row
+   * lock; the loser matches no row.
    */
-  async startProcessing(jobId: string): Promise<StartedIngestion> {
+  async startProcessing(jobId: string, expectedAttempt?: number): Promise<StartedIngestion> {
     const job = await this.#db.brandIngestionJob.findUnique({ where: { id: jobId } });
     if (!job) throw documentNotFound();
 
@@ -643,22 +651,26 @@ export class BrandIngestionService {
       attempt: job.attempts + 1,
       maxAttempts: job.maxAttempts,
       removed: document.deletedAt !== null,
+      claimed: false,
     };
     // A document removed while its job waited (Phase 2C-4): nothing is claimed
     // and nothing is parsed; Remove already ended the job.
     if (started.removed) return started;
+    // A message for another attempt — an older one replayed — claims nothing.
+    if (expectedAttempt !== undefined && expectedAttempt !== started.attempt) return started;
 
     const now = this.#clock.now();
-    await this.#db.brandIngestionJob.update({
-      where: { id: job.id },
+    const claim = await this.#db.brandIngestionJob.updateMany({
+      where: { id: job.id, stage: 'QUEUED', attempts: job.attempts },
       data: { stage: 'EXTRACTING', attempts: { increment: 1 }, startedAt: now },
     });
+    if (claim.count !== 1) return started;
     await this.#db.brandSourceDocument.update({
       where: { id: document.id },
       data: { status: 'PROCESSING' },
     });
 
-    return started;
+    return { ...started, claimed: true };
   }
 
   /**
@@ -689,6 +701,25 @@ export class BrandIngestionService {
         failureMessage: 'source_removed',
       };
     }
+
+    /*
+     * ONLY THE ATTEMPT THAT CLAIMED THE ROW MAY WRITE (Fix PR 1 · F2, D-413).
+     *
+     * A start that claimed nothing — a replayed message, an older attempt —
+     * writes nothing. A claimed one FENCES first: the row must still be
+     * EXTRACTING on this very attempt. The stuck-job sweep may have handed it
+     * back to the queue (or failed it) while this parse overran, and a second
+     * attempt may already be running; either way this one's result is stale.
+     * The fence is an UPDATE, so it takes the row lock for the rest of this
+     * transaction and the sweep's own compare-and-set waits for it — exactly
+     * one of the two wins.
+     */
+    if (!started.claimed) return this.#unchanged(started.documentId);
+    const fence = await this.#db.brandIngestionJob.updateMany({
+      where: { id: started.jobId, stage: 'EXTRACTING', attempts: started.attempt },
+      data: { stage: 'EXTRACTING' },
+    });
+    if (fence.count !== 1) return this.#unchanged(started.documentId);
 
     if (!outcome.ok) {
       /*
@@ -863,42 +894,57 @@ export class BrandIngestionService {
   }
 
   /**
-   * Reconcile jobs stuck past their deadline.
+   * Reconcile jobs stuck past their deadline, in this workspace.
    *
    * The F-65 lesson from Phase 4, applied before the defect rather than after
    * it: a sweep that throws on an unfixable row hands the same row back on
    * every pass and never makes progress. Each job is reconciled independently
    * and a failure to reconcile one does not stop the rest.
+   *
+   * RUNNING ROWS ONLY, AND ONE COMPARE-AND-SET EACH (Fix PR 1 · F2, D-413). A
+   * QUEUED row is the reconciler's, never this sweep's: it used to be included,
+   * and a row waiting out its retry backoff had its `nextAttemptAt` pushed back
+   * on every pass. `recoverStuckIngestionJob` says what "stuck" is and why it
+   * cannot take a row a live worker is still writing. The maintenance scheduler
+   * runs the same function across tenants; this is the per-workspace entry.
    */
   async sweepStuckJobs(stuckAfterSeconds: number): Promise<number> {
-    const threshold = new Date(this.#clock.now().getTime() - stuckAfterSeconds * 1000);
-    const stuck = await this.#db.brandIngestionJob.findMany({
-      where: {
-        stage: { in: ['QUEUED', 'EXTRACTING', 'CHUNKING', 'EXTRACTING_FACTS'] },
-        startedAt: { lt: threshold },
-      },
-      orderBy: { queuedAt: 'asc' },
-      take: 100,
-    });
+    const stuckBefore = new Date(this.#clock.now().getTime() - stuckAfterSeconds * 1000);
+    const stuck = await findStuckIngestionJobs(this.#db, stuckBefore, STUCK_SWEEP_BATCH);
 
     let reconciled = 0;
     for (const job of stuck) {
       try {
-        await this.#fail(
-          job.id,
-          job.sourceDocumentId,
-          // A reason KEY, like every other failure (Phase 2C-4).
-          'stuck_timeout',
-          'stuck_timeout',
-          job.attempts >= job.maxAttempts,
-        );
-        reconciled += 1;
+        const outcome = await recoverStuckIngestionJob({
+          db: this.#db,
+          workspaceId: this.#workspaceId,
+          job,
+          stuckBefore,
+          retryBackoffSeconds: this.#policy.retryBackoffSeconds,
+          clock: this.#clock,
+        });
+        if (outcome !== 'skipped') reconciled += 1;
       } catch {
         // One unfixable row must not starve the rest of the sweep.
         continue;
       }
     }
     return reconciled;
+  }
+
+  /** What a start that claimed nothing reports: the document as it stands. */
+  async #unchanged(documentId: string): Promise<ProcessResult> {
+    const document = await this.#db.brandSourceDocument.findUnique({
+      where: { id: documentId },
+      select: { status: true, failureMessage: true },
+    });
+    return {
+      documentId,
+      status: document?.status ?? 'FAILED',
+      chunksCreated: 0,
+      candidatesCreated: 0,
+      failureMessage: document?.failureMessage ?? null,
+    };
   }
 
   async #fail(
@@ -957,6 +1003,11 @@ export interface StartedIngestion {
   readonly maxAttempts: number;
   /** The document was removed before the job ran: nothing is read or written. */
   readonly removed: boolean;
+  /**
+   * This start really claimed the job (D-413). When false — a replayed or older
+   * message, or a row that is no longer QUEUED — nothing is read or written.
+   */
+  readonly claimed: boolean;
 }
 
 /** What the extraction produced: the text, or a stable reason and whether it is final. */
@@ -985,6 +1036,8 @@ export async function extractSourceDocument(input: {
   readonly started: StartedIngestion;
 }): Promise<ExtractionOutcome> {
   if (input.started.removed) return { ok: false, reason: 'source_removed', terminal: true };
+  // Nothing was claimed, so nothing is read (D-413); `finishProcessing` writes nothing.
+  if (!input.started.claimed) return { ok: false, reason: 'not_claimed', terminal: true };
   let bytes: Uint8Array | null;
   try {
     bytes = await input.store.get(input.started.storageKey);
@@ -1055,21 +1108,158 @@ function refusalError(reason: UploadRefusalReason) {
 export async function findUnclaimedIngestionJobs(
   db: {
     brandIngestionJob: {
-      findMany(args: unknown): Promise<Array<{ id: string; workspaceId: string }>>;
+      findMany(
+        args: unknown,
+      ): Promise<Array<{ id: string; workspaceId: string; attempts: number }>>;
     };
   },
   now: Date,
   limit: number,
-): Promise<Array<{ id: string; workspaceId: string }>> {
+): Promise<Array<{ id: string; workspaceId: string; attempts: number }>> {
   return db.brandIngestionJob.findMany({
     where: {
       stage: 'QUEUED',
       OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
     },
-    select: { id: true, workspaceId: true },
+    // The attempts SPENT, so the dispatch names the next one (D-413).
+    select: { id: true, workspaceId: true, attempts: true },
     // Oldest first with an id tie-break: deterministic, and the document that
     // has been waiting longest goes first.
     orderBy: [{ queuedAt: 'asc' }, { id: 'asc' }],
     take: limit,
   });
+}
+
+/** How many stuck rows one per-workspace sweep reconciles at most. */
+const STUCK_SWEEP_BATCH = 100;
+
+/** The stages a claimed attempt passes through. A row in one of them is being worked on. */
+const RUNNING_STAGES = ['EXTRACTING', 'CHUNKING', 'EXTRACTING_FACTS'] as const;
+
+/**
+ * HOW LONG A CLAIM MUST HAVE BEEN SILENT BEFORE IT IS STUCK (D-413).
+ *
+ * The media-processing worker holds a BullMQ lock of five minutes on the job
+ * it is running (`apps/worker/src/main.ts`), and one extraction is bounded by
+ * the configured `extraction.timeoutMs`. A claim younger than the parse's own
+ * bound plus that lock could belong to a worker that is still alive, so the
+ * sweep never takes one — whatever `ingestion.stuckAfterSeconds` says, which
+ * configuration allows as low as sixty seconds. The fence in
+ * `finishProcessing` covers the rest: a worker that overruns even this finds
+ * its attempt superseded and writes nothing.
+ */
+export const INGESTION_WORKER_LOCK_SECONDS = 5 * 60;
+
+export function stuckIngestionThresholdSeconds(policy: {
+  readonly stuckAfterSeconds: number;
+  readonly extraction: { readonly timeoutMs: number };
+}): number {
+  return Math.max(
+    policy.stuckAfterSeconds,
+    Math.ceil(policy.extraction.timeoutMs / 1000) + INGESTION_WORKER_LOCK_SECONDS,
+  );
+}
+
+export interface StuckIngestionJob {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly brandId: string;
+  readonly sourceDocumentId: string;
+  readonly attempts: number;
+  readonly maxAttempts: number;
+}
+
+/**
+ * The claims that went silent: a RUNNING stage, claimed before `stuckBefore`.
+ * Takes a client rather than opening one, as `findUnclaimedIngestionJobs` does:
+ * the platform identity sees every tenant's (the scheduler), a tenant client
+ * its own workspace's.
+ */
+export async function findStuckIngestionJobs(
+  db: {
+    brandIngestionJob: {
+      findMany(args: unknown): Promise<StuckIngestionJob[]>;
+    };
+  },
+  stuckBefore: Date,
+  limit: number,
+): Promise<StuckIngestionJob[]> {
+  return db.brandIngestionJob.findMany({
+    where: { stage: { in: [...RUNNING_STAGES] }, startedAt: { lt: stuckBefore } },
+    select: {
+      id: true,
+      workspaceId: true,
+      brandId: true,
+      sourceDocumentId: true,
+      attempts: true,
+      maxAttempts: true,
+    },
+    orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  });
+}
+
+/**
+ * Hand one stuck claim back, or fail it for good (D-413).
+ *
+ * ONE COMPARE-AND-SET: the row must still be in a running stage, on the very
+ * attempt that was found, claimed before `stuckBefore`. A worker that finished
+ * in between, a second attempt that claimed it, or another replica's sweep all
+ * make it match nothing, and nothing is written. Below the attempt limit it
+ * goes back to QUEUED with its backoff — the document stays PROCESSING — and
+ * the reconciler dispatches the NEXT attempt under a new id; at the limit it is
+ * FAILED `stuck_timeout`, and so is the document. Either way it is audited.
+ */
+export async function recoverStuckIngestionJob(input: {
+  readonly db: TenantScopedClient;
+  readonly workspaceId: string;
+  readonly job: StuckIngestionJob;
+  readonly stuckBefore: Date;
+  readonly retryBackoffSeconds: number;
+  readonly clock: Clock;
+}): Promise<'requeued' | 'failed' | 'skipped'> {
+  const { db, job } = input;
+  const now = input.clock.now();
+  const terminal = job.attempts >= job.maxAttempts;
+  const moved = await db.brandIngestionJob.updateMany({
+    where: {
+      id: job.id,
+      workspaceId: input.workspaceId,
+      stage: { in: [...RUNNING_STAGES] },
+      attempts: job.attempts,
+      startedAt: { lt: input.stuckBefore },
+    },
+    data: terminal
+      ? {
+          stage: 'FAILED',
+          failureMessage: 'stuck_timeout',
+          failureCode: 'stuck_timeout',
+          completedAt: now,
+        }
+      : {
+          stage: 'QUEUED',
+          failureMessage: 'stuck_timeout',
+          failureCode: 'stuck_timeout',
+          nextAttemptAt: new Date(now.getTime() + input.retryBackoffSeconds * 1000),
+        },
+  });
+  if (moved.count !== 1) return 'skipped';
+
+  await db.brandSourceDocument.update({
+    where: { id: job.sourceDocumentId },
+    data: {
+      // Not FAILED before the retries are spent: that would be untrue.
+      status: terminal ? 'FAILED' : 'PROCESSING',
+      failureMessage: terminal ? 'stuck_timeout' : null,
+    },
+  });
+  await writeAuditEvent(db, input.workspaceId, {
+    action: terminal ? 'brand_brain.source.failed' : 'brand_brain.source.retry_scheduled',
+    actorType: 'SYSTEM',
+    resourceType: 'BrandSourceDocument',
+    resourceId: job.sourceDocumentId,
+    brandId: job.brandId,
+    after: { jobId: job.id, attempt: job.attempts, reason: 'stuck_timeout' },
+  });
+  return terminal ? 'failed' : 'requeued';
 }

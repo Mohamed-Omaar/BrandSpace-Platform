@@ -3,7 +3,14 @@ import {
   TenantAssetPolicySource,
   findUnclaimedAssetJobs,
 } from '@brandspace/assets';
-import { findUnclaimedIngestionJobs, purgeExpiredChatContent } from '@brandspace/brand-brain';
+import {
+  findStuckIngestionJobs,
+  findUnclaimedIngestionJobs,
+  purgeExpiredChatContent,
+  recoverStuckIngestionJob,
+  resolveBrandBrainPolicy,
+  stuckIngestionThresholdSeconds,
+} from '@brandspace/brand-brain';
 import { ConfigurationAiSource, purgeExpiredOutputs } from '@brandspace/ai-gateway';
 import {
   createAnalyticsRegistry,
@@ -36,6 +43,9 @@ import {
   PUBLISH_SOCIAL_POST,
   VERIFY_SOCIAL_POST,
   enqueue,
+  enqueueReplacingFinished,
+  ingestionJobKey,
+  verifySocialPostJobKey,
   type BackfillAnalyticsPayload,
   type EvaluateAutomationPayload,
   type IngestAnalyticsPayload,
@@ -161,6 +171,8 @@ const CYCLE_BOUNDARY_TIMEOUT_MS = 20_000;
 
 export interface MaintenanceResult {
   readonly ingestionDispatched: number;
+  /** Fix PR 1 · F2 (D-413) — silent ingestion claims handed back or failed. */
+  readonly ingestionJobsRecovered: number;
   readonly chatContentPurged: number;
   readonly gatewayOutputsPurged: number;
   /** Phase 5B-1 — the Asset Library sweeps. */
@@ -267,18 +279,79 @@ export class MaintenanceScheduler {
 
     let dispatched = 0;
     for (const job of waiting) {
-      const result = await enqueue('media-processing', INGEST_SOURCE_DOCUMENT, {
+      const attempt = job.attempts + 1;
+      /*
+       * ONE ID PER ATTEMPT (Fix PR 1 · F2, D-413). It used to be `ingest-<id>`
+       * for every attempt, and BullMQ keeps finished jobs and ignores a re-add
+       * of an id it holds — so a retry was reported dispatched and never ran.
+       * The first attempt's id is the one the producer used, so a sweep racing
+       * a live dispatch still adds nothing. A FINISHED job under the same id
+       * (its message threw before the claim and spent BullMQ's own retries) is
+       * replaced; the row's compare-and-set claim is what stops a double run.
+       */
+      const result = await enqueueReplacingFinished('media-processing', INGEST_SOURCE_DOCUMENT, {
         kind: INGEST_SOURCE_DOCUMENT,
         workspaceId: job.workspaceId,
-        // THE SAME KEY THE PRODUCER USES. BullMQ refuses a duplicate job id, so
-        // a sweep racing a successful dispatch adds nothing rather than queuing
-        // a second parse of the same document.
-        idempotencyKey: `ingest-${job.id}`,
+        idempotencyKey: ingestionJobKey(job.id, attempt),
         ingestionJobId: job.id,
+        attempt,
       } satisfies IngestSourceDocumentPayload);
       if (result.dispatched) dispatched += 1;
     }
     return dispatched;
+  }
+
+  /**
+   * Hand back ingestion claims that went silent — `sweepStuckJobs`, which
+   * nothing ever called (Fix PR 1 · F2, D-413).
+   *
+   * A worker that dies after claiming a document leaves it EXTRACTING, and a
+   * redelivered message claims nothing, so without this the document read
+   * "Processing" for ever and Read again was refused. RUNNING rows only (a
+   * QUEUED one is `reconcileIngestion`'s), claimed longer ago than
+   * `stuckIngestionThresholdSeconds` — never less than the parse's own bound
+   * plus the worker's lock, so a live worker is not robbed. Each row is one
+   * compare-and-set inside its own workspace's context; two replicas running
+   * this at once recover a row once.
+   */
+  async recoverStuckIngestion(limit: number): Promise<number> {
+    const platform = getPlatformClient();
+    const policy = await resolveBrandBrainPolicy(
+      new ConfigurationService({ prisma: platform }),
+      this.#environment,
+    );
+    const now = this.#clock.now();
+    const stuckBefore = new Date(now.getTime() - stuckIngestionThresholdSeconds(policy) * 1000);
+    const stuck = await findStuckIngestionJobs(platform, stuckBefore, limit);
+
+    let recovered = 0;
+    const tenantPrisma = getPrisma();
+    for (const job of stuck) {
+      try {
+        const outcome = await withWorkspace(
+          job.workspaceId,
+          async (db) =>
+            recoverStuckIngestionJob({
+              db,
+              workspaceId: job.workspaceId,
+              job,
+              stuckBefore,
+              retryBackoffSeconds: policy.ingestion.retryBackoffSeconds,
+              clock: this.#clock,
+            }),
+          { prisma: tenantPrisma },
+        );
+        if (outcome !== 'skipped') recovered += 1;
+      } catch (error: unknown) {
+        // One row must not starve the rest (F-65).
+        log.error('could not recover a stuck ingestion job', {
+          workspaceId: job.workspaceId,
+          jobId: job.id,
+          ...internalErrorFields(error),
+        });
+      }
+    }
+    return recovered;
   }
 
   /**
@@ -602,19 +675,26 @@ export class MaintenanceScheduler {
     const staleBefore = new Date(now.getTime() - lease.claimLeaseSeconds * 1_000);
     const stale = await platform.publishJob.findMany({
       where: { status: 'PUBLISHING', claimedAt: { lt: staleBefore } },
-      select: { id: true, workspaceId: true, idempotencyKey: true },
+      select: { id: true, workspaceId: true, idempotencyKey: true, claimedAt: true },
       orderBy: { claimedAt: 'asc' },
       take: lease.staleClaimBatchSize,
     });
 
     let recovered = 0;
     for (const job of stale) {
+      // The query above only returns claimed rows; the guard satisfies the type.
+      if (!job.claimedAt) continue;
       const result = await enqueue('publish-jobs', VERIFY_SOCIAL_POST, {
         kind: VERIFY_SOCIAL_POST,
         workspaceId: job.workspaceId,
-        // A DISTINCT QUEUE ID FROM THE PUBLISH MESSAGE for the same job, so a
-        // verification is never de-duplicated against the publish that stalled.
-        idempotencyKey: `verify:${job.idempotencyKey}`,
+        /*
+         * ONE QUEUE ID PER STALLED CLAIM, AND NO COLON (D-410). It used to be
+         * `verify:<key>`, which `enqueue` refuses — BullMQ cannot use a `:` in a
+         * job id — so no verification was ever sent and a post whose worker
+         * died stayed PUBLISHING. `verifySocialPostJobKey` says why the prefix
+         * and the claim time are there.
+         */
+        idempotencyKey: verifySocialPostJobKey(job.idempotencyKey, job.claimedAt),
         publishJobId: job.id,
       } satisfies VerifySocialPostPayload);
       if (result.dispatched) recovered += 1;
@@ -1826,6 +1906,10 @@ export class MaintenanceScheduler {
   /** One full pass of everything. Exposed so a test can run it deterministically. */
   async runOnce(): Promise<MaintenanceResult> {
     const cadence = await this.#cadence();
+    // Recover first, so a row handed back is dispatched in the same pass.
+    const ingestionJobsRecovered = await this.recoverStuckIngestion(
+      cadence.ingestionReconcileBatch,
+    );
     const ingestionDispatched = await this.reconcileIngestion(cadence.ingestionReconcileBatch);
     const assetJobsDispatched = await this.reconcileAssetProcessing(
       cadence.ingestionReconcileBatch,
@@ -1840,6 +1924,7 @@ export class MaintenanceScheduler {
     const workspacesDeleted = await this.finishWorkspaceDeletions(cadence.retentionPurgeBatch);
     return {
       ingestionDispatched,
+      ingestionJobsRecovered,
       chatContentPurged: purged.chat,
       gatewayOutputsPurged: purged.gateway,
       assetJobsDispatched,
@@ -1915,9 +2000,11 @@ export class MaintenanceScheduler {
       this.#timers.push(timer);
     };
 
-    every(cadence.ingestionReconcileSeconds, 'ingestion-reconcile', () =>
-      this.reconcileIngestion(cadence.ingestionReconcileBatch),
-    );
+    every(cadence.ingestionReconcileSeconds, 'ingestion-reconcile', async () => {
+      // D-413: silent claims are handed back first, then everything due is dispatched.
+      const recovered = await this.recoverStuckIngestion(cadence.ingestionReconcileBatch);
+      return recovered + (await this.reconcileIngestion(cadence.ingestionReconcileBatch));
+    });
     every(cadence.retentionPurgeSeconds, 'retention-purge', async () => {
       const purged = await this.purgeRetention(cadence.retentionPurgeBatch);
       return purged.chat + purged.gateway;

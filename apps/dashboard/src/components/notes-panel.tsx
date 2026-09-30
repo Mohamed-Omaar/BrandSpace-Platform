@@ -86,12 +86,17 @@ export async function NotesPanel({
    */
   let threads;
   let members;
+  let candidates: readonly { readonly userId: string; readonly name: string }[] = [];
   let mayManage = false;
   try {
     threads = await inNotes(locale, async ({ service, actor }) => {
       // Q12 — whether this member may run a conversation or only take part.
       mayManage = actor.permissionKeys.includes(NOTE_MANAGE_PERMISSION);
-      return service.threadsFor(subject, actor);
+      const found = await service.threadsFor(subject, actor);
+      // D-409 — who may be named or assigned HERE: members who could read
+      // this subject, in its brand. `members` stays for showing names.
+      candidates = await service.mentionCandidates(subject, actor);
+      return found;
     });
     members = await mentionableMembers(locale);
   } catch {
@@ -131,6 +136,7 @@ export async function NotesPanel({
               thread={thread}
               returnPath={returnPath}
               members={members}
+              candidates={candidates}
               highlighted={thread.id === highlightThreadId}
               mayManage={mayManage}
             />
@@ -167,11 +173,11 @@ export async function NotesPanel({
           required
           placeholder={t('notes.placeholderMention')}
           suggestionsLabel={t('notes.mentionSuggestions')}
-          members={members}
+          members={candidates}
           testId="note-body"
         />
         <noscript>
-          <MentionPicker locale={locale} members={members} id="note-mentions" />
+          <MentionPicker locale={locale} members={candidates} id="note-mentions" />
         </noscript>
 
         <div>
@@ -195,13 +201,17 @@ async function NoteThread({
   thread,
   returnPath,
   members,
+  candidates,
   highlighted,
   mayManage,
 }: {
   readonly locale: string;
   readonly thread: NoteThreadSummary;
   readonly returnPath: string;
+  /** Everybody's names, for showing who wrote what. */
   readonly members: readonly { readonly userId: string; readonly name: string }[];
+  /** D-409 — who may be named or assigned in this thread. */
+  readonly candidates: readonly { readonly userId: string; readonly name: string }[];
   readonly highlighted: boolean;
   /**
    * Q12 — `notes.manage`: resolve, reopen, assign, due date, importance, and
@@ -353,11 +363,11 @@ async function NoteThread({
             required
             placeholder={t('notes.replyPlaceholder')}
             suggestionsLabel={t('notes.mentionSuggestions')}
-            members={members}
+            members={candidates}
             testId={`note-reply-${threadId}`}
           />
           <noscript>
-            <MentionPicker locale={locale} members={members} id={`reply-mentions-${threadId}`} />
+            <MentionPicker locale={locale} members={candidates} id={`reply-mentions-${threadId}`} />
           </noscript>
           <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
             <button
@@ -438,7 +448,7 @@ async function NoteThread({
                 data-testid={`note-assign-${threadId}`}
               >
                 <option value="">{t('notes.nobody')}</option>
-                {members.map((member) => (
+                {candidates.map((member) => (
                   <option key={member.userId} value={member.userId}>
                     {member.name}
                   </option>

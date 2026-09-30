@@ -161,6 +161,9 @@ export function BuyPackButton({
       packKey,
       idempotencyKey: idempotencyKey(),
       locale: locale === 'ar' ? 'ar' : 'en',
+      // The API holds the confirmation too (F4, D-411); `buy` runs only from
+      // the dialog's "Continue to payment".
+      confirm: true,
     }).catch(() => null);
     const payload = (await response?.json().catch(() => null)) as {
       redirectUrl?: string;

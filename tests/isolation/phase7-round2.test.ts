@@ -741,7 +741,7 @@ describe('A1: the automation outbox carries a real domain event to a rule', () =
           triggerConfig: triggerType === 'SCHEDULED_TIME' ? { daysOfWeek: [], hourLocal: 9 } : {},
           conditions: [],
           actionType: 'NOTIFY',
-          actionConfig: { templateKey: 'automation.confirmation_required' },
+          actionConfig: { templateKey: 'automation.notice' },
           maxRunsPerDay: 0,
           createdByUserId: fixtures.a.userId,
         },

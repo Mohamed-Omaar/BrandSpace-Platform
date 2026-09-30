@@ -23,6 +23,8 @@
  * rather than appearing to succeed.
  */
 
+import type { AutomationNotificationTemplate } from './registry';
+
 export interface NotificationPort {
   /**
    * Notify the members who can act on this.
@@ -35,7 +37,8 @@ export interface NotificationPort {
   notify(input: {
     readonly workspaceId: string;
     readonly brandId: string;
-    readonly templateKey: string;
+    /** A closed set (D-412): never a string a rule or a model chose. */
+    readonly templateKey: AutomationNotificationTemplate;
     readonly resourceType: string;
     readonly resourceId: string;
     readonly idempotencyKey: string;

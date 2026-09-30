@@ -284,7 +284,7 @@ async function deliver(event: {
 
 const notifyAction = {
   actionType: 'NOTIFY' as const,
-  actionConfig: { templateKey: 'automation.confirmation_required' } as never,
+  actionConfig: { templateKey: 'automation.notice' } as never,
 };
 
 beforeAll(async () => {

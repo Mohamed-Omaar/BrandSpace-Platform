@@ -81,6 +81,16 @@ export async function mutedRecipients(
   userIds: readonly string[],
   templateKey: NotificationTemplateKey,
 ): Promise<ReadonlySet<string>> {
+  /*
+   * AN UNCLASSIFIED KEY FAILS CLOSED (Fix PR 1 · F5, D-412). `CATEGORY_OF`
+   * covers every template, so this cannot happen through a typed caller; it did
+   * through an automation rule's free-text key, and `category: undefined` made
+   * the query below drop its category filter, muting everyone who had switched
+   * ANY category off. Refusing sends nothing, which is the safe side.
+   */
+  if (!Object.hasOwn(CATEGORY_OF, templateKey)) {
+    throw new Error('Refusing a notification whose template is not in the catalogue.');
+  }
   const category = categoryOf(templateKey);
   if (category === null || userIds.length === 0) return new Set();
   const rows = await db.notificationPreference.findMany({

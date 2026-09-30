@@ -138,7 +138,11 @@ export type { DetectedFormat, SignatureCheck } from './file-signature';
 export {
   BrandIngestionService,
   extractSourceDocument,
+  findStuckIngestionJobs,
   findUnclaimedIngestionJobs,
+  INGESTION_WORKER_LOCK_SECONDS,
+  recoverStuckIngestionJob,
+  stuckIngestionThresholdSeconds,
 } from './ingestion';
 export type {
   ExtractionOutcome,
@@ -148,6 +152,7 @@ export type {
   ReceiveOutcome,
   ReceiveResult,
   StartedIngestion,
+  StuckIngestionJob,
   UploadInput,
   UploadRefusalReason,
 } from './ingestion';

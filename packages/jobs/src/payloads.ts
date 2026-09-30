@@ -28,6 +28,23 @@ import type { TenantJobPayload } from './queues';
 export interface IngestSourceDocumentPayload extends TenantJobPayload {
   readonly kind: 'brand-brain.ingest-source-document';
   readonly ingestionJobId: string;
+  /**
+   * The attempt this message may claim, counting from 1 (Fix PR 1 · F2,
+   * D-413). The consumer claims the row only while it is QUEUED with exactly
+   * `attempt - 1` attempts spent, so a replayed or duplicate message for an
+   * earlier attempt does nothing. Optional so a message queued by the previous
+   * release still claims a QUEUED row, once.
+   */
+  readonly attempt?: number;
+}
+
+/**
+ * The queue id of ONE ingestion attempt (D-413). No colon (BullMQ). One id per
+ * attempt, because BullMQ keeps finished jobs and ignores a re-add of an id it
+ * still holds: a retry dispatched under the first attempt's id never ran.
+ */
+export function ingestionJobKey(ingestionJobId: string, attempt: number): string {
+  return `ingest-${ingestionJobId}-${attempt}`;
 }
 
 /**
@@ -116,6 +133,24 @@ export type PublishJobsPayload = PublishSocialPostPayload | VerifySocialPostPayl
 
 export const PUBLISH_SOCIAL_POST = 'social.publish-post' as const;
 export const VERIFY_SOCIAL_POST = 'social.verify-post' as const;
+
+/**
+ * The queue id of the verification sent for ONE stalled claim (D-143, D-410).
+ *
+ * NO COLON. BullMQ refuses a custom job id containing `:`, and `enqueue`
+ * refuses it first; the recovery used to be keyed `verify:<key>`, so every
+ * verification was refused and a post whose worker died stayed PUBLISHING.
+ *
+ * `verify-` keeps it distinct from the publish message for the same job
+ * (`<key>-<nextAttemptAt>`), so a verification is never de-duplicated against
+ * the publish that stalled. The CLAIM TIME makes it distinct per stall: BullMQ
+ * keeps finished jobs, so a job that is verified, sent again and stalls again
+ * needs a new id, while every sweep that sees the SAME stalled claim builds the
+ * same id and adds nothing.
+ */
+export function verifySocialPostJobKey(publishIdempotencyKey: string, claimedAt: Date): string {
+  return `verify-${publishIdempotencyKey}-${claimedAt.getTime()}`;
+}
 
 /**
  * Pull one connection's analytics for one window — Phase 7.

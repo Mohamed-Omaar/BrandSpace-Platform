@@ -169,8 +169,11 @@ export async function disconnectAccountAction(formData: FormData): Promise<void>
       throw new AppError('VALIDATION_FAILED', 'Disconnecting needs to be confirmed.');
     }
     const connectionId = String(formData.get('connectionId') ?? '');
+    // The API holds the confirmation too (F4, D-411); only this confirmed
+    // path sends it.
     const result = await callSocialApi(
       `/v1/social/connections/${encodeURIComponent(connectionId)}/disconnect`,
+      { confirm: true },
     );
     destination = result.ok
       ? pageUrl(locale, { ok: 'ACCOUNT_DISCONNECTED' })

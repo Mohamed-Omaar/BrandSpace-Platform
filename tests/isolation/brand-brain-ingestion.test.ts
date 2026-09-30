@@ -369,6 +369,10 @@ describe('processing produces candidates and NEVER knowledge', () => {
       });
       await svc.process(job.id);
       const a = await db.brandSourceChunk.count({ where: { sourceDocumentId: document.id } });
+      // A REAL RETRY (D-413): the row goes back to QUEUED, as a transient
+      // failure or the stuck-job sweep leaves it, and is claimed again. A mere
+      // second call no longer re-runs a finished job at all.
+      await db.brandIngestionJob.update({ where: { id: job.id }, data: { stage: 'QUEUED' } });
       await svc.process(job.id);
       const b = await db.brandSourceChunk.count({ where: { sourceDocumentId: document.id } });
       return { firstChunks: a, secondChunks: b };
@@ -400,6 +404,8 @@ describe('processing produces candidates and NEVER knowledge', () => {
         where: { id: first?.id ?? '' },
         data: { status: 'REJECTED', reviewedByUserId: fixtures.a.userId, reviewedAt: new Date() },
       });
+      // A REAL RETRY (D-413): back to QUEUED, then claimed and processed again.
+      await db.brandIngestionJob.update({ where: { id: job.id }, data: { stage: 'QUEUED' } });
       await svc.process(job.id);
       return db.brandKnowledgeCandidate.findUnique({ where: { id: first?.id ?? '' } });
     });

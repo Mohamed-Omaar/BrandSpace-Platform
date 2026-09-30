@@ -19,6 +19,7 @@ import {
 import {
   INGEST_SOURCE_DOCUMENT,
   enqueue,
+  ingestionJobKey,
   type IngestSourceDocumentPayload,
 } from '@brandspace/jobs';
 import {
@@ -520,9 +521,11 @@ export async function uploadSourceAction(formData: FormData): Promise<void> {
         kind: INGEST_SOURCE_DOCUMENT,
         workspaceId: session.workspace.workspaceId,
         requestedByUserId: session.customer.userId,
-        // The job row's id IS the natural key for this work. A second dispatch
-        // of the same row is refused by BullMQ rather than parsed twice.
-        idempotencyKey: `ingest-${job.id}`,
+        // The job row's id and attempt ARE the natural key for this work: a
+        // second dispatch of the same attempt is refused by BullMQ, and a
+        // retry gets its own id (D-413). A new row is on its first attempt.
+        idempotencyKey: ingestionJobKey(job.id, 1),
+        attempt: 1,
         ingestionJobId: job.id,
       } satisfies IngestSourceDocumentPayload);
       if (!dispatch.dispatched) {
@@ -636,7 +639,9 @@ export async function readAgainSourceAction(formData: FormData): Promise<void> {
       kind: INGEST_SOURCE_DOCUMENT,
       workspaceId: session.workspace.workspaceId,
       requestedByUserId: session.customer.userId,
-      idempotencyKey: `ingest-${job.id}`,
+      // A new job row: its first attempt, under that attempt's own id (D-413).
+      idempotencyKey: ingestionJobKey(job.id, 1),
+      attempt: 1,
       ingestionJobId: job.id,
     } satisfies IngestSourceDocumentPayload);
     if (!dispatch.dispatched) {

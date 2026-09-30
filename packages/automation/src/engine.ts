@@ -41,7 +41,9 @@ import {
   evaluateConditions,
   findAction,
   findTrigger,
+  isAutomationNotifyTemplate,
   isExternalAction,
+  NOTIFY_TEMPLATE_NOT_ALLOWED,
   satisfiesActionPermissions,
   type ActionDefinition,
   type AutomationCondition,
@@ -1055,6 +1057,20 @@ export class AutomationEngine {
     if (!action?.executable) {
       return this.#finish(rule, run, 'FAILED', { failureCode: 'unknown_action' });
     }
+    /*
+     * A NOTIFY RULE SENDS ONLY `automation.notice` (Fix PR 1 · F5, D-412). The
+     * set is enforced when a rule is written; this is the stored rule written
+     * before that, or around it, and it fails CLOSED — nothing is sent — rather
+     * than reaching a mute filter that cannot classify its template.
+     */
+    if (
+      rule.actionType === 'NOTIFY' &&
+      !isAutomationNotifyTemplate(
+        (rule.actionConfig as Record<string, unknown> | null)?.['templateKey'],
+      )
+    ) {
+      return this.#finish(rule, run, 'FAILED', { failureCode: NOTIFY_TEMPLATE_NOT_ALLOWED });
+    }
 
     if (!actor) {
       return this.#finish(rule, run, 'BLOCKED_BY_AUTHORIZATION', {
@@ -1457,10 +1473,13 @@ export class AutomationEngine {
     switch (rule.actionType) {
       case 'NOTIFY': {
         if (!this.#ports.notifications) throw unknownTriggerOrAction();
+        // Checked before any action runs (D-412); re-checked so the type is proven here.
+        const templateKey = config['templateKey'];
+        if (!isAutomationNotifyTemplate(templateKey)) throw unknownTriggerOrAction();
         const result = await this.#ports.notifications.notify({
           workspaceId: this.#workspaceId,
           brandId: rule.brandId,
-          templateKey: String(config['templateKey']),
+          templateKey,
           resourceType: event.refType ?? 'AutomationRun',
           resourceId: event.refId ?? run.id,
           idempotencyKey,

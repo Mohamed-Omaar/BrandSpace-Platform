@@ -218,7 +218,7 @@ beforeAll(async () => {
         } as never,
         conditions: [],
         actionType: 'NOTIFY',
-        actionConfig: { templateKey: 'automation.confirmation_required' } as never,
+        actionConfig: { templateKey: 'automation.notice' } as never,
         maxRunsPerDay: 0,
         createdByUserId: fixtures.b.userId,
       },

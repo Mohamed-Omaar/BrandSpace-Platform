@@ -1983,6 +1983,9 @@ export const messages = {
     'activity.action.automation.confirmation_refused': 'رُفض تأكيد أتمتة',
     'activity.action.brand_brain.source.uploaded': 'رُفع مستند إلى عقل العلامة',
     'activity.action.brand_brain.source.processed': 'عولج مستند في عقل العلامة',
+    'activity.action.brand_brain.source.retry_scheduled':
+      'تعثّرت قراءة مستند في عقل العلامة، وستُعاد المحاولة',
+    'activity.action.brand_brain.source.failed': 'تعذّرت قراءة مستند في عقل العلامة',
     'activity.action.brand_brain.knowledge.created': 'أُضيفت معرفة للعلامة',
     'activity.action.brand_brain.knowledge.updated': 'عُدّلت معرفة العلامة',
     'activity.action.brand_brain.knowledge.rolled_back': 'استُعيدت نسخة سابقة من معرفة العلامة',
@@ -2653,6 +2656,8 @@ export const messages = {
     'automations.failure': 'السبب: {code}',
     'automations.failure.condition_value_unavailable':
       'تم التخطي — شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.',
+    'automations.failure.notify_template_not_allowed':
+      'لم يُرسل — تذكر هذه الأتمتة إشعارًا لا يمكن للأتمتة إرساله. احذفها وأنشئها من جديد.',
     'automations.confirmNeedsPermission': 'ينتظر تأكيد عضو يملك صلاحية النشر.',
     'automations.brandFilter': 'القواعد والتشغيلات للعلامة {brand}.',
     'notifications.template.analytics.anomaly_detected': 'تغيّر غير معتاد في الأداء',
@@ -5206,6 +5211,9 @@ export const messages = {
     'activity.action.automation.confirmation_refused': 'An automation confirmation was refused',
     'activity.action.brand_brain.source.uploaded': 'A document was uploaded to Brand Brain',
     'activity.action.brand_brain.source.processed': 'A Brand Brain document was processed',
+    'activity.action.brand_brain.source.retry_scheduled':
+      'Reading a Brand Brain document stalled, and will be tried again',
+    'activity.action.brand_brain.source.failed': 'A Brand Brain document could not be read',
     'activity.action.brand_brain.knowledge.created': 'Brand knowledge was added',
     'activity.action.brand_brain.knowledge.updated': 'Brand knowledge was edited',
     'activity.action.brand_brain.knowledge.rolled_back':
@@ -5909,6 +5917,8 @@ export const messages = {
     'automations.failure': 'Reason: {code}',
     'automations.failure.condition_value_unavailable':
       "Skipped — something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.",
+    'automations.failure.notify_template_not_allowed':
+      "Not sent — this automation names a notification that automations can't send. Delete it and create it again.",
     'automations.confirmNeedsPermission': 'Waiting for a member who may publish to confirm it.',
     'automations.brandFilter': 'Rules and runs for {brand}.',
     'notifications.template.analytics.anomaly_detected': 'An unusual change in performance',

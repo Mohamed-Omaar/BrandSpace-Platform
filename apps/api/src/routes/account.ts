@@ -265,7 +265,12 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     app,
     'POST',
     '/v1/account/mfa/enrol',
-    { scope: 'workspace', permission: 'workspace.read', confirmation: 'required' },
+    {
+      scope: 'workspace',
+      permission: 'workspace.read',
+      confirmation: 'required',
+      confirmedBy: 'explicit_decision',
+    },
     async (req, reply) => {
       const user = await resolveUser(req, reply);
       if (!user) return;
@@ -284,7 +289,12 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     app,
     'POST',
     '/v1/account/mfa/enrol/confirm',
-    { scope: 'workspace', permission: 'workspace.read', confirmation: 'required' },
+    {
+      scope: 'workspace',
+      permission: 'workspace.read',
+      confirmation: 'required',
+      confirmedBy: 'proof_of_possession',
+    },
     async (req, reply) => {
       const user = await resolveUser(req, reply);
       if (!user) return;
@@ -312,7 +322,12 @@ export function registerAccountRoutes(app: FastifyInstance): void {
     app,
     'POST',
     '/v1/account/mfa/disable',
-    { scope: 'workspace', permission: 'workspace.read', confirmation: 'required' },
+    {
+      scope: 'workspace',
+      permission: 'workspace.read',
+      confirmation: 'required',
+      confirmedBy: 'proof_of_possession',
+    },
     async (req, reply) => {
       const user = await resolveUser(req, reply);
       if (!user) return;

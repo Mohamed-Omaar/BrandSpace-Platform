@@ -314,7 +314,10 @@ route({
 });
 ```
 
-The framework refuses to register a route that omits `scope`. Handlers cannot reach the database without a
+The framework refuses to register a route that omits `scope`. It also refuses one that declares
+`confirmation: 'required'` without `confirmedBy` — how the SERVER holds the confirmation (`confirm_field`,
+`single_use_token`, `proof_of_possession`, `provider_consent` or `explicit_decision`), because the declaration
+alone enforces nothing (D-411). Handlers cannot reach the database without a
 resolved context. A generated **route/permission report** is committed and reviewed, so any route lacking a
 permission is visible in the diff.
 
@@ -1620,6 +1623,12 @@ one. Approvals render read-only for anyone without `content.approve`, and Copilo
 `copilot.use`. `client_viewer` stays exactly `['workspace.read']` in Phase 2A. A separate, later
 release grants it `content.read` in the migration, the seed and the bootstrap together — and must be
 deployed after Phase 2A, never with it. Until then the D-62 paragraph above holds unchanged.
+
+**A note thread follows its subject's read permission (D-409).** `content.read` lets a member take part
+in notes at all; each thread also needs its subject's key — `campaigns.read`, `assets.read` or
+`brand_brain.read` for a campaign, asset or brand thread. So the Viewer (Q12) reads and answers threads
+about content only, and a thread about something the member cannot read is the 404 of a genuine miss
+on every path, never FORBIDDEN. Mentions and assignees are limited to members who could read the thread.
 
 **The escalation that is deliberately prevented.** `approvals.policy.manage` can turn self-approval
 on, so it is held only by the Workspace Owner and Workspace Admin — and NOT by the Marketing Manager,

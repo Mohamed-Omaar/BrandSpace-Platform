@@ -89,7 +89,7 @@ function rule(
         : { metricKey: 'followers', direction: 'above', threshold: 100, windowDays: 7 }) as never,
       conditions: [],
       actionType: 'NOTIFY',
-      actionConfig: { templateKey: 'automation.confirmation_required' } as never,
+      actionConfig: { templateKey: 'automation.notice' } as never,
       maxRunsPerDay: 0,
       createdByUserId: w.userId,
       nextEvaluationAt,
