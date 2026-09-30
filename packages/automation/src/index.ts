@@ -136,6 +136,7 @@ export {
   TenantAutomationPolicySource,
   parseAutomationPolicy,
   resolveAutomationPolicy,
+  triggerAvailable,
 } from './policy';
 export type { AutomationCatalogueReader, AutomationPolicy } from './policy';
 
