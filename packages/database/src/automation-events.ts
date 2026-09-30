@@ -28,7 +28,19 @@ import type { TenantScopedClient } from './tenant-client';
 
 /** A domain event: it belongs to the BRAND, and every listening rule sees it. */
 export type DomainAutomationEvent =
-  | { readonly triggerType: 'CONTENT_APPROVED'; readonly refType: 'ContentItem' }
+  /**
+   * Phase 2B-3 PR 2 — ONE EVENT PER APPROVAL CYCLE. The reference stays the
+   * content item (what the rule acts on); the IDENTITY is the approval that
+   * decided the cycle, so a post withdrawn, edited, resubmitted and approved
+   * again is a second event — which is what a person approving it again means.
+   * Before PR 2 the key was the item's id and a re-approval was swallowed as a
+   * duplicate of the first; those rows keep their keys and are never rewritten.
+   */
+  | {
+      readonly triggerType: 'CONTENT_APPROVED';
+      readonly refType: 'ContentItem';
+      readonly approvalId: string;
+    }
   | { readonly triggerType: 'CONTENT_SCHEDULED'; readonly refType: 'CalendarSlot' }
   | { readonly triggerType: 'POST_PUBLISHED'; readonly refType: 'PublishJob' }
   | { readonly triggerType: 'ANALYTICS_REFRESHED'; readonly refType: 'AnalyticsIngestionRun' }
@@ -72,8 +84,10 @@ export async function recordAutomationEvent(
         refId: input.refId,
         // THE IDENTITY OF THE EVENT, not of the attempt. The trigger and the row
         // it happened to: "item X was approved" is the same event however many
-        // times anything notices it.
-        dedupeKey: `${event.triggerType}:${input.refId}`,
+        // times anything notices it. An approval is identified by its CYCLE.
+        dedupeKey: `${event.triggerType}:${
+          event.triggerType === 'CONTENT_APPROVED' ? event.approvalId : input.refId
+        }`,
       },
     ],
     skipDuplicates: true,
