@@ -490,6 +490,23 @@ async function editRule(page: Page, ruleId: string, locale = 'en'): Promise<void
   await expect(page.getByTestId('automation-edit-form')).toBeVisible();
 }
 
+/**
+ * THE ACTION A RULE THESE TESTS SWITCH ON IS CHOSEN, AND IT CHANGES NOTHING.
+ *
+ * These rules live in the shared end-to-end workspace, and switched on they
+ * react to every approval in it — including the post `phase8-flow` approves
+ * and then schedules by hand. Left to the form's first action after the G13
+ * flip (SCHEDULE_NEXT_FREE_SLOT), one of them scheduled that post first and
+ * step 11 found nothing to schedule. "Notify a person" is the G13 successor of
+ * the NOTIFY these rules sent before Phase 2B-3 PR 2: a notice, nothing moved.
+ */
+async function chooseHarmlessAction(page: Page): Promise<void> {
+  await page.getByTestId('automation-action').selectOption('NOTIFY_PERSON');
+  const person = page.getByTestId('automation-action-person');
+  await expect(person).toBeVisible();
+  await expect(person).not.toHaveValue('');
+}
+
 test.describe('automations', () => {
   test('a rule can be created, is listed, and starts DISABLED', async ({ page }) => {
     /*
@@ -736,6 +753,7 @@ test.describe('automations', () => {
 
     const name = `E2E boolean ${Date.now()}`;
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
+    await chooseHarmlessAction(page);
     await page.getByTestId('automation-submit').click();
     await automationDone(page, 'AUTOMATION_CREATED');
 
@@ -806,6 +824,7 @@ test.describe('automations', () => {
 
     const name = `E2E list ${Date.now()}`;
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
+    await chooseHarmlessAction(page);
     await value.selectOption(['POST', 'REEL']);
     await page.getByTestId('automation-submit').click();
     await automationDone(page, 'AUTOMATION_CREATED');
