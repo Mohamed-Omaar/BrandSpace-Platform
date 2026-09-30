@@ -38,7 +38,7 @@ const T = new Date();
 beforeAll(async () => {
   app = appRoleClient();
   platform = platformRoleClient();
-  fixtures = await createIsolationFixtures(app, platform);
+  fixtures = await createIsolationFixtures(app);
 });
 
 afterAll(async () => {

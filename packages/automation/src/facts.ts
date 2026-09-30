@@ -133,6 +133,23 @@ export async function gatherFacts(
   }
 
   /*
+   * Phase 2B-3 PR 3 — CAMPAIGN_STARTED / CAMPAIGN_ENDED: the campaign itself,
+   * and only while it is still one of the event's brand's live campaigns.
+   */
+  if (event.refType === 'Campaign' && event.refId) {
+    const campaign = await db.campaign.findFirst({
+      where: {
+        id: event.refId,
+        workspaceId: event.workspaceId,
+        brandId: event.brandId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (campaign) facts['campaign.id'] = campaign.id;
+  }
+
+  /*
    * THE METRIC FACTS COME FROM THE RULE'S OWN WINDOW, THROUGH THE SAME PORT THE
    * PRODUCER USED.
    *

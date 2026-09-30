@@ -82,15 +82,15 @@ describe('registry parity with the database enums', () => {
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
       'POST_FAILED',
-      // Phase 2B-3 PR 3 — ships with its producer.
+      // Phase 2B-3 PR 3 — each ships with its producer.
       'REVIEW_WAITING_24H',
+      'CAMPAIGN_STARTED',
+      'CAMPAIGN_ENDED',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
     ]);
     expect(PLANNED_AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
-      'CAMPAIGN_STARTED',
-      'CAMPAIGN_ENDED',
       'WEEKLY_ENGAGEMENT_DROPPED',
       'SCHEDULE_GAP',
       'POST_TOP_10_PERCENT',

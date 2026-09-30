@@ -35,6 +35,8 @@ import {
   nextTimedEvaluationAt,
   timedRuleIsDue,
   nextVisitAt,
+  produceCampaignEnded,
+  produceCampaignStarted,
   produceReviewWaiting,
   type DueProducerContext,
   type DueVisit,
@@ -181,6 +183,8 @@ const DUE_CALENDAR: LocalCalendarPort = {
 /** Phase 2B-3 PR 3 — the timed G13 triggers, each with its producer. */
 const DUE_PRODUCERS = [
   ['REVIEW_WAITING_24H', produceReviewWaiting],
+  ['CAMPAIGN_STARTED', produceCampaignStarted],
+  ['CAMPAIGN_ENDED', produceCampaignEnded],
 ] as const satisfies readonly (readonly [
   AutomationTrigger,
   (context: DueProducerContext) => Promise<DueVisit>,

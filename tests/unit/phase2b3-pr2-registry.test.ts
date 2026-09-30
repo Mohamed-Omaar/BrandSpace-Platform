@@ -28,7 +28,14 @@ import {
 const G13_PAIRS: Record<string, readonly string[]> = {
   SCHEDULE_NEXT_FREE_SLOT: ['CONTENT_APPROVED'],
   // Phase 2B-3 PR 3 adds each timed trigger as its producer ships.
-  NOTIFY_PERSON: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED', 'REVIEW_WAITING_24H'],
+  NOTIFY_PERSON: [
+    'CONTENT_APPROVED',
+    'POST_PUBLISHED',
+    'POST_FAILED',
+    'REVIEW_WAITING_24H',
+    'CAMPAIGN_STARTED',
+    'CAMPAIGN_ENDED',
+  ],
   ADD_TO_CAMPAIGN: ['CONTENT_APPROVED'],
   MAKE_DRAFT_COPY: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
 };
@@ -38,7 +45,7 @@ describe('the compatibility table', () => {
     for (const [type, triggers] of Object.entries(G13_PAIRS)) {
       expect(findAction(type)?.authoringTriggers, type).toEqual(triggers);
     }
-    expect(Object.values(G13_PAIRS).flat()).toHaveLength(9);
+    expect(Object.values(G13_PAIRS).flat()).toHaveLength(11);
   });
 
   it('no legacy action may ever be authored on POST_FAILED', () => {
@@ -85,6 +92,8 @@ describe('the conditions a new rule may name', () => {
       POST_PUBLISHED: G13,
       POST_FAILED: [...G13, 'publish.failureClass'],
       REVIEW_WAITING_24H: G13,
+      CAMPAIGN_STARTED: ['campaign.id'],
+      CAMPAIGN_ENDED: ['campaign.id'],
     });
   });
 
@@ -192,6 +201,8 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'POST_PUBLISHED',
       'POST_FAILED',
       'REVIEW_WAITING_24H',
+      'CAMPAIGN_STARTED',
+      'CAMPAIGN_ENDED',
     ]);
     expect(AUTOMATION_ACTIONS.filter((a) => a.authorable).map((a) => a.type)).toEqual([
       'SCHEDULE_NEXT_FREE_SLOT',
@@ -234,6 +245,8 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'POST_FAILED × NOTIFY_PERSON',
       'POST_FAILED × MAKE_DRAFT_COPY',
       'REVIEW_WAITING_24H × NOTIFY_PERSON',
+      'CAMPAIGN_STARTED × NOTIFY_PERSON',
+      'CAMPAIGN_ENDED × NOTIFY_PERSON',
     ]);
   });
 

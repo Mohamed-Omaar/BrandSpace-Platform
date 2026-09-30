@@ -1,5 +1,6 @@
 import type { AutomationTrigger, TenantScopedClient } from '@brandspace/database';
-import type { LocalCalendarPort } from './due-events';
+import { dayKeyInEventKey, dayKeyOf, type LocalCalendarPort } from './due-events';
+import { BOUNDARY_CAMPAIGN_STATUSES } from './due-producers';
 import { DUE_EVENT_DEFINITIONS } from './registry';
 
 /**
@@ -57,6 +58,30 @@ export async function occurrenceStillHolds(
         approval.createdAt.getTime() + DUE_EVENT_DEFINITIONS.reviewWaitHours * 3_600_000 <=
           check.now.getTime()
       );
+    }
+    /*
+     * A CAMPAIGN BOUNDARY STILL ON THAT DAY: the campaign, in the rule's brand,
+     * still planned, running, paused or completed, not archived or deleted, and
+     * its start (or end) date still the day the event was produced for. A date
+     * moved since is a different occurrence, produced on its own.
+     */
+    case 'CAMPAIGN_STARTED':
+    case 'CAMPAIGN_ENDED': {
+      const dayKey = dayKeyInEventKey(check.eventKey);
+      if (!check.refId || !dayKey) return false;
+      const campaign = await db.campaign.findFirst({
+        where: {
+          id: check.refId,
+          workspaceId: check.workspaceId,
+          brandId: check.brandId,
+          deletedAt: null,
+          status: { in: [...BOUNDARY_CAMPAIGN_STATUSES] },
+        },
+        select: { startDate: true, endDate: true },
+      });
+      const date =
+        check.triggerType === 'CAMPAIGN_STARTED' ? campaign?.startDate : campaign?.endDate;
+      return !!date && dayKeyOf(date) === dayKey;
     }
     default:
       return true;

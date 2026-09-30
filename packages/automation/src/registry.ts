@@ -223,6 +223,31 @@ export const AUTOMATION_TRIGGERS = [
     authorable: true,
     messageKey: 'reviewWaiting24h',
   },
+  /*
+   * PHASE 2B-3 PR 3 — a campaign's first day beginning, and its last day
+   * ending, in the workspace's zone. Rule-derived; the reference is the
+   * campaign, which reaches no single post.
+   */
+  {
+    type: 'CAMPAIGN_STARTED',
+    config: emptyConfig,
+    refType: 'Campaign',
+    contentItemVia: null,
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'campaignStarted',
+  },
+  {
+    type: 'CAMPAIGN_ENDED',
+    config: emptyConfig,
+    refType: 'Campaign',
+    contentItemVia: null,
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'campaignEnded',
+  },
   {
     type: 'ANALYTICS_REFRESHED',
     config: emptyConfig,
@@ -289,20 +314,6 @@ export interface PlannedTriggerDefinition {
 }
 
 export const PLANNED_AUTOMATION_TRIGGERS = [
-  {
-    type: 'CAMPAIGN_STARTED',
-    refType: 'Campaign',
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'CAMPAIGN_ENDED',
-    refType: 'Campaign',
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
   // A change of a rule's own state, so there is no row to point at.
   {
     type: 'WEEKLY_ENGAGEMENT_DROPPED',
@@ -366,6 +377,8 @@ export const CONDITION_FIELDS = [
   'metric.value',
   'metric.changeMilli',
   'brand.id',
+  // Phase 2B-3 PR 3 — the campaign a start or end event is about.
+  'campaign.id',
 ] as const;
 export type ConditionField = (typeof CONDITION_FIELDS)[number];
 
@@ -412,6 +425,8 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
     'METRIC_THRESHOLD_CROSSED',
     'SCHEDULED_TIME',
     'REVIEW_WAITING_24H',
+    'CAMPAIGN_STARTED',
+    'CAMPAIGN_ENDED',
   ],
   // Reachable wherever a content item is reachable — which is exactly where
   // `contentItemVia` is not null.
@@ -431,6 +446,8 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
   'metric.key': ['METRIC_THRESHOLD_CROSSED'],
   'metric.value': ['METRIC_THRESHOLD_CROSSED'],
   'metric.changeMilli': ['METRIC_THRESHOLD_CROSSED'],
+  // Only the campaign boundaries, whose reference IS the campaign.
+  'campaign.id': ['CAMPAIGN_STARTED', 'CAMPAIGN_ENDED'],
 };
 
 /**
@@ -471,6 +488,9 @@ export const AUTHORING_CONDITION_FIELDS: Partial<
   POST_FAILED: [...G13_CONTENT_CONDITION_FIELDS, 'publish.failureClass'],
   // Phase 2B-3 PR 3 — the waiting post's own fields (revised report §8).
   REVIEW_WAITING_24H: G13_CONTENT_CONDITION_FIELDS,
+  // Which campaign (revised report §8); the brand is the rule's own.
+  CAMPAIGN_STARTED: ['campaign.id'],
+  CAMPAIGN_ENDED: ['campaign.id'],
 };
 
 /**
@@ -690,6 +710,17 @@ export const CONDITION_FIELD_CONTRACTS: Record<ConditionField, ConditionFieldCon
     operators: STRING_OPERATORS,
     options: null,
     catalogue: 'brands',
+  },
+  /*
+   * Phase 2B-3 PR 3 — the campaign a boundary event is about: one of the
+   * rule's brand's campaigns, validated and re-resolved exactly like
+   * `content.campaignId`.
+   */
+  'campaign.id': {
+    kind: 'string',
+    operators: STRING_OPERATORS,
+    options: null,
+    catalogue: 'campaigns',
   },
   'content.status': {
     kind: 'string',
@@ -1153,7 +1184,14 @@ export const AUTOMATION_ACTIONS = [
     spendsCredits: false,
     asksFirst: false,
     authorable: true,
-    authoringTriggers: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED', 'REVIEW_WAITING_24H'],
+    authoringTriggers: [
+      'CONTENT_APPROVED',
+      'POST_PUBLISHED',
+      'POST_FAILED',
+      'REVIEW_WAITING_24H',
+      'CAMPAIGN_STARTED',
+      'CAMPAIGN_ENDED',
+    ],
     catalogue: 'g13',
     executable: true,
     needsContentItem: false,

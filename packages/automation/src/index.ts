@@ -106,7 +106,14 @@ export {
 } from './due-events';
 export type { DueCandidate, LocalCalendarPort } from './due-events';
 export { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
-export { advanceDueWatermark, produceReviewWaiting } from './due-producers';
+export {
+  BOUNDARY_CAMPAIGN_STATUSES,
+  advanceDueWatermark,
+  campaignBoundary,
+  produceCampaignEnded,
+  produceCampaignStarted,
+  produceReviewWaiting,
+} from './due-producers';
 export type { DueProducerContext, DueRuleRow, DueVisit } from './due-producers';
 export type { OccurrenceCheck } from './occurrence';
 export type {
