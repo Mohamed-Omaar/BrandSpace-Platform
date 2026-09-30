@@ -27,17 +27,18 @@ import {
 
 const G13_PAIRS: Record<string, readonly string[]> = {
   SCHEDULE_NEXT_FREE_SLOT: ['CONTENT_APPROVED'],
-  NOTIFY_PERSON: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
+  // Phase 2B-3 PR 3 adds each timed trigger as its producer ships.
+  NOTIFY_PERSON: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED', 'REVIEW_WAITING_24H'],
   ADD_TO_CAMPAIGN: ['CONTENT_APPROVED'],
   MAKE_DRAFT_COPY: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
 };
 
 describe('the compatibility table', () => {
-  it('each G13 action names exactly its approved triggers — eight pairs', () => {
+  it('each G13 action names exactly its approved triggers', () => {
     for (const [type, triggers] of Object.entries(G13_PAIRS)) {
       expect(findAction(type)?.authoringTriggers, type).toEqual(triggers);
     }
-    expect(Object.values(G13_PAIRS).flat()).toHaveLength(8);
+    expect(Object.values(G13_PAIRS).flat()).toHaveLength(9);
   });
 
   it('no legacy action may ever be authored on POST_FAILED', () => {
@@ -83,6 +84,7 @@ describe('the conditions a new rule may name', () => {
       CONTENT_APPROVED: G13,
       POST_PUBLISHED: G13,
       POST_FAILED: [...G13, 'publish.failureClass'],
+      REVIEW_WAITING_24H: G13,
     });
   });
 
@@ -184,11 +186,12 @@ describe('the typed outcomes', () => {
 });
 
 describe('the G13 flip — exactly what a new rule may be written as', () => {
-  it('three triggers and four actions are authorable, by name', () => {
+  it('the authorable triggers and actions, by name', () => {
     expect(AUTOMATION_TRIGGERS.filter((t) => t.authorable).map((t) => t.type)).toEqual([
       'CONTENT_APPROVED',
       'POST_PUBLISHED',
       'POST_FAILED',
+      'REVIEW_WAITING_24H',
     ]);
     expect(AUTOMATION_ACTIONS.filter((a) => a.authorable).map((a) => a.type)).toEqual([
       'SCHEDULE_NEXT_FREE_SLOT',
@@ -213,7 +216,7 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
     }
   });
 
-  it('the authorable pairs are exactly the eight approved ones', () => {
+  it('the authorable pairs are exactly the approved ones', () => {
     const pairs: string[] = [];
     for (const trigger of AUTOMATION_TRIGGERS) {
       for (const action of AUTOMATION_ACTIONS) {
@@ -230,6 +233,7 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'POST_PUBLISHED × MAKE_DRAFT_COPY',
       'POST_FAILED × NOTIFY_PERSON',
       'POST_FAILED × MAKE_DRAFT_COPY',
+      'REVIEW_WAITING_24H × NOTIFY_PERSON',
     ]);
   });
 

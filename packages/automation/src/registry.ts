@@ -207,6 +207,22 @@ export const AUTOMATION_TRIGGERS = [
     authorable: true,
     messageKey: 'postFailed',
   },
+  /*
+   * PHASE 2B-3 PR 3 — a review cycle still open `reviewWaitHours` after it was
+   * asked for. Rule-derived: the producer reads one rule's brand, and the event
+   * goes to that rule alone. The reference is the review cycle; the post is
+   * reached through it.
+   */
+  {
+    type: 'REVIEW_WAITING_24H',
+    config: emptyConfig,
+    refType: 'Approval',
+    contentItemVia: 'approval',
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'reviewWaiting24h',
+  },
   {
     type: 'ANALYTICS_REFRESHED',
     config: emptyConfig,
@@ -273,13 +289,6 @@ export interface PlannedTriggerDefinition {
 }
 
 export const PLANNED_AUTOMATION_TRIGGERS = [
-  {
-    type: 'REVIEW_WAITING_24H',
-    refType: 'Approval',
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
   {
     type: 'CAMPAIGN_STARTED',
     refType: 'Campaign',
@@ -380,6 +389,18 @@ export type ConditionField = (typeof CONDITION_FIELDS)[number];
  * EXHAUSTIVE BY TYPE: every `ConditionField` must appear, and TypeScript refuses
  * the file if one is missing.
  */
+/**
+ * The triggers whose reference reaches a content item (`contentItemVia` is not
+ * null). Phase 2B-3 PR 3 adds REVIEW_WAITING_24H: the review cycle names its post.
+ */
+const CONTENT_REACHABLE_TRIGGERS = [
+  'CONTENT_APPROVED',
+  'CONTENT_SCHEDULED',
+  'POST_PUBLISHED',
+  'POST_FAILED',
+  'REVIEW_WAITING_24H',
+] as const satisfies readonly AutomationTrigger[];
+
 export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly AutomationTrigger[]> = {
   // The brand is on every event, because `deliver` selects rules BY brand.
   'brand.id': [
@@ -390,27 +411,18 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
     'ANALYTICS_REFRESHED',
     'METRIC_THRESHOLD_CROSSED',
     'SCHEDULED_TIME',
+    'REVIEW_WAITING_24H',
   ],
   // Reachable wherever a content item is reachable — which is exactly where
   // `contentItemVia` is not null.
-  'content.status': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
-  'content.pillar': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
-  'content.platformCount': [
-    'CONTENT_APPROVED',
-    'CONTENT_SCHEDULED',
-    'POST_PUBLISHED',
-    'POST_FAILED',
-  ],
-  'content.hasCampaign': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
-  'content.campaignId': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
-  'content.type': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
-  'content.authorUserId': [
-    'CONTENT_APPROVED',
-    'CONTENT_SCHEDULED',
-    'POST_PUBLISHED',
-    'POST_FAILED',
-  ],
-  'content.channels': ['CONTENT_APPROVED', 'CONTENT_SCHEDULED', 'POST_PUBLISHED', 'POST_FAILED'],
+  'content.status': CONTENT_REACHABLE_TRIGGERS,
+  'content.pillar': CONTENT_REACHABLE_TRIGGERS,
+  'content.platformCount': CONTENT_REACHABLE_TRIGGERS,
+  'content.hasCampaign': CONTENT_REACHABLE_TRIGGERS,
+  'content.campaignId': CONTENT_REACHABLE_TRIGGERS,
+  'content.type': CONTENT_REACHABLE_TRIGGERS,
+  'content.authorUserId': CONTENT_REACHABLE_TRIGGERS,
+  'content.channels': CONTENT_REACHABLE_TRIGGERS,
   // Only the publish job carries these. A failed post carries its class.
   'publish.provider': ['POST_PUBLISHED'],
   'publish.failureClass': ['POST_PUBLISHED', 'POST_FAILED'],
@@ -457,6 +469,8 @@ export const AUTHORING_CONDITION_FIELDS: Partial<
   CONTENT_APPROVED: G13_CONTENT_CONDITION_FIELDS,
   POST_PUBLISHED: G13_CONTENT_CONDITION_FIELDS,
   POST_FAILED: [...G13_CONTENT_CONDITION_FIELDS, 'publish.failureClass'],
+  // Phase 2B-3 PR 3 — the waiting post's own fields (revised report §8).
+  REVIEW_WAITING_24H: G13_CONTENT_CONDITION_FIELDS,
 };
 
 /**
@@ -1139,7 +1153,7 @@ export const AUTOMATION_ACTIONS = [
     spendsCredits: false,
     asksFirst: false,
     authorable: true,
-    authoringTriggers: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
+    authoringTriggers: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED', 'REVIEW_WAITING_24H'],
     catalogue: 'g13',
     executable: true,
     needsContentItem: false,

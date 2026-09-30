@@ -82,12 +82,13 @@ describe('registry parity with the database enums', () => {
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
       'POST_FAILED',
+      // Phase 2B-3 PR 3 — ships with its producer.
+      'REVIEW_WAITING_24H',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
     ]);
     expect(PLANNED_AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
-      'REVIEW_WAITING_24H',
       'CAMPAIGN_STARTED',
       'CAMPAIGN_ENDED',
       'WEEKLY_ENGAGEMENT_DROPPED',
@@ -355,6 +356,8 @@ describe('the stringSet kind and content.channels', () => {
       'CONTENT_SCHEDULED',
       'POST_PUBLISHED',
       'POST_FAILED',
+      // Phase 2B-3 PR 3 — the waiting review names its post.
+      'REVIEW_WAITING_24H',
     ]);
   });
 

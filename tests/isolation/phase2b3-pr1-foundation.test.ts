@@ -458,7 +458,20 @@ describe('existing stored rules of every shape behave exactly as before', () => 
   it('every shipped trigger × every action it supports, and the entitlement port is never asked', async () => {
     entitlementQuestions = [];
     let walked = 0;
-    for (const trigger of AUTOMATION_TRIGGERS) {
+    // Phase 2B-3 PR 3: the triggers that existed before the timed G13 ones,
+    // by name; each timed trigger has its own suite.
+    const PRE_PR3_TRIGGERS = [
+      'CONTENT_APPROVED',
+      'CONTENT_SCHEDULED',
+      'POST_PUBLISHED',
+      'POST_FAILED',
+      'ANALYTICS_REFRESHED',
+      'METRIC_THRESHOLD_CROSSED',
+      'SCHEDULED_TIME',
+    ];
+    for (const trigger of AUTOMATION_TRIGGERS.filter((entry) =>
+      PRE_PR3_TRIGGERS.includes(entry.type),
+    )) {
       // The shapes that existed before G13; the G13 actions have their own
       // suites (Phase 2B-3 PR 2).
       for (const action of AUTOMATION_ACTIONS.filter((entry) => entry.type in EXPECTED)) {

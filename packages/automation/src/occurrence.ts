@@ -1,5 +1,6 @@
 import type { AutomationTrigger, TenantScopedClient } from '@brandspace/database';
 import type { LocalCalendarPort } from './due-events';
+import { DUE_EVENT_DEFINITIONS } from './registry';
 
 /**
  * PHASE 2B-3 PR 3 — DOES THE OCCURRENCE STILL HOLD WHEN IT IS DELIVERED?
@@ -40,8 +41,23 @@ export async function occurrenceStillHolds(
   db: TenantScopedClient,
   check: OccurrenceCheck,
 ): Promise<boolean> {
-  void db;
   switch (check.triggerType) {
+    /*
+     * A REVIEW STILL WAITING: the cycle, in the rule's brand, still PENDING
+     * and still past its wait. Decided, cancelled or gone, it is not waiting.
+     */
+    case 'REVIEW_WAITING_24H': {
+      if (!check.refId) return false;
+      const approval = await db.approval.findFirst({
+        where: { id: check.refId, workspaceId: check.workspaceId, brandId: check.brandId },
+        select: { status: true, createdAt: true },
+      });
+      return (
+        approval?.status === 'PENDING' &&
+        approval.createdAt.getTime() + DUE_EVENT_DEFINITIONS.reviewWaitHours * 3_600_000 <=
+          check.now.getTime()
+      );
+    }
     default:
       return true;
   }

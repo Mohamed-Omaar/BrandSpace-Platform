@@ -25,6 +25,7 @@ import {
   getPrisma,
   recordRuleAutomationEvent,
   withWorkspace,
+  type AutomationTrigger,
   type PrismaClient,
 } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
@@ -33,6 +34,11 @@ import {
   localMomentFor,
   nextTimedEvaluationAt,
   timedRuleIsDue,
+  nextVisitAt,
+  produceReviewWaiting,
+  type DueProducerContext,
+  type DueVisit,
+  type LocalCalendarPort,
 } from '@brandspace/automation';
 import {
   BACKFILL_ANALYTICS,
@@ -63,7 +69,11 @@ import {
   type ApplicationResolver,
   type PublishingPolicy,
 } from '@brandspace/social-connectors';
-import { ContentApprovalService, TenantContentPolicySource } from '@brandspace/content';
+import {
+  ContentApprovalService,
+  TenantContentPolicySource,
+  instantForIntent,
+} from '@brandspace/content';
 import {
   CreditLedgerService,
   SubscriptionService,
@@ -158,6 +168,23 @@ const AUTOMATION_REDISPATCH_SECONDS = 120;
  * the batch, not the ordering, is what needs raising.
  */
 const AUTOMATION_RULE_PARK_MAX_SECONDS = 3_600;
+
+/**
+ * Phase 2B-3 PR 3 — local 00:00 for the timed G13 producers, from the platform's
+ * one zoned-time resolver (a midnight lost to daylight saving moves forward; a
+ * repeated one resolves to the earlier instant).
+ */
+const DUE_CALENDAR: LocalCalendarPort = {
+  localMidnight: (dayKey, timezone) => instantForIntent(`${dayKey}T00:00`, timezone),
+};
+
+/** Phase 2B-3 PR 3 — the timed G13 triggers, each with its producer. */
+const DUE_PRODUCERS = [
+  ['REVIEW_WAITING_24H', produceReviewWaiting],
+] as const satisfies readonly (readonly [
+  AutomationTrigger,
+  (context: DueProducerContext) => Promise<DueVisit>,
+])[];
 
 /**
  * How long one billing-cycle boundary may hold its transaction.
@@ -1046,7 +1073,9 @@ export class MaintenanceScheduler {
     expired: number;
   }> {
     const produced =
-      (await this.#produceTimedEvents(batch)) + (await this.#produceThresholdEvents(batch));
+      (await this.#produceTimedEvents(batch)) +
+      (await this.#produceThresholdEvents(batch)) +
+      (await this.#produceDueEvents(batch));
     const dispatched = await this.#dispatchAutomationEvents(batch);
     const expired = await this.#expireAutomationProposals(batch);
     return { produced, dispatched, expired };
@@ -1375,6 +1404,122 @@ export class MaintenanceScheduler {
    * THE EVENT ID IS THE QUEUE JOB ID, so a sweep racing a successful dispatch
    * adds nothing rather than queuing the same event twice inside one minute.
    */
+  /**
+   * PHASE 2B-3 PR 3 — THE TIMED G13 PRODUCERS, one per trigger, on this sweep.
+   *
+   * THE SAME SHAPE AS THE TIMED AND THRESHOLD PRODUCERS ABOVE, on purpose: the
+   * oldest-due rules first (`nextEvaluationAt`, then id — the R4-2 queue), the
+   * enumeration cross-tenant and everything else inside the tenant's own
+   * transaction under RLS, the rule re-read there, and the events, the rule's
+   * cursor and its park committing together. A workspace pending deletion
+   * produces nothing (D-328).
+   *
+   * What each trigger means lives in `@brandspace/automation` (`due-producers`),
+   * as functions of one rule; this is only the clock that visits them.
+   */
+  async #produceDueEvents(batch: number): Promise<number> {
+    let produced = 0;
+    for (const [triggerType, produce] of DUE_PRODUCERS) {
+      produced += await this.#produceDue(triggerType, produce, batch);
+    }
+    return produced;
+  }
+
+  async #produceDue(
+    triggerType: (typeof DUE_PRODUCERS)[number][0],
+    produce: (context: DueProducerContext) => Promise<DueVisit>,
+    batch: number,
+  ): Promise<number> {
+    const platform = getPlatformClient();
+    const now = this.#clock.now();
+    const rules = await platform.automationRule.findMany({
+      where: {
+        triggerType,
+        enabled: true,
+        deletedAt: null,
+        nextEvaluationAt: { lte: now },
+        workspace: { deletionScheduledFor: null },
+      },
+      select: { id: true, workspaceId: true },
+      orderBy: [{ nextEvaluationAt: 'asc' }, { id: 'asc' }],
+      take: batch,
+    });
+    if (rules.length === 0) return 0;
+
+    const zones = await this.#timezonesFor(
+      platform,
+      rules.map((rule) => rule.workspaceId),
+    );
+
+    let produced = 0;
+    for (const rule of rules) {
+      const visit = await withWorkspace(
+        rule.workspaceId,
+        async (db) => {
+          // RE-READ UNDER RLS: a rule disabled, deleted or re-targeted since the
+          // enumeration produces nothing.
+          const live = await db.automationRule.findFirst({
+            where: {
+              id: rule.id,
+              workspaceId: rule.workspaceId,
+              triggerType,
+              enabled: true,
+              deletedAt: null,
+            },
+            select: {
+              id: true,
+              brandId: true,
+              armedAt: true,
+              dueWatermark: true,
+              thresholdBreached: true,
+              thresholdCycle: true,
+              thresholdEvaluatedAt: true,
+            },
+          });
+          if (!live) return null;
+
+          const result = await produce({
+            db,
+            workspaceId: rule.workspaceId,
+            rule: live,
+            now,
+            timezone: zones.get(rule.workspaceId) ?? 'UTC',
+            calendar: DUE_CALENDAR,
+          });
+
+          // The park, with the same `lte: now` guard as the producers above: a
+          // replica that already parked this rule further out is not undone.
+          await db.automationRule.updateMany({
+            where: { id: rule.id, workspaceId: rule.workspaceId, nextEvaluationAt: { lte: now } },
+            data: {
+              nextEvaluationAt: nextVisitAt({
+                now,
+                next: result.next,
+                more: result.more,
+                maxAheadSeconds: AUTOMATION_RULE_PARK_MAX_SECONDS,
+              }),
+              lastEvaluatedAt: now,
+            },
+          });
+          return result;
+        },
+        { prisma: getPrisma() },
+      );
+      if (!visit) continue;
+      produced += visit.produced;
+      if (visit.skippedLate > 0) {
+        // Owner decision A: late campaign boundaries are skipped, and counted.
+        log.info('timed automation occurrences skipped as late', {
+          trigger: triggerType,
+          ruleId: rule.id,
+          workspaceId: rule.workspaceId,
+          skipped: visit.skippedLate,
+        });
+      }
+    }
+    return produced;
+  }
+
   async #dispatchAutomationEvents(batch: number): Promise<number> {
     const platform = getPlatformClient();
     const now = this.#clock.now();
