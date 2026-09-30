@@ -524,6 +524,34 @@ database change**. What differs until the new release is back:
 
 No data is lost or rewritten.
 
+### 6.10 Phase 2B-3 PR 4: M3's indexes, and rolling the application back (D-435 – D-441)
+
+M3 (`20261012090000_…`, `20261012091000_…`, `20261012092000_…`) only creates three indexes, each with
+`CREATE INDEX CONCURRENTLY IF NOT EXISTS` as the file's single statement (DATABASE.md §18.12). While one
+builds, `metric_observation` or `publish_job` keeps taking reads and writes; the build waits for
+transactions already running on the table, so a long transaction delays the build, not the other way
+round.
+
+- **A failed or interrupted build leaves an INVALID index**, which PostgreSQL maintains on writes but
+  never uses. Find it with
+  `SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;`
+  then `DROP INDEX CONCURRENTLY IF EXISTS "<name>";` and deploy again — `IF NOT EXISTS` would otherwise
+  skip the rebuild. Never mark it valid by hand.
+- **Removing an M3 index** (only if one is shown to hurt): `DROP INDEX CONCURRENTLY IF EXISTS "<name>";`,
+  one statement per session, outside a transaction. It does not block writes either. The migration stays
+  recorded as applied (§6.1); the queries still run, only slower. Put the index back with the migration's
+  own statement.
+- **Rolling the APPLICATION back from PR 4 needs no database change.** The previous release neither
+  reads nor needs the indexes, and its configuration schema drops the unknown `events` block when it
+  parses the `automations` document.
+- **What lapses until the new release is back:** neither analytics event is produced; the cursors and
+  the weekly edge memory are left as they are and resume on the way forward (nothing before a rule's
+  arming is produced, D-417). The previous release treats the two triggers as not yet authorable, so rules
+  on them stay stored and cannot be created. An event produced before the rollback and not yet delivered
+  would be delivered WITHOUT the occurrence re-check — let the outbox drain (§5) before rolling back.
+
+No data is lost or rewritten.
+
 ## 7. Secret rotation
 
 **Platform capability.** Every provider credential is a REFERENCE in configuration and a row in the

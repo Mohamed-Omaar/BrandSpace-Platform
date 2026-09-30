@@ -1926,6 +1926,44 @@ enum, so the template needs no schema. Reminder rows are ordinary `notification`
 **No database change is needed to roll the application back** from PR 3; what the previous release does
 with rows already written is in OPERATIONS.md §6.9.
 
+### 18.12 Phase 2B-3 PR 4 — the analytics producers and M3, indexes only (D-435 – D-441)
+
+**M3 adds three indexes and nothing else**: no table, column, CHECK, policy, enum value or data change.
+`metric_observation` and `publish_job` stay ENABLE + FORCE row-level security.
+
+| Migration                                               | Index                                             | Columns                                                          | Serves                 |
+| ------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------- | ---------------------- |
+| `20261012090000_metric_observation_brand_window_index`  | `metric_observation_brand_metric_granularity_idx` | `workspaceId, brandId, metricKey, granularity, periodStart`      | the weekly sums        |
+| `20261012091000_metric_observation_item_pooling_index`  | `metric_observation_item_metric_granularity_idx`  | `workspaceId, contentItemId, metricKey, granularity`             | per-post pooling       |
+| `20261012092000_publish_job_published_population_index` | `publish_job_published_population_idx` (partial)  | `workspaceId, brandId, publishedAt` `WHERE status = 'PUBLISHED'` | the top-10% population |
+
+Each file is ONE `CREATE INDEX CONCURRENTLY IF NOT EXISTS` statement — Prisma runs a single-statement
+migration outside a transaction block, which `CONCURRENTLY` requires. The build holds SHARE UPDATE
+EXCLUSIVE: reads and writes continue; only DDL and VACUUM on the same table wait. Rollback and a failed
+build are in OPERATIONS.md §6.10.
+
+**Everything else PR 4 writes already had a home:**
+
+| What PR 4 uses                                                     | Added by        | For                                                       |
+| ------------------------------------------------------------------ | --------------- | --------------------------------------------------------- |
+| Trigger enum values WEEKLY_ENGAGEMENT_DROPPED, POST_TOP_10_PERCENT | M1a (D-404)     | the two events                                            |
+| `automation_event_ref_matches_trigger`, rule-addressed CHECK       | M1c             | null / ContentItem references, every event rule-addressed |
+| `automation_rule.armedAt` / `dueWatermark`                         | M1c             | the floor; the settled day judged / the refresh ranked    |
+| `thresholdBreached` / `thresholdCycle` / `thresholdEvaluatedAt`    | D-177           | the weekly drop's edge memory, by compare-and-set         |
+| `automation_event_workspaceId_dedupeKey_key`                       | round 2 (§18.6) | one row per occurrence across replicas and repeats        |
+
+**Dedupe keys** (`recordRuleAutomationEvent`):
+
+| Trigger                     | `refType`     | Key                                          |
+| --------------------------- | ------------- | -------------------------------------------- |
+| `WEEKLY_ENGAGEMENT_DROPPED` | none          | `WEEKLY_ENGAGEMENT_DROPPED:<ruleId>:<cycle>` |
+| `POST_TOP_10_PERCENT`       | `ContentItem` | `POST_TOP_10_PERCENT:<ruleId>:<itemId>`      |
+
+**Every read is tenant- and brand-scoped**, runs on the tenant identity under RLS inside the rule's own
+transaction, and is a Prisma `aggregate` / `groupBy` / `findMany` — no raw SQL. The thresholds live in the
+`automations` configuration domain (`events`, D-436), which the Configuration Service also projects into
+`entitlement_catalogue_snapshot` for the dashboard.
+
 ## 19. Phase 9 — Commerce & Onboarding
 
 Thirteen models: eight tenant-owned commercial tables, two platform-owned, three identity-scoped.
