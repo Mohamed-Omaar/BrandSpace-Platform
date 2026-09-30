@@ -42,6 +42,7 @@ import {
   produceFactExpiring,
   produceReviewWaiting,
   produceScheduleGap,
+  produceTopPost,
   produceWeeklyEngagementDropped,
   resolveAutomationPolicy,
   type AnalyticsEventInputs,
@@ -203,6 +204,7 @@ const DUE_PRODUCERS = [
   ['FACT_EXPIRING', produceFactExpiring],
   // Phase 2B-3 PR 4 — the analytics events.
   ['WEEKLY_ENGAGEMENT_DROPPED', produceWeeklyEngagementDropped],
+  ['POST_TOP_10_PERCENT', produceTopPost],
 ] as const satisfies readonly (readonly [
   AutomationTrigger,
   (context: DueProducerContext) => Promise<DueVisit>,

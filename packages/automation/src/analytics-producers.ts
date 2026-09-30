@@ -1,11 +1,13 @@
 import { recordRuleAutomationEvent } from '@brandspace/database';
 import {
+  brandTopPostPopulation,
   brandWeeklyEngagement,
   readOnce,
+  topShareOf,
   weeklyDropVerdict,
   weeklyEngagementWindows,
 } from './analytics-events';
-import { edgeTransitionSinceArming } from './due-events';
+import { edgeTransitionSinceArming, producerCeiling, producerFloor } from './due-events';
 import { advanceDueWatermark, type DueProducerContext, type DueVisit } from './due-producers';
 import { TIMED_PRODUCER_LIMITS } from './registry';
 import { moveState } from './threshold-producer';
@@ -119,4 +121,103 @@ export async function produceWeeklyEngagementDropped(
   }
   await advanceDueWatermark(db, workspaceId, rule.id, windows.settledEnd);
   return { ...NOTHING, produced, next };
+}
+
+// ---------------------------------------------------------------------------
+// POST_TOP_10_PERCENT
+// ---------------------------------------------------------------------------
+
+/**
+ * A post in the brand's top 10% by pooled engagement rate (report §30), judged
+ * after the brand's analytics refresh and once per rule and post.
+ *
+ * WHEN: the brand's `ANALYTICS_REFRESHED` outbox rows are the signal (report
+ * §11). A refresh newer than the cursor — and behind the usual lag — makes the
+ * rule rank the brand's posts now; the cursor then moves to that refresh, so
+ * the same refresh is never ranked twice.
+ *
+ * WHICH POSTS FIRE: those in the top share whose EARLIEST publication is at or
+ * after the rule's arming — a rule switched on today does not announce last
+ * month's hits. The key is `POST_TOP_10_PERCENT:<ruleId>:<itemId>`, so a post
+ * fires once per rule however many refreshes keep it in the top.
+ *
+ * BOUNDED: at most `maxOccurrencesPerVisit` new posts per visit, the oldest
+ * publication first; with more left the cursor stays and the rule is due again
+ * at once, so nothing is dropped. Posts already announced are skipped before
+ * the cap is counted.
+ */
+export async function produceTopPost(context: DueProducerContext): Promise<DueVisit> {
+  const { db, workspaceId, rule, now, analytics } = context;
+  const floor = producerFloor(rule);
+  if (!floor || !rule.armedAt || !analytics) return NOTHING;
+  const { populationDays, minImpressions, minPopulation } = analytics.events.topPost;
+  if (populationDays === undefined || minImpressions === undefined || minPopulation === undefined) {
+    return NOTHING;
+  }
+  const ceiling = producerCeiling(now);
+  if (ceiling.getTime() <= floor.getTime()) return NOTHING;
+
+  const refresh = await db.automationEvent.findFirst({
+    where: {
+      workspaceId,
+      brandId: rule.brandId,
+      triggerType: 'ANALYTICS_REFRESHED',
+      createdAt: { gt: floor, lte: ceiling },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  });
+  if (!refresh) return NOTHING;
+
+  const since = new Date(now.getTime() - populationDays * DAY_MS);
+  const population = await readOnce(
+    analytics.shared,
+    `top:${workspaceId}:${rule.brandId}:${since.toISOString()}`,
+    () =>
+      brandTopPostPopulation(db, {
+        workspaceId,
+        brandId: rule.brandId,
+        since,
+        minImpressions,
+        minPopulation,
+      }),
+  );
+
+  const armedAt = rule.armedAt;
+  const qualifying = population
+    ? topShareOf(population)
+        .filter((post) => post.firstPublishedAt.getTime() >= armedAt.getTime())
+        .sort(
+          (a, b) =>
+            a.firstPublishedAt.getTime() - b.firstPublishedAt.getTime() || a.id.localeCompare(b.id),
+        )
+    : [];
+  const keyOf = (id: string) => `POST_TOP_10_PERCENT:${rule.id}:${id}`;
+  const announced = new Set(
+    qualifying.length === 0
+      ? []
+      : (
+          await db.automationEvent.findMany({
+            where: { workspaceId, dedupeKey: { in: qualifying.map((post) => keyOf(post.id)) } },
+            select: { dedupeKey: true },
+          })
+        ).map((row) => row.dedupeKey),
+  );
+  const pending = qualifying.filter((post) => !announced.has(keyOf(post.id)));
+  const cap = TIMED_PRODUCER_LIMITS.maxOccurrencesPerVisit;
+  const emit = pending.slice(0, cap);
+  const more = pending.length > cap;
+
+  let produced = 0;
+  for (const post of emit) {
+    const wrote = await recordRuleAutomationEvent(db, workspaceId, {
+      triggerType: 'POST_TOP_10_PERCENT',
+      brandId: rule.brandId,
+      ruleId: rule.id,
+      contentItemId: post.id,
+    });
+    if (wrote) produced += 1;
+  }
+  if (!more) await advanceDueWatermark(db, workspaceId, rule.id, refresh.createdAt);
+  return { ...NOTHING, produced, more };
 }

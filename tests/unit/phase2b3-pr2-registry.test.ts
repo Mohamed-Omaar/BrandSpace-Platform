@@ -38,9 +38,10 @@ const G13_PAIRS: Record<string, readonly string[]> = {
     'SCHEDULE_GAP',
     'FACT_EXPIRING',
     'WEEKLY_ENGAGEMENT_DROPPED',
+    'POST_TOP_10_PERCENT',
   ],
   ADD_TO_CAMPAIGN: ['CONTENT_APPROVED'],
-  MAKE_DRAFT_COPY: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
+  MAKE_DRAFT_COPY: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED', 'POST_TOP_10_PERCENT'],
   // Phase 2B-3 PR 3 — the reminder, on the one trigger that names a review.
   REMIND_REVIEWER: ['REVIEW_WAITING_24H'],
 };
@@ -50,7 +51,7 @@ describe('the compatibility table', () => {
     for (const [type, triggers] of Object.entries(G13_PAIRS)) {
       expect(findAction(type)?.authoringTriggers, type).toEqual(triggers);
     }
-    expect(Object.values(G13_PAIRS).flat()).toHaveLength(15);
+    expect(Object.values(G13_PAIRS).flat()).toHaveLength(17);
   });
 
   it('no legacy action may ever be authored on POST_FAILED', () => {
@@ -102,6 +103,7 @@ describe('the conditions a new rule may name', () => {
       SCHEDULE_GAP: [],
       FACT_EXPIRING: [],
       WEEKLY_ENGAGEMENT_DROPPED: [],
+      POST_TOP_10_PERCENT: G13,
     });
   });
 
@@ -217,6 +219,7 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'SCHEDULE_GAP',
       'FACT_EXPIRING',
       'WEEKLY_ENGAGEMENT_DROPPED',
+      'POST_TOP_10_PERCENT',
     ]);
     expect(AUTOMATION_ACTIONS.filter((a) => a.authorable).map((a) => a.type)).toEqual([
       'SCHEDULE_NEXT_FREE_SLOT',
@@ -266,6 +269,8 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'SCHEDULE_GAP × NOTIFY_PERSON',
       'FACT_EXPIRING × NOTIFY_PERSON',
       'WEEKLY_ENGAGEMENT_DROPPED × NOTIFY_PERSON',
+      'POST_TOP_10_PERCENT × NOTIFY_PERSON',
+      'POST_TOP_10_PERCENT × MAKE_DRAFT_COPY',
     ]);
   });
 

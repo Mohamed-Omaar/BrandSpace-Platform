@@ -89,13 +89,13 @@ describe('registry parity with the database enums', () => {
       'SCHEDULE_GAP',
       'FACT_EXPIRING',
       'WEEKLY_ENGAGEMENT_DROPPED',
+      'POST_TOP_10_PERCENT',
       'ANALYTICS_REFRESHED',
       'METRIC_THRESHOLD_CROSSED',
       'SCHEDULED_TIME',
     ]);
-    expect(PLANNED_AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([
-      'POST_TOP_10_PERCENT',
-    ]);
+    // Phase 2B-3 PR 4 — the last planned trigger ships; none is planned now.
+    expect(PLANNED_AUTOMATION_TRIGGERS.map((trigger) => trigger.type)).toEqual([]);
     // Phase 2B-3 PR 2: four G13 actions ship with their settings; PR 3 ships
     // REMIND_REVIEWER (owner decision D3); the rest stay planned.
     expect(AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
@@ -358,6 +358,8 @@ describe('the stringSet kind and content.channels', () => {
       'POST_FAILED',
       // Phase 2B-3 PR 3 — the waiting review names its post.
       'REVIEW_WAITING_24H',
+      // Phase 2B-3 PR 4 — the ranked post is the reference.
+      'POST_TOP_10_PERCENT',
     ]);
   });
 

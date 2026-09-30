@@ -297,6 +297,20 @@ export const AUTOMATION_TRIGGERS = [
     authorable: true,
     messageKey: 'weeklyEngagementDropped',
   },
+  /*
+   * PHASE 2B-3 PR 4 — a post in the brand's top 10% by pooled engagement rate,
+   * once per rule and post. Rule-derived; the reference is the post itself.
+   */
+  {
+    type: 'POST_TOP_10_PERCENT',
+    config: emptyConfig,
+    refType: 'ContentItem',
+    contentItemVia: 'direct',
+    timeBucketed: false,
+    ruleAddressed: true,
+    authorable: true,
+    messageKey: 'postTop10Percent',
+  },
   {
     type: 'ANALYTICS_REFRESHED',
     config: emptyConfig,
@@ -362,15 +376,9 @@ export interface PlannedTriggerDefinition {
   readonly executable: false;
 }
 
-export const PLANNED_AUTOMATION_TRIGGERS = [
-  {
-    type: 'POST_TOP_10_PERCENT',
-    refType: 'ContentItem',
-    ruleAddressed: true,
-    authorable: false,
-    executable: false,
-  },
-] as const satisfies readonly PlannedTriggerDefinition[];
+// Phase 2B-3 PR 4 — every G13 trigger now ships with its producer; the list
+// stays, typed, for the parity tests and for any trigger a later PR declares.
+export const PLANNED_AUTOMATION_TRIGGERS: readonly PlannedTriggerDefinition[] = [];
 
 /**
  * TRIGGERS THE DATABASE ENUM KEEPS AND THE REGISTRY RETIRED. Named so the
@@ -439,6 +447,8 @@ const CONTENT_REACHABLE_TRIGGERS = [
   'POST_PUBLISHED',
   'POST_FAILED',
   'REVIEW_WAITING_24H',
+  // Phase 2B-3 PR 4 — the ranked post itself.
+  'POST_TOP_10_PERCENT',
 ] as const satisfies readonly AutomationTrigger[];
 
 export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly AutomationTrigger[]> = {
@@ -457,6 +467,7 @@ export const CONDITION_FIELD_TRIGGERS: Record<ConditionField, readonly Automatio
     'SCHEDULE_GAP',
     'FACT_EXPIRING',
     'WEEKLY_ENGAGEMENT_DROPPED',
+    'POST_TOP_10_PERCENT',
   ],
   // Reachable wherever a content item is reachable — which is exactly where
   // `contentItemVia` is not null.
@@ -526,6 +537,8 @@ export const AUTHORING_CONDITION_FIELDS: Partial<
   FACT_EXPIRING: [],
   // Phase 2B-3 PR 4 — none: the drop is the condition (revised report §8).
   WEEKLY_ENGAGEMENT_DROPPED: [],
+  // Phase 2B-3 PR 4 — the ranked post's own fields (revised report §8).
+  POST_TOP_10_PERCENT: G13_CONTENT_CONDITION_FIELDS,
 };
 
 /**
@@ -1233,6 +1246,7 @@ export const AUTOMATION_ACTIONS = [
       'SCHEDULE_GAP',
       'FACT_EXPIRING',
       'WEEKLY_ENGAGEMENT_DROPPED',
+      'POST_TOP_10_PERCENT',
     ],
     catalogue: 'g13',
     executable: true,
@@ -1271,7 +1285,7 @@ export const AUTOMATION_ACTIONS = [
     spendsCredits: false,
     asksFirst: false,
     authorable: true,
-    authoringTriggers: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED'],
+    authoringTriggers: ['CONTENT_APPROVED', 'POST_PUBLISHED', 'POST_FAILED', 'POST_TOP_10_PERCENT'],
     catalogue: 'g13',
     executable: true,
     needsContentItem: true,

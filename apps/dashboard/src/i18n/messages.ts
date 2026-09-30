@@ -2629,6 +2629,7 @@ export const messages = {
       'عند اقتراب انتهاء صلاحية معلومة في عقل العلامة خلال 7 أيام',
     'automations.trigger.WEEKLY_ENGAGEMENT_DROPPED':
       'عند انخفاض التفاعل الأسبوعي بنسبة 20% أو أكثر',
+    'automations.trigger.POST_TOP_10_PERCENT': 'عند وصول منشور إلى أفضل 10% من منشوراتك',
     'automations.action.SCHEDULE_NEXT_FREE_SLOT': 'جدولة في أول موعد متاح',
     'automations.action.NOTIFY_PERSON': 'تنبيه شخص محدد',
     'automations.action.ADD_TO_CAMPAIGN': 'إضافة إلى حملة',
@@ -5946,6 +5947,7 @@ export const messages = {
     'automations.trigger.SCHEDULE_GAP': 'When nothing is scheduled for the next 3 days',
     'automations.trigger.FACT_EXPIRING': 'When a Brand Brain fact expires within 7 days',
     'automations.trigger.WEEKLY_ENGAGEMENT_DROPPED': 'When weekly engagement drops by 20% or more',
+    'automations.trigger.POST_TOP_10_PERCENT': 'When a post ranks in your top 10%',
     'automations.action.SCHEDULE_NEXT_FREE_SLOT': 'Schedule in the next free slot',
     'automations.action.NOTIFY_PERSON': 'Notify a chosen person',
     'automations.action.ADD_TO_CAMPAIGN': 'Add to a campaign',

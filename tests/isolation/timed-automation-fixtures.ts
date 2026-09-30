@@ -55,7 +55,7 @@ export async function timedRule(
     readonly triggerType: AutomationTrigger;
     readonly armedAt: Date | null;
     readonly createdByUserId: string;
-    readonly actionType?: 'NOTIFY_PERSON' | 'REMIND_REVIEWER';
+    readonly actionType?: 'NOTIFY_PERSON' | 'REMIND_REVIEWER' | 'MAKE_DRAFT_COPY';
     readonly conditions?: unknown;
   },
 ): Promise<string> {

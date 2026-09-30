@@ -156,6 +156,26 @@ export async function occurrenceStillHolds(
       });
       return rule?.thresholdBreached === true && rule.thresholdCycle === cycle;
     }
+    /*
+     * PHASE 2B-3 PR 4 — THE POST IS STILL THERE: in the rule's brand, not
+     * deleted, not archived. Its rank is not recomputed: it was in the top when
+     * the brand's numbers were judged, and a ranking re-run at delivery would
+     * judge a different population.
+     */
+    case 'POST_TOP_10_PERCENT': {
+      if (!check.refId) return false;
+      const item = await db.contentItem.findFirst({
+        where: {
+          id: check.refId,
+          workspaceId: check.workspaceId,
+          brandId: check.brandId,
+          deletedAt: null,
+          status: { not: 'ARCHIVED' },
+        },
+        select: { id: true },
+      });
+      return item !== null;
+    }
     default:
       return true;
   }
