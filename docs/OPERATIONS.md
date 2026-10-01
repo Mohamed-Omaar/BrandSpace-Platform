@@ -721,5 +721,10 @@ workers, sharding, reporter and test selection did not change.
 - **Test names in the CI log.** The CI reporters are `dot`, `list`, `html` and `json`; `list` was
   added so a run cancelled before its summary still names each test, its status and its duration.
 
+- **Two E2E shards (D-455).** The Playwright job runs as two shards by project, each with its own
+  database and seed; the check named "Playwright E2E (RTL/LTR + accessibility)" is now an aggregate
+  that passes only when both shards pass. A coverage step fails a shard if the two lists stop covering
+  the whole suite exactly once — a new project must be added to one of them.
+
 **Tracked for the final review:** splitting or sharding the E2E suite, and the type-checking cost of
 the `tests` package. Raising a ceiling again is not the answer to a suite that keeps growing.
