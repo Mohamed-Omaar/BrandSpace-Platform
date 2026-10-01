@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
 import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
+import { withPlatformPrisma } from './platform-prisma';
 
 /**
  * Connected accounts and publishing history, end to end in a real browser —
@@ -121,6 +122,24 @@ test.describe('the publishing history', () => {
   });
 
   test('offers a retry on a failure a retry can fix', async ({ page }) => {
+    /*
+     * THE FAILURE IS RECENT WHEN THIS TEST RUNS, not when the seed ran.
+     *
+     * `seed-social` dates the failed post an hour before the seed, and a post
+     * is retryable only inside its lateness window (`latenessToleranceMinutes`,
+     * 120 by default) measured from `scheduledAtUtc`. A suite that reached this
+     * test more than an hour after seeding found the post past its deadline —
+     * correctly offered no Retry — and failed. Re-dating the same fixture to an
+     * hour before NOW keeps what this test proves: a failed post inside its
+     * lateness window is offered a retry.
+     */
+    const refreshed = await withPlatformPrisma((prisma) =>
+      prisma.publishJob.updateMany({
+        where: { idempotencyKey: 'e2e-publish-fixture', status: 'FAILED' },
+        data: { scheduledAtUtc: new Date(Date.now() - 60 * 60 * 1_000) },
+      }),
+    );
+    expect(refreshed.count, 'the seeded failed post must exist').toBeGreaterThan(0);
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
     await expect(page.locator('[data-testid^="retry-"]').first()).toBeVisible();
