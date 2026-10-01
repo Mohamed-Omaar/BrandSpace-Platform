@@ -139,7 +139,9 @@ function portsFor(
         const userIds = await resolveRecipients({
           db,
           workspaceId,
-          permissionKey: 'publishing.manage',
+          // Phase 2B-3 PR 5 — the action's own permission for a request; an
+          // older NOTIFY rule names none and reaches publishers, as before.
+          permissionKey: input.recipientPermission ?? 'publishing.manage',
           brandId: input.brandId,
         });
         const delivered = await service.create({

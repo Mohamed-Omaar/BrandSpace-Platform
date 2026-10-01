@@ -44,6 +44,13 @@ export interface NotificationPort {
     readonly resourceType: string;
     readonly resourceId: string;
     readonly idempotencyKey: string;
+    /**
+     * PHASE 2B-3 PR 5 — WHO MAY DECIDE IT. For an asks-first request, the one
+     * permission its action requires: only members holding it, in scope for
+     * the brand, are told. Absent (an older NOTIFY rule), `publishing.manage`,
+     * exactly as before.
+     */
+    readonly recipientPermission?: string | undefined;
   }): Promise<{ readonly recipients: number }>;
   /**
    * PHASE 2B-3 PR 2 (owner decision D4) — notify ONE member the rule names.

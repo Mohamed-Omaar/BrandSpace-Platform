@@ -53,7 +53,16 @@ import { campaignPausePort, publishRetryPort } from './automation-ports';
  * tenant pool, where it belongs.
  */
 
-const CONFIRM_PERMISSION = 'publishing.manage';
+/*
+ * THE ROUTE'S FLOOR, NOT THE DECISION (Phase 2B-3 PR 5, report §13.4). Each
+ * asks-first action needs its OWN permission — publishing for a publish or a
+ * retry, campaigns for a pause — and the engine checks exactly that against the
+ * caller, with their live brand scope, on every token and every approval. A
+ * route gate of `publishing.manage` would have locked out a campaign manager
+ * from approving a pause they are entitled to decide; `automation.read` is the
+ * least a person needs to see a request at all.
+ */
+const CONFIRM_PERMISSION = 'automation.read';
 
 const confirmSchema = z.object({
   runId: z.string().uuid(),

@@ -1451,6 +1451,13 @@ export class AutomationEngine {
         resourceType: 'AutomationRun',
         resourceId: run.id,
         idempotencyKey: `automation-confirm:${run.id}`,
+        /*
+         * PHASE 2B-3 PR 5 — TOLD ARE THE PEOPLE WHO MAY DECIDE IT: holders of
+         * this action's permission (a unit test holds every asks-first action
+         * to exactly one). A pause request reaches campaign managers, not only
+         * publishers; a publish or retry request, publishers, as before.
+         */
+        recipientPermission: findAction(rule.actionType)?.permissions.allOf[0],
       });
     }
 
