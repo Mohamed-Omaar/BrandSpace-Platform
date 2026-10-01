@@ -2629,6 +2629,9 @@ export const messages = {
     'automations.trigger.SCHEDULED_TIME': 'في وقت محدد',
     'automations.trigger.ANOMALY_DETECTED': 'عند رصد تغيّر غير معتاد',
     'automations.olderAutomation': '(أتمتة أقدم)',
+    'automations.ideasDrafted': 'تمت صياغة 3 أفكار في مكتبة المحتوى.',
+    'automations.aiCapReached':
+      'بلغ الحد الشهري لإجراءات الأتمتة بالذكاء الاصطناعي — يُستأنف الشهر القادم',
     'automations.action.NOTIFY': 'إرسال إشعار داخلي',
     'automations.action.SUBMIT_FOR_APPROVAL': 'إرسال للمراجعة',
     'automations.action.PLACE_ON_CALENDAR': 'وضع في التقويم',
@@ -5994,6 +5997,8 @@ export const messages = {
     'automations.trigger.SCHEDULED_TIME': 'At a scheduled time',
     'automations.trigger.ANOMALY_DETECTED': 'When an anomaly is detected',
     'automations.olderAutomation': '(older automation)',
+    'automations.ideasDrafted': 'Drafted 3 ideas in your content library.',
+    'automations.aiCapReached': 'Monthly AI limit reached — resumes next month',
     'automations.action.NOTIFY': 'Send an in-app notification',
     'automations.action.SUBMIT_FOR_APPROVAL': 'Submit for review',
     'automations.action.PLACE_ON_CALENDAR': 'Place on the calendar',

@@ -179,3 +179,30 @@ export function requestLine(
     value: proposal.content,
   };
 }
+
+/**
+ * PHASE 2B-3 PR 6 — WHAT A DRAFT_IDEAS RUN MADE, in one line (approved copy):
+ * "Drafted 3 ideas in your content library.", shown only for a run that
+ * finished SUCCEEDED. The screen links it to the brand's drafts.
+ */
+export function ideasLine(run: {
+  readonly actionType: string;
+  readonly status: string;
+}): 'automations.ideasDrafted' | null {
+  return run.actionType === 'DRAFT_IDEAS' && run.status === 'SUCCEEDED'
+    ? 'automations.ideasDrafted'
+    : null;
+}
+
+/**
+ * PHASE 2B-3 PR 6 (owner decision 2a) — THE CAP, ON THE RULE CARD. No
+ * notification: a DRAFT_IDEAS rule says, where its owner manages it, that this
+ * month's AI automation actions are used up. `limit` is the workspace's
+ * ceiling (null unlimited, 0 none); `used` this workspace-local month's count.
+ */
+export function aiCapReached(input: {
+  readonly limit: number | null;
+  readonly used: number;
+}): boolean {
+  return input.limit !== null && input.used >= input.limit;
+}

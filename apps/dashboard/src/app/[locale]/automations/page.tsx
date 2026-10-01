@@ -29,16 +29,23 @@ import {
 } from '@brandspace/automation';
 import { INGESTED_METRIC_KEYS } from '@brandspace/analytics';
 import { PAUSABLE_CAMPAIGN_STATUSES } from '@brandspace/content';
-import { brandIdQueryFilter, brandScopeFilter } from '@brandspace/shared';
-import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
+import {
+  currentEnvironment,
+  inWorkspace,
+  requireWorkspacePage,
+} from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { copilotHref } from '../../../server/copilot-surface';
 import {
+  aiCapReached,
+  ideasLine,
   requestLine as requestLineFor,
   runPresentation,
   waitingHint,
 } from '../../../server/automation-run-display';
+import { createAutomationAiQuota, workspaceMonthLabel } from '@brandspace/entitlements';
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey, successFlash } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -185,10 +192,12 @@ export default async function AutomationsPage({
   );
   const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
 
-  const { rules, runs, needsYou, automationPolicy, entitledActions } = await inAnalytics(
-    workspace.workspaceId,
-    async (services) => {
+  const { rules, runs, needsYou, automationPolicy, entitledActions, aiCapIsReached } =
+    await inAnalytics(workspace.workspaceId, async (services) => {
       const engine = await services.automations();
+      const entitled = await entitledActionTypes((featureKey) =>
+        services.entitlements.can(workspace.workspaceId, featureKey),
+      );
       return {
         /** Phase 2B-3 PR 4 — which analytics events have their thresholds set. */
         automationPolicy: await services.automationPolicy(),
@@ -196,9 +205,33 @@ export default async function AutomationsPage({
          * Phase 2B-3 PR 6 — the actions this workspace's plan includes: the same
          * answer `createRule` refuses on (owner decision 11).
          */
-        entitledActions: await entitledActionTypes((featureKey) =>
-          services.entitlements.can(workspace.workspaceId, featureKey),
-        ),
+        entitledActions: entitled,
+        /**
+         * Phase 2B-3 PR 6 (owner decision 2a) — this month's AI automation
+         * actions are used up. Asked only of a workspace whose plan includes
+         * them: "not entitled" is a different sentence, said in Run history.
+         */
+        aiCapIsReached: entitled.has('DRAFT_IDEAS')
+          ? await (async () => {
+              const quota = createAutomationAiQuota({
+                db: services.db,
+                workspaceId: workspace.workspaceId,
+                environment: currentEnvironment(),
+              });
+              const limit = await quota.limit();
+              if (limit === null) return false;
+              const zone = await services.db.workspace.findUnique({
+                where: { id: workspace.workspaceId },
+                select: { timezone: true },
+              });
+              return aiCapReached({
+                limit,
+                used: await quota.used(
+                  workspaceMonthLabel(zone?.timezone ?? 'UTC', systemClock.now()),
+                ),
+              });
+            })()
+          : false,
         rules: await engine.listRules({
           brandId: selectedBrand?.id,
           brandScope: workspace.brandScope,
@@ -219,8 +252,7 @@ export default async function AutomationsPage({
           permissionKeys: workspace.permissionKeys,
         }),
       };
-    },
-  );
+    });
 
   /*
    * WHAT A PROPOSED PUBLISH WOULD PUBLISH (P6-12). The confirm button used to
@@ -923,6 +955,18 @@ export default async function AutomationsPage({
                         {t('automations.olderAutomation')}
                       </span>
                     ) : null}
+                    {rule.actionType === 'DRAFT_IDEAS' && aiCapIsReached ? (
+                      <span
+                        data-testid={`automation-ai-cap-${rule.id}`}
+                        style={{
+                          display: 'block',
+                          ...typographyTokens.caption,
+                          color: colorTokens.textSecondary,
+                        }}
+                      >
+                        {t('automations.aiCapReached')}
+                      </span>
+                    ) : null}
                   </span>
                   <span style={{ display: 'flex', gap: spacingTokens.sm, alignItems: 'center' }}>
                     <StatusBadge
@@ -1037,6 +1081,18 @@ export default async function AutomationsPage({
                         <span data-testid={`automation-run-failure-${run.id}`}>
                           {t(shown.reason.key)}
                         </span>
+                      ) : null}
+                      {/*
+                        PHASE 2B-3 PR 6 — WHERE THE IDEAS ARE: the brand's
+                        drafts in the content library.
+                      */}
+                      {ideasLine(run) ? (
+                        <Link
+                          href={`/${locale}/content?brand=${run.brandId}&status=DRAFT`}
+                          data-testid={`automation-run-ideas-${run.id}`}
+                        >
+                          {t('automations.ideasDrafted')}
+                        </Link>
                       ) : null}
                       {proposals.has(run.id) ? (
                         <span data-testid={`automation-proposal-${run.id}`}>

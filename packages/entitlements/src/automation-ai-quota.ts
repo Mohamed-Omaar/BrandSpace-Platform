@@ -75,6 +75,8 @@ export interface AutomationAiQuota {
   claim(runId: string, monthLabel: string): Promise<'claimed' | 'cap_reached'>;
   /** Give the run's slot back. Idempotent per run; a no-op if none was taken. */
   release(runId: string, monthLabel: string): Promise<void>;
+  /** Slots taken in `monthLabel`. A read: nothing moves. */
+  used(monthLabel: string): Promise<number>;
 }
 
 export function createAutomationAiQuota(input: {
@@ -111,6 +113,17 @@ export function createAutomationAiQuota(input: {
         if (error instanceof AppError && error.code === 'QUOTA_EXCEEDED') return 'cap_reached';
         throw error;
       }
+    },
+
+    async used(monthLabel) {
+      const consumption = await usage.consumption({
+        workspaceId,
+        featureKey: AUTOMATION_AI_ACTIONS_FEATURE,
+        limitValue: null,
+        period: 'billing_cycle',
+        cycle: workspaceMonthWindow(monthLabel),
+      });
+      return consumption.used;
     },
 
     async release(runId, monthLabel) {

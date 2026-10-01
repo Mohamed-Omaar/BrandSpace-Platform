@@ -140,7 +140,8 @@ describe('the Copilot offers and admits exactly what the plan includes', () => {
     expect(route).toContain('await entitledActionTypes((featureKey) =>');
     expect(route).toContain('entitlements: entitlementGate(db, workspaceId)');
     const page = read('apps/dashboard/src/app/[locale]/automations/page.tsx');
-    expect(page).toContain('entitledActions: await entitledActionTypes((featureKey) =>');
+    expect(page).toContain('await entitledActionTypes((featureKey) =>');
+    expect(page).toContain('entitledActions: entitled,');
     expect(page).toContain('entitledActions.has(action.type)');
     const engine = read('packages/automation/src/engine.ts');
     expect(engine).toContain(
