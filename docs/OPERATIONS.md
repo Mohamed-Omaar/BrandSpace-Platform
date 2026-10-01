@@ -609,6 +609,31 @@ outside one transaction: FORCE must never be observable as lifted.
 leave the column out and now get `{}`; it reads `{}` exactly as it read NULL. Forward-only (§6): no
 down script; NULL cannot be restored and would mean the same thing.
 
+### 6.12 Phase 2B-3 PR 5: M4's index, and rolling the application back (D-445 – D-453)
+
+M4 (`20261014090000_automation_run_awaiting_expiry_index`) only creates one partial index, with
+`CREATE INDEX CONCURRENTLY IF NOT EXISTS` as the file's single statement (DATABASE.md §18.14). While
+it builds, `automation_run` keeps taking reads and writes; the build waits for transactions already
+running on the table.
+
+- **A failed or interrupted build leaves an INVALID index**, maintained on writes but never used.
+  Find it with `SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;`, then
+  `DROP INDEX CONCURRENTLY IF EXISTS "automation_run_awaiting_expiry_idx";` and deploy again —
+  `IF NOT EXISTS` would otherwise skip the rebuild. Never mark it valid by hand.
+- **Removing it** (only if it is shown to hurt): the same `DROP INDEX CONCURRENTLY`, one statement,
+  outside a transaction. The migration stays recorded as applied (§6.1); the sweep still runs, only
+  slower. Put it back with the migration's own statement.
+- **Rolling the APPLICATION back from PR 5 needs no database change.** The previous release neither
+  reads nor needs the index.
+- **What the previous release does with PR 5's rows:** rules with RETRY_PUBLISH or PAUSE_CAMPAIGN stay
+  stored; it treats both actions as planned, so it neither creates nor runs them, and a request
+  already waiting can no longer be approved there (its confirm route has no retry or pause port) — it
+  lapses at its window and is closed by the sweep as before. Decide waiting requests, or let them
+  lapse, before rolling back. A campaign already paused stays PAUSED; a job already re-queued
+  publishes as any queued job does.
+
+No data is lost or rewritten.
+
 ## 7. Secret rotation
 
 **Platform capability.** Every provider credential is a REFERENCE in configuration and a row in the
