@@ -7,6 +7,7 @@
  * D-06…D-12 are unanswered owner decisions (docs/DECISIONS.md §4.2).
  */
 export * from './automation-ai-cap';
+export * from './automation-ai-quota';
 export * from './beta-cohorts';
 export * from './credit-ledger';
 export * from './credit-policy';
