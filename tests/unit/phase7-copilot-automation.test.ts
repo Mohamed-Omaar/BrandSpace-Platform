@@ -303,6 +303,9 @@ describe('the automation registry is CLOSED, and small on purpose', () => {
       'MAKE_DRAFT_COPY',
       // Phase 2B-3 PR 3 — the reviewer reminder joins it.
       'REMIND_REVIEWER',
+      // Phase 2B-3 PR 5 — the two asks-first actions.
+      'RETRY_PUBLISH',
+      'PAUSE_CAMPAIGN',
     ]);
   });
 
@@ -320,9 +323,14 @@ describe('the automation registry is CLOSED, and small on purpose', () => {
     }
   });
 
-  it('exactly one action is external, and it is the one that leaves the platform', () => {
+  it('exactly three actions are external — publish, and since PR 5 retry and pause — and each asks first', () => {
     const external = AUTOMATION_ACTIONS.filter((a) => isExternalAction(a.type));
-    expect(external.map((a) => a.type)).toEqual(['PROPOSE_PUBLISH']);
+    expect(external.map((a) => a.type)).toEqual([
+      'PROPOSE_PUBLISH',
+      'RETRY_PUBLISH',
+      'PAUSE_CAMPAIGN',
+    ]);
+    for (const action of external) expect(action.asksFirst, action.type).toBe(true);
     expect(isExternalAction('NOTIFY')).toBe(false);
   });
 

@@ -5,7 +5,7 @@ import {
   TenantAutomationPolicySource,
   campaignTargetResolves,
   gatherFacts,
-  type AutomationActor,
+  memberAuthorityResolver,
   type AutomationNotificationTemplate,
   type AutomationPorts,
   type MetricWindowPort,
@@ -40,7 +40,11 @@ import {
   isAppError,
   systemClock,
 } from '@brandspace/shared';
-import { unreachableChannelGate } from '@brandspace/social-connectors';
+import {
+  publishRetryRefusal,
+  TenantPublishingPolicySource,
+  unreachableChannelGate,
+} from '@brandspace/social-connectors';
 
 /**
  * Evaluate the automation rules listening for one event.
@@ -70,37 +74,6 @@ import { unreachableChannelGate } from '@brandspace/social-connectors';
  */
 
 const log = createLogger({ context: { component: 'worker.automation' } });
-
-/**
- * The CURRENT authority of a rule's creator, or null when they no longer have
- * any.
- *
- * Reads through the tenant-scoped client, so a membership in another workspace is
- * invisible rather than merely filtered.
- */
-function actorResolver(
-  db: TenantScopedClient,
-  workspaceId: string,
-): (userId: string) => Promise<AutomationActor | null> {
-  return async (userId: string) => {
-    const membership = await db.membership.findFirst({
-      where: { workspaceId, userId, status: 'ACTIVE' },
-      select: {
-        brandScope: true,
-        role: {
-          select: { key: true, permissions: { select: { permission: { select: { key: true } } } } },
-        },
-      },
-    });
-    if (!membership) return null;
-    return {
-      userId,
-      roleKey: membership.role.key,
-      permissionKeys: membership.role.permissions.map((row) => row.permission.key),
-      brandScope: membership.brandScope,
-    };
-  };
-}
 
 function portsFor(
   db: TenantScopedClient,
@@ -166,7 +139,9 @@ function portsFor(
         const userIds = await resolveRecipients({
           db,
           workspaceId,
-          permissionKey: 'publishing.manage',
+          // Phase 2B-3 PR 5 — the action's own permission for a request; an
+          // older NOTIFY rule names none and reaches publishers, as before.
+          permissionKey: input.recipientPermission ?? 'publishing.manage',
           brandId: input.brandId,
         });
         const delivered = await service.create({
@@ -407,6 +382,24 @@ function portsFor(
     // Phase 2B-3 PR 3 — Brand Brain's one usable-fact rule, for the FACT_EXPIRING
     // re-check (owner decision F).
     knowledge: { asOf: knowledgeAsOfSafe, usableWhere: usableKnowledgeWhere },
+    /*
+     * PHASE 2B-3 PR 5 (owner decision D3) — WOULD A RETRY BE REFUSED? Asked
+     * before a person is asked to approve one. A READ-ONLY function of the
+     * tenant's client and publishing policy: nothing that can publish or queue
+     * is constructed here.
+     */
+    publishRetryCheck: {
+      async refusal(input) {
+        const policy = await new TenantPublishingPolicySource(db, environment).load();
+        return publishRetryRefusal({
+          db,
+          workspaceId: input.workspaceId,
+          policy,
+          jobId: input.jobId,
+          brandScope: input.brandScope,
+        });
+      },
+    },
     // NO PUBLISH PORT HERE. See the file comment: the confirmation arrives in
     // `apps/api`, with a person's session behind it, and the port is wired there.
   };
@@ -466,7 +459,7 @@ export async function processAutomationJob(payload: EvaluateAutomationPayload): 
     };
     const delivered = await engine.deliver({
       event,
-      resolveActor: actorResolver(db, payload.workspaceId),
+      resolveActor: memberAuthorityResolver(db, payload.workspaceId),
     });
 
     /*

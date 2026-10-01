@@ -40,13 +40,16 @@ describe('D-332 · the refusal', () => {
       source.indexOf('  async reconnectedRetryable('),
     );
     for (const body of [retry, reconnected]) {
+      // The job's write — `update(` or, since PR 5, the conditional `updateMany(`.
+      const write = body.search(/publishJob\.update(Many)?\(/);
+      expect(write).toBeGreaterThan(0);
       const check = body.indexOf('throw publishJobPastDeadline()');
       expect(check).toBeGreaterThan(0);
-      expect(check).toBeLessThan(body.indexOf('publishJob.update('));
+      expect(check).toBeLessThan(write);
       // Item 9 (D-332 amended): and a post scheduled again is never retried.
       const superseded = body.indexOf('throw publishJobSuperseded()');
       expect(superseded).toBeGreaterThan(0);
-      expect(superseded).toBeLessThan(body.indexOf('publishJob.update('));
+      expect(superseded).toBeLessThan(write);
     }
   });
 });

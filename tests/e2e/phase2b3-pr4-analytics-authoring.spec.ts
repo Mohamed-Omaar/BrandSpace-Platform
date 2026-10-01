@@ -166,7 +166,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   // --- Each event: its actions and its conditions ------------------------------
   await trigger.selectOption('WEEKLY_ENGAGEMENT_DROPPED');
   await expect(action).toHaveValue('');
-  expect(await values(page, 'automation-action')).toEqual(['', 'NOTIFY_PERSON']);
+  // Phase 2B-3 PR 5 — a drop may pause a campaign (asks first).
+  expect(await values(page, 'automation-action')).toEqual(['', 'NOTIFY_PERSON', 'PAUSE_CAMPAIGN']);
   // No condition to choose: the event is the condition.
   expect(await values(page, 'automation-condition-field')).toEqual(['']);
 

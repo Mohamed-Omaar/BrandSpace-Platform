@@ -118,6 +118,8 @@ export interface AutomationFormLabels {
   /** Phase 2B-3 PR 2 — the G13 actions' own settings. */
   readonly actionPerson: string;
   readonly actionCampaign: string;
+  /** Phase 2B-3 PR 5 — what a pause does and does not do. */
+  readonly pauseNote: string;
   /**
    * Phase 2B-3 PR 2 — the empty first option of the trigger and action pickers
    * on a NEW rule, and what the browser says when either is left unchosen.
@@ -185,6 +187,11 @@ export interface AutomationFormProps {
    */
   readonly actionPeopleByBrand: Readonly<Record<string, readonly ConditionChoice[]>>;
   readonly actionCampaignsByBrand: Readonly<Record<string, readonly ConditionChoice[]>>;
+  /**
+   * Phase 2B-3 PR 5 — the campaigns `PAUSE_CAMPAIGN` may name, per rule brand:
+   * only PLANNED or ACTIVE ones, the engine's save-time rule.
+   */
+  readonly actionPausableCampaignsByBrand: Readonly<Record<string, readonly ConditionChoice[]>>;
   readonly metrics: readonly { readonly key: string; readonly label: string }[];
   readonly labels: AutomationFormLabels;
   readonly action: (formData: FormData) => void | Promise<void>;
@@ -508,6 +515,33 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                 ),
               )}
             </select>
+          </label>
+        ) : null}
+
+        {actionType === 'PAUSE_CAMPAIGN' ? (
+          <label style={FIELD}>
+            <span style={caption}>{props.labels.actionCampaign}</span>
+            <select
+              name="actionCampaignId"
+              required
+              className="bs-control"
+              data-testid="automation-action-pause-campaign"
+              defaultValue={initial?.actionCampaignId ?? undefined}
+              key={`pause-campaign-${brandId}`}
+              aria-describedby="automation-pause-note"
+            >
+              {targetChoices(
+                props.actionPausableCampaignsByBrand,
+                initial?.actionCampaignId ?? null,
+              ).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span id="automation-pause-note" style={caption} data-testid="automation-pause-note">
+              {props.labels.pauseNote}
+            </span>
           </label>
         ) : null}
 

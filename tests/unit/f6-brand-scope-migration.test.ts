@@ -62,9 +62,11 @@ describe('F6 — the brandScope migration', () => {
     expect(code).not.toMatch(/\b(DELETE|DROP|TRUNCATE|INSERT)\b/);
   });
 
-  it('is the newest migration in the manifest, directly after M3', () => {
+  it('comes directly after M3, and only the PR 5 M4 index follows it', () => {
     const at = EXPECTED_MIGRATIONS.indexOf(NAME);
-    expect(at).toBe(EXPECTED_MIGRATIONS.length - 1);
+    expect(EXPECTED_MIGRATIONS.slice(at + 1)).toEqual([
+      '20261014090000_automation_run_awaiting_expiry_index',
+    ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe(
       '20261012092000_publish_job_published_population_index',
     );

@@ -603,8 +603,19 @@ describe('existing stored rules of every shape behave exactly as before', () => 
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
 
     entitlementQuestions = [];
-    // Phase 2B-3 PR 3: the three actions still planned. REMIND_REVIEWER now
-    // executes; its runs are proved in phase2b3-pr3-remind-reviewer.
+    // Phase 2B-3 PR 3: REMIND_REVIEWER executes; its runs are proved in
+    // phase2b3-pr3-remind-reviewer. Phase 2B-3 PR 5: RETRY_PUBLISH and
+    // PAUSE_CAMPAIGN execute too, so a row written around the engine for them
+    // is refused by their own target checks rather than as unknown; either way
+    // nobody is asked and nothing is performed. Their runs are proved in
+    // phase2b3-pr5-asks-first. DRAFT_IDEAS is still planned.
+    const expected: Record<string, readonly [string, string]> = {
+      // A content item is not a failed attempt: there is nothing to retry.
+      RETRY_PUBLISH: ['SKIPPED', 'content_unavailable'],
+      // No campaign named: there is nothing to pause.
+      PAUSE_CAMPAIGN: ['BLOCKED_BY_POLICY', 'campaign_unavailable'],
+      DRAFT_IDEAS: ['FAILED', 'unknown_action'],
+    };
     for (const actionType of ['RETRY_PUBLISH', 'PAUSE_CAMPAIGN', 'DRAFT_IDEAS']) {
       const planned = await inA((db) =>
         db.automationRule.create({
@@ -629,10 +640,8 @@ describe('existing stored rules of every shape behave exactly as before', () => 
         }),
       });
       // Never AWAITING_CONFIRMATION, never performed.
-      expect([outcome.status, outcome.run?.failureCode], actionType).toEqual([
-        'FAILED',
-        'unknown_action',
-      ]);
+      expect(outcome.status, actionType).not.toBe('AWAITING_CONFIRMATION');
+      expect([outcome.status, outcome.run?.failureCode], actionType).toEqual(expected[actionType]);
     }
     expect(entitlementQuestions).toEqual([]);
   });

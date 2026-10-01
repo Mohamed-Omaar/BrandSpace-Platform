@@ -1207,12 +1207,13 @@ describe('a proposed external action can actually be confirmed by a permitted hu
     const issued = await inA((db) =>
       engineFor(db, []).reissueRunConfirmation({ runId, actor: confirmer() }),
     );
-    expect(issued.token.length).toBeGreaterThan(16);
+    // PR 5: the token is null only when the request was ENDED; not here.
+    expect(issued.token?.length).toBeGreaterThan(16);
 
     // THE RAW TOKEN IS NOT IN THE ROW. Only its digest.
     const stored = await inA((db) => db.automationRun.findFirstOrThrow({ where: { id: runId } }));
     expect(stored.confirmationTokenHash).not.toBe(issued.token);
-    expect(JSON.stringify(stored)).not.toContain(issued.token);
+    expect(JSON.stringify(stored)).not.toContain(issued.token!);
   });
 
   it('ISSUING TWICE LEAVES ONE LIVE CREDENTIAL, and the first stops working', async () => {
@@ -1224,9 +1225,10 @@ describe('a proposed external action can actually be confirmed by a permitted hu
       engineFor(db, []).reissueRunConfirmation({ runId, actor: confirmer() }),
     );
     expect(second.token).not.toBe(first.token);
+    expect(first.token).toEqual(expect.any(String));
 
     const refused = await failure(
-      inA((db) => engineFor(db, []).confirmRun({ runId, token: first.token, actor: confirmer() })),
+      inA((db) => engineFor(db, []).confirmRun({ runId, token: first.token!, actor: confirmer() })),
     );
     expect(refused.code).toBe('CONFLICT');
   });

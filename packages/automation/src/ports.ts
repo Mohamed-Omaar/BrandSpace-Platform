@@ -44,6 +44,13 @@ export interface NotificationPort {
     readonly resourceType: string;
     readonly resourceId: string;
     readonly idempotencyKey: string;
+    /**
+     * PHASE 2B-3 PR 5 — WHO MAY DECIDE IT. For an asks-first request, the one
+     * permission its action requires: only members holding it, in scope for
+     * the brand, are told. Absent (an older NOTIFY rule), `publishing.manage`,
+     * exactly as before.
+     */
+    readonly recipientPermission?: string | undefined;
   }): Promise<{ readonly recipients: number }>;
   /**
    * PHASE 2B-3 PR 2 (owner decision D4) — notify ONE member the rule names.
@@ -246,6 +253,64 @@ export interface EntitlementPort {
   allows(featureKey: string): Promise<boolean>;
 }
 
+/**
+ * PHASE 2B-3 PR 5 — WHY A RETRY WOULD BE REFUSED, asked without changing
+ * anything. Wired in the WORKER (owner decision D3: a request certain to be
+ * refused is never put to a person) and in the API. It holds nothing that can
+ * publish.
+ */
+export interface PublishRetryCheckPort {
+  refusal(input: {
+    readonly workspaceId: string;
+    readonly jobId: string;
+    readonly brandScope: readonly string[];
+  }): Promise<'not_found' | 'not_retryable' | 'deadline_passed' | 'superseded' | null>;
+}
+
+/**
+ * PHASE 2B-3 PR 5 — RETRY A FAILED POST, once a person approved it. Wired on
+ * the API's confirm route ONLY, beside the publish port, and never in the
+ * worker: the engine calls it downstream of the confirmation by construction.
+ * It re-queues the job through the publishing pipeline's own `retry()`, as the
+ * APPROVER, with the approver's live scope.
+ */
+export interface PublishRetryPort {
+  retry(input: {
+    readonly workspaceId: string;
+    readonly jobId: string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+  }): Promise<
+    | { readonly kind: 'queued' }
+    | {
+        readonly kind: 'refused';
+        readonly reason: 'not_found' | 'not_retryable' | 'deadline_passed' | 'superseded';
+      }
+  >;
+}
+
+/**
+ * PHASE 2B-3 PR 5 — PAUSE THE CAMPAIGN A RULE NAMES, once a person approved
+ * it. Wired on the API's confirm route only. `CampaignService.pause` decides:
+ * the named campaign of the rule's brand, within the approver's scope, from
+ * PLANNED or ACTIVE only; anything else is a typed refusal and nothing moves.
+ */
+export interface CampaignPausePort {
+  pause(input: {
+    readonly workspaceId: string;
+    readonly brandId: string;
+    readonly campaignId: string;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+  }): Promise<
+    | { readonly kind: 'paused' }
+    | {
+        readonly kind: 'refused';
+        readonly reason: 'campaign_unavailable' | 'campaign_not_pausable';
+      }
+  >;
+}
+
 export interface AutomationPorts {
   readonly entitlements?: EntitlementPort | undefined;
   readonly notifications?: NotificationPort | undefined;
@@ -265,4 +330,10 @@ export interface AutomationPorts {
    * re-check. Absent, that event fails closed.
    */
   readonly knowledge?: KnowledgeValidityPort | undefined;
+  /** Phase 2B-3 PR 5 — see `PublishRetryCheckPort`. */
+  readonly publishRetryCheck?: PublishRetryCheckPort | undefined;
+  /** Phase 2B-3 PR 5 — see `PublishRetryPort`. API confirm route only. */
+  readonly publishRetry?: PublishRetryPort | undefined;
+  /** Phase 2B-3 PR 5 — see `CampaignPausePort`. API confirm route only. */
+  readonly campaignPause?: CampaignPausePort | undefined;
 }

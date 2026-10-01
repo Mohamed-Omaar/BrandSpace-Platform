@@ -32,6 +32,7 @@ import {
 } from './phase7-context';
 // ONE IMPLEMENTATION OF THE PLAN CEILING, shared with the Copilot route.
 import { scheduleQuota } from './schedule-quota';
+import { campaignPausePort, publishRetryPort } from './automation-ports';
 
 /**
  * THE ONE ROUTE AN AUTOMATION'S EXTERNAL ACTION CAN REACH THE WORLD THROUGH.
@@ -52,7 +53,16 @@ import { scheduleQuota } from './schedule-quota';
  * tenant pool, where it belongs.
  */
 
-const CONFIRM_PERMISSION = 'publishing.manage';
+/*
+ * THE ROUTE'S FLOOR, NOT THE DECISION (Phase 2B-3 PR 5, report §13.4). Each
+ * asks-first action needs its OWN permission — publishing for a publish or a
+ * retry, campaigns for a pause — and the engine checks exactly that against the
+ * caller, with their live brand scope, on every token and every approval. A
+ * route gate of `publishing.manage` would have locked out a campaign manager
+ * from approving a pause they are entitled to decide; `automation.read` is the
+ * least a person needs to see a request at all.
+ */
+const CONFIRM_PERMISSION = 'automation.read';
 
 const confirmSchema = z.object({
   runId: z.string().uuid(),
@@ -240,6 +250,16 @@ export function registerAutomationRoutes(app: FastifyInstance): void {
           { prisma: getPrisma() },
         );
 
+        /*
+         * PHASE 2B-3 PR 5 (D1, D2) — THE REQUEST WAS ENDED, NOT ISSUED. Its rule
+         * was switched off or its creator no longer holds what it needs; the
+         * engine ended it BLOCKED inside this transaction, which commits
+         * because nothing threw. The caller gets the ordinary refusal and the
+         * run history says why.
+         */
+        if (issued.token === null) {
+          return reply.code(409).send({ error: { code: 'CONFLICT' } });
+        }
         return reply.send({
           runId: issued.run.id,
           // RETURNED EXACTLY ONCE. Only its hash is stored.
@@ -283,6 +303,13 @@ export function registerAutomationRoutes(app: FastifyInstance): void {
               // entitlement gate, asked again at the moment the action happens.
               ports: {
                 publishing: publishPort(db),
+                // Phase 2B-3 PR 5 — the two other asks-first actions, here only.
+                publishRetry: publishRetryPort(db, {
+                  environment: currentEnvironment(),
+                  loadPolicy: () =>
+                    resolvePublishingPolicy(configurationService(), currentEnvironment()),
+                }),
+                campaignPause: campaignPausePort(db),
                 entitlements: entitlementGate(db, caller.workspaceId),
               },
               // A REFUSED CONFIRMATION MUST OUTLIVE THE TRANSACTION THAT REFUSED

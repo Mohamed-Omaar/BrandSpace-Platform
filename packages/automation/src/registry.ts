@@ -1104,6 +1104,13 @@ export function isAutomationNotifyTemplate(value: unknown): value is AutomationN
  */
 export const NOTIFY_TEMPLATE_NOT_ALLOWED = 'notify_template_not_allowed';
 
+/**
+ * Phase 2B-3 PR 5 (owner decision D2, F7's slice) — an asks-first request is
+ * approved after its rule was switched off or deleted. The request ends
+ * BLOCKED with this code and nothing is performed.
+ */
+export const RULE_DISABLED = 'rule_disabled';
+
 /** The triggers the four pre-G13 actions were authored with. */
 const LEGACY_AUTHORING_TRIGGERS = [
   'CONTENT_APPROVED',
@@ -1313,6 +1320,54 @@ export const AUTOMATION_ACTIONS = [
     needsContentItem: false,
     messageKey: 'remindReviewer',
   },
+  /*
+   * PHASE 2B-3 PR 5 — RETRY THE FAILED POST, ASKS FIRST. Its target is the
+   * failed attempt the event names (no setting): through it the publish job,
+   * in the rule's brand. When the request would be created, `retry()`'s own
+   * refusals are asked read-only and a retry certain to be refused is never
+   * put to anybody (owner decision D3). At approval the attempt must still be
+   * the job's latest, then the pipeline's `retry()` decides, as the approver.
+   */
+  {
+    type: 'RETRY_PUBLISH',
+    config: emptyConfig,
+    actionClass: 'EXTERNAL_OR_DESTRUCTIVE',
+    permissions: { allOf: ['publishing.manage'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: true,
+    authorable: true,
+    authoringTriggers: ['POST_FAILED'],
+    catalogue: 'g13',
+    executable: true,
+    needsContentItem: true,
+    messageKey: 'retryPublish',
+  },
+  /*
+   * PHASE 2B-3 PR 5 — PAUSE A CAMPAIGN, ASKS FIRST. The target is ALWAYS the
+   * rule's explicit `campaignId` (report §22, owner answer B-2); no condition
+   * ever selects it. Checked on save, when the request would be created and at
+   * approval: a live campaign of the rule's brand, PLANNED or ACTIVE. Pausing
+   * is the status alone (owner decision D4) — scheduled posts still go out.
+   */
+  {
+    type: 'PAUSE_CAMPAIGN',
+    config: z.object({
+      /** One campaign of the rule's brand, PLANNED or ACTIVE when the rule is saved. */
+      campaignId: z.string().uuid(),
+    }),
+    actionClass: 'EXTERNAL_OR_DESTRUCTIVE',
+    permissions: { allOf: ['campaigns.manage'], anyOf: [] },
+    entitlements: [],
+    spendsCredits: false,
+    asksFirst: true,
+    authorable: true,
+    authoringTriggers: ['POST_FAILED', 'CAMPAIGN_STARTED', 'WEEKLY_ENGAGEMENT_DROPPED'],
+    catalogue: 'g13',
+    executable: true,
+    needsContentItem: false,
+    messageKey: 'pauseCampaign',
+  },
 ] as const satisfies readonly ActionDefinition[];
 
 /**
@@ -1350,26 +1405,6 @@ export const PLANNED_AUTOMATION_ACTIONS = [
     entitlements: ['limit.automation_ai_actions'],
     spendsCredits: true,
     asksFirst: false,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'RETRY_PUBLISH',
-    actionClass: 'EXTERNAL_OR_DESTRUCTIVE',
-    permissions: { allOf: ['publishing.manage'], anyOf: [] },
-    entitlements: [],
-    spendsCredits: false,
-    asksFirst: true,
-    authorable: false,
-    executable: false,
-  },
-  {
-    type: 'PAUSE_CAMPAIGN',
-    actionClass: 'EXTERNAL_OR_DESTRUCTIVE',
-    permissions: { allOf: ['campaigns.manage'], anyOf: [] },
-    entitlements: [],
-    spendsCredits: false,
-    asksFirst: true,
     authorable: false,
     executable: false,
   },
@@ -1490,6 +1525,14 @@ export const ACTION_OUTCOME_STATUS = {
   occurrence_stale: 'SKIPPED',
   // Phase 2B-3 PR 3 — nobody can decide the review right now (decision D).
   no_eligible_reviewer: 'BLOCKED_BY_POLICY',
+  // Phase 2B-3 PR 5 — RETRY_PUBLISH: the post failed again, or was retried,
+  // since the request was made; then `retry()`'s own refusals.
+  failure_superseded: 'BLOCKED_BY_POLICY',
+  publish_not_retryable: 'BLOCKED_BY_POLICY',
+  publish_deadline_passed: 'BLOCKED_BY_POLICY',
+  superseded_by_new_slot: 'BLOCKED_BY_POLICY',
+  // Phase 2B-3 PR 5 — PAUSE_CAMPAIGN: the campaign is no longer PLANNED or ACTIVE.
+  campaign_not_pausable: 'BLOCKED_BY_POLICY',
 } as const satisfies Record<string, 'SKIPPED' | 'BLOCKED_BY_POLICY'>;
 export type ActionOutcomeCode = keyof typeof ACTION_OUTCOME_STATUS;
 

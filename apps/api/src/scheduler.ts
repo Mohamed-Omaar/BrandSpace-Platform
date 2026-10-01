@@ -27,6 +27,7 @@ import {
   getPrisma,
   recordRuleAutomationEvent,
   withWorkspace,
+  writeAuditEvent,
   type AutomationTrigger,
   type PrismaClient,
 } from '@brandspace/database';
@@ -1124,14 +1125,27 @@ export class MaintenanceScheduler {
     const platform = getPlatformClient();
     const now = this.#clock.now();
 
+    /*
+     * OLDEST WINDOW FIRST, read through M4 (Phase 2B-3 PR 5):
+     * `automation_run_awaiting_expiry_idx` on (confirmationExpiresAt) WHERE
+     * status = 'AWAITING_CONFIRMATION' — the open requests only, so the scan
+     * does not grow with the run history.
+     */
     const stale = await platform.automationRun.findMany({
       where: {
         status: 'AWAITING_CONFIRMATION',
         confirmedAt: null,
         confirmationExpiresAt: { lt: now },
       },
-      select: { id: true, workspaceId: true },
-      orderBy: { startedAt: 'asc' },
+      select: {
+        id: true,
+        workspaceId: true,
+        brandId: true,
+        ruleId: true,
+        actionType: true,
+        correlationId: true,
+      },
+      orderBy: [{ confirmationExpiresAt: 'asc' }, { id: 'asc' }],
       take: batch,
     });
 
@@ -1139,8 +1153,8 @@ export class MaintenanceScheduler {
     for (const run of stale) {
       const closed = await withWorkspace(
         run.workspaceId,
-        (db) =>
-          db.automationRun.updateMany({
+        async (db) => {
+          const ended = await db.automationRun.updateMany({
             // CONDITIONAL, so a confirmation landing in the same instant wins
             // rather than being erased by the sweep.
             where: {
@@ -1156,7 +1170,27 @@ export class MaintenanceScheduler {
               confirmationTokenHash: null,
               finishedAt: now,
             },
-          }),
+          });
+          /*
+           * PHASE 2B-3 PR 5 — "LAPSED", IN THE ACTIVITY LOG. Written in the SAME
+           * transaction as the status, and only by the sweep that actually
+           * closed the request, so a lapse is recorded once and never for a
+           * request somebody decided in time. Nothing was performed.
+           */
+          if (ended.count > 0) {
+            await writeAuditEvent(db, run.workspaceId, {
+              action: 'automation.run_expired',
+              actorType: 'AUTOMATION',
+              resourceType: 'AutomationRun',
+              resourceId: run.id,
+              brandId: run.brandId,
+              traceId: run.correlationId,
+              reason: 'confirmation_window_closed',
+              after: { ruleId: run.ruleId, actionType: run.actionType, status: 'EXPIRED' },
+            });
+          }
+          return ended;
+        },
         { prisma: getPrisma() },
       );
       if (closed.count > 0) expired += 1;

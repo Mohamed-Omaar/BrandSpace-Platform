@@ -189,6 +189,12 @@ export interface MaterialiseResult {
   readonly skipReason: string | null;
 }
 
+/**
+ * Why `retry()` would refuse a job (Phase 2B-3 PR 5). `retryRefusal()` answers
+ * with one of these, read-only; `retry()` throws the matching error.
+ */
+export type RetryRefusal = 'not_found' | 'not_retryable' | 'deadline_passed' | 'superseded';
+
 export interface ExecuteResult {
   readonly jobId: string;
   readonly status: PublishJob['status'];
@@ -1364,6 +1370,31 @@ export class PublishPipelineService {
   }
 
   /**
+   * WOULD `retry()` REFUSE THIS JOB, AND WHY? READ-ONLY (Phase 2B-3 PR 5, D3).
+   *
+   * The same checks `retry()` makes, in the same order, without changing
+   * anything — so an automation can decline to ask a person to approve a retry
+   * that is certain to be refused, and say why. `null` means a retry would be
+   * accepted now; it is not a promise, and `retry()` checks again.
+   */
+  async retryRefusal(input: {
+    jobId: string;
+    brandScope: readonly string[];
+  }): Promise<RetryRefusal | null> {
+    return publishRetryRefusal({
+      db: this.#db,
+      workspaceId: this.#workspaceId,
+      policy: this.#policy,
+      clock: this.#clock,
+      ...input,
+    });
+  }
+
+  #retryRefusal(job: PublishJob): Promise<RetryRefusal | null> {
+    return refusalForJob(this.#db, this.#workspaceId, this.#policy, this.#clock, job);
+  }
+
+  /**
    * Retry by hand, after a human has fixed whatever was wrong.
    *
    * REFUSED FOR CLASSES WHERE RETRYING CANNOT HELP. `AUTH_REVOKED` needs a
@@ -1392,27 +1423,23 @@ export class PublishPipelineService {
       where: { id: input.jobId, ...brandIdQueryFilter({ brandScope: input.brandScope }) },
     });
     if (!job) throw publishJobNotFound();
-    if (job.status !== 'FAILED') throw publishJobNotRetryable();
-    /*
-     * AND NOT AN INDETERMINATE CLASS EVEN WHEN FAILED. A job that exhausted its
-     * attempts on a TIMEOUT is a job whose last request may have landed; it
-     * reaches FAILED through `#fail`, and retrying it is the same duplicate by
-     * a longer route.
-     */
-    if (job.failureClass && FAILURE_BEHAVIOUR[job.failureClass].indeterminate) {
-      throw publishJobNotRetryable();
-    }
+    const refusal = await this.#retryRefusal(job);
     // D-332 (owner decision): a retry never publishes late. Refused, not queued.
-    if (this.pastLatenessDeadline(job.scheduledAtUtc)) throw publishJobPastDeadline();
+    if (refusal === 'deadline_passed') throw publishJobPastDeadline();
     // Item 9 (D-332 amended): the post was scheduled again; this attempt is history.
-    if ((await this.supersededJobs([job.id])).has(job.id)) throw publishJobSuperseded();
-    if (job.failureClass && !FAILURE_BEHAVIOUR[job.failureClass].manualRetryUseful) {
-      throw publishJobNotRetryable();
-    }
+    if (refusal === 'superseded') throw publishJobSuperseded();
+    if (refusal) throw publishJobNotRetryable();
 
     const now = this.#clock.now();
-    await this.#db.publishJob.update({
-      where: { id: job.id },
+    /*
+     * A CONDITIONAL WRITE, NOT READ-THEN-WRITE (Phase 2B-3 PR 5). The checks
+     * above read a FAILED job; two retries racing — a person's and an approved
+     * automation's — would both pass them and both re-queue it. The status in
+     * the WHERE makes the database the referee: exactly one moves the job, and
+     * the other is refused as the job no longer being retryable.
+     */
+    const queued = await this.#db.publishJob.updateMany({
+      where: { id: job.id, workspaceId: this.#workspaceId, status: 'FAILED' },
       data: {
         status: 'QUEUED',
         // A FRESH ATTEMPT BUDGET, because a human deciding to try again is a
@@ -1426,6 +1453,7 @@ export class PublishPipelineService {
         failureCode: null,
       },
     });
+    if (queued.count !== 1) throw publishJobNotRetryable();
 
     await writeAuditEvent(this.#db, this.#workspaceId, {
       action: 'social.post.retry_requested',
@@ -1581,35 +1609,7 @@ export class PublishPipelineService {
    * Read-only, and one query per call.
    */
   async supersededJobs(jobIds: readonly string[]): Promise<ReadonlySet<string>> {
-    if (jobIds.length === 0) return new Set();
-    const jobs = await this.#db.publishJob.findMany({
-      where: { workspaceId: this.#workspaceId, id: { in: [...jobIds] } },
-      select: {
-        id: true,
-        contentItemId: true,
-        slot: { select: { id: true, createdAt: true } },
-      },
-    });
-    if (jobs.length === 0) return new Set();
-    const slots = await this.#db.calendarSlot.findMany({
-      where: {
-        workspaceId: this.#workspaceId,
-        contentItemId: { in: [...new Set(jobs.map((job) => job.contentItemId))] },
-        status: { not: 'CANCELLED' },
-      },
-      select: { id: true, contentItemId: true, createdAt: true },
-    });
-    const superseded = new Set<string>();
-    for (const job of jobs) {
-      const newer = slots.some(
-        (slot) =>
-          slot.contentItemId === job.contentItemId &&
-          slot.id !== job.slot.id &&
-          slot.createdAt > job.slot.createdAt,
-      );
-      if (newer) superseded.add(job.id);
-    }
-    return superseded;
+    return supersededJobIds(this.#db, this.#workspaceId, jobIds);
   }
 
   /**
@@ -2004,4 +2004,102 @@ export class PublishPipelineService {
       data: { status: itemStatus },
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// READ-ONLY RETRY CHECKS (Phase 2B-3 PR 5)
+// ---------------------------------------------------------------------------
+
+/**
+ * WOULD `retry()` REFUSE THIS JOB, AND WHY? READ-ONLY, AND WITHOUT A PIPELINE.
+ *
+ * The same checks `retry()` makes, in the same order. It needs only the
+ * tenant's client and the publishing policy, so the automation WORKER can ask
+ * it when a retry request would be created (owner decision D3) without being
+ * handed anything that can publish — the worker is deliberately wired with no
+ * publish capability at all. `null` means a retry would be accepted now; it is
+ * not a promise, and `retry()` checks again under its own conditional write.
+ */
+export async function publishRetryRefusal(input: {
+  readonly db: TenantScopedClient;
+  readonly workspaceId: string;
+  readonly policy: PublishingPolicy;
+  readonly clock?: Clock | undefined;
+  readonly jobId: string;
+  readonly brandScope: readonly string[];
+}): Promise<RetryRefusal | null> {
+  const job = await input.db.publishJob.findFirst({
+    where: {
+      id: input.jobId,
+      workspaceId: input.workspaceId,
+      ...brandIdQueryFilter({ brandScope: input.brandScope }),
+    },
+  });
+  if (!job) return 'not_found';
+  return refusalForJob(input.db, input.workspaceId, input.policy, input.clock ?? systemClock, job);
+}
+
+async function refusalForJob(
+  db: TenantScopedClient,
+  workspaceId: string,
+  policy: PublishingPolicy,
+  clock: Clock,
+  job: PublishJob,
+): Promise<RetryRefusal | null> {
+  if (job.status !== 'FAILED') return 'not_retryable';
+  /*
+   * AND NOT AN INDETERMINATE CLASS EVEN WHEN FAILED. A job that exhausted its
+   * attempts on a TIMEOUT is a job whose last request may have landed; it
+   * reaches FAILED through `#fail`, and retrying it is the same duplicate by a
+   * longer route.
+   */
+  if (job.failureClass && FAILURE_BEHAVIOUR[job.failureClass].indeterminate) {
+    return 'not_retryable';
+  }
+  // D-332 (owner decision): a retry never publishes late. Refused, not queued.
+  const lateness = policy.dispatch.latenessToleranceMinutes * 60_000;
+  if (clock.now().getTime() - job.scheduledAtUtc.getTime() > lateness) return 'deadline_passed';
+  // Item 9 (D-332 amended): the post was scheduled again; this attempt is history.
+  if ((await supersededJobIds(db, workspaceId, [job.id])).has(job.id)) return 'superseded';
+  if (job.failureClass && !FAILURE_BEHAVIOUR[job.failureClass].manualRetryUseful) {
+    return 'not_retryable';
+  }
+  return null;
+}
+
+/** ITEM 9 — the jobs whose slot a newer, non-cancelled slot of the same post replaced. */
+async function supersededJobIds(
+  db: TenantScopedClient,
+  workspaceId: string,
+  jobIds: readonly string[],
+): Promise<ReadonlySet<string>> {
+  if (jobIds.length === 0) return new Set();
+  const jobs = await db.publishJob.findMany({
+    where: { workspaceId, id: { in: [...jobIds] } },
+    select: {
+      id: true,
+      contentItemId: true,
+      slot: { select: { id: true, createdAt: true } },
+    },
+  });
+  if (jobs.length === 0) return new Set();
+  const slots = await db.calendarSlot.findMany({
+    where: {
+      workspaceId,
+      contentItemId: { in: [...new Set(jobs.map((job) => job.contentItemId))] },
+      status: { not: 'CANCELLED' },
+    },
+    select: { id: true, contentItemId: true, createdAt: true },
+  });
+  const superseded = new Set<string>();
+  for (const job of jobs) {
+    const newer = slots.some(
+      (slot) =>
+        slot.contentItemId === job.contentItemId &&
+        slot.id !== job.slot.id &&
+        slot.createdAt > job.slot.createdAt,
+    );
+    if (newer) superseded.add(job.id);
+  }
+  return superseded;
 }

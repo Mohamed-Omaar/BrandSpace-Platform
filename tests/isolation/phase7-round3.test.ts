@@ -546,10 +546,11 @@ describe('R3-4: an external proposal mints on demand and ends explicitly', () =>
     const issued = await inA((db) =>
       engineAt(db, now).reissueRunConfirmation({ runId, actor: confirmer() }),
     );
-    expect(issued.token.length).toBeGreaterThan(16);
+    // PR 5: the token is null only when the request was ENDED; not here.
+    expect(issued.token?.length).toBeGreaterThan(16);
 
     const confirmed = await inA((db) =>
-      engineAt(db, now).confirmRun({ runId, token: issued.token, actor: confirmer() }),
+      engineAt(db, now).confirmRun({ runId, token: issued.token!, actor: confirmer() }),
     );
     expect(confirmed.confirmedAt).not.toBeNull();
   });
@@ -619,9 +620,10 @@ describe('R3-4: an external proposal mints on demand and ends explicitly', () =>
       engineAt(db, now).reissueRunConfirmation({ runId, actor: confirmer() }),
     );
     expect(second.token).not.toBe(first.token);
+    expect(first.token).toEqual(expect.any(String));
 
     await expect(
-      inA((db) => engineAt(db, now).confirmRun({ runId, token: first.token, actor: confirmer() })),
+      inA((db) => engineAt(db, now).confirmRun({ runId, token: first.token!, actor: confirmer() })),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
@@ -632,8 +634,13 @@ describe('R3-4: an external proposal mints on demand and ends explicitly', () =>
     const token = await inA((db) =>
       engineAt(db, now).reissueRunConfirmation({ runId: confirmedRun, actor: confirmer() }),
     );
+    expect(token.token).toEqual(expect.any(String));
     await inA((db) =>
-      engineAt(db, now).confirmRun({ runId: confirmedRun, token: token.token, actor: confirmer() }),
+      engineAt(db, now).confirmRun({
+        runId: confirmedRun,
+        token: token.token!,
+        actor: confirmer(),
+      }),
     );
     await expect(
       inA((db) =>

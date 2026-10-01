@@ -5305,6 +5305,10 @@ model AutomationRun {
   @@index([workspaceId, ruleId, startedAt(sort: Desc)])
   @@index([workspaceId, brandId, status])
   @@index([startedAt])
+  /// Phase 2B-3 PR 5 (M4) — also a PARTIAL index, which Prisma cannot declare:
+  /// `automation_run_awaiting_expiry_idx` on (confirmationExpiresAt) WHERE
+  /// status = 'AWAITING_CONFIRMATION', in migration
+  /// 20261014090000_automation_run_awaiting_expiry_index. The lapse sweep reads it.
   @@map("automation_run")
 }
 

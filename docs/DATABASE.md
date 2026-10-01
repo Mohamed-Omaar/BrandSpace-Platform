@@ -1988,6 +1988,28 @@ aborts unless both tables are RLS-enabled, FORCE-d and NOT NULL. `invitation_sta
 permits the backfill (it refuses only status resurrection and token changes). `updatedAt` is not
 touched. Lock, timeout and recovery: OPERATIONS.md §6.11.
 
+### 18.14 Phase 2B-3 PR 5 — asks-first retry and pause, and M4 (D-445 – D-453)
+
+**M4** (`20261014090000_automation_run_awaiting_expiry_index`) is one partial index,
+`automation_run_awaiting_expiry_idx` on `automation_run ("confirmationExpiresAt") WHERE status =
+'AWAITING_CONFIRMATION'`, built with `CREATE INDEX CONCURRENTLY IF NOT EXISTS` as the file's single
+statement. It serves the expiry sweep, which reads open requests oldest window first. Prisma cannot
+declare a partial index, so `AutomationRun` carries a comment naming it. No column, constraint or
+policy changed.
+
+**No stored value changes meaning.** RETRY_PUBLISH and PAUSE_CAMPAIGN already existed in the
+`AutomationActionType` enum (M1, D-404); they become authorable and executable. Their requests use
+the existing columns: `resourceType` / `resourceId` are `PublishAttempt` (the failed attempt a retry
+concerns) or `Campaign` (the campaign a pause names, from `actionConfig.campaignId`). A request ended
+at approval uses the existing statuses (BLOCKED_BY_POLICY, BLOCKED_BY_AUTHORIZATION) with codes in
+`failureCode`; a lapse stays EXPIRED with `confirmation_window_closed`.
+
+**Writes:** a retry re-queues its `publish_job` with a compare-and-swap on `status = 'FAILED'`; a
+pause moves `campaign.status` PLANNED/ACTIVE → PAUSED with a compare-and-swap on `version`. New
+audit actions: `automation.run_confirmed` (the approver), `automation.run_expired` (the sweep, same
+transaction as the status, once). `automation.run_skipped` and `campaign.updated` (reason
+`automation_pause`) are existing actions. Recovery: OPERATIONS.md §6.12.
+
 ## 19. Phase 9 — Commerce & Onboarding
 
 Thirteen models: eight tenant-owned commercial tables, two platform-owned, three identity-scoped.

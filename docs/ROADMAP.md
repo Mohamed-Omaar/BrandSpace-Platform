@@ -1050,6 +1050,7 @@ vendor and its credentials.
 | **Commerce**      | Marketplace of templates and strategies, partner/reseller program, affiliate program, usage-based enterprise pricing                                                 |
 | **Platform**      | Public API + SDKs, outbound webhooks, Zapier/Make connectors, CRM integrations (HubSpot, Salesforce), mobile apps, browser extension                                 |
 | **Content**       | Advanced creative editor, brand-compliance auto-checking, UGC management, content repurposing pipelines, localization beyond ar/en                                   |
+| **Automation**    | Pausing a campaign also holds its scheduled posts (today a pause is status only — D-447, owner decision D4-A)                                                        |
 | **Operations**    | Multi-region deployment, service extraction (AI, publishing, analytics workers), advanced cost optimization, self-hosted model options                               |
 
 ---
