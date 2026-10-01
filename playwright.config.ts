@@ -322,11 +322,27 @@ export default defineConfig({
   reporter: process.env['CI']
     ? [
         ['dot'],
+        /*
+         * NAMES IN THE LOG (D-454). The dot reporter prints a symbol per test and
+         * names failures only in its end-of-run summary, which a run cancelled
+         * by the job's ceiling never reaches. `list` prints each test's name,
+         * status and duration as it finishes, so a cancelled run still says
+         * which tests timed out or failed. Output only: no test, retry, worker
+         * or timeout changes.
+         */
+        ['list'],
         ['html', { open: 'never', outputFolder: 'playwright-report' }],
         ['json', { outputFile: 'playwright-json/results.json' }],
       ]
     : [['list']],
-  timeout: 30_000,
+  /*
+   * 45 SECONDS PER TEST, NOT 30 (D-456). On a slower runner every test took
+   * about 1.5–1.8x as long, and tests that normally take 20–28 s timed out at
+   * 31–36 s. Sharding (D-455) shortens the run, not a test. Retries, the
+   * `expect` timeout and every assertion are unchanged; a test with its own
+   * `test.setTimeout` keeps it.
+   */
+  timeout: 45_000,
   expect: {
     timeout: 10_000,
     toHaveScreenshot: {
@@ -677,6 +693,15 @@ export default defineConfig({
       name: 'phase8-flow',
       testMatch: /(phase8-flow|phase8-creative-adaptation)\.spec\.ts/,
       fullyParallel: false,
+      /*
+       * AFTER `brand-brain` (D-457). Step 14 proposes a learning from Marketing
+       * Intelligence and expects a candidate in the Brand Brain queue; it passes
+       * only once `brand-brain` has written its knowledge into the shared
+       * workspace. That was an accident of both projects running in one job;
+       * the E2E shards made it visible. Declared here so the order is real. That
+       * step creating its own candidate is on the final-review list.
+       */
+      dependencies: ['brand-brain'],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

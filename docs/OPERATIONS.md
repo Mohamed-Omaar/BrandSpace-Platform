@@ -725,3 +725,46 @@ The first restore drill produces the RTO. The chosen hosting plan produces the R
 - **A status page.** It is a public-website feature and an external hosting decision.
 - **Automated backup verification.** §2.1 is a procedure a person runs. Automating it needs an
   environment to run in.
+
+---
+
+## 11. CI headroom (D-454)
+
+Two CI limits were raised on measurement. Nothing was skipped, hidden or weakened, and the retries,
+workers, sharding, reporter and test selection did not change.
+
+- **Typecheck heap: 4 GB.** `pnpm typecheck` runs in one step of the "Format, lint, typecheck" job,
+  now with `NODE_OPTIONS=--max-old-space-size=4096`. The `tests` package alone needs about 2.7 GB on
+  staging @ `2672bad` (`tsc --extendedDiagnostics` reports `Memory used: 2,728,528K`), which is at
+  the runner's default Node heap. It crashed with `JavaScript heap out of memory` on PR #63, a
+  change that did not move the measurement (2,733,768K).
+- **Playwright E2E job: 60 → 90 minutes.** A normal run of the 1,041 tests takes about 47 minutes
+  for Playwright alone (PR #63, first run on `51642f8`: 47.2 m; the job 50.5 m). A slower runner
+  then went past 60 minutes twice with no failure in the code under review: 594 and 647 of 1,041
+  tests finished at the cancel, and a full local run of PR #63's head (`d401fb3`) had no failures.
+
+- **Test names in the CI log.** The CI reporters are `dot`, `list`, `html` and `json`; `list` was
+  added so a run cancelled before its summary still names each test, its status and its duration.
+
+- **Two E2E shards (D-455).** The Playwright job runs as two shards by project, each with its own
+  database and seed; the check named "Playwright E2E (RTL/LTR + accessibility)" is now an aggregate
+  that passes only when both shards pass. A coverage step fails a shard if the two lists stop covering
+  the whole suite exactly once — a new project must be added to one of them. A project that depends on
+  another runs in that project's shard (`phase8-flow` after `brand-brain`, D-457).
+
+- **Per-test timeout: 30 → 45 seconds (D-456).** The tests that timed out ran 31–36 s on the slower
+  runners. Retries, the `expect` timeout and assertions are unchanged.
+
+**Tracked for the final review:**
+
+- The type-checking cost of the `tests` package, and whether two E2E shards stay enough as the suite
+  grows. Raising a ceiling again is not the answer to a suite that keeps growing.
+- **`phase8-flow` step 14 should create its own learning candidate.** It now passes only after the
+  `brand-brain` project has written knowledge into the shared workspace (declared as a dependency,
+  D-457); a test that seeds what it asserts on would not need the other project at all.
+- **Production risk — overlapping maintenance sweeps under load.** `MaintenanceScheduler.start()`
+  runs each sweep on `setInterval` with `void run()` and no in-flight guard, so a pass slower than its
+  interval starts another on top of it and they compete for the database. It is not active in the
+  measured runs (about 3 s of database time per 11 minutes of E2E), but under production load a slow
+  pass would compound. The proposed fix — skip a tick while the previous pass is still running — is
+  deferred by owner decision on #64.

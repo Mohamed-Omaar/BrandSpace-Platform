@@ -48,7 +48,14 @@ jobs:
       - name: Lint (includes module boundary rules)
         run: pnpm lint
 
+      # A 4 GB HEAP FOR TSC (D-454). `pnpm typecheck` checks every package in one
+      # step, and the `tests` package alone uses about 2.7 GB on staging @ 2672bad
+      # (`tsc --extendedDiagnostics`: Memory used 2,728,528K) — at the runner's
+      # default Node heap, so it crashed out of memory on a PR that changed
+      # nothing it measures. This is headroom only: no check is skipped.
       - name: Typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm typecheck
 
   # ---------------------------------------------------------------------------
@@ -259,8 +266,32 @@ jobs:
   # credential is used anywhere.
   # ---------------------------------------------------------------------------
   e2e:
-    name: Playwright E2E (RTL/LTR + accessibility)
+    # TWO SHARDS, BY PROJECT (D-455). Each shard is a whole job: its own
+    # PostgreSQL and Redis, its own fresh database and seed, its own servers.
+    # The aggregate job below keeps the original check name and passes only
+    # when both shards pass. Shard 1 carries the desktop project and the
+    # Control Center, asset and Brand Brain visual projects; shard 2 the mobile
+    # project, `brand-brain` and every other serial project. A project stays in
+    # the shard of the project it depends on: `owner-simple-mode` with
+    # `admin-console`, `production-email` with `phase10-platform`, and
+    # `phase8-flow` with `brand-brain` (D-457). The coverage step fails the shard if the two
+    # lists ever stop covering the whole suite exactly once.
+    name: Playwright E2E shard ${{ matrix.shard }} of 2
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    env:
+      E2E_SHARD_1: >-
+        --project=chromium-desktop --project=admin-console --project=owner-simple-mode
+        --project=assets --project=brand-brain-visual
+      E2E_SHARD_2: >-
+        --project=chromium-mobile --project=brand-brain --project=design-system --project=customer-app
+        --project=content-calendar --project=brand-context --project=approvals
+        --project=analytics-copilot --project=social-publishing --project=phase8-journey
+        --project=phase8-flow --project=content-studio --project=phase10-platform
+        --project=production-email --project=phase4-security
     # A CEILING, so a hang fails with an uploaded report instead of inheriting
     # GitHub's six-hour default.
     #
@@ -290,7 +321,14 @@ jobs:
     # wait for the real worker to read uploaded documents, and run #334 was
     # cancelled by this ceiling with 1,005 of 1,016 tests finished and none
     # failed. Nothing was removed to fit, for the reason given above.
-    timeout-minutes: 60
+    #
+    # RAISED FROM 60 TO 90 (D-454). A normal run of the 1,041 tests takes about
+    # 47 minutes of Playwright alone (PR #63, first run on 51642f8: 47.2m), and
+    # a slower runner then went past 60 twice with nothing failing in the code
+    # it was checking. Same rule as above: nothing removed, no retries, workers
+    # or sharding changed. Splitting or sharding the suite is tracked for the
+    # final review (OPERATIONS §11).
+    timeout-minutes: 90
 
     services:
       postgres:
@@ -392,6 +430,23 @@ jobs:
       - name: Generate Prisma client (offline)
         run: pnpm --filter @brandspace/database exec prisma generate
 
+      # D-455: nothing may fall between the shards or run in both. The two
+      # shards' test lists, together, must equal the whole suite's list.
+      - name: The two shards cover the whole suite exactly once
+        run: |
+          list() { pnpm exec playwright test --list --reporter=list "$@" | grep -E '^\s+\[' | sed -E 's/^\s+//' | sort; }
+          list > all.txt
+          list $E2E_SHARD_1 > s1.txt
+          list $E2E_SHARD_2 > s2.txt
+          sort s1.txt s2.txt > both.txt
+          echo "suite $(wc -l < all.txt) · shard 1 $(wc -l < s1.txt) · shard 2 $(wc -l < s2.txt)"
+          if ! diff -q all.txt both.txt > /dev/null; then
+            echo "::error::The E2E shards do not cover the suite exactly once."
+            diff all.txt both.txt | head -40
+            exit 1
+          fi
+          rm -f all.txt s1.txt s2.txt both.txt
+
       - name: Apply migrations to the end-to-end database
         env:
           NODE_ENV: test
@@ -420,7 +475,10 @@ jobs:
       - name: Run Playwright
         env:
           BRANDSPACE_VISUAL_BASELINE: '0'
-        run: pnpm test:e2e
+        run: |
+          if [ "${{ matrix.shard }}" = 1 ]; then PROJECTS=$E2E_SHARD_1; else PROJECTS=$E2E_SHARD_2; fi
+          pnpm e2e:seed
+          pnpm exec playwright test $PROJECTS
 
       # Failure artifacts only. Traces and screenshots are of the applications
       # themselves; the run has no real credential to capture, and the throwaway
@@ -429,7 +487,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
@@ -444,7 +502,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: playwright-json
+          name: playwright-json-shard-${{ matrix.shard }}
           path: playwright-json/results.json
           retention-days: 7
           if-no-files-found: ignore
@@ -473,6 +531,24 @@ jobs:
           };
           for (const suite of report.suites ?? []) walk(suite);
           "
+
+  # ---------------------------------------------------------------------------
+  # D-455: THE ORIGINAL CHECK NAME, AS AN AGGREGATE. It passes only when both
+  # E2E shards passed, so anything that requires "Playwright E2E (RTL/LTR +
+  # accessibility)" still means "the whole suite passed". A skipped, cancelled
+  # or failed shard fails it.
+  # ---------------------------------------------------------------------------
+  e2e-result:
+    name: Playwright E2E (RTL/LTR + accessibility)
+    needs: e2e
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Both shards passed
+        run: |
+          echo "E2E shards: ${{ needs.e2e.result }}"
+          test "${{ needs.e2e.result }}" = success
 
   # ---------------------------------------------------------------------------
   # Nothing resembling a credential may enter the repository.
