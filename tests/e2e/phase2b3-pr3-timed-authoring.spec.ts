@@ -173,10 +173,14 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await expect(action).toContainText(copy.remind);
   expect(await values(page, 'automation-condition-field')).toEqual(['', ...CONTENT_FIELDS]);
 
-  for (const boundary of ['CAMPAIGN_STARTED', 'CAMPAIGN_ENDED']) {
+  for (const [boundary, actions] of [
+    // Phase 2B-3 PR 5 — a campaign that starts may be paused (asks first).
+    ['CAMPAIGN_STARTED', ['', 'NOTIFY_PERSON', 'PAUSE_CAMPAIGN']],
+    ['CAMPAIGN_ENDED', ['', 'NOTIFY_PERSON']],
+  ] as const) {
     await trigger.selectOption(boundary);
     await expect(action).toHaveValue('');
-    expect(await values(page, 'automation-action')).toEqual(['', 'NOTIFY_PERSON']);
+    expect(await values(page, 'automation-action')).toEqual(actions);
     expect(await values(page, 'automation-condition-field')).toEqual(['', 'campaign.id']);
   }
   // The campaign is chosen from the brand's own, never typed.

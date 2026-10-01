@@ -222,7 +222,14 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
 
   // --- Each trigger's actions: the compatibility table ------------------------
   await page.getByTestId('automation-trigger').selectOption('POST_FAILED');
-  expect(await values(page, 'automation-action')).toEqual(['', 'NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
+  // Phase 2B-3 PR 5 — the retry and the pause, which ask first, follow.
+  expect(await values(page, 'automation-action')).toEqual([
+    '',
+    'NOTIFY_PERSON',
+    'MAKE_DRAFT_COPY',
+    'RETRY_PUBLISH',
+    'PAUSE_CAMPAIGN',
+  ]);
   expect(await values(page, 'automation-condition-field')).toContain('publish.failureClass');
   await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
   expect(await values(page, 'automation-action')).toEqual([

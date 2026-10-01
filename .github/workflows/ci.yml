@@ -463,7 +463,7 @@ jobs:
           const report = JSON.parse(fs.readFileSync(file, 'utf8'));
           const walk = (suite) => {
             for (const spec of suite.specs ?? []) {
-              if (!['phase2b3-pr2-g13-authoring.spec.ts', 'phase2b3-pr3-timed-authoring.spec.ts', 'phase2b3-pr4-analytics-authoring.spec.ts'].some((name) => spec.file.endsWith(name))) continue;
+              if (!['phase2b3-pr2-g13-authoring.spec.ts', 'phase2b3-pr3-timed-authoring.spec.ts', 'phase2b3-pr4-analytics-authoring.spec.ts', 'phase2b3-pr5-asks-first.spec.ts'].some((name) => spec.file.endsWith(name))) continue;
               for (const test of spec.tests) {
                 const last = test.results.at(-1);
                 console.log(['E2E-EVIDENCE', test.projectName, spec.title, last ? last.status : 'not run', last ? last.retry : '-'].join(' | '));
