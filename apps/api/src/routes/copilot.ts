@@ -5,7 +5,7 @@ import {
   TenantAnalyticsPolicySource,
   createAnalyticsRegistry,
 } from '@brandspace/analytics';
-import { TenantAutomationPolicySource } from '@brandspace/automation';
+import { TenantAutomationPolicySource, entitledActionTypes } from '@brandspace/automation';
 import {
   COPILOT_SUBJECT_TYPES,
   COPILOT_SURFACE_KEYS,
@@ -134,13 +134,23 @@ const cancelSchema = z.object({ planId: z.string().uuid() });
 /** The automations domain as the Copilot may reach it — see copilot-automation.ts. */
 async function automationPort(db: TenantScopedClient, workspaceId: string) {
   const policy = await new TenantAutomationPolicySource(db, currentEnvironment()).load();
-  return copilotAutomationPort({ db, workspaceId, policy });
+  return copilotAutomationPort({
+    db,
+    workspaceId,
+    policy,
+    // Phase 2B-3 PR 6 — `createRule` asks the plan for an AI action.
+    entitlements: entitlementGate(db, workspaceId),
+  });
 }
 
-/** The registry check under this environment's automation thresholds. */
-async function automationRules(db: TenantScopedClient) {
+/**
+ * The registry check under this environment's automation thresholds, and this
+ * workspace's plan (Phase 2B-3 PR 6, owner decision 11).
+ */
+async function automationRules(db: TenantScopedClient, workspaceId: string) {
   return automationRuleCheckFor(
     await new TenantAutomationPolicySource(db, currentEnvironment()).load(),
+    await entitledActionTypes((featureKey) => entitlementGate(db, workspaceId).allows(featureKey)),
   );
 }
 
@@ -374,7 +384,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
           caller.workspaceId,
           async (db) => {
             const policy = await new TenantCopilotPolicySource(db, currentEnvironment()).load();
-            const automationRuleCheck = await automationRules(db);
+            const automationRuleCheck = await automationRules(db, caller.workspaceId);
             const orchestrator = new CopilotOrchestrator({
               db,
               workspaceId: caller.workspaceId,
@@ -474,7 +484,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
             if (!authorization) throw new AppError('NOT_FOUND', 'Conversation not found.');
 
             const policy = await new TenantCopilotPolicySource(db, currentEnvironment()).load();
-            const automationRuleCheck = await automationRules(db);
+            const automationRuleCheck = await automationRules(db, caller.workspaceId);
             const orchestrator = new CopilotOrchestrator({
               db,
               workspaceId: caller.workspaceId,

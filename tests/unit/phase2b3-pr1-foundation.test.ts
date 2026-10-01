@@ -111,8 +111,10 @@ describe('registry parity with the database enums', () => {
       // Phase 2B-3 PR 5 — the two asks-first actions ship.
       'RETRY_PUBLISH',
       'PAUSE_CAMPAIGN',
+      // Phase 2B-3 PR 6 — the last planned action ships.
+      'DRAFT_IDEAS',
     ]);
-    expect(PLANNED_AUTOMATION_ACTIONS.map((action) => action.type)).toEqual(['DRAFT_IDEAS']);
+    expect(PLANNED_AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([]);
     // CONNECTION_EXPIRING is deferred: no enum value, no declaration.
     expect(Object.values(AutomationTrigger)).not.toContain('CONNECTION_EXPIRING');
   });
@@ -232,7 +234,9 @@ describe('the declared G13 requirements (Correction 1)', () => {
   });
 
   it('DRAFT_IDEAS is strict allOf [content.create, copilot.use], and spends credits', () => {
-    const draft = findPlannedAction('DRAFT_IDEAS');
+    // Phase 2B-3 PR 6: shipped with the requirement declared here, unchanged.
+    expect(findPlannedAction('DRAFT_IDEAS')).toBeUndefined();
+    const draft = findAction('DRAFT_IDEAS');
     expect(draft?.permissions).toEqual({ allOf: ['content.create', 'copilot.use'], anyOf: [] });
     expect(draft?.spendsCredits).toBe(true);
     expect(draft?.entitlements).toEqual(['limit.automation_ai_actions']);
@@ -288,7 +292,7 @@ describe('the declared G13 requirements (Correction 1)', () => {
 
 describe('allOf / anyOf evaluation', () => {
   const addToCampaign = declared('ADD_TO_CAMPAIGN')?.permissions as ActionPermissions;
-  const draftIdeas = findPlannedAction('DRAFT_IDEAS')?.permissions as ActionPermissions;
+  const draftIdeas = findAction('DRAFT_IDEAS')?.permissions as ActionPermissions;
   const role = (key: string): readonly string[] =>
     ROLE_DEFINITIONS.find((definition) => definition.key === key)?.permissionKeys ?? [];
 
@@ -471,10 +475,11 @@ describe('older-automation classification', () => {
     expect(isOlderAutomation({ triggerType: 'REVIEW_WAITING_24H', actionType: 'NOTIFY' })).toBe(
       true,
     );
-    // A planned action (REMIND_REVIEWER ships in PR 3, so DRAFT_IDEAS stands in).
-    expect(isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'DRAFT_IDEAS' })).toBe(
-      true,
-    );
+    // The action half: no planned action is left (DRAFT_IDEAS ships in PR 6),
+    // so an action the registry does not offer stands in.
+    expect(
+      isOlderAutomation({ triggerType: 'CONTENT_APPROVED', actionType: 'NOT_AN_ACTION' }),
+    ).toBe(true);
     expect(isOlderAutomation({ triggerType: 'NOT_A_TRIGGER', actionType: 'NOTIFY' })).toBe(true);
   });
 

@@ -296,6 +296,49 @@ function hashToken(token: string): string {
  */
 export const WORKSPACE_PENDING_DELETION_FAILURE = 'workspace_pending_deletion';
 
+/** Why a rule may no longer act through its creator. */
+export interface RuleAuthorityRefusal {
+  readonly status: 'BLOCKED_BY_AUTHORIZATION' | 'BLOCKED_BY_POLICY';
+  readonly code: string;
+}
+
+/**
+ * MAY THIS RULE STILL ACT, THROUGH ITS CREATOR, RIGHT NOW?
+ *
+ * The live rule is enabled and not deleted; its creator is still a member, still
+ * holds every permission the action requires, and still has the rule's brand.
+ * The first that fails is the answer, else null.
+ *
+ * ONE FUNCTION, asked by every door that acts after the run was decided: an
+ * asks-first approval (PR 5) and the AI executor (PR 6), immediately before it
+ * claims a slot of the monthly cap. Neither keeps a copy of these rules.
+ */
+export async function ruleAuthorityRefusal(
+  db: TenantScopedClient,
+  workspaceId: string,
+  rule: Pick<AutomationRule, 'id' | 'brandId' | 'createdByUserId'>,
+  action: Pick<ActionDefinition, 'permissions'>,
+): Promise<RuleAuthorityRefusal | null> {
+  const live = await db.automationRule.findFirst({
+    where: { id: rule.id, workspaceId },
+    select: { enabled: true, deletedAt: true },
+  });
+  if (!live || !live.enabled || live.deletedAt) {
+    return { status: 'BLOCKED_BY_POLICY', code: RULE_DISABLED };
+  }
+  const creator = await memberAuthority(db, workspaceId, rule.createdByUserId);
+  if (!creator) {
+    return { status: 'BLOCKED_BY_AUTHORIZATION', code: 'creator_no_longer_a_member' };
+  }
+  if (!satisfiesActionPermissions(creator.permissionKeys, action.permissions)) {
+    return { status: 'BLOCKED_BY_AUTHORIZATION', code: 'creator_lost_permission' };
+  }
+  if (!brandInScope(creator.brandScope, rule.brandId)) {
+    return { status: 'BLOCKED_BY_AUTHORIZATION', code: 'creator_lost_brand_scope' };
+  }
+  return null;
+}
+
 /** Phase 2B-3 PR 5 — `retry()`'s refusals, as the run's typed outcomes. */
 const RETRY_REFUSAL_OUTCOME = {
   not_found: 'content_unavailable',
@@ -409,28 +452,8 @@ export class AutomationEngine {
   async #requestRefusal(
     rule: AutomationRule,
     action: ActionDefinition,
-  ): Promise<{
-    readonly status: 'BLOCKED_BY_AUTHORIZATION' | 'BLOCKED_BY_POLICY';
-    readonly code: string;
-  } | null> {
-    const live = await this.#db.automationRule.findFirst({
-      where: { id: rule.id, workspaceId: this.#workspaceId },
-      select: { enabled: true, deletedAt: true },
-    });
-    if (!live || !live.enabled || live.deletedAt) {
-      return { status: 'BLOCKED_BY_POLICY', code: RULE_DISABLED };
-    }
-    const creator = await memberAuthority(this.#db, this.#workspaceId, rule.createdByUserId);
-    if (!creator) {
-      return { status: 'BLOCKED_BY_AUTHORIZATION', code: 'creator_no_longer_a_member' };
-    }
-    if (!satisfiesActionPermissions(creator.permissionKeys, action.permissions)) {
-      return { status: 'BLOCKED_BY_AUTHORIZATION', code: 'creator_lost_permission' };
-    }
-    if (!brandInScope(creator.brandScope, rule.brandId)) {
-      return { status: 'BLOCKED_BY_AUTHORIZATION', code: 'creator_lost_brand_scope' };
-    }
-    return null;
+  ): Promise<RuleAuthorityRefusal | null> {
+    return ruleAuthorityRefusal(this.#db, this.#workspaceId, rule, action);
   }
 
   async #auditRefusal(event: {
@@ -516,6 +539,13 @@ export class AutomationEngine {
     if (!isAuthorablePair(input.triggerType, input.actionType)) {
       throw triggerActionIncompatible();
     }
+    /*
+     * PHASE 2B-3 PR 6 — AND THE PLAN MUST INCLUDE IT (owner decision 11). An
+     * action the workspace is not entitled to is not offered, and is refused
+     * here as if it did not exist. A stored rule whose workspace later loses
+     * the entitlement is blocked at run time with `not_entitled`.
+     */
+    if (await this.#entitlementRefusal(action)) throw unknownTriggerOrAction();
 
     // The creator must hold BOTH the authoring permission and the permission the
     // ACTION needs. Holding `automation.manage` is not a way to acquire
@@ -1288,6 +1318,18 @@ export class AutomationEngine {
       return this.#finish(rule, run, 'FAILED', { failureCode: 'unknown_action' });
     }
     /*
+     * PHASE 2B-3 PR 6 — AN ACTION THAT SPENDS CREDITS RUNS ONLY ON THE PAIRS IT
+     * CAN BE AUTHORED ON. A stored rule pairing it with any other trigger —
+     * which only a write around the engine could produce — fails closed with
+     * the same code, before the plan is even asked.
+     */
+    if (
+      action.spendsCredits &&
+      !(action.authoringTriggers as readonly string[]).includes(rule.triggerType)
+    ) {
+      return this.#finish(rule, run, 'FAILED', { failureCode: 'unknown_action' });
+    }
+    /*
      * A NOTIFY RULE SENDS ONLY `automation.notice` (Fix PR 1 · F5, D-412). The
      * set is enforced when a rule is written; this is the stored rule written
      * before that, or around it, and it fails CLOSED — nothing is sent — rather
@@ -1335,6 +1377,9 @@ export class AutomationEngine {
       });
     }
 
+    // --- AN AI ACTION WAITS FOR THE AI EXECUTOR (PR 6) ----------------------
+    if (action.spendsCredits) return this.#awaitExecution(rule, run);
+
     // --- EXTERNAL ACTIONS STOP HERE ------------------------------------------
     if (isExternalAction(rule.actionType)) {
       /*
@@ -1378,6 +1423,37 @@ export class AutomationEngine {
       const failureCode = error instanceof AppError ? error.code.toLowerCase() : 'internal';
       return this.#finish(rule, run, 'FAILED', { conditionsHeld: true, failureCode });
     }
+  }
+
+  /**
+   * PHASE 2B-3 PR 6 — AN AI ACTION, CLEARED AND WAITING FOR THE EXECUTOR.
+   *
+   * Every gate the engine owns has passed: the rule, the occurrence, the
+   * conditions, the creator's authority and the plan. What remains needs the AI
+   * gateway, which only the API holds, so the run waits AWAITING_EXECUTION,
+   * due now. Nothing is charged and nothing is counted here; the executor
+   * re-checks before it does either.
+   */
+  async #awaitExecution(rule: AutomationRule, run: AutomationRun): Promise<RunOutcome> {
+    const updated = await this.#db.automationRun.update({
+      where: { id: run.id },
+      data: {
+        status: 'AWAITING_EXECUTION',
+        conditionsHeld: true,
+        executionAvailableAt: this.#clock.now(),
+      },
+    });
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'automation.awaiting_execution',
+      actorType: 'AUTOMATION',
+      resourceType: 'AutomationRun',
+      resourceId: run.id,
+      brandId: rule.brandId,
+      traceId: run.correlationId,
+      severity: 'INFO',
+      after: { ruleId: rule.id, actionType: rule.actionType },
+    });
+    return { run: updated, status: 'AWAITING_EXECUTION', confirmationToken: null };
   }
 
   /**

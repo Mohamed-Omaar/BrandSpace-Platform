@@ -18,6 +18,7 @@ import {
   CONDITION_FIELD_CONTRACTS,
   authorableConditionFieldsFor,
   conditionFieldsForRule,
+  entitledActionTypes,
   isAuthorablePair,
   isOlderAutomation,
   memberCatalogueFor,
@@ -184,13 +185,20 @@ export default async function AutomationsPage({
   );
   const brandNames = new Map(brands.map((brand) => [brand.id, brand.name]));
 
-  const { rules, runs, needsYou, automationPolicy } = await inAnalytics(
+  const { rules, runs, needsYou, automationPolicy, entitledActions } = await inAnalytics(
     workspace.workspaceId,
     async (services) => {
       const engine = await services.automations();
       return {
         /** Phase 2B-3 PR 4 — which analytics events have their thresholds set. */
         automationPolicy: await services.automationPolicy(),
+        /**
+         * Phase 2B-3 PR 6 — the actions this workspace's plan includes: the same
+         * answer `createRule` refuses on (owner decision 11).
+         */
+        entitledActions: await entitledActionTypes((featureKey) =>
+          services.entitlements.can(workspace.workspaceId, featureKey),
+        ),
         rules: await engine.listRules({
           brandId: selectedBrand?.id,
           brandScope: workspace.brandScope,
@@ -721,8 +729,9 @@ export default async function AutomationsPage({
               ).map((trigger) => ({
                 type: trigger.type,
                 label: t(`automations.trigger.${trigger.type}` as MessageKey),
-                actionTypes: AUTOMATION_ACTIONS.filter((action) =>
-                  isAuthorablePair(trigger.type, action.type),
+                actionTypes: AUTOMATION_ACTIONS.filter(
+                  (action) =>
+                    isAuthorablePair(trigger.type, action.type) && entitledActions.has(action.type),
                 ).map((action) => action.type),
                 /*
                   Phase 2B-3 PR 2 — a NEW rule is offered its trigger's G13

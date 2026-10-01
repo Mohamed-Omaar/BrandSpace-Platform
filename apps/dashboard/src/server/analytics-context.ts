@@ -119,9 +119,15 @@ export async function inAnalytics<T>(
           db: scoped.db,
           workspaceId,
           policy: await automationPolicy(),
-          // NO PORTS. See the interface comment: authoring needs none, and an
-          // engine here that could act would be this app doing the worker's job.
-          ports: {},
+          // NO ACTING PORTS. See the interface comment: authoring needs none,
+          // and an engine here that could act would be this app doing the
+          // worker's job. The ONE port is a read: Phase 2B-3 PR 6's
+          // `createRule` asks the plan before it stores an AI action.
+          ports: {
+            entitlements: {
+              allows: (featureKey: string) => scoped.entitlements.can(workspaceId, featureKey),
+            },
+          },
           /*
            * B12 (Phase 2B-2b) — A REFUSED SKIP IS RECORDED ON ITS OWN
            * CONNECTION, exactly as `apps/api` records a refused confirmation:

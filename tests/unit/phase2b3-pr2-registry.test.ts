@@ -47,6 +47,14 @@ const G13_PAIRS: Record<string, readonly string[]> = {
   // Phase 2B-3 PR 5 — the asks-first actions (report §7).
   RETRY_PUBLISH: ['POST_FAILED'],
   PAUSE_CAMPAIGN: ['POST_FAILED', 'CAMPAIGN_STARTED', 'WEEKLY_ENGAGEMENT_DROPPED'],
+  // Phase 2B-3 PR 6 — the AI action (revised report §7).
+  DRAFT_IDEAS: [
+    'CAMPAIGN_STARTED',
+    'WEEKLY_ENGAGEMENT_DROPPED',
+    'SCHEDULE_GAP',
+    'POST_TOP_10_PERCENT',
+    'FACT_EXPIRING',
+  ],
 };
 
 describe('the compatibility table', () => {
@@ -54,7 +62,7 @@ describe('the compatibility table', () => {
     for (const [type, triggers] of Object.entries(G13_PAIRS)) {
       expect(findAction(type)?.authoringTriggers, type).toEqual(triggers);
     }
-    expect(Object.values(G13_PAIRS).flat()).toHaveLength(21);
+    expect(Object.values(G13_PAIRS).flat()).toHaveLength(26);
   });
 
   it('no legacy action may ever be authored on POST_FAILED', () => {
@@ -184,7 +192,7 @@ describe('the G13 action settings', () => {
 });
 
 describe('the typed outcomes', () => {
-  it('each code ends the run SKIPPED or BLOCKED_BY_POLICY, as approved', () => {
+  it('each code ends the run SKIPPED, BLOCKED_BY_POLICY or FAILED, as approved', () => {
     expect(ACTION_OUTCOME_STATUS).toEqual({
       already_has_time: 'SKIPPED',
       no_free_day: 'BLOCKED_BY_POLICY',
@@ -209,6 +217,13 @@ describe('the typed outcomes', () => {
       publish_deadline_passed: 'BLOCKED_BY_POLICY',
       superseded_by_new_slot: 'BLOCKED_BY_POLICY',
       campaign_not_pausable: 'BLOCKED_BY_POLICY',
+      // Phase 2B-3 PR 6 — DRAFT_IDEAS (owner decisions 7–9).
+      monthly_ai_cap_reached: 'SKIPPED',
+      ai_credits_insufficient: 'SKIPPED',
+      no_reviewed_facts: 'SKIPPED',
+      brand_not_active: 'SKIPPED',
+      ai_unavailable: 'FAILED',
+      ai_output_unusable: 'FAILED',
     });
     expect(isActionOutcomeCode('no_free_day')).toBe(true);
     expect(isActionOutcomeCode('toString')).toBe(false);
@@ -238,6 +253,7 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'REMIND_REVIEWER',
       'RETRY_PUBLISH',
       'PAUSE_CAMPAIGN',
+      'DRAFT_IDEAS',
     ]);
   });
 
@@ -279,13 +295,18 @@ describe('the G13 flip — exactly what a new rule may be written as', () => {
       'REVIEW_WAITING_24H × REMIND_REVIEWER',
       'CAMPAIGN_STARTED × NOTIFY_PERSON',
       'CAMPAIGN_STARTED × PAUSE_CAMPAIGN',
+      'CAMPAIGN_STARTED × DRAFT_IDEAS',
       'CAMPAIGN_ENDED × NOTIFY_PERSON',
       'SCHEDULE_GAP × NOTIFY_PERSON',
+      'SCHEDULE_GAP × DRAFT_IDEAS',
       'FACT_EXPIRING × NOTIFY_PERSON',
+      'FACT_EXPIRING × DRAFT_IDEAS',
       'WEEKLY_ENGAGEMENT_DROPPED × NOTIFY_PERSON',
       'WEEKLY_ENGAGEMENT_DROPPED × PAUSE_CAMPAIGN',
+      'WEEKLY_ENGAGEMENT_DROPPED × DRAFT_IDEAS',
       'POST_TOP_10_PERCENT × NOTIFY_PERSON',
       'POST_TOP_10_PERCENT × MAKE_DRAFT_COPY',
+      'POST_TOP_10_PERCENT × DRAFT_IDEAS',
     ]);
   });
 

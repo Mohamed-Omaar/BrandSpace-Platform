@@ -52,6 +52,9 @@ export const EXISTING_REACHABLE_CODES = [
   // Phase 2B-3 PR 5 (owner decision D2) — the rule was switched off or deleted
   // before its request was approved.
   'rule_disabled',
+  // Phase 2B-3 PR 6 — DRAFT_IDEAS is the first action that declares an
+  // entitlement, so a plan that does not include it is now a reachable reason.
+  'not_entitled',
 ] as const;
 type ExistingReachableCode = (typeof EXISTING_REACHABLE_CODES)[number];
 

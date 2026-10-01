@@ -7,6 +7,7 @@ import {
   satisfiesActionPermissions,
   triggerAvailable,
   type AutomationPolicy,
+  type EntitlementPort,
 } from '@brandspace/automation';
 import type {
   AutomationRuleCheck,
@@ -67,14 +68,26 @@ export const automationRuleCheck: AutomationRuleCheck = {
  * admits a rule on it — the D-425 parity: never ask a customer to confirm a
  * rule the engine would refuse. What the route injects.
  */
-export function automationRuleCheckFor(policy: AutomationPolicy): AutomationRuleCheck {
+export function automationRuleCheckFor(
+  policy: AutomationPolicy,
+  /*
+   * PHASE 2B-3 PR 6 — the actions this workspace's plan includes
+   * (`entitledActionTypes`, owner decision 11). Required: a check built without
+   * it would offer an AI action to a workspace whose plan does not include it.
+   */
+  entitled: ReadonlySet<string>,
+): AutomationRuleCheck {
   return {
     authorablePairs: () =>
       automationRuleCheck
         .authorablePairs()
-        .filter((pair) => triggerAvailable(policy, pair.triggerType)),
+        .filter(
+          (pair) => triggerAvailable(policy, pair.triggerType) && entitled.has(pair.actionType),
+        ),
     admissible: (input) =>
-      triggerAvailable(policy, input.triggerType) && automationRuleCheck.admissible(input),
+      triggerAvailable(policy, input.triggerType) &&
+      entitled.has(input.actionType) &&
+      automationRuleCheck.admissible(input),
   };
 }
 
@@ -92,12 +105,18 @@ export function copilotAutomationPort(input: {
   db: TenantScopedClient;
   workspaceId: string;
   policy: AutomationPolicy;
+  /**
+   * PHASE 2B-3 PR 6 — the plan question `createRule` asks for an action that
+   * declares an entitlement. A read, not an action; without it such an action
+   * is refused (fail closed).
+   */
+  entitlements?: EntitlementPort;
 }): CopilotAutomationPort {
   const engine = new AutomationEngine({
     db: input.db,
     workspaceId: input.workspaceId,
     policy: input.policy,
-    ports: {},
+    ports: input.entitlements ? { entitlements: input.entitlements } : {},
   });
   return {
     async createRule(rule) {

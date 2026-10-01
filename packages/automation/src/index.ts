@@ -48,6 +48,7 @@ export {
   evaluateConditions,
   actionPermissionKeys,
   findAction,
+  entitledActionTypes,
   findPlannedAction,
   findTrigger,
   isAuthorablePair,
@@ -83,9 +84,11 @@ export type {
 export {
   AutomationEngine,
   WORKSPACE_PENDING_DELETION_FAILURE,
+  ruleAuthorityRefusal,
   runBucketFor,
   runIdempotencyKeyFor,
 } from './engine';
+export type { RuleAuthorityRefusal } from './engine';
 export {
   localMomentFor,
   metricThresholdConfigSchema,

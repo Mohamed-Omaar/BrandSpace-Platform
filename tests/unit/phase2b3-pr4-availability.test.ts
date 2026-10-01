@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { defaultPayload } from '@brandspace/config';
-import { parseAutomationPolicy } from '@brandspace/automation';
+import { AUTOMATION_ACTIONS, parseAutomationPolicy } from '@brandspace/automation';
 import {
   automationRuleCheck,
   automationRuleCheckFor,
@@ -31,9 +31,13 @@ const configured = parseAutomationPolicy({
   },
 });
 
+// Phase 2B-3 PR 6 — the check also takes the actions the plan includes; these
+// tests are about the thresholds, so the workspace is entitled to every action.
+const ALL_ENTITLED: ReadonlySet<string> = new Set(AUTOMATION_ACTIONS.map((action) => action.type));
+
 describe('automationRuleCheckFor', () => {
   it('unconfigured: the analytics events are neither offered nor admitted', () => {
-    const check = automationRuleCheckFor(unconfigured);
+    const check = automationRuleCheckFor(unconfigured, ALL_ENTITLED);
     const offered = check.authorablePairs();
     expect(offered.filter((pair) => ANALYTICS.includes(pair.triggerType))).toEqual([]);
     for (const triggerType of ANALYTICS) {
@@ -48,7 +52,7 @@ describe('automationRuleCheckFor', () => {
   });
 
   it('configured: exactly the registry check', () => {
-    const check = automationRuleCheckFor(configured);
+    const check = automationRuleCheckFor(configured, ALL_ENTITLED);
     expect(check.authorablePairs()).toEqual(automationRuleCheck.authorablePairs());
     for (const pair of automationRuleCheck.authorablePairs()) {
       expect(check.admissible({ ...pair, permissionKeys: MANAGE })).toBe(
