@@ -439,7 +439,9 @@ The monthly cap on credit-spending automation actions (Q18) is **not** part of P
 2B-2b has no credit-spending action. The proposal on record, to be decided with the G13 catalogue in 2B-3:
 a **plan limit** in configuration (Control Center plan editor, never code), counted **per workspace per
 calendar month** in the workspace's time zone — **Starter 2 · Growth 4 · Scale 8 · Enterprise 8 · trial 2**.
-PROVISIONAL, NOT IMPLEMENTED.
+~~PROVISIONAL, NOT IMPLEMENTED.~~ **IMPLEMENTED in Phase 2B-3 PR 6** (D-458 – D-460) as the plan fields
+`automationAiActionsPerMonth` and `trialAutomationAiActionsPerMonth`; not set is off. The numbers above
+remain the provisional proposal: the owner enters them in Control Center, and no code or seed holds them.
 
 ## 8. Motion (prototype v105)
 

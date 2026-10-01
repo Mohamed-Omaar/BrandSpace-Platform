@@ -847,6 +847,22 @@ ships (§4.2 of `CLAUDE.md`), and the owner may refine them in the final parity 
 
 No new colour family, font, shadow style, motion or interaction model.
 
+### 6.3.50 Phase 2B-3 PR 6 — DRAFT_IDEAS on the Automations screen and in Control Center (D-461, D-466)
+
+Approved design-system extensions, built only from what the screens already draw:
+
+- **Rule card** — a DRAFT_IDEAS rule whose workspace has used this month's AI automation actions adds
+  one muted `typographyTokens.caption` line, "Monthly AI limit reached — resumes next month", under its
+  name, as the "(older automation)" caption already sits. No banner, badge or notification.
+- **Run history** — a finished DRAFT_IDEAS run adds "Drafted 3 ideas in your content library." in the
+  row's existing caption stack, as a plain link to the brand's drafts; a waiting or executing run reads
+  "Drafting ideas…" in the existing status badge.
+- **Control Center plan editors** (internal, not customer-facing) — the two AI automation caps are a
+  `SimpleSection` (simple editor) and a `SectionHeader` group (Advanced) of the existing `Field`,
+  `bs-control` select and number input.
+
+No new colour family, font, shadow style, motion or interaction model.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

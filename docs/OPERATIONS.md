@@ -634,6 +634,60 @@ running on the table.
 
 No data is lost or rewritten.
 
+### 6.13 Phase 2B-3 PR 6: M5a/M5b, and never redeploying the previous release (D-458 – D-467)
+
+**M5a** (`20261015090000_automation_ai_execution_status`) adds the run statuses `AWAITING_EXECUTION`
+and `EXECUTING`. **M5b** is two files: `20261015091000_automation_ai_execution_lease` adds three
+nullable/defaulted columns and three CHECKs to `automation_run` in ONE transaction that starts with
+`SET LOCAL lock_timeout = '5s'`; `20261015092000_automation_run_execution_due_index` builds one partial
+index with `CREATE INDEX CONCURRENTLY IF NOT EXISTS` (DATABASE.md §18.15). All three are additive and
+safe while the previous release is live: it never writes the new statuses, selects only the columns it
+knows, and its inserts get NULL, NULL and 0.
+
+**DO NOT REDEPLOY THE PREVIOUS RELEASE ONCE ANY RUN IS IN A NEW STATUS.** PostgreSQL cannot drop an
+enum value, §6 forbids a down script, and the previous release's Prisma client cannot decode a row
+whose status is `AWAITING_EXECUTION` or `EXECUTING` — every screen and job that reads that run would
+fail. Such rows appear only after an owner has set an AI automation cap on a plan (D-458) and a
+DRAFT_IDEAS rule has run. To check before any rollback:
+
+```sql
+SELECT count(*) FROM "automation_run" WHERE "status" IN ('AWAITING_EXECUTION', 'EXECUTING');
+```
+
+Non-zero means fix forward. (Before the first such run, rolling the application back needs no
+database change: the columns and the index are inert to it.)
+
+- **If M5b's transaction times out** on its lock: nothing changed. Mark it rolled back
+  (`prisma migrate resolve --rolled-back 20261015091000_automation_ai_execution_lease`, migrator role,
+  as §6.11), find the long transaction, and deploy again.
+- **If the index build fails or is interrupted**, it leaves an INVALID index: find it with
+  `SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;`, then
+  `DROP INDEX CONCURRENTLY IF EXISTS "automation_run_execution_due_idx";` and deploy again. Never mark
+  it valid by hand.
+- **A run stuck in EXECUTING** needs nothing: its lease expires (`claimLeaseSeconds`), the executor
+  claims it again, and the gateway replays a request that already ran rather than charging it twice. A
+  run that used every attempt is finished FAILED by the executor's own sweep.
+
+**Launch checklist — before DRAFT_IDEAS is offered in production (owner decision 13):**
+
+1. In Control Center → AI routing, a rule for `ideas.generate` with **`persistOutput` on** and an
+   `outputRetentionDays` set — without it every run ends FAILED `ai_unavailable` and nothing is
+   charged, because a run whose save was interrupted could not be replayed.
+2. In Control Center → AI credit rules, a credit rule for `ideas.generate` on each model its route
+   can use.
+3. In Control Center → Plans, the AI automation cap (`automationAiActionsPerMonth`, and the trial
+   value) on each plan that should include the action — not set is off. The provisional values are
+   in PROTOTYPE-V76-ALIGNMENT §7.3; nothing seeds them.
+4. A registered AI provider (D-13); until then runs end FAILED `ai_unavailable`, nothing charged.
+
+**Tracked for the final review (PR 6):**
+
+- The `automation.blocked` notification template is defined and sent by nothing (owner decision 2a).
+- The content library's "Search posts" filter label measures 4.26:1 against the shell's gradient in
+  LTR on a DRAFT-filtered view (axe `color-contrast`, found by the PR 6 E2E run; not changed here).
+- Once, axe caught the library's "Create" button mid-transition on arrival (#9059fc behind white 10 px
+  text, 4.11:1). Not a resting colour of any token; worth checking whether that frame can be seen.
+
 ## 7. Secret rotation
 
 **Platform capability.** Every provider credential is a REFERENCE in configuration and a row in the
