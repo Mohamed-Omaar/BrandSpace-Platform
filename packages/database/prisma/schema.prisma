@@ -4343,6 +4343,12 @@ enum AutomationRunStatus {
   /// otherwise keep a Confirm control alive on a screen for ever, pointing at a
   /// proposal whose content is now days stale.
   EXPIRED
+  /// Phase 2B-3 PR 6 (M5a). An AI action (DRAFT_IDEAS) passed the engine's
+  /// gates and waits for the API's AI executor. Not terminal.
+  AWAITING_EXECUTION
+  /// The AI executor holds the run's lease (`executionLeaseId`) and is
+  /// drafting. Not terminal; an expired lease makes the run claimable again.
+  EXECUTING
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. ONE NORMALIZED METRIC FACT, as one provider

@@ -93,4 +93,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261012092000_publish_job_published_population_index',
   '20261013090000_brand_scope_not_null',
   '20261014090000_automation_run_awaiting_expiry_index',
+  '20261015090000_automation_ai_execution_status',
 ];
