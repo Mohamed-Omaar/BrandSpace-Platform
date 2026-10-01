@@ -401,6 +401,10 @@ function calendar(
       timezone,
       quota: q.quota,
       approvalGate: { policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }) },
+      // THE SUITE'S CLOCK, as every other service here gets. Without it the
+      // service read the real clock, so "2026-10-01T14:00" was in the past from
+      // about 14:00 UTC on 1 October 2026 onward and the test failed for ever.
+      clock,
     });
 }
 
@@ -507,6 +511,7 @@ describe('Review item 13 · a refund moves the scheduling key on; a retry never 
           approvalGate: {
             policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }),
           },
+          clock,
         }).reschedule({
           slotId: soon.slotId,
           localTime: '2026-10-01T15:00',
@@ -526,6 +531,7 @@ describe('Review item 13 · a refund moves the scheduling key on; a retry never 
           approvalGate: {
             policyForBrand: async () => ({ requireApprovalBeforeScheduling: false }),
           },
+          clock,
         }).reschedule({
           slotId: soon.slotId,
           localTime: '2026-10-01T15:00',
