@@ -718,5 +718,8 @@ workers, sharding, reporter and test selection did not change.
   then went past 60 minutes twice with no failure in the code under review: 594 and 647 of 1,041
   tests finished at the cancel, and a full local run of PR #63's head (`d401fb3`) had no failures.
 
+- **Test names in the CI log.** The CI reporters are `dot`, `list`, `html` and `json`; `list` was
+  added so a run cancelled before its summary still names each test, its status and its duration.
+
 **Tracked for the final review:** splitting or sharding the E2E suite, and the type-checking cost of
 the `tests` package. Raising a ceiling again is not the answer to a suite that keeps growing.

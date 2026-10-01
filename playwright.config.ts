@@ -322,6 +322,15 @@ export default defineConfig({
   reporter: process.env['CI']
     ? [
         ['dot'],
+        /*
+         * NAMES IN THE LOG (D-454). The dot reporter prints a symbol per test and
+         * names failures only in its end-of-run summary, which a run cancelled
+         * by the job's ceiling never reaches. `list` prints each test's name,
+         * status and duration as it finishes, so a cancelled run still says
+         * which tests timed out or failed. Output only: no test, retry, worker
+         * or timeout changes.
+         */
+        ['list'],
         ['html', { open: 'never', outputFolder: 'playwright-report' }],
         ['json', { outputFile: 'playwright-json/results.json' }],
       ]
