@@ -94,4 +94,6 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261013090000_brand_scope_not_null',
   '20261014090000_automation_run_awaiting_expiry_index',
   '20261015090000_automation_ai_execution_status',
+  '20261015091000_automation_ai_execution_lease',
+  '20261015092000_automation_run_execution_due_index',
 ];

@@ -52,10 +52,12 @@ describe('M4 — the asks-first expiry index', () => {
     }
   });
 
-  it('comes directly after F6, and only PR 6 M5a follows it', () => {
+  it('comes directly after F6, and only PR 6 M5a/M5b follow it', () => {
     const at = EXPECTED_MIGRATIONS.indexOf(M4);
     expect(EXPECTED_MIGRATIONS.slice(at + 1)).toEqual([
       '20261015090000_automation_ai_execution_status',
+      '20261015091000_automation_ai_execution_lease',
+      '20261015092000_automation_run_execution_due_index',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261013090000_brand_scope_not_null');
   });

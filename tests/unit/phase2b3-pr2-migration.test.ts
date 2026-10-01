@@ -40,12 +40,12 @@ describe('M2 — PREFLIGHT_REFUSED on PublishAttemptOutcome', () => {
     expect(sql).not.toMatch(/\bCREATE (UNIQUE )?INDEX\b/);
   });
 
-  it('comes directly after M1c, and only the PR 4 M3 indexes, F6, the PR 5 M4 index and PR 6 M5a follow it', () => {
+  it('comes directly after M1c, and only the PR 4 M3 indexes, F6, the PR 5 M4 index and PR 6 M5a/M5b follow it', () => {
     const at = MIGRATIONS.indexOf(NAME);
     expect(MIGRATIONS[at - 1]).toBe('20261010092000_automation_g13_checks_and_state');
     // Phase 2B-3 PR 4 — M3, three concurrent index builds, come after M2;
     // then F6, brandScope never NULL; then PR 5's M4 expiry index; then PR 6's
-    // M5a run statuses.
+    // M5a run statuses and M5b lease (with its index).
     expect(MIGRATIONS.slice(at + 1)).toEqual([
       '20261012090000_metric_observation_brand_window_index',
       '20261012091000_metric_observation_item_pooling_index',
@@ -53,6 +53,8 @@ describe('M2 — PREFLIGHT_REFUSED on PublishAttemptOutcome', () => {
       '20261013090000_brand_scope_not_null',
       '20261014090000_automation_run_awaiting_expiry_index',
       '20261015090000_automation_ai_execution_status',
+      '20261015091000_automation_ai_execution_lease',
+      '20261015092000_automation_run_execution_due_index',
     ]);
   });
 
