@@ -335,7 +335,14 @@ export default defineConfig({
         ['json', { outputFile: 'playwright-json/results.json' }],
       ]
     : [['list']],
-  timeout: 30_000,
+  /*
+   * 45 SECONDS PER TEST, NOT 30 (D-456). On a slower runner every test took
+   * about 1.5–1.8x as long, and tests that normally take 20–28 s timed out at
+   * 31–36 s. Sharding (D-455) shortens the run, not a test. Retries, the
+   * `expect` timeout and every assertion are unchanged; a test with its own
+   * `test.setTimeout` keeps it.
+   */
+  timeout: 45_000,
   expect: {
     timeout: 10_000,
     toHaveScreenshot: {

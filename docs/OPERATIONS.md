@@ -726,5 +726,16 @@ workers, sharding, reporter and test selection did not change.
   that passes only when both shards pass. A coverage step fails a shard if the two lists stop covering
   the whole suite exactly once — a new project must be added to one of them.
 
-**Tracked for the final review:** splitting or sharding the E2E suite, and the type-checking cost of
-the `tests` package. Raising a ceiling again is not the answer to a suite that keeps growing.
+- **Per-test timeout: 30 → 45 seconds (D-456).** The tests that timed out ran 31–36 s on the slower
+  runners. Retries, the `expect` timeout and assertions are unchanged.
+
+**Tracked for the final review:**
+
+- The type-checking cost of the `tests` package, and whether two E2E shards stay enough as the suite
+  grows. Raising a ceiling again is not the answer to a suite that keeps growing.
+- **Production risk — overlapping maintenance sweeps under load.** `MaintenanceScheduler.start()`
+  runs each sweep on `setInterval` with `void run()` and no in-flight guard, so a pass slower than its
+  interval starts another on top of it and they compete for the database. It is not active in the
+  measured runs (about 3 s of database time per 11 minutes of E2E), but under production load a slow
+  pass would compound. The proposed fix — skip a tick while the previous pass is still running — is
+  deferred by owner decision on #64.
