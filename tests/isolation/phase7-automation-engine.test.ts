@@ -429,6 +429,8 @@ describe('an EXTERNAL action never runs on its own', () => {
         actor: owner(),
       }),
     );
+    // PR 5: null would mean the request was ENDED (its rule or creator); not here.
+    if (issued.token === null) throw new Error('no credential was issued');
     return issued.token;
   }
 

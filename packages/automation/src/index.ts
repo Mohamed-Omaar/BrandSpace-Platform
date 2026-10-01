@@ -16,6 +16,7 @@ export {
 } from './condition-values';
 export type { MemberChoice } from './condition-values';
 export { campaignTargetResolves, personTargetResolves } from './action-targets';
+export { memberAuthority, memberAuthorityResolver } from './authority';
 export { evaluateThresholdRule } from './threshold-producer';
 export type { ThresholdOutcome, ThresholdRuleRow } from './threshold-producer';
 export type { FactEvent, MetricWindowPort } from './facts';
@@ -50,6 +51,7 @@ export {
   isExternalAction,
   isOlderAutomation,
   NOTIFY_TEMPLATE_NOT_ALLOWED,
+  RULE_DISABLED,
   PLANNED_AUTOMATION_ACTIONS,
   PLANNED_AUTOMATION_TRIGGERS,
   RETIRED_AUTOMATION_TRIGGERS,

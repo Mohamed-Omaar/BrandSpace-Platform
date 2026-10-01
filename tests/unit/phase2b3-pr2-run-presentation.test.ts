@@ -103,6 +103,11 @@ const COPY: Record<string, readonly [string, string]> = {
     'Not run — this automation reached its daily limit of runs.',
     'لم تُشغَّل — بلغت هذه الأتمتة حدها اليومي من مرات التشغيل.',
   ],
+  // Phase 2B-3 PR 5 (owner decision D2).
+  rule_disabled: [
+    'Not done — this automation was switched off or deleted before it was approved.',
+    'لم يُنفَّذ — أُوقفت هذه الأتمتة أو حُذفت قبل الموافقة عليها.',
+  ],
   fallback: ['Something went wrong running this automation.', 'حدث خطأ أثناء تشغيل هذه الأتمتة.'],
 };
 

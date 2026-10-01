@@ -5,7 +5,7 @@ import {
   TenantAutomationPolicySource,
   campaignTargetResolves,
   gatherFacts,
-  type AutomationActor,
+  memberAuthorityResolver,
   type AutomationNotificationTemplate,
   type AutomationPorts,
   type MetricWindowPort,
@@ -70,37 +70,6 @@ import { unreachableChannelGate } from '@brandspace/social-connectors';
  */
 
 const log = createLogger({ context: { component: 'worker.automation' } });
-
-/**
- * The CURRENT authority of a rule's creator, or null when they no longer have
- * any.
- *
- * Reads through the tenant-scoped client, so a membership in another workspace is
- * invisible rather than merely filtered.
- */
-function actorResolver(
-  db: TenantScopedClient,
-  workspaceId: string,
-): (userId: string) => Promise<AutomationActor | null> {
-  return async (userId: string) => {
-    const membership = await db.membership.findFirst({
-      where: { workspaceId, userId, status: 'ACTIVE' },
-      select: {
-        brandScope: true,
-        role: {
-          select: { key: true, permissions: { select: { permission: { select: { key: true } } } } },
-        },
-      },
-    });
-    if (!membership) return null;
-    return {
-      userId,
-      roleKey: membership.role.key,
-      permissionKeys: membership.role.permissions.map((row) => row.permission.key),
-      brandScope: membership.brandScope,
-    };
-  };
-}
 
 function portsFor(
   db: TenantScopedClient,
@@ -466,7 +435,7 @@ export async function processAutomationJob(payload: EvaluateAutomationPayload): 
     };
     const delivered = await engine.deliver({
       event,
-      resolveActor: actorResolver(db, payload.workspaceId),
+      resolveActor: memberAuthorityResolver(db, payload.workspaceId),
     });
 
     /*

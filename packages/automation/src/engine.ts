@@ -34,6 +34,7 @@ import {
 import { CONDITION_VALUE_UNAVAILABLE, conditionValuesResolve } from './condition-values';
 import { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
 import { campaignTargetResolves, personTargetResolves } from './action-targets';
+import { memberAuthority } from './authority';
 import { triggerAvailable, type AutomationPolicy } from './policy';
 import type { AutomationPorts } from './ports';
 import {
@@ -50,6 +51,7 @@ import {
   isAutomationNotifyTemplate,
   isExternalAction,
   NOTIFY_TEMPLATE_NOT_ALLOWED,
+  RULE_DISABLED,
   satisfiesActionPermissions,
   type ActionDefinition,
   type ActionOutcomeCode,
@@ -313,6 +315,112 @@ export class AutomationEngine {
    * The sink's own failure is swallowed: a refusal must not become a 500 because
    * the audit connection was unavailable.
    */
+  /**
+   * PHASE 2B-3 PR 5 — THE REQUEST STILL HAS SOMEBODY BEHIND IT (owner
+   * decisions D1 and D2; the carried "creator authority at confirm" defect and
+   * F7's disabled-rule slice).
+   *
+   * Approving checks the APPROVER — they must hold the action's permission and
+   * the brand — and that used to be all. But the request was proposed by a RULE
+   * on behalf of its CREATOR, and both can change while it waits: the rule
+   * switched off or deleted, the creator removed, their role narrowed, their
+   * brands taken away. An approval is a person agreeing to what the rule
+   * proposed; it is not a way for the rule to act with authority its creator
+   * no longer has, or after its owner turned it off.
+   *
+   * So the same checks a run makes are made again here, with the same codes:
+   * the rule is enabled and not deleted (`rule_disabled`), and the creator is
+   * an ACTIVE member who holds the action's permissions and the rule's brand
+   * (`creator_no_longer_a_member`, `creator_lost_permission`,
+   * `creator_lost_brand_scope`). Any one failing ENDS the request — BLOCKED,
+   * audited, gone from Needs you — rather than leaving it waiting for a lapse;
+   * nothing is performed.
+   *
+   * The end is a COMPARE-AND-SWAP on the waiting state, so it never lands on a
+   * run that was approved, skipped or lapsed in between; losing that race is
+   * an ordinary refusal.
+   */
+  async #endIfNoLongerAuthorized(
+    rule: AutomationRule,
+    run: AutomationRun,
+    action: ActionDefinition,
+    approverUserId: string,
+  ): Promise<AutomationRun | null> {
+    const refusal = await this.#requestRefusal(rule, action);
+    if (!refusal) return null;
+
+    const now = this.#clock.now();
+    const ended = await this.#db.automationRun.updateMany({
+      where: {
+        id: run.id,
+        workspaceId: this.#workspaceId,
+        status: 'AWAITING_CONFIRMATION',
+        confirmedAt: null,
+        confirmationExpiresAt: { gt: now },
+      },
+      data: {
+        status: refusal.status,
+        failureCode: refusal.code,
+        confirmationTokenHash: null,
+        finishedAt: now,
+        durationMs: Math.max(0, now.getTime() - run.startedAt.getTime()),
+      },
+    });
+    if (ended.count === 0) throw automationConfirmationRejected();
+
+    await this.#db.automationRule.update({
+      where: { id: rule.id },
+      data: { lastRunAt: now, lastRunStatus: refusal.status, runCount: { increment: 1 } },
+    });
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'automation.run',
+      actorType: 'AUTOMATION',
+      resourceType: 'AutomationRun',
+      resourceId: run.id,
+      brandId: rule.brandId,
+      traceId: run.correlationId,
+      outcome: 'DENIED',
+      severity: refusal.status === 'BLOCKED_BY_AUTHORIZATION' ? 'WARNING' : 'INFO',
+      reason: refusal.code,
+      after: { ruleId: rule.id, status: refusal.status, actionType: rule.actionType },
+    });
+    await this.#auditRefusal({
+      runId: run.id,
+      brandId: run.brandId,
+      actorUserId: approverUserId,
+      reason: refusal.code,
+    });
+    return this.#db.automationRun.findFirstOrThrow({ where: { id: run.id } });
+  }
+
+  /** The first reason this rule may no longer act through its creator, or null. */
+  async #requestRefusal(
+    rule: AutomationRule,
+    action: ActionDefinition,
+  ): Promise<{
+    readonly status: 'BLOCKED_BY_AUTHORIZATION' | 'BLOCKED_BY_POLICY';
+    readonly code: string;
+  } | null> {
+    const live = await this.#db.automationRule.findFirst({
+      where: { id: rule.id, workspaceId: this.#workspaceId },
+      select: { enabled: true, deletedAt: true },
+    });
+    if (!live || !live.enabled || live.deletedAt) {
+      return { status: 'BLOCKED_BY_POLICY', code: RULE_DISABLED };
+    }
+    const creator = await memberAuthority(this.#db, this.#workspaceId, rule.createdByUserId);
+    if (!creator) {
+      return { status: 'BLOCKED_BY_AUTHORIZATION', code: 'creator_no_longer_a_member' };
+    }
+    if (!satisfiesActionPermissions(creator.permissionKeys, action.permissions)) {
+      return { status: 'BLOCKED_BY_AUTHORIZATION', code: 'creator_lost_permission' };
+    }
+    if (!brandInScope(creator.brandScope, rule.brandId)) {
+      return { status: 'BLOCKED_BY_AUTHORIZATION', code: 'creator_lost_brand_scope' };
+    }
+    return null;
+  }
+
   async #auditRefusal(event: {
     runId: string;
     brandId: string;
@@ -1368,7 +1476,7 @@ export class AutomationEngine {
   async reissueRunConfirmation(input: {
     runId: string;
     actor: AutomationActor;
-  }): Promise<{ run: AutomationRun; token: string }> {
+  }): Promise<{ run: AutomationRun; token: string | null }> {
     const run = await this.#db.automationRun.findFirst({
       where: { id: input.runId, workspaceId: this.#workspaceId },
     });
@@ -1392,6 +1500,9 @@ export class AutomationEngine {
       throw automationConfirmationRejected();
     }
     if (!brandInScope(input.actor.brandScope, run.brandId)) throw automationConfirmationRejected();
+    // D1 / D2 — the rule and its creator, re-checked before a credential exists.
+    const ended = await this.#endIfNoLongerAuthorized(rule, run, action, input.actor.userId);
+    if (ended) return { run: ended, token: null };
 
     const now = this.#clock.now();
     const token = randomUUID() + randomUUID();
@@ -1483,6 +1594,9 @@ export class AutomationEngine {
       });
       throw automationConfirmationRejected();
     }
+    // D1 / D2 — the rule and its creator, re-checked at the moment of approval.
+    const ended = await this.#endIfNoLongerAuthorized(rule, run, action, input.actor.userId);
+    if (ended) return ended;
 
     const now = this.#clock.now();
     const claimed = await this.#db.automationRun.updateMany({

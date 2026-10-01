@@ -46,6 +46,9 @@ export const EXISTING_REACHABLE_CODES = [
   'creator_lost_brand_scope',
   'workspace_pending_deletion',
   'daily_ceiling_reached',
+  // Phase 2B-3 PR 5 (owner decision D2) — the rule was switched off or deleted
+  // before its request was approved.
+  'rule_disabled',
 ] as const;
 type ExistingReachableCode = (typeof EXISTING_REACHABLE_CODES)[number];
 

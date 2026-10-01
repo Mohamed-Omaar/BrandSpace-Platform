@@ -240,6 +240,16 @@ export function registerAutomationRoutes(app: FastifyInstance): void {
           { prisma: getPrisma() },
         );
 
+        /*
+         * PHASE 2B-3 PR 5 (D1, D2) — THE REQUEST WAS ENDED, NOT ISSUED. Its rule
+         * was switched off or its creator no longer holds what it needs; the
+         * engine ended it BLOCKED inside this transaction, which commits
+         * because nothing threw. The caller gets the ordinary refusal and the
+         * run history says why.
+         */
+        if (issued.token === null) {
+          return reply.code(409).send({ error: { code: 'CONFLICT' } });
+        }
         return reply.send({
           runId: issued.run.id,
           // RETURNED EXACTLY ONCE. Only its hash is stored.

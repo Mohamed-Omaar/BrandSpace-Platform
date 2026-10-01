@@ -1104,6 +1104,13 @@ export function isAutomationNotifyTemplate(value: unknown): value is AutomationN
  */
 export const NOTIFY_TEMPLATE_NOT_ALLOWED = 'notify_template_not_allowed';
 
+/**
+ * Phase 2B-3 PR 5 (owner decision D2, F7's slice) — an asks-first request is
+ * approved after its rule was switched off or deleted. The request ends
+ * BLOCKED with this code and nothing is performed.
+ */
+export const RULE_DISABLED = 'rule_disabled';
+
 /** The triggers the four pre-G13 actions were authored with. */
 const LEGACY_AUTHORING_TRIGGERS = [
   'CONTENT_APPROVED',

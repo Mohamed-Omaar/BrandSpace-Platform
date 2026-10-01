@@ -2715,6 +2715,8 @@ export const messages = {
       'لم تُشغَّل — منشئ هذه الأتمتة لم تعد لديه صلاحية هذا الإجراء.',
     'automations.failure.creator_lost_brand_scope':
       'لم تُشغَّل — منشئ هذه الأتمتة لم يعد لديه وصول إلى هذه العلامة التجارية.',
+    'automations.failure.rule_disabled':
+      'لم يُنفَّذ — أُوقفت هذه الأتمتة أو حُذفت قبل الموافقة عليها.',
     'automations.failure.workspace_pending_deletion': 'لم تُشغَّل — مساحة العمل هذه مجدولة للحذف.',
     'automations.failure.daily_ceiling_reached':
       'لم تُشغَّل — بلغت هذه الأتمتة حدها اليومي من مرات التشغيل.',
@@ -6038,6 +6040,8 @@ export const messages = {
       'Not run — the person who created this automation no longer has permission for this action.',
     'automations.failure.creator_lost_brand_scope':
       'Not run — the person who created this automation no longer has access to this brand.',
+    'automations.failure.rule_disabled':
+      'Not done — this automation was switched off or deleted before it was approved.',
     'automations.failure.workspace_pending_deletion':
       'Not run — this workspace is scheduled for deletion.',
     'automations.failure.daily_ceiling_reached':
