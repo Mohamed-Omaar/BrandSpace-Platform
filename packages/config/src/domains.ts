@@ -489,6 +489,23 @@ const aiCreditRulesSchema = z.object({
  * `null` means unlimited/negotiated — Enterprise, whose numbers are agreed per
  * contract rather than published.
  */
+/**
+ * PHASE 2B-3 PR 6 — THE MONTHLY CAP ON AI AUTOMATION ACTIONS (Q18, D-458).
+ *
+ * A different shape from the counts below ON PURPOSE. Those default to `null`,
+ * which means unlimited; this one has NO default, so a plan written before the
+ * field existed — every plan today — leaves it out, and "not set" means OFF.
+ * An automation that spends credits is never switched on for a plan by the
+ * schema: only the owner, in Control Center, by choosing `limited` or
+ * `unlimited`. The values are the owner's and appear nowhere in source.
+ */
+export const automationAiCapSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('limited'), value: z.number().int().min(1).max(1000) }),
+  z.object({ kind: z.literal('unlimited') }),
+]);
+
+export type AutomationAiCap = z.infer<typeof automationAiCapSchema>;
+
 const planQuotasSchema = z.object({
   seats: z.number().int().positive().nullable().default(null),
   brands: z.number().int().positive().nullable().default(null),
@@ -504,6 +521,16 @@ const planQuotasSchema = z.object({
    * owner's workspaces live). `null` is unlimited, as for every quota here.
    */
   workspaces: z.number().int().positive().nullable().default(null),
+  /**
+   * AI automation actions per workspace-local calendar month (DRAFT_IDEAS).
+   * Absent = off. Projected as `limit.automation_ai_actions`.
+   */
+  automationAiActionsPerMonth: automationAiCapSchema.optional(),
+  /**
+   * The same cap while the workspace's subscription is TRIALING. Absent = off
+   * during the trial, whatever the plan's own value.
+   */
+  trialAutomationAiActionsPerMonth: automationAiCapSchema.optional(),
 });
 
 const plansSchema = z.object({

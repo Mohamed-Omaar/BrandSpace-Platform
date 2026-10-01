@@ -739,6 +739,21 @@ function semantic(
         });
       }
 
+      // PR 6: a trial never gets MORE AI automation actions than the plan it
+      // trials. "Not set" on the plan is off, so a trial cap under an unset
+      // plan cap would be a trial-only capability nobody can keep.
+      const quotas = (plan['quotas'] ?? {}) as Record<string, unknown>;
+      const trialCap = capCeiling(quotas['trialAutomationAiActionsPerMonth']);
+      const planCap = capCeiling(quotas['automationAiActionsPerMonth']);
+      if (trialCap !== 0 && trialCap !== undefined && exceeds(trialCap, planCap)) {
+        issues.push({
+          severity: 'error',
+          path: `plans.${i}.quotas.trialAutomationAiActionsPerMonth`,
+          message:
+            'The trial allows more AI automation actions per month than the plan itself. Set the trial value at or below the plan value.',
+        });
+      }
+
       for (const [j, addOn] of ((plan['addOns'] ?? []) as Record<string, unknown>[]).entries()) {
         const addOnCurrencies = ((addOn['prices'] ?? []) as { currency: string }[]).map((p) =>
           p.currency.toUpperCase(),
@@ -882,4 +897,25 @@ export function validateConfiguration(
     // logger takes for its own timestamps.
     checkedAt: systemClock.now().toISOString(),
   };
+}
+
+/**
+ * An AI automation cap as a ceiling: 0 when not set (off), the number when
+ * limited, `null` when unlimited. `undefined` for a shape the schema refused
+ * already, so this check adds no second error to it.
+ */
+function capCeiling(raw: unknown): number | null | undefined {
+  if (raw === undefined || raw === null) return 0;
+  const cap = raw as { kind?: unknown; value?: unknown };
+  if (cap.kind === 'unlimited') return null;
+  if (cap.kind === 'limited' && typeof cap.value === 'number') return cap.value;
+  return undefined;
+}
+
+/** Is ceiling `a` above ceiling `b`? `null` is unlimited. */
+function exceeds(a: number | null, b: number | null | undefined): boolean {
+  if (b === undefined) return false;
+  if (b === null) return false;
+  if (a === null) return true;
+  return a > b;
 }
