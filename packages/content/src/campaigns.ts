@@ -102,6 +102,17 @@ export function campaignVersionConflict(): AppError {
 export const CAMPAIGN_NOT_PLANNED_REASON = 'campaign_not_planned';
 export const CAMPAIGN_ALREADY_ENDED_REASON = 'campaign_already_ended';
 
+/**
+ * Phase 2B-3 PR 5 — the statuses a campaign may be paused from (owner answer
+ * B-2: PLANNED and ACTIVE). Pausing is the status alone (owner decision D4):
+ * nothing reads PAUSED to hold posts, so a paused campaign's scheduled posts
+ * still go out.
+ */
+export const PAUSABLE_CAMPAIGN_STATUSES = ['PLANNED', 'ACTIVE'] as const;
+
+/** Why `pause()` did not pause. Typed outcomes, never matched on a message. */
+export type CampaignPauseRefusal = 'campaign_unavailable' | 'campaign_not_pausable';
+
 const NAME_MAX = 120;
 
 export class CampaignService {
@@ -345,6 +356,72 @@ export class CampaignService {
       actor: input.actor,
       reason: 'start_now',
     });
+  }
+
+  /**
+   * PHASE 2B-3 PR 5 — PAUSE A CAMPAIGN, as an approved automation request does.
+   *
+   * THE CAMPAIGN NAMED, IN THE BRAND NAMED, OR NOTHING. The target is the rule's
+   * explicit `campaignId` (report §22, owner answer B-2), re-read with the
+   * brand and the APPROVER's live scope in the WHERE; never another campaign,
+   * never one inferred from a condition. A campaign that is gone, in another
+   * brand or out of scope is `campaign_unavailable`; one that is no longer
+   * PLANNED or ACTIVE is `campaign_not_pausable`. Either way nothing changes.
+   *
+   * ONE CONDITIONAL WRITE on (id, version, status IN pausable, not deleted).
+   * A person editing the campaign at the same moment changes the version, so
+   * the write misses; it is re-read ONCE and re-checked, so an unrelated edit
+   * (a renamed campaign) does not block the pause, and a status change does.
+   * One `campaign.updated` audit event with reason `automation_pause`, by the
+   * person who approved.
+   */
+  async pause(input: {
+    campaignId: string;
+    brandId: string;
+    actor: CampaignActor;
+  }): Promise<
+    { kind: 'paused'; campaign: Campaign } | { kind: 'refused'; reason: CampaignPauseRefusal }
+  > {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const existing = await this.#db.campaign.findFirst({
+        where: {
+          id: input.campaignId,
+          workspaceId: this.#workspaceId,
+          deletedAt: null,
+          ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.actor.brandScope }),
+        },
+      });
+      if (!existing) return { kind: 'refused', reason: 'campaign_unavailable' };
+      if (!(PAUSABLE_CAMPAIGN_STATUSES as readonly string[]).includes(existing.status)) {
+        return { kind: 'refused', reason: 'campaign_not_pausable' };
+      }
+      const written = await this.#db.campaign.updateMany({
+        where: {
+          id: existing.id,
+          workspaceId: this.#workspaceId,
+          version: existing.version,
+          status: { in: [...PAUSABLE_CAMPAIGN_STATUSES] },
+          deletedAt: null,
+        },
+        data: { status: 'PAUSED', version: { increment: 1 } },
+      });
+      if (written.count !== 1) continue;
+      const updated = await this.#db.campaign.findUniqueOrThrow({ where: { id: existing.id } });
+      await writeAuditEvent(this.#db, this.#workspaceId, {
+        action: 'campaign.updated',
+        actorType: 'USER',
+        actorId: input.actor.userId,
+        resourceType: 'Campaign',
+        resourceId: updated.id,
+        brandId: updated.brandId,
+        reason: 'automation_pause',
+        before: { version: existing.version, status: existing.status },
+        after: { version: updated.version, status: updated.status },
+      });
+      return { kind: 'paused', campaign: updated };
+    }
+    // Changed twice under us: whatever it is now, this request does not decide it.
+    return { kind: 'refused', reason: 'campaign_not_pausable' };
   }
 
   /**

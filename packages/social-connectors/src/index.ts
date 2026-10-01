@@ -73,6 +73,7 @@ export {
 } from './publishing';
 export type {
   ExecuteResult,
+  RetryRefusal,
   MaterialiseResult,
   PublishApprovalGate,
   PublishMediaPort,

@@ -177,6 +177,7 @@ export {
   CAMPAIGN_ALREADY_ENDED_REASON,
   CAMPAIGN_NOT_PLANNED_REASON,
   CampaignService,
+  PAUSABLE_CAMPAIGN_STATUSES,
   campaignNotFound,
   campaignVersionConflict,
 } from './campaigns';
@@ -195,7 +196,12 @@ export type { CampaignResultsPeriod } from './campaign-results';
  */
 export { ContentMediaResolver, mediaNotFound, tooManyMedia } from './media';
 export type { MediaResolverOptions, ResolvedMedia } from './media';
-export type { CampaignActor, CampaignServiceOptions, CreateCampaignInput } from './campaigns';
+export type {
+  CampaignActor,
+  CampaignPauseRefusal,
+  CampaignServiceOptions,
+  CreateCampaignInput,
+} from './campaigns';
 export {
   MemberSuggestionService,
   PREFERENCE_SOURCE,
