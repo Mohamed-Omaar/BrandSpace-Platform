@@ -12,6 +12,7 @@ import {
 } from '../../../../server/platform-context';
 import { removeCollectionItem, upsertCollectionItem } from '../../../../server/config-draft';
 import { majorToMinor } from '../../../../server/money';
+import { readPlanAiCaps } from '../../../../server/plan-ai-cap';
 
 const log = createLogger({ context: { component: 'admin.plans' } });
 
@@ -142,6 +143,8 @@ export async function savePlanAction(formData: FormData): Promise<void> {
         storageGb: readNullableInt(formData, 'quota.storageGb'),
         analyticsRetentionDays: readNullableInt(formData, 'quota.analyticsRetentionDays'),
         workspaces: readNullableInt(formData, 'quota.workspaces'),
+        // PR 6: the AI automation caps. Not set is LEFT OUT (off), never null.
+        ...readPlanAiCaps(formData),
       },
       sortOrder: readInt(formData, 'sortOrder'),
     };

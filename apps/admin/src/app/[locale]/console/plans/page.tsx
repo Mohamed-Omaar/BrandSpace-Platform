@@ -857,6 +857,64 @@ function PlanForm({
         ))}
       </div>
 
+      {/* PR 6 — the AI automation caps. Not set is OFF and is left out of the
+          plan, unlike the limits above, where blank means unlimited. */}
+      <SectionHeader
+        title={isArabic ? 'إجراءات الأتمتة بالذكاء الاصطناعي' : 'AI automation actions'}
+        description={
+          isArabic
+            ? 'شهريًا لكل مساحة عمل، بحسب منطقتها الزمنية. «غير محدد» يعني أنها متوقفة.'
+            : 'Per workspace per month, in its own time zone. Not set means off.'
+        }
+      />
+      <div style={grid}>
+        {(
+          [
+            ['automationAiActionsPerMonth', isArabic ? 'شهريًا' : 'Per month'],
+            [
+              'trialAutomationAiActionsPerMonth',
+              isArabic ? 'شهريًا خلال التجربة' : 'Per month during the trial',
+            ],
+          ] as const
+        ).map(([field, label]) => {
+          const cap = plan?.quotas[field] ?? null;
+          return (
+            <div key={field} style={{ display: 'grid', gap: spacingTokens.xs }}>
+              <Field label={label} htmlFor={`aicap-${field}-kind`}>
+                <select
+                  className="bs-control"
+                  id={`aicap-${field}-kind`}
+                  name={`aiCap.${field}.kind`}
+                  defaultValue={cap === null ? '' : cap.kind}
+                  style={inputStyle()}
+                  data-testid={`field-aicap-${field}-kind`}
+                >
+                  <option value="">{isArabic ? 'غير محدد (متوقف)' : 'Not set (off)'}</option>
+                  <option value="limited">{isArabic ? 'محدود' : 'Limited'}</option>
+                  <option value="unlimited">{isArabic ? 'بلا حد' : 'Unlimited'}</option>
+                </select>
+              </Field>
+              <Field
+                label={isArabic ? 'العدد (1–1000)' : 'Number (1–1000)'}
+                htmlFor={`aicap-${field}-value`}
+              >
+                <input
+                  className="bs-control"
+                  id={`aicap-${field}-value`}
+                  name={`aiCap.${field}.value`}
+                  type="number"
+                  min={1}
+                  max={1000}
+                  defaultValue={cap?.kind === 'limited' ? cap.value : ''}
+                  style={inputStyle()}
+                  data-testid={`field-aicap-${field}-value`}
+                />
+              </Field>
+            </div>
+          );
+        })}
+      </div>
+
       <div style={{ marginBlockStart: spacingTokens.md }}>
         <Field
           label={isArabic ? 'سبب التغيير' : 'Change reason'}

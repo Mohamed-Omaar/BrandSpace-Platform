@@ -1,4 +1,5 @@
 import type { PlanDetail, PlanQuotas } from '@brandspace/entitlements';
+import { PLAN_AI_CAP_FIELDS, planAiCapValue, type PlanAiCapField } from './plan-ai-cap';
 
 /**
  * WHAT A PLANS CHANGE DOES, IN WORDS AN OWNER CAN CHECK (D-313).
@@ -36,7 +37,10 @@ export interface PlanChange {
   readonly changes: readonly PlanFieldChange[];
 }
 
-const QUOTAS: readonly (keyof PlanQuotas)[] = [
+/** The counted quotas: a number, or `null` for unlimited. */
+export type CountQuota = Exclude<keyof PlanQuotas, PlanAiCapField>;
+
+const QUOTAS: readonly CountQuota[] = [
   'seats',
   'brands',
   'socialAccounts',
@@ -88,6 +92,10 @@ export function describePlanChanges(
     compare('trialCredits', before.trialCredits, next.trialCredits);
     compare('monthlyCredits', before.monthlyCredits, next.monthlyCredits);
     for (const quota of QUOTAS) compare(quota, before.quotas[quota], next.quotas[quota]);
+    // PR 6: a cap reads as a number, null (unlimited) or 'off' (not set).
+    for (const field of PLAN_AI_CAP_FIELDS) {
+      compare(field, planAiCapValue(before.quotas[field]), planAiCapValue(next.quotas[field]));
+    }
     if (changes.length > 0) {
       out.push({
         key: next.key,
