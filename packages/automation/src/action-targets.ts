@@ -49,3 +49,38 @@ export async function campaignTargetResolves(
   });
   return campaign !== null;
 }
+
+/**
+ * PHASE 2B-3 PR 5 — MAY THIS CAMPAIGN BE PAUSED FOR THIS RULE? A live campaign
+ * of the workspace and the rule's brand, within `brandScope` (the author's on
+ * save, the creator's when the request would be created), PLANNED or ACTIVE.
+ * Read-only; `CampaignService.pause` asks again under its own conditional
+ * write when a person approves.
+ */
+export async function campaignPauseRefusal(
+  db: TenantScopedClient,
+  input: {
+    readonly workspaceId: string;
+    readonly brandId: string;
+    readonly campaignId: unknown;
+    readonly brandScope: readonly string[];
+  },
+): Promise<'campaign_unavailable' | 'campaign_not_pausable' | null> {
+  if (typeof input.campaignId !== 'string' || !UUID.test(input.campaignId)) {
+    return 'campaign_unavailable';
+  }
+  if (!brandInScope(input.brandScope, input.brandId)) return 'campaign_unavailable';
+  const campaign = await db.campaign.findFirst({
+    where: {
+      id: input.campaignId,
+      workspaceId: input.workspaceId,
+      brandId: input.brandId,
+      deletedAt: null,
+    },
+    select: { status: true },
+  });
+  if (!campaign) return 'campaign_unavailable';
+  return campaign.status === 'PLANNED' || campaign.status === 'ACTIVE'
+    ? null
+    : 'campaign_not_pausable';
+}

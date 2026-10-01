@@ -103,6 +103,27 @@ const COPY: Record<string, readonly [string, string]> = {
     'Not run — this automation reached its daily limit of runs.',
     'لم تُشغَّل — بلغت هذه الأتمتة حدها اليومي من مرات التشغيل.',
   ],
+  // Phase 2B-3 PR 5 — the asks-first outcomes (owner-approved copy, §6).
+  failure_superseded: [
+    'Not retried — the post failed again or was retried since this was asked.',
+    'لم تُعَد المحاولة — تعثّر المنشور مرة أخرى أو أُعيدت محاولته منذ هذا الطلب.',
+  ],
+  publish_not_retryable: [
+    "Not retried — this post can't be retried in its current state.",
+    'لم تُعَد المحاولة — لا يمكن إعادة محاولة هذا المنشور في حالته الحالية.',
+  ],
+  publish_deadline_passed: [
+    "Not retried — the post's time has passed, so it won't be published late.",
+    'لم تُعَد المحاولة — فات موعد المنشور، فلن يُنشر متأخرًا.',
+  ],
+  superseded_by_new_slot: [
+    'Not retried — the post was scheduled again.',
+    'لم تُعَد المحاولة — أُعيدت جدولة المنشور.',
+  ],
+  campaign_not_pausable: [
+    'Not paused — the campaign is no longer planned or active.',
+    'لم تُوقَف — لم تعد الحملة مخطَّطة أو نشطة.',
+  ],
   // Phase 2B-3 PR 5 (owner decision D2).
   rule_disabled: [
     'Not done — this automation was switched off or deleted before it was approved.',

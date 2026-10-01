@@ -68,6 +68,7 @@ export {
   RECONNECT_REQUIRED_CODE,
   providerForPlatformKey,
   publishIdempotencyKey,
+  publishRetryRefusal,
   retryableAfterReconnect,
   unreachableChannelGate,
 } from './publishing';

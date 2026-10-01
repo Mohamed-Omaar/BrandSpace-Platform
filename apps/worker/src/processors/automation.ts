@@ -40,7 +40,11 @@ import {
   isAppError,
   systemClock,
 } from '@brandspace/shared';
-import { unreachableChannelGate } from '@brandspace/social-connectors';
+import {
+  publishRetryRefusal,
+  TenantPublishingPolicySource,
+  unreachableChannelGate,
+} from '@brandspace/social-connectors';
 
 /**
  * Evaluate the automation rules listening for one event.
@@ -376,6 +380,24 @@ function portsFor(
     // Phase 2B-3 PR 3 — Brand Brain's one usable-fact rule, for the FACT_EXPIRING
     // re-check (owner decision F).
     knowledge: { asOf: knowledgeAsOfSafe, usableWhere: usableKnowledgeWhere },
+    /*
+     * PHASE 2B-3 PR 5 (owner decision D3) — WOULD A RETRY BE REFUSED? Asked
+     * before a person is asked to approve one. A READ-ONLY function of the
+     * tenant's client and publishing policy: nothing that can publish or queue
+     * is constructed here.
+     */
+    publishRetryCheck: {
+      async refusal(input) {
+        const policy = await new TenantPublishingPolicySource(db, environment).load();
+        return publishRetryRefusal({
+          db,
+          workspaceId: input.workspaceId,
+          policy,
+          jobId: input.jobId,
+          brandScope: input.brandScope,
+        });
+      },
+    },
     // NO PUBLISH PORT HERE. See the file comment: the confirmation arrives in
     // `apps/api`, with a person's session behind it, and the port is wired there.
   };

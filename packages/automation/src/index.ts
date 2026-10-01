@@ -15,7 +15,11 @@ export {
   memberCatalogueFor,
 } from './condition-values';
 export type { MemberChoice } from './condition-values';
-export { campaignTargetResolves, personTargetResolves } from './action-targets';
+export {
+  campaignPauseRefusal,
+  campaignTargetResolves,
+  personTargetResolves,
+} from './action-targets';
 export { memberAuthority, memberAuthorityResolver } from './authority';
 export { evaluateThresholdRule } from './threshold-producer';
 export type { ThresholdOutcome, ThresholdRuleRow } from './threshold-producer';
@@ -168,6 +172,9 @@ export type {
   EntitlementPort,
   NotificationPort,
   PublishPort,
+  PublishRetryCheckPort,
+  PublishRetryPort,
+  CampaignPausePort,
   TimezonePort,
 } from './ports';
 

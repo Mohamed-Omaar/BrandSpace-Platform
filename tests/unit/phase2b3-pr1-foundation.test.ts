@@ -108,12 +108,11 @@ describe('registry parity with the database enums', () => {
       'ADD_TO_CAMPAIGN',
       'MAKE_DRAFT_COPY',
       'REMIND_REVIEWER',
-    ]);
-    expect(PLANNED_AUTOMATION_ACTIONS.map((action) => action.type)).toEqual([
-      'DRAFT_IDEAS',
+      // Phase 2B-3 PR 5 — the two asks-first actions ship.
       'RETRY_PUBLISH',
       'PAUSE_CAMPAIGN',
     ]);
+    expect(PLANNED_AUTOMATION_ACTIONS.map((action) => action.type)).toEqual(['DRAFT_IDEAS']);
     // CONNECTION_EXPIRING is deferred: no enum value, no declaration.
     expect(Object.values(AutomationTrigger)).not.toContain('CONNECTION_EXPIRING');
   });
@@ -202,13 +201,15 @@ describe('every shipped action requires EXACTLY what it required before', () => 
     }
   });
 
-  it('only PROPOSE_PUBLISH asks first, as before', () => {
+  it('only PROPOSE_PUBLISH and, since PR 5, RETRY_PUBLISH and PAUSE_CAMPAIGN ask first', () => {
     expect(AUTOMATION_ACTIONS.filter((action) => action.asksFirst).map((a) => a.type)).toEqual([
       'PROPOSE_PUBLISH',
+      'RETRY_PUBLISH',
+      'PAUSE_CAMPAIGN',
     ]);
     expect(
       AUTOMATION_ACTIONS.filter((action) => isExternalAction(action.type)).map((a) => a.type),
-    ).toEqual(['PROPOSE_PUBLISH']);
+    ).toEqual(['PROPOSE_PUBLISH', 'RETRY_PUBLISH', 'PAUSE_CAMPAIGN']);
   });
 });
 

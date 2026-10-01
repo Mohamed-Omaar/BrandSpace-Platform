@@ -32,6 +32,7 @@ import {
 } from './phase7-context';
 // ONE IMPLEMENTATION OF THE PLAN CEILING, shared with the Copilot route.
 import { scheduleQuota } from './schedule-quota';
+import { campaignPausePort, publishRetryPort } from './automation-ports';
 
 /**
  * THE ONE ROUTE AN AUTOMATION'S EXTERNAL ACTION CAN REACH THE WORLD THROUGH.
@@ -293,6 +294,13 @@ export function registerAutomationRoutes(app: FastifyInstance): void {
               // entitlement gate, asked again at the moment the action happens.
               ports: {
                 publishing: publishPort(db),
+                // Phase 2B-3 PR 5 — the two other asks-first actions, here only.
+                publishRetry: publishRetryPort(db, {
+                  environment: currentEnvironment(),
+                  loadPolicy: () =>
+                    resolvePublishingPolicy(configurationService(), currentEnvironment()),
+                }),
+                campaignPause: campaignPausePort(db),
                 entitlements: entitlementGate(db, caller.workspaceId),
               },
               // A REFUSED CONFIRMATION MUST OUTLIVE THE TRANSACTION THAT REFUSED

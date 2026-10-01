@@ -33,7 +33,11 @@ import {
 } from './errors';
 import { CONDITION_VALUE_UNAVAILABLE, conditionValuesResolve } from './condition-values';
 import { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
-import { campaignTargetResolves, personTargetResolves } from './action-targets';
+import {
+  campaignPauseRefusal,
+  campaignTargetResolves,
+  personTargetResolves,
+} from './action-targets';
 import { memberAuthority } from './authority';
 import { triggerAvailable, type AutomationPolicy } from './policy';
 import type { AutomationPorts } from './ports';
@@ -291,6 +295,14 @@ function hashToken(token: string): string {
  * credit ledger records as `WORKSPACE_PENDING_DELETION`.
  */
 export const WORKSPACE_PENDING_DELETION_FAILURE = 'workspace_pending_deletion';
+
+/** Phase 2B-3 PR 5 — `retry()`'s refusals, as the run's typed outcomes. */
+const RETRY_REFUSAL_OUTCOME = {
+  not_found: 'content_unavailable',
+  not_retryable: 'publish_not_retryable',
+  deadline_passed: 'publish_deadline_passed',
+  superseded: 'superseded_by_new_slot',
+} as const satisfies Record<string, ActionOutcomeCode>;
 
 export class AutomationEngine {
   readonly #db: TenantScopedClient;
@@ -1325,6 +1337,19 @@ export class AutomationEngine {
 
     // --- EXTERNAL ACTIONS STOP HERE ------------------------------------------
     if (isExternalAction(rule.actionType)) {
+      /*
+       * PHASE 2B-3 PR 5 — NEVER ASK A PERSON TO APPROVE WHAT IS CERTAIN TO BE
+       * REFUSED. The target is checked now, as the creator, with the checks
+       * approval will make; a refusal ends the run with its reason and no
+       * request is created.
+       */
+      const refusal = await this.#proposalRefusal(rule, event, actor);
+      if (refusal) {
+        return this.#finish(rule, run, ACTION_OUTCOME_STATUS[refusal], {
+          conditionsHeld: true,
+          failureCode: refusal,
+        });
+      }
       return this.#awaitConfirmation(rule, run, event);
     }
 
@@ -1399,8 +1424,19 @@ export class AutomationEngine {
         conditionsHeld: true,
         confirmationTokenHash: null,
         confirmationExpiresAt: expiresAt,
-        resourceType: event.refType,
-        resourceId: event.refId,
+        /*
+         * WHAT A PERSON IS ASKED TO APPROVE. For a pause that is the campaign
+         * the rule names — never the event's reference, which may be another
+         * campaign or a post — so the request shows what would change.
+         */
+        ...(rule.actionType === 'PAUSE_CAMPAIGN'
+          ? {
+              resourceType: 'Campaign',
+              resourceId: String(
+                ((rule.actionConfig ?? {}) as Record<string, unknown>)['campaignId'] ?? '',
+              ),
+            }
+          : { resourceType: event.refType, resourceId: event.refId }),
       },
     });
 
@@ -1620,6 +1656,26 @@ export class AutomationEngine {
       throw automationConfirmationRejected();
     }
 
+    /*
+     * PHASE 2B-3 PR 5 — "APPROVED BY", in the Activity log. The claim above is
+     * the approval; this records who gave it, before anything is performed,
+     * so an approval whose action then refuses still reads as approved.
+     */
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'automation.run_confirmed',
+      actorType: 'USER',
+      actorId: input.actor.userId,
+      resourceType: 'AutomationRun',
+      resourceId: run.id,
+      brandId: run.brandId,
+      traceId: run.correlationId,
+      severity: 'NOTICE',
+      after: { ruleId: rule.id, actionType: rule.actionType },
+    });
+
+    if (rule.actionType === 'RETRY_PUBLISH') return this.#confirmRetry(rule, run, input.actor);
+    if (rule.actionType === 'PAUSE_CAMPAIGN') return this.#confirmPause(rule, run, input.actor);
+
     // THE ONLY CALL SITE OF THE PUBLISH PORT IN THIS FILE, and it is downstream
     // of the confirmation by construction.
     if (!this.#ports.publishing || !run.triggerRefId) {
@@ -1689,6 +1745,161 @@ export class AutomationEngine {
       const finished = await this.#finish(rule, run, 'FAILED', { failureCode });
       /* c8 ignore next -- `#finish` always returns a run here. */
       return finished.run ?? run;
+    }
+  }
+
+  /**
+   * PHASE 2B-3 PR 5 — THE TARGET OF AN ASKS-FIRST ACTION, CHECKED BEFORE A
+   * PERSON IS ASKED (owner decision D3, report §22). As the creator, with the
+   * checks approval will make again; a refusal is the run's outcome.
+   */
+  async #proposalRefusal(
+    rule: AutomationRule,
+    event: TriggerEvent,
+    actor: AutomationActor,
+  ): Promise<ActionOutcomeCode | null> {
+    if (rule.actionType === 'RETRY_PUBLISH') {
+      const target = await this.#retryTarget(event.refId, rule.brandId, actor.brandScope);
+      if ('outcome' in target) return target.outcome;
+      // No check wired is no check passed: fail closed, nobody is asked.
+      if (!this.#ports.publishRetryCheck) return 'publish_not_retryable';
+      const refusal = await this.#ports.publishRetryCheck.refusal({
+        workspaceId: this.#workspaceId,
+        jobId: target.jobId,
+        brandScope: actor.brandScope,
+      });
+      return refusal ? RETRY_REFUSAL_OUTCOME[refusal] : null;
+    }
+    if (rule.actionType === 'PAUSE_CAMPAIGN') {
+      return campaignPauseRefusal(this.#db, {
+        workspaceId: this.#workspaceId,
+        brandId: rule.brandId,
+        campaignId: ((rule.actionConfig ?? {}) as Record<string, unknown>)['campaignId'],
+        brandScope: actor.brandScope,
+      });
+    }
+    return null;
+  }
+
+  /**
+   * THE PUBLISH JOB A FAILED ATTEMPT BELONGS TO, in the rule's brand and the
+   * given scope — and only while that attempt is still the job's LATEST. A
+   * newer attempt means the post failed again, or was retried, after the
+   * request was made: `failure_superseded`, and nothing is retried.
+   */
+  async #retryTarget(
+    attemptId: string | null | undefined,
+    brandId: string,
+    brandScope: readonly string[],
+  ): Promise<{ jobId: string } | { outcome: ActionOutcomeCode }> {
+    if (!attemptId || !UUID_PATTERN.test(attemptId)) return { outcome: 'content_unavailable' };
+    const attempt = await this.#db.publishAttempt.findFirst({
+      where: { id: attemptId, workspaceId: this.#workspaceId },
+      select: { publishJobId: true },
+    });
+    if (!attempt) return { outcome: 'content_unavailable' };
+    const job = await this.#db.publishJob.findFirst({
+      where: {
+        id: attempt.publishJobId,
+        workspaceId: this.#workspaceId,
+        ...brandIdQueryFilter({ brandId, brandScope }),
+      },
+      select: { id: true },
+    });
+    if (!job) return { outcome: 'content_unavailable' };
+    const latest = await this.#db.publishAttempt.findFirst({
+      where: { workspaceId: this.#workspaceId, publishJobId: job.id },
+      orderBy: [{ attemptNumber: 'desc' }, { id: 'desc' }],
+      select: { id: true },
+    });
+    if (latest?.id !== attemptId) return { outcome: 'failure_superseded' };
+    return { jobId: job.id };
+  }
+
+  /** PHASE 2B-3 PR 5 — an approved retry, performed as the APPROVER. */
+  async #confirmRetry(
+    rule: AutomationRule,
+    run: AutomationRun,
+    approver: AutomationActor,
+  ): Promise<AutomationRun> {
+    const end = async (
+      status: AutomationRun['status'],
+      input: {
+        conditionsHeld?: boolean;
+        failureCode?: string;
+        actionResult?: Prisma.InputJsonValue;
+      },
+    ) => (await this.#finish(rule, run, status, input)).run ?? run;
+    if (!this.#ports.publishRetry) {
+      return end('BLOCKED_BY_POLICY', { failureCode: 'external_action_unavailable' });
+    }
+    const target = await this.#retryTarget(run.triggerRefId, run.brandId, approver.brandScope);
+    if ('outcome' in target) {
+      return end(ACTION_OUTCOME_STATUS[target.outcome], {
+        conditionsHeld: true,
+        failureCode: target.outcome,
+      });
+    }
+    try {
+      const result = await this.#ports.publishRetry.retry({
+        workspaceId: this.#workspaceId,
+        jobId: target.jobId,
+        actorUserId: approver.userId,
+        actorBrandScope: approver.brandScope,
+      });
+      if (result.kind === 'refused') {
+        const outcome = RETRY_REFUSAL_OUTCOME[result.reason];
+        return end(ACTION_OUTCOME_STATUS[outcome], { conditionsHeld: true, failureCode: outcome });
+      }
+      return end('SUCCEEDED', { conditionsHeld: true, actionResult: { jobId: target.jobId } });
+    } catch (error: unknown) {
+      const failureCode = error instanceof AppError ? error.code.toLowerCase() : 'internal';
+      return end('FAILED', { failureCode });
+    }
+  }
+
+  /** PHASE 2B-3 PR 5 — an approved pause of the rule's named campaign, as the APPROVER. */
+  async #confirmPause(
+    rule: AutomationRule,
+    run: AutomationRun,
+    approver: AutomationActor,
+  ): Promise<AutomationRun> {
+    const end = async (
+      status: AutomationRun['status'],
+      input: {
+        conditionsHeld?: boolean;
+        failureCode?: string;
+        actionResult?: Prisma.InputJsonValue;
+      },
+    ) => (await this.#finish(rule, run, status, input)).run ?? run;
+    if (!this.#ports.campaignPause) {
+      return end('BLOCKED_BY_POLICY', { failureCode: 'external_action_unavailable' });
+    }
+    const campaignId = ((rule.actionConfig ?? {}) as Record<string, unknown>)['campaignId'];
+    if (typeof campaignId !== 'string' || !UUID_PATTERN.test(campaignId)) {
+      return end('BLOCKED_BY_POLICY', {
+        conditionsHeld: true,
+        failureCode: 'campaign_unavailable',
+      });
+    }
+    try {
+      const result = await this.#ports.campaignPause.pause({
+        workspaceId: this.#workspaceId,
+        brandId: run.brandId,
+        campaignId,
+        actorUserId: approver.userId,
+        actorBrandScope: approver.brandScope,
+      });
+      if (result.kind === 'refused') {
+        return end(ACTION_OUTCOME_STATUS[result.reason], {
+          conditionsHeld: true,
+          failureCode: result.reason,
+        });
+      }
+      return end('SUCCEEDED', { conditionsHeld: true, actionResult: { campaignId } });
+    } catch (error: unknown) {
+      const failureCode = error instanceof AppError ? error.code.toLowerCase() : 'internal';
+      return end('FAILED', { failureCode });
     }
   }
 
@@ -1924,6 +2135,10 @@ export class AutomationEngine {
       }
 
       case 'DRAFT_IDEAS':
+        throw unknownTriggerOrAction();
+
+      /* c8 ignore next 4 -- asks-first actions stop at AWAITING_CONFIRMATION
+         and are performed by `confirmRun`, never here. */
       case 'RETRY_PUBLISH':
       case 'PAUSE_CAMPAIGN':
         throw unknownTriggerOrAction();
@@ -2199,6 +2414,20 @@ export class AutomationEngine {
         campaignId: config['campaignId'],
       });
       if (!ok) throw automationTargetNotFound();
+    }
+    /*
+     * PHASE 2B-3 PR 5 — the campaign a pause names: this brand's, live, and
+     * PLANNED or ACTIVE now. The rule's brand is already within the author's
+     * scope (checked before this), so the campaign is too.
+     */
+    if (actionType === 'PAUSE_CAMPAIGN') {
+      const refusal = await campaignPauseRefusal(this.#db, {
+        workspaceId: this.#workspaceId,
+        brandId,
+        campaignId: config['campaignId'],
+        brandScope: [],
+      });
+      if (refusal) throw automationTargetNotFound();
     }
   }
 

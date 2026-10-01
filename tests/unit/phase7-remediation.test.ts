@@ -217,6 +217,8 @@ describe('an action that needs a content item may only be paired with a trigger 
       'SCHEDULE_NEXT_FREE_SLOT',
       'ADD_TO_CAMPAIGN',
       'MAKE_DRAFT_COPY',
+      // Phase 2B-3 PR 5 — a retry reaches its post through the failed attempt.
+      'RETRY_PUBLISH',
     ]);
 
     for (const action of contentActions) {

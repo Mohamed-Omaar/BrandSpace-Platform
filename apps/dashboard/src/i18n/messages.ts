@@ -2634,6 +2634,8 @@ export const messages = {
     'automations.action.NOTIFY_PERSON': 'تنبيه شخص محدد',
     'automations.action.ADD_TO_CAMPAIGN': 'إضافة إلى حملة',
     'automations.action.MAKE_DRAFT_COPY': 'إنشاء نسخة مسودة',
+    'automations.action.RETRY_PUBLISH': 'إعادة محاولة نشر المنشور المتعثّر',
+    'automations.action.PAUSE_CAMPAIGN': 'إيقاف حملة مؤقتًا',
     'automations.action.REMIND_REVIEWER': 'تذكير المراجِع',
     'automations.status.RUNNING': 'قيد التشغيل',
     'automations.status.SUCCEEDED': 'نجحت',
@@ -2709,6 +2711,14 @@ export const messages = {
     'automations.failure.occurrence_stale': 'تم التخطي — تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
     'automations.failure.no_eligible_reviewer':
       'لم يُرسل — لا يوجد حاليًا من يمكنه مراجعة هذا المنشور.',
+    'automations.failure.failure_superseded':
+      'لم تُعَد المحاولة — تعثّر المنشور مرة أخرى أو أُعيدت محاولته منذ هذا الطلب.',
+    'automations.failure.publish_not_retryable':
+      'لم تُعَد المحاولة — لا يمكن إعادة محاولة هذا المنشور في حالته الحالية.',
+    'automations.failure.publish_deadline_passed':
+      'لم تُعَد المحاولة — فات موعد المنشور، فلن يُنشر متأخرًا.',
+    'automations.failure.superseded_by_new_slot': 'لم تُعَد المحاولة — أُعيدت جدولة المنشور.',
+    'automations.failure.campaign_not_pausable': 'لم تُوقَف — لم تعد الحملة مخطَّطة أو نشطة.',
     'automations.failure.creator_no_longer_a_member':
       'لم تُشغَّل — منشئ هذه الأتمتة لم يعد عضوًا في مساحة العمل.',
     'automations.failure.creator_lost_permission':
@@ -5955,6 +5965,8 @@ export const messages = {
     'automations.action.NOTIFY_PERSON': 'Notify a chosen person',
     'automations.action.ADD_TO_CAMPAIGN': 'Add to a campaign',
     'automations.action.MAKE_DRAFT_COPY': 'Make a draft copy',
+    'automations.action.RETRY_PUBLISH': 'Retry the failed post',
+    'automations.action.PAUSE_CAMPAIGN': 'Pause a campaign',
     'automations.action.REMIND_REVIEWER': 'Remind the reviewer',
     'automations.status.RUNNING': 'Running',
     'automations.status.SUCCEEDED': 'Succeeded',
@@ -6034,6 +6046,15 @@ export const messages = {
       'Skipped — what started this automation had changed by the time it ran.',
     'automations.failure.no_eligible_reviewer':
       'Not sent — no one who can review this post is available right now.',
+    'automations.failure.failure_superseded':
+      'Not retried — the post failed again or was retried since this was asked.',
+    'automations.failure.publish_not_retryable':
+      "Not retried — this post can't be retried in its current state.",
+    'automations.failure.publish_deadline_passed':
+      "Not retried — the post's time has passed, so it won't be published late.",
+    'automations.failure.superseded_by_new_slot': 'Not retried — the post was scheduled again.',
+    'automations.failure.campaign_not_pausable':
+      'Not paused — the campaign is no longer planned or active.',
     'automations.failure.creator_no_longer_a_member':
       'Not run — the person who created this automation is no longer a member of the workspace.',
     'automations.failure.creator_lost_permission':
