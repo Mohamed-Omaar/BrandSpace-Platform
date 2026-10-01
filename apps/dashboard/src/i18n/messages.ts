@@ -2573,6 +2573,8 @@ export const messages = {
     'automations.approveRun': 'موافقة',
     'automations.needsYou.retry': 'إعادة محاولة «{content}»',
     'automations.needsYou.pause': 'إيقاف الحملة «{campaign}» مؤقتًا',
+    // A campaign the reader cannot see is never named, whichever the reason.
+    'automations.needsYou.pauseUnavailable': 'إيقاف حملة (غير متاحة)',
     'automations.pauseNote':
       'الإيقاف يضع الحملة في حالة «متوقفة». المنشورات المجدولة تُنشر كما هي.',
     'automations.approvedBy': 'وافق عليه {name}',
@@ -2745,6 +2747,8 @@ export const messages = {
       'لم تُشغَّل — بلغت هذه الأتمتة حدها اليومي من مرات التشغيل.',
     'automations.failure.fallback': 'حدث خطأ أثناء تشغيل هذه الأتمتة.',
     'automations.confirmNeedsPermission': 'ينتظر تأكيد عضو يملك صلاحية النشر.',
+    // Phase 2B-3 PR 5 — a pause waits for someone who may manage campaigns.
+    'automations.confirmNeedsCampaignPermission': 'في انتظار عضو يملك صلاحية إدارة هذه الحملة.',
     'automations.brandFilter': 'القواعد والتشغيلات للعلامة {brand}.',
     'notifications.template.analytics.anomaly_detected': 'تغيّر غير معتاد في الأداء',
     'notifications.template.brand_brain.learning_proposed': 'درس مقترح بانتظار مراجعتك',
@@ -5919,6 +5923,8 @@ export const messages = {
     'automations.approveRun': 'Approve',
     'automations.needsYou.retry': 'Retry "{content}"',
     'automations.needsYou.pause': 'Pause the campaign "{campaign}"',
+    // A campaign the reader cannot see is never named, whichever the reason.
+    'automations.needsYou.pauseUnavailable': 'Pause a campaign (not available)',
     'automations.pauseNote':
       'Pausing marks the campaign as paused. Posts already scheduled still go out.',
     'automations.approvedBy': 'Approved by {name}',
@@ -6095,6 +6101,9 @@ export const messages = {
       'Not run — this automation reached its daily limit of runs.',
     'automations.failure.fallback': 'Something went wrong running this automation.',
     'automations.confirmNeedsPermission': 'Waiting for a member who may publish to confirm it.',
+    // Phase 2B-3 PR 5 — a pause waits for someone who may manage campaigns.
+    'automations.confirmNeedsCampaignPermission':
+      'Waiting for a member who may manage this campaign.',
     'automations.brandFilter': 'Rules and runs for {brand}.',
     'notifications.template.analytics.anomaly_detected': 'An unusual change in performance',
     'notifications.template.brand_brain.learning_proposed':

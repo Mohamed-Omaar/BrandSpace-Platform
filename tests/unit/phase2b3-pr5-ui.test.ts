@@ -2,8 +2,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { translator } from '../../apps/dashboard/src/i18n/messages';
-import { runPresentation } from '../../apps/dashboard/src/server/automation-run-display';
+import { messages, translator } from '../../apps/dashboard/src/i18n/messages';
+import {
+  requestLine,
+  runPresentation,
+  waitingHint,
+} from '../../apps/dashboard/src/server/automation-run-display';
 import { actionConfigFrom } from '../../apps/dashboard/src/server/automation-form';
 
 /**
@@ -43,6 +47,19 @@ const COPY: Record<string, readonly [string, string]> = {
     'Nobody approved this in the time allowed, so nothing was done.',
     'لم يوافق عليه أحد خلال المهلة، فلم يُنفَّذ شيء.',
   ],
+  // Owner decisions on #63: the hint for a pause, and a campaign the reader cannot see.
+  'automations.confirmNeedsCampaignPermission': [
+    'Waiting for a member who may manage this campaign.',
+    'في انتظار عضو يملك صلاحية إدارة هذه الحملة.',
+  ],
+  'automations.needsYou.pauseUnavailable': [
+    'Pause a campaign (not available)',
+    'إيقاف حملة (غير متاحة)',
+  ],
+  'automations.failure.rule_disabled': [
+    'Not done — this automation was switched off or deleted before it was approved.',
+    'لم يُنفَّذ — أُوقفت هذه الأتمتة أو حُذفت قبل الموافقة عليها.',
+  ],
   'automations.approvedBy': ['Approved by {name}', 'وافق عليه {name}'],
   'automations.skippedBy': ['Skipped by {name}', 'تخطّاه {name}'],
   'activity.action.automation.run_confirmed': [
@@ -66,6 +83,82 @@ describe('the approved copy, in both languages', () => {
       expect(ar(key as never)).toBe(arabic);
     });
   }
+});
+
+describe('en and ar parity for every PR 5 key', () => {
+  it('each key exists, non-empty, in both languages', () => {
+    const catalogue = messages as unknown as Record<'en' | 'ar', Record<string, string>>;
+    for (const key of Object.keys(COPY)) {
+      expect(catalogue.en[key], `en ${key}`).toEqual(expect.any(String));
+      expect(catalogue.ar[key], `ar ${key}`).toEqual(expect.any(String));
+      expect(catalogue.en[key]!.length, `en ${key}`).toBeGreaterThan(0);
+      expect(catalogue.ar[key]!.length, `ar ${key}`).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('who a waiting request waits for (waitingHint)', () => {
+  it('a pause: a member who may manage the campaign — its action’s campaigns.manage', () => {
+    expect(waitingHint('PAUSE_CAMPAIGN')).toBe('automations.confirmNeedsCampaignPermission');
+  });
+
+  it('a publish or a retry: a member who may publish, as before', () => {
+    expect(waitingHint('PROPOSE_PUBLISH')).toBe('automations.confirmNeedsPermission');
+    expect(waitingHint('RETRY_PUBLISH')).toBe('automations.confirmNeedsPermission');
+  });
+
+  it('an action without a required permission, or an unknown one, gets no hint', () => {
+    expect(waitingHint('NOTIFY_PERSON')).toBeNull();
+    expect(waitingHint('NOT_AN_ACTION')).toBeNull();
+  });
+
+  it('the page shows it only to a reader who cannot decide the request', () => {
+    const page = source('apps/dashboard/src/app/[locale]/automations/page.tsx');
+    expect(page).toContain('proposals.has(run.id) && !mayDecide(run.actionType)');
+    expect(page).toContain('waitingHint(run.actionType)');
+    expect(page).not.toContain("t('automations.confirmNeedsPermission')");
+  });
+});
+
+describe('what a request would do (requestLine)', () => {
+  it('a pause names the campaign the reader can see', () => {
+    expect(requestLine('PAUSE_CAMPAIGN', { content: null, campaign: 'Spring' })).toEqual({
+      key: 'automations.needsYou.pause',
+      token: '{campaign}',
+      value: 'Spring',
+    });
+  });
+
+  it('a campaign deleted or outside the reader’s brands: one neutral label, no name', () => {
+    for (const proposal of [undefined, { content: null, campaign: null }]) {
+      const line = requestLine('PAUSE_CAMPAIGN', proposal);
+      expect(line).toEqual({ key: 'automations.needsYou.pauseUnavailable' });
+      expect('value' in line).toBe(false);
+    }
+    expect(en('automations.needsYou.pauseUnavailable')).not.toContain('—');
+  });
+
+  it('the page reads campaigns through the reader’s scope and never prints a placeholder name', () => {
+    const page = source('apps/dashboard/src/app/[locale]/automations/page.tsx');
+    expect(page).toContain("run.resourceType === 'Campaign'");
+    expect(page).not.toContain("proposal?.campaign ?? '—'");
+  });
+
+  it('a retry and a publish name their post, or say it is not available', () => {
+    expect(requestLine('RETRY_PUBLISH', { content: 'Post', campaign: null })).toEqual({
+      key: 'automations.needsYou.retry',
+      token: '{content}',
+      value: 'Post',
+    });
+    expect(requestLine('PROPOSE_PUBLISH', { content: 'Post', campaign: null })).toEqual({
+      key: 'automations.previewContent',
+      token: '{content}',
+      value: 'Post',
+    });
+    expect(requestLine('RETRY_PUBLISH', { content: null, campaign: null })).toEqual({
+      key: 'automations.previewUnknown',
+    });
+  });
 });
 
 describe('a lapsed request reads in words', () => {

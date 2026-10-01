@@ -33,7 +33,11 @@ import { inWorkspace, requireWorkspacePage } from '../../../server/customer-cont
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { copilotHref } from '../../../server/copilot-surface';
-import { runPresentation } from '../../../server/automation-run-display';
+import {
+  requestLine as requestLineFor,
+  runPresentation,
+  waitingHint,
+} from '../../../server/automation-run-display';
 import { inAnalytics } from '../../../server/analytics-context';
 import { statusMessage, translator, type MessageKey, successFlash } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -364,14 +368,8 @@ export default async function AutomationsPage({
    * post a publish or a retry concerns, the campaign a pause names.
    */
   const requestLine = (run: { id: string; actionType: string }): string => {
-    const proposal = proposals.get(run.id);
-    if (run.actionType === 'PAUSE_CAMPAIGN') {
-      return t('automations.needsYou.pause').replace('{campaign}', proposal?.campaign ?? '—');
-    }
-    if (!proposal?.content) return t('automations.previewUnknown');
-    return run.actionType === 'RETRY_PUBLISH'
-      ? t('automations.needsYou.retry').replace('{content}', proposal.content)
-      : t('automations.previewContent').replace('{content}', proposal.content);
+    const line = requestLineFor(run.actionType, proposals.get(run.id));
+    return 'token' in line ? t(line.key).replace(line.token, line.value) : t(line.key);
   };
   const formBrands = selectedBrand
     ? brands.filter((brand) => brand.id === selectedBrand.id)
@@ -1082,15 +1080,20 @@ export default async function AutomationsPage({
                       fetched server-side and never reaches this page.
                     */}
                       {/*
-                        The existing "waiting for a member who may publish"
-                        words fit a publish and a retry only; a pause someone
-                        else must decide shows no hint rather than a wrong one.
+                        WHO IT WAITS FOR, by the action's own permission
+                        (`waitingHint`): a member who may publish, or one who
+                        may manage the campaign.
                       */}
-                      {proposals.has(run.id) &&
-                      !mayDecide(run.actionType) &&
-                      run.actionType !== 'PAUSE_CAMPAIGN' ? (
-                        <span>{t('automations.confirmNeedsPermission')}</span>
-                      ) : null}
+                      {proposals.has(run.id) && !mayDecide(run.actionType)
+                        ? (() => {
+                            const hint = waitingHint(run.actionType);
+                            return hint ? (
+                              <span data-testid={`automation-run-waiting-${run.id}`}>
+                                {t(hint)}
+                              </span>
+                            ) : null;
+                          })()
+                        : null}
                       {proposals.has(run.id) && mayDecide(run.actionType) ? (
                         // B12 — decided in "Needs you" above, not here.
                         <span>{t('automations.decideAbove')}</span>
