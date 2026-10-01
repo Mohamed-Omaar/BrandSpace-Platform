@@ -115,6 +115,19 @@ export {
 } from './due-events';
 export type { DueCandidate, KnowledgeValidityPort, LocalCalendarPort } from './due-events';
 export { OCCURRENCE_STALE, occurrenceStillHolds } from './occurrence';
+// Phase 2B-3 PR 6 — DRAFT_IDEAS: the brief, the parser and its keys.
+export {
+  DRAFT_IDEAS_COUNT,
+  DRAFT_IDEAS_TASK_KEY,
+  DRAFT_IDEA_TITLE_MAX,
+  draftIdeaKey,
+  draftIdeasContext,
+  draftIdeasPrompt,
+  draftIdeasRequestKey,
+  isDraftIdeasTrigger,
+  parseDraftIdeas,
+} from './draft-ideas';
+export type { DraftIdea, DraftIdeasTrigger } from './draft-ideas';
 export { produceTopPost, produceWeeklyEngagementDropped } from './analytics-producers';
 export {
   ENGAGEMENTS_METRIC,

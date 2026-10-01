@@ -2097,6 +2097,14 @@ const automationsSchema = z.object({
       claimLeaseSeconds: z.number().int().min(60).max(3_600).default(300),
       /** How long a completed run record is kept. */
       runRetentionDays: z.number().int().min(1).max(365).default(90),
+      /**
+       * PHASE 2B-3 PR 6 — how many times the AI executor claims one run
+       * (DRAFT_IDEAS) before it gives up: FAILED `ai_unavailable`, nothing
+       * charged, the cap slot given back. M5b's CHECK bounds attempts at 20.
+       */
+      aiMaxAttempts: z.number().int().min(1).max(10).default(3),
+      /** PHASE 2B-3 PR 6 — runs one AI executor pass claims, platform-wide. */
+      aiExecutionBatchSize: z.number().int().min(1).max(100).default(10),
     })
     .default({}),
 

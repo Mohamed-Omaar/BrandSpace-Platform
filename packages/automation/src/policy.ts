@@ -29,6 +29,9 @@ export interface AutomationPolicy {
     readonly dispatchBatchSize: number;
     readonly claimLeaseSeconds: number;
     readonly runRetentionDays: number;
+    /** Phase 2B-3 PR 6 — the AI executor (DRAFT_IDEAS). */
+    readonly aiMaxAttempts: number;
+    readonly aiExecutionBatchSize: number;
   };
   /**
    * Phase 2B-3 PR 4 — the analytics events' operator thresholds. Every value

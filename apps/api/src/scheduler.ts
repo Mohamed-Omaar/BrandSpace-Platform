@@ -85,6 +85,7 @@ import {
   ContentApprovalService,
   TenantContentPolicySource,
   instantForIntent,
+  resolveContentPolicy,
 } from '@brandspace/content';
 import {
   CreditLedgerService,
@@ -109,6 +110,8 @@ import {
 } from '@brandspace/billing';
 import { createObjectStore } from '@brandspace/storage';
 import { applicationResolver } from './routes/social';
+import { gateway as aiGateway } from './routes/phase7-context';
+import { AutomationAiExecutor, type RoutingRuleView } from './automation-ai-executor';
 import { WorkspaceDeletionService } from '@brandspace/onboarding';
 import {
   AppError,
@@ -260,6 +263,13 @@ export interface MaintenanceResult {
   readonly financialDriftsFound: number;
   /** Prototype v94 Phase 2B-1, A8 (D-328) — deletions whose waiting period ended. */
   readonly workspacesDeleted: number;
+  /**
+   * Phase 2B-3 PR 6 — the AI executor: gateway requests stuck past their
+   * deadline released, AI runs given up after every attempt, AI runs finished.
+   */
+  readonly aiRequestsReleased: number;
+  readonly automationAiRunsAbandoned: number;
+  readonly automationAiRunsExecuted: number;
 }
 
 export interface SchedulerOptions {
@@ -289,6 +299,7 @@ export class MaintenanceScheduler {
 
   readonly #socialApplications: ApplicationResolver;
   readonly #injectedPublishingPolicy: PublishingPolicy | undefined;
+  #aiExecutor: AutomationAiExecutor | null = null;
 
   constructor(options: SchedulerOptions) {
     this.#environment = options.environment;
@@ -2127,6 +2138,48 @@ export class MaintenanceScheduler {
     return new Map(rows.map((row) => [row.id, row.timezone ?? 'UTC']));
   }
 
+  /**
+   * PHASE 2B-3 PR 6 — THE AI EXECUTOR'S PASS (`automation-ai-executor.ts`).
+   *
+   * Here, in the API, because the AI gateway needs the PLATFORM database
+   * identity and the worker has none (F-07 / F-68). The executor guards itself
+   * against an overlapping pass, and a run's lease makes an overlap harmless
+   * anyway. It also releases gateway requests stuck past their deadline
+   * (`sweepStuckRequests`), which nothing called before — and which an AI run
+   * waiting on a request that crashed mid-flight needs.
+   */
+  async executeAutomationAi(): Promise<{
+    readonly stuckRequestsReleased: number;
+    readonly abandoned: number;
+    readonly executed: number;
+  }> {
+    this.#aiExecutor ??= new AutomationAiExecutor({
+      environment: this.#environment,
+      clock: this.#clock,
+      platform: getPlatformClient(),
+      app: getPrisma(),
+      gateway: aiGateway(),
+      automationPolicy: () =>
+        resolveAutomationPolicy(
+          new ConfigurationService({ prisma: getPlatformClient() }),
+          this.#environment,
+        ),
+      contentPolicy: () =>
+        resolveContentPolicy(
+          new ConfigurationService({ prisma: getPlatformClient() }),
+          this.#environment,
+        ),
+      routingRules: async () => {
+        const routing = await new ConfigurationService({ prisma: getPlatformClient() }).get(
+          'ai.routing',
+          this.#environment,
+        );
+        return ((routing as { rules?: RoutingRuleView[] }).rules ?? []) as RoutingRuleView[];
+      },
+    });
+    return this.#aiExecutor.sweep();
+  }
+
   /** One full pass of everything. Exposed so a test can run it deterministically. */
   async runOnce(): Promise<MaintenanceResult> {
     const cadence = await this.#cadence();
@@ -2144,6 +2197,7 @@ export class MaintenanceScheduler {
     const analytics = await this.sweepAnalytics(cadence.ingestionReconcileBatch);
     const analyticsRowsPruned = await this.pruneAnalyticsRetention(cadence.retentionPurgeBatch);
     const automations = await this.sweepAutomations(cadence.ingestionReconcileBatch);
+    const automationAi = await this.executeAutomationAi();
     const finance = await this.sweepFinance(cadence.retentionPurgeBatch);
     const workspacesDeleted = await this.finishWorkspaceDeletions(cadence.retentionPurgeBatch);
     return {
@@ -2170,6 +2224,9 @@ export class MaintenanceScheduler {
       dunningSuspensions: finance.dunningSuspensions,
       financialDriftsFound: finance.driftsFound,
       workspacesDeleted,
+      aiRequestsReleased: automationAi.stuckRequestsReleased,
+      automationAiRunsAbandoned: automationAi.abandoned,
+      automationAiRunsExecuted: automationAi.executed,
     };
   }
 
@@ -2281,6 +2338,15 @@ export class MaintenanceScheduler {
     every(cadence.ingestionReconcileSeconds, 'automation-sweep', async () => {
       const swept = await this.sweepAutomations(cadence.ingestionReconcileBatch);
       return swept.produced + swept.dispatched + swept.expired;
+    });
+    /*
+     * PHASE 2B-3 PR 6 — THE AI EXECUTOR, ON ITS OWN TIMER. Separate from the
+     * automation sweep so an AI call never delays producing and dispatching
+     * events; the executor skips a pass that would overlap its previous one.
+     */
+    every(cadence.ingestionReconcileSeconds, 'automation-ai-execute', async () => {
+      const swept = await this.executeAutomationAi();
+      return swept.stuckRequestsReleased + swept.abandoned + swept.executed;
     });
 
     /*
