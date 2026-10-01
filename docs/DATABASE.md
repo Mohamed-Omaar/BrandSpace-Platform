@@ -159,12 +159,12 @@ stateDiagram-v2
 
 User ↔ Workspace with role and optional brand restriction.
 
-| Field                                                                         | Type        | Notes                                       |
-| ----------------------------------------------------------------------------- | ----------- | ------------------------------------------- |
-| `id`, `workspaceId`, `userId`, `roleId`                                       | uuid        |                                             |
-| `brandScope`                                                                  | uuid[] null | null = all brands; array = restricted set   |
-| `status`                                                                      | enum        | `invited`, `active`, `suspended`, `removed` |
-| `invitedByUserId`, `invitationTokenHash`, `invitationExpiresAt`, `acceptedAt` |             | token stored hashed only                    |
+| Field                                                                         | Type   | Notes                                                                            |
+| ----------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------- |
+| `id`, `workspaceId`, `userId`, `roleId`                                       | uuid   |                                                                                  |
+| `brandScope`                                                                  | uuid[] | `{}` = all brands; array = restricted set; never NULL, default `{}` (F6, §18.13) |
+| `status`                                                                      | enum   | `invited`, `active`, `suspended`, `removed`                                      |
+| `invitedByUserId`, `invitationTokenHash`, `invitationExpiresAt`, `acceptedAt` |        | token stored hashed only                                                         |
 
 Constraints: `unique(workspaceId, userId)` where `status <> 'removed'`.
 Indexes: `(workspaceId, status)`, `(userId, status)`.
@@ -1963,6 +1963,30 @@ build are in OPERATIONS.md §6.10.
 transaction, and is a Prisma `aggregate` / `groupBy` / `findMany` — no raw SQL. The thresholds live in the
 `automations` configuration domain (`events`, D-436), which the Configuration Service also projects into
 `entitlement_catalogue_snapshot` for the dashboard.
+
+### 18.13 F6 — `brandScope` is never NULL (D-442 – D-444)
+
+`membership.brandScope` and `invitation.brandScope` are `uuid[] NOT NULL DEFAULT '{}'` from
+`20261013090000_brand_scope_not_null`. Before it both were nullable, and the two owner writers —
+self-onboarding and a workspace created by staff — left the column out, so an owner was stored NULL.
+
+**What a value means did not change.** `{}` means every brand in the workspace and a non-empty array
+restricts the member, exactly as before; NULL, which every reader in code already treated as `{}`,
+can no longer be stored. The migration rewrote only NULL rows, to `{}`, and touched no restricted
+scope. The Prisma fields carry `@default([])`, the one rule for an insert that omits the column
+(an older release included).
+
+**Why it mattered.** In SQL, `cardinality(NULL) = 0` and `NULL @> ARRAY[x]` are NULL, not true, so
+an array filter silently drops NULL rows. `resolveRecipients` (`isEmpty` OR `has`) therefore skipped
+the owner, and `memberCatalogueFor` had to read up to 2,000 members and filter in code. Both now ask
+PostgreSQL directly.
+
+**The migration** is one explicit transaction in D-112's order: `SET LOCAL lock_timeout = '5s'`;
+FORCE lifted on both tables (the migrator owns them, is NOBYPASSRLS and has no policy, so under FORCE
+it sees no row); the default; the NULL → `{}` backfill; NOT NULL; FORCE restored; a `DO` block that
+aborts unless both tables are RLS-enabled, FORCE-d and NOT NULL. `invitation_status_is_terminal`
+permits the backfill (it refuses only status resurrection and token changes). `updatedAt` is not
+touched. Lock, timeout and recovery: OPERATIONS.md §6.11.
 
 ## 19. Phase 9 — Commerce & Onboarding
 

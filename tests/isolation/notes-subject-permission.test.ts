@@ -52,7 +52,7 @@ let copywriter: Member;
 let approver: Member;
 /** A copywriter whose BrandScope names ANOTHER brand only. */
 let elsewhere: Member;
-/** An approver whose membership row was written with NO brandScope at all (NULL). */
+/** An approver whose membership row was written with NO brandScope at all (stored `{}` since F6). */
 let unscoped: Member;
 
 const inA = <T>(fn: (service: NotesService, db: TenantScopedClient) => Promise<T>) =>
@@ -90,7 +90,7 @@ async function member(
       status: 'ACTIVE',
       acceptedAt: new Date(),
       // `null` is written by leaving the column out, the way onboarding writes
-      // an owner — the NULL scope `brandInScope` must treat as every brand.
+      // an owner — stored NULL before F6 and `{}` since; both mean every brand.
       ...(brandScope === null ? {} : { brandScope }),
     },
   });
@@ -324,7 +324,7 @@ describe('F3 · the picker offers exactly the people the service accepts', () =>
     ]);
     const named = (await mentionRows(noteId)).map((row) => row.mentionedUserId);
     expect(named).not.toContain(elsewhere.userId);
-    // A NULL scope means every brand: decided in code, so the row is not lost.
+    // An omitted scope means every brand (NULL before F6, `{}` since): the row is not lost.
     expect(named).toContain(unscoped.userId);
   });
 

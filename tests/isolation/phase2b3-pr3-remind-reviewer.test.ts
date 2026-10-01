@@ -81,20 +81,17 @@ async function member(input: {
     where: { key: input.roleKey, realm: 'WORKSPACE' },
   });
   const workspaceId = input.workspaceId ?? fixtures.a.workspaceId;
-  const membership = await platform.membership.create({
+  await platform.membership.create({
     data: {
       workspaceId,
       userId: user.id,
       roleId: role.id,
       status: input.status ?? 'ACTIVE',
-      brandScope: [...(input.brandScope ?? [])],
+      // `null` leaves the column out, the way onboarding writes an owner. It
+      // used to be stored NULL; since F6 the database stores `{}` instead.
+      ...(input.brandScope === null ? {} : { brandScope: [...input.brandScope] }),
     },
-    select: { id: true },
   });
-  if (input.brandScope === null) {
-    // NULL is how an unrestricted membership is usually written.
-    await platform.$executeRaw`UPDATE "membership" SET "brandScope" = NULL WHERE "id" = ${membership.id}::uuid`;
-  }
   return user.id;
 }
 
@@ -301,10 +298,19 @@ describe('who is reminded', () => {
     for (const userId of never) expect(recipients).not.toContain(userId);
   });
 
-  it('a member with a NULL brand scope is unrestricted, and is reminded', async () => {
+  it('a member written without a brand scope is unrestricted, and is reminded; NULL is refused (F6)', async () => {
     const { brandId } = await waitingReview();
     const unrestricted = await member({ roleKey: 'approver', brandScope: null });
     try {
+      // F6: the omitted scope is stored as `{}`, and a NULL can no longer be.
+      const [row] = await platform.$queryRaw<{ id: string; scope: string }[]>`
+        SELECT "id", "brandScope"::text AS scope FROM "membership"
+         WHERE "workspaceId" = ${fixtures.a.workspaceId}::uuid AND "userId" = ${unrestricted}::uuid`;
+      expect(row?.scope).toBe('{}');
+      await expect(
+        platform.$executeRaw`UPDATE "membership" SET "brandScope" = NULL WHERE "id" = ${row!.id}::uuid`,
+      ).rejects.toThrow(/null value in column "brandScope"|23502/);
+
       const ruleId = await reminderRule(brandId);
       const { recipients } = await remind(ruleId);
       expect(recipients).toEqual([unrestricted]);
