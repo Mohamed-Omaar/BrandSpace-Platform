@@ -693,6 +693,15 @@ export default defineConfig({
       name: 'phase8-flow',
       testMatch: /(phase8-flow|phase8-creative-adaptation)\.spec\.ts/,
       fullyParallel: false,
+      /*
+       * AFTER `brand-brain` (D-457). Step 14 proposes a learning from Marketing
+       * Intelligence and expects a candidate in the Brand Brain queue; it passes
+       * only once `brand-brain` has written its knowledge into the shared
+       * workspace. That was an accident of both projects running in one job;
+       * the E2E shards made it visible. Declared here so the order is real. That
+       * step creating its own candidate is on the final-review list.
+       */
+      dependencies: ['brand-brain'],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

@@ -724,7 +724,8 @@ workers, sharding, reporter and test selection did not change.
 - **Two E2E shards (D-455).** The Playwright job runs as two shards by project, each with its own
   database and seed; the check named "Playwright E2E (RTL/LTR + accessibility)" is now an aggregate
   that passes only when both shards pass. A coverage step fails a shard if the two lists stop covering
-  the whole suite exactly once — a new project must be added to one of them.
+  the whole suite exactly once — a new project must be added to one of them. A project that depends on
+  another runs in that project's shard (`phase8-flow` after `brand-brain`, D-457).
 
 - **Per-test timeout: 30 → 45 seconds (D-456).** The tests that timed out ran 31–36 s on the slower
   runners. Retries, the `expect` timeout and assertions are unchanged.
@@ -733,6 +734,9 @@ workers, sharding, reporter and test selection did not change.
 
 - The type-checking cost of the `tests` package, and whether two E2E shards stay enough as the suite
   grows. Raising a ceiling again is not the answer to a suite that keeps growing.
+- **`phase8-flow` step 14 should create its own learning candidate.** It now passes only after the
+  `brand-brain` project has written knowledge into the shared workspace (declared as a dependency,
+  D-457); a test that seeds what it asserts on would not need the other project at all.
 - **Production risk — overlapping maintenance sweeps under load.** `MaintenanceScheduler.start()`
   runs each sweep on `setInterval` with `void run()` and no in-flight guard, so a pass slower than its
   interval starts another on top of it and they compete for the database. It is not active in the

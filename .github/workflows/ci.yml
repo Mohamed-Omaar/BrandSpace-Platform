@@ -270,11 +270,11 @@ jobs:
     # PostgreSQL and Redis, its own fresh database and seed, its own servers.
     # The aggregate job below keeps the original check name and passes only
     # when both shards pass. Shard 1 carries the desktop project and the
-    # Control Center, asset and Brand Brain projects (about 92 minutes of test
-    # time on the slowest measured runner); shard 2 the mobile project and every
-    # other serial project (about 85). `owner-simple-mode` stays with
-    # `admin-console` and `production-email` with `phase10-platform`, the
-    # projects they depend on. The coverage step fails the shard if the two
+    # Control Center, asset and Brand Brain visual projects; shard 2 the mobile
+    # project, `brand-brain` and every other serial project. A project stays in
+    # the shard of the project it depends on: `owner-simple-mode` with
+    # `admin-console`, `production-email` with `phase10-platform`, and
+    # `phase8-flow` with `brand-brain` (D-457). The coverage step fails the shard if the two
     # lists ever stop covering the whole suite exactly once.
     name: Playwright E2E shard ${{ matrix.shard }} of 2
     runs-on: ubuntu-latest
@@ -285,9 +285,9 @@ jobs:
     env:
       E2E_SHARD_1: >-
         --project=chromium-desktop --project=admin-console --project=owner-simple-mode
-        --project=assets --project=brand-brain --project=brand-brain-visual
+        --project=assets --project=brand-brain-visual
       E2E_SHARD_2: >-
-        --project=chromium-mobile --project=design-system --project=customer-app
+        --project=chromium-mobile --project=brand-brain --project=design-system --project=customer-app
         --project=content-calendar --project=brand-context --project=approvals
         --project=analytics-copilot --project=social-publishing --project=phase8-journey
         --project=phase8-flow --project=content-studio --project=phase10-platform
