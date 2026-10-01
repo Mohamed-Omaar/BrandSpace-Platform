@@ -700,3 +700,23 @@ The first restore drill produces the RTO. The chosen hosting plan produces the R
 - **A status page.** It is a public-website feature and an external hosting decision.
 - **Automated backup verification.** §2.1 is a procedure a person runs. Automating it needs an
   environment to run in.
+
+---
+
+## 11. CI headroom (D-454)
+
+Two CI limits were raised on measurement. Nothing was skipped, hidden or weakened, and the retries,
+workers, sharding, reporter and test selection did not change.
+
+- **Typecheck heap: 4 GB.** `pnpm typecheck` runs in one step of the "Format, lint, typecheck" job,
+  now with `NODE_OPTIONS=--max-old-space-size=4096`. The `tests` package alone needs about 2.7 GB on
+  staging @ `2672bad` (`tsc --extendedDiagnostics` reports `Memory used: 2,728,528K`), which is at
+  the runner's default Node heap. It crashed with `JavaScript heap out of memory` on PR #63, a
+  change that did not move the measurement (2,733,768K).
+- **Playwright E2E job: 60 → 90 minutes.** A normal run of the 1,041 tests takes about 47 minutes
+  for Playwright alone (PR #63, first run on `51642f8`: 47.2 m; the job 50.5 m). A slower runner
+  then went past 60 minutes twice with no failure in the code under review: 594 and 647 of 1,041
+  tests finished at the cancel, and a full local run of PR #63's head (`d401fb3`) had no failures.
+
+**Tracked for the final review:** splitting or sharding the E2E suite, and the type-checking cost of
+the `tests` package. Raising a ceiling again is not the answer to a suite that keeps growing.

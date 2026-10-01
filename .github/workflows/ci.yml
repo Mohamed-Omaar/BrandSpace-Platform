@@ -48,7 +48,14 @@ jobs:
       - name: Lint (includes module boundary rules)
         run: pnpm lint
 
+      # A 4 GB HEAP FOR TSC (D-454). `pnpm typecheck` checks every package in one
+      # step, and the `tests` package alone uses about 2.7 GB on staging @ 2672bad
+      # (`tsc --extendedDiagnostics`: Memory used 2,728,528K) — at the runner's
+      # default Node heap, so it crashed out of memory on a PR that changed
+      # nothing it measures. This is headroom only: no check is skipped.
       - name: Typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm typecheck
 
   # ---------------------------------------------------------------------------
@@ -290,7 +297,14 @@ jobs:
     # wait for the real worker to read uploaded documents, and run #334 was
     # cancelled by this ceiling with 1,005 of 1,016 tests finished and none
     # failed. Nothing was removed to fit, for the reason given above.
-    timeout-minutes: 60
+    #
+    # RAISED FROM 60 TO 90 (D-454). A normal run of the 1,041 tests takes about
+    # 47 minutes of Playwright alone (PR #63, first run on 51642f8: 47.2m), and
+    # a slower runner then went past 60 twice with nothing failing in the code
+    # it was checking. Same rule as above: nothing removed, no retries, workers
+    # or sharding changed. Splitting or sharding the suite is tracked for the
+    # final review (OPERATIONS §11).
+    timeout-minutes: 90
 
     services:
       postgres:
