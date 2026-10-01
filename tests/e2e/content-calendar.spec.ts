@@ -292,7 +292,15 @@ test.describe('placing content on the calendar', () => {
     await expect(agenda).toContainText('Seasonal note');
 
     // AC-14.8 — open it and move it a week later.
-    await agenda.locator('button').first().click();
+    /*
+     * THE ENTRY IS OPENED BY ITS NAME, not as the agenda's first button. The
+     * agenda lists every planned item in the month, and in the first days of a
+     * month the seed's failed post — dated an hour before the seed — sorts
+     * ahead of this one; the first button then opened THAT post, whose dialog
+     * has no readiness row, and the test failed from 1 October 2026. Strict
+     * mode still refuses if two entries carry the name.
+     */
+    await agenda.getByRole('button', { name: /Seasonal note/ }).click();
     const dialog = page.getByTestId('calendar-slot-dialog');
     await expect(dialog).toBeVisible();
     /*
@@ -323,7 +331,8 @@ test.describe('placing content on the calendar', () => {
     // AC-14.8 — and take it off again.
     const afterMove = await openMonth(moved.slice(0, 7));
     await expect(afterMove).toContainText('Seasonal note');
-    await afterMove.locator('button').first().click();
+    // By name for the same reason: the moved date can share today's month.
+    await afterMove.getByRole('button', { name: /Seasonal note/ }).click();
     await expect(page.getByTestId('calendar-slot-dialog')).toBeVisible();
     await submitAndExpect(page, 'calendar-cancel-submit', 'CONTENT_UNSCHEDULED');
 
