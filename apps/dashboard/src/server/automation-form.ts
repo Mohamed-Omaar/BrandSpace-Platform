@@ -178,6 +178,12 @@ export function actionConfigFrom(formData: FormData, actionType: string): Record
       return { userId: picked('actionUserId') };
     case 'ADD_TO_CAMPAIGN':
       return { campaignId: picked('actionCampaignId') };
+    // Phase 2B-3 PR 5 — the campaign a pause names is picked, never inferred;
+    // a retry retries the post that failed, so it has nothing to choose.
+    case 'PAUSE_CAMPAIGN':
+      return { campaignId: picked('actionCampaignId') };
+    case 'RETRY_PUBLISH':
+      return {};
     // Phase 2B-3 PR 3 — REMIND_REVIEWER: who is reminded is decided at run
     // time, never chosen.
     case 'SCHEDULE_NEXT_FREE_SLOT':

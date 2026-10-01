@@ -21,10 +21,13 @@ import {
   isAuthorablePair,
   isOlderAutomation,
   memberCatalogueFor,
+  findAction,
+  satisfiesActionPermissions,
   triggerAvailable,
   type ConditionField,
 } from '@brandspace/automation';
 import { INGESTED_METRIC_KEYS } from '@brandspace/analytics';
+import { PAUSABLE_CAMPAIGN_STATUSES } from '@brandspace/content';
 import { brandIdQueryFilter, brandScopeFilter } from '@brandspace/shared';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
@@ -143,7 +146,17 @@ export default async function AutomationsPage({
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const mayManage = workspace.permissionKeys.includes('automation.manage');
-  const mayPublish = workspace.permissionKeys.includes('publishing.manage');
+  /*
+   * WHO MAY DECIDE A REQUEST IS ITS ACTION'S QUESTION (Phase 2B-3 PR 5): a
+   * publish or a retry needs `publishing.manage`, a pause `campaigns.manage` —
+   * the permission the engine checks on approval.
+   */
+  const mayDecide = (actionType: string): boolean => {
+    const action = findAction(actionType);
+    return action
+      ? satisfiesActionPermissions(workspace.permissionKeys, action.permissions)
+      : false;
+  };
 
   /*
    * THE RAIL'S BRAND (P6-12, D-190). The page computed the brand context and
@@ -215,7 +228,10 @@ export default async function AutomationsPage({
         !needsYou.some((waiting) => waiting.id === run.id),
     ),
   ];
-  const proposals = new Map<string, { rule: string | null; content: string | null }>();
+  const proposals = new Map<
+    string,
+    { rule: string | null; content: string | null; campaign: string | null }
+  >();
   if (awaiting.length > 0) {
     await inWorkspace(workspace.workspaceId, async ({ db }) => {
       const scoped = brandIdQueryFilter({ brandScope: workspace.brandScope });
@@ -245,6 +261,34 @@ export default async function AutomationsPage({
           });
           contentItemId = job?.contentItemId ?? null;
         }
+        // Phase 2B-3 PR 5 — a retry request names the failed attempt; its post
+        // is read through the attempt's job, under the same scope.
+        if (run.resourceId && run.resourceType === 'PublishAttempt') {
+          const attempt = await db.publishAttempt.findFirst({
+            where: { id: run.resourceId, workspaceId: workspace.workspaceId },
+            select: { publishJobId: true },
+          });
+          const job = attempt
+            ? await db.publishJob.findFirst({
+                where: { id: attempt.publishJobId, workspaceId: workspace.workspaceId, ...scoped },
+                select: { contentItemId: true },
+              })
+            : null;
+          contentItemId = job?.contentItemId ?? null;
+        }
+        // …and a pause request names its campaign.
+        const campaign =
+          run.resourceId && run.resourceType === 'Campaign'
+            ? await db.campaign.findFirst({
+                where: {
+                  id: run.resourceId,
+                  workspaceId: workspace.workspaceId,
+                  deletedAt: null,
+                  ...scoped,
+                },
+                select: { name: true },
+              })
+            : null;
         const item = contentItemId
           ? await db.contentItem.findFirst({
               where: { id: contentItemId, workspaceId: workspace.workspaceId, ...scoped },
@@ -254,10 +298,81 @@ export default async function AutomationsPage({
         proposals.set(run.id, {
           rule: ruleNames.get(run.ruleId) ?? null,
           content: item?.title ?? null,
+          campaign: campaign?.name ?? null,
         });
       }
     });
   }
+
+  /*
+   * WHO DECIDED (Phase 2B-3 PR 5): "Approved by" from the run's own
+   * `confirmedByUserId`, "Skipped by" from the skip's audit event — the run
+   * does not store its skipper. Names are read through this workspace's
+   * memberships only, as the Activity screen does; an id that is not a member
+   * here resolves to nothing and no line is shown.
+   */
+  const decided = new Map<string, { kind: 'approved' | 'skipped'; name: string }>();
+  {
+    const skippedIds = runs
+      .filter((run) => run.status === 'CANCELLED' && run.failureCode === 'skipped_by_member')
+      .map((run) => run.id);
+    const deciders = await inWorkspace(workspace.workspaceId, async ({ db }) => {
+      const skips =
+        skippedIds.length === 0
+          ? []
+          : await db.auditEvent.findMany({
+              where: {
+                workspaceId: workspace.workspaceId,
+                action: 'automation.run_skipped',
+                resourceType: 'AutomationRun',
+                resourceId: { in: skippedIds },
+              },
+              select: { resourceId: true, actorId: true },
+            });
+      const userIds = [
+        ...new Set(
+          [
+            ...runs.map((run) => run.confirmedByUserId),
+            ...skips.map((skip) => skip.actorId),
+          ].filter((id): id is string => typeof id === 'string'),
+        ),
+      ];
+      const members =
+        userIds.length === 0
+          ? []
+          : await db.membership.findMany({
+              where: { workspaceId: workspace.workspaceId, userId: { in: userIds } },
+              select: { userId: true, user: { select: { name: true, email: true } } },
+            });
+      return {
+        skips,
+        names: new Map(members.map((m) => [m.userId, m.user.name ?? m.user.email] as const)),
+      };
+    });
+    for (const run of runs) {
+      const name = run.confirmedByUserId ? deciders.names.get(run.confirmedByUserId) : undefined;
+      if (name) decided.set(run.id, { kind: 'approved', name });
+    }
+    for (const skip of deciders.skips) {
+      const name = skip.actorId ? deciders.names.get(skip.actorId) : undefined;
+      if (skip.resourceId && name) decided.set(skip.resourceId, { kind: 'skipped', name });
+    }
+  }
+
+  /**
+   * WHAT A REQUEST WOULD DO, in one line (Phase 2B-3 PR 5, approved copy): the
+   * post a publish or a retry concerns, the campaign a pause names.
+   */
+  const requestLine = (run: { id: string; actionType: string }): string => {
+    const proposal = proposals.get(run.id);
+    if (run.actionType === 'PAUSE_CAMPAIGN') {
+      return t('automations.needsYou.pause').replace('{campaign}', proposal?.campaign ?? '—');
+    }
+    if (!proposal?.content) return t('automations.previewUnknown');
+    return run.actionType === 'RETRY_PUBLISH'
+      ? t('automations.needsYou.retry').replace('{content}', proposal.content)
+      : t('automations.previewContent').replace('{content}', proposal.content);
+  };
   const formBrands = selectedBrand
     ? brands.filter((brand) => brand.id === selectedBrand.id)
     : brands;
@@ -284,7 +399,7 @@ export default async function AutomationsPage({
     const byBrand = new Map<
       string,
       {
-        campaigns: readonly { id: string; name: string }[];
+        campaigns: readonly { id: string; name: string; status: string }[];
         members: readonly { id: string; name: string }[];
       }
     >();
@@ -296,7 +411,7 @@ export default async function AutomationsPage({
             deletedAt: null,
             ...brandIdQueryFilter({ brandId, brandScope: workspace.brandScope }),
           },
-          select: { id: true, name: true },
+          select: { id: true, name: true, status: true },
           orderBy: [{ name: 'asc' }, { id: 'asc' }],
           take: 200,
         }),
@@ -442,16 +557,22 @@ export default async function AutomationsPage({
                         proposals.get(run.id)?.rule ?? '—',
                       )}
                     </strong>
-                    <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                    <span
+                      style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+                      data-testid={`automation-needs-you-line-${run.id}`}
+                    >
                       {t(`automations.action.${run.actionType}` as MessageKey)}
                       {' · '}
-                      {proposals.get(run.id)?.content
-                        ? t('automations.previewContent').replace(
-                            '{content}',
-                            proposals.get(run.id)?.content ?? '',
-                          )
-                        : t('automations.previewUnknown')}
+                      {requestLine(run)}
                     </span>
+                    {run.actionType === 'PAUSE_CAMPAIGN' ? (
+                      <span
+                        style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+                        data-testid={`automation-pause-note-${run.id}`}
+                      >
+                        {t('automations.pauseNote')}
+                      </span>
+                    ) : null}
                   </span>
                   <span style={{ display: 'flex', gap: spacingTokens.sm }}>
                     <form action={confirmAutomationRunAction}>
@@ -463,7 +584,10 @@ export default async function AutomationsPage({
                         className={buttonClass('primary')}
                         data-testid="automation-confirm"
                       >
-                        {t('automations.confirmRun')}
+                        {/* "Confirm publish" stays the publish's own words. */}
+                        {run.actionType === 'PROPOSE_PUBLISH'
+                          ? t('automations.confirmRun')
+                          : t('automations.approveRun')}
                       </button>
                     </form>
                     <form action={skipAutomationRunAction}>
@@ -680,6 +804,16 @@ export default async function AutomationsPage({
                   })),
                 ]),
               )}
+              actionPausableCampaignsByBrand={Object.fromEntries(
+                catalogueBrandIds.map((brandId) => [
+                  brandId,
+                  (catalogueByBrand.get(brandId)?.campaigns ?? [])
+                    .filter((campaign) =>
+                      (PAUSABLE_CAMPAIGN_STATUSES as readonly string[]).includes(campaign.status),
+                    )
+                    .map((campaign) => ({ value: campaign.id, label: campaign.name })),
+                ]),
+              )}
               metrics={INGESTED_METRIC_KEYS.map((key) => ({
                 key,
                 label: t(`analytics.metric.${key}` as MessageKey),
@@ -694,6 +828,7 @@ export default async function AutomationsPage({
                 offsetHours: t('automations.offsetHoursLabel'),
                 actionPerson: t('automations.actionPersonLabel'),
                 actionCampaign: t('automations.actionCampaignLabel'),
+                pauseNote: t('automations.pauseNote'),
                 chooseTrigger: t('automations.chooseTrigger'),
                 chooseAction: t('automations.chooseAction'),
                 triggerUnavailable: t('automations.triggerUnavailable'),
@@ -905,12 +1040,16 @@ export default async function AutomationsPage({
                             proposals.get(run.id)?.rule ?? '—',
                           )}
                           {' · '}
-                          {proposals.get(run.id)?.content
-                            ? t('automations.previewContent').replace(
-                                '{content}',
-                                proposals.get(run.id)?.content ?? '',
-                              )
-                            : t('automations.previewUnknown')}
+                          {requestLine(run)}
+                        </span>
+                      ) : null}
+                      {decided.has(run.id) ? (
+                        <span data-testid={`automation-run-decided-${run.id}`}>
+                          {t(
+                            decided.get(run.id)?.kind === 'approved'
+                              ? 'automations.approvedBy'
+                              : 'automations.skippedBy',
+                          ).replace('{name}', decided.get(run.id)?.name ?? '')}
                         </span>
                       ) : null}
                     </span>
@@ -942,10 +1081,17 @@ export default async function AutomationsPage({
                       It posts the RUN's id and nothing else — the credential is
                       fetched server-side and never reaches this page.
                     */}
-                      {proposals.has(run.id) && !mayPublish ? (
+                      {/*
+                        The existing "waiting for a member who may publish"
+                        words fit a publish and a retry only; a pause someone
+                        else must decide shows no hint rather than a wrong one.
+                      */}
+                      {proposals.has(run.id) &&
+                      !mayDecide(run.actionType) &&
+                      run.actionType !== 'PAUSE_CAMPAIGN' ? (
                         <span>{t('automations.confirmNeedsPermission')}</span>
                       ) : null}
-                      {proposals.has(run.id) && mayPublish ? (
+                      {proposals.has(run.id) && mayDecide(run.actionType) ? (
                         // B12 — decided in "Needs you" above, not here.
                         <span>{t('automations.decideAbove')}</span>
                       ) : null}

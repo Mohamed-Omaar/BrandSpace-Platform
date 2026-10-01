@@ -22,6 +22,7 @@ import {
  *   - the five existing codes a PR 2 rule can reach — the creator no longer a
  *     member, without the permission, without the brand; the workspace pending
  *     deletion; the daily limit — each have their words;
+ *   - a request nobody approved in time (EXPIRED) says so (PR 5);
  *   - ANY OTHER CODE reads "Something went wrong running this automation."
  *
  * A condition that did not hold still reads "Conditions did not hold" with no
@@ -37,6 +38,7 @@ export type RunReasonKey =
   | 'automations.failure.notify_template_not_allowed'
   | `automations.failure.${ActionOutcomeCode}`
   | `automations.failure.${ExistingReachableCode}`
+  | 'automations.failure.confirmation_window_closed'
   | 'automations.failure.fallback';
 
 /** The existing codes a PR 2 rule can normally reach (§13 of the PR 2 report). */
@@ -55,6 +57,12 @@ type ExistingReachableCode = (typeof EXISTING_REACHABLE_CODES)[number];
 function isExistingReachableCode(code: string): code is ExistingReachableCode {
   return (EXISTING_REACHABLE_CODES as readonly string[]).includes(code);
 }
+
+/**
+ * Phase 2B-3 PR 5 — a request nobody approved in time. The expiry sweep writes
+ * it, and only under EXPIRED; anywhere else it reads as the fallback.
+ */
+export const CONFIRMATION_WINDOW_CLOSED = 'confirmation_window_closed';
 
 export interface RunPresentation {
   readonly statusKey: string;
@@ -92,6 +100,12 @@ export function runPresentation(run: {
     return {
       statusKey: run.status === 'SKIPPED' ? 'automations.status.actionSkipped' : status,
       reason: { kind: 'message', key: `automations.failure.${code}` },
+    };
+  }
+  if (run.status === 'EXPIRED' && code === CONFIRMATION_WINDOW_CLOSED) {
+    return {
+      statusKey: status,
+      reason: { kind: 'message', key: 'automations.failure.confirmation_window_closed' },
     };
   }
   if (isExistingReachableCode(code)) {

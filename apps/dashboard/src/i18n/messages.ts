@@ -1981,6 +1981,9 @@ export const messages = {
     'activity.action.automation.awaiting_confirmation': 'أتمتة بانتظار التأكيد',
     'activity.action.automation.confirmation_issued': 'صدر تأكيد أتمتة',
     'activity.action.automation.confirmation_refused': 'رُفض تأكيد أتمتة',
+    'activity.action.automation.run_confirmed': 'تمت الموافقة على طلب أتمتة',
+    'activity.action.automation.run_skipped': 'تم تخطي طلب أتمتة',
+    'activity.action.automation.run_expired': 'انتهت مهلة طلب أتمتة',
     'activity.action.brand_brain.source.uploaded': 'رُفع مستند إلى عقل العلامة',
     'activity.action.brand_brain.source.processed': 'عولج مستند في عقل العلامة',
     'activity.action.brand_brain.source.retry_scheduled':
@@ -2566,6 +2569,14 @@ export const messages = {
     'automations.needsYou.body':
       'إجراءات اقترحتها قواعد الأتمتة ولا تُنفَّذ إلا إذا أكّدتها. يمكنك تأكيدها أو تخطيها.',
     'automations.skipRun': 'تخطٍّ',
+    // Phase 2B-3 PR 5 — the retry and the pause ask first; approved copy (§6).
+    'automations.approveRun': 'موافقة',
+    'automations.needsYou.retry': 'إعادة محاولة «{content}»',
+    'automations.needsYou.pause': 'إيقاف الحملة «{campaign}» مؤقتًا',
+    'automations.pauseNote':
+      'الإيقاف يضع الحملة في حالة «متوقفة». المنشورات المجدولة تُنشر كما هي.',
+    'automations.approvedBy': 'وافق عليه {name}',
+    'automations.skippedBy': 'تخطّاه {name}',
     'automations.decideAbove': 'قرِّر في قسم «بانتظارك» أعلاه.',
     'automations.field.publish.provider': 'المنصة',
     'automations.field.publish.failureClass': 'نوع الإخفاق',
@@ -2727,6 +2738,8 @@ export const messages = {
       'لم تُشغَّل — منشئ هذه الأتمتة لم يعد لديه وصول إلى هذه العلامة التجارية.',
     'automations.failure.rule_disabled':
       'لم يُنفَّذ — أُوقفت هذه الأتمتة أو حُذفت قبل الموافقة عليها.',
+    'automations.failure.confirmation_window_closed':
+      'لم يوافق عليه أحد خلال المهلة، فلم يُنفَّذ شيء.',
     'automations.failure.workspace_pending_deletion': 'لم تُشغَّل — مساحة العمل هذه مجدولة للحذف.',
     'automations.failure.daily_ceiling_reached':
       'لم تُشغَّل — بلغت هذه الأتمتة حدها اليومي من مرات التشغيل.',
@@ -5282,6 +5295,9 @@ export const messages = {
     'activity.action.automation.awaiting_confirmation': 'An automation is waiting for confirmation',
     'activity.action.automation.confirmation_issued': 'An automation confirmation was issued',
     'activity.action.automation.confirmation_refused': 'An automation confirmation was refused',
+    'activity.action.automation.run_confirmed': 'An automation request was approved',
+    'activity.action.automation.run_skipped': 'An automation request was skipped',
+    'activity.action.automation.run_expired': 'An automation request lapsed',
     'activity.action.brand_brain.source.uploaded': 'A document was uploaded to Brand Brain',
     'activity.action.brand_brain.source.processed': 'A Brand Brain document was processed',
     'activity.action.brand_brain.source.retry_scheduled':
@@ -5899,6 +5915,14 @@ export const messages = {
     'automations.needsYou.body':
       'Actions your automations proposed. Nothing happens unless you confirm; you can also skip them.',
     'automations.skipRun': 'Skip',
+    // Phase 2B-3 PR 5 — the retry and the pause ask first; approved copy (§6).
+    'automations.approveRun': 'Approve',
+    'automations.needsYou.retry': 'Retry "{content}"',
+    'automations.needsYou.pause': 'Pause the campaign "{campaign}"',
+    'automations.pauseNote':
+      'Pausing marks the campaign as paused. Posts already scheduled still go out.',
+    'automations.approvedBy': 'Approved by {name}',
+    'automations.skippedBy': 'Skipped by {name}',
     'automations.decideAbove': 'Decide in “Needs you” above.',
     'automations.field.publish.provider': 'Platform',
     'automations.field.publish.failureClass': 'Failure class',
@@ -6063,6 +6087,8 @@ export const messages = {
       'Not run — the person who created this automation no longer has access to this brand.',
     'automations.failure.rule_disabled':
       'Not done — this automation was switched off or deleted before it was approved.',
+    'automations.failure.confirmation_window_closed':
+      'Nobody approved this in the time allowed, so nothing was done.',
     'automations.failure.workspace_pending_deletion':
       'Not run — this workspace is scheduled for deletion.',
     'automations.failure.daily_ceiling_reached':

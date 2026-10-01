@@ -269,17 +269,21 @@ export async function deleteAutomationAction(formData: FormData): Promise<void> 
  *
  * TWO CALLS, ONE PERSON, CHECKED TWICE. The first asks the API to issue a
  * credential for this run; the second spends it. Both carry this person's own
- * session, and the engine re-checks `publishing.manage` and the run's brand
- * against their LIVE membership on each — so the round trip is not ceremony, it
- * is the confirmation boundary being crossed by somebody who may cross it.
+ * session, and the engine re-checks the ACTION'S OWN permission and the run's
+ * brand against their LIVE membership on each — so the round trip is not
+ * ceremony, it is the confirmation boundary being crossed by somebody who may
+ * cross it.
  *
- * `publishing.manage` IS CHECKED HERE AND AGAIN IN THE ENGINE, against the
- * CONFIRMER rather than the rule's creator — otherwise a rule written by an admin
- * would let anyone holding the link authorize a publish.
+ * THE GATE HERE IS THE FLOOR, `automation.read` (Phase 2B-3 PR 5), as on the
+ * API route: a publish or a retry needs `publishing.manage`, a pause
+ * `campaigns.manage`, and the ENGINE checks exactly that against the CONFIRMER
+ * rather than the rule's creator — otherwise a rule written by an admin would
+ * let anyone holding the link authorize it. A gate of `publishing.manage` here
+ * would refuse a campaign manager the pause they are entitled to decide.
  */
 export async function confirmAutomationRunAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
-  await requireWorkspace(locale, 'publishing.manage');
+  await requireWorkspace(locale, 'automation.read');
   const runId = String(formData.get('runId') ?? '');
 
   const issued = await callPhase7Api('/v1/automations/confirmation-token', { runId });
@@ -297,6 +301,16 @@ export async function confirmAutomationRunAction(formData: FormData): Promise<vo
     redirect(`/${locale}/automations?error=${payload.error?.code ?? 'INTERNAL'}`);
   }
 
+  /*
+   * APPROVED IS NOT DONE (Phase 2B-3 PR 5). The approval can END the request
+   * without performing it — the post failed again, the campaign was completed,
+   * the rule was switched off — and the API answers 200 with that ending. Only
+   * SUCCEEDED is "on its way"; anything else says the state moved on, and the
+   * run history, revalidated here, says why in words.
+   */
   revalidatePath(`/${locale}/automations`);
+  if ((response.payload as { status?: string }).status !== 'SUCCEEDED') {
+    redirect(`/${locale}/automations?error=CONFLICT`);
+  }
   redirect(`/${locale}/automations?ok=AUTOMATION_CONFIRMED`);
 }
