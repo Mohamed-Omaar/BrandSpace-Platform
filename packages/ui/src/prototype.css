@@ -640,6 +640,10 @@ button.bsp-xcard:hover {
  */
 @media (min-width: 768px) {
   .bs-shell.bsp-frame {
+    /* `position: relative; z-index: 1` — the frame sits above the ambient layer
+       (which is `z-index: -1`) in its own stacking order, as in the prototype. */
+    position: relative;
+    z-index: 1;
     grid-template-columns: var(--bs-shell-sidebar-width, 250px) minmax(0, 1fr);
     /* The prototype is a 1440px artboard; wider than that it draws nothing,
        so the product's own ceiling (1540px, centred) still applies. */
