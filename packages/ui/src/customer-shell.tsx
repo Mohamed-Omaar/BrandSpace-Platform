@@ -180,6 +180,7 @@ function RailLink({
         <span
           className={item.count.tone === 'quiet' ? 'bsp-cnt bsp-nl' : 'bsp-cnt'}
           data-tone={item.count.tone}
+          {...(item.testId ? { 'data-testid': `${item.testId}-count` } : {})}
           aria-hidden="true"
         >
           {item.count.text}
@@ -280,19 +281,45 @@ export function CustomerShell({
   usePageEnterGate();
   const [collapsed, setCollapsed, hydrated] = useCollapsePreference();
   const [sidebarMotion, setSidebarMotion] = useState(false);
+  /*
+   * `fadeSbLabels`: collapsing, the labels fade out (110 ms) BEFORE the column
+   * narrows; expanding, the column widens and the labels fade in after it
+   * (220 ms, 150 ms late). The preference and `aria-pressed` flip at once;
+   * only the layout waits for the fade (`collapsing`).
+   */
+  const [fadingOut, setFadingOut] = useState(false);
   const motionTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(motionTimer.current), []);
   const toggle = useCallback(() => {
-    setCollapsed(!collapsed);
+    const next = !collapsed;
+    setCollapsed(next);
     window.clearTimeout(motionTimer.current);
     if (prefersReducedMotion()) {
+      setFadingOut(false);
       setSidebarMotion(false);
       return;
     }
     // `transition: grid-template-columns .38s` — present only after a click.
     setSidebarMotion(true);
-    motionTimer.current = window.setTimeout(() => setSidebarMotion(false), motionMs.collapse + 50);
+    const settle = () => {
+      motionTimer.current = window.setTimeout(
+        () => setSidebarMotion(false),
+        Math.max(motionMs.collapse, motionMs.labelInDelay + motionMs.labelIn) + 50,
+      );
+    };
+    if (next) {
+      setFadingOut(true);
+      motionTimer.current = window.setTimeout(() => {
+        setFadingOut(false);
+        settle();
+      }, motionMs.labelOut);
+    } else {
+      setFadingOut(false);
+      settle();
+    }
   }, [collapsed, setCollapsed]);
+  // The column follows the labels: it narrows only once they have left.
+  const layoutCollapsed = collapsed && !fadingOut;
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
@@ -311,7 +338,7 @@ export function CustomerShell({
   }, [drawerOpen]);
 
   // `sbW = s.sbMin ? '76px' : '250px'`.
-  const sidebarWidth = collapsed ? '76px' : '250px';
+  const sidebarWidth = layoutCollapsed ? '76px' : '250px';
   // `sbArrow`: the chevron points to the start edge, and flips when collapsed.
   const arrow = collapsed ? 'scaleX(-1)' : 'none';
 
@@ -331,7 +358,15 @@ export function CustomerShell({
     <div
       className="bs-ambient-host"
       data-testid="app-shell"
-      data-sidebar-state={hydrated ? (collapsed ? 'collapsed' : 'expanded') : 'expanded'}
+      data-sidebar-state={
+        hydrated
+          ? fadingOut
+            ? 'collapsing'
+            : layoutCollapsed
+              ? 'collapsed'
+              : 'expanded'
+          : 'expanded'
+      }
       {...(sidebarMotion ? { 'data-sidebar-motion': '' } : {})}
     >
       <AmbientBackground />
@@ -341,7 +376,7 @@ export function CustomerShell({
         style={{ '--bs-shell-sidebar-width': sidebarWidth } as CSSProperties}
       >
         <aside
-          className={collapsed ? 'bs-sidebar bsp-sb bsp-min' : 'bs-sidebar bsp-sb'}
+          className={layoutCollapsed ? 'bs-sidebar bsp-sb bsp-min' : 'bs-sidebar bsp-sb'}
           data-testid="sidebar"
         >
           <div className="bsp-sb-top">
@@ -363,7 +398,7 @@ export function CustomerShell({
           </div>
           <RailNav
             sections={sections}
-            collapsed={collapsed}
+            collapsed={layoutCollapsed}
             label={labels.primaryNavigation}
             scope="rail"
           />
