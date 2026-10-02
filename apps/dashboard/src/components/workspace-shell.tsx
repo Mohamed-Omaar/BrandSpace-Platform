@@ -1,35 +1,22 @@
-import Link from 'next/link';
 import { headers } from 'next/headers';
 import { Suspense, type ReactNode } from 'react';
 import {
-  AppShell,
-  BrandMark,
-  ProfileCard,
-  TopbarCreateMenu,
-  TopbarLink,
-  menuItemStyle,
-  HomeIcon,
-  CalendarIcon,
-  FlagIcon,
-  LayersIcon,
-  ImageIcon,
-  PencilIcon,
-  PulseIcon,
-  RouteIcon,
-  SlidersIcon,
-  LanguageSwitcher,
-  SendIcon,
-  SettingsIcon,
-  SparkIcon,
-  BrandCard,
-  BrandSwitcher,
-  BusinessSwitcher,
-  colorTokens,
-  typographyTokens,
+  CustomerShell,
+  PrototypeBrandCard,
+  PrototypeBrandSwitcher,
+  PrototypeBusinessSwitcher,
+  PrototypeCopilotFab,
+  PrototypeCreateMenu,
+  PrototypeIcon,
+  PrototypeLanguageSwitch,
+  PrototypeMenuLink,
+  PrototypeTopbarLink,
+  PrototypeUserCard,
   Banner,
   StateMessage,
-  spacingTokens,
-  type ShellNavSection,
+  type CustomerNavSection,
+  type PrototypeCreateItem,
+  type PrototypeGlyph,
   type Tone,
   initialsFrom,
   ToastHost,
@@ -37,7 +24,7 @@ import {
 import { switchLocalePath } from '../i18n/locale-path';
 import { customerRoleName, translator, type MessageKey } from '../i18n/messages';
 import type { BrandContext } from '../server/brand-context';
-import { topbarModel } from '../server/topbar';
+import { topbarModel, type TopbarCounts } from '../server/topbar';
 import { copilotSurfaceForPath } from '../server/copilot-surface';
 import { RATE_METRIC_KEYS, copilotLabels } from '../server/copilot-labels';
 import { copilotDrawerSubject } from '../server/copilot-context';
@@ -54,12 +41,14 @@ import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 import { signOutAction, switchWorkspaceAction } from '../app/[locale]/(auth)/actions';
 
 /**
- * The authenticated customer shell.
+ * The authenticated customer shell — PORTED FROM `prototype-2026-09-27` (D-468).
  *
- * Composes `AppShell` from the design system, so the sidebar, the drawer, the
- * collapse behaviour and the focus management are the SAME implementation the
- * Control Center uses. Before Phase 2C these were two hand-rolled flex rows
- * that had already drifted apart.
+ * The frame, the rail, the top bar and the floating Copilot are the prototype's
+ * own (`Main.dc.html` lines 79–191 and 1483, `CustomerShell` and
+ * `prototype-rail.tsx` in `@brandspace/ui`, `prototype.css`). This file decides
+ * only WHAT they carry: which rail entries this member may open, the real
+ * counts beside them, the brand or business card, the account menu and the
+ * creation flows.
  *
  * Navigation is filtered by the member's EFFECTIVE permissions — which is a
  * convenience. Every page behind these links calls `requireWorkspace(locale,
@@ -70,147 +59,134 @@ interface NavEntry {
   href: string;
   key: MessageKey;
   permission: string | null;
-  icon: ReactNode;
+  glyph: PrototypeGlyph;
+  /** Which of the shell's counts the prototype draws beside it. */
+  count?: 'review' | 'failed' | 'notes' | 'team';
 }
 
-/**
- * The rail's groups, in the order of the work (P6-04).
+/*
+ * THE PROTOTYPE'S RAIL, IN ITS ORDER (`Main.dc.html` lines 102–129): Home; the
+ * brand's own group with Brand Brain; Plan — Strategy, Campaigns; Create —
+ * Posts, Media; Publish — Approvals, Calendar, Publishing log; Improve —
+ * Performance; Automate — Automations, Notes; Workspace — Team, Settings.
  *
- * WHY THIS IS A DATA CHANGE AND NOT A COMPONENT ONE. `AppShell` has always
- * taken `readonly ShellNavSection[]` with an optional per-section `title`, has
- * always rendered those titles as `.nav-group-title`, and already replaces a
- * heading with a divider when the rail is collapsed — the Control Center has
- * used all of it since Phase 2C. The customer dashboard passed twenty-one
- * entries as ONE unnamed section, so a member arriving at a workspace met an
- * undifferentiated list and had to know the product to find anything in it.
- *
- * Nothing about the sidebar's appearance changes: same geometry, same density,
- * same icons, same active treatment, same collapse behaviour. What changes is
- * that the list says what its parts are for.
- *
- * THE ORDER IS THE ORDER OF THE WORK: know the brand, plan it, make it, publish
- * it, learn from it, automate it — and the workspace's own administration last,
- * because administering the workspace is not the work.
- *
- * EVERY PERMISSION GATE IS CARRIED OVER UNCHANGED. Grouping must not become a
- * way to leak an entry: each route still calls `requireWorkspace(locale,
- * permission)` and answers 404 without it, the hidden link is still tidiness
- * rather than security, and a group whose every entry is filtered out renders
- * no heading at all — a titled group with nothing under it would be the dead
- * navigation §20 forbids, wearing a label.
+ * TWO ENTRIES THE PROTOTYPE'S RAIL DOES NOT HAVE, KEPT FOR NOW. The prototype
+ * folds the AI Creative Studio into Media ("Media = the media library + a
+ * Generate tab in place of the AI Creative Studio page", line 2172) and
+ * Marketing Intelligence into Performance's Insights. Neither home exists in
+ * the product until Media (batch 3) and Performance (batch 4) are ported, and
+ * without a rail entry a member who may open either screen could lose the only
+ * general way to it (the Create menu also asks `copilot.use`; Intelligence
+ * asks `strategy.read`, not `analytics.read`). So both stay, after the
+ * prototype's own entries in their groups, until their prototype homes land.
  */
 const NAV: readonly NavEntry[] = [
-  { href: '/overview', key: 'nav.overview', permission: null, icon: <HomeIcon size={20} /> },
+  { href: '/overview', key: 'nav.overview', permission: null, glyph: 'home' },
   {
     href: '/brand-brain',
     key: 'nav.brandBrain',
     permission: 'brand_brain.read',
-    icon: <SparkIcon size={20} />,
+    glyph: 'brain',
   },
   {
     href: '/strategy',
     key: 'nav.strategy',
     permission: 'strategy.read',
-    icon: <RouteIcon size={20} />,
+    glyph: 'strategy',
   },
   {
     href: '/campaigns',
     key: 'nav.campaigns',
     permission: 'campaigns.read',
-    // `FlagIcon` reused rather than a new glyph drawn (§4.2 rule 4): a campaign
-    // is a marker planted on a period of work, which is what a flag is.
-    icon: <FlagIcon size={20} />,
+    glyph: 'campaigns',
   },
   {
     href: '/content',
-    key: 'nav.content',
+    key: 'nav.rail.posts',
     permission: 'content.read',
-    icon: <PencilIcon size={20} />,
+    glyph: 'posts',
+  },
+  {
+    href: '/assets',
+    key: 'nav.rail.media',
+    permission: 'assets.read',
+    glyph: 'media',
   },
   {
     href: '/creative',
     key: 'nav.creative',
     permission: 'assets.upload',
-    // `SparkIcon` reused rather than a new glyph drawn (§4.2 rule 4): it is the
-    // product's mark for "a model did this", and it is what Brand Brain wears.
-    icon: <SparkIcon size={20} />,
+    glyph: 'spark',
   },
   {
-    href: '/assets',
-    key: 'nav.assets',
-    permission: 'assets.read',
-    icon: <ImageIcon size={20} />,
+    href: '/approvals',
+    key: 'nav.approvals',
+    permission: 'content.read',
+    glyph: 'approvals',
+    count: 'review',
   },
   {
     href: '/calendar',
     key: 'nav.calendar',
     permission: 'content.read',
-    icon: <CalendarIcon size={20} />,
+    glyph: 'calendar',
   },
-  /*
-   * PUBLISHING (D-277 §33): Queue · Published · Failed · Accounts. Gated on
-   * `publishing.read`, exactly as the route is. `SendIcon` reused: publishing
-   * IS sending.
-   */
   {
     href: '/publishing',
-    key: 'nav.publishing',
+    key: 'nav.rail.publishingLog',
     permission: 'publishing.read',
-    icon: <SendIcon size={20} />,
+    glyph: 'publishing',
+    count: 'failed',
   },
   {
     href: '/analytics',
-    key: 'nav.analytics',
+    key: 'nav.rail.performance',
     permission: 'analytics.read',
-    icon: <PulseIcon size={20} />,
+    glyph: 'performance',
   },
   {
     href: '/intelligence',
     key: 'nav.intelligence',
     permission: 'strategy.read',
-    icon: <LayersIcon size={20} />,
+    glyph: 'brain',
   },
   {
     href: '/automations',
     key: 'nav.automations',
     permission: 'automation.read',
-    icon: <SlidersIcon size={20} />,
+    glyph: 'automations',
+  },
+  {
+    href: '/notes',
+    key: 'nav.rail.notes',
+    permission: 'content.read',
+    glyph: 'notes',
+    count: 'notes',
+  },
+  {
+    href: '/members',
+    key: 'nav.members',
+    permission: 'member.read',
+    glyph: 'team',
+    count: 'team',
   },
   /*
    * SETTINGS is for EVERY member: it holds Security, Roles & permissions and
    * Activity, which ask no permission. Its href is resolved per member to the
    * first section they may open (`settingsLandingPath`), so it never 404s.
    */
-  {
-    href: '/settings',
-    key: 'nav.settings',
-    permission: null,
-    icon: <SettingsIcon size={20} />,
-  },
+  { href: '/settings', key: 'nav.settings', permission: null, glyph: 'settings' },
 ];
 
-/*
- * THE FINAL INFORMATION ARCHITECTURE (owner decision D-277, contract §3).
- *
- * Home, then the selected brand's Brand Brain — its group is TITLED WITH THE
- * BRAND, so the rail itself says whose brain it is — then the work in order:
- * PLAN, CREATE, PUBLISH, IMPROVE, AUTOMATE, and Settings last.
- *
- * NOT ON THE RAIL, AND WHERE THEY WENT: Approvals (top-bar Review, Home, the
- * post and campaign screens), Notes (top-bar Notes, Home, the object itself),
- * Notifications (the bell), Copilot (the top bar), Team, Roles & permissions,
- * Activity, Plan, Billing and Connections (Settings), Onboarding (the first-run
- * wizard). Every one of those routes still exists and still authorizes itself.
- */
 const NAV_GROUPS: readonly { titleKey: MessageKey | null; hrefs: readonly string[] }[] = [
   { titleKey: null, hrefs: ['/overview'] },
   { titleKey: 'nav.group.brand', hrefs: ['/brand-brain'] },
   { titleKey: 'nav.group.plan', hrefs: ['/strategy', '/campaigns'] },
-  { titleKey: 'nav.group.create', hrefs: ['/content', '/creative', '/assets'] },
-  { titleKey: 'nav.group.publish', hrefs: ['/calendar', '/publishing'] },
+  { titleKey: 'nav.group.create', hrefs: ['/content', '/assets', '/creative'] },
+  { titleKey: 'nav.group.publish', hrefs: ['/approvals', '/calendar', '/publishing'] },
   { titleKey: 'nav.group.improve', hrefs: ['/analytics', '/intelligence'] },
-  { titleKey: 'nav.group.automate', hrefs: ['/automations'] },
-  { titleKey: null, hrefs: ['/settings'] },
+  { titleKey: 'nav.group.automate', hrefs: ['/automations', '/notes'] },
+  { titleKey: 'nav.group.workspace', hrefs: ['/members', '/settings'] },
 ];
 
 function navSections(
@@ -219,7 +195,8 @@ function navSections(
   activePath: string | undefined,
   t: (key: MessageKey) => string,
   brandContext: BrandContext | undefined,
-): readonly ShellNavSection[] {
+  counts: TopbarCounts,
+): readonly CustomerNavSection[] {
   const byHref = new Map(NAV.map((item) => [item.href, item]));
   const placed = NAV_GROUPS.flatMap((group) => group.hrefs);
   if (placed.length !== NAV.length || new Set(placed).size !== NAV.length) {
@@ -227,8 +204,34 @@ function navSections(
     // editing NAV or NAV_GROUPS and not the other.
     throw new Error('Every NAV entry must appear in exactly one NAV_GROUPS entry.');
   }
+  const countFor = (entry: NavEntry) => {
+    const value =
+      entry.count === 'review'
+        ? counts.review
+        : entry.count === 'failed'
+          ? counts.failed
+          : entry.count === 'notes'
+            ? counts.notes
+            : entry.count === 'team'
+              ? counts.team
+              : null;
+    if (typeof value !== 'number' || value <= 0) return undefined;
+    const fill = (key: MessageKey) => t(key).replace('{count}', String(value));
+    switch (entry.count) {
+      case 'review':
+        return { text: String(value), tone: 'ink' as const, label: fill('topbar.reviewCount') };
+      case 'failed':
+        return { text: String(value), tone: 'bad' as const, label: fill('nav.count.failed') };
+      case 'notes':
+        return { text: String(value), tone: 'brand' as const, label: fill('topbar.notesCount') };
+      case 'team':
+        return { text: String(value), tone: 'quiet' as const, label: fill('nav.count.team') };
+      default:
+        return undefined;
+    }
+  };
 
-  const sections: ShellNavSection[] = [];
+  const sections: CustomerNavSection[] = [];
   for (const group of NAV_GROUPS) {
     const items = group.hrefs
       .map((href) => byHref.get(href))
@@ -240,7 +243,7 @@ function navSections(
             ? `/${locale}${settingsLandingPath(permissionKeys)}`
             : `/${locale}${item.href}`,
         label: t(item.key),
-        icon: item.icon,
+        icon: <PrototypeIcon glyph={item.glyph} />,
         active:
           activePath === item.href ||
           (item.href === '/settings' &&
@@ -249,11 +252,12 @@ function navSections(
         // The existing convention, preserved: renaming these would drop the
         // end-to-end assertions that use them.
         testId: `nav-${item.href.slice(1)}`,
+        count: countFor(item),
       }));
     if (items.length === 0) continue;
     /*
-     * THE BRAND GROUP IS TITLED WITH THE BRAND (§3: "visually associated with
-     * the currently selected Brand"). "All brands" when that is the selection;
+     * THE BRAND GROUP IS TITLED WITH THE BRAND (`<div class="grp"><bdi>
+     * {{t.brandName}}</bdi></div>`). "All brands" when that is the selection;
      * the generic word only when there is no brand to name.
      */
     const title =
@@ -294,6 +298,33 @@ function brandTrigger(
   }
 }
 
+/** The creation flows, as the prototype's Create menu names and draws them. */
+const CREATE_ITEM: Readonly<
+  Record<string, { label: MessageKey; sub: MessageKey; glyph: PrototypeGlyph }>
+> = {
+  content: { label: 'topbar.menu.post', sub: 'topbar.menu.postSub', glyph: 'posts' },
+  campaign: { label: 'topbar.menu.campaign', sub: 'topbar.menu.campaignSub', glyph: 'campaigns' },
+  creative: { label: 'topbar.menu.image', sub: 'topbar.menu.imageSub', glyph: 'spark' },
+  asset: { label: 'topbar.menu.upload', sub: 'topbar.menu.uploadSub', glyph: 'upload' },
+};
+
+/** `+ New workspace` and the menu's note, at the prototype's 12.5px in its deep purple. */
+const MENU_LINK = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  borderRadius: '10px',
+  padding: '7px 10px',
+  fontSize: 'var(--bsp-t-12_5)',
+  fontWeight: 600,
+  textDecoration: 'none',
+} as const;
+const MENU_NOTE = {
+  margin: 0,
+  fontSize: 'var(--bsp-t-11)',
+  padding: '2px 10px 6px',
+  lineHeight: 1.45,
+} as const;
+
 export async function WorkspaceShell({
   locale,
   heading,
@@ -319,17 +350,11 @@ export async function WorkspaceShell({
    */
   heading: string;
   description?: string | undefined;
-  /** Page-level actions, rendered beside the title. */
+  /** Page-level actions, rendered above the page's content. */
   actions?: ReactNode;
-  /** Badges or status pills that belong next to the title. */
+  /** Badges or status pills that belong next to the top bar's controls. */
   meta?: ReactNode;
-  /**
-   * A page that supplies its own title surface.
-   *
-   * The Overview's approved hero IS its page title (§5), so it renders the
-   * `h1` itself and the standard header is suppressed rather than stacked
-   * above it. Any page that passes `hero` is responsible for exactly one `h1`.
-   */
+  /** A page's own lead surface (Home's hero), the first block under the bar. */
   hero?: ReactNode;
   /**
    * The current path segment, e.g. `/members`. Marks the active nav item and
@@ -338,7 +363,7 @@ export async function WorkspaceShell({
   activePath?: string | undefined;
   workspaceName: string;
   roleName: string;
-  /** The signed-in person, for the rail's profile card. Their email if unnamed. */
+  /** The signed-in person, for the rail's user card. Their email if unnamed. */
   customerName?: string | undefined;
   permissionKeys: readonly string[];
   availableWorkspaces?: ReadonlyArray<{
@@ -348,71 +373,48 @@ export async function WorkspaceShell({
     current: boolean;
   }>;
   /**
-   * The resolved global brand context (D-190).
-   *
-   * OPTIONAL, and that is deliberate rather than lax: the sign-in, workspace
-   * chooser and no-workspace screens render this shell without a workspace to
-   * resolve brands in. A page that HAS a workspace passes it, and the selector
-   * appears; a page that does not simply has no second card.
+   * The resolved global brand context (D-190). OPTIONAL: the sign-in, workspace
+   * chooser and no-workspace screens render this shell without a workspace.
    */
   brandContext?: BrandContext | undefined;
   /**
-   * FOCUSED PRESENTATION (Phase 6 final acceptance, D-303) — the first-run
-   * Setup Wizard. The daily navigation and the top-bar actions step aside so
-   * the journey is the only thing on the screen; the brand, the language
-   * switch and the account menu (sign-out) remain. Authorization is the page's
-   * own, exactly as without it.
+   * FOCUSED PRESENTATION (D-303) — the first-run Setup Wizard. The daily
+   * navigation and the top-bar actions step aside; the brand, the language and
+   * the account menu (sign-out) remain.
    */
   focus?: boolean | undefined;
-  /**
-   * C8 (Phase 2B-2b) — THIS REQUEST'S SUCCESS, as a toast rather than a
-   * banner: the page resolves its `?ok=` code to words and passes them here;
-   * the shell's one `ToastHost` shows them and takes `ok` off the address.
-   */
+  /** C8 — this request's success, as a toast. */
   flash?: { readonly tone: 'success'; readonly message: string } | undefined;
   children: ReactNode;
 }) {
   const t = translator(locale);
   const other = locale === 'ar' ? 'en' : 'ar';
+  /*
+   * Each language by its own name and its code, the same in either interface
+   * (`curLang`/`nextLang` and the language square in the prototype; the auth
+   * card names them the same way). Locale data, not copy to translate.
+   */
+  const ownName = (code: string) => (code === 'ar' ? 'العربية' : 'English');
 
   /*
-   * THE SAME PAGE, IN THE OTHER LANGUAGE (PHASE 2).
-   *
-   * This used to be `/${other}${activePath ?? '/overview'}`. `activePath` is
-   * the NAV ITEM's path, which is a different thing from the route: on
-   * `/en/content/compose?item=…` it is `/content`, so switching to Arabic
-   * dropped the composer and the draft being edited, and on the routes that
-   * pass no `activePath` at all it fell back to `/overview` — changing language
-   * moved the reader to a page they had not asked for. The query string went
-   * too, and with it every filter, the asset cursor and the selected row.
-   *
-   * The middleware puts the real path and query on the request, so the switch
-   * is now the same route with one segment changed. `activePath` remains the
-   * fallback for anything that reaches this component without the header.
+   * THE SAME PAGE, IN THE OTHER LANGUAGE: the middleware puts the real path
+   * and query on the request, so the switch is the same route with one segment
+   * changed. `activePath` is the fallback.
    */
   const requestPath = (await headers()).get('x-brandspace-path');
   const localeHref = (target: string): string =>
     switchLocalePath(requestPath, target, `/${target}${activePath ?? '/overview'}`);
   const identity = customerName ?? workspaceName;
 
-  /*
-   * THE TOP BAR (P6-16): Review · Notes · Notifications · Copilot · Create,
-   * each to the screen that owns it, each on the permission that screen
-   * demands, and each dot drawn only from a real count (`topbar-counts.ts`).
-   */
-  const topbar = topbarModel({
-    locale,
-    permissionKeys,
-    requestPath,
-    counts: await topbarCounts(),
-  });
-
-  const sections = focus ? [] : navSections(permissionKeys, locale, activePath, t, brandContext);
+  const counts = await topbarCounts();
+  const topbar = topbarModel({ locale, permissionKeys, requestPath, counts });
+  const sections = focus
+    ? []
+    : navSections(permissionKeys, locale, activePath, t, brandContext, counts);
 
   /*
    * THE GLOBAL COPILOT (D-277 §37): what the drawer opens with — the rail's
-   * brand, this screen as its surface, and the object this address names,
-   * read under the reader's scope. Only when the top bar offers the Copilot.
+   * brand, this screen as its surface, and the object this address names.
    */
   const copilotLink = topbar.links.find((link) => link.key === 'copilot' && !link.current);
   const drawerBrand =
@@ -424,24 +426,13 @@ export async function WorkspaceShell({
     : null;
 
   /*
-   * THE BRAND PROFILE ROW NEEDS A BRAND *AND* THE PERMISSION TO READ ONE.
-   *
-   * `/settings/brand` calls `requireWorkspace(locale, 'brand.read')` and answers
-   * 404 without it, so offering the row to a member who does not hold it is a
-   * link to a dead end — and a dead end that looks like a permissions bug to
-   * the person who clicks it.
-   *
-   * DEAD-LINK PREVENTION ONLY. The route authorizes independently and nothing
-   * here is load-bearing for security: typing the URL still fails, identically
-   * to a route that does not exist (CLAUDE.md §2.1).
+   * THE BRAND PROFILE ROW NEEDS A BRAND *AND* THE PERMISSION TO READ ONE:
+   * `/settings/brand` answers 404 without `brand.read`. Dead-link prevention
+   * only; the route authorizes independently.
    */
   const mayReadBrandProfile = permissionKeys.includes('brand.read');
 
-  /*
-   * HOW MANY BUSINESSES THIS PERSON BELONGS TO (D-302). "Switch business" is
-   * offered in the account menu only when there is another one to switch to;
-   * the count comes from the same membership listing the picker reads.
-   */
+  /* How many businesses this person belongs to (D-302). */
   const businessCount =
     availableWorkspaces.length > 0
       ? availableWorkspaces.length
@@ -452,11 +443,9 @@ export async function WorkspaceShell({
         ).length;
 
   /*
-   * THE BUSINESS SWITCHER (Q1 / Q2, D-326 — supersedes D-302 for the switcher).
-   * With one brand in view (which is every workspace while multi-brand is off,
-   * Q2b), the rail's card opens the list of businesses as "role · plan", with
-   * the owner's workspace allowance at its foot. A workspace that still has
-   * several brands in view keeps the brand selector exactly as it was.
+   * THE BUSINESS SWITCHER (Q1 / Q2, D-326). With one brand in view the rail's
+   * card opens the businesses, with the owner's allowance at its head and foot
+   * (`.bmenu`: "Workspaces · 1/2", "+ New workspace  1/2", the note).
    */
   const activeWorkspaceId =
     brandContext && brandContext.brands.length < 2
@@ -465,356 +454,377 @@ export async function WorkspaceShell({
   const switcher = activeWorkspaceId
     ? await businessSwitcherModel(locale, activeWorkspaceId)
     : null;
+  const usage =
+    switcher && switcher.foot.kind !== 'none' && switcher.foot.kind !== 'unavailable'
+      ? switcher.foot.allowed === null
+        ? null
+        : `${switcher.foot.used}/${switcher.foot.allowed}`
+      : null;
+
+  const brandCard = brandContext ? (
+    brandContext.brands.length >= 2 ? (
+      <PrototypeBrandSwitcher
+        label={t('brand.switcherLabel')}
+        current={brandTrigger(brandContext, t)}
+        options={brandContext.brands.map((brand) => ({
+          id: brand.id,
+          name: brand.name,
+          current: brandContext.selectedValue === brand.id,
+        }))}
+        action={selectBrandAction}
+        hiddenFields={{ locale, next: localeHref(locale) }}
+        {...(brandContext.aggregateAllowed
+          ? {
+              allOption: {
+                label: t('brand.allBrands'),
+                current: brandContext.resolution.kind === 'all',
+              },
+            }
+          : {})}
+        emptyLabel={t('brand.emptyMenu')}
+        {...(brandContext.resolution.kind === 'brand' && mayReadBrandProfile
+          ? {
+              manageHref: `/${locale}/settings/brand?brand=${brandContext.resolution.brand.id}`,
+              manageLabel: t('brand.profile'),
+            }
+          : {})}
+      />
+    ) : switcher ? (
+      <PrototypeBusinessSwitcher
+        label={t('ws.switcherLabel')}
+        heading={
+          <span data-testid={usage ? 'workspace-usage' : undefined}>
+            {t('ws.menuHeading')}
+            {usage ? (
+              <>
+                {' · '}
+                <span className="bsp-ltr">{usage}</span>
+              </>
+            ) : null}
+          </span>
+        }
+        current={{
+          name: brandContext.brands[0]?.name ?? workspaceName,
+          caption: switcher.currentCaption,
+        }}
+        options={switcher.options}
+        action={switchWorkspaceAction}
+        hiddenFields={{ locale }}
+        footer={
+          <>
+            {switcher.foot.kind === 'create' ? (
+              <a
+                href={`/${locale}/onboarding/workspace`}
+                role="menuitem"
+                data-testid="workspace-new"
+                style={{ ...MENU_LINK, color: 'var(--bs-brand-purple-pressed)' }}
+              >
+                <span>{t('ws.new')}</span>
+                {usage ? (
+                  <span
+                    className="bsp-ltr"
+                    style={{
+                      fontSize: 'var(--bsp-t-11)',
+                      color: 'var(--bsp-faint)',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {usage}
+                  </span>
+                ) : null}
+              </a>
+            ) : null}
+            {switcher.foot.kind === 'unavailable' ? (
+              // Owner decision (PR #47): an allowance of 0 never reads "N of 0".
+              <>
+                <p
+                  data-testid="workspace-unavailable"
+                  style={{ ...MENU_NOTE, color: 'var(--bsp-faint)' }}
+                >
+                  {t('ws.unavailable')}
+                </p>
+                {permissionKeys.includes('billing.read') ? (
+                  <a
+                    href={`/${locale}/plan`}
+                    role="menuitem"
+                    data-testid="workspace-unavailable-upgrade"
+                    style={{ ...MENU_LINK, color: 'var(--bs-brand-purple-pressed)' }}
+                  >
+                    {t('ws.unavailableUpgrade')}
+                  </a>
+                ) : (
+                  <p
+                    data-testid="workspace-unavailable-upgrade"
+                    style={{ ...MENU_NOTE, color: 'var(--bsp-faint)' }}
+                  >
+                    {t('ws.unavailableUpgrade')}
+                  </p>
+                )}
+              </>
+            ) : null}
+            {switcher.foot.kind === 'limit' ? (
+              <>
+                <p
+                  data-testid="workspace-limit"
+                  style={{ ...MENU_NOTE, color: 'var(--bsp-faint)' }}
+                >
+                  {t('ws.limitReached')}
+                </p>
+                {permissionKeys.includes('billing.read') ? (
+                  <a
+                    href={`/${locale}/plan`}
+                    role="menuitem"
+                    data-testid="workspace-upgrade"
+                    style={{ ...MENU_LINK, color: 'var(--bs-brand-purple-pressed)' }}
+                  >
+                    {t('ws.upgrade')}
+                  </a>
+                ) : null}
+              </>
+            ) : null}
+            {brandContext.brands[0] && mayReadBrandProfile ? (
+              <a
+                href={`/${locale}/settings/brand?brand=${brandContext.brands[0].id}`}
+                role="menuitem"
+                data-testid="manage-brand"
+                style={{ ...MENU_LINK, color: 'var(--bs-brand-purple-pressed)' }}
+              >
+                {t('brand.profile')}
+              </a>
+            ) : null}
+            {switcher.foot.kind === 'none' ? null : (
+              <p style={{ ...MENU_NOTE, color: 'var(--bsp-faint)' }}>{t('ws.menuNote')}</p>
+            )}
+          </>
+        }
+      />
+    ) : brandContext.brands[0] ? (
+      <PrototypeBrandCard
+        label={t('brand.cardLabel')}
+        current={{ name: brandContext.brands[0].name, caption: t('brand.selectedCaption') }}
+        href={
+          mayReadBrandProfile
+            ? `/${locale}/settings/brand?brand=${brandContext.brands[0].id}`
+            : undefined
+        }
+      />
+    ) : null
+  ) : null;
+
+  /* The top bar: notes, notifications, the language square, Create. */
+  const notesLink = topbar.links.find((link) => link.key === 'notes');
+  const bellLink = topbar.links.find((link) => link.key === 'notifications');
+  const bell = bellLink ? (
+    <PrototypeTopbarLink
+      href={bellLink.href}
+      label={t(bellLink.labelKey)}
+      glyph="notifications"
+      count={bellLink.count}
+      countLabel={
+        bellLink.countKey && bellLink.count
+          ? t(bellLink.countKey).replace('{count}', String(bellLink.count))
+          : undefined
+      }
+      current={bellLink.current}
+      testId="topbar-notifications"
+    />
+  ) : null;
+  const headerActions = (
+    <>
+      {focus || !notesLink ? null : (
+        <PrototypeTopbarLink
+          href={notesLink.href}
+          label={t(notesLink.labelKey)}
+          glyph="notes"
+          count={notesLink.count}
+          countLabel={
+            notesLink.countKey && notesLink.count
+              ? t(notesLink.countKey).replace('{count}', String(notesLink.count))
+              : undefined
+          }
+          current={notesLink.current}
+          testId="topbar-notes"
+          // The prototype draws the unread notes on the rail, not on this square.
+          showCount={false}
+        />
+      )}
+      {focus || !bellLink ? null : bellLink.current ? (
+        bell
+      ) : (
+        // D-297 — the bell opens its feed over the screen (still a link without script).
+        <NotificationsBell
+          locale={locale}
+          href={bellLink.href}
+          load={loadNotificationFeed}
+          strings={{
+            title: t('notifications.title'),
+            close: t('common.close'),
+            all: t('notifications.feed.all'),
+            mentions: t('notifications.feed.mentions'),
+            approvals: t('notifications.feed.approvals'),
+            seeAll: t('notifications.feed.seeAll'),
+            open: t('notifications.view'),
+            unread: t('notifications.unread'),
+            loading: t('notifications.feed.loading'),
+            emptyTitle: t('notifications.emptyTitle'),
+            emptyBody: t('notifications.emptyBody'),
+            error: t('notifications.feed.error'),
+          }}
+        >
+          {bell}
+        </NotificationsBell>
+      )}
+      <PrototypeLanguageSwitch
+        href={localeHref(other)}
+        targetLocale={other}
+        targetLetters={other.toUpperCase()}
+        label={t('topbar.switchLanguage')}
+      />
+      {focus ? null : (
+        <PrototypeCreateMenu
+          label={t('topbar.create')}
+          items={topbar.create
+            .map((item): PrototypeCreateItem | null => {
+              const copy = CREATE_ITEM[item.key];
+              return copy
+                ? {
+                    key: item.key,
+                    href: item.href,
+                    label: t(copy.label),
+                    sub: t(copy.sub),
+                    glyph: copy.glyph,
+                  }
+                : null;
+            })
+            .filter((item): item is PrototypeCreateItem => item !== null)}
+        />
+      )}
+    </>
+  );
+
+  /* The floating Copilot (`.fab`), for a member who may use it. */
+  const copilot = topbar.links.find((link) => link.key === 'copilot');
+  const fab =
+    focus || !copilot ? null : copilotLink ? (
+      <GlobalCopilot
+        locale={locale}
+        href={copilotLink.href}
+        brand={drawerBrand}
+        surface={copilotSurfaceForPath(requestPath)}
+        subject={drawerSubject}
+        labels={copilotLabels(locale, identity)}
+        rateMetricKeys={RATE_METRIC_KEYS}
+        strings={{
+          openFull: t('copilot.openFull'),
+          chooseBrandTitle: t('brand.chooseTitle'),
+          chooseBrandBody: t('copilot.noBrandBody'),
+        }}
+      >
+        <PrototypeCopilotFab
+          href={copilotLink.href}
+          label={t('topbar.copilot')}
+          testId="topbar-copilot"
+        />
+      </GlobalCopilot>
+    ) : (
+      <PrototypeCopilotFab
+        href={copilot.href}
+        label={t('topbar.copilot')}
+        current
+        testId="topbar-copilot"
+      />
+    );
+
+  /*
+   * THE USER CARD (`.ucard`) AND ITS MENU (`.umenu`): the person's name and
+   * email, "AI credits" with the balance for those who may read it, the
+   * language, sign out. "Switch business" stays for a member of more than one
+   * business while several brands are in view (D-302), because the brand
+   * selector then holds brands, not businesses.
+   */
+  const profile = (
+    <PrototypeUserCard
+      label={t('nav.account')}
+      name={identity}
+      email={customerName}
+      role={customerRoleName(roleName)}
+      initials={initialsFrom(identity)}
+    >
+      {typeof counts.credits === 'number' && permissionKeys.includes('billing.read') ? (
+        <PrototypeMenuLink
+          href={`/${locale}/billing`}
+          testId="account-credits"
+          trailing={
+            <span className="bsp-pill bsp-p-ai">
+              <PrototypeIcon glyph="spark" size={12} stroke={0} />
+              <span className="bsp-ltr">
+                {counts.credits.toLocaleString(locale === 'ar' ? 'ar' : 'en')}
+              </span>
+            </span>
+          }
+        >
+          {t('account.credits')}
+        </PrototypeMenuLink>
+      ) : null}
+      {businessCount > 1 && brandContext && brandContext.brands.length >= 2 ? (
+        <PrototypeMenuLink href={`/${locale}/workspaces`} testId="switch-workspace">
+          {t('ws.switchBusiness')}
+        </PrototypeMenuLink>
+      ) : null}
+      <PrototypeMenuLink
+        href={localeHref(other)}
+        hrefLang={other}
+        testId="account-language"
+        trailing={
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <b>{ownName(locale)}</b>
+            <span style={{ fontSize: 'var(--bsp-t-11)', color: 'var(--bsp-faint)' }}>
+              → {ownName(other)}
+            </span>
+          </span>
+        }
+      >
+        {t('account.language')}
+      </PrototypeMenuLink>
+      <form action={signOutAction} style={{ margin: 0 }}>
+        <input type="hidden" name="locale" value={locale} />
+        <button
+          type="submit"
+          role="menuitem"
+          data-testid="sign-out"
+          className="bsp-menu-item bsp-sign-out"
+        >
+          {t('nav.signOut')}
+        </button>
+      </form>
+    </PrototypeUserCard>
+  );
 
   return (
-    <AppShell
-      brand={<BrandMark title={t('app.title')} />}
+    <CustomerShell
+      // The logotype, drawn in Latin in both languages as the prototype and the
+      // brand mark's own title do — the brand's name, not copy to translate.
+      wordmark="BrandSpace"
       sections={sections}
       labels={{
         primaryNavigation: t('nav.primary'),
         openNavigation: t('nav.open'),
         closeNavigation: t('nav.close'),
-        collapseSidebar: t('nav.collapse'),
-        expandSidebar: t('nav.expand'),
+        collapseSidebar: t('nav.collapseMenu'),
+        expandSidebar: t('nav.expandMenu'),
       }}
-      headerStart={
-        /*
-         * THE BRAND, AND ONLY THE BRAND (Phase 6 final acceptance, D-302).
-         *
-         * The workspace is the tenant boundary — membership, billing, RLS,
-         * audit — and it stays exactly that, underneath. It is no longer a card
-         * in the customer's rail: a standard business has one workspace and one
-         * brand, and "what is the difference between my workspace and my
-         * brand?" is a question the product should never make them ask. A
-         * member of more than one business switches from the account menu.
-         *
-         * ONE REACHABLE BRAND IS A CARD, NOT A MENU. The selector returns,
-         * unchanged, when a second brand is reachable — which the plan's brand
-         * quota (`limit.brands`, the existing entitlement) is what permits. That
-         * is the future multi-brand mode, switched on by configuration rather
-         * than by code.
-         */
-        brandContext ? (
-          brandContext.brands.length >= 2 ? (
-            <BrandSwitcher
-              label={t('brand.switcherLabel')}
-              current={brandTrigger(brandContext, t)}
-              options={brandContext.brands.map((brand) => ({
-                id: brand.id,
-                name: brand.name,
-                current: brandContext.selectedValue === brand.id,
-              }))}
-              action={selectBrandAction}
-              hiddenFields={{ locale, next: localeHref(locale) }}
-              {...(brandContext.aggregateAllowed
-                ? {
-                    allOption: {
-                      label: t('brand.allBrands'),
-                      current: brandContext.resolution.kind === 'all',
-                    },
-                  }
-                : {})}
-              emptyLabel={t('brand.emptyMenu')}
-              {...(brandContext.resolution.kind === 'brand' && mayReadBrandProfile
-                ? {
-                    manageHref: `/${locale}/settings/brand?brand=${brandContext.resolution.brand.id}`,
-                    manageLabel: t('brand.profile'),
-                  }
-                : {})}
-            />
-          ) : switcher ? (
-            <BusinessSwitcher
-              label={t('ws.switcherLabel')}
-              current={{
-                name: brandContext.brands[0]?.name ?? workspaceName,
-                caption: switcher.currentCaption,
-              }}
-              options={switcher.options}
-              action={switchWorkspaceAction}
-              hiddenFields={{ locale }}
-              footer={
-                <>
-                  {switcher.foot.kind === 'none' || switcher.foot.kind === 'unavailable' ? null : (
-                    <p
-                      data-testid="workspace-usage"
-                      style={{
-                        ...menuItemStyle(),
-                        cursor: 'default',
-                        margin: 0,
-                        ...typographyTokens.caption,
-                        color: colorTokens.textSecondary,
-                      }}
-                    >
-                      {switcher.foot.allowed === null
-                        ? t('ws.usageUnlimited').replace('{used}', String(switcher.foot.used))
-                        : t('ws.usage')
-                            .replace('{used}', String(switcher.foot.used))
-                            .replace('{allowed}', String(switcher.foot.allowed))}
-                    </p>
-                  )}
-                  {switcher.foot.kind === 'create' ? (
-                    <Link
-                      href={`/${locale}/onboarding/workspace`}
-                      role="menuitem"
-                      data-testid="workspace-new"
-                      style={{ ...menuItemStyle(), color: colorTokens.brandPurple }}
-                    >
-                      {t('ws.new')}
-                    </Link>
-                  ) : null}
-                  {switcher.foot.kind === 'unavailable' ? (
-                    // Owner decision (PR #47): an allowance of 0 never reads "N of 0".
-                    <>
-                      <p
-                        data-testid="workspace-unavailable"
-                        style={{
-                          ...menuItemStyle(),
-                          cursor: 'default',
-                          margin: 0,
-                          color: colorTokens.textSecondary,
-                        }}
-                      >
-                        {t('ws.unavailable')}
-                      </p>
-                      {permissionKeys.includes('billing.read') ? (
-                        <Link
-                          href={`/${locale}/plan`}
-                          role="menuitem"
-                          data-testid="workspace-unavailable-upgrade"
-                          style={{ ...menuItemStyle(), color: colorTokens.brandPurple }}
-                        >
-                          {t('ws.unavailableUpgrade')}
-                        </Link>
-                      ) : (
-                        <p
-                          data-testid="workspace-unavailable-upgrade"
-                          style={{
-                            ...menuItemStyle(),
-                            cursor: 'default',
-                            margin: 0,
-                            color: colorTokens.textSecondary,
-                          }}
-                        >
-                          {t('ws.unavailableUpgrade')}
-                        </p>
-                      )}
-                    </>
-                  ) : null}
-                  {switcher.foot.kind === 'limit' ? (
-                    <>
-                      <p
-                        data-testid="workspace-limit"
-                        style={{
-                          ...menuItemStyle(),
-                          cursor: 'default',
-                          margin: 0,
-                          color: colorTokens.textSecondary,
-                        }}
-                      >
-                        {t('ws.limitReached')}
-                      </p>
-                      {permissionKeys.includes('billing.read') ? (
-                        <Link
-                          href={`/${locale}/plan`}
-                          role="menuitem"
-                          data-testid="workspace-upgrade"
-                          style={{ ...menuItemStyle(), color: colorTokens.brandPurple }}
-                        >
-                          {t('ws.upgrade')}
-                        </Link>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {brandContext.brands[0] && mayReadBrandProfile ? (
-                    <Link
-                      href={`/${locale}/settings/brand?brand=${brandContext.brands[0].id}`}
-                      role="menuitem"
-                      data-testid="manage-brand"
-                      style={{ ...menuItemStyle(), color: colorTokens.brandPurple }}
-                    >
-                      {t('brand.profile')}
-                    </Link>
-                  ) : null}
-                </>
-              }
-            />
-          ) : brandContext.brands[0] ? (
-            <BrandCard
-              label={t('brand.cardLabel')}
-              current={{
-                name: brandContext.brands[0].name,
-                caption: t('brand.selectedCaption'),
-              }}
-              href={
-                mayReadBrandProfile
-                  ? `/${locale}/settings/brand?brand=${brandContext.brands[0].id}`
-                  : undefined
-              }
-            />
-          ) : null
-        ) : null
-      }
-      headerEnd={
-        /*
-         * THE CUSTOMER TOP BAR (P6-16). The demo's composition — square
-         * `.icon-button`s, the 38px language square and the purple
-         * `.primary-button.compact` — with every control leading to a real
-         * screen. The search control is gone rather than faked: no search
-         * domain exists behind it (D-276).
-         */
-        <>
-          {(focus ? [] : topbar.links).map((link) => {
-            const count = link.count ?? 0;
-            const control = (
-              <TopbarLink
-                key={link.key}
-                href={link.href}
-                label={t(link.labelKey)}
-                glyph={link.key}
-                current={link.current}
-                testId={`topbar-${link.key}`}
-                // D-304 — the Copilot is named on screen, not only by its spark.
-                showLabel={link.key === 'copilot'}
-                indicator={
-                  link.countKey && count > 0
-                    ? { count, label: t(link.countKey).replace('{count}', String(count)) }
-                    : null
-                }
-              />
-            );
-            // D-297 — the bell opens its feed over the screen (still a link without script).
-            if (link.key === 'notifications' && !link.current) {
-              return (
-                <NotificationsBell
-                  key={link.key}
-                  locale={locale}
-                  href={link.href}
-                  load={loadNotificationFeed}
-                  strings={{
-                    title: t('notifications.title'),
-                    close: t('common.close'),
-                    all: t('notifications.feed.all'),
-                    mentions: t('notifications.feed.mentions'),
-                    approvals: t('notifications.feed.approvals'),
-                    seeAll: t('notifications.feed.seeAll'),
-                    open: t('notifications.view'),
-                    unread: t('notifications.unread'),
-                    loading: t('notifications.feed.loading'),
-                    emptyTitle: t('notifications.emptyTitle'),
-                    emptyBody: t('notifications.emptyBody'),
-                    error: t('notifications.feed.error'),
-                  }}
-                >
-                  {control}
-                </NotificationsBell>
-              );
-            }
-            return link === copilotLink ? (
-              <GlobalCopilot
-                key={link.key}
-                locale={locale}
-                href={link.href}
-                brand={drawerBrand}
-                surface={copilotSurfaceForPath(requestPath)}
-                subject={drawerSubject}
-                labels={copilotLabels(locale, identity)}
-                rateMetricKeys={RATE_METRIC_KEYS}
-                strings={{
-                  openFull: t('copilot.openFull'),
-                  chooseBrandTitle: t('brand.chooseTitle'),
-                  chooseBrandBody: t('copilot.noBrandBody'),
-                }}
-              >
-                {control}
-              </GlobalCopilot>
-            ) : (
-              control
-            );
-          })}
-          <LanguageSwitcher
-            href={localeHref(other)}
-            targetLocale={other}
-            targetLabel={other === 'ar' ? 'العربية' : 'English'}
-            ariaLabel={t('nav.language')}
-          />
-          {focus ? null : (
-            <TopbarCreateMenu
-              label={t('topbar.create')}
-              items={topbar.create.map((item) => ({
-                key: item.key,
-                href: item.href,
-                label: t(item.labelKey),
-              }))}
-            />
-          )}
-        </>
-      }
-      /*
-       * EVERY route gets the top-bar title, the Overview included: the
-       * reference's home view has BOTH an `h1` in the bar ("Good morning, …")
-       * and an `h2` hero statement below it. The hero is a second block, never
-       * a replacement for the first.
-       */
+      brandCard={brandCard}
+      profile={profile}
       pageEyebrow={t('page.eyebrow')}
       pageTitle={heading}
       pageDescription={description}
       pageMeta={meta}
-      profile={
-        /*
-         * THE DEMO'S PROFILE CARD (§8): avatar, name, role and a real `•••`
-         * menu holding sign-out. It replaces the standalone sign-out row, which
-         * was visually unrelated to the demo.
-         */
-        <ProfileCard
-          label={t('nav.account')}
-          name={identity}
-          role={customerRoleName(roleName)}
-          initials={initialsFrom(identity)}
-        >
-          {businessCount > 1 ? (
-            <Link
-              href={`/${locale}/workspaces`}
-              role="menuitem"
-              data-testid="switch-workspace"
-              style={menuItemStyle()}
-            >
-              {t('ws.switchBusiness')}
-            </Link>
-          ) : null}
-          <form action={signOutAction}>
-            <input type="hidden" name="locale" value={locale} />
-            <button type="submit" role="menuitem" data-testid="sign-out" style={menuItemStyle()}>
-              {t('nav.signOut')}
-            </button>
-          </form>
-        </ProfileCard>
-      }
+      actions={headerActions}
+      fab={fab}
     >
-      {/*
-        THE TITLE IS IN THE TOP BAR NOW (fidelity pass §4/§5).
-
-        `PageHeader` used to render it here, one block below the bar, which is
-        exactly the "visually lower or detached" composition the reference does
-        not have. The shell passes the title up instead, so every route gets the
-        reference's single `eyebrow → h1 → actions` block and the first content
-        surface starts immediately underneath it.
-
-        Page-level actions still render here when a page has them, because the
-        top-bar actions are global (review, notes, notifications, Copilot, create)
-        rather than page-specific.
-      */}
       {hero ?? null}
       {actions ? (
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: spacingTokens.sm,
-            marginBlockEnd: spacingTokens.md,
-          }}
-        >
-          {actions}
-        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>{actions}</div>
       ) : null}
       <div className="bs-section-stack">{children}</div>
       {/* `useSearchParams` in the host needs a boundary on a prerendered route. */}
@@ -826,7 +836,7 @@ export async function WorkspaceShell({
           openLabel={t('notifications.incoming.open')}
         />
       </Suspense>
-    </AppShell>
+    </CustomerShell>
   );
 }
 

@@ -79,6 +79,16 @@ export interface TopbarCounts {
   readonly notes: number | null;
   /** Unread in-app notifications for this member. */
   readonly notifications: number | null;
+  /**
+   * D-468 — the rail's counts the prototype draws beside "Publishing log" and
+   * "Team": publishing that failed or half-failed and is sitting there (the
+   * same count Home's attention list reads), and the active members. Absent
+   * (`undefined`) where the member may not open the destination.
+   */
+  readonly failed?: number | null;
+  readonly team?: number | null;
+  /** The AI credit balance, for a member who may read it (Q18). */
+  readonly credits?: number | null;
 }
 
 export interface TopbarLinkModel {

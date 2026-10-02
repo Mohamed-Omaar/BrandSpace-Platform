@@ -8,6 +8,24 @@ import {
   webfontHref,
 } from '@brandspace/ui';
 import '@brandspace/ui/tokens.css';
+import '@brandspace/ui/prototype.css';
+/*
+ * THE PROTOTYPE'S TYPE, SERVED FROM THIS ORIGIN (D-468). `prototype-2026-09-27`
+ * sets Latin in Inter and Arabic in Cairo, at 400–800. The policy allows fonts
+ * from `'self'` only, so the faces are bundled with the application (OFL-1.1,
+ * `@fontsource/*`) rather than fetched from a third party at run time — which
+ * the optional stylesheet below could never do under that policy.
+ */
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/inter/800.css';
+import '@fontsource/cairo/400.css';
+import '@fontsource/cairo/500.css';
+import '@fontsource/cairo/600.css';
+import '@fontsource/cairo/700.css';
+import '@fontsource/cairo/800.css';
 
 export const metadata = {
   title: 'BrandSpace Dashboard',

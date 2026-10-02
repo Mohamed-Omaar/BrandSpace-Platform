@@ -31,6 +31,8 @@
     "@brandspace/social-connectors": "workspace:*",
     "@brandspace/storage": "workspace:*",
     "@brandspace/ui": "workspace:*",
+    "@fontsource/cairo": "5.3.0",
+    "@fontsource/inter": "5.3.0",
     "next": "16.3.4",
     "qrcode": "1.5.4",
     "react": "19.2.8",
