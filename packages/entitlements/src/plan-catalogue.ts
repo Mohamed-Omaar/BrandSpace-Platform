@@ -1,3 +1,4 @@
+import { readAutomationAiCap } from './automation-ai-cap';
 import type { PlanTerms } from './subscription';
 
 /**
@@ -24,7 +25,17 @@ export interface PlanQuotas {
   readonly analyticsRetentionDays: number | null;
   /** Q1: how many workspaces an owner on this plan may own. `null` = unlimited. */
   readonly workspaces: number | null;
+  /**
+   * PR 6: AI automation actions per workspace-local month, and the same while
+   * TRIALING. `null` is NOT SET (off) — unlike the counts above, where null is
+   * unlimited; unlimited is `{ kind: 'unlimited' }`.
+   */
+  readonly automationAiActionsPerMonth: PlanAutomationAiCap | null;
+  readonly trialAutomationAiActionsPerMonth: PlanAutomationAiCap | null;
 }
+
+export type PlanAutomationAiCap =
+  { readonly kind: 'limited'; readonly value: number } | { readonly kind: 'unlimited' };
 
 export interface PlanAddOn {
   readonly key: string;
@@ -146,6 +157,8 @@ function readPlan(p: Record<string, unknown>): PlanDetail {
       storageGb: nullableNumber(quotas['storageGb']),
       analyticsRetentionDays: nullableNumber(quotas['analyticsRetentionDays']),
       workspaces: nullableNumber(quotas['workspaces']),
+      automationAiActionsPerMonth: planCap(quotas['automationAiActionsPerMonth']),
+      trialAutomationAiActionsPerMonth: planCap(quotas['trialAutomationAiActionsPerMonth']),
     },
     addOns: ((p['addOns'] ?? []) as ReadonlyArray<Record<string, unknown>>).map((addOn) => {
       const addOnName = (addOn['name'] ?? {}) as Record<string, string>;
@@ -185,4 +198,12 @@ function nullableNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function planCap(raw: unknown): PlanAutomationAiCap | null {
+  const cap = readAutomationAiCap(raw);
+  if (!cap) return null;
+  return cap.limitValue === null
+    ? { kind: 'unlimited' }
+    : { kind: 'limited', value: cap.limitValue };
 }

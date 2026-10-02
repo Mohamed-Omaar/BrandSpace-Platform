@@ -2629,6 +2629,9 @@ export const messages = {
     'automations.trigger.SCHEDULED_TIME': 'في وقت محدد',
     'automations.trigger.ANOMALY_DETECTED': 'عند رصد تغيّر غير معتاد',
     'automations.olderAutomation': '(أتمتة أقدم)',
+    'automations.ideasDrafted': 'تمت صياغة 3 أفكار في مكتبة المحتوى.',
+    'automations.aiCapReached':
+      'بلغ الحد الشهري لإجراءات الأتمتة بالذكاء الاصطناعي — يُستأنف الشهر القادم',
     'automations.action.NOTIFY': 'إرسال إشعار داخلي',
     'automations.action.SUBMIT_FOR_APPROVAL': 'إرسال للمراجعة',
     'automations.action.PLACE_ON_CALENDAR': 'وضع في التقويم',
@@ -2649,11 +2652,14 @@ export const messages = {
     'automations.action.MAKE_DRAFT_COPY': 'إنشاء نسخة مسودة',
     'automations.action.RETRY_PUBLISH': 'إعادة محاولة نشر المنشور المتعثّر',
     'automations.action.PAUSE_CAMPAIGN': 'إيقاف حملة مؤقتًا',
+    'automations.action.DRAFT_IDEAS': 'صياغة 3 أفكار بالذكاء الاصطناعي',
     'automations.action.REMIND_REVIEWER': 'تذكير المراجِع',
     'automations.status.RUNNING': 'قيد التشغيل',
     'automations.status.SUCCEEDED': 'نجحت',
     'automations.status.SKIPPED': 'لم تتحقق الشروط',
     'automations.status.AWAITING_CONFIRMATION': 'بانتظار موافقة',
+    'automations.status.AWAITING_EXECUTION': 'جارٍ صياغة الأفكار…',
+    'automations.status.EXECUTING': 'جارٍ صياغة الأفكار…',
     'automations.status.BLOCKED_BY_POLICY': 'أوقفتها السياسة',
     'automations.status.BLOCKED_BY_AUTHORIZATION': 'صلاحية المنشئ لم تعد كافية',
     'automations.status.FAILED': 'فشلت',
@@ -2745,6 +2751,18 @@ export const messages = {
     'automations.failure.workspace_pending_deletion': 'لم تُشغَّل — مساحة العمل هذه مجدولة للحذف.',
     'automations.failure.daily_ceiling_reached':
       'لم تُشغَّل — بلغت هذه الأتمتة حدها اليومي من مرات التشغيل.',
+    'automations.failure.monthly_ai_cap_reached':
+      'تم التخطي: بلغت إجراءات الأتمتة بالذكاء الاصطناعي حدّها لهذا الشهر، ويُعاد ضبطه مع بداية الشهر القادم. لم يُخصم أي رصيد.',
+    'automations.failure.ai_credits_insufficient':
+      'تم التخطي: رصيد الذكاء الاصطناعي غير كافٍ. لم يُخصم أي رصيد.',
+    'automations.failure.no_reviewed_facts':
+      'تم التخطي: لا توجد حقائق معتمدة متاحة للعلامة لاستلهام الأفكار منها.',
+    'automations.failure.brand_not_active': 'تم التخطي: العلامة مؤرشفة.',
+    'automations.failure.ai_unavailable':
+      'تعذّر على خدمة الذكاء الاصطناعي صياغة الأفكار هذه المرة. لم يُخصم أي رصيد.',
+    'automations.failure.ai_output_unusable':
+      'تعذّر استخدام ردّ الذكاء الاصطناعي، فلم تُحفظ أي أفكار. استُخدم رصيد هذه المحاولة.',
+    'automations.failure.not_entitled': 'خطتك لا تشمل إجراءات الأتمتة بالذكاء الاصطناعي.',
     'automations.failure.fallback': 'حدث خطأ أثناء تشغيل هذه الأتمتة.',
     'automations.confirmNeedsPermission': 'ينتظر تأكيد عضو يملك صلاحية النشر.',
     // Phase 2B-3 PR 5 — a pause waits for someone who may manage campaigns.
@@ -5979,6 +5997,8 @@ export const messages = {
     'automations.trigger.SCHEDULED_TIME': 'At a scheduled time',
     'automations.trigger.ANOMALY_DETECTED': 'When an anomaly is detected',
     'automations.olderAutomation': '(older automation)',
+    'automations.ideasDrafted': 'Drafted 3 ideas in your content library.',
+    'automations.aiCapReached': 'Monthly AI limit reached — resumes next month',
     'automations.action.NOTIFY': 'Send an in-app notification',
     'automations.action.SUBMIT_FOR_APPROVAL': 'Submit for review',
     'automations.action.PLACE_ON_CALENDAR': 'Place on the calendar',
@@ -5997,11 +6017,14 @@ export const messages = {
     'automations.action.MAKE_DRAFT_COPY': 'Make a draft copy',
     'automations.action.RETRY_PUBLISH': 'Retry the failed post',
     'automations.action.PAUSE_CAMPAIGN': 'Pause a campaign',
+    'automations.action.DRAFT_IDEAS': 'Draft 3 ideas with AI',
     'automations.action.REMIND_REVIEWER': 'Remind the reviewer',
     'automations.status.RUNNING': 'Running',
     'automations.status.SUCCEEDED': 'Succeeded',
     'automations.status.SKIPPED': 'Conditions did not hold',
     'automations.status.AWAITING_CONFIRMATION': 'Waiting for confirmation',
+    'automations.status.AWAITING_EXECUTION': 'Drafting ideas…',
+    'automations.status.EXECUTING': 'Drafting ideas…',
     'automations.status.BLOCKED_BY_POLICY': 'Stopped by policy',
     'automations.status.BLOCKED_BY_AUTHORIZATION': "The creator's permission is no longer enough",
     'automations.status.FAILED': 'Failed',
@@ -6099,6 +6122,18 @@ export const messages = {
       'Not run — this workspace is scheduled for deletion.',
     'automations.failure.daily_ceiling_reached':
       'Not run — this automation reached its daily limit of runs.',
+    'automations.failure.monthly_ai_cap_reached':
+      "Skipped: this month's limit for AI automation actions is reached. It resets at the start of next month. Nothing was charged.",
+    'automations.failure.ai_credits_insufficient':
+      'Skipped: not enough AI credits. Nothing was charged.',
+    'automations.failure.no_reviewed_facts':
+      'Skipped: no approved brand facts are available to draw ideas from.',
+    'automations.failure.brand_not_active': 'Skipped: the brand is archived.',
+    'automations.failure.ai_unavailable':
+      "The AI service couldn't draft ideas this time. Nothing was charged.",
+    'automations.failure.ai_output_unusable':
+      "The AI reply couldn't be used, so no ideas were saved. Credits for this attempt were used.",
+    'automations.failure.not_entitled': "Your plan doesn't include AI automation actions.",
     'automations.failure.fallback': 'Something went wrong running this automation.',
     'automations.confirmNeedsPermission': 'Waiting for a member who may publish to confirm it.',
     // Phase 2B-3 PR 5 — a pause waits for someone who may manage campaigns.

@@ -233,6 +233,8 @@ const STRUCTURED_TASKS = new Set([
   'strategy.generate',
   'plan.monthly',
   'analytics.explain',
+  // Phase 2B-3 PR 6 — DRAFT_IDEAS asks for exactly three titles, as JSON.
+  'ideas.generate',
 ]);
 
 /** The platform keys a caption request named, read from the prompt's own line. */
@@ -376,6 +378,24 @@ function reasoningDocument(
  * product is right to apply and would be testing the limit rather than the
  * path.
  */
+/**
+ * PHASE 2B-3 PR 6 — THREE IDEA TITLES, in the shape `parseDraftIdeas` accepts
+ * and in the language the platform's prompt asked for. Fixed text: an idea a
+ * mock invents from a brand's material would be indistinguishable from one a
+ * model wrote, and the mock must never pass as one.
+ */
+function ideasDocument(prompt: string): string {
+  const arabic = /^Write in: Arabic\.$/m.test(prompt);
+  const titles = arabic
+    ? ['فكرة تجريبية أولى للعلامة', 'فكرة تجريبية ثانية للعلامة', 'فكرة تجريبية ثالثة للعلامة']
+    : [
+        'A first sample idea for this brand',
+        'A second sample idea for this brand',
+        'A third sample idea for this brand',
+      ];
+  return JSON.stringify({ ideas: titles.map((title) => ({ title })) });
+}
+
 function captionDocument(
   prompt: string,
   context: readonly string[],
@@ -572,7 +592,9 @@ export class MockProviderAdapter implements AiProviderAdapter {
     const document = structured
       ? request.taskKey === 'caption.generate'
         ? captionDocument(request.prompt, context, request.maxOutputTokens)
-        : reasoningDocument(request.prompt, context, request.maxOutputTokens)
+        : request.taskKey === 'ideas.generate'
+          ? ideasDocument(request.prompt)
+          : reasoningDocument(request.prompt, context, request.maxOutputTokens)
       : request.taskKey === 'copilot.chat' && request.prompt.includes('{"kind":"answer"|"job"')
         ? askDocument(request.prompt, context, request.maxOutputTokens)
         : request.taskKey === 'copilot.chat' && request.prompt.includes('"steps":[{"toolKey"')

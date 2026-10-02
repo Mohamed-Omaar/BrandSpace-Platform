@@ -1368,6 +1368,41 @@ export const AUTOMATION_ACTIONS = [
     needsContentItem: false,
     messageKey: 'pauseCampaign',
   },
+  /*
+   * PHASE 2B-3 PR 6 — DRAFT THREE IDEAS WITH AI (G13, D-405, D-458..D-466).
+   *
+   * IDEAS ONLY: three DRAFT content items, a title each, in the brand's content
+   * library — never a variant, a calendar slot, an approval or a publish job.
+   * STRICT `allOf`: a designer holds `copilot.use` and not `content.create`,
+   * and D-315 makes every credit-spending action need `copilot.use` as well.
+   *
+   * THE ENGINE ONLY DECIDES WHETHER IT MAY RUN. A run that passes every gate
+   * waits AWAITING_EXECUTION; the API's AI executor (the worker has no AI
+   * gateway, F-07 / F-68) re-checks the creator, the rule, the brand and the
+   * plan, claims one slot of the monthly cap, asks the gateway for
+   * `ideas.generate` and saves the ideas — `apps/api/src/automation-ai-executor.ts`.
+   */
+  {
+    type: 'DRAFT_IDEAS',
+    config: emptyConfig,
+    actionClass: 'INTERNAL_REVERSIBLE',
+    permissions: { allOf: ['content.create', 'copilot.use'], anyOf: [] },
+    entitlements: ['limit.automation_ai_actions'],
+    spendsCredits: true,
+    asksFirst: false,
+    authorable: true,
+    authoringTriggers: [
+      'CAMPAIGN_STARTED',
+      'WEEKLY_ENGAGEMENT_DROPPED',
+      'SCHEDULE_GAP',
+      'POST_TOP_10_PERCENT',
+      'FACT_EXPIRING',
+    ],
+    catalogue: 'g13',
+    executable: true,
+    needsContentItem: false,
+    messageKey: 'draftIdeas',
+  },
 ] as const satisfies readonly ActionDefinition[];
 
 /**
@@ -1396,19 +1431,12 @@ export interface PlannedActionDefinition {
   readonly executable: false;
 }
 
-export const PLANNED_AUTOMATION_ACTIONS = [
-  {
-    type: 'DRAFT_IDEAS',
-    actionClass: 'INTERNAL_REVERSIBLE',
-    // STRICT: both. A designer holds `copilot.use` and not `content.create`.
-    permissions: { allOf: ['content.create', 'copilot.use'], anyOf: [] },
-    entitlements: ['limit.automation_ai_actions'],
-    spendsCredits: true,
-    asksFirst: false,
-    authorable: false,
-    executable: false,
-  },
-] as const satisfies readonly PlannedActionDefinition[];
+/*
+ * EMPTY SINCE PHASE 2B-3 PR 6: DRAFT_IDEAS, the last one, moved into
+ * `AUTOMATION_ACTIONS` with the requirement declared here, unchanged. The
+ * mechanism stays for the next action declared before its code exists.
+ */
+export const PLANNED_AUTOMATION_ACTIONS: readonly PlannedActionDefinition[] = [];
 
 const PLANNED_ACTIONS_BY_TYPE = new Map<string, PlannedActionDefinition>(
   PLANNED_AUTOMATION_ACTIONS.map((action) => [action.type, action]),
@@ -1485,6 +1513,30 @@ export function isOlderAutomation(input: {
   return !trigger?.authorable || !action?.authorable;
 }
 
+/**
+ * PHASE 2B-3 PR 6 — THE ACTIONS THIS WORKSPACE'S PLAN INCLUDES (owner decision
+ * 11). An action that declares no entitlement is always included; one that
+ * declares some is included only when the workspace is entitled to every one.
+ * The Automations screen and the Copilot offer exactly these, and `createRule`
+ * refuses the rest — the same answer from every door.
+ */
+export async function entitledActionTypes(
+  allows: (featureKey: string) => Promise<boolean>,
+): Promise<ReadonlySet<AutomationActionType>> {
+  const entitled = new Set<AutomationActionType>();
+  for (const action of AUTOMATION_ACTIONS) {
+    let included = true;
+    for (const featureKey of action.entitlements) {
+      if (!(await allows(featureKey))) {
+        included = false;
+        break;
+      }
+    }
+    if (included) entitled.add(action.type);
+  }
+  return entitled;
+}
+
 /** May a NEW rule be written on this trigger with this action? */
 export function isAuthorablePair(triggerType: string, actionType: string): boolean {
   const trigger = findTrigger(triggerType);
@@ -1533,7 +1585,18 @@ export const ACTION_OUTCOME_STATUS = {
   superseded_by_new_slot: 'BLOCKED_BY_POLICY',
   // Phase 2B-3 PR 5 — PAUSE_CAMPAIGN: the campaign is no longer PLANNED or ACTIVE.
   campaign_not_pausable: 'BLOCKED_BY_POLICY',
-} as const satisfies Record<string, 'SKIPPED' | 'BLOCKED_BY_POLICY'>;
+  // Phase 2B-3 PR 6 — DRAFT_IDEAS. Every SKIPPED one charged nothing and
+  // counted nothing against the monthly cap.
+  monthly_ai_cap_reached: 'SKIPPED',
+  ai_credits_insufficient: 'SKIPPED',
+  no_reviewed_facts: 'SKIPPED',
+  brand_not_active: 'SKIPPED',
+  // The AI could not draft: nothing charged, the cap slot given back.
+  ai_unavailable: 'FAILED',
+  // The AI answered and the answer could not be used: the charge stands and
+  // the slot stays used (AC-11.9, owner decision 9).
+  ai_output_unusable: 'FAILED',
+} as const satisfies Record<string, 'SKIPPED' | 'BLOCKED_BY_POLICY' | 'FAILED'>;
 export type ActionOutcomeCode = keyof typeof ACTION_OUTCOME_STATUS;
 
 export function isActionOutcomeCode(value: unknown): value is ActionOutcomeCode {

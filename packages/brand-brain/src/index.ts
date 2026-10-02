@@ -199,6 +199,7 @@ export {
   usableFactsForDisplay,
   writingFactsInAreas,
   writingGoal,
+  writingGroundingWithoutQuestion,
 } from './grounding';
 export {
   calendarDate,

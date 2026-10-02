@@ -130,12 +130,22 @@ export interface WorkspaceEntitlementContext {
    * from somebody whose subscription is fine.
    */
   readonly planEnded?: boolean;
+  /**
+   * PR 6 — the subscription is TRIALING. The pure engine ignores it;
+   * `applyTrialQuota` reads it after the engine decided.
+   */
+  readonly trialing?: boolean;
 }
 
 export interface EntitlementCatalogue {
   readonly features: readonly FeatureDefinition[];
   readonly planEntitlements: readonly PlanEntitlementRule[];
   readonly flags: readonly FlagRule[];
+  /**
+   * PR 6 — the plan's values WHILE TRIALING, for the features that have one
+   * (`applyTrialQuota`). The pure engine never reads them.
+   */
+  readonly trialPlanEntitlements?: readonly PlanEntitlementRule[];
 }
 
 /** One step the engine considered, in evaluation order. */

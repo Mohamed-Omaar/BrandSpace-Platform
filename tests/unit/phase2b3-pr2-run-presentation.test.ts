@@ -129,6 +129,32 @@ const COPY: Record<string, readonly [string, string]> = {
     'Not done — this automation was switched off or deleted before it was approved.',
     'لم يُنفَّذ — أُوقفت هذه الأتمتة أو حُذفت قبل الموافقة عليها.',
   ],
+  // Phase 2B-3 PR 6 — DRAFT_IDEAS (approved copy, owner decisions 7 and 9).
+  monthly_ai_cap_reached: [
+    "Skipped: this month's limit for AI automation actions is reached. It resets at the start of next month. Nothing was charged.",
+    'تم التخطي: بلغت إجراءات الأتمتة بالذكاء الاصطناعي حدّها لهذا الشهر، ويُعاد ضبطه مع بداية الشهر القادم. لم يُخصم أي رصيد.',
+  ],
+  ai_credits_insufficient: [
+    'Skipped: not enough AI credits. Nothing was charged.',
+    'تم التخطي: رصيد الذكاء الاصطناعي غير كافٍ. لم يُخصم أي رصيد.',
+  ],
+  no_reviewed_facts: [
+    'Skipped: no approved brand facts are available to draw ideas from.',
+    'تم التخطي: لا توجد حقائق معتمدة متاحة للعلامة لاستلهام الأفكار منها.',
+  ],
+  brand_not_active: ['Skipped: the brand is archived.', 'تم التخطي: العلامة مؤرشفة.'],
+  ai_unavailable: [
+    "The AI service couldn't draft ideas this time. Nothing was charged.",
+    'تعذّر على خدمة الذكاء الاصطناعي صياغة الأفكار هذه المرة. لم يُخصم أي رصيد.',
+  ],
+  ai_output_unusable: [
+    "The AI reply couldn't be used, so no ideas were saved. Credits for this attempt were used.",
+    'تعذّر استخدام ردّ الذكاء الاصطناعي، فلم تُحفظ أي أفكار. استُخدم رصيد هذه المحاولة.',
+  ],
+  not_entitled: [
+    "Your plan doesn't include AI automation actions.",
+    'خطتك لا تشمل إجراءات الأتمتة بالذكاء الاصطناعي.',
+  ],
   fallback: ['Something went wrong running this automation.', 'حدث خطأ أثناء تشغيل هذه الأتمتة.'],
 };
 

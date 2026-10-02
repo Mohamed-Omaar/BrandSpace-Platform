@@ -62,10 +62,13 @@ describe('F6 — the brandScope migration', () => {
     expect(code).not.toMatch(/\b(DELETE|DROP|TRUNCATE|INSERT)\b/);
   });
 
-  it('comes directly after M3, and only the PR 5 M4 index follows it', () => {
+  it('comes directly after M3, and only the PR 5 M4 index and PR 6 M5a/M5b follow it', () => {
     const at = EXPECTED_MIGRATIONS.indexOf(NAME);
     expect(EXPECTED_MIGRATIONS.slice(at + 1)).toEqual([
       '20261014090000_automation_run_awaiting_expiry_index',
+      '20261015090000_automation_ai_execution_status',
+      '20261015091000_automation_ai_execution_lease',
+      '20261015092000_automation_run_execution_due_index',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe(
       '20261012092000_publish_job_published_population_index',

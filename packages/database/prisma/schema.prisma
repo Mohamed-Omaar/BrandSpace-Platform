@@ -4343,6 +4343,12 @@ enum AutomationRunStatus {
   /// otherwise keep a Confirm control alive on a screen for ever, pointing at a
   /// proposal whose content is now days stale.
   EXPIRED
+  /// Phase 2B-3 PR 6 (M5a). An AI action (DRAFT_IDEAS) passed the engine's
+  /// gates and waits for the API's AI executor. Not terminal.
+  AWAITING_EXECUTION
+  /// The AI executor holds the run's lease (`executionLeaseId`) and is
+  /// drafting. Not terminal; an expired lease makes the run claimable again.
+  EXECUTING
 }
 
 /// TENANT-OWNED, BRAND-SCOPED. ONE NORMALIZED METRIC FACT, as one provider
@@ -5295,6 +5301,18 @@ model AutomationRun {
   finishedAt DateTime? @db.Timestamptz(6)
   durationMs Int?
 
+  /// Phase 2B-3 PR 6 (M5b) — THE AI EXECUTOR'S LEASE. Set exactly while the
+  /// run is EXECUTING (CHECK `automation_run_execution_lease_matches_status`);
+  /// every write that finishes or releases the run is guarded by it.
+  executionLeaseId     String?   @db.Uuid
+  /// When the executor may next touch the run: the backoff while
+  /// AWAITING_EXECUTION, the lease expiry while EXECUTING. Never NULL in either
+  /// status (CHECK `automation_run_execution_due_is_set`).
+  executionAvailableAt DateTime? @db.Timestamptz(6)
+  /// Claims so far, bounded by `automations.execution.aiMaxAttempts` and by
+  /// CHECK `automation_run_execution_attempts_bounded` (0..20).
+  executionAttempts    Int       @default(0)
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -5309,6 +5327,10 @@ model AutomationRun {
   /// `automation_run_awaiting_expiry_idx` on (confirmationExpiresAt) WHERE
   /// status = 'AWAITING_CONFIRMATION', in migration
   /// 20261014090000_automation_run_awaiting_expiry_index. The lapse sweep reads it.
+  /// Phase 2B-3 PR 6 — `automation_run_execution_due_idx` on
+  /// (executionAvailableAt) WHERE status IN ('AWAITING_EXECUTION', 'EXECUTING'),
+  /// in migration 20261015092000_automation_run_execution_due_index. The AI
+  /// executor reads it.
   @@map("automation_run")
 }
 

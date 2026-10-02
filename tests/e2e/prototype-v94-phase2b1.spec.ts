@@ -245,6 +245,34 @@ test.describe('A8 · the owner deletes a workspace, it waits, and the owner canc
   });
 });
 
+/**
+ * THE DAY `seed-calendar-fixture.ts` ACTUALLY WROTE, read back from the active
+ * `content` configuration — never "today + 3 days" worked out a second time.
+ * The seed runs minutes before this test; a run that crosses midnight UTC in
+ * between would otherwise look for the next day's chip (PR 6, final review).
+ */
+async function seededFixtureHolidayDay(): Promise<string> {
+  return withPlatformPrisma(async (prisma) => {
+    const active = await prisma.configurationVersion.findFirstOrThrow({
+      where: { domain: 'content', environment: 'DEVELOPMENT', status: 'ACTIVE' },
+      select: { payload: true },
+    });
+    const holidays =
+      (
+        active.payload as {
+          calendar?: {
+            holidays?: { country: string; date: string; name: { en?: string } }[];
+          };
+        }
+      ).calendar?.holidays ?? [];
+    const seeded = holidays.find(
+      (row) => row.country === 'US' && row.name.en === 'E2E Fixture Holiday',
+    );
+    if (!seeded) throw new Error('The calendar fixture is not seeded. Run `pnpm e2e:seed`.');
+    return seeded.date;
+  });
+}
+
 test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; suggested times', () => {
   test('a holiday chip, the Studio for that day, and "Suggested time" in the schedule dialog', async ({
     page,
@@ -252,8 +280,9 @@ test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; s
   }) => {
     test.skip(isMobile === true, 'the month grid is desktop; the agenda carries the same chip');
     // `seed-calendar-fixture.ts`: a fixture holiday three days after the seed, in
-    // the fixture workspaces' country, and suggested times for that country.
-    const day = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    // the fixture workspaces' country, and suggested times for that country —
+    // on the day the seed wrote, read back rather than recomputed.
+    const day = await seededFixtureHolidayDay();
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${day.slice(0, 7)}`);
     const chip = page.getByTestId(`calendar-marker-${day}-0`);

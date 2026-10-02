@@ -93,6 +93,12 @@ const REASONING_TASK_KEYS = ['strategy.generate', 'plan.monthly', 'analytics.exp
  * below for the same reason.
  */
 const CONTENT_TASK_KEY = 'caption.generate';
+/**
+ * PHASE 2B-3 PR 6 — DRAFT_IDEAS's task. Development and E2E only: production's
+ * routing and credit rules for it are the owner's, set in Control Center
+ * (OPERATIONS launch checklist), and production registers no adapter (D-13).
+ */
+const IDEAS_TASK_KEY = 'ideas.generate';
 
 /** Enough for a long session of development chat; refilled by re-running. */
 const DEVELOPMENT_CREDIT_GRANT = 5_000;
@@ -296,6 +302,34 @@ const PAYLOADS = {
         moderateInput: false,
         moderationModelKey: null,
       },
+      {
+        taskKey: IDEAS_TASK_KEY,
+        scope: 'global',
+        planKey: null,
+        workspaceId: null,
+        primaryModelKey: MODEL_KEY,
+        fallbackModelKeys: [],
+        timeoutMs: 10_000,
+        maxCostPerRequestMinor: null,
+        priority: 0,
+        parameters: {
+          temperature: 0.7,
+          maxOutputTokens: 400,
+          promptTemplateVersion: 1,
+          /*
+           * ON, unlike the caption: the AI executor replays a run's request
+           * after a crash between the charge and the save, and only a kept
+           * output can be replayed (owner decision 13). Seven days covers any
+           * retry the executor makes; the ideas themselves live in
+           * `content_item`.
+           */
+          persistOutput: true,
+          outputRetentionDays: 7,
+        },
+        retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
+        moderateInput: false,
+        moderationModelKey: null,
+      },
       ...REASONING_TASK_KEYS.map((taskKey) => ({
         taskKey,
         scope: 'global' as const,
@@ -415,6 +449,13 @@ const PAYLOADS = {
         modelKey: MODEL_KEY,
         baseMilliCredits: 250,
         perUnitMilliCredits: 90,
+        unit: '1k_tokens',
+      },
+      {
+        taskKey: IDEAS_TASK_KEY,
+        modelKey: MODEL_KEY,
+        baseMilliCredits: 150,
+        perUnitMilliCredits: 50,
         unit: '1k_tokens',
       },
       ...REASONING_TASK_KEYS.map((taskKey) => ({

@@ -14,6 +14,12 @@ import {
   type WorkspaceEntitlementContext,
 } from './precedence';
 import { findPlan, readPlanCatalogue, termsFor } from './plan-catalogue';
+import {
+  AUTOMATION_AI_ACTIONS_FEATURE,
+  AUTOMATION_AI_CAP_FIELDS,
+  applyTrialQuota,
+  projectAutomationAiCap,
+} from './automation-ai-cap';
 import { addMonthsClamped } from './credit-policy';
 import type { PlanTerms } from './subscription';
 import type { CreditLedgerService, LedgerTx } from './credit-ledger';
@@ -289,6 +295,7 @@ export class EntitlementService {
       features: withQuotaFeatures(declaredFeatures),
       planEntitlements: [...declaredEntitlements, ...projected],
       flags: (flags['flags'] ?? []) as unknown as FlagRule[],
+      trialPlanEntitlements: projectAutomationAiCap(planDocs, AUTOMATION_AI_CAP_FIELDS.trial),
     };
 
     this.#catalogueCache = {
@@ -378,6 +385,9 @@ export class EntitlementService {
     const planEnded =
       subscription !== null && TERMINAL_SUBSCRIPTION_STATUSES.has(subscription.status);
     const planKey = planEnded ? null : workspace.planKey;
+    // PR 6: a trial resolves its plan as before; only a feature with a trial
+    // value (`applyTrialQuota`) reads this.
+    const trialing = subscription?.status === 'TRIALING';
 
     const overrides = await this.#prisma.workspaceOverride.findMany({
       where: { workspaceId, status: 'ACTIVE' },
@@ -396,6 +406,7 @@ export class EntitlementService {
       workspaceId: workspace.id,
       planKey,
       planEnded,
+      trialing,
       country: workspace.country,
       betaGroups: cohorts.map((c) => c.cohortKey),
       overrides: overrides.map((o) => ({
@@ -421,7 +432,11 @@ export class EntitlementService {
       this.catalogue(),
       this.contextFor(workspaceId),
     ]);
-    return resolveEntitlement(catalogue, context, featureKey, this.#clock.now());
+    return applyTrialQuota(
+      resolveEntitlement(catalogue, context, featureKey, this.#clock.now()),
+      catalogue.trialPlanEntitlements ?? [],
+      context,
+    );
   }
 
   /**
@@ -473,7 +488,13 @@ export class EntitlementService {
     return {
       workspaceId,
       planKey: context.planKey,
-      decisions: catalogue.features.map((f) => resolveEntitlement(catalogue, context, f.key, now)),
+      decisions: catalogue.features.map((f) =>
+        applyTrialQuota(
+          resolveEntitlement(catalogue, context, f.key, now),
+          catalogue.trialPlanEntitlements ?? [],
+          context,
+        ),
+      ),
     };
   }
 
@@ -936,6 +957,19 @@ const QUOTA_FEATURE_DEFINITIONS: readonly FeatureDefinition[] = [
     dependsOn: [],
     enumOptions: [],
   },
+  /*
+   * PR 6 — AI automation actions per month. `defaultValue: false`, NOT null:
+   * a stated "none". A plan that does not set the field, a workspace on no
+   * plan and one whose plan ended are all off — an automation that spends
+   * credits is never switched on by omission (D-458).
+   */
+  {
+    key: AUTOMATION_AI_ACTIONS_FEATURE,
+    valueType: 'quota',
+    defaultValue: false,
+    dependsOn: [],
+    enumOptions: [],
+  },
 ];
 
 /** Plan quota field -> canonical feature key, and the window it counts over. */
@@ -1003,6 +1037,13 @@ function projectPlanQuotas(
         limitPeriod: mapping.period,
       });
     }
+  }
+
+  // PR 6 — the AI automation cap has its own shape (absent = off), so it is
+  // projected by its own reader rather than through the numeric map above.
+  for (const row of projectAutomationAiCap(plans, AUTOMATION_AI_CAP_FIELDS.plan)) {
+    if (declaredPairs.has(`${row.planKey}::${row.featureKey}`)) continue;
+    projected.push(row);
   }
 
   return projected;

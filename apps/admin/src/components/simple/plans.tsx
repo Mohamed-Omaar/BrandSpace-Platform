@@ -1,5 +1,9 @@
 import type { AuthenticatedPlatformActor } from '@brandspace/auth';
-import { readPlanCatalogue, type PlanDetail, type PlanQuotas } from '@brandspace/entitlements';
+import {
+  readPlanCatalogue,
+  type PlanAutomationAiCap,
+  type PlanDetail,
+} from '@brandspace/entitlements';
 import {
   Banner,
   Card,
@@ -21,7 +25,8 @@ import { fill, simpleCopy, type SimpleKey } from '../../i18n/simple';
 import { loadDomainEditor } from '../../server/config-draft';
 import { formatMinor, minorToMajorInput } from '../../server/money';
 import { loadCustomersPerPlan } from '../../server/owner-overview';
-import { describePlanChanges, type PlanFieldChange } from '../../server/plan-diff';
+import { PLAN_AI_CAP_FIELDS } from '../../server/plan-ai-cap';
+import { describePlanChanges, type CountQuota, type PlanFieldChange } from '../../server/plan-diff';
 import { currentEnvironment, getConfigService } from '../../server/platform-context';
 import {
   activatePlansAction,
@@ -43,7 +48,7 @@ import { ActionLink, ActionOutcome, SimpleSection, flash, formatCount } from '..
  * `discardPlanDraftAction`. Rollback and version history stay in Advanced.
  */
 
-const QUOTAS: readonly (keyof PlanQuotas)[] = [
+const QUOTAS: readonly CountQuota[] = [
   'seats',
   'brands',
   'socialAccounts',
@@ -64,6 +69,13 @@ function saleState(plan: PlanDetail): { key: SimpleKey; tone: BadgeTone } {
   if (plan.status === 'draft') return { key: 'plans.draft', tone: 'neutral' };
   if (plan.status === 'grandfathered') return { key: 'plans.grandfathered', tone: 'warning' };
   return { key: 'plans.retired', tone: 'neutral' };
+}
+
+/** A cap as the owner reads it: off, unlimited, or the number. */
+function aiCapText(locale: string, cap: PlanAutomationAiCap | null): string {
+  const copy = simpleCopy(locale);
+  if (cap === null) return copy('plans.aiCap.off');
+  return cap.kind === 'unlimited' ? copy('plans.unlimited') : formatCount(locale, cap.value);
 }
 
 function name(locale: string, plan: { nameEn: string; nameAr: string }): string {
@@ -309,6 +321,26 @@ export async function SimplePlans({
                             </dd>
                           </div>
                         ))}
+                        {PLAN_AI_CAP_FIELDS.map((field) => (
+                          <div
+                            key={field}
+                            style={{
+                              padding: spacingTokens.xs,
+                              borderRadius: radiusTokens.md,
+                              background: colorTokens.surfaceSoft,
+                            }}
+                          >
+                            <dt style={{ color: colorTokens.textMuted }}>
+                              {copy(`quota.${field}` as SimpleKey)}
+                            </dt>
+                            <dd
+                              style={{ margin: 0, fontWeight: 700 }}
+                              data-testid={`plan-${plan.key}-${field}`}
+                            >
+                              {aiCapText(locale, plan.quotas[field])}
+                            </dd>
+                          </div>
+                        ))}
                       </dl>
                     </div>
                     <div style={{ display: 'grid', gap: '2px', ...typographyTokens.caption }}>
@@ -415,6 +447,8 @@ function PendingPlans({
   const value = (change: PlanFieldChange, which: 'before' | 'after'): string => {
     const raw = change[which];
     if (raw === null) return change.field === 'price' ? '—' : copy('plans.unlimited');
+    // PR 6: an AI automation cap that is not set is off, never "unlimited".
+    if (raw === 'off') return copy('plans.aiCap.off');
     if (change.field === 'price' && change.detail && typeof raw === 'number')
       return formatMinor(raw, change.detail.currency, locale);
     return typeof raw === 'number' ? formatCount(locale, raw) : String(raw);
@@ -872,6 +906,57 @@ function PlanEditor({
                   />
                 </Field>
               ))}
+            </ContentGrid>
+          </SimpleSection>
+
+          <SimpleSection title={copy('plans.aiCap.title')} description={copy('plans.aiCap.hint')}>
+            <ContentGrid min="16rem">
+              {PLAN_AI_CAP_FIELDS.map((field) => {
+                const cap = plan?.quotas[field] ?? null;
+                return (
+                  <fieldset
+                    key={field}
+                    style={{
+                      border: 0,
+                      margin: 0,
+                      padding: 0,
+                      display: 'grid',
+                      gap: spacingTokens.xs,
+                    }}
+                  >
+                    <legend style={{ ...typographyTokens.label, padding: 0 }}>
+                      {copy(`quota.${field}` as SimpleKey)}
+                    </legend>
+                    <select
+                      id={`pe-aicap-${field}-kind`}
+                      name={`aiCap.${field}.kind`}
+                      aria-label={copy(`quota.${field}` as SimpleKey)}
+                      defaultValue={cap === null ? '' : cap.kind}
+                      className="bs-control"
+                      style={small}
+                      data-testid={`pe-aicap-${field}-kind`}
+                    >
+                      <option value="">{copy('plans.aiCap.off')}</option>
+                      <option value="limited">{copy('plans.aiCap.limited')}</option>
+                      <option value="unlimited">{copy('plans.unlimited')}</option>
+                    </select>
+                    <Field label={copy('plans.aiCap.value')} htmlFor={`pe-aicap-${field}-value`}>
+                      <input
+                        id={`pe-aicap-${field}-value`}
+                        name={`aiCap.${field}.value`}
+                        type="number"
+                        min={1}
+                        max={1000}
+                        step={1}
+                        defaultValue={cap?.kind === 'limited' ? cap.value : ''}
+                        className="bs-control"
+                        style={small}
+                        data-testid={`pe-aicap-${field}-value`}
+                      />
+                    </Field>
+                  </fieldset>
+                );
+              })}
             </ContentGrid>
           </SimpleSection>
 

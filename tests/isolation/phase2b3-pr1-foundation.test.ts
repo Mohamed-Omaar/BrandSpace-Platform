@@ -578,7 +578,8 @@ describe('existing stored rules of every shape behave exactly as before', () => 
           triggerType: 'CONTENT_APPROVED',
           triggerConfig: {},
           conditions: [],
-          // Phase 2B-3 PR 3: REMIND_REVIEWER ships (D3); DRAFT_IDEAS is still planned.
+          // Phase 2B-3 PR 3: REMIND_REVIEWER ships (D3). Phase 2B-3 PR 6: DRAFT_IDEAS
+          // ships too, but never on CONTENT_APPROVED.
           actionType: 'DRAFT_IDEAS' as never,
           actionConfig: {},
           actor: actor({ permissionKeys: [...EVERYTHING, 'content.create', 'campaigns.manage'] }),
@@ -608,7 +609,9 @@ describe('existing stored rules of every shape behave exactly as before', () => 
     // PAUSE_CAMPAIGN execute too, so a row written around the engine for them
     // is refused by their own target checks rather than as unknown; either way
     // nobody is asked and nothing is performed. Their runs are proved in
-    // phase2b3-pr5-asks-first. DRAFT_IDEAS is still planned.
+    // phase2b3-pr5-asks-first. Phase 2B-3 PR 6: DRAFT_IDEAS executes, but only on
+    // the triggers it can be authored on — on CONTENT_APPROVED it still fails
+    // closed as unknown, before the plan is asked (phase2b3-pr6-executor).
     const expected: Record<string, readonly [string, string]> = {
       // A content item is not a failed attempt: there is nothing to retry.
       RETRY_PUBLISH: ['SKIPPED', 'content_unavailable'],

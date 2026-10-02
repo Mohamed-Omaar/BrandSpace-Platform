@@ -52,6 +52,9 @@ export const EXISTING_REACHABLE_CODES = [
   // Phase 2B-3 PR 5 (owner decision D2) — the rule was switched off or deleted
   // before its request was approved.
   'rule_disabled',
+  // Phase 2B-3 PR 6 — DRAFT_IDEAS is the first action that declares an
+  // entitlement, so a plan that does not include it is now a reachable reason.
+  'not_entitled',
 ] as const;
 type ExistingReachableCode = (typeof EXISTING_REACHABLE_CODES)[number];
 
@@ -175,4 +178,31 @@ export function requestLine(
     token: '{content}',
     value: proposal.content,
   };
+}
+
+/**
+ * PHASE 2B-3 PR 6 — WHAT A DRAFT_IDEAS RUN MADE, in one line (approved copy):
+ * "Drafted 3 ideas in your content library.", shown only for a run that
+ * finished SUCCEEDED. The screen links it to the brand's drafts.
+ */
+export function ideasLine(run: {
+  readonly actionType: string;
+  readonly status: string;
+}): 'automations.ideasDrafted' | null {
+  return run.actionType === 'DRAFT_IDEAS' && run.status === 'SUCCEEDED'
+    ? 'automations.ideasDrafted'
+    : null;
+}
+
+/**
+ * PHASE 2B-3 PR 6 (owner decision 2a) — THE CAP, ON THE RULE CARD. No
+ * notification: a DRAFT_IDEAS rule says, where its owner manages it, that this
+ * month's AI automation actions are used up. `limit` is the workspace's
+ * ceiling (null unlimited, 0 none); `used` this workspace-local month's count.
+ */
+export function aiCapReached(input: {
+  readonly limit: number | null;
+  readonly used: number;
+}): boolean {
+  return input.limit !== null && input.used >= input.limit;
 }

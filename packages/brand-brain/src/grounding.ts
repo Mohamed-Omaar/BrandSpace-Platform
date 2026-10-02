@@ -7,6 +7,7 @@ import {
   usableKnowledgeWhere,
   type RetrievalContext,
 } from './retrieval';
+import { sortByPrecedence } from './precedence';
 import { knowledgeAsOfSafe, workspaceKnowledgeAsOf } from './validity';
 
 /**
@@ -148,6 +149,47 @@ async function writingKnowledgeWhere(db: TenantScopedClient, clock: Clock) {
     ...usableKnowledgeWhere(await workspaceKnowledgeAsOf(db, clock)),
     brand: { useBrandBrain: true, deletedAt: null },
   };
+}
+
+/**
+ * PHASE 2B-3 PR 6 — WRITING WITH NO QUESTION (DRAFT_IDEAS).
+ *
+ * An automation drafting ideas has no question to rank facts against, and the
+ * retriever is lexical: a question it composed would leave out whatever shares
+ * no words with it. So this is `groundingFor(purpose: 'writing')` without the
+ * ranking — the SAME rules, applied here and nowhere else:
+ *
+ *   - "Use Brand Brain" off (or the brand deleted) → DISABLED, nothing read;
+ *   - only usable facts: ACTIVE or STALE, never expired as of the workspace's
+ *     today, never DRAFT, PROPOSED or ARCHIVED, never a candidate or a raw
+ *     source chunk (`usableKnowledgeWhere`, owner decision 6);
+ *   - precedence orders them, the character budget bounds them, and `facts`
+ *     and `citations` record exactly what was used, at its version.
+ */
+export async function writingGroundingWithoutQuestion(
+  db: TenantScopedClient,
+  request: { readonly brandId: string; readonly maxItems: number; readonly maxChars: number },
+  clock: Clock = systemClock,
+): Promise<Grounding> {
+  const brand = await brandGroundingFacts(db, request.brandId);
+  if (brand?.useBrandBrain !== true) return DISABLED;
+  const items = await db.brandKnowledgeItem.findMany({
+    where: { brandId: request.brandId, ...(await writingKnowledgeWhere(db, clock)) },
+    orderBy: [{ area: 'asc' }, { itemKey: 'asc' }],
+    take: 500,
+    select: {
+      id: true,
+      area: true,
+      memory: true,
+      origin: true,
+      version: true,
+      status: true,
+      title: true,
+      body: true,
+    },
+  });
+  const chosen = sortByPrecedence(items).slice(0, request.maxItems);
+  return { ...contextFromFacts(chosen, request.maxChars), enabled: true };
 }
 
 /**

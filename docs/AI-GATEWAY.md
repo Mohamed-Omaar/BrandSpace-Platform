@@ -334,6 +334,10 @@ sequenceDiagram
 A sweeper reconciles requests stuck in `running` past their timeout: the reservation is released and the
 request is marked `timeout`. **No reservation can outlive its request.**
 
+That sweeper is `AiGateway.sweepStuckRequests`. Since Phase 2B-3 PR 6 the API scheduler calls it on
+every pass of the AI executor's timer (`automation-ai-execute`); before that nothing outside the tests
+did (D-465).
+
 ---
 
 ## 7. Credit Accounting
@@ -454,10 +458,17 @@ Every customer-started action that spends credits needs its own feature key **an
 `/v1/strategy/generate` and `/v1/intelligence/content-gap`. A member without `copilot.use` gets the
 same 404 as any other missing permission, sees no credit-spending button and no credit balance
 (`mayReadCreditBalance`: `credits.read` + `copilot.use`). Quotes spend nothing and keep their read
-keys. No worker, scheduler or automation path calls the gateway today; the scheduler's ledger
-housekeeping runs as the platform. An automation action that ever spends credits must add
-`copilot.use` to its action permission, which the engine re-checks against the rule's creator at
-every run.
+keys. The scheduler's ledger housekeeping runs as the platform.
+
+**Since Phase 2B-3 PR 6 one automation spends credits: DRAFT_IDEAS** (D-461 – D-465). Its action
+requires `content.create` + `copilot.use`, re-checked against the rule's creator by the engine at
+every run and by the AI executor immediately before it claims a cap slot. The executor — in the API
+scheduler, because the worker has no gateway — calls `ideas.generate` with the key
+`automation-run:<runId>` (one reservation and one charge per run, ever) and relies on the routing
+rule's `persistOutput` to replay a request whose charge succeeded and whose save was interrupted; a
+routing rule for `ideas.generate` without it is refused before any call. Production's routing and
+credit rules for `ideas.generate` are the owner's to configure (OPERATIONS §6.13 launch checklist);
+until a provider is registered (D-13) every run ends FAILED `ai_unavailable` with nothing charged.
 
 ## 8. Budgets and Limits
 

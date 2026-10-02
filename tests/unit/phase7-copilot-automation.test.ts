@@ -306,6 +306,8 @@ describe('the automation registry is CLOSED, and small on purpose', () => {
       // Phase 2B-3 PR 5 — the two asks-first actions.
       'RETRY_PUBLISH',
       'PAUSE_CAMPAIGN',
+      // Phase 2B-3 PR 6 — the AI action: internal, never a webhook.
+      'DRAFT_IDEAS',
     ]);
   });
 

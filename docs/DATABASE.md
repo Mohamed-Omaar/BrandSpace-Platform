@@ -2010,6 +2010,43 @@ audit actions: `automation.run_confirmed` (the approver), `automation.run_expire
 transaction as the status, once). `automation.run_skipped` and `campaign.updated` (reason
 `automation_pause`) are existing actions. Recovery: OPERATIONS.md §6.12.
 
+### 18.15 Phase 2B-3 PR 6 — DRAFT_IDEAS, the AI executor's lease, and M5a/M5b (D-458 – D-467)
+
+**M5a** (`20261015090000_automation_ai_execution_status`) adds two values to `AutomationRunStatus`:
+`AWAITING_EXECUTION` (the engine's gates passed; the run waits for the API's AI executor) and
+`EXECUTING` (the executor holds its lease). Neither is terminal. Its own file, because M5b's CHECKs
+name both and a value added by `ALTER TYPE … ADD VALUE` cannot be used in the transaction that added it.
+
+**M5b** (`20261015091000_automation_ai_execution_lease`) adds three columns to `automation_run`, in one
+transaction with a five-second lock timeout:
+
+| Column                 | Type          | Meaning                                                                 |
+| ---------------------- | ------------- | ----------------------------------------------------------------------- |
+| `executionLeaseId`     | `uuid`, null  | Who holds the run while EXECUTING; every finish is guarded by it        |
+| `executionAvailableAt` | `timestamptz` | When the executor may next touch it: the backoff, or the lease's expiry |
+| `executionAttempts`    | `int`, 0      | Claims so far, bounded by `automations.execution.aiMaxAttempts`         |
+
+and three CHECKs: `automation_run_execution_lease_matches_status` (a lease exists exactly while
+EXECUTING), `automation_run_execution_due_is_set` (a waiting or executing run says when it is due) and
+`automation_run_execution_attempts_bounded` (0..20). Every existing row satisfies them with NULL, NULL
+and 0. Its partial index is a file of its own, `20261015092000_automation_run_execution_due_index`:
+`automation_run_execution_due_idx` on `("executionAvailableAt") WHERE status IN ('AWAITING_EXECUTION',
+'EXECUTING')`, `CREATE INDEX CONCURRENTLY IF NOT EXISTS` as its single statement (the M4 pattern);
+`AutomationRun` carries a comment naming it.
+
+**No stored value changes meaning.** `DRAFT_IDEAS` already existed in `AutomationActionType` (M1b,
+D-404). A finished run's `actionResult` holds metadata only: `capPeriod` (the YYYY-MM its cap slot
+was claimed in), `ideaItemIds` and `aiRequestId`; `resourceType`/`resourceId` name the first idea.
+
+**Writes.** Three `content_item` rows per run — DRAFT, `origin AI_GENERATED`, title only, created by
+the rule's creator, `idempotencyKey` `automation-ideas:<runId>:<n>` (the existing unique key keeps a
+replay from creating them twice). One `usage_counter` row per workspace and month label for
+`limit.automation_ai_actions`, through `UsageService` with an explicit window (D-460); claim and
+release are `usage_event` rows keyed `automation-cap:<runId>` and `automation-cap-refund:<runId>`. One
+`ai_request` per run, keyed `automation-run:<runId>`. Audit: `automation.awaiting_execution` (the
+engine), `automation.run` (the executor's finish, except SKIPPED, as the engine's own `#finish`) and
+`content.item.generated` per idea (actor AUTOMATION). Recovery: OPERATIONS.md §6.13.
+
 ## 19. Phase 9 — Commerce & Onboarding
 
 Thirteen models: eight tenant-owned commercial tables, two platform-owned, three identity-scoped.

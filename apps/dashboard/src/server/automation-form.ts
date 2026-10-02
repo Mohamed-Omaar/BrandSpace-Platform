@@ -186,9 +186,11 @@ export function actionConfigFrom(formData: FormData, actionType: string): Record
       return {};
     // Phase 2B-3 PR 3 — REMIND_REVIEWER: who is reminded is decided at run
     // time, never chosen.
+    // Phase 2B-3 PR 6 — DRAFT_IDEAS: three ideas, always; nothing to choose.
     case 'SCHEDULE_NEXT_FREE_SLOT':
     case 'MAKE_DRAFT_COPY':
     case 'REMIND_REVIEWER':
+    case 'DRAFT_IDEAS':
       return {};
     default:
       throw unknownTriggerOrAction();
