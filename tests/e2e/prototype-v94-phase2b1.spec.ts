@@ -40,7 +40,7 @@ async function signIn(page: Page, locale = 'en'): Promise<void> {
 }
 
 test.describe('UI-1 · one global scrollbar', () => {
-  test('the one global scrollbar style reaches the page; the sidebar navigation keeps its bar hidden', async ({
+  test('the one global scrollbar style reaches the page; the collapsed rail keeps its bar hidden', async ({
     page,
     isMobile,
   }) => {
@@ -78,9 +78,14 @@ test.describe('UI-1 · one global scrollbar', () => {
     expect(rules['::-webkit-scrollbar-button']).toContain('display: none');
     expect(rules['::-webkit-scrollbar-thumb']).toContain('var(--bs-scrollbar-thumb)');
     expect(rules['::-webkit-scrollbar-thumb:hover']).toContain('var(--bs-scrollbar-thumb-hover)');
-    expect(rules['.bs-nav-scroll::-webkit-scrollbar']).toContain('display: none');
+    // D-468: the prototype hides the rail's bar only when the rail is collapsed
+    // (`.sb.min nav{scrollbar-width:none}` and its WebKit twin); expanded, the
+    // rail scrolls with the prototype's thin bar like every other area.
+    expect(rules['.bsp-sb.bsp-min .bsp-sbnav::-webkit-scrollbar']).toContain('display: none');
 
-    const nav = page.locator('.bs-nav-scroll').first();
+    await page.getByTestId('toggle-sidebar').click();
+    await expect(page.getByTestId('app-shell')).toHaveAttribute('data-sidebar-state', 'collapsed');
+    const nav = page.locator('.bsp-sb.bsp-min .bsp-sbnav').first();
     await expect(nav).toBeVisible();
     const hidden = await nav.evaluate((element) => ({
       bar: (element as HTMLElement).offsetWidth - (element as HTMLElement).clientWidth,
@@ -88,6 +93,8 @@ test.describe('UI-1 · one global scrollbar', () => {
     }));
     expect(hidden.bar).toBe(0);
     expect(hidden.width).toBe('none');
+    await page.getByTestId('toggle-sidebar').click();
+    await expect(page.getByTestId('app-shell')).toHaveAttribute('data-sidebar-state', 'expanded');
     // An ordinary scroll area is NOT hidden: it keeps the platform default here
     // and is drawn by the global pseudo-element rules.
     expect(

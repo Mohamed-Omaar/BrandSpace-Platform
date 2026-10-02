@@ -445,11 +445,11 @@ test.describe('accessibility and direction', () => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
     /*
-     * Approvals and Notifications moved from the sidebar to the TOP BAR
-     * (Review, the bell); Activity moved into SETTINGS. Each is still a real,
-     * focusable link to the same route.
+     * D-468: Approvals is back on the rail (the prototype's own entry, with its
+     * review count) and Notifications is the bell; Activity is in SETTINGS.
+     * Each is still a real, focusable link to the same route.
      */
-    await expect(page.getByTestId('topbar-review')).toHaveAttribute('href', '/en/approvals');
+    await expect(page.getByTestId('nav-approvals')).toHaveAttribute('href', '/en/approvals');
     await expect(page.getByTestId('topbar-notifications')).toHaveAttribute(
       'href',
       '/en/notifications',

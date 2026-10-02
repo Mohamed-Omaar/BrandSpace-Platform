@@ -192,13 +192,13 @@ test.describe('D-62 / Q12 — the Viewer reads, and holds no authority beyond re
     }
   });
 
-  test('the top bar offers Approvals ("Review"), which the Viewer may read (Q12)', async ({
+  test('the shell offers Approvals ("Review"), which the Viewer may read (Q12)', async ({
     page,
   }) => {
     await signInAsViewer(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
-    // Approvals lives in the top bar, not the rail.
-    await expect(page.getByTestId('topbar-review')).toHaveAttribute('href', '/en/approvals');
+    // D-468: Approvals lives on the rail, as in the prototype.
+    await expect(page.getByTestId('nav-approvals')).toHaveAttribute('href', '/en/approvals');
   });
 
   test('POSTING a verdict to the route hands a Viewer no decision or policy control', async ({

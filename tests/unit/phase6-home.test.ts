@@ -147,7 +147,7 @@ describe('D-277 §7 · the page, in the owner’s order', () => {
       'data-testid="hero-performance"',
       'data-testid="overview-metrics"',
       '{setupCard}',
-      'data-testid="attention-card"',
+      '{needsYouCard}',
       'data-testid="overview-upcoming"',
       'data-testid="home-copilot"',
       'data-testid="home-recommended"',
