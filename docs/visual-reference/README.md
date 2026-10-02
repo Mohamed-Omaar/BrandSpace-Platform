@@ -19,6 +19,9 @@ Verify at any time with `sha256sum docs/visual-reference/prototype-2026-09-27/*`
 - `Main.dc.html` is the customer application, `Auth.dc.html` sign-up, sign-in and setup, and
   `support.js` the canvas runtime both load. `Mobile.dc.html` is the phone layout, which the owner
   moved to post-launch; it is kept for reference only.
+- **It is the visual authority for customer screens (owner decision D-468, 2026-10-02)** and
+  replaces `full-demo/` (and `brand-brain-native/`). Everything below about `full-demo/` being the
+  "current" authority is history, kept so earlier decisions stay readable.
 - The rules for this directory below apply unchanged: never edited, formatted, linted, imported,
   built or served by application code, and never a source of behaviour or data.
 

@@ -7,6 +7,23 @@
 
 **Status: binding on every customer-facing route from Phase 5A onward — EXCEPT where superseded below.**
 
+> **THE AUTHORITY IS NOW `docs/visual-reference/prototype-2026-09-27/` — OWNER DECISION D-468
+> (2026-10-02).** The product must look exactly like the prototype: `Main.dc.html` for the customer
+> application, `Auth.dc.html` for sign-up, sign-in and setup, both running on `support.js` (checksums
+> in §3 and in that directory's README). It **replaces `docs/visual-reference/full-demo/`** (and, for
+> Brand Brain, `brand-brain-native/`) as the visual authority for customer screens. Each screen is
+> PORTED mechanically from the prototype's own markup, CSS, layout and motion, screen by screen, and
+> wired to the product's existing data, permissions and logic. D-468 **supersedes D-277, the Phase 6
+> Final UX contract and the banner below** wherever they tell a screen to differ from the prototype's
+> look or composition; the ten rules in §1 apply again, with "the demo" meaning this prototype. The
+> only allowed differences are D-468's three kinds — (a) a recorded owner decision that keeps the
+> repo's behaviour, (b) an item moved to post-launch (View as, the phone layout, website reading, the
+> connection-expiry alert), whose prototype elements are left out, and (c) a state the prototype does
+> not draw (errors, permission refusals, admin), built in its visual language — plus any prototype
+> element that needs data or a feature that does not exist, which is left out. Every use is listed in
+> the PR that ports the screen. The earlier sections stay so the decisions they record remain
+> readable; where they disagree with the prototype, the prototype wins.
+
 > **SUPERSEDED FOR PRODUCT / UX / IA BY OWNER DECISION D-277 (2026-09-24).** The Phase 6 Final UX
 > Contract (`docs/PHASE-6-FINAL-UX-CONTRACT.md`) is now the product, UX and information-architecture
 > authority. For every surface it redesigns — Home, the sidebar, the Setup Wizard, Brand Brain,
@@ -94,7 +111,19 @@ do not replace it.
 | `/[locale]/content`, `/[locale]/content/compose` | `demo/styles-2.css`                           | `Mohamed-Omaar/Brandspace-Landing-page` | `10765e8cf4f5b89c91b144863330459611248b16` | `fffa17614b8a01feb8f33bb36211366a5bbe9c1eac007867358a7893af8a66a9` |
 | `/[locale]/content`, `/[locale]/content/compose` | `demo/styles-3.css`                           | `Mohamed-Omaar/Brandspace-Landing-page` | `10765e8cf4f5b89c91b144863330459611248b16` | `6319a57e97f0c506be1bcdc0cbe7edb3248277243345244f636da5c1d7d228f1` |
 
-**TWO PINNED COMMITS, AND WHY.** The Brand Brain rows above are pinned to the
+**THE PROTOTYPE (D-468).** The rows below are the current authority for every customer route. They
+are not pinned to an upstream commit: the owner supplied the files directly, and they are vendored
+byte for byte at `docs/visual-reference/prototype-2026-09-27/`. A ported screen names the screen it
+came from inside `Main.dc.html` or `Auth.dc.html` in the PR that ports it.
+
+| Routes                                                   | Authoritative source                  | Supplied                  | SHA-256                                                            |
+| -------------------------------------------------------- | ------------------------------------- | ------------------------- | ------------------------------------------------------------------ |
+| Every customer route (the shell, Home and each screen)   | `prototype-2026-09-27/Main.dc.html`   | owner, 2026-10-02 (D-468) | `eec2fcc23316aae5483761bf10706bfc7a9ee87130d8e50e5160d848a788c270` |
+| Sign-up, sign-in, reset, setup and the workspace chooser | `prototype-2026-09-27/Auth.dc.html`   | owner, 2026-10-02 (D-468) | `19bf61a9d8141571473c946d5f64f4a075f44295fc241b41ceed6f047b3723ec` |
+| The canvas runtime both files load                       | `prototype-2026-09-27/support.js`     | owner, 2026-10-02 (D-468) | `82ab863dabf94f79db1b4ced13046a03425dcd255e97a5e42c60b6e8035fea34` |
+| None — the phone layout is post-launch (reference only)  | `prototype-2026-09-27/Mobile.dc.html` | owner, 2026-10-02 (D-468) | `23be0823637f9723304f4a9e0beb1d5696b26787bd334c6e9c04c0dc55872cfc` |
+
+**TWO PINNED COMMITS, AND WHY (superseded by D-468; kept for the record).** The Brand Brain rows above are pinned to the
 `brand-brain-native.*` files, which D-60 superseded the full demo with FOR THAT ROUTE ONLY. Every
 other customer route still takes its authority from the full demo snapshot
 (`docs/visual-reference/full-demo/`, D-60, commit `10765e8c…`), which is where `postsPage()` and
