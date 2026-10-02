@@ -52,6 +52,8 @@ function sourceFiles(dir: string): string[] {
  */
 const KNOWN_HIDDEN = [
   { file: 'packages/ui/src/brand-brain.css', selector: '.bb-chat-suggestions' },
+  // D-468: the collapsed rail, `.sb.min nav{…scrollbar-width:none}` in the prototype.
+  { file: 'packages/ui/src/prototype.css', selector: '.bsp-sb.bsp-min .bsp-sbnav' },
 ];
 
 interface Declaration {

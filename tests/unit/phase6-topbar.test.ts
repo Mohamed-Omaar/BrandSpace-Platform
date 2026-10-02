@@ -213,8 +213,9 @@ describe('P6-16 · no placeholder survives', () => {
   it('the customer shell no longer renders the preview action set or a search control', () => {
     expect(shell).not.toMatch(/<TopbarActions\b/);
     expect(shell).not.toMatch(/previewTitle|previewBody|topbar\.search/);
-    expect(shell).toMatch(/<TopbarLink\b/);
-    expect(shell).toMatch(/<TopbarCreateMenu\b/);
+    // D-468: the prototype's top bar, ported as `PrototypeTopbarLink` and `PrototypeCreateMenu`.
+    expect(shell).toMatch(/<PrototypeTopbarLink\b/);
+    expect(shell).toMatch(/<PrototypeCreateMenu\b/);
   });
 
   it('the dictionary has no "not connected yet" copy left for the customer app', () => {

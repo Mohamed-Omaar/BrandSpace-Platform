@@ -130,7 +130,8 @@ describe('D7 · AI suggestions on/off', () => {
     const ai = read('apps/dashboard/src/app/[locale]/settings/ai/page.tsx');
     expect(ai).toContain('name="aiSuggestionsEnabled"');
     const home = read('apps/dashboard/src/app/[locale]/overview/page.tsx');
-    expect(home).toContain('{showRecommendations ? (');
+    // D-468: the recommendations are cards inside "BrandSpace noticed".
+    expect(home).toMatch(/\{showRecommendations\s*\?\s*recommendations\.map\(/);
     expect(home.match(/aiSuggestionsEnabled/g)?.length).toBeGreaterThan(0);
     // Not the workflow suggestions (D-296), not the Studio's tools.
     expect(home).toContain('decideWorkflowAction');

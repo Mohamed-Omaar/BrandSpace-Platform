@@ -36,14 +36,15 @@ function navHrefs(): readonly string[] {
 }
 
 /**
- * THE FINAL INFORMATION ARCHITECTURE (owner decision D-277, contract §3).
+ * THE RAIL OF THE VENDORED PROTOTYPE (owner decision D-468).
  *
- * SUPERSEDES the eighteen-areas-on-the-rail inventory of D-188. The rail now
- * carries the work, in order; administration and the conversational surfaces
- * moved to Settings and the top bar. What this file still guarantees is the
- * rule it was written for — a link that goes nowhere is not navigation — for
- * the rail AND for every area that left it: each must still have a page, and
- * each must still be reachable from the place the owner put it.
+ * SUPERSEDES D-277's thirteen entries, which superseded D-188's eighteen. The
+ * prototype puts Approvals, Notes and Team back on the rail; the AI Creative
+ * Studio and Marketing Intelligence stay on it until the prototype screens that
+ * absorb them (Media, Performance) are ported. What this file still guarantees
+ * is the rule it was written for — a link that goes nowhere is not navigation —
+ * for the rail AND for every area that is not on it: each must still have a
+ * page, and each must still be reachable from the place the owner put it.
  */
 const RAIL: readonly string[] = [
   '/overview',
@@ -51,23 +52,23 @@ const RAIL: readonly string[] = [
   '/strategy',
   '/campaigns',
   '/content',
-  '/creative',
   '/assets',
+  '/creative',
+  '/approvals',
   '/calendar',
   '/publishing',
   '/analytics',
   '/intelligence',
   '/automations',
+  '/notes',
+  '/members',
   '/settings',
 ];
 
-/** Areas that left the rail, and where the owner moved each (§3). */
+/** Areas that are not on the rail, and where each is reached. */
 const MOVED: Readonly<Record<string, 'top bar' | 'settings'>> = {
-  '/approvals': 'top bar',
-  '/notes': 'top bar',
   '/notifications': 'top bar',
   '/copilot': 'top bar',
-  '/members': 'settings',
   '/permissions': 'settings',
   '/activity': 'settings',
   '/plan': 'settings',

@@ -139,16 +139,22 @@ describe('D-277 §7 · setup is offered, and then it stops', () => {
 });
 
 describe('D-277 §7 · the page, in the owner’s order', () => {
-  it('A needs → B recommended → C notes → D coming up → E performance', () => {
+  it('in the prototype’s order (D-468): hero → figures → setup → needs you → coming up beside Copilot → noticed', () => {
+    // SUPERSEDES D-277 §7's A–E order (needs → recommended → notes → coming
+    // up → performance). The vendored prototype's Home (Main.dc.html lines
+    // 192–328) is the order now; Notes left Home for the rail's own count.
     const order = [
-      'testId="attention-card"',
-      'testId="home-recommended"',
-      'testId="home-notes"',
-      'testId="overview-upcoming"',
-      'testId="overview-metrics"',
+      'data-testid="hero-performance"',
+      'data-testid="overview-metrics"',
+      '{setupCard}',
+      'data-testid="attention-card"',
+      'data-testid="overview-upcoming"',
+      'data-testid="home-copilot"',
+      'data-testid="home-recommended"',
     ].map((marker) => PAGE.indexOf(marker));
     expect(order.every((index) => index > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(PAGE).not.toContain('home-notes');
   });
 
   it('shows at most three recommendations, only of the recommendation kinds', () => {
@@ -165,10 +171,11 @@ describe('D-277 §7 · the page, in the owner’s order', () => {
     );
   });
 
-  it('account facts left Home: plan, credits, members, activity, notification count', () => {
+  it('account facts left Home: plan, members, activity, notification count', () => {
+    // D-468: the prototype's fourth figure is AI credits, so `metric-credits`
+    // is back (behind `mayReadCreditBalance`, as everywhere else it is shown).
     for (const gone of [
       'metric-plan',
-      'metric-credits',
       'metric-members',
       'overview-activity',
       'overview-notifications',

@@ -56,7 +56,8 @@ describe('Q12 · the real Viewer reads content', () => {
       feedback: true,
     });
     const home = read('apps/dashboard/src/app/[locale]/overview/page.tsx');
-    expect(home).toContain('data-testid="home-feedback-calendar"');
+    // D-468: the role sections are declared as data for the prototype's cards.
+    expect(home).toContain("testId: 'home-feedback-calendar'");
   });
 });
 
