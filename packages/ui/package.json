@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./tokens.css": "./src/tokens.css",
     "./brand-brain.css": "./src/brand-brain.css",
-    "./content-studio.css": "./src/content-studio.css"
+    "./content-studio.css": "./src/content-studio.css",
+    "./prototype.css": "./src/prototype.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

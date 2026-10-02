@@ -112,7 +112,7 @@ const COLLAPSE_STORAGE_KEY = 'brandspace.sidebar.collapsed';
  * first paint is always the expanded sidebar, and a stored preference applies
  * on the next frame.
  */
-function useCollapsePreference(): readonly [boolean, (next: boolean) => void, boolean] {
+export function useCollapsePreference(): readonly [boolean, (next: boolean) => void, boolean] {
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   /*
@@ -292,7 +292,7 @@ function NavLink({
 const PAGE_ENTER_KEY = 'brandspace.session.seen';
 let pageEnterGateChecked = false;
 
-function usePageEnterGate(): void {
+export function usePageEnterGate(): void {
   useEffect(() => {
     if (pageEnterGateChecked) return;
     pageEnterGateChecked = true;
