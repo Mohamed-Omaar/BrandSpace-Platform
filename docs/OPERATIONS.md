@@ -687,6 +687,14 @@ database change: the columns and the index are inert to it.)
   LTR on a DRAFT-filtered view (axe `color-contrast`, found by the PR 6 E2E run; not changed here).
 - Once, axe caught the library's "Create" button mid-transition on arrival (#9059fc behind white 10 px
   text, 4.11:1). Not a resting colour of any token; worth checking whether that frame can be seen.
+- **E2E dates computed from the real clock.** The G6 calendar test recomputed "today + 3 days" apart
+  from `seed-calendar-fixture.ts` and failed when #65's run crossed midnight UTC; it now reads the
+  day the seed wrote. A search of `tests/e2e` and the seeds found no other seed/spec (or in-spec) pair
+  of that kind. A related case remains: specs that compute "today" or "next month" from the real
+  clock and compare it with what the app renders (`calendar-seed.ts` `utcDay`/`nextUtcMonth` in the
+  drag specs, `phase6-calendar.spec.ts` `nextMonth`, `prototype-v90-phase2b2b.spec.ts` `dayKey`,
+  `prototype-v90-phase2c4.spec.ts` `currentSignature`). A run crossing midnight or a month boundary
+  between the two could break them; fixing that needs an injected application clock, not a read.
 
 ## 7. Secret rotation
 
