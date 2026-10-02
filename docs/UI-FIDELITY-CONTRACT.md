@@ -222,6 +222,61 @@ repaint the company's logo.
 
 ---
 
+## 4.3 D-468 batch 1 — the shell and Home: every difference from the prototype
+
+The shell (`Main.dc.html` lines 79–191 and 1483) and Home (lines 192–328, logic 2172–4509) are
+PORTED: `packages/ui/src/prototype.css`, `customer-shell.tsx`, `prototype-rail.tsx`,
+`prototype-icons.tsx`, `prototype-hero-canvas.tsx`, `apps/dashboard/src/components/workspace-shell.tsx`
+and `apps/dashboard/src/app/[locale]/overview/page.tsx`. Inter and Cairo are self-hosted
+(`@fontsource`) because the CSP refuses Google Fonts; the prototype's colours and type steps are
+named once as `--bsp-*` tokens with its exact values. The prototype has no `box-sizing` reset, so its
+`section`/`div` sizes are content-box and are ported as content-box. Every difference that remains:
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- Search (`⌘K`) is not drawn: there is no search feature (Q6, D-276).
+- "Switch business" stays in the account menu for a member with more than one business (D-302).
+- Arabic copy is the product's formal Arabic (owner answer to D-468, 3a). The prototype's Egyptian
+  strings are collected unwired in `apps/dashboard/src/i18n/ar-eg.ts`.
+- P6-14 (every Arabic dictionary value is Arabic): the logotype "BrandSpace", the language square's
+  letters and the language names are rendered as locale data, not dictionary entries — no visual
+  difference results.
+
+**(b) Moved to post-launch by the owner — prototype elements left out.**
+
+- "View as" (role preview) in the account menu and the role-preview banner.
+- The phone layout: below 768px the product keeps its existing drawer and full-window layout.
+
+**(c) States the prototype does not draw — built in its visual language.**
+
+- A member without analytics reads "hidden" in the performance card and figures, never a fake value.
+- Home with no brand, error and permission states keep the product's existing state screens.
+- **Interim:** "AI Creative Studio" (Create) and "Marketing Intelligence" (Improve) stay on the rail as
+  prototype rail items until the prototype screens that absorb them (Media's Generate, Performance's
+  Insights) are ported in batches 3 and 4; without them a member who may open either could lose the
+  only general way in. Owner to confirm.
+
+**Accessibility findings in the prototype itself (listed, per D-468).** Three of its text colours fail
+WCAG 2.2 AA contrast for the small text they set, and the product's axe suites require zero
+violations: the quiet grey `#8a8a92` (3.43:1 on white — menu headings, counts, notes), the rail's
+group and eyebrow grey `#7a7a82` (3.97:1 on the rail) and the "waiting for you" amber `#b86e00`
+(3.99:1). Each is replaced by the prototype's own nearest passing colour — its secondary grey
+`#6a6a72` and its warning-status ink `#8a6b00`. Keeping the prototype's values would need the axe
+suites to exempt `color-contrast`; that is the owner's call, not this PR's.
+
+**Left out because the data or feature does not exist.**
+
+- "Take the tour" and "My profile" in the account menu.
+- The setup checklist's "Not needed" / hide control (no per-person flag exists).
+- The credits figure's "of N · resets D" line and bar are shown only when the workspace has a plan
+  allowance and a reset date; otherwise the line is empty rather than invented.
+- The Notes and notification popovers keep their current panels until batch 4 (Notifications).
+
+**Proven** by `tests/e2e/prototype-parity.spec.ts` (opt-in, `BRANDSPACE_PARITY=1`: side-by-side
+1440×900 screenshots, prototype and product, English and Arabic, the prototype served the same local
+fonts) and `tests/unit/d468-home-prototype.test.ts` (the prototype's `kfmt`, `delta`, `spark` and
+`VA_meKind`, and the unwired Egyptian layer).
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:
@@ -1078,6 +1133,9 @@ asserted, axe (WCAG 2.2 AA tags) clean, and no inline-end overflow at 390px — 
 `tests/unit/owner-simple-mode.test.ts`.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
+
+> **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The
+> notes below are history.
 
 > **Superseded in composition by D-277 §7 / D-279 (Phase 6 final).** The hero, its two floating
 > cards, the metric card and the surface card keep the demo's geometry and treatment; what changed is
