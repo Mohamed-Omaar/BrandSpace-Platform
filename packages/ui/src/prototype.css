@@ -638,12 +638,16 @@ button.bsp-xcard:hover {
  * The ambient layer behind it is the platform's own (`ambient.tsx`), which the
  * prototype's canvas redraws.
  */
+/* `position: relative; z-index: 1` — the frame sits above the ambient layer
+   (which is `z-index: -1`) in its own stacking order, as in the prototype; at
+   every width, so the phone's full-window shell stacks the same way. */
+.bs-shell.bsp-frame {
+  position: relative;
+  z-index: 1;
+}
+
 @media (min-width: 768px) {
   .bs-shell.bsp-frame {
-    /* `position: relative; z-index: 1` — the frame sits above the ambient layer
-       (which is `z-index: -1`) in its own stacking order, as in the prototype. */
-    position: relative;
-    z-index: 1;
     grid-template-columns: var(--bs-shell-sidebar-width, 250px) minmax(0, 1fr);
     /* The prototype is a 1440px artboard; wider than that it draws nothing,
        so the product's own ceiling (1540px, centred) still applies. */
@@ -1427,6 +1431,39 @@ button.bsp-xcard:hover {
 }
 
 /* ---------------------------------------------------------------- §4 ---- */
+
+/*
+ * NARROWER THAN THE ARTBOARD (D-468 (c): a state the prototype does not draw).
+ * The prototype is a 1440px artboard; its hero needs ~972px for the copy
+ * (44px + 540px) beside the 320px performance card. Below a 1340px window the
+ * floating cards leave their absolute geometry and sit in a row under the
+ * copy, unchanged in size, surface and order; below 1100px the four figures
+ * pair up and the side-by-side rows stack, so nothing is cut off.
+ */
+@media (max-width: 1339.98px) {
+  .bsp-hero {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .bsp-hero-copy {
+    flex-basis: 100%;
+  }
+  .bsp-float,
+  .bsp-float-approvals {
+    position: relative;
+    inset: auto;
+  }
+}
+@media (max-width: 1099.98px) {
+  .bsp-home-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .bsp-home-split,
+  .bsp-home-noticed {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
 
 /*
  * THE PHONE WIDTH (D-468 (b): the phone layout is post-launch). Below 768px

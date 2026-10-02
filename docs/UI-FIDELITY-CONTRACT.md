@@ -251,6 +251,9 @@ named once as `--bsp-*` tokens with its exact values. The prototype has no `box-
 
 - A member without analytics reads "hidden" in the performance card and figures, never a fake value.
 - Home with no brand, error and permission states keep the product's existing state screens.
+- Windows narrower than the prototype's 1440px artboard: below 1340px the hero's floating cards sit
+  in a row under its copy instead of over it, and below 1100px the four figures pair up and the
+  side-by-side rows stack — sizes, surfaces and order unchanged, nothing cut off.
 - **Interim:** "AI Creative Studio" (Create) and "Marketing Intelligence" (Improve) stay on the rail as
   prototype rail items until the prototype screens that absorb them (Media's Generate, Performance's
   Insights) are ported in batches 3 and 4; without them a member who may open either could lose the
