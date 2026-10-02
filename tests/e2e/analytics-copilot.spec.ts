@@ -984,12 +984,13 @@ test.describe('P6-11 · analytics → intelligence → pulse', () => {
     }
   });
 
-  test('Home names the list Pulse, in both languages', async ({ page }) => {
+  test('Home names the list "Needs you", in both languages (D-468)', async ({ page }) => {
+    // SUPERSEDED: P6-11 titled it "Pulse"; the prototype titles it "Needs you".
     await signIn(page);
-    await expect(page.getByTestId('attention-card')).toContainText('Pulse');
+    await expect(page.getByTestId('attention-card')).toContainText('Needs you');
     await page.goto(`${DASHBOARD_BASE_URL}/ar/overview`);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-    await expect(page.getByTestId('attention-card')).toContainText('النبض');
+    await expect(page.getByTestId('attention-card')).toContainText('يحتاجك');
   });
 
   test('intelligence is clean under axe in both directions', async ({ page }) => {
