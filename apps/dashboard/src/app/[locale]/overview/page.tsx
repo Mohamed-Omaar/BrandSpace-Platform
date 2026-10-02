@@ -673,6 +673,60 @@ export default async function OverviewPage({
       </section>
     ) : null;
 
+  /*
+   * NEEDS YOU (Main.dc.html lines 230–244). The owner's Home always draws it;
+   * a role Home draws it only when it has rows — D12 (a recorded owner
+   * decision, kept under D-468 (a)) gives a copywriter the Brand Brain rows.
+   */
+  const needsYouCard = (
+    <section className="bsp-card" data-testid="attention-card" style={{ overflow: 'hidden' }}>
+      <div style={NEEDS_HEAD}>
+        <h2 className="bsp-sech">{t('home.p.needsTitle')}</h2>
+        <span style={{ fontSize: 'var(--bsp-t-12_5)', color: 'var(--bs-text-muted)' }}>
+          {fill('home.p.needsScope', { brand: brandName })}
+        </span>
+      </div>
+      {attention.length === 0 ? (
+        <div className="bsp-row" data-testid="attention-none">
+          <span className="bsp-pill bsp-p-ok">{t('home.p.allClear')}</span>
+          <span style={{ fontSize: 'var(--bsp-t-14)', color: 'var(--bs-text-secondary)' }}>
+            {t('home.p.allClearSub')}
+          </span>
+        </div>
+      ) : (
+        <ul data-testid="attention-list" style={LIST}>
+          {attention.map((item) => {
+            const tag = TAG[item.kind] ?? (item.severity === 'blocked' ? 'failed' : 'change');
+            return (
+              <li key={item.kind} className="bsp-row" data-testid={`attention-${item.kind}`}>
+                <span className={`bsp-pill ${TAG_TONE[tag]}`}>
+                  {t(`home.p.tag.${tag}` as MessageKey)}
+                </span>
+                <span style={{ flexGrow: 1, fontSize: 'var(--bsp-t-14)', fontWeight: 600 }}>
+                  {attentionSentence(
+                    t as never,
+                    item,
+                    (value) => dateIn(value, { dateStyle: 'medium' }),
+                    locale,
+                  )}
+                </span>
+                <Link
+                  href={`/${locale}${item.href}`}
+                  className="bsp-btn bsp-sm bsp-sec"
+                  data-testid={`attention-action-${item.kind}`}
+                >
+                  {t(
+                    `home.action.${attentionAction(item.kind, workspace.permissionKeys)}` as MessageKey,
+                  )}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+
   return (
     <WorkspaceShell
       brandContext={brandContext}
@@ -907,52 +961,7 @@ export default async function OverviewPage({
           {setupCard}
 
           {/* ------------------------------------------------------------ Needs you */}
-          <section className="bsp-card" data-testid="attention-card" style={{ overflow: 'hidden' }}>
-            <div style={NEEDS_HEAD}>
-              <h2 className="bsp-sech">{t('home.p.needsTitle')}</h2>
-              <span style={{ fontSize: 'var(--bsp-t-12_5)', color: 'var(--bs-text-muted)' }}>
-                {fill('home.p.needsScope', { brand: brandName })}
-              </span>
-            </div>
-            {attention.length === 0 ? (
-              <div className="bsp-row" data-testid="attention-none">
-                <span className="bsp-pill bsp-p-ok">{t('home.p.allClear')}</span>
-                <span style={{ fontSize: 'var(--bsp-t-14)', color: 'var(--bs-text-secondary)' }}>
-                  {t('home.p.allClearSub')}
-                </span>
-              </div>
-            ) : (
-              <ul data-testid="attention-list" style={LIST}>
-                {attention.map((item) => {
-                  const tag = TAG[item.kind] ?? (item.severity === 'blocked' ? 'failed' : 'change');
-                  return (
-                    <li key={item.kind} className="bsp-row" data-testid={`attention-${item.kind}`}>
-                      <span className={`bsp-pill ${TAG_TONE[tag]}`}>
-                        {t(`home.p.tag.${tag}` as MessageKey)}
-                      </span>
-                      <span style={{ flexGrow: 1, fontSize: 'var(--bsp-t-14)', fontWeight: 600 }}>
-                        {attentionSentence(
-                          t as never,
-                          item,
-                          (value) => dateIn(value, { dateStyle: 'medium' }),
-                          locale,
-                        )}
-                      </span>
-                      <Link
-                        href={`/${locale}${item.href}`}
-                        className="bsp-btn bsp-sm bsp-sec"
-                        data-testid={`attention-action-${item.kind}`}
-                      >
-                        {t(
-                          `home.action.${attentionAction(item.kind, workspace.permissionKeys)}` as MessageKey,
-                        )}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+          {needsYouCard}
 
           {/* ------------------------------------------- Upcoming, and the Copilot */}
           <div className="bsp-home-split" style={SPLIT}>
@@ -1066,9 +1075,9 @@ export default async function OverviewPage({
           </div>
 
           {/* --------------------------------------------------- BrandSpace noticed */}
-          {(showRecommendations && recommendations.length > 0) ||
-          noticedPreferences.length > 0 ||
-          noticedWorkflows.length > 0 ? (
+          {/* `x.suggestOn` draws the section; D7 keeps the workflow and
+              preference cards when only the recommendations are switched off. */}
+          {showRecommendations || noticedPreferences.length > 0 || noticedWorkflows.length > 0 ? (
             <section
               className="bsp-card"
               data-testid="home-recommended"
@@ -1233,6 +1242,15 @@ export default async function OverviewPage({
                       </div>
                     ))
                   : null}
+                {noticedPreferences.length === 0 &&
+                noticedWorkflows.length === 0 &&
+                recommendations.length === 0 ? (
+                  // Not drawn by the prototype (its sample always has three): a
+                  // new workspace has nothing to notice yet, said in one line.
+                  <p data-testid="home-recommended-none" style={NOTICED_NONE}>
+                    {t('home.recommended.none')}
+                  </p>
+                ) : null}
               </div>
             </section>
           ) : null}
@@ -1265,6 +1283,7 @@ export default async function OverviewPage({
                 {locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
               </span>
             </section>
+            {attention.length > 0 ? needsYouCard : null}
             <div className="bsp-home-noticed" style={ROLE_GRID}>
               {roleRows ? roleSectionsFor(kind, roleRows) : null}
             </div>
@@ -1682,6 +1701,13 @@ const NOTICED_TITLE: CSSProperties = {
   fontSize: 'var(--bsp-t-15)',
   letterSpacing: '-0.01em',
   lineHeight: 1.4,
+};
+const NOTICED_NONE: CSSProperties = {
+  gridColumn: '1 / -1',
+  margin: 0,
+  padding: '6px 0',
+  fontSize: 'var(--bsp-t-13)',
+  color: 'var(--bsp-faint)',
 };
 const NOTICED_FOOT: CSSProperties = { justifyContent: 'flex-start', flexWrap: 'wrap' };
 const ROLE_HERO: CSSProperties = {
