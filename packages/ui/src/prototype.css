@@ -1375,8 +1375,10 @@ button.bsp-xcard:hover {
   letter-spacing: 0;
 }
 
-/* `.kpi{animation:bsRise .6s cubic-bezier(.2,.8,.2,1) both}` */
-.bsp-kpi {
+/* `.kpi{animation:bsRise .6s cubic-bezier(.2,.8,.2,1) both}` — played the way
+   the product plays every entrance (MO1, D-349): on an in-app page change,
+   never on a full page load, where the figures are simply there. */
+[data-page-enter] .bs-page-flow:not([data-entered]) .bsp-kpi {
   animation: bsp-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
@@ -1511,6 +1513,12 @@ button.bsp-xcard:hover {
      The control is laid onto the empty slot at the end of the header's action
      row (`--bsp-fab-x/y`, set by the shell), scrolls with the page, and takes
      the header controls' own look: 40px high, 12px radius, the `.ibtn` grey. */
+  .bsp-actions {
+    flex-wrap: wrap;
+    flex-shrink: 1;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
   .bsp-fab-slot[data-on] {
     display: block;
     block-size: 40px;

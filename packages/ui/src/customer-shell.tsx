@@ -368,12 +368,20 @@ export function CustomerShell({
     if (control) observer.observe(control);
     const header = slot.closest('header');
     if (header) observer.observe(header);
+    // The row itself and the slot: a reflow inside the row moves the slot
+    // without resizing the header.
+    if (slot.parentElement) observer.observe(slot.parentElement);
+    observer.observe(slot);
+    window.addEventListener('resize', schedule);
+    window.addEventListener('load', schedule);
     phone.addEventListener('change', schedule);
     void document.fonts?.ready.then(schedule);
     place();
     return () => {
       observer.disconnect();
       phone.removeEventListener('change', schedule);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('load', schedule);
       if (frame) cancelAnimationFrame(frame);
     };
   }, [fab]);

@@ -242,6 +242,10 @@ named once as `--bsp-*` tokens with its exact values. The prototype has no `box-
   letters and the language names are rendered as locale data, not dictionary entries — no visual
   difference results.
 
+- Entrance motion follows MO1 (D-349): Home's figures rise as the prototype's `.kpi` do on an
+  in-app page change, and are simply present on a full page load, like every other entrance in
+  the product.
+
 **(b) Moved to post-launch by the owner — prototype elements left out.**
 
 - "View as" (role preview) in the account menu and the role-preview banner.
