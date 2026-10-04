@@ -283,6 +283,15 @@ suites to exempt `color-contrast`; that is the owner's call, not this PR's.
   allowance and a reset date; otherwise the line is empty rather than invented.
 - The Notes and notification popovers keep their current panels until batch 4 (Notifications).
 
+**Carried to later batches (owner decisions, 2026-10-04).**
+
+- **Batch 4 (Brand Brain):** the review inbox's "Edit, then accept" `<summary>`
+  (`apps/dashboard/src/app/[locale]/brand-brain/review-inbox.tsx`) is 14.4px tall at 9px text and
+  fails WCAG 2.5.8 target size on a phone whenever a fact waits for review. Give it a 24px minimum
+  target height when Brand Brain is ported. Not in batch 1, which does not touch that screen.
+- **Batches 3 and 4:** remove the interim AI Creative Studio and Marketing Intelligence rail entries
+  once Media's Generate and Performance's Insights are ported.
+
 **Proven** by `tests/e2e/prototype-parity.spec.ts` (opt-in, `BRANDSPACE_PARITY=1`: side-by-side
 1440×900 screenshots, prototype and product, English and Arabic, the prototype served the same local
 fonts) and `tests/unit/d468-home-prototype.test.ts` (the prototype's `kfmt`, `delta`, `spark` and
