@@ -469,6 +469,8 @@ test.describe('the team page performs real work', () => {
     await enterWorkspace(page, customer.secondWorkspaceSlug);
     await page.goto(`${DASHBOARD_BASE_URL}/en/members`);
 
+    // Remove is on the member's own page (D-468), opened from their row.
+    await page.click(`[data-testid="member-manage-${customer.email}"]`);
     await page.click(`[data-testid="remove-member-${customer.email}"]`);
     await expect(page.getByTestId('error-banner')).toBeVisible();
 

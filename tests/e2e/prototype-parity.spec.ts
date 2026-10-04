@@ -106,6 +106,14 @@ const SCREENS: readonly {
     prototype: thenPress(viaRail('Automations', 'الأتمتة'), 'New rule', 'قاعدة جديدة'),
   },
   {
+    key: 'team',
+    route: '/members',
+    prototype: async (page) => {
+      await viaRail('Settings', 'الإعدادات')(page);
+      await viaRail('Team & roles', 'الفريق والأدوار')(page);
+    },
+  },
+  {
     key: 'media-generate',
     route: '/creative',
     prototype: thenPress(viaRail('Media', 'الوسائط'), 'Generate', 'توليد'),

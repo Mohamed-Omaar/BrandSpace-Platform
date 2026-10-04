@@ -79,10 +79,12 @@ test.describe('D-298 · settings, team, billing and history', () => {
       await expect(list.getByText(/^Joined /).first()).toBeVisible();
       return;
     }
+    // D-468: the prototype's rows — each leads with the member, then says who
+    // they are, their brand access and when they joined.
     const table = page.getByTestId('members-table');
-    await expect(table.getByRole('columnheader', { name: 'Member' })).toBeVisible();
-    await expect(table.getByRole('columnheader', { name: 'Brand access' })).toBeVisible();
-    await expect(table.getByRole('columnheader', { name: 'Status' })).toBeVisible();
+    const first = table.getByRole('listitem').first();
+    await expect(first.locator('.bsp-tm-name')).toBeVisible();
+    await expect(first).toContainText('Brand access');
     await expect(table.getByText(/^Joined /).first()).toBeVisible();
   });
 

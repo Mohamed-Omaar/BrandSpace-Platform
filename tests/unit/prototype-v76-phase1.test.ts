@@ -85,10 +85,12 @@ describe('B-5 · the team screen offers no change to your own authority', () => 
 
   it('hides role and brand-access controls on the reader’s own row, desktop and phone', () => {
     expect(page).toContain('const isSelf = (member: { userId: string }) =>');
+    // D-468: on a wide screen the controls are on the opened member's page
+    // (`opened`), on a phone in the row (`m`) — gated the same way in both.
     expect(
-      page.match(/may\('member\.assign_role'\) && !isSelf\(m\) && assignableRoles/g),
+      page.match(/may\('member\.assign_role'\) && !isSelf\((m|opened)\) && assignableRoles/g),
     ).toHaveLength(2);
-    expect(page.match(/!isSelf\(m\) &&\s*!m\.isWorkspaceOwner/g)).toHaveLength(2);
+    expect(page.match(/!isSelf\((m|opened)\) &&\s*!(m|opened)\.isWorkspaceOwner/g)).toHaveLength(2);
   });
 });
 

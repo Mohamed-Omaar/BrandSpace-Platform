@@ -774,6 +774,36 @@ Copilot builds one from words instead), Duplicate in the ⋯ menu, the monthly c
 plan's, set in the Control Center), the cost and "asks how" sentences in the read-back, and the hours
 left on a waiting request.
 
+### Team (`Main.dc.html` lines 1381–1402)
+
+Ported: the team as the prototype's card of rows — the head row with the count and "+ Invite", then a
+row per member (the rounded tile, the name at 14px / 700 over a 12px line, the role pill, "Manage →") —
+and a member opened on their own page at `?member=<membership>`: "← Team", the member's card (a 48px
+tile, the name at 19px / 800, who they are), the owner's lock card, the role as the prototype's chips and
+brand access in its own card.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- Each role chip is the existing role change, posted; brand access keeps its all-or-some choice and its
+  save; Remove stays (on the member's page); the last owner still cannot be removed, and says so.
+- The pending invitations (resend, revoke) and the invite form (email, role, brand access) stay, as a
+  second card in the same rows and fields.
+- A member's line carries their email, their brand access and when they joined (D-277 §45).
+
+**(b) Post-launch — left out.** "View as" (D-468), and the phone layout: below 768px the product's
+record lists stay, with their actions in each row.
+
+**(c) States the prototype does not draw.** No invitations, more invitations than shown, an invitation
+revoked or expired, a member not yet active, an error from a refused change, the invite form not
+offered (said, with who can).
+
+**Accessibility findings.** The quiet greys take `#6a6a72`.
+
+**Left out — no data or feature.** The seat count (the plan's seats are not read here; the count of
+people stands in), per-member permission switches and the "customised" pill (permissions are the
+role's), a role's one-line description, the audit note and the member page's save bar (each change is
+saved by its own button).
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

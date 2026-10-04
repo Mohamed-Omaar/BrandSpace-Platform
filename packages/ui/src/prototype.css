@@ -6914,6 +6914,143 @@ button.bsp-chip.bsp-bb-q {
   gap: 8px;
 }
 
+/* ------------------------------------------------------------- §3-TM ---- */
+
+/*
+ * TEAM — `Main.dc.html` lines 1381–1402 (D-468, batch 6): a `.card` of
+ * `.row`s — the 36px tile, the name at 14px / 700 over a 12px line, the role
+ * pill and "Manage →" in `#5312c4` — and the member opened on its own page.
+ */
+.bsp-card.bsp-tm {
+  overflow: hidden;
+}
+.bsp-tm-count {
+  flex-grow: 1;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.bsp-tm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bsp-row.bsp-tm-row {
+  background: #fff;
+}
+.bsp-tm-main {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.bsp-tm-name {
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.bsp-tm-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-tm-email {
+  overflow-wrap: anywhere;
+}
+.bsp-tm-manage {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #5312c4;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.bsp-tm-note {
+  margin: 0;
+  padding: 12px 18px;
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-tm-none {
+  padding: 18px 20px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6a6a72;
+}
+.bsp-tm-none > b {
+  font-weight: 600;
+  color: #111114;
+}
+/* The invite form, in the prototype's fields: `border: 1px solid #e4e4e8; border-radius: 12px; padding: 9px 12px`. */
+.bsp-tm-invite {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px 18px;
+  border-block-start: 1px solid #f0f0f2;
+}
+.bsp-tm-invite > .bsp-btn {
+  justify-self: start;
+}
+.bsp-tm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-tm-input.bs-control {
+  border: 1px solid #e4e4e8;
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-size: 14px;
+  background: #fff;
+  color: #111114;
+}
+.bsp-tm-wide {
+  grid-column: 1 / -1;
+}
+/* The member's own page. */
+.bsp-btn.bsp-tm-back {
+  align-self: flex-start;
+}
+.bsp-card.bsp-tm-hero {
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.bsp-tm-hname {
+  font-size: 19px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.bsp-card.bsp-tm-lock {
+  padding: 16px 18px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 13.5px;
+}
+.bsp-card.bsp-tm-box {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bsp-tm-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bsp-tm-form {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+.bsp-card.bsp-tm-end {
+  align-items: flex-start;
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -7225,6 +7362,13 @@ button.bsp-chip.bsp-bb-q {
   .bsp-au-dialog {
     padding: 18px 16px;
     border-radius: 22px;
+  }
+}
+
+/* Team below 768px: the product's phone layout (its record lists); the invite form is one column. */
+@media (max-width: 767.98px) {
+  .bsp-tm-invite {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
