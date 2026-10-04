@@ -478,6 +478,38 @@ BrandSpace opens the live post and checks…" (no such check exists), the bar's 
 stands") and "Back to the library" link are not drawn: the prototype states the status as the bar's
 pill and leaves navigation to the rail.
 
+### Approvals (`Main.dc.html` lines 567–598)
+
+Ported: the 330px list card with the "Waiting for me" / "Sent by me" switch (its sliding pill and the
+waiting count), the queue's rows (52px picture, title, who sent it and when; the chosen row lavender)
+and the sent rows with Withdraw, beside the review card — the post as it will look, its title and
+facts (channels, who sent it), the note, and Approve, Request changes and Reject. A queue opens on its
+first review, as the prototype's does.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-288 / AC-29.1: the review shows the product's `SocialPostPreview` for every channel version, the
+  captions and the media under review, and the post's notes thread — not the prototype's single
+  sample picture.
+- B5: a reason is required to request changes (the field is required; Approve and Reject skip it),
+  and the verdict is the product's Approve — approving does not schedule the post, so the prototype's
+  "Approve & schedule" and its hint ("Approving schedules the post…") are not used.
+- D-122 / D-126: a review the reader may not decide (self-approval forbidden by the policy it was
+  opened under) says so on its row and offers no verdict.
+- A8: the approval rules live in Settings → Approvals; the queue keeps its pointer there for
+  `approvals.policy.manage`.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the list and the review stack.
+
+**(c) States the prototype does not draw.** A member who may not review (the queue explains why), an
+empty "Sent by me" with the way to the drafts, who a review is assigned to, who decided a sent one
+and why, and "Open in Studio". Below 1280px the review's two columns stack; below 1024px the list
+and the review do.
+
+**Left out — no data or feature.** The requested time and the campaign rows of the review's facts
+(a review carries neither), and the rows' real pictures (a queue row carries no media; the product's
+abstract art stands in, as on the calendar).
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

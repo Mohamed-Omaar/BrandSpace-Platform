@@ -1,46 +1,32 @@
 import type React from 'react';
 import Link from 'next/link';
 import {
-  LinkTabs,
-  type LinkTab,
+  AbstractMedia,
   AssetThumb,
-  Card,
-  CONTROL_CLASS,
-  Field,
-  SectionHeader,
-  Stack,
-  StateMessage,
-  StatusBadge,
-  buttonStyle,
-  colorTokens,
-  inputStyle,
-  spacingTokens,
-  typographyTokens,
-  type BadgeTone,
+  SegmentPill,
+  type LinkTab,
+  type MediaSeed,
 } from '@brandspace/ui';
 import type { MessageKey } from '../../../i18n/messages';
-import { EmptyAction } from '../../../components/empty-action';
 
 /**
- * The Approvals screen — Phase 5B-3, docs/PRODUCT.md §5 module 14.
+ * The Approvals screen — the prototype's (`Main.dc.html` lines 567–598, D-468
+ * batch 3), wired to the product's approval cycles.
  *
- * A DESIGN-SYSTEM EXTENSION, NOT A DEMO PORT (UI-FIDELITY-CONTRACT §6). The
- * approved demo routes `#customer/approvals` to `simpleFeaturePage('approvals')`
- * — a "Future product preview" placeholder with three identical cards and no
- * design behind it, exactly the case §6.1 was written for after the Asset
- * Library. So the screen is composed from what already ships: `Card`,
- * `SectionHeader`, `StateMessage`, `StatusBadge`, `Field` and the button and
- * spacing tokens, inside the shared dashboard shell.
+ * The composition is the prototype's: a 330px card with the "Waiting for me" /
+ * "Sent by me" switch and the list, beside the card of the review being
+ * decided — the post as it will look, its facts, the note, and the three
+ * verdicts. A queue opens on its first review, as the prototype's does.
  *
  * EVERY PANEL IS GATED BY A SERVER-RESOLVED FLAG, not by a link being left out.
  * A member who may read content but not approve sees "what you sent" and no
- * verdict controls; one without `approvals.policy.manage` sees no policy
- * editor. The flags say what the server already decided — they never decide
- * anything themselves.
+ * verdict controls; the flags say what the server already decided — they never
+ * decide anything themselves.
  *
- * A SERVER COMPONENT WITH FORMS, and no client JavaScript at all. Every control
- * is a `<form>` posting to a server action, so the screen works with scripting
- * unavailable and every decision is enforced where it must be.
+ * A SERVER COMPONENT WITH FORMS, and no client JavaScript beyond the switch's
+ * sliding pill. Every control is a `<form>` posting to a server action, so the
+ * screen works with scripting unavailable and every decision is enforced where
+ * it must be.
  */
 
 export interface ApprovalRow {
@@ -119,13 +105,22 @@ export interface BrandPolicyRow {
   readonly allowSelfApproval: boolean;
 }
 
-const STATUS_TONE: Record<ApprovalRow['status'], BadgeTone> = {
-  PENDING: 'warning',
-  APPROVED: 'success',
-  CHANGES_REQUESTED: 'warning',
-  REJECTED: 'danger',
-  CANCELLED: 'neutral',
+const STATUS_X: Record<ApprovalRow['status'], string> = {
+  PENDING: 'bsp-warn',
+  APPROVED: '',
+  CHANGES_REQUESTED: 'bsp-warn',
+  REJECTED: 'bsp-bad',
+  CANCELLED: 'bsp-neu',
 };
+
+/** The prototype's 52px picture; a row carries no media, so the abstract art. */
+function RowArt({ id }: { readonly id: string }) {
+  return (
+    <span className="bsp-apr-art" aria-hidden="true">
+      <AbstractMedia seed={(id.charCodeAt(0) % 6) as MediaSeed} alt="" />
+    </span>
+  );
+}
 
 export function ApprovalsView({
   locale,
@@ -158,286 +153,330 @@ export function ApprovalsView({
     withdraw(formData: FormData): Promise<void>;
   };
 }) {
+  const selected = review?.approvalId ?? null;
   return (
-    <Stack>
-      {/*
-        THE REVIEW SUBJECT, when one was asked for: the captions under review
-        and the requester's note, so a verdict is given on the words rather
-        than on a title. It is authorized per approval inside the service, so
-        rendering it here discloses nothing the reader could not already
-        fetch.
-      */}
-      {review ? (
-        <Card testId="approvals-review-subject">
-          <SectionHeader
-            eyebrow={`${review.brandName} · ${t('approvals.cycle')} ${review.cycle}`}
-            title={review.itemTitle}
-            description={`${t('approvals.requestedBy')} ${review.requestedByLabel}`}
-          />
-          {review.requestNote ? <p style={noteStyle}>{review.requestNote}</p> : null}
-          {review.previews ? (
-            <div
-              data-testid="review-previews"
-              style={{
-                display: 'grid',
-                gap: spacingTokens.md,
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(18rem, 100%), 1fr))',
-              }}
-            >
-              {review.previews}
-            </div>
-          ) : null}
-          <ul style={listStyle} data-testid="review-variants">
-            {review.variants.map((variant) => (
-              <li key={variant.id} style={rowStyle}>
-                <span style={metaStyle}>{variant.platformKey}</span>
-                <p style={bodyStyle}>{variant.body}</p>
-                {variant.hashtags.length > 0 ? (
-                  <span style={metaStyle}>{variant.hashtags.map((h) => `#${h}`).join(' ')}</span>
-                ) : null}
-                {/*
-                  WHAT IS ACTUALLY BEING APPROVED (AC-29.1). The thumbnails are
-                  the media the publish pipeline will send — the same asset ids,
-                  in the same order — so a reviewer's decision is about the post
-                  rather than about its words.
-                */}
-                {variant.media.length > 0 ? (
-                  <ul
-                    style={{
-                      listStyle: 'none',
-                      margin: 0,
-                      padding: 0,
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: spacingTokens.xs,
-                    }}
-                    data-testid={`approval-media-${variant.id}`}
-                  >
-                    {variant.media.map((item) => (
-                      <li key={item.id}>
-                        {item.previewToken ? (
-                          <AssetThumb
-                            src={`/${locale}/assets/file/${item.previewToken}`}
-                            alt={item.name}
-                            size="3.5rem"
-                            testId={`approval-media-thumb-${item.id}`}
-                          />
-                        ) : (
-                          <span style={metaStyle}>{item.name}</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-          {review.mayDecide ? (
-            <DecisionForm
-              locale={locale}
-              t={t}
-              approvalId={review.approvalId}
-              itemId={review.itemId}
-              tab={tab}
-              action={actions.decide}
-            />
-          ) : null}
-          {review.conversation ?? null}
-        </Card>
-      ) : null}
-
-      <div>
-        <LinkTabs
-          label={t('approvals.tabs.label')}
-          tabs={tabs}
-          currentId={tab}
-          testId="approvals-tabs"
-        />
-      </div>
-
-      {tab === 'forMe' ? (
-        <Card testId="approvals-queue">
-          <SectionHeader eyebrow={t('approvals.eyebrow')} title={t('approvals.queue')} />
-          {!mayReview ? (
-            <StateMessage
-              title={t('approvals.noPermissionTitle')}
-              description={t('approvals.noPermissionBody')}
-            />
-          ) : queue.length === 0 ? (
-            <StateMessage
-              title={t('approvals.queueEmptyTitle')}
-              description={t('approvals.queueEmptyBody')}
-            />
-          ) : (
-            <ul style={listStyle} data-testid="approvals-queue-list">
-              {queue.map((row) => (
-                <li key={row.id} style={rowStyle} data-testid={`approval-${row.itemId}`}>
-                  <ApprovalSummary locale={locale} t={t} row={row} />
-                  {row.assignedToLabel ? (
-                    <p style={noteStyle} data-testid={`assigned-to-${row.itemId}`}>
-                      {row.assignedToLabel}
-                    </p>
-                  ) : null}
-                  {row.mayDecide ? (
-                    <DecisionForm
-                      locale={locale}
-                      t={t}
-                      approvalId={row.id}
-                      itemId={row.itemId}
-                      tab={tab}
-                      action={actions.decide}
-                    />
-                  ) : row.blockedAsSelf ? (
-                    /*
-                     * D-122. The reader submitted this and the brand forbids
-                     * self-approval, so it says so rather than silently omitting
-                     * the buttons — a control that vanishes without explanation
-                     * reads as a bug. The server refuses it regardless.
-                     */
-                    <p style={noteStyle} data-testid={`self-blocked-${row.itemId}`}>
-                      {t('approvals.selfBlocked')}
-                    </p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      ) : null}
-
-      {/*
-        "What you sent" belongs to members who can send. A Viewer has never
-        opened a cycle, so the panel is withheld rather than shown empty — and
-        the page does not query it for them either.
-      */}
-      {tab === 'sent' && mayReadContent ? (
-        <Card testId="approvals-mine">
-          <SectionHeader title={t('approvals.mine')} />
-          {mine.length === 0 ? (
-            <StateMessage
-              title={t('approvals.mineEmptyTitle')}
-              description={t('approvals.mineEmptyBody')}
-              action={
-                <EmptyAction
-                  href={`/${locale}/content?status=DRAFT`}
-                  label={t('approvals.mineEmptyAction')}
-                  testId="approvals-mine-empty-action"
-                  tone="neutral"
-                />
-              }
-            />
-          ) : (
-            <ul style={listStyle} data-testid="approvals-mine-list">
-              {mine.map((row) => (
-                <li key={row.id} style={rowStyle} data-testid={`mine-${row.itemId}`}>
-                  <ApprovalSummary locale={locale} t={t} row={row} />
-                  {row.mayWithdraw ? (
-                    <form action={actions.withdraw}>
-                      <input type="hidden" name="locale" value={locale} />
-                      <input type="hidden" name="approvalId" value={row.id} />
-                      <input type="hidden" name="tab" value={tab} />
-                      <button
-                        type="submit"
-                        style={buttonStyle('ghost')}
-                        data-testid={`withdraw-${row.itemId}`}
-                      >
-                        {t('approvals.withdraw')}
-                      </button>
-                    </form>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      ) : null}
-
-      {/*
-        The approval rules live in Settings → Approvals (A8, prototype v94). The
-        queue only points there, and only for the permission that may change
-        them — Owner and Admin (`approvals.policy.manage`).
-      */}
-      {tab === 'forMe' && mayManagePolicy && policies.length > 0 ? (
-        <Card testId="approvals-policy-link">
-          <SectionHeader
-            title={t('approvals.policyTitle')}
-            description={t('approvals.policyMoved')}
-          />
-          <Link
-            href={`/${locale}/settings/approvals`}
-            style={buttonStyle('ghost', 'sm')}
-            data-testid="approvals-policy-open"
+    <div className="bsp-apr">
+      <div className="bsp-apr-grid">
+        <div className="bsp-apr-side">
+          <section
+            className="bsp-card bsp-apr-list"
+            data-testid={tab === 'forMe' ? 'approvals-queue' : 'approvals-mine'}
           >
-            {t('approvals.policyOpen')}
-          </Link>
-        </Card>
-      ) : null}
-    </Stack>
-  );
-}
+            <div className="bsp-apr-tabs-pad">
+              <nav
+                className="bsp-seg bsp-apr-tabs"
+                aria-label={t('approvals.tabs.label')}
+                data-testid="approvals-tabs"
+              >
+                <SegmentPill selector='[aria-current="page"]' />
+                {tabs.map((link) => (
+                  <Link
+                    key={link.id}
+                    href={link.href}
+                    aria-current={link.id === tab ? 'page' : undefined}
+                    data-testid={`approvals-tab-${link.id}`}
+                  >
+                    {link.label}
+                    {link.id === 'forMe' && mayReview ? (
+                      <span className="bsp-ltr"> {queue.length}</span>
+                    ) : null}
+                  </Link>
+                ))}
+              </nav>
+            </div>
 
-function ApprovalSummary({
-  locale,
-  t,
-  row,
-}: {
-  readonly locale: string;
-  readonly t: (key: MessageKey) => string;
-  readonly row: ApprovalRow;
-}) {
-  return (
-    <div style={{ display: 'grid', gap: spacingTokens['3xs'] }}>
-      <div
-        style={{ display: 'flex', gap: spacingTokens.xs, alignItems: 'center', flexWrap: 'wrap' }}
-      >
+            {tab === 'forMe' ? (
+              !mayReview ? (
+                <div className="bsp-apr-empty">
+                  <b>{t('approvals.noPermissionTitle')}</b>
+                  <span>{t('approvals.noPermissionBody')}</span>
+                </div>
+              ) : queue.length === 0 ? (
+                <div className="bsp-apr-empty">
+                  <b>{t('approvals.queueEmptyTitle')}</b>
+                  <span>{t('approvals.queueEmptyBody')}</span>
+                </div>
+              ) : (
+                <ul className="bsp-apr-rows" data-testid="approvals-queue-list">
+                  {queue.map((row) => (
+                    <li key={row.id} data-testid={`approval-${row.itemId}`}>
+                      {/*
+                        THE REVIEW CONTEXT, not the content library. The row
+                        opens the review it belongs to, which is what a reader of
+                        this screen wants from it; opening the draft for EDITING
+                        is offered on the review itself.
+                      */}
+                      <Link
+                        className="bsp-apr-row"
+                        href={`/${locale}/approvals?review=${row.id}`}
+                        aria-current={row.id === selected ? 'true' : undefined}
+                      >
+                        <RowArt id={row.itemId || row.id} />
+                        <span className="bsp-apr-copy">
+                          <span className="bsp-apr-title" dir="auto">
+                            {row.itemTitle}
+                          </span>
+                          <span className="bsp-apr-meta">
+                            {row.brandName} · {t('approvals.requestedBy')} {row.requestedByLabel} ·{' '}
+                            {row.requestedAtLabel}
+                          </span>
+                          {row.assignedToLabel ? (
+                            <span
+                              className="bsp-apr-meta"
+                              data-testid={`assigned-to-${row.itemId}`}
+                            >
+                              {row.assignedToLabel}
+                            </span>
+                          ) : null}
+                          {!row.mayDecide && row.blockedAsSelf ? (
+                            /*
+                             * D-122. The reader submitted this and the brand
+                             * forbids self-approval, so it says so rather than
+                             * silently omitting the verdict — a control that
+                             * vanishes without explanation reads as a bug. The
+                             * server refuses it regardless.
+                             */
+                            <span
+                              className="bsp-apr-meta bsp-apr-warn"
+                              data-testid={`self-blocked-${row.itemId}`}
+                            >
+                              {t('approvals.selfBlocked')}
+                            </span>
+                          ) : null}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : null}
+
+            {/*
+              "What you sent" belongs to members who can send. A Viewer has never
+              opened a cycle, so the panel is withheld rather than shown empty —
+              and the page does not query it for them either.
+            */}
+            {tab === 'sent' && mayReadContent ? (
+              mine.length === 0 ? (
+                <div className="bsp-apr-empty">
+                  <b>{t('approvals.mineEmptyTitle')}</b>
+                  <span>{t('approvals.mineEmptyBody')}</span>
+                  <Link
+                    className="bsp-btn bsp-sm bsp-sec bsp-apr-start"
+                    href={`/${locale}/content?status=DRAFT`}
+                    data-testid="approvals-mine-empty-action"
+                  >
+                    {t('approvals.mineEmptyAction')}
+                  </Link>
+                </div>
+              ) : (
+                <ul className="bsp-apr-rows" data-testid="approvals-mine-list">
+                  {mine.map((row) => (
+                    <li
+                      key={row.id}
+                      className="bsp-apr-sent"
+                      data-testid={`mine-${row.itemId}`}
+                      aria-current={row.id === selected ? 'true' : undefined}
+                    >
+                      <RowArt id={row.itemId || row.id} />
+                      <span className="bsp-apr-copy">
+                        <Link
+                          className="bsp-apr-title bsp-apr-link"
+                          href={`/${locale}/approvals?review=${row.id}&tab=sent`}
+                          dir="auto"
+                        >
+                          {row.itemTitle}
+                        </Link>
+                        <span className="bsp-apr-meta">
+                          <span
+                            className={`bsp-xstatus ${STATUS_X[row.status]}`}
+                            data-testid={`approval-status-${row.itemId}`}
+                          >
+                            {t(`approvals.status.${row.status}` as MessageKey)}
+                          </span>{' '}
+                          {row.assignedToLabel ?? row.brandName} · {row.requestedAtLabel}
+                        </span>
+                        {row.decidedByLabel ? (
+                          <span className="bsp-apr-meta" data-testid={`decided-by-${row.itemId}`}>
+                            {row.decidedByLabel}
+                          </span>
+                        ) : null}
+                        {row.decisionNote ? (
+                          <span
+                            className="bsp-apr-meta bsp-apr-note"
+                            dir="auto"
+                            data-testid={`decision-note-${row.itemId}`}
+                          >
+                            {row.decisionNote}
+                          </span>
+                        ) : null}
+                        {row.mayOpenInStudio && row.itemId ? (
+                          <Link
+                            className="bsp-apr-studio"
+                            href={`/${locale}/content/compose?item=${row.itemId}`}
+                            data-testid={`open-in-studio-${row.itemId}`}
+                          >
+                            {t('calendar.openInStudio')}
+                          </Link>
+                        ) : null}
+                      </span>
+                      {row.mayWithdraw ? (
+                        <form action={actions.withdraw}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="approvalId" value={row.id} />
+                          <input type="hidden" name="tab" value={tab} />
+                          <button
+                            type="submit"
+                            className="bsp-btn bsp-sm bsp-sec"
+                            data-testid={`withdraw-${row.itemId}`}
+                          >
+                            {t('approvals.withdraw')}
+                          </button>
+                        </form>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : null}
+          </section>
+
+          {/*
+            The approval rules live in Settings → Approvals (A8, prototype v94).
+            The queue only points there, and only for the permission that may
+            change them — Owner and Admin (`approvals.policy.manage`).
+          */}
+          {tab === 'forMe' && mayManagePolicy && policies.length > 0 ? (
+            <section className="bsp-card bsp-apr-policy" data-testid="approvals-policy-link">
+              <span className="bsp-apr-copy">
+                <span className="bsp-apr-title">{t('approvals.policyTitle')}</span>
+                <span className="bsp-apr-meta">{t('approvals.policyMoved')}</span>
+              </span>
+              <Link
+                href={`/${locale}/settings/approvals`}
+                className="bsp-btn bsp-sm bsp-sec"
+                data-testid="approvals-policy-open"
+              >
+                {t('approvals.policyOpen')}
+              </Link>
+            </section>
+          ) : null}
+        </div>
+
         {/*
-          THE REVIEW CONTEXT, not the content library. The title opens the
-          review it belongs to, which is what a reader of this screen wants
-          from it; opening the draft for EDITING is a different intent and is
-          offered separately, below, as its own link.
+          THE REVIEW BEING DECIDED: the post as it will look, the captions and
+          media under review, the requester's note, and the verdicts. It is
+          authorized per approval inside the service, so rendering it here
+          discloses nothing the reader could not already fetch.
         */}
-        <Link href={`/${locale}/approvals?review=${row.id}`} style={linkStyle}>
-          {row.itemTitle}
-        </Link>
-        <StatusBadge
-          label={t(`approvals.status.${row.status}` as MessageKey)}
-          tone={STATUS_TONE[row.status]}
-          testId={`approval-status-${row.itemId}`}
-        />
+        {review ? (
+          <section className="bsp-card bsp-apr-detail" data-testid="approvals-review-subject">
+            <div className="bsp-apr-prev">
+              {review.previews ? (
+                <div className="bsp-apr-prev-list" data-testid="review-previews">
+                  {review.previews}
+                </div>
+              ) : null}
+            </div>
+            <div className="bsp-apr-side-col">
+              <div>
+                <div className="bsp-apr-h" dir="auto">
+                  {review.itemTitle}
+                </div>
+                <div className="bsp-apr-sub">
+                  {review.brandName} · {t('approvals.cycle')} {review.cycle}
+                </div>
+              </div>
+              <div className="bsp-apr-facts">
+                <div>
+                  <span>{t('approvals.channels')}</span>
+                  <span className="bsp-ltr">
+                    {review.variants
+                      .map((variant) => t(`content.platform.${variant.platformKey}` as MessageKey))
+                      .join(' · ')}
+                  </span>
+                </div>
+                <div>
+                  <span>{t('approvals.requestedBy')}</span>
+                  <span>{review.requestedByLabel}</span>
+                </div>
+              </div>
+              {review.requestNote ? (
+                <p className="bsp-apr-quote" dir="auto">
+                  {review.requestNote}
+                </p>
+              ) : null}
+              <ul className="bsp-apr-variants" data-testid="review-variants">
+                {review.variants.map((variant) => (
+                  <li key={variant.id}>
+                    <span className="bsp-lbl">
+                      {t(`content.platform.${variant.platformKey}` as MessageKey)}
+                    </span>
+                    <p dir="auto">{variant.body}</p>
+                    {variant.hashtags.length > 0 ? (
+                      <span className="bsp-apr-meta">
+                        {variant.hashtags.map((h) => `#${h}`).join(' ')}
+                      </span>
+                    ) : null}
+                    {/*
+                      WHAT IS ACTUALLY BEING APPROVED (AC-29.1). The thumbnails
+                      are the media the publish pipeline will send — the same
+                      asset ids, in the same order — so a reviewer's decision is
+                      about the post rather than about its words.
+                    */}
+                    {variant.media.length > 0 ? (
+                      <ul className="bsp-apr-media" data-testid={`approval-media-${variant.id}`}>
+                        {variant.media.map((item) => (
+                          <li key={item.id}>
+                            {item.previewToken ? (
+                              <AssetThumb
+                                src={`/${locale}/assets/file/${item.previewToken}`}
+                                alt={item.name}
+                                size="3.5rem"
+                                testId={`approval-media-thumb-${item.id}`}
+                              />
+                            ) : (
+                              <span className="bsp-apr-meta">{item.name}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              {review.mayDecide ? (
+                <DecisionForm
+                  locale={locale}
+                  t={t}
+                  approvalId={review.approvalId}
+                  itemId={review.itemId}
+                  tab={tab}
+                  action={actions.decide}
+                />
+              ) : null}
+              {mayReadContent ? (
+                <Link
+                  className="bsp-apr-studio"
+                  href={`/${locale}/content/compose?item=${review.itemId}`}
+                >
+                  {t('calendar.openInStudio')}
+                </Link>
+              ) : null}
+            </div>
+            {review.conversation ? (
+              <div className="bsp-apr-thread">{review.conversation}</div>
+            ) : null}
+          </section>
+        ) : null}
       </div>
-      <span style={metaStyle}>
-        {row.brandName} · {t('approvals.requestedBy')} {row.requestedByLabel} ·{' '}
-        {t('approvals.requestedAt')} {row.requestedAtLabel} · {t('approvals.cycle')} {row.cycle}
-      </span>
-      {row.requestNote ? <p style={noteStyle}>{row.requestNote}</p> : null}
-      {row.decidedByLabel ? (
-        <span style={metaStyle} data-testid={`decided-by-${row.itemId}`}>
-          {row.decidedByLabel}
-        </span>
-      ) : null}
-      {row.decisionNote ? (
-        <p style={noteStyle} data-testid={`decision-note-${row.itemId}`}>
-          {row.decisionNote}
-        </p>
-      ) : null}
-      {row.mayOpenInStudio && row.itemId ? (
-        <Link
-          href={`/${locale}/content/compose?item=${row.itemId}`}
-          style={metaStyle}
-          data-testid={`open-in-studio-${row.itemId}`}
-        >
-          {t('calendar.openInStudio')}
-        </Link>
-      ) : null}
     </div>
   );
 }
 
 /**
- * The three verdicts, in one place.
- *
- * Shared by the queue row and the review-subject panel rather than duplicated,
- * because a second copy is where the two would come to offer different buttons.
+ * The three verdicts, in one place: the prototype's note and its Approve,
+ * Request changes and Reject.
  */
 function DecisionForm({
   locale,
@@ -460,30 +499,30 @@ function DecisionForm({
    * (`formNoValidate`). The server refuses a blank reason either way.
    */
   return (
-    <form action={action} style={formStyle}>
+    <form action={action} className="bsp-apr-form">
       <input type="hidden" name="locale" value={locale} />
       <input type="hidden" name="approvalId" value={approvalId} />
       <input type="hidden" name="tab" value={tab} />
-      <Field label={t('approvals.decisionNote')} htmlFor={`note-${approvalId}`}>
-        <input
-          id={`note-${approvalId}`}
-          name="note"
-          type="text"
-          required
-          style={inputStyle()}
-          className={CONTROL_CLASS}
-          placeholder={t('approvals.notePlaceholder')}
-          maxLength={1000}
-          data-testid={`decision-note-input-${itemId}`}
-        />
-      </Field>
-      <div style={buttonRowStyle}>
+      <label className="bsp-apr-label" htmlFor={`note-${approvalId}`}>
+        {t('approvals.decisionNote')}
+      </label>
+      <textarea
+        id={`note-${approvalId}`}
+        className="bs-control bsp-apr-textarea"
+        name="note"
+        dir="auto"
+        required
+        placeholder={t('approvals.notePlaceholder')}
+        maxLength={1000}
+        data-testid={`decision-note-input-${itemId}`}
+      />
+      <div className="bsp-apr-verdicts">
         <button
           type="submit"
           name="verdict"
           value="APPROVE"
           formNoValidate
-          style={buttonStyle('primary')}
+          className="bsp-btn bsp-pur"
           data-testid={`approve-${itemId}`}
         >
           {t('approvals.approve')}
@@ -492,7 +531,7 @@ function DecisionForm({
           type="submit"
           name="verdict"
           value="REQUEST_CHANGES"
-          style={buttonStyle('ghost')}
+          className="bsp-btn bsp-sec"
           data-testid={`request-changes-${itemId}`}
         >
           {t('approvals.requestChanges')}
@@ -502,7 +541,7 @@ function DecisionForm({
           name="verdict"
           value="REJECT"
           formNoValidate
-          style={buttonStyle('ghost')}
+          className="bsp-btn bsp-ghost bsp-apr-reject"
           data-testid={`reject-${itemId}`}
         >
           {t('approvals.reject')}
@@ -511,48 +550,3 @@ function DecisionForm({
     </form>
   );
 }
-
-const listStyle = {
-  listStyle: 'none',
-  margin: 0,
-  padding: 0,
-  display: 'grid',
-  gap: spacingTokens.md,
-} as const;
-
-const rowStyle = {
-  display: 'grid',
-  gap: spacingTokens.sm,
-  paddingBlock: spacingTokens.sm,
-  borderBlockEnd: `1px solid ${colorTokens.border}`,
-} as const;
-
-const formStyle = { display: 'grid', gap: spacingTokens.xs } as const;
-
-const buttonRowStyle = {
-  display: 'flex',
-  gap: spacingTokens.xs,
-  flexWrap: 'wrap',
-} as const;
-
-const metaStyle = { ...typographyTokens.caption, color: colorTokens.textMuted } as const;
-
-const noteStyle = {
-  ...typographyTokens.bodySm,
-  color: colorTokens.textMuted,
-  margin: 0,
-  overflowWrap: 'anywhere',
-} as const;
-
-const bodyStyle = {
-  ...typographyTokens.bodySm,
-  margin: 0,
-  whiteSpace: 'pre-wrap',
-  overflowWrap: 'anywhere',
-} as const;
-
-const linkStyle = {
-  ...typographyTokens.bodySm,
-  fontWeight: 600,
-  color: colorTokens.textPrimary,
-} as const;

@@ -3350,6 +3350,331 @@ span.bsp-cal-hol {
   }
 }
 
+/* ------------------------------------------------------------ §3-APR ---- */
+
+/*
+ * APPROVALS — `Main.dc.html` lines 567–598. Batch 3 of D-468.
+ */
+
+/* `display: flex; flex-direction: column; gap: 22px`, then the grid
+   `grid-template-columns: 330px minmax(0, 1fr); gap: 16px; align-items: start`. */
+.bsp-apr {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-inline-size: 0;
+}
+.bsp-apr-grid {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.bsp-apr-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+/* The list card: `overflow: hidden`; the switch in `padding: 12px`, the `.seg`
+   `width: 100%; box-sizing: border-box`, each button `flex-grow: 1`. */
+.bsp-apr-list {
+  overflow: hidden;
+}
+.bsp-apr-tabs-pad {
+  padding: 12px;
+}
+.bsp-seg.bsp-apr-tabs {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+}
+.bsp-seg.bsp-apr-tabs > a {
+  flex-grow: 1;
+  justify-content: center;
+}
+.bsp-apr-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* A queue row: `display: flex; gap: 12px; width: 100%; border: 0;
+   border-block-start: 1px solid #f0f0f2; background: #fff (the chosen one
+   #f6f3ff); padding: 12px 14px; text-align: start`. */
+.bsp-apr-row,
+.bsp-apr-sent {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-block-start: 1px solid #f0f0f2;
+  background: #fff;
+  padding: 12px 14px;
+  text-align: start;
+  color: inherit;
+  text-decoration: none;
+}
+.bsp-apr-row[aria-current='true'],
+.bsp-apr-sent[aria-current='true'] {
+  background: #f6f3ff;
+}
+.bsp-apr-row:hover {
+  background: #fbfaff;
+}
+.bsp-apr-row[aria-current='true']:hover {
+  background: #f6f3ff;
+}
+.bsp-apr-row:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: -2px;
+}
+/* The sent row: `align-items: center`. */
+.bsp-apr-sent {
+  align-items: center;
+}
+/* The picture: `width: 52px; height: 52px; flex-shrink: 0; border-radius: 12px`. */
+.bsp-apr-art {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  display: block;
+}
+.bsp-apr-art > * {
+  width: 100%;
+  height: 100%;
+}
+.bsp-apr-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex-grow: 1;
+}
+/* `font-size: 13.5px; font-weight: 800` (queue) and `13px; 700` (sent). */
+.bsp-apr-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.bsp-apr-sent .bsp-apr-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+.bsp-apr-link {
+  color: inherit;
+  text-decoration: none;
+}
+.bsp-apr-link:hover {
+  text-decoration: underline;
+}
+/* `font-size: 12px; color: #6a6a72` (queue) and `11px` (sent). */
+.bsp-apr-meta {
+  font-size: 12px;
+  color: #6a6a72;
+  overflow-wrap: anywhere;
+}
+.bsp-apr-sent .bsp-apr-meta {
+  font-size: 11px;
+}
+.bsp-apr-warn {
+  color: #8a5a00;
+}
+.bsp-apr-note {
+  color: #26262b;
+}
+.bsp-apr-studio {
+  font-size: 12px;
+  font-weight: 700;
+  color: #5312c4;
+  text-decoration: none;
+  align-self: flex-start;
+  min-block-size: 24px;
+  display: inline-flex;
+  align-items: center;
+}
+/* The empty list: `padding: 24px 16px; font-size: 13.5px; color: #6a6a72;
+   border-block-start: 1px solid #f0f0f2`. */
+.bsp-apr-empty {
+  padding: 24px 16px;
+  font-size: 13.5px;
+  color: #6a6a72;
+  border-block-start: 1px solid #f0f0f2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bsp-apr-empty > b {
+  color: #111114;
+}
+.bsp-btn.bsp-apr-start {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+/* The product's pointer to the approval rules (D-468 (c)). */
+.bsp-apr-policy {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* The review: `padding: 18px 20px; display: grid;
+   grid-template-columns: 300px minmax(0, 1fr); gap: 20px`. */
+.bsp-apr-detail {
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 20px;
+  min-width: 0;
+}
+/* The post: `border: 1px solid #ececef; border-radius: 16px; overflow: hidden`. */
+.bsp-apr-prev {
+  border: 1px solid #ececef;
+  border-radius: 16px;
+  overflow: hidden;
+  align-self: start;
+}
+.bsp-apr-prev-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px;
+}
+.bsp-apr-side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+/* `font-size: 20px; font-weight: 800`, then `font-size: 13px; color: #6a6a72`. */
+.bsp-apr-h {
+  font-size: 20px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.bsp-apr-sub {
+  font-size: 13px;
+  color: #6a6a72;
+}
+/* `display: flex; flex-direction: column; gap: 6px; font-size: 13px`, each row
+   `justify-content: space-between`, the label `#6a6a72`, the value 700. */
+.bsp-apr-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.bsp-apr-facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bsp-apr-facts > div > span:first-child {
+  color: #6a6a72;
+}
+.bsp-apr-facts > div > span:last-child {
+  font-weight: 700;
+  text-align: end;
+}
+.bsp-apr-quote {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  background: #fbfbfc;
+  border-radius: 12px;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+}
+/* The words and media under review (D-468 (c)). */
+.bsp-apr-variants {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bsp-apr-variants > li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-block-start: 1px solid #f0f0f2;
+  padding-top: 10px;
+}
+.bsp-apr-variants p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bsp-apr-media {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bsp-apr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* `font-size: 12.5px; font-weight: 700`. */
+.bsp-apr-label {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+/* `min-height: 70px; resize: vertical; border: 1px solid transparent;
+   background: #f5f5f7; border-radius: 12px; padding: 10px 12px; font-size: 13.5px`. */
+.bs-control.bsp-apr-textarea {
+  min-height: 70px;
+  resize: vertical;
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: #111114;
+}
+.bs-control.bsp-apr-textarea:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: 1px;
+}
+/* `display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto`. */
+.bsp-apr-verdicts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+.bsp-btn.bsp-apr-reject {
+  color: #b83245;
+}
+/* Narrower than the prototype's 1440 frame (D-468 (c)): the review's two
+   columns stack, then the list and the review. */
+@media (max-width: 1279.98px) {
+  .bsp-apr-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 1023.98px) {
+  .bsp-apr-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* The conversation about the post (D-468 (c)), under both columns. */
+.bsp-apr-thread {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -3528,6 +3853,15 @@ span.bsp-cal-hol {
   }
   .bsp-st-when {
     width: min(300px, calc(100vw - 72px));
+  }
+}
+
+/* Approvals below 768px: the product's phone layout — the list, then the
+   review, each the full width. */
+@media (max-width: 767.98px) {
+  .bsp-apr-grid,
+  .bsp-apr-detail {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

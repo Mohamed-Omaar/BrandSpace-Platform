@@ -1910,10 +1910,9 @@ export const messages = {
 
     'approvals.title': 'الموافقات',
     'approvals.eyebrow': 'سير العمل',
-    'approvals.subtitle':
-      'المحتوى الذي ينتظر قرارك. اعتمِد، أو اطلب تعديلًا، أو ارفض — ويسجَّل كل قرار باسم صاحبه.',
+    'approvals.subtitle': 'المنشورات التي تنتظر قرارك، بمعاينتها الكاملة.',
     'approvals.queue': 'بانتظار المراجعة',
-    'approvals.queueEmptyTitle': 'لا شيء ينتظر المراجعة',
+    'approvals.queueEmptyTitle': 'لا شيء بانتظارك.',
     'approvals.queueEmptyBody': 'سيظهر هنا كل محتوى يُرسل للمراجعة في علاماتك.',
     'approvals.noPermissionTitle': 'لا تملك صلاحية المراجعة',
     'approvals.noPermissionBody':
@@ -1928,8 +1927,9 @@ export const messages = {
     'approvals.note': 'ملاحظة',
     'approvals.notePlaceholder': 'مطلوب عند طلب التعديلات',
     'approvals.tabs.label': 'المراجعات',
-    'approvals.tabs.forMe': 'لي',
-    'approvals.tabs.sent': 'المُرسلة',
+    'approvals.tabs.forMe': 'بانتظاري',
+    'approvals.tabs.sent': 'ما أرسلتُه',
+    'approvals.channels': 'القنوات',
     'approvals.decidedBy': 'قرّرها {name}',
     'approvals.decisionNote': 'سبب القرار',
     'approvals.approve': 'اعتماد',
@@ -5400,10 +5400,9 @@ export const messages = {
 
     'approvals.title': 'Approvals',
     'approvals.eyebrow': 'Workflow',
-    'approvals.subtitle':
-      'Content waiting on your decision. Approve it, ask for changes, or turn it down \u2014 every verdict is recorded against the person who made it.',
+    'approvals.subtitle': 'Posts waiting for your decision, with the full preview.',
     'approvals.queue': 'Waiting for review',
-    'approvals.queueEmptyTitle': 'Nothing is waiting for review',
+    'approvals.queueEmptyTitle': 'Nothing is waiting for you.',
     'approvals.queueEmptyBody': 'Content sent for review in your brands will appear here.',
     'approvals.noPermissionTitle': 'You do not review content',
     'approvals.noPermissionBody':
@@ -5418,8 +5417,9 @@ export const messages = {
     'approvals.note': 'Note',
     'approvals.notePlaceholder': 'Required when asking for changes',
     'approvals.tabs.label': 'Reviews',
-    'approvals.tabs.forMe': 'For me',
-    'approvals.tabs.sent': 'Sent',
+    'approvals.tabs.forMe': 'Waiting for me',
+    'approvals.tabs.sent': 'Sent by me',
+    'approvals.channels': 'Channels',
     'approvals.decidedBy': 'Decided by {name}',
     'approvals.decisionNote': 'Reason',
     'approvals.approve': 'Approve',

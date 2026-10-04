@@ -743,7 +743,8 @@ describe('B5 · Approvals per person, and a reason for "request changes"', () =>
   it('the form requires the reason for "request changes", and Approve/Reject skip it', () => {
     const view = read('apps/dashboard/src/app/[locale]/approvals/approvals-view.tsx');
     const form = view.slice(view.indexOf('function DecisionForm('));
-    expect(form).toMatch(/name="note"\s*type="text"\s*required/);
+    // D-468: the reason is the prototype's textarea; still required.
+    expect(form).toMatch(/<textarea[^>]*?\s*name="note"\s*dir="auto"\s*required/);
     expect(form.match(/^\s+formNoValidate$/gm)).toHaveLength(2);
     const requestChanges = form.slice(form.indexOf('value="REQUEST_CHANGES"'));
     expect(requestChanges.slice(0, requestChanges.indexOf('</button>'))).not.toContain(

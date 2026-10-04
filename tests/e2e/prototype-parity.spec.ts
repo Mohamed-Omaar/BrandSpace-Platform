@@ -66,7 +66,8 @@ const viaRail =
   (en: string, ar: string) =>
   async (page: Page): Promise<void> => {
     await page
-      .locator('nav .nav', { hasText: new RegExp(`^\\s*(${en}|${ar})\\s*$`) })
+      // An item may carry its count badge after the name ("Approvals 2").
+      .locator('nav .nav', { hasText: new RegExp(`^\\s*(${en}|${ar})\\s*\\d*\\s*$`) })
       .first()
       .click();
   };
@@ -93,6 +94,7 @@ const SCREENS: readonly {
   { key: 'home', route: '/overview' },
   { key: 'calendar', route: '/calendar', prototype: viaRail('Calendar', 'التقويم') },
   { key: 'posts', route: '/content', prototype: viaRail('Posts', 'المنشورات') },
+  { key: 'approvals', route: '/approvals', prototype: viaRail('Approvals', 'الموافقات') },
   {
     key: 'studio',
     route: '/content/compose?mode=write',

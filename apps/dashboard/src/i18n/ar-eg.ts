@@ -122,4 +122,11 @@ export const arEgOverrides = {
   'studio.row.tags': 'الهاشتاجات',
   'studio.tagsNone': 'لسه مفيش هاشتاجات.',
   'studio.tagRemove': 'شيل {tag}',
+
+  // Batch 3 — Approvals (Main.dc.html lines 567–598; copy at 2183).
+  'approvals.subtitle': 'المنشورات اللي مستنية قرارك، بمعاينتها كاملة.',
+  'approvals.tabs.forMe': 'مستني قراري',
+  'approvals.tabs.sent': 'أنا بعته',
+  'approvals.queueEmptyTitle': 'مفيش حاجة مستنياك.',
+  'approvals.decisionNote': 'ملاحظة',
 } as const satisfies Partial<Record<MessageKey, string>>;

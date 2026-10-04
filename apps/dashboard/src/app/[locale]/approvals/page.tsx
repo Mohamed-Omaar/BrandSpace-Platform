@@ -157,8 +157,14 @@ export default async function ApprovalsPage({
        * request for another brand's review gets the same not-found a
        * non-existent id would give.
        */
-      const subject = reviewId
-        ? await service.reviewSubject({ approvalId: reviewId, actor }).catch(() => null)
+      /*
+       * D-468 — A QUEUE OPENS ON ITS FIRST REVIEW, as the prototype's does: with
+       * no review asked for, "Waiting for me" shows the first one it lists.
+       */
+      const subjectId =
+        reviewId ?? (tab === 'forMe' && mayApprove ? (pending[0]?.id ?? null) : null);
+      const subject = subjectId
+        ? await service.reviewSubject({ approvalId: subjectId, actor }).catch(() => null)
         : null;
 
       const userIds = [
@@ -356,6 +362,7 @@ export default async function ApprovalsPage({
       brandContext={brandContext}
       locale={locale}
       activePath="/approvals"
+      eyebrow={t('nav.group.publish')}
       heading={t('approvals.title')}
       description={t('approvals.subtitle')}
       workspaceName={workspace.workspaceName}
