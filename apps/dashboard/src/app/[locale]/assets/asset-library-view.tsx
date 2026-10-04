@@ -36,6 +36,7 @@ import {
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { ASSET_VIEWS, type RightsState } from '../../../server/asset-views';
 import { formatBytes } from '../../../components/format-bytes';
+import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /**
  * The Asset Library screen.
@@ -277,7 +278,7 @@ function filterHref(
 }
 
 export function AssetLibraryView(props: AssetLibraryViewProps) {
-  const t = translator(props.locale);
+  const t = translator(useMessageLocale(props.locale));
   const { filters, can, actions } = props;
   /** D-305 — the standard business: one brand, so no brand or shelf choice to make. */
   const singleBrand = props.brands.length <= 1;

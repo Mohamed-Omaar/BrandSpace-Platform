@@ -21,7 +21,7 @@ import { mediaForVariants } from '../../../../server/media-picker';
 import { activityTimeline } from '../../../../server/activity-timeline';
 import { ActivityTimeline } from '../../../../components/activity-timeline';
 import { EmptyAction } from '../../../../components/empty-action';
-import { messages, type MessageKey, successFlash } from '../../../../i18n/messages';
+import { type MessageKey, successFlash, dictionaryFor } from '../../../../i18n/messages';
 import { brandContextFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
 import { inAnalytics } from '../../../../server/analytics-context';
@@ -84,8 +84,8 @@ export default async function CampaignDetailPage({
 }) {
   const { locale, campaignId } = await params;
   const query = await searchParams;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'campaigns.read');
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale, 'campaigns.read');
+  const t = translator(messageLocale);
 
   const single = (key: string): string | undefined => {
     const value = query[key];
@@ -301,9 +301,7 @@ export default async function CampaignDetailPage({
       : [];
 
   const brief = briefFrom(campaign.brief);
-  const dictionary = (locale === 'ar' ? messages.ar : messages.en) as Readonly<
-    Record<string, string | undefined>
-  >;
+  const dictionary = dictionaryFor(messageLocale) as Readonly<Record<string, string | undefined>>;
   const numberFormat = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
     numberingSystem: 'latn',
   });

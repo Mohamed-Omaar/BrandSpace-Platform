@@ -97,8 +97,8 @@ export default async function OnboardingPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale);
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale);
+  const t = translator(messageLocale);
   const may = (key: string) => workspace.permissionKeys.includes(key);
 
   const brandContext = await brandContextFor(
@@ -746,7 +746,7 @@ export default async function OnboardingPage({
         })
       : { providers: [], connections: [] };
     const providerLabel = (provider: string) =>
-      optionalMessage(locale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
+      optionalMessage(messageLocale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
 
     body = (
       <CustomerCard

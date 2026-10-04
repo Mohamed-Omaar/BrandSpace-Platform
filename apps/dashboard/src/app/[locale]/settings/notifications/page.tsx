@@ -31,8 +31,8 @@ export default async function NotificationSettingsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale);
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale);
+  const t = translator(messageLocale);
 
   const preferences = await inWorkspace(workspace.workspaceId, async ({ db }) =>
     new NotificationPreferenceService({ db, workspaceId: workspace.workspaceId }).forUser(

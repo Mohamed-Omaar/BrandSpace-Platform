@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { SettingsSplit } from '@brandspace/ui';
 import { settingsNavItems, type SettingsNavKey } from '../server/settings-nav';
 import { translator } from '../i18n/messages';
+import { requestMessageLocale } from '../server/message-locale';
 
 /**
  * SETTINGS AS ONE PLACE (Phase 6 final, D-277 §3/§44).
@@ -27,7 +28,7 @@ export function SettingsFrame({
   readonly selected: SettingsNavKey;
   readonly children: ReactNode;
 }) {
-  const t = translator(locale);
+  const t = translator(requestMessageLocale(locale));
   return (
     <SettingsSplit
       navLabel={t('settings.navLabel')}

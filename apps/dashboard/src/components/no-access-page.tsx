@@ -5,6 +5,7 @@ import { brandContextFor } from '../server/brand-context';
 import { memberDisplayName, workspaceOwnerName, type PageAccess } from '../server/customer-context';
 import { denialText } from '../server/denial';
 import { WorkspaceShell } from './workspace-shell';
+import { requestMessageLocale } from '../server/message-locale';
 
 /**
  * "NO ACCESS TO THIS PAGE" (E2, Q5) — for a page on the known navigation list
@@ -26,7 +27,7 @@ export async function NoAccessPage({
   readonly locale: string;
   readonly access: Extract<PageAccess, { allowed: false }>;
 }) {
-  const t = translator(locale);
+  const t = translator(requestMessageLocale(locale));
   const { customer, workspace } = access.session;
   const brandContext = await brandContextFor(workspace, access.route);
   const text = denialText(locale, {

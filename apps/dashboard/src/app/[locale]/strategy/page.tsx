@@ -95,8 +95,9 @@ export default async function StrategyPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/strategy');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const session = access.session;
   const { workspace } = session;
@@ -193,7 +194,8 @@ export default async function StrategyPage({
   const audience = knowledgeIn(['AUDIENCE']);
   const messagesKnown = knowledgeIn(['OFFERS', 'PROOF_POINTS']);
   const declaredPillars = knowledgeIn(['STRATEGY']);
-  const platformName = (key: string) => optionalMessage(locale, `content.platform.${key}`) ?? key;
+  const platformName = (key: string) =>
+    optionalMessage(messageLocale, `content.platform.${key}`) ?? key;
   const refs = (rationale: Rationale) =>
     rationale.evidenceRefs.length > 0
       ? ` · ${t('strategy.rests')} ${evidenceRefs(locale, rationale.evidenceRefs)}`

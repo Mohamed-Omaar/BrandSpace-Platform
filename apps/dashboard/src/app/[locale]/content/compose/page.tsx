@@ -113,8 +113,9 @@ export default async function ComposePage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const translate = translator(locale);
   const access = await requireWorkspacePage(locale, '/content/compose');
+  const { messageLocale } = access.session;
+  const translate = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
 
@@ -150,7 +151,7 @@ export default async function ComposePage({
    * reader arrived with — a campaign — travels with every choice.
    */
   const mode = itemId ? null : createModeFrom(single('mode'));
-  const tk = (key: string): string => optionalMessage(locale, key) ?? key;
+  const tk = (key: string): string => optionalMessage(messageLocale, key) ?? key;
   /*
    * G6 (D-329) — OPENED FROM A ★ DAY ON THE CALENDAR. A date shape, not in the
    * past for the workspace, and — when that day is one of the workspace's
@@ -623,7 +624,7 @@ export default async function ComposePage({
         const shorter = /^shorter:([a-z0-9_-]+)$/.exec(key);
         const tone = /^tone:(friendly|professional):([a-z0-9_-]+)$/.exec(key);
         const platform = (value: string) =>
-          optionalMessage(locale, `content.platform.${value}`) ?? value;
+          optionalMessage(messageLocale, `content.platform.${value}`) ?? value;
         if (shorter) {
           return [
             {

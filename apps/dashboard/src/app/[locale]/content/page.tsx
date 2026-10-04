@@ -62,9 +62,10 @@ export default async function ContentPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const translate = translator(locale);
-  const t = (key: string): string => optionalMessage(locale, key) ?? key;
   const access = await requireWorkspacePage(locale, '/content');
+  const { messageLocale } = access.session;
+  const translate = translator(messageLocale);
+  const t = (key: string): string => optionalMessage(messageLocale, key) ?? key;
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
   const may = (key: string) => workspace.permissionKeys.includes(key);
@@ -288,7 +289,8 @@ export default async function ContentPage({
     const list = linksByItem.get(job.contentItemId) ?? [];
     list.push({
       label:
-        optionalMessage(locale, `content.platform.${job.provider.toLowerCase()}`) ?? job.provider,
+        optionalMessage(messageLocale, `content.platform.${job.provider.toLowerCase()}`) ??
+        job.provider,
       url: job.externalPostUrl,
     });
     linksByItem.set(job.contentItemId, list);
@@ -465,7 +467,7 @@ export default async function ContentPage({
           campaignsByBrand,
           today: formatLocalTime(now, menuFacts.timezone).slice(0, 10),
           labels: Object.fromEntries(
-            MENU_KEYS.map((key) => [key, optionalMessage(locale, key) ?? '']),
+            MENU_KEYS.map((key) => [key, optionalMessage(messageLocale, key) ?? '']),
           ),
         }}
         can={{

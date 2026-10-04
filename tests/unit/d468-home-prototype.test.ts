@@ -81,7 +81,7 @@ describe('sparkPath — `spark(vals)` on a 120×30 box', () => {
   });
 });
 
-describe('the Egyptian Arabic layer is collected, keyed, and not wired (D-468)', () => {
+describe('the Egyptian Arabic layer is collected and keyed (D-468), and read only by messages.ts (D-470)', () => {
   const ar = messages.ar as Record<string, string>;
   const entries = Object.entries(arEgOverrides as Record<string, string>);
 
@@ -103,7 +103,7 @@ describe('the Egyptian Arabic layer is collected, keyed, and not wired (D-468)',
     }
   });
 
-  it('nothing reads it yet: the owner approves the wiring first', async () => {
+  it('only the dictionary reads it: every screen asks `translator`, never the file (D-470)', async () => {
     const { readdirSync, readFileSync, statSync } = await import('node:fs');
     const path = await import('node:path');
     const root = path.resolve(__dirname, '../../apps/dashboard/src');
@@ -118,6 +118,8 @@ describe('the Egyptian Arabic layer is collected, keyed, and not wired (D-468)',
       }
     };
     walk(root);
-    expect(readers).toEqual([]);
+    expect(readers.map((file) => path.relative(root, file))).toEqual([
+      path.join('i18n', 'messages.ts'),
+    ]);
   });
 });

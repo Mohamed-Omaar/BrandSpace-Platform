@@ -3,7 +3,8 @@ import { systemClock } from '@brandspace/shared';
 import { inWorkspace } from './customer-context';
 import { activityActionLabel } from './activity-labels';
 import { relativeTime } from './home';
-import { messages, optionalMessage } from '../i18n/messages';
+import { dictionaryFor, optionalMessage } from '../i18n/messages';
+import { requestMessageLocale } from './message-locale';
 
 /**
  * A CONTEXTUAL MINI-TIMELINE (Phase 6 final, D-277 §41/§47, D-298).
@@ -37,7 +38,7 @@ export async function activityTimeline(input: {
 }): Promise<readonly TimelineEntry[]> {
   const { locale, workspace } = input;
   if (input.resourceIds.length === 0) return [];
-  const dictionary = (locale === 'ar' ? messages.ar : messages.en) as Readonly<
+  const dictionary = dictionaryFor(requestMessageLocale(locale)) as Readonly<
     Record<string, string | undefined>
   >;
   const now = systemClock.now();
@@ -69,10 +70,11 @@ export async function activityTimeline(input: {
       label: activityActionLabel(entry.action, dictionary),
       actor:
         entry.actorId === input.userId
-          ? (optionalMessage(locale, 'activity.you') ?? '')
+          ? (optionalMessage(requestMessageLocale(locale), 'activity.you') ?? '')
           : entry.actorId && names.has(entry.actorId)
             ? (names.get(entry.actorId) ?? '')
-            : (optionalMessage(locale, `activity.actor.${entry.actorType}`) ?? '—'),
+            : (optionalMessage(requestMessageLocale(locale), `activity.actor.${entry.actorType}`) ??
+              '—'),
       at: entry.occurredAt,
       when: relativeTime(entry.occurredAt, now, locale),
     }));

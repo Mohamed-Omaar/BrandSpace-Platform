@@ -17,6 +17,7 @@ import {
   updateKnowledgeAction,
   uploadSourceAction,
 } from './actions';
+import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /** Q19 — the key question a person chose to answer: its fact key and its words. */
 export interface QuestionFocus {
@@ -70,7 +71,7 @@ export function AreaDrawer({
   /** D4 — open the one review inbox at this area's first candidate. */
   onReview: (area: string) => void;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   // The question being answered: from "What's missing", or chosen here.
   const [chosen, setChosen] = useState<QuestionFocus | null>(focus);
   useEffect(() => setChosen(focus), [focus, requestedArea?.area]);

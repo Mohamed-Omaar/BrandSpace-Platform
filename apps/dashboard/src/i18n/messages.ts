@@ -5,6 +5,8 @@
  * first-class. Typed, so a missing key is a compile error rather than a
  * placeholder that ships.
  */
+import { arEgOverrides } from './ar-eg';
+
 export const messages = {
   ar: {
     'app.title': 'براندسبيس',
@@ -6905,8 +6907,48 @@ export const messages = {
 
 export type MessageKey = keyof (typeof messages)['en'];
 
+/**
+ * WHICH WORDS A READER GETS (D-470).
+ *
+ * The ROUTE locale (`en` / `ar`) decides the URL, `dir` and number and date
+ * formatting. The MESSAGE locale decides only the words: Arabic follows the
+ * workspace's country, so a reader of `/ar` in an Egyptian workspace reads
+ * `ar-EG` — the Egyptian layer laid over formal Arabic key by key — and every
+ * other Arabic reader reads formal Arabic. A screen before a workspace exists
+ * (sign-in, sign-up, the first onboarding step) has no country and stays
+ * formal. Adding a dialect is one strings file and one line in `DIALECTS`.
+ */
+export type MessageLocale = 'en' | 'ar' | 'ar-EG';
+
+const DIALECTS: Readonly<Record<string, Exclude<MessageLocale, 'en' | 'ar'>>> = {
+  EG: 'ar-EG',
+};
+
+export function messageLocaleFor(
+  locale: string,
+  country: string | null | undefined,
+): MessageLocale {
+  if (locale !== 'ar') return 'en';
+  const dialect = country ? DIALECTS[country.toUpperCase()] : undefined;
+  return dialect === undefined ? 'ar' : dialect;
+}
+
+type Dictionary = Readonly<Record<MessageKey, string>>;
+
+/** Formal Arabic with the Egyptian layer on top: a key absent from the layer keeps the formal string. */
+const arEg: Dictionary = { ...messages.ar, ...arEgOverrides };
+
+/**
+ * The dictionary for a route locale or a message locale. Anything that is not
+ * Arabic is English, as `translator` has always treated an unknown locale.
+ */
+export function dictionaryFor(locale: string): Dictionary {
+  if (locale === 'ar-EG') return arEg;
+  return locale === 'ar' ? messages.ar : messages.en;
+}
+
 export function translator(locale: string) {
-  const dictionary = locale === 'ar' ? messages.ar : messages.en;
+  const dictionary = dictionaryFor(locale);
   return (key: MessageKey): string => dictionary[key];
 }
 
@@ -6942,7 +6984,7 @@ export function translator(locale: string) {
  * `e1` shorthand the evidence store uses.
  */
 export function evidenceRefs(locale: string, refs: readonly number[]): string {
-  const joined = refs.join(locale === 'ar' ? '، ' : ', ');
+  const joined = refs.join(locale.startsWith('ar') ? '، ' : ', ');
   return (optionalMessage(locale, 'insights.evidenceRefs') ?? '{refs}').replace('{refs}', joined);
 }
 
@@ -6974,8 +7016,7 @@ export function evidenceLabel(locale: string, labelKey: string | null | undefine
 }
 
 export function optionalMessage(locale: string, key: string): string | null {
-  const dictionary: Record<string, string | undefined> =
-    locale === 'ar' ? messages.ar : messages.en;
+  const dictionary: Record<string, string | undefined> = dictionaryFor(locale);
   const value = dictionary[key];
   return typeof value === 'string' && value !== '' ? value : null;
 }

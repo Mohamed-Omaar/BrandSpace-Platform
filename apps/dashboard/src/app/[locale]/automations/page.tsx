@@ -47,7 +47,13 @@ import {
 } from '../../../server/automation-run-display';
 import { createAutomationAiQuota, workspaceMonthLabel } from '@brandspace/entitlements';
 import { inAnalytics } from '../../../server/analytics-context';
-import { statusMessage, translator, type MessageKey, successFlash } from '../../../i18n/messages';
+import {
+  statusMessage,
+  translator,
+  type MessageKey,
+  successFlash,
+  type MessageLocale,
+} from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import Link from 'next/link';
 import { AutomationForm, type AutomationFormInitial } from './automation-form';
@@ -87,14 +93,14 @@ export const dynamic = 'force-dynamic';
  */
 function conditionChoicesFor(
   field: ConditionField,
-  locale: string,
+  messageLocale: MessageLocale,
   catalogues: {
     readonly brands: readonly { readonly id: string; readonly name: string }[];
     readonly campaigns: readonly { readonly id: string; readonly name: string }[];
     readonly members: readonly { readonly id: string; readonly name: string }[];
   },
 ): readonly { readonly value: string; readonly label: string }[] {
-  const t = translator(locale);
+  const t = translator(messageLocale);
   const contract = CONDITION_FIELD_CONTRACTS[field];
 
   if (contract.catalogue === 'brands') {
@@ -149,8 +155,9 @@ export default async function AutomationsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/automations');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const session = access.session;
   const { workspace } = session;
@@ -466,7 +473,7 @@ export default async function AutomationsPage({
     field: ConditionField,
     brandId: string | undefined,
   ): readonly { value: string; label: string }[] =>
-    conditionChoicesFor(field, locale, {
+    conditionChoicesFor(field, messageLocale, {
       brands,
       campaigns: (brandId ? catalogueByBrand.get(brandId)?.campaigns : undefined) ?? [],
       members: (brandId ? catalogueByBrand.get(brandId)?.members : undefined) ?? [],

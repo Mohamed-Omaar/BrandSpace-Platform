@@ -237,7 +237,8 @@ named once as `--bsp-*` tokens with its exact values. The prototype has no `box-
 - Search (`⌘K`) is not drawn: there is no search feature (Q6, D-276).
 - "Switch business" stays in the account menu for a member with more than one business (D-302).
 - Arabic copy is the product's formal Arabic (owner answer to D-468, 3a). The prototype's Egyptian
-  strings are collected unwired in `apps/dashboard/src/i18n/ar-eg.ts`.
+  strings are collected in `apps/dashboard/src/i18n/ar-eg.ts`; batch 1 left them unwired, and D-470
+  wires them for Egyptian workspaces (§4.4).
 - P6-14 (every Arabic dictionary value is Arabic): the logotype "BrandSpace", the language square's
   letters and the language names are rendered as locale data, not dictionary entries — no visual
   difference results.
@@ -265,7 +266,8 @@ named once as `--bsp-*` tokens with its exact values. The prototype has no `box-
 - **Interim:** "AI Creative Studio" (Create) and "Marketing Intelligence" (Improve) stay on the rail as
   prototype rail items until the prototype screens that absorb them (Media's Generate, Performance's
   Insights) are ported in batches 3 and 4; without them a member who may open either could lose the
-  only general way in. Owner to confirm.
+  only general way in. Confirmed by the owner (D-470, 2026-10-04): they stay until those screens are
+  ported, then come off.
 
 **Accessibility findings in the prototype itself (listed, per D-468).** Three of its text colours fail
 WCAG 2.2 AA contrast for the small text they set, and the product's axe suites require zero
@@ -273,7 +275,8 @@ violations: the quiet grey `#8a8a92` (3.43:1 on white — menu headings, counts,
 group and eyebrow grey `#7a7a82` (3.97:1 on the rail) and the "waiting for you" amber `#b86e00`
 (3.99:1). Each is replaced by the prototype's own nearest passing colour — its secondary grey
 `#6a6a72` and its warning-status ink `#8a6b00`. Keeping the prototype's values would need the axe
-suites to exempt `color-contrast`; that is the owner's call, not this PR's.
+suites to exempt `color-contrast`. **Owner decision (D-470, 2026-10-04): the three darker
+replacements stay, and colour contrast is not exempted from the tests.**
 
 **Left out because the data or feature does not exist.**
 
@@ -296,6 +299,38 @@ suites to exempt `color-contrast`; that is the owner's call, not this PR's.
 1440×900 screenshots, prototype and product, English and Arabic, the prototype served the same local
 fonts) and `tests/unit/d468-home-prototype.test.ts` (the prototype's `kfmt`, `delta`, `spark` and
 `VA_meKind`, and the unwired Egyptian layer).
+
+## 4.4 D-470 — the interface Arabic follows the workspace's country
+
+Approved by the owner on 2026-10-04 (D-470), from the batch 1 design note.
+
+- **Where the country comes from.** `Workspace.country`, mapped onto the workspace context that
+  `listWorkspaces` already loads for every page (`CustomerWorkspaceContext.country`) — one more field
+  on a row already read, no extra query, no schema change.
+- **Which words.** `messageLocaleFor(routeLocale, country)`: `en` on the English route; on the Arabic
+  route `ar-EG` for Egypt and `ar` (formal) for every other country. `requireWorkspace` returns it as
+  `session.messageLocale`. `dictionaryFor('ar-EG')` is formal Arabic with `apps/dashboard/src/i18n/ar-eg.ts`
+  laid over it key by key, so a key the layer lacks reads the formal string.
+- **How screens read it.** A page passes `session.messageLocale` to `translator` / `optionalMessage`
+  and keeps the route locale for links, `dir` and number and date formatting. The shared server
+  components (the shell, the "no access" page, the settings and billing tabs, the notes panel, the
+  denial text) read the same value through `requestMessageLocale()`, recorded by `requireWorkspace`
+  for the length of one server render. Client components that translate for themselves read it from
+  the shell through `useMessageLocale()`. A unit guard fails any workspace page that translates with
+  the route locale.
+- **Server-rendered.** No flash, nothing decided in the browser. The route stays `/ar`; `dir` and the
+  document's `<html lang>` are unchanged. The shell's root carries `lang="ar-EG"` in an Egyptian
+  workspace, so assistive technology reads the dialect.
+- **Formal Arabic where there is no workspace.** Sign-in, sign-up, verification, reset, the workspace
+  chooser, the first onboarding step, errors outside the shell and the sign-in emails
+  (`packages/auth/src/email-templates.ts`) have no country and stay formal.
+- **Not changed.** The design note proposed `<html lang="ar">` in place of `ar-SA`. The tag is shared
+  by all three apps and existing suites read it, so it stays `ar-SA` and the dialect is carried on the
+  shell's root instead; changing the document tag remains open for the owner.
+- **Proven** by `tests/unit/d470-message-locale.test.ts` (country → words, per-key fallback, the
+  Egyptian dictionary's key set, the page guard) and `tests/e2e/d470-egyptian-arabic.spec.ts` (an
+  Egyptian and a Saudi workspace on the same `/ar` route; formal Arabic before a workspace exists).
+- Egyptian strings keep being collected in `ar-eg.ts` for every screen this PR ports.
 
 ## 5. How compliance is proven
 

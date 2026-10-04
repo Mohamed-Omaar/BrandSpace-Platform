@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { Button, Dialog } from '@brandspace/ui';
 import { translator } from '../../../i18n/messages';
 import { readAgainSourceAction, removeSourceAction } from './actions';
+import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /**
  * ONE SOURCE, WITH WHAT IT IS RESPONSIBLE FOR (Phase 2C-4, D5).
@@ -61,7 +62,7 @@ export function SourceRow({
   /** `brand_brain.upload` AND `brand_brain.edit` — "Drop its facts". */
   readonly canDrop: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const detailId = useId();
   const removeFormId = useId();
   const [open, setOpen] = useState(false);

@@ -11,6 +11,7 @@ import {
 import { translator } from '../../../i18n/messages';
 import type { AreaItemData, VoiceData } from './brand-brain-view';
 import { archiveKnowledgeAction, createKnowledgeAction, updateKnowledgeAction } from './actions';
+import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /**
  * C4 + D1 (Phase 2C) — THE ONE VOICE CARD on the Look & voice tab.
@@ -43,7 +44,7 @@ export function VoiceCard({
   canEdit: boolean;
   profileHref: string | null;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   return (
     <div className="bb-source" data-testid="voice-card" style={{ display: 'grid', gap: 16 }}>
       <div className="bb-source-head">
@@ -192,7 +193,7 @@ function RuleList({
   canEdit: boolean;
   note?: string;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   return (
     <section data-testid={testId} style={sectionStyle}>
       <h5 style={headingStyle}>{title}</h5>

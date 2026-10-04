@@ -20,6 +20,7 @@ import {
   typographyTokens,
 } from '@brandspace/ui';
 import { CopilotLink } from '../../../components/copilot-link';
+import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /**
  * The Brand Brain client island.
@@ -297,7 +298,7 @@ export function BrandBrainView({
     readonly prompt: string;
   } | null;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const [tab, setTabState] = useState<BrandBrainTab>(initialTab);
   const [openArea, setOpenArea] = useState<string | null>(initialFocus?.area ?? null);
   const [focus, setFocus] = useState<QuestionFocus | null>(

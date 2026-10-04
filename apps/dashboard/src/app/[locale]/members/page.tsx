@@ -95,8 +95,9 @@ export default async function MembersPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/members');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const session = access.session;
   const { workspace } = session;
@@ -252,7 +253,7 @@ export default async function MembersPage({
 
   /** A membership or invitation status in the reader's language (P6-15). */
   const statusLabel = (kind: 'memberStatus' | 'inviteStatus', status: string): string =>
-    optionalMessage(locale, `members.${kind}.${status}`) ?? status;
+    optionalMessage(messageLocale, `members.${kind}.${status}`) ?? status;
 
   const may = (key: string) => workspace.permissionKeys.includes(key);
   // B-5 — nobody is offered a change to their own role or brand access; the

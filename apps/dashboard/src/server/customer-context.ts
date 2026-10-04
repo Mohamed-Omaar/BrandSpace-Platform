@@ -28,7 +28,9 @@ import {
   UsageService,
 } from '@brandspace/entitlements';
 import { currentEnvironment, isProduction, requestContext } from '@brandspace/shared';
+import { messageLocaleFor, type MessageLocale } from '../i18n/messages';
 import { permissionDenied } from './denial';
+import { recordMessageLocale } from './message-locale';
 import { KNOWN_PAGE_PERMISSIONS, type KnownPage } from './known-routes';
 
 /**
@@ -245,6 +247,13 @@ export interface WorkspaceSession {
   readonly workspace: CustomerWorkspaceContext;
   /** The session token, so a caller can re-derive scope without re-reading. */
   readonly token: string;
+  /**
+   * D-470: the words this member reads — the route locale, except that Arabic
+   * follows the workspace's country (`ar-EG` for Egypt). Pass it to
+   * `translator` / `optionalMessage`; keep the route locale for links, `dir`
+   * and number and date formatting.
+   */
+  readonly messageLocale: MessageLocale;
 }
 
 /**
@@ -303,7 +312,9 @@ export async function requireWorkspace(
   if (workspace.requireMfa && !customer.mfaEnabled) redirect(`/${locale}/mfa-setup`);
 
   if (!holdsEvery(workspace, permissionKey)) notFound();
-  return { customer, workspace, token };
+  const messageLocale = messageLocaleFor(locale, workspace.country);
+  recordMessageLocale(messageLocale);
+  return { customer, workspace, token, messageLocale };
 }
 
 /**
@@ -426,7 +437,8 @@ export async function resolveApiWorkspace(
     : undefined;
   if (!workspace) return null;
   if (permissionKey && !holdsPermission(workspace, permissionKey)) return null;
-  return { customer, workspace, token };
+  // A route handler answers JSON with no words in it; its message locale is never read.
+  return { customer, workspace, token, messageLocale: 'en' };
 }
 
 /** The membership-service actor shape, built in one place so none is partial. */

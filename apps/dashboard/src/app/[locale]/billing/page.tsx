@@ -59,8 +59,9 @@ export const dynamic = 'force-dynamic';
  */
 export default async function BillingPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/billing');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
   const mayManage = workspace.permissionKeys.includes('billing.manage');

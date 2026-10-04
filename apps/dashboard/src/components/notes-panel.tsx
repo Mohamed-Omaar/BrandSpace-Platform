@@ -30,6 +30,7 @@ import {
   setNoteImportanceAction,
   startNoteThreadAction,
 } from '../app/[locale]/notes-actions';
+import { requestMessageLocale } from '../server/message-locale';
 
 /**
  * CONTEXTUAL COLLABORATION, RENDERED WHERE THE WORK IS (P6-05).
@@ -74,7 +75,7 @@ export async function NotesPanel({
   /** A deep link's target thread, drawn highlighted (D-281). */
   readonly highlightThreadId?: string | null | undefined;
 }) {
-  const t = translator(locale);
+  const t = translator(requestMessageLocale(locale));
 
   /*
    * A PANEL THAT CANNOT READ ITS THREADS RENDERS NOTHING AT ALL.
@@ -220,7 +221,7 @@ async function NoteThread({
    */
   readonly mayManage: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(requestMessageLocale(locale));
   const threadId = thread.id;
   const status = thread.status;
   const now = systemClock.now();
@@ -551,7 +552,7 @@ function MentionPicker({
   readonly members: readonly { readonly userId: string; readonly name: string }[];
   readonly id: string;
 }) {
-  const t = translator(locale);
+  const t = translator(requestMessageLocale(locale));
   if (members.length === 0) return null;
   return (
     <div style={{ display: 'grid', gap: spacingTokens['3xs'] }}>

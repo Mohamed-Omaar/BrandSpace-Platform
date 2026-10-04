@@ -30,8 +30,8 @@ export default async function DeletionPendingPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
-  const { workspace } = await pendingDeletionSession(locale);
+  const { workspace, messageLocale } = await pendingDeletionSession(locale);
+  const t = translator(messageLocale);
   const mayCancel = holdsPermission(workspace, 'workspace.delete');
   const format = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
     dateStyle: 'long',

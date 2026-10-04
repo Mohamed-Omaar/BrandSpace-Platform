@@ -1,5 +1,6 @@
 import { LinkTabs } from '@brandspace/ui';
 import { translator } from '../i18n/messages';
+import { requestMessageLocale } from '../server/message-locale';
 
 /**
  * BILLING & USAGE — ONE SETTINGS SECTION, TWO TABS (Phase 6 final, D-277
@@ -17,7 +18,7 @@ export function BillingTabs({
   readonly locale: string;
   readonly current: 'billing' | 'usage';
 }) {
-  const t = translator(locale);
+  const t = translator(requestMessageLocale(locale));
   return (
     <LinkTabs
       label={t('nav.billing')}

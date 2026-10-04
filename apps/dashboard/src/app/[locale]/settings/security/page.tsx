@@ -66,8 +66,8 @@ export default async function SecuritySettingsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale);
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale);
+  const t = translator(messageLocale);
 
   const policy = await withoutTenantContext(
     async (db) => new TenantOnboardingPolicySource(db, currentEnvironment()).load(),

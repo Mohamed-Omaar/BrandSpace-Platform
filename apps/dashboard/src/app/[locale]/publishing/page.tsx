@@ -110,8 +110,9 @@ export default async function PublishingPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/publishing');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const session = access.session;
   const { workspace } = session;
@@ -276,12 +277,12 @@ export default async function PublishingPage({
     timeZone: 'UTC',
   });
   const providerLabel = (provider: string): string =>
-    optionalMessage(locale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
+    optionalMessage(messageLocale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
   const failureText = (failureClass: string | null, failureCode: string | null): string | null =>
     failureClass === null
       ? null
-      : ((failureCode ? optionalMessage(locale, `publishing.code.${failureCode}`) : null) ??
-        optionalMessage(locale, `publishing.failure.${failureClass.toLowerCase()}`) ??
+      : ((failureCode ? optionalMessage(messageLocale, `publishing.code.${failureCode}`) : null) ??
+        optionalMessage(messageLocale, `publishing.failure.${failureClass.toLowerCase()}`) ??
         t('publishing.failure.unknown'));
 
   const count = (statuses: readonly string[]) =>

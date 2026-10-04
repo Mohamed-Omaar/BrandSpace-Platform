@@ -31,12 +31,12 @@ import { mediaForVariants } from '../../../server/media-picker';
 import { GAP_WEEKS, emptyWeekdays, gapWindow, weekdayName } from '../../../server/calendar-gaps';
 import { copilotHref } from '../../../server/copilot-surface';
 import {
-  messages,
   optionalMessage,
   statusMessage,
   translator,
   type MessageKey,
   successFlash,
+  dictionaryFor as messagesFor,
 } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { CalendarView, type SchedulableDraft, type SlotDetail } from './calendar-view';
@@ -151,8 +151,9 @@ export default async function CalendarPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const translate = translator(locale);
   const access = await requireWorkspacePage(locale, '/calendar');
+  const { messageLocale } = access.session;
+  const translate = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
 
@@ -697,7 +698,7 @@ export default async function CalendarPage({
     month: 'long',
   }).format(new Date(firstOfMonthUtc));
 
-  const t = dictionaryFor(translate, locale);
+  const t = dictionaryFor(translate, messageLocale);
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
   const reference = single('ref');
@@ -794,7 +795,7 @@ export default async function CalendarPage({
           campaigns: [...campaignNames].map(([id, name]) => ({ id, name })),
           platforms: platformKeys.map((key) => ({
             key,
-            label: optionalMessage(locale, `content.platform.${key}`) ?? key,
+            label: optionalMessage(messageLocale, `content.platform.${key}`) ?? key,
           })),
           statuses: FILTER_STATUSES.map((status) => ({
             key: status,
@@ -956,7 +957,7 @@ function dictionaryFor(
    * The calendar's own words, plus what the post drawer's preview reads
    * (D-290) — status, platform, format and preview labels, nothing more.
    */
-  const all = messages[locale === 'ar' ? 'ar' : 'en'] as Record<string, string>;
+  const all = messagesFor(locale) as Record<string, string>;
   const preview = Object.fromEntries(
     Object.entries(all).filter(
       ([key]) =>

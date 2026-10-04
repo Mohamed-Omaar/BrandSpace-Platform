@@ -1,18 +1,19 @@
 import type { MessageKey } from './messages';
 
 /**
- * EGYPTIAN ARABIC — COLLECTED, NOT WIRED (owner decision D-468, 2026-10-02).
+ * EGYPTIAN ARABIC — the interface Arabic of an Egyptian workspace (D-468, D-470).
  *
  * The interface Arabic follows the workspace's country: Egypt gets the
  * prototype's Egyptian Arabic, every other country the product's formal Arabic
- * (`messages.ar`) until its own dialect is written. Until the owner approves
- * wiring that layer, `ar` stays formal Arabic and NOTHING READS THIS FILE.
+ * (`messages.ar`) until its own dialect is written. `messages.ts` lays this file
+ * over `ar` key by key (`dictionaryFor('ar-EG')`), so a key absent here falls
+ * back to the formal string. Nothing else reads it.
  *
  * WHAT IS HERE: every Arabic string of `prototype-2026-09-27` that differs from
  * the formal one the product ships for the same key, written exactly as the
- * prototype writes it — same keys, so the layer can be laid over `ar` key by key
- * with formal Arabic as the fallback. A key absent here means the prototype's
- * Arabic and the formal Arabic agree, or the prototype has no string for it.
+ * prototype writes it — same keys, same placeholders. A key absent here means
+ * the prototype's Arabic and the formal Arabic agree, or the prototype has no
+ * string for it.
  *
  * Collected screen by screen as each batch is ported; the batch that added an
  * entry is named in the comment above its group.

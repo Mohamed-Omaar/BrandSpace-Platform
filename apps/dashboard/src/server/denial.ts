@@ -6,6 +6,7 @@ import {
   toPublicErrorCode,
 } from '@brandspace/shared';
 import { optionalMessage } from '../i18n/messages';
+import { requestMessageLocale } from './message-locale';
 
 /**
  * DENIAL MESSAGES (A5, E6) — one place that turns "the role does not hold X"
@@ -74,9 +75,11 @@ export function denialText(
   locale: string,
   input: { permissionKey: string; memberName: string; ownerName: string },
 ): DenialText {
-  const m = (key: string) => optionalMessage(locale, key) ?? '';
+  // D-470: the words of this request — Egyptian Arabic in an Egyptian workspace.
+  const words = requestMessageLocale(locale);
+  const m = (key: string) => optionalMessage(words, key) ?? '';
   const permission =
-    optionalMessage(locale, `perms.desc.${input.permissionKey}`) ?? m('perms.denied.thisAction');
+    optionalMessage(words, `perms.desc.${input.permissionKey}`) ?? m('perms.denied.thisAction');
   const ownerOnly = isOwnerOnlyPermission(input.permissionKey);
   const body = ownerOnly
     ? fill(m('perms.denied.ownerOnly'), { permission })

@@ -5,6 +5,7 @@ import { Button, CONTROL_CLASS, Dialog, colorTokens, typographyTokens } from '@b
 import { translator } from '../../../i18n/messages';
 import type { CandidateData } from './brand-brain-view';
 import { acceptConfidentCandidatesAction, reviewCandidateAction } from './actions';
+import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /**
  * D4 + C1 (Phase 2C) — THE ONE REVIEW INBOX.
@@ -61,7 +62,7 @@ export function ReviewInbox({
   canEdit: boolean;
   onEditFact: (area: string) => void;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const [index, setIndex] = useState(() =>
     Math.max(
       0,

@@ -22,6 +22,7 @@ import {
   saveBrandTypographyAction,
   uploadBrandLogoAction,
 } from './look-actions';
+import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /**
  * PHASE 2C-2 (item 3) — LOOK & VOICE: COLOURS, LOGO AND FONTS.
@@ -127,7 +128,7 @@ export function LookCard({
   canManage: boolean;
   canUpload: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   return (
     <div className="bb-source" data-testid="look-card" style={{ display: 'grid', gap: 20 }}>
       <div className="bb-source-head">
@@ -177,7 +178,7 @@ function Colours({
   palette: readonly string[];
   canManage: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const [colours, setColours] = useState<string[]>([...palette]);
   const headingId = useId();
 
@@ -296,7 +297,7 @@ function Logo({
   canManage: boolean;
   canUpload: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const headingId = useId();
   const fileId = useId();
   const pickId = useId();
@@ -389,7 +390,7 @@ function Slots({
   look: LookViewData;
   canManage: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const headingId = useId();
   const [chosen, setChosen] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -498,7 +499,7 @@ function FontManager({
   canManage: boolean;
   canUpload: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const headingId = useId();
   if (!canManage) return null;
   return (
@@ -536,7 +537,7 @@ function LanguageFonts({
   look: LookViewData;
   canUpload: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const fileId = useId();
   const nameId = useId();
   const fonts = look.fonts.filter((font) => font.language === language);
@@ -627,7 +628,7 @@ function FontRow({
   accept: string;
   canUpload: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const [confirming, setConfirming] = useState(false);
   const renameId = useId();
   const replaceId = useId();

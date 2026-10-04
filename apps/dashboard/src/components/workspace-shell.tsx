@@ -39,6 +39,8 @@ import { businessSwitcherModel } from '../server/business-switcher';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
 import { signOutAction, switchWorkspaceAction } from '../app/[locale]/(auth)/actions';
+import { requestMessageLocale } from '../server/message-locale';
+import { MessageLocaleProvider } from '../i18n/message-locale-context';
 
 /**
  * The authenticated customer shell — PORTED FROM `prototype-2026-09-27` (D-468).
@@ -387,7 +389,9 @@ export async function WorkspaceShell({
   flash?: { readonly tone: 'success'; readonly message: string } | undefined;
   children: ReactNode;
 }) {
-  const t = translator(locale);
+  // D-470: the words this member reads — `ar-EG` in an Egyptian workspace.
+  const words = requestMessageLocale(locale);
+  const t = translator(words);
   const other = locale === 'ar' ? 'en' : 'ar';
   /*
    * Each language by its own name and its code, the same in either interface
@@ -712,7 +716,7 @@ export async function WorkspaceShell({
         brand={drawerBrand}
         surface={copilotSurfaceForPath(requestPath)}
         subject={drawerSubject}
-        labels={copilotLabels(locale, identity)}
+        labels={copilotLabels(words, identity)}
         rateMetricKeys={RATE_METRIC_KEYS}
         strings={{
           openFull: t('copilot.openFull'),
@@ -801,42 +805,45 @@ export async function WorkspaceShell({
   );
 
   return (
-    <CustomerShell
-      // The logotype, drawn in Latin in both languages as the prototype and the
-      // brand mark's own title do — the brand's name, not copy to translate.
-      wordmark="BrandSpace"
-      sections={sections}
-      labels={{
-        primaryNavigation: t('nav.primary'),
-        openNavigation: t('nav.open'),
-        closeNavigation: t('nav.close'),
-        collapseSidebar: t('nav.collapseMenu'),
-        expandSidebar: t('nav.expandMenu'),
-      }}
-      brandCard={brandCard}
-      profile={profile}
-      pageEyebrow={t('page.eyebrow')}
-      pageTitle={heading}
-      pageDescription={description}
-      pageMeta={meta}
-      actions={headerActions}
-      fab={fab}
-    >
-      {hero ?? null}
-      {actions ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>{actions}</div>
-      ) : null}
-      <div className="bs-section-stack">{children}</div>
-      {/* `useSearchParams` in the host needs a boundary on a prerendered route. */}
-      <Suspense fallback={null}>
-        <ToastHost
-          flash={flash}
-          dismissLabel={t('toast.dismiss')}
-          incoming={await incomingMentions(locale)}
-          openLabel={t('notifications.incoming.open')}
-        />
-      </Suspense>
-    </CustomerShell>
+    <MessageLocaleProvider value={words}>
+      <CustomerShell
+        contentLang={words !== locale ? words : undefined}
+        // The logotype, drawn in Latin in both languages as the prototype and the
+        // brand mark's own title do — the brand's name, not copy to translate.
+        wordmark="BrandSpace"
+        sections={sections}
+        labels={{
+          primaryNavigation: t('nav.primary'),
+          openNavigation: t('nav.open'),
+          closeNavigation: t('nav.close'),
+          collapseSidebar: t('nav.collapseMenu'),
+          expandSidebar: t('nav.expandMenu'),
+        }}
+        brandCard={brandCard}
+        profile={profile}
+        pageEyebrow={t('page.eyebrow')}
+        pageTitle={heading}
+        pageDescription={description}
+        pageMeta={meta}
+        actions={headerActions}
+        fab={fab}
+      >
+        {hero ?? null}
+        {actions ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>{actions}</div>
+        ) : null}
+        <div className="bs-section-stack">{children}</div>
+        {/* `useSearchParams` in the host needs a boundary on a prerendered route. */}
+        <Suspense fallback={null}>
+          <ToastHost
+            flash={flash}
+            dismissLabel={t('toast.dismiss')}
+            incoming={await incomingMentions(locale)}
+            openLabel={t('notifications.incoming.open')}
+          />
+        </Suspense>
+      </CustomerShell>
+    </MessageLocaleProvider>
   );
 }
 

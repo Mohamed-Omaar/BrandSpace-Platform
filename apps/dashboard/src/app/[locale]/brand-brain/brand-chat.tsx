@@ -13,6 +13,7 @@ import {
   chatUndoRemoveAction,
   type ChatFact,
 } from './chat-actions';
+import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /**
  * Brand Brain chat — the approved demo's panel, with a real backend behind it.
@@ -160,7 +161,7 @@ export function BrandChat({
   onAttach: () => void;
   onAreaDetails: (() => void) | null;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const router = useRouter();
   const localeKey: 'en' | 'ar' = locale === 'ar' ? 'ar' : 'en';
   const areaName = useCallback(

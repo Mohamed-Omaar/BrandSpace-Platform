@@ -69,8 +69,9 @@ export default async function PublishingDefaultsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/settings/publishing');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
   const mayManageTemplates = workspace.permissionKeys.includes('templates.manage');
@@ -104,7 +105,8 @@ export default async function PublishingDefaultsPage({
     return { policy, brands, byBrand };
   });
 
-  const platformLabel = (key: string, labelKey: string) => optionalMessage(locale, labelKey) ?? key;
+  const platformLabel = (key: string, labelKey: string) =>
+    optionalMessage(messageLocale, labelKey) ?? key;
   const platforms = data.policy.platforms.map((platform) => ({
     key: platform.key,
     label: platformLabel(platform.key, platform.labelKey),
