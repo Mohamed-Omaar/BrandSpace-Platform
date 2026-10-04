@@ -1,0 +1,1583 @@
+/*
+ * THE CUSTOMER APPLICATION, PORTED FROM `prototype-2026-09-27` (D-468).
+ *
+ * Source of truth: `docs/visual-reference/prototype-2026-09-27/Main.dc.html`,
+ * its `<style>` block (lines 12–77) and the inline styles of the template it
+ * renders (the shell at lines 79–191, Home at 192–328). Checksums are in that
+ * directory's README and in docs/UI-FIDELITY-CONTRACT.md §3.
+ *
+ * THIS FILE IS A TRANSCRIPTION, NOT A DESIGN. Every value is the prototype's
+ * own, written as the prototype writes it. The prototype's class names are kept
+ * behind a `bsp-` prefix — `.nav` is `.bsp-nav`, `.xcard` is `.bsp-xcard` — so a
+ * reviewer can diff a rule here against its source line by line, and so nothing
+ * collides with the design system's own `.bs-*` classes.
+ *
+ * Why a stylesheet: the prototype depends on `:hover`, `:focus-visible`,
+ * descendant selectors, the collapsed-rail `.sb.min` cascade and reduced-motion
+ * media queries, none of which an inline style can express (the same reason
+ * `content-studio.css` and `brand-brain.css` exist).
+ *
+ * Loaded by the customer dashboard only. The Control Center keeps the design
+ * system's shell; nothing here is reachable from it.
+ *
+ * §1 is the prototype's stylesheet. §2 is the shell's frame, rail and top bar,
+ * transcribed from the template's inline styles. §3 is Home. §4 is the phone
+ * width, which the owner moved to post-launch (D-468 (b)): below 768px the
+ * product keeps its existing drawer and full-window layout. §5 is accessibility
+ * and reduced motion.
+ */
+
+/* ---------------------------------------------------------------- §1 ---- */
+
+/* The prototype's quiet text — menu headings, counts, notes — named once so the
+   application's own markup can reach it without a colour literal.
+
+   ACCESSIBILITY FINDING (D-468: "if the prototype itself fails a rule, list
+   the finding"). The prototype's quiet greys `#8a8a92` (3.43:1 on white) and
+   `#7a7a82` (3.97:1 on the rail) and its amber `#b86e00` (3.99:1) fail WCAG
+   2.2 AA for the small text they set, and the product's axe suites require
+   zero violations. Each is replaced by the prototype's OWN nearest passing
+   colour: its secondary grey `#6a6a72` (5.36:1 on white, 5.00:1 on the rail)
+   and its warning-status ink `#8a6b00` (5.02:1). Listed in
+   docs/UI-FIDELITY-CONTRACT.md §4.3 for the owner to overrule. */
+:root {
+  --bsp-faint: #6a6a72;
+}
+
+/* The rest of the prototype's inline colours that Home's application markup
+   needs, each named once with the prototype's exact value (CLAUDE.md §4.1):
+   secondary text `#55555c`, near-ink `#26262b`, the hairline and chip grey
+   `#f2f2f4`, an empty thumbnail `#e4e4e8`, the "noticed" row `#fbfbfc`, the
+   setup steps done `#f7fbf8` / to do `#fbfaff`, the success tint `#eaf7ef`
+   and ink `#417a59`, the warning ink (`#b86e00` in the prototype, `#8a6b00`
+   here — see the accessibility finding above), and the role hero's
+   `linear-gradient(135deg, #f6f1ff, #fffbe8)`. */
+:root {
+  --bsp-sub: #55555c;
+  --bsp-ink-2: #26262b;
+  --bsp-rule: #f2f2f4;
+  --bsp-chip: #f2f2f4;
+  --bsp-art-empty: #e4e4e8;
+  --bsp-noticed: #fbfbfc;
+  --bsp-setup-done: #f7fbf8;
+  --bsp-setup-todo: #fbfaff;
+  --bsp-ok-tint: #eaf7ef;
+  --bsp-ok-ink: #417a59;
+  --bsp-warn-ink: #8a6b00;
+  --bsp-role-hero: linear-gradient(135deg, #f6f1ff, #fffbe8);
+}
+
+/* The prototype's type steps, exactly as its inline styles write them, named
+   once so application markup reaches them as tokens rather than literals
+   (`--bsp-t-12_5` is 12.5px). The prototype has no rem scale; these are its own
+   values and are used only by the ported customer screens. */
+:root {
+  --bsp-t-10: 10px;
+  --bsp-t-11: 11px;
+  --bsp-t-12: 12px;
+  --bsp-t-12_5: 12.5px;
+  --bsp-t-13: 13px;
+  --bsp-t-13_5: 13.5px;
+  --bsp-t-14: 14px;
+  --bsp-t-14_5: 14.5px;
+  --bsp-t-15: 15px;
+  --bsp-t-16: 16px;
+  --bsp-t-18: 18px;
+  --bsp-t-22: 22px;
+}
+
+/* `*{scrollbar-width:thin;scrollbar-color:rgba(20,16,35,.2) transparent}` and
+   the WebKit pseudo-elements beside it. Scoped to the customer frame so the
+   design system's UI-1 rule keeps applying everywhere else. */
+.bsp-frame *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.bsp-frame *::-webkit-scrollbar-track {
+  background: transparent;
+}
+.bsp-frame *::-webkit-scrollbar-thumb {
+  background-color: rgba(20, 16, 35, 0.16);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+.bsp-frame *::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(20, 16, 35, 0.3);
+}
+.bsp-frame *::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+.bsp-frame *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* `button{font:inherit;cursor:pointer;color:inherit}` — scoped with :where()
+   so it keeps the prototype's own specificity (0,0,1) and every class (`.btn`,
+   `.nav`, `.xcard`) still wins over it, as it does there. */
+:where(.bsp-frame) button {
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+}
+
+:where(.bsp-frame) button:focus-visible,
+:where(.bsp-frame) a:focus-visible,
+:where(.bsp-frame) textarea:focus-visible,
+:where(.bsp-frame) input:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+
+/* `.nav` */
+.bsp-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  inline-size: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: normal;
+  text-align: start;
+  text-decoration: none;
+  min-block-size: 38px;
+  box-sizing: border-box;
+  background: transparent;
+  color: #26262b;
+  position: relative;
+  z-index: 1;
+  transition:
+    background-color 0.18s ease,
+    color 0.26s ease,
+    box-shadow 0.26s ease,
+    scale 0.12s ease;
+}
+.bsp-nav:hover {
+  background: #ececef;
+}
+.bsp-nav[aria-current='page'] {
+  background: #111114;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(17, 17, 20, 0.18);
+}
+.bsp-nav svg {
+  flex-shrink: 0;
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bsp-nav:hover svg {
+  transform: scale(1.06);
+}
+
+/* `.navInd` — the one dark pill that glides to the current item (MO2). */
+.bsp-nav-ind {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  border-radius: 12px;
+  background: #111114;
+  box-shadow: 0 8px 18px rgba(17, 17, 20, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+  transition:
+    transform 0.44s cubic-bezier(0.16, 1, 0.3, 1),
+    width 0.44s cubic-bezier(0.16, 1, 0.3, 1),
+    height 0.44s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.2s ease;
+}
+.bsp-sbnav[data-ind] > .bsp-nav-ind {
+  opacity: 1;
+}
+.bsp-sbnav[data-ind] .bsp-nav[aria-current='page'],
+.bsp-sbnav[data-ind] .bsp-nav[aria-current='page']:hover {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* `.grp` */
+.bsp-grp {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: normal;
+  color: #6a6a72; /* prototype #7a7a82: see the accessibility finding at the top */
+  padding: 16px 12px 6px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+/* `.cnt`, and the four counts the rail draws. */
+.bsp-cnt {
+  margin-inline-start: auto;
+  min-inline-size: 20px;
+  block-size: 20px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  padding: 0 6px;
+  box-sizing: border-box;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+.bsp-cnt[data-tone='ink'] {
+  background: #111114;
+  color: #fff;
+}
+.bsp-cnt[data-tone='bad'] {
+  background: #fdecef;
+  color: #b83245;
+}
+/* `.ncount` — the unread-notes count. */
+.bsp-cnt[data-tone='brand'] {
+  background: #7935fe;
+  color: #fff;
+}
+/* The team size: plain text, no chip. */
+.bsp-cnt[data-tone='quiet'] {
+  background: transparent;
+  color: #6a6a72; /* prototype #8a8a92: see the accessibility finding at the top */
+  font-weight: 400;
+  padding: 0;
+  min-inline-size: 0;
+}
+.bsp-nav[aria-current='page'] .bsp-cnt[data-tone='quiet'] {
+  color: #fff;
+}
+
+/* `.ibtn` */
+.bsp-ibtn {
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: 12px;
+  border: 0;
+  background: #f2f2f4;
+  display: grid;
+  place-items: center;
+  position: relative;
+  color: #111114;
+  text-decoration: none;
+  padding: 0;
+  box-sizing: border-box;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.2s ease,
+    translate 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    scale 0.12s ease;
+}
+.bsp-ibtn:hover {
+  background: #e8e8ec;
+}
+/* The current page's own control, when the top bar is on it. */
+.bsp-ibtn[aria-current='page'] {
+  background: #111114;
+  color: #fff;
+}
+
+/* `.btn` and its variants */
+.bsp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: normal;
+  background: #111114;
+  color: #fff;
+  white-space: nowrap;
+  min-block-size: 40px;
+  box-sizing: border-box;
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.2s ease,
+    translate 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    scale 0.12s ease;
+}
+.bsp-btn:hover {
+  background: #2a2a30;
+}
+.bsp-btn.bsp-pur {
+  background: #7935fe;
+}
+.bsp-btn.bsp-pur:hover {
+  background: #6528e0;
+}
+.bsp-btn.bsp-sec {
+  background: #f2f2f4;
+  color: #111114;
+}
+.bsp-btn.bsp-sec:hover {
+  background: #e6e6ea;
+}
+.bsp-btn.bsp-ghost {
+  background: transparent;
+  color: #111114;
+}
+.bsp-btn.bsp-ghost:hover {
+  background: #f2f2f4;
+}
+.bsp-btn.bsp-sm {
+  padding: 6px 12px;
+  font-size: 12.5px;
+  min-block-size: 32px;
+  border-radius: 10px;
+}
+.bsp-btn[disabled],
+.bsp-btn[aria-disabled='true'] {
+  background: #ececef;
+  color: #9a9aa2;
+  cursor: not-allowed;
+}
+
+/* `.card` */
+.bsp-card {
+  background: #fff;
+  border: 1px solid #ececef;
+  border-radius: 22px;
+  box-shadow: 0 10px 30px rgba(20, 16, 35, 0.04);
+}
+
+/* `.pill` and its six tones */
+.bsp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: normal;
+  padding: 3px 9px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.bsp-p-ok {
+  background: #e6f6ee;
+  color: #16794b;
+}
+.bsp-p-info {
+  background: #eaf3ff;
+  color: #175cd3;
+}
+.bsp-p-warn {
+  background: #fff3cc;
+  color: #7a5600;
+}
+.bsp-p-bad {
+  background: #fdecef;
+  color: #b83245;
+}
+.bsp-p-neu {
+  background: #f0f0f2;
+  color: #55555c;
+}
+.bsp-p-ai {
+  background: #f0e9ff;
+  color: #5312c4;
+}
+
+/* `.lbl` */
+.bsp-lbl {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: normal;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6a6a72; /* prototype #7a7a82: see the accessibility finding at the top */
+}
+
+/* `.row` */
+.bsp-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 18px;
+  border-block-end: 1px solid #f0f0f2;
+}
+.bsp-row:last-child {
+  border-block-end: 0;
+}
+
+/* `.ltr` */
+.bsp-ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* `.xgrid`, `.xcard` and the card system beside them */
+.bsp-xgrid {
+  display: grid;
+  gap: 14px;
+}
+.bsp-xcard {
+  border: 0;
+  border-radius: 24px;
+  padding: 22px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgba(20, 16, 35, 0.035);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: start;
+  color: #111114;
+  font: inherit;
+  text-decoration: none;
+  box-sizing: border-box;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+a.bsp-xcard,
+button.bsp-xcard {
+  cursor: pointer;
+}
+a.bsp-xcard:hover,
+button.bsp-xcard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 9px 24px rgba(20, 16, 35, 0.055);
+}
+.bsp-xicon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: #f2edff;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  color: #111114;
+  flex-shrink: 0;
+}
+.bsp-xtitle {
+  margin: 17px 0 7px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.25;
+}
+.bsp-xtitle.bsp-sm {
+  font-size: 15px;
+  letter-spacing: 0;
+  margin: 14px 0 6px;
+}
+.bsp-xdesc {
+  margin: 0;
+  color: #6a6a72;
+  font-size: 11px;
+  line-height: 1.6;
+}
+[lang='ar'] .bsp-xdesc {
+  font-size: 12px;
+}
+.bsp-xfoot {
+  margin-top: auto;
+  padding-top: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.bsp-xstatus {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 6px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+  background: #eaf7ef;
+  color: #417a59;
+}
+.bsp-xstatus.bsp-warn {
+  background: #fff5c8;
+  color: #8a6b00;
+}
+.bsp-xstatus.bsp-neu {
+  background: #f0f0f2;
+  color: #55555c;
+}
+.bsp-xstatus.bsp-ai {
+  background: #f2edff;
+  color: #5f23da;
+}
+.bsp-xstatus.bsp-bad {
+  background: #fdecef;
+  color: #b83245;
+}
+.bsp-xstatus.bsp-info {
+  background: #eaf3ff;
+  color: #175cd3;
+}
+[lang='ar'] .bsp-xstatus {
+  font-size: 10.5px;
+}
+.bsp-xnum {
+  font-size: 30px;
+  line-height: 34px;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+.bsp-sech {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.4;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+/* `.uprow:hover` */
+.bsp-uprow:hover {
+  background: #fafafb !important;
+}
+
+/* The glass menus (`.bmenu`, `.umenu`, the Create menu): `[role="menu"]`
+   enters with `bsPop`, `.umenu` rises with `bsPopUp`. */
+@keyframes bsp-pop {
+  from {
+    opacity: 0;
+    scale: 0.97;
+    translate: 0 -4px;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+  }
+}
+@keyframes bsp-pop-up {
+  from {
+    opacity: 0;
+    scale: 0.97;
+    translate: 0 4px;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    translate: 0 0;
+  }
+}
+.bsp-menu {
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 16px;
+  box-shadow:
+    0 22px 55px rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.05);
+  padding: 6px;
+  /* <div role="menu"> in the prototype, which has no box-sizing reset: the
+     inline width is the content box (240px renders 254px wide). */
+  box-sizing: content-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: bsp-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top center;
+}
+.bsp-menu.bsp-rise {
+  animation-name: bsp-pop-up;
+  transform-origin: bottom center;
+}
+.bsp-menu-item {
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: start;
+  font-size: 13px;
+  line-height: normal;
+  color: #111114;
+  text-decoration: none;
+  cursor: pointer;
+  inline-size: 100%;
+  box-sizing: border-box;
+}
+.bsp-menu-item:hover {
+  background: rgba(20, 16, 35, 0.04);
+}
+/* Sign out: `border-top: 1px solid #f0f0f2; margin-top: 4px; padding: 10px;
+   font-weight: 600; color: #b83245`. */
+.bsp-sign-out {
+  border-top: 1px solid #f0f0f2;
+  margin-top: 4px;
+  border-radius: 10px;
+  padding: 10px;
+  font-weight: 600;
+  color: #b83245;
+}
+.bsp-menu-head {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #6a6a72; /* prototype #8a8a92: see the accessibility finding at the top */
+  padding: 6px 10px 2px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------- §2 ---- */
+
+/*
+ * The frame: `<div style="padding: 20px; background: #f3f3f3">` holding a grid
+ * `grid-template-columns: {sbW} minmax(0, 1fr); transition: grid-template-columns
+ * .38s cubic-bezier(.16,1,.3,1); background: rgba(255,255,255,.93);
+ * backdrop-filter: blur(30px); border-radius: 34px; overflow: hidden;
+ * box-shadow: 0 24px 70px rgba(20,16,35,.1)`. `sbW` is 250px, 76px collapsed.
+ * The ambient layer behind it is the platform's own (`ambient.tsx`), which the
+ * prototype's canvas redraws.
+ */
+/* `position: relative; z-index: 1` — the frame sits above the ambient layer
+   (which is `z-index: -1`) in its own stacking order, as in the prototype; at
+   every width, so the phone's full-window shell stacks the same way. */
+.bs-shell.bsp-frame {
+  position: relative;
+  z-index: 1;
+}
+
+@media (min-width: 768px) {
+  .bs-shell.bsp-frame {
+    grid-template-columns: var(--bs-shell-sidebar-width, 250px) minmax(0, 1fr);
+    /* The prototype is a 1440px artboard; wider than that it draws nothing,
+       so the product's own ceiling (1540px, centred) still applies. */
+    inline-size: min(var(--bs-shell-max-width), calc(100% - 40px));
+    block-size: calc(100vh - 40px);
+    min-block-size: 0;
+    margin: 20px auto;
+    background: rgba(255, 255, 255, 0.93);
+    -webkit-backdrop-filter: blur(30px);
+    backdrop-filter: blur(30px);
+    border-radius: 34px;
+    overflow: hidden;
+    box-shadow: 0 24px 70px rgba(20, 16, 35, 0.1);
+  }
+  [data-sidebar-motion] .bs-shell.bsp-frame {
+    transition: grid-template-columns 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* `<aside class="sb" style="display: grid; grid-template-rows: auto
+     minmax(0, 1fr) auto; background: rgba(248,248,249,.7);
+     border-inline-end: 1px solid rgba(20,16,35,.05); min-height: 0">` */
+  .bs-shell.bsp-frame > .bs-sidebar.bsp-sb {
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    background: rgba(248, 248, 249, 0.7);
+    border-inline-end: 1px solid rgba(20, 16, 35, 0.05);
+    min-block-size: 0;
+    block-size: auto;
+    position: relative;
+    inset-block-start: auto;
+    z-index: 6;
+    padding: 0;
+    gap: 0;
+    min-inline-size: 0;
+  }
+
+  /* `<div style="display: grid; grid-template-rows: auto minmax(0, 1fr);
+     min-width: 0; min-height: 0; position: relative">` */
+  .bs-shell.bsp-frame > .bs-panel.bsp-main {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-inline-size: 0;
+    min-block-size: 0;
+    block-size: auto;
+    position: relative;
+    overflow: visible;
+  }
+
+  /* `<main style="overflow: auto; min-height: 0; position: relative">` */
+  .bsp-scroll {
+    overflow: auto;
+    min-block-size: 0;
+    position: relative;
+  }
+}
+
+/* The rail's top block: `display: flex; flex-direction: column; gap: 16px;
+   padding: 22px 16px 6px`, its logo row `gap: 10px`. */
+.bsp-sb-top {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 16px 6px;
+  min-inline-size: 0;
+}
+.bsp-sb-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-inline-size: 0;
+}
+.bsp-sb-logo-mark {
+  width: 34px;
+  height: 34px;
+  display: block;
+  flex: none;
+}
+.bsp-sb-wordmark {
+  font-weight: 800;
+  font-size: 18px;
+  font-family: Inter, sans-serif;
+  flex-grow: 1;
+  color: #111114;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* `.ibtn.sbt` at 34px. */
+.bsp-sbt {
+  inline-size: 34px;
+  block-size: 34px;
+  background: #f2f2f4;
+  flex-shrink: 0;
+}
+.bsp-sbt svg {
+  transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* `<nav style="overflow: auto; padding: 8px 12px; display: flex;
+   flex-direction: column; gap: 2px; min-height: 0; position: relative">` */
+.bsp-sbnav {
+  overflow: auto;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-block-size: 0;
+  position: relative;
+}
+
+/* `<div style="padding: 8px 14px 16px; display: flex; flex-direction: column;
+   gap: 8px">` */
+.bsp-sb-foot {
+  padding: 8px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-inline-size: 0;
+}
+
+/* `.bcard`: `display: flex; align-items: center; gap: 12px; width: 100%;
+   background: #fff; border: 1px solid #ececef; border-radius: 16px;
+   padding: 10px 12px; box-shadow: 0 6px 16px rgba(20,16,35,.04)` */
+.bsp-bcard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  inline-size: 100%;
+  background: #fff;
+  border: 1px solid #ececef;
+  border-radius: 16px;
+  padding: 10px 12px;
+  text-align: start;
+  box-shadow: 0 6px 16px rgba(20, 16, 35, 0.04);
+  cursor: pointer;
+  color: #111114;
+  text-decoration: none;
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+.bsp-bcard-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #fff1c2 0%, #fde8ec 55%, #ece6ff 100%);
+  color: #1d1a12;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.bsp-bcard-copy {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-inline-size: 0;
+}
+.bsp-bcard-name {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: normal;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.bsp-bcard-caption {
+  font-size: 12px;
+  line-height: normal;
+  color: #6a6a72;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* `.ucard`: `gap: 10px; background: #fff; border: 1px solid #ececef;
+   border-radius: 16px; padding: 10px 12px` */
+.bsp-ucard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  inline-size: 100%;
+  background: #fff;
+  border: 1px solid #ececef;
+  border-radius: 16px;
+  padding: 10px 12px;
+  text-align: start;
+  cursor: pointer;
+  color: #111114;
+  box-sizing: border-box;
+  min-inline-size: 0;
+}
+.bsp-ucard-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: #7935fe;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.bsp-ucard-copy {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-inline-size: 0;
+}
+.bsp-ucard-name {
+  font-size: 13.5px;
+  font-weight: 800;
+  line-height: normal;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.bsp-ucard-role {
+  font-size: 11.5px;
+  line-height: normal;
+  color: #6a6a72;
+}
+.bsp-ucard-more {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  color: #6a6a72;
+  flex-shrink: 0;
+}
+
+/* The collapsed rail — `.sb.min`, transcribed. */
+.bsp-sb.bsp-min .bsp-nl {
+  display: none !important;
+}
+.bsp-sb.bsp-min .bsp-sbnav {
+  padding: 6px 0 !important;
+  align-items: center;
+  scrollbar-width: none;
+}
+.bsp-sb.bsp-min .bsp-sbnav::-webkit-scrollbar {
+  display: none;
+}
+.bsp-sb.bsp-min > .bsp-sb-foot {
+  padding: 8px 0 16px !important;
+  border-top: 1px solid #ececef;
+}
+.bsp-sb.bsp-min .bsp-ucard {
+  width: auto !important;
+  margin-inline: auto;
+  justify-content: center;
+  padding: 4px !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+.bsp-sb.bsp-min .bsp-nav {
+  justify-content: center;
+  padding: 0;
+  inline-size: 42px;
+  min-block-size: 38px;
+  block-size: 38px;
+  position: relative;
+  flex-shrink: 0;
+}
+.bsp-sb.bsp-min .bsp-nav .bsp-cnt {
+  position: absolute;
+  top: 1px;
+  inset-inline-end: 1px;
+  min-width: 16px !important;
+  height: 16px !important;
+  font-size: 9.5px !important;
+  padding: 0 4px !important;
+  border-radius: 99px;
+  box-shadow: 0 0 0 2px #f8f8f9;
+  margin: 0 !important;
+}
+.bsp-sb.bsp-min .bsp-nav .bsp-cnt[data-tone='bad'] {
+  background: #d92d45 !important;
+  color: #fff !important;
+}
+.bsp-sb.bsp-min .bsp-nav .bsp-cnt[data-tone='quiet'] {
+  display: none;
+}
+.bsp-sb.bsp-min .bsp-grp {
+  display: block !important;
+  font-size: 0;
+  padding: 0;
+  block-size: 1px;
+  inline-size: 24px;
+  background: #e4e4e8;
+  margin: 5px auto;
+  flex-shrink: 0;
+}
+.bsp-sb.bsp-min .bsp-bcard {
+  justify-content: center;
+  padding: 4px !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+.bsp-sb.bsp-min .bsp-sbt {
+  margin-inline: auto;
+}
+.bsp-sb.bsp-min .bsp-bmenu {
+  top: 0 !important;
+  inset-inline-start: calc(100% + 14px) !important;
+}
+.bsp-sb.bsp-min .bsp-umenu {
+  bottom: 0 !important;
+  inset-inline-start: calc(100% + 14px) !important;
+}
+.bsp-sb.bsp-min > .bsp-sb-top {
+  padding: 20px 0 6px !important;
+  align-items: center;
+  gap: 12px !important;
+}
+.bsp-sb.bsp-min > .bsp-sb-top > div {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.bsp-sb.bsp-min > .bsp-sb-top > .bsp-sb-logo {
+  flex-direction: column;
+}
+
+/* The header: `display: flex; align-items: flex-start; justify-content:
+   space-between; gap: 16px; padding: 26px 32px 12px`. */
+.bs-topbar.bsp-header {
+  position: relative;
+  inset-block-start: auto;
+  z-index: 7;
+  background: transparent;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 26px 32px 12px;
+  min-block-size: 0;
+  flex-wrap: nowrap;
+}
+.bsp-header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+}
+/* `<h1 style="margin: 0; font-size: 28px; font-weight: 800;
+   letter-spacing: {{track}}">`, `track` = -0.02em, and 0 in Arabic. */
+.bsp-h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: normal;
+  letter-spacing: -0.02em;
+  color: #111114;
+}
+[lang='ar'] .bsp-h1 {
+  letter-spacing: 0;
+}
+.bsp-sub {
+  margin: 2px 0 0;
+  max-width: 620px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #55555c;
+}
+.bsp-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  flex-shrink: 0;
+}
+/* The bell's count: `top: 4px; inset-inline-end: 4px; min-width: 16px;
+   height: 16px; padding: 0 4px; border-radius: 99px; background: #7935fe;
+   color: #fff; font-size: 10px; font-weight: 700`. */
+.bsp-ibtn-count {
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 99px;
+  background: #7935fe;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+/* The language square: `font-size: 13px; font-weight: 800`. */
+.bsp-lang {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* The page: `<div style="padding: 10px 32px 40px; display: flex;
+   flex-direction: column; gap: 22px">`. */
+.bsp-page {
+  padding: 10px 32px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* The Create menu: `top: 50px; inset-inline-end: 0; width: 330px;
+   border-radius: 18px; padding: 8px`. */
+.bsp-create-menu {
+  position: absolute;
+  top: 50px;
+  inset-inline-end: 0;
+  z-index: 20;
+  width: 330px;
+  border-radius: 18px;
+  box-shadow:
+    0 24px 60px rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.05);
+  padding: 8px;
+}
+.bsp-create-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: start;
+  color: #111114;
+  text-decoration: none;
+}
+.bsp-create-item:first-child {
+  background: #f6f3ff;
+}
+.bsp-create-item:hover {
+  background: rgba(20, 16, 35, 0.04);
+}
+.bsp-create-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #f2f2f4;
+  color: #111114;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.bsp-create-item:first-child .bsp-create-icon {
+  background: #7935fe;
+  color: #fff;
+}
+.bsp-create-copy {
+  display: flex;
+  flex-direction: column;
+}
+.bsp-create-label {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: normal;
+}
+.bsp-create-sub {
+  font-size: 12px;
+  line-height: normal;
+  color: #6a6a72;
+}
+
+/* The floating Copilot: `.fab` — `bottom: 24px; inset-inline-end: 24px;
+   z-index: 36; height: 48px; padding: 0 18px 0 6px; border-radius: 99px;
+   background: rgba(255,255,255,.62); backdrop-filter: blur(18px)
+   saturate(170%); font-size: 13.5px; font-weight: 700`. */
+.bsp-fab {
+  position: fixed;
+  bottom: 24px;
+  inset-inline-end: 24px;
+  z-index: 36;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 18px 0 6px;
+  padding-inline: 6px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+  color: #111114;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: normal;
+  text-decoration: none;
+  box-shadow:
+    0 10px 30px rgba(83, 18, 196, 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.8) inset;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+@media (min-width: 768px) {
+  /* The Copilot button is `position: absolute; bottom: 24px;
+     inset-inline-end: 24px` INSIDE the prototype's frame. The product keeps it
+     fixed (outside the frame, whose backdrop-filter would otherwise capture the
+     Copilot panel) and offsets it by the frame's own margin, so it lands on the
+     same spot: 24px in from the frame's corner. */
+  .bsp-fab {
+    bottom: 44px;
+    inset-inline-end: calc((100% - min(var(--bs-shell-max-width), calc(100% - 40px))) / 2 + 24px);
+  }
+}
+/* The header slot that holds the Copilot's room on a phone; never drawn wider. */
+.bsp-fab-slot {
+  display: none;
+}
+.bsp-fab-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #9b6bff, #5312c4);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 12px rgba(83, 18, 196, 0.35);
+}
+
+/* `fadeSbLabels`: out over 110 ms ease-out before the rail narrows; in over
+   220 ms ease-out, 150 ms late, after it widens (only after a click). */
+[data-sidebar-state='collapsing'] .bsp-sb .bsp-nl {
+  opacity: 0;
+  transition: opacity 0.11s ease-out;
+}
+[data-sidebar-motion][data-sidebar-state='expanded'] .bsp-sb .bsp-nl {
+  animation: bsp-label-in 0.22s ease-out 0.15s both;
+}
+@keyframes bsp-label-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------------------------------------------------------------- §3 ---- */
+
+/* The hero: `position: relative; overflow: hidden; border-radius: 32px;
+   min-height: 360px; padding: 36px 44px; background: #faf8ff; display: flex;
+   align-items: center`. */
+.bsp-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 32px;
+  min-height: 360px;
+  padding: 36px 44px;
+  background: #faf8ff;
+  display: flex;
+  align-items: center;
+  /* The prototype has no box-sizing reset and this is a <section>, so its
+     360px is the CONTENT box: 432px tall with the padding. */
+  box-sizing: content-box;
+}
+.bsp-hero-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.bsp-hero-copy {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 540px;
+}
+.bsp-hero-brand {
+  background: #fff;
+  color: #111114;
+  align-self: flex-start;
+  padding: 5px 12px;
+  font-size: 12px;
+}
+/* `font-size: 64px; line-height: 1; font-weight: 800; letter-spacing:
+   {{trackHero}}` — -0.045em, and 0 in Arabic. */
+.bsp-hero-greet {
+  margin: 0;
+  font-size: 64px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  color: #111114;
+}
+[lang='ar'] .bsp-hero-greet {
+  letter-spacing: 0;
+}
+.bsp-hero-sub {
+  margin: 0;
+  font-size: 16.5px;
+  line-height: 1.55;
+  color: #4d4c53;
+  max-width: 520px;
+}
+.bsp-hero-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.bsp-hero-actions .bsp-btn {
+  min-block-size: 48px;
+  font-size: 14.5px;
+}
+.bsp-hero-actions .bsp-btn:not(.bsp-ghost) {
+  padding: 12px 20px;
+}
+/* The three floating cards, at the prototype's own geometry. */
+.bsp-float {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(20, 16, 35, 0.1);
+  display: flex;
+  /* <div>s in the prototype, without a reset: each width is the content box
+     (280px + 40px of padding = 320px wide, 270px + 36px = 306px). */
+  box-sizing: content-box;
+}
+.bsp-float-perf {
+  top: 56px;
+  inset-inline-end: 48px;
+  width: 280px;
+  padding: 18px 20px;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-float-next {
+  bottom: 44px;
+  inset-inline-end: 290px;
+  width: 270px;
+  padding: 16px 18px;
+  align-items: center;
+  gap: 12px;
+}
+.bsp-float-title {
+  font-size: 14.5px;
+  font-weight: 800;
+  line-height: normal;
+}
+.bsp-float-line {
+  font-size: 13px;
+  line-height: normal;
+  color: #6a6a72;
+}
+.bsp-float-detail {
+  font-size: 12.5px;
+  line-height: normal;
+  color: #6a6a72;
+}
+.bsp-float-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #f4e3c8, #d9a066 60%, #8a5534);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.bsp-float-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bsp-float-approvals {
+  position: absolute;
+  bottom: 60px;
+  inset-inline-end: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: linear-gradient(145deg, #eee6ff, #fff9d7);
+  color: #111114;
+  border-radius: 20px;
+  padding: 12px 16px;
+  box-shadow: 0 16px 40px rgba(20, 16, 35, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: normal;
+  text-decoration: none;
+}
+.bsp-float-approvals-count {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 99px;
+  background: #7935fe;
+  color: #fff;
+  display: grid;
+  place-items: center;
+}
+
+/* `.kpi` entrance — `bsRise .6s cubic-bezier(.2,.8,.2,1) both`. */
+/* The hero's brand pill: `background: rgba(121,53,254,.12); color: #5f23da;
+   padding: 6px 10px` on a `.pill`. */
+.bsp-ai-pill {
+  background: rgba(121, 53, 254, 0.12);
+  color: #5f23da;
+  padding: 6px 10px;
+}
+
+/* A role Home's greeting (line 308): `font-size: 34px; font-weight: 800;
+   letter-spacing: {{trackBig}}; line-height: 1.1`, `trackBig` 0 in Arabic. */
+.bsp-role-hi {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+[lang='ar'] .bsp-role-hi {
+  letter-spacing: 0;
+}
+
+/* `.kpi{animation:bsRise .6s cubic-bezier(.2,.8,.2,1) both}` — played the way
+   the product plays every entrance (MO1, D-349): on an in-app page change,
+   never on a full page load, where the figures are simply there. */
+[data-page-enter] .bs-page-flow:not([data-entered]) .bsp-kpi {
+  animation: bsp-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes bsp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The setup progress bar and the credits bar: `height: 6px` / `5px`,
+   `background: #efe7ff`, filled `linear-gradient(90deg, #7935fe, #ffd60a)`. */
+.bsp-bar {
+  width: 100%;
+  border-radius: 99px;
+  background: #efe7ff;
+  overflow: hidden;
+}
+.bsp-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #7935fe, #ffd60a);
+}
+
+/* The Copilot card: `border-radius: 26px; padding: 24px; gap: 14px;
+   background: linear-gradient(145deg, #eee6ff, #fff9d7); box-shadow:
+   0 5px 18px rgba(20,16,35,.035)`. */
+.bsp-copilot-card {
+  border-radius: 26px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: linear-gradient(145deg, #eee6ff, #fff9d7);
+  box-shadow: 0 5px 18px rgba(20, 16, 35, 0.035);
+}
+.bsp-copilot-ask {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 17px;
+  padding: 14px 16px;
+  text-align: start;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: normal;
+  color: #26262b;
+  text-decoration: none;
+}
+
+/* ---------------------------------------------------------------- §4 ---- */
+
+/*
+ * NARROWER THAN THE ARTBOARD (D-468 (c): a state the prototype does not draw).
+ * The prototype is a 1440px artboard; its hero needs ~972px for the copy
+ * (44px + 540px) beside the 320px performance card. Below a 1340px window the
+ * floating cards leave their absolute geometry and sit in a row under the
+ * copy, unchanged in size, surface and order; below 1100px the four figures
+ * pair up and the side-by-side rows stack, so nothing is cut off.
+ */
+@media (max-width: 1339.98px) {
+  .bsp-hero {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .bsp-hero-copy {
+    flex-basis: 100%;
+  }
+  .bsp-float,
+  .bsp-float-approvals {
+    position: relative;
+    inset: auto;
+  }
+}
+@media (max-width: 1099.98px) {
+  .bsp-home-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .bsp-home-split,
+  .bsp-home-noticed {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/*
+ * THE PHONE WIDTH (D-468 (b): the phone layout is post-launch). Below 768px
+ * the product keeps the layout it already had — the full window, the drawer
+ * opened from the header, the page scrolling with the window — and only the
+ * prototype's surfaces, sizes and colours apply. The hero's floating cards
+ * leave the absolute geometry, which a 390px screen cannot hold.
+ */
+@media (max-width: 767.98px) {
+  .bs-topbar.bsp-header {
+    padding: 16px 16px 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .bsp-page {
+    padding: 10px 16px 96px;
+  }
+  .bsp-hero {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 28px 22px;
+    gap: 14px;
+  }
+  .bsp-hero-greet {
+    font-size: 40px;
+  }
+  .bsp-float,
+  .bsp-float-approvals {
+    position: relative;
+    inset: auto;
+    width: auto;
+  }
+  .bsp-home-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .bsp-home-split,
+  .bsp-home-noticed {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  /* THE COPILOT IN THE HEADER (D-468 (b)): no floating button on a phone.
+     The control is laid onto the empty slot at the end of the header's action
+     row (`--bsp-fab-x/y`, set by the shell), scrolls with the page, and takes
+     the header controls' own look: 40px high, 12px radius, the `.ibtn` grey. */
+  .bsp-actions {
+    flex-wrap: wrap;
+    flex-shrink: 1;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+  .bsp-fab-slot[data-on] {
+    display: block;
+    block-size: 40px;
+    flex: none;
+  }
+  .bsp-fab {
+    position: absolute;
+    inset: auto;
+    top: var(--bsp-fab-y, 16px);
+    /* Physical, as measured from the slot: correct in both directions. */
+    left: var(--bsp-fab-x, auto);
+    z-index: 2;
+    height: 40px;
+    gap: 8px;
+    padding-inline: 4px 12px;
+    border: 0;
+    border-radius: 12px;
+    background: #f2f2f4;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  .bsp-fab .bsp-fab-mark {
+    width: 32px;
+    height: 32px;
+    box-shadow: none;
+  }
+  /* A header menu or panel that is open stays on top of it. */
+  .bs-ambient-host:has(.bsp-header [aria-expanded='true']) .bsp-fab {
+    visibility: hidden;
+  }
+  /* The hero's cards stack under its copy in one column (never a second). */
+  .bsp-hero {
+    flex-wrap: nowrap;
+  }
+}
+
+/* ---------------------------------------------------------------- §5 ---- */
+
+/* `@media (prefers-reduced-motion: reduce)` — every entry the prototype names. */
+@media (prefers-reduced-motion: reduce) {
+  .bsp-nav,
+  .bsp-nav svg,
+  .bsp-nav-ind,
+  .bsp-btn,
+  .bsp-ibtn,
+  .bsp-xcard,
+  .bsp-sbt svg {
+    transition: none !important;
+  }
+  .bsp-nav:hover svg {
+    transform: none;
+  }
+  .bsp-menu,
+  .bsp-kpi {
+    animation: none !important;
+  }
+  a.bsp-xcard:hover,
+  button.bsp-xcard:hover {
+    transform: none;
+  }
+}

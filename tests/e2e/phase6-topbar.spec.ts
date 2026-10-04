@@ -49,6 +49,19 @@ async function signIn(page: Page, account: Account = 'owner', locale = 'en'): Pr
 
 const topbar = (page: Page) => page.locator('header.bs-topbar');
 
+/**
+ * D-468: Review is the rail's Approvals entry. On a phone the rail is the
+ * navigation drawer (the product's own phone layout, kept by the owner), so it
+ * is opened first and the entry is read inside it.
+ */
+async function approvalsEntry(page: Page, isMobile: boolean | undefined) {
+  if (isMobile) {
+    await page.getByTestId('open-navigation').click();
+    return page.getByTestId('navigation-drawer').getByTestId('nav-approvals');
+  }
+  return page.getByTestId('sidebar').getByTestId('nav-approvals');
+}
+
 /** The number of the last run of digits in a string, or 0. */
 function lastNumber(text: string | null): number {
   const matches = (text ?? '').match(/\d+/g);
@@ -56,33 +69,39 @@ function lastNumber(text: string | null): number {
 }
 
 test.describe('P6-16 · the customer top bar', () => {
-  test('carries Review, Notes, Notifications, Copilot and Create — and no placeholder', async ({
+  test('carries Notes, Notifications and Create; Review is the rail’s Approvals and the Copilot floats — and no placeholder', async ({
     page,
+    isMobile,
   }) => {
     await signIn(page);
     const bar = topbar(page);
     const order = await bar
       .locator('[data-testid^="topbar-"]:not([data-testid$="-dot"]):not([data-testid$="-label"])')
       .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-testid')));
-    expect(order).toEqual([
-      'topbar-review',
-      'topbar-notes',
-      'topbar-notifications',
-      'topbar-copilot',
-      'topbar-create',
-    ]);
+    // D-468: the prototype's bar (Main.dc.html lines 151–167). Review is the
+    // rail's Approvals entry with its count, and the Copilot is the floating
+    // button (line 1483) — both still on every page.
+    expect(order).toEqual(['topbar-notes', 'topbar-notifications', 'topbar-create']);
+    await expect(page.getByTestId('topbar-copilot')).toBeVisible();
+    await expect(await approvalsEntry(page, isMobile)).toBeVisible();
     await expect(page.getByTestId('topbar-search')).toHaveCount(0);
     await expect(page.locator('body')).not.toContainText('Not connected yet');
     await expect(page.locator('body')).not.toContainText('has not shipped');
     await expect(page.getByTestId('topbar-search-panel')).toHaveCount(0);
   });
 
-  test('Review, Notes and Notifications land on their real screens', async ({ page }) => {
+  test('Review (the rail’s Approvals), Notes and Notifications land on their real screens', async ({
+    page,
+    isMobile,
+  }) => {
     await signIn(page);
-    await page.getByTestId('topbar-review').click();
+    await (await approvalsEntry(page, isMobile)).click();
     await page.waitForURL(/\/en\/approvals$/);
     await expect(page.getByTestId('heading')).toHaveText('Approvals');
-    await expect(page.getByTestId('topbar-review')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('sidebar').getByTestId('nav-approvals')).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
 
     await page.getByTestId('topbar-notes').click();
     await page.waitForURL(/\/en\/notes$/);
@@ -188,8 +207,11 @@ test.describe('P6-16 · the customer top bar', () => {
     const notes = page.getByTestId('topbar-notes');
     if (listed > 0) {
       await expect(notes).toHaveAttribute('data-indicator', String(listed));
+      // D-468: the count is drawn on the rail, beside Notes.
+      await expect(page.getByTestId('nav-notes-count')).toHaveText(String(listed));
     } else {
       await expect(page.getByTestId('topbar-notes-dot')).toHaveCount(0);
+      await expect(page.getByTestId('nav-notes-count')).toHaveCount(0);
     }
   });
 
@@ -203,12 +225,8 @@ test.describe('P6-16 · the customer top bar', () => {
     await expect(menu).toBeVisible();
     await expect(create).toHaveAttribute('aria-expanded', 'true');
     const items = menu.getByRole('menuitem');
-    await expect(items).toHaveText([
-      'New content',
-      'New campaign',
-      'AI creative',
-      'Upload to the library',
-    ]);
+    // D-468: the prototype's Create menu — a name and a line under it.
+    await expect(items).toHaveText([/^Post/, /^Campaign/, /^AI image/, /^Upload/]);
 
     // Escape closes and returns focus to the trigger.
     await page.keyboard.press('Escape');
@@ -246,35 +264,41 @@ test.describe('P6-16 · the customer top bar', () => {
     await expect(page.getByTestId('assets-upload-dialog')).toBeVisible();
   });
 
-  test('a read-only member is offered reading, never creating or the Copilot', async ({ page }) => {
+  test('a read-only member is offered reading, never creating or the Copilot', async ({
+    page,
+    isMobile,
+  }) => {
     await signIn(page, 'viewer');
     // Q12 — the Viewer reads content, so Approvals ("Review") and Notes are its to open.
-    for (const key of ['review', 'notes', 'notifications']) {
+    for (const key of ['notes', 'notifications']) {
       await expect(page.getByTestId(`topbar-${key}`), key).toBeVisible();
     }
     for (const key of ['copilot', 'create']) {
       await expect(page.getByTestId(`topbar-${key}`), key).toHaveCount(0);
     }
+    await expect(await approvalsEntry(page, isMobile), 'review').toBeVisible();
   });
 
   test('a copywriter can start only what a copywriter can create', async ({ page }) => {
     await signIn(page, 'copywriter');
     await page.getByTestId('topbar-create').click();
     await expect(page.getByTestId('topbar-create-menu').getByRole('menuitem')).toHaveText([
-      'New content',
+      /^Post/,
     ]);
   });
 
-  test('in Arabic the bar is right-to-left, named in Arabic, and fits', async ({ page }) => {
+  test('in Arabic the bar is right-to-left, named in Arabic, and fits', async ({
+    page,
+    isMobile,
+  }) => {
     await signIn(page, 'owner', 'ar');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-    const names: Record<string, string> = {
-      'topbar-review': 'المراجعة',
-      'topbar-notes': 'الملاحظات',
-    };
-    for (const [testId, name] of Object.entries(names)) {
-      await expect(page.getByTestId(testId)).toHaveAttribute('aria-label', new RegExp(`^${name}`));
+    await expect(await approvalsEntry(page, isMobile)).toHaveAccessibleName(/^الموافقات/);
+    if (isMobile) {
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('navigation-drawer')).toBeHidden();
     }
+    await expect(page.getByTestId('topbar-notes')).toHaveAttribute('aria-label', /^الملاحظات/);
     // D-304 — the Copilot's name is on screen, so it is its accessible name too.
     await expect(page.getByTestId('topbar-copilot')).toHaveAccessibleName(/^المساعد/);
     await expect(page.getByTestId('topbar-copilot-label')).toHaveText('المساعد');
@@ -283,14 +307,17 @@ test.describe('P6-16 · the customer top bar', () => {
       /^الإشعارات/,
     );
 
-    // RTL: Review sits to the RIGHT of Create, the mirror of English.
-    const review = await page.getByTestId('topbar-review').boundingBox();
-    const create = await page.getByTestId('topbar-create').boundingBox();
-    expect(review!.x).toBeGreaterThan(create!.x);
+    // RTL: Review (on the rail) sits to the RIGHT of Create, the mirror of
+    // English. On a phone the rail is the drawer, which is not open here.
+    if (!isMobile) {
+      const review = await page.getByTestId('sidebar').getByTestId('nav-approvals').boundingBox();
+      const create = await page.getByTestId('topbar-create').boundingBox();
+      expect(review!.x).toBeGreaterThan(create!.x);
+    }
 
     await page.getByTestId('topbar-create').click();
     await expect(page.getByTestId('topbar-create-menu').getByRole('menuitem').first()).toHaveText(
-      'محتوى جديد',
+      /^منشور/,
     );
     const overhang = await inlineEndOverhang(page);
     expect(overhang.px, overhang.offender).toBe(0);
@@ -298,13 +325,21 @@ test.describe('P6-16 · the customer top bar', () => {
 
   test('every action is a 24px-or-larger keyboard stop with a visible focus ring', async ({
     page,
+    isMobile,
   }) => {
     await signIn(page);
     // Reached the way a keyboard user reaches them — by Tab — because a
     // programmatic focus() does not raise `:focus-visible` on a link.
-    const wanted = ['review', 'notes', 'notifications', 'copilot', 'create'].map(
-      (key) => `topbar-${key}`,
-    );
+    // D-468: the rail (with Approvals) comes first in the document, then the
+    // bar, then the floating Copilot.
+    const wanted = [
+      // On a phone the rail is the drawer, reached by its own button.
+      ...(isMobile ? [] : ['nav-approvals']),
+      'topbar-notes',
+      'topbar-notifications',
+      'topbar-create',
+      'topbar-copilot',
+    ];
     const seen: string[] = [];
     for (let press = 0; press < 80 && seen.length < wanted.length; press += 1) {
       await page.keyboard.press('Tab');

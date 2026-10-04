@@ -200,8 +200,8 @@ describe('applications hold no colour literals', () => {
     // Both halves matter: a stripper that removed everything would make every
     // `not.toContain` assertion above pass for the wrong reason.
     const shell = readCode('apps/dashboard/src/components/workspace-shell.tsx');
-    expect(shell).toContain('AppShell');
-    expect(shell).not.toContain('Composes `AppShell` from the design system');
+    expect(shell).toContain('CustomerShell');
+    expect(shell).not.toContain('The authenticated customer shell — PORTED FROM');
   });
 });
 

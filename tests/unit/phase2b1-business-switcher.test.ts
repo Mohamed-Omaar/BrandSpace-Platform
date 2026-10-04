@@ -52,8 +52,9 @@ describe('Q1 · what the business switcher offers at its foot', () => {
       'utf8',
     );
     // No usage line and no "+ New workspace" for it; the second line links to the plans page.
+    // D-468: the usage now sits in the menu heading ("Workspaces · 1/2"), computed once.
     expect(shell).toContain(
-      "switcher.foot.kind === 'none' || switcher.foot.kind === 'unavailable' ? null : (",
+      "switcher && switcher.foot.kind !== 'none' && switcher.foot.kind !== 'unavailable'",
     );
     const block = shell.slice(
       shell.indexOf("switcher.foot.kind === 'unavailable' ? ("),

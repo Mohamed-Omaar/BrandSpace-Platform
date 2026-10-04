@@ -332,6 +332,10 @@ export function DropdownMenu({
   trigger = 'control',
   fullWidth = false,
   placement = 'block-end',
+  triggerClassName,
+  affordance,
+  menuClassName,
+  menuStyle,
 }: {
   readonly label: string;
   readonly triggerContent: ReactNode;
@@ -356,6 +360,17 @@ export function DropdownMenu({
   readonly fullWidth?: boolean;
   /** `block-start` opens upward — for a menu pinned to the foot of the rail. */
   readonly placement?: 'block-start' | 'block-end';
+  /**
+   * D-468 — A TRIGGER DRAWN BY A PORTED STYLESHEET. With a class, the trigger
+   * takes its look from that class alone (`prototype.css`) and none of the
+   * presets above; the menu-button behaviour is unchanged.
+   */
+  readonly triggerClassName?: string | undefined;
+  /** Replaces the preset chevron or ellipsis; `null` draws none. */
+  readonly affordance?: ReactNode;
+  /** D-468 — the panel's class and placement, for a ported menu surface. */
+  readonly menuClassName?: string | undefined;
+  readonly menuStyle?: CSSProperties | undefined;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -418,11 +433,12 @@ export function DropdownMenu({
           setOpen(true);
         }}
         className={
-          trigger === 'card'
+          triggerClassName ??
+          (trigger === 'card'
             ? 'bs-pressable'
             : trigger === 'primary'
               ? 'bs-pressable bs-filled-brand'
-              : undefined
+              : undefined)
         }
         /*
          * A CARD TRIGGER IS NAMED EXPLICITLY, because its visible copy can be
@@ -433,58 +449,62 @@ export function DropdownMenu({
          */
         aria-label={trigger === 'card' ? label : undefined}
         style={
-          trigger === 'primary'
-            ? {
-                /* `.primary-button.compact { min-height: 38px; padding: 0 15px;
+          triggerClassName
+            ? undefined
+            : trigger === 'primary'
+              ? {
+                  /* `.primary-button.compact { min-height: 38px; padding: 0 15px;
                    border-radius: 12px; background: var(--purple); color: #fff }`
                    — byte for byte the create button the top bar always drew. */
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: spacingTokens['3xs'],
-                minBlockSize: layoutTokens.iconButton,
-                paddingInline: '0.9375rem',
-                flexShrink: 0,
-                border: 0,
-                borderRadius: radiusTokens.control,
-                background: colorTokens.brandPurple,
-                color: colorTokens.brandPurpleInk,
-                fontFamily: 'inherit',
-                ...typographyTokens.button,
-                cursor: 'pointer',
-              }
-            : trigger === 'card'
-              ? {
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: spacingTokens.sm,
-                  inlineSize: '100%',
-                  minInlineSize: 0,
-                  overflow: 'hidden',
-                  // `.workspace-switcher { padding: 10px; radius: 15px;
-                  //  box-shadow: 0 4px 18px rgba(0,0,0,.035) }`, 54px tall.
-                  padding: layoutTokens.railCardPad,
-                  minBlockSize: '3.625rem',
-                  border: '1px solid transparent',
-                  borderRadius: radiusTokens.rail,
-                  background: colorTokens.surface,
-                  boxShadow: shadowTokens.rail,
-                  color: colorTokens.textPrimary,
+                  gap: spacingTokens['3xs'],
+                  minBlockSize: layoutTokens.iconButton,
+                  paddingInline: '0.9375rem',
+                  flexShrink: 0,
+                  border: 0,
+                  borderRadius: radiusTokens.control,
+                  background: colorTokens.brandPurple,
+                  color: colorTokens.brandPurpleInk,
                   fontFamily: 'inherit',
-                  textAlign: 'start',
+                  ...typographyTokens.button,
                   cursor: 'pointer',
                 }
-              : {
-                  ...buttonStyle('neutral', 'sm'),
-                  gap: spacingTokens.xs,
-                  maxInlineSize: '100%',
-                  inlineSize: fullWidth ? '100%' : undefined,
-                  minInlineSize: 0,
-                  overflow: 'hidden',
-                }
+              : trigger === 'card'
+                ? {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: spacingTokens.sm,
+                    inlineSize: '100%',
+                    minInlineSize: 0,
+                    overflow: 'hidden',
+                    // `.workspace-switcher { padding: 10px; radius: 15px;
+                    //  box-shadow: 0 4px 18px rgba(0,0,0,.035) }`, 54px tall.
+                    padding: layoutTokens.railCardPad,
+                    minBlockSize: '3.625rem',
+                    border: '1px solid transparent',
+                    borderRadius: radiusTokens.rail,
+                    background: colorTokens.surface,
+                    boxShadow: shadowTokens.rail,
+                    color: colorTokens.textPrimary,
+                    fontFamily: 'inherit',
+                    textAlign: 'start',
+                    cursor: 'pointer',
+                  }
+                : {
+                    ...buttonStyle('neutral', 'sm'),
+                    gap: spacingTokens.xs,
+                    maxInlineSize: '100%',
+                    inlineSize: fullWidth ? '100%' : undefined,
+                    minInlineSize: 0,
+                    overflow: 'hidden',
+                  }
         }
       >
         {triggerContent}
-        {trigger === 'primary' ? null : trigger === 'card' && placement === 'block-start' ? (
+        {affordance !== undefined ? (
+          affordance
+        ) : trigger === 'primary' ? null : trigger === 'card' && placement === 'block-start' ? (
           // `.more { color: var(--muted); font-size: 11px }` — the demo's
           // profile affordance is an ellipsis, not a chevron.
           <span
@@ -523,21 +543,28 @@ export function DropdownMenu({
                 : items[(index - 1 + items.length) % items.length];
             next?.focus();
           }}
-          className={`bs-dropdown-menu bs-dropdown-panel bs-pop${placement === 'block-start' ? ' bs-pop-up' : ''}`}
+          className={
+            menuClassName ??
+            `bs-dropdown-menu bs-dropdown-panel bs-pop${placement === 'block-start' ? ' bs-pop-up' : ''}`
+          }
           data-origin={align}
           {...(leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
-          style={{
-            position: 'absolute',
-            insetBlockStart: placement === 'block-end' ? 'calc(100% + 6px)' : undefined,
-            insetBlockEnd: placement === 'block-start' ? 'calc(100% + 6px)' : undefined,
-            insetInlineEnd: align === 'end' ? 0 : undefined,
-            insetInlineStart: align === 'start' ? 0 : undefined,
-            zIndex: zIndexTokens.overlay,
-            minInlineSize: '13rem',
-            maxBlockSize: '18rem',
-            display: 'grid',
-            gap: spacingTokens['3xs'],
-          }}
+          style={
+            menuClassName
+              ? { position: 'absolute', zIndex: zIndexTokens.overlay, ...menuStyle }
+              : {
+                  position: 'absolute',
+                  insetBlockStart: placement === 'block-end' ? 'calc(100% + 6px)' : undefined,
+                  insetBlockEnd: placement === 'block-start' ? 'calc(100% + 6px)' : undefined,
+                  insetInlineEnd: align === 'end' ? 0 : undefined,
+                  insetInlineStart: align === 'start' ? 0 : undefined,
+                  zIndex: zIndexTokens.overlay,
+                  minInlineSize: '13rem',
+                  maxBlockSize: '18rem',
+                  display: 'grid',
+                  gap: spacingTokens['3xs'],
+                }
+          }
         >
           {children}
         </div>

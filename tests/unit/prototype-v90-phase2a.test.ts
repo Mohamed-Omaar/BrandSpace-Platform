@@ -472,8 +472,10 @@ describe('A6 + E7 / Q12 · Home by role, and a member who may only comment', () 
       /\{mayManage \? \(\s*<form action=\{status === 'RESOLVED' \? reopenNoteThreadAction/,
     );
     expect(panel).toMatch(/\{mayManage \? \(\s*<details data-testid=\{`note-options-/);
+    // D-468: the prototype's Home has no notes card, so Home offers no triage at
+    // all; the notes panel above remains the only place it is offered.
     const home = read('apps/dashboard/src/app/[locale]/overview/page.tsx');
-    expect(home).toContain("entry.status === 'OPEN' && mayManageNotes ? (");
+    expect(home).not.toContain('resolveNoteThreadAction');
   });
 
   it('the notes service asks notes.manage for every triage write', () => {
@@ -495,9 +497,12 @@ describe('A6 + E7 / Q12 · Home by role, and a member who may only comment', () 
     );
     expect(home).toContain('requestedByUserId: customer.userId');
     expect(home).toContain('item: { createdByUserId: customer.userId, deletedAt: null }');
-    expect(home).toMatch(/testId="home-feedback"[\s\S]*?href=\{`\/\$\{locale\}\/calendar`\}/);
+    // D-468: the role sections are declared as data for the prototype's cards.
+    expect(home).toMatch(/testId: 'home-feedback'[\s\S]*?href: `\/\$\{locale\}\/calendar`/);
     // A member without analytics is told the figure is hidden, not pending.
-    expect(home).toMatch(/!maySeeAnalytics\s*\?\s*t\('overview\.metric\.hidden'\)/);
+    expect(home).toMatch(
+      /\{maySeeAnalytics \? \([\s\S]*?\) : \([\s\S]*?t\('overview\.metric\.hidden'\)/,
+    );
     for (const key of [
       'home.role.review.title',
       'home.role.drafts.title',

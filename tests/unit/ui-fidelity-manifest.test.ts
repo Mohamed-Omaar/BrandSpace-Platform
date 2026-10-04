@@ -406,3 +406,42 @@ describe('the orb component is a transcription of the snapshot', () => {
     expect(orb).not.toMatch(/backgroundColor|borderRadius|boxShadow/);
   });
 });
+
+/**
+ * D-468 — THE PROTOTYPE IS THE AUTHORITY NOW, AND IT CANNOT DRIFT EITHER.
+ *
+ * The owner supplied `prototype-2026-09-27` directly, so there is no upstream
+ * commit to pin; the four files are vendored byte for byte and these are the
+ * checksums the owner sent with them. Duplicated here on purpose, like the
+ * ones above: a reference edited to agree with an implementation fails here.
+ */
+const PROTOTYPE = path.join(ROOT, 'docs/visual-reference/prototype-2026-09-27');
+
+const PROTOTYPE_PINNED: ReadonlyArray<readonly [string, string]> = [
+  ['Main.dc.html', 'eec2fcc23316aae5483761bf10706bfc7a9ee87130d8e50e5160d848a788c270'],
+  ['Auth.dc.html', '19bf61a9d8141571473c946d5f64f4a075f44295fc241b41ceed6f047b3723ec'],
+  ['Mobile.dc.html', '23be0823637f9723304f4a9e0beb1d5696b26787bd334c6e9c04c0dc55872cfc'],
+  ['support.js', '82ab863dabf94f79db1b4ced13046a03425dcd255e97a5e42c60b6e8035fea34'],
+];
+
+describe('the vendored prototype (D-468)', () => {
+  it.each(PROTOTYPE_PINNED)('prototype-2026-09-27/%s matches its checksum', (file, expected) => {
+    expect(
+      createHash('sha256')
+        .update(readFileSync(path.join(PROTOTYPE, file)))
+        .digest('hex'),
+    ).toBe(expected);
+  });
+
+  it('the contract, the reference README and CLAUDE.md name it as the authority', () => {
+    const contract = readFileSync(path.join(ROOT, 'docs/UI-FIDELITY-CONTRACT.md'), 'utf8');
+    const readme = readFileSync(path.join(ROOT, 'docs/visual-reference/README.md'), 'utf8');
+    for (const [file, checksum] of PROTOTYPE_PINNED) {
+      expect(contract, `${file} checksum missing from the contract`).toContain(checksum);
+      expect(readme, `${file} checksum missing from the README`).toContain(checksum);
+    }
+    expect(contract).toContain('D-468');
+    const guide = readFileSync(path.join(ROOT, 'CLAUDE.md'), 'utf8');
+    expect(guide).toContain('docs/visual-reference/prototype-2026-09-27/');
+  });
+});

@@ -1,5 +1,30 @@
 # The approved visual reference
 
+## `prototype-2026-09-27/` — the BrandSpace design canvas, 2026-09-27
+
+Four files, copied **unchanged** from the archive the owner supplied on 2026-10-02
+(`BrandSpace-prototype-2026-09-27.zip`, SHA-256
+`2718ecd74e4bfc4af943a644884a4753b2f9d98f6d8ac101f8b9bb6b6ec452bd`, folder `prototype-2026-09-27/`).
+The owner confirmed it is the latest prototype.
+
+| File here | SHA-256 |
+| --- | --- |
+| `prototype-2026-09-27/Main.dc.html` | `eec2fcc23316aae5483761bf10706bfc7a9ee87130d8e50e5160d848a788c270` |
+| `prototype-2026-09-27/Auth.dc.html` | `19bf61a9d8141571473c946d5f64f4a075f44295fc241b41ceed6f047b3723ec` |
+| `prototype-2026-09-27/Mobile.dc.html` | `23be0823637f9723304f4a9e0beb1d5696b26787bd334c6e9c04c0dc55872cfc` |
+| `prototype-2026-09-27/support.js` | `82ab863dabf94f79db1b4ced13046a03425dcd255e97a5e42c60b6e8035fea34` |
+
+Verify at any time with `sha256sum docs/visual-reference/prototype-2026-09-27/*`.
+
+- `Main.dc.html` is the customer application, `Auth.dc.html` sign-up, sign-in and setup, and
+  `support.js` the canvas runtime both load. `Mobile.dc.html` is the phone layout, which the owner
+  moved to post-launch; it is kept for reference only.
+- **It is the visual authority for customer screens (owner decision D-468, 2026-10-02)** and
+  replaces `full-demo/` (and `brand-brain-native/`). Everything below about `full-demo/` being the
+  "current" authority is history, kept so earlier decisions stay readable.
+- The rules for this directory below apply unchanged: never edited, formatted, linted, imported,
+  built or served by application code, and never a source of behaviour or data.
+
 `full-demo/` holds the **current** authority for BrandSpace's visual direction:
 a byte-for-byte snapshot of the full product demo, vendored from
 

@@ -72,33 +72,37 @@ describe('P6-04 · every navigation entry is placed exactly once', () => {
     expect(unknown, 'a group names a route NAV does not define').toEqual([]);
   });
 
-  it('carries exactly the thirteen destinations of the final IA (D-277 §3)', () => {
-    // SUPERSEDED BY OWNER DECISION D-277. P6-04 kept all twenty-two entries on
-    // the rail; the owner's final information architecture moves Approvals,
-    // Notes, Notifications, Copilot, Team, Roles & permissions, Activity, Plan,
-    // Billing, Connections and Onboarding OFF it, to the top bar and Settings.
-    // The count still guards against a silent cull — of the NEW list.
+  it('carries exactly the destinations of the prototype rail (D-468)', () => {
+    // SUPERSEDED TWICE. P6-04 kept twenty-two entries; D-277 cut them to
+    // thirteen; D-468 ports the prototype's rail, which puts Approvals, Notes
+    // and Team back on it. The AI Creative Studio and Marketing Intelligence
+    // stay after the prototype's own entries until their prototype homes (Media,
+    // Performance) are ported, so no member loses the way in. The count still
+    // guards against a silent cull — of the CURRENT list.
     expect(navHrefs()).toEqual([
       '/overview',
       '/brand-brain',
       '/strategy',
       '/campaigns',
       '/content',
-      '/creative',
       '/assets',
+      '/creative',
+      '/approvals',
       '/calendar',
       '/publishing',
       '/analytics',
       '/intelligence',
       '/automations',
+      '/notes',
+      '/members',
       '/settings',
     ]);
-    expect(groupedHrefs()).toHaveLength(13);
+    expect(groupedHrefs()).toHaveLength(16);
   });
 });
 
 describe("D-277 · the groups are the owner's, in work order", () => {
-  it('declares Home, the brand, Plan, Create, Publish, Improve, Automate, then Settings', () => {
+  it('declares Home, the brand, Plan, Create, Publish, Improve, Automate, then Workspace (D-468)', () => {
     const table = code(SHELL).slice(
       code(SHELL).indexOf('const NAV_GROUPS'),
       code(SHELL).indexOf('function navSections'),
@@ -114,12 +118,21 @@ describe("D-277 · the groups are the owner's, in work order", () => {
       "'nav.group.publish'",
       "'nav.group.improve'",
       "'nav.group.automate'",
-      'null',
+      // D-468: the prototype titles the last group ("Workspace": Team, Settings).
+      "'nav.group.workspace'",
     ]);
   });
 
   it('has an Arabic and an English string for every group title', () => {
-    for (const group of ['brand', 'plan', 'create', 'publish', 'improve', 'automate']) {
+    for (const group of [
+      'brand',
+      'plan',
+      'create',
+      'publish',
+      'improve',
+      'automate',
+      'workspace',
+    ]) {
       const occurrences = [...MESSAGES.matchAll(new RegExp(`'nav\\.group\\.${group}':`, 'g'))];
       expect(occurrences, `nav.group.${group} is not in both message tables`).toHaveLength(2);
     }

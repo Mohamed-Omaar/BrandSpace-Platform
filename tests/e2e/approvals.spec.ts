@@ -352,24 +352,25 @@ test.describe('notifications', () => {
 
 test.describe('the Command Center aggregates the modules', () => {
   /*
-   * PHASE 6 FINAL (D-277 §7): HOME ANSWERS "WHAT NEEDS ME" FIRST.
+   * D-468 (SUPERSEDES D-277 §7's order): HOME IS THE PROTOTYPE'S.
    *
-   * The sections come in the owner's order — what needs you, recommendations,
-   * notes, coming up — and the figures come LAST. Plan, credits, members, the
-   * activity log and the notification count left Home for Settings and the top
-   * bar. What did not change is the honesty rule below.
+   * The hero with its floating performance card, then the four figures, then
+   * what needs you, then Coming up beside the Copilot card, then "BrandSpace
+   * noticed". AI credits is the fourth figure again (the prototype's `kCred`);
+   * plan, members, the activity log and the notification count stay off Home.
+   * What did not change is the honesty rule below.
    */
-  test('shows the owner’s sections, in order, with the figures last', async ({ page }) => {
+  test('shows the owner’s sections in the prototype’s order', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
     await expect(page.getByTestId('overview-metrics')).toBeVisible({ timeout: 15_000 });
 
     const sections = [
-      'attention-card',
-      'home-recommended',
-      'home-notes',
-      'overview-upcoming',
+      'hero-performance',
       'overview-metrics',
+      'attention-card',
+      'overview-upcoming',
+      'home-recommended',
     ];
     const tops: number[] = [];
     for (const id of sections) {
@@ -377,19 +378,15 @@ test.describe('the Command Center aggregates the modules', () => {
       expect(box, id).not.toBeNull();
       tops.push(box?.y ?? 0);
     }
-    // Notes and Coming up share a row on a wide screen; nothing comes before
-    // "what needs you", and the figures come after everything.
-    expect(Math.min(...tops)).toBe(tops[0]);
-    expect(Math.max(...tops)).toBe(tops[4]);
+    expect([...tops].sort((a, b) => a - b)).toEqual(tops);
+    // Coming up and the Copilot card share a row.
+    const copilot = await page.getByTestId('home-copilot').boundingBox();
+    expect(copilot?.y).toBe(tops[3]);
 
     await expect(page.getByTestId('metric-in-review')).toBeVisible();
     await expect(page.getByTestId('metric-scheduled')).toBeVisible();
-    for (const gone of [
-      'metric-plan',
-      'metric-credits',
-      'overview-activity',
-      'overview-notifications',
-    ]) {
+    await expect(page.getByTestId('metric-credits')).toBeVisible();
+    for (const gone of ['metric-plan', 'overview-activity', 'overview-notifications']) {
       await expect(page.getByTestId(gone)).toHaveCount(0);
     }
 
@@ -441,20 +438,20 @@ test.describe('accessibility and direction', () => {
     }
   }
 
-  test('the new routes are reachable where the final IA put them (D-277)', async ({ page }) => {
+  test('the routes are reachable where the prototype puts them (D-468)', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
     /*
-     * Approvals and Notifications moved from the sidebar to the TOP BAR
-     * (Review, the bell); Activity moved into SETTINGS. Each is still a real,
-     * focusable link to the same route.
+     * D-468: Approvals is back on the rail (the prototype's own entry, with its
+     * review count) and Notifications is the bell; Activity is in SETTINGS.
+     * Each is still a real, focusable link to the same route.
      */
-    await expect(page.getByTestId('topbar-review')).toHaveAttribute('href', '/en/approvals');
+    await expect(page.getByTestId('nav-approvals')).toHaveAttribute('href', '/en/approvals');
     await expect(page.getByTestId('topbar-notifications')).toHaveAttribute(
       'href',
       '/en/notifications',
     );
-    for (const item of ['approvals', 'activity', 'notifications']) {
+    for (const item of ['activity', 'notifications']) {
       await expect(page.getByTestId(`nav-${item}`)).toHaveCount(0);
     }
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);

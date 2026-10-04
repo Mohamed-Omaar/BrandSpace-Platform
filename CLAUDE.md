@@ -161,14 +161,29 @@ Module boundaries are enforced by lint rules on import paths. A package may not 
   text without its darkened token. These are design tokens, never literals in components.
 - **`#00ADEE` is a RETIRED legacy identity colour.** It must not appear in new product or marketing
   UI. The token remains defined so historical decisions stay readable, and nothing consumes it.
-  See D-42, D-60 and D-61 in `docs/DECISIONS.md`; the vendored demo in
-  `docs/visual-reference/full-demo/` is the visual authority and contains no blue at all.
+  See D-42, D-60 and D-61 in `docs/DECISIONS.md`; the vendored prototype in
+  `docs/visual-reference/prototype-2026-09-27/` is the visual authority (D-468) and contains no blue
+  at all.
 
-### 4.1 UI fidelity — the approved demo is a SPECIFICATION
+### 4.1 UI fidelity — the approved prototype is a SPECIFICATION
 
 **`docs/UI-FIDELITY-CONTRACT.md` is binding on every customer-facing route.** Read it before building
 or changing one. In short:
 
+- **The authority is `docs/visual-reference/prototype-2026-09-27/`** (`Main.dc.html`, `Auth.dc.html`,
+  `support.js`; checksums in its README). It **replaces `docs/visual-reference/full-demo/`** for
+  customer screens (owner decision D-468, 2026-10-02): the product must look exactly like it. D-468
+  supersedes D-277, the Phase 6 Final UX contract and any other document where they tell a screen to
+  differ from the prototype's look or composition. "The demo" below means this prototype.
+- **Port it screen by screen**, from the prototype's own markup, CSS, layout and motion, and wire it to
+  the product's existing data, permissions and logic — no behaviour change, no new permission keys, no
+  new API paths, no fake or sample data. The only allowed differences are D-468's (a) recorded owner
+  decisions that keep the repo's behaviour, (b) items moved to post-launch (View as, the phone layout,
+  website reading, the connection-expiry alert), left out, and (c) states the prototype does not draw
+  (errors, permission refusals, admin), built in its visual language. A prototype element that needs
+  data or a feature that does not exist is left out and listed. Every use is listed in the PR.
+- **Arabic follows the workspace's country** (D-468): Egypt gets the prototype's Egyptian Arabic,
+  every other country the product's formal Arabic. Until that layer is wired, formal Arabic is `ar`.
 - The approved demo is a **UI specification**, not a loose visual reference or a mood board.
 - Implementations **mechanically port** the demo's HTML, CSS, layout, motion and interaction. Numeric
   constants are transcribed exactly; geometry keeps the same formula; composition keeps the same

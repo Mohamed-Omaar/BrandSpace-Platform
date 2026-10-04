@@ -7,6 +7,23 @@
 
 **Status: binding on every customer-facing route from Phase 5A onward — EXCEPT where superseded below.**
 
+> **THE AUTHORITY IS NOW `docs/visual-reference/prototype-2026-09-27/` — OWNER DECISION D-468
+> (2026-10-02).** The product must look exactly like the prototype: `Main.dc.html` for the customer
+> application, `Auth.dc.html` for sign-up, sign-in and setup, both running on `support.js` (checksums
+> in §3 and in that directory's README). It **replaces `docs/visual-reference/full-demo/`** (and, for
+> Brand Brain, `brand-brain-native/`) as the visual authority for customer screens. Each screen is
+> PORTED mechanically from the prototype's own markup, CSS, layout and motion, screen by screen, and
+> wired to the product's existing data, permissions and logic. D-468 **supersedes D-277, the Phase 6
+> Final UX contract and the banner below** wherever they tell a screen to differ from the prototype's
+> look or composition; the ten rules in §1 apply again, with "the demo" meaning this prototype. The
+> only allowed differences are D-468's three kinds — (a) a recorded owner decision that keeps the
+> repo's behaviour, (b) an item moved to post-launch (View as, the phone layout, website reading, the
+> connection-expiry alert), whose prototype elements are left out, and (c) a state the prototype does
+> not draw (errors, permission refusals, admin), built in its visual language — plus any prototype
+> element that needs data or a feature that does not exist, which is left out. Every use is listed in
+> the PR that ports the screen. The earlier sections stay so the decisions they record remain
+> readable; where they disagree with the prototype, the prototype wins.
+
 > **SUPERSEDED FOR PRODUCT / UX / IA BY OWNER DECISION D-277 (2026-09-24).** The Phase 6 Final UX
 > Contract (`docs/PHASE-6-FINAL-UX-CONTRACT.md`) is now the product, UX and information-architecture
 > authority. For every surface it redesigns — Home, the sidebar, the Setup Wizard, Brand Brain,
@@ -94,7 +111,19 @@ do not replace it.
 | `/[locale]/content`, `/[locale]/content/compose` | `demo/styles-2.css`                           | `Mohamed-Omaar/Brandspace-Landing-page` | `10765e8cf4f5b89c91b144863330459611248b16` | `fffa17614b8a01feb8f33bb36211366a5bbe9c1eac007867358a7893af8a66a9` |
 | `/[locale]/content`, `/[locale]/content/compose` | `demo/styles-3.css`                           | `Mohamed-Omaar/Brandspace-Landing-page` | `10765e8cf4f5b89c91b144863330459611248b16` | `6319a57e97f0c506be1bcdc0cbe7edb3248277243345244f636da5c1d7d228f1` |
 
-**TWO PINNED COMMITS, AND WHY.** The Brand Brain rows above are pinned to the
+**THE PROTOTYPE (D-468).** The rows below are the current authority for every customer route. They
+are not pinned to an upstream commit: the owner supplied the files directly, and they are vendored
+byte for byte at `docs/visual-reference/prototype-2026-09-27/`. A ported screen names the screen it
+came from inside `Main.dc.html` or `Auth.dc.html` in the PR that ports it.
+
+| Routes                                                   | Authoritative source                  | Supplied                  | SHA-256                                                            |
+| -------------------------------------------------------- | ------------------------------------- | ------------------------- | ------------------------------------------------------------------ |
+| Every customer route (the shell, Home and each screen)   | `prototype-2026-09-27/Main.dc.html`   | owner, 2026-10-02 (D-468) | `eec2fcc23316aae5483761bf10706bfc7a9ee87130d8e50e5160d848a788c270` |
+| Sign-up, sign-in, reset, setup and the workspace chooser | `prototype-2026-09-27/Auth.dc.html`   | owner, 2026-10-02 (D-468) | `19bf61a9d8141571473c946d5f64f4a075f44295fc241b41ceed6f047b3723ec` |
+| The canvas runtime both files load                       | `prototype-2026-09-27/support.js`     | owner, 2026-10-02 (D-468) | `82ab863dabf94f79db1b4ced13046a03425dcd255e97a5e42c60b6e8035fea34` |
+| None — the phone layout is post-launch (reference only)  | `prototype-2026-09-27/Mobile.dc.html` | owner, 2026-10-02 (D-468) | `23be0823637f9723304f4a9e0beb1d5696b26787bd334c6e9c04c0dc55872cfc` |
+
+**TWO PINNED COMMITS, AND WHY (superseded by D-468; kept for the record).** The Brand Brain rows above are pinned to the
 `brand-brain-native.*` files, which D-60 superseded the full demo with FOR THAT ROUTE ONLY. Every
 other customer route still takes its authority from the full demo snapshot
 (`docs/visual-reference/full-demo/`, D-60, commit `10765e8c…`), which is where `postsPage()` and
@@ -192,6 +221,81 @@ re-theme. Routing them through tokens would let a palette change silently
 repaint the company's logo.
 
 ---
+
+## 4.3 D-468 batch 1 — the shell and Home: every difference from the prototype
+
+The shell (`Main.dc.html` lines 79–191 and 1483) and Home (lines 192–328, logic 2172–4509) are
+PORTED: `packages/ui/src/prototype.css`, `customer-shell.tsx`, `prototype-rail.tsx`,
+`prototype-icons.tsx`, `prototype-hero-canvas.tsx`, `apps/dashboard/src/components/workspace-shell.tsx`
+and `apps/dashboard/src/app/[locale]/overview/page.tsx`. Inter and Cairo are self-hosted
+(`@fontsource`) because the CSP refuses Google Fonts; the prototype's colours and type steps are
+named once as `--bsp-*` tokens with its exact values. The prototype has no `box-sizing` reset, so its
+`section`/`div` sizes are content-box and are ported as content-box. Every difference that remains:
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- Search (`⌘K`) is not drawn: there is no search feature (Q6, D-276).
+- "Switch business" stays in the account menu for a member with more than one business (D-302).
+- Arabic copy is the product's formal Arabic (owner answer to D-468, 3a). The prototype's Egyptian
+  strings are collected unwired in `apps/dashboard/src/i18n/ar-eg.ts`.
+- P6-14 (every Arabic dictionary value is Arabic): the logotype "BrandSpace", the language square's
+  letters and the language names are rendered as locale data, not dictionary entries — no visual
+  difference results.
+
+- Entrance motion follows MO1 (D-349): Home's figures rise as the prototype's `.kpi` do on an
+  in-app page change, and are simply present on a full page load, like every other entrance in
+  the product.
+
+**(b) Moved to post-launch by the owner — prototype elements left out.**
+
+- "View as" (role preview) in the account menu and the role-preview banner.
+- The phone layout: below 768px the product keeps its existing drawer and full-window layout.
+  The Copilot is part of it: below 768px it is a control at the end of the header's action row, as
+  the product had it, and no floating button covers the page (owner approval, 2026-10-04, after
+  the floating button covered the calendar's Undo on a phone). From 768px up it is the prototype's
+  floating button, unchanged.
+
+**(c) States the prototype does not draw — built in its visual language.**
+
+- A member without analytics reads "hidden" in the performance card and figures, never a fake value.
+- Home with no brand, error and permission states keep the product's existing state screens.
+- Windows narrower than the prototype's 1440px artboard: below 1340px the hero's floating cards sit
+  in a row under its copy instead of over it, and below 1100px the four figures pair up and the
+  side-by-side rows stack — sizes, surfaces and order unchanged, nothing cut off.
+- **Interim:** "AI Creative Studio" (Create) and "Marketing Intelligence" (Improve) stay on the rail as
+  prototype rail items until the prototype screens that absorb them (Media's Generate, Performance's
+  Insights) are ported in batches 3 and 4; without them a member who may open either could lose the
+  only general way in. Owner to confirm.
+
+**Accessibility findings in the prototype itself (listed, per D-468).** Three of its text colours fail
+WCAG 2.2 AA contrast for the small text they set, and the product's axe suites require zero
+violations: the quiet grey `#8a8a92` (3.43:1 on white — menu headings, counts, notes), the rail's
+group and eyebrow grey `#7a7a82` (3.97:1 on the rail) and the "waiting for you" amber `#b86e00`
+(3.99:1). Each is replaced by the prototype's own nearest passing colour — its secondary grey
+`#6a6a72` and its warning-status ink `#8a6b00`. Keeping the prototype's values would need the axe
+suites to exempt `color-contrast`; that is the owner's call, not this PR's.
+
+**Left out because the data or feature does not exist.**
+
+- "Take the tour" and "My profile" in the account menu.
+- The setup checklist's "Not needed" / hide control (no per-person flag exists).
+- The credits figure's "of N · resets D" line and bar are shown only when the workspace has a plan
+  allowance and a reset date; otherwise the line is empty rather than invented.
+- The Notes and notification popovers keep their current panels until batch 4 (Notifications).
+
+**Carried to later batches (owner decisions, 2026-10-04).**
+
+- **Batch 4 (Brand Brain):** the review inbox's "Edit, then accept" `<summary>`
+  (`apps/dashboard/src/app/[locale]/brand-brain/review-inbox.tsx`) is 14.4px tall at 9px text and
+  fails WCAG 2.5.8 target size on a phone whenever a fact waits for review. Give it a 24px minimum
+  target height when Brand Brain is ported. Not in batch 1, which does not touch that screen.
+- **Batches 3 and 4:** remove the interim AI Creative Studio and Marketing Intelligence rail entries
+  once Media's Generate and Performance's Insights are ported.
+
+**Proven** by `tests/e2e/prototype-parity.spec.ts` (opt-in, `BRANDSPACE_PARITY=1`: side-by-side
+1440×900 screenshots, prototype and product, English and Arabic, the prototype served the same local
+fonts) and `tests/unit/d468-home-prototype.test.ts` (the prototype's `kfmt`, `delta`, `spark` and
+`VA_meKind`, and the unwired Egyptian layer).
 
 ## 5. How compliance is proven
 
@@ -1049,6 +1153,9 @@ asserted, axe (WCAG 2.2 AA tags) clean, and no inline-end overflow at 390px — 
 `tests/unit/owner-simple-mode.test.ts`.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
+
+> **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The
+> notes below are history.
 
 > **Superseded in composition by D-277 §7 / D-279 (Phase 6 final).** The hero, its two floating
 > cards, the metric card and the surface card keep the demo's geometry and treatment; what changed is

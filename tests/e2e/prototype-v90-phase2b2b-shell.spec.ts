@@ -431,7 +431,7 @@ test.describe('§8 motion — overlays (D-350)', () => {
     return `${style.animationName} ${style.animationDuration} ${style.animationDelay}`;
   };
 
-  test('MO5: a menu is glass, grows in, its rows follow 22 ms apart, and it leaves inert', async ({
+  test('MO5: a menu is glass, pops in as the prototype’s does, and it leaves inert', async ({
     page,
   }) => {
     await signIn(page);
@@ -439,16 +439,17 @@ test.describe('§8 motion — overlays (D-350)', () => {
     await page.getByTestId('topbar-create').click();
     const menu = page.getByTestId('topbar-create-menu');
     await expect(menu).toBeVisible();
-    expect(await menu.evaluate(anim)).toBe('bs-pop-in 0.2s 0s');
-    expect(await menu.evaluate((el) => getComputedStyle(el).backdropFilter)).toBe('blur(24px)');
-    const rows = await menu.locator(':scope > *').evaluateAll((els) =>
-      els.map((el) => {
-        const style = getComputedStyle(el);
-        return `${style.animationName} ${style.animationDuration} ${style.animationDelay}`;
-      }),
+    // D-468: `[role="menu"]{animation:bsPop .18s cubic-bezier(.16,1,.3,1) both}`
+    // and `backdrop-filter: blur(22px) saturate(180%)` (Main.dc.html); the
+    // prototype's menus do not stagger their rows, so the rows carry no entrance.
+    expect(await menu.evaluate(anim)).toBe('bsp-pop 0.18s 0s');
+    expect(await menu.evaluate((el) => getComputedStyle(el).backdropFilter)).toBe(
+      'blur(22px) saturate(1.8)',
     );
-    expect(rows[0]).toBe('bs-row-in 0.22s 0s');
-    if (rows.length > 1) expect(rows[1]).toBe('bs-row-in 0.22s 0.022s');
+    const rows = await menu
+      .locator(':scope > *')
+      .evaluateAll((els) => els.map((el) => getComputedStyle(el).animationName));
+    expect(rows.every((name) => name === 'none')).toBe(true);
 
     // Closing is immediate; only its picture leaves, and nothing in it is usable.
     await page.keyboard.press('Escape');
@@ -652,8 +653,8 @@ test.describe('MO10 · an incoming mention from another person (option A)', () =
       'href',
       `/en/content/compose?item=${itemId}&thread=${threadId}#thread-${threadId}`,
     );
-    // It stays in the bell's count.
-    await expect(page.getByTestId('topbar-notes-dot')).toBeVisible();
+    // It stays in the Notes count (D-468: the rail's count beside Notes).
+    await expect(page.getByTestId('nav-notes-count')).toBeVisible();
 
     // Once per mention per tab: the next page does not announce it again.
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
@@ -670,7 +671,8 @@ test.describe('MO10 · an incoming mention from another person (option A)', () =
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
     await expect(page.getByTestId('app-shell')).toBeVisible();
     await expect(page.getByTestId('incoming-mention')).toHaveCount(0);
-    await expect(page.getByTestId('topbar-notes-dot')).toHaveCount(0);
+    await expect(page.getByTestId('app-shell').getByTestId('nav-notes')).toBeVisible();
+    await expect(page.getByTestId('nav-notes-count')).toHaveCount(0);
   });
 
   test('in Arabic, the notice speaks Arabic', async ({ page }) => {

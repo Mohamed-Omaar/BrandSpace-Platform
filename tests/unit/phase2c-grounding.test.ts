@@ -277,6 +277,10 @@ const NON_GENERATIVE_READERS: ReadonlyMap<string, string> = new Map([
   ],
   ['apps/dashboard/src/server/setup-wizard.ts', 'SETUP STATE: which setup steps are done'],
   [
+    'apps/dashboard/src/server/home-prototype.ts',
+    "SETUP STATE (D-468): Home's setup checklist counts the Brand Brain areas complete from the Q19 completeness — counts only, never text, never a prompt",
+  ],
+  [
     'packages/automation/src/due-producers.ts',
     'AUTOMATION TRIGGER (non-generative, Phase 2B-3 PR 3): FACT_EXPIRING selects usable facts in their last seven days through the injected usable rule — ids and dates only, never text, never a prompt',
   ],

@@ -1,7 +1,8 @@
 import 'server-only';
 import { cache } from 'react';
 import { NotesService } from '@brandspace/collaboration';
-import { systemClock } from '@brandspace/shared';
+import { brandIdScopeFilter, mayReadCreditBalance, systemClock } from '@brandspace/shared';
+import { MILLI_PER_CREDIT } from '@brandspace/entitlements';
 import { notificationService } from './approvals-context';
 import { inContentStudio } from './content-context';
 import { resolveApiWorkspace } from './customer-context';
@@ -64,7 +65,28 @@ export const topbarCounts = cache(async (): Promise<TopbarCounts> => {
       const review = may('content.approve')
         ? await (await approvals()).pendingCount(workspace.brandScope)
         : null;
-      return { review, notes, notifications };
+      // D-468 — the rail's "Publishing log" and "Team" counts, each only for a
+      // member who may open the destination it sits beside.
+      const failed = may('publishing.read')
+        ? await db.calendarSlot.count({
+            where: {
+              workspaceId,
+              status: { in: ['FAILED', 'PARTIALLY_PUBLISHED'] },
+              ...brandIdScopeFilter(workspace.brandScope),
+            },
+          })
+        : null;
+      const team = may('member.read')
+        ? await db.membership.count({ where: { workspaceId, status: 'ACTIVE' } })
+        : null;
+      // The user menu's "AI credits" pill: read, never created (a wallet the
+      // first spend has not opened yet reads as no figure, not as zero).
+      const credits = mayReadCreditBalance(workspace.permissionKeys)
+        ? await db.creditWallet
+            .findUnique({ where: { workspaceId }, select: { balanceMilliCredits: true } })
+            .then((row) => (row ? Number(row.balanceMilliCredits / MILLI_PER_CREDIT) : null))
+        : null;
+      return { review, notes, notifications, failed, team, credits };
     });
   } catch {
     return UNKNOWN;

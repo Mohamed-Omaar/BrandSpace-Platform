@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BrandSpace sign up and setup</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=Cairo:wght@400;600;700;800&amp;display=swap">
+<style>
+*{scrollbar-width:thin;scrollbar-color:rgba(20,16,35,.2) transparent}*::-webkit-scrollbar{width:10px;height:10px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background-color:rgba(20,16,35,.16);border-radius:99px;border:3px solid transparent;background-clip:padding-box}*::-webkit-scrollbar-thumb:hover{background-color:rgba(20,16,35,.3)}*::-webkit-scrollbar-button{display:none;width:0;height:0}*::-webkit-scrollbar-corner{background:transparent}
+body{margin:0;background:#f3f3f3}
+.brandrow{display:flex;align-items:center;gap:12px}
+.logo{width:46px;height:46px;display:block;flex:none}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;background:#f0e9ff;color:#5312c4;border-radius:99px;padding:6px 12px;font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.langb{margin-inline-start:auto;width:44px;height:44px;border-radius:12px;border:0;background:#f4f4f5;font-weight:800;font-size:13px}
+button{font:inherit;cursor:pointer;color:inherit}
+input{font:inherit}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid #7935fe;outline-offset:2px}
+a{color:#5312c4}
+.in{display:block;inline-size:100%;box-sizing:border-box;border:1px solid transparent;background:#f4f4f5;border-radius:14px;padding:14px 18px;font-size:15.5px;min-block-size:58px;color:#111114}
+.pw{position:relative}.pw .in{padding-inline-end:84px}.pw .show{position:absolute;inset-block:7px;inset-inline-end:7px;border:0;background:#fff;border-radius:10px;padding:0 12px;font-size:13px;font-weight:800;color:#55555c;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.lb{display:block;font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6a6a72;margin-block-end:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:14px;padding:12px 20px;font-size:15px;font-weight:800;background:#111114;color:#fff;min-block-size:56px;text-decoration:none}
+.btn.pur{background:#7935fe}.btn.sec{background:#f2f2f4;color:#111114}.btn.ghost{background:transparent;color:#111114}
+.lnk{border:0;background:transparent;color:#5312c4;font-weight:700;font-size:13.5px;text-decoration:underline;padding:4px}
+.chip{display:inline-flex;align-items:center;gap:8px;border:1px solid #e4e4e8;background:#fff;border-radius:14px;padding:10px 14px;font-size:14px;font-weight:700;min-block-size:46px;text-align:start}
+.chip[aria-pressed="true"]{border-color:#7935fe;background:#f6f3ff;box-shadow:0 0 0 3px #efe7ff}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.ltr{direction:ltr;unicode-bidi:isolate}
+</style>
+</helmet>
+<div dir="{{dir}}" lang="{{lang}}" style="width: 1440px; height: 900px; box-sizing: border-box; position: relative; overflow: hidden; font-family: {{font}}; color: #111114; background: radial-gradient(720px 540px at 12% 8%, rgba(121,53,254,.26), transparent 70%), radial-gradient(640px 520px at 88% 10%, rgba(255,120,170,.14), transparent 70%), radial-gradient(780px 580px at 94% 100%, rgba(255,214,10,.34), transparent 70%), #f3f3f3; display: grid; place-items: center; padding: 32px">
+
+<!-- AUTH CARD -->
+<sc-if value="{{isAuth}}" hint-placeholder-val="{{true}}">
+<div style="width: 540px; box-sizing: border-box; background: rgba(255,255,255,.96); border-radius: 36px; padding: 42px 44px 34px; box-shadow: 0 40px 100px rgba(20,16,35,.14); display: flex; flex-direction: column; gap: 20px">
+<div class="brandrow"><span class="logo"><svg width="100%" height="100%" style="display:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 877.07 877.07" role="img" aria-label="BrandSpace">  <path fill="#000000" d="M615.98 877.07H261.09C116.89 877.07 0 760.18 0 615.98V261.09C0 116.89 116.89 0 261.09 0h354.89c144.2 0 261.09 116.89 261.09 261.09v354.89c0 144.2-116.89 261.09-261.09 261.09z"/>  <path fill="#FFFFFF" d="M555.77 680.25c-112.22 0-224.43 0-336.65 0-.16-.99-.45-1.99-.45-2.98-.06-159.21-.09-318.42-.12-477.63 0-.9.08-1.8.13-2.83h3.94c104.11.03 208.22.02 312.34.13 13.4.01 26.69 1.43 39.65 5.12 22.03 6.27 40.24 18.01 52.92 37.44 13.44 20.59 17.97 43.61 18.03 67.78 0 .83-.55 1.8-1.12 2.48-6.09 7.23-12.25 14.39-18.35 21.61-18.58 21.99-37.14 44-55.7 66.01-.48.57-1.11 1.28-1.13 1.94-.11 3.74-.05 7.49-.05 11.37h5.23c13.8-.04 26.95 2.88 39.11 9.43 22.82 12.29 37.3 31.07 42.94 56.47.88 3.98 1.36 8.04 2.03 12.07v86.24c-.13.58-.29 1.15-.39 1.73-1.16 7.1-1.75 14.35-3.57 21.27-6.18 23.48-18.97 42.81-37.9 58.03-15.24 12.26-32.56 19.84-51.88 22.87-3 .47-6.01.97-9.01 1.45zM366.47 390.4c.73.04 1.24.08 1.75.08 40.44.02 80.87.05 121.31.03 8.77 0 16.33-5.65 18.14-14.27.97-4.63.51-9.56.74-14.36.52-11.1-8.64-19.85-19.78-19.8-39.75.16-79.5.11-119.25.13h-2.91v48.19zm-.08 144.65c.61.03 1.1.08 1.6.08 40.61-.02 81.22 0 121.83-.08 9.65-.02 17.77-7.82 18.39-17.42.23-3.51-.02-7.06.17-10.58.61-11.46-8.23-20.47-20.26-20.44-39.66.1-79.33.01-118.99-.01h-2.74v48.45z"/></svg></span><span class="ltr" style="font-weight: 800; font-size: 20px; font-family: Inter, sans-serif">BrandSpace</span><button class="langb" onClick="{{toggleLang}}" lang="{{otherLang}}">{{t.langBtn}}</button></div>
+<span class="eyebrow"><span style="width: 7px; height: 7px; border-radius: 50%; background: #7935fe"></span>{{eyebrow}}</span>
+<div style="display: flex; flex-direction: column; gap: 8px"><h1 style="margin: 0; font-size: 42px; line-height: 1.05; font-weight: 800; letter-spacing: {{trackBig}}">{{head.title}}</h1><p style="margin: 0; font-size: 15px; color: #55555c; line-height: 1.6">{{head.sub}}</p></div>
+
+<sc-if value="{{is.signin}}" hint-placeholder-val="{{true}}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div><label class="lb" for="e1">{{t.email}}</label><input id="e1" class="in ltr" type="email" value="reem@reemacafe.com"></div>
+<div><div style="display: flex; justify-content: space-between; align-items: baseline"><label class="lb" for="p1">{{t.password}}</label><button class="lnk" onClick="{{go.forgot}}" style="font-size: 12.5px; padding: 0">{{t.forgot}}</button></div><div class="pw"><input id="p1" class="in ltr" type="{{pwType}}" value="password123"><button class="show" onClick="{{togglePw}}">{{pwLabel}}</button></div></div>
+<button class="btn" onClick="{{signIn}}">{{t.signIn}}</button>
+<div style="font-size: 13.5px; color: #4d4c53; text-align: center">{{t.noAccount}} <button class="lnk" onClick="{{go.signup}}">{{t.createAccount}}</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{is.signup}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div><label class="lb" for="n2">{{t.name}}</label><input id="n2" class="in" dir="auto" value="{{su.name}}" onChange="{{su.onName}}"></div>
+<div><label class="lb" for="e2">{{t.email}}</label><input id="e2" class="in ltr" type="email" value="{{su.email}}" onChange="{{su.onEmail}}"></div>
+<div><label class="lb" for="p2">{{t.password}}</label><div class="pw"><input id="p2" class="in ltr" type="{{pwType}}" value="{{su.pw}}" onChange="{{su.onPw}}"><button class="show" onClick="{{togglePw}}">{{pwLabel}}</button></div><span style="font-size: 12px; color: {{su.pwColor}}">{{su.pwRule}}</span></div>
+<label style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: #4d4c53"><input type="checkbox" checked="{{wz.terms}}" onChange="{{wz.toggleTerms}}" style="width: 18px; height: 18px; margin: 2px 0 0">{{t.terms}}</label>
+<div style="background: #f6f3ff; border-radius: 12px; padding: 10px 12px; font-size: 12.5px; color: #5312c4">{{t.trialNote}}</div>
+<button class="btn pur" onClick="{{wz.create}}">{{t.createAccount}}</button>
+<div style="font-size: 13.5px; color: #4d4c53; text-align: center">{{t.haveAccount}} <button class="lnk" onClick="{{go.signin}}">{{t.signIn}}</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{is.sent}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="background: #f3f3f5; border-radius: 14px; padding: 14px; font-size: 14px"><span class="ltr" style="font-weight: 800">{{su.email}}</span></div>
+<button class="btn" onClick="{{verified}}">{{t.openedLink}}</button>
+<div style="display: flex; justify-content: space-between; font-size: 13px"><button class="lnk" onClick="{{resend}}">{{t.resend}}</button><button class="lnk" onClick="{{go.signup}}">{{t.wrongEmail}}</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{is.forgot}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div><label class="lb" for="e3">{{t.email}}</label><input id="e3" class="in ltr" type="email" value="{{su.email}}" onChange="{{su.onEmail}}"></div>
+<button class="btn" onClick="{{go.forgotSent}}">{{t.sendLink}}</button>
+<button class="lnk" onClick="{{go.signin}}" style="align-self: center">← {{t.backSignIn}}</button>
+</div>
+</sc-if>
+
+<sc-if value="{{is.forgotSent}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="background: #e6f6ee; color: #16794b; border-radius: 14px; padding: 12px 14px; font-size: 13.5px; font-weight: 700">{{t.linkSent}}</div>
+<button class="btn" onClick="{{go.newpass}}">{{t.openedLink}}</button>
+<button class="lnk" onClick="{{go.signin}}" style="align-self: center">← {{t.backSignIn}}</button>
+</div>
+</sc-if>
+
+<sc-if value="{{is.newpass}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div><label class="lb" for="p4">{{t.newPassword}}</label><div class="pw"><input id="p4" class="in ltr" type="{{pwType}}" value="{{su.np}}" onChange="{{su.onNp}}"><button class="show" onClick="{{togglePw}}">{{pwLabel}}</button></div></div>
+<div><label class="lb" for="p5">{{t.confirmPassword}}</label><div class="pw"><input id="p5" class="in ltr" type="{{pwType}}" value="{{su.np2}}" onChange="{{su.onNp2}}"><button class="show" onClick="{{togglePw}}">{{pwLabel}}</button></div></div>
+<button class="btn" onClick="{{savePass}}">{{t.savePass}}</button>
+</div>
+</sc-if>
+
+<sc-if value="{{is.workspaces}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{workspaces}}" as="w" hint-placeholder-count="2">
+<a href="Main.dc.html" onClick="{{w.open}}" style="display: flex; align-items: center; gap: 14px; background: #f4f4f5; border-radius: 18px; padding: 14px 16px; text-decoration: none; color: #111114">
+<span style="width: 50px; height: 50px; border-radius: 14px; background: linear-gradient(145deg, #8f5bff, #5b1fd6); color: #fff; display: grid; place-items: center; font-weight: 800">{{w.ini}}</span>
+<span style="display: flex; flex-direction: column; flex-grow: 1"><span style="font-size: 18px; font-weight: 800">{{w.name}}</span><span style="font-size: 12.5px; color: #6a6a72">{{w.role}}</span></span>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: {{flip}}"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+</a>
+</sc-for>
+<sc-if value="{{wl.can}}" hint-placeholder-val="{{true}}"><button class="btn" onClick="{{wl.create}}" style="margin-top: 6px">{{t.createWs}} <span class="ltr" style="opacity: .6">· {{wl.use}}</span></button></sc-if><sc-if value="{{wl.full}}" hint-placeholder-val="{{false}}"><div style="margin-top: 6px; border: 1px solid #ececef; border-radius: 14px; padding: 12px 14px; font-size: 13px; color: #55555c; line-height: 1.5">{{wl.fullL}}</div></sc-if>
+</div>
+</sc-if>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8a8a92; padding-top: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #ffd60a"></span>{{t.footer}}</div>
+</div>
+</sc-if>
+
+<!-- WIZARD -->
+<sc-if value="{{inWizard}}" hint-placeholder-val="{{false}}">
+<div style="width: 900px; max-height: 100%; box-sizing: border-box; background: rgba(255,255,255,.96); border-radius: 36px; padding: 32px 40px; box-shadow: 0 40px 100px rgba(20,16,35,.14); display: flex; flex-direction: column; gap: 18px; overflow: auto">
+<div class="brandrow"><span class="logo" style="width: 40px; height: 40px"><svg width="100%" height="100%" style="display:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 877.07 877.07" role="img" aria-label="BrandSpace">  <path fill="#000000" d="M615.98 877.07H261.09C116.89 877.07 0 760.18 0 615.98V261.09C0 116.89 116.89 0 261.09 0h354.89c144.2 0 261.09 116.89 261.09 261.09v354.89c0 144.2-116.89 261.09-261.09 261.09z"/>  <path fill="#FFFFFF" d="M555.77 680.25c-112.22 0-224.43 0-336.65 0-.16-.99-.45-1.99-.45-2.98-.06-159.21-.09-318.42-.12-477.63 0-.9.08-1.8.13-2.83h3.94c104.11.03 208.22.02 312.34.13 13.4.01 26.69 1.43 39.65 5.12 22.03 6.27 40.24 18.01 52.92 37.44 13.44 20.59 17.97 43.61 18.03 67.78 0 .83-.55 1.8-1.12 2.48-6.09 7.23-12.25 14.39-18.35 21.61-18.58 21.99-37.14 44-55.7 66.01-.48.57-1.11 1.28-1.13 1.94-.11 3.74-.05 7.49-.05 11.37h5.23c13.8-.04 26.95 2.88 39.11 9.43 22.82 12.29 37.3 31.07 42.94 56.47.88 3.98 1.36 8.04 2.03 12.07v86.24c-.13.58-.29 1.15-.39 1.73-1.16 7.1-1.75 14.35-3.57 21.27-6.18 23.48-18.97 42.81-37.9 58.03-15.24 12.26-32.56 19.84-51.88 22.87-3 .47-6.01.97-9.01 1.45zM366.47 390.4c.73.04 1.24.08 1.75.08 40.44.02 80.87.05 121.31.03 8.77 0 16.33-5.65 18.14-14.27.97-4.63.51-9.56.74-14.36.52-11.1-8.64-19.85-19.78-19.8-39.75.16-79.5.11-119.25.13h-2.91v48.19zm-.08 144.65c.61.03 1.1.08 1.6.08 40.61-.02 81.22 0 121.83-.08 9.65-.02 17.77-7.82 18.39-17.42.23-3.51-.02-7.06.17-10.58.61-11.46-8.23-20.47-20.26-20.44-39.66.1-79.33.01-118.99-.01h-2.74v48.45z"/></svg></span><span class="ltr" style="font-weight: 800; font-size: 18px; font-family: Inter, sans-serif">BrandSpace</span><span class="eyebrow" style="margin-inline-start: 8px">{{stepLabel}}</span><button class="langb" onClick="{{toggleLang}}" lang="{{otherLang}}">{{t.langBtn}}</button></div>
+<div style="display: flex; gap: 6px"><sc-for list="{{steps}}" as="s" hint-placeholder-count="5"><div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px"><div style="height: 5px; border-radius: 99px; background: {{s.bar}}"></div><span style="font-size: 11.5px; font-weight: 800; color: {{s.color}}">{{s.label}}</span></div></sc-for></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><h1 style="margin: 0; font-size: 34px; line-height: 1.08; font-weight: 800; letter-spacing: {{trackBig}}">{{head.title}}</h1><p style="margin: 0; font-size: 14px; color: #4d4c53; line-height: 1.55">{{head.sub}}</p></div>
+
+<sc-if value="{{is.business}}" hint-placeholder-val="{{true}}">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+<div><label class="lb" for="b1">{{t.bizName}}</label><input id="b1" class="in" dir="auto" value="{{wz.bizName}}" onChange="{{wz.onBiz}}"></div>
+<div style="position: relative"><label class="lb">{{t.country}}</label><button class="in" onClick="{{wz.toggleC}}" aria-haspopup="listbox" aria-expanded="{{wz.cOpen}}" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: start; cursor: pointer"><bdi>{{wz.country}}</bdi><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a8a92" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button><sc-if value="{{wz.cOpen}}" hint-placeholder-val="{{false}}"><div role="listbox" aria-label="{{t.country}}" style="position: absolute; top: calc(100% + 6px); inset-inline: 0; z-index: 30; background: rgba(255,255,255,.62); backdrop-filter: blur(22px) saturate(180%); -webkit-backdrop-filter: blur(22px) saturate(180%); border: 1px solid rgba(255,255,255,.75); border-radius: 16px; box-shadow: 0 22px 55px rgba(40,20,90,.14), 0 0 0 1px rgba(20,16,35,.05); padding: 6px; display: flex; flex-direction: column; gap: 2px"><input dir="auto" value="{{wz.cq}}" onChange="{{wz.onCq}}" placeholder="{{wz.L.search}}" aria-label="{{wz.L.search}}" autofocus="{{true}}" style="border: 0; border-radius: 10px; background: rgba(20,16,35,.05); padding: 8px 10px; font-size: 13.5px; margin-bottom: 4px"><div style="max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 1px"><sc-for list="{{wz.countries}}" as="c" hint-placeholder-count="5"><button role="option" onClick="{{c.act}}" style="display: flex; justify-content: space-between; gap: 10px; border: 0; background: {{c.bg}}; border-radius: 10px; padding: 8px 10px; text-align: start; font-size: 13px; cursor: pointer"><bdi>{{c.label}}</bdi><span style="font-size: 11px; color: #8a8a92; white-space: nowrap">{{c.sub}}</span></button></sc-for><sc-if value="{{wz.cNone}}" hint-placeholder-val="{{false}}"><span style="font-size: 12.5px; color: #8a8a92; padding: 8px 10px">{{wz.L.none}}</span></sc-if></div></div></sc-if></div>
+<div style="grid-column: 1 / -1"><label class="lb">{{t.industry}}</label><div style="display: flex; gap: 6px; flex-wrap: wrap"><sc-for list="{{wz.inds}}" as="i" hint-placeholder-count="8"><button class="chip" aria-pressed="{{i.on}}" onClick="{{i.act}}" style="min-block-size: 38px; padding: 6px 12px; font-size: 13px">{{i.label}}</button></sc-for></div><sc-if value="{{wz.indOther}}" hint-placeholder-val="{{false}}"><div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px"><input class="in" dir="auto" value="{{wz.indText}}" onChange="{{wz.onInd}}" placeholder="{{wz.L.typeInd}}" aria-label="{{wz.L.typeInd}}" autofocus="{{true}}"><sc-if value="{{wz.hasSugg}}" hint-placeholder-val="{{false}}"><div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center"><span style="font-size: 12px; color: #6a6a72">{{wz.L.maybe}}</span><sc-for list="{{wz.sugg}}" as="g" hint-placeholder-count="2"><button class="chip" onClick="{{g.act}}" style="min-block-size: 30px; padding: 3px 10px; font-size: 12px">{{g.label}}</button></sc-for></div></sc-if><sc-if value="{{wz.indCustom}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #6a6a72">{{wz.L.indHint}}</span></sc-if></div></sc-if></div>
+<div><label class="lb">{{t.teamSize}}</label><div style="display: flex; gap: 6px; flex-wrap: wrap"><sc-for list="{{sizes}}" as="i" hint-placeholder-count="4"><button class="chip" aria-pressed="{{i.on}}" onClick="{{i.act}}" style="min-block-size: 38px; padding: 6px 12px; font-size: 13px">{{i.label}}</button></sc-for></div></div>
+<span style="grid-column: 1 / -1; font-size: 12.5px; color: #6a6a72">{{wz.tzLine}}</span>
+</div>
+</sc-if>
+
+<sc-if value="{{is.brand}}" hint-placeholder-val="{{false}}">
+<div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div><label class="lb" for="w1">{{t.brandNameL}}</label><input id="w1" class="in" dir="auto" value="{{wz.brandN}}" onChange="{{wz.onBrand}}"></div>
+<div><label class="lb" for="w2">{{t.website}}</label><input id="w2" class="in ltr" value="{{wz.site}}" onChange="{{wz.onSite}}"></div>
+<div><label class="lb">{{t.languages}}</label><div style="display: flex; gap: 6px"><sc-for list="{{langs}}" as="l" hint-placeholder-count="2"><button class="chip" aria-pressed="{{l.on}}" onClick="{{l.act}}" style="min-block-size: 38px; padding: 6px 12px; font-size: 13px">{{l.label}}</button></sc-for></div></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; background: #fbfbfc; border-radius: 18px; padding: 16px">
+<span class="lb">{{t.logoColours}}</span>
+<div style="display: flex; gap: 10px; align-items: center"><span style="width: 64px; height: 64px; border-radius: 16px; background: #111114; color: #ffd60a; display: grid; place-items: center; font-size: 26px; font-weight: 800">{{wz.ini}}</span><button class="btn sec" onClick="{{wz.uploadLogo}}">{{wz.logoLabel}}</button></div>
+<div style="display: flex; gap: 8px"><sc-for list="{{wz.swatches}}" as="w" hint-placeholder-count="3"><label style="width: 40px; height: 40px; border-radius: 12px; background: {{w.hex}}; border: 1px solid #ececef; position: relative; cursor: pointer; display: block"><input type="color" value="{{w.hex}}" onChange="{{w.on}}" aria-label="{{w.hex}}" style="position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer"></label></sc-for></div>
+<span style="font-size: 12px; color: #6a6a72">{{t.coloursNote}}</span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{is.teach}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<button class="chip" aria-pressed="{{siteOn}}" onClick="{{readSite}}" style="flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px"><span>{{t.readSite}}</span><span class="ltr" style="font-size: 12.5px; font-weight: 600; color: #6a6a72">{{wz.site}}</span></button>
+<button class="chip" aria-pressed="{{filesOn}}" onClick="{{addFiles}}" style="flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px"><span>{{t.uploadFiles}}</span><span style="font-size: 12.5px; font-weight: 600; color: #6a6a72">{{t.fileKinds}}</span></button>
+</div>
+<sc-if value="{{hasFacts}}" hint-placeholder-val="{{false}}">
+<div style="border: 1px solid #ececef; border-radius: 18px; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #fbfbfc"><span style="flex-grow: 1; font-size: 14px; font-weight: 800">{{factsHead}}</span><button class="btn pur" onClick="{{acceptAll}}" style="min-block-size: 38px; padding: 6px 12px; font-size: 13px">{{t.acceptAll}}</button></div>
+<sc-for list="{{facts}}" as="f" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-block-start: 1px solid #f0f0f2">
+<span class="pill" style="background: #f0e9ff; color: #5312c4">{{f.area}}</span><span style="flex-grow: 1; font-size: 13.5px">{{f.text}}</span><span class="ltr" style="font-size: 11.5px; color: #6a6a72">{{f.conf}}</span>
+<sc-if value="{{f.pending}}" hint-placeholder-val="{{true}}"><button class="btn sec" onClick="{{f.accept}}" style="min-block-size: 34px; padding: 4px 10px; font-size: 12.5px">{{t.accept}}</button><button class="btn ghost" onClick="{{f.reject}}" style="min-block-size: 34px; padding: 4px 10px; font-size: 12.5px">{{t.reject}}</button></sc-if>
+<sc-if value="{{f.done}}" hint-placeholder-val="{{false}}"><span class="pill" style="background: {{f.bg}}; color: {{f.fg}}">{{f.state}}</span></sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{noFacts}}" hint-placeholder-val="{{true}}"><div style="border: 1.5px dashed #d8d8de; border-radius: 16px; padding: 18px; font-size: 13.5px; color: #6a6a72">{{t.teachEmpty}}</div></sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{is.connect}}" hint-placeholder-val="{{false}}">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{accounts}}" as="a" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 12px; border: 1px solid #ececef; border-radius: 16px; padding: 12px 14px">
+<span style="width: 40px; height: 40px; border-radius: 12px; background: #f3f3f5; display: grid; place-items: center"><sc-if value="{{a.hasMark}}" hint-placeholder-val="{{true}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="{{a.color}}" aria-hidden="true"><path d="{{a.path}}"></path></svg></sc-if><sc-if value="{{a.noMark}}" hint-placeholder-val="{{false}}"><span style="width: 10px; height: 10px; border-radius: 50%; background: #0A66C2"></span></sc-if></span>
+<span style="flex-grow: 1; display: flex; flex-direction: column"><span class="ltr" style="font-size: 14.5px; font-weight: 800; text-align: start">{{a.name}}</span><span style="font-size: 12.5px; color: #6a6a72">{{a.sub}}</span></span>
+<sc-if value="{{a.off}}" hint-placeholder-val="{{true}}"><button class="btn" onClick="{{a.act}}" style="min-block-size: 40px; padding: 8px 14px; font-size: 13px">{{t.connect}}</button></sc-if>
+<sc-if value="{{a.on}}" hint-placeholder-val="{{false}}"><span class="pill" style="background: #e6f6ee; color: #16794b">{{t.connected}}</span></sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{is.goal}}" hint-placeholder-val="{{false}}">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{goals}}" as="g" hint-placeholder-count="9"><button class="chip" aria-pressed="{{g.on}}" onClick="{{g.act}}">{{g.label}}</button></sc-for>
+<sc-for list="{{wz.goalsC}}" as="g" hint-placeholder-count="0"><button class="chip" aria-pressed="{{g.on}}" onClick="{{g.act}}"><bdi>{{g.label}}</bdi></button></sc-for>
+<sc-if value="{{wz.goalAdd}}" hint-placeholder-val="{{false}}"><div style="grid-column: 1 / -1; display: flex; gap: 8px"><input class="in" dir="auto" value="{{wz.goalText}}" onChange="{{wz.onGoal}}" placeholder="{{wz.L.goalPh}}" aria-label="{{wz.L.goalPh}}" autofocus="{{true}}" style="flex-grow: 1"><button class="chip" onClick="{{wz.addGoalNow}}" style="justify-content: center; min-inline-size: 80px">{{wz.L.add}}</button></div></sc-if>
+<sc-if value="{{wz.noGoalAdd}}" hint-placeholder-val="{{true}}"><button class="chip" onClick="{{wz.openGoal}}" style="border-style: dashed; color: #5312c4">{{wz.L.addGoal}}</button></sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{is.ready}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px"><sc-for list="{{summary}}" as="m" hint-placeholder-count="3"><div style="background: #fbfbfc; border-radius: 16px; padding: 14px"><div class="ltr" style="font-size: 24px; font-weight: 800; text-align: start">{{m.value}}</div><div style="font-size: 12.5px; color: #6a6a72">{{m.label}}</div></div></sc-for></div>
+<span style="font-size: 14px; font-weight: 800">{{t.firstIdeas}}</span>
+<sc-for list="{{ideas}}" as="i" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 12px; border: 1px solid #ececef; border-radius: 16px; padding: 12px 14px"><span style="width: 44px; height: 44px; border-radius: 12px; background: {{i.art}}"></span><span style="flex-grow: 1; display: flex; flex-direction: column"><span style="font-size: 14px; font-weight: 800">{{i.title}}</span><span style="font-size: 12.5px; color: #6a6a72">{{i.meta}}</span></span><a class="btn pur" href="Main.dc.html" onClick="{{i.make}}" style="min-block-size: 40px; padding: 8px 14px; font-size: 13px">{{t.makeIt}}</a></div>
+</sc-for>
+</div>
+</sc-if>
+
+<div style="display: flex; align-items: center; gap: 10px; border-block-start: 1px solid #f0f0f2; padding-top: 16px">
+<sc-if value="{{canBack}}" hint-placeholder-val="{{true}}"><button class="btn ghost" onClick="{{back}}">{{t.back}}</button></sc-if>
+<span style="flex-grow: 1; font-size: 12.5px; color: #6a6a72">{{t.savedAsYouGo}}</span>
+<sc-if value="{{canSkip}}" hint-placeholder-val="{{true}}"><button class="btn ghost" onClick="{{next}}">{{t.skip}}</button></sc-if>
+<sc-if value="{{notReady}}" hint-placeholder-val="{{true}}"><button class="btn pur" onClick="{{next}}">{{t.continue}}</button></sc-if>
+<sc-if value="{{is.ready}}" hint-placeholder-val="{{false}}"><a class="btn" href="Main.dc.html" onClick="{{wz.finish}}">{{t.goHome}}</a></sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{hasToast}}" hint-placeholder-val="{{false}}"><div role="status" style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: #111114; color: #fff; border-radius: 14px; padding: 10px 16px; font-size: 13.5px">{{toast}}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"startLanguage":{"editor":"enum","options":["en","ar"],"default":"en"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { lang: null, pw: false, screen: 'signin', ind: 0, size: 1, langs: { ar: true, en: true }, site: false, files: false, facts: {}, acc: {}, goal: -1, toast: '' };
+    try { if (typeof window !== 'undefined' && window.localStorage) { const g0 = window.localStorage.getItem('bs.goto'); if (g0 === 'workspaces' || g0 === 'business') { window.localStorage.removeItem('bs.goto'); this.state.screen = g0; this.state.newWs = g0 === 'business'; } const wl = JSON.parse(window.localStorage.getItem('bs.wsList') || '[]'); if (Array.isArray(wl)) this.state.wsExtra = wl.map(function (w) { return Array.isArray(w) ? w : [w.name, 'owner', w]; }); } } catch (er) {}
+  }
+  renderVals() {
+    const s = this.state; const self = this;
+    const lang = s.lang || this.props.startLanguage || 'en'; const ar = lang === 'ar';
+    const T = ar ? {
+      langBtn: 'EN', show: 'إظهار', hide: 'إخفاء', eSignin: 'تسجيل الدخول', eSignup: 'حساب جديد', eVerify: 'تأكيد الإيميل', ePass: 'كلمة السر', eApp: 'تطبيق العملاء', footer: 'دخول آمن · جلسات العملاء منفصلة عن إدارة المنصة', createWs: 'اعمل مساحة عمل جديدة', hWs: ['اختار هتشتغل فين', 'إنت عضو في مساحتين عمل.'], ws: [['ريما كافيه', 'المالكة'], ['نورث ستار ستوديو', 'صانعة محتوى']], userName: 'ريم عصام', brandName: 'ريما كافيه', email: 'البريد الإلكتروني', password: 'كلمة السر', forgot: 'نسيت كلمة السر؟', signIn: 'تسجيل الدخول', noAccount: 'معندكش حساب؟', createAccount: 'اعمل حساب', name: 'اسمك', pwRule: '✓ 8 حروف على الأقل · جملة بمسافات تنفع', terms: 'موافق على الشروط وسياسة الخصوصية', trialNote: 'تجربة 14 يوم ببلاش و200 رصيد، ومن غير كارت.', haveAccount: 'عندك حساب؟',
+      openedLink: 'فتحت اللينك من الإيميل', resend: 'ابعته تاني', wrongEmail: 'الإيميل غلط؟', sendLink: 'ابعتلي لينك', backSignIn: 'رجوع لتسجيل الدخول', linkSent: 'لو الإيميل عندنا، هيوصلك لينك خلال دقيقة.', newPassword: 'كلمة سر جديدة', confirmPassword: 'أكّدها', savePass: 'احفظ وادخل',
+      hSignin: ['أهلًا بيك تاني', 'ادخل على مساحة شغلك في BrandSpace.'], hSignup: ['ابدأ مع BrandSpace', 'دقيقتين وتبقى جاهز تعمل أول بوست.'], hSent: ['شوف إيميلك', 'بعتنالك لينك تأكيد. أول ما تفتحه هتدخل على طول.'], hForgot: ['نسيت كلمة السر؟', 'اكتب إيميلك ونبعتلك لينك تغيّرها.'], hForgotSent: ['اللينك في الطريق', 'افتح الإيميل واضغط على اللينك.'], hNewpass: ['كلمة سر جديدة', 'اختار كلمة سر وهتدخل على طول.'],
+      hBusiness: ['احكيلنا عن نشاطك', 'سؤالين بس. الباقي بنعرفه لوحدنا وتقدر تغيّره بعدين.'], hBrand: ['علامتك', 'الاسم والموقع واللوجو. بنستخدمهم في القوالب والمسودات.'], hTeach: ['علّم BrandSpace عن علامتك', 'اقرا الموقع أو ارفع ملفات، وراجع اللي فهمناه قبل ما يتحفظ.'], hConnect: ['اربط حساباتك', 'عشان تنشر وتقيس من مكان واحد. تقدر تكمّل وتربطهم بعدين.'], hGoal: ['عاوز تحقق إيه الأول؟', 'بنبني عليه الاستراتيجية وأول أفكار.'], hReady: ['ريما كافيه جاهزة', 'جهزنالك 3 أفكار من هدفك. ابدأ بأي واحدة أو روح للرئيسية.'],
+      stepNames: ['النشاط', 'العلامة', 'التعليم', 'الحسابات', 'الهدف'], stepOf: (n) => 'خطوة ' + n + ' من 5',
+      bizName: 'اسم النشاط', country: 'الدولة', countryVal: 'مصر', industry: 'المجال', teamSize: 'حجم الفريق', industries: ['مطاعم وكافيهات', 'موضة', 'تجميل', 'خدمات', 'تعليم', 'حاجة تانية'], sizes: ['لوحدي', '2–5', '6–20', '+20'], autoFilled: 'المنطقة الزمنية ولغة الواجهة وإيميل الفوترة اتظبطوا من حسابك.',
+      brandNameL: 'اسم العلامة', website: 'الموقع (اختياري)', languages: 'بتنشر بأنهي لغة؟', langAr: 'عربي', langEn: 'إنجليزي', logoColours: 'اللوجو والألوان', uploadLogo: 'ارفع اللوجو', coloursNote: 'طلّعنا الألوان من اللوجو. تقدر تغيّرها.',
+      readSite: 'اقرا الموقع', uploadFiles: 'ارفع ملفات', fileKinds: 'منيو، بروفايل، دليل العلامة', teachEmpty: 'اختار مصدر وهنقولك فهمنا إيه. مفيش حاجة بتتحفظ من غير موافقتك.', acceptAll: 'اقبل الكل', accept: 'اقبل', reject: 'ارفض', accepted: 'اتقبلت', rejected: 'اترفضت', factsHead: (n) => 'فهمنا ' + n + ' حاجات · راجعها',
+      factList: [['نبذة عن النشاط', 'كافيه مصري بيقدّم قهوة مختصة ومخبوزات يومية'], ['الجمهور', 'موظفين وطلبة بين 20 و35 في القاهرة'], ['العروض', 'لاتيه، فلات وايت، كرواسون، برانش الويكند'], ['النبرة', 'دافية وبسيطة، بالمصري، من غير مبالغة'], ['الإثباتات', 'تقييم 4.8 على جوجل من 1,200 تقييم']],
+      connect: 'ربط', connected: 'متصل', notConnected: 'مش متصل',
+      goals: ['يعرفونا أكتر', 'تفاعل أكتر', 'عملاء جداد', 'زيارات للموقع أو المحل', 'إطلاق حاجة جديدة', 'العملاء يرجعوا تاني', 'ننشر بانتظام', 'نبقى مرجع في مجالنا', 'لسه مش متأكد'],
+      firstIdeas: 'أول 3 أفكار', makeIt: 'اعمله', sumFacts: 'معلومة معتمدة', sumAcc: 'حساب متصل', sumGoal: 'الهدف', ideas: [['قهوة الصبح قبل الشغل', 'منشور · إنستجرام · الأحد 9:00'], ['15 ثانية ورا البار', 'ريل · تيك توك · الثلاثاء'], ['برانش الويكند رجع', 'ستوري · إنستجرام · الخميس']],
+      back: 'رجوع', skip: 'تخطّى', continue: 'كمّل', goHome: 'روح للرئيسية', savedAsYouGo: 'كل خطوة بتتحفظ. تقدر تكمّل بعدين من الرئيسية.', tResent: 'اتبعت تاني', tSite: 'قرينا الموقع', tFiles: 'قرينا الملفات', tConn: 'اتربط', tPass: 'اتغيّرت كلمة السر'
+    } : {
+      langBtn: 'AR', show: 'Show', hide: 'Hide', eSignin: 'Sign in', eSignup: 'New account', eVerify: 'Verify email', ePass: 'Password', eApp: 'Customer app', footer: 'Secure sign-in · separate customer and platform sessions', createWs: 'Create workspace', hWs: ['Choose where to work', 'You belong to two workspaces.'], ws: [['Reema Café', 'Owner'], ['North Star Studio', 'Content creator']], userName: 'Reem Essam', brandName: 'Reema Café', email: 'Email', password: 'Password', forgot: 'Forgot password?', signIn: 'Sign in', noAccount: 'No account yet?', createAccount: 'Create account', name: 'Your name', pwRule: '✓ At least 8 characters · a phrase with spaces is fine', terms: 'I accept the Terms and Privacy Policy', trialNote: '14-day free trial with 200 credits. No card needed.', haveAccount: 'Already have an account?',
+      openedLink: 'I opened the link in the email', resend: 'Send it again', wrongEmail: 'Wrong email?', sendLink: 'Send me a link', backSignIn: 'Back to sign in', linkSent: 'If that email is registered, a link arrives within a minute.', newPassword: 'New password', confirmPassword: 'Confirm it', savePass: 'Save and sign in',
+      hSignin: ['Welcome back', 'Sign in to your BrandSpace workspace.'], hSignup: ['Start with BrandSpace', 'Two minutes and you are ready to make your first post.'], hSent: ['Check your email', 'We sent a confirmation link. Opening it signs you straight in.'], hForgot: ['Forgot your password?', 'Enter your email and we will send a link to change it.'], hForgotSent: ['The link is on its way', 'Open the email and click the link.'], hNewpass: ['New password', 'Pick a password and you are in.'],
+      hBusiness: ['Tell us about your business', 'Two questions. We work out the rest, and you can change it later.'], hBrand: ['Your brand', 'Name, website and logo. Templates and drafts use them.'], hTeach: ['Teach BrandSpace your brand', 'Read your website or upload files, then check what we understood before it is saved.'], hConnect: ['Connect your accounts', 'To publish and measure in one place. You can skip and connect later.'], hGoal: ['What do you want first?', 'Your strategy and first ideas are built on it.'], hReady: ['Reema Café is ready', 'We prepared 3 ideas from your goal. Start with one, or go to Home.'],
+      stepNames: ['Business', 'Brand', 'Teach', 'Accounts', 'Goal'], stepOf: (n) => 'Step ' + n + ' of 5',
+      bizName: 'Business name', country: 'Country', countryVal: 'Egypt', industry: 'Industry', teamSize: 'Team size', industries: ['Food & cafés', 'Fashion', 'Beauty', 'Services', 'Education', 'Something else'], sizes: ['Just me', '2–5', '6–20', '20+'], autoFilled: 'Time zone, interface language and billing email were set from your account.',
+      brandNameL: 'Brand name', website: 'Website (optional)', languages: 'Which languages do you post in?', langAr: 'Arabic', langEn: 'English', logoColours: 'Logo and colours', uploadLogo: 'Upload logo', coloursNote: 'We took the colours from your logo. You can change them.',
+      readSite: 'Read my website', uploadFiles: 'Upload files', fileKinds: 'Menu, company profile, brand guide', teachEmpty: 'Pick a source and we will show what we understood. Nothing is saved without your approval.', acceptAll: 'Accept all', accept: 'Accept', reject: 'Reject', accepted: 'Accepted', rejected: 'Rejected', factsHead: (n) => 'We understood ' + n + ' things · review them',
+      factList: [['About the business', 'An Egyptian café serving specialty coffee and daily pastries'], ['Audience', 'Office workers and students aged 20–35 in Cairo'], ['Offers', 'Latte, flat white, croissants, weekend brunch'], ['Tone', 'Warm and simple, local, no hype'], ['Proof points', '4.8 on Google from 1,200 reviews']],
+      connect: 'Connect', connected: 'Connected', notConnected: 'Not connected',
+      goals: ['Build awareness', 'Increase engagement', 'Generate leads', 'Drive visits or traffic', 'Launch something', 'Keep customers coming back', 'Post consistently', 'Build authority', 'I’m not sure yet'],
+      firstIdeas: 'Your first 3 ideas', makeIt: 'Make it', sumFacts: 'approved facts', sumAcc: 'accounts connected', sumGoal: 'goal', ideas: [['Coffee before work', 'Post · Instagram · Sun 9:00'], ['15 seconds behind the bar', 'Reel · TikTok · Tue'], ['Weekend brunch is back', 'Story · Instagram · Thu']],
+      back: 'Back', skip: 'Skip', continue: 'Continue', goHome: 'Go to Home', savedAsYouGo: 'Every step is saved. You can finish later from Home.', tResent: 'Sent again', tSite: 'Website read', tFiles: 'Files read', tConn: 'Connected', tPass: 'Password changed'
+    };
+    const flow = ['business', 'brand', 'teach', 'connect', 'goal', 'ready'];
+    const all = ['signin', 'signup', 'sent', 'forgot', 'forgotSent', 'newpass', 'workspaces'].concat(flow);
+    const go = {}; const is = {};
+    all.forEach(function (k) { go[k] = function () { self.setState({ screen: k, toast: '' }); }; is[k] = s.screen === k; });
+    const heads = { workspaces: T.hWs, signin: T.hSignin, signup: T.hSignup, sent: T.hSent, forgot: T.hForgot, forgotSent: T.hForgotSent, newpass: T.hNewpass, business: T.hBusiness, brand: T.hBrand, teach: T.hTeach, connect: T.hConnect, goal: T.hGoal, ready: T.hReady };
+    const nmR = String((typeof s.brandN === 'string' ? s.brandN : '') || (typeof s.bizName === 'string' ? s.bizName : '') || (s.newWs ? '' : T.brandName)).trim(); if (nmR) heads.ready = [T.hReady[0].replace(T.brandName, nmR), T.hReady[1]]; else heads.ready = [ar ? 'مساحتك جاهزة' : 'Your workspace is ready', T.hReady[1]];
+    { const nW = T.ws.length + (s.wsExtra || []).length; heads.workspaces = [T.hWs[0], ar ? ('إنت عضو في ' + (nW === 2 ? 'مساحتين عمل' : nW + ' مساحات عمل') + '.') : ('You belong to ' + nW + ' workspaces.')]; }
+    const h = heads[s.screen];
+    const idx = flow.indexOf(s.screen);
+    const steps = T.stepNames.map(function (n, i) { return { label: n, bar: i < idx || idx === 5 ? '#16794b' : (i === idx ? '#7935fe' : '#ececef'), color: i === idx ? '#111114' : '#7a7a82' }; });
+    const GEO_IND_AR = ['كافيه ومخبوزات', 'مطعم', 'توصيل أكل', 'موضة وملابس', 'تجميل وصالونات', 'عناية بالبشرة ومستحضرات', 'جيم ولياقة', 'عيادة ورعاية صحية', 'صيدلية', 'عقارات', 'تعليم وكورسات', 'سفر وفنادق', 'محل تجزئة', 'متجر أونلاين', 'تكنولوجيا وبرمجيات', 'وكالة وخدمات', 'سيارات', 'مناسبات وأفراح', 'بيت وأثاث', 'مجوهرات وإكسسوارات', 'أطفال ولعب', 'جمعية خيرية'];
+    const GEO_IND_EN = ['Café & bakery', 'Restaurant', 'Food delivery', 'Fashion & apparel', 'Beauty & salons', 'Skincare & cosmetics', 'Fitness & gyms', 'Clinic & healthcare', 'Pharmacy', 'Real estate', 'Education & courses', 'Travel & hotels', 'Retail store', 'Online store', 'Tech & software', 'Agency & services', 'Automotive', 'Events & weddings', 'Home & furniture', 'Jewelry & accessories', 'Kids & toys', 'Nonprofit'];
+    const GEO_IND = ar ? GEO_IND_AR : GEO_IND_EN;
+    const GEO_indShow = function (v) { let i = GEO_IND_EN.indexOf(v); if (i < 0) i = GEO_IND_AR.indexOf(v); return i >= 0 ? GEO_IND[i] : v; };
+    // time zones: the first three keep their old positions; offsets as of today
+    const GEO_TZ = [['Cairo', 'القاهرة', '+3'], ['Riyadh', 'الرياض', '+3'], ['Dubai', 'دبي', '+4'], ['Kuwait', 'الكويت', '+3'], ['Doha', 'الدوحة', '+3'], ['Bahrain', 'البحرين', '+3'], ['Muscat', 'مسقط', '+4'], ['Amman', 'عمّان', '+3'], ['Beirut', 'بيروت', '+3'], ['Baghdad', 'بغداد', '+3'], ['Damascus', 'دمشق', '+3'], ['Palestine', 'فلسطين', '+3'], ['Aden', 'عدن', '+3'], ['Khartoum', 'الخرطوم', '+2'], ['Tripoli', 'طرابلس', '+2'], ['Tunis', 'تونس', '+1'], ['Algiers', 'الجزائر', '+1'], ['Casablanca', 'الدار البيضاء', '+1'], ['Istanbul', 'إسطنبول', '+3'], ['London', 'لندن', '+1'], ['Paris', 'باريس', '+2'], ['Berlin', 'برلين', '+2'], ['New York', 'نيويورك', '−4'], ['Toronto', 'تورنتو', '−4'], ['Los Angeles', 'لوس أنجلوس', '−7'], ['Karachi', 'كراتشي', '+5'], ['India', 'الهند', '+5:30']];
+    const GEO_TZL = function (i) { const z = GEO_TZ[i] || GEO_TZ[0]; return (ar ? z[1] : z[0]) + ' (GMT' + z[2] + ')'; };
+    // country → default time zone
+    const GEO_C = [['Egypt', 'مصر', 0], ['Saudi Arabia', 'السعودية', 1], ['United Arab Emirates', 'الإمارات', 2], ['Kuwait', 'الكويت', 3], ['Qatar', 'قطر', 4], ['Bahrain', 'البحرين', 5], ['Oman', 'عُمان', 6], ['Jordan', 'الأردن', 7], ['Lebanon', 'لبنان', 8], ['Iraq', 'العراق', 9], ['Syria', 'سوريا', 10], ['Palestine', 'فلسطين', 11], ['Yemen', 'اليمن', 12], ['Sudan', 'السودان', 13], ['Libya', 'ليبيا', 14], ['Tunisia', 'تونس', 15], ['Algeria', 'الجزائر', 16], ['Morocco', 'المغرب', 17], ['Turkey', 'تركيا', 18], ['United Kingdom', 'المملكة المتحدة', 19], ['France', 'فرنسا', 20], ['Germany', 'ألمانيا', 21], ['United States', 'الولايات المتحدة', 22], ['Canada', 'كندا', 23], ['Pakistan', 'باكستان', 25], ['India', 'الهند', 26]];
+    const GEO_norm = function (t3) { return String(t3 || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').trim(); };
+
+    // wizard: industry (pick or type your own), country (searchable, sets the time zone), goals (add your own)
+    const WZL = ar ? { other: 'حاجة تانية', typeInd: 'اكتب مجالك', indHint: 'هيتحفظ زي ما كتبته، وتقدر تغيّره من الإعدادات ← عام.', search: 'دوّر على بلد…', none: 'مفيش نتايج', tzLine: function (z) { return 'المنطقة الزمنية: ' + z + ' حسب البلد. لغة الواجهة وإيميل الفواتير من حسابك، وكله يتغيّر من الإعدادات.'; }, addGoal: '+ هدف من عندك', goalPh: 'اكتب هدفك', add: 'ضيف', maybe: 'يمكن تقصد:' }
+      : { other: 'Something else', typeInd: 'Type your industry', indHint: 'Saved as you typed it. You can change it later in Settings → General.', search: 'Search a country…', none: 'No matches', tzLine: function (z) { return 'Time zone: ' + z + ', from your country. Interface language and billing email come from your account — all editable in Settings.'; }, addGoal: '+ Add your own', goalPh: 'Type your goal', add: 'Add', maybe: 'Did you mean:' };
+    const COMMON = [0, 1, 3, 4, 10, 12, 15];
+    const indV = GEO_indShow(typeof s.indV === 'string' ? s.indV : GEO_IND[0]);
+    const indOther = !!s.indOther; const indText = s.indText || '';
+    const nq = GEO_norm(indText);
+    const cIdx = typeof s.ctry === 'number' ? s.ctry : 0; const cOpen = !!s.cOpen; const cq = GEO_norm(s.cq || '');
+    const goalsC = s.goalsC || [];
+    const WZ = { L: WZL,
+      inds: COMMON.map(function (i) { const n = GEO_IND[i]; return { label: n, on: !indOther && indV === n ? 'true' : 'false', act: function () { self.setState({ indV: n, indOther: false }); } }; })
+        .concat([{ label: WZL.other + '…', on: indOther ? 'true' : 'false', act: function () { self.setState({ indOther: true, indV: self.state.indText || '' }); } }]),
+      indOther: indOther, indText: indText, onInd: function (e) { self.setState({ indText: e.target.value, indV: e.target.value }); },
+      sugg: nq ? GEO_IND.filter(function (n, i) { return GEO_norm(n).indexOf(nq) >= 0 && GEO_norm(n) !== nq; }).slice(0, 5).map(function (n) { return { label: n, act: function () { self.setState({ indText: n, indV: n }); } }; }) : [],
+      hasSugg: false, indCustom: indOther && !!indText.trim() && GEO_IND.indexOf(indText.trim()) < 0,
+      country: ar ? GEO_C[cIdx][1] : GEO_C[cIdx][0], cOpen: cOpen, cq: s.cq || '', toggleC: function () { self.setState({ cOpen: !self.state.cOpen, cq: '' }); }, onCq: function (e) { self.setState({ cq: e.target.value }); },
+      countries: GEO_C.map(function (c, i) { return { c: c, i: i }; }).filter(function (o) { return !cq || GEO_norm(o.c[0]).indexOf(cq) >= 0 || GEO_norm(o.c[1]).indexOf(cq) >= 0; }).map(function (o) { return { label: ar ? o.c[1] : o.c[0], sub: GEO_TZL(o.c[2]), bg: o.i === cIdx ? '#f6f3ff' : 'transparent', act: function () { self.setState({ ctry: o.i, cOpen: false, cq: '' }); } }; }),
+      tzLine: WZL.tzLine(GEO_TZL(GEO_C[cIdx][2])),
+      goalAdd: !!s.goalAdd, goalText: s.goalText || '', openGoal: function () { self.setState({ goalAdd: true }); }, onGoal: function (e) { self.setState({ goalText: e.target.value }); },
+      addGoalNow: function () { const v = (self.state.goalText || '').trim(); if (!v) return; const arr = (self.state.goalsC || []).concat([v]); self.setState({ goalsC: arr, goal: 'c' + (arr.length - 1), goalText: '', goalAdd: false }); },
+      goalsC: goalsC.map(function (g, i) { return { label: g, on: s.goal === 'c' + i ? 'true' : 'false', act: function () { self.setState({ goal: 'c' + i }); } }; })
+    };
+    WZ.bizName = typeof s.bizName === 'string' ? s.bizName : (s.newWs ? '' : T.brandName); WZ.onBiz = function (e) { self.setState({ bizName: e.target.value }); };
+    WZ.brandN = typeof s.brandN === 'string' ? s.brandN : (typeof s.bizName === 'string' ? s.bizName : (s.newWs ? '' : T.brandName)); WZ.onBrand = function (e) { self.setState({ brandN: e.target.value }); };
+    WZ.site = typeof s.siteUrl === 'string' ? s.siteUrl : (s.newWs ? '' : 'reemacafe.com'); WZ.onSite = function (e) { self.setState({ siteUrl: e.target.value }); };
+    WZ.terms = s.terms === true; WZ.toggleTerms = function () { self.setState({ terms: self.state.terms !== true }); };
+    // what the app receives when you go in (read once by the app on open)
+    const handoff = function (extra) { const st = self.state; const gl = typeof st.goal === 'string' ? ((st.goalsC || [])[+st.goal.slice(1)] || '') : (st.goal >= 0 ? T.goals[st.goal] : '');
+      const data = Object.assign({ lang: lang, onboard: { bizName: WZ.bizName, brandName: WZ.brandN, site: WZ.site, industry: indV, country: GEO_C[cIdx][0], tz: GEO_C[cIdx][2], langs: st.langs, accounts: Object.keys(st.acc || {}).filter(function (k) { return st.acc[k]; }), goal: gl, goalKey: typeof st.goal === 'number' && st.goal >= 0 ? st.goal : null, colors: st.wCols || null, logo: !!st.logoUp, facts: Object.keys(st.facts || {}).filter(function (k) { return st.facts[k] === 'a'; }).length, factList: Object.keys(st.facts || {}).filter(function (k) { return st.facts[k] === 'a'; }).map(function (k) { const f = T.factList[+k]; return f ? [[0, 1, 2, 3, 5][+k] === undefined ? 0 : [0, 1, 2, 3, 5][+k], f[1]] : null; }).filter(Boolean) } }, extra || {});
+      try { window.localStorage.setItem('bs.handoff', JSON.stringify(data)); } catch (er) {} };
+    WZ.finish = function () { handoff(); };
+    WZ.ini = (WZ.brandN || 'B').trim().charAt(0).toUpperCase() || 'B';
+    WZ.logoLabel = s.logoUp ? (ar ? '✓ اترفع اللوجو · غيّره' : '✓ Logo uploaded · change') : T.uploadLogo;
+    WZ.uploadLogo = function () { self.setState({ logoUp: true, toast: ar ? 'اترفع اللوجو وطلعنا ألوانه' : 'Logo uploaded and its colours picked up' }); };
+    const wCols = s.wCols || ['#111114', '#FFD60A', '#FFF4C7'];
+    WZ.swatches = wCols.map(function (h, i) { return { hex: h, on: function (e) { const a = wCols.slice(); a[i] = e.target.value; self.setState({ wCols: a }); } }; });
+    WZ.create = function () { const su0 = self.state; const nm0 = (typeof su0.suName === 'string' ? su0.suName : T.userName).trim(); const em0 = (typeof su0.suEmail === 'string' ? su0.suEmail : 'reem@reemacafe.com').trim(); const pw0 = typeof su0.suPw === 'string' ? su0.suPw : 'a long phrase here'; if (!nm0) { self.setState({ toast: ar ? 'اكتب اسمك' : 'Enter your name' }); return; } if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em0)) { self.setState({ toast: ar ? 'الإيميل مش صحيح' : 'That email doesn’t look right' }); return; } if (pw0.length < 8) { self.setState({ toast: ar ? 'كلمة السر لازم 8 حروف على الأقل' : 'The password needs at least 8 characters' }); return; } if (self.state.terms !== true) { self.setState({ toast: ar ? 'لازم توافق على الشروط الأول' : 'Please accept the terms first' }); return; } self.setState({ screen: 'sent', toast: '' }); };
+    WZ.noGoalAdd = !WZ.goalAdd; WZ.hasSugg = WZ.sugg.length > 0; WZ.cNone = WZ.countries.length === 0;
+    const goalLabel = typeof s.goal === 'string' ? (goalsC[+s.goal.slice(1)] || '—') : (s.goal >= 0 ? T.goals[s.goal] : '—');
+    const pick = function (key, arr) { return arr.map(function (l, i) { return { label: l, on: s[key] === i ? 'true' : 'false', act: function () { const o = {}; o[key] = i; self.setState(o); } }; }); };
+    const F = T.factList; const hasFacts = s.site || s.files;
+    const facts = F.map(function (f, i) { const st = s.facts[i]; return { area: f[0], text: f[1], conf: [96, 91, 88, 84, 79][i] + '%', pending: !st, done: !!st, state: st === 'a' ? T.accepted : T.rejected, bg: st === 'a' ? '#e6f6ee' : '#f0f0f2', fg: st === 'a' ? '#16794b' : '#55555c',
+      accept: function () { const o = Object.assign({}, self.state.facts); o[i] = 'a'; self.setState({ facts: o }); }, reject: function () { const o = Object.assign({}, self.state.facts); o[i] = 'r'; self.setState({ facts: o }); } }; });
+    const P = {
+      instagram: 'M12 2.16c3.2 0 3.58.01 4.85.07 3.25.15 4.77 1.69 4.92 4.92.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.15 3.23-1.66 4.77-4.92 4.92-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-3.26-.15-4.77-1.7-4.92-4.92-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85C2.38 3.92 3.9 2.38 7.15 2.23 8.42 2.17 8.8 2.16 12 2.16zM12 0C8.74 0 8.33.01 7.05.07 2.7.27.27 2.69.07 7.05.01 8.33 0 8.74 0 12s.01 3.67.07 4.95c.2 4.36 2.62 6.78 6.98 6.98C8.33 23.99 8.74 24 12 24s3.67-.01 4.95-.07c4.35-.2 6.78-2.62 6.98-6.98.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.2-4.35-2.62-6.78-6.98-6.98C15.67.01 15.26 0 12 0zm0 5.84a6.16 6.16 0 1 0 0 12.32 6.16 6.16 0 0 0 0-12.32zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.4-11.85a1.44 1.44 0 1 0 0 2.88 1.44 1.44 0 0 0 0-2.88z',
+      facebook: 'M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z',
+      tiktok: 'M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z', linkedin: ''
+    };
+    const accounts = [['instagram', 'Instagram', '#FF0069'], ['facebook', 'Facebook', '#0866FF'], ['tiktok', 'TikTok', '#000000'], ['linkedin', 'LinkedIn', '#0A66C2']].map(function (a) { const on = !!s.acc[a[0]]; return { name: a[1], path: P[a[0]], hasMark: !!P[a[0]], noMark: !P[a[0]], color: a[2], on: on, off: !on, sub: on ? '@reema.coffee' : T.notConnected, act: function () { const o = Object.assign({}, self.state.acc); o[a[0]] = true; self.setState({ acc: o, toast: a[1] + ' · ' + T.tConn }); } }; });
+    const accN = Object.keys(s.acc).length; const factN = Object.keys(s.facts).filter(function (k) { return s.facts[k] === 'a'; }).length;
+    const arts = ['linear-gradient(160deg, #6b4128, #b8794a 45%, #e9c79a)', 'linear-gradient(160deg, #2c1d17, #7a4b2f 60%, #d9a066)', 'linear-gradient(160deg, #f4e3c8, #d9a066 60%, #8a5534)'];
+    return {
+      t: T, lang: lang, otherLang: ar ? 'en' : 'ar', dir: ar ? 'rtl' : 'ltr', track: ar ? '0' : '-0.03em',
+      font: ar ? 'Cairo, "IBM Plex Sans Arabic", Tahoma, sans-serif' : 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif',
+      toggleLang: function () { self.setState({ lang: ar ? 'en' : 'ar' }); }, trackBig: ar ? '0' : '-0.04em', flip: ar ? 'scaleX(-1)' : 'none',
+      pwType: s.pw ? 'text' : 'password', pwLabel: s.pw ? T.hide : T.show, togglePw: function () { self.setState({ pw: !self.state.pw }); },
+      eyebrow: ({ signin: T.eSignin, signup: T.eSignup, sent: T.eVerify, forgot: T.ePass, forgotSent: T.ePass, newpass: T.ePass, workspaces: T.eApp })[s.screen] || '',
+      workspaces: T.ws.concat((s.wsExtra || []).map(function (w) { return [w[0], ar ? 'المالك' : 'Owner']; })).map(function (w, wi) { return { name: w[0], role: w[1], ini: w[0].charAt(0), open: function () { try { window.localStorage.setItem('bs.handoff', JSON.stringify({ lang: lang, ws: wi })); } catch (er) {} } }; }),
+      go: go, is: is, head: s.screen === 'ready' ? { title: (function () { const n0 = String(WZ.brandN || '').trim() || String(WZ.bizName || '').trim(); return n0 ? (ar ? n0 + ' جاهزة' : n0 + ' is ready') : (ar ? 'مساحتك جاهزة' : 'Your workspace is ready'); })(), sub: (s.goal === -1 || s.goal === undefined) ? (ar ? 'جهزنالك 3 أفكار تبدأ بيها. تقدر تحدد هدف بعدين من الاستراتيجي.' : 'We prepared 3 ideas to start with. You can set a goal later in Strategy.') : h[1] } : { title: h[0], sub: h[1] }, isAuth: idx < 0, inWizard: idx >= 0, stepLabel: idx >= 0 && idx < 5 ? T.stepOf(idx + 1) : '',
+      signIn: function () { self.setState({ screen: 'workspaces' }); }, verified: function () { self.setState({ screen: 'business' }); }, resend: function () { self.setState({ toast: T.tResent }); }, savePass: function () { const a0 = typeof self.state.np === 'string' ? self.state.np : 'a new long phrase'; const b0 = typeof self.state.np2 === 'string' ? self.state.np2 : 'a new long phrase'; if (a0.length < 8) { self.setState({ toast: ar ? 'كلمة السر لازم 8 حروف على الأقل' : 'The password needs at least 8 characters' }); return; } if (a0 !== b0) { self.setState({ toast: ar ? 'الكلمتين مش زي بعض' : 'The two passwords don’t match' }); return; } self.setState({ screen: 'signin', toast: T.tPass, np: '', np2: '' }); },
+      steps: steps, wz: WZ, industries: pick('ind', T.industries), sizes: pick('size', T.sizes),
+      langs: [['ar', T.langAr], ['en', T.langEn]].map(function (l) { return { label: l[1], on: s.langs[l[0]] ? 'true' : 'false', act: function () { const o = Object.assign({}, self.state.langs); o[l[0]] = !o[l[0]]; if (!o.ar && !o.en) { self.setState({ toast: ar ? 'لازم لغة واحدة على الأقل' : 'Keep at least one language' }); return; } self.setState({ langs: o }); } }; }),
+      swatches: ['#111114', '#FFD60A', '#FFF4C7'],
+      siteOn: s.site ? 'true' : 'false', filesOn: s.files ? 'true' : 'false', readSite: function () { self.setState({ site: true, toast: T.tSite }); }, addFiles: function () { self.setState({ files: true, toast: T.tFiles }); },
+      hasFacts: hasFacts, noFacts: !hasFacts, facts: facts, factsHead: T.factsHead(F.length), acceptAll: function () { const o = {}; F.forEach(function (f, i) { o[i] = self.state.facts[i] || 'a'; }); self.setState({ facts: o }); },
+      accounts: accounts, goals: pick('goal', T.goals),
+      summary: [{ value: String(factN), label: T.sumFacts }, { value: String(accN), label: T.sumAcc }, { value: goalLabel, label: T.sumGoal }],
+      ideas: T.ideas.map(function (d, i) { return { title: d[0], meta: d[1], art: arts[i], make: function () { WZ.finish(); try { const h0 = JSON.parse(window.localStorage.getItem('bs.handoff') || '{}'); h0.idea = d[0]; window.localStorage.setItem('bs.handoff', JSON.stringify(h0)); } catch (er) {} } }; }),
+      canBack: idx > 0 || (idx === 0 && !!s.newWs), canSkip: idx >= 2 && idx <= 4, notReady: idx >= 0 && idx < 5,
+      back: function () { if (idx === 0 && self.state.newWs) { self.setState({ screen: 'workspaces', newWs: false, toast: '' }); return; } self.setState({ screen: flow[Math.max(0, idx - 1)], toast: '' }); }, next: function () { if (idx === 0 && !String(WZ.bizName || '').trim()) { self.setState({ toast: ar ? 'اكتب اسم النشاط الأول' : 'Enter the business name first' }); return; } if (idx === 1 && !String(WZ.brandN || WZ.bizName || '').trim()) { self.setState({ toast: ar ? 'اكتب اسم العلامة' : 'Enter the brand name' }); return; } self.setState({ screen: flow[Math.min(5, idx + 1)], toast: '' }); },
+      su: (function () { const pw0 = typeof s.suPw === 'string' ? s.suPw : 'a long phrase here'; const okp = pw0.length >= 8; return { name: typeof s.suName === 'string' ? s.suName : T.userName, email: typeof s.suEmail === 'string' ? s.suEmail : 'reem@reemacafe.com', pw: pw0, np: typeof s.np === 'string' ? s.np : 'a new long phrase', np2: typeof s.np2 === 'string' ? s.np2 : 'a new long phrase',
+        onName: function (e) { self.setState({ suName: e.target.value }); }, onEmail: function (e) { self.setState({ suEmail: e.target.value }); }, onPw: function (e) { self.setState({ suPw: e.target.value }); }, onNp: function (e) { self.setState({ np: e.target.value }); }, onNp2: function (e) { self.setState({ np2: e.target.value }); },
+        pwRule: okp ? T.pwRule : (ar ? '8 حروف على الأقل · فاضل ' + (8 - pw0.length) : 'At least 8 characters · ' + (8 - pw0.length) + ' to go'), pwColor: okp ? '#16794b' : '#b86e00' }; })(),
+      wl: (function () { const owned = 1 + (s.wsExtra || []).length; const lim = 2; const can = owned < lim; return { can: can, full: !can, use: owned + '/' + lim, create: function () { self.setState({ screen: 'business', newWs: true, bizName: undefined, brandN: undefined, siteUrl: undefined, toast: '' }); }, fullL: ar ? ('وصلت لحد مساحات العمل في باقة Growth (' + owned + '/' + lim + '). رقّي الباقة من ريما كافيه ← الإعدادات ← الخطة والفوترة عشان تضيف مساحة تانية.') : ('You’ve reached the workspace limit on the Growth plan (' + owned + '/' + lim + '). Upgrade from Reema Café → Settings → Plan & billing to add another.') }; })(),
+      toast: s.toast, hasToast: !!s.toast
+    };
+  }
+}
+</script>
+</body>
+</html>

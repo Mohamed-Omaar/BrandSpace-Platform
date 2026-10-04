@@ -68,11 +68,10 @@ describe('D-281 · deep links open the exact subject, with the thread highlighte
     );
   });
 
-  it('Home and the Notes inbox both link through it, and every panel highlights', () => {
-    for (const file of [
-      'apps/dashboard/src/app/[locale]/overview/page.tsx',
-      'apps/dashboard/src/app/[locale]/notes/page.tsx',
-    ]) {
+  it('the Notes inbox links through it, and every panel highlights', () => {
+    // D-468: the prototype's Home has no notes card (the rail's Notes count
+    // leads to the inbox), so Home left this list; the inbox still deep-links.
+    for (const file of ['apps/dashboard/src/app/[locale]/notes/page.tsx']) {
       expect(read(file)).toMatch(/noteThreadHref\(locale, entry\)/);
     }
     for (const file of [

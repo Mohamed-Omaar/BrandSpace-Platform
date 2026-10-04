@@ -792,9 +792,10 @@ test.describe('accessibility', () => {
 /**
  * THE DEMO'S GEOMETRY, ASSERTED.
  *
- * `docs/visual-reference/full-demo/` is the visual authority (D-60), and the
- * standard is reproduction, not resemblance. Every number below was measured
- * from that demo rendered in this same browser at 1440×900 — not read off its
+ * `docs/visual-reference/prototype-2026-09-27/` is the visual authority
+ * (D-468; it replaced the full demo of D-60), and the standard is
+ * reproduction, not resemblance. Every number below was measured from that
+ * prototype rendered in this same browser at 1440×900 — not read off its
  * stylesheet — and each is a value the fidelity pass moved. Asserting them
  * turns "it looks right today" into something a future edit cannot quietly
  * undo, which is the only reason a screenshot review has to happen once.
@@ -811,16 +812,18 @@ test.describe('the shell reproduces the demo geometry', () => {
 
   test('the shell, the rail and the ground', async ({ page }) => {
     const shell = page.locator('.bs-shell');
-    // `.app-shell { width: min(1540px, calc(100% - 40px)); border-radius: 34px }`
+    // D-468, prototype-2026-09-27 (measured from Main.dc.html at 1440×900):
+    // the frame is 1400px wide, `border-radius: 34px; background:
+    // rgba(255,255,255,.93); backdrop-filter: blur(30px)`.
     await expect(shell).toHaveCSS('border-radius', '34px');
-    await expect(shell).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.78)');
-    await expect(shell).toHaveCSS('backdrop-filter', 'blur(24px)');
+    await expect(shell).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.93)');
+    await expect(shell).toHaveCSS('backdrop-filter', 'blur(30px)');
     expect((await shell.boundingBox())?.width).toBe(1400);
 
-    // `.sidebar { --sidebar: 248px; background: rgba(250,250,251,.78) }`
+    // The rail: `sbW = '250px'`, `background: rgba(248,248,249,.7)`.
     const sidebar = page.locator('.bs-sidebar');
-    expect((await sidebar.boundingBox())?.width).toBe(248);
-    await expect(sidebar).toHaveCSS('background-color', 'rgba(250, 250, 251, 0.78)');
+    expect((await sidebar.boundingBox())?.width).toBe(250);
+    await expect(sidebar).toHaveCSS('background-color', 'rgba(248, 248, 249, 0.7)');
 
     // `html { background: #f2f2f2 }`, `.ambient { background: #f3f3f3 }`,
     // `body { font-size: 15px }`.
@@ -912,68 +915,64 @@ test.describe('the shell reproduces the demo geometry', () => {
   });
 
   test('the navigation rows', async ({ page }) => {
-    // `.nav-item { height:39px; border-radius:12px; padding:0 11px; gap:11px;
-    //  font-size:11px; font-weight:650 }` with a 20px `.nav-icon` slot.
-    const item = page.locator('.bs-sidebar').getByRole('link').first();
-    expect((await item.boundingBox())?.height).toBe(39);
+    // D-468: `.nav{gap:12px;border-radius:12px;padding:9px 12px;
+    //  font-size:13.5px;font-weight:600;min-block-size:38px}` with an 18px glyph.
+    const item = page.locator('.bs-sidebar').getByTestId('nav-overview');
+    expect((await item.boundingBox())?.height).toBe(38);
     await expect(item).toHaveCSS('border-radius', '12px');
-    await expect(item).toHaveCSS('padding', '0px 11px');
-    await expect(item).toHaveCSS('gap', '11px');
-    await expect(item).toHaveCSS('font-size', '11px');
-    await expect(item).toHaveCSS('font-weight', '650');
-    expect((await page.locator('.bs-nav-icon').first().boundingBox())?.width).toBe(20);
+    await expect(item).toHaveCSS('padding', '9px 12px');
+    await expect(item).toHaveCSS('gap', '12px');
+    await expect(item).toHaveCSS('font-size', '13.5px');
+    await expect(item).toHaveCSS('font-weight', '600');
+    expect((await item.locator('svg').first().boundingBox())?.width).toBe(18);
   });
 
   test('the top bar', async ({ page }) => {
-    // `.topbar { min-height:88px; gap:16px; padding-bottom:12px }`,
-    // `.eyebrow { font-size:9px; font-weight:800; letter-spacing:.08em }`,
-    // `.topbar h1 { font-size:24px; letter-spacing:-.04em }`.
+    // D-468: the prototype's header measures 116.92px with its eyebrow, title
+    // and description (`padding: 26px 32px 12px; gap: 16px`); `.lbl` is
+    // 11px/700 at .07em and the title 28px/800 at -0.02em.
     const bar = page.locator('.bs-topbar');
-    expect((await bar.boundingBox())?.height).toBe(88);
+    expect((await bar.boundingBox())?.height).toBeCloseTo(116.92, 1);
     await expect(bar).toHaveCSS('column-gap', '16px');
     await expect(bar).toHaveCSS('padding-bottom', '12px');
 
     const eyebrow = page.getByTestId('page-eyebrow');
-    await expect(eyebrow).toHaveCSS('font-size', '9px');
-    await expect(eyebrow).toHaveCSS('font-weight', '800');
-    await expect(eyebrow).toHaveCSS('letter-spacing', '0.72px');
+    await expect(eyebrow).toHaveCSS('font-size', '11px');
+    await expect(eyebrow).toHaveCSS('font-weight', '700');
+    await expect(eyebrow).toHaveCSS('letter-spacing', '0.77px');
 
     const heading = page.getByTestId('heading');
-    await expect(heading).toHaveCSS('font-size', '24px');
-    await expect(heading).toHaveCSS('letter-spacing', '-0.96px');
+    await expect(heading).toHaveCSS('font-size', '28px');
+    await expect(heading).toHaveCSS('letter-spacing', '-0.56px');
   });
 
   test('the top bar controls', async ({ page }) => {
     /*
-     * P6-16: the customer top bar is Review · Notes · Notifications · Copilot ·
-     * Create, every one a real destination. The search control is GONE rather
-     * than faked (D-276), so it must not come back as an empty shell.
-     *
-     * `.icon-button { width:38px; height:38px; border-radius:12px }` for each
-     * square action, `.primary-button.compact { min-height:38px;
-     * border-radius:12px; padding:0 15px; font-size:10px }` for Create.
+     * D-468: the prototype's bar is Notes · Notifications · language · Create
+     * (`.ibtn{inline-size:40px;block-size:40px;border-radius:12px}` and
+     * `.btn.pur`: min-block-size 40px, padding 9px 16px, 13.5px/700); Review is
+     * the rail's Approvals and the Copilot is the floating button (48px high,
+     * `border-radius: 99px`, its name on screen). Search stays GONE (D-276).
      */
     await expect(page.getByTestId('topbar-search')).toHaveCount(0);
-    for (const key of ['review', 'notes', 'notifications']) {
+    for (const key of ['notes', 'notifications']) {
       const control = page.getByTestId(`topbar-${key}`);
       const box = await control.boundingBox();
-      expect(box?.width, key).toBe(38);
-      expect(box?.height, key).toBe(38);
+      expect(box?.width, key).toBe(40);
+      expect(box?.height, key).toBe(40);
       await expect(control).toHaveCSS('border-radius', '12px');
     }
-    // D-304 — the Copilot is a LABELLED control: the same height and radius,
-    // wider, with its name on screen rather than a spark to decode.
     const copilot = page.getByTestId('topbar-copilot');
     const copilotBox = await copilot.boundingBox();
-    expect(copilotBox?.height).toBe(38);
-    expect(copilotBox?.width ?? 0).toBeGreaterThan(38);
-    await expect(copilot).toHaveCSS('border-radius', '12px');
+    expect(copilotBox?.height).toBe(48);
+    expect(copilotBox?.width ?? 0).toBeGreaterThan(48);
+    await expect(copilot).toHaveCSS('border-radius', '99px');
     await expect(page.getByTestId('topbar-copilot-label')).toHaveText('Copilot');
     const create = page.getByTestId('topbar-create');
-    expect((await create.boundingBox())?.height).toBe(38);
+    expect((await create.boundingBox())?.height).toBe(40);
     await expect(create).toHaveCSS('border-radius', '12px');
-    await expect(create).toHaveCSS('padding-inline-start', '15px');
-    await expect(create).toHaveCSS('font-size', '10px');
+    await expect(create).toHaveCSS('padding-inline-start', '16px');
+    await expect(create).toHaveCSS('font-size', '13.5px');
   });
 
   test('the rail cards and the surfaces', async ({ page }) => {
@@ -998,11 +997,12 @@ test.describe('the shell reproduces the demo geometry', () => {
      * what makes the assertion about a METRIC rather than about DOM order, so
      * adding another card to this page can no longer break it.
      */
-    // `.metric { border-radius:20px; padding:20px; background:rgba(255,255,255,.72) }`
-    const metric = page.getByTestId('overview-metrics').locator('[data-surface="card"]').first();
-    await expect(metric).toHaveCSS('border-radius', '20px');
-    await expect(metric).toHaveCSS('padding', '20px');
-    await expect(metric).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.72)');
+    // D-468: a Home figure is `.xcard` — `border-radius:24px; padding:22px;
+    // background:#fff`.
+    const metric = page.getByTestId('metric-scheduled');
+    await expect(metric).toHaveCSS('border-radius', '24px');
+    await expect(metric).toHaveCSS('padding', '22px');
+    await expect(metric).toHaveCSS('background-color', 'rgb(255, 255, 255)');
 
     /*
      * `.surface-card { border-radius: 18px; padding: 22px }` — the OTHER half,
@@ -1010,8 +1010,9 @@ test.describe('the shell reproduces the demo geometry', () => {
      * it here means a change to `cardStyle` fails on the card it actually
      * changed, instead of surfacing as a confusing metric failure.
      */
+    // D-468: Upcoming is `.card` with `padding: 20px 22px; border-radius: 24px`.
     const surface = page.getByTestId('overview-upcoming');
-    await expect(surface).toHaveCSS('border-radius', '18px');
-    await expect(surface).toHaveCSS('padding', '22px');
+    await expect(surface).toHaveCSS('border-radius', '24px');
+    await expect(surface).toHaveCSS('padding', '20px 22px');
   });
 });
