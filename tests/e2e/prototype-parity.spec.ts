@@ -113,6 +113,7 @@ const SCREENS: readonly {
       await viaRail('Team & roles', 'الفريق والأدوار')(page);
     },
   },
+  { key: 'settings', route: '/settings', prototype: viaRail('Settings', 'الإعدادات') },
   {
     key: 'media-generate',
     route: '/creative',

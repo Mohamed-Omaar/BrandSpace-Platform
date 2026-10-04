@@ -1,5 +1,3 @@
-import { spacingTokens, typographyTokens } from '@brandspace/ui';
-
 /**
  * A checkbox, composed rather than created — moved here from the Approvals
  * screen when the approval rules moved to Settings (A8), and reused by the
@@ -31,34 +29,26 @@ export function CheckboxRow({
   /** A second line under the label, saying what the switch changes. */
   readonly hint?: string | undefined;
 }) {
+  /*
+   * D-468 — THE PROTOTYPE'S SWITCH ROW (`Main.dc.html` lines 1360, 1373): the
+   * label at 13.5px / 600 over its 11.5px line, the `.tgl` switch at the end.
+   * Still a native checkbox — drawn as the switch — so it posts, and is read,
+   * exactly as before.
+   */
   return (
-    <label
-      style={{
-        display: 'flex',
-        gap: spacingTokens.xs,
-        alignItems: hint ? 'flex-start' : 'center',
-        minBlockSize: '24px',
-        cursor: 'pointer',
-      }}
-    >
+    <label className="bsp-tg-row">
+      <span className="bsp-tg-text">
+        <span className="bsp-tg-l">{label}</span>
+        {hint ? <span className="bsp-tg-s">{hint}</span> : null}
+      </span>
       <input
         type="checkbox"
         name={name}
         {...(value !== undefined ? { value } : {})}
         defaultChecked={checked}
         data-testid={testId}
-        style={{
-          inlineSize: '20px',
-          blockSize: '20px',
-          margin: 0,
-          cursor: 'pointer',
-          flexShrink: 0,
-        }}
+        className="bsp-tgl-in"
       />
-      <span style={{ display: 'grid', gap: '0.125rem' }}>
-        <span style={typographyTokens.bodySm}>{label}</span>
-        {hint ? <span style={typographyTokens.caption}>{hint}</span> : null}
-      </span>
     </label>
   );
 }

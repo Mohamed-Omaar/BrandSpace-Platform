@@ -3,7 +3,6 @@ import {
   DraftForm,
   Field,
   SectionHeader,
-  SettingsSplit,
   colorTokens,
   inputStyle,
   spacingTokens,
@@ -13,7 +12,7 @@ import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-c
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { CheckboxRow } from '../../../../components/checkbox-row';
 import { brandContextFor, listAccessibleBrands } from '../../../../server/brand-context';
-import { settingsNavItems } from '../../../../server/settings-nav';
+import { SettingsFrame } from '../../../../components/settings-frame';
 import { saveBarLabels } from '../../../../server/save-bar-labels';
 import { statusMessage, translator, successFlash } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
@@ -81,14 +80,7 @@ export default async function AiSettingsPage({
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
-      <SettingsSplit
-        navLabel={t('settings.navLabel')}
-        items={settingsNavItems({
-          locale,
-          permissionKeys: workspace.permissionKeys,
-          selected: 'ai',
-        }).map((item) => ({ href: item.href, label: t(item.labelKey), selected: item.selected }))}
-      >
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="ai">
         <Card testId="ai-settings">
           <SectionHeader title={t('aiSettings.title')} description={t('aiSettings.body')} />
           {brands.length === 0 ? (
@@ -166,7 +158,7 @@ export default async function AiSettingsPage({
             </ul>
           )}
         </Card>
-      </SettingsSplit>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

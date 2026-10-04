@@ -1,7 +1,6 @@
 import {
   Card,
   Field,
-  SettingsSplit,
   buttonStyle,
   colorTokens,
   inputStyle,
@@ -20,7 +19,7 @@ import {
   requireWorkspace,
 } from '../../../../server/customer-context';
 import { brandContextFor } from '../../../../server/brand-context';
-import { settingsNavItems } from '../../../../server/settings-nav';
+import { SettingsFrame } from '../../../../components/settings-frame';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import {
@@ -146,18 +145,7 @@ export default async function SecuritySettingsPage({
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
 
-      <SettingsSplit
-        navLabel={t('settings.navLabel')}
-        items={settingsNavItems({
-          locale,
-          permissionKeys: workspace.permissionKeys,
-          selected: 'security',
-        }).map((item) => ({
-          href: item.href,
-          label: t(item.labelKey),
-          selected: item.selected,
-        }))}
-      >
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="security">
         <Card testId="mfa-card">
           <div style={{ display: 'grid', gap: spacingTokens.md }}>
             <div>
@@ -441,7 +429,7 @@ export default async function SecuritySettingsPage({
             </div>
           </form>
         </Card>
-      </SettingsSplit>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

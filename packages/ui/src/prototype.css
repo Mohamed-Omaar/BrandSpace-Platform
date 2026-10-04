@@ -7051,6 +7051,232 @@ button.bsp-chip.bsp-bb-q {
   align-items: flex-start;
 }
 
+/* ------------------------------------------------------------- §3-SG ---- */
+
+/*
+ * SETTINGS — the section column, `Main.dc.html` lines 1337–1340 (D-468,
+ * batch 6): `grid-template-columns: 210px minmax(0, 1fr); gap: 18px`, groups
+ * `gap: 14px` of rows `gap: 2px` under a 10.5px capitalised label, the rows
+ * the rail's `.nav`. The label's `#8a8a92` takes `#6a6a72`.
+ */
+.bsp-sg-grp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bsp-sg-gl {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6a6a72;
+  padding: 0 12px 4px;
+}
+.bsp-nav.bsp-sg-item {
+  justify-content: space-between;
+}
+.bsp-sg-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-inline-size: 0;
+}
+@media (min-width: 1100px) {
+  .bs-settings-split.bsp-sg {
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 18px;
+  }
+  .bsp-sg-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: sticky;
+    top: 0;
+  }
+}
+/* A section's own head: `h2.sech` at 20px and its 12.5px line. */
+.bsp-sg-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bsp-sg-head > .bsp-sech {
+  font-size: 20px;
+}
+.bsp-sg-head > span {
+  font-size: 12.5px;
+  color: #6a6a72;
+}
+
+/*
+ * THE SECTIONS' PARTS, as the prototype draws them in every section (lines
+ * 1341–1487): `.xcard`s (radius 24, `0 5px 18px rgba(20,16,35,.035)`), fields
+ * `border: 1px solid #e4e4e8; border-radius: 12px; padding: 9px 12px;
+ * font-size: 14px`, labels as `.lbl`, a card's heading as `.sech`, and the
+ * save bar — dark with a yellow dot while there are changes, glass with a
+ * green dot once saved (lines 1488–1489).
+ */
+.bsp-sg-main section[data-surface='card'] {
+  border-radius: 24px !important;
+  box-shadow: 0 5px 18px rgba(20, 16, 35, 0.035) !important;
+  border-color: transparent !important;
+}
+.bsp-sg-main
+  :is(
+    input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+    select,
+    textarea
+  ).bs-control {
+  border: 1px solid #e4e4e8 !important;
+  border-radius: 12px !important;
+  padding: 9px 12px !important;
+  font-size: 14px !important;
+  background-color: #fff !important;
+  box-shadow: none !important;
+  color: #111114;
+}
+.bsp-sg-main div > label[for]:first-child {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6a6a72 !important;
+}
+.bsp-sg-main section[data-surface='card'] :is(h2, h3) {
+  font-size: 18px !important;
+  line-height: 1.4 !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.035em;
+}
+.bsp-sg-main div[data-state]:has(> span[role='status']) {
+  border-radius: 16px !important;
+  padding: 10px 12px 10px 16px !important;
+}
+.bsp-sg-main div[data-state='dirty']:has(> span[role='status']) {
+  background: #111114 !important;
+  color: #fff;
+  border-color: transparent !important;
+  box-shadow: 0 -10px 30px rgba(20, 16, 35, 0.12) !important;
+}
+.bsp-sg-main div[data-state='clean']:has(> span[role='status']) {
+  background: rgba(255, 255, 255, 0.62) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid #ececef !important;
+  box-shadow: none !important;
+}
+.bsp-sg-main div[data-state]:has(> span[role='status']) > span[role='status'] {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+}
+.bsp-sg-main div[data-state='dirty']:has(> span[role='status']) > span[role='status'] {
+  color: #fff !important;
+}
+.bsp-sg-main div[data-state='clean']:has(> span[role='status']) > span[role='status'] {
+  color: #55555c !important;
+}
+.bsp-sg-main div[data-state]:has(> span[role='status']) > span[role='status']::before {
+  content: '';
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: #2fb36d;
+  flex-shrink: 0;
+}
+.bsp-sg-main div[data-state='dirty']:has(> span[role='status']) > span[role='status']::before {
+  background: #ffd60a;
+}
+.bsp-sg-main div[data-state]:has(> span[role='status']) > span[role='status'] > svg {
+  display: none;
+}
+.bsp-sg-main div[data-state='dirty']:has(> span[role='status']) button[type='button'] {
+  background: transparent !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+.bsp-sg-main div[data-state='dirty']:has(> span[role='status']) button[type='submit'] {
+  background: #fff !important;
+  color: #111114 !important;
+  border-color: transparent !important;
+}
+
+/*
+ * A SWITCH ROW (`CheckboxRow`): the label and its line, then `.tgl` — 34 × 20,
+ * a 16px knob 2px in, off `#d2d2d8`, on `#111114` — drawn on the native
+ * checkbox. Rows `padding: 12px 0` under a `#f3f3f5` rule.
+ */
+.bsp-tg-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  min-block-size: 24px;
+  border-block-start: 1px solid #f3f3f5;
+  cursor: pointer;
+}
+.bsp-tg-text {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.bsp-tg-l {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.bsp-tg-s {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #6a6a72;
+}
+.bsp-tgl-in {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  inline-size: 34px;
+  block-size: 20px;
+  margin: 0;
+  border: 0;
+  border-radius: 99px;
+  background: #d2d2d8;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.bsp-tgl-in::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  inline-size: 16px;
+  block-size: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: inset-inline-start 0.15s;
+}
+.bsp-tgl-in:checked {
+  background: #111114;
+}
+.bsp-tgl-in:checked::before {
+  inset-inline-start: 16px;
+}
+.bsp-tgl-in:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bsp-tgl-in:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bsp-tgl-in,
+  .bsp-tgl-in::before {
+    transition: none;
+  }
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -7369,6 +7595,19 @@ button.bsp-chip.bsp-bb-q {
 @media (max-width: 767.98px) {
   .bsp-tm-invite {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Settings below 1100px (the phone layout, and a tablet's): the sections as one card above the page, the groups side by side. */
+@media (max-width: 1099.98px) {
+  .bsp-sg-nav {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    padding: 14px;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 12px 35px rgba(16, 14, 28, 0.06);
   }
 }
 

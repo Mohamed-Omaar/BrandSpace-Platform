@@ -2,7 +2,6 @@ import {
   Card,
   DraftForm,
   Field,
-  SettingsSplit,
   buttonStyle,
   colorTokens,
   inputStyle,
@@ -28,7 +27,7 @@ import { saveBarLabels, weekdayNames } from '../../../server/save-bar-labels';
 import { GeneralFields } from './general-fields';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
-import { settingsNavItems } from '../../../server/settings-nav';
+import { SettingsFrame } from '../../../components/settings-frame';
 import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -153,18 +152,7 @@ export default async function SettingsPage({
         Phase 2C does not have, and a row that leads nowhere is a placeholder
         link, not fidelity.
       */}
-      <SettingsSplit
-        navLabel={t('settings.navLabel')}
-        items={settingsNavItems({
-          locale,
-          permissionKeys: workspace.permissionKeys,
-          selected: 'settings',
-        }).map((item) => ({
-          href: item.href,
-          label: t(item.labelKey),
-          selected: item.selected,
-        }))}
-      >
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="settings">
         <Card testId="settings-card">
           {/*
             A9 / G1 (D-330) — THE GENERAL FIELDS, UNDER THE SAVE BAR.
@@ -282,7 +270,7 @@ export default async function SettingsPage({
             </div>
           </form>
         </Card>
-      </SettingsSplit>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

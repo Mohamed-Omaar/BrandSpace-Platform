@@ -191,4 +191,9 @@ export const arEgOverrides = {
   'automations.more': 'أكتر',
   'automations.notifLink':
     'تنبيهاتك انت (منشور ما اتنشرش، موافقات، الرصيد، مراجعة Brand Brain) من الإعدادات ← الإشعارات',
+
+  // Batch 6 — Settings (Main.dc.html lines 1337–1340; copy at 3909).
+  'settings.group.workspace': 'المساحة',
+  'settings.group.people': 'الناس',
+  'settings.group.aiBilling': 'الذكاء والفوترة',
 } as const satisfies Partial<Record<MessageKey, string>>;

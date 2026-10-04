@@ -804,6 +804,41 @@ people stands in), per-member permission switches and the "customised" pill (per
 role's), a role's one-line description, the audit note and the member page's save bar (each change is
 saved by its own button).
 
+### Settings (`Main.dc.html` lines 1336–1489)
+
+Ported: the Settings column — 210px, the prototype's five groups (Workspace · People · Publishing ·
+AI & billing · Security) under their small capitalised labels, each row the rail's `.nav` item, the
+current one dark — beside the section; and, in every section, the prototype's parts: cards at radius 24
+with the faint shadow, fields (`#e4e4e8` edge, radius 12, `9px 12px`, 14px), labels as `.lbl`, a card's
+heading as `.sech`, switches as the prototype's `.tgl` rows (label and line, the switch at the end), and
+the save bar — dark with a yellow dot while there are changes, glass with a green dot once saved.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-277 §3/§44, D-298: Settings is the one home of workspace administration — Team, Roles &
+  permissions, Activity, Connections and Billing & usage are rows of it; a member sees only the rows
+  they can open, and the table that decides is the one the guard test pins.
+- Each section keeps its own fields, saves and audit (A8–A10, G1–G3, D-117, D-330, D-331, P6-13); a
+  section's name is the page heading.
+- The product's rows the prototype does not list sit in the group the prototype would put them in:
+  Roles & permissions under People, Activity under Security.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the section list is one card above the
+section.
+
+**(c) States the prototype does not draw.** A refused or saved change (the banners), the sections only
+an owner can open, a member without a brand, the retention control, multi-factor setup and recovery
+codes, connected-account errors, data export in progress, workspace deletion pending.
+
+**Accessibility findings.** The group labels' `#8a8a92` takes `#6a6a72`. The switches stay native
+checkboxes (keyboard, form posting and the 24px target unchanged).
+
+**Left out — no data or feature.** The "unsaved" dot on a row in the column (a section's changes are its
+own form's), the prototype's per-section one-line subtitles under a second heading, each section's
+composition where the product's section has different content (General's combo boxes, Brands' gradient
+tiles and "Add brand", the notification e-mail column, the AI dialect chips, the activity log inside
+Security), which keep the product's controls in the prototype's parts.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

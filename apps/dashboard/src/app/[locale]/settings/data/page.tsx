@@ -3,7 +3,6 @@ import {
   Card,
   Field,
   SectionHeader,
-  SettingsSplit,
   StatusBadge,
   buttonClass,
   buttonStyle,
@@ -20,7 +19,7 @@ import {
 } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { brandContextFor } from '../../../../server/brand-context';
-import { settingsNavItems } from '../../../../server/settings-nav';
+import { SettingsFrame } from '../../../../components/settings-frame';
 import { statusMessage, translator, type MessageKey } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { requestWorkspaceDeletionAction } from './actions';
@@ -126,14 +125,7 @@ export default async function DataControlsPage({
       {ok && statusMessage(ok, locale) && (
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
-      <SettingsSplit
-        navLabel={t('settings.navLabel')}
-        items={settingsNavItems({
-          locale,
-          permissionKeys: workspace.permissionKeys,
-          selected: 'data',
-        }).map((item) => ({ href: item.href, label: t(item.labelKey), selected: item.selected }))}
-      >
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="data">
         <Card testId="data-controls">
           <SectionHeader title={t('settings.data')} description={t('data.subtitle')} />
           <ul
@@ -258,7 +250,7 @@ export default async function DataControlsPage({
             <StatusBadge tone="neutral" label={t('data.workspaceDeletion.ownerOnly')} />
           )}
         </Card>
-      </SettingsSplit>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

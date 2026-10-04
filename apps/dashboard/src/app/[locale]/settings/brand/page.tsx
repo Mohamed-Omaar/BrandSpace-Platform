@@ -2,7 +2,6 @@ import Link from 'next/link';
 import {
   Card,
   Field,
-  SettingsSplit,
   StateMessage,
   buttonStyle,
   colorTokens,
@@ -17,7 +16,7 @@ import { NoAccessPage } from '../../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../../server/brand-context';
 import { paletteFrom } from '../../../../server/brand-profile';
 import { typographySummaryFor } from '../../../../server/brand-fonts';
-import { settingsNavItems } from '../../../../server/settings-nav';
+import { SettingsFrame } from '../../../../components/settings-frame';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { saveBrandProfileAction } from './actions';
@@ -132,12 +131,6 @@ export default async function BrandProfilePage({
    * genuinely separable — a brand manager who is not a workspace administrator
    * belongs here and does not belong there. The shared table decides.
    */
-  const nav = settingsNavItems({
-    locale,
-    permissionKeys: workspace.permissionKeys,
-    selected: 'brand',
-  }).map((item) => ({ href: item.href, label: t(item.labelKey), selected: item.selected }));
-
   const palette = paletteFrom(data?.brand.colorPalette);
 
   return (
@@ -157,7 +150,7 @@ export default async function BrandProfilePage({
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
 
-      <SettingsSplit navLabel={t('settings.navLabel')} items={nav}>
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="brand">
         {data === null ? (
           /*
            * THE TWO HONEST ABSENCES, told apart (D-191). "Choose one" and
@@ -463,7 +456,7 @@ export default async function BrandProfilePage({
             </form>
           </Card>
         )}
-      </SettingsSplit>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

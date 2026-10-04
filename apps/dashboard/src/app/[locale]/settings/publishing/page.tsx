@@ -4,7 +4,6 @@ import {
   DraftForm,
   Field,
   SectionHeader,
-  SettingsSplit,
   StateMessage,
   StatusBadge,
   buttonClass,
@@ -20,7 +19,7 @@ import { inContentStudio } from '../../../../server/content-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { CheckboxRow } from '../../../../components/checkbox-row';
 import { brandContextFor, listAccessibleBrands } from '../../../../server/brand-context';
-import { settingsNavItems } from '../../../../server/settings-nav';
+import { SettingsFrame } from '../../../../components/settings-frame';
 import { saveBarLabels } from '../../../../server/save-bar-labels';
 import {
   optionalMessage,
@@ -140,13 +139,10 @@ export default async function PublishingDefaultsPage({
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
-      <SettingsSplit
-        navLabel={t('settings.navLabel')}
-        items={settingsNavItems({
-          locale,
-          permissionKeys: workspace.permissionKeys,
-          selected: 'publishing',
-        }).map((item) => ({ href: item.href, label: t(item.labelKey), selected: item.selected }))}
+      <SettingsFrame
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="publishing"
       >
         {data.brands.length === 0 ? (
           <Card testId="publishing-defaults">
@@ -529,7 +525,7 @@ export default async function PublishingDefaultsPage({
             </div>
           );
         })}
-      </SettingsSplit>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

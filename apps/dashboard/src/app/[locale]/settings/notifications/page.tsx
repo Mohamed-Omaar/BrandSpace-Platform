@@ -1,8 +1,8 @@
-import { Card, DraftForm, SectionHeader, SettingsSplit, spacingTokens } from '@brandspace/ui';
+import { Card, DraftForm, SectionHeader, spacingTokens } from '@brandspace/ui';
 import { NOTIFICATION_CATEGORIES, NotificationPreferenceService } from '@brandspace/notifications';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
 import { brandContextFor } from '../../../../server/brand-context';
-import { settingsNavItems } from '../../../../server/settings-nav';
+import { SettingsFrame } from '../../../../components/settings-frame';
 import { saveBarLabels } from '../../../../server/save-bar-labels';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
@@ -59,13 +59,10 @@ export default async function NotificationSettingsPage({
       {ok && statusMessage(ok, locale) && (
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
-      <SettingsSplit
-        navLabel={t('settings.navLabel')}
-        items={settingsNavItems({
-          locale,
-          permissionKeys: workspace.permissionKeys,
-          selected: 'notifications',
-        }).map((item) => ({ href: item.href, label: t(item.labelKey), selected: item.selected }))}
+      <SettingsFrame
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="notifications"
       >
         <Card testId="notification-preferences">
           <SectionHeader
@@ -95,7 +92,7 @@ export default async function NotificationSettingsPage({
             ))}
           </DraftForm>
         </Card>
-      </SettingsSplit>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }
