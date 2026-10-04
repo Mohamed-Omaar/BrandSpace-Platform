@@ -154,7 +154,8 @@ test.describe('D-294 · the Brand Brain says what it knows', () => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
     const loaded = credentials();
-    await expect(page.getByTestId('brand-brain-name')).toContainText(
+    // D-468: the brand's name is the page's eyebrow, as on the prototype.
+    await expect(page.getByTestId('page-eyebrow')).toContainText(
       brandFixtures(loaded).secondBrandName,
     );
     await expect(page.getByTestId('brand-brain-understands')).toContainText(

@@ -4,7 +4,14 @@ import { DASHBOARD_BASE_URL } from './apps';
 import { E2E_VISUAL_FILE, type E2eVisualFixture } from './env';
 
 /**
- * VISUAL PARITY with the pinned demo — docs/UI-FIDELITY-CONTRACT.md §5.
+ * VISUAL PARITY with the approved prototype — docs/UI-FIDELITY-CONTRACT.md §5.
+ *
+ * REPLACED (D-468, batch 4): the numbers below were the `brand-brain-native`
+ * demo's; the prototype `prototype-2026-09-27/Main.dc.html` (lines 757–926)
+ * superseded it, so they are now the prototype's, and the baselines were
+ * re-taken from the ported screen in the same change. The rules stay: the
+ * stage is transparent, the centre is an empty transparent circle and never
+ * the brand's name, the nodes are dots, six of them, and the rest is DOM.
  *
  * WHY THIS FILE EXISTS. The Phase 5A Brand Brain screen passed typecheck, lint,
  * axe, a design-system audit and 273 Playwright assertions while being a
@@ -52,29 +59,29 @@ function fixture(): E2eVisualFixture {
   }
 }
 
-/* --- the demo's own numbers, transcribed ---------------------------------- */
+/* --- the prototype's own numbers, transcribed ---------------------------- */
 
 /**
- * Every value below is quoted from `docs/visual-reference/brand-brain-native/`
- * at the pinned commit. They are duplicated here rather than imported so that
- * an edit to the stylesheet cannot make this file agree with it: a test that
- * reads its expectations from the thing under test asserts nothing.
+ * Quoted from `docs/visual-reference/prototype-2026-09-27/Main.dc.html`:
+ * the hero is `.card` with `padding: 0; grid-template-columns: 450px
+ * minmax(0, 1fr)`; the orb column `min-height: 400px` over a `min-height:
+ * 362px` stage; the centre a 96px transparent circle; a node a 7px dot with a
+ * 3px white ring; six nodes, ten area cards four across; the chat card 600px.
+ * Duplicated here, not imported, so an edit to the stylesheet cannot make this
+ * file agree with it.
  */
-const DEMO = {
-  stageMinHeightDesktop: 570,
-  stageMinHeightMobile: 470,
-  centreDiameterDesktop: 122,
-  centreDiameterMobile: 104,
-  nodeDiameterDesktop: 12,
-  nodeDiameterMobile: 11,
-  heroPaddingDesktop: 24,
-  heroPaddingMobile: 16,
-  heroRadiusDesktop: 24,
-  heroRadiusMobile: 20,
-  /** `minmax(0,1.22fr) minmax(320px,.78fr)` — the orb column is the wider one. */
-  heroColumnRatio: 1.22 / 0.78,
+const PROTO = {
+  orbColumn: 450,
+  orbColumnMinHeight: 400,
+  stageMinHeight: 362,
+  centreDiameter: 96,
+  nodeDot: 11,
+  heroPadding: 0,
+  cardRadius: 22,
   orbitNodes: 6,
   areaCards: 10,
+  areaColumns: 4,
+  chatHeight: 600,
 } as const;
 
 const MOBILE = { width: 390, height: 844 };
@@ -152,130 +159,96 @@ const style = (locator: Locator, property: string): Promise<string> =>
  */
 async function shot(page: Page, name: string, target?: Locator): Promise<void> {
   if (!PIXEL_COMPARISON) return;
-  await page.addStyleTag({ content: '.bb-orb-canvas { visibility: hidden !important; }' });
+  await page.addStyleTag({ content: '.bsp-bb-canvas { visibility: hidden !important; }' });
   try {
     await expect(target ?? page).toHaveScreenshot(name);
   } finally {
     // Undo it, so a later assertion in the same test sees the real page.
-    await page.addStyleTag({ content: '.bb-orb-canvas { visibility: visible !important; }' });
+    await page.addStyleTag({ content: '.bsp-bb-canvas { visibility: visible !important; }' });
   }
 }
 
 /* --- the orb ------------------------------------------------------------- */
 
-test.describe('the orb matches the approved demo', () => {
-  test('the stage, the centre and the nodes are the demo’s, on desktop', async ({ page }) => {
+test.describe('the orb matches the approved prototype', () => {
+  test('the stage, the centre and the nodes are the prototype’s, on desktop', async ({ page }) => {
     await signIn(page, 'en');
 
     const stage = page.getByTestId('brand-orb');
-    const stageBox = await box(stage);
-    expect(stageBox.height).toBeGreaterThanOrEqual(DEMO.stageMinHeightDesktop);
+    expect((await box(stage)).height).toBeGreaterThanOrEqual(PROTO.stageMinHeight);
 
-    /*
-     * THE DEFECT THIS CATCHES: a lavender container behind the orb. The demo's
-     * stage is TRANSPARENT — the particles are drawn on the hero's own frosted
-     * panel — and Phase 5A gave it a filled surface.
-     */
+    // THE DEFECT THIS CATCHES: a filled container behind the orb. The stage is
+    // TRANSPARENT; the particles are drawn on the hero card's own wash.
     expect(await style(stage, 'background-color')).toBe('rgba(0, 0, 0, 0)');
     expect(await style(stage, 'background-image')).toBe('none');
 
-    /*
-     * THE DEFECT THIS CATCHES: a black rounded square in the middle. The demo's
-     * centre is a transparent 122px CIRCLE with no fill and no border.
-     */
+    // THE DEFECT THIS CATCHES: a filled centre. The prototype's is a 96px
+    // transparent circle with nothing written in it — never the brand's name.
     const centre = page.getByTestId('orb-center');
     const centreBox = await box(centre);
-    expect(Math.round(centreBox.width)).toBe(DEMO.centreDiameterDesktop);
-    expect(Math.round(centreBox.height)).toBe(DEMO.centreDiameterDesktop);
+    expect(Math.round(centreBox.width)).toBe(PROTO.centreDiameter);
+    expect(Math.round(centreBox.height)).toBe(PROTO.centreDiameter);
     expect(await style(centre, 'background-color')).toBe('rgba(0, 0, 0, 0)');
     expect(await style(centre, 'border-radius')).toBe('50%');
-
-    /*
-     * THE DEFECT THIS CATCHES: the customer's brand name in the centre. The
-     * approved demo shows the PRODUCT's name there, in both languages.
-     */
-    await expect(centre).toContainText('Brand');
-    await expect(centre).toContainText('Brain');
+    await expect(centre).toHaveText('');
     await expect(centre).not.toContainText(fixture().brandName);
 
-    /*
-     * THE DEFECT THIS CATCHES: white rectangular cards instead of dots. The
-     * demo's node is a 12px circle with a radial-gradient fill.
-     */
-    const node = page.getByTestId('orb-node-IDENTITY');
-    /*
-     * THE CSS BOX, NOT THE PAINTED ONE. A node carries the demo's own depth
-     * `scale()` — between 0.82 and 1.04 depending on where it is in its orbit —
-     * so its bounding box is a moving target while its declared size is not.
-     * Both are asserted: the size here, the scale range below.
-     */
-    expect(await style(node, 'width')).toBe(`${DEMO.nodeDiameterDesktop}px`);
-    expect(await style(node, 'height')).toBe(`${DEMO.nodeDiameterDesktop}px`);
-    expect(await style(node, 'border-radius')).toBe('50%');
-    expect(await style(node, 'background-image')).toContain('radial-gradient');
+    // THE DEFECT THIS CATCHES: cards instead of dots. A node is the prototype's
+    // 7px dot (11px of colour inside a 3px white ring), round.
+    const dot = page.getByTestId('orb-node-IDENTITY').locator('i');
+    expect(await style(dot, 'width')).toBe(`${PROTO.nodeDot}px`);
+    expect(await style(dot, 'height')).toBe(`${PROTO.nodeDot}px`);
+    expect(await style(dot, 'border-radius')).toBe('50%');
 
-    // `scale = .82 + z * .22`, so every node sits inside [0.82, 1.04].
+    // `sc = 0.82 + z * 0.22`, so every node sits inside [0.82, 1.04].
     const scales = await page.evaluate(() =>
-      Array.from(document.querySelectorAll<HTMLElement>('.bb-orbit-node')).map((element) =>
+      Array.from(document.querySelectorAll<HTMLElement>('.bsp-bb-node')).map((element) =>
         Number.parseFloat(/scale\(([0-9.]+)\)/.exec(element.style.transform)?.[1] ?? '0'),
       ),
     );
-    expect(scales).toHaveLength(6);
+    expect(scales).toHaveLength(PROTO.orbitNodes);
     for (const value of scales) {
       expect(value).toBeGreaterThanOrEqual(0.82);
       expect(value).toBeLessThanOrEqual(1.04);
     }
 
-    /*
-     * THE DEFECT THIS CATCHES: moving all ten knowledge areas into the orb. The
-     * demo carries six dots and its grid carries the rest (D-87).
-     */
-    await expect(page.locator('.bb-orbit-node')).toHaveCount(DEMO.orbitNodes);
-    await expect(page.getByTestId('area-grid').locator('button')).toHaveCount(DEMO.areaCards);
+    // Six dots on the orb, all ten areas in the grid (D-87).
+    await expect(page.locator('.bsp-bb-node')).toHaveCount(PROTO.orbitNodes);
+    await expect(page.getByTestId('area-grid').locator('button')).toHaveCount(PROTO.areaCards);
 
     await shot(page, 'orb-desktop-en.png', page.getByTestId('brand-brain-hero'));
   });
 
-  test('the hero keeps the demo’s two-column proportion', async ({ page }) => {
+  test('the hero keeps the prototype’s 450px orb column', async ({ page }) => {
     await signIn(page, 'en');
 
-    const stage = await box(page.getByTestId('brand-orb'));
-    const stats = await box(page.getByTestId('hero-stats'));
-
-    // `minmax(0,1.22fr) minmax(320px,.78fr)`. The tolerance absorbs the 24px
-    // gap and sub-pixel rounding, not a different layout.
-    expect(stage.width / stats.width).toBeGreaterThan(DEMO.heroColumnRatio - 0.25);
-    expect(stage.width / stats.width).toBeLessThan(DEMO.heroColumnRatio + 0.25);
+    const column = await box(page.locator('.bsp-bb-orbcol'));
+    expect(Math.round(column.width)).toBe(PROTO.orbColumn);
+    expect(column.height).toBeGreaterThanOrEqual(PROTO.orbColumnMinHeight);
 
     const hero = page.getByTestId('brand-brain-hero');
-    expect(await style(hero, 'padding-top')).toBe(`${DEMO.heroPaddingDesktop}px`);
-    expect(await style(hero, 'border-radius')).toBe(`${DEMO.heroRadiusDesktop}px`);
+    expect(await style(hero, 'padding-top')).toBe(`${PROTO.heroPadding}px`);
+    expect(await style(hero, 'border-radius')).toBe(`${PROTO.cardRadius}px`);
+
+    // Four area cards across.
+    const columns = await style(page.getByTestId('area-grid'), 'grid-template-columns');
+    expect(columns.split(' ')).toHaveLength(PROTO.areaColumns);
   });
 
-  test('the mobile breakpoint is the demo’s, not a different design', async ({ page }) => {
+  test('on a phone the hero stacks and nothing scrolls sideways', async ({ page }) => {
     await page.setViewportSize(MOBILE);
     await signIn(page, 'en');
 
-    const stage = await box(page.getByTestId('brand-orb'));
-    expect(stage.height).toBeGreaterThanOrEqual(DEMO.stageMinHeightMobile);
-
-    expect(await style(page.getByTestId('orb-center'), 'width')).toBe(
-      `${DEMO.centreDiameterMobile}px`,
+    expect((await box(page.getByTestId('brand-orb'))).height).toBeGreaterThanOrEqual(
+      PROTO.stageMinHeight,
     );
+    expect(await style(page.getByTestId('orb-center'), 'width')).toBe(`${PROTO.centreDiameter}px`);
 
-    expect(await style(page.getByTestId('orb-node-IDENTITY'), 'width')).toBe(
-      `${DEMO.nodeDiameterMobile}px`,
-    );
+    // One column below 1100px: the text sits under the orb, as wide as it.
+    const column = await box(page.locator('.bsp-bb-orbcol'));
+    const text = await box(page.getByTestId('completion-card'));
+    expect(Math.abs(column.width - text.width)).toBeLessThan(2);
 
-    const hero = page.getByTestId('brand-brain-hero');
-    expect(await style(hero, 'padding-top')).toBe(`${DEMO.heroPaddingMobile}px`);
-    expect(await style(hero, 'border-radius')).toBe(`${DEMO.heroRadiusMobile}px`);
-
-    // One column below 1100px, which is what stacks the panel under the orb.
-    const stats = await box(page.getByTestId('hero-stats'));
-    expect(Math.abs(stage.width - stats.width)).toBeLessThan(2);
-
-    // And nothing overflows sideways at phone width.
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
@@ -293,21 +266,17 @@ test.describe('Arabic renders the same design, mirrored', () => {
 
     expect(await page.getAttribute('html', 'dir')).toBe('rtl');
 
-    // The orb is a circle in a symmetric stage: mirroring the page must NOT
-    // change its geometry, and a value that differs from the LTR run means
-    // something physical crept into the layout.
+    // The orb is a circle in a symmetric stage: mirroring must not change it.
     const centre = await box(page.getByTestId('orb-center'));
-    expect(Math.round(centre.width)).toBe(DEMO.centreDiameterDesktop);
-    await expect(page.locator('.bb-orbit-node')).toHaveCount(DEMO.orbitNodes);
-
-    // The centre says "Brand Brain" in Arabic, not the brand's name.
+    expect(Math.round(centre.width)).toBe(PROTO.centreDiameter);
+    await expect(page.locator('.bsp-bb-node')).toHaveCount(PROTO.orbitNodes);
     await expect(page.getByTestId('orb-center')).not.toContainText(fixture().brandName);
 
-    // The stats panel sits on the LEFT in Arabic, which is the same logical
-    // position it holds on the right in English.
-    const stage = await page.getByTestId('brand-orb').boundingBox();
-    const stats = await page.getByTestId('hero-stats').boundingBox();
-    expect(stats!.x).toBeLessThan(stage!.x);
+    // The text column sits on the LEFT in Arabic — the same logical place it
+    // holds on the right in English.
+    const orb = await page.locator('.bsp-bb-orbcol').boundingBox();
+    const text = await page.getByTestId('completion-card').boundingBox();
+    expect(text!.x).toBeLessThan(orb!.x);
 
     await shot(page, 'orb-desktop-ar.png', page.getByTestId('brand-brain-hero'));
   });
@@ -327,36 +296,22 @@ test.describe('Arabic renders the same design, mirrored', () => {
 
 /* --- chat ---------------------------------------------------------------- */
 
-test.describe('the chat lives inside the hero', () => {
-  test('opening it SWAPS the stats view and changes nothing else', async ({ page }) => {
+test.describe('Talk with the brand is the prototype’s chat card', () => {
+  test('the centre opens it, alone, at the prototype’s fixed height', async ({ page }) => {
     await signIn(page, 'en');
-
-    const heroBefore = await box(page.getByTestId('brand-brain-hero'));
-    const stageBefore = await box(page.getByTestId('brand-orb'));
 
     await page.getByTestId('orb-center').click();
     const chat = page.getByTestId('brand-chat');
     await expect(chat).toBeVisible();
 
-    /*
-     * THE DEFECT THIS CATCHES: a chat that floats over the page. The demo's
-     * `.bb-hero-stats.chat-open` hides the stats and shows the chat in the SAME
-     * fixed-height box, so opening it must not move or resize anything.
-     */
-    await expect(page.getByTestId('stats-view')).toBeHidden();
+    // The prototype's chat tab is the card on its own (lines 899–925): the
+    // hero and the grid give way to it, and it does not float over the page.
+    await expect(page.getByTestId('brand-brain-hero')).toHaveCount(0);
+    await expect(page.getByTestId('tab-chat')).toHaveAttribute('aria-selected', 'true');
     expect(await style(chat, 'position')).toBe('static');
+    expect(Math.round((await box(chat)).height)).toBe(PROTO.chatHeight);
 
-    const heroAfter = await box(page.getByTestId('brand-brain-hero'));
-    const stageAfter = await box(page.getByTestId('brand-orb'));
-    expect(Math.abs(heroAfter.height - heroBefore.height)).toBeLessThan(2);
-    expect(Math.abs(stageAfter.width - stageBefore.width)).toBeLessThan(2);
-
-    // The chat occupies the panel the stats vacated, to the pixel.
-    const chatBox = await box(chat);
-    const panel = await box(page.getByTestId('hero-stats'));
-    expect(Math.abs(chatBox.height - panel.height)).toBeLessThan(2);
-
-    await shot(page, 'chat-open-desktop-en.png', page.getByTestId('brand-brain-hero'));
+    await shot(page, 'chat-open-desktop-en.png', chat);
   });
 
   test('the panel does not grow when a message is sent', async ({ page }) => {
@@ -378,45 +333,41 @@ test.describe('the chat lives inside the hero', () => {
   });
 });
 
-/* --- drawer --------------------------------------------------------------- */
+/* --- an open area --------------------------------------------------------- */
 
-test.describe('the area drawer', () => {
-  test('opens over the page without moving it', async ({ page }) => {
+test.describe('an open area', () => {
+  test('opens in place of the grid, in two columns', async ({ page }) => {
     await signIn(page, 'en');
 
-    const heroBefore = await box(page.getByTestId('brand-brain-hero'));
-
     await page.getByTestId('area-card-IDENTITY').click();
-    const drawer = page.getByTestId('area-drawer');
-    await expect(drawer).toBeVisible();
-    await expect(drawer).toHaveAttribute('aria-modal', 'true');
+    const area = page.getByTestId('area-drawer');
+    await expect(area).toBeVisible();
 
-    const heroAfter = await box(page.getByTestId('brand-brain-hero'));
-    expect(Math.abs(heroAfter.width - heroBefore.width)).toBeLessThan(2);
+    // The prototype opens the area where the cards were (lines 817–866): the
+    // hero, "What's missing" and the grid give way, and the facts sit beside
+    // what is waiting, `1.3fr 1fr`.
+    await expect(page.getByTestId('area-grid')).toHaveCount(0);
+    await expect(page.getByTestId('brand-brain-hero')).toHaveCount(0);
+    const facts = await box(page.locator('.bsp-bb-facts'));
+    const waiting = await box(page.getByTestId('drawer-review'));
+    expect(facts.width / waiting.width).toBeGreaterThan(1.2);
+    expect(facts.width / waiting.width).toBeLessThan(1.4);
 
-    await shot(page, 'drawer-open-desktop-en.png');
+    await shot(page, 'area-open-desktop-en.png');
   });
 
-  test('opens on the correct side in Arabic', async ({ page }) => {
+  test('starts on the right in Arabic', async ({ page }) => {
     await signIn(page, 'ar');
 
     await page.getByTestId('area-card-IDENTITY').click();
-    const drawer = page.getByTestId('area-drawer');
-    await expect(drawer).toBeVisible();
+    await expect(page.getByTestId('area-drawer')).toBeVisible();
 
-    /*
-     * Logical inline-end, which in RTL is the LEFT edge. A physical `right`
-     * anywhere in the drawer's styles would put it on the wrong side.
-     *
-     * Asserted as "in the left half", not "at x = 0": the shell insets the
-     * drawer from the edge, and pinning the exact inset here would make this
-     * test fail on a spacing change rather than on the thing it is about.
-     */
-    const bounds = (await drawer.boundingBox())!;
-    const viewport = page.viewportSize()!;
-    expect(bounds.x + bounds.width / 2).toBeLessThan(viewport.width / 2);
+    // "← All areas" at the inline START, which in RTL is the right.
+    const back = (await page.getByTestId('drawer-close').boundingBox())!;
+    const area = (await page.getByTestId('area-drawer').boundingBox())!;
+    expect(back.x + back.width / 2).toBeGreaterThan(area.x + area.width / 2);
 
-    await shot(page, 'drawer-open-desktop-ar.png');
+    await shot(page, 'area-open-desktop-ar.png');
   });
 });
 

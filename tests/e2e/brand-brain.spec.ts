@@ -81,7 +81,7 @@ async function addKnowledge(page: Page, area: string, key: string, body: string)
 
   const form = page.getByTestId('add-knowledge-form');
   if (!(await form.isVisible().catch(() => false))) {
-    await page.keyboard.press('Escape');
+    await page.getByTestId('drawer-close').click();
     return;
   }
   await page.fill('[data-testid="new-item-key"]', key);
@@ -168,19 +168,20 @@ test.describe('Brand Brain screen', () => {
     await expect(page.getByTestId('orb-node-AUDIENCE')).toBeVisible();
   });
 
-  test('clicking an area card opens the real detail drawer', async ({ page }) => {
+  test('clicking an area card opens the real area in place of the grid', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
     await page.getByTestId('area-card-IDENTITY').click();
     const drawer = page.getByTestId('area-drawer');
     await expect(drawer).toBeVisible();
-    await expect(drawer).toHaveAttribute('aria-modal', 'true');
+    // D-468: the prototype opens an area where the cards were (lines 817–866).
+    await expect(page.getByTestId('area-grid')).toHaveCount(0);
     // Real state, not a placeholder: an area with nothing in it says so.
     await expect(page.getByTestId('drawer-count')).toBeVisible();
   });
 
-  test('clicking an orb node opens the same drawer', async ({ page }) => {
+  test('clicking an orb node opens the same area', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
@@ -189,60 +190,63 @@ test.describe('Brand Brain screen', () => {
   });
 });
 
-test.describe('the drawer is genuinely modal', () => {
-  test('Escape closes it and focus returns to the page', async ({ page }) => {
+/*
+ * REPLACED (D-468, batch 4): the area was a modal drawer — Escape, `inert`
+ * siblings and a focus trap. The prototype opens it IN PLACE of the grid, with
+ * "← All areas" above it, so these now prove the inline view's own contract:
+ * focus starts on the way back, the way back restores the grid, nothing on the
+ * page is made inert, and Tab walks on from the area into the page.
+ */
+test.describe('the open area replaces the grid, keyboard first', () => {
+  test('"All areas" closes it and the grid comes back', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
     await page.getByTestId('area-card-IDENTITY').click();
     await expect(page.getByTestId('area-drawer')).toBeVisible();
-    await page.keyboard.press('Escape');
+    await page.getByTestId('drawer-close').click();
     await expect(page.getByTestId('area-drawer')).toBeHidden();
+    await expect(page.getByTestId('area-grid')).toBeVisible();
   });
 
-  test('focus moves INTO the drawer on open', async ({ page }) => {
+  test('focus moves to "All areas" on open', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
     await page.getByTestId('area-card-OFFERS').click();
     await expect(page.getByTestId('area-drawer')).toBeVisible();
-    // The close button takes focus, so a keyboard user starts inside the layer
-    // rather than at the top of the document.
+    // The way back takes focus, so a keyboard user starts at the area.
     await expect(page.getByTestId('drawer-close')).toBeFocused();
   });
 
-  test('the page behind is INERT while the drawer is open', async ({ page }) => {
+  test('nothing on the page is inert while an area is open', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
     await page.getByTestId('area-card-GLOSSARY').click();
     await expect(page.getByTestId('area-drawer')).toBeVisible();
-
-    /*
-     * An overlay stops clicks. It does NOT stop Tab. `inert` on every sibling
-     * of the panel is what removes the page behind from the tab order and the
-     * accessibility tree, and this is the assertion that proves it is applied.
-     */
-    const inertCount = await page.evaluate(
-      () => Array.from(document.body.children).filter((el) => el.hasAttribute('inert')).length,
+    // The page around the area stays live: the rail, the top bar and the tabs.
+    const inert = await page.evaluate(() =>
+      ['nav', 'main', '[data-testid="brand-brain-tabs"]'].map(
+        (selector) => document.querySelector(selector)?.closest('[inert]') !== null,
+      ),
     );
-    expect(inertCount).toBeGreaterThan(0);
+    expect(inert).toEqual([false, false, false]);
   });
 
-  test('Tab stays inside the drawer', async ({ page }) => {
+  test('Tab moves from "All areas" into the area', async ({ page }) => {
     await openBrandBrain(page);
     await ensureBrand(page);
 
     await page.getByTestId('area-card-IDENTITY').click();
-    await expect(page.getByTestId('area-drawer')).toBeVisible();
+    await expect(page.getByTestId('drawer-close')).toBeFocused();
+    await page.keyboard.press('Tab');
 
-    for (let i = 0; i < 12; i += 1) await page.keyboard.press('Tab');
-
-    const insideDrawer = await page.evaluate(() => {
-      const drawer = document.querySelector('[data-testid="area-drawer"]');
-      return drawer?.contains(document.activeElement) ?? false;
+    const insideArea = await page.evaluate(() => {
+      const area = document.querySelector('[data-testid="area-drawer"]');
+      return area?.contains(document.activeElement) ?? false;
     });
-    expect(insideDrawer).toBe(true);
+    expect(insideArea).toBe(true);
   });
 });
 
@@ -391,19 +395,20 @@ test.describe('right-to-left', () => {
     expect(hero).toMatch(/[؀-ۿ]/);
   });
 
-  test('the drawer opens on the correct side in RTL', async ({ page }) => {
+  test('the open area starts on the right in RTL', async ({ page }) => {
     await openBrandBrain(page, 'ar');
     await ensureBrand(page, 'ar');
 
     await page.getByTestId('area-card-IDENTITY').click();
-    const drawer = page.getByTestId('area-drawer');
-    await expect(drawer).toBeVisible();
+    await expect(page.getByTestId('area-drawer')).toBeVisible();
 
-    // `inset-inline-end` puts it on the LEFT in RTL. A `right` literal would
-    // leave it on the right and overlap the content it is meant to sit beside.
-    const box = await drawer.boundingBox();
-    const viewport = page.viewportSize();
-    expect(box?.x ?? 0).toBeLessThan((viewport?.width ?? 1280) / 2);
+    // "← All areas" sits at the inline START — the right edge in Arabic. A
+    // physical `left` would leave it on the wrong side of the area.
+    const back = await page.getByTestId('drawer-close').boundingBox();
+    const area = await page.getByTestId('area-drawer').boundingBox();
+    expect((back?.x ?? 0) + (back?.width ?? 0)).toBeGreaterThan(
+      (area?.x ?? 0) + (area?.width ?? 0) / 2,
+    );
   });
 });
 
@@ -422,7 +427,7 @@ test.describe('responsive', () => {
     expect(overflow).toBeLessThanOrEqual(2);
   });
 
-  test('the drawer fits a phone screen', async ({ page }) => {
+  test('the open area fits a phone screen', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openBrandBrain(page);
     await ensureBrand(page);
@@ -458,7 +463,7 @@ test.describe('accessibility', () => {
     });
   }
 
-  test('the OPEN DRAWER has no serious or critical violations', async ({ page }) => {
+  test('the OPEN AREA has no serious or critical violations', async ({ page }) => {
     // Asserted with the modal open, because that is when the page has two
     // competing focus contexts and an `inert` subtree — the state most likely
     // to be wrong and least likely to be checked.

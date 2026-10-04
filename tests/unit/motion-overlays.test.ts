@@ -57,7 +57,6 @@ describe('MO5 — opening', () => {
     for (const file of [
       'packages/ui/src/app-shell.tsx',
       'packages/ui/src/post-detail-drawer.tsx',
-      'apps/dashboard/src/app/[locale]/brand-brain/area-drawer.tsx',
     ]) {
       expect(read(file), file).toContain('className="bs-pop"');
     }
@@ -83,7 +82,6 @@ describe('MO5 — closing', () => {
       'packages/ui/src/app-shell.tsx',
       'packages/ui/src/searchable-select.tsx',
       'apps/dashboard/src/components/mention-field.tsx',
-      'apps/dashboard/src/app/[locale]/brand-brain/area-drawer.tsx',
     ]) {
       expect(read(file), file).toMatch(/'data-leaving': '', 'aria-hidden': true, inert: true/);
     }

@@ -576,6 +576,60 @@ generation and the scan in progress.
 figure), "Big files" and "Plan →", a video's duration on its card (not in the card's data), and the
 generated example picture.
 
+### Brand Brain (`Main.dc.html` lines 757–926, and the orb's `makeOrb`)
+
+Ported: the four tabs in the prototype's segmented switch (Knowledge, Look & voice, Sources, Talk with
+the brand); the hero card — the orb in its 450px column with its hint, beside the count, the lead and
+the actions; "What's missing" with its question chips; the To review banner with "Accept the confident
+ones" (its card lists what it will accept) and "Review one by one" (the review card: where the fact
+goes, its confidence pill, the fact in large type, what was found in the source, old and new side by
+side, Accept · Edit · Reject · Later, and "All reviewed" when the queue is empty); the ten area cards
+four across; an open area IN PLACE of the grid ("← All areas", the head card with its key questions,
+Approved facts beside Waiting for your review); Look & voice as the prototype's cards (Logo, Colours,
+Voice and the fonts full width); Sources as the upload card and the list (type badge, name over meta,
+"n · Facts", Read again, Remove with the prototype's inline confirmation); and the chat card (the small
+orb, "Brand Brain", what it answers from, the log, suggestions, the mode switch with its glyphs, the
+input and Send, the note). The orb is a transcription of the prototype's canvas orb — its particle
+counts, scale, rotation, links, flares, pointer repulsion, no hole, and the six nodes on its ellipse —
+replacing the `brand-brain-native` orb.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-357: the hero counts key questions — "answered n of m", the number in the prototype's 52px figure —
+  not "areas complete out of 10", and there is no progress bar; an area's state and its card's count
+  come from its key questions too, and a node's line is that area's "n of m".
+- D-294: under the count, what BrandSpace understands, the four layers, the facts and sources; the
+  brand's name is the page's eyebrow (as on the prototype).
+- D-298 and the Copilot: "Ask about this brand" (the scoped Copilot) and "Brand profile" beside "Ask the
+  brand" and "Upload files".
+- D1: the Knowledge tab carries the number waiting for review; the tabs stay a keyboard tablist.
+- D-91 / D-86: the six nodes are real buttons placed on the prototype's ellipse each frame (so a keyboard
+  can open an area and a file can be dropped on one); reduced motion draws the prototype's `draw(0)`.
+- D-65 / D4: one review queue; a candidate that precedence refuses offers Reject and "Edit fact", with
+  the precedence note; the card names its source and its place in the queue, and an analytics
+  learning its evidence. "Edit" opens both languages of the title and the body.
+- D6 / D7: a fact's "valid until", its layer and authority, provenance and uses; adding a fact names
+  its key and both languages, and without review rights is sent for review; the chat keeps Add, Edit,
+  Remove (with Undo) and Attach.
+- CLAUDE.md §2.5: "Upload files" and a file dropped on the orb place the file on the Sources form to be
+  confirmed — nothing uploads silently; Remove asks Keep its facts / Drop its facts.
+
+**(b) Post-launch — left out.** Website reading ("Read my website" and the site card). The phone layout:
+below 768px the areas two across and everything else one column.
+
+**(c) States the prototype does not draw.** An empty brain, a member who may not review ("waiting for
+reviewers"), a document being read or failed, an upload in flight, a chat that cannot answer from
+approved knowledge, chat errors, a fact that has expired.
+
+**Accessibility findings.** The quiet greys (`#8a8a92`) take `#6a6a72`. "Edit, then accept" was a
+`<summary>` under 24px; it is now the prototype's Edit button (40px), which also meets the owner's 24px
+minimum.
+
+**Left out — no data or feature.** "Suggest from sources" on an area, a fact's version history and
+restore, the archived-facts list, the Look tab's templates card (Colours takes its column), the logo
+"Replace" tiles, the chat's inline teach / fix cards (the product's modes do this), and a per-fact
+"used by" from a chat answer.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

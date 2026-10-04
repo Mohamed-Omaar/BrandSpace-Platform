@@ -32,8 +32,9 @@ describe('D-294 · Brand Brain says what it knows, in counts', () => {
    */
   it('every inbox candidate shows a confidence label and the recorded reason for it', () => {
     const inbox = read('apps/dashboard/src/app/[locale]/brand-brain/review-inbox.tsx');
+    // D-468: the label sits in the prototype's confidence pill, with the reason.
     expect(inbox).toMatch(
-      /<p data-testid=\{`intel-confidence-\$\{current\.id\}`\}>\s*\{current\.confidenceLabel\}[^<]*\{current\.confidenceWhy\}/,
+      /data-testid=\{`intel-confidence-\$\{current\.id\}`\}\s*>\s*\{current\.confidenceLabel\}[\s\S]{0,160}?\{current\.confidenceWhy\}\s*<\/span>/,
     );
   });
 

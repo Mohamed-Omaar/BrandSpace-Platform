@@ -117,7 +117,7 @@ describe('Item 5 — the Remove dialog offers Drop only with brand_brain.edit', 
     expect(view).toMatch(/canDrop=\{permissions\.upload && permissions\.edit\}/);
     expect(view).toMatch(/canUpload=\{permissions\.upload\}/);
     const row = source('apps/dashboard/src/app/[locale]/brand-brain/source-row.tsx');
-    expect(row).toMatch(/\{canDrop \? \(\s*<label>/);
+    expect(row).toMatch(/\{canDrop \? \(\s*<button\s+type="submit"\s+name="mode"\s+value="drop"/);
     expect(row).toMatch(/\{canUpload && source\.canReadAgain \? \(/);
     const actions = source('apps/dashboard/src/app/[locale]/brand-brain/actions.ts');
     expect(actions).toMatch(

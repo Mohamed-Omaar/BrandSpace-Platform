@@ -124,7 +124,6 @@ describe('every managed overlay goes through the one stack', () => {
       'packages/ui/src/post-detail-drawer.tsx': 1,
       // The phone navigation drawer.
       'packages/ui/src/app-shell.tsx': 1,
-      'apps/dashboard/src/app/[locale]/brand-brain/area-drawer.tsx': 1,
     };
     for (const [file, count] of Object.entries(managed)) {
       const source = read(file);

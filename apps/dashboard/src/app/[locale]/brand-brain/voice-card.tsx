@@ -46,114 +46,119 @@ export function VoiceCard({
 }) {
   const t = translator(useMessageLocale(locale));
   return (
-    <div className="bb-source" data-testid="voice-card" style={{ display: 'grid', gap: 16 }}>
-      <div className="bb-source-head">
-        <h4>{t('bb.voice.title')}</h4>
-      </div>
-
-      <section data-testid="voice-words" style={sectionStyle}>
-        <h5 style={headingStyle}>{t('bb.voice.words')}</h5>
-        <p style={bodyStyle} data-testid="voice-words-value">
-          {voice.words ? voice.words.body || voice.words.title : t('bb.voice.wordsEmpty')}
-        </p>
-        {canEdit ? (
-          <form
-            action={voice.words ? updateKnowledgeAction : createKnowledgeAction}
-            style={formStyle}
-            data-testid="voice-words-form"
-          >
-            <Hidden locale={locale} brandId={brandId} area="TONE_OF_VOICE" />
-            {voice.words ? (
-              <input type="hidden" name="itemId" value={voice.words.id} />
-            ) : (
-              <input type="hidden" name="itemKey" value="voice.words" />
-            )}
-            {/* The fact's own title, in both catalogues' words — never typed here. */}
-            <input type="hidden" name="titleEn" value={translator('en')('bb.voice.words')} />
-            <input type="hidden" name="titleAr" value={translator('ar')('bb.voice.words')} />
-            <input
-              className={CONTROL_CLASS}
-              name="bodyEn"
-              dir="ltr"
-              defaultValue={voice.words?.edit.bodyEn ?? ''}
-              placeholder={t('bb.voice.wordsPlaceholderEn')}
-              aria-label={t('bb.newItem.bodyEn')}
-              data-testid="voice-words-en"
-              style={inputStyle}
-            />
-            <input
-              className={CONTROL_CLASS}
-              name="bodyAr"
-              dir="rtl"
-              defaultValue={voice.words?.edit.bodyAr ?? ''}
-              placeholder={t('bb.voice.wordsPlaceholderAr')}
-              aria-label={t('bb.newItem.bodyAr')}
-              data-testid="voice-words-ar"
-              style={inputStyle}
-            />
-            <button
-              type="submit"
-              className={buttonClass('neutral')}
-              style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
-              data-testid="voice-words-save"
+    <section className="bsp-card bsp-bb-lc bsp-bb-lc-full" data-testid="voice-card">
+      {/* The prototype's Voice card (line 874): the label, what it is for, three columns. */}
+      <span className="bsp-bb-lc-h">
+        <span className="bsp-lbl">{t('bb.voice.title')}</span>
+        <span>{t('bb.voice.sub')}</span>
+      </span>
+      <div className="bsp-bb-voice-grid">
+        <section data-testid="voice-words" style={sectionStyle}>
+          <h5 style={headingStyle}>{t('bb.voice.words')}</h5>
+          <p style={bodyStyle} data-testid="voice-words-value">
+            {voice.words ? voice.words.body || voice.words.title : t('bb.voice.wordsEmpty')}
+          </p>
+          {canEdit ? (
+            <form
+              action={voice.words ? updateKnowledgeAction : createKnowledgeAction}
+              style={formStyle}
+              data-testid="voice-words-form"
             >
-              {t('common.save')}
-            </button>
-          </form>
-        ) : null}
-      </section>
+              <Hidden locale={locale} brandId={brandId} area="TONE_OF_VOICE" />
+              {voice.words ? (
+                <input type="hidden" name="itemId" value={voice.words.id} />
+              ) : (
+                <input type="hidden" name="itemKey" value="voice.words" />
+              )}
+              {/* The fact's own title, in both catalogues' words — never typed here. */}
+              <input type="hidden" name="titleEn" value={translator('en')('bb.voice.words')} />
+              <input type="hidden" name="titleAr" value={translator('ar')('bb.voice.words')} />
+              <input
+                className={CONTROL_CLASS}
+                name="bodyEn"
+                dir="ltr"
+                defaultValue={voice.words?.edit.bodyEn ?? ''}
+                placeholder={t('bb.voice.wordsPlaceholderEn')}
+                aria-label={t('bb.newItem.bodyEn')}
+                data-testid="voice-words-en"
+                style={inputStyle}
+              />
+              <input
+                className={CONTROL_CLASS}
+                name="bodyAr"
+                dir="rtl"
+                defaultValue={voice.words?.edit.bodyAr ?? ''}
+                placeholder={t('bb.voice.wordsPlaceholderAr')}
+                aria-label={t('bb.newItem.bodyAr')}
+                data-testid="voice-words-ar"
+                style={inputStyle}
+              />
+              <button
+                type="submit"
+                className={buttonClass('neutral')}
+                style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
+                data-testid="voice-words-save"
+              >
+                {t('common.save')}
+              </button>
+            </form>
+          ) : null}
+        </section>
 
-      <RuleList
-        testId="voice-tone"
-        title={t('bb.voice.tone')}
-        empty={t('bb.voice.toneEmpty')}
-        items={voice.tone}
-        area="TONE_OF_VOICE"
-        prefix="tone."
-        addLabel={t('bb.voice.addTone')}
-        locale={locale}
-        brandId={brandId}
-        canEdit={canEdit}
-      />
-      <RuleList
-        testId="voice-do"
-        title={t('bb.voice.do')}
-        empty={t('bb.voice.doEmpty')}
-        items={voice.dos}
-        area="DO_DONT"
-        prefix="do."
-        addLabel={t('bb.voice.addDo')}
-        locale={locale}
-        brandId={brandId}
-        canEdit={canEdit}
-      />
-      <RuleList
-        testId="voice-dont"
-        title={t('bb.voice.dont')}
-        empty={t('bb.voice.dontEmpty')}
-        items={voice.donts}
-        area="DO_DONT"
-        prefix="dont."
-        addLabel={t('bb.voice.addDont')}
-        locale={locale}
-        brandId={brandId}
-        canEdit={canEdit}
-      />
-      {voice.unsorted.length > 0 ? (
         <RuleList
-          testId="voice-unsorted"
-          title={t('bb.voice.unsorted')}
-          empty=""
-          items={voice.unsorted}
-          area="DO_DONT"
-          prefix={null}
-          addLabel=""
+          testId="voice-tone"
+          title={t('bb.voice.tone')}
+          empty={t('bb.voice.toneEmpty')}
+          items={voice.tone}
+          area="TONE_OF_VOICE"
+          prefix="tone."
+          addLabel={t('bb.voice.addTone')}
           locale={locale}
           brandId={brandId}
           canEdit={canEdit}
-          note={t('bb.voice.unsortedNote')}
         />
-      ) : null}
+        <div className="bsp-bb-voice-col">
+          <RuleList
+            testId="voice-do"
+            title={t('bb.voice.do')}
+            empty={t('bb.voice.doEmpty')}
+            items={voice.dos}
+            area="DO_DONT"
+            prefix="do."
+            addLabel={t('bb.voice.addDo')}
+            locale={locale}
+            brandId={brandId}
+            canEdit={canEdit}
+          />
+          <RuleList
+            testId="voice-dont"
+            title={t('bb.voice.dont')}
+            empty={t('bb.voice.dontEmpty')}
+            items={voice.donts}
+            area="DO_DONT"
+            prefix="dont."
+            addLabel={t('bb.voice.addDont')}
+            locale={locale}
+            brandId={brandId}
+            canEdit={canEdit}
+          />
+        </div>
+        {voice.unsorted.length > 0 ? (
+          <RuleList
+            testId="voice-unsorted"
+            title={t('bb.voice.unsorted')}
+            empty=""
+            items={voice.unsorted}
+            area="DO_DONT"
+            prefix={null}
+            addLabel=""
+            locale={locale}
+            brandId={brandId}
+            canEdit={canEdit}
+            note={t('bb.voice.unsortedNote')}
+          />
+        ) : null}
+      </div>
 
       <p style={{ ...bodyStyle, color: colorTokens.textMuted }} data-testid="voice-look-note">
         {t('bb.voice.lookNote')}{' '}
@@ -163,7 +168,7 @@ export function VoiceCard({
           </Link>
         ) : null}
       </p>
-    </div>
+    </section>
   );
 }
 

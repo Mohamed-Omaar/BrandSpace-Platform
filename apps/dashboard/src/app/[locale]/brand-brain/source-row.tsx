@@ -1,21 +1,21 @@
 'use client';
 
-import { useId, useState } from 'react';
-import { Button, Dialog } from '@brandspace/ui';
+import { useEffect, useId, useRef, useState } from 'react';
 import { translator } from '../../../i18n/messages';
 import { readAgainSourceAction, removeSourceAction } from './actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /**
- * ONE SOURCE, WITH WHAT IT IS RESPONSIBLE FOR (Phase 2C-4, D5).
+ * ONE SOURCE, WITH WHAT IT IS RESPONSIBLE FOR (Phase 2C-4, D5) — the
+ * prototype's source row (`Main.dc.html` lines 889–893, D-468).
  *
- * THE ROW IS THE DEMO'S. `.bb-doc` — badge, name over detail, status — is
- * transcribed unchanged, so the Sources card still reads as the approved demo.
- * Below it, an APPROVED DESIGN-SYSTEM EXTENSION (CLAUDE.md §4.2, recorded in
- * docs/UI-FIDELITY-CONTRACT.md §6): a meta line (type, size, date, counts) and
- * the three actions the demo describes but never drew — the facts list, Read
- * again and Remove — built from the card's own type scale and the shared
- * `Dialog`. No new colour, radius, shadow or font.
+ * The type badge, the name over its meta (type, size, date, the reader's
+ * detail and the counts), then the actions: "n facts · Show" (the facts and
+ * candidates it is responsible for), Read again, and Remove — which opens the
+ * prototype's inline confirmation: remove and keep its facts, or (with
+ * `brand_brain.edit`) remove it and its facts, or Cancel. Removing is a
+ * high-impact action and still takes that second, explicit press
+ * (CLAUDE.md §2.5).
  *
  * NOTHING HERE DECIDES A PERMISSION. The page passes what the member holds and
  * the row simply leaves out a control they cannot use; the actions re-check
@@ -64,180 +64,179 @@ export function SourceRow({
 }) {
   const t = translator(useMessageLocale(locale));
   const detailId = useId();
-  const removeFormId = useId();
   const [open, setOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [mode, setMode] = useState<'keep' | 'drop'>('keep');
+  const keepRef = useRef<HTMLButtonElement | null>(null);
+  const removeRef = useRef<HTMLButtonElement | null>(null);
   const failed = source.status === 'FAILED';
+  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
   const count = (key: 'bb.source.approvedCount' | 'bb.source.pendingCount', n: number) =>
-    t(key).replace('{n}', new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en').format(n));
+    t(key).replace('{n}', number.format(n));
+
+  // The confirmation takes focus when it opens, and gives it back when it closes.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (removing) keepRef.current?.focus();
+    else if (wasOpen.current) removeRef.current?.focus();
+    wasOpen.current = removing;
+  }, [removing]);
 
   return (
-    <li className="bb-doc-item" data-testid={`source-${source.id}`} data-status={source.status}>
-      <div className="bb-doc">
-        <i aria-hidden="true">{source.kind}</i>
-        <span>
-          <b>{source.fileName}</b>
-          <small data-testid={`source-detail-${source.id}`}>{source.detail}</small>
+    <li className="bsp-bb-srow" data-testid={`source-${source.id}`} data-status={source.status}>
+      <div className="bsp-row bsp-bb-srow-main">
+        <span className="bsp-bb-ext" aria-hidden="true">
+          {source.kind}
         </span>
-        <span className={failed ? 'failed' : undefined} data-testid={`source-status-${source.id}`}>
-          {source.statusLabel}
+        <span className="bsp-bb-srow-t">
+          <b className="bsp-ltr">{source.fileName}</b>
+          <span data-testid={`source-meta-${source.id}`}>
+            {source.meta} · {count('bb.source.approvedCount', source.approvedCount)} ·{' '}
+            {count('bb.source.pendingCount', source.pendingCount)}
+          </span>
+          <span data-testid={`source-detail-${source.id}`}>{source.detail}</span>
         </span>
+        {canUpload && source.reading ? (
+          <span
+            className="bsp-pill bsp-p-ai bs-pulse"
+            role="status"
+            data-testid={`source-reading-${source.id}`}
+          >
+            {t('bb.source.reading')}
+          </span>
+        ) : (
+          <span
+            className={failed ? 'bsp-pill bsp-p-bad' : 'bsp-pill bsp-p-ok'}
+            data-testid={`source-status-${source.id}`}
+          >
+            {source.statusLabel}
+          </span>
+        )}
+        <button
+          type="button"
+          className="bsp-chip bsp-bb-srow-show"
+          aria-expanded={open}
+          aria-controls={detailId}
+          onClick={() => setOpen((value) => !value)}
+          data-testid={`source-toggle-${source.id}`}
+        >
+          {number.format(source.approvedCount + source.pendingCount)} ·{' '}
+          {open ? t('bb.source.hideDetails') : t('bb.source.showDetails')}
+        </button>
+        {canUpload && source.canReadAgain ? (
+          <form action={readAgainSourceAction}>
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="documentId" value={source.id} />
+            <button
+              type="submit"
+              className="bsp-btn bsp-sm bsp-ghost"
+              data-testid={`source-read-again-${source.id}`}
+            >
+              {t('bb.source.readAgain')}
+            </button>
+          </form>
+        ) : null}
+        {canUpload ? (
+          <button
+            ref={removeRef}
+            type="button"
+            className="bsp-btn bsp-sm bsp-ghost bsp-bb-danger"
+            aria-expanded={removing}
+            onClick={() => setRemoving(true)}
+            data-testid={`source-remove-${source.id}`}
+          >
+            {t('bb.source.remove')}
+          </button>
+        ) : null}
       </div>
 
-      <div className="bb-doc-meta">
-        <small data-testid={`source-meta-${source.id}`}>
-          {source.meta} · {count('bb.source.approvedCount', source.approvedCount)} ·{' '}
-          {count('bb.source.pendingCount', source.pendingCount)}
-        </small>
-        <span className="bb-doc-actions">
+      {removing ? (
+        /* `r.rmOpen` — line 892: the question, Keep, Drop, Cancel. */
+        <form
+          action={removeSourceAction}
+          className="bsp-bb-rm"
+          role="group"
+          aria-label={t('bb.source.removeTitle').replace('{name}', source.fileName)}
+          data-testid={`source-remove-dialog-${source.id}`}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.stopPropagation();
+              setRemoving(false);
+            }
+          }}
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="documentId" value={source.id} />
+          <span className="bsp-bb-rm-q">
+            <b>{t('bb.source.removeTitle').replace('{name}', source.fileName)}</b>
+            <small>{t('bb.source.removeBody')}</small>
+          </span>
           <button
-            type="button"
-            className="bb-doc-action"
-            aria-expanded={open}
-            aria-controls={detailId}
-            onClick={() => setOpen((value) => !value)}
-            data-testid={`source-toggle-${source.id}`}
+            ref={keepRef}
+            type="submit"
+            name="mode"
+            value="keep"
+            className="bsp-btn bsp-sm bsp-sec"
+            title={t('bb.source.keepHint')}
+            data-testid={`source-remove-keep-${source.id}`}
           >
-            {open ? t('bb.source.hideDetails') : t('bb.source.showDetails')}
+            {t('bb.source.keep')}
           </button>
-          {canUpload && source.canReadAgain ? (
-            <form action={readAgainSourceAction}>
-              <input type="hidden" name="locale" value={locale} />
-              <input type="hidden" name="documentId" value={source.id} />
-              <button
-                type="submit"
-                className="bb-doc-action"
-                data-testid={`source-read-again-${source.id}`}
-              >
-                {t('bb.source.readAgain')}
-              </button>
-            </form>
-          ) : null}
-          {canUpload && source.reading ? (
-            <small role="status" data-testid={`source-reading-${source.id}`}>
-              {t('bb.source.reading')}
-            </small>
-          ) : null}
-          {canUpload ? (
+          {canDrop ? (
             <button
-              type="button"
-              className="bb-doc-action"
-              onClick={() => {
-                setMode('keep');
-                setRemoving(true);
-              }}
-              data-testid={`source-remove-${source.id}`}
+              type="submit"
+              name="mode"
+              value="drop"
+              className="bsp-btn bsp-sm bsp-bb-drop"
+              title={t('bb.source.dropHint').replace('{n}', number.format(source.approvedCount))}
+              data-testid={`source-remove-drop-${source.id}`}
             >
-              {t('bb.source.remove')}
+              {t('bb.source.drop')}
             </button>
           ) : null}
-        </span>
-      </div>
+          <button
+            type="button"
+            className="bsp-btn bsp-sm bsp-ghost"
+            onClick={() => setRemoving(false)}
+            data-testid={`source-remove-cancel-${source.id}`}
+          >
+            {t('common.cancel')}
+          </button>
+        </form>
+      ) : null}
 
       {open ? (
-        <div className="bb-doc-detail" id={detailId} data-testid={`source-facts-${source.id}`}>
-          <h5>{t('bb.source.factsTitle')}</h5>
+        /* `r.open` — line 893: each fact with its state and area. */
+        <div className="bsp-bb-sfacts" id={detailId} data-testid={`source-facts-${source.id}`}>
+          <b className="bsp-lbl">{t('bb.source.factsTitle')}</b>
           {source.facts.length === 0 ? (
-            <p>{t('bb.source.noFacts')}</p>
+            <span className="bsp-bb-sfacts-none">{t('bb.source.noFacts')}</span>
           ) : (
-            <ul>
-              {source.facts.map((fact) => (
-                <li key={fact.id} data-testid={`source-fact-${fact.id}`}>
-                  <b dir="auto">{fact.title}</b>
-                  <small>
-                    {fact.areaLabel} · {fact.stateLabel}
-                  </small>
-                </li>
-              ))}
-            </ul>
+            source.facts.map((fact) => (
+              <span key={fact.id} className="bsp-bb-sfact" data-testid={`source-fact-${fact.id}`}>
+                <span className="bsp-pill bsp-p-ok">{fact.stateLabel}</span>
+                <span dir="auto">{fact.title}</span>
+                <span className="bsp-bb-sfact-a">{fact.areaLabel}</span>
+              </span>
+            ))
           )}
-          <h5>{t('bb.source.pendingTitle')}</h5>
+          <b className="bsp-lbl">{t('bb.source.pendingTitle')}</b>
           {source.pending.length === 0 ? (
-            <p>{t('bb.source.noPending')}</p>
+            <span className="bsp-bb-sfacts-none">{t('bb.source.noPending')}</span>
           ) : (
-            <ul>
-              {source.pending.map((candidate) => (
-                <li key={candidate.id} data-testid={`source-pending-${candidate.id}`}>
-                  <b dir="auto">{candidate.title}</b>
-                  <small>
-                    {candidate.areaLabel} · {candidate.stateLabel}
-                  </small>
-                </li>
-              ))}
-            </ul>
+            source.pending.map((candidate) => (
+              <span
+                key={candidate.id}
+                className="bsp-bb-sfact"
+                data-testid={`source-pending-${candidate.id}`}
+              >
+                <span className="bsp-pill bsp-p-ai">{candidate.stateLabel}</span>
+                <span dir="auto">{candidate.title}</span>
+                <span className="bsp-bb-sfact-a">{candidate.areaLabel}</span>
+              </span>
+            ))
           )}
         </div>
       ) : null}
-
-      <Dialog
-        open={removing}
-        onClose={() => setRemoving(false)}
-        title={t('bb.source.removeTitle').replace('{name}', source.fileName)}
-        description={t('bb.source.removeBody')}
-        closeLabel={t('bb.detailClose')}
-        testId={`source-remove-dialog-${source.id}`}
-        footer={
-          <>
-            <Button variant="neutral" onClick={() => setRemoving(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="brand"
-              type="submit"
-              form={removeFormId}
-              data-testid={`source-remove-confirm-${source.id}`}
-            >
-              {t('bb.source.removeConfirm')}
-            </Button>
-          </>
-        }
-      >
-        <form id={removeFormId} action={removeSourceAction} className="bb-remove-choice">
-          <input type="hidden" name="locale" value={locale} />
-          <input type="hidden" name="documentId" value={source.id} />
-          <fieldset>
-            <legend>{t('bb.source.removeChoose')}</legend>
-            <label>
-              <input
-                type="radio"
-                name="mode"
-                value="keep"
-                checked={mode === 'keep'}
-                onChange={() => setMode('keep')}
-                data-testid={`source-remove-keep-${source.id}`}
-              />
-              <span>
-                <b>{t('bb.source.keep')}</b>
-                <small>{t('bb.source.keepHint')}</small>
-              </span>
-            </label>
-            {canDrop ? (
-              <label>
-                <input
-                  type="radio"
-                  name="mode"
-                  value="drop"
-                  checked={mode === 'drop'}
-                  onChange={() => setMode('drop')}
-                  data-testid={`source-remove-drop-${source.id}`}
-                />
-                <span>
-                  <b>{t('bb.source.drop')}</b>
-                  <small>
-                    {t('bb.source.dropHint').replace(
-                      '{n}',
-                      new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en').format(
-                        source.approvedCount,
-                      ),
-                    )}
-                  </small>
-                </span>
-              </label>
-            ) : null}
-          </fieldset>
-        </form>
-      </Dialog>
     </li>
   );
 }

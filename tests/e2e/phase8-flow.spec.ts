@@ -812,7 +812,11 @@ test('14 · a learning is proposed and reaches the governed Brand Brain queue', 
   const after = await brandBrainCandidateCount(page);
   expect(after, 'the proposal reached the Brand Brain review queue').toBeGreaterThanOrEqual(before);
   expect(after, 'the review queue holds at least one candidate').toBeGreaterThan(0);
-  await expect(page.getByTestId('intel-card')).toBeVisible();
+  // The prototype's banner opens the one review card.
+  await expect(async () => {
+    await page.getByTestId('review-one-by-one').click();
+    await expect(page.getByTestId('intel-card')).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
 
   /*
    * AND IT IS STILL WAITING FOR A HUMAN. A count alone would not distinguish a
@@ -822,7 +826,7 @@ test('14 · a learning is proposed and reaches the governed Brand Brain queue', 
    * and checks it is sitting there with Reject, and Accept or — where a human
    * fact outranks it (D-65) — the precedence note, still to be decided.
    */
-  const card = page.getByTestId('intel-card').locator('.bb-learning').first();
+  const card = page.getByTestId('intel-card').locator('.bsp-bb-rv-body').first();
   const cardId = (await card.getAttribute('data-testid'))?.replace('intel-', '');
   expect(cardId, 'the queued candidate is on the inbox card').toBeTruthy();
   await expect(page.getByTestId(`reject-${cardId}`)).toBeVisible();
@@ -837,6 +841,10 @@ test('14 · a learning is proposed and reaches the governed Brand Brain queue', 
  */
 async function brandBrainCandidateCount(page: Page): Promise<number> {
   await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
-  const text = await page.getByTestId('review-inbox-count').innerText();
+  await expect(page.getByTestId('brand-brain-tabs')).toBeVisible();
+  // D-468: the prototype draws the To review banner only when something waits.
+  const banner = page.getByTestId('review-inbox-count');
+  if ((await banner.count()) === 0) return 0;
+  const text = await banner.innerText();
   return Number(/\d+/.exec(text)?.[0] ?? '0');
 }

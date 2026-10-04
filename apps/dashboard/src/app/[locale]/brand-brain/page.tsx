@@ -431,6 +431,7 @@ export default async function BrandBrainPage({
       })),
       pendingCandidates: area.pendingCandidates,
       attention: area.attention.map((reason) => t(`bb.attention.${reason}` as MessageKey)),
+      attentionCodes: area.attention,
       items: (itemsByArea.get(area.area) ?? []).map((item) => ({
         id: item.id,
         itemKey: item.itemKey,
@@ -482,7 +483,14 @@ export default async function BrandBrainPage({
         area,
         slot: ORB_SLOTS[area as keyof typeof ORB_SLOTS],
         label: card.label,
-        detail: `${card.activeItems} ${t('bb.itemsCount')}`,
+        // The prototype's node line is the area's own "n of m" (`a.sub`).
+        detail:
+          card.total > 0
+            ? t('bb.answeredOf')
+                .replace('{answered}', String(card.answered))
+                .replace('{total}', String(card.total))
+            : `${card.activeItems} ${t('bb.itemsCount')}`,
+        done: card.status === 'COMPLETE',
       },
     ];
   });
@@ -559,6 +567,7 @@ export default async function BrandBrainPage({
       confidencePercent: Math.round(candidate.confidenceMilli / 10),
       // D4 — High / Medium / Low from the CONFIGURED thresholds, and why.
       confidenceLabel: t(`bb.confidence.${label}` as MessageKey),
+      confidenceLevel: label,
       confidenceWhy: t(`bb.confidence.why.${why.reason}` as MessageKey).replace(
         '{hits}',
         reviewNumber.format(why.keywordHits ?? 0),
@@ -837,6 +846,9 @@ export default async function BrandBrainPage({
       brandContext={brandContext}
       locale={locale}
       heading={t('bb.title')}
+      // The prototype's eyebrow over "Brand Brain" is the brand's own name.
+      eyebrow={brand.name}
+      description={t('bb.pageSub')}
       activePath="/brand-brain"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -874,6 +886,8 @@ export default async function BrandBrainPage({
         initialTab={initialTab}
         initialFocus={initialFocus}
         focusCandidateId={typeof query['candidate'] === 'string' ? query['candidate'] : null}
+        // The review card posts and comes back here: it stays open on the way back.
+        reviewOpen={status === 'CANDIDATE_ACCEPTED' || status === 'CANDIDATE_REJECTED'}
         confident={confident.map((entry) => ({
           id: entry.id,
           title: pick(entry.title, locale) || entry.itemKey,

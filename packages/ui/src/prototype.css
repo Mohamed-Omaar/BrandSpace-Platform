@@ -4497,6 +4497,1225 @@ span.bsp-cal-hol {
   }
 }
 
+/* ------------------------------------------------------------- §3-BB ---- */
+
+/*
+ * BRAND BRAIN — `Main.dc.html` lines 757–926 (D-468, batch 4). The quiet greys
+ * `#8a8a92` take `#6a6a72` for contrast, as everywhere in this file.
+ */
+
+.bsp-bb,
+.bsp-bb-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-inline-size: 0;
+}
+.bsp-bb-panel:focus {
+  outline: none;
+}
+
+/* The tabs are a real tablist in the `.seg` look: `aria-selected` reads as
+   `aria-pressed`, and the chat's modes (a radio group) read `aria-checked`. */
+.bsp-seg button[aria-selected='true'],
+.bsp-seg button[aria-checked='true'] {
+  background: #fff;
+  color: #111114;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.bsp-seg[data-seg] button[aria-selected='true'],
+.bsp-seg[data-seg] button[aria-checked='true'] {
+  background: transparent;
+  box-shadow: none;
+}
+.bsp-seg.bsp-bb-tabs {
+  align-self: flex-start;
+  flex-wrap: wrap;
+  max-inline-size: 100%;
+}
+/* The Knowledge tab's waiting count (not in the prototype, D-468 (a), D1). */
+.bsp-bb-tabn {
+  margin-inline-start: 6px;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: #f0e9ff;
+  color: #5312c4;
+  font-size: 11px;
+}
+
+/* The hero: `.card` with `padding: 0; display: grid; grid-template-columns:
+   450px minmax(0, 1fr); align-items: center; overflow: hidden` on the
+   prototype's radial wash, which follows the orb to the other side in RTL. */
+.bsp-card.bsp-bb-hero {
+  padding: 0;
+  display: grid;
+  grid-template-columns: 450px minmax(0, 1fr);
+  align-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(420px 340px at 20% 48%, rgba(121, 53, 254, 0.08), transparent 70%), #fff;
+}
+[dir='rtl'] .bsp-card.bsp-bb-hero {
+  background:
+    radial-gradient(420px 340px at 80% 48%, rgba(121, 53, 254, 0.08), transparent 70%), #fff;
+}
+.bsp-bb-orbcol {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 400px;
+  min-inline-size: 0;
+}
+.bsp-bb-stage {
+  position: relative;
+  flex-grow: 1;
+  min-block-size: 362px;
+}
+.bsp-bb-stage.dragging {
+  box-shadow: inset 0 0 0 2px #d9ccff;
+  border-radius: 20px;
+}
+.bsp-bb-canvas {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+}
+/* The centre: a transparent 96px circle that opens the chat. */
+.bsp-bb-centre {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  inline-size: 96px;
+  block-size: 96px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.bsp-bb-centre:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+/*
+ * THE SIX NODES, drawn as the prototype's canvas draws them: a 7px dot with a
+ * 3px white ring (audience purple, offers yellow, the rest ink), a green 4px
+ * dot at (+7, −7) when the area is complete, the name in 800 12px with its
+ * baseline 22px below the dot's centre and the count in 600 10.5px at 36px.
+ * The canvas is not mirrored in Arabic, so neither are these: physical
+ * `left`/`top`, as the script that places them writes.
+ */
+.bsp-bb-node {
+  position: absolute;
+  left: 0;
+  top: 0;
+  inline-size: 40px;
+  block-size: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #111114;
+  font: inherit;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+.bsp-bb-node > i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  inline-size: 11px;
+  block-size: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 50%;
+  background: #111114;
+  box-shadow: 0 0 0 3px #fff;
+}
+.bsp-bb-node[data-slot='audience'] > i {
+  background: #7935fe;
+}
+.bsp-bb-node[data-slot='offers'] > i {
+  background: #ffdd15;
+}
+.bsp-bb-node[data-done] > i::after {
+  content: '';
+  position: absolute;
+  left: 8.5px;
+  top: -5.5px;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: #16794b;
+}
+.bsp-bb-node > b,
+.bsp-bb-node > small {
+  position: absolute;
+  left: 50%;
+  line-height: 1;
+  white-space: nowrap;
+  translate: -50% -86.4%;
+}
+.bsp-bb-node > b {
+  top: calc(50% + 22px);
+  font-size: 12px;
+  font-weight: 800;
+  color: #111114;
+}
+.bsp-bb-node > small {
+  top: calc(50% + 36px);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #6a6a72;
+}
+.bsp-bb-node:focus-visible {
+  outline: none;
+}
+.bsp-bb-node:focus-visible > i {
+  outline: 2px solid #7935fe;
+  outline-offset: 4px;
+}
+.bsp-bb-node.dragging > i {
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 6px #d9ccff;
+}
+/* `padding: 0 20px 16px; text-align: center; font-size: 11.5px`. */
+.bsp-bb-hint {
+  padding: 0 20px 16px;
+  text-align: center;
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+/* `padding: 32px 56px 32px 12px; max-width: 560px; gap: 16px`. */
+.bsp-bb-herotext {
+  padding-block: 32px;
+  padding-inline: 12px 56px;
+  max-inline-size: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  justify-content: center;
+  min-inline-size: 0;
+}
+/* D-357: "answered n of m" — the count in the prototype's 52px figure
+   (`font-weight: 800; letter-spacing: -0.03em`), its words at 14px. */
+.bsp-bb-count {
+  display: block;
+  font-size: 14px;
+  font-weight: 400;
+  color: #6a6a72;
+}
+.bsp-bb-big {
+  display: inline-block;
+  margin-inline: 4px;
+  font-size: 52px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #111114;
+}
+.bsp-bb-und {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6a6a72;
+}
+.bsp-bb-lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #4d4c53;
+}
+.bsp-bb-layers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bsp-bb-acts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* `label.btn` holding a transparent file input over itself. */
+.bsp-btn.bsp-bb-pick {
+  position: relative;
+  cursor: pointer;
+}
+.bsp-btn.bsp-bb-pick:focus-within {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bs-control.bsp-bb-file {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* What's missing: `.card` with `padding: 14px 18px; display: flex;
+   align-items: center; gap: 14px; flex-wrap: wrap`. */
+.bsp-card.bsp-bb-miss {
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.bsp-bb-miss-t {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 180px;
+}
+.bsp-bb-miss-t > b {
+  font-size: 14px;
+}
+.bsp-bb-miss-t > span {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-bb-miss-n {
+  color: #6a6a72;
+  font-weight: 700;
+}
+.bsp-bb-miss-q {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-grow: 1;
+}
+.bsp-bb-miss-q > .bsp-chip {
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.bsp-bb-miss-a {
+  color: #6a6a72;
+  font-weight: 600;
+}
+.bsp-bb-miss-plus {
+  color: #5312c4;
+}
+
+/* To review: `border-radius: 18px; background: #f6f3ff; padding: 14px 18px;
+   display: flex; align-items: center; gap: 12px`. */
+.bsp-bb-rvbar {
+  border-radius: 18px;
+  background: #f6f3ff;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bsp-bb-rvbar-t {
+  flex-grow: 1;
+  font-size: 14px;
+  font-weight: 700;
+}
+.bsp-bb-rvbar-n {
+  font-size: 12.5px;
+  color: #55555c;
+}
+/* The confident-ones card: `padding: 14px 18px; gap: 8px; margin-top: -6px`. */
+.bsp-card.bsp-bb-bulk {
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: -6px;
+}
+.bsp-bb-bulk-f {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bsp-bb-bulk-f > b {
+  font-size: 13.5px;
+}
+.bsp-bb-bulk-f > ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bsp-bb-bulk-f li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+}
+.bsp-bb-bulk-x {
+  flex-grow: 1;
+}
+.bsp-bb-bulk-a {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-bb-bulk-acts {
+  display: flex;
+  gap: 8px;
+}
+.bsp-bb-bulk-none {
+  font-size: 13.5px;
+  color: #55555c;
+}
+.bsp-card.bsp-bb-bulk > .bsp-btn {
+  align-self: flex-start;
+}
+
+/* The review card: `padding: 22px 24px; gap: 14px; max-width: 760px`. */
+.bsp-card.bsp-bb-rv {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-inline-size: 760px;
+  scroll-margin-block-start: 16px;
+}
+.bsp-bb-rv-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bsp-bb-rv-head > b {
+  font-size: 18px;
+  flex-grow: 1;
+}
+.bsp-bb-rv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bsp-bb-rv-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bsp-bb-rv-k {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-bb-rv-text {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+.bsp-bb-rv-sub {
+  font-size: 14px;
+  line-height: 1.55;
+  color: #4d4c53;
+}
+/* "What we found in the source": `background: #f7f7f9; border-radius: 14px;
+   padding: 12px 14px; gap: 4px`, the words 13.5px `#4d4c53`. */
+.bsp-bb-rv-said {
+  background: #f7f7f9;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bsp-bb-rv-said > span:last-child {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #4d4c53;
+}
+.bsp-bb-rv-cmp {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.bsp-bb-rv-cmp > div {
+  border: 1px solid #ececef;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13.5px;
+}
+.bsp-bb-rv-cmp > .bsp-bb-rv-new {
+  border-color: #f3c9d1;
+  background: #fff7f8;
+}
+.bsp-bb-rv-new > .bsp-lbl {
+  color: #b83245;
+}
+.bsp-bb-rv-warn {
+  font-size: 12.5px;
+  color: #b83245;
+}
+.bsp-bb-rv-link {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #5312c4;
+}
+.bsp-bb-rv-acts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bsp-bb-rv-acts > form {
+  display: contents;
+}
+.bsp-btn.bsp-bb-rv-reject {
+  color: #b83245;
+}
+.bsp-bb-rv-foot {
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+.bsp-bb-rv-note {
+  margin: 0;
+  font-size: 13.5px;
+  color: #55555c;
+}
+.bsp-bb-rv-done {
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.bsp-bb-rv-done > b {
+  font-size: 22px;
+  font-weight: 800;
+}
+.bsp-bb-rv-done > span {
+  font-size: 13.5px;
+  color: #6a6a72;
+}
+.bsp-bb-rv-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* The prototype's inputs: `border: 1px solid #ececef; border-radius: 10px;
+   padding: 9px 12px; font-size: 14px`; the fact being edited `#d9ccff`, 12px,
+   `11px 13px`, 16px 700. */
+.bs-control.bsp-bb-in {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  border: 1px solid #ececef;
+  border-radius: 10px;
+  background: #fff;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 14px;
+}
+textarea.bs-control.bsp-bb-in {
+  resize: vertical;
+}
+.bs-control.bsp-bb-in.bsp-bb-in-big {
+  border-color: #d9ccff;
+  border-radius: 12px;
+  padding: 11px 13px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* The ten areas: `.xgrid` four across, `.xcard` `min-height: 210px`; the count
+   is `.xcount` (`font-size: 9px; text-align: end`, 10.5px in Arabic). */
+.bsp-xgrid.bsp-bb-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.bsp-xcard.bsp-bb-card {
+  min-block-size: 210px;
+}
+.bsp-xcount {
+  font-size: 9px;
+  color: #6a6a72;
+  text-align: end;
+}
+[lang='ar'] .bsp-xcount {
+  font-size: 10.5px;
+}
+
+/* An open area, in place of the grid (lines 817–866). */
+.bsp-bb-area {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bsp-btn.bsp-bb-back {
+  align-self: flex-start;
+}
+.bsp-card.bsp-bb-ahead {
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.bsp-bb-ahead-t {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-grow: 1;
+  min-inline-size: 0;
+}
+.bsp-bb-ahead-n {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bsp-bb-ahead-n > h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+}
+.bsp-bb-ahead-d {
+  font-size: 13px;
+  color: #6a6a72;
+}
+.bsp-bb-ahead-q {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 6px;
+}
+.bsp-bb-ahead-k {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #6a6a72;
+}
+/* A key question: `.chip` with `min-block-size: 28px; padding: 3px 10px;
+   font-size: 12px`, its mark green when answered. */
+.bsp-chip.bsp-bb-q {
+  min-block-size: 28px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+button.bsp-chip.bsp-bb-q {
+  cursor: pointer;
+}
+.bsp-chip.bsp-bb-q[aria-pressed='true'] {
+  border-color: #7935fe;
+  background: #f6f3ff;
+}
+.bsp-bb-q-m {
+  font-weight: 800;
+  color: #6a6a72;
+}
+.bsp-bb-q[data-answered='true'] .bsp-bb-q-m {
+  color: #16794b;
+}
+.bsp-bb-q-w {
+  display: contents;
+}
+.bsp-bb-ahead-att {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #fff3cc;
+  color: #7a5600;
+  font-size: 12.5px;
+}
+/* `grid-template-columns: 1.3fr 1fr; gap: 14px; align-items: start`. */
+.bsp-bb-acols {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.bsp-card.bsp-bb-facts,
+.bsp-card.bsp-bb-wait {
+  overflow: hidden;
+  min-inline-size: 0;
+}
+.bsp-bb-colh {
+  margin: 0;
+  padding: 14px 18px 6px;
+  font-size: 15px;
+  font-weight: 800;
+}
+.bsp-bb-colh-n {
+  color: #6a6a72;
+}
+.bsp-bb-colh-p {
+  color: #5312c4;
+}
+/* A fact: `padding: 11px 18px; border-block-end: 1px solid #f0f0f2; gap: 8px`. */
+.bsp-bb-fact {
+  padding: 11px 18px;
+  border-block-end: 1px solid #f0f0f2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bsp-bb-fact[data-expired] {
+  background: #fbfbfc;
+}
+.bsp-bb-fact-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bsp-bb-fact-main {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+  font-size: 14px;
+}
+.bsp-bb-fact-body {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #4d4c53;
+  white-space: pre-wrap;
+}
+.bsp-bb-fact-meta {
+  font-size: 11.5px;
+  color: #6a6a72;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bsp-bb-fact-acts {
+  display: flex;
+  flex-shrink: 0;
+}
+.bsp-bb-fact-acts > form {
+  display: contents;
+}
+/* The edit box: `background: #fff; border: 1px solid #e6dcff; border-radius:
+   12px; padding: 10px; gap: 8px`. */
+.bsp-bb-editbox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #e6dcff;
+  border-radius: 12px;
+  padding: 10px;
+}
+.bsp-bb-editbox-acts {
+  display: flex;
+  gap: 6px;
+}
+.bsp-bb-until {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: #55555c;
+}
+.bsp-bb-until > .bs-control.bsp-bb-in {
+  inline-size: auto;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.bsp-bb-until > small {
+  flex-basis: 100%;
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+.bsp-bb-empty {
+  font-size: 13.5px;
+  color: #6a6a72;
+}
+/* The add row: `.row` on `#fbfbfc`. */
+.bsp-bb-add {
+  padding: 12px 18px;
+  background: #fbfbfc;
+  border-block-end: 1px solid #f0f0f2;
+  display: grid;
+  gap: 8px;
+}
+.bsp-bb-add-q {
+  font-size: 13.5px;
+}
+.bsp-bb-add-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.bsp-bb-add-note {
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+.bsp-bb-add > .bsp-btn {
+  justify-self: start;
+}
+.bsp-bb-aup {
+  padding: 10px 18px;
+  background: #fbfbfc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bs-control.bsp-bb-aup-in {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 12.5px;
+}
+/* Waiting for your review: rows `padding: 11px 18px; border-top`, the empty
+   line `12px 18px 18px`, the footer 12px. */
+.bsp-bb-wait-row {
+  padding: 11px 18px;
+  border-block-start: 1px solid #f0f0f2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+.bsp-bb-wait-none {
+  margin: 0;
+  padding: 12px 18px 18px;
+  font-size: 13.5px;
+  color: #6a6a72;
+}
+.bsp-btn.bsp-bb-wait-go {
+  margin: 4px 18px 12px;
+}
+.bsp-bb-wait-foot {
+  margin: 0;
+  padding: 12px 18px;
+  border-block-start: 1px solid #f0f0f2;
+  font-size: 12px;
+  color: #6a6a72;
+}
+
+/* Look & voice: `grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px`,
+   each card `padding: 18px; gap: 12px`; Voice and the fonts `grid-column:
+   1 / -1`. Colours spans the templates card's place (left out). */
+.bsp-bb-lookgrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.bsp-card.bsp-bb-lc {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-inline-size: 0;
+}
+.bsp-card.bsp-bb-lc-2 {
+  grid-column: span 2;
+}
+.bsp-bb-lc input[type='file'] {
+  max-inline-size: 100%;
+}
+.bsp-card.bsp-bb-lc-full {
+  grid-column: 1 / -1;
+  gap: 14px;
+}
+.bsp-bb-lc-t {
+  margin: 0;
+}
+.bsp-bb-lc-h {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bsp-bb-lc-h > span:last-child {
+  font-size: 12.5px;
+  color: #6a6a72;
+}
+.bsp-bb-voice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.bsp-bb-voice-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-inline-size: 0;
+}
+
+/* Sources: `max-width: 900px; gap: 14px`; the upload card `padding: 16px 18px;
+   gap: 8px`; the list `.card` with `overflow: hidden`. */
+.bsp-bb-src {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-inline-size: 900px;
+}
+.bsp-card.bsp-bb-upcard {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bsp-bb-uprow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bsp-bb-upname {
+  font-size: 13px;
+  font-weight: 700;
+}
+.bsp-bb-uphint {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-card.bsp-bb-srclist {
+  overflow: hidden;
+}
+.bsp-bb-srclist > ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bsp-bb-srcempty {
+  margin: 0;
+  padding: 14px 18px;
+  font-size: 13.5px;
+  color: #6a6a72;
+}
+.bsp-bb-srow {
+  border-block-end: 1px solid #f0f0f2;
+}
+.bsp-bb-srow:last-child {
+  border-block-end: 0;
+}
+.bsp-row.bsp-bb-srow-main {
+  border: 0;
+  flex-wrap: wrap;
+}
+.bsp-bb-srow-main > form {
+  display: contents;
+}
+/* The type badge: `40px; border-radius: 11px; background: #f2edff; color:
+   #5312c4; font-size: 10.5px; font-weight: 800`. */
+.bsp-bb-ext {
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: 11px;
+  background: #f2edff;
+  color: #5312c4;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.bsp-bb-srow-t {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.bsp-bb-srow-t > b {
+  font-size: 14px;
+  text-align: start;
+}
+.bsp-bb-srow-t > span {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-chip.bsp-bb-srow-show {
+  font-size: 12px;
+  cursor: pointer;
+}
+.bsp-btn.bsp-bb-danger {
+  color: #b83245;
+}
+/* Remove: `margin: 0 18px 12px; padding: 12px 14px; border-radius: 14px;
+   background: #fff7f8; border: 1px solid #f6d6dc`; Drop on `#b83245`. */
+.bsp-bb-rm {
+  margin: 0 18px 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff7f8;
+  border: 1px solid #f6d6dc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bsp-bb-rm-q {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bsp-bb-rm-q > b {
+  font-size: 13.5px;
+}
+.bsp-bb-rm-q > small {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-btn.bsp-bb-drop {
+  background: #b83245;
+  color: #fff;
+}
+.bsp-btn.bsp-bb-drop:hover {
+  background: #9e2a3b;
+}
+.bsp-bb-sfacts {
+  margin: 0 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-bb-sfact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.bsp-bb-sfact > span:nth-child(2) {
+  flex-grow: 1;
+}
+.bsp-bb-sfact-a {
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+.bsp-bb-sfacts-none {
+  font-size: 13px;
+  color: #6a6a72;
+}
+
+/* Talk with the brand: `.card` with `display: grid; grid-template-rows: auto
+   minmax(0, 1fr) auto; height: 600px; overflow: hidden`. */
+.bsp-card.bsp-bb-chat {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  block-size: 600px;
+  overflow: hidden;
+}
+.bsp-bb-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-block-end: 1px solid #f0f0f2;
+}
+.bsp-bb-mini {
+  inline-size: 52px;
+  block-size: 52px;
+  flex-shrink: 0;
+}
+.bsp-bb-chat-name {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-inline-size: 0;
+}
+.bsp-bb-chat-name > b {
+  font-size: 15px;
+  font-weight: 800;
+}
+.bsp-bb-chat-name > span {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-bb-chat-ctx {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.bsp-btn.bsp-bb-chat-x {
+  font-size: 18px;
+  inline-size: 32px;
+  padding: 0;
+}
+/* The log: `overflow: auto; padding: 18px 20px; gap: 12px`. */
+.bsp-bb-chat-msgs {
+  overflow: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-block-size: 0;
+}
+/* A message: `max-width: 78%; border-radius: 16px; padding: 10px 14px;
+   font-size: 14px; line-height: 1.6`, the brand's on `#f5f3ff`, yours on ink. */
+.bsp-bb-msg {
+  align-self: flex-start;
+  max-inline-size: 78%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 16px;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  background: #f5f3ff;
+  color: #111114;
+}
+.bsp-bb-msg.bsp-bb-msg-me {
+  align-self: flex-end;
+  background: #111114;
+  color: #fff;
+}
+/* A mode's panel: the prototype's teach card (`border: 1px solid #e6dcff;
+   background: #fcfbff`). */
+.bsp-bb-msg.bb-chat-panel {
+  max-inline-size: min(100%, 520px);
+  border: 1px solid #e6dcff;
+  background: #fcfbff;
+}
+/* The chat's own panels and lines, which were drawn for a dark panel, on the
+   prototype's light card: labels and inputs as the teach card's, the action as
+   `.btn pur sm`, the cited sources as `.pill p-neu`. */
+.bsp-bb-chat .bb-chat-panel label {
+  color: #55555c;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.bsp-bb-chat .bb-chat-panel :is(select, input, textarea) {
+  border: 1px solid #ececef;
+  border-radius: 10px;
+  background: #fff;
+  color: #111114;
+  font-size: 13px;
+}
+.bsp-bb-chat .bb-chat-match {
+  border-color: #ececef;
+  background: #fff;
+  color: #111114;
+  font-size: 13px;
+}
+.bsp-bb-chat .bb-chat-match:hover {
+  border-color: #7935fe;
+}
+.bsp-bb-chat :is(.bb-chat-match small, .bb-chat-old small, .bb-chat-areas) {
+  color: #6a6a72;
+  font-size: 11.5px;
+}
+.bsp-bb-chat .bb-chat-old {
+  color: #55555c;
+}
+.bsp-bb-chat .bb-chat-old s {
+  color: #6a6a72;
+}
+.bsp-bb-chat .bb-chat-action {
+  min-block-size: 32px;
+  border-radius: 10px;
+  padding: 6px 12px;
+  background: #7935fe;
+  font-size: 12.5px;
+}
+.bsp-bb-chat .bb-chat-link {
+  color: #5312c4;
+  font-size: 12px;
+}
+.bsp-bb-chat .bb-chat-sources {
+  align-items: center;
+  gap: 6px;
+  margin-top: 0;
+}
+.bsp-bb-chat .bb-chat-source {
+  border-radius: 99px;
+  padding: 3px 9px;
+  background: #f0f0f2;
+  color: #55555c;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.bsp-bb-chat-foot {
+  border-block-start: 1px solid #f0f0f2;
+  padding: 12px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bsp-bb-chat-sugg {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bsp-bb-chat-sugg > .bsp-chip {
+  font-size: 12.5px;
+  min-block-size: 32px;
+  padding: 4px 11px;
+  cursor: pointer;
+}
+.bsp-bb-chat-sugg > .bsp-chip[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+.bsp-seg.bsp-bb-chat-modes {
+  align-self: flex-start;
+}
+.bsp-bb-chat-glyph {
+  opacity: 0.6;
+}
+.bsp-bb-chat-compose {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+/* `border: 1px solid transparent; background: #f5f5f7; border-radius: 12px;
+   padding: 10px 14px; font-size: 14px`. */
+.bs-control.bsp-bb-chat-input {
+  flex-grow: 1;
+  min-inline-size: 0;
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+.bs-control.bsp-bb-chat-input::placeholder {
+  color: #6a6a72;
+}
+.bsp-btn.bsp-bb-chat-attach {
+  inline-size: 32px;
+  padding: 0;
+  font-size: 16px;
+}
+.bsp-bb-chat-note {
+  font-size: 12px;
+  color: #6a6a72;
+}
+
+@media (max-width: 1199.98px) {
+  .bsp-xgrid.bsp-bb-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1099.98px) {
+  .bsp-card.bsp-bb-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-bb-herotext {
+    max-inline-size: none;
+    padding: 0 24px 24px;
+  }
+  .bsp-bb-acols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-bb-voice-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-bb-lookgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -4720,6 +5939,38 @@ span.bsp-cal-hol {
   }
   .bsp-med-kinds {
     margin-inline-start: 0;
+  }
+}
+
+/* Brand Brain below 768px: the product's phone layout — the areas two
+   across, one column for everything else, the chat a little shorter. */
+@media (max-width: 767.98px) {
+  .bsp-xgrid.bsp-bb-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bsp-xcard.bsp-bb-card {
+    min-block-size: 0;
+  }
+  .bsp-bb-lookgrid,
+  .bsp-bb-add-grid,
+  .bsp-bb-rv-cmp {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-card.bsp-bb-lc-2 {
+    grid-column: auto;
+  }
+  .bsp-card.bsp-bb-ahead {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .bsp-card.bsp-bb-rv {
+    padding: 18px;
+  }
+  .bsp-card.bsp-bb-chat {
+    block-size: 72vh;
+  }
+  .bsp-bb-msg {
+    max-inline-size: 92%;
   }
 }
 

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { CONTROL_CLASS } from '@brandspace/ui';
+import { CONTROL_CLASS, SegmentPill } from '@brandspace/ui';
+import { MiniOrb } from './brand-orb';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
@@ -115,6 +116,14 @@ export type ChatStart =
 
 const MODES: readonly ChatMode[] = ['ask', 'add', 'edit', 'remove'];
 
+/** The prototype's glyph beside each mode (`['ask', …, '?'], ['add', …, '+'], …`). */
+const MODE_GLYPH: Readonly<Record<ChatMode, string>> = {
+  ask: '?',
+  add: '+',
+  edit: '✎',
+  remove: '−',
+};
+
 type Localized = { readonly en?: string | undefined; readonly ar?: string | undefined };
 
 function pick(text: Localized | undefined, locale: string): string {
@@ -135,7 +144,7 @@ export function BrandChat({
   modes,
   copilotHref,
   start,
-  hidden,
+  hidden = false,
   onClose,
   onAttach,
   onAreaDetails,
@@ -155,8 +164,8 @@ export function BrandChat({
   /** The Copilot, for "Send to Copilot"; null when the member may not use it. */
   copilotHref: string | null;
   start: ChatStart | null;
-  /** The parent shows and hides the panel; this keeps it out of the a11y tree. */
-  hidden: boolean;
+  /** The parent may keep the panel mounted but hidden; this keeps it out of the a11y tree. */
+  hidden?: boolean;
   onClose: () => void;
   onAttach: () => void;
   onAreaDetails: (() => void) | null;
@@ -541,82 +550,52 @@ export function BrandChat({
 
   return (
     <section
-      className="bb-brain-chat"
+      className="bsp-card bsp-bb-chat"
       data-testid="brand-chat"
       data-mode={mode}
       aria-label={labels.title}
       aria-hidden={hidden ? 'true' : undefined}
-      // The panel is hidden by its parent's CSS, not removed. `inert` keeps a
-      // hidden panel's controls out of the tab order, which `display: none`
-      // already does — it is here so that a future change to how the parent
-      // hides it cannot quietly leave a focusable control behind.
+      // `inert` keeps a hidden panel's controls out of the tab order, so a
+      // future change to how the parent hides it cannot leave a focusable
+      // control behind.
       inert={hidden ? true : undefined}
     >
-      <header className="bb-brain-chat-head">
-        <div className="bb-brain-chat-brand">
-          <i aria-hidden="true">✦</i>
-          <span>
-            <small>{labels.subtitle}</small>
-            <b>{labels.title}</b>
-          </span>
-        </div>
-        <button
-          type="button"
-          className="bb-chat-close"
-          onClick={onClose}
-          aria-label={labels.close}
-          data-testid="chat-close"
-        >
-          ×
-        </button>
-      </header>
-
-      <div className="bb-chat-context-row">
-        <span className="bb-chat-context" data-testid="chat-context">
-          {areaLabel ?? labels.contextAll}
+      {/*
+        THE PROTOTYPE'S CHAT HEAD (line 901): the small orb, "Brand Brain" and
+        what it answers from — "Reading approved knowledge…" while it writes.
+        The area it is scoped to, and the way back, sit at its end.
+      */}
+      <header className="bsp-bb-chat-head">
+        <MiniOrb busy={busy} />
+        <span className="bsp-bb-chat-name">
+          <b>{labels.title}</b>
+          <span>{busy ? labels.thinking : labels.subtitle}</span>
         </span>
-        {onAreaDetails ? (
+        <span className="bsp-bb-chat-ctx">
+          <span className="bsp-pill bsp-p-neu" data-testid="chat-context">
+            {areaLabel ?? labels.contextAll}
+          </span>
+          {onAreaDetails ? (
+            <button
+              type="button"
+              className="bsp-btn bsp-sm bsp-ghost"
+              onClick={onAreaDetails}
+              data-testid="chat-area-details"
+            >
+              {labels.areaDetails}
+            </button>
+          ) : null}
           <button
             type="button"
-            className="bb-chat-area-details"
-            onClick={onAreaDetails}
-            data-testid="chat-area-details"
+            className="bsp-btn bsp-sm bsp-ghost bsp-bb-chat-x"
+            onClick={onClose}
+            aria-label={labels.close}
+            data-testid="chat-close"
           >
-            {labels.areaDetails}
+            ×
           </button>
-        ) : null}
-      </div>
-
-      {/*
-        D7 — THE MODES, as a radio group in the suggestions' chip style. A member
-        without `brand_brain.edit` has only Ask, so no group is drawn.
-      */}
-      {available.length > 1 ? (
-        <div
-          className="bb-chat-modes"
-          role="radiogroup"
-          aria-label={t('bb.chatMode.label')}
-          data-testid="chat-modes"
-        >
-          {available.map((entry, index) => (
-            <button
-              key={entry}
-              ref={(node) => {
-                modeRefs.current[entry] = node;
-              }}
-              type="button"
-              role="radio"
-              aria-checked={mode === entry}
-              tabIndex={mode === entry ? 0 : -1}
-              data-testid={`chat-mode-${entry}`}
-              onClick={() => chooseMode(entry)}
-              onKeyDown={(event) => onModeKey(event, index)}
-            >
-              {t(`bb.chatMode.${entry}` as MessageKey)}
-            </button>
-          ))}
-        </div>
-      ) : null}
+        </span>
+      </header>
 
       {/*
         THE ONLY SCROLLER. `min-height: 0` in the stylesheet is load-bearing:
@@ -626,7 +605,7 @@ export function BrandChat({
       <div
         ref={listRef}
         onScroll={onScroll}
-        className="bb-chat-messages"
+        className="bsp-bb-chat-msgs"
         data-testid="chat-messages"
         role="log"
         aria-live="polite"
@@ -634,16 +613,12 @@ export function BrandChat({
       >
         {mode === 'ask' ? (
           <>
-            {messages.length === 0 && !busy ? (
-              <p className="bb-chat-message brain">{labels.empty}</p>
-            ) : null}
+            {messages.length === 0 && !busy ? <p className="bsp-bb-msg">{labels.empty}</p> : null}
 
             {messages.map((message) => (
               <article
                 key={message.id}
-                className={
-                  message.role === 'user' ? 'bb-chat-message user' : 'bb-chat-message brain'
-                }
+                className={message.role === 'user' ? 'bsp-bb-msg bsp-bb-msg-me' : 'bsp-bb-msg'}
                 data-testid={`chat-message-${message.role}`}
               >
                 {message.purged ? (
@@ -718,13 +693,13 @@ export function BrandChat({
             ))}
 
             {busy ? (
-              <p className="bb-chat-message brain typing bs-pulse" data-testid="chat-busy">
+              <p className="bsp-bb-msg bs-pulse" data-testid="chat-busy">
                 {labels.thinking}
               </p>
             ) : null}
 
             {error ? (
-              <p className="bb-chat-message brain" role="alert" data-testid="chat-error">
+              <p className="bsp-bb-msg" role="alert" data-testid="chat-error">
                 {error}
               </p>
             ) : null}
@@ -733,7 +708,7 @@ export function BrandChat({
 
         {mode === 'add' ? (
           <form
-            className="bb-chat-message brain bb-chat-panel"
+            className="bsp-bb-msg bb-chat-panel"
             data-testid="chat-add-form"
             onSubmit={(event) => {
               event.preventDefault();
@@ -794,7 +769,7 @@ export function BrandChat({
         ) : null}
 
         {mode === 'edit' || mode === 'remove' ? (
-          <div className="bb-chat-message brain bb-chat-panel" data-testid={`chat-${mode}-panel`}>
+          <div className="bsp-bb-msg bb-chat-panel" data-testid={`chat-${mode}-panel`}>
             <p
               tabIndex={-1}
               ref={(node) => {
@@ -931,7 +906,7 @@ export function BrandChat({
 
         {mode !== 'ask' && outcome ? (
           <p
-            className="bb-chat-message brain"
+            className="bsp-bb-msg"
             role={outcome.tone === 'error' ? 'alert' : 'status'}
             data-testid={outcome.tone === 'error' ? 'chat-mode-error' : 'chat-mode-done'}
           >
@@ -940,78 +915,118 @@ export function BrandChat({
         ) : null}
       </div>
 
-      {mode === 'ask' ? (
-        <div className="bb-chat-suggestions">
-          {labels.suggestions.map((suggestion) => (
+      <div className="bsp-bb-chat-foot">
+        {mode === 'ask' ? (
+          <div className="bsp-bb-chat-sugg">
+            {labels.suggestions.map((suggestion) => (
+              <button
+                key={suggestion.prompt}
+                type="button"
+                className="bsp-chip"
+                data-testid={`chat-suggestion-${suggestion.prompt.length}`}
+                disabled={!canChat || busy}
+                onClick={() => void send(suggestion.prompt)}
+              >
+                {suggestion.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {/*
+        D7 — THE MODES, in the prototype's segmented switch (line 917) with its
+        glyphs, kept a radio group. A member without `brand_brain.edit` has
+        only Ask, so no switch is drawn.
+      */}
+        {available.length > 1 ? (
+          <div
+            className="bsp-seg bsp-bb-chat-modes"
+            role="radiogroup"
+            aria-label={t('bb.chatMode.label')}
+            data-testid="chat-modes"
+          >
+            <SegmentPill selector='[aria-checked="true"]' />
+            {available.map((entry, index) => (
+              <button
+                key={entry}
+                ref={(node) => {
+                  modeRefs.current[entry] = node;
+                }}
+                type="button"
+                role="radio"
+                className="bsp-seg-item"
+                aria-checked={mode === entry}
+                tabIndex={mode === entry ? 0 : -1}
+                data-testid={`chat-mode-${entry}`}
+                onClick={() => chooseMode(entry)}
+                onKeyDown={(event) => onModeKey(event, index)}
+              >
+                <span aria-hidden="true" className="bsp-bb-chat-glyph">
+                  {MODE_GLYPH[entry]}
+                </span>{' '}
+                {t(`bb.chatMode.${entry}` as MessageKey)}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {mode === 'add' ? null : (
+          <form
+            className="bsp-bb-chat-compose"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (mode !== 'ask') {
+                void find(draft);
+                return;
+              }
+              if (busy) {
+                cancel();
+                return;
+              }
+              void send(draft);
+            }}
+          >
             <button
-              key={suggestion.prompt}
               type="button"
-              data-testid={`chat-suggestion-${suggestion.prompt.length}`}
-              disabled={!canChat || busy}
-              onClick={() => void send(suggestion.prompt)}
+              className="bsp-btn bsp-sm bsp-ghost bsp-bb-chat-attach"
+              onClick={onAttach}
+              disabled={!canUpload}
+              aria-label={labels.attach}
+              data-testid="chat-attach"
             >
-              {suggestion.label}
+              +
             </button>
-          ))}
-        </div>
-      ) : null}
+            <input
+              className={`${CONTROL_CLASS} bsp-bb-chat-input`}
+              type="text"
+              autoComplete="off"
+              data-testid="chat-input"
+              value={draft}
+              disabled={mode === 'ask' ? !canChat : !modes.edit}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={composerPlaceholder}
+              aria-label={composerPlaceholder}
+            />
+            <button
+              type="submit"
+              className="bsp-btn bsp-sm bsp-pur"
+              data-testid={busy && mode === 'ask' ? 'chat-cancel' : 'chat-send'}
+              disabled={
+                mode === 'ask'
+                  ? !canChat || (!busy && draft.trim().length === 0)
+                  : busy || draft.trim().length === 0
+              }
+              aria-label={busy && mode === 'ask' ? labels.cancel : labels.send}
+            >
+              {busy && mode === 'ask' ? labels.cancel : labels.send}
+            </button>
+          </form>
+        )}
 
-      {mode === 'add' ? null : (
-        <form
-          className="bb-chat-compose"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (mode !== 'ask') {
-              void find(draft);
-              return;
-            }
-            if (busy) {
-              cancel();
-              return;
-            }
-            void send(draft);
-          }}
-        >
-          <button
-            type="button"
-            className="bb-chat-attach"
-            onClick={onAttach}
-            disabled={!canUpload}
-            aria-label={labels.attach}
-            data-testid="chat-attach"
-          >
-            +
-          </button>
-          <input
-            className={`${CONTROL_CLASS} bb-chat-input`}
-            type="text"
-            autoComplete="off"
-            data-testid="chat-input"
-            value={draft}
-            disabled={mode === 'ask' ? !canChat : !modes.edit}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={composerPlaceholder}
-            aria-label={composerPlaceholder}
-          />
-          <button
-            type="submit"
-            className="bb-chat-send"
-            data-testid={busy && mode === 'ask' ? 'chat-cancel' : 'chat-send'}
-            disabled={
-              mode === 'ask'
-                ? !canChat || (!busy && draft.trim().length === 0)
-                : busy || draft.trim().length === 0
-            }
-            aria-label={busy && mode === 'ask' ? labels.cancel : labels.send}
-          >
-            {busy && mode === 'ask' ? '×' : '↑'}
-          </button>
-        </form>
-      )}
-
-      <small className="bb-chat-disclaimer">
-        {mode === 'ask' ? `${labels.disclaimer} ${labels.retention}` : t('bb.chatMode.noCredits')}
-      </small>
+        <small className="bsp-bb-chat-note">
+          {mode === 'ask' ? `${labels.disclaimer} ${labels.retention}` : t('bb.chatMode.noCredits')}
+        </small>
+      </div>
     </section>
   );
 }
