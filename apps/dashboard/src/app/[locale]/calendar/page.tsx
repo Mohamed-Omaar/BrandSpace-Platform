@@ -46,7 +46,7 @@ import {
   rescheduleContentAction,
   scheduleContentAction,
 } from './actions';
-import { submitForReviewAction } from '../content/actions';
+import { duplicateContentAction, submitForReviewAction } from '../content/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -492,7 +492,7 @@ export default async function CalendarPage({
   const firstWeekday = weekdayInZone(new Date(firstOfMonthUtc + 12 * 3_600_000), timezone);
   const lead = (firstWeekday - weekStartsOn + 7) % 7;
 
-  const dayFormatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+  const dayFormatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
     timeZone: 'UTC',
     day: 'numeric',
   });
@@ -686,13 +686,19 @@ export default async function CalendarPage({
   const todayIndex = days.findIndex((day) => day.isToday);
   const weekIndex = todayIndex >= 0 ? Math.floor(todayIndex / 7) : 0;
 
+  // D-468 — the prototype's weekday heads ("SUN", "أحد"), from the configured start.
+  const protoWeekdays = Array.from({ length: 7 }, (_unused, offset) =>
+    translate(`calendar.wd.${(weekStartsOn + offset) % 7}` as MessageKey),
+  );
+
   const weekdayNames = Array.from({ length: 7 }, (_unused, offset) =>
     // 2024-01-07 was a Sunday, so adding the configured start gives the right
     // first column whichever day the market begins its week on.
     weekdayFormatter.format(new Date(Date.UTC(2024, 0, 7 + ((weekStartsOn + offset) % 7)))),
   );
 
-  const periodLabel = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+  // Western digits in both languages (CLAUDE.md §4), as the prototype prints "أكتوبر 2026".
+  const periodLabel = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
     timeZone: 'UTC',
     year: 'numeric',
     month: 'long',
@@ -728,6 +734,7 @@ export default async function CalendarPage({
       flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
+      eyebrow={translate('nav.group.publish')}
       heading={translate('calendar.title')}
       description={translate('calendar.subtitle')}
       activePath="/calendar"
@@ -824,6 +831,8 @@ export default async function CalendarPage({
         quotaLimit={quotaLimit}
         canSchedule={workspace.permissionKeys.includes('content.schedule')}
         canSubmit={workspace.permissionKeys.includes('content.submit')}
+        canCreate={workspace.permissionKeys.includes('content.create')}
+        weekdays={protoWeekdays}
         postsOnDayLabel={translate('calendar.postsOnDay')}
         labels={{
           calendarLabel: translate('calendar.label'),
@@ -882,6 +891,7 @@ export default async function CalendarPage({
           move: moveSlotAction,
           cancel: cancelScheduleAction,
           submitForReview: submitForReviewAction,
+          duplicate: duplicateContentAction,
         }}
       />
     </WorkspaceShell>
@@ -946,6 +956,20 @@ const CALENDAR_KEYS = [
   'calendar.tray.title',
   'calendar.media',
   'calendar.scheduledFor',
+  'calendar.weekN',
+  'calendar.newPostDay',
+  'calendar.readyTitle',
+  'calendar.noReady',
+  'calendar.agendaEmpty',
+  'calendar.hint',
+  'calendar.pickDay',
+  'calendar.pop.edit',
+  'calendar.pop.open',
+  'calendar.pop.move',
+  'calendar.pop.duplicate',
+  'calendar.pop.details',
+  'calendar.cancelMove',
+  'content.status.IN_REVIEW',
   'common.close',
 ] as const satisfies readonly MessageKey[];
 

@@ -332,6 +332,56 @@ Approved by the owner on 2026-10-04 (D-470), from the batch 1 design note.
   Egyptian and a Saudi workspace on the same `/ar` route; formal Arabic before a workspace exists).
 - Egyptian strings keep being collected in `ar-eg.ts` for every screen this PR ports.
 
+## 4.5 D-468 batches 2–6 — every difference from the prototype, screen by screen
+
+One pull request (D-470), one commit per screen. Each screen is ported from `Main.dc.html` (or
+`Auth.dc.html`) into its own `§3-…` section of `packages/ui/src/prototype.css` and wired to the
+product's existing data, permissions and actions. The rules of §4.3 carry over unchanged: entrances
+follow MO1 (D-349); below 768px the product keeps its phone layout (D-468 (b)); colours that fail
+WCAG 2.2 AA take the prototype's nearest passing colour (D-470); Arabic is formal, with every
+differing prototype string collected in `ar-eg.ts` and read by Egyptian workspaces (§4.4).
+
+### Calendar (`Main.dc.html` lines 599–660)
+
+Ported: the head row (previous, next, the month — "· week N" in the week view —, Today when away
+from the current month, the channel chips, the Month / Week / Agenda switch with its sliding pill),
+the month card of `.cal` days with the number badge, "Today", ★ moments, the hover "+" and the
+`.calchip` posts (status bar, picture, title, channel marks, time), the post's glass popover (picture,
+title, status, meta, two lines of caption; Edit or Open, Move to another day, Duplicate), an empty
+day's popover (+ New post on this day, Drafts without a date), the move banner, the week view's
+cards, the agenda list, the legend and its hint. Only the weeks the month reaches are drawn.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-290: the post drawer stays — preview, facts, readiness, approval, notes, reschedule, request
+  approval, take off the calendar — opened from the popover's "Details" (a control the prototype does
+  not have) and from a week card or an agenda row (which in the prototype open the editor).
+- D-290: the brand, campaign and status filters, the zone and quota notes, the gap line and the
+  Unscheduled tray stay, drawn in the prototype's language (chips, `.xcard`, its rows).
+- B7 / D-290: "Drafts without a date" opens the scheduling dialog for that day — a slot needs a time,
+  which the prototype's one-click placement does not ask for. "+ New post on this day" and the day's
+  "+" open the Studio dated, as the prototype's do.
+- §8.2 / D-353: moving keeps the pointer drag, its label, its Undo and the phone's drop strip; the
+  prototype's Move goes through the same move action.
+- P6-14: channel names are the product's translated names in Arabic ("إنستغرام"); the prototype
+  writes them in Latin.
+- The product's Schedule button ("Add to calendar") sits after the switch: the prototype schedules
+  only from the Studio.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the product's agenda stays.
+
+**(c) States the prototype does not draw.** A member who may not schedule has no drop targets, no
+Move and no hint; one who may not create has no "+" and no Duplicate. More channels than the
+prototype's three wrap the head row. A long list of undated drafts scrolls inside the day's popover.
+
+**Accessibility findings.** The day numbers of past days (`#9a9aa2`, 2.6:1) and of days outside the
+month (`#c4c4cb`, 1.7:1), the weekday heads and popover headings (`#7a7a82`), the empty notes and the
+hint (`#8a8a92`) take `#6a6a72`. The ★ moment is 17px tall in the prototype, under WCAG 2.5.8's 24px
+target; it keeps its look and gains the height. The day's "+" also shows on keyboard focus.
+
+**Left out — no data or feature.** "On hold" (a post held by a paused campaign) is not in the
+calendar's data, so its legend entry and its pause mark are not drawn.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

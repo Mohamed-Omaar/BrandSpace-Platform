@@ -61,12 +61,25 @@ async function serveFonts(page: Page): Promise<void> {
   });
 }
 
+/** The prototype's own rail: press the item with this English / Arabic name. */
+const viaRail =
+  (en: string, ar: string) =>
+  async (page: Page): Promise<void> => {
+    await page
+      .locator('nav .nav', { hasText: new RegExp(`^\\s*(${en}|${ar})\\s*$`) })
+      .first()
+      .click();
+  };
+
 /** The screens of a batch: the product route, and how the prototype is brought to it. */
 const SCREENS: readonly {
   readonly key: string;
   readonly route: string;
   readonly prototype?: (page: Page) => Promise<void>;
-}[] = [{ key: 'home', route: '/overview' }];
+}[] = [
+  { key: 'home', route: '/overview' },
+  { key: 'calendar', route: '/calendar', prototype: viaRail('Calendar', 'التقويم') },
+];
 
 /**
  * The first 1440×900 view, then the rest of the screen: both sides scroll a

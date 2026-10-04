@@ -329,6 +329,7 @@ const MENU_NOTE = {
 
 export async function WorkspaceShell({
   locale,
+  eyebrow,
   heading,
   description,
   actions,
@@ -346,6 +347,12 @@ export async function WorkspaceShell({
   children,
 }: {
   locale: string;
+  /**
+   * The eyebrow over the title — the screen's group, as the prototype's
+   * `heads` table gives it ("Publish" over the calendar). Home's
+   * "Your business" when absent.
+   */
+  eyebrow?: string | undefined;
   /**
    * The page title. THE SHELL OWNS THE `h1`, so every page has exactly one and
    * no page can forget it — which is what the accessibility suite asserts.
@@ -821,7 +828,7 @@ export async function WorkspaceShell({
         }}
         brandCard={brandCard}
         profile={profile}
-        pageEyebrow={t('page.eyebrow')}
+        pageEyebrow={eyebrow ?? t('page.eyebrow')}
         pageTitle={heading}
         pageDescription={description}
         pageMeta={meta}

@@ -1436,6 +1436,809 @@ button.bsp-xcard:hover {
   text-decoration: none;
 }
 
+/* ------------------------------------------------------------ §3-CAL ---- */
+
+/*
+ * CALENDAR — `Main.dc.html` lines 599–660 and its `.seg`, `.chip`, `.cal`,
+ * `.caladd` and `.calchip` rules (lines 12–77). Batch 2 of D-468.
+ */
+
+/* `.seg`, `.seg button`, `.seg button[aria-pressed="true"]`. The sliding
+   `.segInd` is `SegmentPill` (MO4), which copies the pressed look. */
+.bsp-seg {
+  display: inline-flex;
+  gap: 2px;
+  background: #f2f2f4;
+  border-radius: 12px;
+  padding: 3px;
+  position: relative;
+}
+.bsp-seg button {
+  border: 0;
+  background: transparent;
+  border-radius: 9px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: normal;
+  color: #55555c;
+  min-block-size: 30px;
+  position: relative;
+  z-index: 1;
+  transition:
+    color 0.2s ease,
+    scale 0.12s ease;
+}
+.bsp-seg button[aria-pressed='true'] {
+  background: #fff;
+  color: #111114;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.bsp-seg[data-seg] button[aria-pressed='true'] {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* `.chip` */
+.bsp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #e4e4e8;
+  background: #fff;
+  border-radius: 99px;
+  padding: 5px 11px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: normal;
+  min-block-size: 32px;
+  box-sizing: border-box;
+  color: #111114;
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.2s ease;
+}
+.bsp-chip:hover {
+  border-color: #c9c9d1;
+}
+.bsp-chip[aria-pressed='true'] {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
+
+/* The screen: `display: flex; flex-direction: column; gap: 14px`, and the
+   head row `display: flex; align-items: center; gap: 10px`. */
+.bsp-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-inline-size: 0;
+}
+/* A flex column's children are as wide as their widest unbreakable line by
+   default; the phone agenda's one-line titles would widen the page. */
+.bsp-cal > * {
+  min-inline-size: 0;
+}
+.bsp-cal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* `font-size: 22px; font-weight: 700; letter-spacing: -0.03em` — a <span> in
+   the prototype, an <h2> here so the month is a heading; same box. */
+.bsp-cal-label {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: normal;
+  letter-spacing: -0.03em;
+}
+.bsp-cal-pf {
+  display: flex;
+  gap: 6px;
+  margin-inline-start: 16px;
+}
+[dir='rtl'] .bsp-cal-flip {
+  transform: scaleX(-1);
+}
+
+/* The move banner: `background: linear-gradient(145deg, #eee6ff, #fff9d7);
+   border-radius: 14px; padding: 10px 14px; font-size: 13px; font-weight: 600`. */
+.bsp-cal-moving {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(145deg, #eee6ff, #fff9d7);
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* The month and week cards: `.card` with `overflow: hidden; display: grid;
+   grid-template-columns: repeat(7, minmax(0, 1fr))`. */
+.bsp-cal-grid {
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+/* The weekday heads: `padding: 9px 10px; font-size: 11px; font-weight: 800
+   (700 in the week view); color: #7a7a82; letter-spacing: .06em;
+   border-block-end: 1px solid #f0f0f2`. */
+.bsp-cal-wd {
+  padding: 9px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: normal;
+  color: #6a6a72; /* prototype #7a7a82: see the accessibility finding (§1) */
+  letter-spacing: 0.06em;
+  border-block-end: 1px solid #f0f0f2;
+}
+.bsp-cal-week .bsp-cal-wd {
+  font-weight: 700;
+}
+
+/* `.cal` — one day. Its background and ring come from the template (`d.bg`,
+   `d.ring`); the states are the data attributes below. */
+.bsp-cal-day {
+  /* A <div> in a prototype with no box-sizing reset: its 112px (360px in the
+     week) is the CONTENT box, 129px tall with the padding and the rule. */
+  box-sizing: content-box;
+  display: block;
+  border: 0;
+  border-inline-end: 1px solid #f2f2f4;
+  border-block-end: 1px solid #f2f2f4;
+  background: #fff;
+  text-align: start;
+  padding: 8px;
+  min-block-size: 112px;
+  position: relative;
+}
+.bsp-cal-week .bsp-cal-day {
+  min-block-size: 360px;
+}
+.bsp-cal-day:hover {
+  background: #faf8ff;
+}
+.bsp-cal-day[data-out] {
+  background: #fafafb;
+}
+.bsp-cal-day[data-today] {
+  background: #fcfaff;
+}
+.bsp-cal-day[data-pop] {
+  background: #faf8ff;
+}
+.bsp-cal-day[data-moving] {
+  background: #fbf9ff;
+}
+/* The drop the pointer drag marks (`useCalendarDrag`): `#f4efff` and an inset
+   2px purple ring. */
+.bsp-cal-day[data-drop-over='ok'] {
+  background: #f4efff;
+  box-shadow: inset 0 0 0 2px #7935fe;
+}
+.bsp-cal-hit {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  z-index: 0;
+  padding: 0;
+}
+.bsp-cal-num-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+/* The day number: `min-width: 24px; height: 24px; padding: 0 4px;
+   border-radius: 99px; font-size: 12px; font-weight: 700` (28px and 14px in
+   the week view), purple behind today. */
+.bsp-cal-num {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 99px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: normal;
+  color: #111114;
+}
+.bsp-cal-week .bsp-cal-num {
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 14px;
+}
+.bsp-cal-day[data-past] .bsp-cal-num {
+  color: #6a6a72; /* prototype #9a9aa2 (2.6:1): see the accessibility finding (§1) */
+}
+.bsp-cal-day[data-out] .bsp-cal-num {
+  color: #6a6a72; /* prototype #c4c4cb (1.7:1): see the accessibility finding (§1) */
+}
+.bsp-cal-day[data-today] .bsp-cal-num {
+  background: #7935fe;
+  color: #fff;
+}
+.bsp-cal-today {
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: normal;
+  color: #5f23da;
+}
+.bsp-cal-week .bsp-cal-today {
+  font-size: 11px;
+}
+/* ★ `margin-top: 4px; max-width: 100%; border: 0; border-radius: 7px;
+   background: #fff6d6; color: #7a5600; font-size: 10.5px; font-weight: 700;
+   padding: 2px 6px` */
+.bsp-cal-hol {
+  position: relative;
+  z-index: 1;
+  display: block;
+  /* ACCESSIBILITY FINDING: the prototype's ★ is 17px tall, under WCAG 2.5.8's
+     24px target; it keeps its look and gains the height, text centred. */
+  min-block-size: 24px;
+  line-height: 20px;
+  margin-top: 4px;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 7px;
+  background: #fff6d6;
+  color: #7a5600;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: normal;
+  padding: 2px 6px;
+  text-align: start;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+span.bsp-cal-hol {
+  cursor: default;
+}
+/* `.caladd` — `position: absolute; top: 6px; inset-inline-end: 6px; z-index: 2;
+   width: 24px; height: 24px; border: 0; border-radius: 8px; background: #f2edff;
+   color: #5312c4; font-size: 15px; font-weight: 700`, shown on the day's hover
+   (and on keyboard focus, which the prototype's opacity alone would hide). */
+.bsp-caladd {
+  position: absolute;
+  top: 6px;
+  inset-inline-end: 6px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 8px;
+  background: #f2edff;
+  color: #5312c4;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: normal;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.bsp-cal-day:hover .bsp-caladd,
+.bsp-caladd:focus-visible {
+  opacity: 1;
+}
+
+/* `[data-pid]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+   touch-action:manipulation}` — a post a finger may long-press to lift. */
+.bsp-frame [data-pid] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+/* `.calchip` and the status pair each chip draws (`CB`): the 3px bar and the
+   ground. A draft is dashed. */
+.bsp-calchip {
+  position: relative;
+  z-index: 1;
+  cursor: grab;
+  width: 100%;
+  text-align: start;
+  margin-top: 5px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  border-radius: 9px;
+  padding: 4px 6px 4px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #111114;
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  box-sizing: border-box;
+}
+.bsp-calchip[data-k='sched'] {
+  background: #f6f3ff;
+}
+.bsp-calchip[data-k='draft'] {
+  background: #f5f5f7;
+  border: 1px dashed #d8d8de;
+}
+.bsp-calchip[data-k='review'] {
+  background: #fff8e1;
+}
+.bsp-calchip[data-k='pub'] {
+  background: #eef8f2;
+}
+.bsp-calchip[data-k='failed'] {
+  background: #fdecef;
+}
+.bsp-calchip[data-dragging] {
+  opacity: 0.45;
+}
+.bsp-cal-bar {
+  width: 3px;
+  align-self: stretch;
+  border-radius: 3px;
+  background: #b5b5bd;
+  flex-shrink: 0;
+}
+[data-k='sched'] > .bsp-cal-bar {
+  background: #7935fe;
+}
+[data-k='review'] > .bsp-cal-bar {
+  background: #e0b400;
+}
+[data-k='pub'] > .bsp-cal-bar {
+  background: #16794b;
+}
+[data-k='failed'] > .bsp-cal-bar {
+  background: #b83245;
+}
+.bsp-cal-art {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.bsp-cal-chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex-grow: 1;
+}
+.bsp-cal-chip-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* The channel and time line: `font-size: 10px; font-weight: 500; color: #6a6a72`,
+   marks in `#55555c`. */
+.bsp-cal-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #6a6a72;
+}
+.bsp-cal-marks {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+  color: #55555c;
+}
+/* A channel the prototype has no mark for: `width: 12px; height: 12px;
+   border-radius: 3px; background: #0A66C2`. */
+.bsp-cal-nomark {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: #0a66c2;
+  flex-shrink: 0;
+}
+
+/* The glass popovers — a post's (`role="dialog"`, 260px, radius 18) and a
+   day's (`.popx`, 230px, radius 16). The prototype has no box-sizing reset:
+   both widths are content boxes. */
+.bsp-cal-pop {
+  position: absolute;
+  top: 30px;
+  inset-inline-start: 6px;
+  z-index: 12;
+  width: 260px;
+  box-sizing: content-box;
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 18px;
+  box-shadow:
+    0 22px 55px rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.05);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: bsp-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.bsp-cal-pop-art {
+  display: block;
+  height: 110px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.bsp-cal-pop-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.bsp-cal-pop-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+.bsp-cal-pop-meta {
+  font-size: 11px;
+  color: #6a6a72;
+}
+.bsp-cal-pop-cap {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #4d4c53;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bsp-cal-pop-acts {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bsp-cal-popx {
+  position: absolute;
+  top: 34px;
+  inset-inline-start: 6px;
+  z-index: 10;
+  width: 230px;
+  box-sizing: content-box;
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 60px rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.05);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* A workspace's undated drafts can outnumber the prototype's few: the
+     popover scrolls past this height instead of running off the grid. */
+  max-block-size: 340px;
+  overflow-y: auto;
+  animation: bsp-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.bsp-cal-popx-title {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #6a6a72; /* prototype #7a7a82: see the accessibility finding (§1) */
+  padding: 4px 8px;
+}
+.bsp-cal-popx-new {
+  display: block;
+  border: 0;
+  background: #f6f3ff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: start;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: normal;
+  color: #5312c4;
+  text-decoration: none;
+}
+.bsp-cal-popx-head {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6a6a72; /* prototype #7a7a82: see the accessibility finding (§1) */
+  padding: 8px 8px 2px;
+}
+.bsp-cal-popx-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  padding: 6px 8px;
+  text-align: start;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: normal;
+  cursor: pointer;
+}
+.bsp-cal-popx-row:hover {
+  background: rgba(20, 16, 35, 0.04);
+}
+.bsp-cal-popx-art {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.bsp-cal-popx-none {
+  font-size: 12px;
+  color: #6a6a72; /* prototype #8a8a92: see the accessibility finding (§1) */
+  padding: 4px 8px;
+}
+
+/* The week view's post: `margin-top: 8px; flex-direction: column; gap: 6px;
+   border-radius: 12px; padding: 6px`, a 70px picture, 12px/600 title and an
+   11px channel line. */
+.bsp-cal-wpost {
+  position: relative;
+  z-index: 1;
+  cursor: grab;
+  width: 100%;
+  text-align: start;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 12px;
+  padding: 6px;
+  color: #111114;
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  box-sizing: border-box;
+}
+.bsp-cal-wpost[data-k='sched'] {
+  background: #f6f3ff;
+}
+.bsp-cal-wpost[data-k='draft'] {
+  border: 1px dashed #d8d8de;
+}
+.bsp-cal-wpost[data-k='review'] {
+  background: #fff8e1;
+}
+.bsp-cal-wpost[data-k='pub'] {
+  background: #eef8f2;
+}
+.bsp-cal-wpost[data-k='failed'] {
+  background: #fdecef;
+}
+.bsp-cal-wpost-art {
+  display: block;
+  height: 70px;
+  width: 100%;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.bsp-cal-wpost-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.bsp-cal-wpost .bsp-cal-meta {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* The agenda: `.xcard` with `padding: 6px 22px`; each row `gap: 14px;
+   border-block-end: 1px solid #f3f3f5; padding: 12px 0`. */
+.bsp-cal-agenda {
+  padding: 6px 22px;
+}
+.bsp-cal-arow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  border: 0;
+  border-block-end: 1px solid #f3f3f5;
+  background: transparent;
+  padding: 12px 0;
+  text-align: start;
+  cursor: pointer;
+  color: #111114;
+}
+.bsp-cal-aday {
+  width: 64px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #5312c4;
+}
+.bsp-cal-aart {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.bsp-cal-acopy {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.bsp-cal-atitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+.bsp-cal-arow .bsp-cal-meta {
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 400;
+}
+.bsp-cal-aempty {
+  display: block;
+  padding: 18px 0;
+  font-size: 13px;
+  color: #6a6a72;
+}
+
+/* The legend row: `gap: 14px`, each item `gap: 6px; font-size: 11px;
+   color: #55555c` with a 10×3 bar; the hint `font-size: 11px; color: #8a8a92`. */
+.bsp-cal-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.bsp-cal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #55555c;
+}
+.bsp-cal-legend-bar {
+  width: 10px;
+  height: 3px;
+  border-radius: 3px;
+  background: #b5b5bd;
+}
+.bsp-cal-legend-bar[data-k='sched'] {
+  background: #7935fe;
+}
+.bsp-cal-legend-bar[data-k='review'] {
+  background: #e0b400;
+}
+.bsp-cal-legend-bar[data-k='pub'] {
+  background: #16794b;
+}
+.bsp-cal-legend-bar[data-k='failed'] {
+  background: #b83245;
+}
+.bsp-cal-hint {
+  margin-inline-start: auto;
+  font-size: 11px;
+  color: #6a6a72; /* prototype #8a8a92: see the accessibility finding (§1) */
+}
+
+/* PRODUCT STATES THE PROTOTYPE DOES NOT DRAW (D-468 (c)), in its language:
+   the D-290 filter row (brand, campaign, status — the prototype filters by
+   channel only), the zone and quota notes, the gap line and the Unscheduled
+   tray. Sizes, colours and radii are the prototype's own (`.chip`, `.lbl`,
+   `.xcard`, the agenda row and the popover's draft row). */
+.bsp-cal-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.bsp-cal-filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.bsp-cal-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bsp-cal-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6a6a72;
+}
+.bsp-cal-select {
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+/* The control class keeps the global chevron; the chip keeps its own ground. */
+.bsp-chip.bs-control.bsp-cal-select,
+.bsp-chip.bs-control.bsp-cal-select:hover:not(:disabled) {
+  background: #fff;
+  border: 1px solid #e4e4e8;
+}
+.bsp-chip.bs-control.bsp-cal-select:hover:not(:disabled) {
+  border-color: #c9c9d1;
+}
+.bsp-cal-note {
+  margin: 0;
+  font-size: 11px;
+  color: #6a6a72;
+}
+.bsp-cal-gap {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #55555c;
+}
+.bsp-cal-gap b {
+  color: #111114;
+}
+.bsp-cal-tray {
+  gap: 10px;
+}
+.bsp-cal-tray-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: 8px;
+}
+.bsp-cal-tray-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #fbfbfc;
+  border: 1px solid #f0f0f2;
+  cursor: grab;
+  max-inline-size: 100%;
+  box-sizing: border-box;
+}
+.bsp-cal-tray-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex-grow: 1;
+}
+.bsp-cal-tray-copy .bsp-cal-atitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A head row with more channels than the prototype's three wraps rather than
+   overflow (D-468 (c)); with three it never does. */
+.bsp-cal-head {
+  flex-wrap: wrap;
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -1553,6 +2356,15 @@ button.bsp-xcard:hover {
   /* The hero's cards stack under its copy in one column (never a second). */
   .bsp-hero {
     flex-wrap: nowrap;
+  }
+}
+
+/* Calendar below 768px: the head row wraps and the channel chips lose their
+   offset; the grid gives way to the product's phone agenda (D-468 (b)). */
+@media (max-width: 767.98px) {
+  .bsp-cal-pf {
+    margin-inline-start: 0;
+    flex-wrap: wrap;
   }
 }
 

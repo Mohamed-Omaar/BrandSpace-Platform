@@ -184,8 +184,13 @@ test.describe('the calendar renders the workspace’s own month', () => {
     await expect(grid).toHaveAttribute('role', 'grid');
     await expect(grid.locator('[role="columnheader"]')).toHaveCount(7);
 
-    // Six weeks, so a month beginning on the last weekday still shows whole.
-    await expect(grid.locator('[role="gridcell"]')).toHaveCount(42);
+    // Whole weeks — the rows the month reaches, as the prototype draws them
+    // (D-468): four to six, so a month beginning on the last weekday still
+    // shows whole.
+    const cells = await grid.locator('[role="gridcell"]').count();
+    expect(cells % 7).toBe(0);
+    expect(cells).toBeGreaterThanOrEqual(28);
+    expect(cells).toBeLessThanOrEqual(42);
 
     /*
      * THE ZONE IS STATED. Every time on this screen is a wall-clock in the

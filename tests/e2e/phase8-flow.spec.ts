@@ -665,7 +665,9 @@ test('11 · the post is scheduled and the calendar states its context', async ({
   // for — the campaign it belongs to, its publishing state, its media count.
   const chip = page.locator('[data-testid^="calendar-post-"]', { hasText: CONTENT_TITLE }).first();
   await expect(chip).toBeVisible();
+  // D-468 — the chip opens its popover; Details is the post drawer.
   await chip.click();
+  await page.getByTestId('calendar-pop-details').click();
   const facts = page.getByTestId('calendar-slot-facts');
   await expect(facts).toBeVisible();
   await expect(page.getByTestId('calendar-slot-status')).not.toBeEmpty();

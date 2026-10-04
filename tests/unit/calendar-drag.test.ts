@@ -257,8 +257,8 @@ describe('who can drag what', () => {
     expect(view).toContain(
       'return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;',
     );
-    // Drop targets exist only for a scheduler.
-    expect(view).toMatch(/\{\.\.\.\(canSchedule\s*\?\s*\{\s*dropTargets: true,/);
+    // Drop targets exist only for a scheduler (D-468: the ported calendar's prop).
+    expect(view).toContain('dropTargets={canSchedule}');
   });
 });
 

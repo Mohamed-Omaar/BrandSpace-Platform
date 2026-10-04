@@ -83,4 +83,22 @@ export const arEgOverrides = {
   'home.p.s.fb': 'مستني رأيك',
   'home.p.s.fbSub': 'منشورات عايزينك تشوفها قبل ما تنزل.',
   'home.p.s.empty': 'مفيش حاجة هنا دلوقتي.',
+
+  // Batch 2 — Calendar (Main.dc.html lines 599–660; copy at 2187 and 2660–2740).
+  'calendar.subtitle': 'اضغط على أي يوم فاضي عشان تعمل منشور فيه.',
+  'calendar.agenda': 'جدول',
+  'calendar.today': 'النهارده',
+  'calendar.weekN': 'أسبوع {n}',
+  'calendar.newPostDay': 'منشور جديد في اليوم ده',
+  'calendar.readyTitle': 'مسودات من غير ميعاد',
+  'calendar.noReady': 'مفيش مسودات من غير ميعاد.',
+  'calendar.agendaEmpty': 'مفيش منشورات في الشهر ده.',
+  'calendar.hint': 'اسحب أي منشور ليوم تاني عشان تغيّر ميعاده. الساعة بتفضل زي ما هي.',
+  'calendar.pickDay': 'اختار يوم جديد لـ «{title}»',
+  'calendar.pop.open': 'افتح',
+  'calendar.pop.move': 'انقله ليوم تاني',
+  'content.status.IN_REVIEW': 'في المراجعة',
+  'content.status.SCHEDULED': 'مجدولة',
+  'content.status.PUBLISHED': 'منشورة',
+  'content.status.FAILED': 'متعثرة',
 } as const satisfies Partial<Record<MessageKey, string>>;
