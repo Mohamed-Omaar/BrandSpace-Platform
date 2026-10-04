@@ -704,6 +704,30 @@ and the arrow.
 the prototype's action button under an answer ("Open the Studio →"): the product's answers carry their
 own links inside the plan.
 
+### Notifications (`Main.dc.html` lines 162–170)
+
+Ported: the bell's popover — 340px, the glass card 10px under the bell at its inline end, 18px corners;
+the head (title and Dismiss under a rule); the rows (an 8px dot, purple while unread, the title at 13px /
+700, the meta line at 12px), the unread row's lavender ground; and the "See all" foot in purple on its
+light band. It opens and closes from the bell, Escape or an outside click, and returns focus to the bell.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-297: the three tabs — All, Mentions, Approvals — as the prototype's segmented control above the rows.
+- Each row opens the exact place it is about; a note's excerpt is quoted under its title; unread is a
+  word in the meta line as well as the dot (never colour alone). The bell is still the link to the full
+  Notifications screen (a modified click or no script follows it).
+
+**(b) Post-launch — left out.** The phone layout: below 768px the popover spans the screen less 16px.
+
+**(c) States the prototype does not draw.** Loading, a feed that failed to load, and an empty tab.
+
+**Accessibility findings.** The meta grey (`#8a8a92`) takes `#6a6a72`. The glass is drawn at `.94` white, not
+`.62`: at `.62` the page behind (Home's hero heading) showed through the feed's text and failed contrast.
+
+**Left out — no data or feature.** The unread count badge on the bell (the top bar is drawn before the
+feed is read, and it is not read on every page), and "Mark all as read" (no such action exists).
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

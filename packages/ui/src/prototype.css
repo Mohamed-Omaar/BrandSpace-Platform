@@ -6306,6 +6306,150 @@ button.bsp-chip.bsp-bb-q {
   gap: 8px !important;
 }
 
+/* ------------------------------------------------------------ §3-NTF ---- */
+
+/*
+ * NOTIFICATIONS — the bell's popover, `Main.dc.html` line 162 (D-468,
+ * batch 4): `width: 340px; background: rgba(255,255,255,.62); backdrop-filter:
+ * blur(22px) saturate(180%); border: 1px solid rgba(255,255,255,.75);
+ * border-radius: 18px`, rows `padding: 11px 14px` with an 8px dot.
+ */
+.bsp-ntf-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.bsp-ntf {
+  position: absolute;
+  top: calc(100% + 10px);
+  inset-inline-end: 0;
+  z-index: 60;
+  inline-size: 340px;
+  max-inline-size: calc(100vw - 32px);
+  text-align: start;
+  /* Accessibility finding: the prototype's `.62` glass let the page behind (Home's hero
+     heading) show through the feed's text; `.94` keeps the blur and the edge. */
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 18px;
+  box-shadow:
+    0 24px 60px rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.05);
+  overflow: hidden;
+  color: #111114;
+}
+.bsp-ntf:focus {
+  outline: none;
+}
+.bsp-ntf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-block-end: 1px solid #f0f0f2;
+  font-size: 14px;
+  font-weight: 800;
+}
+/* The three tabs (D-297), a `.seg` under the head. */
+.bsp-seg.bsp-ntf-tabs {
+  margin: 10px 14px 4px;
+}
+.bsp-ntf-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-block-size: min(60vh, 420px);
+  overflow-y: auto;
+}
+.bsp-ntf-row {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 11px 14px;
+  border-block-end: 1px solid rgba(20, 16, 35, 0.06);
+}
+.bsp-ntf-row[data-unread] {
+  background: rgba(121, 53, 254, 0.07);
+}
+.bsp-ntf-dot {
+  inline-size: 8px;
+  block-size: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #d2d2d8;
+  flex-shrink: 0;
+}
+.bsp-ntf-row[data-unread] .bsp-ntf-dot {
+  background: #7935fe;
+}
+.bsp-ntf-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.bsp-ntf-t {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111114;
+  text-decoration: none;
+}
+/* The whole row answers its title's link. */
+.bsp-ntf-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.bsp-ntf-link:focus-visible {
+  outline: none;
+}
+.bsp-ntf-link:focus-visible::after {
+  outline: 2px solid #7935fe;
+  outline-offset: -2px;
+}
+.bsp-ntf-x {
+  font-size: 12.5px;
+  color: #4d4c53;
+  overflow-wrap: anywhere;
+}
+.bsp-ntf-m {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-ntf-note {
+  margin: 0;
+  padding: 14px;
+  font-size: 13px;
+  color: #55555c;
+}
+.bsp-ntf-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 14px;
+}
+.bsp-ntf-empty > b {
+  font-size: 13.5px;
+}
+.bsp-ntf-empty > span {
+  font-size: 12.5px;
+  color: #6a6a72;
+}
+/* "See all": `padding: 10px 14px; font-size: 13px; font-weight: 800; color: #5312c4`. */
+.bsp-ntf-all {
+  display: block;
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.35);
+  font-size: 13px;
+  font-weight: 800;
+  color: #5312c4;
+  text-align: center;
+  text-decoration: none;
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -6588,6 +6732,16 @@ button.bsp-chip.bsp-bb-q {
     inset: 12px;
     inline-size: auto;
     block-size: auto;
+  }
+}
+
+/* The bell's popover below 768px: pinned under the top bar, the screen's width. */
+@media (max-width: 767.98px) {
+  .bsp-ntf {
+    position: fixed;
+    top: 64px;
+    inset-inline: 16px;
+    inline-size: auto;
   }
 }
 
