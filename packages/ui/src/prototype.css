@@ -1166,6 +1166,10 @@ button.bsp-xcard:hover {
     inset-inline-end: calc((100% - min(var(--bs-shell-max-width), calc(100% - 40px))) / 2 + 24px);
   }
 }
+/* The header slot that holds the Copilot's room on a phone; never drawn wider. */
+.bsp-fab-slot {
+  display: none;
+}
 .bsp-fab-mark {
   width: 36px;
   height: 36px;
@@ -1503,9 +1507,44 @@ button.bsp-xcard:hover {
   .bsp-home-noticed {
     grid-template-columns: minmax(0, 1fr) !important;
   }
+  /* THE COPILOT IN THE HEADER (D-468 (b)): no floating button on a phone.
+     The control is laid onto the empty slot at the end of the header's action
+     row (`--bsp-fab-x/y`, set by the shell), scrolls with the page, and takes
+     the header controls' own look: 40px high, 12px radius, the `.ibtn` grey. */
+  .bsp-fab-slot[data-on] {
+    display: block;
+    block-size: 40px;
+    flex: none;
+  }
   .bsp-fab {
-    bottom: 16px;
-    inset-inline-end: 16px;
+    position: absolute;
+    inset: auto;
+    top: var(--bsp-fab-y, 16px);
+    /* Physical, as measured from the slot: correct in both directions. */
+    left: var(--bsp-fab-x, auto);
+    z-index: 2;
+    height: 40px;
+    gap: 8px;
+    padding-inline: 4px 12px;
+    border: 0;
+    border-radius: 12px;
+    background: #f2f2f4;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+  .bsp-fab .bsp-fab-mark {
+    width: 32px;
+    height: 32px;
+    box-shadow: none;
+  }
+  /* A header menu or panel that is open stays on top of it. */
+  .bs-ambient-host:has(.bsp-header [aria-expanded='true']) .bsp-fab {
+    visibility: hidden;
+  }
+  /* The hero's cards stack under its copy in one column (never a second). */
+  .bsp-hero {
+    flex-wrap: nowrap;
   }
 }
 

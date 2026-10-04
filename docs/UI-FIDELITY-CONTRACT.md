@@ -246,6 +246,10 @@ named once as `--bsp-*` tokens with its exact values. The prototype has no `box-
 
 - "View as" (role preview) in the account menu and the role-preview banner.
 - The phone layout: below 768px the product keeps its existing drawer and full-window layout.
+  The Copilot is part of it: below 768px it is a control at the end of the header's action row, as
+  the product had it, and no floating button covers the page (owner approval, 2026-10-04, after
+  the floating button covered the calendar's Undo on a phone). From 768px up it is the prototype's
+  floating button, unchanged.
 
 **(c) States the prototype does not draw — built in its visual language.**
 

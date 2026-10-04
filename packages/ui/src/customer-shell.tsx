@@ -321,6 +321,63 @@ export function CustomerShell({
   // The column follows the labels: it narrows only once they have left.
   const layoutCollapsed = collapsed && !fadingOut;
 
+  /*
+   * THE COPILOT ON A PHONE (D-468 (b): the phone layout is post-launch, so it
+   * stays the product's). From 768px up the Copilot is the prototype's floating
+   * button. Below 768px it is a control in the header's action row, as the
+   * product had it, and nothing floats over the page. The control keeps its one
+   * place in the document (after the header, so the bar's own order and the
+   * tab order are unchanged); an empty slot at the end of the action row holds
+   * its room, and the control is laid onto that slot and scrolls with the
+   * header.
+   */
+  const fabHostRef = useRef<HTMLDivElement | null>(null);
+  const fabSlotRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    const host = fabHostRef.current;
+    const slot = fabSlotRef.current;
+    if (!host || !slot) return undefined;
+    const phone = window.matchMedia('(max-width: 767.98px)');
+    let frame = 0;
+    const place = () => {
+      frame = 0;
+      const control = host.querySelector<HTMLElement>('.bsp-fab');
+      const anchor = host.closest<HTMLElement>('.bs-ambient-host');
+      if (!control || !anchor) return;
+      if (!phone.matches) {
+        slot.removeAttribute('data-on');
+        slot.style.removeProperty('inline-size');
+        control.style.removeProperty('--bsp-fab-x');
+        control.style.removeProperty('--bsp-fab-y');
+        return;
+      }
+      slot.setAttribute('data-on', '');
+      slot.style.setProperty('inline-size', `${control.offsetWidth}px`);
+      const at = slot.getBoundingClientRect();
+      const origin = anchor.getBoundingClientRect();
+      control.style.setProperty('--bsp-fab-x', `${at.left - origin.left}px`);
+      control.style.setProperty('--bsp-fab-y', `${at.top - origin.top}px`);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(place);
+    };
+    const observer = new ResizeObserver(schedule);
+    const shell = host.closest<HTMLElement>('.bs-ambient-host');
+    if (shell) observer.observe(shell);
+    const control = host.querySelector<HTMLElement>('.bsp-fab');
+    if (control) observer.observe(control);
+    const header = slot.closest('header');
+    if (header) observer.observe(header);
+    phone.addEventListener('change', schedule);
+    void document.fonts?.ready.then(schedule);
+    place();
+    return () => {
+      observer.disconnect();
+      phone.removeEventListener('change', schedule);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [fab]);
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const drawerId = useId();
@@ -448,6 +505,7 @@ export function CustomerShell({
             <div className="bsp-actions">
               {pageMeta}
               {actions}
+              {fab ? <span ref={fabSlotRef} className="bsp-fab-slot" aria-hidden="true" /> : null}
             </div>
           </header>
           <main id="main" className="bsp-scroll">
@@ -459,7 +517,9 @@ export function CustomerShell({
         </div>
       </div>
 
-      {fab}
+      <div ref={fabHostRef} style={{ display: 'contents' }}>
+        {fab}
+      </div>
 
       {drawer.present ? (
         <div
