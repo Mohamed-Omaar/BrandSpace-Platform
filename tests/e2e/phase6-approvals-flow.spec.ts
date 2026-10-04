@@ -127,7 +127,8 @@ test.describe('D-288 · the next step follows the brand policy', () => {
       'href',
       `/en/calendar?item=${f.itemId}`,
     );
-    await expect(page.getByTestId('submit-for-review')).toHaveClass(/bsp-sec/);
+    // Review of #67, round 2: "Send for review" is the bar's one purple primary.
+    await expect(page.getByTestId('submit-for-review')).toHaveClass(/bsp-pur/);
     await expect(page.getByTestId('editor-needs-approval')).toHaveCount(0);
   });
 

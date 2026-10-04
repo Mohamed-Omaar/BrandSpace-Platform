@@ -1602,6 +1602,15 @@ Onboarding is the standalone card (`SetupFrame`): Business (the workspace form),
 Teach (learn + review), Accounts, Goal. Every element still not built is listed, with its
 effort, in the PR for the owner.
 
+**Round 2 of the review.** The Studio's sticky bar is the prototype's — status · save
+state · hint · Reviewer · When · one purple "Send for review" · the round Copilot button
+(the floating Copilot steps aside on the Studio, as the prototype's `fabUp`). On an open
+post, "Save edit", the first comment, the tone, "Save as template" and Archive are under
+the bar's "⋯"; the calendar's Schedule is in the When panel; choosing a campaign files the
+post. "Post to" shows every channel, the post's own pressed. Brand Brain's notes are behind
+a "Notes" disclosure at the page's foot. Publish time and Campaign share the settings row as
+two equal columns until the Pillar exists.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

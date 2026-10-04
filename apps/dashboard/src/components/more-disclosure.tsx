@@ -21,6 +21,7 @@ export function MoreDisclosure({
   closeOnPick = false,
   summary,
   summaryClassName = 'bsp-chip bsp-fdis-chip',
+  up = false,
   children,
 }: {
   readonly label: string;
@@ -35,6 +36,8 @@ export function MoreDisclosure({
    */
   readonly summary?: ReactNode;
   readonly summaryClassName?: string;
+  /** The panel opens above the face — for a control in a bar at the bottom. */
+  readonly up?: boolean;
   readonly children: ReactNode;
 }) {
   const ref = useRef<HTMLDetailsElement | null>(null);
@@ -77,7 +80,9 @@ export function MoreDisclosure({
           <span aria-hidden="true">⋯</span>
         </summary>
       )}
-      <div className={`bsp-fdis-panel${align === 'start' ? ' bsp-fdis-start' : ''}`}>
+      <div
+        className={`bsp-fdis-panel${align === 'start' ? ' bsp-fdis-start' : ''}${up ? ' bsp-fdis-up' : ''}`}
+      >
         <div className="bsp-fdis-form">{children}</div>
       </div>
     </details>

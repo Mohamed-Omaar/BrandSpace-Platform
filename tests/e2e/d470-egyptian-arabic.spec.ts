@@ -90,7 +90,9 @@ test.describe('D-470: Arabic follows the workspace country', () => {
     await expect(page.locator('[lang="ar-EG"]')).toHaveCount(0);
 
     await createWorkspace(page, 'EG');
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/onboarding`);
+    // Review of #67 — onboarding is the standalone card with no app shell, so
+    // the shell's dialect is read on Settings, a screen inside it.
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/settings`);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     await expect(page.locator('html')).toHaveAttribute('lang', /^ar\b/);
     await expect(page.locator('[data-testid="app-shell"]')).toHaveAttribute('lang', 'ar-EG');
@@ -100,7 +102,7 @@ test.describe('D-470: Arabic follows the workspace country', () => {
     );
 
     // English stays English for the same workspace.
-    await page.goto(`${DASHBOARD_BASE_URL}/en/onboarding`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
     await expect(page.locator('[data-testid="app-shell"]')).not.toHaveAttribute('lang', /.+/);
     await expect(page.locator('[data-testid="locale-switch"]')).toHaveAttribute(
       'aria-label',
@@ -113,7 +115,7 @@ test.describe('D-470: Arabic follows the workspace country', () => {
     await signIn(page, email, 'en');
     await createWorkspace(page, 'SA');
 
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/onboarding`);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/settings`);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     await expect(page.locator('[data-testid="app-shell"]')).not.toHaveAttribute('lang', /.+/);
     await expect(page.locator('[data-testid="locale-switch"]')).toHaveAttribute(

@@ -718,7 +718,8 @@ describe('B4 / Q10 · default reviewer; anyone who may approve can decide', () =
 
   it('the composer lets the author choose, or leave it automatic, on submit and resubmit', () => {
     const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
-    expect(editor).toContain("{reviewerPicker('submit')}");
+    // Review of #67, round 2: the bar's picker belongs to the review form by `form=`.
+    expect(editor).toContain("reviewerPicker('submit', reviewFormId)");
     expect(editor).toContain("{reviewerPicker('resubmit')}");
     expect(editor).toContain('name="assignedToUserId"');
     const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');

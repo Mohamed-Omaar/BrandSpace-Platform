@@ -933,12 +933,24 @@ export default async function BrandBrainPage({
         separation is structural — `packages/collaboration` has no dependency on
         `packages/brand-brain` in either direction.
       */}
-      <NotesPanel
-        locale={locale}
-        subject={{ type: 'BRAND', brandId: brand.id }}
-        returnPath={`/${locale}/brand-brain`}
-        highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
-      />
+      {/*
+        Review of #67, round 2 — the prototype's Brand Brain draws no notes
+        section, so the brand's notes are behind this disclosure at the foot of
+        the page; a link to one thread (`?thread=`) opens it.
+      */}
+      <details
+        className="bsp-bb-notes"
+        open={typeof query['thread'] === 'string'}
+        data-testid="brand-brain-notes"
+      >
+        <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>
+        <NotesPanel
+          locale={locale}
+          subject={{ type: 'BRAND', brandId: brand.id }}
+          returnPath={`/${locale}/brand-brain`}
+          highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
+        />
+      </details>
     </WorkspaceShell>
   );
 }

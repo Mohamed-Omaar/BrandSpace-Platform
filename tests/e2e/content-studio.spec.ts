@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { openStudioMore } from './studio-bar';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
@@ -621,6 +622,7 @@ test.describe('writing a post by hand', () => {
        * anything had been written to it. `ok=SAVED` is what the action redirects
        * to, so it is the thing that says the save finished.
        */
+      await openStudioMore(page);
       await page.getByTestId(`editor-save-${platformKey}`).click();
       await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
 

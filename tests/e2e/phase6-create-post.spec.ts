@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { openStudioMore } from './studio-bar';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { withPlatformPrisma } from './platform-prisma';
@@ -317,6 +318,7 @@ test.describe('Create Post — the draft editor (§20-§22, §27)', () => {
     );
     const form = page.locator('[data-testid="content-variant"][data-platform="instagram"]');
     await form.locator('textarea').fill('Changed after approval.');
+    await openStudioMore(page);
     await page.getByTestId('editor-save-instagram').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
     await expect(page.getByTestId('editor-saved-instagram')).toHaveText('Saved just now');
@@ -335,7 +337,9 @@ test.describe('Create Post — the draft editor (§20-§22, §27)', () => {
     await signIn(page);
     await page.goto(compose('en', `?item=${itemId}`));
 
+    await openStudioMore(page);
     await page.getByTestId('content-first-comment-instagram').fill('Link in bio.');
+    await openStudioMore(page);
     await page.getByTestId('editor-save-instagram').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
 
@@ -345,6 +349,7 @@ test.describe('Create Post — the draft editor (§20-§22, §27)', () => {
     await page
       .locator('[data-testid="content-variant"][data-platform="linkedin"] textarea')
       .fill('LinkedIn words, edited.');
+    await openStudioMore(page);
     await page.getByTestId('editor-save-linkedin').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
 
@@ -471,6 +476,8 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     await preview.getByTestId('preview-slide-next').click();
     await expect(preview.getByTestId('preview-carousel-badge')).toHaveText('Slide 2 of 3');
 
+    await openStudioMore(page);
+
     await page.getByTestId('editor-save-instagram').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
     expect((await storedVariant(variantId)).assetIds).toEqual([slides[1], slides[0], slides[2]]);
@@ -490,6 +497,7 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     await expect(page.getByTestId('content-media-instagram-slide-0')).toContainText('0:15');
     await expect(page.getByTestId('content-media-instagram-cover-0')).toHaveCount(0);
     await page.getByTestId('content-media-instagram-cover-1').click();
+    await openStudioMore(page);
     await page.getByTestId('editor-save-instagram').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
 
@@ -522,6 +530,7 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
       'data-asset-id',
       picture,
     );
+    await openStudioMore(page);
     await page.getByTestId('editor-save-instagram').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
     expect((await storedVariant(variantId)).assetIds).toEqual([picture]);
@@ -548,6 +557,7 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
       'data-asset-id',
       picture,
     );
+    await openStudioMore(page);
     await page.getByTestId(`editor-save-${platform}`).click();
     await page.waitForURL(
       (url) => url.searchParams.get('ok') === 'SAVED' && !url.searchParams.has('attach'),
@@ -586,6 +596,7 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     const slide = page.getByTestId('content-media-instagram-slide-0');
     await expect(slide).toBeVisible({ timeout: 120_000 });
     const assetId = (await slide.getAttribute('data-asset-id')) ?? '';
+    await openStudioMore(page);
     await page.getByTestId('editor-save-instagram').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
 

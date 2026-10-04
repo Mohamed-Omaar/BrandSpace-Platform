@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { openStudioMore } from './studio-bar';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
@@ -256,7 +257,8 @@ test.describe('B9 · the Studio: inline date and time, and "Save as template"', 
     await date.fill(tomorrow);
     await expect(time).toHaveValue('11:15');
 
-    // Save as template, from the post.
+    // Save as template, from the post — under the bar's "⋯" (review of #67, round 2).
+    await openStudioMore(page);
     await page.getByTestId('save-as-template').locator('summary').click();
     await page.getByTestId('save-as-template-name').fill('From the Studio');
     await page.getByTestId('save-as-template-submit').click();

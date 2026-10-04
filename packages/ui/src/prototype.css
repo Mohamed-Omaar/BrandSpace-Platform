@@ -2177,11 +2177,19 @@ span.bsp-cal-hol {
 /* The control class keeps the global chevron; the chip keeps its own ground. */
 .bsp-chip.bs-control.bsp-cal-select,
 .bsp-chip.bs-control.bsp-cal-select:hover:not(:disabled) {
-  background: #fff;
+  /* The colour only: the shorthand cleared the global chevron (review of #67). */
+  background-color: #fff;
   border: 1px solid #e4e4e8;
 }
 .bsp-chip.bs-control.bsp-cal-select:hover:not(:disabled) {
   border-color: #c9c9d1;
+}
+/* "Filters" and "⋯" at the head row's end, wrapping as one (review of #67). */
+.bsp-cal-acts {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
 }
 .bsp-cal-note {
   margin: 0;
@@ -2371,6 +2379,9 @@ span.bsp-cal-hol {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+  /* Review of #67, round 2: each card keeps its natural height, the row
+     top-aligned, as the prototype draws them. */
+  align-items: start;
 }
 /* `.lift` */
 .bsp-lift {
@@ -2388,7 +2399,6 @@ span.bsp-cal-hol {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  height: 100%;
   box-sizing: border-box;
 }
 /* The picture: `border: 0; padding: 0; aspect-ratio: 1; position: relative`. */
@@ -2885,6 +2895,102 @@ span.bsp-cal-hol {
 }
 .bsp-chip.bs-control.bsp-st-select {
   width: 100%;
+}
+/* REVIEW OF #67, ROUND 2 — the prototype's campaign control is a chip with
+   its own chevron at the end (`<svg width="14" height="14"><path
+   d="m6 9 6 6 6-6"/>`, stroke 2), not the browser's marker. The select keeps
+   working as a select; only the marker is the prototype's. */
+.bsp-chip.bs-control.bsp-st-select,
+.bsp-chip.bs-control.bsp-st-select:hover:not(:disabled) {
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23111114' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: 14px 14px;
+  background-position: right 11px center;
+  padding-inline-end: 32px !important;
+  appearance: none;
+}
+[dir='rtl'] .bsp-chip.bs-control.bsp-st-select,
+[dir='rtl'] .bsp-chip.bs-control.bsp-st-select:hover:not(:disabled) {
+  background-position: left 11px center;
+}
+.bsp-chip.bs-control.bsp-st-select::picker-icon {
+  display: none;
+}
+/* Publish time and Campaign share the row as two equal columns until the
+   prototype's Pillar (a later phase) exists (review of #67, round 2). */
+.bsp-st-f6 {
+  grid-column: span 6;
+}
+/* The field's label line, with a short hint at its end. */
+.bsp-st-lblrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.bsp-st-lblrow > .bsp-st-hint {
+  font-size: 11.5px;
+}
+/* The bar's end: `<span style="width: 1px; height: 24px; background:
+   #ececef">` and the 40px Copilot circle, `background: linear-gradient(135deg,
+   #9b6bff, #5312c4); box-shadow: 0 4px 12px rgba(83,18,196,.3)`. */
+.bsp-st-rule {
+  width: 1px;
+  height: 24px;
+  background: #ececef;
+  flex-shrink: 0;
+}
+.bsp-st-cp {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #9b6bff, #5312c4);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(83, 18, 196, 0.3);
+}
+/* The bar's reviewer chip before the post exists: it names who will review,
+   and is chosen once the draft is saved. */
+.bsp-chip.bsp-st-rev-static {
+  cursor: default;
+}
+/* "Post to" on an open post: the post's own channels are the pressed chips
+   (`.chip[aria-pressed=true]`), the others plain and not chosen here. */
+.bsp-chip[data-chosen='true'] {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
+.bsp-chip.bsp-st-off {
+  cursor: default;
+}
+/* The bar's When panel opens above it (the prototype's bar popovers sit at
+   `bottom: 42px; inset-inline-end: 0`). */
+.bsp-st-when.bsp-st-when-up {
+  top: auto;
+  bottom: 42px;
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+}
+/* "+ Add the design" in the preview's empty picture: `border: 1.5px dashed
+   #c9c9d1; background: rgba(255,255,255,.7); border-radius: 12px;
+   padding: 12px 16px; font-size: 13px; font-weight: 700; color: #4d4c53`. */
+.bsp-st-adddesign {
+  border: 1.5px dashed #c9c9d1;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4d4c53;
+  cursor: pointer;
 }
 .bsp-st-inline {
   display: flex;
@@ -3413,6 +3519,19 @@ span.bsp-cal-hol {
   .bsp-st-bar {
     padding-inline-end: 168px;
   }
+  /* Review of #67, round 2 — where the bar carries its own round Copilot
+     button, the prototype hides the floating one (`fabUp`) and opens the panel
+     above the bar (`fabPanel: 96px`); the bar's end is then its own. */
+  .bsp-st-bar:has(.bsp-st-cp) {
+    padding-inline-end: 12px;
+  }
+  body:has(.bsp-st-cp) .bsp-fab {
+    visibility: hidden;
+  }
+  body:has(.bsp-st-cp) .bsp-cp {
+    bottom: 96px;
+    block-size: min(580px, calc(100vh - 132px));
+  }
 }
 /* REVIEW OF #67 — the Studio before the post exists, as the prototype draws it. */
 /* The campaign keeps the prototype's third column (`grid-column: span 4` after
@@ -3474,12 +3593,22 @@ span.bsp-cal-hol {
   opacity: 0.75;
   font-weight: 600;
 }
+/* Review of #67, round 2 — waiting for a topic, the button keeps the
+   prototype's purple and its cost; only the pointer says it cannot run yet. */
+.bsp-btn.bsp-pur.bsp-st-aiw[disabled] {
+  background: #7935fe;
+  color: #fff;
+}
 /* The preview's size line: `font-size: 11px; color: #6a6a72`. */
 .bsp-st-size {
   font-size: 11px;
   color: #6a6a72;
 }
 /* "⋯" opens its panel from the start side, under the channels. */
+.bsp-fdis-panel.bsp-fdis-up {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
 .bsp-fdis-panel.bsp-fdis-start {
   inset-inline-end: auto;
   inset-inline-start: 0;
@@ -4577,9 +4706,12 @@ span.bsp-cal-hol {
   transition: opacity 0.15s ease;
   cursor: pointer;
 }
+/* On hover, on focus, once ticked — and on every tile while any is ticked
+   (selection mode; review of #67, round 2). Otherwise hidden. */
 .bsp-med-tile:hover .bsp-med-select,
 .bsp-med-select:focus-within,
-.bsp-med-select:has(input:checked) {
+.bsp-med-select:has(input:checked),
+.bsp-med-grid:has(.bsp-med-select input:checked) .bsp-med-select {
   opacity: 1;
 }
 /* Without hover (touch), the box is always there. */
@@ -5100,6 +5232,32 @@ span.bsp-cal-hol {
 .bsp-bb-miss-plus {
   color: #5312c4;
 }
+/* Review of #67, round 2 — the prototype's one row: the title on its own
+   line, then the short chips and the expired-fact pill on the next, the chips
+   clipped rather than wrapped. */
+.bsp-card.bsp-bb-miss > .bsp-bb-miss-t {
+  flex-basis: 100%;
+}
+.bsp-card.bsp-bb-miss > .bsp-bb-miss-q {
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+.bsp-bb-miss-q > .bsp-chip {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  max-inline-size: 280px;
+  white-space: nowrap;
+}
+.bsp-bb-miss-p {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bsp-card.bsp-bb-miss > .bsp-pill {
+  flex: none;
+}
 
 /* To review: `border-radius: 18px; background: #f6f3ff; padding: 14px 18px;
    display: flex; align-items: center; gap: 12px`. */
@@ -5338,6 +5496,31 @@ textarea.bs-control.bsp-bb-in {
 }
 [lang='ar'] .bsp-xcount {
   font-size: 10.5px;
+}
+/* The brand's notes, behind a disclosure at the page's foot (round 2). */
+.bsp-bb-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-block-start: 8px;
+}
+.bsp-bb-notes > summary {
+  align-self: flex-start;
+  list-style: none;
+  cursor: pointer;
+}
+.bsp-bb-notes > summary::-webkit-details-marker {
+  display: none;
+}
+.bsp-bb-notes[open] > summary {
+  margin-block-end: 12px;
+}
+/* The card's count on one line, as the prototype's (review of #67, round 2). */
+.bsp-bb-card .bsp-xcount {
+  white-space: nowrap;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* An open area, in place of the grid (lines 817–866). */
@@ -6640,6 +6823,9 @@ button.bsp-chip.bsp-bb-q {
   outline: none;
 }
 .bsp-ntf-head {
+  /* Review of #67 — the "⋯" panel opens over the list (each row is its own layer). */
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -7179,7 +7365,8 @@ button.bsp-chip.bsp-bb-q {
 /* Review of #67 — the tile's "Listens to …": `font-size: 10.5px; color: #8a8a92`. */
 .bsp-au-tile-s {
   font-size: 10.5px;
-  color: #8a8a92;
+  /* D-470 (2): the prototype's #8a8a92 darkened to the product's #6a6a72 for contrast. */
+  color: #6a6a72;
 }
 /* An action: `align-items: center; gap: 6px; padding: 9px 10px; font-size: 12.5px; font-weight: 600`. */
 .bsp-au-tile.bsp-au-act {
@@ -8060,17 +8247,24 @@ button.bsp-chip.bsp-bb-q {
  * the white 10px-radius button 7px inside the field's trailing edge, 13px / 800
  * `#55555c` — on sign-in's field and on the shared password field's reveal.
  */
+/* The label and "Forgot password?" share the first line; the field is the
+   second. The link comes after the field in the document, so the keyboard goes
+   from the email to the password as it always has. */
 .bsp-pw-row {
-  display: flex;
-  flex-direction: column;
-}
-.bsp-pw-head {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 10px;
+  column-gap: 10px;
 }
-.bsp-pw-head > label {
+.bsp-pw-row > .bsp-pw {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.bsp-pw-row > .bsp-lnk {
+  grid-column: 2;
+  grid-row: 1;
+}
+.bsp-pw-row > label {
   font-size: 11.5px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -8593,6 +8787,7 @@ button.bsp-chip.bsp-bb-q {
   .bsp-st-f12,
   .bsp-st-f7,
   .bsp-st-f5,
+  .bsp-st-f6,
   .bsp-st-f4 {
     grid-column: auto;
   }
@@ -8610,6 +8805,11 @@ button.bsp-chip.bsp-bb-q {
     flex-basis: 100%;
   }
   .bsp-st-note:empty {
+    display: none;
+  }
+  /* The phone keeps its Copilot in the header (D-468 (b)). */
+  .bsp-st-rule,
+  .bsp-st-cp {
     display: none;
   }
   .bsp-st-when {

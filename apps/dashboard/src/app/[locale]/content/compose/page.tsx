@@ -1169,6 +1169,16 @@ function translateOptional(
 const EDITOR_KEYS = [
   // Review of #67 — the product's other AI edits, under "⋯".
   'editor.ai.more',
+  // Review of #67, round 2 — the prototype's chip wording, bar and preview.
+  'editor.ai.translateTo',
+  'editor.ai.estimateOne',
+  'studio.addDesign',
+  'studio.reviewer',
+  'studio.reviewerAuto',
+  'studio.sendAfterSave',
+  'studio.rewriteSaved',
+  'topbar.copilot',
+  'studio.channelOff',
   'studio.moreOptions',
   // Phase 2B-2 — carousel slide headlines (B9).
   'editor.slides.headline',

@@ -313,7 +313,8 @@ test.describe('B12 + G13 (a) · automations v2', () => {
     await page.waitForURL((url) => url.searchParams.get('ok') === 'AUTOMATION_UPDATED');
     await expect(page.getByTestId('automation-rules')).toContainText('Early note');
     // Still disabled: editing never switches a rule on.
-    await expect(page.getByTestId('automation-rules')).toContainText('Disabled');
+    // Review of #67 — the prototype's state chip reads On / Off.
+    await expect(page.getByTestId('automation-rules')).toContainText('Off');
 
     await page.getByTestId(`automation-more-${ruleId}`).click();
     await page.getByTestId(`automation-edit-${ruleId}`).click();

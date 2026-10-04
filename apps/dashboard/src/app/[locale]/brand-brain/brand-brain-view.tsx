@@ -332,6 +332,10 @@ export function BrandBrainView({
     };
   });
   const pendingTotal = areas.reduce((sum, area) => sum + area.pendingCandidates, 0);
+  const expiredFacts = areas.reduce(
+    (sum, area) => sum + area.items.filter((item) => item.expired).length,
+    0,
+  );
   const readySources = sources.filter((source) => source.status === 'READY').length;
   const missingCount = Math.max(0, totalQuestions - answered);
 
@@ -672,10 +676,17 @@ export function BrandBrainView({
                       key={`${entry.area}:${entry.itemKey}`}
                       type="button"
                       className="bsp-chip"
+                      title={entry.prompt}
                       data-testid={`brand-brain-missing-${entry.itemKey}`}
                       onClick={() => askMissing(entry)}
                     >
-                      <span className="bsp-bb-miss-a">{entry.areaLabel} ·</span> {entry.prompt}{' '}
+                      {/*
+                        The prototype's short chip — area · label + — on one
+                        row: the owner-approved question is the label, clipped
+                        to the chip, and read in full on hover (round 2).
+                      */}
+                      <span className="bsp-bb-miss-a">{entry.areaLabel} ·</span>{' '}
+                      <span className="bsp-bb-miss-p">{entry.prompt}</span>{' '}
                       <span className="bsp-bb-miss-plus" aria-hidden="true">
                         +
                       </span>
@@ -689,7 +700,18 @@ export function BrandBrainView({
                     title={pill.areas.join(' · ')}
                     data-testid={`brand-brain-attention-${pill.code}`}
                   >
-                    {pill.label} · <span className="bsp-ltr">{pill.areas.length}</span>
+                    {pill.code === 'expired_items' && expiredFacts > 0 ? (
+                      /* The prototype's "1 expired fact" (`expN`). */
+                      expiredFacts === 1 ? (
+                        t('bb.expiredOne')
+                      ) : (
+                        t('bb.expiredMany').replace('{count}', String(expiredFacts))
+                      )
+                    ) : (
+                      <>
+                        {pill.label} · <span className="bsp-ltr">{pill.areas.length}</span>
+                      </>
+                    )}
                   </span>
                 ))}
               </section>
@@ -775,39 +797,42 @@ export function BrandBrainView({
             ) : (
               /* The ten areas — `.xgrid` of `.xcard`s, four across (lines 805–815). */
               <section className="bsp-xgrid bsp-bb-grid" data-testid="area-grid">
-                {areas.map((area) => (
-                  <button
-                    key={area.area}
-                    type="button"
-                    className="bsp-xcard bsp-bb-card"
-                    data-testid={`area-card-${area.area}`}
-                    onClick={() => setOpenArea(area.area)}
-                  >
-                    <span className="bsp-xicon" aria-hidden="true">
-                      {AREA_GLYPHS[area.area] ?? '◇'}
-                    </span>
-                    <span className="bsp-xtitle">{area.label}</span>
-                    <span className="bsp-xdesc">{area.description}</span>
-                    <span className="bsp-xfoot">
-                      <span
-                        className={`bsp-xstatus ${AREA_X[area.status]}`}
-                        data-testid={`area-status-${area.area}`}
-                      >
-                        {area.statusLabel}
+                {[...areas]
+                  .sort((a, b) => gridOrder(a.area) - gridOrder(b.area))
+                  .map((area) => (
+                    <button
+                      key={area.area}
+                      type="button"
+                      className="bsp-xcard bsp-bb-card"
+                      data-testid={`area-card-${area.area}`}
+                      onClick={() => setOpenArea(area.area)}
+                    >
+                      <span className="bsp-xicon" aria-hidden="true">
+                        {AREA_GLYPHS[area.area] ?? '◇'}
                       </span>
-                      <span className="bsp-xcount" data-testid={`area-answered-${area.area}`}>
-                        {area.total > 0
-                          ? t('bb.answeredOf')
-                              .replace('{answered}', String(area.answered))
-                              .replace('{total}', String(area.total))
-                          : `${area.activeItems} ${t('bb.itemsCount')}`}
-                        {area.pendingCandidates > 0
-                          ? ` · ${area.pendingCandidates} ${t('bb.pendingCount')}`
-                          : ''}
+                      <span className="bsp-xtitle">{area.label}</span>
+                      <span className="bsp-xdesc">{area.description}</span>
+                      <span className="bsp-xfoot">
+                        <span
+                          className={`bsp-xstatus ${AREA_X[area.status]}`}
+                          data-testid={`area-status-${area.area}`}
+                        >
+                          {area.statusLabel}
+                        </span>
+                        <span className="bsp-xcount" data-testid={`area-answered-${area.area}`}>
+                          {/* The prototype's line: "1 of 3 key questions · 2 to review". */}
+                          {area.total > 0
+                            ? t('bb.cardQuestions')
+                                .replace('{answered}', String(area.answered))
+                                .replace('{total}', String(area.total))
+                            : `${area.activeItems} ${t('bb.itemsCount')}`}
+                          {area.pendingCandidates > 0
+                            ? ` · ${t('bb.cardToReview').replace('{count}', String(area.pendingCandidates))}`
+                            : ''}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                ))}
+                    </button>
+                  ))}
               </section>
             )}
           </>
@@ -1072,3 +1097,25 @@ function UploadSubmit({ label, pendingLabel }: { label: string; pendingLabel: st
 
 export type { MessageKey };
 export type { OrbNode };
+
+/**
+ * THE AREA CARDS IN THE PROTOTYPE'S ORDER (`Main.dc.html` lines 805–815;
+ * review of #67, round 2). Only the grid is ordered so; "What's missing" and
+ * the orb keep the areas' own order.
+ */
+const GRID_ORDER: readonly string[] = [
+  'IDENTITY',
+  'AUDIENCE',
+  'OFFERS',
+  'TONE_OF_VOICE',
+  'DO_DONT',
+  'PROOF_POINTS',
+  'GLOSSARY',
+  'COMPETITORS',
+  'STRATEGY',
+  'LEARNINGS',
+];
+function gridOrder(area: string): number {
+  const index = GRID_ORDER.indexOf(area);
+  return index < 0 ? GRID_ORDER.length : index;
+}

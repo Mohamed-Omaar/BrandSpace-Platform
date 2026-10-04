@@ -127,7 +127,12 @@ export function NotificationsBell({
           <div className="bsp-ntf-head">
             <span>{strings.title}</span>
             <span className="bsp-ntf-headacts">
-              <MoreDisclosure label={strings.more} testId="notifications-more" align="end">
+              <MoreDisclosure
+                label={strings.more}
+                testId="notifications-more"
+                align="end"
+                closeOnPick
+              >
                 <div className="bsp-seg bsp-ntf-tabs" role="tablist" aria-label={strings.title}>
                   {/* MO4: the chosen tab's pill slides between tabs. */}
                   <SegmentPill selector='[aria-selected="true"]' />

@@ -142,6 +142,12 @@ export const arEgOverrides = {
   'signIn.createAccount': 'اعمل حساب',
   'notifications.markAllRead': 'علّم الكل كمقروء',
   'signUp.trialNote': 'تجربة {days} يوم ببلاش و{credits} رصيد، ومن غير كارت.',
+  // Studio (Main.dc.html lines 2178, 2201).
+  'editor.ai.friendlier': 'أودّ',
+  'bb.status.IN_PROGRESS': 'ناقص',
+  'bb.expiredOne': '1 معلومة انتهت',
+  'bb.expiredMany': '{count} معلومة انتهت',
+  'editor.ai.professional': 'أرسمي',
   // Automations (Main.dc.html AU and AU_T, lines 3795–3806).
   'automations.on': 'شغّالة',
   'automations.off': 'مقفولة',

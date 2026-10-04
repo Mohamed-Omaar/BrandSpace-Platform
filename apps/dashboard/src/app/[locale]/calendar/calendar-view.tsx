@@ -692,9 +692,10 @@ export function CalendarView({
             Review of #67 — the prototype's head row has neither the filter
             row nor "Add to calendar": the brand, campaign and status filters,
             the time zone and the count are under "Filters", and adding to the
-            calendar is under "⋯". Nothing is removed.
+            calendar is under "⋯". Nothing is removed. The two stay together at
+            the row's end when it wraps, so the panels open over the month.
           */
-          <>
+          <span className="bsp-cal-acts">
             <FiltersDisclosure
               label={t['content.p.filters'] ?? ''}
               active={[filters.brand, filters.campaign, filters.status].filter(Boolean).length}
@@ -780,7 +781,7 @@ export function CalendarView({
                 </button>
               </MoreDisclosure>
             ) : null}
-          </>
+          </span>
         }
         newPostHref={canCreate ? (dayKey) => `/${locale}/content/compose?date=${dayKey}` : null}
         drafts={

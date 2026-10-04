@@ -27,12 +27,7 @@ export function SignInPassword({
   const [shown, setShown] = useState(false);
   return (
     <div className="bsp-pw-row">
-      <div className="bsp-pw-head">
-        <label htmlFor="password">{label}</label>
-        <Link href={forgotHref} className="bsp-lnk" data-testid="signin-forgot">
-          {forgot}
-        </Link>
-      </div>
+      <label htmlFor="password">{label}</label>
       <div className="bsp-pw">
         <input
           className="bs-control bsp-ltr"
@@ -54,6 +49,10 @@ export function SignInPassword({
           <span aria-hidden="true">{shown ? hide : show}</span>
         </button>
       </div>
+      {/* Drawn on the label's line; after the field so Tab reaches the password first. */}
+      <Link href={forgotHref} className="bsp-lnk" data-testid="signin-forgot">
+        {forgot}
+      </Link>
     </div>
   );
 }

@@ -558,7 +558,17 @@ async function build(
               body: caption,
               characterCount: caption.length,
               validationState: 'VALID',
-              assetIds: picture ? [picture] : [],
+              // A carousel carries three slides, as the prototype's (its 1/3 counter).
+              assetIds: !picture
+                ? []
+                : post.type === 'CAROUSEL'
+                  ? [
+                      picture,
+                      ...Object.values(pictures)
+                        .filter((id) => id !== picture)
+                        .slice(0, 2),
+                    ]
+                  : [picture],
             },
           });
         }
@@ -731,6 +741,29 @@ async function build(
           },
         });
       }
+      // One expired fact, as the prototype's ("1 expired fact"): a summer offer
+      // whose "valid until" day has passed. It answers no key question.
+      await db.brandKnowledgeItem.create({
+        data: {
+          workspaceId: workspace.id,
+          brandId: brand.id,
+          area: 'OFFERS' as never,
+          memory: 'CANONICAL',
+          origin: 'HUMAN',
+          status: 'ACTIVE',
+          itemKey: 'offers.summer_iced',
+          title: { en: 'Summer iced latte', ar: 'آيس لاتيه الصيف' },
+          body: {
+            en: 'Iced latte at 55 EGP all summer.',
+            ar: 'آيس لاتيه بـ 55 جنيه طول الصيف.',
+          },
+          createdByUserId: owner.id,
+          version: 1,
+          lastReviewedAt: new Date(Date.now() - 120 * DAY),
+          reviewDueAt: new Date(Date.now() + 365 * DAY),
+          validUntil: new Date(Date.now() - 30 * DAY),
+        },
+      });
       const guide = await db.brandSourceDocument.create({
         data: {
           workspaceId: workspace.id,

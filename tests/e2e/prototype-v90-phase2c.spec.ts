@@ -317,7 +317,7 @@ test.describe('Item 2 · Q19 key questions and "What\'s missing"', () => {
     const hero = page.getByTestId('completion-answered');
     await expect(hero).toHaveText(/^answered 0 of \d+$/);
     await expect(hero).not.toContainText('%');
-    await expect(page.getByTestId('area-answered-IDENTITY')).toHaveText(/^answered 0 of 4/);
+    await expect(page.getByTestId('area-answered-IDENTITY')).toHaveText(/^0 of 4 key questions/);
 
     const missing = page.getByTestId('brand-brain-missing-identity.what');
     await expect(missing).toBeVisible();
@@ -334,7 +334,7 @@ test.describe('Item 2 · Q19 key questions and "What\'s missing"', () => {
     await page.getByTestId('save-knowledge').click();
     await page.waitForURL(/ok=KNOWLEDGE_SAVED/);
 
-    await expect(page.getByTestId('area-answered-IDENTITY')).toHaveText(/^answered 1 of 4/);
+    await expect(page.getByTestId('area-answered-IDENTITY')).toHaveText(/^1 of 4 key questions/);
     await expect(page.getByTestId('brand-brain-missing-identity.what')).toHaveCount(0);
   });
 });

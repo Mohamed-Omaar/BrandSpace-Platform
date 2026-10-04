@@ -173,7 +173,12 @@ const SCREENS: readonly {
     route: '/content',
     prototype: thenPress(viaRail('Posts', 'المنشورات'), 'Continue', 'كمّل'),
     product: async (page) => {
-      await page.locator('[data-testid^="content-edit-"]').first().click();
+      // The same card as the prototype's: the first draft's "Continue".
+      await page
+        .locator('[data-testid^="content-edit-"]')
+        .filter({ hasText: /^(Continue|كمّل|متابعة|أكمل)$/ })
+        .first()
+        .click();
       await page.waitForURL(/content\/compose\?item=/);
     },
   },
@@ -267,6 +272,9 @@ async function shoot(page: Page, file: (frame: number) => string): Promise<void>
 }
 
 async function settle(page: Page): Promise<void> {
+  // The pointer is left where the last click was; away from the screen, no
+  // card is shot mid-hover (review of #67, round 2: a lifted Posts card).
+  await page.mouse.move(0, 0);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(1200);
 }

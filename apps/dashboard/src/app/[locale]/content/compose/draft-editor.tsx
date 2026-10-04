@@ -22,6 +22,7 @@ import { MediaDrawer, type CreativeFormatOption } from './media-drawer';
 import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
+import { StudioCopilotButton } from './studio-copilot';
 import type {
   ComposerDraft,
   ComposerPlatform,
@@ -118,6 +119,8 @@ export interface DraftEditorProps {
   /** G6 (D-329): the ★ day the Studio was opened for; its Schedule link opens there. */
   readonly plannedDate?: string | null;
   readonly onTool: (variantId: string, tool: string, argument?: string) => void;
+  /** Review of #67, round 2 — the Studio's "Or start from:" chips, kept on an open post. */
+  readonly startFrom?: { readonly idea: string; readonly repurpose: string };
   readonly actions: {
     save(formData: FormData): Promise<void>;
     transition(formData: FormData): Promise<void>;
@@ -200,6 +203,7 @@ export function DraftEditor({
   review = null,
   scheduling = null,
   failed = null,
+  startFrom,
   onTool,
   actions,
 }: DraftEditorProps) {
@@ -213,6 +217,16 @@ export function DraftEditor({
   // The prototype's Words / Design tabs; an image carried in opens on Design.
   const [tab, setTab] = useState<'words' | 'visual'>(attach ? 'visual' : 'words');
   const [whenOpen, setWhenOpen] = useState(false);
+  /*
+   * WHICH "WHEN" OPENED THE PUBLISH-TIME PANEL — the settings card's chip or
+   * the bar's (review of #67, round 2). One panel, drawn under the chip that
+   * opened it, so its controls exist once on the page.
+   */
+  const [whenAt, setWhenAt] = useState<'card' | 'bar'>('card');
+  const toggleWhen = (at: 'card' | 'bar') => {
+    setWhenOpen((open) => (whenAt === at ? !open : true));
+    setWhenAt(at);
+  };
 
   /*
    * WHAT IS ON SCREEN, PER VARIANT. Keyed by the variant's `updatedAt`, so a
@@ -399,6 +413,45 @@ export function DraftEditor({
   const estimate = estimates[estimateKey];
 
   /*
+   * "WRITE CAPTION WITH AI · N" ON AN OPEN POST (review of #67, round 2): the
+   * prototype keeps the button in its editing state. Writing a saved post anew
+   * from its topic is not something the product does yet, so the button waits,
+   * and still states what a caption costs: the same gateway quote the new-post
+   * Studio asks for, for this post's topic, channels and format. It reserves
+   * nothing.
+   */
+  const [writeQuote, setWriteQuote] = useState<string | null>(null);
+  const writeQuoteKey = `${draft.brandId}|${draft.title}|${draft.contentType}|${draft.variants
+    .map((variant) => variant.platformKey)
+    .join(',')}`;
+  useEffect(() => {
+    if (!canQuote || draft.title.trim() === '') return;
+    let current = true;
+    fetch('/api/content/quote', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        brandId: draft.brandId,
+        brief: draft.title,
+        platformKeys: draft.variants.map((variant) => variant.platformKey),
+        locale: draft.variants[0]?.locale ?? 'EN',
+        contentType: draft.contentType,
+      }),
+    })
+      .then(async (response) =>
+        response.ok ? ((await response.json()) as { estimateMilli?: string }) : null,
+      )
+      .then((payload) => {
+        if (current && payload?.estimateMilli) setWriteQuote(String(payload.estimateMilli));
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+    // The key stands for every input of the quote.
+  }, [canQuote, writeQuoteKey]);
+
+  /*
    * D10 (Phase 2C-3) — A FACT THIS CAPTION USED CHANGED, EXPIRED OR WAS
    * REMOVED. The banner lists the active variant's undismissed changes; its
    * Rewrite is priced by the SAME quote path the rewrite reserves against
@@ -450,7 +503,7 @@ export function DraftEditor({
    * service picks (the first name below); choosing a name asks that person.
    * Either way anyone who may approve for the brand can decide it.
    */
-  const reviewerPicker = (id: string) =>
+  const reviewerPicker = (id: string, form?: string) =>
     review?.reviewers && review.reviewers.length > 0 ? (
       <span className="bsp-chip bsp-st-rev">
         <label className="bsp-st-rev-label" htmlFor={`${fieldId}-${id}`}>
@@ -460,6 +513,7 @@ export function DraftEditor({
           id={`${fieldId}-${id}`}
           className="bs-control bsp-st-rev-select"
           name="assignedToUserId"
+          form={form}
           defaultValue=""
           data-testid={`${id}-reviewer`}
         >
@@ -554,6 +608,91 @@ export function DraftEditor({
   const activeValue = activeVariant ? live(activeVariant) : null;
   const activeDirty = activeVariant ? isDirty(activeVariant) : false;
   const statusLabel = t[`content.status.${draft.status}`] ?? draft.status;
+
+  const mayReview = (draft.status === 'DRAFT' || draft.status === 'FAILED') && can.submit;
+  const reviewFormId = `${fieldId}-review`;
+  const activePlatform = activeVariant
+    ? platforms.find((p) => p.key === activeVariant.platformKey)
+    : undefined;
+  const hasMore =
+    (activeVariant !== undefined && can.edit) ||
+    activePlatform?.allowsFirstComment === true ||
+    (can.edit && tools.includes('tone')) ||
+    can.archive ||
+    (can.manageTemplates === true && actions.saveAsTemplate !== undefined);
+
+  /*
+   * THE PUBLISH-TIME PANEL, under whichever "When" opened it (review of #67,
+   * round 2): the settings card's chip, or the bar's.
+   */
+  const whenPanel = (at: 'card' | 'bar') => (
+    <>
+      {/*
+              THE PUBLISH TIME, where the prototype keeps it: the calendar's
+              own date and time controls (B9 / F2), offered exactly where the
+              Schedule step is, and the calendar for everything else.
+            */}
+      <div
+        role="dialog"
+        aria-label={t['studio.whenTitle']}
+        className={`bsp-st-when${at === 'bar' ? ' bsp-st-when-up' : ''}`}
+        hidden={!whenOpen}
+        data-testid="editor-when-panel"
+      >
+        <span className="bsp-st-when-title">{t['studio.whenTitle']}</span>
+        {/*
+                B9 / F2 (Phase 2B-2) — THE DATE AND TIME, INLINE, wherever the
+                Schedule link is offered: the same states, the same
+                permission, the same service call. The link stays for the
+                calendar view.
+              */}
+        {scheduling &&
+        actions.scheduleFromStudio &&
+        can.schedule &&
+        ((draft.status === 'DRAFT' && review && !review.requiresApproval) ||
+          draft.status === 'APPROVED') ? (
+          <InlineSchedule
+            locale={locale}
+            itemId={draft.id}
+            today={scheduling.today}
+            tomorrow={scheduling.tomorrow}
+            defaultTime={scheduling.defaultTime}
+            plannedDate={plannedDate}
+            disabled={anyDirty}
+            action={actions.scheduleFromStudio}
+            t={t}
+          />
+        ) : (
+          <span className="bsp-st-when-note">
+            {review?.requiresApproval && draft.status === 'DRAFT'
+              ? t['editor.next.needsApproval']
+              : statusLabel}
+          </span>
+        )}
+        {/*
+                THE CALENDAR'S SCHEDULE, where the prototype sets the time
+                (review of #67, round 2): the link the bar used to carry.
+              */}
+        {mayScheduleHere ? (
+          <Link
+            className="bsp-st-link"
+            href={`/${locale}/calendar?item=${draft.id}${plannedDate ? `&date=${plannedDate}` : ''}`}
+            aria-disabled={anyDirty}
+            data-testid="editor-schedule"
+          >
+            {t['editor.next.schedule']} →
+          </Link>
+        ) : null}
+        <button
+          type="button"
+          className="bsp-btn bsp-sm bsp-st-end"
+          onClick={() => setWhenOpen(false)}
+        >
+          {t['studio.whenDone']}
+        </button>
+      </div>
+    </>
+  );
 
   return (
     <div className="bsp-st" data-testid="draft-editor">
@@ -780,43 +919,71 @@ export function DraftEditor({
           <span className="bsp-lbl" id={`${fieldId}-postto`}>
             {t['studio.postTo']}
           </span>
-          {draft.variants.length > 0 ? (
-            <div
-              role="tablist"
-              aria-labelledby={`${fieldId}-postto`}
-              className="bsp-st-chips"
-              data-testid="variant-tabs"
-            >
-              {draft.variants.map((variant, index) => {
-                const selected = variant.id === activeVariant?.id;
-                const channel = channelOf(variant.platformKey);
-                return (
-                  <button
-                    key={variant.id}
-                    ref={(node) => {
-                      tabRefs.current[variant.id] = node;
-                    }}
-                    type="button"
-                    role="tab"
-                    id={`${fieldId}-tab-${variant.id}`}
-                    aria-controls={panelId(variant)}
-                    aria-selected={selected}
-                    tabIndex={selected ? 0 : -1}
-                    className="bsp-chip"
-                    data-testid={`variant-tab-${variant.platformKey}`}
-                    onClick={() => setActive(variant.id)}
-                    onKeyDown={(event) => onTabKey(event, index)}
-                  >
-                    <ChannelMark channel={channel} size={14} label={false} />
-                    <span className="bsp-ltr">{channel.name}</span>
-                    {isDirty(variant) ? <span aria-hidden="true"> •</span> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
+          {/*
+            ALL THE CHANNELS, THE POST'S OWN HIGHLIGHTED (review of #67, round
+            2), as the prototype's "Post to" row. The post's channels are its
+            versions — the tabs that choose which one is edited; the others are
+            shown, and are chosen when a post is written.
+          */}
+          <div className="bsp-st-chips" data-testid="editor-post-to">
+            {draft.variants.length > 0 ? (
+              <div
+                role="tablist"
+                aria-labelledby={`${fieldId}-postto`}
+                className="bsp-st-chips"
+                data-testid="variant-tabs"
+              >
+                {draft.variants.map((variant, index) => {
+                  const selected = variant.id === activeVariant?.id;
+                  const channel = channelOf(variant.platformKey);
+                  return (
+                    <button
+                      key={variant.id}
+                      ref={(node) => {
+                        tabRefs.current[variant.id] = node;
+                      }}
+                      type="button"
+                      role="tab"
+                      id={`${fieldId}-tab-${variant.id}`}
+                      aria-controls={panelId(variant)}
+                      aria-selected={selected}
+                      tabIndex={selected ? 0 : -1}
+                      className="bsp-chip"
+                      data-chosen="true"
+                      data-testid={`variant-tab-${variant.platformKey}`}
+                      onClick={() => setActive(variant.id)}
+                      onKeyDown={(event) => onTabKey(event, index)}
+                    >
+                      <ChannelMark channel={channel} size={14} label={false} />
+                      <span className="bsp-ltr">{channel.name}</span>
+                      {isDirty(variant) ? <span aria-hidden="true"> •</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            {platforms
+              .filter((platform) => !draft.variants.some((v) => v.platformKey === platform.key))
+              .map((platform) => (
+                <span
+                  key={platform.key}
+                  className="bsp-chip bsp-st-off"
+                  aria-disabled="true"
+                  title={t['studio.channelOff']}
+                  data-testid={`editor-channel-off-${platform.key}`}
+                >
+                  <ChannelMark
+                    channel={{ key: platform.key, name: platform.label }}
+                    size={14}
+                    label={false}
+                  />
+                  <span className="bsp-ltr">{platform.label}</span>
+                </span>
+              ))}
+          </div>
         </div>
-        <div className="bsp-st-f bsp-st-f4">
+        {/* Publish time and Campaign share the row until the Pillar exists (round 2). */}
+        <div className="bsp-st-f bsp-st-f6">
           <span className="bsp-lbl">{t['studio.when']}</span>
           <span className="bsp-st-anchor">
             <button
@@ -825,7 +992,7 @@ export function DraftEditor({
               aria-haspopup="dialog"
               aria-expanded={whenOpen}
               data-testid="editor-when"
-              onClick={() => setWhenOpen((open) => !open)}
+              onClick={() => toggleWhen('card')}
             >
               <span className="bsp-st-when-label">
                 <CalendarGlyph />
@@ -840,58 +1007,10 @@ export function DraftEditor({
                 </span>
               </span>
             </button>
-            {/*
-              THE PUBLISH TIME, where the prototype keeps it: the calendar's
-              own date and time controls (B9 / F2), offered exactly where the
-              Schedule step is, and the calendar for everything else.
-            */}
-            <div
-              role="dialog"
-              aria-label={t['studio.whenTitle']}
-              className="bsp-st-when"
-              hidden={!whenOpen}
-            >
-              <span className="bsp-st-when-title">{t['studio.whenTitle']}</span>
-              {/*
-                B9 / F2 (Phase 2B-2) — THE DATE AND TIME, INLINE, wherever the
-                Schedule link is offered: the same states, the same
-                permission, the same service call. The link stays for the
-                calendar view.
-              */}
-              {scheduling &&
-              actions.scheduleFromStudio &&
-              can.schedule &&
-              ((draft.status === 'DRAFT' && review && !review.requiresApproval) ||
-                draft.status === 'APPROVED') ? (
-                <InlineSchedule
-                  locale={locale}
-                  itemId={draft.id}
-                  today={scheduling.today}
-                  tomorrow={scheduling.tomorrow}
-                  defaultTime={scheduling.defaultTime}
-                  plannedDate={plannedDate}
-                  disabled={anyDirty}
-                  action={actions.scheduleFromStudio}
-                  t={t}
-                />
-              ) : (
-                <span className="bsp-st-when-note">
-                  {review?.requiresApproval && draft.status === 'DRAFT'
-                    ? t['editor.next.needsApproval']
-                    : statusLabel}
-                </span>
-              )}
-              <button
-                type="button"
-                className="bsp-btn bsp-sm bsp-st-end"
-                onClick={() => setWhenOpen(false)}
-              >
-                {t['studio.whenDone']}
-              </button>
-            </div>
+            {whenAt === 'card' ? whenPanel('card') : null}
           </span>
         </div>
-        <div className="bsp-st-f bsp-st-f4 bsp-st-c9">
+        <div className="bsp-st-f bsp-st-f6">
           <span className="bsp-lbl">{t['campaigns.composerLabel']}</span>
           {/*
             Q21 — a post with no campaign may be filed by anyone who may create
@@ -910,8 +1029,14 @@ export function DraftEditor({
                 name="campaignId"
                 defaultValue={draft.campaignId ?? ''}
                 aria-label={t['campaigns.composerLabel']}
-                className="bs-control bsp-chip bsp-cal-select bsp-st-select"
+                className="bs-control bsp-chip bsp-st-select"
                 data-testid="content-campaign"
+                /*
+                  THE CHOICE IS THE SAVE (review of #67, round 2): the prototype
+                  files a post the moment a campaign is picked, so the second
+                  "Save edit" beside it is gone. The same form, the same action.
+                */
+                onChange={(event) => event.currentTarget.form?.requestSubmit()}
               >
                 <option value="">{t['campaigns.composerNone']}</option>
                 {campaigns.map((campaign) => (
@@ -920,13 +1045,6 @@ export function DraftEditor({
                   </option>
                 ))}
               </select>
-              <button
-                type="submit"
-                className="bsp-btn bsp-sm bsp-sec"
-                data-testid="content-campaign-save"
-              >
-                {t['content.composer.saveEdit']}
-              </button>
             </form>
           ) : (
             <span className="bsp-st-fixed">
@@ -973,6 +1091,51 @@ export function DraftEditor({
               </button>
             </div>
 
+            {/*
+              "WHAT IS THE POST ABOUT?" ON AN OPEN POST — the prototype's editing
+              state keeps the topic, "Or start from:" and the AI button (review
+              of #67, round 2). The topic is the post's own; starting from an
+              idea or a past post opens a new one.
+            */}
+            {can.edit ? (
+              <div className="bsp-st-field" hidden={tab !== 'words'} data-testid="editor-brief">
+                <label className="bsp-st-label" htmlFor={`${fieldId}-brief`}>
+                  {t['studio.briefLabel']}
+                </label>
+                <input
+                  id={`${fieldId}-brief`}
+                  className="bsp-st-brief"
+                  value={draft.title}
+                  readOnly
+                  dir="auto"
+                  aria-describedby={`${fieldId}-brief-hint`}
+                  data-testid="editor-brief-input"
+                />
+                {startFrom ? (
+                  <div className="bsp-st-start">
+                    <span>{t['studio.orStart']}</span>
+                    <Link
+                      href={startFrom.idea}
+                      className="bsp-chip bsp-st-sm"
+                      data-testid="editor-start-idea"
+                    >
+                      {t['create.mode.idea']}
+                    </Link>
+                    <Link
+                      href={startFrom.repurpose}
+                      className="bsp-chip bsp-st-sm"
+                      data-testid="editor-start-repurpose"
+                    >
+                      {t['create.mode.repurpose']}
+                    </Link>
+                  </div>
+                ) : null}
+                <span id={`${fieldId}-brief-hint`} className="bsp-st-hint bsp-st-start-hint">
+                  {t['studio.rewriteSaved']}
+                </span>
+              </div>
+            ) : null}
+
             {draft.variants.map((variant) => {
               const platform = platforms.find((p) => p.key === variant.platformKey);
               const value = live(variant);
@@ -999,7 +1162,12 @@ export function DraftEditor({
                 >
                   {busy === `${variant.id}:${action.tool}`
                     ? t['content.tool.running']
-                    : t[`editor.ai.${action.key}`]}
+                    : action.key === 'translate'
+                      ? fill(t['editor.ai.translateTo'] ?? '{language}', {
+                          language:
+                            t[`content.language.${variant.locale === 'AR' ? 'EN' : 'AR'}`] ?? '',
+                        })
+                      : t[`editor.ai.${action.key}`]}
                 </button>
               );
               return (
@@ -1023,9 +1191,28 @@ export function DraftEditor({
 
                   <div className="bsp-st-words" hidden={tab !== 'words'}>
                     <div className="bsp-st-field">
-                      <label className="bsp-st-label" htmlFor={`${fieldId}-${variant.id}`}>
-                        {t['editor.caption']}
-                      </label>
+                      <div className="bsp-st-caphead">
+                        <label className="bsp-st-label" htmlFor={`${fieldId}-${variant.id}`}>
+                          {t['editor.caption']}
+                        </label>
+                        {can.edit && actionsFor.length > 0 ? (
+                          <button
+                            type="button"
+                            className="bsp-btn bsp-pur bsp-sm bsp-st-aiw"
+                            disabled
+                            title={t['studio.rewriteSaved']}
+                            data-testid={`editor-ai-write-${variant.platformKey}`}
+                          >
+                            <SparkGlyph />
+                            {t['studio.aiWrite']}
+                            {writeQuote !== null ? (
+                              <span className="bsp-st-aiw-cost bsp-ltr">
+                                · {formatCredits(writeQuote)}
+                              </span>
+                            ) : null}
+                          </button>
+                        ) : null}
+                      </div>
                       <textarea
                         id={`${fieldId}-${variant.id}`}
                         className="bsp-st-caption"
@@ -1084,9 +1271,11 @@ export function DraftEditor({
                               className="bsp-st-hint"
                               data-testid={`editor-estimate-${variant.platformKey}`}
                             >
-                              {fill(t['editor.ai.estimate'] ?? '{credits}', {
-                                credits: formatCredits(estimate),
-                              })}
+                              {formatCredits(estimate) === '1'
+                                ? t['editor.ai.estimateOne']
+                                : fill(t['editor.ai.estimate'] ?? '{credits}', {
+                                    credits: formatCredits(estimate),
+                                  })}
                             </span>
                           ) : (
                             <span className="bsp-st-hint">
@@ -1151,31 +1340,12 @@ export function DraftEditor({
                         data-testid={`content-hashtags-${variant.platformKey}`}
                       />
                       {/*
-                        FIRST COMMENT, ONLY WHERE THE PLATFORM ALLOWS ONE.
-                        Elsewhere the stored value travels untouched as a
-                        hidden field, so saving a caption never erases it.
+                        FIRST COMMENT, ONLY WHERE THE PLATFORM ALLOWS ONE. The
+                        field is under the bar's "⋯" (review of #67, round 2);
+                        its value travels with this version's form from here.
                       */}
                       {platform?.allowsFirstComment ? (
-                        <div className="bsp-st-field">
-                          <label
-                            className="bsp-st-label"
-                            htmlFor={`${fieldId}-${variant.id}-comment`}
-                          >
-                            {t['editor.firstComment']}
-                          </label>
-                          <input
-                            id={`${fieldId}-${variant.id}-comment`}
-                            className="bsp-st-tag-input"
-                            name="firstComment"
-                            value={value.firstComment}
-                            readOnly={!can.edit}
-                            dir="auto"
-                            onChange={(event) =>
-                              change(variant, { firstComment: event.target.value })
-                            }
-                            data-testid={`content-first-comment-${variant.platformKey}`}
-                          />
-                        </div>
+                        <input type="hidden" name="firstComment" value={value.firstComment} />
                       ) : null}
                     </div>
                   </div>
@@ -1219,35 +1389,6 @@ export function DraftEditor({
 
             {tab === 'words' ? (
               <>
-                {can.edit && tools.includes('tone') ? (
-                  <div className="bsp-st-field">
-                    <label className="bsp-st-label" htmlFor={`${fieldId}-tone`}>
-                      {t['content.tool.toneArgument']}
-                    </label>
-                    <div className="bsp-st-inline">
-                      <input
-                        id={`${fieldId}-tone`}
-                        className="bsp-st-tag-input"
-                        value={toneArgument}
-                        onChange={(event) => setToneArgument(event.target.value)}
-                      />
-                      {activeVariant ? (
-                        <button
-                          type="button"
-                          className="bsp-btn bsp-sm bsp-sec"
-                          disabled={
-                            busy !== null || toneArgument.trim() === '' || isDirty(activeVariant)
-                          }
-                          data-testid="editor-custom-tone"
-                          onClick={() => onTool(activeVariant.id, 'tone', toneArgument.trim())}
-                        >
-                          {t['content.tool.tone']}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
                 {/*
                   D10 (Phase 2C-3) — A FACT THIS CAPTION USED CHANGED, EXPIRED
                   OR WAS REMOVED: the prototype's `capFix`. Old → new, old →
@@ -1476,7 +1617,8 @@ export function DraftEditor({
                 </MoreDisclosure>
               ) : null}
             </div>
-            {draft.variants.length > 1 && !compare ? (
+            {/* The prototype's channel tabs, drawn for one channel too (round 2). */}
+            {draft.variants.length > 0 && !compare ? (
               <div
                 className="bsp-seg bsp-st-seg-full"
                 role="group"
@@ -1607,89 +1749,13 @@ export function DraftEditor({
       ) : null}
 
       {/*
-        THE PRODUCT'S OTHER WAYS ON, which the prototype's Studio does not
-        draw (D-468 (c)): restore, save as template, archive.
+        THE STICKY BAR — `Main.dc.html` lines 525–534 (review of #67, round 2):
+        status · save state · hint · Reviewer · When · one purple primary · ⋯ ·
+        the round Copilot button. "Save edit", the first comment, the tone,
+        "Save as template" and Archive are the product's own, under "⋯"; the
+        calendar's Schedule is in the When panel, where the time is set.
       */}
-      {(can.archive && draft.status === 'ARCHIVED') ||
-      (can.manageTemplates && actions.saveAsTemplate) ||
-      (can.archive && draft.status !== 'ARCHIVED') ? (
-        <div className="bsp-st-more">
-          {/* B-7 — restore is the other half of archive: `content.archive`. */}
-          {can.archive && draft.status === 'ARCHIVED' ? (
-            <form action={actions.transition}>
-              <input type="hidden" name="locale" value={locale} />
-              <input type="hidden" name="itemId" value={draft.id} />
-              <input type="hidden" name="to" value="DRAFT" />
-              <button type="submit" className="bsp-btn bsp-sm bsp-sec">
-                {t['content.composer.restore']}
-              </button>
-            </form>
-          ) : null}
-          {can.manageTemplates && actions.saveAsTemplate ? (
-            /*
-             * E4 — SAVE AS TEMPLATE, a disclosure like Archive beside it:
-             * the name is the one thing a template needs that the post
-             * does not already say.
-             */
-            <details data-testid="save-as-template">
-              <summary className="bsp-btn bsp-sm bsp-ghost">{t['editor.template.save']}</summary>
-              <form action={actions.saveAsTemplate} className="bsp-st-disclosed">
-                <input type="hidden" name="locale" value={locale} />
-                <input type="hidden" name="itemId" value={draft.id} />
-                <label className="bsp-st-label" htmlFor={`${fieldId}-template-name`}>
-                  {t['editor.template.name']}
-                </label>
-                <input
-                  id={`${fieldId}-template-name`}
-                  className="bsp-st-tag-input"
-                  name="name"
-                  required
-                  maxLength={80}
-                  dir="auto"
-                  data-testid="save-as-template-name"
-                />
-                <span className="bsp-st-hint">{t['editor.template.hint']}</span>
-                <button
-                  type="submit"
-                  className="bsp-btn bsp-sm bsp-pur bsp-st-end"
-                  data-testid="save-as-template-submit"
-                >
-                  {t['editor.template.confirm']}
-                </button>
-              </form>
-            </details>
-          ) : null}
-          {can.archive && draft.status !== 'ARCHIVED' ? (
-            /*
-             * B8 — ARCHIVE ASKS FIRST, the same two steps as the Posts
-             * menu: the disclosure opens the question, the button inside
-             * answers it with the `intent` the server requires.
-             */
-            <details data-testid="archive-disclosure">
-              <summary className="bsp-btn bsp-sm bsp-ghost">
-                {t['content.composer.archive']}
-              </summary>
-              <form action={actions.transition} className="bsp-st-disclosed">
-                <input type="hidden" name="locale" value={locale} />
-                <input type="hidden" name="itemId" value={draft.id} />
-                <input type="hidden" name="to" value="ARCHIVED" />
-                <input type="hidden" name="intent" value="ARCHIVE" />
-                <span className="bsp-st-hint">{t['content.archive.confirmBody']}</span>
-                <button
-                  type="submit"
-                  className="bsp-btn bsp-sm bsp-st-end"
-                  data-testid="archive-confirm"
-                >
-                  {t['content.archive.confirm']}
-                </button>
-              </form>
-            </details>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* ---------------------------------------------- the sticky bar --- */}
-      <div className="bsp-st-bar">
+      <div className="bsp-st-bar" data-testid="editor-bar">
         <span
           className={`bsp-pill ${STATUS_PILL[draft.status] ?? 'bsp-p-neu'}`}
           data-testid="composer-status"
@@ -1710,48 +1776,206 @@ export function DraftEditor({
             ? t['editor.saveBeforeReview']
             : null}
         </span>
-        {activeVariant && can.edit ? (
-          <button
-            type="submit"
-            form={panelId(activeVariant)}
-            className={activeDirty ? 'bsp-btn bsp-pur' : 'bsp-btn bsp-sec'}
-            data-testid={`editor-save-${activeVariant.platformKey}`}
-          >
-            {t['content.composer.saveEdit']}
-          </button>
-        ) : null}
         {/*
-          D-288 — THE NEXT STEP FOLLOWS THE BRAND'S POLICY. A brand that
-          needs approval before scheduling asks for review first; one
-          that does not goes straight to the calendar, and review stays
-          available. An approved post's next step is always the calendar.
+          D-288 — THE NEXT STEP FOLLOWS THE BRAND'S POLICY. Sending for review
+          is the bar's one primary wherever it is open; an approved post's next
+          step is the calendar, which the When panel opens.
         */}
-        {(draft.status === 'DRAFT' || draft.status === 'FAILED') && can.submit ? (
-          <form action={actions.submitForReview} className="bsp-st-inline">
+        {mayReview ? (
+          <form id={reviewFormId} action={actions.submitForReview} hidden>
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="itemId" value={draft.id} />
-            {reviewerPicker('submit')}
-            <button
-              type="submit"
-              className={review?.requiresApproval ? 'bsp-btn bsp-pur' : 'bsp-btn bsp-sec'}
-              disabled={anyDirty}
-              title={anyDirty ? t['editor.saveBeforeReview'] : undefined}
-              data-testid="submit-for-review"
-            >
-              {t['content.composer.submit']}
-            </button>
           </form>
         ) : null}
-        {mayScheduleHere ? (
-          <Link
+        {mayReview ? reviewerPicker('submit', reviewFormId) : null}
+        {!draft.readOnly ? (
+          <span className="bsp-st-anchor">
+            <button
+              type="button"
+              className="bsp-chip"
+              aria-haspopup="dialog"
+              aria-expanded={whenOpen && whenAt === 'bar'}
+              data-testid="editor-bar-when"
+              onClick={() => toggleWhen('bar')}
+            >
+              <CalendarGlyph />
+              <span>
+                {plannedDate ? (
+                  <span className="bsp-ltr">{plannedDate}</span>
+                ) : draft.status === 'SCHEDULED' ? (
+                  statusLabel
+                ) : (
+                  t['studio.whenUnset']
+                )}
+              </span>
+            </button>
+            {whenAt === 'bar' ? whenPanel('bar') : null}
+          </span>
+        ) : null}
+        {mayReview ? (
+          <button
+            type="submit"
+            form={reviewFormId}
             className="bsp-btn bsp-pur"
-            href={`/${locale}/calendar?item=${draft.id}${plannedDate ? `&date=${plannedDate}` : ''}`}
-            aria-disabled={anyDirty}
-            data-testid="editor-schedule"
+            disabled={anyDirty}
+            title={anyDirty ? t['editor.saveBeforeReview'] : undefined}
+            data-testid="submit-for-review"
+          >
+            {t['content.composer.submit']}
+          </button>
+        ) : mayScheduleHere ? (
+          <button
+            type="button"
+            className="bsp-btn bsp-pur"
+            disabled={anyDirty}
+            data-testid="editor-schedule-open"
+            onClick={() => {
+              setWhenAt('bar');
+              setWhenOpen(true);
+            }}
           >
             {t['editor.next.schedule']}
-          </Link>
+          </button>
         ) : null}
+        {hasMore ? (
+          <MoreDisclosure
+            label={t['studio.moreOptions'] ?? ''}
+            testId="editor-bar-more"
+            align="end"
+            up
+          >
+            {activeVariant && can.edit ? (
+              <button
+                type="submit"
+                form={panelId(activeVariant)}
+                className={activeDirty ? 'bsp-btn bsp-sm bsp-pur' : 'bsp-btn bsp-sm bsp-sec'}
+                data-testid={`editor-save-${activeVariant.platformKey}`}
+              >
+                {t['content.composer.saveEdit']}
+              </button>
+            ) : null}
+            {activeVariant && activePlatform?.allowsFirstComment ? (
+              <div className="bsp-fdis-field">
+                <label
+                  className="bsp-fdis-label"
+                  htmlFor={`${fieldId}-${activeVariant.id}-comment`}
+                >
+                  {t['editor.firstComment']}
+                </label>
+                <input
+                  id={`${fieldId}-${activeVariant.id}-comment`}
+                  className="bsp-st-tag-input"
+                  value={live(activeVariant).firstComment}
+                  readOnly={!can.edit}
+                  dir="auto"
+                  onChange={(event) => change(activeVariant, { firstComment: event.target.value })}
+                  data-testid={`content-first-comment-${activeVariant.platformKey}`}
+                />
+              </div>
+            ) : null}
+            {can.edit && tools.includes('tone') ? (
+              <div className="bsp-fdis-field">
+                <label className="bsp-st-label" htmlFor={`${fieldId}-tone`}>
+                  {t['content.tool.toneArgument']}
+                </label>
+                <div className="bsp-st-inline">
+                  <input
+                    id={`${fieldId}-tone`}
+                    className="bsp-st-tag-input"
+                    value={toneArgument}
+                    onChange={(event) => setToneArgument(event.target.value)}
+                  />
+                  {activeVariant ? (
+                    <button
+                      type="button"
+                      className="bsp-btn bsp-sm bsp-sec"
+                      disabled={
+                        busy !== null || toneArgument.trim() === '' || isDirty(activeVariant)
+                      }
+                      data-testid="editor-custom-tone"
+                      onClick={() => onTool(activeVariant.id, 'tone', toneArgument.trim())}
+                    >
+                      {t['content.tool.tone']}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {/* B-7 — restore is the other half of archive: `content.archive`. */}
+            {can.archive && draft.status === 'ARCHIVED' ? (
+              <form action={actions.transition}>
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="itemId" value={draft.id} />
+                <input type="hidden" name="to" value="DRAFT" />
+                <button type="submit" className="bsp-btn bsp-sm bsp-sec">
+                  {t['content.composer.restore']}
+                </button>
+              </form>
+            ) : null}
+            {can.manageTemplates && actions.saveAsTemplate ? (
+              /*
+               * E4 — SAVE AS TEMPLATE, a disclosure like Archive beside it:
+               * the name is the one thing a template needs that the post
+               * does not already say.
+               */
+              <details data-testid="save-as-template">
+                <summary className="bsp-btn bsp-sm bsp-ghost">{t['editor.template.save']}</summary>
+                <form action={actions.saveAsTemplate} className="bsp-st-disclosed">
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="itemId" value={draft.id} />
+                  <label className="bsp-st-label" htmlFor={`${fieldId}-template-name`}>
+                    {t['editor.template.name']}
+                  </label>
+                  <input
+                    id={`${fieldId}-template-name`}
+                    className="bsp-st-tag-input"
+                    name="name"
+                    required
+                    maxLength={80}
+                    dir="auto"
+                    data-testid="save-as-template-name"
+                  />
+                  <span className="bsp-st-hint">{t['editor.template.hint']}</span>
+                  <button
+                    type="submit"
+                    className="bsp-btn bsp-sm bsp-pur bsp-st-end"
+                    data-testid="save-as-template-submit"
+                  >
+                    {t['editor.template.confirm']}
+                  </button>
+                </form>
+              </details>
+            ) : null}
+            {can.archive && draft.status !== 'ARCHIVED' ? (
+              /*
+               * B8 — ARCHIVE ASKS FIRST, the same two steps as the Posts
+               * menu: the disclosure opens the question, the button inside
+               * answers it with the `intent` the server requires.
+               */
+              <details data-testid="archive-disclosure">
+                <summary className="bsp-btn bsp-sm bsp-ghost">
+                  {t['content.composer.archive']}
+                </summary>
+                <form action={actions.transition} className="bsp-st-disclosed">
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="itemId" value={draft.id} />
+                  <input type="hidden" name="to" value="ARCHIVED" />
+                  <input type="hidden" name="intent" value="ARCHIVE" />
+                  <span className="bsp-st-hint">{t['content.archive.confirmBody']}</span>
+                  <button
+                    type="submit"
+                    className="bsp-btn bsp-sm bsp-st-end"
+                    data-testid="archive-confirm"
+                  >
+                    {t['content.archive.confirm']}
+                  </button>
+                </form>
+              </details>
+            ) : null}
+          </MoreDisclosure>
+        ) : null}
+        <StudioCopilotButton label={t['topbar.copilot'] ?? ''} />
       </div>
 
       {drawerVariant ? (

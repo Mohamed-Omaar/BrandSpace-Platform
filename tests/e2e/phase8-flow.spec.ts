@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { openStudioMore } from './studio-bar';
 import { deterministicPng } from '@brandspace/ai-gateway';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
@@ -353,8 +354,13 @@ test('6 · content is created and filed under the campaign', async ({ page }) =>
   expect(state.itemId, 'the composer is on a real draft').toBeTruthy();
 
   // FILE IT UNDER THE CAMPAIGN, through the control the composer offers.
+  // Review of #67, round 2: choosing the campaign files the post (no second Save).
+  const filed = page
+    .waitForResponse((response) => response.request().method() === 'POST', { timeout: 30_000 })
+    .catch(() => undefined);
   await page.getByTestId('content-campaign').selectOption(state.campaignId as string);
-  await clickAndSettle(page.getByTestId('content-campaign-save'), page);
+  await filed;
+  await page.waitForLoadState('networkidle');
   await expect(page.getByTestId('content-campaign')).toHaveValue(state.campaignId as string);
 });
 
@@ -500,7 +506,8 @@ test('9 · media is attached to the variant and shows in the social preview', as
     )
     .toBeGreaterThan(0);
   await page.locator('[data-testid^="media-choose-"]:not([disabled])').first().click();
-  // The Studio's Save sits in the sticky bar, submitting the variant's form.
+  // The Studio's Save sits under the sticky bar's "⋯", submitting the variant's form.
+  await openStudioMore(page);
   await clickAndSettle(page.locator('[data-testid^="editor-save-"]').first(), page);
 
   // SAVED, AND SHOWN. The preview is the approved `SocialPostPreview` fed the

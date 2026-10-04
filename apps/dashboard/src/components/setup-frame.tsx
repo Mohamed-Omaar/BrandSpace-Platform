@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { BrandGlyph, LanguageSwitcher, visuallyHiddenStyle } from '@brandspace/ui';
 import { translator } from '../i18n/messages';
+import { requestMessageLocale } from '../server/message-locale';
 
 /**
  * THE SETUP CARD, ON ITS OWN PAGE — `Auth.dc.html` lines 114–200 (review of #67).
@@ -48,12 +49,19 @@ export function SetupFrame({
   readonly view?: string | undefined;
   readonly children: ReactNode;
 }) {
-  const t = translator(locale);
+  // D-470: the words this member reads — `ar-EG` in an Egyptian workspace.
+  const words = requestMessageLocale(locale);
+  const t = translator(words);
   const target = locale === 'ar' ? 'en' : 'ar';
   return (
     <div className="bsp-auth">
       <main id="main" className="bsp-auth-stage">
-        <div className="bsp-wz bsp-wz-solo" data-testid={testId} data-view={view}>
+        <div
+          className="bsp-wz bsp-wz-solo"
+          data-testid={testId}
+          data-view={view}
+          lang={words === 'ar-EG' ? 'ar-EG' : undefined}
+        >
           <div className="bsp-wz-brand">
             <span className="bsp-auth-logo" data-testid="auth-brand-mark">
               <BrandGlyph size="40px" />
@@ -67,7 +75,7 @@ export function SetupFrame({
                 href={languageHref}
                 targetLocale={target}
                 targetLabel={target === 'ar' ? 'ع' : 'EN'}
-                ariaLabel={locale === 'ar' ? 'تغيير اللغة' : 'Change language'}
+                ariaLabel={t('topbar.switchLanguage')}
               />
             </nav>
           </div>

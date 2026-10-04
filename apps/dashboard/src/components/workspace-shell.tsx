@@ -504,7 +504,9 @@ export async function WorkspaceShell({
         }
         current={{
           name: brandContext.brands[0]?.name ?? workspaceName,
-          caption: switcher.currentCaption,
+          // The prototype's card reads "Active brand"; Role · Plan stays on each
+          // business in the menu (review of #67, round 2).
+          caption: brandContext.brands[0] ? t('brand.selectedCaption') : switcher.currentCaption,
         }}
         options={switcher.options}
         action={switchWorkspaceAction}

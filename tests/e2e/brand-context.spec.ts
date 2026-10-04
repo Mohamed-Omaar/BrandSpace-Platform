@@ -149,7 +149,8 @@ test.describe('brand profile', () => {
 
     await expect(page.getByTestId('brand-profile-form')).toBeVisible();
     // The Settings composition, not a page of its own invention.
-    await expect(page.locator('nav', { hasText: 'Brand profile' }).first()).toBeVisible();
+    // Review of #67: the one Settings page's own navigation, its item named "Brands".
+    await expect(page.locator('nav', { hasText: 'Brands' }).first()).toBeVisible();
     await expect(page.getByTestId('brand-profile-name')).toBeVisible();
   });
 

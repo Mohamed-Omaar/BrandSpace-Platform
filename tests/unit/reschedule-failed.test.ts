@@ -102,8 +102,9 @@ describe('the screens', () => {
     expect(editor).toContain("{draft.status === 'FAILED' && failed ? (");
     expect(editor).toContain('href={`/${locale}/calendar?item=${draft.id}`}');
     expect(editor).toContain('data-testid="editor-failed-duplicate"');
+    // Review of #67, round 2: the same condition, named once for the bar.
     expect(editor).toContain(
-      "{(draft.status === 'DRAFT' || draft.status === 'FAILED') && can.submit ? (",
+      "const mayReview = (draft.status === 'DRAFT' || draft.status === 'FAILED') && can.submit;",
     );
     const page = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
     // D-332 wording, Phase 2B-2b (owner-approved): the notice names the way on
