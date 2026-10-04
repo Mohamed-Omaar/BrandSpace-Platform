@@ -179,6 +179,7 @@ function MessageRow({
   return (
     <div
       data-testid={`copilot-message-${message.author}`}
+      className="bs-cpb-msg"
       style={{
         display: 'grid',
         gridTemplateColumns: 'auto minmax(0, 1fr)',
@@ -193,6 +194,7 @@ function MessageRow({
       {assistant ? (
         <span
           aria-hidden="true"
+          className="bs-cpb-av"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -208,15 +210,20 @@ function MessageRow({
           <SparkIcon size={14} />
         </span>
       ) : (
-        <span aria-hidden="true" style={{ gridColumn: 1, flexShrink: 0 }}>
+        <span aria-hidden="true" className="bs-cpb-av" style={{ gridColumn: 1, flexShrink: 0 }}>
           <Avatar initials={labels.userName.slice(0, 2)} size="1.75rem" seed={3} />
         </span>
       )}
       <div style={{ display: 'grid', gap: spacingTokens['3xs'], minInlineSize: 0 }}>
-        <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+        <span
+          className="bs-cpb-who"
+          style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+        >
           {assistant ? labels.assistantName : labels.userName}
         </span>
-        <div style={bubbleStyle(message.author)}>{message.text}</div>
+        <div className="bs-cpb-bubble" style={bubbleStyle(message.author)}>
+          {message.text}
+        </div>
       </div>
     </div>
   );
@@ -430,6 +437,7 @@ export function CopilotBody({
 
   return (
     <div
+      className="bs-cpb"
       style={{
         display: 'grid',
         gridTemplateRows: context ? 'auto 1fr auto' : '1fr auto',
@@ -445,6 +453,7 @@ export function CopilotBody({
       {context ? (
         <div
           data-testid="copilot-context"
+          className="bs-cpb-ctx"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -508,6 +517,7 @@ export function CopilotBody({
         // or its content is unreachable without a pointer (WCAG 2.1.1). axe
         // flags this as `scrollable-region-focusable`, and it did.
         tabIndex={0}
+        className="bs-cpb-log"
         style={{
           overflowY: 'auto',
           padding: spacingTokens.md,
@@ -535,6 +545,7 @@ export function CopilotBody({
         {state === 'streaming' ? (
           <div
             data-testid="copilot-streaming"
+            className="bs-cpb-bubble"
             style={{ ...bubbleStyle('assistant'), display: 'grid', gap: spacingTokens.xs }}
           >
             <span
@@ -650,6 +661,7 @@ export function CopilotBody({
       </div>
 
       <div
+        className="bs-cpb-foot"
         style={{
           padding: spacingTokens.md,
           display: 'grid',
@@ -669,7 +681,7 @@ export function CopilotBody({
                 key={suggestion.id}
                 type="button"
                 disabled={disabled}
-                className="bs-pressable"
+                className="bs-pressable bs-cpb-chip"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -733,11 +745,13 @@ export function CopilotBody({
 
         <label
           htmlFor={promptId}
+          className="bs-cpb-label"
           style={{ ...typographyTokens.label, color: colorTokens.textPrimary }}
         >
           {labels.promptLabel}
         </label>
         <div
+          className="bs-cpb-compose"
           style={{
             display: 'grid',
             gap: spacingTokens.xs,
@@ -778,6 +792,7 @@ export function CopilotBody({
             }}
           />
           <div
+            className="bs-cpb-send"
             style={{
               display: 'flex',
               gap: spacingTokens.xs,
@@ -805,7 +820,7 @@ export function CopilotBody({
               data-testid={composer?.submitTestId ?? 'copilot-send'}
               {...(composer ? { onClick: () => composer.onSubmit() } : {})}
             >
-              {labels.send}
+              <span className="bs-cpb-sendl">{labels.send}</span>
             </Button>
           </div>
         </div>

@@ -671,6 +671,39 @@ Clicks columns, and a post's picture (a neutral tile stands in). Below 1,000 the
 quarter of its maximum (the prototype's smallest step, 500, would flatten a young account's line), and a
 day with no reading is a gap in the line, never a zero.
 
+### Copilot (`Main.dc.html` lines 1493–1525)
+
+Ported: the floating panel — 380px wide, up to 580px tall, the glass card at the bottom inline end in
+the floating button's place (the button steps aside while it is open), entering from its corner
+(`bsPanel`, 340 ms); its head (the 34px spark tile, "Copilot" and what it is attached to, the close
+chevron); the conversation as the prototype's bubbles (yours dark, the Copilot's grey, 16px corners);
+the plan as the prototype's lavender-edged card; the foot under its rule with the suggestion chips and
+the grey field beside the purple send button. Outside a click, Escape and the close button close it, and
+focus returns to the control that opened it.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-277 §37 / D-304: the panel carries the product's one conversation component, with its plan →
+  confirm → undo ceremony, its context line (brand, screen, object) and its inspection results; nothing
+  runs from here that the full Copilot screen would not run, and nothing without the same confirmation.
+- "Open full Copilot" stays in the head, and the control is still the link to the full screen (a
+  modified click or no script follows it).
+- D-294: "Give to Copilot" and "Ask about this Brand" open this panel with the request already in it.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the panel fills the screen less a 12px
+margin.
+
+**(c) States the prototype does not draw.** No brand chosen, a refusal (in words, never a code), credits
+too low, a plan that expired, a result and its undo, an undo that was refused.
+
+**Accessibility findings.** The speaker's name on each bubble, the field's label and the send button's
+word stay for assistive technology (visually hidden), as the prototype shows only the bubbles, the field
+and the arrow.
+
+**Left out — no data or feature.** The credit pill in the head (the panel has no balance to read), and
+the prototype's action button under an answer ("Open the Studio →"): the product's answers carry their
+own links inside the plan.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

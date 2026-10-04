@@ -1,14 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import {
-  CopilotDrawer,
   StateMessage,
-  buttonClass,
-  buttonStyle,
-  colorTokens,
-  spacingTokens,
-  typographyTokens,
+  useDismissOnOutsidePointer,
+  useOverlayBehaviour,
   type CopilotLabels,
 } from '@brandspace/ui';
 import Link from 'next/link';
@@ -66,6 +62,12 @@ export function GlobalCopilot({
   };
 }) {
   const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLSpanElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const close = useCallback(() => setOpen(false), []);
+  // Focus in, Escape, focus back to the button that opened it (C8).
+  const overlayId = useOverlayBehaviour({ open, onClose: close, containerRef: panelRef });
+  useDismissOnOutsidePointer(wrapRef, open, close, overlayId);
   /*
    * A NEW CONVERSATION EACH TIME THE DRAWER OPENS on a different subject: the
    * key remounts `CopilotView`, whose session is fixed to what it was opened
@@ -111,8 +113,14 @@ export function GlobalCopilot({
     return () => window.removeEventListener(OPEN_COPILOT_EVENT, onRequest);
   }, [openHere]);
 
+  /*
+   * THE PROTOTYPE'S COPILOT PANEL (`Main.dc.html` lines 1493–1525, D-468): a
+   * 380px glass card at the bottom inline end, in the floating button's place
+   * (the button steps aside while it is open), its head — the spark tile,
+   * "Copilot" and where it is attached — then the conversation.
+   */
   return (
-    <>
+    <span ref={wrapRef} className="bsp-cp-wrap" data-open={open ? 'true' : undefined}>
       <span
         onClickCapture={intercept}
         data-testid="global-copilot-trigger"
@@ -120,43 +128,79 @@ export function GlobalCopilot({
       >
         {children}
       </span>
-      <CopilotDrawer open={open} onClose={() => setOpen(false)} labels={labels}>
-        <div style={{ display: 'grid', gap: spacingTokens.md }}>
-          <Link
-            href={href}
-            data-testid="global-copilot-full"
-            className={buttonClass('ghost')}
-            style={{
-              ...buttonStyle('ghost', 'sm'),
-              justifySelf: 'start',
-              color: colorTokens.textSecondary,
-            }}
-          >
-            {strings.openFull}
-          </Link>
-          {brand ? (
-            <CopilotView
-              key={conversation.key}
-              locale={locale}
-              brand={brand}
-              surface={surface}
-              subject={subject}
-              initialRequest={handedRequest}
-              creditsLabel={null}
-              labels={labels}
-              rateMetricKeys={rateMetricKeys}
-            />
-          ) : (
-            <div style={{ ...typographyTokens.bodySm }}>
+      {open ? (
+        <aside
+          ref={panelRef}
+          role="dialog"
+          aria-label={labels.title}
+          data-testid="copilot-drawer"
+          tabIndex={-1}
+          // MO7: enters from its bottom end corner (340 ms).
+          className="bs-copilot-in bsp-cp"
+        >
+          <div className="bsp-cp-head" data-testid="copilot-header">
+            <span className="bsp-cp-mark" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3.5 13.6 9l5.4 1.6-5.4 1.6L12 17.5l-1.6-5.3L5 10.6 10.4 9z" />
+              </svg>
+            </span>
+            <span className="bsp-cp-t">
+              <b>{labels.title}</b>
+              <span>{labels.subtitle}</span>
+            </span>
+            <Link
+              href={href}
+              className="bsp-btn bsp-sm bsp-ghost bsp-cp-full"
+              data-testid="global-copilot-full"
+            >
+              {strings.openFull}
+            </Link>
+            <button
+              type="button"
+              className="bsp-cp-x"
+              aria-label={labels.close}
+              title={labels.close}
+              data-testid="copilot-close"
+              onClick={close}
+            >
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+          </div>
+          <div className="bsp-cp-body">
+            {brand ? (
+              <CopilotView
+                key={conversation.key}
+                locale={locale}
+                brand={brand}
+                surface={surface}
+                subject={subject}
+                initialRequest={handedRequest}
+                creditsLabel={null}
+                labels={labels}
+                rateMetricKeys={rateMetricKeys}
+              />
+            ) : (
               <StateMessage
                 kind="empty"
                 title={strings.chooseBrandTitle}
                 description={strings.chooseBrandBody}
               />
-            </div>
-          )}
-        </div>
-      </CopilotDrawer>
-    </>
+            )}
+          </div>
+        </aside>
+      ) : null}
+    </span>
   );
 }
