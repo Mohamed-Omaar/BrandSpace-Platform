@@ -7404,6 +7404,422 @@ button.bsp-chip.bsp-bb-q {
   font-weight: 700;
 }
 
+/* ----------------------------------------------------------- §3-AUTH ---- */
+
+/*
+ * SIGN-IN AND THE OTHER ENTRY SCREENS — `Auth.dc.html` lines 12–117 (D-468,
+ * batch 6): the stage's three radial washes on `#f3f3f3`, one 540px card
+ * (`rgba(255,255,255,.96)`, radius 36, `padding: 42px 44px 34px`,
+ * `0 40px 100px rgba(20,16,35,.14)`, `gap: 20px`), the 46px logo beside the
+ * 44px language button, the purple eyebrow, a 42px / 1.05 / 800 heading over
+ * a 15px line, `.lb` labels, `.in` fields and `.btn` buttons. The footer's
+ * `#8a8a92` takes `#6a6a72`.
+ */
+.bsp-auth {
+  min-block-size: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(720px 540px at 12% 8%, rgba(121, 53, 254, 0.26), transparent 70%),
+    radial-gradient(640px 520px at 88% 10%, rgba(255, 120, 170, 0.14), transparent 70%),
+    radial-gradient(780px 580px at 94% 100%, rgba(255, 214, 10, 0.34), transparent 70%), #f3f3f3;
+  color: #111114;
+}
+.bsp-auth-stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  box-sizing: border-box;
+}
+.bsp-auth-card {
+  inline-size: min(540px, 100%);
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 36px;
+  padding: 42px 44px 34px;
+  box-shadow: 0 40px 100px rgba(20, 16, 35, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.bsp-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bsp-auth-logo {
+  inline-size: 46px;
+  block-size: 46px;
+  display: block;
+  flex: none;
+}
+.bsp-auth-lang {
+  margin-inline-start: auto;
+}
+.bsp-auth-lang [data-testid='locale-switch'] {
+  inline-size: 44px;
+  block-size: 44px;
+  min-inline-size: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: #f4f4f5;
+  color: #111114;
+  font-size: 13px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  box-shadow: none;
+}
+.bsp-auth-lang [data-testid='locale-switch'] svg {
+  display: none;
+}
+/* `.eyebrow`: `#f0e9ff` / `#5312c4`, `padding: 6px 12px`, 11.5px / 800, a 7px dot. */
+.bsp-auth-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  background: #f0e9ff;
+  color: #5312c4;
+  border-radius: 99px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.bsp-auth-eyebrow > span {
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: 50%;
+  background: #7935fe;
+}
+.bsp-auth-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bsp-auth-head > h1 {
+  margin: 0;
+  font-size: 42px;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+.bsp-auth-head > p {
+  margin: 0;
+  font-size: 15px;
+  color: #55555c;
+  line-height: 1.6;
+}
+.bsp-auth-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* `.lb`: 11.5px / 800, `.08em`, capitals, `#6a6a72`, `margin-block-end: 8px`. */
+.bsp-auth-body div > label[for]:first-child {
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a6a72 !important;
+  margin-block-end: 8px !important;
+}
+/* `.in`: `background: #f4f4f5; border-radius: 14px; padding: 14px 18px; font-size: 15.5px; min-block-size: 58px`. */
+.bsp-auth-body
+  :is(
+    input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+    select,
+    textarea
+  ).bs-control {
+  display: block;
+  inline-size: 100%;
+  box-sizing: border-box;
+  border: 1px solid transparent !important;
+  background: #f4f4f5 !important;
+  border-radius: 14px !important;
+  padding: 14px 18px !important;
+  font-size: 15.5px !important;
+  min-block-size: 58px !important;
+  color: #111114;
+  box-shadow: none !important;
+}
+/* `.btn`: 56px, radius 14, `padding: 12px 20px`, 15px / 800, ink; sign-up's is purple. */
+.bsp-auth-body form button[type='submit']:not(.bsp-auth-ws) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  inline-size: 100%;
+  border: 0 !important;
+  border-radius: 14px !important;
+  padding: 12px 20px !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  background: #111114 !important;
+  color: #fff !important;
+  min-block-size: 56px !important;
+  box-shadow: none !important;
+}
+.bsp-auth-body form button[type='submit'][data-testid='signup-submit'] {
+  background: #7935fe !important;
+}
+.bsp-auth-body a,
+.bsp-auth-links a {
+  color: #5312c4;
+  font-weight: 700;
+}
+.bsp-auth-word {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.bsp-auth-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+  color: #4d4c53;
+  text-align: center;
+}
+/* The footer line: 12px, a 7px `#ffd60a` dot, `padding-top: 6px`. */
+.bsp-auth-foot {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #6a6a72;
+  padding-block-start: 6px;
+}
+.bsp-auth-foot > span {
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: 50%;
+  background: #ffd60a;
+  flex-shrink: 0;
+}
+
+/*
+ * THE SETUP WIZARD — `Auth.dc.html` lines 114–200: a 900px card
+ * (`rgba(255,255,255,.96)`, radius 36, `padding: 32px 40px`, `gap: 18px`),
+ * the step bars (`gap: 6px`; a 5px bar, green done / purple current /
+ * `#ececef` ahead, over an 11.5px / 800 name), the step's 34px / 1.08 / 800
+ * heading over a 14px line, its fields as `.lb` and `.in`, its choices as the
+ * wizard's `.chip`s. The steps' own cards are flat inside it.
+ */
+.bsp-wz {
+  inline-size: min(900px, 100%);
+  margin-inline: auto;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 36px;
+  padding: 32px 40px;
+  box-shadow: 0 40px 100px rgba(20, 16, 35, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-block-start: 8px;
+}
+.bsp-wz-steps {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bsp-wz-step {
+  flex-grow: 1;
+  flex-basis: 0;
+  min-inline-size: 0;
+}
+.bsp-wz-sbody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-decoration: none;
+  color: #6a6a72;
+}
+.bsp-wz-bar {
+  display: block;
+  block-size: 5px;
+  border-radius: 99px;
+  background: #ececef;
+}
+.bsp-wz-bar[data-state='done'] {
+  background: #16794b;
+}
+.bsp-wz-bar[data-state='current'] {
+  background: #7935fe;
+}
+.bsp-wz-sl {
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.bsp-wz-step[data-current='true'] .bsp-wz-sbody {
+  color: #111114;
+}
+.bsp-wz section[data-surface='card'] {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+.bsp-wz section[data-surface='card'] > header h2 {
+  font-size: 34px !important;
+  line-height: 1.08 !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.035em;
+}
+.bsp-wz section[data-surface='card'] > header + p {
+  font-size: 14px !important;
+  color: #4d4c53 !important;
+  line-height: 1.55 !important;
+}
+.bsp-wz div > label[for]:first-child {
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a6a72 !important;
+  margin-block-end: 8px !important;
+}
+.bsp-wz
+  :is(
+    input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']),
+    select,
+    textarea
+  ).bs-control {
+  border: 1px solid transparent !important;
+  background: #f4f4f5 !important;
+  border-radius: 14px !important;
+  padding: 14px 18px !important;
+  font-size: 15.5px !important;
+  min-block-size: 58px !important;
+  color: #111114;
+  box-shadow: none !important;
+}
+/* The teach step's file picker: its button as the prototype's `.btn.sec` (`#f2f2f4`, radius 14, 800). */
+.bsp-wz input[type='file']::file-selector-button {
+  border: 0;
+  background: #f2f2f4;
+  color: #111114;
+  border-radius: 14px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  margin-inline-end: 10px;
+  cursor: pointer;
+}
+/* The goal step's `.chip`s: three columns; chosen `#7935fe` edge on `#f6f3ff` with a 3px `#efe7ff` ring. */
+.bsp-wz-goals {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.bsp-wz-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e4e4e8;
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  min-block-size: 46px;
+  box-sizing: border-box;
+  text-align: start;
+  cursor: pointer;
+}
+.bsp-wz-chip:has(.bsp-wz-radio:checked) {
+  border-color: #7935fe;
+  background: #f6f3ff;
+  box-shadow: 0 0 0 3px #efe7ff;
+}
+.bsp-wz-chip:has(.bsp-wz-radio:focus-visible) {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bsp-wz-radio {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Choosing a workspace: rows on `#f4f4f5`, radius 18, `padding: 14px 16px`, a 50px gradient tile, the name at 18px / 800. */
+.bsp-auth-wslist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bsp-auth-ws {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  inline-size: 100%;
+  border: 0;
+  background: #f4f4f5;
+  border-radius: 18px;
+  padding: 14px 16px;
+  color: #111114;
+  text-align: start;
+  cursor: pointer;
+}
+.bsp-auth-ws:hover {
+  background: #ececef;
+}
+.bsp-auth-wsini {
+  inline-size: 50px;
+  block-size: 50px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #8f5bff, #5b1fd6);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.bsp-auth-wsmain {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-inline-size: 0;
+}
+.bsp-auth-wsname {
+  font-size: 18px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.bsp-auth-wsrole {
+  font-size: 12.5px;
+  color: #6a6a72;
+}
+.bsp-auth-wsdel {
+  color: #b83245;
+}
+[dir='rtl'] .bsp-auth-wsgo {
+  transform: scaleX(-1);
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -7746,6 +8162,35 @@ button.bsp-chip.bsp-bb-q {
   }
   .bsp-bl-inv .bsp-row {
     flex-wrap: wrap;
+  }
+}
+
+/* The entry screens below 768px: the product's phone layout — the card fills the width. */
+@media (max-width: 767.98px) {
+  .bsp-auth-stage {
+    padding: 16px;
+  }
+  .bsp-auth-card {
+    padding: 28px 22px 24px;
+    border-radius: 28px;
+  }
+  .bsp-auth-head > h1 {
+    font-size: 32px;
+  }
+}
+@media (max-width: 767.98px) {
+  .bsp-wz {
+    padding: 22px 18px;
+    border-radius: 28px;
+  }
+  .bsp-wz-steps {
+    flex-wrap: wrap;
+  }
+  .bsp-wz-goals {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-wz section[data-surface='card'] > header h2 {
+    font-size: 26px !important;
   }
 }
 

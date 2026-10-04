@@ -1,10 +1,8 @@
 import Link from 'next/link';
 import {
-  CheckIcon,
   colorTokens,
   motionTokens,
   radiusTokens,
-  shadowTokens,
   spacingTokens,
   typographyTokens,
   visuallyHiddenStyle,
@@ -45,90 +43,49 @@ export function SetupStepper({
   readonly stepLabel: (key: SetupStepState['key']) => string;
   readonly doneLabel: string;
 }) {
+  /*
+   * D-468 — THE PROTOTYPE'S STEP BARS, `Auth.dc.html` line 117: one column per
+   * step (`gap: 6px`), a 5px bar — green once done, purple for the current
+   * step, `#ececef` ahead — over the step's name at 11.5px / 800, ink for the
+   * current one. Done is also said in words, never by the colour alone.
+   */
   return (
     <nav aria-label={label} data-testid="setup-stepper">
-      <ol
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: spacingTokens['3xs'],
-          margin: 0,
-          padding: spacingTokens['3xs'],
-          listStyle: 'none',
-          borderRadius: radiusTokens.lg,
-          background: colorTokens.surfaceMuted,
-          maxInlineSize: '100%',
-          inlineSize: 'fit-content',
-        }}
-      >
-        {steps.map((step, index) => {
+      <ol className="bsp-wz-steps">
+        {steps.map((step) => {
           const current = step.key === view;
           const linkable = step.key !== 'workspace' && (step.key === 'brand' || hasBrand);
           const body = (
             <>
               <span
                 aria-hidden="true"
-                style={{
-                  display: 'inline-grid',
-                  placeItems: 'center',
-                  inlineSize: '1.25rem',
-                  blockSize: '1.25rem',
-                  borderRadius: radiusTokens.full,
-                  ...typographyTokens.caption,
-                  fontWeight: 700,
-                  background: step.complete
-                    ? colorTokens.successTint
-                    : current
-                      ? colorTokens.surfaceLavenderStrong
-                      : colorTokens.surfaceSunken,
-                  color: step.complete
-                    ? colorTokens.success
-                    : current
-                      ? colorTokens.brandPurplePressed
-                      : colorTokens.textSecondary,
-                }}
-              >
-                {step.complete ? <CheckIcon size={12} /> : index + 1}
-              </span>
-              <span>{stepLabel(step.key)}</span>
+                className="bsp-wz-bar"
+                data-state={step.complete ? 'done' : current ? 'current' : 'todo'}
+              />
+              <span className="bsp-wz-sl">{stepLabel(step.key)}</span>
               {step.complete ? (
                 <span style={visuallyHiddenStyle()}>{` — ${doneLabel}`}</span>
               ) : null}
             </>
           );
-          const style = {
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: spacingTokens.xs,
-            minBlockSize: '2.25rem',
-            paddingInline: spacingTokens.md,
-            borderRadius: radiusTokens.md,
-            ...typographyTokens.bodySm,
-            fontWeight: 600,
-            textDecoration: 'none',
-            background: current ? colorTokens.surface : 'transparent',
-            color: current ? colorTokens.brandPurplePressed : colorTokens.textSecondary,
-            boxShadow: current ? shadowTokens.card : 'none',
-            transition: `color ${motionTokens.fast} ${motionTokens.easeOut}`,
-          } as const;
           return (
             <li
               key={step.key}
               data-testid={`onboarding-step-${step.key}`}
               data-complete={step.complete ? 'true' : 'false'}
               data-current={current ? 'true' : 'false'}
+              className="bsp-wz-step"
             >
               {linkable ? (
                 <Link
                   href={href(step.key as SetupView)}
                   aria-current={current ? 'step' : undefined}
-                  className="bs-pressable"
-                  style={style}
+                  className="bsp-wz-sbody"
                 >
                   {body}
                 </Link>
               ) : (
-                <span style={style}>{body}</span>
+                <span className="bsp-wz-sbody">{body}</span>
               )}
             </li>
           );
@@ -194,12 +151,9 @@ export function SetupProgress({
         aria-valuemax={total}
         aria-valuenow={position}
         aria-valuetext={text}
-        style={{
-          blockSize: '0.375rem',
-          borderRadius: radiusTokens.full,
-          background: colorTokens.surfaceMuted,
-          overflow: 'hidden',
-        }}
+        // D-468: the step bars above draw the position; the progressbar stays
+        // for assistive technology.
+        style={visuallyHiddenStyle()}
       >
         <div
           style={{

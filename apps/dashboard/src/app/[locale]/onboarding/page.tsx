@@ -838,30 +838,18 @@ export default async function OnboardingPage({
           >
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="brandId" value={brand.id} />
-            <fieldset
-              style={{ border: 0, margin: 0, padding: 0, display: 'grid', gap: spacingTokens.xs }}
-            >
+            {/* D-468 — the prototype's goal chips: three columns of choices (line 183). */}
+            <fieldset className="bsp-wz-goals">
               <legend style={visuallyHiddenStyle()}>{t('setup.goal.title')}</legend>
               {[...SETUP_GOALS, 'unsure' as const].map((goal) => (
-                <label
-                  key={goal}
-                  style={{
-                    display: 'flex',
-                    gap: spacingTokens.sm,
-                    alignItems: 'center',
-                    padding: spacingTokens.sm,
-                    borderRadius: radiusTokens.md,
-                    background: colorTokens.surfaceSoft,
-                    cursor: 'pointer',
-                    ...typographyTokens.bodySm,
-                  }}
-                >
+                <label key={goal} className="bsp-wz-chip">
                   <input
                     type="radio"
                     name="goal"
                     value={goal}
                     required
                     defaultChecked={goal === chosen}
+                    className="bsp-wz-radio"
                     data-testid={`setup-goal-${goal.toLowerCase()}`}
                   />
                   {t(`setup.goal.${goal}` as MessageKey)}
@@ -966,9 +954,9 @@ export default async function OnboardingPage({
       <div
         data-testid="setup-wizard"
         data-view={view}
-        // Clear of the sticky header's fade, so a two-line description never
-        // runs into the step line beneath it.
-        style={{ display: 'grid', gap: spacingTokens.lg, paddingBlockStart: spacingTokens.md }}
+        // D-468 — the prototype's wizard card (`Auth.dc.html` lines 114–200):
+        // 900px, radius 36, `padding: 32px 40px`, the step bars, then the step.
+        className="bsp-wz"
       >
         <SetupProgress
           label={t('setup.stepsLabel')}

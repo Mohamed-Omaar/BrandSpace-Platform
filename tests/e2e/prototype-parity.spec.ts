@@ -20,9 +20,9 @@ import { signIn } from './own-workspace';
  */
 
 const OUT = process.env['BRANDSPACE_PARITY_DIR'] ?? path.join(process.cwd(), 'test-results/parity');
-const PROTOTYPE = pathToFileURL(
-  path.join(process.cwd(), 'docs/visual-reference/prototype-2026-09-27/Main.dc.html'),
-).href;
+const prototypeFile = (name: string): string =>
+  pathToFileURL(path.join(process.cwd(), 'docs/visual-reference/prototype-2026-09-27', name)).href;
+const PROTOTYPE = prototypeFile('Main.dc.html');
 
 /**
  * THE PROTOTYPE'S FONTS, SERVED LOCALLY. Its `<link>` asks Google Fonts for
@@ -90,6 +90,9 @@ const SCREENS: readonly {
   readonly prototype?: (page: Page) => Promise<void>;
   /** After the route: how the product is brought to the same screen. */
   readonly product?: (page: Page) => Promise<void>;
+  /** Another prototype file (`Auth.dc.html`), and a product route seen signed out. */
+  readonly file?: string;
+  readonly signedOut?: boolean;
 }[] = [
   { key: 'home', route: '/overview' },
   { key: 'calendar', route: '/calendar', prototype: viaRail('Calendar', 'التقويم') },
@@ -141,6 +144,19 @@ const SCREENS: readonly {
       await page.waitForURL(/content\/compose\?item=/);
     },
   },
+  { key: 'sign-in', route: '/sign-in', file: 'Auth.dc.html', signedOut: true },
+  {
+    key: 'sign-up',
+    route: '/sign-up',
+    file: 'Auth.dc.html',
+    signedOut: true,
+    prototype: async (page) => {
+      await page
+        .getByRole('button', { name: /^(Create account|إنشاء حساب|اعمل حساب)$/ })
+        .first()
+        .click();
+    },
+  },
 ];
 
 /**
@@ -189,13 +205,15 @@ test.describe('prototype parity screenshots (D-468)', () => {
             window.localStorage.setItem('bs.handoff', JSON.stringify({ lang: 'ar' })),
           );
         }
-        await proto.goto(PROTOTYPE, { waitUntil: 'networkidle' });
+        await proto.goto(screen.file ? prototypeFile(screen.file) : PROTOTYPE, {
+          waitUntil: 'networkidle',
+        });
         if (screen.prototype) await screen.prototype(proto);
         await settle(proto);
         await shoot(proto, (n) => path.join(OUT, `${screen.key}-${locale}-${n}-prototype.png`));
         await proto.close();
 
-        await signIn(page, locale);
+        if (!screen.signedOut) await signIn(page, locale);
         await page.goto(`${DASHBOARD_BASE_URL}/${locale}${screen.route}`);
         if (screen.product) await screen.product(page);
         await settle(page);

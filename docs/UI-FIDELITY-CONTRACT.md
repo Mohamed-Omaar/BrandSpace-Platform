@@ -868,6 +868,43 @@ cancellation (with Resume), a pending plan change, no invoices, no packs, a memb
 low-credit alert threshold, and a PDF button on each invoice (an invoice opens on its own page, which
 has its printable document).
 
+### Sign-in and onboarding (`Auth.dc.html`)
+
+Ported: the entry screens' card (lines 39–117) — one 540px card on the purple / pink / yellow wash, the
+logo and wordmark beside the 44px language button, the purple eyebrow pill naming the screen, the 42px
+heading over its 15px line (sign-in's "Welcome back" and sign-up's "Start with BrandSpace" are the
+prototype's), `.lb` labels, the 58px `#f4f4f5` fields, the 56px buttons (ink; purple for creating an
+account), the links row and the "Secure sign-in · separate customer and platform sessions" line —
+for sign-in, sign-up, "check your inbox", password reset (both steps), e-mail verification,
+two-factor sign-in and setup, an invitation, choosing a workspace, no workspace and deletion pending;
+and the setup wizard (lines 114–200) as the prototype's 900px card with its step bars (green done,
+purple current, grey ahead), each step's 34px heading over its 14px line, and its fields.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- One generic sign-in failure for every cause (docs/SECURITY.md §3); sign-up keeps its fields (name,
+  e-mail, password with its rule, time zone) and the legal documents to accept, and says when sign-up is
+  closed; reset links expire.
+- D-303: "Step n of m · name" stays in words beside the bars, with "Finish later"; the wizard keeps
+  its five steps (brand, teach, connect, goal, done) and saves as it goes.
+- The wizard stays inside the signed-in shell in its focus mode (no rail), as the product's routing
+  places it after the workspace exists.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the card fills the width and the bars wrap.
+
+**(c) States the prototype does not draw.** Sign-up closed, a refused sign-in, a locked or unverified account, an
+expired or used link, a two-factor challenge and recovery codes, an invitation for another address,
+no workspace yet, a workspace pending deletion, each wizard step's errors and empty states.
+
+**Accessibility findings.** The footer and quiet greys (`#8a8a92`, `#7a7a82`) take `#6a6a72`. The
+progress stays a real progressbar for assistive technology (visually the bars).
+
+**Left out — no data or feature.** The password "Show" button inside each password field, sign-in's
+"No account yet? Create account" (sign-up can be closed; it is reached from the public site), the trial note on sign-up (the trial is the configured plan's, stated on Billing), "I opened the link" on the inbox screens (the e-mailed link does it), the
+country combobox's search (the product's picker stays), the wizard's team-size chips, logo upload and
+colour swatches in the brand step, the "read my website" option, and the first post ideas on the last
+step.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

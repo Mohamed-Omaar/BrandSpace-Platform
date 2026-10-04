@@ -46,8 +46,9 @@ export default async function SignInPage({
   return (
     <AuthCard
       locale={locale}
-      heading={t('signIn.title')}
-      description={t('signIn.description')}
+      eyebrow={t('signIn.title')}
+      heading={t('signIn.welcome')}
+      description={t('signIn.welcomeSub')}
       footer={
         <Link href={`/${locale}/reset`} style={{ color: colorTokens.brandPurple }}>
           {t('signIn.forgot')}

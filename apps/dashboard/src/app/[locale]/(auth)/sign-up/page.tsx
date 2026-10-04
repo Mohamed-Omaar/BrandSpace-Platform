@@ -82,7 +82,9 @@ export default async function SignUpPage({
   return (
     <AuthCard
       locale={locale}
-      heading={t('signUp.title')}
+      eyebrow={t('auth.eyebrow.signUp')}
+      heading={t('signUp.start')}
+      description={t('signUp.startSub')}
       footer={
         <Link href={`/${locale}/sign-in`} style={{ color: colorTokens.brandPurple }}>
           {t('signUp.haveAccount')}

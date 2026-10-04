@@ -199,4 +199,13 @@ export const arEgOverrides = {
 
   // Batch 6 — Plan & billing (Main.dc.html lines 1445–1463; copy at 3909).
   'billing.changePlan': 'غيّر الخطة',
+
+  // Batch 6 — Sign-in and the entry screens (Auth.dc.html lines 39–117; copy at 260–330).
+  'signIn.welcome': 'أهلًا بيك تاني',
+  'signIn.welcomeSub': 'ادخل على مساحة شغلك في BrandSpace.',
+  'signUp.start': 'ابدأ مع BrandSpace',
+  'signUp.startSub': 'دقيقتين وتبقى جاهز تعمل أول بوست.',
+  'auth.eyebrow.verify': 'تأكيد الإيميل',
+  'auth.eyebrow.password': 'كلمة السر',
+  'auth.footer': 'دخول آمن · جلسات العملاء منفصلة عن إدارة المنصة',
 } as const satisfies Partial<Record<MessageKey, string>>;
