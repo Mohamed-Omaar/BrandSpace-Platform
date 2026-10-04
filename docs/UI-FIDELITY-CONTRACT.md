@@ -839,6 +839,35 @@ composition where the product's section has different content (General's combo b
 tiles and "Add brand", the notification e-mail column, the AI dialect chips, the activity log inside
 Security), which keep the product's controls in the prototype's parts.
 
+### Plan & billing (`Main.dc.html` lines 1445–1463)
+
+Ported: the plan and the credits side by side (1.2fr / 1fr cards at `padding: 20px 22px`): the plan's
+name at 20px / 800 with its monthly price, the status and the renewal date, "Change plan"; the credits at
+34px / 800 with what they are and a way to buy more; the plans and the credit packs as the prototype's
+tiles (`border-radius: 16px; padding: 12px`, the current one marked); the invoices as rows (number,
+date, amount, the status pill, View).
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-298: Billing & usage is one Settings row with two tabs (Billing, Usage).
+- Prices are the configured plan prices in the workspace's currency, never converted; a plan with no
+  price says why. "Current" means paid for, not merely assigned (a trial can still buy).
+- D-196: credits are prepaid, with a hard stop and no debt; packs ask before charging.
+- Downgrades are scheduled for the period end and can be withdrawn; the accounting export and the
+  cancellation stay, each in its own card.
+
+**(b) Post-launch — left out.** The phone layout: below 768px one column.
+
+**(c) States the prototype does not draw.** No subscription, a trial, past due, suspended, a scheduled
+cancellation (with Resume), a pending plan change, no invoices, no packs, a member without
+`billing.manage` (said, with who can).
+
+**Accessibility findings.** The quiet greys take `#6a6a72`.
+
+**Left out — no data or feature.** The usage bars in the plan card (they are the Usage tab's), the
+low-credit alert threshold, and a PDF button on each invoice (an invoice opens on its own page, which
+has its printable document).
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

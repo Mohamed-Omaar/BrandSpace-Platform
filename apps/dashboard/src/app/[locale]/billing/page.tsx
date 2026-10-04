@@ -27,9 +27,6 @@ import {
   CustomerCard,
   CustomerEmpty,
   WorkspaceShell,
-  customerTableStyle,
-  customerTdStyle,
-  customerThStyle,
 } from '../../../components/workspace-shell';
 import {
   BuyPackButton,
@@ -101,6 +98,9 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
   const currentTier = snapshot.plans.find((plan) => plan.key === subscription?.planKey)?.tier ?? -1;
 
   const brandContext = await brandContextFor(workspace, '/billing');
+  const currentPrice = subscription
+    ? (snapshot.availability.find((a) => a.planKey === subscription.planKey)?.monthly ?? null)
+    : null;
 
   return (
     <WorkspaceShell
@@ -153,49 +153,56 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
           </CustomerBanner>
         ) : null}
 
-        <div className="bs-split-main">
-          <CustomerCard title={t('billing.subscription')} testId="subscription-card">
+        {/*
+          D-468 — THE PROTOTYPE'S PLAN & BILLING, `Main.dc.html` lines 1445–1463:
+          the plan and the credits side by side (1.2fr / 1fr), the plans, the
+          packs, then the invoices as rows.
+        */}
+        <div className="bsp-bl-top">
+          <section className="bsp-card bsp-bl-card" data-testid="subscription-card">
+            <span className="bsp-lbl">{t('billing.subscription')}</span>
             {subscription ? (
-              <dl style={{ margin: 0, display: 'grid', gap: spacingTokens.xs }}>
-                <Row
-                  label={t('billing.plan')}
-                  value={planDisplayName(subscription.planKey, snapshot.plans, locale) ?? ''}
-                  testId="billing-plan"
-                />
-                <Row
-                  label={t('billing.status')}
-                  value={t(`billing.status.${subscription.status}` as MessageKey)}
-                  testId="billing-status"
-                />
-                <Row
-                  label={
-                    subscription.status === 'TRIALING'
-                      ? t('billing.trialEnds')
-                      : t('billing.renews')
-                  }
-                  value={day(
-                    subscription.status === 'TRIALING'
-                      ? subscription.trialEndsAt
-                      : subscription.currentPeriodEnd,
-                  )}
-                  testId="billing-period"
-                />
-              </dl>
+              <>
+                <div className="bsp-bl-planh">
+                  <span className="bsp-bl-pname" data-testid="billing-plan">
+                    {planDisplayName(subscription.planKey, snapshot.plans, locale) ?? ''}
+                  </span>
+                  {currentPrice ? (
+                    <span className="bsp-ltr bsp-bl-price">
+                      {show(currentPrice)} / {t('billing.perMonth')}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="bsp-bl-sub">
+                  <span data-testid="billing-status">
+                    {t(`billing.status.${subscription.status}` as MessageKey)}
+                  </span>
+                  {' · '}
+                  {subscription.status === 'TRIALING'
+                    ? t('billing.trialEnds')
+                    : t('billing.renews')}{' '}
+                  <span data-testid="billing-period">
+                    {day(
+                      subscription.status === 'TRIALING'
+                        ? subscription.trialEndsAt
+                        : subscription.currentPeriodEnd,
+                    )}
+                  </span>
+                </span>
+              </>
             ) : (
               <>
-                <p data-testid="no-subscription" style={{ margin: 0, ...typographyTokens.bodySm }}>
+                <p data-testid="no-subscription" className="bsp-bl-pname">
                   {t('billing.noSubscription')}
                 </p>
-                <p style={mutedStyle}>{t('billing.noSubscriptionBody')}</p>
+                <p className="bsp-bl-sub">{t('billing.noSubscriptionBody')}</p>
               </>
             )}
 
             {subscription?.pendingPlanKey ? (
-              <div style={{ marginBlockStart: spacingTokens.sm }} data-testid="pending-change">
-                <p style={{ margin: 0, ...typographyTokens.bodySm }}>
-                  {t('billing.pendingChange')}
-                </p>
-                <p style={mutedStyle}>
+              <div className="bsp-bl-pending" data-testid="pending-change">
+                <span className="bsp-xstatus bsp-info">{t('billing.pendingChange')}</span>
+                <p className="bsp-bl-sub">
                   {fill('billing.pendingChangeBody', {
                     plan:
                       planDisplayName(subscription.pendingPlanKey, snapshot.plans, locale) ??
@@ -214,43 +221,48 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                 ) : null}
               </div>
             ) : null}
-          </CustomerCard>
+            {mayManage ? (
+              <a href="#plans" className="bsp-btn bsp-sm bsp-sec bsp-bl-start">
+                {t('billing.changePlan')}
+              </a>
+            ) : null}
+          </section>
 
-          <CustomerCard title={t('billing.credits')} testId="credits-card">
+          <section className="bsp-card bsp-bl-card" data-testid="credits-card">
+            <span className="bsp-lbl">{t('billing.credits')}</span>
             {wallet ? (
               <>
                 <p
                   data-testid="credit-balance"
-                  style={{ margin: 0, ...typographyTokens.h3 }}
+                  className="bsp-ltr bsp-bl-big"
                   aria-label={t('billing.creditsBalance')}
                 >
                   {wallet.balanceCredits}
                 </p>
                 {/* D-196 stated where the customer can act on it, not buried in a
                   policy page: prepaid, hard stop, no debt. */}
-                <p style={mutedStyle}>
+                <p className="bsp-bl-sub">
                   {wallet.balanceCredits === 0
                     ? t('billing.creditsZero')
                     : t('billing.creditsPrepaid')}
                 </p>
               </>
             ) : (
-              <CustomerEmpty message={t('billing.creditsPrepaid')} />
+              <p className="bsp-bl-sub">{t('billing.creditsPrepaid')}</p>
             )}
-          </CustomerCard>
+            {mayManage && snapshot.packs.length > 0 ? (
+              <a href="#packs" className="bsp-btn bsp-sm bsp-pur bsp-bl-start">
+                {t('billing.packs')}
+              </a>
+            ) : null}
+          </section>
         </div>
 
+        <div id="plans" className="bsp-bl-anchor" />
         <CustomerCard title={t('billing.plans')} testId="plans-card">
           <p style={mutedStyle}>{fill('billing.plansIn', { currency: snapshot.currency })}</p>
           <p style={mutedStyle}>{t('billing.downgradeNotice')}</p>
-          <div
-            style={{
-              display: 'grid',
-              gap: spacingTokens.md,
-              gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))',
-              marginBlockStart: spacingTokens.sm,
-            }}
-          >
+          <div className="bsp-bl-tiles">
             {snapshot.plans.map((plan) => {
               const availability = snapshot.availability.find((a) => a.planKey === plan.key);
               /*
@@ -268,27 +280,16 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                 <section
                   key={plan.key}
                   data-testid={`plan-${plan.key}`}
-                  style={{
-                    border: `1px solid ${colorTokens.hairline}`,
-                    borderRadius: '0.75rem',
-                    padding: spacingTokens.md,
-                    display: 'grid',
-                    gap: spacingTokens.xs,
-                    alignContent: 'start',
-                  }}
+                  className="bsp-bl-tile"
+                  data-current={isCurrent ? 'true' : undefined}
                 >
-                  <h3 style={{ margin: 0, ...typographyTokens.h3 }}>
-                    {locale === 'ar' ? plan.nameAr : plan.nameEn}
-                  </h3>
+                  <h3 className="bsp-bl-tname">{locale === 'ar' ? plan.nameAr : plan.nameEn}</h3>
                   <p style={mutedStyle}>
                     {locale === 'ar' ? plan.descriptionAr : plan.descriptionEn}
                   </p>
 
                   {availability?.available && availability.monthly ? (
-                    <p
-                      data-testid={`plan-price-${plan.key}`}
-                      style={{ margin: 0, ...typographyTokens.h3 }}
-                    >
+                    <p data-testid={`plan-price-${plan.key}`} className="bsp-ltr bsp-bl-tprice">
                       {show(availability.monthly)}{' '}
                       <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
                         {t('billing.perMonth')}
@@ -306,9 +307,12 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                   )}
 
                   {isCurrent ? (
-                    <p data-testid={`plan-current-${plan.key}`} style={mutedStyle}>
+                    <span
+                      data-testid={`plan-current-${plan.key}`}
+                      className="bsp-xstatus bsp-ai bsp-bl-start"
+                    >
                       {t('billing.currentPlan')}
-                    </p>
+                    </span>
                   ) : mayManage && availability?.available ? (
                     isDowngrade ? (
                       <ScheduleDowngradeButton
@@ -337,37 +341,26 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
           </div>
         </CustomerCard>
 
+        <div id="packs" className="bsp-bl-anchor" />
         <CustomerCard title={t('billing.packs')} testId="packs-card">
           <p style={mutedStyle}>{t('billing.creditsPrepaid')}</p>
           {snapshot.packs.length === 0 ? (
             <CustomerEmpty message={t('billing.packsEmpty')} />
           ) : (
-            <div
-              style={{
-                display: 'grid',
-                gap: spacingTokens.md,
-                gridTemplateColumns: 'repeat(auto-fit, minmax(14rem, 1fr))',
-              }}
-            >
+            <div className="bsp-bl-tiles">
               {snapshot.packs.map((offer) => (
                 <section
                   key={offer.pack.key}
                   data-testid={`pack-${offer.pack.key}`}
-                  style={{
-                    border: `1px solid ${colorTokens.hairline}`,
-                    borderRadius: '0.75rem',
-                    padding: spacingTokens.md,
-                    display: 'grid',
-                    gap: spacingTokens.xs,
-                  }}
+                  className="bsp-bl-tile"
                 >
-                  <h3 style={{ margin: 0, ...typographyTokens.h3 }}>
+                  <h3 className="bsp-bl-tname">
                     {locale === 'ar' ? offer.pack.name.ar : offer.pack.name.en}
                   </h3>
                   <p style={{ margin: 0, ...typographyTokens.bodySm }}>
                     {fill('billing.packCredits', { credits: String(offer.pack.credits) })}
                   </p>
-                  <p style={{ margin: 0, ...typographyTokens.h3 }}>{show(offer.price)}</p>
+                  <p className="bsp-ltr bsp-bl-tprice">{show(offer.price)}</p>
                   {offer.pack.expiryDays ? (
                     <p style={mutedStyle}>
                       {fill('billing.packExpiry', { days: String(offer.pack.expiryDays) })}
@@ -403,36 +396,30 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
           {overview.invoices.length === 0 ? (
             <CustomerEmpty message={t('billing.invoicesEmpty')} />
           ) : (
-            <table style={customerTableStyle()} data-testid="invoices-table">
-              <thead>
-                <tr>
-                  <th style={customerThStyle()}>{t('billing.invoiceNumber')}</th>
-                  <th style={customerThStyle()}>{t('billing.invoiceDate')}</th>
-                  <th style={customerThStyle()}>{t('billing.status')}</th>
-                  <th style={customerThStyle()}>{t('billing.invoiceTotal')}</th>
-                  <th style={customerThStyle()}>
-                    <span className="bs-visually-hidden">{t('billing.invoiceView')}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {overview.invoices.map((invoice) => (
-                  <tr key={invoice.id} data-testid={`invoice-${invoice.id}`}>
-                    <td style={customerTdStyle()}>{invoice.number ?? '—'}</td>
-                    <td style={customerTdStyle()}>{day(invoice.issuedAt)}</td>
-                    <td style={customerTdStyle()}>
-                      {t(`billing.invoiceStatus.${invoice.status}` as MessageKey)}
-                    </td>
-                    <td style={customerTdStyle()}>{show(invoice.total)}</td>
-                    <td style={customerTdStyle()}>
-                      <Link href={`/${locale}/billing/invoices/${invoice.id}`}>
-                        {t('billing.invoiceView')}
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ul
+              className="bsp-bl-inv"
+              aria-label={t('billing.invoices')}
+              data-testid="invoices-table"
+            >
+              {overview.invoices.map((invoice) => (
+                <li key={invoice.id} className="bsp-row" data-testid={`invoice-${invoice.id}`}>
+                  <span className="bsp-ltr bsp-bl-ino">{invoice.number ?? '—'}</span>
+                  <span className="bsp-bl-idate">{day(invoice.issuedAt)}</span>
+                  <span className="bsp-ltr bsp-bl-iamt">{show(invoice.total)}</span>
+                  <span
+                    className={`bsp-pill ${invoice.status === 'PAID' ? 'bsp-p-ok' : 'bsp-p-neu'}`}
+                  >
+                    {t(`billing.invoiceStatus.${invoice.status}` as MessageKey)}
+                  </span>
+                  <Link
+                    href={`/${locale}/billing/invoices/${invoice.id}`}
+                    className="bsp-btn bsp-sm bsp-ghost"
+                  >
+                    {t('billing.invoiceView')}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           )}
           <p style={mutedStyle}>{t('billing.creditNoteNotice')}</p>
         </CustomerCard>
@@ -534,17 +521,6 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
         ) : null}
       </SettingsFrame>
     </WorkspaceShell>
-  );
-}
-
-function Row({ label, value, testId }: { label: string; value: string; testId?: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: spacingTokens.sm }}>
-      <dt style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>{label}</dt>
-      <dd data-testid={testId} style={{ margin: 0, ...typographyTokens.caption, textAlign: 'end' }}>
-        {value}
-      </dd>
-    </div>
   );
 }
 

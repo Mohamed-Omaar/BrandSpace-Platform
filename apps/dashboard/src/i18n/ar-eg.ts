@@ -196,4 +196,7 @@ export const arEgOverrides = {
   'settings.group.workspace': 'المساحة',
   'settings.group.people': 'الناس',
   'settings.group.aiBilling': 'الذكاء والفوترة',
+
+  // Batch 6 — Plan & billing (Main.dc.html lines 1445–1463; copy at 3909).
+  'billing.changePlan': 'غيّر الخطة',
 } as const satisfies Partial<Record<MessageKey, string>>;

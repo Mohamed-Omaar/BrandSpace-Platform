@@ -3051,6 +3051,7 @@ export const messages = {
     'billing.suspendedBody':
       'لم تُحصَّل الدفعة بعد انتهاء مهلة السماح. بياناتك محفوظة بالكامل ويمكن تصديرها، ويعود الوصول فور نجاح الدفع.',
     'billing.plans': 'الخطط',
+    'billing.changePlan': 'تغيير الخطة',
     'billing.plansIn': 'الأسعار بعملة {currency} كما حدّدها المالك — لا يوجد تحويل عملات.',
     'billing.perMonth': 'شهريًا',
     'billing.perYear': 'سنويًا',
@@ -6669,6 +6670,7 @@ export const messages = {
     'billing.suspendedBody':
       'Payment was not collected before the grace period ended. Your data is fully retained and can still be exported, and access returns as soon as a payment succeeds.',
     'billing.plans': 'Plans',
+    'billing.changePlan': 'Change plan',
     'billing.plansIn': 'Prices are set in {currency} by the owner — nothing is converted.',
     'billing.perMonth': 'per month',
     'billing.perYear': 'per year',

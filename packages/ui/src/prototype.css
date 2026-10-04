@@ -7277,6 +7277,133 @@ button.bsp-chip.bsp-bb-q {
   }
 }
 
+/* ------------------------------------------------------------- §3-BL ---- */
+
+/*
+ * PLAN & BILLING — `Main.dc.html` lines 1445–1463 (D-468, batch 6): the plan
+ * and the credits side by side (`1.2fr 1fr; gap: 14px`), each a `.card` at
+ * `padding: 20px 22px; gap: 12px`; the plan's name at 20px / 800, the credits
+ * at 34px / 800; the plans as tiles (`border: 1px solid #ececef;
+ * border-radius: 16px; padding: 12px`); the invoices as `.row`s.
+ */
+.bsp-bl-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+@media (min-width: 1100px) {
+  .bsp-bl-top {
+    grid-template-columns: 1.2fr 1fr;
+  }
+}
+.bsp-card.bsp-bl-card {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bsp-bl-planh {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bsp-bl-pname {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+.bsp-bl-price {
+  font-size: 14px;
+  font-weight: 700;
+}
+.bsp-bl-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #6a6a72;
+}
+.bsp-bl-big {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: start;
+}
+.bsp-bl-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.bsp-bl-start {
+  align-self: flex-start;
+}
+.bsp-bl-anchor {
+  scroll-margin-block-start: 16px;
+}
+.bsp-bl-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-block-start: 8px;
+}
+.bsp-bl-tile {
+  border: 1px solid #ececef;
+  border-radius: 16px;
+  padding: 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bsp-bl-tile[data-current] {
+  background: #faf8ff;
+}
+.bsp-bl-tname {
+  margin: 0;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  letter-spacing: normal !important;
+}
+.bsp-bl-tprice {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+.bsp-bl-tile > p {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.bsp-bl-tile > .bsp-bl-tprice {
+  font-size: 18px;
+}
+.bsp-bl-tile > :is(button, a) {
+  margin-block-start: 6px;
+  align-self: flex-start;
+}
+/* An invoice: number 13.5 / 700, date 13px, amount 13.5 / 700, the pill, View. */
+.bsp-bl-inv {
+  list-style: none;
+  margin: 0 -22px;
+  padding: 0;
+}
+.bsp-bl-ino {
+  flex-grow: 1;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-align: start;
+}
+.bsp-bl-idate {
+  font-size: 13px;
+  color: #6a6a72;
+}
+.bsp-bl-iamt {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -7608,6 +7735,17 @@ button.bsp-chip.bsp-bb-q {
     border-radius: 22px;
     background: rgba(255, 255, 255, 0.82);
     box-shadow: 0 12px 35px rgba(16, 14, 28, 0.06);
+  }
+}
+
+/* Plan & billing below 768px: the product's phone layout — one column. */
+@media (max-width: 767.98px) {
+  .bsp-bl-top,
+  .bsp-bl-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-bl-inv .bsp-row {
+    flex-wrap: wrap;
   }
 }
 

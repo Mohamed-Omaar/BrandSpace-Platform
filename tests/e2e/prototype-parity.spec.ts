@@ -115,6 +115,14 @@ const SCREENS: readonly {
   },
   { key: 'settings', route: '/settings', prototype: viaRail('Settings', 'الإعدادات') },
   {
+    key: 'billing',
+    route: '/billing',
+    prototype: async (page) => {
+      await viaRail('Settings', 'الإعدادات')(page);
+      await viaRail('Plan & billing', 'الخطة والفوترة')(page);
+    },
+  },
+  {
     key: 'media-generate',
     route: '/creative',
     prototype: thenPress(viaRail('Media', 'الوسائط'), 'Generate', 'توليد'),
