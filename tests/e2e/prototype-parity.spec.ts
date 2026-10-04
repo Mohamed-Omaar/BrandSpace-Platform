@@ -99,6 +99,12 @@ const SCREENS: readonly {
   { key: 'media', route: '/assets', prototype: viaRail('Media', 'الوسائط') },
   { key: 'brand-brain', route: '/brand-brain', prototype: viaRail('Brand Brain', 'عقل العلامة') },
   { key: 'performance', route: '/analytics', prototype: viaRail('Performance', 'الأداء') },
+  { key: 'automations', route: '/automations', prototype: viaRail('Automations', 'الأتمتة') },
+  {
+    key: 'automations-new',
+    route: '/automations?new=1',
+    prototype: thenPress(viaRail('Automations', 'الأتمتة'), 'New rule', 'قاعدة جديدة'),
+  },
   {
     key: 'media-generate',
     route: '/creative',

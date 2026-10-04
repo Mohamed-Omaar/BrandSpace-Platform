@@ -263,11 +263,19 @@ const COPY = {
   },
 } as const;
 
+/*
+ * D-468 — the event and the action are the prototype's grids of choices, real
+ * radio buttons; the other pickers are still selects. Both read the same way.
+ */
 const values = (page: Page, testId: string) =>
   page
     .getByTestId(testId)
-    .locator('option')
-    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    .locator('option, input[type="radio"]:not([value=""])')
+    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLInputElement).value));
+const chosen = (page: Page, testId: string) =>
+  page.getByTestId(testId).locator('input[type="radio"]:checked');
+const pick = (page: Page, testId: string, value: string) =>
+  page.getByTestId(`${testId}-${value}`).check();
 
 async function create(page: Page, name: string): Promise<void> {
   await page.getByTestId('automation-name').fill(name);
@@ -321,16 +329,16 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await noSeriousViolations(page);
 
   // --- Authoring: the retry and the pause, from the keyboard -------------------
-  const trigger = page.getByTestId('automation-trigger');
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations?new=1`);
   const action = page.getByTestId('automation-action');
-  await trigger.selectOption('POST_FAILED');
+  await pick(page, 'automation-trigger', 'POST_FAILED');
   expect(await values(page, 'automation-action')).toEqual(
     expect.arrayContaining(['RETRY_PUBLISH', 'PAUSE_CAMPAIGN']),
   );
   await expect(action).toContainText(copy.retryAction);
   await expect(action).toContainText(copy.pauseAction);
 
-  await action.selectOption('PAUSE_CAMPAIGN');
+  await pick(page, 'automation-action', 'PAUSE_CAMPAIGN');
   const picker = page.getByTestId('automation-action-pause-campaign');
   await expect(picker).toBeVisible();
   // Only PLANNED or ACTIVE: never a completed campaign.
@@ -338,7 +346,7 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     [seeded.target.id, seeded.planned.id].sort(),
   );
   await expect(page.getByTestId('automation-pause-note')).toHaveText(copy.note);
-  await action.focus();
+  await chosen(page, 'automation-action').focus();
   await page.keyboard.press('Tab');
   await expect(picker).toBeFocused();
   await picker.selectOption(seeded.planned.id);
@@ -351,9 +359,9 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     enabled: false,
   });
 
-  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations`);
-  await trigger.selectOption('POST_FAILED');
-  await action.selectOption('RETRY_PUBLISH');
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations?new=1`);
+  await pick(page, 'automation-trigger', 'POST_FAILED');
+  await pick(page, 'automation-action', 'RETRY_PUBLISH');
   // A retry retries the post that failed: nothing to choose.
   await expect(page.getByTestId('automation-action-pause-campaign')).toHaveCount(0);
   await expect(page.getByTestId('automation-action-campaign')).toHaveCount(0);
@@ -379,7 +387,9 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   );
   expect(campaign.status).toBe('PAUSED');
 
-  // --- Run history: who decided, and a lapse in words --------------------------
+  // --- Run history: who decided, and a lapse in words, on its own tab ---------
+  await page.getByTestId('automations-tab-runs').click();
+  await expect(page.getByTestId('automation-runs')).toBeVisible();
   await expect(page.getByTestId(`automation-run-status-${seeded.retryRun}`)).toHaveText(
     copy.skipped,
   );

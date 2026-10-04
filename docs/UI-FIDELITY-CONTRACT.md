@@ -728,6 +728,52 @@ light band. It opens and closes from the bell, Escape or an outside click, and r
 **Left out — no data or feature.** The unread count badge on the bell (the top bar is drawn before the
 feed is read, and it is not read on every page), and "Mark all as read" (no such action exists).
 
+### Automations (`Main.dc.html` lines 1304–1334, the rule builder at 1556–1569)
+
+Ported: the head row (Rules · Run history and "New rule"); the requests waiting for an OK as the
+prototype's amber card, Skip and Approve on each; the rules as one card of rows (the ↻ tile, the event →
+the action, the meta line with its "Asks first" and "Uses credits" pills, the on / off pill, the switch
+and the ⋯ menu with Edit and Delete); the "Suggested rules" row and the notes under the card, with the
+link to Settings → Notifications; Run history as the prototype's Activity card (when, what, which rule,
+the outcome's pill); and the rule builder as the prototype's 640px dialog — "1 · When" and "3 · Then" as
+two-column grids of choices, "2 · Only if", each choice's settings under the lavender edge, the rule
+read back in the gradient box, Cancel and Save. Both tabs and the dialog are addresses (`?view=runs`,
+`?new=1`, `?edit=<rule>`), so they work without script; with script, Escape, the veil and ✕ close the
+dialog and focus stays inside it while it is open.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- Phase 2B-3 (R4-1, PR 1–6): the builder is still built from the engine's closed registry — only the
+  actions a trigger supports, only the condition fields it produces, each field's own operators and
+  value control, a trigger whose thresholds are not set shown but not choosable, nothing preselected
+  on a new rule, the browser's "choose one" in the page's language, a saved value no longer offered
+  kept as "No longer available", an older automation captioned, the AI cap said on its rule.
+- A rule keeps its name (and, when edited, its description); its brand is chosen on a new rule and
+  fixed on an edited one, as are its event and action.
+- B12: the requests waiting for an OK show only actions this person can decide; "Confirm publish"
+  stays the publish's own words; Run history names who approved or skipped and who a request waits
+  for.
+- P6-12: Delete still asks twice.
+- D-277 §39 / D-296: the suggested row is "Automate by asking", which hands the Copilot an example;
+  its notes say a Copilot-prepared rule starts off and a publish always asks first.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the rows wrap and the builder is one
+column.
+
+**(c) States the prototype does not draw.** No rules, no runs, a refused save (the error banner), a
+waiting request this person cannot decide, a failed or blocked run with its reason in words, ideas
+drafted by a run (with the link to them), the conditions of a Copilot-written rule kept as they are.
+
+**Accessibility findings.** The quiet greys (`#8a8a92`) take `#6a6a72`. The choices are radio buttons
+(one tab stop per group, arrow keys between choices) with a visible focus ring on the tile. The switch
+and the ⋯ button are named with the rule.
+
+**Left out — no data or feature.** A rule's "Listens to …" line and its run count, each event's
+"Listens to …" sub-line in the builder, the suggested-rule templates (the product has none; the
+Copilot builds one from words instead), Duplicate in the ⋯ menu, the monthly cap chips (the cap is the
+plan's, set in the Control Center), the cost and "asks how" sentences in the read-back, and the hours
+left on a waiting request.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

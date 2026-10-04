@@ -2621,6 +2621,15 @@ export const messages = {
     'automations.runsEmpty': 'لم تعمل أي أتمتة بعد',
     'automations.runsEmptyBody': 'كل مرة تعمل فيها أتمتة، يظهر هنا ما فعلته ومتى.',
     'automations.create': 'قاعدة جديدة',
+    'automations.form.when': 'عندما',
+    'automations.form.onlyIf': 'بشرط',
+    'automations.form.then': 'نفّذ',
+    'automations.form.preview': 'القاعدة',
+    'automations.asksFirst': 'تطلب موافقتك أولًا',
+    'automations.usesCredits': 'تستهلك رصيدًا',
+    'automations.more': 'المزيد',
+    'automations.notifLink':
+      'تنبيهاتك أنت (منشور تعذّر نشره، الموافقات، الرصيد، مراجعة عقل العلامة) في الإعدادات ← الإشعارات',
     'automations.discover.title': 'أتمت بالسؤال',
     'automations.discover.body':
       'أخبر المساعد بما تكرره، بكلماتك. يجهّز قاعدة من المشغلات والإجراءات المدعومة لتراجعها.',
@@ -6205,6 +6214,15 @@ export const messages = {
     'automations.runsEmpty': 'No automation has run yet',
     'automations.runsEmptyBody': 'Each time an automation runs, what it did and when appears here.',
     'automations.create': 'New rule',
+    'automations.form.when': 'When',
+    'automations.form.onlyIf': 'Only if',
+    'automations.form.then': 'Then',
+    'automations.form.preview': 'The rule',
+    'automations.asksFirst': 'Asks first',
+    'automations.usesCredits': 'Uses credits',
+    'automations.more': 'More',
+    'automations.notifLink':
+      'Your own alerts (failed posts, approvals, credits, Brand Brain reviews) are in Settings → Notifications',
     'automations.discover.title': 'Automate by asking',
     'automations.discover.body':
       'Tell the Copilot what you keep doing, in your own words. It prepares a rule from the supported triggers and actions for you to review.',

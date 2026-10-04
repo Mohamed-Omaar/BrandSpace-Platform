@@ -6450,6 +6450,470 @@ button.bsp-chip.bsp-bb-q {
   text-decoration: none;
 }
 
+/* ------------------------------------------------------------- §3-AU ---- */
+
+/*
+ * AUTOMATIONS — `Main.dc.html` lines 1304–1334 and the rule builder at
+ * 1556–1569 (D-468, batch 6). The quiet greys (`#8a8a92`) take `#6a6a72`.
+ */
+.bsp-au {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* The head row: `display: flex; align-items: center; gap: 12px`. */
+.bsp-au-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bsp-au-brand {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-btn.bsp-au-new {
+  margin-inline-start: auto;
+}
+/* Waiting for your OK: `padding: 4px 0; border: 1px solid #f5dfb3; background: #fffbf2`. */
+.bsp-xcard.bsp-au-pend {
+  padding: 4px 0;
+  border: 1px solid #f5dfb3;
+  background: #fffbf2;
+}
+.bsp-au-pend-t {
+  margin: 0;
+  padding: 12px 20px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8a5a00;
+}
+.bsp-au-pend-b {
+  margin: 0;
+  padding: 0 20px 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #6a6a72;
+}
+.bsp-au-pend-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px 14px;
+  flex-wrap: wrap;
+}
+.bsp-au-pend-row > form {
+  display: contents;
+}
+.bsp-au-pend-what {
+  flex-grow: 1;
+  min-inline-size: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.bsp-au-pend-w {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.bsp-au-sub {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #6a6a72;
+}
+.bsp-au-sublink {
+  font-size: 11px;
+  font-weight: 600;
+  color: #5312c4;
+}
+/* The rules card: `.xcard` at `padding: 4px 0`. */
+.bsp-xcard.bsp-au-card {
+  padding: 4px 0;
+}
+.bsp-au-none {
+  padding: 18px 20px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6a6a72;
+}
+.bsp-au-none > b {
+  font-weight: 600;
+  color: #111114;
+}
+.bsp-au-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* A rule: `gap: 14px; padding: 14px 20px; border-top: 1px solid #f3f3f5`. */
+.bsp-au-rule {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-block-start: 1px solid #f3f3f5;
+}
+.bsp-xicon.bsp-au-ico {
+  inline-size: 36px;
+  block-size: 36px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+.bsp-au-main {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+}
+.bsp-au-line {
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.bsp-au-line > b {
+  font-weight: 600;
+}
+.bsp-au-arrow {
+  color: #6a6a72;
+}
+.bsp-au-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: #6a6a72;
+}
+/* `.tgl`: 34 × 20, a 16px knob 2px in; on `#111114`, off `#d2d2d8`. */
+.bsp-au-tglf {
+  display: contents;
+}
+.bsp-tgl {
+  inline-size: 34px;
+  block-size: 20px;
+  border-radius: 99px;
+  border: 0;
+  position: relative;
+  padding: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  background: #d2d2d8;
+  transition: background 0.15s;
+}
+.bsp-tgl[aria-pressed='true'] {
+  background: #111114;
+}
+.bsp-tgl-k {
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  inline-size: 16px;
+  block-size: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: inset-inline-start 0.15s;
+}
+.bsp-tgl[aria-pressed='true'] .bsp-tgl-k {
+  inset-inline-start: 16px;
+}
+/* The ⋯ button (`.ibtn`, 30 × 30) and its glass menu (160px, radius 14). */
+.bsp-au-more {
+  position: static;
+}
+.bsp-au-more > summary {
+  list-style: none;
+}
+.bsp-au-more > summary::-webkit-details-marker {
+  display: none;
+}
+.bsp-ibtn.bsp-au-dots {
+  inline-size: 30px;
+  block-size: 30px;
+  cursor: pointer;
+}
+.bsp-au-menu {
+  position: absolute;
+  top: 48px;
+  inset-inline-end: 16px;
+  z-index: 20;
+  inline-size: 160px;
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 14px;
+  box-shadow:
+    0 22px 55px rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.05);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  animation: bsp-au-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top center;
+}
+@keyframes bsp-au-pop {
+  from {
+    opacity: 0;
+    scale: 0.97;
+    translate: 0 -4px;
+  }
+}
+.bsp-au-mi {
+  display: block;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: start;
+  font-size: 13px;
+  color: #111114;
+  text-decoration: none;
+  cursor: pointer;
+  list-style: none;
+}
+.bsp-au-mi::-webkit-details-marker {
+  display: none;
+}
+.bsp-au-mi:hover {
+  background: rgba(20, 16, 35, 0.05);
+}
+.bsp-au-mi-bad {
+  color: #b83245;
+}
+.bsp-au-del {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 10px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #55555c;
+}
+.bsp-au-del > button {
+  align-self: flex-start;
+  border: 0;
+  background: #fdecef;
+  color: #b83245;
+}
+/* Suggested rules: `font-size: 11px; font-weight: 700; color: #6a6a72` and the small chips. */
+.bsp-au-sugg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-au-sugg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bsp-au-sugg-t {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6a6a72;
+}
+.bsp-chip.bsp-au-chip {
+  font-size: 12px;
+  min-block-size: 28px;
+  padding: 3px 10px;
+  font-weight: 500;
+}
+.bsp-au-note {
+  font-size: 11px;
+  color: #6a6a72;
+  line-height: 1.5;
+}
+.bsp-au-notif {
+  align-self: flex-start;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #5312c4;
+  text-decoration: none;
+}
+/* Run history: `gap: 14px; padding: 12px 20px`, the time in a 110px column. */
+.bsp-au-run {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  border-block-start: 1px solid #f3f3f5;
+}
+.bsp-au-when {
+  inline-size: 110px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #6a6a72;
+}
+.bsp-au-run .bsp-au-main {
+  gap: 2px;
+}
+.bsp-au-what {
+  font-size: 13px;
+}
+
+/*
+ * THE RULE BUILDER: a 640px card, radius 28, `padding: 22px 24px; gap: 14px`,
+ * over a `rgba(17,17,20,.28)` veil.
+ */
+.bsp-au-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(17, 17, 20, 0.28);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.bsp-au-dialog {
+  inline-size: min(640px, 100%);
+  max-block-size: 92vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 28px;
+  box-shadow: 0 30px 80px rgba(20, 16, 35, 0.25);
+  padding: 22px 24px;
+  box-sizing: border-box;
+  color: #111114;
+}
+.bsp-au-dialog:focus {
+  outline: none;
+}
+.bsp-au-dialog-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-end: 14px;
+}
+.bsp-au-dialog-h > .bsp-sech {
+  font-size: 20px;
+}
+.bsp-au-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bsp-au-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.bsp-au-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* The prototype's fields: `border: 1px solid #e4e4e8; border-radius: 12px; padding: 9px 12px; font-size: 14px`. */
+.bsp-au-input.bs-control {
+  border: 1px solid #e4e4e8;
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-size: 14px;
+  background: #fff;
+  color: #111114;
+}
+.bsp-au-fixed {
+  font-size: 14px;
+  padding: 9px 0;
+}
+/* The choices: two columns, `border: 1px solid #ececef; border-radius: 12px; padding: 8px 10px`. */
+.bsp-au-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.bsp-au-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: start;
+  border: 1px solid #ececef;
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+.bsp-au-tile[data-on] {
+  border-color: #7935fe;
+  background: #f6f3ff;
+}
+.bsp-au-tile[data-off] {
+  cursor: not-allowed;
+  color: #6a6a72;
+}
+.bsp-au-tile:has(.bsp-au-radio:focus-visible) {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bsp-au-tile-l {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+/* An action: `align-items: center; gap: 6px; padding: 9px 10px; font-size: 12.5px; font-weight: 600`. */
+.bsp-au-tile.bsp-au-act {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+/* The radio itself covers its tile, unseen: the tile is the control. */
+.bsp-au-radio.bs-control {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.bsp-au-radio.bsp-au-ghost {
+  inset: auto;
+  inline-size: 1px;
+  block-size: 1px;
+  pointer-events: none;
+}
+/* A choice's settings: `padding-inline-start: 10px; border-inline-start: 2px solid #ece4ff`. */
+.bsp-au-subb {
+  display: grid;
+  gap: 10px;
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid #ece4ff;
+}
+.bsp-au-subb:empty {
+  display: none;
+}
+/* The read-back: `linear-gradient(145deg, #eee6ff, #fff9d7); border-radius: 14px; padding: 12px 14px`. */
+.bsp-au-prev {
+  background: linear-gradient(145deg, #eee6ff, #fff9d7);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bsp-au-prev-t {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5f23da;
+}
+.bsp-au-prev-l {
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.bsp-au-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -6742,6 +7206,25 @@ button.bsp-chip.bsp-bb-q {
     top: 64px;
     inset-inline: 16px;
     inline-size: auto;
+  }
+}
+
+/* Automations below 768px: the product's phone layout — one column. */
+@media (max-width: 767.98px) {
+  .bsp-au-rule {
+    flex-wrap: wrap;
+  }
+  .bsp-au-run {
+    flex-wrap: wrap;
+    gap: 6px 14px;
+  }
+  .bsp-au-fields,
+  .bsp-au-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-au-dialog {
+    padding: 18px 16px;
+    border-radius: 22px;
   }
 }
 

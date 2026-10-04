@@ -107,14 +107,20 @@ test.describe('Phase 2B-3 PR 1 · older automations', () => {
     await expect(rules).toContainText('When an anomaly is detected');
     await expect(page.getByTestId(`automation-older-${older}`)).toContainText('(older automation)');
     await expect(page.getByTestId(`automation-older-${current}`)).toHaveCount(0);
-    // Its controls stay: it can still be edited, switched and deleted.
+    // Its controls stay: it can still be switched, and (from its ⋯ menu) edited and deleted.
+    await expect(page.getByTestId(`automation-toggle-${older}`)).toBeVisible();
+    await page.getByTestId(`automation-more-${older}`).click();
     await expect(page.getByTestId(`automation-edit-${older}`)).toBeVisible();
     await expect(page.getByTestId(`automation-delete-${older}`)).toBeVisible();
+    await noSeriousViolations(page);
     // The retired trigger is never offered for a new rule.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
+    await expect(page.getByTestId('automation-trigger')).toBeVisible();
     await expect(
-      page.getByTestId('automation-trigger').locator('option[value="ANOMALY_DETECTED"]'),
+      page.getByTestId('automation-trigger').locator('input[value="ANOMALY_DETECTED"]'),
     ).toHaveCount(0);
-    // A stale-value skip: its own label and the localized reason, no raw code.
+    // A stale-value skip, in Run history: its own label and the localized reason, no raw code.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?view=runs`);
     await expect(page.getByTestId(`automation-run-status-${staleRun}`)).toHaveText('Skipped');
     await expect(page.getByTestId(`automation-run-failure-${staleRun}`)).toHaveText(STALE_EN);
     await expect(page.getByTestId(`automation-run-${staleRun}`)).not.toContainText(
@@ -131,6 +137,7 @@ test.describe('Phase 2B-3 PR 1 · older automations', () => {
     await expect(page.getByTestId('automation-rules')).toContainText('عند رصد تغيّر غير معتاد');
     await expect(page.getByTestId(`automation-older-${older}`)).toContainText('(أتمتة أقدم)');
     await expect(page.getByTestId(`automation-older-${current}`)).toHaveCount(0);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/automations?view=runs`);
     await expect(page.getByTestId(`automation-run-status-${staleRun}`)).toHaveText('تم التخطي');
     await expect(page.getByTestId(`automation-run-failure-${staleRun}`)).toHaveText(STALE_AR);
     await expect(page.getByTestId(`automation-run-${staleRun}`)).not.toContainText(

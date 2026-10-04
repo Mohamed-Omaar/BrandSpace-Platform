@@ -501,7 +501,7 @@ async function editRule(page: Page, ruleId: string, locale = 'en'): Promise<void
  * the NOTIFY these rules sent before Phase 2B-3 PR 2: a notice, nothing moved.
  */
 async function chooseHarmlessAction(page: Page): Promise<void> {
-  await page.getByTestId('automation-action').selectOption('NOTIFY_PERSON');
+  await page.getByTestId('automation-action-NOTIFY_PERSON').check();
   const person = page.getByTestId('automation-action-person');
   await expect(person).toBeVisible();
   await expect(person).not.toHaveValue('');
@@ -515,7 +515,7 @@ test.describe('automations', () => {
      * moment it was saved would act before its author had read it back.
      */
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
 
     const form = page.getByTestId('automation-form');
     await expect(form).toBeVisible();
@@ -524,7 +524,7 @@ test.describe('automations', () => {
     await form.locator('input[name="name"]').fill(name);
     // Nothing is chosen for the author (Phase 2B-3 PR 2): the trigger and the
     // action are picked, never inherited.
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     await chooseHarmlessAction(page);
     await form.locator('button[type="submit"]').first().click();
     await automationDone(page, 'AUTOMATION_CREATED');
@@ -570,9 +570,13 @@ test.describe('automations', () => {
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
     await automationDone(page, 'AUTOMATION_UPDATED');
+    // The row's switch is on, and now offers to switch it off.
     await expect(
-      page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
-    ).toContainText(/disable/i);
+      page
+        .locator('[data-testid="automation-rules"] li', { hasText: name })
+        .first()
+        .getByRole('button', { name: /disable/i }),
+    ).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('AN OLDER THRESHOLD RULE IS STILL EDITABLE, with metric, direction and number', async ({
@@ -602,9 +606,13 @@ test.describe('automations', () => {
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
     await automationDone(page, 'AUTOMATION_UPDATED');
+    // The row's switch is on, and now offers to switch it off.
     await expect(
-      page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
-    ).toContainText(/disable/i);
+      page
+        .locator('[data-testid="automation-rules"] li', { hasText: name })
+        .first()
+        .getByRole('button', { name: /disable/i }),
+    ).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('A MISSING THRESHOLD NUMBER CANNOT BE SUBMITTED AT ALL', async ({ page }) => {
@@ -640,24 +648,25 @@ test.describe('automations', () => {
      * list, so an impossible rule cannot be chosen.
      */
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
 
-    await page.getByTestId('automation-trigger').selectOption('POST_PUBLISHED');
+    await page.getByTestId('automation-trigger-POST_PUBLISHED').check();
+    // D-468 — the actions are the prototype's grid of radio choices.
     const publishedActions = await page
       .getByTestId('automation-action')
-      .locator('option')
-      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
-    // The empty "Choose an action" leads every list (Phase 2B-3 PR 2).
-    expect(publishedActions).toEqual(['', 'NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
+      .locator('input[type="radio"]')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLInputElement).value));
+    // Nothing is chosen for the author (Phase 2B-3 PR 2).
+    await expect(page.getByTestId('automation-action').locator('input:checked')).toHaveCount(0);
+    expect(publishedActions).toEqual(['NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
 
     // And the approval trigger offers all four.
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     const approvedActions = await page
       .getByTestId('automation-action')
-      .locator('option')
-      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+      .locator('input[type="radio"]')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLInputElement).value));
     expect(approvedActions).toEqual([
-      '',
       'SCHEDULE_NEXT_FREE_SLOT',
       'NOTIFY_PERSON',
       'ADD_TO_CAMPAIGN',
@@ -667,9 +676,9 @@ test.describe('automations', () => {
 
   test('A CONDITION FIELD IS OFFERED ONLY WHERE THE RUNTIME PRODUCES IT', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
 
-    await page.getByTestId('automation-trigger').selectOption('POST_FAILED');
+    await page.getByTestId('automation-trigger-POST_FAILED').check();
     const failed = await page
       .getByTestId('automation-condition-field')
       .locator('option')
@@ -678,7 +687,7 @@ test.describe('automations', () => {
     expect(failed).toContain('publish.failureClass');
     expect(failed).not.toContain('content.status');
 
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     const approved = await page
       .getByTestId('automation-condition-field')
       .locator('option')
@@ -734,18 +743,22 @@ test.describe('automations', () => {
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
     await automationDone(page, 'AUTOMATION_UPDATED');
+    // The row's switch is on, and now offers to switch it off.
     await expect(
-      page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
-    ).toContainText(/disable/i);
+      page
+        .locator('[data-testid="automation-rules"] li', { hasText: name })
+        .first()
+        .getByRole('button', { name: /disable/i }),
+    ).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('A BOOLEAN CONDITION OFFERS is_true / is_false, AND NO VALUE BOX AT ALL', async ({
     page,
   }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
 
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     await page.getByTestId('automation-condition-field').selectOption('content.hasCampaign');
 
     const operators = await page
@@ -767,19 +780,23 @@ test.describe('automations', () => {
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
     await automationDone(page, 'AUTOMATION_UPDATED');
+    // The row's switch is on, and now offers to switch it off.
     await expect(
-      page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
-    ).toContainText(/disable/i);
+      page
+        .locator('[data-testid="automation-rules"] li', { hasText: name })
+        .first()
+        .getByRole('button', { name: /disable/i }),
+    ).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('A CLOSED STRING FIELD IS PICKED, NEVER TYPED, AND ITS OPTIONS ARE TRANSLATED', async ({
     page,
   }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
 
     // Phase 2B-3 PR 2: the post's FORMAT, a closed field a new rule is offered.
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     await page.getByTestId('automation-condition-field').selectOption('content.type');
 
     const operators = await page
@@ -820,9 +837,9 @@ test.describe('automations', () => {
      * false whatever was chosen.
      */
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
 
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     await page.getByTestId('automation-condition-field').selectOption('content.type');
     await page.getByTestId('automation-condition-operator').selectOption('in');
 
@@ -843,16 +860,20 @@ test.describe('automations', () => {
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     await row.getByRole('button', { name: /enable/i }).click();
     await automationDone(page, 'AUTOMATION_UPDATED');
+    // The row's switch is on, and now offers to switch it off.
     await expect(
-      page.locator('[data-testid="automation-rules"] li', { hasText: name }).first(),
-    ).toContainText(/disable/i);
+      page
+        .locator('[data-testid="automation-rules"] li', { hasText: name })
+        .first()
+        .getByRole('button', { name: /disable/i }),
+    ).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('CHANGING THE FIELD RESETS AN OPERATOR THAT NO LONGER APPLIES', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
 
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     await page.getByTestId('automation-condition-field').selectOption('content.type');
     await page.getByTestId('automation-condition-operator').selectOption('in');
 
@@ -865,9 +886,9 @@ test.describe('automations', () => {
     page,
   }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/automations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/automations?new=1`);
 
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     await page.getByTestId('automation-condition-field').selectOption('content.hasCampaign');
 
     const operators = await page
@@ -901,7 +922,7 @@ test.describe('automations', () => {
      * and an empty region with no words in it is the state that reads as a bug.
      */
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?view=runs`);
 
     const runs = page.getByTestId('automation-runs');
     if ((await runs.count()) > 0) {
@@ -1084,20 +1105,23 @@ test.describe('P6-12 · copilot and automations', () => {
 
   test('deleting a rule asks first', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
     const form = page.getByTestId('automation-form');
     const name = `E2E delete ${Date.now()}`;
     await form.locator('input[name="name"]').fill(name);
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     await chooseHarmlessAction(page);
     await page.getByTestId('automation-submit').click();
     await automationDone(page, 'AUTOMATION_CREATED');
 
     const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
     const confirmDelete = row.getByRole('button', { name: /delete this rule/i });
-    // Not reachable in one click: the destructive button is behind a disclosure.
+    // Not reachable in one click: the destructive button is behind the row's ⋯
+    // menu (D-468) and, inside it, a second disclosure.
     await expect(confirmDelete).toBeHidden();
-    await row.locator('summary').click();
+    await row.locator('[data-testid^="automation-more-"]').click();
+    await expect(confirmDelete).toBeHidden();
+    await row.locator('[data-testid^="automation-delete-"] > summary').click();
     await expect(confirmDelete).toBeVisible();
     await confirmDelete.click();
     await automationDone(page, 'AUTOMATION_DELETED');

@@ -182,4 +182,13 @@ export const arEgOverrides = {
   'bb.chatSubFacts': 'بيجاوب من {count} معلومة معتمدة',
   'bb.voice.sub': 'ده اللي الذكاء بيقراه قبل ما يكتب أي كلمة.',
   'bb.orbHint': 'دوس على أي نقطة تفتح مجالها، أو على المنتصف تسأل',
+
+  // Batch 6 — Automations (Main.dc.html lines 1304–1334, 1556–1569; copy at 3779).
+  'automations.form.when': 'لما',
+  'automations.form.then': 'اعمل',
+  'automations.asksFirst': 'بيستأذنك',
+  'automations.usesCredits': 'بيصرف رصيد',
+  'automations.more': 'أكتر',
+  'automations.notifLink':
+    'تنبيهاتك انت (منشور ما اتنشرش، موافقات، الرصيد، مراجعة Brand Brain) من الإعدادات ← الإشعارات',
 } as const satisfies Partial<Record<MessageKey, string>>;

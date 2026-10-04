@@ -584,7 +584,8 @@ describe('run history: a condition_value_unavailable skip has its own label and 
       'utf8',
     );
     expect(page).toContain('const shown = runPresentation(run);');
-    expect(page).toContain('label={t(shown.statusKey as MessageKey)}');
-    expect(page).not.toContain('label={t(`automations.status.${run.status}` as MessageKey)}');
+    // D-468: the status is the prototype's pill, its words the presentation's.
+    expect(page).toContain('{t(shown.statusKey as MessageKey)}');
+    expect(page).not.toContain('t(`automations.status.${run.status}` as MessageKey)');
   });
 });

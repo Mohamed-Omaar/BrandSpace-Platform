@@ -1,14 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  buttonStyle,
-  colorTokens,
-  inputStyle,
-  spacingTokens,
-  typographyTokens,
-} from '@brandspace/ui';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { colorTokens, inputStyle, spacingTokens, typographyTokens } from '@brandspace/ui';
 
 /**
  * THE AUTOMATION AUTHORING FORM.
@@ -92,6 +86,13 @@ export interface ConditionFieldOption {
 
 export interface AutomationFormLabels {
   readonly name: string;
+  /** D-468 — the prototype builder's three steps, its read-back and its pills. */
+  readonly when: string;
+  readonly onlyIf: string;
+  readonly then: string;
+  readonly preview: string;
+  readonly asksFirst: string;
+  readonly usesCredits: string;
   readonly brand: string;
   readonly trigger: string;
   readonly action: string;
@@ -193,6 +194,10 @@ export interface AutomationFormProps {
    */
   readonly actionPausableCampaignsByBrand: Readonly<Record<string, readonly ConditionChoice[]>>;
   readonly metrics: readonly { readonly key: string; readonly label: string }[];
+  /** What each action's tile says of it: asks first, uses credits (the registry's own flags). */
+  readonly actionNotes?: Readonly<
+    Record<string, { readonly asksFirst: boolean; readonly spendsCredits: boolean }>
+  >;
   readonly labels: AutomationFormLabels;
   readonly action: (formData: FormData) => void | Promise<void>;
   /** B12 — edit an existing rule instead of creating one. */
@@ -242,14 +247,25 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
    * the same translated words as the empty option, rather than left to the
    * browser's own language.
    */
-  const triggerPicker = useRef<HTMLSelectElement>(null);
-  const actionPicker = useRef<HTMLSelectElement>(null);
+  const formId = useId();
+  /** The first choosable trigger carries the group's "choose one" message. */
+  const firstTrigger = props.triggers.findIndex((option) => !option.unavailable);
+  const triggerPicker = useRef<HTMLInputElement>(null);
+  const actionGroup = useRef<HTMLDivElement>(null);
   useEffect(() => {
     triggerPicker.current?.setCustomValidity(triggerType === '' ? props.labels.chooseTrigger : '');
   }, [triggerType, props.labels.chooseTrigger]);
   useEffect(() => {
-    actionPicker.current?.setCustomValidity(actionType === '' ? props.labels.chooseAction : '');
-  }, [actionType, props.labels.chooseAction]);
+    /*
+     * The trigger decides which actions are offered, so which radio comes first
+     * changes with it: every radio is cleared, then the first carries the words.
+     */
+    const radios = Array.from(
+      actionGroup.current?.querySelectorAll<HTMLInputElement>('input[name="actionType"]') ?? [],
+    );
+    for (const radio of radios) radio.setCustomValidity('');
+    radios[0]?.setCustomValidity(actionType === '' ? props.labels.chooseAction : '');
+  }, [actionType, triggerType, props.labels.chooseAction]);
   /** The brand's list, plus the saved value when it is no longer offered. */
   const targetChoices = (
     byBrand: Readonly<Record<string, readonly ConditionChoice[]>>,
@@ -334,8 +350,32 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
 
   const caption = { ...typographyTokens.caption, color: colorTokens.textSecondary } as const;
 
+  const actionLabel = actionType === '' ? '' : (props.actionLabels[actionType] ?? actionType);
+  const notes = (type: string) => props.actionNotes?.[type];
+  const pills = (type: string) => (
+    <>
+      {notes(type)?.asksFirst ? (
+        <span className="bsp-xstatus bsp-warn">{props.labels.asksFirst}</span>
+      ) : null}
+      {notes(type)?.spendsCredits ? (
+        <span className="bsp-xstatus bsp-ai">{props.labels.usesCredits}</span>
+      ) : null}
+    </>
+  );
+
+  /*
+   * THE PROTOTYPE'S RULE BUILDER, `Main.dc.html` lines 1559–1566 (D-468): "1 ·
+   * When" as a two-column grid of choices, "2 · Only if", "3 · Then" as a
+   * second grid, each with its own settings under a lavender edge, and the
+   * rule read back as one sentence. The choices are real radio buttons — one
+   * `triggerType`, one `actionType` — so the form posts exactly what it did.
+   */
   return (
-    <form action={props.action} data-testid={editing ? 'automation-edit-form' : 'automation-form'}>
+    <form
+      action={props.action}
+      className="bsp-au-form"
+      data-testid={editing ? 'automation-edit-form' : 'automation-form'}
+    >
       <input type="hidden" name="locale" value={props.locale} />
       {initial ? (
         <>
@@ -344,225 +384,113 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
           {keepConditions ? <input type="hidden" name="conditionsMode" value="keep" /> : null}
         </>
       ) : null}
-      <div style={{ display: 'grid', gap: spacingTokens.md }}>
-        <div
-          style={{ display: 'flex', gap: spacingTokens.md, flexWrap: 'wrap', alignItems: 'end' }}
-        >
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.name}</span>
-            <input
-              name="name"
-              required
-              maxLength={120}
-              defaultValue={initial?.name}
-              className="bs-control"
-              style={inputStyle()}
-              data-testid="automation-name"
-            />
-          </label>
-          {initial ? (
-            /*
-             * FIXED ON AN EXISTING RULE: the brand, the trigger and the action are
-             * named, not offered. Nothing is posted for them; the server uses the
-             * stored ones.
-             */
-            <dl style={{ display: 'flex', gap: spacingTokens.md, flexWrap: 'wrap', margin: 0 }}>
-              {[
-                [props.labels.brand, initial.brandName],
-                [props.labels.trigger, trigger?.label ?? initial.triggerType],
-                [props.labels.action, props.actionLabels[initial.actionType] ?? initial.actionType],
-              ].map(([term, value]) => (
-                <div key={term} style={FIELD}>
-                  <dt style={caption}>{term}</dt>
-                  <dd style={{ margin: 0, ...typographyTokens.bodySm }}>{value}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-          {initial ? null : (
-            <>
-              <label style={FIELD}>
-                <span style={caption}>{props.labels.brand}</span>
-                <select
-                  name="brandId"
-                  className="bs-control"
-                  data-testid="automation-brand"
-                  value={brandId}
-                  onChange={(event) => setBrandId(event.target.value)}
-                >
-                  {props.brands.map((brand) => (
-                    <option key={brand.id} value={brand.id}>
-                      {brand.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={FIELD}>
-                <span style={caption}>{props.labels.trigger}</span>
-                <select
-                  name="triggerType"
-                  className="bs-control"
-                  data-testid="automation-trigger"
-                  ref={triggerPicker}
-                  required
-                  value={triggerType}
-                  onChange={(event) => {
-                    setTriggerType(event.target.value);
-                    // A field that is not produced by the NEW trigger must not
-                    // survive the change.
-                    setConditionField('');
-                  }}
-                >
-                  <option value="">{props.labels.chooseTrigger}</option>
-                  {props.triggers.map((option) => (
-                    <option key={option.type} value={option.type} disabled={option.unavailable}>
-                      {option.unavailable
-                        ? props.labels.triggerUnavailable.replace('{trigger}', option.label)
-                        : option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={FIELD}>
-                <span style={caption}>{props.labels.action}</span>
-                {/*
-              ONLY THE ACTIONS THIS TRIGGER SUPPORTS. `actionSupportsTrigger`
-              decided this list on the server; an action that needs a content
-              item is simply absent from a trigger that has none, so an
-              incompatible pair cannot be selected rather than being refused
-              after submit.
-            */}
-                <select
-                  name="actionType"
-                  className="bs-control"
-                  data-testid="automation-action"
-                  ref={actionPicker}
-                  required
-                  value={actionType}
-                  onChange={(event) => setChosenAction(event.target.value)}
-                >
-                  <option value="">{props.labels.chooseAction}</option>
-                  {(trigger?.actionTypes ?? []).map((type) => (
-                    <option key={type} value={type}>
-                      {props.actionLabels[type] ?? type}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </>
-          )}
-        </div>
 
+      <div className="bsp-au-fields">
+        <label className="bsp-au-field">
+          <span className="bsp-lbl">{props.labels.name}</span>
+          <input
+            name="name"
+            required
+            maxLength={120}
+            defaultValue={initial?.name}
+            className="bs-control bsp-au-input"
+            data-testid="automation-name"
+          />
+        </label>
         {initial ? (
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.description}</span>
-            <textarea
-              name="description"
-              maxLength={500}
-              rows={2}
-              defaultValue={initial.description}
-              className="bs-control"
-              style={inputStyle()}
-              data-testid="automation-description"
-            />
-          </label>
-        ) : null}
-
-        {/*
-          PHASE 2B-3 PR 2 — THE G13 ACTIONS' OWN SETTINGS. The person to notify
-          and the campaign are picked from lists built for the rule's brand, so
-          nothing typed becomes a target; the engine re-checks both on save and
-          on every run. A saved choice that is no longer offered stays selected
-          as "No longer available", so an edit never silently changes it.
-        */}
-        {actionType === 'NOTIFY_PERSON' ? (
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.actionPerson}</span>
+          /*
+           * FIXED ON AN EXISTING RULE: the brand, the trigger and the action are
+           * named, not offered. Nothing is posted for them; the server uses the
+           * stored ones.
+           */
+          <div className="bsp-au-field">
+            <span className="bsp-lbl">{props.labels.brand}</span>
+            <span className="bsp-au-fixed">{initial.brandName}</span>
+          </div>
+        ) : (
+          <label className="bsp-au-field">
+            <span className="bsp-lbl">{props.labels.brand}</span>
             <select
-              name="actionUserId"
-              required
-              className="bs-control"
-              data-testid="automation-action-person"
-              defaultValue={initial?.actionUserId ?? undefined}
-              key={`person-${brandId}`}
+              name="brandId"
+              className="bs-control bsp-au-input"
+              data-testid="automation-brand"
+              value={brandId}
+              onChange={(event) => setBrandId(event.target.value)}
             >
-              {targetChoices(props.actionPeopleByBrand, initial?.actionUserId ?? null).map(
-                (option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ),
-              )}
-            </select>
-          </label>
-        ) : null}
-        {actionType === 'ADD_TO_CAMPAIGN' ? (
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.actionCampaign}</span>
-            <select
-              name="actionCampaignId"
-              required
-              className="bs-control"
-              data-testid="automation-action-campaign"
-              defaultValue={initial?.actionCampaignId ?? undefined}
-              key={`campaign-${brandId}`}
-            >
-              {targetChoices(props.actionCampaignsByBrand, initial?.actionCampaignId ?? null).map(
-                (option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ),
-              )}
-            </select>
-          </label>
-        ) : null}
-
-        {actionType === 'PAUSE_CAMPAIGN' ? (
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.actionCampaign}</span>
-            <select
-              name="actionCampaignId"
-              required
-              className="bs-control"
-              data-testid="automation-action-pause-campaign"
-              defaultValue={initial?.actionCampaignId ?? undefined}
-              key={`pause-campaign-${brandId}`}
-              aria-describedby="automation-pause-note"
-            >
-              {targetChoices(
-                props.actionPausableCampaignsByBrand,
-                initial?.actionCampaignId ?? null,
-              ).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {props.brands.map((brand) => (
+                <option key={brand.id} value={brand.id}>
+                  {brand.name}
                 </option>
               ))}
             </select>
-            <span id="automation-pause-note" style={caption} data-testid="automation-pause-note">
-              {props.labels.pauseNote}
-            </span>
           </label>
-        ) : null}
+        )}
+      </div>
 
-        {initial && initial.offsetHours !== null ? (
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.offsetHours}</span>
-            <input
-              name="offsetHours"
-              type="number"
-              min={0}
-              max={720}
-              step={1}
-              required
-              defaultValue={initial.offsetHours}
-              className="bs-control"
-              style={inputStyle()}
-              data-testid="automation-offset-hours"
-            />
-          </label>
-        ) : null}
+      {initial ? (
+        <label className="bsp-au-field">
+          <span className="bsp-lbl">{props.labels.description}</span>
+          <textarea
+            name="description"
+            maxLength={500}
+            rows={2}
+            defaultValue={initial.description}
+            className="bs-control bsp-au-input"
+            data-testid="automation-description"
+          />
+        </label>
+      ) : null}
 
+      <span className="bsp-lbl" id={`${formId}-when`}>
+        1 · {props.labels.when}
+      </span>
+      {initial ? (
+        <div className="bsp-au-tiles">
+          <span className="bsp-au-tile" data-on="true">
+            <span className="bsp-au-tile-l">{trigger?.label ?? initial.triggerType}</span>
+          </span>
+        </div>
+      ) : (
+        <div
+          role="radiogroup"
+          aria-labelledby={`${formId}-when`}
+          className="bsp-au-tiles"
+          data-testid="automation-trigger"
+        >
+          {props.triggers.map((option, index) => (
+            <label
+              key={option.type}
+              className="bsp-au-tile"
+              data-on={triggerType === option.type ? 'true' : undefined}
+              data-off={option.unavailable ? 'true' : undefined}
+            >
+              <input
+                type="radio"
+                name="triggerType"
+                value={option.type}
+                required
+                disabled={option.unavailable}
+                checked={triggerType === option.type}
+                ref={index === firstTrigger ? triggerPicker : undefined}
+                className="bs-control bsp-au-radio"
+                data-testid={`automation-trigger-${option.type}`}
+                onChange={() => {
+                  setTriggerType(option.type);
+                  // A field that is not produced by the NEW trigger must not
+                  // survive the change.
+                  setConditionField('');
+                }}
+              />
+              <span className="bsp-au-tile-l">
+                {option.unavailable
+                  ? props.labels.triggerUnavailable.replace('{trigger}', option.label)
+                  : option.label}
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+      <div className="bsp-au-subb">
         {trigger?.needsSchedule ? (
           <fieldset
             style={{
@@ -680,7 +608,10 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
             </label>
           </fieldset>
         ) : null}
+      </div>
 
+      <span className="bsp-lbl">2 · {props.labels.onlyIf}</span>
+      <div className="bsp-au-subb">
         {keepConditions ? (
           <p style={caption} data-testid="automation-conditions-kept">
             {(props.labels.conditionsKept ?? '').replace(
@@ -815,21 +746,191 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
             )}
           </fieldset>
         )}
+      </div>
 
-        <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
-          <button
-            type="submit"
-            style={buttonStyle('brand', 'sm')}
-            data-testid={editing ? 'automation-edit-submit' : 'automation-submit'}
-          >
-            {props.labels.submit}
-          </button>
-          {editing && props.cancelHref ? (
-            <Link href={props.cancelHref} style={buttonStyle('ghost', 'sm')}>
-              {props.labels.cancel}
-            </Link>
+      <span className="bsp-lbl" id={`${formId}-then`}>
+        3 · {props.labels.then}
+      </span>
+      {initial ? (
+        <div className="bsp-au-tiles">
+          <span className="bsp-au-tile bsp-au-act" data-on="true">
+            {actionLabel}
+            {pills(initial.actionType)}
+          </span>
+        </div>
+      ) : (
+        /*
+         * ONLY THE ACTIONS THIS TRIGGER SUPPORTS. `actionSupportsTrigger`
+         * decided this list on the server; an action that needs a content item
+         * is simply absent from a trigger that has none, so an incompatible pair
+         * cannot be chosen rather than being refused after submit.
+         */
+        <div
+          role="radiogroup"
+          ref={actionGroup}
+          aria-labelledby={`${formId}-then`}
+          className="bsp-au-tiles"
+          data-testid="automation-action"
+        >
+          {(trigger?.actionTypes ?? []).map((type) => (
+            <label
+              key={type}
+              className="bsp-au-tile bsp-au-act"
+              data-on={actionType === type ? 'true' : undefined}
+            >
+              <input
+                type="radio"
+                name="actionType"
+                value={type}
+                required
+                checked={actionType === type}
+                className="bs-control bsp-au-radio"
+                data-testid={`automation-action-${type}`}
+                onChange={() => setChosenAction(type)}
+              />
+              {props.actionLabels[type] ?? type}
+              {pills(type)}
+            </label>
+          ))}
+          {/*
+            No trigger chosen yet: the radio the browser reports, so "choose an
+            action" is said even while there is nothing to choose from.
+          */}
+          {(trigger?.actionTypes ?? []).length === 0 ? (
+            <input
+              type="radio"
+              name="actionType"
+              value=""
+              required
+              tabIndex={-1}
+              aria-hidden="true"
+              className="bs-control bsp-au-radio bsp-au-ghost"
+              onChange={() => undefined}
+              checked={false}
+            />
           ) : null}
         </div>
+      )}
+      <div className="bsp-au-subb">
+        {/*
+          PHASE 2B-3 PR 2 — THE G13 ACTIONS' OWN SETTINGS. The person to notify
+          and the campaign are picked from lists built for the rule's brand, so
+          nothing typed becomes a target; the engine re-checks both on save and
+          on every run. A saved choice that is no longer offered stays selected
+          as "No longer available", so an edit never silently changes it.
+        */}
+        {actionType === 'NOTIFY_PERSON' ? (
+          <label style={FIELD}>
+            <span style={caption}>{props.labels.actionPerson}</span>
+            <select
+              name="actionUserId"
+              required
+              className="bs-control"
+              data-testid="automation-action-person"
+              defaultValue={initial?.actionUserId ?? undefined}
+              key={`person-${brandId}`}
+            >
+              {targetChoices(props.actionPeopleByBrand, initial?.actionUserId ?? null).map(
+                (option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+        ) : null}
+        {actionType === 'ADD_TO_CAMPAIGN' ? (
+          <label style={FIELD}>
+            <span style={caption}>{props.labels.actionCampaign}</span>
+            <select
+              name="actionCampaignId"
+              required
+              className="bs-control"
+              data-testid="automation-action-campaign"
+              defaultValue={initial?.actionCampaignId ?? undefined}
+              key={`campaign-${brandId}`}
+            >
+              {targetChoices(props.actionCampaignsByBrand, initial?.actionCampaignId ?? null).map(
+                (option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+        ) : null}
+
+        {actionType === 'PAUSE_CAMPAIGN' ? (
+          <label style={FIELD}>
+            <span style={caption}>{props.labels.actionCampaign}</span>
+            <select
+              name="actionCampaignId"
+              required
+              className="bs-control"
+              data-testid="automation-action-pause-campaign"
+              defaultValue={initial?.actionCampaignId ?? undefined}
+              key={`pause-campaign-${brandId}`}
+              aria-describedby="automation-pause-note"
+            >
+              {targetChoices(
+                props.actionPausableCampaignsByBrand,
+                initial?.actionCampaignId ?? null,
+              ).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span id="automation-pause-note" style={caption} data-testid="automation-pause-note">
+              {props.labels.pauseNote}
+            </span>
+          </label>
+        ) : null}
+
+        {initial && initial.offsetHours !== null ? (
+          <label style={FIELD}>
+            <span style={caption}>{props.labels.offsetHours}</span>
+            <input
+              name="offsetHours"
+              type="number"
+              min={0}
+              max={720}
+              step={1}
+              required
+              defaultValue={initial.offsetHours}
+              className="bs-control"
+              style={inputStyle()}
+              data-testid="automation-offset-hours"
+            />
+          </label>
+        ) : null}
+      </div>
+
+      {trigger ? (
+        <div className="bsp-au-prev" data-testid="automation-preview">
+          <span className="bsp-au-prev-t">{props.labels.preview}</span>
+          <span className="bsp-au-prev-l">
+            {trigger.label}
+            {actionLabel ? ` → ${actionLabel}` : ''}
+          </span>
+        </div>
+      ) : null}
+
+      <div className="bsp-au-foot">
+        {props.cancelHref ? (
+          <Link href={props.cancelHref} className="bsp-btn bsp-sec">
+            {props.labels.cancel}
+          </Link>
+        ) : null}
+        <button
+          type="submit"
+          className="bsp-btn bsp-pur"
+          data-testid={editing ? 'automation-edit-submit' : 'automation-submit'}
+        >
+          {props.labels.submit}
+        </button>
       </div>
     </form>
   );

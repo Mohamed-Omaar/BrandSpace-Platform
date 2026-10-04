@@ -76,18 +76,28 @@ async function seed(label: string): Promise<Seeded> {
   return { ws, staleRun };
 }
 
+/*
+ * D-468 — the event and the action are the prototype's grids of choices, real
+ * radio buttons; the other pickers are still selects. Both read the same way.
+ */
 const values = (page: Page, testId: string) =>
   page
     .getByTestId(testId)
-    .locator('option')
-    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    .locator('option, input[type="radio"]:not([value=""])')
+    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLInputElement).value));
+const chosen = (page: Page, testId: string) =>
+  page.getByTestId(testId).locator('input[type="radio"]:checked');
+const pick = (page: Page, testId: string, value: string) =>
+  page.getByTestId(`${testId}-${value}`).check();
 
 const disabled = (page: Page, testId: string) =>
   page
     .getByTestId(testId)
-    .locator('option')
+    .locator('input[type="radio"]')
     .evaluateAll((nodes) =>
-      nodes.filter((node) => (node as HTMLOptionElement).disabled).map((node) => node.textContent),
+      nodes
+        .filter((node) => (node as HTMLInputElement).disabled)
+        .map((node) => node.closest('label')?.textContent ?? ''),
     );
 
 const COPY = {
@@ -146,12 +156,12 @@ async function stored(workspaceId: string, name: string) {
 
 async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise<void> {
   const copy = COPY[locale];
-  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations`);
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations?new=1`);
   if (locale === 'ar') await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 
   const trigger = page.getByTestId('automation-trigger');
   const action = page.getByTestId('automation-action');
-  await expect(trigger).toHaveValue('');
+  await expect(chosen(page, 'automation-trigger')).toHaveCount(0);
 
   // --- The catalogue: the analytics events after the timed ones, choosable ----
   expect((await values(page, 'automation-trigger')).slice(-2)).toEqual([
@@ -164,24 +174,24 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   expect(await disabled(page, 'automation-trigger')).toEqual([]);
 
   // --- Each event: its actions and its conditions ------------------------------
-  await trigger.selectOption('WEEKLY_ENGAGEMENT_DROPPED');
-  await expect(action).toHaveValue('');
+  await pick(page, 'automation-trigger', 'WEEKLY_ENGAGEMENT_DROPPED');
+  await expect(chosen(page, 'automation-action')).toHaveCount(0);
   // Phase 2B-3 PR 5 — a drop may pause a campaign (asks first).
-  expect(await values(page, 'automation-action')).toEqual(['', 'NOTIFY_PERSON', 'PAUSE_CAMPAIGN']);
+  expect(await values(page, 'automation-action')).toEqual(['NOTIFY_PERSON', 'PAUSE_CAMPAIGN']);
   // No condition to choose: the event is the condition.
   expect(await values(page, 'automation-condition-field')).toEqual(['']);
 
-  await trigger.selectOption('POST_TOP_10_PERCENT');
-  await expect(action).toHaveValue('');
-  expect(await values(page, 'automation-action')).toEqual(['', 'NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
+  await pick(page, 'automation-trigger', 'POST_TOP_10_PERCENT');
+  await expect(chosen(page, 'automation-action')).toHaveCount(0);
+  expect(await values(page, 'automation-action')).toEqual(['NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
   await expect(action).toContainText(copy.notify);
   await expect(action).toContainText(copy.copy);
   expect(await values(page, 'automation-condition-field')).toEqual(['', ...CONTENT_FIELDS]);
   await noSeriousViolations(page);
 
   // --- The weekly drop × notify a person, from the keyboard --------------------
-  await trigger.selectOption('WEEKLY_ENGAGEMENT_DROPPED');
-  await action.selectOption('NOTIFY_PERSON');
+  await pick(page, 'automation-trigger', 'WEEKLY_ENGAGEMENT_DROPPED');
+  await pick(page, 'automation-action', 'NOTIFY_PERSON');
   const person = page.getByTestId('automation-action-person');
   await expect(person).toBeVisible();
   await action.focus();
@@ -201,9 +211,9 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await expect(page.getByTestId(`automation-older-${weekly.id}`)).toHaveCount(0);
 
   // --- The top 10% × a draft copy, which needs no settings ---------------------
-  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations`);
-  await trigger.selectOption('POST_TOP_10_PERCENT');
-  await action.selectOption('MAKE_DRAFT_COPY');
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations?new=1`);
+  await pick(page, 'automation-trigger', 'POST_TOP_10_PERCENT');
+  await pick(page, 'automation-action', 'MAKE_DRAFT_COPY');
   await expect(page.getByTestId('automation-action-person')).toHaveCount(0);
   await expect(page.getByTestId('automation-action-campaign')).toHaveCount(0);
   const topName = `Top ${locale} ${randomUUID().slice(0, 6)}`;
@@ -222,6 +232,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await expect(page.getByTestId(`automation-older-${top.id}`)).toHaveCount(0);
 
   // --- Run history: a top post re-checked at delivery, in words ---------------
+  await page.getByTestId('automations-tab-runs').click();
+  await expect(page.getByTestId('automation-runs')).toBeVisible();
   await expect(page.getByTestId(`automation-run-status-${seeded.staleRun}`)).toHaveText(
     copy.skipped,
   );
