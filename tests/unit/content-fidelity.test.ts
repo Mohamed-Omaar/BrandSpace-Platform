@@ -354,16 +354,16 @@ describe('the Content Studio stylesheet is a transcription of the pinned demo', 
     expect(ported).not.toContain('300px');
   });
 
-  it('the composer markup is the demo’s composition', () => {
+  it('the composer markup is the prototype Studio’s composition (D-468)', () => {
     /*
      * The class names a reviewer would look for, asserted against the VIEW
      * rather than the stylesheet — a stylesheet full of ported rules nothing
      * renders is not a port.
      *
-     * THE LIBRARY IS NO LONGER A DEMO PORT. The owner's final UX contract
-     * (D-277 §15, D-282) replaced its gradient cards with a media-first library
-     * built from the design system; that decision supersedes this assertion
-     * for `/content`, and `docs/UI-FIDELITY-CONTRACT.md` records it.
+     * D-468 (batch 2) SUPERSEDES THE DEMO COMPOSER FOR THIS ROUTE: the Studio
+     * of prototype-2026-09-27 is the authority, transcribed in
+     * `@brandspace/ui/prototype.css` §3-STUDIO — the settings card, the editor
+     * and preview cards, and the sticky bar.
      */
     const composer = readFileSync(
       path.join(ROOT, 'apps/dashboard/src/app/[locale]/content/compose/composer-view.tsx'),
@@ -371,14 +371,14 @@ describe('the Content Studio stylesheet is a transcription of the pinned demo', 
     );
 
     for (const className of [
-      'cs-view-toolbar',
-      'cs-composer',
-      'cs-surface-card',
-      'cs-channel-row',
-      'cs-channel',
-      'cs-field',
-      'cs-form-row',
-      'cs-form-actions',
+      'bsp-st',
+      'bsp-st-set',
+      'bsp-st-grid',
+      'bsp-st-ed',
+      'bsp-st-prev',
+      'bsp-st-bar',
+      'bsp-seg',
+      'bsp-chip',
     ]) {
       expect(composer, `the composer does not render .${className}`).toContain(className);
     }

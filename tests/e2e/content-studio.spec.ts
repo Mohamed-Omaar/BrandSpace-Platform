@@ -383,7 +383,7 @@ test.describe('generation', () => {
 
     // The screen is Arabic throughout: no English fallback leaked into a label.
     await expect(page.getByTestId('content-composer')).toBeVisible();
-    await expect(page.locator('.cs-view-toolbar')).toContainText(/[؀-ۿ]/);
+    await expect(page.locator('.bsp-st-set')).toContainText(/[؀-ۿ]/);
   });
 
   test('AC-11.6 — nothing on the page names a model, a provider or a prompt', async ({ page }) => {
@@ -479,7 +479,7 @@ test.describe('writing a post by hand', () => {
      * post, and a channel that cannot is disabled rather than silently dropped
      * at publish time.
      */
-    await page.getByTestId('content-format').selectOption('REEL');
+    await page.getByTestId('content-format').locator('button[data-value="REEL"]').click();
 
     // TWO channels that CAN carry a reel, so the fan-out is observable.
     const channels = page.locator('[data-testid="content-channel"]:not([disabled])');
@@ -613,7 +613,7 @@ test.describe('writing a post by hand', () => {
        * anything had been written to it. `ok=SAVED` is what the action redirects
        * to, so it is the thing that says the save finished.
        */
-      await variant.locator('button[type="submit"]').first().click();
+      await page.getByTestId(`editor-save-${platformKey}`).click();
       await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
 
       // THE ROW FIRST — if the save did not happen, say so here rather than
@@ -1111,7 +1111,7 @@ test.describe('the composer is the demo, in both directions', () => {
     await openComposer(page);
 
     const columns = async () =>
-      page.locator('.cs-composer').evaluate((el) => getComputedStyle(el).gridTemplateColumns);
+      page.locator('.bsp-st-grid').evaluate((el) => getComputedStyle(el).gridTemplateColumns);
 
     await page.setViewportSize({ width: 1440, height: 900 });
     expect((await columns()).split(' ')).toHaveLength(2);

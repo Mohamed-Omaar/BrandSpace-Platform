@@ -414,6 +414,70 @@ campaigns than fit scrolls the "…" menu inside itself.
 **Left out — no data or feature.** The card's "Retry" opens the Publishing log, where the failed
 post's retry is: retrying needs the publish job, which a library card does not carry.
 
+### Studio — the post editor (`Main.dc.html` lines 329–537)
+
+Ported: the banner for the post being edited (its picture, "Editing", status, title and what that
+status means here, with the ways on, on the prototype's per-state backgrounds); the settings card's
+twelve-column grid (Format, "Post to", the publish time with its glass popover, Campaign); the editor
+card with its Words / Design tabs and sliding pill beside the 380px preview card with its channel
+tabs; the caption field, its count, the AI edit chips and their cost line; the hashtag block (count,
+the tags as removable chips, the field); the changed-fact warning (`capFix`: area, old → new, Rewrite,
+Keep as is) and the "Used N Brand Brain facts" line with its list (`bbUse`); "Will it land right?" —
+one card per channel with its status and its caption, hashtags and media rows; and the sticky bar
+(status, saved, the next step). A new post is the same frame: the settings card (Format as the
+prototype's segmented switch, "Post to" chips), the brief in the editor card, the preview card, and
+the bar with Estimate, Save without AI and Write the draft.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-277 §20–§22 / D-284: every channel keeps its own version of the post — the "Post to" chips are
+  the tabs that choose the version being edited (the prototype's chips add or remove a channel, which
+  a written post cannot), and the preview card's tabs follow the same choice.
+- §27: there is no autosave. The bar's Save is the version's save (it submits that version's form),
+  and the saved line says "Saved 5 min ago" or "Unsaved changes" rather than the prototype's
+  "saves as you type".
+- D-288 / Q10: the next step follows the brand's approval policy — Send for review (with the reviewer
+  picker in the prototype's reviewer chip) and, where approval is not needed or has been given,
+  Schedule. Changes requested is answered from the banner (reply, reviewer, resend).
+- B9 / F2: the publish-time popover holds the product's date and time, posted to the calendar's
+  schedule action, offered exactly where Schedule is; the prototype's "Best time automatically" and
+  "Right after approval" modes and its suggested times are not features of the product.
+- D-285 / §23–§25: the Design tab is the product's media slides (order, cover, replace, remove, slide
+  headlines) and media drawer (library, upload, Generate with AI). The prototype's source tiles,
+  brand-template panel and slide strip are not drawn.
+- AC-27.4: the preview is the product's `SocialPostPreview` — the post's real media, carousel paging
+  and format — with "Compare previews"; the prototype's hand-drawn Instagram, Facebook, TikTok and
+  LinkedIn frames are not.
+- D-224 / Q18: a new post's controls stay the product's — template, language, goal (with the
+  recommended goal and "Stop using" defaults), campaign — as fields of the settings card.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the cards stack in one column, the
+settings one field to a row, and the bar wraps.
+
+**(c) States the prototype does not draw.** A failed post's ways on (Reschedule, Make a new copy), a
+published post's read-only note, the in-review, approved and scheduled warnings, an image carried
+from the Creative Studio, and a changes request — all in the banner. The product's validation in
+words, each with its fix (Shorten with AI, Choose media), and an expired channel's explanation sit in
+that channel's check card. Restore, Save as template and Archive (asked first) sit under the checks.
+The format of a written post is shown, not offered: it is chosen when the post is written. More
+formats than the prototype's four wrap the switch. Below 1100px the editor and preview cards stack and
+the bar wraps; the bar keeps its end clear for the shell's floating Copilot, which stands where the
+prototype's bar has its own Copilot button.
+
+**Accessibility findings.** The tag's ✕ (`#8a6ad8`, 3.6:1 on `#f6f3ff`) takes the tag's purple ink
+and a 24px target; the popover note, the empty notes and the fact areas (`#8a8a92`) take `#6a6a72`.
+The Words / Design switch is a group of pressed buttons rather than the prototype's `role="tab"` with
+`aria-pressed`, which is not a valid pairing.
+
+**Left out — no data or feature.** The brief's "Or start from" ideas and "Write caption with AI" on a
+written post (AI edits are the chips; a new post is written from the brief), the content pillar
+("auto-picked"), the hashtag suggestion groups and "Other ideas", the size and safe-zone line, the
+post's notes count in the preview card (the notes stay below the Studio), "After publishing,
+BrandSpace opens the live post and checks…" (no such check exists), the bar's second "When" chip,
+"Open approvals", and the Copilot button. The product's own lifecycle path ("Where this post
+stands") and "Back to the library" link are not drawn: the prototype states the status as the bar's
+pill and leaves navigation to the rail.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

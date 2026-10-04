@@ -394,6 +394,7 @@ export default async function ComposePage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
+      eyebrow={translate('nav.group.create')}
       heading={translate('content.composer.title')}
       description={translate('content.subtitle')}
       activePath="/content"
@@ -1008,6 +1009,7 @@ export default async function ComposePage({
       flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
+      eyebrow={translate('nav.group.create')}
       heading={translate(draft ? 'content.composer.editTitle' : 'content.composer.title')}
       description={translate('content.subtitle')}
       activePath="/content"
@@ -1384,6 +1386,24 @@ const COMPOSER_KEYS = [
   'content.preview.actions',
   // And the composer's own withdraw control, blank for the same reason.
   'content.composer.withdraw',
+  'studio.editing',
+  'studio.format',
+  'studio.postTo',
+  'studio.when',
+  'studio.whenTitle',
+  'studio.whenUnset',
+  'studio.whenDone',
+  'studio.tabWords',
+  'studio.tabVisual',
+  'studio.preview',
+  'studio.checks',
+  'studio.ready',
+  'studio.fix',
+  'studio.row.caption',
+  'studio.row.tags',
+  'studio.row.media',
+  'studio.tagsNone',
+  'studio.tagRemove',
   'content.composer.eyebrow',
   'content.composer.title',
   'content.composer.back',

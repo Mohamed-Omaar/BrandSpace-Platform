@@ -238,6 +238,8 @@ test.describe('B9 · the Studio: inline date and time, and "Save as template"', 
     await page.getByTestId('content-write-manual').click();
     await page.waitForURL(/\/en\/content\/compose\?item=/);
 
+    // D-468: the date and time are in the Studio's publish-time popover.
+    await page.getByTestId('editor-when').click();
     const form = page.getByTestId('editor-schedule-inline');
     await expect(form).toBeVisible();
     const date = page.getByTestId('editor-schedule-date');
@@ -258,6 +260,7 @@ test.describe('B9 · the Studio: inline date and time, and "Save as template"', 
     await page.getByTestId('save-as-template-submit').click();
     await page.waitForURL(/ok=TEMPLATE_SAVED/);
 
+    await page.getByTestId('editor-when').click();
     await page.getByTestId('editor-schedule-submit').click();
     await page.waitForURL(/ok=CONTENT_SCHEDULED/);
     await expect(page.getByTestId('editor-schedule-inline')).toHaveCount(0);

@@ -365,7 +365,9 @@ test('7 · a picture is uploaded from the composer into the one library', async 
 
   const name = `journey-${RUN}.png`;
   state.uploadedAssetName = name;
-  // D-285: uploading lives in the composer's media drawer, still in the post.
+  // D-285: uploading lives in the composer's media drawer, still in the post
+  // (D-468: on the Studio's Design tab).
+  await page.getByTestId('studio-tab-visual').click();
   await page.locator('[data-testid^="content-media-"][data-testid$="-add"]').first().click();
   await page.getByTestId('media-tab-upload').click();
   await expect(page.getByTestId('composer-upload-form')).toBeVisible();
@@ -485,6 +487,7 @@ test('9 · media is attached to the variant and shows in the social preview', as
     .poll(
       async () => {
         await page.reload();
+        await page.getByTestId('studio-tab-visual').click();
         await addButton.first().click();
         const count = await page.locator('[data-testid^="media-choose-"]:not([disabled])').count();
         if (count === 0) await page.getByTestId('media-drawer-close').click();
@@ -494,7 +497,8 @@ test('9 · media is attached to the variant and shows in the social preview', as
     )
     .toBeGreaterThan(0);
   await page.locator('[data-testid^="media-choose-"]:not([disabled])').first().click();
-  await clickAndSettle(variantForm.locator('[data-testid^="editor-save-"]').first(), page);
+  // The Studio's Save sits in the sticky bar, submitting the variant's form.
+  await clickAndSettle(page.locator('[data-testid^="editor-save-"]').first(), page);
 
   // SAVED, AND SHOWN. The preview is the approved `SocialPostPreview` fed the
   // real caption and the real picture — what will actually be published.

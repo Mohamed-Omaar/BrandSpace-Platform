@@ -21,7 +21,7 @@ describe('D-288', () => {
 
   it('the next step is chosen by the brand policy, and scheduling needs its own permission', () => {
     const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
-    expect(editor).toMatch(/review\?\.requiresApproval \? 'cs-dark-button'/);
+    expect(editor).toMatch(/review\?\.requiresApproval \? 'bsp-btn bsp-pur'/);
     expect(editor).toMatch(/can\.schedule &&/);
     const page = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
     expect(page).toMatch(/schedule: workspace\.permissionKeys\.includes\('content\.schedule'\)/);

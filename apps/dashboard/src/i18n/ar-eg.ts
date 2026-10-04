@@ -108,4 +108,18 @@ export const arEgOverrides = {
   'content.p.retry': 'أعد المحاولة',
   'content.menu.addCampaign': 'ضيفه لحملة',
   'content.menu.changeCampaign': 'غيّر الحملة',
+
+  // Batch 2 — Studio (Main.dc.html lines 329–537; copy at 2176–2177, 2311, 2324–2326, 2577).
+  'studio.editing': 'بتعدّل',
+  'studio.postTo': 'انشر على',
+  'studio.when': 'ميعاد النشر',
+  'studio.whenTitle': 'هينزل إمتى؟',
+  'studio.whenUnset': 'لسه متجدولش',
+  'studio.whenDone': 'تمام',
+  'studio.tabWords': 'الكلام',
+  'studio.checks': 'هينزل صح؟',
+  'studio.fix': 'محتاج تعديل',
+  'studio.row.tags': 'الهاشتاجات',
+  'studio.tagsNone': 'لسه مفيش هاشتاجات.',
+  'studio.tagRemove': 'شيل {tag}',
 } as const satisfies Partial<Record<MessageKey, string>>;

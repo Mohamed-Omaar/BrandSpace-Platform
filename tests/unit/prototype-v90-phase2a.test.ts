@@ -348,7 +348,7 @@ describe('E3 + Q18 · spending credits needs copilot.use as well as the feature 
     );
     const composer = read('apps/dashboard/src/app/[locale]/content/compose/composer-view.tsx');
     expect(composer).toMatch(
-      /\{can\.generate \? \(\s*<button[^>]*?\s*type="button"\s*className="cs-ghost-button"/,
+      /\{can\.generate \? \(\s*<button[^>]*?\s*type="button"\s*className="bsp-btn bsp-sec"/,
     );
     // Writing it yourself spends nothing and stays available.
     expect(composer).toContain('const canWrite = hasInputs && draft === null;');

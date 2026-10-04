@@ -127,7 +127,7 @@ test.describe('D-288 · the next step follows the brand policy', () => {
       'href',
       `/en/calendar?item=${f.itemId}`,
     );
-    await expect(page.getByTestId('submit-for-review')).toHaveClass(/cs-ghost-button/);
+    await expect(page.getByTestId('submit-for-review')).toHaveClass(/bsp-sec/);
     await expect(page.getByTestId('editor-needs-approval')).toHaveCount(0);
   });
 
@@ -136,7 +136,7 @@ test.describe('D-288 · the next step follows the brand policy', () => {
     await signIn(page, f.brandId);
     await page.goto(compose(f.itemId));
     await expect(page.getByTestId('editor-needs-approval')).toBeVisible();
-    await expect(page.getByTestId('submit-for-review')).toHaveClass(/cs-dark-button/);
+    await expect(page.getByTestId('submit-for-review')).toHaveClass(/bsp-pur/);
     await expect(page.getByTestId('editor-schedule')).toHaveCount(0);
   });
 });

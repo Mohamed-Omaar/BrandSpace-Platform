@@ -71,15 +71,42 @@ const viaRail =
       .click();
   };
 
+/** Then press the first control with this English / Arabic name. */
+const thenPress =
+  (open: (page: Page) => Promise<void>, en: string, ar: string) =>
+  async (page: Page): Promise<void> => {
+    await open(page);
+    await page
+      .getByRole('button', { name: new RegExp(`^\\s*\\+?\\s*(${en}|${ar})\\s*$`) })
+      .first()
+      .click();
+  };
+
 /** The screens of a batch: the product route, and how the prototype is brought to it. */
 const SCREENS: readonly {
   readonly key: string;
   readonly route: string;
   readonly prototype?: (page: Page) => Promise<void>;
+  /** After the route: how the product is brought to the same screen. */
+  readonly product?: (page: Page) => Promise<void>;
 }[] = [
   { key: 'home', route: '/overview' },
   { key: 'calendar', route: '/calendar', prototype: viaRail('Calendar', 'التقويم') },
   { key: 'posts', route: '/content', prototype: viaRail('Posts', 'المنشورات') },
+  {
+    key: 'studio',
+    route: '/content/compose?mode=write',
+    prototype: thenPress(viaRail('Posts', 'المنشورات'), 'New post', 'منشور جديد'),
+  },
+  {
+    key: 'studio-post',
+    route: '/content',
+    prototype: thenPress(viaRail('Posts', 'المنشورات'), 'Continue', 'كمّل'),
+    product: async (page) => {
+      await page.locator('[data-testid^="content-edit-"]').first().click();
+      await page.waitForURL(/content\/compose\?item=/);
+    },
+  },
 ];
 
 /**
@@ -136,6 +163,7 @@ test.describe('prototype parity screenshots (D-468)', () => {
 
         await signIn(page, locale);
         await page.goto(`${DASHBOARD_BASE_URL}/${locale}${screen.route}`);
+        if (screen.product) await screen.product(page);
         await settle(page);
         await shoot(page, (n) => path.join(OUT, `${screen.key}-${locale}-${n}-product.png`));
       });

@@ -151,6 +151,7 @@ test.describe('D-287 · the Asset Library', () => {
     const itemId = await postUsing(picture, `Lapsed ${tag}`);
     await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
     await expect(page.getByTestId('editor-issues-instagram')).toContainText('licence has ended');
+    await page.getByTestId('studio-tab-visual').click();
     await page.getByTestId('content-media-instagram-add').click();
     await expect(page.getByTestId(`media-choose-${picture}`)).toHaveCount(0);
   });

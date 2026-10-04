@@ -140,6 +140,8 @@ test.describe('Q12 · the real Viewer reads Content, and is offered nothing it w
     await signInAsViewer(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
     await expect(page.getByTestId('content-composer')).toBeVisible();
+    // D-468: the media are on the Studio's Design tab.
+    await page.getByTestId('studio-tab-visual').click();
     await expect(page.getByTestId('content-media-instagram')).toBeVisible();
     for (const selector of [
       '[data-testid="content-media-instagram-add"]',

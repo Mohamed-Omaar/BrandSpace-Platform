@@ -57,8 +57,8 @@ test.describe('Create Post — the entry (§17)', () => {
     await page.waitForURL((url) => url.searchParams.get('mode') === 'write');
     await expect(page.getByTestId('content-composer')).toBeVisible();
     // Writing it yourself: saving is the primary action, generating is not.
-    await expect(page.getByTestId('content-write-manual')).toHaveClass(/cs-dark-button/);
-    await expect(page.getByTestId('content-generate')).toHaveClass(/cs-ghost-button/);
+    await expect(page.getByTestId('content-write-manual')).toHaveClass(/bsp-pur/);
+    await expect(page.getByTestId('content-generate')).toHaveClass(/bsp-sec/);
     await expect(page.getByText('Your post', { exact: true })).toBeVisible();
     // No goal on a post the person writes word for word.
     await expect(page.getByTestId('content-goal')).toHaveCount(0);
@@ -80,7 +80,7 @@ test.describe('Create Post — format and goal (§18, §19)', () => {
     await expect(format).toBeVisible();
 
     // The seeded registry: reels on Instagram and TikTok, never on LinkedIn.
-    await format.selectOption('REEL');
+    await format.locator('button[data-value="REEL"]').click();
     await expect(
       page.locator('[data-testid="content-channel"][data-platform="linkedin"]'),
     ).toBeDisabled();
@@ -96,7 +96,7 @@ test.describe('Create Post — format and goal (§18, §19)', () => {
     }
 
     // Back to a plain post: every channel can carry it again.
-    await format.selectOption('POST');
+    await format.locator('button[data-value="POST"]').click();
     await expect(
       page.locator('[data-testid="content-channel"][data-platform="linkedin"]'),
     ).toBeEnabled();
@@ -256,7 +256,7 @@ test.describe('Create Post — the draft editor (§20-§22, §27)', () => {
     await signIn(page);
     await page.goto(compose('en', `?item=${itemId}`));
 
-    await expect(page.getByTestId('draft-context')).toContainText('Using');
+    await expect(page.getByTestId('draft-brain')).toContainText('Using');
     await expect(page.getByTestId('variant-tab-instagram')).toHaveAttribute(
       'aria-selected',
       'true',
@@ -447,6 +447,8 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     const { itemId, variantId } = await formatDraft('CAROUSEL', slides);
     await signIn(page);
     await page.goto(compose('en', `?item=${itemId}`));
+    // D-468: the media are on the Studio's Design tab.
+    await page.getByTestId('studio-tab-visual').click();
 
     const media = page.getByTestId('content-media-instagram');
     await expect(media.getByTestId('content-media-instagram-slide-0')).toContainText('Slide 01');
@@ -473,6 +475,8 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     const { itemId, variantId } = await formatDraft('REEL', [video, image]);
     await signIn(page);
     await page.goto(compose('en', `?item=${itemId}`));
+    // D-468: the media are on the Studio's Design tab.
+    await page.getByTestId('studio-tab-visual').click();
 
     // The video shows its measured length; only the image can be the cover.
     await expect(page.getByTestId('content-media-instagram-slide-0')).toContainText('0:15');
@@ -482,6 +486,7 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
 
     await page.reload();
+    await page.getByTestId('studio-tab-visual').click();
     await expect(page.getByTestId('content-media-instagram-cover-1')).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -497,6 +502,8 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     const { itemId, variantId } = await formatDraft('POST', []);
     await signIn(page);
     await page.goto(compose('en', `?item=${itemId}`));
+    // D-468: the media are on the Studio's Design tab.
+    await page.getByTestId('studio-tab-visual').click();
 
     await page.getByTestId('content-media-instagram-add').click();
     const drawer = page.getByTestId('media-drawer');
@@ -557,6 +564,8 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     const { itemId, variantId } = await formatDraft('POST', []);
     await signIn(page);
     await page.goto(compose('en', `?item=${itemId}`));
+    // D-468: the media are on the Studio's Design tab.
+    await page.getByTestId('studio-tab-visual').click();
 
     await page.getByTestId('content-media-instagram-add').click();
     await page.getByTestId('media-tab-generate').click();

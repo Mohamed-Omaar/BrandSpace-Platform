@@ -2566,6 +2566,790 @@ span.bsp-cal-hol {
   }
 }
 
+/* --------------------------------------------------------- §3-STUDIO ---- */
+
+/*
+ * STUDIO (the post editor) — `Main.dc.html` lines 329–537 and its `.card`,
+ * `.lbl`, `.seg`, `.chip`, `.btn` and `.xstatus` rules. Batch 2 of D-468.
+ */
+
+/* `display: flex; flex-direction: column; gap: 16px; padding-bottom: 70px` */
+.bsp-st-root,
+.bsp-st {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-inline-size: 0;
+}
+.bsp-st {
+  padding-bottom: 70px;
+}
+.bsp-st-root > *,
+.bsp-st > * {
+  min-inline-size: 0;
+}
+/* A panel the tabs hide stays in its form; its own `display` must not show it. */
+.bsp-st-root [hidden] {
+  display: none !important;
+}
+
+/* The banner for the post being edited (`ep`), and its background per state
+   (`EPV.bg`): draft `#ffffff`, scheduled, in review, published, failed. */
+.bsp-st-ep {
+  border-radius: 20px;
+  padding: 14px 18px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.bsp-st-ep[data-tone='sched'] {
+  background: linear-gradient(145deg, #eee6ff, #fff9d7);
+}
+.bsp-st-ep[data-tone='review'] {
+  background: #fff9e6;
+}
+.bsp-st-ep[data-tone='pub'] {
+  background: #f5fbf7;
+}
+.bsp-st-ep[data-tone='failed'] {
+  background: #fff8f9;
+}
+.bsp-st-ep-art {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: block;
+  background: #e4e4e8;
+}
+.bsp-st-ep-art > * {
+  width: 100%;
+  height: 100%;
+}
+.bsp-st-ep-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-grow: 1;
+  min-width: 0;
+}
+.bsp-st-ep-kick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bsp-st-ep-kick > span:first-child {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6a6a72;
+}
+.bsp-st-ep-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.bsp-st-ep-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #55555c;
+  margin: 0;
+}
+/* A state the prototype's banner does not draw (D-468 (c)): a failed post's
+   ways on, a changes request and its answer — on their own line inside it. */
+.bsp-st-ep-more {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bsp-st-ep-sub {
+  font-size: 13px;
+  font-weight: 700;
+}
+.bsp-st-ep-acts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.bsp-st-resubmit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The settings card: `padding: 16px 18px; display: grid;
+   grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px 18px`. */
+.bsp-st-set {
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+.bsp-st-f {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.bsp-st-f12 {
+  grid-column: span 12;
+}
+.bsp-st-f7 {
+  grid-column: span 7;
+}
+.bsp-st-f5 {
+  grid-column: span 5;
+}
+.bsp-st-f4 {
+  grid-column: span 4;
+}
+/* `.seg` with `display: flex; width: 100%; box-sizing: border-box`, its
+   buttons `flex: 1 1 0`. More formats than the prototype's four wrap. */
+.bsp-st-seg-full {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+}
+.bsp-st-seg-full > button {
+  flex: 1 1 0;
+}
+.bsp-st-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* A channel tab is a chip; the chosen one is the pressed chip. */
+.bsp-chip[aria-selected='true'] {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
+.bsp-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* A value the screen states rather than offers — the chip's outline, no press. */
+.bsp-st-fixed {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  border: 1px solid #e4e4e8;
+  border-radius: 99px;
+  padding: 5px 11px;
+  font-size: 12.5px;
+  font-weight: 600;
+  min-block-size: 32px;
+  box-sizing: border-box;
+  align-self: flex-start;
+}
+.bsp-st-fixed-sub {
+  font-weight: 500;
+  color: #6a6a72;
+}
+.bsp-st-anchor {
+  position: relative;
+  display: block;
+}
+.bsp-chip.bsp-st-wide {
+  cursor: pointer;
+  width: 100%;
+  justify-content: space-between;
+}
+.bsp-st-when-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bsp-chip.bs-control.bsp-st-select {
+  width: 100%;
+}
+.bsp-st-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.bsp-st-inline > .bsp-chip.bs-control.bsp-st-select {
+  width: auto;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The "When" popover: `position: absolute; top: 42px; inset-inline-start: 0;
+   z-index: 25; width: 300px`, the glass surface, `padding: 12px`, gap 10px. */
+.bsp-st-when {
+  position: absolute;
+  top: 42px;
+  inset-inline-start: 0;
+  z-index: 25;
+  width: 300px;
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 18px;
+  box-shadow:
+    0 22px 55px rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.05);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: bsp-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top center;
+}
+.bsp-st-when-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+/* `font-size: 11px; line-height: 1.5; color: #8a8a92` — `#6a6a72` here
+   (contrast, D-468 batch 1 accessibility finding). */
+.bsp-st-when-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #6a6a72;
+  margin: 0;
+}
+.bsp-st-when-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bsp-st-when-grid {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 8px;
+}
+.bsp-st-when-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.bsp-st-when-field > span {
+  font-size: 11px;
+  color: #6a6a72;
+}
+.bsp-st-when-input {
+  border: 1px solid #e4e4e8;
+  border-radius: 10px;
+  padding: 7px 8px;
+  font-size: 13px;
+  min-width: 0;
+}
+.bsp-st-when-acts {
+  display: flex;
+  justify-content: flex-end;
+}
+.bsp-btn.bsp-st-end {
+  align-self: flex-end;
+}
+
+/* `grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start` */
+.bsp-st-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 16px;
+  align-items: start;
+}
+.bsp-st-ed {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.bsp-st-ed > .bsp-seg {
+  align-self: flex-start;
+}
+.bsp-st-ok {
+  color: #16794b;
+}
+.bsp-st-panel,
+.bsp-st-words,
+.bsp-st-visual {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.bsp-st-visual:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+.bsp-st-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-st-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+/* The brief: `border: 1px solid transparent; background: #f5f5f7;
+   border-radius: 12px; padding: 10px 14px; font-size: 14px`. */
+.bsp-st-input {
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  min-width: 0;
+  font: inherit;
+  color: #111114;
+}
+/* The caption: `min-height: 150px; resize: vertical; … border-radius: 14px;
+   padding: 12px 14px; font-size: 14px; line-height: 1.65; color: #111114`. */
+.bsp-st-caption {
+  min-height: 150px;
+  resize: vertical;
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #111114;
+}
+.bsp-st-input:focus-visible,
+.bsp-st-caption:focus-visible,
+.bsp-st-tag-input:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: 1px;
+}
+.bsp-st-count {
+  font-size: 11.5px;
+  color: #6a6a72;
+  align-self: flex-end;
+  margin-top: -2px;
+}
+.bsp-st-count[data-over='true'] {
+  color: #b83245;
+}
+.bsp-st-tools {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* A small chip: `font-size: 12px; min-block-size: 28px; padding: 3px 10px` —
+   at least 28px, over WCAG 2.2's 24px target. */
+.bsp-chip.bsp-st-sm {
+  font-size: 12px;
+  min-block-size: 28px;
+  padding: 3px 10px;
+}
+.bsp-st-hint {
+  font-size: 11.5px;
+  color: #6a6a72;
+  align-self: center;
+  margin: 0;
+}
+.bsp-st-f > .bsp-st-hint {
+  align-self: flex-start;
+}
+
+/* Hashtags: `border-top: 1px solid #f0f0f2; padding-top: 14px`, gap 10px. */
+.bsp-st-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid #f0f0f2;
+  padding-top: 14px;
+}
+.bsp-st-tags-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.bsp-st-tags-count {
+  font-size: 11px;
+  color: #6a6a72;
+}
+.bsp-st-tag-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.bsp-chip.bsp-st-tag {
+  background: #f6f3ff;
+  border-color: #e6dcff;
+  color: #5312c4;
+  min-block-size: 28px;
+  padding: 3px 6px 3px 10px;
+  font-size: 12px;
+}
+/* The tag's ✕: the prototype's `#8a6ad8` is 3.6:1 on the tag's `#f6f3ff`, so
+   it takes the tag's own purple ink; and it is 24px square (WCAG 2.2). */
+.bsp-st-tag-x {
+  border: 0;
+  background: transparent;
+  color: #5312c4;
+  cursor: pointer;
+  padding: 0 2px;
+  min-inline-size: 24px;
+  min-block-size: 24px;
+}
+.bsp-st-tag-input {
+  flex-grow: 1;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  color: #111114;
+}
+.bsp-st-none {
+  font-size: 12px;
+  color: #6a6a72;
+  margin: 0;
+}
+
+/* The changed-fact warning (`capFix`): `border: 1px solid #f3dfa0;
+   background: #fffbea; border-radius: 14px; padding: 12px 14px`. */
+.bsp-st-capfix {
+  border: 1px solid #f3dfa0;
+  background: #fffbea;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bsp-st-capfix > b {
+  font-size: 13.5px;
+  color: #7a5600;
+}
+.bsp-st-capfix-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.bsp-st-capfix-row s {
+  color: #6a6a72;
+}
+.bsp-st-area {
+  color: #6a6a72;
+  min-width: 90px;
+}
+.bsp-st-grow {
+  flex-grow: 1;
+}
+
+/* "Used N Brand Brain facts" (`bbUse`): `font-size: 12.5px; color: #5312c4`. */
+.bsp-st-bb {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-st-bb-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #5312c4;
+  flex-wrap: wrap;
+}
+.bsp-st-summary {
+  cursor: pointer;
+  min-block-size: 24px;
+  font-weight: 700;
+}
+.bsp-st-bb-list {
+  border: 1px solid #ece4ff;
+  background: #fcfbff;
+  border-radius: 12px;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+}
+.bsp-st-bb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12.5px;
+}
+.bsp-st-link {
+  border: 0;
+  background: transparent;
+  color: #5312c4;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  min-block-size: 24px;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.bsp-st-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 12px;
+  padding: 9px 12px;
+  background: #f6f3ff;
+  font-size: 12.5px;
+}
+.bsp-st-defaults {
+  margin: 0;
+  padding-inline-start: 1rem;
+}
+.bsp-st-inline-form {
+  display: inline;
+}
+
+/* The preview card: `padding: 16px; gap: 12px`, its channel tabs
+   `flex: 1 1 0; min-width: 0; gap: 5px; padding-inline: 6px; font-size: 11.5px`. */
+.bsp-st-prev {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.bsp-st-prev-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.bsp-seg button.bsp-st-prev-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding-inline: 6px;
+  font-size: 11.5px;
+}
+.bsp-st-prev-tab > svg {
+  flex-shrink: 0;
+}
+.bsp-st-prev-tab > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "Will it land right?": `padding: 16px 18px; gap: 10px`, the cards
+   `repeat(auto-fill, minmax(230px, 1fr))`, each `border: 1px solid #f0f0f2;
+   border-radius: 14px; padding: 12px 14px`. */
+.bsp-st-checks {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bsp-st-checks-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.bsp-st-checks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+.bsp-st-check {
+  border: 1px solid #f0f0f2;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.bsp-st-check-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.bsp-st-check-mark {
+  display: inline-flex;
+  color: #26262b;
+  flex-shrink: 0;
+}
+.bsp-st-check-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  flex-grow: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bsp-st-noshrink {
+  flex-shrink: 0;
+}
+.bsp-st-check-row {
+  display: grid;
+  grid-template-columns: 14px 64px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+}
+.bsp-st-check-row > span:first-child {
+  text-align: center;
+  font-weight: 800;
+  color: #16794b;
+}
+.bsp-st-check-row[data-ok='false'] > span:first-child {
+  color: #b83245;
+}
+.bsp-st-check-row > span:nth-child(2) {
+  color: #6a6a72;
+}
+.bsp-st-check-row > span:nth-child(3) {
+  color: #26262b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The product's validation in words, with its fix (D-468 (c)): the expired
+   note's `font-size: 11.5px; line-height: 1.45; color: #8a5a00`. */
+.bsp-st-issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bsp-st-issues > li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #8a5a00;
+}
+.bsp-st-issues > li.error {
+  color: #b83245;
+}
+
+/* The product's further ways on (D-468 (c)): restore, template, archive. */
+.bsp-st-more {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.bsp-st-more summary {
+  list-style: none;
+  cursor: pointer;
+}
+.bsp-st-more summary::-webkit-details-marker {
+  display: none;
+}
+.bsp-st-disclosed {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-inline-size: 360px;
+}
+
+/* The sticky bar: `position: sticky; bottom: 0; z-index: 5; gap: 12px;
+   background: rgba(255,255,255,.94); backdrop-filter: blur(8px);
+   border: 1px solid #ececef; border-radius: 18px; padding: 10px 12px 10px 16px;
+   box-shadow: 0 -10px 30px rgba(20,16,35,.06)`. */
+.bsp-st-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid #ececef;
+  border-radius: 18px;
+  padding-block: 10px;
+  padding-inline: 16px 12px;
+  box-shadow: 0 -10px 30px rgba(20, 16, 35, 0.06);
+}
+/* The prototype's bar ends with its own Copilot button; here the shell's
+   floating Copilot (the global panel) sits at that end, so every row of the
+   bar keeps the end clear for it. */
+@media (min-width: 768px) {
+  .bsp-st-bar {
+    padding-inline-end: 168px;
+  }
+}
+/* Narrower than the prototype's 1440 frame (D-468 (c)): the editor and the
+   preview stack, and the settings fields take half a row or a whole one. */
+@media (max-width: 1099.98px) {
+  .bsp-st-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-st-f7,
+  .bsp-st-f5 {
+    grid-column: span 12;
+  }
+  .bsp-st-f4 {
+    grid-column: span 6;
+  }
+}
+.bsp-st-saved {
+  font-size: 12.5px;
+  color: #6a6a72;
+}
+.bsp-st-note {
+  font-size: 12.5px;
+  color: #4d4c53;
+  margin-inline-start: auto;
+}
+.bsp-st-bar > .bsp-st-inline {
+  flex-wrap: wrap;
+}
+/* The reviewer chip: `<span style="font-size: 11px; color: #6a6a72">` and the
+   name — here the name is the product's own select. */
+.bsp-chip.bsp-st-rev {
+  gap: 6px;
+  padding-block: 0;
+}
+.bsp-st-rev-label {
+  font-size: 11px;
+  color: #6a6a72;
+  white-space: nowrap;
+}
+.bs-control.bsp-st-rev-select {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  min-block-size: 30px;
+  padding: 0;
+  max-inline-size: 160px;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bsp-st-when {
+    animation: none !important;
+  }
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -2711,6 +3495,39 @@ span.bsp-cal-hol {
   .bsp-posts-head > .bsp-seg > a {
     flex-shrink: 0;
     white-space: nowrap;
+  }
+}
+
+/* The Studio below 768px: the product's phone layout — one column, the cards
+   stacked, the settings one field to a row, the bar wrapping. */
+@media (max-width: 767.98px) {
+  .bsp-st-set {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-st-f12,
+  .bsp-st-f7,
+  .bsp-st-f5,
+  .bsp-st-f4 {
+    grid-column: auto;
+  }
+  .bsp-st-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-st-bar {
+    flex-wrap: wrap;
+  }
+  .bsp-st-bar > .bsp-st-inline {
+    flex-wrap: wrap;
+  }
+  .bsp-st-note {
+    margin-inline-start: 0;
+    flex-basis: 100%;
+  }
+  .bsp-st-note:empty {
+    display: none;
+  }
+  .bsp-st-when {
+    width: min(300px, calc(100vw - 72px));
   }
 }
 
