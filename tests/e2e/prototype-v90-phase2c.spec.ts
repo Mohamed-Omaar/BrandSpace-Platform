@@ -574,6 +574,8 @@ test.describe('Item 1 · the composer’s goal and pillar ideas are writing inpu
       'Seasonal recipes',
     );
     await compose('ai');
+    // Review of #67 — the goal and its recommendation are under "⋯".
+    await page.getByTestId('content-more').click();
     await expect(page.getByTestId('content-goal-recommended')).toBeVisible();
 
     // The goal EXPIRED: no goal idea and no recommendation; the pillar stays.

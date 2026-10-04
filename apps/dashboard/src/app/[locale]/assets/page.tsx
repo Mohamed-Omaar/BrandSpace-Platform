@@ -426,8 +426,8 @@ export default async function AssetsPage({
       brandContext={brandContext}
       locale={locale}
       eyebrow={t('nav.group.create')}
-      heading={t('assets.title')}
-      description={t('assets.subtitle')}
+      heading={t('assets.media.title')}
+      description={t('assets.media.subtitle')}
       activePath="/assets"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -466,6 +466,7 @@ export default async function AssetsPage({
           ...(view ? { view } : {}),
           sort,
         }}
+        planHref={can('billing.read') ? `/${locale}/billing` : null}
         can={{
           // D-468 — the Generate tab is the Creative Studio, behind its own gate.
           generate: maySpendCredits(permissions, 'assets.upload'),

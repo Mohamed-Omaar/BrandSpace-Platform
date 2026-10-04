@@ -27,14 +27,52 @@ const GROUPS: readonly {
   readonly keys: readonly SettingsNavKey[];
 }[] = [
   { labelKey: 'settings.group.workspace', keys: ['settings', 'brand'] },
-  { labelKey: 'settings.group.people', keys: ['members', 'permissions', 'approvals'] },
+  { labelKey: 'settings.group.people', keys: ['members', 'approvals'] },
   {
     labelKey: 'settings.group.publishing',
     keys: ['connections', 'publishing', 'notifications'],
   },
   { labelKey: 'settings.group.aiBilling', keys: ['ai', 'billing'] },
-  { labelKey: 'settings.group.security', keys: ['security', 'data', 'activity'] },
+  { labelKey: 'settings.group.security', keys: ['security', 'data'] },
 ];
+
+/**
+ * ONE PAGE, TITLED "SETTINGS" (review of #67): the prototype's inner menu —
+ * General · Brands · Team & roles · Approvals · Accounts · Publishing defaults
+ * · Notifications · AI · Plan & billing · Security · Data — and each section's
+ * own heading and line under it. Every product route keeps its address and its
+ * own permission check; Roles & permissions belongs to Team & roles and the
+ * activity log to Security, as the prototype words them, so their routes light
+ * those rows and are reached from inside those sections.
+ */
+const SECTION: Readonly<Record<SettingsNavKey, string>> = {
+  settings: 'biz',
+  brand: 'brands',
+  members: 'team',
+  permissions: 'team',
+  approvals: 'appr',
+  connections: 'conn',
+  publishing: 'pub',
+  notifications: 'notif',
+  ai: 'ai',
+  billing: 'bill',
+  security: 'sec',
+  activity: 'sec',
+  data: 'data',
+};
+const ROW_OF: Partial<Record<SettingsNavKey, SettingsNavKey>> = {
+  permissions: 'members',
+  activity: 'security',
+};
+/** Inside a section: the product page that belongs to it, one link away. */
+const RELATED: Partial<
+  Record<SettingsNavKey, { readonly key: SettingsNavKey; readonly labelKey: MessageKey }>
+> = {
+  members: { key: 'permissions', labelKey: 'perms.title' },
+  permissions: { key: 'members', labelKey: 'members.title' },
+  security: { key: 'activity', labelKey: 'nav.activity' },
+  activity: { key: 'security', labelKey: 'security.title' },
+};
 
 export function SettingsFrame({
   locale,
@@ -49,11 +87,16 @@ export function SettingsFrame({
 }) {
   const t = translator(requestMessageLocale(locale));
   const items = settingsNavItems({ locale, permissionKeys, selected });
+  const row = ROW_OF[selected] ?? selected;
+  const section = SECTION[selected];
+  const related = RELATED[selected];
+  const relatedItem = related ? items.find((item) => item.key === related.key) : undefined;
   return (
     <div className="bs-settings-split bsp-sg" data-testid="settings-split">
       <nav aria-label={t('settings.navLabel')} className="bsp-sg-nav" data-testid="settings-nav">
         {GROUPS.map((group) => {
-          const rows = items.filter((item) => group.keys.includes(item.key));
+          // In the prototype's order within each group, not the table's.
+          const rows = group.keys.flatMap((key) => items.filter((item) => item.key === key));
           if (rows.length === 0) return null;
           return (
             <div key={group.labelKey} className="bsp-sg-grp">
@@ -63,16 +106,38 @@ export function SettingsFrame({
                   key={item.href}
                   href={item.href}
                   className="bsp-nav bsp-sg-item"
-                  aria-current={item.selected ? 'page' : undefined}
+                  aria-current={item.key === row ? 'page' : undefined}
+                  data-testid={`settings-nav-${item.key}`}
                 >
-                  {t(item.labelKey)}
+                  {t(`settings.sec.${SECTION[item.key]}` as MessageKey)}
                 </Link>
               ))}
             </div>
           );
         })}
       </nav>
-      <div className="bsp-sg-main">{children}</div>
+      <div className="bsp-sg-main">
+        {/*
+          The section's heading: `h2.sech` at 20px and the line under it
+          (12.5px, the muted grey), `Main.dc.html` line 1340.
+        */}
+        <div className="bsp-sg-head" data-testid="settings-section-head">
+          <span className="bsp-sg-headtext">
+            <h2 className="bsp-sech bsp-sg-title">{t(`settings.sec.${section}` as MessageKey)}</h2>
+            <span className="bsp-sg-sub">{t(`settings.sec.${section}.sub` as MessageKey)}</span>
+          </span>
+          {relatedItem && related ? (
+            <Link
+              href={relatedItem.href}
+              className="bsp-btn bsp-sm bsp-ghost"
+              data-testid={`settings-related-${related.key}`}
+            >
+              {t(related.labelKey)} →
+            </Link>
+          ) : null}
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

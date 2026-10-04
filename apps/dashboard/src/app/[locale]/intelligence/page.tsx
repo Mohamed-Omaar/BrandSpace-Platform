@@ -405,7 +405,7 @@ export default async function IntelligencePage({
                       >
                         <NarrativeBlock
                           title={t('intelligence.why')}
-                          lines={[{ text: narrative.why, evidence: [] }]}
+                          lines={narrative.why ? [{ text: narrative.why, evidence: [] }] : []}
                           testId="narrative-why"
                           evidenceLabel={t('insights.evidence')}
                           locale={locale}

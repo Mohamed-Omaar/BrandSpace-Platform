@@ -31,6 +31,8 @@ import type { MoveSlotResult } from './actions';
 import { pendingMoves, withMoves } from './optimistic-moves';
 import { VariantPreview, previewLabels } from '../content/compose/variant-preview';
 import { CopilotLink } from '../../../components/copilot-link';
+import { FiltersDisclosure } from '../../../components/filters-disclosure';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 import {
   PrototypeCalendar,
   type CalendarPostKind,
@@ -686,76 +688,99 @@ export function CalendarView({
           href: filterHref({ platform: filters.platform === platform.key ? '' : platform.key }),
         }))}
         headerAction={
-          canSchedule ? (
-            <button
-              type="button"
-              className="bsp-btn bsp-sm"
-              data-testid="calendar-schedule-open"
-              onClick={() => setScheduling(true)}
+          /*
+            Review of #67 — the prototype's head row has neither the filter
+            row nor "Add to calendar": the brand, campaign and status filters,
+            the time zone and the count are under "Filters", and adding to the
+            calendar is under "⋯". Nothing is removed.
+          */
+          <>
+            <FiltersDisclosure
+              label={t['content.p.filters'] ?? ''}
+              active={[filters.brand, filters.campaign, filters.status].filter(Boolean).length}
+              testId="calendar-filters-toggle"
+              wide
             >
-              {t['calendar.scheduleSubmit']}
-            </button>
-          ) : undefined
-        }
-        filters={
-          <div className="bsp-cal-filters" data-testid="calendar-filters">
-            {filterOptions ? (
-              <form
-                method="get"
-                action={`/${locale}/calendar`}
-                data-testid="calendar-filter-form"
-                className="bsp-cal-filter-form"
-              >
-                <input type="hidden" name="month" value={month} />
-                {filters.platform ? (
-                  <input type="hidden" name="platform" value={filters.platform} />
+              <div className="bsp-cal-filters" data-testid="calendar-filters">
+                {filterOptions ? (
+                  <form
+                    method="get"
+                    action={`/${locale}/calendar`}
+                    data-testid="calendar-filter-form"
+                    className="bsp-cal-filter-form"
+                  >
+                    <input type="hidden" name="month" value={month} />
+                    {filters.platform ? (
+                      <input type="hidden" name="platform" value={filters.platform} />
+                    ) : null}
+                    <FilterSelect
+                      id="calendar-filter-brand"
+                      name="brand"
+                      label={t['calendar.filter.brand'] ?? ''}
+                      allLabel={t['calendar.filter.all'] ?? ''}
+                      value={filters.brand}
+                      options={filterOptions.brands.map((b) => ({ value: b.id, label: b.name }))}
+                    />
+                    <FilterSelect
+                      id="calendar-filter-campaign"
+                      name="campaign"
+                      label={t['calendar.filter.campaign'] ?? ''}
+                      allLabel={t['calendar.filter.all'] ?? ''}
+                      value={filters.campaign}
+                      options={filterOptions.campaigns.map((c) => ({ value: c.id, label: c.name }))}
+                    />
+                    <FilterSelect
+                      id="calendar-filter-status"
+                      name="status"
+                      label={t['calendar.filter.status'] ?? ''}
+                      allLabel={t['calendar.filter.all'] ?? ''}
+                      value={filters.status}
+                      options={filterOptions.statuses.map((st) => ({
+                        value: st.key,
+                        label: st.label,
+                      }))}
+                    />
+                    <button
+                      type="submit"
+                      className="bsp-btn bsp-sm bsp-sec"
+                      data-testid="calendar-filter-apply"
+                    >
+                      {t['calendar.filter.apply']}
+                    </button>
+                  </form>
                 ) : null}
-                <FilterSelect
-                  id="calendar-filter-brand"
-                  name="brand"
-                  label={t['calendar.filter.brand'] ?? ''}
-                  allLabel={t['calendar.filter.all'] ?? ''}
-                  value={filters.brand}
-                  options={filterOptions.brands.map((b) => ({ value: b.id, label: b.name }))}
-                />
-                <FilterSelect
-                  id="calendar-filter-campaign"
-                  name="campaign"
-                  label={t['calendar.filter.campaign'] ?? ''}
-                  allLabel={t['calendar.filter.all'] ?? ''}
-                  value={filters.campaign}
-                  options={filterOptions.campaigns.map((c) => ({ value: c.id, label: c.name }))}
-                />
-                <FilterSelect
-                  id="calendar-filter-status"
-                  name="status"
-                  label={t['calendar.filter.status'] ?? ''}
-                  allLabel={t['calendar.filter.all'] ?? ''}
-                  value={filters.status}
-                  options={filterOptions.statuses.map((st) => ({ value: st.key, label: st.label }))}
-                />
+                {/*
+                  THE ZONE IS STATED, ALWAYS. Every time on this screen is a
+                  wall-clock in the workspace's zone, and a calendar that does not
+                  say which zone it means is a calendar people misread — which is
+                  the whole reason the slot stores the intent (AC-14.2, AC-14.3).
+                */}
+                <span data-testid="calendar-timezone" className="bsp-cal-note">
+                  {t['calendar.timezoneNote']}: {timezone}
+                </span>
+                <span data-testid="calendar-quota" className="bsp-cal-note">
+                  {quotaText}
+                </span>
+              </div>
+            </FiltersDisclosure>
+            {canSchedule ? (
+              <MoreDisclosure
+                label={t['calendar.scheduleSubmit'] ?? ''}
+                testId="calendar-more"
+                align="end"
+                closeOnPick
+              >
                 <button
-                  type="submit"
-                  className="bsp-btn bsp-sm bsp-sec"
-                  data-testid="calendar-filter-apply"
+                  type="button"
+                  className="bsp-btn bsp-sm"
+                  data-testid="calendar-schedule-open"
+                  onClick={() => setScheduling(true)}
                 >
-                  {t['calendar.filter.apply']}
+                  {t['calendar.scheduleSubmit']}
                 </button>
-              </form>
+              </MoreDisclosure>
             ) : null}
-            {/*
-              THE ZONE IS STATED, ALWAYS. Every time on this screen is a
-              wall-clock in the workspace's zone, and a calendar that does not
-              say which zone it means is a calendar people misread — which is
-              the whole reason the slot stores the intent (AC-14.2, AC-14.3).
-            */}
-            <span data-testid="calendar-timezone" className="bsp-cal-note">
-              {t['calendar.timezoneNote']}: {timezone}
-            </span>
-            <span data-testid="calendar-quota" className="bsp-cal-note">
-              {quotaText}
-            </span>
-          </div>
+          </>
         }
         newPostHref={canCreate ? (dayKey) => `/${locale}/content/compose?date=${dayKey}` : null}
         drafts={

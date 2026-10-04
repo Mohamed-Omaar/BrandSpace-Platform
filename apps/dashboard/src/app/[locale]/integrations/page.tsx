@@ -368,8 +368,8 @@ export default async function IntegrationsPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('integrations.title')}
-      description={t('integrations.subtitle')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       activePath="/integrations"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}

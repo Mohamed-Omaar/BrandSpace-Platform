@@ -657,7 +657,9 @@ export async function WorkspaceShell({
           load={loadNotificationFeed}
           strings={{
             title: t('notifications.title'),
-            close: t('common.close'),
+            close: t('notifications.dismiss'),
+            markAll: t('notifications.markAllRead'),
+            more: t('studio.moreOptions'),
             all: t('notifications.feed.all'),
             mentions: t('notifications.feed.mentions'),
             approvals: t('notifications.feed.approvals'),
@@ -715,6 +717,7 @@ export async function WorkspaceShell({
         rateMetricKeys={RATE_METRIC_KEYS}
         strings={{
           openFull: t('copilot.openFull'),
+          more: t('studio.moreOptions'),
           chooseBrandTitle: t('brand.chooseTitle'),
           chooseBrandBody: t('copilot.noBrandBody'),
         }}

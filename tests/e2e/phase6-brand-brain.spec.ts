@@ -158,6 +158,9 @@ test.describe('D-294 · the Brand Brain says what it knows', () => {
     await expect(page.getByTestId('page-eyebrow')).toContainText(
       brandFixtures(loaded).secondBrandName,
     );
+    // Review of #67 — what BrandSpace understands and the four memories are
+    // under the hero's "⋯".
+    await page.getByTestId('brand-brain-more').click();
     await expect(page.getByTestId('brand-brain-understands')).toContainText(
       /approved facts across \d+ of \d+ areas/,
     );
@@ -194,6 +197,8 @@ test.describe('D-294 · the Brand Brain says what it knows', () => {
   test('"Ask about this brand" opens the one Copilot over this screen', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
+    // Review of #67 — "Ask about this brand" is under the hero's "⋯".
+    await page.getByTestId('brand-brain-more').click();
     await page.getByTestId('brand-brain-ask').click();
     await expect(page.getByTestId('copilot-drawer')).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/en/brand-brain');
@@ -203,6 +208,7 @@ test.describe('D-294 · the Brand Brain says what it knows', () => {
     await signIn(page, 'ar');
     await page.goto(`${DASHBOARD_BASE_URL}/ar/brand-brain`);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await page.getByTestId('brand-brain-more').click();
     await expect(page.getByTestId('brand-brain-layers')).toBeVisible();
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])

@@ -35,6 +35,8 @@ import { translator, type MessageKey } from '../../../i18n/messages';
 import { ASSET_VIEWS, type RightsState } from '../../../server/asset-views';
 import { formatBytes } from '../../../components/format-bytes';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
+import { FiltersDisclosure } from '../../../components/filters-disclosure';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 
 /**
  * The Asset Library screen.
@@ -147,6 +149,8 @@ export interface AssetLibraryViewProps {
   readonly tags: ReadonlyArray<{ tag: string; count: number }>;
   readonly storageLimitGb: number | null;
   readonly storageUsedGb: number;
+  /** "Plan & storage →" — the billing screen, for a member who may open it. */
+  readonly planHref?: string | null;
   readonly maxFileBytes: Readonly<Record<string, number>>;
   readonly allowedMimeTypes: readonly string[];
   readonly selected: AssetDetailData | null;
@@ -285,18 +289,18 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
     filters.tag !== undefined ||
     filters.folder !== undefined;
 
-  // Anything the four chips do not say opens the Filters panel, so a filtered
-  // view always shows what filters it.
-  const advanced =
-    filters.search !== undefined ||
-    filters.status !== undefined ||
-    filters.tag !== undefined ||
-    filters.scope !== undefined ||
-    (filters.view !== undefined && filters.view !== 'ai') ||
-    (filters.kind !== undefined && filters.kind !== 'IMAGE' && filters.kind !== 'VIDEO') ||
-    filters.sort !== 'createdAt';
-  const [filtersOpen, setFiltersOpen] = useState(advanced);
-  const filtersId = useId();
+  // What the Filters chip counts: everything the four chips do not say.
+  const activeFilters = [
+    filters.search,
+    filters.status,
+    filters.tag,
+    // The scope follows the rail's brand; it is not a filter the reader set here.
+    filters.view !== undefined && filters.view !== 'ai' ? filters.view : undefined,
+    filters.kind !== undefined && filters.kind !== 'IMAGE' && filters.kind !== 'VIDEO'
+      ? filters.kind
+      : undefined,
+    filters.sort !== 'createdAt' ? filters.sort : undefined,
+  ].filter((value) => value !== undefined).length;
 
   const storagePct =
     props.storageLimitGb === null || props.storageLimitGb <= 0
@@ -358,25 +362,203 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
             );
           })}
         </nav>
-        <span className="bsp-med-acts">
-          <button
-            type="button"
-            className="bsp-btn bsp-sm bsp-ghost"
-            aria-expanded={filtersOpen}
-            aria-controls={filtersId}
-            onClick={() => setFiltersOpen((open) => !open)}
-            data-testid="assets-filters-toggle"
-          >
-            {t('assets.media.filters')}
-          </button>
-          {can.manageTaxonomy ? (
-            <button
-              type="button"
-              className="bsp-btn bsp-sm bsp-ghost"
-              onClick={() => setFolderOpen(true)}
+        {/*
+          THE PRODUCT'S OTHER FILTERS (review of #67): every kind, the views,
+          search, sort, scope, status, tags and the folders, behind one
+          "Filters" chip beside the prototype's four, in a panel that floats
+          over the library — so the grid starts where the prototype's does.
+        */}
+        <FiltersDisclosure
+          label={t('assets.media.filters')}
+          active={activeFilters}
+          testId="assets-filters-toggle"
+          wide
+          align="start"
+        >
+          <div className="bsp-med-filters">
+            <nav
+              className="bsp-med-kinds"
+              aria-label={t('assets.filter.kind')}
+              data-testid="assets-kind-all"
             >
-              {t('assets.newFolder')}
-            </button>
+              {[undefined, ...(Object.keys(KIND_LABEL) as AssetKind[])].map((kind) => (
+                <a
+                  key={kind ?? '__all__'}
+                  href={filterHref(props.locale, filters, { kind })}
+                  className="bsp-chip"
+                  aria-current={filters.kind === kind ? 'true' : undefined}
+                >
+                  {kind ? t(KIND_LABEL[kind]) : t('assets.filter.all')}
+                </a>
+              ))}
+            </nav>
+            <LinkTabs
+              label={t('assets.views.label')}
+              testId="assets-views"
+              currentId={filters.view ?? 'all'}
+              tabs={[
+                {
+                  id: 'all',
+                  href: filterHref(props.locale, filters, { view: undefined }),
+                  label: t('assets.view.all'),
+                },
+                ...ASSET_VIEWS.filter((view) => view !== 'shared' || !singleBrand).map((view) => ({
+                  id: view,
+                  href: filterHref(props.locale, filters, {
+                    view,
+                    kind: undefined,
+                    ...(view === 'shared' ? { scope: undefined } : {}),
+                  }),
+                  label: t(`assets.view.${view}` as MessageKey),
+                })),
+              ]}
+            />
+
+            <Card testId="assets-filters">
+              <div style={{ display: 'grid', gap: spacingTokens.lg }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: spacingTokens.md,
+                    alignItems: 'end',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  {/* Search gets its own lane instead of competing visually with every facet. */}
+                  <form
+                    method="get"
+                    action={`/${props.locale}/assets`}
+                    style={{ display: 'flex', flex: '1 1 18rem', minInlineSize: 0 }}
+                  >
+                    <SearchField
+                      id="assets-search"
+                      label={t('assets.search')}
+                      placeholder={t('assets.search')}
+                      defaultValue={filters.search ?? ''}
+                    />
+                    {/* The other filters ride along, so searching does not reset them. */}
+                    {filters.kind ? <input type="hidden" name="kind" value={filters.kind} /> : null}
+                    {filters.status ? (
+                      <input type="hidden" name="status" value={filters.status} />
+                    ) : null}
+                    {filters.tag ? <input type="hidden" name="tag" value={filters.tag} /> : null}
+                    {filters.folder ? (
+                      <input type="hidden" name="folder" value={filters.folder} />
+                    ) : null}
+                    {filters.scope ? (
+                      <input type="hidden" name="scope" value={filters.scope} />
+                    ) : null}
+                    <input type="hidden" name="sort" value={filters.sort} />
+                  </form>
+
+                  <div style={{ flex: '0 1 auto', minInlineSize: '12rem' }}>
+                    <FilterGroup
+                      label={t('assets.sort')}
+                      allLabel={t('assets.sort.newest')}
+                      current={filters.sort === 'createdAt' ? undefined : filters.sort}
+                      options={[
+                        { value: 'name', label: t('assets.sort.name') },
+                        { value: 'sizeBytes', label: t('assets.sort.size') },
+                      ]}
+                      hrefFor={(value) =>
+                        filterHref(props.locale, filters, { sort: value ?? 'createdAt' })
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(min(14rem, 100%), 1fr))',
+                    gap: spacingTokens.md,
+                    alignItems: 'start',
+                  }}
+                >
+                  {/*
+              D-305 — ONE BRAND, NO SCOPE FILTER. A single-brand business sees its
+              brand's files (with the shared shelf) and no "Flow 54f8b0 · Flow …"
+              chip wall. Several brands get ONE compact select, not a chip per
+              brand.
+            */}
+                  {singleBrand ? null : (
+                    <label
+                      style={{ display: 'grid', gap: spacingTokens['3xs'], minInlineSize: 0 }}
+                      data-testid="assets-brand-filter"
+                    >
+                      <span style={{ ...typographyTokens.label, color: colorTokens.textSecondary }}>
+                        {t('assets.filter.context')}
+                      </span>
+                      <select
+                        className={`${CONTROL_CLASS} bs-select`}
+                        style={inputStyle()}
+                        value={filters.scope ?? ''}
+                        onChange={(event) =>
+                          router.push(
+                            filterHref(props.locale, filters, {
+                              scope: event.target.value === '' ? undefined : event.target.value,
+                            }),
+                          )
+                        }
+                      >
+                        <option value="">{t('assets.filter.allAssets')}</option>
+                        <option value="shared">{t('assets.filter.shared')}</option>
+                        {props.brands.map((brand) => (
+                          <option key={brand.id} value={brand.id}>
+                            {brand.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+
+                  <FilterGroup
+                    label={t('assets.filter.status')}
+                    allLabel={t('assets.filter.all')}
+                    current={filters.status}
+                    options={(Object.keys(STATE_LABEL) as AssetStatus[]).map((status) => ({
+                      value: status,
+                      label: t(STATE_LABEL[status]),
+                    }))}
+                    hrefFor={(value) => filterHref(props.locale, filters, { status: value })}
+                  />
+
+                  {/* Tags are metadata to filter by, not places: they sit with the
+                other filters, the most-used first, never beside the folders. */}
+                  {props.tags.length > 0 ? (
+                    <FilterGroup
+                      label={t('assets.tags')}
+                      allLabel={t('assets.filter.all')}
+                      current={filters.tag}
+                      options={props.tags.slice(0, TAG_LIMIT).map((facet) => ({
+                        value: facet.tag,
+                        label: `${facet.tag} (${facet.count})`,
+                      }))}
+                      hrefFor={(value) => filterHref(props.locale, filters, { tag: value })}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </Card>
+          </div>
+        </FiltersDisclosure>
+        <span className="bsp-med-acts">
+          {can.manageTaxonomy ? (
+            <MoreDisclosure
+              label={t('assets.media.more')}
+              testId="assets-more"
+              align="end"
+              closeOnPick
+            >
+              <button
+                type="button"
+                className="bsp-chip bsp-st-sm"
+                onClick={() => setFolderOpen(true)}
+              >
+                {t('assets.newFolder')}
+              </button>
+            </MoreDisclosure>
           ) : null}
           {can.upload ? (
             <button
@@ -385,7 +567,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               onClick={() => setUploadOpen(true)}
               data-testid="assets-upload-open"
             >
-              {t('assets.upload')}
+              {t('assets.media.upload')}
             </button>
           ) : null}
         </span>
@@ -404,7 +586,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               <b>{t('assets.storageUnlimited')}</b>
             ) : (
               <>
-                <b className="bsp-ltr">{props.storageUsedGb}</b>{' '}
+                <b className="bsp-ltr">{props.storageUsedGb} GB</b>{' '}
                 <span>
                   {t('assets.storageOf')} <span className="bsp-ltr">{props.storageLimitGb} GB</span>
                   {' · '}
@@ -413,6 +595,16 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               </>
             )}
           </span>
+          {props.storageLimitGb !== null ? (
+            <span className="bsp-med-sto-note" data-testid="assets-storage-left">
+              {t('assets.storageLeft').replace(
+                '{left}',
+                String(
+                  Math.max(0, Math.round((props.storageLimitGb - props.storageUsedGb) * 10) / 10),
+                ),
+              )}
+            </span>
+          ) : null}
           {props.countLabel ? (
             <span className="bsp-med-sto-note" data-testid="assets-count">
               {props.countLabel}
@@ -428,296 +620,29 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
             <span style={{ width: `${storagePct}%` }} />
           </div>
         ) : null}
-      </section>
-
-      {props.brandKit &&
-      (props.brandKit.logos.length > 0 ||
-        props.brandKit.palette.length > 0 ||
-        props.brandKit.fonts.length > 0) ? (
-        <Card
-          title={t('assets.kit.title').replace('{brand}', props.brandKit.brandName)}
-          description={t('assets.kit.body')}
-          testId="assets-brand-kit"
-        >
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: spacingTokens.lg,
-              alignItems: 'flex-start',
-            }}
-          >
-            {props.brandKit.logos.map((logo) => (
-              <a
-                key={logo.assetId}
-                href={filterHref(props.locale, filters, { asset: logo.assetId } as never)}
-                className={CONTROL_CLASS}
-                data-testid={`assets-kit-logo-${logo.role}`}
-                style={{
-                  display: 'grid',
-                  gap: spacingTokens['3xs'],
-                  justifyItems: 'center',
-                  textDecoration: 'none',
-                  color: colorTokens.textSecondary,
-                  ...typographyTokens.caption,
-                }}
-              >
-                {logo.token ? (
-                  <img
-                    src={`/${props.locale}/assets/file/${logo.token}`}
-                    alt=""
-                    style={{
-                      inlineSize: '4rem',
-                      blockSize: '4rem',
-                      objectFit: 'contain',
-                      borderRadius: radiusTokens.md,
-                      background: colorTokens.surfaceMuted,
-                    }}
-                  />
-                ) : (
-                  <IconTile tone="neutral" icon={<ImageIcon size={20} />} />
-                )}
-                {t(logo.role === 'primary' ? 'assets.kit.primaryLogo' : 'assets.kit.secondaryLogo')}
-              </a>
-            ))}
-            {props.brandKit.palette.length > 0 ? (
-              <div
-                data-testid="assets-kit-palette"
-                style={{ display: 'grid', gap: spacingTokens.xs }}
-              >
-                <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                  {t('assets.kit.palette')}
-                </span>
-                <ul
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: spacingTokens.xs,
-                    margin: 0,
-                    padding: 0,
-                    listStyle: 'none',
-                  }}
-                >
-                  {props.brandKit.palette.map((colour) => (
-                    <li
-                      key={colour}
-                      style={{ display: 'grid', justifyItems: 'center', gap: spacingTokens['3xs'] }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          inlineSize: '2rem',
-                          blockSize: '2rem',
-                          borderRadius: radiusTokens.full,
-                          // The brand's OWN colour, as data — not a design literal.
-                          background: colour,
-                          border: `1px solid ${colorTokens.cardBorder}`,
-                        }}
-                      />
-                      <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                        {colour}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {props.brandKit.fonts.length > 0 ? (
-              <div
-                data-testid="assets-kit-fonts"
-                style={{ display: 'grid', gap: spacingTokens.xs }}
-              >
-                <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                  {t('assets.kit.typography')}
-                </span>
-                <span style={typographyTokens.bodySm}>{props.brandKit.fonts.join(' · ')}</span>
-              </div>
-            ) : null}
-          </div>
+        {/*
+          The prototype's two ways on from the storage card: the biggest files
+          first (the library's own Video filter, by size) and the plan.
+        */}
+        <span className="bsp-med-sto-acts">
           <a
-            href={`/${props.locale}/settings/brand`}
-            className={CONTROL_CLASS}
-            style={{
-              display: 'inline-flex',
-              marginBlockStart: spacingTokens.sm,
-              ...typographyTokens.label,
-              color: colorTokens.brandPurple,
-            }}
+            href={filterHref(props.locale, filters, {
+              kind: 'VIDEO',
+              view: undefined,
+              sort: 'sizeBytes',
+            })}
+            className="bsp-btn bsp-sm bsp-sec"
+            data-testid="assets-largest"
           >
-            {t('assets.kit.edit')}
+            {t('assets.media.videosLargest')}
           </a>
-        </Card>
-      ) : null}
-
-      {/*
-        D-287 — VIEWS: derived filters over real columns and references. The
-        word is "view" because nothing here is a stored collection.
-      */}
-      <div id={filtersId} className="bsp-med-filters" hidden={!filtersOpen}>
-        <nav
-          className="bsp-med-kinds"
-          aria-label={t('assets.filter.kind')}
-          data-testid="assets-kind-all"
-        >
-          {[undefined, ...(Object.keys(KIND_LABEL) as AssetKind[])].map((kind) => (
-            <a
-              key={kind ?? '__all__'}
-              href={filterHref(props.locale, filters, { kind })}
-              className="bsp-chip"
-              aria-current={filters.kind === kind ? 'true' : undefined}
-            >
-              {kind ? t(KIND_LABEL[kind]) : t('assets.filter.all')}
+          {props.planHref ? (
+            <a href={props.planHref} className="bsp-btn bsp-sm bsp-ghost" data-testid="assets-plan">
+              {t('assets.media.planStorage')} →
             </a>
-          ))}
-        </nav>
-        <LinkTabs
-          label={t('assets.views.label')}
-          testId="assets-views"
-          currentId={filters.view ?? 'all'}
-          tabs={[
-            {
-              id: 'all',
-              href: filterHref(props.locale, filters, { view: undefined }),
-              label: t('assets.view.all'),
-            },
-            ...ASSET_VIEWS.filter((view) => view !== 'shared' || !singleBrand).map((view) => ({
-              id: view,
-              href: filterHref(props.locale, filters, {
-                view,
-                kind: undefined,
-                ...(view === 'shared' ? { scope: undefined } : {}),
-              }),
-              label: t(`assets.view.${view}` as MessageKey),
-            })),
-          ]}
-        />
-
-        <Card testId="assets-filters">
-          <div style={{ display: 'grid', gap: spacingTokens.lg }}>
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: spacingTokens.md,
-                alignItems: 'end',
-                justifyContent: 'space-between',
-              }}
-            >
-              {/* Search gets its own lane instead of competing visually with every facet. */}
-              <form
-                method="get"
-                action={`/${props.locale}/assets`}
-                style={{ display: 'flex', flex: '1 1 18rem', minInlineSize: 0 }}
-              >
-                <SearchField
-                  id="assets-search"
-                  label={t('assets.search')}
-                  placeholder={t('assets.search')}
-                  defaultValue={filters.search ?? ''}
-                />
-                {/* The other filters ride along, so searching does not reset them. */}
-                {filters.kind ? <input type="hidden" name="kind" value={filters.kind} /> : null}
-                {filters.status ? (
-                  <input type="hidden" name="status" value={filters.status} />
-                ) : null}
-                {filters.tag ? <input type="hidden" name="tag" value={filters.tag} /> : null}
-                {filters.folder ? (
-                  <input type="hidden" name="folder" value={filters.folder} />
-                ) : null}
-                {filters.scope ? <input type="hidden" name="scope" value={filters.scope} /> : null}
-                <input type="hidden" name="sort" value={filters.sort} />
-              </form>
-
-              <div style={{ flex: '0 1 auto', minInlineSize: '12rem' }}>
-                <FilterGroup
-                  label={t('assets.sort')}
-                  allLabel={t('assets.sort.newest')}
-                  current={filters.sort === 'createdAt' ? undefined : filters.sort}
-                  options={[
-                    { value: 'name', label: t('assets.sort.name') },
-                    { value: 'sizeBytes', label: t('assets.sort.size') },
-                  ]}
-                  hrefFor={(value) =>
-                    filterHref(props.locale, filters, { sort: value ?? 'createdAt' })
-                  }
-                />
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(14rem, 100%), 1fr))',
-                gap: spacingTokens.md,
-                alignItems: 'start',
-              }}
-            >
-              {/*
-              D-305 — ONE BRAND, NO SCOPE FILTER. A single-brand business sees its
-              brand's files (with the shared shelf) and no "Flow 54f8b0 · Flow …"
-              chip wall. Several brands get ONE compact select, not a chip per
-              brand.
-            */}
-              {singleBrand ? null : (
-                <label
-                  style={{ display: 'grid', gap: spacingTokens['3xs'], minInlineSize: 0 }}
-                  data-testid="assets-brand-filter"
-                >
-                  <span style={{ ...typographyTokens.label, color: colorTokens.textSecondary }}>
-                    {t('assets.filter.context')}
-                  </span>
-                  <select
-                    className={`${CONTROL_CLASS} bs-select`}
-                    style={inputStyle()}
-                    value={filters.scope ?? ''}
-                    onChange={(event) =>
-                      router.push(
-                        filterHref(props.locale, filters, {
-                          scope: event.target.value === '' ? undefined : event.target.value,
-                        }),
-                      )
-                    }
-                  >
-                    <option value="">{t('assets.filter.allAssets')}</option>
-                    <option value="shared">{t('assets.filter.shared')}</option>
-                    {props.brands.map((brand) => (
-                      <option key={brand.id} value={brand.id}>
-                        {brand.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
-              <FilterGroup
-                label={t('assets.filter.status')}
-                allLabel={t('assets.filter.all')}
-                current={filters.status}
-                options={(Object.keys(STATE_LABEL) as AssetStatus[]).map((status) => ({
-                  value: status,
-                  label: t(STATE_LABEL[status]),
-                }))}
-                hrefFor={(value) => filterHref(props.locale, filters, { status: value })}
-              />
-
-              {/* Tags are metadata to filter by, not places: they sit with the
-                other filters, the most-used first, never beside the folders. */}
-              {props.tags.length > 0 ? (
-                <FilterGroup
-                  label={t('assets.tags')}
-                  allLabel={t('assets.filter.all')}
-                  current={filters.tag}
-                  options={props.tags.slice(0, TAG_LIMIT).map((facet) => ({
-                    value: facet.tag,
-                    label: `${facet.tag} (${facet.count})`,
-                  }))}
-                  hrefFor={(value) => filterHref(props.locale, filters, { tag: value })}
-                />
-              ) : null}
-            </div>
-          </div>
-        </Card>
-      </div>
+          ) : null}
+        </span>
+      </section>
 
       <div
         style={{
@@ -733,12 +658,18 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
       >
         <Stack gap={spacingTokens.md}>
           {/* The location is always stated, even before the first folder exists. */}
-          <FolderBrowser
-            folders={props.folders}
-            current={filters.folder}
-            hrefFor={(folder) => filterHref(props.locale, filters, { folder })}
-            t={t}
-          />
+          {/*
+            THE FOLDERS (D-287) are the product's: drawn once a folder exists
+            or one is open, so a library without folders is the prototype's.
+          */}
+          {props.folders.length > 0 || filters.folder ? (
+            <FolderBrowser
+              folders={props.folders}
+              current={filters.folder}
+              hrefFor={(folder) => filterHref(props.locale, filters, { folder })}
+              t={t}
+            />
+          ) : null}
 
           {props.cards.length === 0 ? (
             <div className="bsp-card bsp-med-empty" data-testid="assets-empty">
@@ -906,6 +837,131 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           ) : null}
         </Stack>
       </div>
+
+      {/* The brand kit: below the library, never above the prototype's grid. */}
+      {props.brandKit &&
+      (props.brandKit.logos.length > 0 ||
+        props.brandKit.palette.length > 0 ||
+        props.brandKit.fonts.length > 0) ? (
+        <Card
+          title={t('assets.kit.title').replace('{brand}', props.brandKit.brandName)}
+          description={t('assets.kit.body')}
+          testId="assets-brand-kit"
+        >
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: spacingTokens.lg,
+              alignItems: 'flex-start',
+            }}
+          >
+            {props.brandKit.logos.map((logo) => (
+              <a
+                key={logo.assetId}
+                href={filterHref(props.locale, filters, { asset: logo.assetId } as never)}
+                className={CONTROL_CLASS}
+                data-testid={`assets-kit-logo-${logo.role}`}
+                style={{
+                  display: 'grid',
+                  gap: spacingTokens['3xs'],
+                  justifyItems: 'center',
+                  textDecoration: 'none',
+                  color: colorTokens.textSecondary,
+                  ...typographyTokens.caption,
+                }}
+              >
+                {logo.token ? (
+                  <img
+                    src={`/${props.locale}/assets/file/${logo.token}`}
+                    alt=""
+                    style={{
+                      inlineSize: '4rem',
+                      blockSize: '4rem',
+                      objectFit: 'contain',
+                      borderRadius: radiusTokens.md,
+                      background: colorTokens.surfaceMuted,
+                    }}
+                  />
+                ) : (
+                  <IconTile tone="neutral" icon={<ImageIcon size={20} />} />
+                )}
+                {t(logo.role === 'primary' ? 'assets.kit.primaryLogo' : 'assets.kit.secondaryLogo')}
+              </a>
+            ))}
+            {props.brandKit.palette.length > 0 ? (
+              <div
+                data-testid="assets-kit-palette"
+                style={{ display: 'grid', gap: spacingTokens.xs }}
+              >
+                <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                  {t('assets.kit.palette')}
+                </span>
+                <ul
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: spacingTokens.xs,
+                    margin: 0,
+                    padding: 0,
+                    listStyle: 'none',
+                  }}
+                >
+                  {props.brandKit.palette.map((colour) => (
+                    <li
+                      key={colour}
+                      style={{ display: 'grid', justifyItems: 'center', gap: spacingTokens['3xs'] }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          inlineSize: '2rem',
+                          blockSize: '2rem',
+                          borderRadius: radiusTokens.full,
+                          // The brand's OWN colour, as data — not a design literal.
+                          background: colour,
+                          border: `1px solid ${colorTokens.cardBorder}`,
+                        }}
+                      />
+                      <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                        {colour}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {props.brandKit.fonts.length > 0 ? (
+              <div
+                data-testid="assets-kit-fonts"
+                style={{ display: 'grid', gap: spacingTokens.xs }}
+              >
+                <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                  {t('assets.kit.typography')}
+                </span>
+                <span style={typographyTokens.bodySm}>{props.brandKit.fonts.join(' · ')}</span>
+              </div>
+            ) : null}
+          </div>
+          <a
+            href={`/${props.locale}/settings/brand`}
+            className={CONTROL_CLASS}
+            style={{
+              display: 'inline-flex',
+              marginBlockStart: spacingTokens.sm,
+              ...typographyTokens.label,
+              color: colorTokens.brandPurple,
+            }}
+          >
+            {t('assets.kit.edit')}
+          </a>
+        </Card>
+      ) : null}
+
+      {/*
+        D-287 — VIEWS: derived filters over real columns and references. The
+        word is "view" because nothing here is a stored collection.
+      */}
 
       {/*
         D-287 — THE DETAIL IS A DRAWER over the library, so the grid the reader
@@ -1239,69 +1295,71 @@ function AssetTile({
         ) : null}
       </div>
       {/*
-        THE STATE AND THE FACTS, which the prototype's tile does not draw
-        (D-468 (c)): every state carries its word, and a reason when there is
-        one — never a raw scanner message, a path or a vendor name.
+        THE PROTOTYPE'S TILE IS THE PICTURE, THE NAME AND "USE" (review of
+        #67). What it does not draw stays where it is needed: a state that is
+        not Ready says so with its reason, licence trouble and the shared shelf
+        keep their badges, the AI badge is the picture's "AI" and is spoken
+        here, and the size, the dimensions and "Used in" are the detail's.
       */}
-      <div className="bsp-med-info">
-        <span className="bsp-med-line">
-          <span
-            className={`bsp-xstatus ${STATE_X[asset.status]}`}
-            data-testid={`asset-state-${asset.id}`}
-          >
-            {stateLabel}
+      <span className="bs-sr-only" data-testid={`asset-badges-${asset.id}`}>
+        {asset.source === 'AI_GENERATED' ? t('assets.badge.ai') : null}
+      </span>
+      {asset.status !== 'READY' ||
+      asset.failureReason ||
+      asset.rights === 'expiring' ||
+      asset.rights === 'expired' ||
+      (asset.shared && showShared) ? (
+        <div className="bsp-med-info">
+          <span className="bsp-med-line">
+            {asset.status !== 'READY' ? (
+              <span
+                className={`bsp-xstatus ${STATE_X[asset.status]}`}
+                data-testid={`asset-state-${asset.id}`}
+              >
+                {stateLabel}
+              </span>
+            ) : null}
+            {asset.shared && showShared ? (
+              <span className="bsp-xstatus bsp-neu">{t('assets.filter.shared')}</span>
+            ) : null}
+            {asset.rights === 'expiring' ? (
+              <span className="bsp-xstatus bsp-warn">{t('assets.badge.rightsExpiring')}</span>
+            ) : null}
+            {asset.rights === 'expired' ? (
+              <span
+                className="bsp-xstatus bsp-bad"
+                data-testid={`asset-rights-expired-${asset.id}`}
+              >
+                {t('assets.badge.rightsExpired')}
+              </span>
+            ) : null}
           </span>
-          <span>
-            {t(KIND_LABEL[asset.kind])} · {formatBytes(asset.sizeBytes, locale)}
-            {asset.width !== null && asset.height !== null
-              ? ` · ${asset.width}×${asset.height}`
-              : ''}
-          </span>
-        </span>
-        {/* D-287 — small badges, only where they mean something. */}
-        <span className="bsp-med-line" data-testid={`asset-badges-${asset.id}`}>
-          {asset.source === 'AI_GENERATED' ? (
-            <span className="bsp-xstatus bsp-ai">{t('assets.badge.ai')}</span>
-          ) : null}
-          {asset.shared && showShared ? (
-            <span className="bsp-xstatus bsp-neu">{t('assets.filter.shared')}</span>
-          ) : null}
-          {asset.rights === 'expiring' ? (
-            <span className="bsp-xstatus bsp-warn">{t('assets.badge.rightsExpiring')}</span>
-          ) : null}
-          {asset.rights === 'expired' ? (
-            <span className="bsp-xstatus bsp-bad" data-testid={`asset-rights-expired-${asset.id}`}>
-              {t('assets.badge.rightsExpired')}
+          {asset.failureReason ? (
+            <span className="bsp-med-line" data-testid={`asset-reason-${asset.id}`}>
+              {t(`assets.reason.${asset.failureReason}` as MessageKey)}
             </span>
           ) : null}
-        </span>
-        <span className="bsp-med-line" data-testid={`asset-used-${asset.id}`}>
-          {asset.usedIn === 0
-            ? t('assets.usedNone')
-            : t(asset.usedIn === 1 ? 'assets.usedOne' : 'assets.usedMany').replace(
-                '{count}',
-                new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en').format(asset.usedIn),
-              )}
-        </span>
-        {asset.failureReason ? (
-          <span className="bsp-med-line" data-testid={`asset-reason-${asset.id}`}>
-            {t(`assets.reason.${asset.failureReason}` as MessageKey)}
+        </div>
+      ) : null}
+      {/*
+        BULK SELECTION — the product's: the box sits on the picture's corner
+        and shows on hover, on focus and once ticked, so the tile keeps the
+        prototype's shape.
+      */}
+      {bulkFormId ? (
+        <label className="bsp-med-select">
+          <input
+            type="checkbox"
+            name="assetIds"
+            value={asset.id}
+            form={bulkFormId}
+            data-testid={`asset-select-${asset.id}`}
+          />
+          <span className="bs-sr-only">
+            {t('assets.bulk.select')} {asset.name}
           </span>
-        ) : null}
-        {bulkFormId ? (
-          <label className="bsp-med-select">
-            <input
-              type="checkbox"
-              name="assetIds"
-              value={asset.id}
-              form={bulkFormId}
-              data-testid={`asset-select-${asset.id}`}
-            />
-            {t('assets.bulk.select')}
-            <span className="bs-sr-only">{asset.name}</span>
-          </label>
-        ) : null}
-      </div>
+        </label>
+      ) : null}
     </div>
   );
 }

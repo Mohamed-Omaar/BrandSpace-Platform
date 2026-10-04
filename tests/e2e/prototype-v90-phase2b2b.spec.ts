@@ -236,7 +236,8 @@ test.describe('B11 · campaign results', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${planned}`);
     await page.getByTestId('campaign-start-now').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'CAMPAIGN_STARTED');
-    await expect(page.getByTestId('campaign-status')).toContainText('Active');
+    // Review of #67 — the prototype names a live campaign "Running".
+    await expect(page.getByTestId('campaign-status')).toContainText('Running');
     await expect(page.getByTestId('campaign-start-now')).toHaveCount(0);
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${ended}`);

@@ -42,25 +42,29 @@ const compose = (locale: string, query = '') =>
   `${DASHBOARD_BASE_URL}/${locale}/content/compose${query}`;
 
 test.describe('Create Post — the entry (§17)', () => {
-  test('asks first, and each answer is an address', async ({ page }) => {
+  test('opens the Studio itself, and the other starts are addresses', async ({ page }) => {
     await signIn(page);
     await page.goto(compose('en'));
-    const entry = page.getByTestId('create-entry');
-    await expect(entry).toContainText('What would you like to create?');
-    for (const mode of ['ai', 'write', 'idea', 'repurpose']) {
-      await expect(page.getByTestId(`create-mode-${mode}`)).toBeVisible();
-    }
-    // Nothing to fill in until a path is chosen.
-    await expect(page.getByTestId('content-composer')).toHaveCount(0);
-
-    await page.getByTestId('create-mode-write').click();
-    await page.waitForURL((url) => url.searchParams.get('mode') === 'write');
+    // Review of #67 — the prototype's "New post" opens the Studio directly:
+    // writing it yourself and having AI write it sit side by side.
     await expect(page.getByTestId('content-composer')).toBeVisible();
-    // Writing it yourself: saving is the primary action, generating is not.
+    await expect(page.getByTestId('create-entry')).toHaveCount(0);
+    await expect(page.getByTestId('content-brief')).toBeVisible();
+    await expect(page.getByTestId('content-caption')).toBeVisible();
+    await expect(page.getByText('Caption', { exact: true })).toBeVisible();
+    // Starting from an idea or a post is the "Or start from" chips, each an address.
+    await expect(page.getByTestId('create-mode-idea')).toHaveAttribute('href', /mode=idea/);
+    await expect(page.getByTestId('create-mode-repurpose')).toHaveAttribute(
+      'href',
+      /mode=repurpose/,
+    );
+    // The prototype's two purple actions: "Write caption with AI" and Save draft.
     await expect(page.getByTestId('content-write-manual')).toHaveClass(/bsp-pur/);
-    await expect(page.getByTestId('content-generate')).toHaveClass(/bsp-sec/);
-    await expect(page.getByText('Your post', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('content-generate')).toHaveClass(/bsp-pur/);
+
     // No goal on a post the person writes word for word.
+    await page.goto(compose('en', '?mode=write'));
+    await expect(page.getByTestId('content-composer')).toBeVisible();
     await expect(page.getByTestId('content-goal')).toHaveCount(0);
   });
 
@@ -68,7 +72,7 @@ test.describe('Create Post — the entry (§17)', () => {
     await signIn(page, 'ar');
     await page.goto(compose('ar'));
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-    await expect(page.getByTestId('create-entry')).toContainText('ماذا تريد أن تنشئ؟');
+    await expect(page.getByTestId('content-composer')).toContainText('أو ابدأ من:');
   });
 });
 
@@ -105,6 +109,8 @@ test.describe('Create Post — format and goal (§18, §19)', () => {
   test('the goal travels in the generation ask', async ({ page }) => {
     await signIn(page);
     await page.goto(compose('en', '?mode=ai&goal=LEADS'));
+    // Review of #67 — the goal is a product setting, under "⋯".
+    await page.getByTestId('content-more').click();
     const goal = page.getByTestId('content-goal');
     await expect(goal).toHaveValue('LEADS');
     await page.getByTestId('content-brief').fill('A short post about our spring hours.');
@@ -282,6 +288,8 @@ test.describe('Create Post — the draft editor (§20-§22, §27)', () => {
       page.locator('[data-testid="content-variant"][data-platform="linkedin"]'),
     ).toBeVisible();
 
+    // Review of #67 — "Compare previews" is under the preview's "⋯".
+    await page.getByTestId('preview-more').click();
     await page.getByTestId('preview-compare').click();
     await expect(page.getByTestId('content-preview-instagram')).toBeVisible();
     await expect(page.getByTestId('content-preview-linkedin')).toBeVisible();
@@ -528,7 +536,7 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     await page.goto(compose('en', `?mode=write&asset=${picture}`));
     await expect(page.getByTestId('content-carried-media')).toContainText(`creative-${tag}.png`);
 
-    await page.getByTestId('content-brief').fill(`Carried from Creative, ${tag}.`);
+    await page.getByTestId('content-caption').fill(`Carried from Creative, ${tag}.`);
     await page.getByTestId('content-write-manual').click();
     await page.waitForURL((url) => url.searchParams.get('attach') === picture, {
       timeout: 60_000,

@@ -2,13 +2,25 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { SegmentPill } from '@brandspace/ui';
 import { ChannelMark } from '../../calendar/prototype-calendar';
 import { generationKeyFor, manualKeyFor } from './idempotency';
 import type { MediaOptionView } from './media-picker';
-import { DraftEditor } from './draft-editor';
-import { formatCredits } from '../../../../server/composer-editor';
+import { CalendarGlyph, DraftEditor, SparkGlyph } from './draft-editor';
+import { VariantPreview, previewLabels } from './variant-preview';
+import { MoreDisclosure } from '../../../../components/more-disclosure';
+import { previewGeometry } from './preview-geometry';
+import {
+  formatCredits,
+  inlineActionsFor,
+  previewFormatFor,
+} from '../../../../server/composer-editor';
+
+/** The prototype's four formats (`Main.dc.html` line 341); the rest sit under "⋯". */
+const MAIN_FORMATS: readonly string[] = ['POST', 'CAROUSEL', 'REEL', 'STORY'];
+/** The prototype's four AI edits under the caption; the rest sit under "⋯". */
+const MAIN_TOOLS: readonly string[] = ['shorten', 'friendlier', 'professional', 'translate'];
 
 /**
  * The composer — the prototype's Studio (`Main.dc.html` lines 329–537, D-468
@@ -263,6 +275,8 @@ export interface ComposerViewProps {
   readonly mode?: 'ai' | 'write';
   /** A brief the reader arrived with — an idea, or a post being repurposed. */
   readonly initialBrief?: string;
+  /** The prototype's "Or start from" chips: the idea and repurpose pickers. */
+  readonly startFrom?: { readonly idea: string; readonly repurpose: string };
   /** The campaign the reader came from, already checked against `campaigns`. */
   readonly initialCampaignId?: string;
   /** The post being repurposed, named so the reader knows what the brief holds. */
@@ -354,6 +368,7 @@ export function ComposerView({
   tools,
   actions,
   mode = 'ai',
+  startFrom,
   initialBrief = '',
   initialCampaignId = '',
   sourceTitle = null,
@@ -466,11 +481,18 @@ export function ComposerView({
    * mode the field IS the post. In AI mode the field is the brief a model
    * reads, and a template's words never go into a prompt (owner answer D4).
    */
-  const [brief, setBrief] = useState(
-    () =>
-      initialBrief ||
-      (mode === 'write' && startingTemplate?.body ? startingTemplate.body : initialBrief),
+  /*
+   * TWO FIELDS, AS THE PROTOTYPE DRAWS THEM (review of #67): "What is the post
+   * about?" is the brief a model reads when AI writes the caption; "Caption"
+   * is the post itself, saved word for word by "Save draft". A template's
+   * words go only into the caption (owner answer D4), and only when writing.
+   */
+  const [brief, setBrief] = useState(initialBrief);
+  const [caption, setCaption] = useState(() =>
+    mode === 'write' && startingTemplate?.body ? startingTemplate.body : '',
   );
+  const [editorTab, setEditorTab] = useState<'words' | 'visual'>('words');
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [goal, setGoal] = useState(initialGoal || recommendedGoal || '');
   const [contentLocale, setContentLocale] = useState<ContentLocale>(
     () => brands.find((brand) => brand.id === brandId)?.defaultLocale ?? 'EN',
@@ -578,7 +600,7 @@ export function ComposerView({
     // Only an empty field, or one still holding the previous template's words,
     // is replaced: nothing the person typed is ever overwritten.
     if (mode === 'write' && next.body) {
-      setBrief((current) =>
+      setCaption((current) =>
         current.trim() === '' || current === (previous?.body ?? '') ? (next.body ?? '') : current,
       );
     }
@@ -601,7 +623,11 @@ export function ComposerView({
     () => generationKeyFor({ ...ask, brief: generationBrief }, draft?.id ?? null),
     [ask, generationBrief, draft?.id],
   );
-  const manualIdempotencyKey = useMemo(() => manualKeyFor(ask, campaignId), [ask, campaignId]);
+  // The MANUAL ask is the caption, saved word for word.
+  const manualIdempotencyKey = useMemo(
+    () => manualKeyFor({ ...ask, brief: caption }, campaignId),
+    [ask, caption, campaignId],
+  );
 
   const post = useCallback(
     async (path: string, body: unknown): Promise<Record<string, unknown> | null> => {
@@ -716,9 +742,42 @@ export function ComposerView({
   };
 
   const briefTooLong = generationBrief.length > maxBriefChars;
-  const hasInputs =
-    can.create && brandId !== '' && selected.length > 0 && brief.trim() !== '' && !briefTooLong;
+  const ready = can.create && brandId !== '' && selected.length > 0;
+  const hasInputs = ready && brief.trim() !== '' && !briefTooLong;
   const canGenerate = hasInputs && can.generate === true;
+
+  /*
+   * "WRITE CAPTION WITH AI · N" — the prototype states the cost on the
+   * button. The figure is the same gateway quote "Estimate cost" asked for,
+   * fetched once the ask settles (it reserves nothing); until it answers, or
+   * if it cannot, the button simply has no figure.
+   */
+  const quoteSeq = useRef(0);
+  useEffect(() => {
+    if (!canGenerate || draft !== null) return;
+    const seq = ++quoteSeq.current;
+    const timer = window.setTimeout(() => {
+      fetch('/api/content/quote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          brandId,
+          brief: generationBrief,
+          platformKeys: selected,
+          locale: contentLocale,
+          contentType,
+        }),
+      })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload: Record<string, unknown> | null) => {
+          if (seq === quoteSeq.current && payload) {
+            setQuote(String(payload['estimateMilli'] ?? '0'));
+          }
+        })
+        .catch(() => undefined);
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [canGenerate, draft, brandId, generationBrief, selected, contentLocale, contentType]);
   /*
    * THE SAME THREE ANSWERS, USED LITERALLY RATHER THAN AS A BRIEF.
    *
@@ -732,7 +791,8 @@ export function ComposerView({
    * words on screen are the VARIANTS' and each has its own save form; making a
    * second item out of the brief field at that point would be a surprise.
    */
-  const canWrite = hasInputs && draft === null;
+  const captionTooLong = caption.length > maxBriefChars;
+  const canWrite = ready && caption.trim() !== '' && !captionTooLong && draft === null;
   const manualFormId = `${fieldId}-manual`;
 
   const chooseFormat = (next: string) => {
@@ -745,6 +805,10 @@ export function ComposerView({
       return first ? [first.key] : [];
     });
   };
+
+  const labels = useMemo(() => previewLabels(t), [t]);
+  const shownPreview =
+    previewKey !== null && selected.includes(previewKey) ? previewKey : (selected[0] ?? null);
 
   return (
     <div className="bsp-st-root" data-testid="content-composer">
@@ -848,11 +912,13 @@ export function ComposerView({
         />
       ) : (
         /*
-          THE PROTOTYPE'S STUDIO BEFORE THE POST EXISTS (D-468): the settings
-          card, the editor card beside the preview card, and the sticky bar
-          with the ways to make the post. Hashtags, media and the per-channel
-          checks belong to a version of the post, so they appear the moment the
-          draft does — in this same Studio.
+          THE PROTOTYPE'S STUDIO BEFORE THE POST EXISTS (`Main.dc.html` lines
+          329–537, review of #67): the settings card (format, post to; publish
+          time and campaign), the editor card — Words and Design, "What is the
+          post about?", "Or start from", the caption with "Write caption with
+          AI", the AI edits — beside the preview card, and the sticky bar.
+          The product's other settings (language, template, goal, the other
+          formats) sit under "⋯" at the end of the channels.
         */
         <div className="bsp-st">
           <section className="bsp-card bsp-st-set">
@@ -863,7 +929,7 @@ export function ComposerView({
               thing — which is exactly how the rail and the page came to
               disagree (D-190).
             */}
-            {draft === null && defaultBrandId === null && brands.length > 1 ? (
+            {defaultBrandId === null && brands.length > 1 ? (
               <div className="bsp-st-f bsp-st-f12">
                 <label className="bsp-lbl" htmlFor={`${fieldId}-brand`}>
                   {t['content.composer.brand']}
@@ -881,11 +947,9 @@ export function ComposerView({
                   }}
                 >
                   {/*
-                    THE EMPTY OPTION IS LOAD-BEARING, not decoration: a
-                    `<select>` whose options do not include the current value
-                    shows the first option while React still holds ''. Giving
-                    '' a real option makes the control show what the state
-                    actually is; `canGenerate` already requires a brand.
+                    THE EMPTY OPTION IS LOAD-BEARING: a `<select>` whose options
+                    do not include the current value shows the first option
+                    while React still holds ''.
                   */}
                   <option value="">{t['content.composer.brandPlaceholder']}</option>
                   {brands.map((brand) => (
@@ -899,8 +963,8 @@ export function ComposerView({
 
             {/*
               §18 — THE FORMAT FIRST, because it decides which channels can
-              carry the post. Only formats some enabled provider accepts are
-              offered, and choosing one drops the channels that cannot carry it.
+              carry the post. The prototype's four are the switch; a format
+              outside them is chosen under "⋯" and shown there.
             */}
             <div className="bsp-st-f bsp-st-f5">
               <span className="bsp-lbl" id={`${fieldId}-type`}>
@@ -914,7 +978,7 @@ export function ComposerView({
                 data-value={contentType}
               >
                 <SegmentPill selector='[aria-pressed="true"]' />
-                {offeredTypes.map((type) => (
+                {MAIN_FORMATS.filter((type) => offeredTypes.includes(type)).map((type) => (
                   <button
                     key={type}
                     type="button"
@@ -940,160 +1004,206 @@ export function ComposerView({
               <span id={`${fieldId}-channels`} className="bsp-lbl">
                 {t['studio.postTo']}
               </span>
-              <div
-                className="bsp-st-chips"
-                role="group"
-                aria-labelledby={`${fieldId}-channels`}
-                aria-describedby={`${fieldId}-channels-hint`}
-              >
-                {platforms.map((platform) => {
-                  const on = selected.includes(platform.key);
-                  const able = carries(contentType, platform.key);
-                  return (
-                    <button
-                      key={platform.key}
-                      type="button"
-                      className="bsp-chip"
-                      aria-pressed={on}
-                      disabled={!able}
-                      title={able ? undefined : t['create.format.unsupported']}
-                      data-testid="content-channel"
-                      data-platform={platform.key}
-                      onClick={() => toggle(platform.key)}
+              <div className="bsp-st-chips">
+                <div
+                  className="bsp-st-chips"
+                  role="group"
+                  aria-labelledby={`${fieldId}-channels`}
+                  aria-describedby={`${fieldId}-channels-hint`}
+                >
+                  {platforms.map((platform) => {
+                    const on = selected.includes(platform.key);
+                    const able = carries(contentType, platform.key);
+                    return (
+                      <button
+                        key={platform.key}
+                        type="button"
+                        className="bsp-chip"
+                        aria-pressed={on}
+                        disabled={!able}
+                        title={able ? undefined : t['create.format.unsupported']}
+                        data-testid="content-channel"
+                        data-platform={platform.key}
+                        onClick={() => toggle(platform.key)}
+                      >
+                        <ChannelMark
+                          channel={{ key: platform.key, name: platform.label }}
+                          size={14}
+                          label={false}
+                        />
+                        <span className="bsp-ltr">{platform.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <MoreDisclosure
+                  label={t['studio.moreOptions'] ?? ''}
+                  chosen={
+                    MAIN_FORMATS.includes(contentType)
+                      ? null
+                      : (t[`content.type.${contentType}`] ?? contentType)
+                  }
+                >
+                  {offeredTypes.some((type) => !MAIN_FORMATS.includes(type)) ? (
+                    <div className="bsp-fdis-field">
+                      <span className="bsp-fdis-label">{t['studio.moreFormats']}</span>
+                      <div className="bsp-st-chips" role="group" data-testid="content-format-more">
+                        {offeredTypes
+                          .filter((type) => !MAIN_FORMATS.includes(type))
+                          .map((type) => (
+                            <button
+                              key={type}
+                              type="button"
+                              className="bsp-chip bsp-st-sm"
+                              aria-pressed={type === contentType}
+                              data-value={type}
+                              onClick={() => chooseFormat(type)}
+                            >
+                              {t[`content.type.${type}`] ?? type}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {offeredTemplates.length > 0 ? (
+                    <label className="bsp-fdis-field">
+                      <span className="bsp-fdis-label">{t['create.template.label']}</span>
+                      <select
+                        className="bs-control bsp-fdis-control"
+                        value={chosenTemplateId}
+                        data-testid="content-template"
+                        onChange={(event) => chooseTemplate(event.target.value)}
+                      >
+                        <option value="">{t['create.template.none']}</option>
+                        {offeredTemplates.map((template) => (
+                          <option key={template.id} value={template.id}>
+                            {template.isDefault
+                              ? (t['create.template.default'] ?? '{name}').replace(
+                                  '{name}',
+                                  template.name,
+                                )
+                              : template.name}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="bsp-st-hint">
+                        {mode === 'write'
+                          ? t['create.template.hintWrite']
+                          : t['create.template.hintAi']}
+                      </span>
+                    </label>
+                  ) : null}
+                  <label className="bsp-fdis-field">
+                    <span className="bsp-fdis-label">{t['content.composer.language']}</span>
+                    <select
+                      className="bs-control bsp-fdis-control"
+                      value={contentLocale}
+                      data-testid="content-language"
+                      onChange={(event) => setContentLocale(event.target.value as ContentLocale)}
                     >
-                      <ChannelMark
-                        channel={{ key: platform.key, name: platform.label }}
-                        size={14}
-                        label={false}
-                      />
-                      <span className="bsp-ltr">{platform.label}</span>
-                    </button>
-                  );
-                })}
+                      <option value="AR">{t['content.language.AR']}</option>
+                      <option value="EN">{t['content.language.EN']}</option>
+                    </select>
+                  </label>
+                  {/*
+                    §19 — THE POST'S GOAL. Only where a model will read it: a
+                    post the person writes themselves is saved word for word.
+                  */}
+                  {mode === 'ai' && goals.length > 0 ? (
+                    <label className="bsp-fdis-field">
+                      <span className="bsp-fdis-label">{t['create.goal.label']}</span>
+                      <select
+                        className="bs-control bsp-fdis-control"
+                        value={goal}
+                        data-testid="content-goal"
+                        onChange={(event) => {
+                          setGoal(event.target.value);
+                          setQuote(null);
+                        }}
+                      >
+                        <option value="">{t['create.goal.none']}</option>
+                        {goals.map((option) => (
+                          <option key={option.key} value={option.key}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      {recommendedGoal ? (
+                        <span className="bsp-st-hint" data-testid="content-goal-recommended">
+                          {(t['create.goal.recommended'] ?? '').replace(
+                            '{goal}',
+                            goals.find((option) => option.key === recommendedGoal)?.label ?? '',
+                          )}
+                        </span>
+                      ) : null}
+                    </label>
+                  ) : null}
+                  {mode === 'ai' && authorDefaults.length > 0 ? (
+                    <div className="bsp-st-hint" data-testid="content-defaults">
+                      <b>{t['create.defaults.title']}</b>
+                      <ul className="bsp-st-defaults">
+                        {authorDefaults.map((entry) => (
+                          <li key={entry.key} data-testid={`content-default-${entry.key}`}>
+                            {entry.label}{' '}
+                            {forgetDefault ? (
+                              <form action={forgetDefault} className="bsp-st-inline-form">
+                                <input type="hidden" name="locale" value={locale} />
+                                <input type="hidden" name="brandId" value={defaultsBrandId} />
+                                <input type="hidden" name="key" value={entry.key} />
+                                <input type="hidden" name="decision" value="dismiss" />
+                                <input type="hidden" name="forget" value="1" />
+                                <input type="hidden" name="returnTo" value="/content/compose" />
+                                <button type="submit" className="bsp-st-link">
+                                  {t['create.defaults.forget']}
+                                </button>
+                              </form>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </MoreDisclosure>
               </div>
               <span id={`${fieldId}-channels-hint`} className="bsp-st-hint">
                 {t['content.composer.channelsHint']}
               </span>
             </div>
 
-            {offeredTemplates.length > 0 ? (
-              <div className="bsp-st-f bsp-st-f4">
-                <label className="bsp-lbl" htmlFor={`${fieldId}-template`}>
-                  {t['create.template.label']}
-                </label>
-                <select
-                  id={`${fieldId}-template`}
-                  className="bs-control bsp-chip bsp-cal-select bsp-st-select"
-                  value={chosenTemplateId}
-                  data-testid="content-template"
-                  aria-describedby={`${fieldId}-template-hint`}
-                  onChange={(event) => chooseTemplate(event.target.value)}
-                >
-                  <option value="">{t['create.template.none']}</option>
-                  {offeredTemplates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.isDefault
-                        ? (t['create.template.default'] ?? '{name}').replace(
-                            '{name}',
-                            template.name,
-                          )
-                        : template.name}
-                    </option>
-                  ))}
-                </select>
-                <span id={`${fieldId}-template-hint`} className="bsp-st-hint">
-                  {mode === 'write' ? t['create.template.hintWrite'] : t['create.template.hintAi']}
-                </span>
-              </div>
-            ) : null}
-
+            {/*
+              THE PUBLISH TIME, where the prototype keeps it. A post that does
+              not exist yet has no time; the day a ★ chip opened the Studio for
+              is shown, and the time is set once the draft is saved.
+            */}
             <div className="bsp-st-f bsp-st-f4">
-              <label className="bsp-lbl" htmlFor={`${fieldId}-language`}>
-                {t['content.composer.language']}
-              </label>
-              <select
-                id={`${fieldId}-language`}
-                className="bs-control bsp-chip bsp-cal-select bsp-st-select"
-                value={contentLocale}
-                onChange={(event) => setContentLocale(event.target.value as ContentLocale)}
+              <span className="bsp-lbl">{t['studio.when']}</span>
+              <span
+                className="bsp-chip bsp-st-wide bsp-st-static"
+                data-testid="composer-when"
+                title={t['studio.whenAfterSave']}
               >
-                <option value="AR">{t['content.language.AR']}</option>
-                <option value="EN">{t['content.language.EN']}</option>
-              </select>
+                <span className="bsp-st-when-label">
+                  <CalendarGlyph />
+                  <span>
+                    {plannedDate ? (
+                      <span className="bsp-ltr">{plannedDate}</span>
+                    ) : (
+                      t['studio.whenUnset']
+                    )}
+                  </span>
+                </span>
+              </span>
             </div>
 
             {/*
-              §19 — THE POST'S GOAL. Only where a model will read it: a post the
-              person writes themselves is saved word for word. The
-              recommendation is the brand's own first goal, named as such.
-            */}
-            {mode === 'ai' && draft === null && goals.length > 0 ? (
-              <div className="bsp-st-f bsp-st-f4">
-                <label className="bsp-lbl" htmlFor={`${fieldId}-goal`}>
-                  {t['create.goal.label']}
-                </label>
-                <select
-                  id={`${fieldId}-goal`}
-                  className="bs-control bsp-chip bsp-cal-select bsp-st-select"
-                  value={goal}
-                  data-testid="content-goal"
-                  onChange={(event) => {
-                    setGoal(event.target.value);
-                    setQuote(null);
-                  }}
-                >
-                  <option value="">{t['create.goal.none']}</option>
-                  {goals.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                {recommendedGoal ? (
-                  <span className="bsp-st-hint" data-testid="content-goal-recommended">
-                    {(t['create.goal.recommended'] ?? '').replace(
-                      '{goal}',
-                      goals.find((option) => option.key === recommendedGoal)?.label ?? '',
-                    )}
-                  </span>
-                ) : null}
-                {authorDefaults.length > 0 ? (
-                  <div className="bsp-st-hint" data-testid="content-defaults">
-                    <b>{t['create.defaults.title']}</b>
-                    <ul className="bsp-st-defaults">
-                      {authorDefaults.map((entry) => (
-                        <li key={entry.key} data-testid={`content-default-${entry.key}`}>
-                          {entry.label}{' '}
-                          {forgetDefault ? (
-                            <form action={forgetDefault} className="bsp-st-inline-form">
-                              <input type="hidden" name="locale" value={locale} />
-                              <input type="hidden" name="brandId" value={defaultsBrandId} />
-                              <input type="hidden" name="key" value={entry.key} />
-                              <input type="hidden" name="decision" value="dismiss" />
-                              <input type="hidden" name="forget" value="1" />
-                              <input type="hidden" name="returnTo" value="/content/compose" />
-                              <button type="submit" className="bsp-st-link">
-                                {t['create.defaults.forget']}
-                              </button>
-                            </form>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {/*
               THE CONTROL IS GATED ON THE PERMISSION THAT AUTHORIZES THE
-              ASSOCIATION, not merely on having campaigns to show (Q21, D-318):
-              filing a NEW post under a campaign is part of making it. It
-              belongs to the manual form below (`form=`), and is CONTROLLED
-              because the idempotency key has to include the choice.
+              ASSOCIATION, not merely on having campaigns to show (Q21, D-318).
+              It belongs to the manual form below (`form=`), and is CONTROLLED
+              because the idempotency key has to include the choice. In the
+              prototype's third column.
             */}
             {can.attachCampaign && campaignOptions.length > 0 ? (
-              <div className="bsp-st-f bsp-st-f4">
+              <div className="bsp-st-f bsp-st-f4 bsp-st-c9">
                 <label className="bsp-lbl" htmlFor={`${fieldId}-manual-campaign`}>
                   {t['campaigns.composerLabel']}
                 </label>
@@ -1120,154 +1230,294 @@ export function ComposerView({
           <div className="bsp-st-grid">
             {/* ---------------------------------------------- the editor --- */}
             <section className="bsp-card bsp-st-ed">
-              <div className="bsp-st-field">
-                <label className="bsp-st-label" htmlFor={`${fieldId}-brief`}>
-                  {mode === 'write' && draft === null
-                    ? t['create.write.label']
-                    : t['content.composer.brief']}
-                </label>
-                <textarea
-                  id={`${fieldId}-brief`}
-                  className="bsp-st-caption"
-                  value={brief}
-                  dir="auto"
-                  maxLength={maxBriefChars}
-                  placeholder={
-                    mode === 'write' && draft === null
-                      ? t['create.write.placeholder']
-                      : t['content.composer.briefPlaceholder']
-                  }
-                  data-testid="content-brief"
-                  onChange={(event) => {
-                    setBrief(event.target.value);
-                    setQuote(null);
-                  }}
-                />
-                <span className="bsp-st-count" data-over={briefTooLong ? 'true' : undefined}>
-                  <span className="bsp-ltr">
-                    {generationBrief.length} / {maxBriefChars}
-                  </span>
-                </span>
+              <div className="bsp-seg bsp-st-tabs" role="tablist">
+                <SegmentPill selector='[aria-selected="true"]' />
+                <button
+                  type="button"
+                  role="tab"
+                  className="bsp-seg-item"
+                  aria-selected={editorTab === 'words'}
+                  data-testid="studio-tab-words"
+                  onClick={() => setEditorTab('words')}
+                >
+                  {t['studio.tabWords']}
+                  {caption.trim() !== '' ? <span className="bsp-st-ok"> ✓</span> : null}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  className="bsp-seg-item"
+                  aria-selected={editorTab === 'visual'}
+                  data-testid="studio-tab-visual"
+                  onClick={() => setEditorTab('visual')}
+                >
+                  {t['studio.tabVisual']}
+                </button>
               </div>
 
-              {quote !== null ? (
-                <div className="bsp-st-quote" role="status" data-testid="content-quote">
-                  <b>
-                    {t['content.composer.quoteLabel']}: {formatCredits(quote)}{' '}
-                    {t['content.composer.quoteUnit']}
-                  </b>
-                  <span>{t['content.composer.quoteHint']}</span>
+              <div className="bsp-st-words" hidden={editorTab !== 'words'}>
+                <div className="bsp-st-field">
+                  <label className="bsp-st-label" htmlFor={`${fieldId}-brief`}>
+                    {t['studio.briefLabel']}
+                  </label>
+                  <input
+                    id={`${fieldId}-brief`}
+                    className="bsp-st-brief"
+                    value={brief}
+                    dir="auto"
+                    maxLength={maxBriefChars}
+                    placeholder={t['content.composer.briefPlaceholder']}
+                    data-testid="content-brief"
+                    onChange={(event) => {
+                      setBrief(event.target.value);
+                      setQuote(null);
+                    }}
+                  />
+                  {startFrom ? (
+                    <div className="bsp-st-start">
+                      <span>{t['studio.orStart']}</span>
+                      <Link
+                        href={startFrom.idea}
+                        className="bsp-chip bsp-st-sm"
+                        data-testid="create-mode-idea"
+                      >
+                        {t['create.mode.idea']}
+                      </Link>
+                      <Link
+                        href={startFrom.repurpose}
+                        className="bsp-chip bsp-st-sm"
+                        data-testid="create-mode-repurpose"
+                      >
+                        {t['create.mode.repurpose']}
+                      </Link>
+                    </div>
+                  ) : null}
+                  <span className="bsp-st-hint bsp-st-start-hint">
+                    {t['studio.briefHint']}
+                    {briefTooLong ? (
+                      <span className="bsp-st-count" data-over="true">
+                        {' '}
+                        <span className="bsp-ltr">
+                          {generationBrief.length} / {maxBriefChars}
+                        </span>
+                      </span>
+                    ) : null}
+                    {can.generate ? (
+                      <>
+                        {' · '}
+                        <button
+                          type="button"
+                          className="bsp-st-link"
+                          disabled={!canGenerate || busy !== null}
+                          data-testid="content-estimate"
+                          onClick={runQuote}
+                        >
+                          {t['content.composer.estimate']}
+                        </button>
+                      </>
+                    ) : null}
+                  </span>
+                  {quote !== null && busy === null ? (
+                    <div className="bsp-st-quote" role="status" data-testid="content-quote">
+                      <b>
+                        {t['content.composer.quoteLabel']}: {formatCredits(quote)}{' '}
+                        {t['content.composer.quoteUnit']}
+                      </b>
+                      <span>{t['content.composer.quoteHint']}</span>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
+
+                <div className="bsp-st-field">
+                  <div className="bsp-st-caphead">
+                    <label className="bsp-st-label" htmlFor={`${fieldId}-caption`}>
+                      {t['editor.caption']}
+                    </label>
+                    {can.generate ? (
+                      <button
+                        type="button"
+                        className="bsp-btn bsp-pur bsp-sm bsp-st-aiw"
+                        disabled={!canGenerate || busy !== null}
+                        data-testid="content-generate"
+                        /*
+                          THE KEY THIS BUTTON WOULD SEND, on the button that
+                          sends it — the only way a browser test can see WHICH
+                          of the two keys the composer wired to generation. A
+                          hash of the customer's own inputs; it discloses nothing.
+                        */
+                        data-generation-key={generationIdempotencyKey}
+                        onClick={runGenerate}
+                      >
+                        <SparkGlyph />
+                        {busy === 'generate'
+                          ? t['content.composer.generating']
+                          : t['studio.aiWrite']}
+                        {quote !== null && busy !== 'generate' ? (
+                          <span className="bsp-st-aiw-cost bsp-ltr">· {formatCredits(quote)}</span>
+                        ) : null}
+                      </button>
+                    ) : null}
+                  </div>
+                  <textarea
+                    id={`${fieldId}-caption`}
+                    className="bsp-st-caption"
+                    value={caption}
+                    dir="auto"
+                    maxLength={maxBriefChars}
+                    placeholder={t['studio.capPlaceholder']}
+                    data-testid="content-caption"
+                    onChange={(event) => setCaption(event.target.value)}
+                  />
+                  <span className="bsp-st-count" data-over={captionTooLong ? 'true' : undefined}>
+                    <span className="bsp-ltr">
+                      {caption.length} / {maxBriefChars}
+                    </span>
+                  </span>
+                  {/*
+                    THE AI EDITS, as the prototype lays them under the caption.
+                    They change a saved version, so before the draft exists
+                    they are shown and wait for it.
+                  */}
+                  {inlineActionsFor(tools).length > 0 ? (
+                    <div className="bsp-st-tools" role="group" aria-label={t['editor.ai.label']}>
+                      {inlineActionsFor(tools)
+                        .filter((action) => MAIN_TOOLS.includes(action.key))
+                        .map((action) => (
+                          <button
+                            key={action.key}
+                            type="button"
+                            className="bsp-chip bsp-st-sm"
+                            disabled
+                            data-action={action.key}
+                          >
+                            {t[`editor.ai.${action.key}`]}
+                          </button>
+                        ))}
+                      <span className="bsp-st-hint">{t['studio.toolsAfterSave']}</span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="bsp-st-visual" hidden={editorTab !== 'visual'}>
+                <p className="bsp-st-hint" data-testid="composer-design-after-save">
+                  {t['studio.designAfterSave']}
+                </p>
+              </div>
 
               {/*
                 THE MANUAL FORM MIRRORS THE CONTROLS ABOVE; IT DOES NOT
                 DUPLICATE THEM. Every hidden value here is already on the
-                screen, in the controls the generate button reads — so the two
-                verbs act on ONE set of answers and cannot drift apart. The
-                button and the campaign sit outside it through `form=`.
-
-                `contentType` WAS BEING DROPPED (PHASE 2 correction): the form
-                sends it, so a person who chose REEL and wrote it themselves
-                gets a reel.
-
-                HASHTAGS AND MEDIA ARE DELIBERATELY NOT HERE. Both are
-                properties of a VARIANT, not of the item; the draft this
-                button creates opens immediately in this same Studio, where the
-                per-version hashtags and media already work (D-184).
-
-                THE IDEMPOTENCY KEY IS THE COMPOSER'S OWN, derived from the
-                brand, the words, the channels and the language, so a double
-                submit returns the first draft instead of making a second.
+                screen, so the two verbs act on ONE set of answers. The button
+                and the campaign sit outside it through `form=`. The body is
+                the CAPTION, saved word for word; hashtags and media belong to
+                a version of the post and open the moment the draft does.
               */}
-              {draft === null ? (
-                <form
-                  id={manualFormId}
-                  action={actions.createManualDraft}
-                  data-testid="content-manual-form"
-                >
-                  <input type="hidden" name="locale" value={locale} />
-                  <input type="hidden" name="brandId" value={brandId} />
-                  <input type="hidden" name="contentLocale" value={contentLocale} />
-                  <input type="hidden" name="contentType" value={contentType} />
-                  <input type="hidden" name="body" value={brief} />
-                  <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
-                  {chosenTemplateId ? (
-                    <input type="hidden" name="templateId" value={chosenTemplateId} />
-                  ) : null}
-                  {carriedMedia ? (
-                    <input type="hidden" name="attach" value={carriedMedia.id} />
-                  ) : null}
-                  {plannedDate ? (
-                    <input type="hidden" name="plannedDate" value={plannedDate} />
-                  ) : null}
-                  {selected.map((platformKey) => (
-                    <input
-                      key={platformKey}
-                      type="hidden"
-                      name="platformKeys"
-                      value={platformKey}
-                    />
-                  ))}
-                </form>
-              ) : null}
+              <form
+                id={manualFormId}
+                action={actions.createManualDraft}
+                data-testid="content-manual-form"
+              >
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="brandId" value={brandId} />
+                <input type="hidden" name="contentLocale" value={contentLocale} />
+                <input type="hidden" name="contentType" value={contentType} />
+                <input type="hidden" name="body" value={caption} />
+                <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
+                {chosenTemplateId ? (
+                  <input type="hidden" name="templateId" value={chosenTemplateId} />
+                ) : null}
+                {carriedMedia ? (
+                  <input type="hidden" name="attach" value={carriedMedia.id} />
+                ) : null}
+                {plannedDate ? (
+                  <input type="hidden" name="plannedDate" value={plannedDate} />
+                ) : null}
+                {selected.map((platformKey) => (
+                  <input key={platformKey} type="hidden" name="platformKeys" value={platformKey} />
+                ))}
+              </form>
             </section>
 
-            {/* ------------------- the preview: nothing written yet, and says so --- */}
+            {/* ------------------ the preview: what the caption will look like --- */}
             <section
               className="bsp-card bsp-st-prev"
               aria-live="polite"
               data-testid="content-results"
             >
               <span className="bsp-lbl">{t['studio.preview']}</span>
-              <p className="bsp-st-none">{t['content.composer.resultsEmpty']}</p>
+              {selected.length > 1 ? (
+                <div
+                  className="bsp-seg bsp-st-seg-full"
+                  role="group"
+                  aria-label={t['studio.preview']}
+                >
+                  <SegmentPill selector='[aria-pressed="true"]' />
+                  {selected.map((key) => {
+                    const channel = {
+                      key,
+                      name: platforms.find((platform) => platform.key === key)?.label ?? key,
+                    };
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        aria-pressed={key === shownPreview}
+                        title={channel.name}
+                        className="bsp-ltr bsp-st-prev-tab"
+                        onClick={() => setPreviewKey(key)}
+                      >
+                        <ChannelMark channel={channel} size={13} label={false} />
+                        <span>{channel.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              {shownPreview ? (
+                <>
+                  <span className="bsp-st-size bsp-ltr">
+                    {previewGeometry(contentType, shownPreview)}
+                  </span>
+                  <VariantPreview
+                    locale={locale}
+                    platformKey={shownPreview}
+                    format={previewFormatFor(contentType)}
+                    body={caption}
+                    hashtags={[]}
+                    media={[]}
+                    accountName={brandName}
+                    accountHandle={brandHandle}
+                    status="DRAFT"
+                    approval="NOT_REQUIRED"
+                    labels={labels}
+                    testId={`content-preview-${shownPreview}`}
+                  />
+                </>
+              ) : (
+                <p className="bsp-st-none">{t['content.composer.resultsEmpty']}</p>
+              )}
             </section>
           </div>
 
           {/* -------------------------------------------- the sticky bar --- */}
           <div className="bsp-st-bar">
-            <span className="bsp-st-note" />
-            {can.generate ? (
-              <button
-                type="button"
-                className="bsp-btn bsp-sec"
-                disabled={!canGenerate || busy !== null}
-                data-testid="content-estimate"
-                onClick={runQuote}
-              >
-                {t['content.composer.estimate']}
-              </button>
-            ) : null}
+            <span className="bsp-pill bsp-p-neu" data-testid="composer-status">
+              {t['content.status.DRAFT']}
+            </span>
+            <span className="bsp-st-saved">{t['studio.notSaved']}</span>
+            <span className="bsp-st-note">
+              {caption.trim() === '' ? t['studio.captionFirst'] : null}
+            </span>
             <button
               type="submit"
               form={manualFormId}
-              className={mode === 'write' ? 'bsp-btn bsp-pur' : 'bsp-btn bsp-sec'}
+              className="bsp-btn bsp-pur"
               disabled={!canWrite || busy !== null}
               data-testid="content-write-manual"
             >
-              {t['content.composer.write']}
+              {t['studio.saveDraft']}
             </button>
-            {can.generate ? (
-              <button
-                type="button"
-                className={mode === 'write' ? 'bsp-btn bsp-sec' : 'bsp-btn bsp-pur'}
-                disabled={!canGenerate || busy !== null}
-                data-testid="content-generate"
-                /*
-                  THE KEY THIS BUTTON WOULD SEND, on the button that sends it.
-                  It is the only way a browser test can see WHICH of the two
-                  keys the composer wired to generation. It discloses nothing:
-                  a hash of the customer's own inputs, already present in this
-                  form as the manual submission's hidden field.
-                */
-                data-generation-key={generationIdempotencyKey}
-                onClick={runGenerate}
-              >
-                {busy === 'generate'
-                  ? t['content.composer.generating']
-                  : t['content.composer.generate']}
-              </button>
-            ) : null}
           </div>
         </div>
       )}

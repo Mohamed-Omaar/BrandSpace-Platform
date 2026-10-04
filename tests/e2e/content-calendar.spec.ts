@@ -62,9 +62,14 @@ async function openCalendar(page: Page, locale = 'en'): Promise<void> {
  * Leaves the dialog OPEN, because every caller's next step is to use it.
  */
 async function hasSchedulableDraft(page: Page): Promise<boolean> {
-  await clickUntil(page, 'calendar-schedule-open', async () => {
+  // Review of #67 — "Add to calendar" is under the head row's "⋯".
+  await expect(async () => {
+    if (!(await page.getByTestId('calendar-schedule-open').isVisible())) {
+      await page.getByTestId('calendar-more').click();
+    }
+    await page.getByTestId('calendar-schedule-open').click({ timeout: 2_000 });
     await expect(page.getByTestId('calendar-schedule-dialog')).toBeVisible({ timeout: 2_000 });
-  });
+  }).toPass({ timeout: 20_000 });
   return page
     .getByTestId('schedule-item')
     .isVisible()
@@ -197,6 +202,8 @@ test.describe('the calendar renders the workspace’s own month', () => {
      * workspace's zone, and a calendar that does not say which zone it means is
      * a calendar people misread — the reason the slot stores the intent at all.
      */
+    // Review of #67 — both are stated under the head row's "Filters".
+    await page.getByTestId('calendar-filters-toggle').click();
     await expect(page.getByTestId('calendar-timezone')).toBeVisible();
     await expect(page.getByTestId('calendar-quota')).toBeVisible();
   });
@@ -444,6 +451,7 @@ test.describe('accessibility', () => {
   test('the schedule dialog traps focus and closes on Escape', async ({ page }) => {
     await signIn(page);
     await openCalendar(page);
+    await page.getByTestId('calendar-more').click();
     await page.getByTestId('calendar-schedule-open').click();
 
     const dialog = page.getByTestId('calendar-schedule-dialog');

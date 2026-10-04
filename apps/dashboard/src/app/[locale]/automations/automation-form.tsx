@@ -37,6 +37,8 @@ import { colorTokens, inputStyle, spacingTokens, typographyTokens } from '@brand
 export interface TriggerOption {
   readonly type: string;
   readonly label: string;
+  /** Review of #67 — "Listens to Approvals", under the tile's label. */
+  readonly listens?: string;
   /** Action types `actionSupportsTrigger` allows for this trigger. */
   readonly actionTypes: readonly string[];
   /** Condition fields that have a real producer in this trigger's context. */
@@ -91,6 +93,8 @@ export interface AutomationFormLabels {
   readonly onlyIf: string;
   readonly then: string;
   readonly preview: string;
+  /** The summary box before a trigger is chosen. */
+  readonly previewEmpty?: string;
   readonly asksFirst: string;
   readonly usesCredits: string;
   readonly brand: string;
@@ -385,62 +389,6 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
         </>
       ) : null}
 
-      <div className="bsp-au-fields">
-        <label className="bsp-au-field">
-          <span className="bsp-lbl">{props.labels.name}</span>
-          <input
-            name="name"
-            required
-            maxLength={120}
-            defaultValue={initial?.name}
-            className="bs-control bsp-au-input"
-            data-testid="automation-name"
-          />
-        </label>
-        {initial ? (
-          /*
-           * FIXED ON AN EXISTING RULE: the brand, the trigger and the action are
-           * named, not offered. Nothing is posted for them; the server uses the
-           * stored ones.
-           */
-          <div className="bsp-au-field">
-            <span className="bsp-lbl">{props.labels.brand}</span>
-            <span className="bsp-au-fixed">{initial.brandName}</span>
-          </div>
-        ) : (
-          <label className="bsp-au-field">
-            <span className="bsp-lbl">{props.labels.brand}</span>
-            <select
-              name="brandId"
-              className="bs-control bsp-au-input"
-              data-testid="automation-brand"
-              value={brandId}
-              onChange={(event) => setBrandId(event.target.value)}
-            >
-              {props.brands.map((brand) => (
-                <option key={brand.id} value={brand.id}>
-                  {brand.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-      </div>
-
-      {initial ? (
-        <label className="bsp-au-field">
-          <span className="bsp-lbl">{props.labels.description}</span>
-          <textarea
-            name="description"
-            maxLength={500}
-            rows={2}
-            defaultValue={initial.description}
-            className="bs-control bsp-au-input"
-            data-testid="automation-description"
-          />
-        </label>
-      ) : null}
-
       <span className="bsp-lbl" id={`${formId}-when`}>
         1 · {props.labels.when}
       </span>
@@ -486,6 +434,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                   ? props.labels.triggerUnavailable.replace('{trigger}', option.label)
                   : option.label}
               </span>
+              {option.listens ? <span className="bsp-au-tile-s">{option.listens}</span> : null}
             </label>
           ))}
         </div>
@@ -908,14 +857,87 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
         ) : null}
       </div>
 
-      {trigger ? (
-        <div className="bsp-au-prev" data-testid="automation-preview">
-          <span className="bsp-au-prev-t">{props.labels.preview}</span>
-          <span className="bsp-au-prev-l">
-            {trigger.label}
-            {actionLabel ? ` → ${actionLabel}` : ''}
-          </span>
-        </div>
+      {/*
+        "THE RULE" — the prototype's summary box, always drawn (review of #67):
+        the rule read back as one line, its condition included, or what is
+        still to choose.
+      */}
+      <div className="bsp-au-prev" data-testid="automation-preview">
+        <span className="bsp-au-prev-t">{props.labels.preview}</span>
+        <span className="bsp-au-prev-l">
+          {trigger ? (
+            <>
+              {trigger.label}
+              {field
+                ? ` · ${props.conditionCatalogue[conditionField]?.label ?? conditionField}`
+                : ''}
+              {actionLabel ? ` → ${actionLabel}` : ''}
+            </>
+          ) : (
+            (props.labels.previewEmpty ?? '')
+          )}
+        </span>
+      </div>
+
+      {/*
+        Review of #67 — the prototype's dialog starts at "1 · When". The rule's
+        name, its brand and (editing) its description, which it does not draw,
+        follow the summary, before the buttons.
+      */}
+      <div className="bsp-au-fields">
+        <label className="bsp-au-field">
+          <span className="bsp-lbl">{props.labels.name}</span>
+          <input
+            name="name"
+            required
+            maxLength={120}
+            defaultValue={initial?.name}
+            className="bs-control bsp-au-input"
+            data-testid="automation-name"
+          />
+        </label>
+        {initial ? (
+          /*
+           * FIXED ON AN EXISTING RULE: the brand, the trigger and the action are
+           * named, not offered. Nothing is posted for them; the server uses the
+           * stored ones.
+           */
+          <div className="bsp-au-field">
+            <span className="bsp-lbl">{props.labels.brand}</span>
+            <span className="bsp-au-fixed">{initial.brandName}</span>
+          </div>
+        ) : (
+          <label className="bsp-au-field">
+            <span className="bsp-lbl">{props.labels.brand}</span>
+            <select
+              name="brandId"
+              className="bs-control bsp-au-input"
+              data-testid="automation-brand"
+              value={brandId}
+              onChange={(event) => setBrandId(event.target.value)}
+            >
+              {props.brands.map((brand) => (
+                <option key={brand.id} value={brand.id}>
+                  {brand.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
+      {initial ? (
+        <label className="bsp-au-field">
+          <span className="bsp-lbl">{props.labels.description}</span>
+          <textarea
+            name="description"
+            maxLength={500}
+            rows={2}
+            defaultValue={initial.description}
+            className="bs-control bsp-au-input"
+            data-testid="automation-description"
+          />
+        </label>
       ) : null}
 
       <div className="bsp-au-foot">

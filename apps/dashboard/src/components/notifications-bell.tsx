@@ -9,6 +9,8 @@ import {
   usePresence,
 } from '@brandspace/ui';
 import type { FeedItem, FeedKind } from '../app/[locale]/notifications/feed';
+import { markAllNotificationsReadAction } from '../app/[locale]/notifications/actions';
+import { MoreDisclosure } from './more-disclosure';
 
 /**
  * THE BELL OPENS A FEED, NOT A PAGE (Phase 6 final, D-277 §40, D-297) — in the
@@ -42,6 +44,9 @@ export function NotificationsBell({
   readonly strings: {
     readonly title: string;
     readonly close: string;
+    /** Review of #67 — the prototype's footer and the "⋯" holding the filters. */
+    readonly markAll: string;
+    readonly more: string;
     readonly all: string;
     readonly mentions: string;
     readonly approvals: string;
@@ -114,29 +119,45 @@ export function NotificationsBell({
           data-testid="notifications-feed"
           {...leavingProps}
         >
+          {/*
+            Review of #67 — the prototype's head: the title and "Dismiss". The
+            product's kind filters and "See all", which it does not draw, are
+            under the "⋯" between them.
+          */}
           <div className="bsp-ntf-head">
             <span>{strings.title}</span>
-            <button type="button" className="bsp-btn bsp-sm bsp-ghost" onClick={close}>
-              {strings.close}
-            </button>
-          </div>
-
-          <div className="bsp-seg bsp-ntf-tabs" role="tablist" aria-label={strings.title}>
-            {/* MO4: the chosen tab's pill slides between tabs. */}
-            <SegmentPill selector='[aria-selected="true"]' />
-            {tabs.map((entry) => (
-              <button
-                key={entry.key}
-                type="button"
-                role="tab"
-                className="bsp-seg-item"
-                aria-selected={tab === entry.key}
-                data-testid={`notifications-tab-${entry.key}`}
-                onClick={() => setTab(entry.key)}
-              >
-                {entry.label}
+            <span className="bsp-ntf-headacts">
+              <MoreDisclosure label={strings.more} testId="notifications-more" align="end">
+                <div className="bsp-seg bsp-ntf-tabs" role="tablist" aria-label={strings.title}>
+                  {/* MO4: the chosen tab's pill slides between tabs. */}
+                  <SegmentPill selector='[aria-selected="true"]' />
+                  {tabs.map((entry) => (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      role="tab"
+                      className="bsp-seg-item"
+                      aria-selected={tab === entry.key}
+                      data-testid={`notifications-tab-${entry.key}`}
+                      onClick={() => setTab(entry.key)}
+                    >
+                      {entry.label}
+                    </button>
+                  ))}
+                </div>
+                <Link
+                  href={href}
+                  className="bsp-ntf-seeall"
+                  data-testid="notifications-see-all"
+                  onClick={close}
+                >
+                  {strings.seeAll}
+                </Link>
+              </MoreDisclosure>
+              <button type="button" className="bsp-btn bsp-sm bsp-ghost" onClick={close}>
+                {strings.close}
               </button>
-            ))}
+            </span>
           </div>
 
           {failed ? (
@@ -181,10 +202,11 @@ export function NotificationsBell({
                         “{item.excerpt}”
                       </span>
                     ) : null}
+                    {/* Review of #67 — unread is the row's dot and tint, as drawn;
+                        the word stays for assistive technology. */}
                     <span className="bsp-ntf-m">
-                      {[item.unread ? strings.unread : null, item.context, item.when]
-                        .filter(Boolean)
-                        .join(' · ')}
+                      {item.unread ? <span className="bs-sr-only">{strings.unread} · </span> : null}
+                      {[item.context, item.when].filter(Boolean).join(' · ')}
                     </span>
                   </span>
                 </li>
@@ -192,14 +214,13 @@ export function NotificationsBell({
             </ul>
           )}
 
-          <Link
-            href={href}
-            className="bsp-ntf-all"
-            data-testid="notifications-see-all"
-            onClick={close}
-          >
-            {strings.seeAll}
-          </Link>
+          {/* "Mark all as read" — the product's existing action, as the prototype's footer. */}
+          <form action={markAllNotificationsReadAction}>
+            <input type="hidden" name="locale" value={locale} />
+            <button type="submit" className="bsp-ntf-all" data-testid="notifications-mark-all">
+              {strings.markAll}
+            </button>
+          </form>
         </div>
       ) : null}
     </span>

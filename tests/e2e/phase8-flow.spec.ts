@@ -614,6 +614,8 @@ test('11 · the post is scheduled and the calendar states its context', async ({
   expect(state.itemId, 'step 6 must have created a draft').toBeTruthy();
   await enter(page, '/calendar');
 
+  // Review of #67 — "Add to calendar" is under the head row's "⋯".
+  await page.getByTestId('calendar-more').click();
   await page.getByTestId('calendar-schedule-open').click();
   const picker = page.getByTestId('schedule-item');
   await expect(picker).toBeVisible();

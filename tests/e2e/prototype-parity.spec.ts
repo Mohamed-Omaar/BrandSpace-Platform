@@ -1,13 +1,11 @@
-import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
-import { signIn } from './own-workspace';
-import { withPlatformPrisma } from './platform-prisma';
-import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
+import { useBrand } from './brand';
+import { E2E_PARITY_FILE, type E2eParityFixture } from './env';
 
 /**
  * D-468 — SIDE-BY-SIDE EVIDENCE: the vendored prototype and the product, the
@@ -87,57 +85,29 @@ const thenPress =
   };
 
 /**
- * ONE POST WAITING FOR THE OWNER: a colleague's post in review in the fixture's
- * primary brand, so the Approvals pair shows a review rather than an empty queue.
- * Local evidence only — the E2E database, never a real one.
+ * INTO THE COMPARISON WORKSPACE (`seed-parity.ts`): the prototype's café, so a
+ * pair compares the design and not whatever the functional suites left behind.
+ * Run `tsx tests/e2e/seed-parity.ts` first.
  */
-async function seedPendingReview(): Promise<void> {
-  const loaded = JSON.parse(readFileSync(E2E_CREDENTIALS_FILE, 'utf8')) as E2eAdminCredentials;
-  const { customer } = loaded;
-  const brandId = brandFixtures(loaded).primaryBrandId;
-  const suffix = randomUUID().slice(0, 6);
-  await withPlatformPrisma(async (prisma) => {
-    const colleague = await prisma.membership.findFirstOrThrow({
-      where: {
-        workspaceId: customer.workspaceId,
-        status: 'ACTIVE',
-        user: { email: { not: customer.email }, name: { not: null } },
-      },
-      select: { userId: true },
-    });
-    const item = await prisma.contentItem.create({
-      data: {
-        workspaceId: customer.workspaceId,
-        brandId,
-        title: `Weekend brunch ${suffix}`,
-        status: 'IN_REVIEW',
-        primaryLocale: 'EN',
-        createdByUserId: colleague.userId,
-      },
-      select: { id: true },
-    });
-    await prisma.contentVariant.create({
-      data: {
-        workspaceId: customer.workspaceId,
-        brandId,
-        contentItemId: item.id,
-        platformKey: 'instagram',
-        locale: 'EN',
-        body: 'Brunch is back every Friday and Saturday, 10 to 2. Book a table from the link in bio.',
-        characterCount: 84,
-        validationState: 'VALID',
-      },
-    });
-    await prisma.approval.create({
-      data: {
-        workspaceId: customer.workspaceId,
-        brandId,
-        contentItemId: item.id,
-        requestedByUserId: colleague.userId,
-        status: 'PENDING',
-      },
-    });
-  });
+function parityFixture(): E2eParityFixture {
+  try {
+    return JSON.parse(readFileSync(E2E_PARITY_FILE, 'utf8')) as E2eParityFixture;
+  } catch {
+    throw new Error('The parity fixture is missing. Run `tsx tests/e2e/seed-parity.ts` first.');
+  }
+}
+
+async function signIn(page: Page, locale: 'en' | 'ar'): Promise<void> {
+  const fixture = parityFixture()[locale];
+  await useBrand(page, fixture.workspaceId, fixture.brandId);
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/sign-in`);
+  await page.fill('#email', fixture.email);
+  await page.fill('#password', fixture.password);
+  await page.click('[data-testid="signin-submit"]');
+  await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
+  const choose = page.getByTestId(`choose-workspace-${fixture.workspaceSlug}`);
+  if (await choose.isVisible().catch(() => false)) await choose.click();
+  await page.waitForURL(new RegExp(`/${locale}/overview$`));
 }
 
 /** The screens of a batch: the product route, and how the prototype is brought to it. */
@@ -160,7 +130,6 @@ const SCREENS: readonly {
     key: 'approvals',
     route: '/approvals',
     prototype: viaRail('Approvals', 'الموافقات'),
-    before: seedPendingReview,
   },
   { key: 'campaigns', route: '/campaigns', prototype: viaRail('Campaigns', 'الحملات') },
   { key: 'media', route: '/assets', prototype: viaRail('Media', 'الوسائط') },
@@ -238,7 +207,7 @@ const SCREENS: readonly {
   },
   {
     key: 'onboarding',
-    route: '/onboarding',
+    route: '/onboarding?step=brand',
     file: 'Auth.dc.html',
     prototype: async (page) => {
       await page
@@ -253,6 +222,12 @@ const SCREENS: readonly {
         .click();
       await page
         .getByRole('button', { name: /^(I opened the link in the email|فتحت اللينك من الإيميل)$/ })
+        .click();
+      // Review of #67 — the same step on both sides: the parity workspace
+      // exists, so the product opens on Brand, the prototype's step 2.
+      await page
+        .getByRole('button', { name: /^(Continue|كمّل|متابعة)$/ })
+        .first()
         .click();
     },
   },

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { translator, type MessageKey } from '../../../i18n/messages';
@@ -420,7 +421,8 @@ export function BrandBrainView({
     {
       id: 'knowledge',
       label: t('bb.tab.knowledge'),
-      ...(pendingTotal > 0 ? { badge: String(pendingTotal) } : {}),
+      // Review of #67 — the prototype's tab carries no count; the facts
+      // waiting are the "To review" bar's.
     },
     { id: 'look', label: t('bb.tab.look') },
     { id: 'sources', label: t('bb.tab.sources') },
@@ -442,7 +444,13 @@ export function BrandBrainView({
     />
   );
 
-  const [answeredBefore = '', answeredAfter = ''] = t('bb.answeredOf').split('{answered}');
+  /*
+   * THE PROTOTYPE'S FIGURE (review of #67): areas complete out of the areas
+   * there are — each area complete by the product's own rule (every key
+   * question answered, nothing waiting) — with its bar.
+   */
+  const areasDone = areas.filter((area) => area.status === 'COMPLETE').length;
+  const areasPct = areas.length > 0 ? Math.round((areasDone / areas.length) * 100) : 0;
 
   return (
     <div className="bsp-bb">
@@ -527,47 +535,20 @@ export function BrandBrainView({
                   <span className="bsp-bb-hint">{t('bb.orbHint')}</span>
                 </div>
                 <div className="bsp-bb-herotext" data-testid="completion-card">
-                  <b className="bsp-bb-count" data-testid="completion-answered">
-                    {answeredBefore}
-                    <span className="bsp-bb-big bsp-ltr">{answered}</span>
-                    {answeredAfter.replace('{total}', String(totalQuestions))}
-                  </b>
-                  <p className="bsp-bb-und" data-testid="brand-brain-understands">
-                    {understanding}
-                  </p>
-                  <p className="bsp-bb-lead">{t('bb.lead')}</p>
-                  <ul
-                    className="bsp-bb-layers"
-                    data-testid="brand-brain-layers"
-                    aria-label={t('bb.layersTitle')}
+                  <div className="bsp-bb-count" data-testid="completion-areas">
+                    <span className="bsp-bb-big bsp-ltr">
+                      {areasDone}/{areas.length}
+                    </span>
+                    <span>{t('bb.areasComplete').replace('{total}', String(areas.length))}</span>
+                  </div>
+                  <div
+                    className="bsp-bb-bar"
+                    role="img"
+                    aria-label={`${areasDone}/${areas.length} ${t('bb.areasComplete').replace('{total}', String(areas.length))}`}
                   >
-                    {layers.map((layer) => (
-                      <li
-                        key={layer.key}
-                        className="bsp-pill bsp-p-neu"
-                        data-testid={`brand-brain-layer-${layer.key}`}
-                        title={layer.description}
-                      >
-                        {layer.label} · <b className="bsp-ltr">{layer.count}</b>
-                        {layer.pending > 0
-                          ? ` · ${t('bb.layerPending').replace('{count}', String(layer.pending))}`
-                          : ''}
-                      </li>
-                    ))}
-                    <li className="bsp-pill bsp-p-neu">
-                      {t('bb.knowledgeItems')} ·{' '}
-                      <b className="bsp-ltr" data-testid="metric-items">
-                        {totalActiveItems}
-                      </b>
-                    </li>
-                    <li className="bsp-pill bsp-p-neu">
-                      {t('bb.sourceDocuments')} ·{' '}
-                      <b className="bsp-ltr" data-testid="metric-sources">
-                        {sourceCount}
-                      </b>
-                      {sourceCount > 0 ? ` · ${readySources} ${t('bb.source.READY')}` : ''}
-                    </li>
-                  </ul>
+                    <span style={{ width: `${areasPct}%` }} />
+                  </div>
+                  <p className="bsp-bb-lead">{t('bb.lead')}</p>
                   <div className="bsp-bb-acts">
                     <button
                       type="button"
@@ -593,24 +574,76 @@ export function BrandBrainView({
                         />
                       </label>
                     ) : null}
-                    {copilotHref ? (
-                      <CopilotLink
-                        href={copilotHref}
-                        className="bsp-btn bsp-sm bsp-sec"
-                        testId="brand-brain-ask"
+                    {/*
+                      THE PRODUCT'S OTHER FACTS AND WAYS ON (review of #67):
+                      key questions answered, what BrandSpace understands, the
+                      four memories, the counts, the Copilot and the profile —
+                      under "⋯" beside the prototype's two actions.
+                    */}
+                    <MoreDisclosure label={t('bb.more')} testId="brand-brain-more" align="start">
+                      <b className="bsp-bb-more-q" data-testid="completion-answered">
+                        {t('bb.answeredOf')
+                          .replace('{answered}', String(answered))
+                          .replace('{total}', String(totalQuestions))}
+                      </b>
+                      <p className="bsp-bb-und" data-testid="brand-brain-understands">
+                        {understanding}
+                      </p>
+                      <ul
+                        className="bsp-bb-layers"
+                        data-testid="brand-brain-layers"
+                        aria-label={t('bb.layersTitle')}
                       >
-                        {t('bb.askAboutBrand')}
-                      </CopilotLink>
-                    ) : null}
-                    {profileHref ? (
-                      <Link
-                        href={profileHref}
-                        className="bsp-btn bsp-sm bsp-ghost"
-                        data-testid="brand-brain-profile"
-                      >
-                        {t('bb.openProfile')}
-                      </Link>
-                    ) : null}
+                        {layers.map((layer) => (
+                          <li
+                            key={layer.key}
+                            className="bsp-pill bsp-p-neu"
+                            data-testid={`brand-brain-layer-${layer.key}`}
+                            title={layer.description}
+                          >
+                            {layer.label} · <b className="bsp-ltr">{layer.count}</b>
+                            {layer.pending > 0
+                              ? ` · ${t('bb.layerPending').replace('{count}', String(layer.pending))}`
+                              : ''}
+                          </li>
+                        ))}
+                        <li className="bsp-pill bsp-p-neu">
+                          {t('bb.knowledgeItems')} ·{' '}
+                          <b className="bsp-ltr" data-testid="metric-items">
+                            {totalActiveItems}
+                          </b>
+                        </li>
+                        <li className="bsp-pill bsp-p-neu">
+                          {t('bb.sourceDocuments')} ·{' '}
+                          <b className="bsp-ltr" data-testid="metric-sources">
+                            {sourceCount}
+                          </b>
+                          {sourceCount > 0 ? ` · ${readySources} ${t('bb.source.READY')}` : ''}
+                        </li>
+                      </ul>
+                      {copilotHref || profileHref ? (
+                        <div className="bsp-bb-acts">
+                          {copilotHref ? (
+                            <CopilotLink
+                              href={copilotHref}
+                              className="bsp-btn bsp-sm bsp-sec"
+                              testId="brand-brain-ask"
+                            >
+                              {t('bb.askAboutBrand')}
+                            </CopilotLink>
+                          ) : null}
+                          {profileHref ? (
+                            <Link
+                              href={profileHref}
+                              className="bsp-btn bsp-sm bsp-ghost"
+                              data-testid="brand-brain-profile"
+                            >
+                              {t('bb.openProfile')}
+                            </Link>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </MoreDisclosure>
                   </div>
                 </div>
               </section>

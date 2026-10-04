@@ -19,6 +19,7 @@ import {
 import { cancelScheduleAction, rescheduleContentAction } from '../calendar/actions';
 import { PostMenu } from './post-menu';
 import { ChannelMark } from '../calendar/prototype-calendar';
+import { FiltersDisclosure } from '../../../components/filters-disclosure';
 
 /**
  * THE CONTENT LIBRARY — PORTED FROM `prototype-2026-09-27` (D-468 batch 2):
@@ -28,11 +29,17 @@ import { ChannelMark } from '../calendar/prototype-calendar';
  * of cards (picture, title and status, meta, campaign, the one button and the
  * "…" menu) and the empty card.
  *
- * MEDIA-FIRST STAYS (D-282): a card shows the post's REAL first image (an
- * expiring grant), a video tile for a video, and — for a text-only post — the
- * caption itself on a lavender surface. Nothing is invented to fill the square.
- * The search, brand, campaign, format and language filters and the grid / list
- * switch stay too (D-282), drawn in the prototype's language.
+ * THE CARD IS THE PROTOTYPE'S: the square cover (the post's REAL first image,
+ * an expiring grant; a video tile for a video), the title and status pill, ONE
+ * meta line — the channels and when it goes out — the campaign chip, the one
+ * button and "…". A text-only post keeps its words (D-306) in the cover's own
+ * overlay, on the prototype's purple picture; nothing is invented.
+ *
+ * THE PRODUCT'S OTHER CONTROLS ARE KEPT, BEHIND "FILTERS" (review of #67): the
+ * search, brand, campaign, format, language, an exact status and the grid /
+ * list switch float in a panel over the screen, so the head row is the
+ * prototype's — the tabs, the channel chips and "+ New post". The list view
+ * keeps the product's long meta line (format, language, who, notes).
  *
  * Server-rendered: every quick action is a link or a server action.
  */
@@ -74,6 +81,8 @@ export interface LibraryCard {
   readonly campaignId?: string | null;
   readonly slot?: { readonly id: string; readonly date: string; readonly time: string } | null;
   readonly links?: readonly { readonly label: string; readonly url: string }[];
+  /** The prototype's "Oct 16 · 10:00", "Today · 18:00" or "No date". */
+  readonly when?: string;
 }
 
 /** B8 — the Posts menu's permissions, options and words, for every card. */
@@ -130,6 +139,10 @@ export function ContentLibrary({
     readonly platforms: readonly LibraryFilterOption[];
     readonly formats: readonly LibraryFilterOption[];
     readonly languages: readonly LibraryFilterOption[];
+    /** The chips: the connected channels (and a platform filtered on). */
+    readonly channels?: readonly LibraryFilterOption[];
+    /** Every exact status, for the Filters panel. */
+    readonly statuses?: readonly LibraryFilterOption[];
   };
   readonly view: 'grid' | 'list';
   readonly ideas: readonly LibraryIdea[];
@@ -169,7 +182,13 @@ export function ContentLibrary({
     const search = params.toString();
     return `/${locale}/content${search ? `?${search}` : ''}`;
   };
-  const filtered = Object.keys(filters).some((key) => key !== 'view' && key !== 'status');
+  const filtered = Object.keys(filters).some(
+    (key) => key !== 'view' && key !== 'status' && key !== 'tab',
+  );
+  // What the Filters chip counts: everything the head row does not show.
+  const activeFilters = ['q', 'brand', 'campaign', 'format', 'language', 'status'].filter(
+    (key) => filters[key] !== undefined,
+  ).length;
   const studio = (card: LibraryCard) => `/${locale}/content/compose?item=${card.id}`;
   const openLabel = (card: LibraryCard) =>
     t(
@@ -182,12 +201,12 @@ export function ContentLibrary({
 
   const select = (name: string, label: string, list: readonly LibraryFilterOption[]) =>
     list.length === 0 ? null : (
-      <label key={name} className="bsp-cal-filter">
-        <span className="bsp-cal-filter-label">{label}</span>
+      <label key={name} className="bsp-fdis-field">
+        <span className="bsp-fdis-label">{label}</span>
         <select
           name={name}
           defaultValue={filters[name] ?? ''}
-          className="bs-control bsp-chip bsp-cal-select"
+          className="bs-control bsp-fdis-control"
           data-testid={`content-${name}`}
         >
           <option value="">{t('content.filter.any')}</option>
@@ -299,7 +318,23 @@ export function ContentLibrary({
       />
     ) : null;
 
+  /* THE PROTOTYPE'S META LINE: the channels, then when it goes out. */
   const meta = (card: LibraryCard) => (
+    <span className="bsp-post-meta">
+      {[...card.platforms.map((platform) => t(`content.platform.${platform}`)), card.when ?? null]
+        .filter(Boolean)
+        .join(' · ')}
+      {card.openNotes > 0 ? (
+        <span className="bs-visually-hidden" data-testid={`content-notes-${card.id}`}>
+          {' · '}
+          {t('content.openNotes').replace('{count}', String(card.openNotes))}
+        </span>
+      ) : null}
+    </span>
+  );
+
+  /* The list view's long line: format, channels, language, when, who, notes. */
+  const fullMeta = (card: LibraryCard) => (
     <span className="bsp-post-meta">
       {[
         t(`content.type.${card.contentType}`),
@@ -350,53 +385,20 @@ export function ContentLibrary({
       </span>
     ) : (
       /* A TEXT-ONLY POST IS A DESIGNED CARD, NOT A MISSING IMAGE (D-306 §23):
-         the lavender surface, a "Text post" label with the note glyph, and the
-         post's own words. The compact list tile keeps only the glyph. */
+         the prototype's purple picture, and the post's own words where the
+         prototype puts a design's headline (`c.overlay`). The compact list
+         tile keeps only the glyph. */
       <span
         data-testid={`content-text-${card.id}`}
         data-text-only="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'grid',
-          alignContent: compact ? 'center' : 'start',
-          justifyItems: compact ? 'center' : 'stretch',
-          gap: spacingTokens.xs,
-          padding: compact ? 0 : spacingTokens.md,
-          background: colorTokens.surfaceLavender,
-          color: colorTokens.brandPurplePressed,
-        }}
+        className="bsp-post-textart"
       >
         {compact ? (
           <NoteIcon size={20} aria-hidden="true" />
         ) : (
-          <>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: spacingTokens['3xs'],
-                ...typographyTokens.caption,
-                fontWeight: 600,
-              }}
-            >
-              <NoteIcon size={14} aria-hidden="true" />
-              {t('content.textOnly')}
-            </span>
-            <span
-              dir="auto"
-              style={{
-                ...typographyTokens.bodySm,
-                color: colorTokens.textPrimary,
-                overflow: 'hidden',
-                display: '-webkit-box',
-                WebkitLineClamp: 6,
-                WebkitBoxOrient: 'vertical',
-              }}
-            >
-              {card.excerpt || card.title}
-            </span>
-          </>
+          <span dir="auto" className="bsp-post-overlay">
+            {card.excerpt || card.title}
+          </span>
         )}
       </span>
     );
@@ -431,7 +433,64 @@ export function ContentLibrary({
           ))}
         </nav>
         <div className="bsp-posts-right">
-          {options.platforms.map((platform) => (
+          <FiltersDisclosure
+            label={t('content.p.filters')}
+            active={activeFilters}
+            testId="content-filters-toggle"
+          >
+            <form
+              method="get"
+              action={`/${locale}/content`}
+              data-testid="content-filters"
+              className="bsp-fdis-form"
+            >
+              {filters['tab'] ? <input type="hidden" name="tab" value={filters['tab']} /> : null}
+              {filters['platform'] ? (
+                <input type="hidden" name="platform" value={filters['platform']} />
+              ) : null}
+              <input type="hidden" name="view" value={view} />
+              <label className="bsp-fdis-field">
+                <span className="bsp-fdis-label">{t('content.search')}</span>
+                <input
+                  type="search"
+                  name="q"
+                  defaultValue={filters['q'] ?? ''}
+                  placeholder={t('content.search')}
+                  className="bs-control bsp-fdis-control"
+                  data-testid="content-search"
+                />
+              </label>
+              {select('brand', t('content.filter.brand'), options.brands)}
+              {select('campaign', t('content.filter.campaign'), options.campaigns)}
+              {select('format', t('content.filter.format'), options.formats)}
+              {select('language', t('content.filter.language'), options.languages)}
+              {select('platform', t('content.filter.platform'), options.platforms)}
+              {select('status', t('content.filter.status'), options.statuses ?? [])}
+              <div className="bsp-fdis-foot">
+                <nav
+                  className="bsp-seg"
+                  aria-label={t('content.view.label')}
+                  data-testid="content-view"
+                >
+                  <SegmentPill selector='[aria-current="page"]' />
+                  {(['grid', 'list'] as const).map((id) => (
+                    <Link
+                      key={id}
+                      href={viewHref(id)}
+                      aria-current={view === id ? 'page' : undefined}
+                      data-testid={`tab-${id}`}
+                    >
+                      {t(`content.view.${id}`)}
+                    </Link>
+                  ))}
+                </nav>
+                <button type="submit" className="bsp-btn bsp-sm" data-testid="content-apply">
+                  {t('content.filter.apply')}
+                </button>
+              </div>
+            </form>
+          </FiltersDisclosure>
+          {(options.channels ?? []).map((platform) => (
             <Link
               key={platform.value}
               href={platformHref(platform.value)}
@@ -477,55 +536,6 @@ export function ContentLibrary({
           ))}
         </section>
       ) : null}
-
-      <form
-        method="get"
-        action={`/${locale}/content`}
-        data-testid="content-filters"
-        className="bsp-posts-filters"
-      >
-        {filters['status'] ? <input type="hidden" name="status" value={filters['status']} /> : null}
-        {filters['platform'] ? (
-          <input type="hidden" name="platform" value={filters['platform']} />
-        ) : null}
-        <input type="hidden" name="view" value={view} />
-        <label className="bsp-cal-filter">
-          <span className="bsp-cal-filter-label">{t('content.search')}</span>
-          <input
-            type="search"
-            name="q"
-            defaultValue={filters['q'] ?? ''}
-            placeholder={t('content.search')}
-            className="bs-control bsp-posts-search"
-            data-testid="content-search"
-          />
-        </label>
-        {select('brand', t('content.filter.brand'), options.brands)}
-        {select('campaign', t('content.filter.campaign'), options.campaigns)}
-        {select('format', t('content.filter.format'), options.formats)}
-        {select('language', t('content.filter.language'), options.languages)}
-        <button type="submit" className="bsp-btn bsp-sm bsp-sec" data-testid="content-apply">
-          {t('content.filter.apply')}
-        </button>
-        <nav
-          className="bsp-seg"
-          aria-label={t('content.view.label')}
-          data-testid="content-view"
-          style={{ marginInlineStart: 'auto' }}
-        >
-          <SegmentPill selector='[aria-current="page"]' />
-          {(['grid', 'list'] as const).map((id) => (
-            <Link
-              key={id}
-              href={viewHref(id)}
-              aria-current={view === id ? 'page' : undefined}
-              data-testid={`tab-${id}`}
-            >
-              {t(`content.view.${id}`)}
-            </Link>
-          ))}
-        </nav>
-      </form>
 
       {cards.length === 0 ? (
         <section className="bsp-xcard bsp-posts-empty" data-testid="content-empty">
@@ -606,7 +616,7 @@ export function ContentLibrary({
                   </span>
                   {campaignChip(card)}
                 </div>
-                {meta(card)}
+                {fullMeta(card)}
               </div>
               <div className="bsp-post-acts" style={{ marginTop: 0, flexShrink: 0 }}>
                 {primary(card)}

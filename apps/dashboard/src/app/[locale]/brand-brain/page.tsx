@@ -486,7 +486,7 @@ export default async function BrandBrainPage({
         // The prototype's node line is the area's own "n of m" (`a.sub`).
         detail:
           card.total > 0
-            ? t('bb.answeredOf')
+            ? t('bb.keyQuestionsOf')
                 .replace('{answered}', String(card.answered))
                 .replace('{total}', String(card.total))
             : `${card.activeItems} ${t('bb.itemsCount')}`,
@@ -720,7 +720,8 @@ export default async function BrandBrainPage({
    * the add form's placeholder and its key already set.
    */
   const cardLabel = new Map(areaCards.map((card) => [card.area, card.label]));
-  const missing = completion.missing.slice(0, 5).map((entry) => ({
+  // The prototype's one row of four (review of #67).
+  const missing = completion.missing.slice(0, 4).map((entry) => ({
     area: entry.area,
     areaLabel: cardLabel.get(entry.area) ?? entry.area,
     itemKey: entry.question.itemKey,

@@ -1,5 +1,6 @@
 import type React from 'react';
 import Link from 'next/link';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 import {
   AbstractMedia,
   AssetThumb,
@@ -183,6 +184,33 @@ export function ApprovalsView({
                   </Link>
                 ))}
               </nav>
+              {/*
+                The approval rules live in Settings → Approvals (A8, prototype
+                v94), for the permission that may change them. Review of #67:
+                the prototype's queue has no policy card; the link is under the
+                tabs' "⋯".
+              */}
+              {tab === 'forMe' && mayManagePolicy && policies.length > 0 ? (
+                <MoreDisclosure
+                  label={t('approvals.policyTitle')}
+                  testId="approvals-more"
+                  align="end"
+                >
+                  <section className="bsp-card bsp-apr-policy" data-testid="approvals-policy-link">
+                    <span className="bsp-apr-copy">
+                      <span className="bsp-apr-title">{t('approvals.policyTitle')}</span>
+                      <span className="bsp-apr-meta">{t('approvals.policyMoved')}</span>
+                    </span>
+                    <Link
+                      href={`/${locale}/settings/approvals`}
+                      className="bsp-btn bsp-sm bsp-sec"
+                      data-testid="approvals-policy-open"
+                    >
+                      {t('approvals.policyOpen')}
+                    </Link>
+                  </section>
+                </MoreDisclosure>
+              ) : null}
             </div>
 
             {tab === 'forMe' ? (
@@ -340,27 +368,6 @@ export function ApprovalsView({
               )
             ) : null}
           </section>
-
-          {/*
-            The approval rules live in Settings → Approvals (A8, prototype v94).
-            The queue only points there, and only for the permission that may
-            change them — Owner and Admin (`approvals.policy.manage`).
-          */}
-          {tab === 'forMe' && mayManagePolicy && policies.length > 0 ? (
-            <section className="bsp-card bsp-apr-policy" data-testid="approvals-policy-link">
-              <span className="bsp-apr-copy">
-                <span className="bsp-apr-title">{t('approvals.policyTitle')}</span>
-                <span className="bsp-apr-meta">{t('approvals.policyMoved')}</span>
-              </span>
-              <Link
-                href={`/${locale}/settings/approvals`}
-                className="bsp-btn bsp-sm bsp-sec"
-                data-testid="approvals-policy-open"
-              >
-                {t('approvals.policyOpen')}
-              </Link>
-            </section>
-          ) : null}
         </div>
 
         {/*
@@ -456,12 +463,19 @@ export function ApprovalsView({
                 />
               ) : null}
               {mayReadContent ? (
-                <Link
-                  className="bsp-apr-studio"
-                  href={`/${locale}/content/compose?item=${review.itemId}`}
+                /* Review of #67 — not drawn by the prototype; kept under "⋯". */
+                <MoreDisclosure
+                  label={t('calendar.openInStudio')}
+                  testId="approvals-review-more"
+                  align="start"
                 >
-                  {t('calendar.openInStudio')}
-                </Link>
+                  <Link
+                    className="bsp-apr-studio"
+                    href={`/${locale}/content/compose?item=${review.itemId}`}
+                  >
+                    {t('calendar.openInStudio')}
+                  </Link>
+                </MoreDisclosure>
               ) : null}
             </div>
             {review.conversation ? (

@@ -347,11 +347,16 @@ describe('E3 + Q18 · spending credits needs copilot.use as well as the feature 
       /generateMedia:\s*maySpendCredits\(workspace\.permissionKeys, 'assets\.upload'\)/,
     );
     const composer = read('apps/dashboard/src/app/[locale]/content/compose/composer-view.tsx');
+    // Review of #67 — "Write caption with AI" (the prototype's purple button)
+    // and the estimate link are both offered only with `can.generate`.
     expect(composer).toMatch(
-      /\{can\.generate \? \(\s*<button[^>]*?\s*type="button"\s*className="bsp-btn bsp-sec"/,
+      /\{can\.generate \? \(\s*<button[^>]*?\s*type="button"\s*className="bsp-btn bsp-pur bsp-sm bsp-st-aiw"/,
     );
+    expect(composer).toMatch(/\{can\.generate \? \(\s*<>\s*\{' · '\}\s*<button/);
     // Writing it yourself spends nothing and stays available.
-    expect(composer).toContain('const canWrite = hasInputs && draft === null;');
+    expect(composer).toContain(
+      "const canWrite = ready && caption.trim() !== '' && !captionTooLong && draft === null;",
+    );
     const pages: Array<[string, RegExp]> = [
       [
         'analytics/page.tsx',

@@ -20,6 +20,8 @@ import { MediaSlides } from './media-slides';
 import { InlineSchedule } from './inline-schedule';
 import { MediaDrawer, type CreativeFormatOption } from './media-drawer';
 import { VariantPreview, previewLabels } from './variant-preview';
+import { MoreDisclosure } from '../../../../components/more-disclosure';
+import { previewGeometry } from './preview-geometry';
 import type {
   ComposerDraft,
   ComposerPlatform,
@@ -605,6 +607,12 @@ export function DraftEditor({
           {draft.status === 'CHANGES_REQUESTED' ? (
             <span className="bsp-st-ep-note">{t['editor.lifecycle.changesRequested']}</span>
           ) : null}
+          {/* The prototype's note line names the campaign the post is filed under. */}
+          {draft.campaignId && campaigns.some((campaign) => campaign.id === draft.campaignId) ? (
+            <span className="bsp-st-ep-note" data-testid="editor-campaign-note">
+              {statusLabel} · {campaigns.find((campaign) => campaign.id === draft.campaignId)?.name}
+            </span>
+          ) : null}
           {review?.requiresApproval && draft.status === 'DRAFT' ? (
             <span className="bsp-st-ep-note" data-testid="editor-needs-approval">
               {t['editor.next.needsApproval']}
@@ -733,18 +741,40 @@ export function DraftEditor({
         <div className="bsp-st-f bsp-st-f5">
           <span className="bsp-lbl">{t['studio.format']}</span>
           {/*
-            The format is chosen when a post is written and is not changed
-            afterwards, so the prototype's switch is shown as the one it is.
+            THE PROTOTYPE'S SWITCH (review of #67). The format is chosen when a
+            post is written and is not changed afterwards, so the switch shows
+            the post's format pressed and the others are not offered.
           */}
-          <span className="bsp-st-fixed">
-            <span>{t[`content.type.${draft.contentType}`] ?? draft.contentType}</span>
-            {draft.arabicDialect ? (
-              <span className="bsp-st-fixed-sub" data-testid="content-dialect">
-                {t['content.composer.dialect']} ·{' '}
-                {t[`content.dialect.${draft.arabicDialect}`] ?? draft.arabicDialect}
-              </span>
-            ) : null}
-          </span>
+          <div
+            className="bsp-seg bsp-st-seg-full"
+            role="group"
+            aria-label={t['studio.format']}
+            data-testid="editor-format"
+            data-value={draft.contentType}
+          >
+            <SegmentPill selector='[aria-pressed="true"]' />
+            {[
+              ...EDITOR_FORMATS,
+              ...(EDITOR_FORMATS.includes(draft.contentType) ? [] : [draft.contentType]),
+            ].map((type) => (
+              <button
+                key={type}
+                type="button"
+                className="bsp-seg-item"
+                aria-pressed={type === draft.contentType}
+                disabled={type !== draft.contentType}
+                data-value={type}
+              >
+                {t[`content.type.${type}`] ?? type}
+              </button>
+            ))}
+          </div>
+          {draft.arabicDialect ? (
+            <span className="bsp-st-hint" data-testid="content-dialect">
+              {t['content.composer.dialect']} ·{' '}
+              {t[`content.dialect.${draft.arabicDialect}`] ?? draft.arabicDialect}
+            </span>
+          ) : null}
         </div>
         <div className="bsp-st-f bsp-st-f7">
           <span className="bsp-lbl" id={`${fieldId}-postto`}>
@@ -861,7 +891,7 @@ export function DraftEditor({
             </div>
           </span>
         </div>
-        <div className="bsp-st-f bsp-st-f4">
+        <div className="bsp-st-f bsp-st-f4 bsp-st-c9">
           <span className="bsp-lbl">{t['campaigns.composerLabel']}</span>
           {/*
             Q21 — a post with no campaign may be filed by anyone who may create
@@ -950,6 +980,28 @@ export function DraftEditor({
               const hashtags = parseHashtags(value.hashtagText);
               const { characters, limit } = checkOf(variant);
               const dirty = isDirty(variant);
+              const toolButton = (action: (typeof actionsFor)[number]) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  className="bsp-chip bsp-st-sm"
+                  disabled={busy !== null || dirty}
+                  data-testid="content-tool"
+                  data-tool={action.tool}
+                  data-action={action.key}
+                  onClick={() =>
+                    onTool(
+                      variant.id,
+                      action.tool,
+                      action.tool === 'tone' ? (action.argument ?? toneArgument) : undefined,
+                    )
+                  }
+                >
+                  {busy === `${variant.id}:${action.tool}`
+                    ? t['content.tool.running']
+                    : t[`editor.ai.${action.key}`]}
+                </button>
+              );
               return (
                 <form
                   key={variant.id}
@@ -1007,30 +1059,26 @@ export function DraftEditor({
                           aria-label={t['editor.ai.label']}
                           data-testid={`editor-ai-${variant.platformKey}`}
                         >
-                          {actionsFor.map((action) => (
-                            <button
-                              key={action.key}
-                              type="button"
-                              className="bsp-chip bsp-st-sm"
-                              disabled={busy !== null || dirty}
-                              data-testid="content-tool"
-                              data-tool={action.tool}
-                              data-action={action.key}
-                              onClick={() =>
-                                onTool(
-                                  variant.id,
-                                  action.tool,
-                                  action.tool === 'tone'
-                                    ? (action.argument ?? toneArgument)
-                                    : undefined,
-                                )
-                              }
+                          {/*
+                            THE PROTOTYPE'S FOUR EDITS under the caption; the
+                            product's others (rewrite, more detail, hashtags)
+                            are the same buttons under "⋯" (review of #67).
+                          */}
+                          {actionsFor
+                            .filter((action) => MAIN_TOOLS.includes(action.key))
+                            .map(toolButton)}
+                          {actionsFor.some((action) => !MAIN_TOOLS.includes(action.key)) ? (
+                            <MoreDisclosure
+                              label={t['editor.ai.more'] ?? ''}
+                              testId={`editor-ai-more-${variant.platformKey}`}
                             >
-                              {busy === `${variant.id}:${action.tool}`
-                                ? t['content.tool.running']
-                                : t[`editor.ai.${action.key}`]}
-                            </button>
-                          ))}
+                              <div className="bsp-st-chips">
+                                {actionsFor
+                                  .filter((action) => !MAIN_TOOLS.includes(action.key))
+                                  .map(toolButton)}
+                              </div>
+                            </MoreDisclosure>
+                          ) : null}
                           {!dirty && selected && estimate !== undefined ? (
                             <span
                               className="bsp-st-hint"
@@ -1410,16 +1458,22 @@ export function DraftEditor({
           <section className="bsp-card bsp-st-prev" data-testid="draft-preview">
             <div className="bsp-st-prev-head">
               <span className="bsp-lbl">{t['studio.preview']}</span>
+              {/*
+                "Compare previews" — the product's, not the prototype's: under
+                the one "⋯" at the end of the label row (review of #67).
+              */}
               {draft.variants.length > 1 ? (
-                <button
-                  type="button"
-                  className="bsp-chip bsp-st-sm"
-                  aria-pressed={compare}
-                  data-testid="preview-compare"
-                  onClick={() => setCompare((value) => !value)}
-                >
-                  {compare ? t['editor.preview.single'] : t['editor.preview.compare']}
-                </button>
+                <MoreDisclosure label={t['studio.moreOptions'] ?? ''} testId="preview-more">
+                  <button
+                    type="button"
+                    className="bsp-chip bsp-st-sm"
+                    aria-pressed={compare}
+                    data-testid="preview-compare"
+                    onClick={() => setCompare((value) => !value)}
+                  >
+                    {compare ? t['editor.preview.single'] : t['editor.preview.compare']}
+                  </button>
+                </MoreDisclosure>
               ) : null}
             </div>
             {draft.variants.length > 1 && !compare ? (
@@ -1447,6 +1501,11 @@ export function DraftEditor({
                   );
                 })}
               </div>
+            ) : null}
+            {!compare && activeVariant ? (
+              <span className="bsp-st-size bsp-ltr">
+                {previewGeometry(draft.contentType, activeVariant.platformKey)}
+              </span>
             ) : null}
             {compare
               ? draft.variants.map((variant) => (
@@ -1766,7 +1825,12 @@ const EP_TONE: Readonly<Record<string, string>> = {
   FAILED: 'failed',
 };
 
-function CalendarGlyph() {
+/** The prototype's four formats (`Main.dc.html` line 341). */
+const EDITOR_FORMATS: readonly string[] = ['POST', 'CAROUSEL', 'REEL', 'STORY'];
+/** The prototype's four AI edits under the caption; the rest sit under "⋯". */
+const MAIN_TOOLS: readonly string[] = ['shorten', 'friendlier', 'professional', 'translate'];
+
+export function CalendarGlyph() {
   return (
     <svg
       width="14"
@@ -1785,7 +1849,7 @@ function CalendarGlyph() {
   );
 }
 
-function SparkGlyph() {
+export function SparkGlyph() {
   return (
     <svg
       width="14"

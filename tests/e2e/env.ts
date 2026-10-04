@@ -57,6 +57,27 @@ export const E2E_CREDENTIALS_FILE = path.join(repoRoot, '.e2e-admin.json');
  */
 export const E2E_VISUAL_FILE = path.join(repoRoot, '.e2e-visual.json');
 
+/**
+ * Where the PARITY fixture (`seed-parity.ts`) writes its throwaway account: the
+ * comparison workspace the D-468 side-by-side pairs are taken in. Same rules —
+ * generated per run, git-ignored, mode 0600.
+ */
+export const E2E_PARITY_FILE = path.join(repoRoot, '.e2e-parity.json');
+
+export interface E2eParityWorkspace {
+  readonly email: string;
+  readonly password: string;
+  readonly workspaceId: string;
+  readonly workspaceSlug: string;
+  readonly brandId: string;
+}
+
+/** One comparison workspace per language: English content, and Arabic. */
+export interface E2eParityFixture {
+  readonly en: E2eParityWorkspace;
+  readonly ar: E2eParityWorkspace;
+}
+
 export interface E2eVisualFixture {
   readonly email: string;
   readonly password: string;

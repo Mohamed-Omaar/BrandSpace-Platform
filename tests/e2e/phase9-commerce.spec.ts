@@ -157,7 +157,8 @@ test.describe('a stranger becomes a paying customer', () => {
     // --- The first-run wizard is DERIVED: the business account exists (it is
     // not a customer-visible step since D-303) and the brand step is not done.
     // (Choosing a plan is not a setup step since D-277 §6.)
-    await expect(page.getByTestId('setup-progress-text')).toContainText('1');
+    // Review of #67 — Business is step 1 (done); the brand is step 2 of 5.
+    await expect(page.getByTestId('setup-progress-text')).toContainText('2');
     await expect(page.locator('[data-testid="onboarding-step-brand"]')).toHaveAttribute(
       'data-complete',
       'false',
@@ -165,6 +166,8 @@ test.describe('a stranger becomes a paying customer', () => {
 
     // --- Billing, priced in the platform's launch currency (USD).
     await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
+    // Review of #67 — the plans open in place from the prototype's "Change plan".
+    await page.click('[data-testid="billing-change-plan"]');
     await expect(page.locator('[data-testid="plans-card"]')).toBeVisible();
 
     // 26.00 USD, from the activated fixture catalogue. Nothing converted.
@@ -288,6 +291,8 @@ test.describe('a stranger becomes a paying customer', () => {
     await expect(page.locator('[data-testid="credit-balance"]')).toHaveText('200');
 
     // B-10 — the purchase is confirmed in the app before checkout opens.
+    // Review of #67 — the packs open in place from the credits card's button.
+    await page.click('[data-testid="billing-buy-credits"]');
     await page.click('[data-testid="pack-buy-fixture-pack-small"]');
     await expect(page.locator('[data-testid="pack-buy-fixture-pack-small-confirm"]')).toBeVisible();
     await buyAndFollow(page, 'pack-buy-fixture-pack-small-accept');
@@ -309,6 +314,7 @@ test.describe('a stranger becomes a paying customer', () => {
     await createWorkspace(page, { country: 'SA' });
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
+    await page.click('[data-testid="billing-change-plan"]');
     await buyAndFollow(page, 'plan-buy-fixture-starter');
     await page.click('[data-testid="dev-checkout-cancel"]');
 
@@ -354,6 +360,7 @@ test.describe('the commercial screens work in both languages', () => {
     // than pinned, because the region is the shell's business, not this test's.
     await expect(page.locator('html')).toHaveAttribute('lang', /^ar\b/);
     // The Arabic page carries no English label where a translation exists.
+    await page.click('[data-testid="billing-change-plan"]');
     await expect(page.locator('[data-testid="plans-card"]')).toBeVisible();
 
     const arabic = await new AxeBuilder({ page })

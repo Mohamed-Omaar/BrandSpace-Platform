@@ -80,8 +80,10 @@ test.describe('P6-13 · team, activity, settings, plan', () => {
     await expect(page.getByTestId('workspace-deletion')).toBeVisible();
     // Reachable from the Settings navigation, alongside Connected accounts.
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
-    await expect(page.getByRole('link', { name: 'Data controls' }).first()).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Connections' }).first()).toBeVisible();
+    // Review of #67 — the prototype's menu names them "Data" and "Accounts".
+    const nav = page.getByTestId('settings-nav');
+    await expect(nav.getByRole('link', { name: 'Data', exact: true })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Accounts', exact: true })).toBeVisible();
   });
 
   test('the Plan screen shows brands and accounts against their real ceilings', async ({

@@ -127,8 +127,8 @@ export default async function ActivityPage({
       brandContext={brandContext}
       locale={locale}
       activePath="/activity"
-      heading={t('activity.title')}
-      description={t('activity.subtitle')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={customer.email}

@@ -109,6 +109,63 @@ export const arEgOverrides = {
   'content.menu.addCampaign': 'ضيفه لحملة',
   'content.menu.changeCampaign': 'غيّر الحملة',
 
+  // Review of #67 — Posts' tabs and the card's date (Main.dc.html line 2185, 2450).
+  'content.tab.review': 'في المراجعة',
+  'content.tab.failed': 'متعثرة',
+  'content.p.noDate': 'من غير ميعاد',
+  'content.p.today': 'النهارده',
+
+  // Review of #67 — the Studio (Main.dc.html lines 329–537; copy at 2176–2177, 2895).
+  'studio.subtitle': 'اكتب المنشور وصمّمه وشوف معاينته، في مكان واحد.',
+  'studio.briefLabel': 'المنشور عن إيه؟',
+  'studio.briefHint': 'الذكاء بيكتب الكابشن تحت من الفكرة دي.',
+  'studio.aiWrite': 'اكتب الكابشن بالذكاء',
+  'studio.capPlaceholder': 'اكتب النص بنفسك، أو اطلب من الذكاء يكتبه من الموضوع فوق.',
+  'studio.captionFirst': 'اكتب النص الأول',
+
+  // Review of #67 — Media's Generate tab (Main.dc.html line 2958, Arabic at 2931).
+  'creative.usesBrand': 'بيستخدم ألوان وأسلوب {brand} من عقل العلامة.',
+
+  // Review of #67 — Brand Brain's areas (Main.dc.html, `areaNames`).
+  'bb.area.identity': 'نبذة عن النشاط',
+  'bb.area.doDont': 'افعل / لا تفعل',
+  'bb.area.learnings': 'الدروس',
+
+  // Review of #67 — Settings as one page (Main.dc.html line 3909, 2898).
+  // Review of #67 — Team & roles (Main.dc.html lines 2937–2938, 4019).
+  'members.inviteSent': 'دعوة مبعوتة',
+  // Campaigns (Main.dc.html line 2433).
+  'campaigns.status.ACTIVE': 'شغالة',
+  'campaigns.status.PLANNED': 'مخططة',
+  // Sign-in (Auth.dc.html line 224).
+  'signIn.noAccount': 'معندكش حساب؟',
+  'signIn.createAccount': 'اعمل حساب',
+  'notifications.markAllRead': 'علّم الكل كمقروء',
+  'signUp.trialNote': 'تجربة {days} يوم ببلاش و{credits} رصيد، ومن غير كارت.',
+  // Automations (Main.dc.html AU and AU_T, lines 3795–3806).
+  'automations.on': 'شغّالة',
+  'automations.off': 'مقفولة',
+  'automations.tab.activity': 'اللي حصل',
+  'automations.listens': 'بتسمع لـ {source}',
+  'automations.ran': 'اشتغلت {count} مرات · آخر مرة {when}',
+  'automations.notRun': 'لسه ما اشتغلتش',
+  'automations.lastToday': 'النهارده {time}',
+  'automations.saveRule': 'احفظ القاعدة',
+  // Plan & billing (Main.dc.html line 2937).
+  'billing.buyCredits': 'اشترِ {credits} رصيد',
+  'settings.p.subtitle': 'نشاطك، وفريقك وصلاحياتهم، والخطة والأمان.',
+  'settings.bizNote':
+    'الاسم ده بيظهر في القائمة وفي التقارير. شكل العلامة وصوتها (اللوجو والألوان والخطوط والنبرة) في عقل العلامة ← الشكل والصوت.',
+  'settings.sec.brands.sub': 'العلامات اللي في المساحة دي وكل واحدة مربوطة بإيه.',
+  'settings.sec.team.sub': 'مين معاك، وكل واحد يقدر يعمل إيه.',
+  'settings.sec.appr.sub': 'مين بيوافق، وإمتى الموافقة مطلوبة.',
+  'settings.sec.conn.sub': 'الحسابات المربوطة وحالة كل ربط.',
+  'settings.sec.pub.sub': 'اللي بيتحط تلقائي في كل بوست جديد.',
+  'settings.sec.notif.sub': 'إيه اللي يوصلك، وفين.',
+  'settings.sec.ai.sub': 'بيكتب إزاي وبيصرف رصيد إمتى.',
+  'settings.sec.sec.sub': 'الدخول والأجهزة وسجل النشاط.',
+  'settings.sec.data.sub': 'تصدير بياناتك أو مسح المساحة.',
+
   // Batch 2 — Studio (Main.dc.html lines 329–537; copy at 2176–2177, 2311, 2324–2326, 2577).
   'studio.editing': 'بتعدّل',
   'studio.postTo': 'انشر على',
@@ -146,7 +203,7 @@ export const arEgOverrides = {
   'campaigns.best.label': 'أنجح حملة',
 
   // Batch 3 — Media (Main.dc.html lines 1237–1284).
-  'assets.media.generate': 'اعمل بالذكاء',
+  'assets.media.generate': 'توليد',
   'assets.media.use': 'استخدمه',
   'assets.media.ai': 'بالذكاء',
   'assets.media.filters': 'فلاتر',

@@ -242,7 +242,8 @@ test.describe('navigation', () => {
     await expect(page.getByTestId('publishing-tabs')).toBeVisible();
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
-    await page.getByTestId('settings-nav').getByRole('link', { name: 'Connections' }).click();
+    // Review of #67 — the prototype's Settings menu names this section "Accounts".
+    await page.getByTestId('settings-nav').getByRole('link', { name: 'Accounts' }).click();
     await page.waitForURL(/\/en\/integrations$/);
     await expect(page.locator('[data-testid="connected-accounts"]')).toBeVisible();
   });

@@ -55,15 +55,21 @@ describe('D-293 · the screens', () => {
    * export, which D-293 put last, now sits in the prototype's head row with
    * the views and the period (`Main.dc.html` line 670).
    */
-  it('Analytics puts the story before the metrics, and Export in the head row', () => {
+  /*
+   * REPLACED (review of #67): the prototype's Numbers tab opens on the KPI
+   * cards, and its layout wins over D-293's order — the story now follows the
+   * figures. Export stays in the head row.
+   */
+  it('Analytics puts the metrics before the story, and Export in the head row', () => {
     const story = analytics.indexOf('analytics-what-changed');
     const metrics = analytics.indexOf('analytics-metric-');
     const head = analytics.indexOf('data-testid="analytics-filters"');
     const exported = analytics.lastIndexOf('data-testid="analytics-export"');
     expect(story).toBeGreaterThan(0);
-    expect(story).toBeLessThan(metrics);
+    expect(metrics).toBeGreaterThan(0);
+    expect(metrics).toBeLessThan(story);
     expect(exported).toBeGreaterThan(head);
-    expect(exported).toBeLessThan(story);
+    expect(exported).toBeLessThan(metrics);
   });
 
   it('Analytics says correlation, not cause', () => {

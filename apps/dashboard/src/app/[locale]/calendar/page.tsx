@@ -899,6 +899,8 @@ export default async function CalendarPage({
 }
 
 const CALENDAR_KEYS = [
+  // Review of #67 — the head row's "Filters" chip.
+  'content.p.filters',
   'calendar.emptySchedule',
   'calendar.emptyCreate',
   'calendar.title',

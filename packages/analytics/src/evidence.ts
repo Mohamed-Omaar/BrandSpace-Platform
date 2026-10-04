@@ -6,7 +6,7 @@ import type {
   MetricUnit,
   SocialProvider,
 } from '@brandspace/database';
-import { fenceUntrusted } from '@brandspace/shared';
+import { fenceUntrusted, isInternalRecordText } from '@brandspace/shared';
 import type { Anomaly } from './anomalies';
 import { findMetric } from './metrics';
 import type { AnalyticsPeriod, MetricValue } from './queries';
@@ -301,7 +301,7 @@ export function foldDigits(text: string): string {
 }
 
 export interface GroundingViolation {
-  readonly kind: 'unknown_citation' | 'ungrounded_number' | 'no_citation';
+  readonly kind: 'unknown_citation' | 'ungrounded_number' | 'no_citation' | 'internal_text';
   /** The offending ordinal or numeral. Safe to log: it is a number or an index. */
   readonly detail: string;
 }
@@ -346,6 +346,16 @@ export function validateGrounding(input: {
 
   if ((input.requireCitation ?? true) && input.citedOrdinals.length === 0) {
     violations.push({ kind: 'no_citation', detail: '0' });
+  }
+
+  /*
+   * `internal_text` (review of #67) catches a model that copied an evidence
+   * RECORD into its answer — `e3 | METRIC | … | unit=COUNT`. With its digits
+   * dropped it passes every numeral check, and it is not an explanation: it is
+   * the platform's own machine text, and a customer read it on Performance.
+   */
+  if (isInternalRecordText(input.text)) {
+    violations.push({ kind: 'internal_text', detail: '0' });
   }
 
   /*

@@ -22,6 +22,7 @@ import {
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { signUpAction } from '../actions';
+import { trialTerms } from '../../../../server/trial-terms';
 import { SIGNUP_DRAFT_COOKIE, decodeSignupDraft } from '../../../../server/signup-draft';
 
 export const dynamic = 'force-dynamic';
@@ -65,6 +66,7 @@ export default async function SignUpPage({
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
   const required = policy.legalDocuments.filter((document) => document.required);
   const timezones = timeZoneOptions(locale);
+  const trial = await trialTerms().catch(() => null);
   // G8 (D-335): after a refusal, what was typed comes back — never the password.
   const draft = error ? decodeSignupDraft((await cookies()).get(SIGNUP_DRAFT_COOKIE)?.value) : null;
 
@@ -196,6 +198,16 @@ export default async function SignUpPage({
             </span>
           </label>
         ))}
+
+        {/* Review of #67 — the prototype's trial note (`Auth.dc.html` line 59),
+            from the same plan catalogue the workspace form states it from. */}
+        {trial ? (
+          <p className="bsp-auth-trial" data-testid="signup-trial-note">
+            {t('signUp.trialNote')
+              .replace('{days}', String(trial.days))
+              .replace('{credits}', String(trial.credits))}
+          </p>
+        ) : null}
 
         <button type="submit" data-testid="signup-submit" style={authButtonStyle()}>
           {t('signUp.submit')}

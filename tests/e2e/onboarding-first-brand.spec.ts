@@ -108,14 +108,17 @@ test.describe('onboarding reaches a first real brand', () => {
     const email = await signUpVerifyAndSignIn(page);
     await createWorkspace(page);
 
-    // The wizard is showing, on the brand step. D-303: the business account
-    // already exists and is not a step the customer sees — the journey is five
-    // steps, and it says where the reader is in it.
+    // The wizard is showing, on the brand step. Review of #67: the prototype's
+    // five steps — Business · Brand · Teach · Accounts · Goal — where Business
+    // is the business account just made, already done.
     const wizard = page.getByTestId('setup-wizard');
     await expect(wizard).toHaveAttribute('data-view', 'brand');
-    await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="onboarding-step-workspace"]')).toHaveAttribute(
+      'data-complete',
+      'true',
+    );
     await expect(page.getByTestId('setup-stepper').locator('li')).toHaveCount(5);
-    await expect(page.getByTestId('setup-progress-text')).toHaveText('Step 1 of 5 · Your brand');
+    await expect(page.getByTestId('setup-progress-text')).toHaveText('Step 2 of 5 · Brand');
     // Focused: the daily navigation steps aside during first-run setup.
     await expect(page.getByTestId('topbar-create')).toHaveCount(0);
     const brandStep = page.locator('[data-testid="onboarding-step-brand"]');
@@ -168,8 +171,9 @@ test.describe('onboarding reaches a first real brand', () => {
     await page.getByTestId('setup-upload-submit').click();
     await page.waitForURL(/step=learn/);
     await expect(page).toHaveURL(/ok=SOURCE_UPLOADED/);
-    await expect(page.locator('[data-testid="onboarding-step-learn"]')).toHaveAttribute(
-      'data-complete',
+    // Review of #67 — learning and reviewing are one step, Teach, still current.
+    await expect(page.locator('[data-testid="onboarding-step-teach"]')).toHaveAttribute(
+      'data-current',
       'true',
     );
 

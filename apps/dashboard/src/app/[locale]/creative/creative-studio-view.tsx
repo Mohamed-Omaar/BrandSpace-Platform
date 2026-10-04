@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { AssetMedia, SegmentPill } from '@brandspace/ui';
 
 /**
@@ -62,6 +62,8 @@ export interface CreativeStudioLabels {
   readonly scanning: string;
   readonly failed: string;
   readonly insufficientCredits: string;
+  /** The prototype's purple line, the brand named: "Uses … from Brand Brain." */
+  readonly usesBrand?: string;
 }
 
 /** The customer-safe codes the API can return, mapped to something readable. */
@@ -76,6 +78,7 @@ export function CreativeStudioView({
   formats,
   labels,
   initialResult,
+  identity = null,
 }: {
   readonly locale: string;
   readonly brandId: string;
@@ -83,6 +86,8 @@ export function CreativeStudioView({
   readonly labels: CreativeStudioLabels;
   /** A result carried back by a reload, so a refresh does not lose the image. */
   readonly initialResult: CreativeResultView | null;
+  /** What the image draws on — opened from the purple line. */
+  readonly identity?: ReactNode;
 }) {
   const router = useRouter();
   const fieldId = useId();
@@ -224,7 +229,7 @@ export function CreativeStudioView({
       } catch (error: unknown) {
         const code = error instanceof Error ? error.message : 'INTERNAL';
         const key = FAILURE_KEYS[code];
-        setFailure(key ? labels[key] : labels.failed);
+        setFailure((key ? labels[key] : undefined) ?? labels.failed);
       } finally {
         inFlight.current = false;
         setBusy(false);
@@ -245,6 +250,15 @@ export function CreativeStudioView({
    * rather than to the selection, because an unknown shape is not a reason to
    * assert a different one.
    */
+  /*
+   * "GENERATE · N" FROM THE FIRST RENDER (review of #67): the price of the
+   * format already chosen, not only after the switch moves.
+   */
+  const firstFormat = formats[0]?.key;
+  useEffect(() => {
+    if (firstFormat) void refreshQuote(firstFormat);
+  }, [firstFormat, refreshQuote]);
+
   const resultFormat = result
     ? (formats.find((format) => format.key === result.formatKey) ?? null)
     : null;
@@ -279,7 +293,7 @@ export function CreativeStudioView({
             aria-describedby={`${fieldId}-brief-hint`}
             data-testid="creative-brief"
           />
-          <span id={`${fieldId}-brief-hint`} className="bsp-gen-hint">
+          <span id={`${fieldId}-brief-hint`} className="bs-sr-only">
             {labels.briefHint}
           </span>
 
@@ -293,6 +307,7 @@ export function CreativeStudioView({
               aria-labelledby={`${fieldId}-format`}
               data-testid="creative-format"
               data-value={formatKey}
+              aria-describedby={`${fieldId}-format-hint`}
             >
               <SegmentPill selector='[aria-pressed="true"]' />
               {formats.map((format) => (
@@ -313,12 +328,30 @@ export function CreativeStudioView({
               ))}
             </div>
           </div>
-          <span className="bsp-gen-hint">{labels.formatHint}</span>
-
-          {/* The prototype's purple line: what the image draws on, and what it does not. */}
-          <span className="bsp-gen-uses" data-testid="creative-no-logo">
-            {labels.noLogoNotice}
+          <span id={`${fieldId}-format-hint`} className="bs-sr-only">
+            {labels.formatHint}
           </span>
+
+          {/*
+            THE PROTOTYPE'S PURPLE LINE — what the image draws on. It opens the
+            product's card of the brand's palette, typefaces and notes, with the
+            rule that a logo is never added by itself.
+          */}
+          {identity ? (
+            <details className="bsp-gen-identity">
+              <summary className="bsp-gen-uses" data-testid="creative-uses">
+                {labels.usesBrand}
+              </summary>
+              <span className="bsp-gen-hint" data-testid="creative-no-logo">
+                {labels.noLogoNotice}
+              </span>
+              {identity}
+            </details>
+          ) : (
+            <span className="bsp-gen-uses" data-testid="creative-no-logo">
+              {labels.noLogoNotice}
+            </span>
+          )}
 
           <button
             type="button"
@@ -331,7 +364,8 @@ export function CreativeStudioView({
             {estimate !== null && !busy ? (
               <span className="bsp-ltr bsp-gen-cost" data-testid="creative-estimate">
                 {' '}
-                · {formatCredits(estimate, locale)} {labels.costUnit}
+                · {formatCredits(estimate, locale)}
+                <span className="bs-sr-only"> {labels.costUnit}</span>
               </span>
             ) : null}
           </button>

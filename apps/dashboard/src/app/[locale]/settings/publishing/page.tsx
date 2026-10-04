@@ -132,10 +132,11 @@ export default async function PublishingDefaultsPage({
       flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
-      heading={t('settings.publishing')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
-      customerName={customer.email}
+      customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}

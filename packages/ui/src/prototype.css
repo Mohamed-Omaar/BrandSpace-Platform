@@ -2241,6 +2241,25 @@ span.bsp-cal-hol {
   flex-wrap: wrap;
 }
 
+/*
+ * READ ALOUD, NOT DRAWN — `bs-sr-only` (and its alias `bs-visually-hidden`).
+ * Seven product labels already named this class, and nothing defined it, so
+ * their words were drawn on screen. The standard clip pattern; the text stays
+ * in the accessibility tree and out of the layout.
+ */
+.bs-sr-only,
+.bs-visually-hidden {
+  position: absolute !important;
+  inline-size: 1px !important;
+  block-size: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 /* ---------------------------------------------------------- §3-POSTS ---- */
 
 /*
@@ -2501,24 +2520,122 @@ span.bsp-cal-hol {
   padding: 36px 22px;
   gap: 10px;
 }
-/* PRODUCT STATES (D-468 (c)): the filter row and the list view, in the
-   prototype's language — the calendar's chip selects and the agenda's rows. */
-.bsp-posts-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+/* A TEXT-ONLY POST'S COVER (D-306 kept, review of #67): the prototype's
+   purple picture (`artB`) and the post's words where the prototype puts a
+   design's headline — `position: absolute; bottom: 10px; inset-inline-start:
+   10px; color: #fff; font-size: 15px; font-weight: 800; text-shadow: 0 1px 8px
+   rgba(0,0,0,.25); max-width: 80%`. */
+.bsp-post-textart {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, #3a2a4f, #7935fe 70%, #c6a8ff);
+  color: #fff;
 }
-.bsp-posts-search {
-  min-inline-size: 12rem;
-  border: 1px solid #e4e4e8;
-  background: #fff;
+.bsp-post-overlay {
+  position: absolute;
+  bottom: 10px;
+  inset-inline-start: 10px;
+  max-width: 80%;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.3;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+/*
+ * "FILTERS" (review of #67): the product's extra controls, behind one chip
+ * in the head row, in a panel that floats over the screen — the glass of
+ * every prototype menu (`Main.dc.html` line 562: blur(22px) saturate(180%),
+ * 16px corners, the two-layer shadow), opaque enough for its fields to read
+ * (the notifications popover's finding). Nothing the prototype draws moves.
+ */
+.bsp-fdis {
+  position: relative;
+}
+.bsp-fdis > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.bsp-fdis > summary::-webkit-details-marker {
+  display: none;
+}
+.bsp-fdis[open] > .bsp-fdis-chip {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
+.bsp-fdis-count {
+  min-inline-size: 18px;
+  block-size: 18px;
   border-radius: 99px;
-  padding: 5px 12px;
-  font: inherit;
-  font-size: 12.5px;
-  min-block-size: 32px;
+  background: #7935fe;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+  padding-inline: 5px;
   box-sizing: border-box;
+}
+.bsp-fdis-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 30;
+  inline-size: 300px;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 16px;
+  box-shadow:
+    0 22px 55px rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.05);
+  padding: 14px;
+  animation: bsp-pop-up 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.bsp-fdis-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bsp-fdis-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bsp-fdis-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #4d4c53;
+}
+/* The prototype's field: `border: 1px solid transparent; background:
+   #f5f5f7; border-radius: 12px; padding: 10px 12px; font-size: 13.5px`. */
+.bsp-fdis-control {
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  min-block-size: 36px;
+  box-sizing: border-box;
+  inline-size: 100%;
+  color: #111114;
+}
+.bsp-fdis-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
 }
 .bsp-posts-list {
   list-style: none;
@@ -2953,7 +3070,8 @@ span.bsp-cal-hol {
   align-self: center;
   margin: 0;
 }
-.bsp-st-f > .bsp-st-hint {
+.bsp-st-f > .bsp-st-hint,
+.bsp-st-field > .bsp-st-start-hint {
   align-self: flex-start;
 }
 
@@ -3296,6 +3414,77 @@ span.bsp-cal-hol {
     padding-inline-end: 168px;
   }
 }
+/* REVIEW OF #67 — the Studio before the post exists, as the prototype draws it. */
+/* The campaign keeps the prototype's third column (`grid-column: span 4` after
+   the publish time and the pillar). */
+@media (min-width: 1100px) {
+  .bsp-st-c9 {
+    grid-column: 9 / span 4;
+  }
+}
+/* A chip that only states (the publish time of a post not saved yet). */
+.bsp-st-static {
+  cursor: default;
+}
+/* "What is the post about?": `border: 1px solid transparent; background:
+   #f5f5f7; border-radius: 12px; padding: 10px 14px; font-size: 14px`. */
+.bsp-st-brief {
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 14px;
+  min-width: 0;
+  color: #111114;
+}
+/* "Or start from:" — `gap: 6px; flex-wrap: wrap`, its label `font-size: 12px;
+   color: #6a6a72`, the chips `font-size: 12px; min-block-size: 28px;
+   padding: 3px 10px`. */
+.bsp-st-start {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-st-start > .bsp-chip {
+  font-size: 12px;
+  min-block-size: 28px;
+  padding: 3px 10px;
+  text-decoration: none;
+}
+/* The caption's label row: `justify-content: space-between; align-items:
+   center; gap: 10px`; "Write caption with AI" `min-block-size: 32px;
+   padding: 5px 12px; font-size: 12.5px`, its cost `opacity: .75;
+   font-weight: 600`. */
+.bsp-st-caphead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.bsp-st-aiw {
+  min-block-size: 32px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+.bsp-st-aiw-cost {
+  opacity: 0.75;
+  font-weight: 600;
+}
+/* The preview's size line: `font-size: 11px; color: #6a6a72`. */
+.bsp-st-size {
+  font-size: 11px;
+  color: #6a6a72;
+}
+/* "⋯" opens its panel from the start side, under the channels. */
+.bsp-fdis-panel.bsp-fdis-start {
+  inset-inline-end: auto;
+  inset-inline-start: 0;
+}
+
 /* Narrower than the prototype's 1440 frame (D-468 (c)): the editor and the
    preview stack, and the settings fields take half a row or a whole one. */
 @media (max-width: 1099.98px) {
@@ -3383,6 +3572,23 @@ span.bsp-cal-hol {
 }
 .bsp-apr-tabs-pad {
   padding: 12px;
+  /* Review of #67 — the tabs, and the policy link's "⋯" beside them. */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bsp-apr-tabs-pad > .bsp-seg {
+  flex: 1;
+  min-inline-size: 0;
+}
+.bsp-apr-list:has(.bsp-fdis[open]) {
+  overflow: visible !important;
+}
+.bsp-fdis-panel .bsp-card.bsp-apr-policy {
+  background: transparent;
+  box-shadow: none;
+  border: 0;
+  padding: 0;
 }
 .bsp-seg.bsp-apr-tabs {
   display: flex;
@@ -4188,6 +4394,13 @@ span.bsp-cal-hol {
   display: grid;
   gap: 12px;
 }
+/* Media's panel holds the views and the facets: wider than a column. */
+.bsp-fdis-panel.bsp-fdis-wide {
+  inline-size: min(560px, calc(100vw - 48px));
+}
+.bsp-fdis-wide .bsp-med-kinds {
+  flex-wrap: wrap;
+}
 .bsp-med-filters > .bsp-med-kinds {
   margin-inline-start: 0;
 }
@@ -4196,7 +4409,7 @@ span.bsp-cal-hol {
 .bsp-card.bsp-med-sto {
   padding: 16px 20px;
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
+  grid-template-columns: 250px minmax(0, 1fr) auto;
   gap: 24px;
   align-items: center;
   border-radius: 20px;
@@ -4241,6 +4454,21 @@ span.bsp-cal-hol {
 .bsp-med-sto-bar > span {
   height: 100%;
   background: #7935fe;
+}
+/* The card's third column: "Videos (largest)" and "Plan & storage →". */
+.bsp-med-sto-acts {
+  grid-column: 3;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.bsp-med-sto-acts > a {
+  text-decoration: none;
+}
+@media (max-width: 1099.98px) {
+  .bsp-med-sto-acts {
+    grid-column: auto;
+  }
 }
 /* The grid: `repeat(6, minmax(0, 1fr)); gap: 12px`. */
 .bsp-med-grid {
@@ -4328,16 +4556,43 @@ span.bsp-cal-hol {
 .bsp-med-line:empty {
   display: none;
 }
+.bsp-card.bsp-med-tile {
+  position: relative;
+}
+/* Bulk selection (the product's, D-468 (c)): a box on the picture's corner,
+   shown on hover, on focus and once ticked — the tile keeps its shape. */
 .bsp-med-select {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-block-size: 24px;
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  inline-size: 28px;
+  block-size: 28px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  cursor: pointer;
+}
+.bsp-med-tile:hover .bsp-med-select,
+.bsp-med-select:focus-within,
+.bsp-med-select:has(input:checked) {
+  opacity: 1;
+}
+/* Without hover (touch), the box is always there. */
+@media (hover: none) {
+  .bsp-med-select {
+    opacity: 1;
+  }
 }
 .bsp-med-select > input {
-  width: 18px;
-  height: 18px;
   margin: 0;
+  inline-size: 16px;
+  block-size: 16px;
+  accent-color: #7935fe;
 }
 /* The empty library: `.card` with `padding: 28px; gap: 8px; align-items:
    flex-start`, `font-size: 16px` and `13.5px; color: #6a6a72`. */
@@ -4413,6 +4668,22 @@ span.bsp-cal-hol {
 .bsp-gen-uses {
   font-size: 12.5px;
   color: #5312c4;
+}
+/* The purple line opens what the image draws on (review of #67). */
+.bsp-gen-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bsp-gen-identity > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.bsp-gen-identity > summary::-webkit-details-marker {
+  display: none;
+}
+.bsp-gen-identity > summary:hover {
+  text-decoration: underline;
 }
 .bsp-btn.bsp-gen-go {
   align-self: flex-start;
@@ -4698,15 +4969,41 @@ span.bsp-cal-hol {
 }
 /* D-357: "answered n of m" — the count in the prototype's 52px figure
    (`font-weight: 800; letter-spacing: -0.03em`), its words at 14px. */
+/* `display: flex; align-items: baseline; gap: 10px`, the figure `font-size:
+   52px; font-weight: 800; letter-spacing: -0.03em`, the words `font-size:
+   14px; color: #6a6a72`. */
 .bsp-bb-count {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   font-size: 14px;
   font-weight: 400;
   color: #6a6a72;
 }
+/* The bar: `height: 6px; border-radius: 99px; background: #efe7ff`, its fill
+   `linear-gradient(90deg, #7935fe, #ffd60a)`. */
+.bsp-bb-bar {
+  block-size: 6px;
+  border-radius: 99px;
+  background: #efe7ff;
+  overflow: hidden;
+}
+.bsp-bb-bar > span {
+  display: block;
+  block-size: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #7935fe, #ffd60a);
+}
+[dir='rtl'] .bsp-bb-bar > span {
+  background: linear-gradient(270deg, #7935fe, #ffd60a);
+}
+/* Inside "⋯": key questions answered, then the rest. */
+.bsp-bb-more-q {
+  font-size: 13.5px;
+  color: #111114;
+}
 .bsp-bb-big {
   display: inline-block;
-  margin-inline: 4px;
   font-size: 52px;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -6437,7 +6734,32 @@ button.bsp-chip.bsp-bb-q {
   color: #6a6a72;
 }
 /* "See all": `padding: 10px 14px; font-size: 13px; font-weight: 800; color: #5312c4`. */
+/* Review of #67 — the Copilot drawer: the head's note under "⋯", and the send button purple (`#7935fe`). */
+.bsp-cp-note {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #55555c;
+}
+.bsp-cp .bs-cpb-foot [data-testid='copilot-send'] {
+  background: #7935fe !important;
+  border-color: #7935fe !important;
+  color: #fff !important;
+}
+.bsp-ntf-headacts {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.bsp-ntf-seeall {
+  font-size: 13px;
+  font-weight: 700;
+  color: #5312c4;
+  text-decoration: none;
+}
 .bsp-ntf-all {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
   display: block;
   inline-size: 100%;
   box-sizing: border-box;
@@ -6854,6 +7176,11 @@ button.bsp-chip.bsp-bb-q {
   font-size: 12.5px;
   font-weight: 600;
 }
+/* Review of #67 — the tile's "Listens to …": `font-size: 10.5px; color: #8a8a92`. */
+.bsp-au-tile-s {
+  font-size: 10.5px;
+  color: #8a8a92;
+}
 /* An action: `align-items: center; gap: 6px; padding: 9px 10px; font-size: 12.5px; font-weight: 600`. */
 .bsp-au-tile.bsp-au-act {
   flex-direction: row;
@@ -6923,6 +7250,18 @@ button.bsp-chip.bsp-bb-q {
  */
 .bsp-card.bsp-tm {
   overflow: hidden;
+}
+/* Review of #67 — a row's "⋯" or "+ Invite" floats over the card, never clipped by it. */
+.bsp-card.bsp-tm:has(.bsp-fdis[open]) {
+  overflow: visible;
+}
+/* The invite form inside "+ Invite": the panel's one column. */
+.bsp-fdis-panel > .bsp-fdis-form > .bsp-tm-invite {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0;
+  border: 0;
+  inline-size: 300px;
+  max-inline-size: 100%;
 }
 .bsp-tm-count {
   flex-grow: 1;
@@ -7094,18 +7433,106 @@ button.bsp-chip.bsp-bb-q {
     top: 0;
   }
 }
-/* A section's own head: `h2.sech` at 20px and its 12.5px line. */
+/* A section's own head: `h2.sech` at 20px and its 12.5px line. A product
+   page that belongs to the section (Roles & permissions, the activity log)
+   is one link at its end. */
 .bsp-sg-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bsp-sg-headtext {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.bsp-sg-head > .bsp-sech {
+.bsp-sech.bsp-sg-title {
   font-size: 20px;
+  margin: 0;
 }
-.bsp-sg-head > span {
+.bsp-sg-sub {
   font-size: 12.5px;
   color: #6a6a72;
+}
+.bsp-sg-head > a {
+  text-decoration: none;
+}
+/* General: `.xcard` with `grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: 14px`; "Week starts on" spans both (`grid-column: 1 / -1`). */
+.bsp-sg-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.bsp-sg-span {
+  grid-column: 1 / -1;
+}
+.bsp-sg-wkrow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-sg-wkline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bsp-sg-wk {
+  position: relative;
+  border-radius: 9px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #55555c;
+  min-block-size: 30px;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.bsp-sg-wk > input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.bsp-sg-wk[data-on='true'] {
+  background: #fff;
+  color: #111114;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.bsp-sg-wk:focus-within {
+  outline: 2px solid #7935fe;
+  outline-offset: 1px;
+}
+.bsp-sg-wkmore {
+  flex-wrap: wrap;
+}
+/* The note under General: `background: #fbfaff; border-radius: 14px;
+   padding: 10px 14px`, its words `font-size: 12px; color: #55555c`. */
+.bsp-sg-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fbfaff;
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+.bsp-sg-note > span {
+  flex-grow: 1;
+  font-size: 12px;
+  color: #55555c;
+}
+.bsp-sg-note > a {
+  text-decoration: none;
+  flex-shrink: 0;
+}
+@media (max-width: 767.98px) {
+  .bsp-sg-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /*
@@ -7404,6 +7831,85 @@ button.bsp-chip.bsp-bb-q {
   font-weight: 700;
 }
 
+/*
+ * Review of #67 — the plan card's usage (`Main.dc.html` line 1450): each row a
+ * 12.5px label and value over a 6px `#f0f0f2` track with an ink fill; the
+ * plans and packs open in place under their buttons (line 1453); the invoices
+ * are a card of rows with no heading.
+ */
+.bsp-bl-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bsp-bl-urow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bsp-bl-uhead {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}
+.bsp-bl-uval {
+  font-weight: 700;
+}
+.bsp-bl-ubar {
+  block-size: 6px;
+  border-radius: 99px;
+  background: #f0f0f2;
+}
+.bsp-bl-ubar > div {
+  block-size: 100%;
+  border-radius: 99px;
+  background: #111114;
+}
+.bsp-bl-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+.bsp-bl-change {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bsp-bl-acts > .bsp-bl-change[open] {
+  flex-basis: 100%;
+}
+.bsp-bl-change > summary {
+  list-style: none;
+  cursor: pointer;
+  align-self: flex-start;
+}
+.bsp-bl-change > summary::-webkit-details-marker {
+  display: none;
+}
+.bsp-bl-change[open] > summary {
+  background: #111114;
+  color: #fff;
+}
+.bsp-bl-plans {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-card.bsp-bl-invcard {
+  overflow: hidden;
+}
+.bsp-bl-invcard > .bsp-bl-inv {
+  margin: 0;
+}
+.bsp-bl-none {
+  margin: 0;
+  padding: 16px 18px;
+  font-size: 13px;
+  color: #6a6a72;
+}
+
 /* ----------------------------------------------------------- §3-AUTH ---- */
 
 /*
@@ -7548,6 +8054,77 @@ button.bsp-chip.bsp-bb-q {
   color: #111114;
   box-shadow: none !important;
 }
+/*
+ * Review of #67 — the password row (`Auth.dc.html` lines 24, 28, 47): the label
+ * and "Forgot password?" (`.lnk`, 12.5px here) on one line, and `.pw .show` —
+ * the white 10px-radius button 7px inside the field's trailing edge, 13px / 800
+ * `#55555c` — on sign-in's field and on the shared password field's reveal.
+ */
+.bsp-pw-row {
+  display: flex;
+  flex-direction: column;
+}
+.bsp-pw-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.bsp-pw-head > label {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a6a72;
+  margin-block-end: 8px;
+}
+.bsp-auth-body .bsp-lnk {
+  border: 0;
+  background: transparent;
+  color: #5312c4;
+  font-weight: 700;
+  font-size: 12.5px;
+  text-decoration: underline;
+  padding: 0;
+}
+.bsp-pw {
+  position: relative;
+}
+.bsp-auth-body .bsp-pw > input.bs-control,
+.bsp-auth-body input.bs-control:has(+ .bs-reveal) {
+  padding-inline-end: 84px !important;
+}
+.bsp-pw-show,
+.bsp-auth-body .bs-reveal {
+  position: absolute;
+  inset-block: 7px !important;
+  inset-inline-end: 7px !important;
+  transform: none !important;
+  border: 0 !important;
+  background: #fff !important;
+  border-radius: 10px !important;
+  padding: 0 12px !important;
+  min-block-size: 0 !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  color: #55555c !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+  cursor: pointer;
+}
+.bsp-auth-trial {
+  margin: 0;
+  background: #f6f3ff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: #5312c4;
+}
+.bsp-auth-alt {
+  display: block;
+  text-align: center;
+  font-size: 13.5px;
+  color: #4d4c53;
+}
 /* `.btn`: 56px, radius 14, `padding: 12px 20px`, 15px / 800, ink; sign-up's is purple. */
 .bsp-auth-body form button[type='submit']:not(.bsp-auth-ws) {
   display: inline-flex;
@@ -7626,6 +8203,45 @@ button.bsp-chip.bsp-bb-q {
   flex-direction: column;
   gap: 18px;
   margin-block-start: 8px;
+}
+/*
+ * Review of #67 — the card on its own page (`Auth.dc.html` lines 115–118): the
+ * logo row (`.brandrow`, a 40px mark), the bars, then the step's heading at
+ * 34px / 800 over its 14px `#4d4c53` line.
+ */
+.bsp-wz.bsp-wz-solo {
+  margin-block-start: 0;
+}
+.bsp-wz-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bsp-wz-brand > .bsp-auth-lang {
+  margin-inline-start: auto;
+}
+.bsp-wz-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bsp-wz-head > h1 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+.bsp-wz-head > p {
+  margin: 0;
+  font-size: 14px;
+  color: #4d4c53;
+  line-height: 1.55;
+}
+.bsp-wz-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 .bsp-wz-steps {
   display: flex;

@@ -161,19 +161,150 @@ export default async function CreativeStudioPage({
     scanning: t('creative.scanning'),
     failed: t('creative.failed'),
     insufficientCredits: t('creative.insufficientCredits'),
+    usesBrand: brand ? t('creative.usesBrand').replace('{brand}', brand.name) : '',
   };
+
+  /*
+   * WHAT THE IMAGE DRAWS ON — the product's card, opened from the prototype's
+   * purple line ("Uses … colours and style from Brand Brain") rather than
+   * standing under the form (review of #67).
+   */
+  const identityCard =
+    brand && identity ? (
+      <Card testId="creative-identity">
+        <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+          <strong style={typographyTokens.bodySm}>
+            {t('creative.identity.title').replace('{brand}', brand.name)}
+          </strong>
+          {identity.palette.length > 0 ? (
+            <ul
+              data-testid="creative-identity-palette"
+              aria-label={t('assets.kit.palette')}
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: spacingTokens.xs,
+                margin: 0,
+                padding: 0,
+                listStyle: 'none',
+              }}
+            >
+              {identity.palette.map((colour) => (
+                <li
+                  key={colour}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      inlineSize: '1.25rem',
+                      blockSize: '1.25rem',
+                      borderRadius: radiusTokens.full,
+                      // The brand's OWN colour, as data — not a design literal.
+                      background: colour,
+                      border: `1px solid ${colorTokens.cardBorder}`,
+                    }}
+                  />
+                  <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                    {colour}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {/*
+                  PHASE 2C-2 (owner decision C) — THE FOUR TYPOGRAPHY SLOTS, each
+                  a short sample drawn in its own font, independent of the
+                  interface language: this card has no content language to
+                  choose by, so it shows both. An uploaded font this reader
+                  cannot load is drawn in the language's default.
+                */}
+          {fontView ? (
+            <ul
+              data-testid="creative-identity-fonts"
+              style={{
+                display: 'grid',
+                gap: spacingTokens.xs,
+                margin: 0,
+                padding: 0,
+                listStyle: 'none',
+              }}
+            >
+              {(['en', 'ar'] as const).flatMap((language) =>
+                (['heading', 'body'] as const).map((role) => {
+                  const slot = fontView.resolved[language][role];
+                  return (
+                    <li
+                      key={`${language}-${role}`}
+                      data-testid={`creative-identity-font-${language}-${role}`}
+                      data-font-family={slot.cssFamily}
+                      style={{ display: 'grid', gap: '0.125rem' }}
+                    >
+                      <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                        {t(`bb.look.slot.${language}.${role}` as MessageKey)} · {slot.name}
+                      </span>
+                      <span
+                        dir={language === 'ar' ? 'rtl' : 'ltr'}
+                        lang={language}
+                        style={{
+                          fontFamily: fontFamilyValue(slot, language),
+                          fontWeight: role === 'heading' ? 700 : 400,
+                          fontSynthesis: 'none',
+                          fontSize:
+                            role === 'heading'
+                              ? typographyTokens.h3.fontSize
+                              : typographyTokens.bodySm.fontSize,
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {translator(language)(`bb.look.sample.${role}` as MessageKey)}
+                      </span>
+                    </li>
+                  );
+                }),
+              )}
+            </ul>
+          ) : null}
+          <span
+            data-testid="creative-identity-summary"
+            style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
+          >
+            {[
+              identity.typography.length > 0
+                ? t('creative.identity.type').replace('{fonts}', identity.typography.join(' · '))
+                : null,
+              identity.notes > 0
+                ? t('creative.identity.notes').replace('{count}', String(identity.notes))
+                : t('creative.identity.noNotes'),
+              identity.palette.length === 0 ? t('creative.identity.noPalette') : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+          {mayProfile ? (
+            <Link
+              href={`/${locale}/settings/brand?brand=${brand.id}`}
+              data-testid="creative-identity-profile"
+              style={{ ...typographyTokens.caption, justifySelf: 'start' }}
+            >
+              {t('creative.identity.edit')}
+            </Link>
+          ) : null}
+        </div>
+      </Card>
+    ) : null;
 
   return (
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
       eyebrow={t('nav.group.create')}
-      heading={t('assets.title')}
-      description={t('creative.subtitle')}
+      heading={t('assets.media.title')}
+      description={t('assets.media.subtitle')}
       activePath="/assets"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
-      customerName={customer.email}
+      customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       {/*
@@ -190,6 +321,19 @@ export default async function CreativeStudioPage({
             {t('assets.media.generate')}
           </Link>
         </nav>
+        {/* The prototype keeps Upload on both tabs: the library's own upload. */}
+        {workspace.permissionKeys.includes('assets.upload') &&
+        workspace.permissionKeys.includes('assets.read') ? (
+          <span className="bsp-med-acts">
+            <Link
+              href={`/${locale}/assets?upload=1`}
+              className="bsp-btn bsp-sm bsp-sec"
+              data-testid="creative-upload"
+            >
+              {t('assets.media.upload')}
+            </Link>
+          </span>
+        ) : null}
       </div>
       {brand === null ? (
         <StateMessage
@@ -235,135 +379,8 @@ export default async function CreativeStudioPage({
             }))}
             labels={labels}
             initialResult={null}
+            identity={identityCard}
           />
-          {identity ? (
-            <Card testId="creative-identity">
-              <div style={{ display: 'grid', gap: spacingTokens.xs }}>
-                <strong style={typographyTokens.bodySm}>
-                  {t('creative.identity.title').replace('{brand}', brand.name)}
-                </strong>
-                {identity.palette.length > 0 ? (
-                  <ul
-                    data-testid="creative-identity-palette"
-                    aria-label={t('assets.kit.palette')}
-                    style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: spacingTokens.xs,
-                      margin: 0,
-                      padding: 0,
-                      listStyle: 'none',
-                    }}
-                  >
-                    {identity.palette.map((colour) => (
-                      <li
-                        key={colour}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
-                      >
-                        <span
-                          aria-hidden="true"
-                          style={{
-                            inlineSize: '1.25rem',
-                            blockSize: '1.25rem',
-                            borderRadius: radiusTokens.full,
-                            // The brand's OWN colour, as data — not a design literal.
-                            background: colour,
-                            border: `1px solid ${colorTokens.cardBorder}`,
-                          }}
-                        />
-                        <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                          {colour}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {/*
-                  PHASE 2C-2 (owner decision C) — THE FOUR TYPOGRAPHY SLOTS, each
-                  a short sample drawn in its own font, independent of the
-                  interface language: this card has no content language to
-                  choose by, so it shows both. An uploaded font this reader
-                  cannot load is drawn in the language's default.
-                */}
-                {fontView ? (
-                  <ul
-                    data-testid="creative-identity-fonts"
-                    style={{
-                      display: 'grid',
-                      gap: spacingTokens.xs,
-                      margin: 0,
-                      padding: 0,
-                      listStyle: 'none',
-                    }}
-                  >
-                    {(['en', 'ar'] as const).flatMap((language) =>
-                      (['heading', 'body'] as const).map((role) => {
-                        const slot = fontView.resolved[language][role];
-                        return (
-                          <li
-                            key={`${language}-${role}`}
-                            data-testid={`creative-identity-font-${language}-${role}`}
-                            data-font-family={slot.cssFamily}
-                            style={{ display: 'grid', gap: '0.125rem' }}
-                          >
-                            <span
-                              style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
-                            >
-                              {t(`bb.look.slot.${language}.${role}` as MessageKey)} · {slot.name}
-                            </span>
-                            <span
-                              dir={language === 'ar' ? 'rtl' : 'ltr'}
-                              lang={language}
-                              style={{
-                                fontFamily: fontFamilyValue(slot, language),
-                                fontWeight: role === 'heading' ? 700 : 400,
-                                fontSynthesis: 'none',
-                                fontSize:
-                                  role === 'heading'
-                                    ? typographyTokens.h3.fontSize
-                                    : typographyTokens.bodySm.fontSize,
-                                lineHeight: 1.4,
-                              }}
-                            >
-                              {translator(language)(`bb.look.sample.${role}` as MessageKey)}
-                            </span>
-                          </li>
-                        );
-                      }),
-                    )}
-                  </ul>
-                ) : null}
-                <span
-                  data-testid="creative-identity-summary"
-                  style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}
-                >
-                  {[
-                    identity.typography.length > 0
-                      ? t('creative.identity.type').replace(
-                          '{fonts}',
-                          identity.typography.join(' · '),
-                        )
-                      : null,
-                    identity.notes > 0
-                      ? t('creative.identity.notes').replace('{count}', String(identity.notes))
-                      : t('creative.identity.noNotes'),
-                    identity.palette.length === 0 ? t('creative.identity.noPalette') : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </span>
-                {mayProfile ? (
-                  <Link
-                    href={`/${locale}/settings/brand?brand=${brand.id}`}
-                    data-testid="creative-identity-profile"
-                    style={{ ...typographyTokens.caption, justifySelf: 'start' }}
-                  >
-                    {t('creative.identity.edit')}
-                  </Link>
-                ) : null}
-              </div>
-            </Card>
-          ) : null}
         </>
       )}
     </WorkspaceShell>

@@ -112,6 +112,8 @@ test.describe('D-297 · the bell', () => {
     // Stays on the screen the reader was on.
     expect(new URL(page.url()).pathname).toBe('/en/overview');
 
+    // Review of #67 — the kind filters are under the popover's "⋯".
+    await feed.getByTestId('notifications-more').click();
     await feed.getByTestId('notifications-tab-mention').click();
     const mention = feed.getByTestId(`feed-m:${threadId}`);
     await expect(mention).toContainText('mentioned you');
@@ -128,6 +130,7 @@ test.describe('D-297 · the bell', () => {
     await signIn(page);
     await page.getByTestId('topbar-notifications').click();
     const feed = page.getByTestId('notifications-feed');
+    await feed.getByTestId('notifications-more').click();
     await feed.getByTestId('notifications-tab-approval').click();
     const row = feed.getByTestId(`feed-n:${notificationId}`);
     await expect(row).toContainText('waiting for your review');
@@ -143,6 +146,17 @@ test.describe('D-297 · the bell', () => {
     await signIn(page, 'ar');
     await page.getByTestId('topbar-notifications').click();
     await expect(page.getByTestId('notifications-feed-list')).toBeVisible();
+    // The list fades in as the popover's rows do (MO): measure the colours it
+    // settles on, not a frame mid-fade — under load axe read 45%-opacity text.
+    await expect
+      .poll(() =>
+        page
+          .getByTestId('notifications-feed')
+          .evaluate((el) =>
+            el.getAnimations({ subtree: true }).every((a) => a.playState === 'finished'),
+          ),
+      )
+      .toBe(true);
     const results = await new AxeBuilder({ page })
       .include('[data-testid="notifications-feed"]')
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])

@@ -257,10 +257,11 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('plan.title')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
-      customerName={customer.email}
+      customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="billing">

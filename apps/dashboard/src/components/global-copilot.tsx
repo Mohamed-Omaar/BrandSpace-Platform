@@ -10,6 +10,7 @@ import {
 import Link from 'next/link';
 import { CopilotView } from '../app/[locale]/copilot/copilot-view';
 import { OPEN_COPILOT_EVENT } from './copilot-link';
+import { MoreDisclosure } from './more-disclosure';
 
 /**
  * THE GLOBAL COPILOT (Phase 6 final, D-277 §37).
@@ -57,6 +58,7 @@ export function GlobalCopilot({
   readonly rateMetricKeys?: readonly string[];
   readonly strings: {
     readonly openFull: string;
+    readonly more: string;
     readonly chooseBrandTitle: string;
     readonly chooseBrandBody: string;
   };
@@ -144,17 +146,24 @@ export function GlobalCopilot({
                 <path d="M12 3.5 13.6 9l5.4 1.6-5.4 1.6L12 17.5l-1.6-5.3L5 10.6 10.4 9z" />
               </svg>
             </span>
+            {/*
+              Review of #67 — the prototype's head is the mark, the title and
+              the close. The product's line on how the Copilot works and "Open
+              the full Copilot", which it does not draw, are under "⋯".
+            */}
             <span className="bsp-cp-t">
               <b>{labels.title}</b>
-              <span>{labels.subtitle}</span>
             </span>
-            <Link
-              href={href}
-              className="bsp-btn bsp-sm bsp-ghost bsp-cp-full"
-              data-testid="global-copilot-full"
-            >
-              {strings.openFull}
-            </Link>
+            <MoreDisclosure label={strings.more} testId="global-copilot-more" align="end">
+              <span className="bsp-cp-note">{labels.subtitle}</span>
+              <Link
+                href={href}
+                className="bsp-btn bsp-sm bsp-ghost bsp-cp-full"
+                data-testid="global-copilot-full"
+              >
+                {strings.openFull}
+              </Link>
+            </MoreDisclosure>
             <button
               type="button"
               className="bsp-cp-x"

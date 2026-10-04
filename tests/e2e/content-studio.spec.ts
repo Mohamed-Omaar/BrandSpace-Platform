@@ -178,7 +178,9 @@ async function ensureBrandWithKnowledge(page: Page, locale = 'en'): Promise<void
 }
 
 /**
- * Fill the brief and pick one channel.
+ * Fill the brief and the caption, and pick one channel. Review of #67: the
+ * Studio has the prototype's two fields — the brief AI writes from, and the
+ * caption "Save draft" keeps word for word — so both are written.
  *
  * The brand select only appears when the workspace has more than one brand, so
  * it is set when present rather than unconditionally — a helper that assumed
@@ -186,6 +188,7 @@ async function ensureBrandWithKnowledge(page: Page, locale = 'en'): Promise<void
  */
 async function compose(page: Page, brief: string): Promise<void> {
   await page.getByTestId('content-brief').fill(brief);
+  await page.getByTestId('content-caption').fill(brief);
   const channel = page.getByTestId('content-channel').first();
   if ((await channel.getAttribute('aria-pressed')) !== 'true') await channel.click();
 }
@@ -212,15 +215,19 @@ test.describe('the content library', () => {
       expect(badge.trim()).toMatch(/^\d+$/);
     }
 
+    // Review of #67 — the product's filters are kept, behind "Filters".
+    await page.getByTestId('content-filters-toggle').click();
     for (const filter of ['content-search', 'content-format', 'content-language']) {
       await expect(page.getByTestId(filter)).toBeVisible();
     }
-    // D-468 — the platform filter is the prototype's channel chips.
-    await expect(page.getByTestId('content-channel-instagram')).toBeVisible();
+    // Review of #67 — the chips are the brand's CONNECTED channels, as the
+    // prototype's are; every platform stays a filter under Filters.
+    await expect(page.getByTestId('content-platform')).toBeVisible();
     await page.getByTestId('content-format').selectOption('POST');
     await page.getByTestId('content-apply').click();
     await expect(page).toHaveURL(/format=POST/);
 
+    await page.getByTestId('content-filters-toggle').click();
     await page.getByTestId('content-view').getByTestId('tab-list').click();
     await expect(page.getByTestId('content-library')).toHaveAttribute('data-view', 'list');
     await expect(page).toHaveURL(/view=list/);
@@ -494,7 +501,8 @@ test.describe('writing a post by hand', () => {
     }
     expect(picked.length).toBe(2);
 
-    await page.getByTestId('content-brief').fill(body);
+    // Review of #67 — the words a person writes are the caption.
+    await page.getByTestId('content-caption').fill(body);
 
     /*
      * THE CAMPAIGN IS NOT ASSERTED HERE. It used to be, conditionally — "if the
@@ -1205,7 +1213,8 @@ test.describe('accessibility and keyboard', () => {
 test.describe('the retention control (D-117)', () => {
   test('is on the settings screen and is enforced server-side', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+    // Review of #67 — retention is Settings → Data, as the prototype states it.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/data`);
     await page.waitForLoadState('domcontentloaded');
 
     const field = page.getByTestId('retention-days');
@@ -1217,7 +1226,7 @@ test.describe('the retention control (D-117)', () => {
 
     await field.fill(String(Number(min) + 10));
     await page.getByTestId('retention-save').click();
-    await page.waitForURL(/\/settings/);
+    await page.waitForURL(/\/settings\/data/);
     await expect(page.getByTestId('retention-days')).toHaveValue(String(Number(min) + 10));
 
     // And the sentence naming what it can NEVER delete is part of the control.
@@ -1226,6 +1235,6 @@ test.describe('the retention control (D-117)', () => {
     // Put it back, so a later run starts where this one did.
     await page.getByTestId('retention-days').fill('');
     await page.getByTestId('retention-save').click();
-    await page.waitForURL(/\/settings/);
+    await page.waitForURL(/\/settings\/data/);
   });
 });

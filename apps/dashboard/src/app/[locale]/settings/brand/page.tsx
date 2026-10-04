@@ -137,12 +137,12 @@ export default async function BrandProfilePage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('brand.profile')}
-      description={t('brandProfile.subtitle')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       activePath="/settings"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
-      customerName={customer.email}
+      customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}

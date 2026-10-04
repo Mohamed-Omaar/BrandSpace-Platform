@@ -1,3 +1,5 @@
+import { isInternalRecordText } from '@brandspace/shared';
+
 /**
  * THE STRATEGY, AS A PLAN A PERSON CAN WORK FROM (Phase 6 final, D-277 §13, D-292).
  *
@@ -119,10 +121,14 @@ export function parseStrategyBody(body: unknown): StrategyBody {
   };
 }
 
-/** A bilingual value in the reader's language, falling back to the other. */
+/**
+ * A bilingual value in the reader's language, falling back to the other — and
+ * never the platform's own evidence record as prose (review of #67).
+ */
 export function pick(value: Bilingual | null | undefined, locale: string): string {
   if (!value) return '';
-  return (locale === 'ar' ? value.ar || value.en : value.en || value.ar).trim();
+  const text = (locale === 'ar' ? value.ar || value.en : value.en || value.ar).trim();
+  return isInternalRecordText(text) ? '' : text;
 }
 
 /*

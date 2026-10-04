@@ -42,7 +42,17 @@ export const dynamic = 'force-dynamic';
  * together, and a brand on the rail narrows them. "All brands" means the brands
  * THIS MEMBER may access, which is what `brandIdQueryFilter` puts in the WHERE.
  */
-const LISTABLE = [...CAMPAIGN_STATUSES, 'ARCHIVED'] as const;
+/*
+ * Review of #67 — THE PROTOTYPE'S TAB ORDER: Running · Paused · Planned · Ended;
+ * the product's draft and archived statuses follow, shown only when they have
+ * campaigns, as every tab is.
+ */
+const PROTOTYPE_ORDER = ['ACTIVE', 'PAUSED', 'PLANNED', 'COMPLETED'] as const;
+const LISTABLE = [
+  ...PROTOTYPE_ORDER,
+  ...CAMPAIGN_STATUSES.filter((value) => !(PROTOTYPE_ORDER as readonly string[]).includes(value)),
+  'ARCHIVED',
+] as const;
 type ListableStatus = (typeof LISTABLE)[number];
 
 /** The chip's dot per status: the prototype's run, paused, planned and ended. */

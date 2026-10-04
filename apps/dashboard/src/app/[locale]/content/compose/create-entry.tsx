@@ -1,9 +1,6 @@
-import type { ReactNode } from 'react';
 import Link from 'next/link';
 import {
   Card,
-  PencilIcon,
-  SparkIcon,
   StateMessage,
   StatusBadge,
   buttonClass,
@@ -14,105 +11,18 @@ import {
   spacingTokens,
   statusTone,
   typographyTokens,
-  LayersIcon,
-  ListIcon,
 } from '@brandspace/ui';
-import type { CreateMode } from '../../../../server/create-post';
 
 /**
- * CREATE POST — THE ENTRY (Phase 6 final, D-277 §17, D-283).
- *
- * "What would you like to create?" before any field: generate with AI, write
- * it yourself, start from an idea, or repurpose something that exists. Each is
- * an ADDRESS (`?mode=`), so the choice survives a reload and the context the
- * reader arrived with (a campaign, a brand) travels with it.
+ * CREATE POST — THE TWO PICKERS BEHIND THE STUDIO'S "OR START FROM" CHIPS
+ * (Phase 6 final, D-277 §17, D-283; review of #67). The prototype's "New post"
+ * opens the Studio directly, so the old "What would you like to create?" step
+ * is gone; starting from an idea and repurposing a post are its chips, and each
+ * opens one of these, as an address (`?mode=`).
  *
  * AN APPROVED DESIGN-SYSTEM EXTENSION: `Card`s in a responsive grid, the icon
  * tiles and button variants the product already uses. Server-rendered.
  */
-export function CreateEntry({
-  locale,
-  t,
-  carry,
-  planned = null,
-}: {
-  readonly locale: string;
-  readonly t: (key: string) => string;
-  /** Query parameters that travel with every choice (campaign, brand, date). */
-  readonly carry: Readonly<Record<string, string>>;
-  /** G6 (D-329): the ★ day the calendar opened the Studio for, said before the choice. */
-  readonly planned?: string | null;
-}) {
-  const href = (mode: CreateMode) =>
-    `/${locale}/content/compose?${new URLSearchParams({ ...carry, mode }).toString()}`;
-  const paths: readonly { mode: CreateMode; icon: ReactNode }[] = [
-    { mode: 'ai', icon: <SparkIcon size={20} /> },
-    { mode: 'write', icon: <PencilIcon size={20} /> },
-    { mode: 'idea', icon: <ListIcon size={20} /> },
-    { mode: 'repurpose', icon: <LayersIcon size={20} /> },
-  ];
-  return (
-    <section data-testid="create-entry" style={{ display: 'grid', gap: spacingTokens.lg }}>
-      <h2 style={{ margin: 0, ...typographyTokens.h2 }}>{t('create.entry.title')}</h2>
-      {planned ? (
-        <div className="cs-notice info" role="note" data-testid="composer-planned-date">
-          <b>{planned}</b>
-        </div>
-      ) : null}
-      <ul
-        style={{
-          listStyle: 'none',
-          margin: 0,
-          padding: 0,
-          display: 'grid',
-          gap: spacingTokens.md,
-          gridTemplateColumns: 'repeat(auto-fit, minmax(14rem, 1fr))',
-        }}
-      >
-        {paths.map((path) => (
-          <li key={path.mode}>
-            <Link
-              href={href(path.mode)}
-              data-testid={`create-mode-${path.mode}`}
-              className="bs-pressable"
-              style={{
-                display: 'grid',
-                gap: spacingTokens.sm,
-                blockSize: '100%',
-                padding: spacingTokens.lg,
-                borderRadius: radiusTokens['2xl'],
-                background: colorTokens.surfaceCardAlpha,
-                border: `1px solid ${colorTokens.cardBorder}`,
-                color: colorTokens.textPrimary,
-                textDecoration: 'none',
-              }}
-            >
-              <span
-                aria-hidden="true"
-                style={{
-                  display: 'inline-grid',
-                  placeItems: 'center',
-                  inlineSize: '2.5rem',
-                  blockSize: '2.5rem',
-                  borderRadius: radiusTokens.lg,
-                  background: colorTokens.brandPurpleTint,
-                  color: colorTokens.brandPurplePressed,
-                }}
-              >
-                {path.icon}
-              </span>
-              <strong style={typographyTokens.body}>{t(`create.mode.${path.mode}`)}</strong>
-              <span style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
-                {t(`create.mode.${path.mode}.body`)}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 export interface IdeaOption {
   readonly key: string;
   readonly title: string;

@@ -59,7 +59,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('perms.title')}
+      heading={t('nav.settings')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={customer.email}
@@ -73,7 +73,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
         <SectionHeader
           eyebrow={t('perms.eyebrow')}
           title={t('perms.rolesTitle')}
-          description={t('perms.rolesHint')}
+          description={t('settings.p.subtitle')}
         />
         <div style={{ marginBlockEnd: spacingTokens.md }}>
           <ContentGrid min="15rem" testId="role-grid">

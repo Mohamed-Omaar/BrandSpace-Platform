@@ -132,11 +132,13 @@ test.describe('Brand Brain screen', () => {
      */
     // Q19 (D-357): key questions "answered n of m", never a percentage — this
     // replaces the old `completion-percent` /^\d{1,3}%$/ assertion.
-    const answeredText = await page.getByTestId('completion-answered').innerText();
+    // Review of #67 — the answered count and the item metric sit in the hero's
+    // "More" disclosure, so they are read as text, not as rendered lines.
+    const answeredText = (await page.getByTestId('completion-answered').textContent()) ?? '';
     expect(answeredText).toMatch(/^answered \d+ of \d+$/);
     expect(answeredText).not.toContain('%');
 
-    const itemsBefore = Number(await page.getByTestId('metric-items').innerText());
+    const itemsBefore = Number(await page.getByTestId('metric-items').textContent());
     expect(Number.isFinite(itemsBefore), 'the item metric must render a number').toBe(true);
 
     await addKnowledge(
@@ -147,7 +149,7 @@ test.describe('Brand Brain screen', () => {
     );
 
     await expect
-      .poll(async () => Number(await page.getByTestId('metric-items').innerText()), {
+      .poll(async () => Number(await page.getByTestId('metric-items').textContent()), {
         timeout: 15_000,
       })
       .toBe(itemsBefore + 1);

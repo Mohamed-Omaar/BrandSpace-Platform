@@ -55,6 +55,8 @@ test.afterAll(async () => {
 });
 
 async function newFolder(page: Page, name: string): Promise<void> {
+  // Review of #67 — "New folder" is under the "⋯" beside Upload.
+  await page.getByTestId('assets-more').click();
   await page.getByRole('button', { name: 'New folder' }).click();
   const dialog = page.getByTestId('assets-folder-dialog');
   await dialog.getByTestId('assets-folder-name').fill(name);
@@ -72,17 +74,20 @@ test('a folder is a place: cards, a breadcrumb, and new folders made where you a
   await signIn(page);
   await page.goto(`${DASHBOARD_BASE_URL}/en/assets`);
 
-  // At the root the location says so.
-  await expect(page.getByTestId('assets-breadcrumbs')).toContainText('Media Library');
-
   await newFolder(page, parent);
   const parentCard = page.getByTestId('assets-folders').getByRole('link', { name: parent });
   await expect(parentCard).toBeVisible();
+  // At the root the location says so. Review of #67 — the folder row is drawn
+  // once the workspace has a folder (the prototype draws none), so this is
+  // read after the first one exists.
+  await expect(page.getByTestId('assets-breadcrumbs')).toContainText('Media Library');
 
   // Into the folder: the breadcrumb names the path, and the parent defaults.
   await parentCard.click();
   await page.waitForURL(/[?&]folder=/);
   await expect(page.getByTestId('assets-crumb-current')).toHaveText(parent);
+  // Review of #67 — "New folder" is under the "⋯" beside Upload.
+  await page.getByTestId('assets-more').click();
   await page.getByRole('button', { name: 'New folder' }).click();
   const parentSelect = page.getByTestId('assets-folder-parent');
   await expect(parentSelect.locator('option:checked')).toHaveText(parent);

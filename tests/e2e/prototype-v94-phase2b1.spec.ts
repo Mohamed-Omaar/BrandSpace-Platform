@@ -297,6 +297,8 @@ test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; s
     await expect(chip).toHaveAttribute('data-kind', 'holiday');
     await expect(chip).toHaveAttribute('href', `/en/content/compose?date=${day}`);
 
+    // Review of #67 — "Add to calendar" is under the head row's "⋯".
+    await page.getByTestId('calendar-more').click();
     await page.getByTestId('calendar-schedule-open').click();
     const suggested = page.getByTestId('schedule-suggested');
     await expect(suggested).toContainText('Suggested time');
@@ -308,11 +310,14 @@ test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; s
     await chip.click();
     await page.waitForURL(new RegExp(`/en/content/compose\\?date=${day}$`));
     await expect(page.getByTestId('composer-planned-date')).toContainText('E2E Fixture Holiday');
-    // The day travels with the choice of how to start, like a campaign does.
-    await page.getByTestId('create-mode-write').click();
-    await page.waitForURL(/mode=write/);
-    expect(new URL(page.url()).searchParams.get('date')).toBe(day);
-    await expect(page.getByTestId('composer-planned-date')).toContainText('E2E Fixture Holiday');
+    // Review of #67 — the chip opens the Studio itself, the day stated there
+    // and as its publish time; the day travels with the other ways to start.
+    await expect(page.getByTestId('content-composer')).toBeVisible();
+    await expect(page.getByTestId('composer-when')).toContainText(day);
+    await expect(page.getByTestId('create-mode-idea')).toHaveAttribute(
+      'href',
+      new RegExp(`date=${day}`),
+    );
   });
 });
 
@@ -400,7 +405,8 @@ test.describe('A9 / G1 · Settings → General, under the save bar', () => {
     await page.getByTestId('settings-city').click();
     await page.getByTestId('settings-city').fill('Alexandria');
     await page.getByRole('option', { name: 'Alexandria' }).click();
-    await page.getByTestId('settings-week-start').selectOption('1');
+    // Review of #67 — "Week starts on" is the prototype's segmented switch.
+    await page.getByTestId('settings-week-start-1').check();
     await page.getByTestId('settings-website').fill('https://general.example');
     await expect(bar).toHaveAttribute('data-state', 'dirty');
     await save.click();
@@ -410,7 +416,7 @@ test.describe('A9 / G1 · Settings → General, under the save bar', () => {
     await expect(page.getByTestId('settings-bar')).toHaveAttribute('data-state', 'clean');
     await expect(page.locator('input[type="hidden"][name="country"]')).toHaveValue('EG');
     await expect(page.locator('input[type="hidden"][name="city"]')).toHaveValue('EG-ALX');
-    await expect(page.getByTestId('settings-week-start')).toHaveValue('1');
+    await expect(page.getByTestId('settings-week-start-1')).toBeChecked();
     await expect(page.getByTestId('settings-website')).toHaveValue('https://general.example');
 
     // The calendar follows the workspace's own week start.

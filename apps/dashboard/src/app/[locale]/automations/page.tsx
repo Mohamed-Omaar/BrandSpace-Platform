@@ -48,6 +48,7 @@ import Link from 'next/link';
 import { AutomationForm, type AutomationFormInitial } from './automation-form';
 import { RuleDialog } from './rule-dialog';
 import { RuleMenu } from './rule-menu';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 import {
   confirmAutomationRunAction,
   createAutomationAction,
@@ -136,6 +137,29 @@ function conditionChoicesFor(
     label: t(`automations.failureClass.${value}` as MessageKey),
   }));
 }
+
+/**
+ * Review of #67 — WHERE EACH TRIGGER LISTENS, as the prototype's sub-line names
+ * it ("Listens to Approvals"): the screen whose events start the rule. A
+ * presentation map from the closed trigger registry to a translated label.
+ */
+const LISTENS_TO: Readonly<Record<string, string>> = {
+  CONTENT_APPROVED: 'APPROVALS',
+  REVIEW_WAITING_24H: 'APPROVALS',
+  CONTENT_SCHEDULED: 'CALENDAR',
+  SCHEDULE_GAP: 'CALENDAR',
+  SCHEDULED_TIME: 'CALENDAR',
+  POST_PUBLISHED: 'PUBLISHING',
+  POST_FAILED: 'PUBLISHING',
+  CAMPAIGN_STARTED: 'CAMPAIGNS',
+  CAMPAIGN_ENDED: 'CAMPAIGNS',
+  FACT_EXPIRING: 'BRAND',
+  WEEKLY_ENGAGEMENT_DROPPED: 'PERFORMANCE',
+  POST_TOP_10_PERCENT: 'PERFORMANCE',
+  ANALYTICS_REFRESHED: 'PERFORMANCE',
+  METRIC_THRESHOLD_CROSSED: 'PERFORMANCE',
+  ANOMALY_DETECTED: 'PERFORMANCE',
+};
 
 export default async function AutomationsPage({
   params,
@@ -538,6 +562,65 @@ export default async function AutomationsPage({
    * `?view=runs` is Run history, `?new=1` and `?edit=<rule>` open the dialog.
    * The rail's brand rides along on every link.
    */
+  /*
+   * Review of #67 — "RAN 6 TIMES · LAST TODAY 09:14": per rule, how many runs
+   * finished their action and when the last one started, read from the run
+   * rows inside the tenant context (RLS), in the workspace's own clock.
+   */
+  const { ranByRule, zone } = await inWorkspace(workspace.workspaceId, async ({ db }) => {
+    const grouped =
+      rules.length === 0
+        ? []
+        : await db.automationRun.groupBy({
+            by: ['ruleId'],
+            where: {
+              workspaceId: workspace.workspaceId,
+              ruleId: { in: rules.map((rule) => rule.id) },
+              status: 'SUCCEEDED',
+            },
+            _count: { _all: true },
+            _max: { startedAt: true },
+          });
+    const row = await db.workspace.findUnique({
+      where: { id: workspace.workspaceId },
+      select: { timezone: true },
+    });
+    return {
+      ranByRule: new Map(
+        grouped.map((entry) => [
+          entry.ruleId,
+          { count: entry._count._all, last: entry._max.startedAt },
+        ]),
+      ),
+      zone: row?.timezone ?? 'UTC',
+    };
+  });
+  const tag = locale === 'ar' ? 'ar' : 'en-GB';
+  const dayOf = (date: Date) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: zone, dateStyle: 'short' }).format(date);
+  const clock = new Intl.DateTimeFormat(tag, {
+    timeZone: zone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    numberingSystem: 'latn',
+  });
+  const shortDay = new Intl.DateTimeFormat(tag, {
+    timeZone: zone,
+    day: 'numeric',
+    month: 'short',
+    numberingSystem: 'latn',
+  });
+  const ranLine = (ruleId: string): string => {
+    const ran = ranByRule.get(ruleId);
+    if (!ran || ran.count === 0 || !ran.last) return t('automations.notRun');
+    const when =
+      dayOf(ran.last) === dayOf(systemClock.now())
+        ? t('automations.lastToday').replace('{time}', clock.format(ran.last))
+        : `${shortDay.format(ran.last)} ${clock.format(ran.last)}`;
+    return t('automations.ran').replace('{count}', String(ran.count)).replace('{when}', when);
+  };
+
   const view = query['view'] === 'runs' ? 'runs' : 'rules';
   const creating = mayManage && editInitial === null && query['new'] === '1';
   const hrefWith = (extra: Record<string, string>): string => {
@@ -561,6 +644,7 @@ export default async function AutomationsPage({
       locale={locale}
       heading={t('automations.title')}
       description={t('automations.subtitle')}
+      eyebrow={t('nav.group.automate')}
       activePath="/automations"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -590,14 +674,14 @@ export default async function AutomationsPage({
               aria-current={view === 'rules' ? 'page' : undefined}
               data-testid="automations-tab-rules"
             >
-              {t('automations.rules')}
+              {t('automations.rules')} <span className="bsp-ltr">{rules.length}</span>
             </Link>
             <Link
               href={hrefWith({ view: 'runs' })}
               aria-current={view === 'runs' ? 'page' : undefined}
               data-testid="automations-tab-runs"
             >
-              {t('automations.runs')}
+              {t('automations.tab.activity')}
             </Link>
           </nav>
           {selectedBrand ? (
@@ -712,7 +796,23 @@ export default async function AutomationsPage({
                           </span>{' '}
                           <b>{t(`automations.action.${rule.actionType}` as MessageKey)}</b>
                         </span>
+                        {/*
+                          Review of #67 — the prototype's sub-line: what the
+                          rule listens to and how often it has run, from the
+                          run rows. The rule's own name and brand stay, after.
+                        */}
                         <span className="bsp-au-meta">
+                          <span data-testid={`automation-listens-${rule.id}`}>
+                            {t('automations.listens').replace(
+                              '{source}',
+                              t(
+                                `automations.source.${LISTENS_TO[rule.triggerType] ?? 'BRAND'}` as MessageKey,
+                              ),
+                            )}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span data-testid={`automation-ran-${rule.id}`}>{ranLine(rule.id)}</span>
+                          <span aria-hidden="true">·</span>
                           <span>{rule.name}</span>
                           {brandNames.get(rule.brandId) ? (
                             <>
@@ -753,7 +853,7 @@ export default async function AutomationsPage({
                         className={`bsp-xstatus${rule.enabled ? '' : ' bsp-neu'}`}
                         data-testid={`automation-state-${rule.id}`}
                       >
-                        {t(rule.enabled ? 'automations.enabled' : 'automations.disabled')}
+                        {t(rule.enabled ? 'automations.on' : 'automations.off')}
                       </span>
                       {mayManage ? (
                         <>
@@ -830,10 +930,18 @@ export default async function AutomationsPage({
                   >
                     + {t('automations.discover.cta')}
                   </CopilotLink>
+                  {/* Review of #67 — the prototype's footer is one row; the three
+                      notes on what stays true are under its "⋯". */}
+                  <MoreDisclosure
+                    label={t('automations.more')}
+                    testId="automations-discover-more"
+                    align="start"
+                  >
+                    <span className="bsp-au-note">{t('automations.discover.off')}</span>
+                    <span className="bsp-au-note">{t('automations.discover.publish')}</span>
+                    <span className="bsp-au-note">{t('automations.discover.home')}</span>
+                  </MoreDisclosure>
                 </span>
-                <span className="bsp-au-note">{t('automations.discover.off')}</span>
-                <span className="bsp-au-note">{t('automations.discover.publish')}</span>
-                <span className="bsp-au-note">{t('automations.discover.home')}</span>
               </div>
             ) : null}
             <span className="bsp-au-note">{t('automations.externalNotice')}</span>
@@ -1005,6 +1113,11 @@ export default async function AutomationsPage({
             ).map((trigger) => ({
               type: trigger.type,
               label: t(`automations.trigger.${trigger.type}` as MessageKey),
+              // Review of #67 — the tile's "Listens to …" line.
+              listens: t('automations.listens').replace(
+                '{source}',
+                t(`automations.source.${LISTENS_TO[trigger.type] ?? 'BRAND'}` as MessageKey),
+              ),
               actionTypes: AUTOMATION_ACTIONS.filter(
                 (action) =>
                   isAuthorablePair(trigger.type, action.type) && entitledActions.has(action.type),
@@ -1113,12 +1226,13 @@ export default async function AutomationsPage({
               onlyIf: t('automations.form.onlyIf'),
               then: t('automations.form.then'),
               preview: t('automations.form.preview'),
+              previewEmpty: t('automations.form.previewEmpty'),
               asksFirst: t('automations.asksFirst'),
               usesCredits: t('automations.usesCredits'),
               brand: t('analytics.brandLabel'),
               trigger: t('automations.triggerLabel'),
               action: t('automations.actionLabel'),
-              submit: editInitial ? t('automations.save') : t('automations.create'),
+              submit: editInitial ? t('automations.save') : t('automations.saveRule'),
               description: t('automations.descriptionLabel'),
               offsetHours: t('automations.offsetHoursLabel'),
               actionPerson: t('automations.actionPersonLabel'),

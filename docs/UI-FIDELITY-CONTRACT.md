@@ -1575,6 +1575,33 @@ Approved design-system extensions, built only from what the screens already draw
 
 No new colour family, font, shadow style, motion or interaction model.
 
+### 6.3.51 Review of #67 — product controls behind the prototype's affordances (D-471)
+
+The prototype's layout wins on every screen. A product control it does not draw is
+kept, behind an affordance it already has, and nothing it draws moves for it:
+
+| Screen                    | Moved behind                                                       | What                                                                                      |
+| ------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Posts                     | "Filters"                                                          | search, brand, campaign, format, language, platform, exact status, grid/list              |
+| Studio (new)              | "⋯" beside Post to                                                 | Video · Article · Thread, template, language, goal, defaults                              |
+| Studio (edit)             | "⋯"                                                                | the other AI edits, Compare previews                                                      |
+| Media                     | "Filters" / "⋯" beside Upload                                      | kinds, views, search, sort, scope, status, tags / New folder                              |
+| Brand Brain               | "⋯" in the hero                                                    | answered n of m, what it understands, layers, counts, Ask about this brand, Brand profile |
+| Settings → General        | "More options" / "⋯"                                               | Locale / the other first days of the week                                                 |
+| Settings → Team & roles   | "+ Invite" / a row's "⋯" / the member's page                       | the invite form / resend, revoke / address and joining date                               |
+| Settings → Plan & billing | "Change plan", "Buy … credits" (in place), "Usage & limits →", "⋯" | plans, packs, the usage tab, the accounting export and cancelling                         |
+| Settings → Security       | a related link                                                     | Activity                                                                                  |
+| Performance               | "Filters"; after the prototype's content                           | Compare with the previous period; What changed · Why · What to try                        |
+| Automations               | after the summary box; "⋯" in the footer                           | the rule's name and brand; the three notes                                                |
+| Notifications popover     | "⋯"                                                                | the kind filters, See all                                                                 |
+| Copilot drawer            | "⋯"                                                                | the line on how it works, Open the full Copilot                                           |
+| Approvals                 | "⋯"                                                                | the policy link, Open in the Studio                                                       |
+| Calendar                  | "Filters" / "⋯"                                                    | brand, campaign, status, the zone and count / Add to calendar                             |
+
+Onboarding is the standalone card (`SetupFrame`): Business (the workspace form), Brand,
+Teach (learn + review), Accounts, Goal. Every element still not built is listed, with its
+effort, in the PR for the owner.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
