@@ -542,6 +542,40 @@ target), "Posts on hold" and the paused overlay (holding a paused campaign's pos
 data), Pause / Resume on a card (pausing is the campaign's edit form), "Add an existing post" in the
 room (the Posts menu files a post under a campaign), and the paused banner.
 
+### Media — the library and its Generate tab (`Main.dc.html` lines 1237–1284)
+
+Ported: the head row (the Library / Generate switch with its sliding pill, the kind chips, Upload), the
+storage card (the figure against the plan's limit, its percentage and bar), the six-across file cards
+(the picture, the AI pill, the name and Use), and the empty card with Upload and Generate. The Generate
+tab is the Creative Studio drawn as the prototype's: the description, the format switch, what the image
+draws on, Generate with its cost, and the result card (the picture in its own format, Use in post,
+Generate again) with the dashed empty state. The interim "AI Creative Studio" rail entry is gone (owner
+decision, batches 2–6); the top bar's Create menu and the Generate tab open it.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-287 / D-305: the library keeps its views (All, AI generated, Rights expiring, …), search, sort,
+  status and tag filters, folders and breadcrumbs, bulk actions, the detail drawer with versions and
+  the brand kit card, in the prototype's chips and cards. The head row carries the prototype's four
+  chips (All, Photos, Video, AI); every other kind and view, search, status, tag and sort sit one press
+  away under **Filters** (open by itself whenever one of them is in use), and the bulk bar appears once
+  a file is ticked.
+- AC-28: Generate keeps the quote before spending, one idempotency key per attempt, the scan step, the
+  "made by AI" label, "Open in library" and the other sizes as their own generations (Adapt).
+
+**(b) Post-launch — left out.** The phone layout: below 768px two files across and one column.
+
+**(c) States the prototype does not draw.** Every file's state with its word (uploading, processing,
+failed, quarantined, archived), its kind, size and dimensions, its badges (shared, rights expiring or
+expired) and where it is used, under the prototype's foot. Four files across below 1200px. A failed
+generation and the scan in progress.
+
+**Accessibility findings.** The storage notes (`#8a8a92`) take `#6a6a72`.
+
+**Left out — no data or feature.** The storage bar's categories and their legend (storage is one
+figure), "Big files" and "Plan →", a video's duration on its card (not in the card's data), and the
+generated example picture.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

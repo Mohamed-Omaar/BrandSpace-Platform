@@ -99,6 +99,11 @@ test.describe('D-287 · the Asset Library', () => {
     const made = await libraryAsset(`ai-made-${tag}.png`, 'AI_GENERATED');
     await signIn(page);
     await page.goto(assets('en'));
+    // Filters is a client toggle: press it until the panel it opens is there.
+    await expect(async () => {
+      await page.getByTestId('assets-filters-toggle').click();
+      await expect(page.getByTestId('assets-views')).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 20_000 });
     await page.getByTestId('assets-views').getByRole('link', { name: 'AI generated' }).click();
     await page.waitForURL((url) => url.searchParams.get('view') === 'ai');
     await expect(page.getByTestId(`asset-tile-${made}`)).toBeVisible();

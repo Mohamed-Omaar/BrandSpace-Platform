@@ -3,20 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useId, useRef, useState } from 'react';
-import {
-  AssetMedia,
-  Card,
-  Field,
-  MediaChip,
-  StateMessage,
-  buttonStyle,
-  colorTokens,
-  inputStyle,
-  radiusTokens,
-  spacingTokens,
-  textareaStyle,
-  typographyTokens,
-} from '@brandspace/ui';
+import { AssetMedia, SegmentPill } from '@brandspace/ui';
 
 /**
  * THE AI CREATIVE STUDIO, AS A CUSTOMER USES IT (AC-28).
@@ -263,118 +250,113 @@ export function CreativeStudioView({
     : null;
 
   return (
-    <div style={{ display: 'grid', gap: spacingTokens.lg }} data-testid="creative-studio">
+    <div className="bsp-gen-wrap" data-testid="creative-studio">
       {failure ? (
-        <div className="cs-notice warning" role="alert" data-testid="creative-failure">
+        <div className="bsp-gen-failure" role="alert" data-testid="creative-failure">
           {failure}
         </div>
       ) : null}
 
-      <div
-        style={{
-          display: 'grid',
-          gap: spacingTokens.lg,
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 20rem)',
-          alignItems: 'start',
-        }}
-        className="bs-studio-grid"
-      >
+      {/*
+        THE PROTOTYPE'S GENERATE TAB (`Main.dc.html` lines 1264–1280): the
+        brief, the format switch, what the image draws on and Generate in the
+        left card; the result in the 360px card beside it.
+      */}
+      <div className="bsp-gen">
         {/* --------------------------------------------------- the brief --- */}
-        <Card testId="creative-form">
-          <div style={{ display: 'grid', gap: spacingTokens.md }}>
-            <Field label={labels.brief} htmlFor={`${fieldId}-brief`} hint={labels.briefHint}>
-              <textarea
-                className="bs-control"
-                id={`${fieldId}-brief`}
-                rows={4}
-                value={brief}
-                placeholder={labels.briefPlaceholder}
-                onChange={(event) => setBrief(event.target.value)}
-                maxLength={1_000}
-                data-testid="creative-brief"
-                style={textareaStyle()}
-              />
-            </Field>
+        <section className="bsp-card bsp-gen-form" data-testid="creative-form">
+          <label className="bsp-gen-label" htmlFor={`${fieldId}-brief`}>
+            {labels.brief}
+          </label>
+          <textarea
+            className="bs-control bsp-gen-brief"
+            id={`${fieldId}-brief`}
+            dir="auto"
+            value={brief}
+            placeholder={labels.briefPlaceholder}
+            onChange={(event) => setBrief(event.target.value)}
+            maxLength={1_000}
+            aria-describedby={`${fieldId}-brief-hint`}
+            data-testid="creative-brief"
+          />
+          <span id={`${fieldId}-brief-hint`} className="bsp-gen-hint">
+            {labels.briefHint}
+          </span>
 
-            <Field label={labels.format} htmlFor={`${fieldId}-format`} hint={labels.formatHint}>
-              <select
-                className="bs-control"
-                id={`${fieldId}-format`}
-                value={formatKey}
-                onChange={(event) => {
-                  setFormatKey(event.target.value);
-                  void refreshQuote(event.target.value);
-                }}
-                data-testid="creative-format"
-                style={inputStyle()}
-              >
-                {formats.map((format) => (
-                  <option key={format.key} value={format.key}>
-                    {format.label} · {format.size}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            {estimate !== null ? (
-              <p
-                style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary, margin: 0 }}
-                data-testid="creative-estimate"
-              >
-                {labels.cost}: {formatCredits(estimate, locale)} {labels.costUnit}
-              </p>
-            ) : null}
-
-            <p
-              style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted, margin: 0 }}
-              data-testid="creative-no-logo"
+          <div className="bsp-gen-row">
+            <span className="bsp-lbl" id={`${fieldId}-format`}>
+              {labels.format}
+            </span>
+            <div
+              className="bsp-seg bsp-gen-formats"
+              role="group"
+              aria-labelledby={`${fieldId}-format`}
+              data-testid="creative-format"
+              data-value={formatKey}
             >
-              {labels.noLogoNotice}
-            </p>
-
-            <div>
-              <button
-                type="button"
-                style={buttonStyle('brand')}
-                disabled={busy || brief.trim() === ''}
-                onClick={() => void generate(formatKey)}
-                data-testid="creative-generate"
-              >
-                {busy ? labels.generating : labels.generate}
-              </button>
+              <SegmentPill selector='[aria-pressed="true"]' />
+              {formats.map((format) => (
+                <button
+                  key={format.key}
+                  type="button"
+                  className="bsp-seg-item"
+                  aria-pressed={format.key === formatKey}
+                  title={format.size}
+                  data-value={format.key}
+                  onClick={() => {
+                    setFormatKey(format.key);
+                    void refreshQuote(format.key);
+                  }}
+                >
+                  {format.label}
+                </button>
+              ))}
             </div>
           </div>
-        </Card>
+          <span className="bsp-gen-hint">{labels.formatHint}</span>
+
+          {/* The prototype's purple line: what the image draws on, and what it does not. */}
+          <span className="bsp-gen-uses" data-testid="creative-no-logo">
+            {labels.noLogoNotice}
+          </span>
+
+          <button
+            type="button"
+            className="bsp-btn bsp-pur bsp-gen-go"
+            disabled={busy || brief.trim() === ''}
+            onClick={() => void generate(formatKey)}
+            data-testid="creative-generate"
+          >
+            {busy ? labels.generating : labels.generate}
+            {estimate !== null && !busy ? (
+              <span className="bsp-ltr bsp-gen-cost" data-testid="creative-estimate">
+                {' '}
+                · {formatCredits(estimate, locale)} {labels.costUnit}
+              </span>
+            ) : null}
+          </button>
+        </section>
 
         {/* -------------------------------------------------- the result --- */}
-        <Card testId="creative-result">
-          <span className="cs-section-kicker">{labels.result}</span>
+        <section className="bsp-card bsp-gen-result" data-testid="creative-result">
+          <span className="bsp-lbl">{labels.result}</span>
           {result === null ? (
-            <StateMessage
-              kind="empty"
-              title={labels.result}
-              description={labels.resultEmpty}
-              testId="creative-result-empty"
-            />
+            <div className="bsp-gen-empty" data-testid="creative-result-empty">
+              {labels.resultEmpty}
+            </div>
           ) : (
-            <div style={{ display: 'grid', gap: spacingTokens.sm }}>
+            <>
               <div
                 /*
                  * THE RESULT'S OWN FORMAT, ON THE ELEMENT. Not decoration: it
                  * is what lets a test assert that the picture on screen is the
-                 * shape the customer asked for, which is the one thing a
-                 * screenshot cannot be made to prove reliably (AC-28.2).
+                 * shape the customer asked for (AC-28.2).
                  */
+                className="bsp-gen-frame"
                 data-testid="creative-result-frame"
                 data-format={result.formatKey}
                 data-aspect={resultFormat?.aspect ?? '1:1'}
-                style={{
-                  position: 'relative',
-                  aspectRatio: (resultFormat?.aspect ?? '1:1').replace(':', ' / '),
-                  borderRadius: radiusTokens.md,
-                  overflow: 'hidden',
-                  background: colorTokens.surfaceMuted,
-                }}
+                style={{ aspectRatio: (resultFormat?.aspect ?? '1:1').replace(':', ' / ') }}
               >
                 {result.previewToken ? (
                   <AssetMedia
@@ -385,30 +367,11 @@ export function CreativeStudioView({
                   />
                 ) : (
                   /*
-                   * NO GRANT YET IS NOT NOTHING TO SAY (AC-28.3).
-                   *
-                   * A generated image lands in the library PENDING its scan, and
-                   * the download service refuses a grant for a file the scanner
-                   * has not cleared — correctly, and for seconds rather than
-                   * minutes. This rendered an empty frame with a badge over it,
-                   * which reads as a failed generation rather than as the safety
-                   * step it is. The file exists, and the screen says so.
+                   * NO GRANT YET IS NOT NOTHING TO SAY (AC-28.3): a generated
+                   * image lands in the library pending its scan, and the screen
+                   * says so rather than drawing an empty frame.
                    */
-                  <p
-                    data-testid="creative-scanning"
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      margin: 0,
-                      padding: spacingTokens.md,
-                      textAlign: 'center',
-                      ...typographyTokens.bodySm,
-                      color: colorTokens.textSecondary,
-                    }}
-                  >
+                  <p className="bsp-gen-scanning" data-testid="creative-scanning">
                     {labels.scanning}
                   </p>
                 )}
@@ -416,79 +379,68 @@ export function CreativeStudioView({
                   ALWAYS LABELLED. A customer must be able to tell what a model
                   made from what they made, on the screen as well as in the row.
                 */}
-                <MediaChip tone="brand" testId="creative-generated-badge">
+                <span
+                  className="bsp-pill bsp-p-ai bsp-gen-badge"
+                  data-testid="creative-generated-badge"
+                >
                   {labels.generatedBadge}
-                </MediaChip>
+                </span>
               </div>
 
-              <p
-                style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary, margin: 0 }}
-                data-testid="creative-saved"
-              >
-                {labels.saved}
-              </p>
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
-                <Link
-                  href={`/${locale}/assets?asset=${result.assetId}`}
-                  style={buttonStyle('neutral', 'sm')}
-                  data-testid="creative-open-library"
-                >
-                  {labels.openInLibrary}
-                </Link>
+              <div className="bsp-gen-acts">
                 <Link
                   href={`/${locale}/content/compose?${new URLSearchParams({
                     mode: 'ai',
                     asset: result.assetId,
                   }).toString()}`}
-                  style={buttonStyle('neutral', 'sm')}
+                  className="bsp-btn bsp-sm bsp-pur"
                   data-testid="creative-use-in-content"
                 >
                   {labels.useInContent}
                 </Link>
                 <button
                   type="button"
-                  style={buttonStyle('ghost', 'sm')}
+                  className="bsp-btn bsp-sm bsp-sec"
                   disabled={busy}
                   /*
                    * "GENERATE ANOTHER" MEANS ANOTHER OF THIS ONE, so it names
-                   * the RESULT's format rather than the dropdown's — the
-                   * control sits under the picture it is offering to redo.
+                   * the RESULT's format rather than the switch's.
                    */
                   onClick={() => void generate(result.formatKey)}
                   data-testid="creative-regenerate"
                 >
                   {labels.regenerate}
                 </button>
+                <Link
+                  href={`/${locale}/assets?asset=${result.assetId}`}
+                  className="bsp-btn bsp-sm bsp-ghost"
+                  data-testid="creative-open-library"
+                >
+                  {labels.openInLibrary}
+                </Link>
               </div>
+              <span className="bsp-gen-hint" data-testid="creative-saved">
+                {labels.saved}
+              </span>
 
               {/*
-                ADAPTATION IS A SECOND GENERATION, NOT A CROP, and the hint says
-                so: cropping a composed image moves its subject out of frame,
-                which is the commonest way an automatic resize ruins a picture.
+                ADAPTATION IS A SECOND GENERATION, NOT A CROP (D-468 (c)): the
+                product's other sizes of this picture, each its own generation.
               */}
-              <div style={{ display: 'grid', gap: spacingTokens['2xs'] }}>
-                <span className="cs-section-kicker">{labels.adapt}</span>
-                <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted, margin: 0 }}>
-                  {labels.adaptHint}
-                </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
+              <div className="bsp-gen-adapt">
+                <span className="bsp-lbl">{labels.adapt}</span>
+                <span className="bsp-gen-hint">{labels.adaptHint}</span>
+                <div className="bsp-gen-adapt-row">
                   {formats
                     .filter((format) => format.key !== result.formatKey)
                     .map((format) => (
                       <button
                         key={format.key}
                         type="button"
-                        className="cs-channel"
+                        className="bsp-chip bsp-gen-chip"
                         disabled={busy}
                         onClick={() => {
-                          /*
-                           * THE TARGET IS PASSED, NOT SET-THEN-READ. The two
-                           * state updates keep the rest of the screen honest —
-                           * the dropdown and the price follow the adaptation —
-                           * but the generation itself does not wait on either,
-                           * and could not have read them in this tick anyway.
-                           */
+                          // THE TARGET IS PASSED, NOT SET-THEN-READ (see `generate`).
                           setFormatKey(format.key);
                           void refreshQuote(format.key);
                           void generate(format.key);
@@ -500,9 +452,9 @@ export function CreativeStudioView({
                     ))}
                 </div>
               </div>
-            </div>
+            </>
           )}
-        </Card>
+        </section>
       </div>
     </div>
   );

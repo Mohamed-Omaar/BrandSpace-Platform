@@ -184,13 +184,13 @@ test.describe('the Asset Library', () => {
 
   test('filters and search are LINKS, so a filtered view is bookmarkable', async ({ page }) => {
     await openLibrary(page);
-    const imageFilter = page.getByRole('link', { name: 'Image', exact: true });
+    const imageFilter = page.getByRole('link', { name: 'Photos', exact: true });
     if (await imageFilter.isVisible().catch(() => false)) {
       await imageFilter.click();
       await page.waitForURL(/kind=IMAGE/);
       // The URL alone reproduces the view — no client state is required.
       await page.goto(page.url());
-      await expect(page.getByRole('link', { name: 'Image', exact: true })).toHaveAttribute(
+      await expect(page.getByRole('link', { name: 'Photos', exact: true })).toHaveAttribute(
         'aria-current',
         'true',
       );

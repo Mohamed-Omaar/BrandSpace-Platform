@@ -1,6 +1,6 @@
 import type { AssetKind, AssetStatus } from '@brandspace/database';
 import { canPreviewWithoutDerivative, isSelectable } from '@brandspace/assets';
-import { brandScopeFilter, systemClock } from '@brandspace/shared';
+import { brandScopeFilter, maySpendCredits, systemClock } from '@brandspace/shared';
 import {
   ASSET_VIEWS,
   RECENT_DAYS,
@@ -425,6 +425,7 @@ export default async function AssetsPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
+      eyebrow={t('nav.group.create')}
       heading={t('assets.title')}
       description={t('assets.subtitle')}
       activePath="/assets"
@@ -466,6 +467,8 @@ export default async function AssetsPage({
           sort,
         }}
         can={{
+          // D-468 — the Generate tab is the Creative Studio, behind its own gate.
+          generate: maySpendCredits(permissions, 'assets.upload'),
           upload: can('assets.upload'),
           edit: can('assets.edit'),
           manageTaxonomy: can('assets.manage_taxonomy'),

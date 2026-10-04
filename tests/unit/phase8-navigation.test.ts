@@ -40,8 +40,8 @@ function navHrefs(): readonly string[] {
  *
  * SUPERSEDES D-277's thirteen entries, which superseded D-188's eighteen. The
  * prototype puts Approvals, Notes and Team back on the rail; the AI Creative
- * Studio and Marketing Intelligence stay on it until the prototype screens that
- * absorb them (Media, Performance) are ported. What this file still guarantees
+ * Studio came off when Media's Generate tab was ported, and Marketing
+ * Intelligence stays until Performance's Insights is. What this file still guarantees
  * is the rule it was written for — a link that goes nowhere is not navigation —
  * for the rail AND for every area that is not on it: each must still have a
  * page, and each must still be reachable from the place the owner put it.
@@ -53,7 +53,6 @@ const RAIL: readonly string[] = [
   '/campaigns',
   '/content',
   '/assets',
-  '/creative',
   '/approvals',
   '/calendar',
   '/publishing',
@@ -69,6 +68,9 @@ const RAIL: readonly string[] = [
 const MOVED: Readonly<Record<string, 'top bar' | 'settings'>> = {
   '/notifications': 'top bar',
   '/copilot': 'top bar',
+  // D-468 batch 3: the Creative Studio is Media's Generate tab, and the top
+  // bar's Create menu still opens it.
+  '/creative': 'top bar',
   '/permissions': 'settings',
   '/activity': 'settings',
   '/plan': 'settings',

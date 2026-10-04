@@ -7,6 +7,7 @@ import {
   radiusTokens,
   spacingTokens,
   typographyTokens,
+  SegmentPill,
 } from '@brandspace/ui';
 import { writingFactsInAreas } from '@brandspace/brand-brain';
 import {
@@ -166,14 +167,30 @@ export default async function CreativeStudioPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('creative.title')}
+      eyebrow={t('nav.group.create')}
+      heading={t('assets.title')}
       description={t('creative.subtitle')}
-      activePath="/creative"
+      activePath="/assets"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
+      {/*
+        D-468 — THE MEDIA SCREEN'S GENERATE TAB. The Library / Generate switch
+        is the prototype's; the Creative Studio is no longer its own rail item.
+      */}
+      <div className="bsp-med-top bsp-gen-top">
+        <nav className="bsp-seg" aria-label={t('assets.media.tabs')} data-testid="media-tabs">
+          <SegmentPill selector='[aria-current="page"]' />
+          {workspace.permissionKeys.includes('assets.read') ? (
+            <Link href={`/${locale}/assets`}>{t('assets.media.library')}</Link>
+          ) : null}
+          <Link href={`/${locale}/creative`} aria-current="page" data-testid="media-tab-generate">
+            {t('assets.media.generate')}
+          </Link>
+        </nav>
+      </div>
       {brand === null ? (
         <StateMessage
           kind="empty"
@@ -207,6 +224,18 @@ export default async function CreativeStudioPage({
               dangerouslySetInnerHTML={{ __html: fontView.css }}
             />
           ) : null}
+          <CreativeStudioView
+            locale={locale}
+            brandId={brand.id}
+            formats={CREATIVE_FORMATS.map((format) => ({
+              key: format.key,
+              label: t(FORMAT_KEYS[format.key] ?? 'creative.format.square'),
+              size: format.size,
+              aspect: format.aspect,
+            }))}
+            labels={labels}
+            initialResult={null}
+          />
           {identity ? (
             <Card testId="creative-identity">
               <div style={{ display: 'grid', gap: spacingTokens.xs }}>
@@ -335,18 +364,6 @@ export default async function CreativeStudioPage({
               </div>
             </Card>
           ) : null}
-          <CreativeStudioView
-            locale={locale}
-            brandId={brand.id}
-            formats={CREATIVE_FORMATS.map((format) => ({
-              key: format.key,
-              label: t(FORMAT_KEYS[format.key] ?? 'creative.format.square'),
-              size: format.size,
-              aspect: format.aspect,
-            }))}
-            labels={labels}
-            initialResult={null}
-          />
         </>
       )}
     </WorkspaceShell>

@@ -115,12 +115,6 @@ const NAV: readonly NavEntry[] = [
     glyph: 'media',
   },
   {
-    href: '/creative',
-    key: 'nav.creative',
-    permission: 'assets.upload',
-    glyph: 'spark',
-  },
-  {
     href: '/approvals',
     key: 'nav.approvals',
     permission: 'content.read',
@@ -184,7 +178,7 @@ const NAV_GROUPS: readonly { titleKey: MessageKey | null; hrefs: readonly string
   { titleKey: null, hrefs: ['/overview'] },
   { titleKey: 'nav.group.brand', hrefs: ['/brand-brain'] },
   { titleKey: 'nav.group.plan', hrefs: ['/strategy', '/campaigns'] },
-  { titleKey: 'nav.group.create', hrefs: ['/content', '/assets', '/creative'] },
+  { titleKey: 'nav.group.create', hrefs: ['/content', '/assets'] },
   { titleKey: 'nav.group.publish', hrefs: ['/approvals', '/calendar', '/publishing'] },
   { titleKey: 'nav.group.improve', hrefs: ['/analytics', '/intelligence'] },
   { titleKey: 'nav.group.automate', hrefs: ['/automations', '/notes'] },

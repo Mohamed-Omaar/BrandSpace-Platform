@@ -724,6 +724,14 @@ export const messages = {
     // --- Phase 5B-1 — Asset Library ---
     'nav.assets': 'مكتبة الوسائط',
     'assets.title': 'مكتبة الوسائط',
+    'assets.media.tabs': 'الوسائط',
+    'assets.media.library': 'المكتبة',
+    'assets.media.generate': 'التوليد',
+    'assets.media.use': 'استخدم',
+    'assets.media.photos': 'صور',
+    'assets.media.video': 'فيديو',
+    'assets.media.ai': 'ذكاء اصطناعي',
+    'assets.media.filters': 'تصفية',
     'assets.eyebrow': 'نشاطك التجاري',
     'assets.subtitle':
       'صورك ومقاطعك وملفاتك وأصول علامتك المعتمدة في مكان واحد — منظّمة بالمجلدات والوسوم، ومفحوصة قبل أن تصبح قابلة للاستخدام.',
@@ -4187,6 +4195,14 @@ export const messages = {
     // --- Phase 5B-1 — Asset Library ---
     'nav.assets': 'Media library',
     'assets.title': 'Media library',
+    'assets.media.tabs': 'Media',
+    'assets.media.library': 'Library',
+    'assets.media.generate': 'Generate',
+    'assets.media.use': 'Use',
+    'assets.media.photos': 'Photos',
+    'assets.media.video': 'Video',
+    'assets.media.ai': 'AI',
+    'assets.media.filters': 'Filters',
     'assets.eyebrow': 'Your business',
     'assets.subtitle':
       'Your photography, video, files and approved brand assets in one place — organised by folder and tag, and scanned before anything becomes usable.',

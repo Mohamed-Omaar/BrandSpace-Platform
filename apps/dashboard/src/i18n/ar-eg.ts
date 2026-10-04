@@ -144,4 +144,10 @@ export const arEgOverrides = {
   'campaigns.card.allPublished': 'اتنشر كله',
   'campaigns.room.edit': 'عدّل',
   'campaigns.best.label': 'أنجح حملة',
+
+  // Batch 3 — Media (Main.dc.html lines 1237–1284).
+  'assets.media.generate': 'اعمل بالذكاء',
+  'assets.media.use': 'استخدمه',
+  'assets.media.ai': 'بالذكاء',
+  'assets.media.filters': 'فلاتر',
 } as const satisfies Partial<Record<MessageKey, string>>;

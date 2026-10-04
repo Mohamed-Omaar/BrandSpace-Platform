@@ -4143,6 +4143,360 @@ span.bsp-cal-hol {
   white-space: pre-wrap;
 }
 
+/* ------------------------------------------------------------ §3-MED ---- */
+
+/*
+ * MEDIA — the library and its Generate tab, `Main.dc.html` lines 1237–1284.
+ * Batch 3 of D-468.
+ */
+
+.bsp-med,
+.bsp-gen-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-inline-size: 0;
+}
+.bsp-med > * {
+  min-inline-size: 0;
+}
+/* The head row: `display: flex; align-items: center; gap: 10px`; the chips
+   `gap: 6px; margin-inline-start: 12px`; Upload `margin-inline-start: auto`. */
+.bsp-med-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bsp-gen-top {
+  margin-block-end: 16px;
+}
+.bsp-med-kinds {
+  display: flex;
+  gap: 6px;
+  margin-inline-start: 12px;
+  flex-wrap: wrap;
+}
+.bsp-med-acts {
+  display: flex;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+/* Filters (not in the prototype, D-468 (c)): every other kind, view, search,
+   status, tag and sort — the product's own controls, one press away. */
+.bsp-med-filters:not([hidden]) {
+  display: grid;
+  gap: 12px;
+}
+.bsp-med-filters > .bsp-med-kinds {
+  margin-inline-start: 0;
+}
+/* Storage: `.card` with `padding: 16px 20px; grid-template-columns: 250px
+   minmax(0, 1fr) auto; gap: 24px; align-items: center; border-radius: 20px`. */
+.bsp-card.bsp-med-sto {
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  border-radius: 20px;
+}
+.bsp-med-sto-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+/* `font-size: 24px; font-weight: 800; letter-spacing: -0.02em`, then
+   `font-size: 12.5px; color: #6a6a72`. */
+.bsp-med-sto-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: #6a6a72;
+}
+.bsp-med-sto-figure > b {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #111114;
+}
+/* `font-size: 11.5px; color: #8a8a92` → `#6a6a72` for contrast. */
+.bsp-med-sto-note {
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+/* `display: flex; gap: 2px; height: 8px; border-radius: 99px;
+   background: #f0f0f2; overflow: hidden`. */
+.bsp-med-sto-bar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 99px;
+  background: #f0f0f2;
+  overflow: hidden;
+}
+.bsp-med-sto-bar > span {
+  height: 100%;
+  background: #7935fe;
+}
+/* The grid: `repeat(6, minmax(0, 1fr)); gap: 12px`. */
+.bsp-med-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+/* A file: `.card` with `overflow: hidden; border-radius: 16px`, the picture
+   `aspect-ratio: 1`, the foot `padding: 8px 10px; gap: 6px`. */
+.bsp-card.bsp-med-tile {
+  overflow: hidden;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bsp-med-thumb {
+  position: relative;
+  aspect-ratio: 1;
+  background: #f5f5f7;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: inherit;
+}
+.bsp-med-thumb > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bsp-med-thumb:focus-visible,
+.bsp-med-name:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: -2px;
+}
+/* The AI pill: `position: absolute; top: 8px; inset-inline-start: 8px`. */
+.bsp-pill.bsp-med-ai {
+  position: absolute;
+  top: 8px;
+  inset-inline-start: 8px;
+}
+.bsp-med-foot {
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* `flex-grow: 1; font-size: 12px; font-weight: 700; overflow: hidden;
+   white-space: nowrap; text-overflow: ellipsis`. */
+.bsp-med-name {
+  flex-grow: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #111114;
+  text-decoration: none;
+}
+/* Use: `padding: 4px 8px; min-block-size: 28px; color: #5312c4`. */
+.bsp-btn.bsp-med-use {
+  padding: 4px 8px;
+  min-block-size: 28px;
+  color: #5312c4;
+  flex-shrink: 0;
+}
+/* The product's state and facts under the prototype's foot (D-468 (c)). */
+.bsp-med-info {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #6a6a72;
+}
+.bsp-med-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.bsp-med-line:empty {
+  display: none;
+}
+.bsp-med-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 24px;
+}
+.bsp-med-select > input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+/* The empty library: `.card` with `padding: 28px; gap: 8px; align-items:
+   flex-start`, `font-size: 16px` and `13.5px; color: #6a6a72`. */
+.bsp-card.bsp-med-empty {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13.5px;
+  color: #6a6a72;
+}
+.bsp-med-empty > b {
+  font-size: 16px;
+  color: #111114;
+}
+.bsp-med-empty-acts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Generate: `grid-template-columns: minmax(0, 1fr) 360px; gap: 16px;
+   align-items: start`; the brief card `padding: 18px 20px; gap: 14px`. */
+.bsp-gen {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+.bsp-card.bsp-gen-form {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.bsp-gen-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+/* `min-height: 90px; resize: vertical; border: 1px solid transparent;
+   background: #f5f5f7; border-radius: 14px; padding: 12px 14px; font-size: 14px`. */
+.bs-control.bsp-gen-brief {
+  min-height: 90px;
+  resize: vertical;
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #111114;
+}
+.bs-control.bsp-gen-brief:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: 1px;
+}
+.bsp-gen-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bsp-seg.bsp-gen-formats {
+  flex-wrap: wrap;
+}
+.bsp-gen-hint {
+  font-size: 12px;
+  color: #6a6a72;
+}
+/* `font-size: 12.5px; color: #5312c4`. */
+.bsp-gen-uses {
+  font-size: 12.5px;
+  color: #5312c4;
+}
+.bsp-btn.bsp-gen-go {
+  align-self: flex-start;
+}
+.bsp-gen-cost {
+  opacity: 0.75;
+}
+.bsp-gen-failure {
+  border-radius: 14px;
+  padding: 10px 14px;
+  background: #fdecef;
+  color: #b83245;
+  font-size: 13px;
+  font-weight: 600;
+}
+/* The result: `padding: 16px; gap: 12px`. */
+.bsp-card.bsp-gen-result {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.bsp-gen-frame {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #f5f5f7;
+}
+.bsp-gen-frame > :not(.bsp-gen-badge) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.bsp-gen-scanning {
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: #55555c;
+}
+.bsp-pill.bsp-gen-badge {
+  position: absolute;
+  top: 8px;
+  inset-inline-start: 8px;
+}
+.bsp-gen-acts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* No result: `border: 1.5px dashed #d8d8de; border-radius: 14px;
+   padding: 30px 16px; text-align: center; font-size: 13px; color: #6a6a72`. */
+.bsp-gen-empty {
+  border: 1.5px dashed #d8d8de;
+  border-radius: 14px;
+  padding: 30px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #6a6a72;
+}
+.bsp-gen-adapt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid #f0f0f2;
+  padding-top: 12px;
+}
+.bsp-gen-adapt-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Narrower than the prototype's 1440 frame (D-468 (c)): four files across. */
+@media (max-width: 1199.98px) {
+  .bsp-med-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -4351,6 +4705,21 @@ span.bsp-cal-hol {
   }
   .bsp-room-acts {
     justify-content: flex-start;
+  }
+}
+
+/* Media below 768px: the product's phone layout — two files across, the
+   storage card and Generate one column. */
+@media (max-width: 767.98px) {
+  .bsp-med-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bsp-card.bsp-med-sto,
+  .bsp-gen {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-med-kinds {
+    margin-inline-start: 0;
   }
 }
 

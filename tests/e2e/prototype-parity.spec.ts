@@ -96,6 +96,12 @@ const SCREENS: readonly {
   { key: 'posts', route: '/content', prototype: viaRail('Posts', 'المنشورات') },
   { key: 'approvals', route: '/approvals', prototype: viaRail('Approvals', 'الموافقات') },
   { key: 'campaigns', route: '/campaigns', prototype: viaRail('Campaigns', 'الحملات') },
+  { key: 'media', route: '/assets', prototype: viaRail('Media', 'الوسائط') },
+  {
+    key: 'media-generate',
+    route: '/creative',
+    prototype: thenPress(viaRail('Media', 'الوسائط'), 'Generate', 'توليد'),
+  },
   {
     key: 'studio',
     route: '/content/compose?mode=write',

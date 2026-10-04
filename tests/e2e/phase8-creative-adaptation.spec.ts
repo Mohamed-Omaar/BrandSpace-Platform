@@ -151,7 +151,7 @@ test.describe('adapting a generated image', () => {
 
     // The dropdown starts on the first format, and the first generation is of
     // that format — which is exactly the state that made the bug invisible.
-    const first = await page.getByTestId('creative-format').inputValue();
+    const first = (await page.getByTestId('creative-format').getAttribute('data-value')) ?? '';
     await generateOnce(page);
 
     const frame = page.getByTestId('creative-result-frame');
@@ -185,7 +185,7 @@ test.describe('adapting a generated image', () => {
 
   test('the result frame follows the RESULT, not the dropdown', async ({ page }) => {
     await enterStudio(page);
-    const first = await page.getByTestId('creative-format').inputValue();
+    const first = (await page.getByTestId('creative-format').getAttribute('data-value')) ?? '';
     await generateOnce(page);
 
     const frame = page.getByTestId('creative-result-frame');
@@ -196,8 +196,9 @@ test.describe('adapting a generated image', () => {
      * changed, so its frame must not either — re-cropping a finished image into
      * a shape it is not is a lie about what was produced.
      */
-    await page.getByTestId('creative-format').selectOption('landscape');
-    await expect(page.getByTestId('creative-format')).toHaveValue('landscape');
+    // D-468: the format is the prototype's switch on the Generate tab.
+    await page.getByTestId('creative-format').locator('button[data-value="landscape"]').click();
+    await expect(page.getByTestId('creative-format')).toHaveAttribute('data-value', 'landscape');
     await expect(frame).toHaveAttribute('data-format', first);
   });
 });
