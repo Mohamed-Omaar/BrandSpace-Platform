@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -5,6 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import { signIn } from './own-workspace';
+import { withPlatformPrisma } from './platform-prisma';
+import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
 
 /**
  * D-468 — SIDE-BY-SIDE EVIDENCE: the vendored prototype and the product, the
@@ -83,6 +86,60 @@ const thenPress =
       .click();
   };
 
+/**
+ * ONE POST WAITING FOR THE OWNER: a colleague's post in review in the fixture's
+ * primary brand, so the Approvals pair shows a review rather than an empty queue.
+ * Local evidence only — the E2E database, never a real one.
+ */
+async function seedPendingReview(): Promise<void> {
+  const loaded = JSON.parse(readFileSync(E2E_CREDENTIALS_FILE, 'utf8')) as E2eAdminCredentials;
+  const { customer } = loaded;
+  const brandId = brandFixtures(loaded).primaryBrandId;
+  const suffix = randomUUID().slice(0, 6);
+  await withPlatformPrisma(async (prisma) => {
+    const colleague = await prisma.membership.findFirstOrThrow({
+      where: {
+        workspaceId: customer.workspaceId,
+        status: 'ACTIVE',
+        user: { email: { not: customer.email }, name: { not: null } },
+      },
+      select: { userId: true },
+    });
+    const item = await prisma.contentItem.create({
+      data: {
+        workspaceId: customer.workspaceId,
+        brandId,
+        title: `Weekend brunch ${suffix}`,
+        status: 'IN_REVIEW',
+        primaryLocale: 'EN',
+        createdByUserId: colleague.userId,
+      },
+      select: { id: true },
+    });
+    await prisma.contentVariant.create({
+      data: {
+        workspaceId: customer.workspaceId,
+        brandId,
+        contentItemId: item.id,
+        platformKey: 'instagram',
+        locale: 'EN',
+        body: 'Brunch is back every Friday and Saturday, 10 to 2. Book a table from the link in bio.',
+        characterCount: 84,
+        validationState: 'VALID',
+      },
+    });
+    await prisma.approval.create({
+      data: {
+        workspaceId: customer.workspaceId,
+        brandId,
+        contentItemId: item.id,
+        requestedByUserId: colleague.userId,
+        status: 'PENDING',
+      },
+    });
+  });
+}
+
 /** The screens of a batch: the product route, and how the prototype is brought to it. */
 const SCREENS: readonly {
   readonly key: string;
@@ -93,11 +150,18 @@ const SCREENS: readonly {
   /** Another prototype file (`Auth.dc.html`), and a product route seen signed out. */
   readonly file?: string;
   readonly signedOut?: boolean;
+  /** Before the product is opened: the state the screen needs to be worth comparing. */
+  readonly before?: () => Promise<void>;
 }[] = [
   { key: 'home', route: '/overview' },
   { key: 'calendar', route: '/calendar', prototype: viaRail('Calendar', 'التقويم') },
   { key: 'posts', route: '/content', prototype: viaRail('Posts', 'المنشورات') },
-  { key: 'approvals', route: '/approvals', prototype: viaRail('Approvals', 'الموافقات') },
+  {
+    key: 'approvals',
+    route: '/approvals',
+    prototype: viaRail('Approvals', 'الموافقات'),
+    before: seedPendingReview,
+  },
   { key: 'campaigns', route: '/campaigns', prototype: viaRail('Campaigns', 'الحملات') },
   { key: 'media', route: '/assets', prototype: viaRail('Media', 'الوسائط') },
   { key: 'brand-brain', route: '/brand-brain', prototype: viaRail('Brand Brain', 'عقل العلامة') },
@@ -142,6 +206,54 @@ const SCREENS: readonly {
     product: async (page) => {
       await page.locator('[data-testid^="content-edit-"]').first().click();
       await page.waitForURL(/content\/compose\?item=/);
+    },
+  },
+  {
+    key: 'copilot',
+    route: '/overview',
+    prototype: async (page) => {
+      await page
+        .getByRole('button', { name: /^(Copilot|المساعد)$/ })
+        .last()
+        .click();
+    },
+    product: async (page) => {
+      await page.getByTestId('global-copilot-trigger').locator('a').first().click();
+      await page.getByTestId('copilot-drawer').waitFor();
+    },
+  },
+  {
+    key: 'notifications',
+    route: '/overview',
+    prototype: async (page) => {
+      await page
+        .getByRole('button', { name: /^(Notifications|الإشعارات)$/ })
+        .first()
+        .click();
+    },
+    product: async (page) => {
+      await page.getByTestId('topbar-notifications').click();
+      await page.getByTestId('notifications-feed').waitFor();
+    },
+  },
+  {
+    key: 'onboarding',
+    route: '/onboarding',
+    file: 'Auth.dc.html',
+    prototype: async (page) => {
+      await page
+        .getByRole('button', { name: /^(Create account|اعمل حساب)$/ })
+        .first()
+        .click();
+      // The terms box, then the purple "Create account".
+      await page.getByRole('checkbox').first().check();
+      await page
+        .getByRole('button', { name: /^(Create account|اعمل حساب)$/ })
+        .last()
+        .click();
+      await page
+        .getByRole('button', { name: /^(I opened the link in the email|فتحت اللينك من الإيميل)$/ })
+        .click();
     },
   },
   { key: 'sign-in', route: '/sign-in', file: 'Auth.dc.html', signedOut: true },
@@ -208,11 +320,16 @@ test.describe('prototype parity screenshots (D-468)', () => {
         await proto.goto(screen.file ? prototypeFile(screen.file) : PROTOTYPE, {
           waitUntil: 'networkidle',
         });
+        // `Auth.dc.html` keeps its own language: its language button switches it.
+        if (screen.file && locale === 'ar') {
+          await proto.getByRole('button', { name: /^AR$/ }).first().click();
+        }
         if (screen.prototype) await screen.prototype(proto);
         await settle(proto);
         await shoot(proto, (n) => path.join(OUT, `${screen.key}-${locale}-${n}-prototype.png`));
         await proto.close();
 
+        if (screen.before) await screen.before();
         if (!screen.signedOut) await signIn(page, locale);
         await page.goto(`${DASHBOARD_BASE_URL}/${locale}${screen.route}`);
         if (screen.product) await screen.product(page);
