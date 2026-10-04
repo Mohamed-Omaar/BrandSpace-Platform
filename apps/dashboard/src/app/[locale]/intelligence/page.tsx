@@ -227,7 +227,8 @@ export default async function IntelligencePage({
       locale={locale}
       heading={t('intelligence.title')}
       description={t('intelligence.subtitle')}
-      activePath="/intelligence"
+      // D-468: a finding is opened from Performance (its Insights tab).
+      activePath="/analytics"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={session.customer.name ?? session.customer.email}

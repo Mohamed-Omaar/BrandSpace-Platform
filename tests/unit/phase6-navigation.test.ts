@@ -76,9 +76,9 @@ describe('P6-04 · every navigation entry is placed exactly once', () => {
     // SUPERSEDED TWICE. P6-04 kept twenty-two entries; D-277 cut them to
     // thirteen; D-468 ports the prototype's rail, which puts Approvals, Notes
     // and Team back on it. The AI Creative Studio came off when its prototype
-    // home (Media's Generate tab) was ported; Marketing Intelligence stays until
-    // Performance's Insights is, so no member loses the way in. The count still
-    // guards against a silent cull — of the CURRENT list.
+    // home (Media's Generate tab) was ported, and Marketing Intelligence when
+    // Performance's Insights was. The count still guards against a silent cull
+    // — of the CURRENT list.
     expect(navHrefs()).toEqual([
       '/overview',
       '/brand-brain',
@@ -90,13 +90,12 @@ describe('P6-04 · every navigation entry is placed exactly once', () => {
       '/calendar',
       '/publishing',
       '/analytics',
-      '/intelligence',
       '/automations',
       '/notes',
       '/members',
       '/settings',
     ]);
-    expect(groupedHrefs()).toHaveLength(15);
+    expect(groupedHrefs()).toHaveLength(14);
   });
 });
 

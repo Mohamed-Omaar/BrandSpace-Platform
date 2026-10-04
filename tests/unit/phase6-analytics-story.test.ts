@@ -50,13 +50,20 @@ describe('D-293 · the screens', () => {
   const analytics = read('apps/dashboard/src/app/[locale]/analytics/page.tsx');
   const intelligence = read('apps/dashboard/src/app/[locale]/intelligence/page.tsx');
 
-  it('Analytics puts the story before the metrics, and the export last', () => {
+  /*
+   * REPLACED (D-468, batch 4): the story still comes before the figures; the
+   * export, which D-293 put last, now sits in the prototype's head row with
+   * the views and the period (`Main.dc.html` line 670).
+   */
+  it('Analytics puts the story before the metrics, and Export in the head row', () => {
     const story = analytics.indexOf('analytics-what-changed');
-    const totals = analytics.indexOf("t('analytics.totals')");
+    const metrics = analytics.indexOf('analytics-metric-');
+    const head = analytics.indexOf('data-testid="analytics-filters"');
     const exported = analytics.lastIndexOf('data-testid="analytics-export"');
     expect(story).toBeGreaterThan(0);
-    expect(story).toBeLessThan(totals);
-    expect(exported).toBeGreaterThan(totals);
+    expect(story).toBeLessThan(metrics);
+    expect(exported).toBeGreaterThan(head);
+    expect(exported).toBeLessThan(story);
   });
 
   it('Analytics says correlation, not cause', () => {

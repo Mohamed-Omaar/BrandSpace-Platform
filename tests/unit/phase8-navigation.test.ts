@@ -41,7 +41,7 @@ function navHrefs(): readonly string[] {
  * SUPERSEDES D-277's thirteen entries, which superseded D-188's eighteen. The
  * prototype puts Approvals, Notes and Team back on the rail; the AI Creative
  * Studio came off when Media's Generate tab was ported, and Marketing
- * Intelligence stays until Performance's Insights is. What this file still guarantees
+ * Intelligence when Performance's Insights was. What this file still guarantees
  * is the rule it was written for — a link that goes nowhere is not navigation —
  * for the rail AND for every area that is not on it: each must still have a
  * page, and each must still be reachable from the place the owner put it.
@@ -57,7 +57,6 @@ const RAIL: readonly string[] = [
   '/calendar',
   '/publishing',
   '/analytics',
-  '/intelligence',
   '/automations',
   '/notes',
   '/members',
@@ -65,7 +64,9 @@ const RAIL: readonly string[] = [
 ];
 
 /** Areas that are not on the rail, and where each is reached. */
-const MOVED: Readonly<Record<string, 'top bar' | 'settings'>> = {
+const MOVED: Readonly<Record<string, 'top bar' | 'settings' | 'performance'>> = {
+  // D-468 batch 4: a finding is opened from Performance's Insights tab.
+  '/intelligence': 'performance',
   '/notifications': 'top bar',
   '/copilot': 'top bar',
   // D-468 batch 3: the Creative Studio is Media's Generate tab, and the top
@@ -103,6 +104,11 @@ describe('every navigation entry leads to a real screen', () => {
       expect(hrefs).not.toContain(href);
       const segment = href.replace(/^\//, '');
       expect(existsSync(resolve(APP_DIR, segment, 'page.tsx'))).toBe(true);
+      if (place === 'performance') {
+        const performance = readFileSync(resolve(APP_DIR, 'analytics/page.tsx'), 'utf8');
+        expect(performance).toContain(`${href}?insight=`);
+        return;
+      }
       const source =
         place === 'settings'
           ? readFileSync(resolve(APP_DIR, '../../server/settings-nav.ts'), 'utf8')

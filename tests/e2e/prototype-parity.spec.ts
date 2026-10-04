@@ -98,6 +98,7 @@ const SCREENS: readonly {
   { key: 'campaigns', route: '/campaigns', prototype: viaRail('Campaigns', 'الحملات') },
   { key: 'media', route: '/assets', prototype: viaRail('Media', 'الوسائط') },
   { key: 'brand-brain', route: '/brand-brain', prototype: viaRail('Brand Brain', 'عقل العلامة') },
+  { key: 'performance', route: '/analytics', prototype: viaRail('Performance', 'الأداء') },
   {
     key: 'media-generate',
     route: '/creative',

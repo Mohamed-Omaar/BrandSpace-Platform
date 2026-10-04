@@ -150,6 +150,11 @@ export const arEgOverrides = {
   'assets.media.use': 'استخدمه',
   'assets.media.ai': 'بالذكاء',
   'assets.media.filters': 'فلاتر',
+  'analytics.sourcesNote':
+    'الأرقام دي جاية من إحصائيات كل منصة بعد الربط. لو منصة مش بتنشر رقم معيّن هتشوف السبب، مش صفر.',
+  'analytics.vsPrev': 'مقارنة بالفترة اللي قبلها',
+  'analytics.dayByDay': 'يوم بيوم',
+  'analytics.tablesNote': 'كل الأرقام دي في ملف الـ CSV.',
   'bb.pageSub': 'كل اللي المنصة عارفاه عن علامتك، وبتكتب منه كل حاجة.',
   'bb.lead':
     'كل مسودة وكل فكرة بتتكتب من المعلومات المعتمدة هنا بس. كل ما تكمّل مجالات أكتر، المسودات بتقرب من صوتك.',

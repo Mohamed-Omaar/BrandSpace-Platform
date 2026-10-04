@@ -141,12 +141,6 @@ const NAV: readonly NavEntry[] = [
     glyph: 'performance',
   },
   {
-    href: '/intelligence',
-    key: 'nav.intelligence',
-    permission: 'strategy.read',
-    glyph: 'brain',
-  },
-  {
     href: '/automations',
     key: 'nav.automations',
     permission: 'automation.read',
@@ -180,7 +174,7 @@ const NAV_GROUPS: readonly { titleKey: MessageKey | null; hrefs: readonly string
   { titleKey: 'nav.group.plan', hrefs: ['/strategy', '/campaigns'] },
   { titleKey: 'nav.group.create', hrefs: ['/content', '/assets'] },
   { titleKey: 'nav.group.publish', hrefs: ['/approvals', '/calendar', '/publishing'] },
-  { titleKey: 'nav.group.improve', hrefs: ['/analytics', '/intelligence'] },
+  { titleKey: 'nav.group.improve', hrefs: ['/analytics'] },
   { titleKey: 'nav.group.automate', hrefs: ['/automations', '/notes'] },
   { titleKey: 'nav.group.workspace', hrefs: ['/members', '/settings'] },
 ];

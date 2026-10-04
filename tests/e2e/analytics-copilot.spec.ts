@@ -939,7 +939,8 @@ test.describe('automations', () => {
 test.describe('P6-11 · analytics → intelligence → pulse', () => {
   test('"why?" is answered in Marketing Intelligence, or honestly declined', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
+    // Explain is on the Insights tab, as the prototype draws it (D-468).
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}&view=insights`);
 
     const explain = page.getByTestId('analytics-explain');
     await expect(explain).toBeVisible();

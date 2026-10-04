@@ -775,7 +775,8 @@ test.describe('D11 · Performance — Save as learning', () => {
     const target = await world('learning', { roleKey: 'analyst' });
     const insightId = await seedPerformance(target);
     await enter(page, target);
-    const analytics = `${DASHBOARD_BASE_URL}/en/analytics?brand=${target.brandId}`;
+    // The finding's card is on the Insights tab, as the prototype draws it.
+    const analytics = `${DASHBOARD_BASE_URL}/en/analytics?brand=${target.brandId}&view=insights`;
     // A SECOND TAB opened now keeps the button after the first tab saves: the
     // stale form re-posts the same insight, which must add nothing.
     const stale = await page.context().newPage();
@@ -814,7 +815,7 @@ test.describe('D11 · Performance — Save as learning', () => {
     // A member without brand_brain.edit gets no button.
     await page.context().clearCookies();
     await enter(page, target, { as: 'member' });
-    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?brand=${target.brandId}`);
+    await page.goto(analytics);
     await expect(page.getByTestId(`insight-save-learning-${insightId}`)).toHaveCount(0);
   });
 });

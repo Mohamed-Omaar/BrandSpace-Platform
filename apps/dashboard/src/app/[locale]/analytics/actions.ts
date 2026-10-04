@@ -44,9 +44,11 @@ export async function explainPeriodAction(formData: FormData): Promise<void> {
     idempotencyKey: `explain:${session.workspace.workspaceId}:${brandId}:${periodDays}:${compare ? 1 : 0}:${today}`,
   });
 
+  // Asked from the Insights tab (D-468), the answer lands back there.
+  const view = formData.get('view') === 'insights' ? '&view=insights' : '';
   const back = `/${locale}/analytics?brand=${encodeURIComponent(brandId)}&range=${periodDays}${
     compare ? '' : '&compare=0'
-  }`;
+  }${view}`;
   if (!response.ok) {
     redirect(`${back}&error=${codeFrom(response.payload)}`);
   }
@@ -85,9 +87,11 @@ export async function saveInsightLearningAction(formData: FormData): Promise<voi
   const brandId = String(formData.get('brandId') ?? '');
   const insightId = String(formData.get('insightId') ?? '');
   const range = String(formData.get('range') ?? '');
+  // The card sits on the Insights tab (D-468); the answer lands back there.
+  const view = formData.get('view') === 'insights' ? '&view=insights' : '';
   const back = `/${locale}/analytics?brand=${encodeURIComponent(brandId)}${
     /^\d{1,3}$/.test(range) ? `&range=${range}` : ''
-  }`;
+  }${view}`;
 
   const response = await callPhase7Api('/v1/insights/save-learning', { insightId });
   if (!response.ok) redirect(`${back}&error=${codeFrom(response.payload)}`);

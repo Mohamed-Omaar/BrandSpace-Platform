@@ -630,6 +630,47 @@ restore, the archived-facts list, the Look tab's templates card (Colours takes i
 "Replace" tiles, the chat's inline teach / fix cards (the product's modes do this), and a per-fact
 "used by" from a chat answer.
 
+### Performance (`Main.dc.html` lines 661–756)
+
+Ported: the head row (Numbers · Insights with its count, the 7 / 28 / 90-day switch, the comparison chip,
+Export), the sources strip, the four headline figures as the prototype's KPI cards (label, figure,
+delta in green or red, the spark line, "vs the previous period"), the day-by-day chart on the
+prototype's 900×230 geometry (grid, axis labels and their thinning, the line, its end value), By
+channel (name, figure, share, the bar in the channel's colour), the Posts table, and the Insights tab
+as the prototype's two-column cards (glyph, state, what the finding is, where it rests, Open and Save as
+learning). All three are links, so the view, the period and the comparison are in the address. The
+interim "Marketing Intelligence" rail entry is gone (owner decision, batches 2–6); a finding opens from
+its Insights card, and the page highlights Performance.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-293: the story — what changed, why it might matter, what to try — stays first, as three of the
+  prototype's cards, with Explain and "Give to Copilot".
+- The product's own headline figures (impressions, reach, engagements, engagement rate) and its one
+  ranked figure on the Posts table (engagements); every figure that has no value says why (the six
+  reasons), never a zero; the mock-data and stale banners; "Repeat it" opens the Studio from that post.
+- D-351 (MO11, MO12): the headline figures count up to the exact server value, the day-by-day line
+  draws in with its end value after it, and the channel bars grow from their start edge.
+- D11: Save as learning on a finding, and its pending / saved state. It and Explain (asking why the
+  period moved) sit on the Insights tab with the findings, and both return to it.
+
+**(b) Post-launch — left out.** The phone layout: below 768px one column, the post table without its
+action column.
+
+**(c) States the prototype does not draw.** No brand chosen, no figures yet (the chart's reason), no
+findings, a finding saved as a learning, an explanation that failed.
+
+**Accessibility findings.** The quiet greys (`#8a8a92`) take `#6a6a72`. The chart keeps its data table
+for assistive technology (visually hidden), as every chart in the product does.
+
+**Left out — no data or feature.** The channel filter chips and the "not connected" card (figures are
+not split per channel on this screen), the hover day card and the published-post dots on the chart, the
+PDF report and the weekly email in Export (CSV only), By strategy pillar, Best time to post, the link
+clicks card, the Campaigns card, the strategy goal card, the Posts table's Channel, Reach, Saves and
+Clicks columns, and a post's picture (a neutral tile stands in). Below 1,000 the chart's grid steps by a
+quarter of its maximum (the prototype's smallest step, 500, would flatten a young account's line), and a
+day with no reading is a gap in the line, never a zero.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

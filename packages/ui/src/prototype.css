@@ -5716,6 +5716,373 @@ button.bsp-chip.bsp-bb-q {
   }
 }
 
+/* ------------------------------------------------------------- §3-PF ---- */
+
+/*
+ * PERFORMANCE — `Main.dc.html` lines 661–756 (D-468, batch 4): Numbers and
+ * Insights. The quiet greys `#8a8a92` take `#6a6a72` for contrast.
+ */
+
+.bsp-pf {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-inline-size: 0;
+}
+/* The head row: `display: flex; align-items: center; gap: 10px; flex-wrap: wrap`. */
+.bsp-pf-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bsp-pf-count {
+  color: #5312c4;
+}
+.bsp-chip.bsp-pf-chip {
+  font-size: 12px;
+  min-block-size: 30px;
+}
+.bsp-btn.bsp-pf-export {
+  margin-inline-start: auto;
+}
+.bsp-pf-form {
+  display: inline-flex;
+}
+/* Sources: `background: #fbfbfc; border: 1px solid #f0f0f2; border-radius:
+   16px; padding: 10px 14px; gap: 8px`, each chip `padding: 4px 6px 4px 10px;
+   font-size: 11.5px`. */
+.bsp-pf-src {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fbfbfc;
+  border: 1px solid #f0f0f2;
+  border-radius: 16px;
+  padding: 10px 14px;
+}
+.bsp-pf-src-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.bsp-pf-src-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #ececef;
+  border-radius: 99px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+.bsp-pf-src-chip > b {
+  font-weight: 600;
+}
+.bsp-pf-src-note {
+  font-size: 11px;
+  color: #6a6a72;
+}
+/* The story (D-293), three `.xcard`s across. */
+.bsp-pf-story {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.bsp-xcard.bsp-pf-card {
+  gap: 10px;
+}
+.bsp-pf-cardh {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.bsp-btn.bsp-pf-link {
+  color: #5312c4;
+}
+.bsp-pf-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.bsp-pf-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.bsp-pf-muted {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #6a6a72;
+}
+.bsp-pf-acts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.bsp-pf-try {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bsp-pf-a {
+  font-size: 12px;
+  font-weight: 700;
+  color: #5312c4;
+}
+.bsp-pf-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* The figures: `.xgrid` four across, `.xcard` `min-height: 0; padding: 16px
+   18px; gap: 4px`; the delta 11px 700, green up, red down; the spark 120×30. */
+.bsp-xgrid.bsp-pf-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.bsp-xcard.bsp-pf-kpi {
+  min-block-size: 0;
+  padding: 16px 18px;
+  gap: 4px;
+}
+.bsp-pf-kpi-l {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6a6a72;
+}
+.bsp-pf-kpi > .bsp-xnum {
+  text-align: start;
+}
+.bsp-pf-kpi-none {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #6a6a72;
+  min-block-size: 34px;
+}
+.bsp-pf-kpi-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.bsp-pf-delta {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6a6a72;
+}
+.bsp-pf-delta[data-direction='up'] {
+  color: #16794b;
+}
+.bsp-pf-delta[data-direction='down'] {
+  color: #b83245;
+}
+.bsp-pf-spark {
+  fill: none;
+  stroke: #7935fe;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.bsp-pf-kpi-vs {
+  font-size: 10.5px;
+  color: #6a6a72;
+}
+/* The day-by-day chart: `viewBox="0 0 900 230"`, grid `#efeff2`, axis 10px,
+   the line 2px, the end value 10.5px 600 `#26262b`. */
+.bsp-xcard.bsp-pf-chartcard {
+  gap: 10px;
+}
+.bsp-pf-charth {
+  justify-content: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bsp-pf-sub {
+  font-size: 11px;
+  color: #6a6a72;
+}
+.bsp-pf-chart {
+  margin: 0;
+  position: relative;
+}
+.bsp-pf-chart > svg {
+  display: block;
+}
+.bsp-pf-grid {
+  stroke: #efeff2;
+  stroke-width: 1;
+}
+.bsp-pf-axis {
+  font-size: 10px;
+  fill: #6a6a72;
+}
+.bsp-pf-line {
+  fill: none;
+  stroke: #7935fe;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.bsp-pf-endv {
+  font-size: 10.5px;
+  font-weight: 600;
+  fill: #26262b;
+}
+/* By channel: the name, the figure, the share, an 8px bar in the channel's
+   colour (`#7935fe`, `#eb6834`, `#1baf7a`, `#2a78d6`). */
+.bsp-pf-ch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bsp-pf-ch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.bsp-pf-ch-name {
+  flex-grow: 1;
+}
+.bsp-pf-ch-share {
+  inline-size: 42px;
+  font-size: 11px;
+  color: #6a6a72;
+  text-align: end;
+}
+.bsp-pf-bar {
+  display: block;
+  block-size: 8px;
+  border-radius: 4px;
+  background: #f3f3f5;
+}
+.bsp-pf-bar > span {
+  display: block;
+  block-size: 100%;
+  border-radius: 4px;
+  background: #111114;
+}
+.bsp-pf-ch[data-provider='instagram'] .bsp-pf-bar > span {
+  background: #7935fe;
+}
+.bsp-pf-ch[data-provider='tiktok'] .bsp-pf-bar > span {
+  background: #eb6834;
+}
+.bsp-pf-ch[data-provider='facebook'] .bsp-pf-bar > span {
+  background: #1baf7a;
+}
+.bsp-pf-ch[data-provider='linkedin'] .bsp-pf-bar > span {
+  background: #2a78d6;
+}
+/* Posts: `.xcard` with `padding: 6px 0 4px`, rows `padding: 10px 20px;
+   border-top: 1px solid #f3f3f5; font-size: 12.5px`, a 36px picture. */
+.bsp-xcard.bsp-pf-posts {
+  padding: 6px 0 4px;
+  gap: 0;
+}
+.bsp-pf-posts-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 20px 6px;
+}
+.bsp-pf-tr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 120px;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 20px;
+  border-block-start: 1px solid #f3f3f5;
+  font-size: 12.5px;
+}
+.bsp-pf-tr.bsp-pf-th {
+  padding: 8px 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6a6a72;
+}
+.bsp-pf-num {
+  text-align: end;
+}
+.bsp-pf-strong {
+  font-weight: 600;
+}
+.bsp-pf-post {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-inline-size: 0;
+}
+.bsp-pf-art {
+  inline-size: 36px;
+  block-size: 36px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #efe7ff, #fff4c7);
+}
+.bsp-pf-rowacts {
+  display: flex;
+  justify-content: flex-end;
+}
+.bsp-pf-none {
+  padding: 16px 20px;
+  border-block-start: 1px solid #f3f3f5;
+  font-size: 13px;
+  color: #6a6a72;
+}
+/* Insights: two `.xcard`s across, `min-height: 210px`. */
+.bsp-card.bsp-pf-explain {
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bsp-pf-ins {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.bsp-xcard.bsp-pf-insight {
+  min-block-size: 210px;
+}
+.bsp-pf-ins-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.bsp-xfoot.bsp-pf-ins-f {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.bsp-card.bsp-pf-insnone {
+  padding: 18px;
+  font-size: 13.5px;
+  color: #6a6a72;
+}
+
+@media (max-width: 1099.98px) {
+  .bsp-pf-story {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-xgrid.bsp-pf-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ---------------------------------------------------------------- §4 ---- */
 
 /*
@@ -5971,6 +6338,24 @@ button.bsp-chip.bsp-bb-q {
   }
   .bsp-bb-msg {
     max-inline-size: 92%;
+  }
+}
+
+/* Performance below 768px: the product's phone layout — one column, the post
+   table without its action column. */
+@media (max-width: 767.98px) {
+  .bsp-pf-ins {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-pf-tr {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .bsp-pf-tr > :last-child:not(:first-child) {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .bsp-btn.bsp-pf-export {
+    margin-inline-start: 0;
   }
 }
 
