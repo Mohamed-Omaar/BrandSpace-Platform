@@ -382,6 +382,38 @@ target; it keeps its look and gains the height. The day's "+" also shows on keyb
 **Left out — no data or feature.** "On hold" (a post held by a paused campaign) is not in the
 calendar's data, so its legend entry and its pause mark are not drawn.
 
+### Posts — the content library (`Main.dc.html` lines 538–566)
+
+Ported: the status tabs as the prototype's `.seg` with counts (red when posts failed), the channel
+chips and "+ New post", "From your strategy" with its ideas, the four-across grid of `.card lift`
+posts (picture, title and status pill, meta, the purple campaign chip, the one button and the "…"
+menu), the glass "…" menu in the prototype's order with its campaign sub-list (✓, Back) and its
+inline two-step archive ("Archive", then "Sure? Archive"), and the empty card.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-282: the library is media-first — a post's real first picture, a video tile, and a text-only
+  post's own words on the lavender card — rather than the prototype's sample artwork and overlay
+  headline. Its search, brand, campaign, format and language filters and the grid / list switch stay,
+  drawn as the calendar's chip selects and the prototype's `.seg`; the list view is the agenda's rows.
+- The status tabs are the product's lifecycle states (Draft, In review, Changes requested, Approved,
+  Scheduled, Publishing, Published, Failed, Archived — each when it has posts), not the prototype's six.
+- B8 / Q21: the menu keeps the product's Request approval, Schedule, Move… (its date-and-time
+  dialog), Unschedule, Restore and View on, each only when the permission and state allow; its first
+  item is the prototype's Edit / Open. A member offered nothing beyond opening gets no menu.
+- The card's one button follows the prototype's `kinds` (Continue, Review, Edit, Results, Retry,
+  Restore) for a member the destination admits; anyone else gets Open. An approved post, a state the
+  prototype does not have, offers Schedule.
+- "From your strategy" lists the product's ideas, each with its own verb ("Create a post for it",
+  "See the evidence"), not the prototype's single "Make it".
+
+**(c) States the prototype does not draw.** Three cards a row below 1100px and two below 900px; on
+a phone the product's card grid stays and the tabs scroll in their own track. A workspace with more
+campaigns than fit scrolls the "…" menu inside itself.
+
+**Left out — no data or feature.** The card's "Retry" opens the Publishing log, where the failed
+post's retry is: retrying needs the publish job, which a library card does not carry.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:

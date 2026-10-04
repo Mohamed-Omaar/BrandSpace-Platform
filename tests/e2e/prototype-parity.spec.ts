@@ -79,6 +79,7 @@ const SCREENS: readonly {
 }[] = [
   { key: 'home', route: '/overview' },
   { key: 'calendar', route: '/calendar', prototype: viaRail('Calendar', 'التقويم') },
+  { key: 'posts', route: '/content', prototype: viaRail('Posts', 'المنشورات') },
 ];
 
 /**

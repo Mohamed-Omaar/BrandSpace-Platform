@@ -98,9 +98,11 @@ describe('B-6 · the library offers Schedule only to members who may schedule', 
   const calendarActions = read('apps/dashboard/src/app/[locale]/calendar/actions.ts');
 
   it('gates the link on the same permission the calendar enforces', () => {
-    expect(library).toMatch(
-      /can\.schedule && \(card\.status === 'APPROVED' \|\| card\.status === 'DRAFT'\) \?/,
+    // D-468: Schedule is an item of the card's "…" menu, gated there.
+    expect(read('apps/dashboard/src/app/[locale]/content/post-menu.tsx')).toContain(
+      "const maySchedule = can.schedule && (status === 'APPROVED' || status === 'DRAFT');",
     );
+    expect(library).toContain('can={{ ...menu.can, submit: can.submit }}');
     expect(page).toContain("schedule: may('content.schedule')");
     // The server half the link leads to, so the two cannot drift apart.
     expect(calendarActions).toContain("requireWorkspaceAction(locale, 'content.schedule')");

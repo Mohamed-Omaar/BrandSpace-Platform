@@ -107,9 +107,12 @@ describe('MO14 — hover lifts, pressing does not move', () => {
     const bb = readFileSync('packages/ui/src/brand-brain.css', 'utf8');
     expect(rule(bb, '.bb-card:hover')).toContain('translateY(-2px)');
     expect(rule(bb, '.bb-card')).toContain('var(--bs-motion-hover)');
+    // D-468: a post card is the prototype's `.card lift` — the same 2px rise.
     expect(
       readFileSync('apps/dashboard/src/app/[locale]/content/content-library.tsx', 'utf8'),
-    ).toContain('className="bs-card-liftable"');
+    ).toContain('className="bsp-card bsp-lift bsp-post"');
+    const proto = readFileSync('packages/ui/src/prototype.css', 'utf8');
+    expect(rule(proto, '.bsp-lift:hover')).toContain('translate: 0 -2px');
   });
 });
 

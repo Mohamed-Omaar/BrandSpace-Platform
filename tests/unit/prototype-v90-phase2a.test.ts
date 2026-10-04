@@ -874,7 +874,9 @@ describe('B8 · the Posts "…" menu, and Q21 · who may file a post under a cam
       /if \(to === 'ARCHIVED' && formData\.get\('intent'\) !== 'ARCHIVE'\) \{\s*throw new AppError\('VALIDATION_FAILED'/,
     );
     expect(menu()).toContain('<input type="hidden" name="intent" value="ARCHIVE" />');
-    expect(menu()).toContain('<ConfirmDialog');
+    // D-468: the prototype's inline second step ("Sure? Archive") replaces the dialog.
+    expect(menu()).toContain('onClick={() => setSure(true)}');
+    expect(menu()).toContain("l('content.menu.archiveSure')");
     const studio = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
     expect(studio).toContain('<details data-testid="archive-disclosure">');
     expect(studio).toContain('<input type="hidden" name="intent" value="ARCHIVE" />');

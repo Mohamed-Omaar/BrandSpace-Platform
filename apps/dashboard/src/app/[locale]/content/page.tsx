@@ -436,8 +436,17 @@ export default async function ContentPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
+      eyebrow={translate('nav.group.create')}
       heading={translate('content.title')}
-      description={translate('content.subtitle')}
+      description={
+        // The prototype's "Every Reema Café post in one place." — the brand in view.
+        effectiveBrand && brandNames.get(effectiveBrand)
+          ? translate('content.p.subtitleBrand').replace(
+              '{brand}',
+              brandNames.get(effectiveBrand) ?? '',
+            )
+          : translate('content.p.subtitleAll')
+      }
       activePath="/content"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -475,6 +484,9 @@ export default async function ContentPage({
           edit: may('content.edit'),
           submit: may('content.submit'),
           schedule: may('content.schedule'),
+          approve: may('content.approve'),
+          results: may('analytics.read'),
+          retry: may('publishing.read'),
         }}
         options={{
           brands:
@@ -515,4 +527,11 @@ const MENU_KEYS = [
   'content.archive.title',
   'content.archive.confirm',
   'content.archive.confirmBody',
+  'content.menu.back',
+  'content.menu.duplicate',
+  'content.menu.addCampaign',
+  'content.menu.changeCampaign',
+  'content.menu.archiveSure',
+  'content.action.requestApproval',
+  'content.action.schedule',
 ] as const;

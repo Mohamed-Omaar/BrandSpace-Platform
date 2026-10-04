@@ -101,4 +101,11 @@ export const arEgOverrides = {
   'content.status.SCHEDULED': 'مجدولة',
   'content.status.PUBLISHED': 'منشورة',
   'content.status.FAILED': 'متعثرة',
+
+  // Batch 2 — Posts, the content library (Main.dc.html lines 538–566; copy at 2185, 2186, 2573).
+  'content.p.continue': 'كمّل',
+  'content.p.review': 'راجِع',
+  'content.p.retry': 'أعد المحاولة',
+  'content.menu.addCampaign': 'ضيفه لحملة',
+  'content.menu.changeCampaign': 'غيّر الحملة',
 } as const satisfies Partial<Record<MessageKey, string>>;

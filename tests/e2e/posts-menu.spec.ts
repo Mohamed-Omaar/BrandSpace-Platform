@@ -91,13 +91,11 @@ test.describe('B8 · the Posts menu', () => {
     await expect(trigger).toBeFocused();
 
     await trigger.click();
+    // D-468 — the prototype's two steps, inline: "Archive", then "Sure? Archive".
     await page.getByTestId(`post-menu-archive-${itemId}`).click();
-    const confirm = page.getByTestId(`post-archive-dialog-${itemId}`);
-    await expect(confirm).toBeVisible();
-    await Promise.all([
-      page.waitForURL(/[?&]ok=SAVED/),
-      confirm.getByTestId('confirm-accept').click(),
-    ]);
+    const confirm = page.getByTestId(`post-menu-archive-confirm-${itemId}`);
+    await expect(confirm).toHaveText('Sure? Archive');
+    await Promise.all([page.waitForURL(/[?&]ok=SAVED/), confirm.click()]);
     const archived = await withPlatformPrisma((prisma) =>
       prisma.contentItem.findUniqueOrThrow({ where: { id: itemId }, select: { status: true } }),
     );
@@ -135,11 +133,11 @@ test.describe('B8 · the Posts menu', () => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/content?q=${encodeURIComponent(title)}`);
     await page.getByTestId(`post-menu-${itemId}`).click();
+    // D-468 — the prototype's campaign sub-menu: the campaigns, then pick one.
     await page.getByTestId(`post-menu-campaign-${itemId}`).click();
-    await page.getByTestId(`post-campaign-select-${itemId}`).selectOption(campaign.id);
     await Promise.all([
       page.waitForURL(/[?&]ok=CAMPAIGN_LINKED/),
-      page.getByTestId(`post-campaign-submit-${itemId}`).click(),
+      page.getByTestId(`post-campaign-${itemId}-${campaign.id}`).click(),
     ]);
     const filed = await withPlatformPrisma((prisma) =>
       prisma.contentItem.findUniqueOrThrow({ where: { id: itemId }, select: { campaignId: true } }),

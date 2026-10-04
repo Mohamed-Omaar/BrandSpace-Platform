@@ -212,14 +212,11 @@ test.describe('the content library', () => {
       expect(badge.trim()).toMatch(/^\d+$/);
     }
 
-    for (const filter of [
-      'content-search',
-      'content-platform',
-      'content-format',
-      'content-language',
-    ]) {
+    for (const filter of ['content-search', 'content-format', 'content-language']) {
       await expect(page.getByTestId(filter)).toBeVisible();
     }
+    // D-468 — the platform filter is the prototype's channel chips.
+    await expect(page.getByTestId('content-channel-instagram')).toBeVisible();
     await page.getByTestId('content-format').selectOption('POST');
     await page.getByTestId('content-apply').click();
     await expect(page).toHaveURL(/format=POST/);
@@ -242,11 +239,26 @@ test.describe('the content library', () => {
     const card = page.getByTestId('content-card').first();
     await expect(card).toBeVisible();
     const itemId = (await card.getAttribute('data-item-id')) ?? '';
+    // D-468 — Duplicate is an item of the card's "…" menu, as in the prototype.
+    await page.getByTestId(`post-menu-${itemId}`).click();
     const duplicate = page.getByTestId(`content-duplicate-${itemId}`);
     await expect(duplicate).toBeVisible();
     await duplicate.click();
-    await page.waitForURL(/\/content\/compose\?item=.*ok=DUPLICATED/);
-    expect(page.url()).not.toContain(`item=${itemId}&`);
+    // The menu's Duplicate is a server action: its redirect is a client
+    // navigation with no new document, so `load` never fires, and the shell
+    // turns `?ok=DUPLICATED` into its toast and then cleans the address. So:
+    // the Studio opens on a DIFFERENT item, and the toast says it was copied.
+    await expect
+      .poll(
+        () => {
+          const opened = new URL(page.url()).searchParams.get('item');
+          return opened !== null && opened !== itemId;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    expect(new URL(page.url()).pathname).toBe('/en/content/compose');
+    await expect(page.getByTestId('toast-host')).toContainText('A copy was made as a new draft.');
   });
 });
 
