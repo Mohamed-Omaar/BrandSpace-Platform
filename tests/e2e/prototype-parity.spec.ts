@@ -95,6 +95,7 @@ const SCREENS: readonly {
   { key: 'calendar', route: '/calendar', prototype: viaRail('Calendar', 'التقويم') },
   { key: 'posts', route: '/content', prototype: viaRail('Posts', 'المنشورات') },
   { key: 'approvals', route: '/approvals', prototype: viaRail('Approvals', 'الموافقات') },
+  { key: 'campaigns', route: '/campaigns', prototype: viaRail('Campaigns', 'الحملات') },
   {
     key: 'studio',
     route: '/content/compose?mode=write',

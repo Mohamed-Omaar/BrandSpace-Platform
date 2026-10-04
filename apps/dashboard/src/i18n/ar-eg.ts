@@ -129,4 +129,19 @@ export const arEgOverrides = {
   'approvals.tabs.sent': 'أنا بعته',
   'approvals.queueEmptyTitle': 'مفيش حاجة مستنياك.',
   'approvals.decisionNote': 'ملاحظة',
+
+  // Batch 3 — Campaigns (Main.dc.html lines 1159–1236; copy at 2433, 2929, 3658–3669).
+  'campaigns.hero.line': '{running} شغالة · {planned} مخططة · {ended} انتهت',
+  'campaigns.hero.endsIn': '{name} بتخلص بعد {days} يوم',
+  'campaigns.hero.endsToday': '{name} بتخلص النهارده',
+  'campaigns.hero.startsIn': '{name} بتبدأ بعد {days} يوم',
+  'campaigns.hero.none': 'مفيش حملة شغالة دلوقتي',
+  'campaigns.hero.running': '«{name}» شغالة دلوقتي',
+  'campaigns.hero.month': 'بوستات الحملات الشهر ده',
+  'campaigns.hero.monthSub': '{scheduled} مجدولة · {published} اتنشرت',
+  'campaigns.card.noPosts': 'لسه مفيش بوستات',
+  'campaigns.card.published': 'اتنشر',
+  'campaigns.card.allPublished': 'اتنشر كله',
+  'campaigns.room.edit': 'عدّل',
+  'campaigns.best.label': 'أنجح حملة',
 } as const satisfies Partial<Record<MessageKey, string>>;

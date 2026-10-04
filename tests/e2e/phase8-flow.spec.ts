@@ -254,7 +254,10 @@ test('5 · a campaign is created through the form and appears in the list', asyn
   await page.waitForURL(/\/en\/campaigns\/[0-9a-f-]{36}\?ok=CAMPAIGN_CREATED/);
 
   await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns`);
-  const row = page.locator('[data-testid^="campaign-open-"]', { hasText: CAMPAIGN_NAME });
+  // The card carries the name; its Open link carries it in its accessible name.
+  const row = page
+    .locator('[data-testid^="campaign-row-"]', { hasText: CAMPAIGN_NAME })
+    .locator('[data-testid^="campaign-open-"]');
   await expect(row).toBeVisible();
 
   const href = await row.getAttribute('href');

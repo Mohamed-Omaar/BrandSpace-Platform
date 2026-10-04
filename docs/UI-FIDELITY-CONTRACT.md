@@ -510,6 +510,38 @@ and the review do.
 (a review carries neither), and the rows' real pictures (a queue row carries no media; the product's
 abstract art stands in, as on the calendar).
 
+### Campaigns (`Main.dc.html` lines 1159–1236)
+
+Ported, the list: the lavender-to-yellow hero (running · planned · ended, what ends or starts next,
+"+ New campaign", the stat tiles), the status switch with counts, and the two-across cards — the
+posts' pictures with "+N", the status chip and its dot, "No posts yet", the name, dates, channel marks
+and objective, what has been published with its bar, the next post, and Open. The room: "← All
+campaigns" and the head card (name and status, the facts line, what has been published with its bar,
+Edit, Start now, + New post), and the brief as the prototype's notes block.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-289: the room keeps its tabs — Overview, Content, Calendar, Assets, Performance and Activity —
+  under the head, with their contents unchanged; the prototype's goal and linked-strategy cards and its
+  post results table are not drawn above them.
+- D-341: the hero's "Best campaign" tile is the product's (engagement over impressions, pooled, for a
+  reader with `analytics.read`; "—" and "No campaign has published yet" otherwise).
+- The switch lists the product's statuses that have campaigns (Draft, Planned, Active, Paused,
+  Completed, Archived), not the prototype's four.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the hero and the cards are one column.
+
+**(c) States the prototype does not draw.** A workspace with no brand (create one), no campaigns
+(create one), and a campaign whose stored channel has no translated name (named by its key).
+
+**Accessibility findings.** The switch's counts (`#7a7a82`), the ratio line and "No posts yet"
+(`#8a8a92`) take `#6a6a72`.
+
+**Left out — no data or feature.** The goal row on the cards and in the room (a campaign has no KPI
+target), "Posts on hold" and the paused overlay (holding a paused campaign's posts is not in the
+data), Pause / Resume on a card (pausing is the campaign's edit form), "Add an existing post" in the
+room (the Posts menu files a post under a campaign), and the paused banner.
+
 ## 5. How compliance is proven
 
 Not by looking at a screenshot and forming an opinion:
