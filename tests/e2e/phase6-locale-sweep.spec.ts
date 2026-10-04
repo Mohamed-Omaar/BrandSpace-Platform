@@ -139,6 +139,21 @@ test.describe('P6-14 · every customer screen, both languages', () => {
           expect(heading, `${label} heading`).toMatch(ARABIC);
         }
 
+        // The rail's entrance fades its rows in: measure the colours it settles
+        // on, not a frame mid-fade (under a full shard's load axe read the
+        // current row's label part-way in).
+        await expect
+          .poll(
+            () =>
+              page
+                .getByTestId('sidebar')
+                .evaluate((el) =>
+                  el.getAnimations({ subtree: true }).every((a) => a.playState === 'finished'),
+                )
+                .catch(() => true),
+            { message: `${label} rail settles` },
+          )
+          .toBe(true);
         const results = await new AxeBuilder({ page })
           .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
           .analyze();
