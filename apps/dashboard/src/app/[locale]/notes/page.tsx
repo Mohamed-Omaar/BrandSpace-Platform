@@ -19,6 +19,7 @@ import { mentionableMembers } from '../../../server/notes-context';
 import { noteThreadHref } from '../../../server/note-links';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { WorkspaceShell } from '../../../components/workspace-shell';
+import { whenLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,11 +78,8 @@ export default async function NotesPage({
   const nameOf = (userId: string): string =>
     members.find((member) => member.userId === userId)?.name ?? t('notes.someone');
 
-  const dateFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  });
+  // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
+  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
 
   /** Where the conversation lives — the subject's own screen, the thread highlighted. */
   const subjectHref = (entry: NoteInboxEntry): string => noteThreadHref(locale, entry);

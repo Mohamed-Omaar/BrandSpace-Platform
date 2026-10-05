@@ -352,7 +352,10 @@ describe('E3 + Q18 · spending credits needs copilot.use as well as the feature 
     expect(composer).toMatch(
       /\{can\.generate \? \(\s*<button[^>]*?\s*type="button"\s*className="bsp-btn bsp-pur bsp-sm bsp-st-aiw"/,
     );
-    expect(composer).toMatch(/\{can\.generate \? \(\s*<>\s*\{' · '\}\s*<button/);
+    // Round 3 — the estimate is under the brief's "⋯", still only with `can.generate`.
+    expect(composer).toMatch(
+      /\{can\.generate \? \(\s*<MoreDisclosure[\s\S]*?data-testid="content-estimate"/,
+    );
     // Writing it yourself spends nothing and stays available.
     expect(composer).toContain(
       "const canWrite = ready && caption.trim() !== '' && !captionTooLong && draft === null;",

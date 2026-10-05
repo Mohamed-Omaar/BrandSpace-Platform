@@ -7,16 +7,18 @@ import { SegmentPill, visuallyHiddenStyle } from '@brandspace/ui';
 import { ChannelMark } from '../../calendar/prototype-calendar';
 import { generationKeyFor, manualKeyFor } from './idempotency';
 import type { MediaOptionView } from './media-picker';
-import { CalendarGlyph, DraftEditor, SparkGlyph } from './draft-editor';
+import { CalendarGlyph, DraftEditor, SparkGlyph, type StudioNotes } from './draft-editor';
 import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
 import { StudioCopilotButton } from './studio-copilot';
 import {
+  countCharacters,
   fill,
   formatCredits,
   inlineActionsFor,
   previewFormatFor,
+  variantIssues,
 } from '../../../../server/composer-editor';
 
 /** The prototype's four formats (`Main.dc.html` line 341); the rest sit under "⋯". */
@@ -197,6 +199,8 @@ export interface ComposerViewProps {
   >;
   /** G6 (D-329): what that day is, in the reader's language. */
   readonly plannedFor?: string | null;
+  /** Round 3 (C1) — the post's notes, as the compact card under the preview. */
+  readonly notes?: StudioNotes | null;
   readonly contentTypes: readonly string[];
   readonly maxBriefChars: number;
   readonly maxVariants: number;
@@ -388,6 +392,7 @@ export function ComposerView({
   carriedMedia = null,
   plannedDate = null,
   expiredChannels = {},
+  notes = null,
   plannedFor = null,
   review = null,
   scheduling = null,
@@ -910,6 +915,7 @@ export function ComposerView({
           attach={carriedMedia}
           plannedDate={plannedDate}
           expiredChannels={expiredChannels}
+          notes={notes}
           review={review}
           scheduling={scheduling}
           failed={failed}
@@ -1311,40 +1317,50 @@ export function ComposerView({
                       </Link>
                     </div>
                   ) : null}
-                  <span className="bsp-st-hint bsp-st-start-hint">
-                    {t['studio.briefHint']}
-                    {briefTooLong ? (
-                      <span className="bsp-st-count" data-over="true">
-                        {' '}
-                        <span className="bsp-ltr">
-                          {generationBrief.length} / {maxBriefChars}
+                  <div className="bsp-st-hintrow">
+                    <span className="bsp-st-hint bsp-st-start-hint">
+                      {t['studio.briefHint']}
+                      {briefTooLong ? (
+                        <span className="bsp-st-count" data-over="true">
+                          {' '}
+                          <span className="bsp-ltr">
+                            {generationBrief.length} / {maxBriefChars}
+                          </span>
                         </span>
-                      </span>
-                    ) : null}
+                      ) : null}
+                    </span>
+                    {/*
+                    Round 3 — the prototype has no estimate box above the
+                    caption: its cost is on the AI button. The product's
+                    estimate and what it means are kept under "⋯".
+                  */}
                     {can.generate ? (
-                      <>
-                        {' · '}
+                      <MoreDisclosure
+                        label={t['studio.moreOptions'] ?? ''}
+                        testId="composer-estimate-more"
+                        align="end"
+                      >
                         <button
                           type="button"
-                          className="bsp-st-link"
+                          className="bsp-chip bsp-st-sm"
                           disabled={!canGenerate || busy !== null}
                           data-testid="content-estimate"
                           onClick={runQuote}
                         >
                           {t['content.composer.estimate']}
                         </button>
-                      </>
+                        {quote !== null && busy === null ? (
+                          <div className="bsp-st-quote" role="status" data-testid="content-quote">
+                            <b>
+                              {t['content.composer.quoteLabel']}: {formatCredits(quote)}{' '}
+                              {t['content.composer.quoteUnit']}
+                            </b>
+                            <span>{t['content.composer.quoteHint']}</span>
+                          </div>
+                        ) : null}
+                      </MoreDisclosure>
                     ) : null}
-                  </span>
-                  {quote !== null && busy === null ? (
-                    <div className="bsp-st-quote" role="status" data-testid="content-quote">
-                      <b>
-                        {t['content.composer.quoteLabel']}: {formatCredits(quote)}{' '}
-                        {t['content.composer.quoteUnit']}
-                      </b>
-                      <span>{t['content.composer.quoteHint']}</span>
-                    </div>
-                  ) : null}
+                  </div>
                 </div>
 
                 <div className="bsp-st-field">
@@ -1421,6 +1437,34 @@ export function ComposerView({
                       <span className="bsp-st-hint">{t['studio.toolsAfterSave']}</span>
                     </div>
                   ) : null}
+                </div>
+                {/*
+                  Round 3 — the prototype's Hashtags under the caption. They
+                  belong to a version of the post, so before it exists the
+                  field is drawn and waits for the save, like the AI edits.
+                */}
+                <div className="bsp-st-tags" data-testid="composer-tags">
+                  <div className="bsp-st-tags-head">
+                    <label className="bsp-st-label" htmlFor={`${fieldId}-tags`}>
+                      {t['content.composer.hashtags']}
+                    </label>
+                    <span className="bsp-st-tags-count bsp-ltr">0</span>
+                  </div>
+                  <div className="bsp-st-tag-add">
+                    <input
+                      id={`${fieldId}-tags`}
+                      className="bsp-st-tag-input"
+                      placeholder={t['studio.tagPlaceholder']}
+                      disabled
+                      aria-describedby={`${fieldId}-tags-hint`}
+                    />
+                    <button type="button" className="bsp-btn bsp-sm bsp-sec" disabled>
+                      {t['studio.tagAdd']}
+                    </button>
+                  </div>
+                  <span className="bsp-st-hint" id={`${fieldId}-tags-hint`}>
+                    {t['studio.tagsAfterSave']}
+                  </span>
                 </div>
               </div>
 
@@ -1536,8 +1580,85 @@ export function ComposerView({
               ) : (
                 <p className="bsp-st-none">{t['content.composer.resultsEmpty']}</p>
               )}
+              {/* C1 — the Notes card, whose conversation starts once the post exists. */}
+              <div className="bsp-st-notes" data-testid="composer-notes">
+                <div className="bsp-st-notes-head">
+                  <span className="bsp-lbl">
+                    {t['studio.notesLabel']} · <span className="bsp-ltr">0</span>
+                  </span>
+                </div>
+                <div className="bsp-st-notes-last">{t['studio.notesAfterSave']}</div>
+              </div>
             </section>
           </div>
+
+          {/*
+            "WILL IT LAND RIGHT?" — the prototype's checks card after the
+            editor, for the channels chosen: the caption against each channel's
+            limits now; hashtags and media open with the saved post.
+          */}
+          {selected.length > 0 ? (
+            <section className="bsp-card bsp-st-checks" data-testid="composer-checks">
+              <div className="bsp-st-checks-head">
+                <span className="bsp-lbl">{t['studio.checks']}</span>
+                <span className="bsp-st-checks-sub">{t['studio.checksSub']}</span>
+              </div>
+              <div className="bsp-st-checks-grid">
+                {selected.map((key) => {
+                  const platform = platforms.find((entry) => entry.key === key);
+                  const channel = { key, name: platform?.label ?? key };
+                  const characters = countCharacters(caption);
+                  const limit = platform?.maxBodyChars ?? 0;
+                  const issues = platform
+                    ? variantIssues(platform, contentType, {
+                        body: caption,
+                        hashtags: [],
+                        mediaKinds: [],
+                        expiredMedia: 0,
+                      })
+                    : [];
+                  const has = (keys: readonly string[]) =>
+                    issues.some((issue) => keys.includes(issue.key));
+                  const rows = [
+                    {
+                      key: 'caption',
+                      ok: !has(['editor.issue.empty', 'editor.issue.tooLong']),
+                      value: `${characters} / ${limit}`,
+                    },
+                    { key: 'tags', ok: true, value: `0 / ${platform?.maxHashtags ?? 0}` },
+                    {
+                      key: 'media',
+                      ok: !issues.some((issue) => issue.fix === 'media'),
+                      value: `0 / ${platform?.maxMediaItems ?? 0}`,
+                    },
+                  ];
+                  const bad = rows.some((row) => !row.ok);
+                  return (
+                    <div key={key} className="bsp-st-check" data-testid={`composer-check-${key}`}>
+                      <div className="bsp-st-check-head">
+                        <span className="bsp-st-check-mark">
+                          <ChannelMark channel={channel} size={14} label={false} />
+                        </span>
+                        <span className="bsp-ltr bsp-st-check-name">{channel.name}</span>
+                        <span className={`bsp-xstatus ${bad ? 'bsp-warn' : ''} bsp-st-noshrink`}>
+                          {bad ? t['studio.fix'] : t['studio.ready']}
+                        </span>
+                      </div>
+                      {rows.map((row) => (
+                        <div key={row.key} className="bsp-st-check-row" data-ok={row.ok}>
+                          <span aria-hidden="true">{row.ok ? '✓' : '✕'}</span>
+                          <span>{t[`studio.row.${row.key}`]}</span>
+                          <span className="bsp-ltr" title={row.value}>
+                            {row.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
 
           {/*
             THE STICKY BAR — `Main.dc.html` lines 525–534 (review of #67, round
@@ -1552,15 +1673,6 @@ export function ComposerView({
               {t['content.status.DRAFT']}
             </span>
             <span className="bsp-st-saved">{t['studio.notSaved']}</span>
-            <button
-              type="submit"
-              form={manualFormId}
-              className="bsp-btn bsp-sm bsp-pur"
-              disabled={!canWrite || busy !== null}
-              data-testid="content-write-manual"
-            >
-              {t['studio.saveDraft']}
-            </button>
             <span className="bsp-st-note">
               {caption.trim() === ''
                 ? t['studio.captionFirst']
@@ -1590,14 +1702,21 @@ export function ComposerView({
                 )}
               </span>
             </span>
+            {/*
+              Round 3 — the bar's one primary, where the prototype has "Send
+              for review": a post that does not exist yet cannot be sent, and
+              the product does not save as you type (every save is audited),
+              so the primary here is the save that creates it.
+            */}
             <button
-              type="button"
-              className="bsp-btn"
-              disabled
+              type="submit"
+              form={manualFormId}
+              className="bsp-btn bsp-pur"
+              disabled={!canWrite || busy !== null}
               title={t['studio.sendAfterSave']}
-              data-testid="composer-send-review"
+              data-testid="content-write-manual"
             >
-              {t['content.composer.submit']}
+              {t['studio.saveDraft']}
             </button>
             <StudioCopilotButton label={t['topbar.copilot'] ?? ''} />
           </div>

@@ -146,7 +146,12 @@ export default async function SettingsPage({
             testId="settings-form"
             barTestId="settings-bar"
             saveTestId="settings-save"
-            labels={saveBarLabels(t)}
+            labels={{
+              ...saveBarLabels(t),
+              // Round 3 — the prototype's own words for this bar.
+              saved: t('settings.allSaved'),
+              save: t('settings.saveChanges'),
+            }}
             style={{ display: 'grid', gap: spacingTokens.md }}
           >
             <input type="hidden" name="locale" value={locale} />
@@ -187,6 +192,7 @@ export default async function SettingsPage({
                 industryNone: t('settings.industryNone'),
                 industryOther: t('settings.industryOther'),
                 industryOtherLabel: t('settings.industryOtherLabel'),
+                industryList: t('settings.industryList'),
                 website: t('settings.website'),
                 websiteHint: t('settings.hint.website'),
                 choose: t('createWorkspace.choose'),

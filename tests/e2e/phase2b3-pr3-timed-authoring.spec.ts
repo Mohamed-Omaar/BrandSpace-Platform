@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import { enter, noSeriousViolations, ownWorkspace, type OwnWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
+import { openRuleMore } from './automation-form';
 
 /**
  * PHASE 2B-3, PR 3 — AUTHORING THE TIMED AUTOMATIONS, AND READING THE
@@ -108,12 +109,13 @@ const pick = (page: Page, testId: string, value: string) =>
 
 const COPY = {
   en: {
+    // Round 3 — the tiles' own words (the prototype's).
     triggers: [
-      'When a post waits for review for over 24 hours',
-      'When a campaign starts',
-      'When a campaign ends',
-      'When nothing is scheduled for the next 3 days',
-      'When a Brand Brain fact expires within 7 days',
+      'A post waits for review over 24 hours',
+      'A campaign starts',
+      'A campaign ends',
+      'Nothing is scheduled for the next 3 days',
+      'A Brand Brain fact expires within 7 days',
     ],
     remind: 'Remind the reviewer',
     campaignField: 'Campaign',
@@ -124,11 +126,11 @@ const COPY = {
   },
   ar: {
     triggers: [
-      'عند انتظار منشور للمراجعة أكثر من 24 ساعة',
-      'عند بدء حملة',
-      'عند انتهاء حملة',
-      'عند عدم جدولة أي منشور للأيام الثلاثة القادمة',
-      'عند اقتراب انتهاء صلاحية معلومة في عقل العلامة خلال 7 أيام',
+      'منشور ينتظر المراجعة أكثر من 24 ساعة',
+      'بدء حملة',
+      'انتهاء حملة',
+      'لا منشورات مجدولة في الأيام الثلاثة القادمة',
+      'معلومة في Brand Brain تنتهي خلال 7 أيام',
     ],
     remind: 'تذكير المراجِع',
     campaignField: 'الحملة',
@@ -178,7 +180,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await expect(chosen(page, 'automation-action')).toHaveCount(0);
   expect(await values(page, 'automation-action')).toEqual(['NOTIFY_PERSON', 'REMIND_REVIEWER']);
   await expect(action).toContainText(copy.remind);
-  expect(await values(page, 'automation-condition-field')).toEqual(['', ...CONTENT_FIELDS]);
+  // Round 3 — chips; "No condition" is the empty value the helper skips.
+  expect(await values(page, 'automation-condition-field')).toEqual([...CONTENT_FIELDS]);
 
   for (const [boundary, actions] of [
     // Phase 2B-3 PR 5 — a campaign that starts may be paused (asks first).
@@ -188,12 +191,12 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     await pick(page, 'automation-trigger', boundary);
     await expect(chosen(page, 'automation-action')).toHaveCount(0);
     expect(await values(page, 'automation-action')).toEqual(actions);
-    expect(await values(page, 'automation-condition-field')).toEqual(['', 'campaign.id']);
+    expect(await values(page, 'automation-condition-field')).toEqual(['campaign.id']);
   }
   // The campaign is chosen from the brand's own, never typed.
   const field = page.getByTestId('automation-condition-field');
   await expect(field).toContainText(copy.campaignField);
-  await field.selectOption('campaign.id');
+  await page.getByTestId('automation-condition-field-campaign.id').check();
   await expect(page.getByTestId('automation-condition-value')).toContainText(seeded.campaignName);
 
   for (const state of ['SCHEDULE_GAP', 'FACT_EXPIRING']) {
@@ -201,7 +204,7 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     await expect(chosen(page, 'automation-action')).toHaveCount(0);
     expect(await values(page, 'automation-action')).toEqual(['NOTIFY_PERSON']);
     // No condition to choose: the event is the condition.
-    expect(await values(page, 'automation-condition-field')).toEqual(['']);
+    expect(await values(page, 'automation-condition-field')).toEqual([]);
   }
   await noSeriousViolations(page);
 
@@ -211,6 +214,7 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await expect(page.getByTestId('automation-action-person')).toHaveCount(0);
   await expect(page.getByTestId('automation-action-campaign')).toHaveCount(0);
   const name = `Remind ${locale} ${randomUUID().slice(0, 6)}`;
+  await openRuleMore(page);
   await page.getByTestId('automation-name').fill(name);
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');

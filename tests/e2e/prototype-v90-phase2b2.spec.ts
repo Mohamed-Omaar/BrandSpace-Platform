@@ -192,9 +192,12 @@ test.describe('E4 / B2 · a post template: saved, made default, and used by a ne
     await page.waitForURL(/\/en\/content\/compose\?item=/);
 
     // The template's hashtags reached the saved draft, as its editor shows them.
-    await expect(page.getByTestId(`content-hashtags-${platformKey}`)).toHaveValue(
-      /#?offer[ ,]+#?weekly/,
-    );
+    // Review of #67, round 3 — the saved hashtags are the version form's value.
+    await expect(
+      page
+        .locator(`[data-testid="content-variant"][data-platform="${platformKey}"]`)
+        .locator('input[name="hashtags"]'),
+    ).toHaveValue(/#?offer[ ,]+#?weekly/);
 
     // Deleting asks twice.
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/publishing`);

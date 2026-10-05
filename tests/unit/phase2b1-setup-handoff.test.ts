@@ -281,8 +281,12 @@ describe('G8 / Q16 · a mismatched reset confirmation blocks the submit (D-261 u
 
 describe('G8 · a new workspace from inside the app', () => {
   it('has a way back, and asks for a city only for Egypt', () => {
+    // Review of #67, round 3: the way back is the Business step's footer
+    // "Back", drawn by the form the page hands it to.
     const page = read('apps/dashboard/src/app/[locale]/onboarding/workspace/page.tsx');
-    expect(page).toContain('data-testid="create-workspace-back"');
+    expect(page).toContain("{ href: `/${locale}/overview`, label: t('createWorkspace.back') }");
+    const form = read('apps/dashboard/src/app/[locale]/onboarding/workspace/form.tsx');
+    expect(form).toContain('data-testid="create-workspace-back"');
     const service = read('packages/onboarding/src/workspace.ts');
     expect(service).toContain('city: cityFor(country, input.city),');
     expect(service).toContain(

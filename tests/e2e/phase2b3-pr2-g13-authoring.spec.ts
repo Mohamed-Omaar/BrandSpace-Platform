@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import { enter, noSeriousViolations, ownWorkspace, type OwnWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
+import { openRuleMore } from './automation-form';
 
 /**
  * PHASE 2B-3, PR 2 — AUTHORING A G13 AUTOMATION, AND READING ITS RUNS, IN
@@ -133,7 +134,8 @@ const pick = (page: Page, testId: string, value: string) =>
 
 const COPY = {
   en: {
-    trigger: 'When a post fails to publish',
+    // Round 3 — the tile's own words (the prototype's).
+    trigger: 'A post fails to publish',
     actions: [
       'Schedule in the next free slot',
       'Notify a chosen person',
@@ -154,7 +156,7 @@ const COPY = {
     fallback: 'Something went wrong running this automation.',
   },
   ar: {
-    trigger: 'عند فشل نشر منشور',
+    trigger: 'تعثّر نشر منشور',
     actions: ['جدولة في أول موعد متاح', 'تنبيه شخص محدد', 'إضافة إلى حملة', 'إنشاء نسخة مسودة'],
     person: 'الشخص المراد تنبيهه',
     campaign: 'الحملة',
@@ -183,6 +185,7 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await noSeriousViolations(page);
 
   const unchosen = `G13 unchosen ${locale} ${randomUUID().slice(0, 6)}`;
+  await openRuleMore(page);
   await page.getByTestId('automation-name').fill(unchosen);
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');
@@ -281,6 +284,7 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
 
   // --- A rule created through the form, submitted from the keyboard -----------
   const name = `G13 ${locale} ${randomUUID().slice(0, 6)}`;
+  await openRuleMore(page);
   await page.getByTestId('automation-name').fill(name);
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');

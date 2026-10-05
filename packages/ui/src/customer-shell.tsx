@@ -124,6 +124,26 @@ function useRailPill(
       nav.removeAttribute('data-ind');
       return undefined;
     }
+    /*
+     * Round 3 (C3) — THE ACTIVE ITEM IS IN VIEW, as the prototype's rail
+     * scrolls to it: a page low in the rail (Automations, Notes, Team,
+     * Settings) opens with its own entry showing, once, without animating.
+     */
+    const reveal = (at: { y: number; h: number }) => {
+      if (at.y < nav.scrollTop || at.y + at.h > nav.scrollTop + nav.clientHeight) {
+        nav.scrollTop = Math.max(0, at.y - (nav.clientHeight - at.h) / 2);
+      }
+    };
+    // Kept in view while the rail settles (late counts, fonts), until the
+    // member scrolls it themselves.
+    let revealing = !placedOnce.current;
+    const stopRevealing = () => {
+      revealing = false;
+    };
+    nav.addEventListener('wheel', stopRevealing, { passive: true });
+    nav.addEventListener('touchstart', stopRevealing, { passive: true });
+    nav.addEventListener('keydown', stopRevealing);
+    if (revealing) reveal(target);
     if (!placedOnce.current && lastPill && track) {
       put(lastPill, false);
       void pill.offsetWidth;
@@ -148,9 +168,21 @@ function useRailPill(
       put(now, false);
       placed = now;
       if (track) lastPill = now;
+      if (revealing) reveal(now);
     });
+    /*
+     * The nav's own box, and every row in it: a row above the current one
+     * that grows after the first placement (a count arriving, a font) moves
+     * the current link without resizing the nav, and the pill must follow.
+     */
     observer.observe(nav);
-    return () => observer.disconnect();
+    for (const child of Array.from(nav.children)) observer.observe(child);
+    return () => {
+      observer.disconnect();
+      nav.removeEventListener('wheel', stopRevealing);
+      nav.removeEventListener('touchstart', stopRevealing);
+      nav.removeEventListener('keydown', stopRevealing);
+    };
   }, [navRef, pillRef, activeHref, track]);
 }
 

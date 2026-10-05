@@ -1,15 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  Field,
-  SearchableSelect,
-  colorTokens,
-  spacingTokens,
-  typographyTokens,
-  type SearchableOption,
-} from '@brandspace/ui';
-import { authButtonStyle, authInputStyle } from '../../../../components/auth-card';
+import { useRef, useState } from 'react';
+import Link from 'next/link';
+import { Field, SearchableSelect, type SearchableOption } from '@brandspace/ui';
+import { authInputStyle } from '../../../../components/auth-card';
 import { timeZoneAfterCountryChange } from '../../../../components/time-zone-suggestion';
 
 interface ApiFailurePayload {
@@ -46,6 +40,7 @@ export function CreateWorkspaceForm({
   timezones,
   suggestedZones,
   cities = [],
+  back = null,
   labels,
 }: {
   locale: string;
@@ -57,6 +52,8 @@ export function CreateWorkspaceForm({
   suggestedZones: Readonly<Record<string, string>>;
   /** G8 (D-335): Egypt's governorates, asked only when the country is Egypt. */
   cities?: readonly SearchableOption[];
+  /** G8 (D-335): the way back to the workspace this person came from. */
+  back?: { readonly href: string; readonly label: string } | null;
   labels: {
     name: string;
     slug: string;
@@ -81,8 +78,13 @@ export function CreateWorkspaceForm({
     localeEn: string;
     city?: string;
     cityNone?: string;
+    /** Review of #67, round 3 — the prototype's step: "More", the zone line, the footer note. */
+    more: string;
+    zoneLine: string;
+    saved: string;
   };
 }) {
+  const more = useRef<HTMLDetailsElement>(null);
   const [country, setCountry] = useState('');
   const [lastCountry, setLastCountry] = useState('');
   const [timezone, setTimezone] = useState('');
@@ -105,6 +107,14 @@ export function CreateWorkspaceForm({
   return (
     <form
       data-testid="create-workspace-form"
+      className="bsp-wz-body"
+      /*
+       * A required field behind "More" that the browser rejects is shown: the
+       * disclosure opens so the browser can point at it.
+       */
+      onInvalidCapture={(event) => {
+        if (more.current && more.current.contains(event.target as Node)) more.current.open = true;
+      }}
       onSubmit={async (event) => {
         event.preventDefault();
         setState({ busy: true, error: null });
@@ -157,159 +167,178 @@ export function CreateWorkspaceForm({
         globalThis.location.assign(`/${locale}/onboarding`);
       }}
     >
-      <Field label={labels.name} htmlFor="name" required>
-        <input
-          className="bs-control"
-          id="name"
-          name="name"
-          required
-          maxLength={120}
-          autoComplete="organization"
-          style={authInputStyle()}
-        />
-      </Field>
-
-      <Field label={labels.slug} htmlFor="slug" required>
-        <input
-          className="bs-control"
-          id="slug"
-          name="slug"
-          required
-          pattern="[a-z0-9][a-z0-9-]{1,48}[a-z0-9]"
-          maxLength={50}
-          autoCapitalize="none"
-          spellCheck={false}
-          style={authInputStyle()}
-        />
-      </Field>
-
-      <Field label={labels.country} htmlFor="country" required hint={labels.countryHint}>
-        <SearchableSelect
-          id="country"
-          name="country"
-          options={countries}
-          value={country}
-          onChange={(next) => {
-            // Q7 — the country PRESELECTS its usual zone; one the person
-            // picked themselves is never replaced (D-194 stands). Typing
-            // clears the choice before a new one is picked, so the zone is
-            // judged against the last country actually CHOSEN, not that blank.
-            setCountry(next);
-            if (next === '') return;
-            setTimezone((current) =>
-              timeZoneAfterCountryChange({
-                previousCountry: lastCountry,
-                nextCountry: next,
-                currentZone: current,
-                suggestions: suggestedZones,
-              }),
-            );
-            setLastCountry(next);
-          }}
-          placeholder={labels.choose}
-          noResultsLabel={labels.noResults}
-          required
-          testId="country-select"
-          style={authInputStyle()}
-        />
-      </Field>
-
-      <Field label={labels.interfaceLocale} htmlFor="defaultLocale" required>
-        <select
-          className="bs-control bs-select"
-          id="defaultLocale"
-          name="defaultLocale"
-          required
-          /*
-           * THE LANGUAGE THE READER IS ALREADY USING, which is English unless
-           * they asked for `/ar` (D-277). A visible, changeable preselection of
-           * the interface language — not a business default: country, timezone
-           * and billing currency are still never guessed (D-194).
-           */
-          defaultValue={locale === 'ar' ? 'AR' : 'EN'}
-          style={authInputStyle()}
-        >
-          <option value="AR">{labels.localeAr}</option>
-          <option value="EN">{labels.localeEn}</option>
-        </select>
-      </Field>
-
-      <Field label={labels.timezone} htmlFor="timezone" required>
-        <SearchableSelect
-          id="timezone"
-          name="timezone"
-          options={timezones}
-          value={timezone}
-          onChange={setTimezone}
-          placeholder={labels.choose}
-          noResultsLabel={labels.noResults}
-          required
-          testId="timezone-select"
-          style={authInputStyle()}
-        />
-      </Field>
-
-      {country === 'EG' && cities.length > 0 && labels.city ? (
-        <Field label={labels.city} htmlFor="city">
-          <SearchableSelect
-            id="city"
-            name="city"
-            options={cities}
-            value={city}
-            onChange={setCity}
-            placeholder={labels.cityNone ?? labels.choose}
-            noResultsLabel={labels.noResults}
-            testId="city-select"
+      {/* "Business name" | "Country" — `grid-template-columns: repeat(2, 1fr); gap: 14px`. */}
+      <div className="bsp-wz-grid2">
+        <Field label={labels.name} htmlFor="name" required>
+          <input
+            className="bs-control"
+            id="name"
+            name="name"
+            required
+            maxLength={120}
+            autoComplete="organization"
             style={authInputStyle()}
           />
         </Field>
-      ) : null}
 
-      <Field label={labels.billingEmail} htmlFor="billingEmail" required>
-        <input
-          className="bs-control"
-          id="billingEmail"
-          name="billingEmail"
-          type="email"
-          required
-          defaultValue={defaultEmail}
-          autoComplete="email"
-          style={authInputStyle()}
-        />
-      </Field>
+        <Field label={labels.country} htmlFor="country" required>
+          <SearchableSelect
+            id="country"
+            name="country"
+            options={countries}
+            value={country}
+            onChange={(next) => {
+              // Q7 — the country PRESELECTS its usual zone; one the person
+              // picked themselves is never replaced (D-194 stands). Typing
+              // clears the choice before a new one is picked, so the zone is
+              // judged against the last country actually CHOSEN, not that blank.
+              setCountry(next);
+              if (next === '') return;
+              setTimezone((current) =>
+                timeZoneAfterCountryChange({
+                  previousCountry: lastCountry,
+                  nextCountry: next,
+                  currentZone: current,
+                  suggestions: suggestedZones,
+                }),
+              );
+              setLastCountry(next);
+            }}
+            placeholder={labels.choose}
+            noResultsLabel={labels.noResults}
+            required
+            testId="country-select"
+            style={authInputStyle()}
+          />
+        </Field>
+      </div>
+      <span className="bsp-wz-hint" data-testid="create-workspace-zone">
+        {timezone ? labels.zoneLine.replace('{zone}', timezone) : labels.countryHint}
+      </span>
+      {/*
+        THE ACCOUNT'S OTHER FACTS, which the prototype sets for the customer
+        ("set from your account"): the address, the interface language, the
+        zone, the city, the billing email and the legal name — all still asked,
+        behind "More".
+      */}
+      <details ref={more} className="bsp-wz-more" data-testid="create-workspace-more">
+        <summary>{labels.more}</summary>
+        <div className="bsp-wz-grid2">
+          <Field label={labels.slug} htmlFor="slug" required>
+            <input
+              className="bs-control"
+              id="slug"
+              name="slug"
+              required
+              pattern="[a-z0-9][a-z0-9-]{1,48}[a-z0-9]"
+              maxLength={50}
+              autoCapitalize="none"
+              spellCheck={false}
+              style={authInputStyle()}
+            />
+          </Field>
 
-      <Field label={labels.legalName} htmlFor="legalName">
-        <input
-          className="bs-control"
-          id="legalName"
-          name="legalName"
-          maxLength={200}
-          style={authInputStyle()}
-        />
-      </Field>
+          <Field label={labels.interfaceLocale} htmlFor="defaultLocale" required>
+            <select
+              className="bs-control bs-select"
+              id="defaultLocale"
+              name="defaultLocale"
+              required
+              /*
+               * THE LANGUAGE THE READER IS ALREADY USING, which is English unless
+               * they asked for `/ar` (D-277). A visible, changeable preselection of
+               * the interface language — not a business default: country, timezone
+               * and billing currency are still never guessed (D-194).
+               */
+              defaultValue={locale === 'ar' ? 'AR' : 'EN'}
+              style={authInputStyle()}
+            >
+              <option value="AR">{labels.localeAr}</option>
+              <option value="EN">{labels.localeEn}</option>
+            </select>
+          </Field>
 
-      <button
-        type="submit"
-        data-testid="create-workspace-submit"
-        disabled={state.busy || country === '' || timezone === ''}
-        style={authButtonStyle()}
-      >
-        {state.busy ? labels.submitting : labels.submit}
-      </button>
+          <Field label={labels.timezone} htmlFor="timezone" required>
+            <SearchableSelect
+              id="timezone"
+              name="timezone"
+              options={timezones}
+              value={timezone}
+              onChange={setTimezone}
+              placeholder={labels.choose}
+              noResultsLabel={labels.noResults}
+              required
+              testId="timezone-select"
+              style={authInputStyle()}
+            />
+          </Field>
 
+          {country === 'EG' && cities.length > 0 && labels.city ? (
+            <Field label={labels.city} htmlFor="city">
+              <SearchableSelect
+                id="city"
+                name="city"
+                options={cities}
+                value={city}
+                onChange={setCity}
+                placeholder={labels.cityNone ?? labels.choose}
+                noResultsLabel={labels.noResults}
+                testId="city-select"
+                style={authInputStyle()}
+              />
+            </Field>
+          ) : null}
+
+          <Field label={labels.billingEmail} htmlFor="billingEmail" required>
+            <input
+              className="bs-control"
+              id="billingEmail"
+              name="billingEmail"
+              type="email"
+              required
+              defaultValue={defaultEmail}
+              autoComplete="email"
+              style={authInputStyle()}
+            />
+          </Field>
+
+          <Field label={labels.legalName} htmlFor="legalName">
+            <input
+              className="bs-control"
+              id="legalName"
+              name="legalName"
+              maxLength={200}
+              style={authInputStyle()}
+            />
+          </Field>
+        </div>
+      </details>
       {state.error ? (
-        <p
-          role="alert"
-          data-testid="create-workspace-error"
-          style={{
-            marginBlockStart: spacingTokens.sm,
-            ...typographyTokens.caption,
-            color: colorTokens.danger,
-          }}
-        >
+        <p role="alert" data-testid="create-workspace-error" className="bsp-wz-error">
           {state.error}
         </p>
       ) : null}
+      {/* The step's footer (`Auth.dc.html` line 196): Back · the saved line · Continue. */}
+      <div className="bsp-wz-foot">
+        {back ? (
+          <Link
+            href={back.href}
+            className="bsp-wz-btn bsp-wz-ghost"
+            data-testid="create-workspace-back"
+          >
+            {back.label}
+          </Link>
+        ) : null}
+        <span className="bsp-wz-note">{labels.saved}</span>
+        <button
+          type="submit"
+          data-testid="create-workspace-submit"
+          className="bsp-wz-btn bsp-wz-pur"
+          disabled={state.busy || country === '' || timezone === ''}
+        >
+          {state.busy ? labels.submitting : labels.submit}
+        </button>
+      </div>
     </form>
   );
 }

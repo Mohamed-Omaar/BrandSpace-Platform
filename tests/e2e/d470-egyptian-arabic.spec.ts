@@ -67,6 +67,8 @@ async function createWorkspace(page: Page, country: string): Promise<void> {
   await page.goto(`${DASHBOARD_BASE_URL}/en/onboarding/workspace`);
   await expect(page.locator('[data-testid="create-workspace-form"]')).toBeVisible();
   await page.fill('#name', `Dialect ${country}`);
+  // Review of #67, round 3: the account's own fields are under the Business step's "More".
+  await page.getByTestId('create-workspace-more').locator('summary').click();
   await page.fill('#slug', `dialect-${country.toLowerCase()}-${crypto.randomUUID().slice(0, 8)}`);
   const countryName = new Intl.DisplayNames(['en'], { type: 'region' }).of(country) ?? country;
   await page.fill('[data-testid="country-select"]', countryName);

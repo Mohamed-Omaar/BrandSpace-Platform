@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import {
-  Avatar,
   Banner,
   RecordList,
   StatusBadge,
@@ -14,9 +13,8 @@ import {
   statusTone,
   typographyTokens,
   visuallyHiddenStyle,
-  type MediaSeed,
 } from '@brandspace/ui';
-import { brandScopeFilter } from '@brandspace/shared';
+import { brandScopeFilter, systemClock } from '@brandspace/shared';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import {
   inWorkspace,
@@ -43,6 +41,7 @@ import {
   revokeInvitationAction,
   changeBrandAccessAction,
 } from './actions';
+import { dayLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,9 +76,26 @@ const accessInputStyle = { inlineSize: '20px', blockSize: '20px', margin: 0 } as
  * A stable palette per member, so the same address is the same colour on every
  * render — the deterministic-artwork rule (D-57) applied to identity tiles.
  */
-function avatarSeed(email: string): MediaSeed {
-  const index = [...email].reduce((total, character) => total + character.charCodeAt(0), 0) % 6;
-  return index as MediaSeed;
+/**
+ * THE PROTOTYPE'S TEAM AVATAR (review of #67, round 3): a solid tile with
+ * white initials, coloured by the person's place in the list — purple, ink,
+ * brown, green (`members` and `newMember`, `Main.dc.html` line 2965). The
+ * colours are the stylesheet's (`.bsp-tm-av[data-c]`).
+ */
+function TeamAvatar({
+  initials,
+  index,
+  size = 36,
+}: {
+  readonly initials: string;
+  readonly index: number;
+  readonly size?: 36 | 48;
+}) {
+  return (
+    <span aria-hidden="true" className="bsp-tm-av" data-c={index % 4} data-size={size}>
+      {initials}
+    </span>
+  );
 }
 
 export default async function MembersPage({
@@ -358,7 +374,8 @@ export default async function MembersPage({
    * member: their name where they gave one, the address under it, and when
    * they joined. Nothing is invented for a member without a name.
    */
-  const joined = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', { dateStyle: 'medium' });
+  // Round 3 (C2) — the prototype's day style: "Oct 16".
+  const joined = { format: (value: Date) => dayLabel(value, locale, 'UTC', systemClock.now()) };
   const memberIdentity = (m: (typeof members)[number]) => (
     <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
       {m.name?.trim() ? (
@@ -480,17 +497,18 @@ export default async function MembersPage({
             </Link>
             {/* The member: a 48px tile, the name at 19px, who they are. */}
             <section className="bsp-card bsp-tm-hero" data-testid="member-detail">
-              <Avatar
+              <TeamAvatar
                 initials={initialsFrom(opened.name?.trim() || opened.email)}
-                seed={avatarSeed(opened.email)}
-                shape="tile"
-                size="48px"
+                index={Math.max(0, members.indexOf(opened))}
+                size={48}
               />
               <span className="bsp-tm-main">
                 <span className="bsp-tm-hname">{opened.name?.trim() || opened.email}</span>
                 {memberMeta(opened)}
               </span>
-              <span className="bsp-pill bsp-p-neu">{roleName(opened)}</span>
+              {opened.isWorkspaceOwner && roleName(opened) === t('members.owner') ? null : (
+                <span className="bsp-pill bsp-p-neu">{roleName(opened)}</span>
+              )}
               {opened.isWorkspaceOwner ? ownerBadge(opened.email) : null}
               {statusPill(opened.status)}
             </section>
@@ -607,17 +625,15 @@ export default async function MembersPage({
                   aria-label={t('members.title')}
                   data-testid="members-table"
                 >
-                  {members.map((m) => (
+                  {members.map((m, index) => (
                     <li
                       key={m.membershipId}
                       className="bsp-row bsp-tm-row"
                       data-testid={`member-${m.email}`}
                     >
-                      <Avatar
+                      <TeamAvatar
                         initials={initialsFrom(m.name?.trim() || m.email)}
-                        seed={avatarSeed(m.email)}
-                        shape="tile"
-                        size="36px"
+                        index={index}
                       />
                       <span className="bsp-tm-main">
                         <span className="bsp-tm-name" data-testid={`member-name-${m.email}`}>
@@ -625,7 +641,10 @@ export default async function MembersPage({
                         </span>
                         {rowMeta(m)}
                       </span>
-                      <span className="bsp-pill bsp-p-neu">{roleName(m)}</span>
+                      {/* One "Owner" on the owner's row, as the prototype's. */}
+                      {m.isWorkspaceOwner && roleName(m) === t('members.owner') ? null : (
+                        <span className="bsp-pill bsp-p-neu">{roleName(m)}</span>
+                      )}
                       {m.isWorkspaceOwner ? ownerBadge(m.email) : null}
                       {statusPill(m.status)}
                       {mayManage ? (
@@ -644,18 +663,13 @@ export default async function MembersPage({
                     each invitation is a row of the same list, its resend and
                     revoke under the row's "⋯".
                   */}
-                  {invitations.map((i) => (
+                  {invitations.map((i, index) => (
                     <li
                       key={i.id}
                       className="bsp-row bsp-tm-row"
                       data-testid={`invitation-${i.email}`}
                     >
-                      <Avatar
-                        initials={initialsFrom(i.email)}
-                        seed={avatarSeed(i.email)}
-                        shape="tile"
-                        size="36px"
-                      />
+                      <TeamAvatar initials={initialsFrom(i.email)} index={members.length + index} />
                       <span className="bsp-tm-main">
                         <span className="bsp-tm-name">{i.email}</span>
                         <span className="bsp-tm-meta">

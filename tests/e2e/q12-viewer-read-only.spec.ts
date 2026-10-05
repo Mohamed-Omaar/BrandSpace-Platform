@@ -5,6 +5,7 @@ import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { withPlatformPrisma } from './platform-prisma';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
+import { openStudioNotes } from './studio-bar';
 
 /**
  * Q12, SECOND RELEASE — THE REAL VIEWER, IN A REAL BROWSER.
@@ -167,6 +168,8 @@ test.describe('Q12 · the real Viewer comments, and triages nothing', () => {
     const { itemId } = await ownersDraft();
     await signInAsViewer(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
+    // Review of #67, round 3 — the conversation opens from the Notes card.
+    await openStudioNotes(page);
 
     const start = page.getByTestId('note-start-form');
     await expect(start).toBeVisible();
@@ -211,6 +214,7 @@ test.describe('Q12 · the real Viewer comments, and triages nothing', () => {
       });
     });
     await page.reload();
+    await openStudioNotes(page);
     await expect(page.getByTestId(`note-thread-${threadId}`)).toBeVisible();
     await expect(page.getByTestId(`note-reply-form-${threadId}`)).toHaveCount(0);
     await expect(page.getByTestId(`note-reopen-${threadId}`)).toHaveCount(0);

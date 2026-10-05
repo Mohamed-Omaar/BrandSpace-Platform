@@ -35,6 +35,7 @@ import {
   retryPublishAction,
   selectTargetAction,
 } from './actions';
+import { whenLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -145,11 +146,8 @@ export default async function IntegrationsPage({
         })
       : 0;
 
-  const formatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  });
+  // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
+  const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
   const stamp = (value: Date | null): string | null => (value ? formatter.format(value) : null);
 
   /*

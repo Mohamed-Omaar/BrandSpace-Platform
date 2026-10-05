@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import { enter, noSeriousViolations, ownWorkspace, type OwnWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
+import { openRuleMore } from './automation-form';
 
 /**
  * PHASE 2B-3, PR 4 — AUTHORING THE ANALYTICS AUTOMATIONS, IN ENGLISH AND IN
@@ -104,6 +105,9 @@ const COPY = {
   en: {
     weekly: 'When weekly engagement drops by 20% or more',
     top: 'When a post ranks in your top 10%',
+    // Round 3 — the tiles' own words (the prototype's).
+    weeklyTile: 'Weekly engagement drops 20%',
+    topTile: 'A post lands in your top 10%',
     unavailable: 'not available yet',
     notify: 'Notify a chosen person',
     copy: 'Make a draft copy',
@@ -113,6 +117,8 @@ const COPY = {
   ar: {
     weekly: 'عند انخفاض التفاعل الأسبوعي بنسبة 20% أو أكثر',
     top: 'عند وصول منشور إلى أفضل 10% من منشوراتك',
+    weeklyTile: 'انخفاض تفاعل الأسبوع 20%',
+    topTile: 'منشور ضمن أعلى 10% أداءً',
     unavailable: 'غير متاح بعد',
     notify: 'تنبيه شخص محدد',
     copy: 'إنشاء نسخة مسودة',
@@ -131,6 +137,7 @@ const CONTENT_FIELDS = [
 ];
 
 async function create(page: Page, name: string): Promise<void> {
+  await openRuleMore(page);
   await page.getByTestId('automation-name').fill(name);
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');
@@ -168,8 +175,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     'WEEKLY_ENGAGEMENT_DROPPED',
     'POST_TOP_10_PERCENT',
   ]);
-  await expect(trigger).toContainText(copy.weekly);
-  await expect(trigger).toContainText(copy.top);
+  await expect(trigger).toContainText(copy.weeklyTile);
+  await expect(trigger).toContainText(copy.topTile);
   await expect(trigger).not.toContainText(copy.unavailable);
   expect(await disabled(page, 'automation-trigger')).toEqual([]);
 
@@ -179,14 +186,15 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   // Phase 2B-3 PR 5 — a drop may pause a campaign (asks first).
   expect(await values(page, 'automation-action')).toEqual(['NOTIFY_PERSON', 'PAUSE_CAMPAIGN']);
   // No condition to choose: the event is the condition.
-  expect(await values(page, 'automation-condition-field')).toEqual(['']);
+  // Round 3 — chips; "No condition" is the empty value the helper skips.
+  expect(await values(page, 'automation-condition-field')).toEqual([]);
 
   await pick(page, 'automation-trigger', 'POST_TOP_10_PERCENT');
   await expect(chosen(page, 'automation-action')).toHaveCount(0);
   expect(await values(page, 'automation-action')).toEqual(['NOTIFY_PERSON', 'MAKE_DRAFT_COPY']);
   await expect(action).toContainText(copy.notify);
   await expect(action).toContainText(copy.copy);
-  expect(await values(page, 'automation-condition-field')).toEqual(['', ...CONTENT_FIELDS]);
+  expect(await values(page, 'automation-condition-field')).toEqual([...CONTENT_FIELDS]);
   await noSeriousViolations(page);
 
   // --- The weekly drop × notify a person, from the keyboard --------------------

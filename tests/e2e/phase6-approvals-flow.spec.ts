@@ -254,9 +254,13 @@ test.describe('D-288 · the reviewer sees the post and its conversation', () => 
       await signIn(page, f.brandId);
       await page.goto(`${DASHBOARD_BASE_URL}/en/approvals?review=${approvalId}`);
       const subject = page.getByTestId('approvals-review-subject');
+      // Review of #67, round 3 — the per-channel previews and the post's notes
+      // are compact disclosures under the cover card.
+      await subject.getByTestId('review-channels-more').locator('summary').click();
       await expect(subject.getByTestId('review-preview-instagram')).toContainText(
         'The words under review',
       );
+      await subject.getByTestId('review-notes-more').locator('summary').click();
       await expect(subject.getByTestId('notes-panel')).toBeVisible();
     } finally {
       // The queue is shared: a review left open would be a verdict another

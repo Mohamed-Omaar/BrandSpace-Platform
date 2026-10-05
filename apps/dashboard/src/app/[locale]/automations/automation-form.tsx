@@ -37,6 +37,8 @@ import { colorTokens, inputStyle, spacingTokens, typographyTokens } from '@brand
 export interface TriggerOption {
   readonly type: string;
   readonly label: string;
+  /** Round 3 — the tile's own words, as the prototype writes them ("A post is approved"). */
+  readonly tileLabel?: string;
   /** Review of #67 — "Listens to Approvals", under the tile's label. */
   readonly listens?: string;
   /** Action types `actionSupportsTrigger` allows for this trigger. */
@@ -88,6 +90,10 @@ export interface ConditionFieldOption {
 
 export interface AutomationFormLabels {
   readonly name: string;
+  /** Round 3 — the "⋯" that holds the rule's name and brand. */
+  readonly moreFields?: string;
+  /** Round 3 — said on the action tiles until a trigger is picked. */
+  readonly pickTriggerFirst?: string;
   /** D-468 — the prototype builder's three steps, its read-back and its pills. */
   readonly when: string;
   readonly onlyIf: string;
@@ -227,6 +233,9 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
   const [conditionField, setConditionField] = useState(initial?.condition?.field ?? '');
   const [conditionOperator, setConditionOperator] = useState(initial?.condition?.operator ?? '');
   const [brandId, setBrandId] = useState(initial?.brandId ?? props.brands[0]?.id ?? '');
+  /** Round 3 — the name a person typed; until then it follows the rule's sentence. */
+  const [typedName, setName] = useState<string | null>(initial?.name ?? null);
+  const moreRef = useRef<HTMLDetailsElement | null>(null);
   const keepConditions = (initial?.extraConditions ?? 0) > 0;
 
   const trigger = useMemo(
@@ -355,6 +364,11 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
   const caption = { ...typographyTokens.caption, color: colorTokens.textSecondary } as const;
 
   const actionLabel = actionType === '' ? '' : (props.actionLabels[actionType] ?? actionType);
+  const name =
+    typedName ??
+    (trigger
+      ? `${trigger.tileLabel ?? trigger.label}${actionLabel ? ` → ${actionLabel}` : ''}`
+      : '');
   const notes = (type: string) => props.actionNotes?.[type];
   const pills = (type: string) => (
     <>
@@ -377,6 +391,10 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
   return (
     <form
       action={props.action}
+      onInvalidCapture={(event) => {
+        const more = moreRef.current;
+        if (more && more.contains(event.target as Node)) more.open = true;
+      }}
       className="bsp-au-form"
       data-testid={editing ? 'automation-edit-form' : 'automation-form'}
     >
@@ -395,7 +413,9 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
       {initial ? (
         <div className="bsp-au-tiles">
           <span className="bsp-au-tile" data-on="true">
-            <span className="bsp-au-tile-l">{trigger?.label ?? initial.triggerType}</span>
+            <span className="bsp-au-tile-l">
+              {trigger?.tileLabel ?? trigger?.label ?? initial.triggerType}
+            </span>
           </span>
         </div>
       ) : (
@@ -431,8 +451,11 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
               />
               <span className="bsp-au-tile-l">
                 {option.unavailable
-                  ? props.labels.triggerUnavailable.replace('{trigger}', option.label)
-                  : option.label}
+                  ? props.labels.triggerUnavailable.replace(
+                      '{trigger}',
+                      option.tileLabel ?? option.label,
+                    )
+                  : (option.tileLabel ?? option.label)}
               </span>
               {option.listens ? <span className="bsp-au-tile-s">{option.listens}</span> : null}
             </label>
@@ -582,36 +605,47 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
             data-testid="automation-condition"
           >
             <legend style={caption}>{props.labels.conditionLegend}</legend>
-            <label style={FIELD}>
-              <span style={caption}>{props.labels.conditionField}</span>
-              {/*
-              ONLY THE FIELDS THIS TRIGGER ACTUALLY PRODUCES. The server derived
-              this from `CONDITION_FIELD_TRIGGERS`, the same table the runtime
-              gatherer is held to — so a customer cannot pick a field that would
-              compare false for ever on the rule they are writing.
+            {/*
+              ROUND 3 — THE PROTOTYPE'S CHIPS ("No condition", "Channel is",
+              "Campaign is", …), one radio each: ONLY THE FIELDS THIS TRIGGER
+              ACTUALLY PRODUCES. The server derived the list from
+              `CONDITION_FIELD_TRIGGERS`, the same table the runtime gatherer is
+              held to — so a customer cannot pick a field that would compare
+              false for ever on the rule they are writing.
             */}
-              <select
-                name="conditionField"
-                className="bs-control"
-                data-testid="automation-condition-field"
-                value={conditionField}
-                onChange={(event) => {
-                  setConditionField(event.target.value);
-                  // THE OPERATOR MUST NOT SURVIVE THE FIELD. `greater_than` is
-                  // legal on a count and meaningless on a provider; carrying it
-                  // across would post a pair the engine refuses, against a
-                  // control that never showed it.
-                  setConditionOperator('');
-                }}
-              >
-                <option value="">{props.labels.conditionNone}</option>
-                {(trigger?.conditionFields ?? []).map((name) => (
-                  <option key={name} value={name}>
-                    {props.conditionCatalogue[name]?.label ?? name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div
+              role="radiogroup"
+              aria-label={props.labels.conditionField}
+              className="bsp-au-chips"
+              data-testid="automation-condition-field"
+            >
+              {['', ...(trigger?.conditionFields ?? [])].map((name) => (
+                <label
+                  key={name || 'none'}
+                  className="bsp-chip bsp-au-chip"
+                  data-on={conditionField === name ? 'true' : undefined}
+                >
+                  <input
+                    type="radio"
+                    name="conditionField"
+                    value={name}
+                    checked={conditionField === name}
+                    className="bs-control bsp-au-radio"
+                    data-testid={`automation-condition-field-${name || 'none'}`}
+                    onChange={() => {
+                      setConditionField(name);
+                      // THE OPERATOR MUST NOT SURVIVE THE FIELD. `greater_than`
+                      // is legal on a count and meaningless on a provider;
+                      // carrying it across would post a pair the engine refuses.
+                      setConditionOperator('');
+                    }}
+                  />
+                  {name === ''
+                    ? props.labels.conditionNone
+                    : (props.conditionCatalogue[name]?.label ?? name)}
+                </label>
+              ))}
+            </div>
             {field === undefined ? null : (
               <>
                 <label style={FIELD}>
@@ -741,6 +775,31 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
               {pills(type)}
             </label>
           ))}
+          {/*
+            ROUND 3 — "3 · THEN" IS DRAWN BEFORE A TRIGGER IS PICKED, as the
+            prototype draws it: every action as a tile that waits for the
+            trigger (only the trigger decides which of them may follow it).
+          */}
+          {trigger === undefined
+            ? Object.keys(props.actionLabels)
+                .filter((type) =>
+                  props.triggers.some(
+                    (option) => !option.unavailable && option.actionTypes.includes(type),
+                  ),
+                )
+                .map((type) => (
+                  <span
+                    key={type}
+                    className="bsp-au-tile bsp-au-act"
+                    data-off="true"
+                    title={props.labels.pickTriggerFirst}
+                    data-testid={`automation-action-waiting-${type}`}
+                  >
+                    {props.actionLabels[type] ?? type}
+                    {pills(type)}
+                  </span>
+                ))
+            : null}
           {/*
             No trigger chosen yet: the radio the browser reports, so "choose an
             action" is said even while there is nothing to choose from.
@@ -880,51 +939,65 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
       </div>
 
       {/*
-        Review of #67 — the prototype's dialog starts at "1 · When". The rule's
-        name, its brand and (editing) its description, which it does not draw,
-        follow the summary, before the buttons.
+        Review of #67, round 3 — the prototype's dialog starts at "1 · When"
+        and has no name or brand field: a rule is read as its sentence. The
+        product's name and brand are kept under one "⋯" before the buttons; the
+        name follows the sentence until it is typed, so a closed "⋯" still posts
+        one, and the browser's own refusal opens it.
       */}
-      <div className="bsp-au-fields">
-        <label className="bsp-au-field">
-          <span className="bsp-lbl">{props.labels.name}</span>
-          <input
-            name="name"
-            required
-            maxLength={120}
-            defaultValue={initial?.name}
-            className="bs-control bsp-au-input"
-            data-testid="automation-name"
-          />
-        </label>
-        {initial ? (
-          /*
-           * FIXED ON AN EXISTING RULE: the brand, the trigger and the action are
-           * named, not offered. Nothing is posted for them; the server uses the
-           * stored ones.
-           */
-          <div className="bsp-au-field">
-            <span className="bsp-lbl">{props.labels.brand}</span>
-            <span className="bsp-au-fixed">{initial.brandName}</span>
-          </div>
-        ) : (
+      <details
+        ref={moreRef}
+        className="bsp-au-more"
+        data-testid="automation-more"
+        open={editing ? true : undefined}
+      >
+        <summary className="bsp-chip bsp-fdis-chip" aria-label={props.labels.moreFields}>
+          <span aria-hidden="true">⋯</span>
+          <span className="bsp-au-more-l">{props.labels.moreFields}</span>
+        </summary>
+        <div className="bsp-au-fields">
           <label className="bsp-au-field">
-            <span className="bsp-lbl">{props.labels.brand}</span>
-            <select
-              name="brandId"
+            <span className="bsp-lbl">{props.labels.name}</span>
+            <input
+              name="name"
+              required
+              maxLength={120}
               className="bs-control bsp-au-input"
-              data-testid="automation-brand"
-              value={brandId}
-              onChange={(event) => setBrandId(event.target.value)}
-            >
-              {props.brands.map((brand) => (
-                <option key={brand.id} value={brand.id}>
-                  {brand.name}
-                </option>
-              ))}
-            </select>
+              data-testid="automation-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
           </label>
-        )}
-      </div>
+          {initial ? (
+            /*
+             * FIXED ON AN EXISTING RULE: the brand, the trigger and the action are
+             * named, not offered. Nothing is posted for them; the server uses the
+             * stored ones.
+             */
+            <div className="bsp-au-field">
+              <span className="bsp-lbl">{props.labels.brand}</span>
+              <span className="bsp-au-fixed">{initial.brandName}</span>
+            </div>
+          ) : (
+            <label className="bsp-au-field">
+              <span className="bsp-lbl">{props.labels.brand}</span>
+              <select
+                name="brandId"
+                className="bs-control bsp-au-input bs-select bsp-chevron"
+                data-testid="automation-brand"
+                value={brandId}
+                onChange={(event) => setBrandId(event.target.value)}
+              >
+                {props.brands.map((brand) => (
+                  <option key={brand.id} value={brand.id}>
+                    {brand.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      </details>
 
       {initial ? (
         <label className="bsp-au-field">

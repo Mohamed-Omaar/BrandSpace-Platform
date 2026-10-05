@@ -1,5 +1,6 @@
 import type { MessageKey } from '../../../i18n/messages';
 import type { CampaignFormLabels } from './campaign-form-view';
+import { rangeDay, rangeLabel } from '../../../server/prototype-dates';
 
 /**
  * The campaign screens' shared label maps.
@@ -70,15 +71,9 @@ export function periodLabel(
 ): string {
   if (!start && !end) return none;
   const format = (value: Date): string =>
-    new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      timeZone: 'UTC',
-      // Western Arabic numerals in Arabic by default (CLAUDE.md §4).
-      numberingSystem: 'latn',
-    }).format(value);
-  if (start && end) return `${format(start)} – ${format(end)}`;
+    // Round 3 (C2) — the prototype writes a day as "5 Oct" (Western digits, §4).
+    rangeDay(value, locale, 'UTC');
+  if (start && end) return rangeLabel(start, end, locale, 'UTC');
   return format((start ?? end) as Date);
 }
 

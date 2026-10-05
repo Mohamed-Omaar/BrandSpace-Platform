@@ -35,6 +35,7 @@ import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
 import { incomingMentions } from '../server/incoming-mentions';
 import { getCustomer, getCustomerAuth, getSessionToken } from '../server/customer-context';
+import { greetingName } from '../server/home';
 import { businessSwitcherModel } from '../server/business-switcher';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
@@ -221,6 +222,18 @@ function navSections(
     }
   };
 
+  // The rail entries this member sees, other than Settings itself.
+  const onRail = new Set(
+    NAV_GROUPS.flatMap((group) => group.hrefs)
+      .filter((href) => href !== '/settings')
+      .filter((href) => {
+        const entry = byHref.get(href);
+        return (
+          entry !== undefined &&
+          (entry.permission === null || permissionKeys.includes(entry.permission))
+        );
+      }),
+  );
   const sections: CustomerNavSection[] = [];
   for (const group of NAV_GROUPS) {
     const items = group.hrefs
@@ -234,11 +247,14 @@ function navSections(
             : `/${locale}${item.href}`,
         label: t(item.key),
         icon: <PrototypeIcon glyph={item.glyph} />,
+        // Settings stands for its sections — unless the section has its own
+        // rail entry (Team): one current item, never two (round 3, C3).
         active:
           activePath === item.href ||
           (item.href === '/settings' &&
             activePath !== undefined &&
-            SETTINGS_PATHS.includes(activePath)),
+            SETTINGS_PATHS.includes(activePath) &&
+            !onRail.has(activePath)),
         // The existing convention, preserved: renaming these would drop the
         // end-to-end assertions that use them.
         testId: `nav-${item.href.slice(1)}`,
@@ -422,6 +438,27 @@ export async function WorkspaceShell({
       : null;
   const drawerSubject = copilotLink
     ? await copilotDrawerSubject(requestPath, drawerBrand?.id ?? null, locale)
+    : null;
+  /*
+   * The panel's head line (`x.ctx`, round 3): "Working on: Home", then the
+   * brand every step acts on (D-190) and the object this address names.
+   */
+  const drawerSurface = copilotSurfaceForPath(requestPath);
+  const drawerContext = [
+    t('copilot.workingOn').replace(
+      '{screen}',
+      drawerSurface === 'general'
+        ? (drawerBrand?.name ?? t('copilot.title'))
+        : t(`copilot.surface.${drawerSurface}` as MessageKey),
+    ),
+    drawerSurface !== 'general' ? (drawerBrand?.name ?? null) : null,
+    drawerSubject ? t('copilot.contextSubject').replace('{subject}', drawerSubject.title) : null,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(' · ');
+  // The greeting's name is the person's own first name, never their email.
+  const firstName = copilotLink
+    ? greetingName((await getCustomer().catch(() => null))?.name)
     : null;
 
   /*
@@ -713,7 +750,7 @@ export async function WorkspaceShell({
         locale={locale}
         href={copilotLink.href}
         brand={drawerBrand}
-        surface={copilotSurfaceForPath(requestPath)}
+        surface={drawerSurface}
         subject={drawerSubject}
         labels={copilotLabels(words, identity)}
         rateMetricKeys={RATE_METRIC_KEYS}
@@ -722,6 +759,21 @@ export async function WorkspaceShell({
           more: t('studio.moreOptions'),
           chooseBrandTitle: t('brand.chooseTitle'),
           chooseBrandBody: t('copilot.noBrandBody'),
+          context: drawerContext,
+          credits:
+            typeof counts.credits === 'number' && permissionKeys.includes('billing.read')
+              ? counts.credits.toLocaleString(locale === 'ar' ? 'ar' : 'en')
+              : null,
+          creditsLabel: t('account.credits'),
+          greeting: firstName
+            ? t('copilot.hello').replace('{name}', firstName)
+            : t('copilot.hello').replace(/\s?\{name\}/, ''),
+          placeholder: t('copilot.askPlaceholder'),
+          suggestions: [
+            { id: 'posts', label: t('copilot.suggest.posts') },
+            { id: 'engagement', label: t('copilot.suggest.engagement') },
+            { id: 'approvals', label: t('copilot.suggest.approvals') },
+          ],
         }}
       >
         <PrototypeCopilotFab

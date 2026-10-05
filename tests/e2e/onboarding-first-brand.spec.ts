@@ -77,6 +77,8 @@ async function signUpVerifyAndSignIn(page: Page, locale = 'en'): Promise<string>
 async function createWorkspace(page: Page, locale = 'en'): Promise<void> {
   await expect(page.locator('[data-testid="create-workspace-form"]')).toBeVisible();
   await page.fill('#name', 'Onboarding Workspace');
+  // Review of #67, round 3: the account's own fields are under the Business step's "More".
+  await page.getByTestId('create-workspace-more').locator('summary').click();
   await page.fill('#slug', `onb-${crypto.randomUUID().slice(0, 8)}`);
   const countryName = new Intl.DisplayNames(['en'], { type: 'region' }).of('GB') ?? 'GB';
   await page.fill('[data-testid="country-select"]', countryName);
@@ -118,19 +120,24 @@ test.describe('onboarding reaches a first real brand', () => {
       'true',
     );
     await expect(page.getByTestId('setup-stepper').locator('li')).toHaveCount(5);
-    await expect(page.getByTestId('setup-progress-text')).toHaveText('Step 2 of 5 · Brand');
+    // Review of #67, round 3: the prototype's "STEP 2 OF 5" chip beside the logo.
+    await expect(page.getByTestId('setup-progress-text')).toHaveText('Step 2 of 5');
     // Focused: the daily navigation steps aside during first-run setup.
     await expect(page.getByTestId('topbar-create')).toHaveCount(0);
     const brandStep = page.locator('[data-testid="onboarding-step-brand"]');
     await expect(brandStep).toHaveAttribute('data-complete', 'false');
 
-    // English is preselected as the brand's content language (D-277).
+    // English is preselected as the brand's content language (D-277) — under
+    // the Brand step's "More", as the prototype does not draw it (round 3).
+    await page.getByTestId('setup-brand-more').locator('summary').click();
     await expect(page.getByTestId('setup-brand-locale')).toHaveValue('EN');
 
     // --- Step 2: the brand, created on the wizard's own screen.
     await page.fill('[data-testid="setup-brand-name"]', BRAND_NAME);
     await page.fill('#setup-brand-website', 'https://onboarding.example');
-    // D-335: the industry list with "Something else", as Settings offers it.
+    // D-335: the industry list with "Something else", as Settings offers it —
+    // behind its own disclosure on the Brand step (round 3).
+    await page.getByTestId('setup-brand-industry-more').locator('summary').click();
     await expect(page.getByTestId('setup-brand-industry')).toBeVisible();
     await page.getByTestId('setup-brand-industry').selectOption('__other');
     await page.getByTestId('setup-brand-industry-other').fill('Retail');
@@ -177,10 +184,8 @@ test.describe('onboarding reaches a first real brand', () => {
       'true',
     );
 
-    // --- Step 4: review. The worker reads the document on its own; the page
-    // is polled, never the queue.
-    await page.getByTestId('setup-continue').click();
-    await page.waitForURL(/step=review/);
+    // --- Step 4: review, inside the same Teach step (round 3). The worker reads
+    // the document on its own; the page is polled, never the queue.
     const candidate = page.locator('[data-testid^="setup-candidate-"]').first();
     const allDone = page.getByTestId('setup-review-done');
     await expect(async () => {

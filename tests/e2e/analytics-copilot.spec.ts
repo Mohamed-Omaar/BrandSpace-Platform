@@ -6,6 +6,7 @@ import { useBrand } from './brand';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
 import { statusMessage } from '../../apps/dashboard/src/i18n/messages';
 import { withPlatformPrisma } from './platform-prisma';
+import { openRuleMore } from './automation-form';
 
 /**
  * Analytics, strategy, the Copilot and automations in a real browser — Phase 7.
@@ -171,10 +172,11 @@ test.describe('the analytics screen', () => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?${RANGE}`);
 
-    // The seeded ones are really there, with real figures.
-    const impressions = page.getByTestId('analytics-metric-impressions');
-    await expect(impressions).toBeVisible();
-    await expect(impressions).not.toContainText(/^0$/);
+    // The seeded ones are really there, with real figures. Round 3 (B8): the
+    // headline figures are the prototype's set, and reach is the seeded one in it.
+    const reach = page.getByTestId('analytics-metric-reach');
+    await expect(reach).toBeVisible();
+    await expect(reach).not.toContainText(/^0$/);
 
     /*
      * AND A DERIVED METRIC IS COMPUTED FROM THE TOTALS, not averaged from daily
@@ -521,6 +523,7 @@ test.describe('automations', () => {
     await expect(form).toBeVisible();
 
     const name = `E2E rule ${Date.now()}`;
+    await openRuleMore(page);
     await form.locator('input[name="name"]').fill(name);
     // Nothing is chosen for the author (Phase 2B-3 PR 2): the trigger and the
     // action are picked, never inherited.
@@ -681,8 +684,8 @@ test.describe('automations', () => {
     await page.getByTestId('automation-trigger-POST_FAILED').check();
     const failed = await page
       .getByTestId('automation-condition-field')
-      .locator('option')
-      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+      .locator('input[type="radio"]')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLInputElement).value));
     // A failed post carries its failure class; no rule is offered a raw status.
     expect(failed).toContain('publish.failureClass');
     expect(failed).not.toContain('content.status');
@@ -690,8 +693,8 @@ test.describe('automations', () => {
     await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     const approved = await page
       .getByTestId('automation-condition-field')
-      .locator('option')
-      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+      .locator('input[type="radio"]')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLInputElement).value));
     expect(approved).toContain('content.channels');
     expect(approved).not.toContain('publish.failureClass');
   });
@@ -718,7 +721,7 @@ test.describe('automations', () => {
     await signIn(page);
     await editRule(page, ruleId);
 
-    await page.getByTestId('automation-condition-field').selectOption('content.platformCount');
+    await page.getByTestId('automation-condition-field-content.platformCount').check();
 
     const operators = await page
       .getByTestId('automation-condition-operator')
@@ -759,7 +762,7 @@ test.describe('automations', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
 
     await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
-    await page.getByTestId('automation-condition-field').selectOption('content.hasCampaign');
+    await page.getByTestId('automation-condition-field-content.hasCampaign').check();
 
     const operators = await page
       .getByTestId('automation-condition-operator')
@@ -771,6 +774,7 @@ test.describe('automations', () => {
     await expect(page.getByTestId('automation-condition-value')).toHaveCount(0);
 
     const name = `E2E boolean ${Date.now()}`;
+    await openRuleMore(page);
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
     await chooseHarmlessAction(page);
     await page.getByTestId('automation-submit').click();
@@ -797,7 +801,7 @@ test.describe('automations', () => {
 
     // Phase 2B-3 PR 2: the post's FORMAT, a closed field a new rule is offered.
     await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
-    await page.getByTestId('automation-condition-field').selectOption('content.type');
+    await page.getByTestId('automation-condition-field-content.type').check();
 
     const operators = await page
       .getByTestId('automation-condition-operator')
@@ -820,6 +824,7 @@ test.describe('automations', () => {
     expect(labels).toContain('Carousel');
 
     const name = `E2E string ${Date.now()}`;
+    await openRuleMore(page);
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
     await value.selectOption('POST');
     await chooseHarmlessAction(page);
@@ -840,13 +845,14 @@ test.describe('automations', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
 
     await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
-    await page.getByTestId('automation-condition-field').selectOption('content.type');
+    await page.getByTestId('automation-condition-field-content.type').check();
     await page.getByTestId('automation-condition-operator').selectOption('in');
 
     const value = page.getByTestId('automation-condition-value');
     await expect(value).toHaveJSProperty('multiple', true);
 
     const name = `E2E list ${Date.now()}`;
+    await openRuleMore(page);
     await page.locator('[data-testid="automation-form"] input[name="name"]').fill(name);
     await chooseHarmlessAction(page);
     await value.selectOption(['POST', 'REEL']);
@@ -874,11 +880,11 @@ test.describe('automations', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
 
     await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
-    await page.getByTestId('automation-condition-field').selectOption('content.type');
+    await page.getByTestId('automation-condition-field-content.type').check();
     await page.getByTestId('automation-condition-operator').selectOption('in');
 
     // `in` is meaningless on a boolean, and must not survive.
-    await page.getByTestId('automation-condition-field').selectOption('content.hasCampaign');
+    await page.getByTestId('automation-condition-field-content.hasCampaign').check();
     await expect(page.getByTestId('automation-condition-operator')).toHaveValue('is_true');
   });
 
@@ -889,7 +895,7 @@ test.describe('automations', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/ar/automations?new=1`);
 
     await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
-    await page.getByTestId('automation-condition-field').selectOption('content.hasCampaign');
+    await page.getByTestId('automation-condition-field-content.hasCampaign').check();
 
     const operators = await page
       .getByTestId('automation-condition-operator')
@@ -905,7 +911,7 @@ test.describe('automations', () => {
       .evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ''));
     for (const label of operatorLabels) expect(label).toMatch(/[\u0600-\u06FF]/);
 
-    await page.getByTestId('automation-condition-field').selectOption('content.type');
+    await page.getByTestId('automation-condition-field-content.type').check();
     const formatLabels = await page
       .getByTestId('automation-condition-value')
       .locator('option')
@@ -1059,9 +1065,9 @@ test.describe('P6-12 · copilot and automations', () => {
     expect(new URL(page.url()).pathname).toBe('/en/overview');
     const context = page.getByTestId('copilot-drawer').getByTestId('copilot-context');
     await expect(context).toBeVisible();
-    // The brand every step will act on, and where the conversation started.
-    await expect(context).toContainText(/Acting on /);
-    await expect(context).toContainText(/opened from Home/);
+    // Where the conversation started, then the brand every step will act on —
+    // the panel head's "Working on: Home · <brand>" (review of #67, round 3).
+    await expect(context).toHaveText(/^Working on: Home · \S.*$/);
     // No second brand picker: the rail is the one source of brand context.
     await expect(page.getByTestId('copilot-brand')).toHaveCount(0);
   });
@@ -1108,6 +1114,7 @@ test.describe('P6-12 · copilot and automations', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
     const form = page.getByTestId('automation-form');
     const name = `E2E delete ${Date.now()}`;
+    await openRuleMore(page);
     await form.locator('input[name="name"]').fill(name);
     await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     await chooseHarmlessAction(page);

@@ -8,11 +8,11 @@ import { requestMessageLocale } from '../server/message-locale';
  * THE SETUP CARD, ON ITS OWN PAGE — `Auth.dc.html` lines 114–200 (review of #67).
  *
  * The prototype's onboarding is a standalone centred card on the auth wash,
- * with no app shell: the logo row, five step bars (Business · Brand · Teach ·
- * Accounts · Goal), the step's 34px heading and its line, then the step. The
- * workspace form (/onboarding/workspace) is step 1, Business; the wizard
- * (/onboarding) is the other four. Each page keeps its own forms and actions —
- * this is only where they are drawn.
+ * with no app shell: the logo row with "STEP n OF 5" beside the wordmark, five
+ * step bars (Business · Brand · Teach · Accounts · Goal), the step's 34px
+ * heading and its line, the step, then its footer (Back · "Every step is
+ * saved…" · Skip · Continue). Each page keeps its own forms and actions — this
+ * is only where they are drawn.
  */
 
 export interface SetupFrameStep {
@@ -31,10 +31,12 @@ export function SetupFrame({
   stepsLabel,
   doneLabel,
   steps,
+  stepText,
   heading,
   description,
   testId,
   view,
+  footer,
   children,
 }: {
   readonly locale: string;
@@ -43,16 +45,28 @@ export function SetupFrame({
   readonly stepsLabel: string;
   readonly doneLabel: string;
   readonly steps: readonly SetupFrameStep[];
+  /** "Step 2 of 5" — the prototype's eyebrow beside the wordmark; none on Ready. */
+  readonly stepText?: string | undefined;
   readonly heading: string;
   readonly description?: string | undefined;
   readonly testId: string;
   readonly view?: string | undefined;
+  /** The step's footer row (`Auth.dc.html` line 196). */
+  readonly footer?: ReactNode;
   readonly children: ReactNode;
 }) {
   // D-470: the words this member reads — `ar-EG` in an Egyptian workspace.
   const words = requestMessageLocale(locale);
   const t = translator(words);
   const target = locale === 'ar' ? 'en' : 'ar';
+  /*
+   * THE BARS ARE THE PROTOTYPE'S, BY POSITION (round 3): the steps before the
+   * one on screen are green, it is purple, the ones after are grey — on Ready
+   * all five are green. Whether a step's data exists is still said to a
+   * screen reader ("— done") and kept as `data-complete`.
+   */
+  const at = steps.findIndex((step) => step.current);
+  const position = at < 0 ? steps.length : at;
   return (
     <div className="bsp-auth">
       <main id="main" className="bsp-auth-stage">
@@ -66,7 +80,15 @@ export function SetupFrame({
             <span className="bsp-auth-logo" data-testid="auth-brand-mark">
               <BrandGlyph size="40px" />
             </span>
-            <span className="bsp-auth-word">{t('app.title')}</span>
+            {/* The product's name, in Latin in both languages, as the prototype writes it. */}
+            <span className="bsp-auth-word bsp-ltr" lang="en">
+              BrandSpace
+            </span>
+            {stepText ? (
+              <span className="bsp-wz-eyebrow" data-testid="setup-progress-text">
+                {stepText}
+              </span>
+            ) : null}
             <nav
               aria-label={locale === 'ar' ? 'التنقل الرئيسي' : 'Main navigation'}
               className="bsp-auth-lang"
@@ -81,13 +103,15 @@ export function SetupFrame({
           </div>
           <nav aria-label={stepsLabel} data-testid="setup-stepper">
             <ol className="bsp-wz-steps">
-              {steps.map((step) => {
+              {steps.map((step, index) => {
                 const body = (
                   <>
                     <span
                       aria-hidden="true"
                       className="bsp-wz-bar"
-                      data-state={step.complete ? 'done' : step.current ? 'current' : 'todo'}
+                      data-state={
+                        index < position ? 'done' : index === position ? 'current' : 'todo'
+                      }
                     />
                     <span className="bsp-wz-sl">{step.label}</span>
                     {step.complete ? (
@@ -129,8 +153,40 @@ export function SetupFrame({
             {description ? <p>{description}</p> : null}
           </div>
           {children}
+          {footer ? (
+            <div className="bsp-wz-foot" data-testid="setup-footer">
+              {footer}
+            </div>
+          ) : null}
         </div>
       </main>
     </div>
+  );
+}
+
+/**
+ * THE FOOTER ROW (`Auth.dc.html` line 196): Back (a ghost button) · the
+ * "Every step is saved" line · Skip (ghost) · Continue (purple). Each control
+ * is the step's own — a link to a step, or a submit button tied to the step's
+ * form by `form=`.
+ */
+export function SetupFooter({
+  back,
+  note,
+  skip,
+  next,
+}: {
+  readonly back?: ReactNode;
+  readonly note: string;
+  readonly skip?: ReactNode;
+  readonly next?: ReactNode;
+}) {
+  return (
+    <>
+      {back}
+      <span className="bsp-wz-note">{note}</span>
+      {skip}
+      {next}
+    </>
   );
 }

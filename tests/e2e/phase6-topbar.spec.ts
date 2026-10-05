@@ -145,8 +145,10 @@ test.describe('P6-16 · the customer top bar', () => {
     const drawer = page.getByTestId('copilot-drawer');
     await expect(drawer).toBeVisible();
     await expect(page).toHaveURL(/\/en\/analytics$/);
-    await expect(drawer.getByTestId('copilot-context')).toContainText(/Acting on /);
-    await expect(drawer.getByTestId('copilot-context')).toContainText(/opened from Analytics/);
+    // Review of #67, round 3 — the panel head's "Working on: <screen> · <brand>".
+    await expect(drawer.getByTestId('copilot-context')).toHaveText(
+      /^Working on: Analytics · \S.*$/,
+    );
     await expect(drawer.getByTestId('global-copilot-full')).toHaveAttribute(
       'href',
       '/en/copilot?from=analytics',

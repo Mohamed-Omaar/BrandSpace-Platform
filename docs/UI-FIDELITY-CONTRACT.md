@@ -1611,6 +1611,43 @@ post. "Post to" shows every channel, the post's own pressed. Brand Brain's notes
 a "Notes" disclosure at the page's foot. Publish time and Campaign share the settings row as
 two equal columns until the Pillar exists.
 
+**Round 3 of the review** (the reviewer's work list on `8e6755e`, applied under D-471):
+
+- **Onboarding** — the prototype's five steps and its Ready, each with its own form, the
+  "STEP n OF 5" chip and "BrandSpace" in Latin; a step whose data exists shows it prefilled.
+- **Copilot drawer** — an opaque white panel docked at the shell's inline end, the credits
+  pill (members who may read billing), "Working on: {screen} · {brand}", a greeting bubble
+  and three suggestion chips that fill the box and never send. The purple send.
+- **Approvals** — the large cover with its caption card under it; Channels · Requested
+  time · Campaign; list rows are the cover and two lines. The per-channel previews, the
+  request note and the conversation are compact disclosures under the cover (C1). The
+  button stays "Approve" with a hint line: approving does not schedule (D-468 (a)).
+- **Studio, lower half** — hashtags as "type one, then Add" with a "From Brand Brain" group
+  (the existing AI hashtag tool); the post's notes as one compact card under the preview
+  (C1); "Will it land right?" with a truthful sub line; the estimate under "⋯"; the Brand
+  Brain source lines under the bar's "⋯". On a new post "Save draft" is the one primary
+  action, because the product does not autosave (D-468 (a)).
+- **Settings → General** — the prototype's field order, one industry field, the chevron as
+  a background image (no native ▼), one "⋯" holding the other week days and the locale, and
+  the sticky bar's "All changes saved · edit anything and Save turns on".
+- **Automations** — "2 · Only if" as chips (one radio per field, the same posted value);
+  the tiles in the prototype's words; the action tiles drawn, waiting, before a trigger is
+  picked; the rule's name and brand behind "⋯" (opened when the browser's own check needs
+  them).
+- **Performance** — the KPIs Reach · Engagement rate · Posts published · New followers;
+  "Reach, day by day" with one line per channel on one scale (a missing day is a gap);
+  By channel, By pillar and Best time to post from the posts' own figures; the posts table
+  and the campaigns card. Link clicks are left out: BrandSpace has no link tracking.
+- **One date style (C2)** — "Oct 16 · 10:00", "5 Oct – 1 Nov", 24-hour, the year only for
+  another year (`apps/dashboard/src/server/prototype-dates.ts`), on every screen that wrote
+  a date its own way.
+- **The rail** scrolls its active item into view; **Campaigns** draws the prototype's tabs
+  always, and its tiles fill the row; **Home** hides the setup checklist once the brand,
+  learning and accounts steps are done, and the credits card reads "of N · resets D" with
+  its bar. The campaign room's notes are a compact disclosure, as Brand Brain's (C1).
+- **Contrast** — the prototype's tan team avatar (`#b8794a`, 3.58:1 with white initials)
+  is `#9c6539` (4.85:1, same hue), as D-470 (2) settled for text colours.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

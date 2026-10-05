@@ -16,6 +16,7 @@ import { notificationService } from '../../../server/approvals-context';
 import { optionalMessage, statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { markAllNotificationsReadAction, markNotificationReadAction } from './actions';
+import { whenLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,11 +63,8 @@ export default async function NotificationsPage({
     };
   });
 
-  const dateFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  });
+  // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
+  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
 
   const brandContext = await brandContextFor(workspace, '/notifications');
 

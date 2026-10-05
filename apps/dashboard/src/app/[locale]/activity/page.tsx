@@ -24,6 +24,7 @@ import {
 import { activityActionLabel, activityResourceLabel } from '../../../server/activity-labels';
 import { SettingsFrame } from '../../../components/settings-frame';
 import { WorkspaceShell } from '../../../components/workspace-shell';
+import { whenLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,11 +106,8 @@ export default async function ActivityPage({
     },
   );
 
-  const dateFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  });
+  // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
+  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
 
   const dictionary = dictionaryFor(messageLocale) as Readonly<Record<string, string | undefined>>;
   const actorLabel = (entry: (typeof page.entries)[number]): string => {

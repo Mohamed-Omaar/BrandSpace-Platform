@@ -4,6 +4,7 @@ import { CopilotLink } from '../../../components/copilot-link';
 import { PrototypeHeroCanvas, PrototypeIcon } from '@brandspace/ui';
 import { localizedFrom } from '@brandspace/brand-brain';
 import { brandIdQueryFilter, mayReadCreditBalance, systemClock } from '@brandspace/shared';
+import { dayLabel } from '../../../server/prototype-dates';
 import { countPublishedPosts, detectAnomalies } from '@brandspace/analytics';
 import { MILLI_PER_CREDIT } from '@brandspace/entitlements';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
@@ -44,6 +45,8 @@ import {
 import { copilotHref } from '../../../server/copilot-surface';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { reviewIntelligenceAction } from '../intelligence/actions';
+import { setupFactsFor } from '../../../server/setup-wizard';
+import { setupSteps } from '../../../server/setup-wizard-state';
 
 export const dynamic = 'force-dynamic';
 
@@ -406,6 +409,21 @@ export default async function OverviewPage({
           }),
         ).catch(() => null)
       : null;
+  /*
+   * Round 3 (C6) — THE PROTOTYPE HIDES THE CHECKLIST ONCE THE BRAND IS SET UP:
+   * the setup wizard's brand, teach and accounts steps done (its own truth
+   * conditions, `setupSteps`). Until then it is shown as before.
+   */
+  const brandSetUp =
+    brandId !== undefined
+      ? await setupFactsFor(workspace.workspaceId, brandId)
+          .then((facts) =>
+            setupSteps(facts)
+              .filter((step) => ['brand', 'learn', 'connect'].includes(step.key))
+              .every((step) => step.complete),
+          )
+          .catch(() => false)
+      : false;
 
   /* ---------------------------------------------------------- the role Homes */
   const roleRows = kind === 'owner' ? null : await roleSections();
@@ -588,7 +606,7 @@ export default async function OverviewPage({
   const stepsDone = steps.filter((step) => step.done).length;
   const stepsLeft = steps.length - stepsDone;
   const setupCard =
-    steps.length > 0 && stepsLeft > 0 ? (
+    steps.length > 0 && stepsLeft > 0 && !brandSetUp ? (
       <section className="bsp-card" data-testid="home-setup" style={SETUP_CARD}>
         <div
           style={{
@@ -707,7 +725,7 @@ export default async function OverviewPage({
                   {attentionSentence(
                     t as never,
                     item,
-                    (value) => dateIn(value, { dateStyle: 'medium' }),
+                    (value) => dayLabel(value, locale, timeZone, now),
                     locale,
                   )}
                 </span>
@@ -930,13 +948,13 @@ export default async function OverviewPage({
                   credits.monthly !== null && credits.resetsAt
                     ? fill('home.p.kCredSub', {
                         total: integer(credits.monthly),
-                        date: dateIn(credits.resetsAt, { day: 'numeric', month: 'short' }),
+                        date: dayLabel(credits.resetsAt, locale, timeZone, now),
                       })
                     : credits.monthly !== null
                       ? fill('home.p.kCredSubTotal', { total: integer(credits.monthly) })
                       : credits.resetsAt
                         ? fill('home.p.kCredSubReset', {
-                            date: dateIn(credits.resetsAt, { day: 'numeric', month: 'short' }),
+                            date: dayLabel(credits.resetsAt, locale, timeZone, now),
                           })
                         : ''
                 }

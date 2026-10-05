@@ -58,7 +58,15 @@ export interface ApprovalRow {
    * to assume.
    */
   readonly mayOpenInStudio: boolean;
+  /** Round 3 — the post's real first picture (an expiring grant), or none. */
+  readonly cover?: ApprovalCover | null | undefined;
+  /** Round 3 — the row's second line: "From Omar · 2 hours ago". */
+  readonly fromLabel?: string | undefined;
 }
+
+/** A post's first picture, as `firstPictures` resolves it. */
+export type ApprovalCover =
+  { readonly kind: 'image'; readonly src: string } | { readonly kind: 'video' };
 
 /** The narrowest thing a reviewer needs in order to decide. */
 export interface ReviewSubjectView {
@@ -77,6 +85,15 @@ export interface ReviewSubjectView {
    */
   readonly previews?: React.ReactNode;
   readonly conversation?: React.ReactNode;
+  /** Round 3 — the cover card: the first picture and the first caption. */
+  readonly cover?: ApprovalCover | null | undefined;
+  readonly caption?: string | undefined;
+  /** "From Omar · 2 hours ago" under the title. */
+  readonly fromLabel?: string | undefined;
+  /** The planned time ("Oct 16 · 10:00"), or the words for none. */
+  readonly requestedTimeLabel?: string | undefined;
+  /** The campaign's name, or the words for none. */
+  readonly campaignLabel?: string | undefined;
   readonly variants: readonly {
     readonly id: string;
     readonly platformKey: string;
@@ -114,11 +131,25 @@ const STATUS_X: Record<ApprovalRow['status'], string> = {
   CANCELLED: 'bsp-neu',
 };
 
-/** The prototype's 52px picture; a row carries no media, so the abstract art. */
-function RowArt({ id }: { readonly id: string }) {
+/**
+ * The prototype's 52px picture: the post's own first picture (round 3), and
+ * the abstract art only for a post with none — or a video, which is not drawn
+ * as a broken image.
+ */
+function RowArt({
+  id,
+  cover,
+}: {
+  readonly id: string;
+  readonly cover?: ApprovalCover | null | undefined;
+}) {
   return (
     <span className="bsp-apr-art" aria-hidden="true">
-      <AbstractMedia seed={(id.charCodeAt(0) % 6) as MediaSeed} alt="" />
+      {cover?.kind === 'image' ? (
+        <img src={cover.src} alt="" />
+      ) : (
+        <AbstractMedia seed={(id.charCodeAt(0) % 6) as MediaSeed} alt="" />
+      )}
     </span>
   );
 }
@@ -239,23 +270,24 @@ export function ApprovalsView({
                         href={`/${locale}/approvals?review=${row.id}`}
                         aria-current={row.id === selected ? 'true' : undefined}
                       >
-                        <RowArt id={row.itemId || row.id} />
+                        <RowArt id={row.itemId || row.id} cover={row.cover} />
+                        {/*
+                          Round 3 — the prototype's two lines: the title, then
+                          who sent it and when, with who it is assigned to.
+                        */}
                         <span className="bsp-apr-copy">
                           <span className="bsp-apr-title" dir="auto">
                             {row.itemTitle}
                           </span>
                           <span className="bsp-apr-meta">
-                            {row.brandName} · {t('approvals.requestedBy')} {row.requestedByLabel} ·{' '}
-                            {row.requestedAtLabel}
+                            {row.fromLabel ??
+                              `${t('approvals.requestedBy')} ${row.requestedByLabel} · ${row.requestedAtLabel}`}
+                            {row.assignedToLabel ? (
+                              <span data-testid={`assigned-to-${row.itemId}`}>
+                                {` · ${row.assignedToLabel}`}
+                              </span>
+                            ) : null}
                           </span>
-                          {row.assignedToLabel ? (
-                            <span
-                              className="bsp-apr-meta"
-                              data-testid={`assigned-to-${row.itemId}`}
-                            >
-                              {row.assignedToLabel}
-                            </span>
-                          ) : null}
                           {!row.mayDecide && row.blockedAsSelf ? (
                             /*
                              * D-122. The reader submitted this and the brand
@@ -306,7 +338,7 @@ export function ApprovalsView({
                       data-testid={`mine-${row.itemId}`}
                       aria-current={row.id === selected ? 'true' : undefined}
                     >
-                      <RowArt id={row.itemId || row.id} />
+                      <RowArt id={row.itemId || row.id} cover={row.cover} />
                       <span className="bsp-apr-copy">
                         <Link
                           className="bsp-apr-title bsp-apr-link"
@@ -378,11 +410,94 @@ export function ApprovalsView({
         */}
         {review ? (
           <section className="bsp-card bsp-apr-detail" data-testid="approvals-review-subject">
-            <div className="bsp-apr-prev">
-              {review.previews ? (
-                <div className="bsp-apr-prev-list" data-testid="review-previews">
-                  {review.previews}
+            {/*
+              ROUND 3 — THE PROTOTYPE'S POST: the large square cover with the
+              caption in the card under it (`Main.dc.html` line 585). The
+              product's preview of every channel version (D-288) and the post's
+              conversation are kept, each behind a compact disclosure under it.
+            */}
+            <div className="bsp-apr-left">
+              <div className="bsp-apr-prev" data-testid="review-cover">
+                <div className="bsp-apr-cover">
+                  {review.cover?.kind === 'image' ? (
+                    <img src={review.cover.src} alt="" />
+                  ) : (
+                    <AbstractMedia seed={(review.itemId.charCodeAt(0) % 6) as MediaSeed} alt="" />
+                  )}
+                  <span className="bsp-apr-overlay" dir="auto" aria-hidden="true">
+                    {review.itemTitle}
+                  </span>
                 </div>
+                {review.caption ? (
+                  <div className="bsp-apr-caption" dir="auto">
+                    {review.caption}
+                  </div>
+                ) : null}
+              </div>
+              <details className="bsp-apr-more" data-testid="review-channels-more">
+                <summary>
+                  <span>{t('approvals.everyChannel')}</span>
+                  <span className="bsp-ltr">{review.variants.length}</span>
+                </summary>
+                {review.previews ? (
+                  <div className="bsp-apr-prev-list" data-testid="review-previews">
+                    {review.previews}
+                  </div>
+                ) : null}
+                {review.requestNote ? (
+                  <p className="bsp-apr-quote" dir="auto">
+                    {review.requestNote}
+                  </p>
+                ) : null}
+                <ul className="bsp-apr-variants" data-testid="review-variants">
+                  {review.variants.map((variant) => (
+                    <li key={variant.id}>
+                      <span className="bsp-lbl">
+                        {t(`content.platform.${variant.platformKey}` as MessageKey)}
+                      </span>
+                      <p dir="auto">{variant.body}</p>
+                      {variant.hashtags.length > 0 ? (
+                        <span className="bsp-apr-meta">
+                          {variant.hashtags.map((h) => `#${h}`).join(' ')}
+                        </span>
+                      ) : null}
+                      {/*
+                        WHAT IS ACTUALLY BEING APPROVED (AC-29.1). The thumbnails
+                        are the media the publish pipeline will send — the same
+                        asset ids, in the same order — so a reviewer's decision is
+                        about the post rather than about its words.
+                      */}
+                      {variant.media.length > 0 ? (
+                        <ul className="bsp-apr-media" data-testid={`approval-media-${variant.id}`}>
+                          {variant.media.map((item) => (
+                            <li key={item.id}>
+                              {item.previewToken ? (
+                                <AssetThumb
+                                  src={`/${locale}/assets/file/${item.previewToken}`}
+                                  alt={item.name}
+                                  size="3.5rem"
+                                  testId={`approval-media-thumb-${item.id}`}
+                                />
+                              ) : (
+                                <span className="bsp-apr-meta">{item.name}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+              {review.conversation ? (
+                /* C1 — the post's notes as a compact card, never a full-width block. */
+                <details className="bsp-apr-more bsp-apr-notes" data-testid="review-notes-more">
+                  <summary>
+                    <span>{t('approvals.notes')}</span>
+                    <span className="bsp-apr-open">{t('approvals.openConversation')}</span>
+                  </summary>
+                  <div className="bsp-apr-thread">{review.conversation}</div>
+                </details>
               ) : null}
             </div>
             <div className="bsp-apr-side-col">
@@ -391,7 +506,7 @@ export function ApprovalsView({
                   {review.itemTitle}
                 </div>
                 <div className="bsp-apr-sub">
-                  {review.brandName} · {t('approvals.cycle')} {review.cycle}
+                  {review.fromLabel ?? `${t('approvals.requestedBy')} ${review.requestedByLabel}`}
                 </div>
               </div>
               <div className="bsp-apr-facts">
@@ -404,54 +519,18 @@ export function ApprovalsView({
                   </span>
                 </div>
                 <div>
-                  <span>{t('approvals.requestedBy')}</span>
-                  <span>{review.requestedByLabel}</span>
+                  <span>{t('approvals.requestedTime')}</span>
+                  <span data-testid="review-requested-time">
+                    {review.requestedTimeLabel ?? t('approvals.noTime')}
+                  </span>
+                </div>
+                <div>
+                  <span>{t('approvals.campaign')}</span>
+                  <span dir="auto" data-testid="review-campaign">
+                    {review.campaignLabel ?? t('approvals.noCampaign')}
+                  </span>
                 </div>
               </div>
-              {review.requestNote ? (
-                <p className="bsp-apr-quote" dir="auto">
-                  {review.requestNote}
-                </p>
-              ) : null}
-              <ul className="bsp-apr-variants" data-testid="review-variants">
-                {review.variants.map((variant) => (
-                  <li key={variant.id}>
-                    <span className="bsp-lbl">
-                      {t(`content.platform.${variant.platformKey}` as MessageKey)}
-                    </span>
-                    <p dir="auto">{variant.body}</p>
-                    {variant.hashtags.length > 0 ? (
-                      <span className="bsp-apr-meta">
-                        {variant.hashtags.map((h) => `#${h}`).join(' ')}
-                      </span>
-                    ) : null}
-                    {/*
-                      WHAT IS ACTUALLY BEING APPROVED (AC-29.1). The thumbnails
-                      are the media the publish pipeline will send — the same
-                      asset ids, in the same order — so a reviewer's decision is
-                      about the post rather than about its words.
-                    */}
-                    {variant.media.length > 0 ? (
-                      <ul className="bsp-apr-media" data-testid={`approval-media-${variant.id}`}>
-                        {variant.media.map((item) => (
-                          <li key={item.id}>
-                            {item.previewToken ? (
-                              <AssetThumb
-                                src={`/${locale}/assets/file/${item.previewToken}`}
-                                alt={item.name}
-                                size="3.5rem"
-                                testId={`approval-media-thumb-${item.id}`}
-                              />
-                            ) : (
-                              <span className="bsp-apr-meta">{item.name}</span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
               {review.mayDecide ? (
                 <DecisionForm
                   locale={locale}
@@ -475,12 +554,12 @@ export function ApprovalsView({
                   >
                     {t('calendar.openInStudio')}
                   </Link>
+                  <span className="bsp-apr-meta">
+                    {review.brandName} · {t('approvals.cycle')} {review.cycle}
+                  </span>
                 </MoreDisclosure>
               ) : null}
             </div>
-            {review.conversation ? (
-              <div className="bsp-apr-thread">{review.conversation}</div>
-            ) : null}
           </section>
         ) : null}
       </div>
@@ -561,6 +640,13 @@ function DecisionForm({
           {t('approvals.reject')}
         </button>
       </div>
+      {/*
+        The prototype's line under the verdicts, in words true of this product:
+        approving clears the post to be scheduled; it does not schedule it (B5).
+      */}
+      <span className="bsp-apr-hint" data-testid={`approve-hint-${itemId}`}>
+        {t('approvals.approveHint')}
+      </span>
     </form>
   );
 }
