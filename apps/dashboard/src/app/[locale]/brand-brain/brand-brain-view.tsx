@@ -923,7 +923,10 @@ export function BrandBrainView({
                       {chosenName}
                     </span>
                   ) : null}
-                  <UploadSubmit label={t('bb.upload')} pendingLabel={t('bb.uploading')} />
+                  {/* Gate 2b — the prototype's one button; sending appears once a file is chosen. */}
+                  {chosenName ? (
+                    <UploadSubmit label={t('bb.upload')} pendingLabel={t('bb.uploading')} />
+                  ) : null}
                 </span>
                 <small className="bsp-bb-uphint">{t('bb.uploadHint')}</small>
               </form>

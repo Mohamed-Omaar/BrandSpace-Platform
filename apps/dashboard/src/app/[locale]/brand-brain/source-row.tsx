@@ -89,10 +89,7 @@ export function SourceRow({
         </span>
         <span className="bsp-bb-srow-t">
           <b className="bsp-ltr">{source.fileName}</b>
-          <span data-testid={`source-meta-${source.id}`}>
-            {source.meta} · {count('bb.source.approvedCount', source.approvedCount)} ·{' '}
-            {count('bb.source.pendingCount', source.pendingCount)}
-          </span>
+          <span data-testid={`source-meta-${source.id}`}>{source.meta}</span>
           <span data-testid={`source-detail-${source.id}`}>{source.detail}</span>
         </span>
         {canUpload && source.reading ? (
@@ -103,14 +100,15 @@ export function SourceRow({
           >
             {t('bb.source.reading')}
           </span>
-        ) : (
+        ) : failed || source.status !== 'READY' ? (
+          /* Gate 2b — the prototype pills only a read in progress or a failure. */
           <span
-            className={failed ? 'bsp-pill bsp-p-bad' : 'bsp-pill bsp-p-ok'}
+            className={failed ? 'bsp-pill bsp-p-bad' : 'bsp-pill bsp-p-neu'}
             data-testid={`source-status-${source.id}`}
           >
             {source.statusLabel}
           </span>
-        )}
+        ) : null}
         <button
           type="button"
           className="bsp-chip bsp-bb-srow-show"
@@ -119,7 +117,9 @@ export function SourceRow({
           onClick={() => setOpen((value) => !value)}
           data-testid={`source-toggle-${source.id}`}
         >
-          {number.format(source.approvedCount + source.pendingCount)} ·{' '}
+          {/* The prototype's chip: "6 approved · 1 to review · Facts". */}
+          {count('bb.source.approvedCount', source.approvedCount)} ·{' '}
+          {count('bb.source.pendingCount', source.pendingCount)} ·{' '}
           {open ? t('bb.source.hideDetails') : t('bb.source.showDetails')}
         </button>
         {canUpload && source.canReadAgain ? (

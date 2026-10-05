@@ -5074,7 +5074,7 @@ export const messages = {
     // Phase 2C-4 (D5) — one source and what it is responsible for.
     'bb.uploading': 'Uploading…',
     'bb.source.approvedCount': '{n} approved',
-    'bb.source.pendingCount': '{n} pending',
+    'bb.source.pendingCount': '{n} to review',
     'bb.source.showDetails': 'Facts',
     'bb.source.hideDetails': 'Hide facts',
     'bb.source.readAgain': 'Read again',

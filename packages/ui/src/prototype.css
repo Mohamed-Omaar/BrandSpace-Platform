@@ -9866,6 +9866,15 @@ img.bsp-pf-art {
   flex-wrap: wrap;
 }
 
+/* Gate 2b — Sources: the upload card at the prototype's first column
+   (`minmax(0, 1fr) minmax(0, 1.3fr); gap: 14px`); the website card beside it
+   is post-launch (D-468 (b)). */
+@media (min-width: 768px) {
+  .bsp-card.bsp-bb-upcard {
+    max-inline-size: calc((100% - 14px) / 2.3);
+  }
+}
+
 /* Round 4 (5.5) — General's save bar. The prototype draws it after the whole
    settings grid (`position: sticky; bottom: 0; margin-top: 14px;
    margin-inline-start: 228px`), so its sticky range runs below the nav too and
