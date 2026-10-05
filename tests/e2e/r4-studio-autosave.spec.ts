@@ -117,6 +117,64 @@ test.describe('Round 4 · 3.1 — the first input makes the draft', () => {
   });
 });
 
+test.describe('Round 4 · 3.1 (review of 2a, 7) — the visit continues the SAME draft', () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+  });
+
+  test('reload, Back then Forward, and a second tab: one post, never a second', async ({
+    page,
+    context,
+  }) => {
+    const words = `One post only ${Date.now().toString(36)}`;
+    const postsWith = () =>
+      withPlatformPrisma((prisma) =>
+        prisma.contentVariant.findMany({
+          where: { body: { startsWith: words } },
+          select: { contentItemId: true },
+          distinct: ['contentItemId'],
+        }),
+      ).then((rows) => rows.map((row) => row.contentItemId));
+
+    // Where the person came from, so Back has somewhere to go.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content`);
+    await openNewPost(page);
+    await page.getByTestId('content-caption').fill(words);
+    const url = await awaitDraft(page);
+    const itemId = url.searchParams.get('item') ?? '';
+    await expect(page.locator('[data-testid^="editor-saved-"]')).toBeVisible({ timeout: 30_000 });
+    expect(await postsWith()).toStrictEqual([itemId]);
+
+    // 1. Reload: the URL is the draft's, so the same draft opens.
+    await page.reload();
+    await expect(page.getByTestId('draft-editor')).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('item')).toBe(itemId);
+
+    // 2. Back leaves the Studio (the new-post address was replaced by the
+    //    draft's); Forward returns to the same draft.
+    await page.goBack();
+    await page.waitForURL((current) => !current.pathname.endsWith('/content/compose'));
+    await page.goForward();
+    await page.waitForURL((current) => current.searchParams.get('item') === itemId);
+    await expect(page.getByTestId('draft-editor')).toBeVisible();
+
+    // 3. A second tab on the draft's address edits the same post.
+    const second = await context.newPage();
+    await second.goto(page.url());
+    const secondWords = second.locator('[data-testid="content-variant"] textarea').first();
+    await expect(secondWords).toHaveValue(words);
+    await secondWords.fill(`${words}, from the second tab.`);
+    await expect(second.locator('[data-testid^="editor-saved-"]')).toHaveText('Saved just now', {
+      timeout: 30_000,
+    });
+    await second.close();
+
+    expect(await postsWith()).toStrictEqual([itemId]);
+  });
+});
+
 test.describe('Round 4 · 3.4 / 3.5 — every format, and the prototype preview card', () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);
@@ -231,5 +289,67 @@ test.describe('Round 4 · 3.1 — the server saves as typed only what a save lea
     for (const variant of after.variants) {
       expect(variant.body).not.toContain('Typed after it was sent for review.');
     }
+  });
+});
+
+test.describe('Round 4 · 3.3 (review of 2a, 6) — a day carried to a brand that needs approval', () => {
+  test.describe.configure({ timeout: 120_000 });
+
+  test('the Studio says the day is not kept, and offers no time it would drop', async ({
+    page,
+  }) => {
+    const loaded = credentials();
+    const { customer } = loaded;
+    const suffix = Date.now().toString(36);
+    const brandId = await withPlatformPrisma(async (prisma) => {
+      const brand = await prisma.brand.create({
+        data: {
+          workspaceId: customer.workspaceId,
+          name: `Approval first ${suffix}`,
+          slug: `approval-first-${suffix}`,
+          status: 'ACTIVE',
+          defaultLocale: 'EN',
+          supportedLocales: ['EN'],
+        },
+        select: { id: true },
+      });
+      await prisma.approvalPolicy.create({
+        data: {
+          workspaceId: customer.workspaceId,
+          brandId: brand.id,
+          requireApprovalBeforeScheduling: true,
+        },
+      });
+      return brand.id;
+    });
+    await useBrand(page, customer.workspaceId, brandId);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
+    await page.fill('#email', customer.email);
+    await page.fill('#password', customer.password);
+    await page.click('[data-testid="signin-submit"]');
+    await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
+    const choose = page.getByTestId(`choose-workspace-${customer.workspaceSlug}`);
+    if (await choose.isVisible().catch(() => false)) await choose.click();
+    await page.waitForURL(/\/en\/overview$/);
+
+    const day = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?mode=write&date=${day}`);
+    await expect(page.getByTestId('composer-planned-date')).toBeVisible();
+    // Said where the day is named, before anything is written.
+    await expect(page.getByTestId('composer-planned-approval-first')).toContainText(
+      'this day is not kept',
+    );
+
+    // The draft's When offers no date or time to choose — only the reason.
+    const channel = page.getByTestId('content-channel').first();
+    if ((await channel.getAttribute('aria-pressed')) !== 'true') await channel.click();
+    await page.getByTestId('content-caption').fill(`Approval first ${suffix}`);
+    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+    await page.getByTestId('editor-when').click();
+    const panel = page.getByTestId('editor-when-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('this day is not kept');
+    await expect(panel.locator('input[type="date"], input[type="time"]')).toHaveCount(0);
+    await expect(page.getByTestId('editor-schedule')).toHaveCount(0);
   });
 });

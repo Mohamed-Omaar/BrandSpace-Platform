@@ -30,6 +30,7 @@ import {
   compactCount,
   deltaText,
   comparableChange,
+  homeCreditGrant,
   homeKindFor,
   setupChecklistFacts,
   sparkPath,
@@ -399,10 +400,16 @@ export default async function OverviewPage({
   /*
    * ROUND 4 (4.6) — "n · of N · resets D", AND THE BAR, THE SAME FIGURE AS
    * BILLING. The balance is the ledger service's own `wallet()` — the call
-   * Billing's balance reads — so the two can never disagree; N is the plan's
-   * monthly grant; D is the wallet's next reset, else the subscription's
-   * renewal (or trial end), the date Billing states as "Renews". Nothing is
-   * computed that the accounting does not already hold.
+   * Billing's balance reads — so the two can never disagree; N is the monthly
+   * grant the subscription is PINNED to (`pinnedMonthlyCredits`, what the
+   * period reset grants), else the plan catalogue's; D is the wallet's next
+   * reset, else the subscription's renewal (or trial end), the date Billing
+   * states as "Renews". Nothing is computed that the accounting does not
+   * already hold. Review of 2a: the catalogue lookup alone missed a plan the
+   * catalogue does not list, and the card lost "of N" and its bar.
+   *
+   * A workspace with no subscription has no monthly grant: the card shows
+   * the balance and "No plan", with no bar (there is no N to measure against).
    */
   const credits = mayReadCredits
     ? await inWorkspace(workspace.workspaceId, async ({ db, entitlements, credits: ledger }) => {
@@ -414,7 +421,12 @@ export default async function OverviewPage({
           }),
           db.workspaceSubscription.findUnique({
             where: { workspaceId: workspace.workspaceId },
-            select: { status: true, currentPeriodEnd: true, trialEndsAt: true },
+            select: {
+              status: true,
+              currentPeriodEnd: true,
+              trialEndsAt: true,
+              pinnedMonthlyCredits: true,
+            },
           }),
         ]);
         const context = await entitlements.contextFor(workspace.workspaceId).catch(() => null);
@@ -430,7 +442,8 @@ export default async function OverviewPage({
           : null;
         return {
           balance: wallet.balanceCredits,
-          monthly: plan && plan.monthlyCredits > 0 ? plan.monthlyCredits : null,
+          monthly: homeCreditGrant(subscription, plan?.monthlyCredits),
+          planned: subscription !== null,
           resetsAt: row?.nextResetAt ?? renews ?? null,
         };
       }).catch(() => null)
@@ -990,11 +1003,13 @@ export default async function OverviewPage({
                       })
                     : credits.monthly !== null
                       ? fill('home.p.kCredSubTotal', { total: integer(credits.monthly) })
-                      : credits.resetsAt
-                        ? fill('home.p.kCredSubReset', {
-                            date: dayLabel(credits.resetsAt, locale, timeZone, now),
-                          })
-                        : ''
+                      : !credits.planned
+                        ? t('ws.noPlan')
+                        : credits.resetsAt
+                          ? fill('home.p.kCredSubReset', {
+                              date: dayLabel(credits.resetsAt, locale, timeZone, now),
+                            })
+                          : ''
                 }
                 bar={
                   credits.monthly !== null

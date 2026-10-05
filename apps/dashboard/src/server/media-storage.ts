@@ -15,7 +15,10 @@ import type { StorageBreakdownRow } from '@brandspace/entitlements';
  *     the Brand Brain's source documents.
  *
  * An upload still in progress is storage the meter counts but no category
- * owns; it is in the "used" figure and in none of the four.
+ * owns. Review of 2a: the parts must add up to the total they sit under, so
+ * whatever the counter holds beyond the four (an upload in progress, or drift
+ * the B-1 recompute has not yet repaired) is shown as one more part, "In
+ * progress" — see `mediaStorageRemainder`.
  */
 export type MediaStorageKey = 'photos' | 'videos' | 'ai' | 'brand';
 
@@ -60,4 +63,22 @@ export function mediaStorageCategories(
     bytes: Number(bytes.get(key) ?? 0n),
     files: files.get(key) ?? 0,
   }));
+}
+
+/**
+ * Review of 2a (2) — WHAT THE COUNTER HOLDS BEYOND THE FOUR CATEGORIES.
+ *
+ * The card's total is the storage counter (B-1/B-8, the figure the limit is
+ * enforced on). The product keeps that counter equal to the stored rows the
+ * four categories group, plus uploads in progress; the remainder is those
+ * uploads, or drift the recompute has not yet repaired. Shown as its own part
+ * so the parts always add up to the total. Never negative: a counter BELOW
+ * the stored rows is drift too, and the four are shown as stored.
+ */
+export function mediaStorageRemainder(
+  usedBytes: number,
+  categories: readonly MediaStorageCategory[],
+): number {
+  const grouped = categories.reduce((sum, row) => sum + row.bytes, 0);
+  return Math.max(0, usedBytes - grouped);
 }

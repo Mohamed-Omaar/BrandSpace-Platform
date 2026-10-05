@@ -181,6 +181,26 @@ export default async function ComposePage({
     }),
   );
 
+  /*
+   * Review of 2a (6) — A DAY CARRIED FROM THE CALENDAR, ON A BRAND THAT NEEDS
+   * APPROVAL. A time is stored only as a calendar slot, and scheduling waits
+   * for approval, so such a day cannot be kept yet (Fix PR 2 brings "Approve &
+   * schedule"). The Studio says so where it names the day, instead of seeming
+   * to take it. Read only when a day was carried.
+   */
+  const approvalFirst: ReadonlySet<string> = plannedDate
+    ? await inContentStudio(workspace.workspaceId, async (services) => {
+        const approvals = await services.approvals();
+        const rows = await Promise.all(
+          brands.map(async (brand) => ({
+            id: brand.id,
+            first: (await approvals.policyForBrand(brand.id)).requireApprovalBeforeScheduling,
+          })),
+        );
+        return new Set(rows.filter((row) => row.first).map((row) => row.id));
+      })
+    : new Set<string>();
+
   const brandContext = await brandContextFor(workspace, '/content');
   /*
    * THE BRAND A NEW POST WOULD BE WRITTEN FOR, when there is exactly one
@@ -1094,7 +1114,10 @@ export default async function ComposePage({
       <ComposerView
         locale={locale}
         t={dictionaryFor(translate)}
-        brands={brands}
+        brands={brands.map((brand) => ({
+          ...brand,
+          approvalFirst: approvalFirst.has(brand.id),
+        }))}
         defaultBrandId={composingBrandId}
         platforms={platforms}
         contentTypes={CONTENT_TYPES}
@@ -1399,6 +1422,7 @@ const COMPOSER_KEYS = [
   'studio.tagAdd',
   'studio.tagPlaceholder',
   'studio.tagsFromBrain',
+  'studio.tagsCostOnDraft',
   'studio.tagsAfterSave',
   'studio.checksSub',
   'studio.notesLabel',
@@ -1452,6 +1476,7 @@ const COMPOSER_KEYS = [
   'create.repurpose.fromBody',
   'create.plannedFor',
   'create.plannedDate',
+  'create.plannedNeedsApproval',
   // Phase 8 — the campaign control on an existing draft (AC-26.3).
   'campaigns.composerLabel',
   'campaigns.composerNone',

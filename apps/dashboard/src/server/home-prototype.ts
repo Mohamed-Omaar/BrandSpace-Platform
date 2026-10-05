@@ -53,6 +53,25 @@ export function compactCount(value: number): string {
  * already null when either side is missing or the baseline is zero.
  */
 /**
+ * ROUND 4 (4.6, review of 2a) — HOME'S "of N": THE MONTHLY GRANT.
+ *
+ * N is what the period reset actually grants: the subscription's PINNED
+ * monthly credits. The plan catalogue's figure is the fallback for a
+ * subscription that pinned none. Reading the catalogue alone dropped "of N"
+ * and the bar for a plan the catalogue does not list. No subscription, no N.
+ */
+export function homeCreditGrant(
+  subscription: { readonly pinnedMonthlyCredits: number } | null,
+  catalogueMonthlyCredits: number | undefined,
+): number | null {
+  if (!subscription) return null;
+  if (subscription.pinnedMonthlyCredits > 0) return subscription.pinnedMonthlyCredits;
+  return catalogueMonthlyCredits !== undefined && catalogueMonthlyCredits > 0
+    ? catalogueMonthlyCredits
+    : null;
+}
+
+/**
  * ROUND 4 (4.5) — A CHANGE ONLY AGAINST A COMPLETE PREVIOUS PERIOD.
  *
  * The owner saw "+3321%": a workspace whose data began a few days into the

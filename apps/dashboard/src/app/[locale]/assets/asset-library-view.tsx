@@ -33,7 +33,7 @@ import {
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { ASSET_VIEWS, type RightsState } from '../../../server/asset-views';
 import { formatBytes } from '../../../components/format-bytes';
-import type { MediaStorageCategory } from '../../../server/media-storage';
+import { mediaStorageRemainder, type MediaStorageCategory } from '../../../server/media-storage';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
 import { dayFormatter } from '../../../server/prototype-dates';
@@ -326,6 +326,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
       ? 0
       : Math.max(1, Math.min(100, Math.round((props.storageUsedBytes / limitBytes) * 1000) / 10));
   const storageFiles = props.storageCategories.reduce((total, row) => total + row.files, 0);
+  // Review of 2a (2): what the counter holds beyond the four, so the parts add up.
+  const storageRest = mediaStorageRemainder(props.storageUsedBytes, props.storageCategories);
 
   return (
     <div className="bsp-med">
@@ -782,6 +784,12 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                     style={{ width: `${Math.max(0.6, (row.bytes / limitBytes) * 100)}%` }}
                   />
                 ))}
+              {storageRest > 0 ? (
+                <span
+                  data-cat="rest"
+                  style={{ width: `${Math.max(0.6, (storageRest / limitBytes) * 100)}%` }}
+                />
+              ) : null}
             </div>
             <div className="bsp-med-sto-cats" data-testid="assets-storage-cats">
               {props.storageCategories.map((row) => (
@@ -798,6 +806,13 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                   </span>
                 </span>
               ))}
+              {storageRest > 0 ? (
+                <span data-testid="assets-storage-cat-rest" title={t('assets.storageRestHint')}>
+                  <span className="bsp-med-sto-dot" data-cat="rest" aria-hidden="true" />
+                  {t('assets.storageCat.rest')}{' '}
+                  <b className="bsp-ltr">{formatBytes(storageRest, props.locale)}</b>
+                </span>
+              ) : null}
             </div>
           </div>
         ) : null}

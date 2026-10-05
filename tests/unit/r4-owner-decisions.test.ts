@@ -1,10 +1,15 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { comparableChange, deltaText } from '../../apps/dashboard/src/server/home-prototype';
+import {
+  comparableChange,
+  deltaText,
+  homeCreditGrant,
+} from '../../apps/dashboard/src/server/home-prototype';
 import {
   mediaStorageCategories,
   mediaStorageKeyFor,
+  mediaStorageRemainder,
 } from '../../apps/dashboard/src/server/media-storage';
 import { messages } from '../../apps/dashboard/src/i18n/messages';
 
@@ -25,6 +30,22 @@ describe('Round 4 · 4.5 — a change only against a complete previous period', 
 
   it('is "—" when there is no change to show at all', () => {
     expect(comparableChange(null, [1, 2])).toBeNull();
+  });
+});
+
+describe('Round 4 · 4.6 (review of 2a) — Home’s "of N" is the pinned monthly grant', () => {
+  it('reads the subscription’s pinned grant, even for a plan the catalogue does not list', () => {
+    expect(homeCreditGrant({ pinnedMonthlyCredits: 1_200 }, undefined)).toBe(1_200);
+    expect(homeCreditGrant({ pinnedMonthlyCredits: 1_200 }, 500)).toBe(1_200);
+  });
+
+  it('falls back to the catalogue when nothing was pinned', () => {
+    expect(homeCreditGrant({ pinnedMonthlyCredits: 0 }, 500)).toBe(500);
+    expect(homeCreditGrant({ pinnedMonthlyCredits: 0 }, undefined)).toBeNull();
+  });
+
+  it('has no N without a subscription', () => {
+    expect(homeCreditGrant(null, 500)).toBeNull();
   });
 });
 
@@ -62,6 +83,23 @@ describe('Round 4 · 4.7 — the Media storage categories', () => {
       { key: 'ai', bytes: 300, files: 2 },
       { key: 'brand', bytes: 100, files: 8 },
     ]);
+  });
+
+  it('adds up to the total it sits under: the counter beyond the four is one more part', () => {
+    const four = [
+      { key: 'photos', bytes: 1_000, files: 4 },
+      { key: 'videos', bytes: 5_000, files: 1 },
+      { key: 'ai', bytes: 300, files: 2 },
+      { key: 'brand', bytes: 100, files: 8 },
+    ] as const;
+    // Kept equal by the product: nothing beyond the four.
+    expect(mediaStorageRemainder(6_400, four)).toBe(0);
+    // An upload in progress (or drift not yet recounted) is the rest, and the sum holds.
+    const rest = mediaStorageRemainder(7_000, four);
+    expect(rest).toBe(600);
+    expect(four.reduce((sum, row) => sum + row.bytes, 0) + rest).toBe(7_000);
+    // Never negative.
+    expect(mediaStorageRemainder(10, four)).toBe(0);
   });
 
   it('is display only: it reads the meter rows and never the counter or BYTES_PER_GB', () => {

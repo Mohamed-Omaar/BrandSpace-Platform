@@ -870,7 +870,10 @@ export function DraftEditor({
         ) : (
           <span className="bsp-st-when-note">
             {review?.requiresApproval && draft.status === 'DRAFT'
-              ? t['editor.next.needsApproval']
+              ? plannedDate
+                ? /* Review of 2a (6): the carried day cannot be kept before approval. */
+                  t['create.plannedNeedsApproval']
+                : t['editor.next.needsApproval']
               : statusLabel}
           </span>
         )}
@@ -1383,7 +1386,9 @@ export function DraftEditor({
               const hashtagAction = actionsFor.find((action) => action.key === 'hashtags');
               const { characters, limit } = checkOf(variant);
               const dirty = isDirty(variant);
-              const toolButton = (action: (typeof actionsFor)[number]) => (
+              // Review of 2a (3): a paid edit offered on its own (the hashtags)
+              // states its cost on the button, as "Write caption with AI · N" does.
+              const toolButton = (action: (typeof actionsFor)[number], withCost = false) => (
                 <button
                   key={action.key}
                   type="button"
@@ -1408,6 +1413,15 @@ export function DraftEditor({
                             t[`content.language.${variant.locale === 'AR' ? 'EN' : 'AR'}`] ?? '',
                         })
                       : t[`editor.ai.${action.key}`]}
+                  {withCost && selected && !dirty && estimate !== undefined ? (
+                    <span
+                      className="bsp-st-aiw-cost bsp-ltr"
+                      data-testid={`editor-tool-cost-${action.key}`}
+                    >
+                      {' '}
+                      · {formatCredits(estimate)}
+                    </span>
+                  ) : null}
                 </button>
               );
               return (
@@ -1495,7 +1509,7 @@ export function DraftEditor({
                           */}
                           {actionsFor
                             .filter((action) => MAIN_TOOLS.includes(action.key))
-                            .map(toolButton)}
+                            .map((action) => toolButton(action))}
                           {actionsFor.some(
                             (action) =>
                               !MAIN_TOOLS.includes(action.key) && action.key !== 'hashtags',
@@ -1510,7 +1524,7 @@ export function DraftEditor({
                                     (action) =>
                                       !MAIN_TOOLS.includes(action.key) && action.key !== 'hashtags',
                                   )
-                                  .map(toolButton)}
+                                  .map((action) => toolButton(action))}
                               </div>
                             </MoreDisclosure>
                           ) : null}
@@ -1627,7 +1641,7 @@ export function DraftEditor({
                             {t['studio.tagsFromBrain']}
                             <span className="bsp-xstatus bsp-ai">AI</span>
                           </span>
-                          <div className="bsp-st-chips">{toolButton(hashtagAction)}</div>
+                          <div className="bsp-st-chips">{toolButton(hashtagAction, true)}</div>
                         </div>
                       ) : null}
                       {/*

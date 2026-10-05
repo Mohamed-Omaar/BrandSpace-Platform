@@ -27,7 +27,11 @@ import path from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { WorkspaceAdminService, hashPassword } from '@brandspace/auth';
-import { CreditLedgerService } from '@brandspace/entitlements';
+import {
+  CreditLedgerService,
+  gigabytesFor,
+  measureStorageBreakdown,
+} from '@brandspace/entitlements';
 import { ConfigurationService } from '@brandspace/config';
 import { withWorkspace } from '@brandspace/database';
 import { createObjectStore } from '@brandspace/storage';
@@ -668,6 +672,24 @@ async function build(
             uploadedByUserId: owner.id,
           },
         });
+        // The version row every upload writes: the storage meter counts the
+        // object through it (B-1), so a picture without one stores nothing.
+        await db.assetVersion.create({
+          data: {
+            workspaceId: workspace.id,
+            brandId: brand.id,
+            assetId: asset.id,
+            versionNumber: 1,
+            storageKey,
+            checksumSha256: createHash('sha256').update(bytes).digest('hex'),
+            mimeType: 'image/png',
+            sizeBytes: bytes.length,
+            width: 720,
+            height: 720,
+            scanStatus: 'CLEAN',
+            createdByUserId: owner.id,
+          },
+        });
         pictures[key] = asset.id;
       }
 
@@ -1243,14 +1265,25 @@ async function build(
       },
     });
   }
+  /*
+   * The storage counter holds what is actually stored, as the product keeps it
+   * (every upload, delete and purge, and B-1's recompute): the SAME rows the
+   * Media card's categories group. Review of 2a: a counter of 3.1 GB with a few
+   * kilobytes behind it is a state the product cannot reach, and the card's
+   * categories could not add up to it.
+   */
+  const stored = (await measureStorageBreakdown(platform, workspace.id)).reduce(
+    (sum, row) => sum + row.bytes,
+    0n,
+  );
   await platform.usageCounter.create({
     data: {
       workspaceId: workspace.id,
       featureKey: 'limit.storage_gb',
       periodStart: new Date('2000-01-01T00:00:00Z'),
       periodEnd: new Date('2100-01-01T00:00:00Z'),
-      usedValue: 3,
-      usedBytes: BigInt(3_100_000_000),
+      usedValue: gigabytesFor(stored),
+      usedBytes: stored,
     },
   });
 

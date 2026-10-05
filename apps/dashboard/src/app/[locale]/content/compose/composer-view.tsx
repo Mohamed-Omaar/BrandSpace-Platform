@@ -168,6 +168,8 @@ export interface ComposerViewProps {
     defaultLocale?: 'AR' | 'EN';
     /** A10 (Phase 2B-2) — the channels a new post for this brand starts with. */
     defaultPlatformKeys?: readonly string[];
+    /** Review of 2a (6) — scheduling waits for approval: a carried day cannot be kept. */
+    approvalFirst?: boolean;
   }[];
   /**
    * The globally selected brand, or null when the rail is on "All brands".
@@ -1007,6 +1009,11 @@ export function ComposerView({
                 ?.replace('{name}', plannedFor ?? '')
                 .replace('{date}', plannedDate)}
             </b>
+            {brands.find((brand) => brand.id === brandId)?.approvalFirst ? (
+              <span className="bsp-st-ep-note" data-testid="composer-planned-approval-first">
+                {t['create.plannedNeedsApproval']}
+              </span>
+            ) : null}
           </span>
         </div>
       ) : null}
@@ -1679,6 +1686,15 @@ export function ComposerView({
                           {t['editor.ai.hashtags']}
                         </button>
                       </div>
+                      {/*
+                        Review of 2a (3): the hashtag edit is a paid AI call on a
+                        saved version, so its price can only be quoted once the
+                        draft exists. This button makes the draft (no credit) and
+                        opens it on the hashtags, where the button states its cost.
+                      */}
+                      <span className="bsp-st-hint" data-testid="composer-tags-brain-cost">
+                        {t['studio.tagsCostOnDraft']}
+                      </span>
                     </div>
                   ) : null}
                 </div>

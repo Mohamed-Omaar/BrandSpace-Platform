@@ -860,6 +860,9 @@ export const messages = {
     'assets.storageCat.videos': 'فيديو',
     'assets.storageCat.ai': 'صور بالذكاء الاصطناعي',
     'assets.storageCat.brand': 'ملفات العلامة',
+    'assets.storageCat.rest': 'قيد الرفع',
+    'assets.storageRestHint':
+      'ملفات ما زالت قيد الرفع، أو مساحة يُعاد حسابها. تُحسب ضمن المساحة المستخدمة.',
     'assets.location': 'الموقع في المكتبة',
     'assets.root': 'مكتبة الوسائط',
     'assets.subfolders': '{count} مجلدات',
@@ -1768,6 +1771,8 @@ export const messages = {
       'يحتوي الوصف أدناه على كلمات المنشور الأصلي. عدّله كما تشاء — الأصل لا يتغير.',
     'create.plannedFor': 'لـ {name} · {date}',
     'create.plannedDate': 'مخطط ليوم {date}',
+    'create.plannedNeedsApproval':
+      'تحتاج هذه العلامة إلى موافقة قبل جدولة أي منشور، لذلك لا يُحفظ هذا اليوم: اختر الوقت بعد الموافقة على المنشور.',
     'create.write.label': 'منشورك',
     'create.write.placeholder': 'اكتب المنشور تمامًا كما يجب أن يُقرأ.',
     'create.format.unsupported': 'لا تدعم هذه القناة هذا الشكل.',
@@ -1944,6 +1949,7 @@ export const messages = {
     'studio.tagAdd': 'إضافة',
     'studio.tagPlaceholder': 'اكتب وسمًا…',
     'studio.tagsFromBrain': 'من Brand Brain',
+    'studio.tagsCostOnDraft': 'يستخدم رصيد الذكاء الاصطناعي؛ تظهر تكلفته في المسودة.',
     'studio.tagsAfterSave': 'تُضاف الوسوم إلى نسخة المنشور، فتُفتح بعد حفظه.',
     'studio.checksSub': 'حدود كل قناة لهذا المنشور — النص والوسوم والوسائط — تُفحص أثناء الكتابة.',
     'studio.notesLabel': 'الملاحظات',
@@ -4652,6 +4658,9 @@ export const messages = {
     'assets.storageCat.videos': 'Videos',
     'assets.storageCat.ai': 'AI images',
     'assets.storageCat.brand': 'Brand files',
+    'assets.storageCat.rest': 'In progress',
+    'assets.storageRestHint':
+      'Files still uploading, or storage still being recounted. It counts toward what you use.',
     'assets.location': 'Location in the library',
     'assets.root': 'Media Library',
     'assets.subfolders': '{count} folders',
@@ -5588,6 +5597,8 @@ export const messages = {
       'The brief below holds the original post’s words. Edit it as you like — the original is not changed.',
     'create.plannedFor': 'For {name} · {date}',
     'create.plannedDate': 'Planned for {date}',
+    'create.plannedNeedsApproval':
+      'This brand needs approval before a post is scheduled, so this day is not kept: choose the time once the post is approved.',
     'create.write.label': 'Your post',
     'create.write.placeholder': 'Write the post exactly as it should read.',
     'create.format.unsupported': 'This channel cannot carry this format.',
@@ -5769,6 +5780,7 @@ export const messages = {
     'studio.tagAdd': 'Add',
     'studio.tagPlaceholder': 'Type a hashtag…',
     'studio.tagsFromBrain': 'From Brand Brain',
+    'studio.tagsCostOnDraft': 'Uses AI credits; its cost shows on the draft.',
     'studio.tagsAfterSave':
       'Hashtags belong to a version of the post, so they open once it is saved.',
     'studio.checksSub':

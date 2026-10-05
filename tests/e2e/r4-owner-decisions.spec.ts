@@ -151,9 +151,14 @@ test.describe('Round 4 · 4.2, 4.4, 4.6, 4.7 — Settings, the rail, Home and Me
     const figure = page.getByTestId('metric-credits');
     await expect(figure).toContainText(Number(balance).toLocaleString('en-US'));
     if (subscribed) {
-      await expect(figure).toContainText(/(of [\d,]+)|(resets )/);
+      // Review of 2a (1): "of N" and the bar, whatever the balance.
+      await expect(figure).toContainText(/of [\d,]+/);
+      await expect(figure.locator('.bsp-bar')).toHaveCount(1);
     } else {
+      // No plan: the balance, "No plan", and no bar (there is no N).
+      await expect(figure).toContainText('No plan');
       await expect(figure).not.toContainText(/of [\d,]+/);
+      await expect(figure.locator('.bsp-bar')).toHaveCount(0);
     }
   });
 
@@ -225,6 +230,37 @@ test.describe('Round 4 · 5.5 — the General save bar stays on the frame’s bo
       return note && bar ? note.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING : 0;
     });
     expect(order).toBeTruthy();
+  });
+});
+
+test.describe('Round 4 · 5.5 (review of 2a) — on a 1440 × 900 screen, as the prototype', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('the General save bar keeps the prototype’s 70px under the note, on the frame’s edge', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+    await expect(page.getByTestId('settings-bar')).toBeVisible();
+    const box = await page.evaluate(() => {
+      const scroller = document.querySelector<HTMLElement>('main.bsp-scroll');
+      const bar = document.querySelector<HTMLElement>('[data-testid="settings-bar"]');
+      const note = document.querySelector<HTMLElement>('[data-testid="settings-identity-note"]');
+      if (!scroller || !bar || !note) return null;
+      return {
+        scrolls: scroller.scrollHeight > scroller.clientHeight,
+        edgeGap: scroller.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom,
+        underNote: bar.getBoundingClientRect().top - note.getBoundingClientRect().bottom,
+      };
+    });
+    expect(box).not.toBeNull();
+    // The prototype's `padding-bottom: 70px` and the bar's `margin-top: 14px`, at least.
+    expect(box?.underNote ?? 0).toBeGreaterThanOrEqual(83);
+    // Whenever the page scrolls, the bar opens on the frame's bottom edge.
+    if (box?.scrolls) {
+      expect(box.edgeGap).toBeGreaterThanOrEqual(0);
+      expect(box.edgeGap).toBeLessThanOrEqual(16);
+    }
   });
 });
 

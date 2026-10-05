@@ -3843,6 +3843,21 @@ span.bsp-cal-hol {
   max-inline-size: 160px;
   box-shadow: none;
 }
+/* Review of 2a (4) — ONE LINE, as the prototype's "Reviewer Sara ▾": the
+   choice is sized to its words and never wraps ("Automatic (Sara Nabil)" broke
+   onto two lines inside the 160px cap); past 220px it ends in an ellipsis. */
+.bsp-chip.bsp-st-rev {
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
+.bs-control.bsp-st-rev-select {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  field-sizing: content;
+  max-inline-size: 220px;
+  padding-inline-end: 18px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .bsp-st-when {
@@ -4901,6 +4916,12 @@ span.bsp-cal-hol {
 .bsp-med-sto-bar > span[data-cat='brand'],
 .bsp-med-sto-dot[data-cat='brand'] {
   background: #2a78d6;
+}
+/* Review of 2a (2) — what the counter holds beyond the four (an upload in
+   progress): a part the prototype does not draw, in its neutral grey. */
+.bsp-med-sto-bar > span[data-cat='rest'],
+.bsp-med-sto-dot[data-cat='rest'] {
+  background: #c9c9cf;
 }
 .bsp-med-sto-cats {
   display: flex;
@@ -8157,6 +8178,13 @@ img.bsp-pf-art {
 }
 .bsp-sg-form > :last-child {
   margin-block-start: auto;
+}
+/* Review of 2a (5) — the prototype's content column ends in
+   `padding-bottom: 70px` before the bar's `margin-top: 14px`, so on a
+   1440 × 900 screen its bar is held on the frame's bottom edge rather than
+   resting under the note. The same 70px sits under the note here. */
+.bsp-sg-form > :nth-last-child(2) {
+  margin-block-end: 70px;
 }
 .bsp-sg-note {
   display: flex;
