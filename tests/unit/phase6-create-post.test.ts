@@ -109,9 +109,10 @@ describe('§19 — the post goal', () => {
 
   it('a post written by hand never carries the goal sentence', () => {
     const composer = read('apps/dashboard/src/app/[locale]/content/compose/composer-view.tsx');
-    // The goal joins the GENERATION brief only; the manual form sends `brief`.
+    // The goal joins the GENERATION brief only; the manual form sends the
+    // caption (review of #67: the Studio's caption is the post written by hand).
     expect(composer).toMatch(/mode === 'ai' && goalLabel !== ''/);
-    expect(composer).toContain('<input type="hidden" name="body" value={brief} />');
+    expect(composer).toContain('<input type="hidden" name="body" value={caption} />');
   });
 });
 

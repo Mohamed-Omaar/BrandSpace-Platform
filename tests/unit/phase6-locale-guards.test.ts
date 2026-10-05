@@ -79,8 +79,23 @@ describe('P6-14 · every Arabic string is Arabic', () => {
    * Values that are legitimately the same in both languages. Empty since P6-16
    * removed the search control and its keyboard-shortcut glyph; anything added
    * here needs that kind of reason.
+   *
+   * Review of #67, round 2: the channels' own names. The prototype writes them
+   * in Latin in Arabic too (Instagram, Facebook, TikTok, LinkedIn, X) — they are
+   * the platforms' names, not words to translate.
    */
-  const SAME_IN_BOTH = new Set<string>();
+  const SAME_IN_BOTH = new Set<string>([
+    'content.platform.instagram',
+    'content.platform.facebook',
+    'content.platform.tiktok',
+    'content.platform.linkedin',
+    'content.platform.x',
+    'integrations.provider.instagram',
+    'integrations.provider.facebook',
+    'integrations.provider.tiktok',
+    'integrations.provider.linkedin',
+    'integrations.provider.x',
+  ]);
 
   const en = messages.en as Record<string, string>;
   const ar = messages.ar as Record<string, string>;

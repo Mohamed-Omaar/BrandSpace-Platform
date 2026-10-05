@@ -135,6 +135,12 @@ export interface CustomerWorkspaceContext {
   readonly deletionScheduledFor?: Date | null;
   /** G4 / Q23 (D-333): every member must have two-step verification on here. */
   readonly requireMfa?: boolean;
+  /**
+   * D-470: the workspace's country (ISO 3166-1 alpha-2, `Workspace.country`).
+   * The interface Arabic follows it — an Egyptian workspace reads Egyptian
+   * Arabic. Read from the row `listWorkspaces` already loads; no extra query.
+   */
+  readonly country?: string | null;
 }
 
 /** One business in the rail's switcher (`listBusinesses`). */
@@ -582,6 +588,7 @@ export class CustomerAuthService {
         brandScope: m.brandScope,
         deletionScheduledFor: m.workspace.deletionScheduledFor,
         requireMfa: m.workspace.requireMfa,
+        country: m.workspace.country,
       }));
   }
 

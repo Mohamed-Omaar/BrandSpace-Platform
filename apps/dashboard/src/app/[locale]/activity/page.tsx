@@ -15,7 +15,12 @@ import {
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { activityService } from '../../../server/approvals-context';
-import { messages, optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
+import {
+  optionalMessage,
+  translator,
+  type MessageKey,
+  dictionaryFor,
+} from '../../../i18n/messages';
 import { activityActionLabel, activityResourceLabel } from '../../../server/activity-labels';
 import { SettingsFrame } from '../../../components/settings-frame';
 import { WorkspaceShell } from '../../../components/workspace-shell';
@@ -51,8 +56,8 @@ export default async function ActivityPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale);
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale);
+  const t = translator(messageLocale);
 
   const action = typeof query.action === 'string' && query.action.length > 0 ? query.action : null;
   const cursor = typeof query.cursor === 'string' ? query.cursor : null;
@@ -106,15 +111,13 @@ export default async function ActivityPage({
     timeZone: 'UTC',
   });
 
-  const dictionary = (locale === 'ar' ? messages.ar : messages.en) as Readonly<
-    Record<string, string | undefined>
-  >;
+  const dictionary = dictionaryFor(messageLocale) as Readonly<Record<string, string | undefined>>;
   const actorLabel = (entry: (typeof page.entries)[number]): string => {
     if (entry.actorId && entry.actorId === customer.userId) return t('activity.you');
     if (entry.actorId && actorNames.has(entry.actorId)) return actorNames.get(entry.actorId) ?? '—';
     // The raw type when there is no translation for it — see `optionalMessage`
     // for why `translated === key` was never the right test.
-    return optionalMessage(locale, `activity.actor.${entry.actorType}`) ?? entry.actorType;
+    return optionalMessage(messageLocale, `activity.actor.${entry.actorType}`) ?? entry.actorType;
   };
 
   const brandContext = await brandContextFor(workspace, '/activity');
@@ -124,8 +127,8 @@ export default async function ActivityPage({
       brandContext={brandContext}
       locale={locale}
       activePath="/activity"
-      heading={t('activity.title')}
-      description={t('activity.subtitle')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={customer.email}

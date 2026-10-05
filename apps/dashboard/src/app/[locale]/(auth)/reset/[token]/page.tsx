@@ -29,7 +29,7 @@ export default async function ResetCompletePage({
   const { minPasswordLength } = await signupPolicy();
 
   return (
-    <AuthCard locale={locale} heading={t('reset.title')}>
+    <AuthCard locale={locale} eyebrow={t('auth.eyebrow.password')} heading={t('reset.title')}>
       {error && (
         <p role="alert" data-testid="reset-error" style={{ color: colorTokens.danger }}>
           {statusMessage(error, locale, ref)}

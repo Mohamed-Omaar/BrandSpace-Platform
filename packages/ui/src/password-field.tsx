@@ -120,7 +120,7 @@ function RevealToggle({
     <button
       type="button"
       onClick={onToggle}
-      className="bs-pressable bs-control"
+      className="bs-pressable bs-control bs-reveal"
       style={style}
       /*
        * THE NAME CHANGES WITH THE STATE, and `aria-pressed` carries the state

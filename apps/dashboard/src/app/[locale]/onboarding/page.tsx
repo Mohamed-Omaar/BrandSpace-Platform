@@ -35,11 +35,12 @@ import {
   translator,
   type MessageKey,
 } from '../../../i18n/messages';
-import { CustomerBanner, CustomerCard, WorkspaceShell } from '../../../components/workspace-shell';
+import { CustomerBanner } from '../../../components/workspace-shell';
+import { SetupFrame } from '../../../components/setup-frame';
 import { uploadSourceAction } from '../brand-brain/actions';
 import { connectAccountAction } from '../integrations/actions';
 import { createSetupBrandAction, reviewSetupCandidateAction, saveFirstGoalAction } from './actions';
-import { SetupProgress, SetupStepper } from './setup-stepper';
+import { SetupProgress } from './setup-stepper';
 import { IndustryField } from '../../../components/industry-field';
 import { SetupBrandLanguages } from '../../../components/setup-brand-languages';
 
@@ -97,8 +98,8 @@ export default async function OnboardingPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale);
+  const { workspace, messageLocale } = await requireWorkspace(locale);
+  const t = translator(messageLocale);
   const may = (key: string) => workspace.permissionKeys.includes(key);
 
   const brandContext = await brandContextFor(
@@ -118,16 +119,6 @@ export default async function OnboardingPage({
   const reference = typeof query['ref'] === 'string' ? query['ref'] : undefined;
   const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? (statusMessage(error, locale, reference) ?? t('setup.error')) : null;
-
-  /*
-   * D-303 — THE CUSTOMER'S JOURNEY IS FIVE STEPS. The business account (the
-   * workspace, the tenant boundary) already exists by the time the wizard
-   * runs, so it is not a step the customer sees; the state model keeps it,
-   * complete by construction.
-   */
-  const journey = steps.filter((step) => step.key !== 'workspace');
-  const position =
-    view === 'done' ? journey.length : journey.findIndex((step) => step.key === view) + 1;
 
   const href = (target: SetupView) => `/${locale}/onboarding?step=${target}`;
   const stepLabel = (key: string) => t(`setup.step.${key}` as MessageKey);
@@ -175,16 +166,18 @@ export default async function OnboardingPage({
   );
 
   let body: ReactNode;
+  // Review of #67 — the step's heading and line, drawn by the setup card.
+  let head: { title: string; description?: string } = { title: t('setup.title') };
 
   /* ------------------------------------------------------------------ brand */
   if (view === 'brand') {
     if (brand) {
+      head = {
+        title: t('setup.brand.readyTitle').replace('{brand}', brand.name),
+        description: t('setup.brand.readyBody'),
+      };
       body = (
-        <CustomerCard
-          title={t('setup.brand.readyTitle').replace('{brand}', brand.name)}
-          description={t('setup.brand.readyBody')}
-          testId="setup-brand-ready"
-        >
+        <section className="bsp-wz-body" data-testid="setup-brand-ready">
           {actions(
             primaryLink(href('learn'), t('setup.continue'), 'setup-continue'),
             secondaryLink(
@@ -193,19 +186,17 @@ export default async function OnboardingPage({
               'setup-edit-profile',
             ),
           )}
-        </CustomerCard>
+        </section>
       );
     } else if (unselected) {
-      body = (
-        <CustomerCard title={t('brand.chooseTitle')} description={t('brand.chooseBody')}>
-          {note(t('setup.brand.chooseHint'))}
-        </CustomerCard>
-      );
+      head = { title: t('brand.chooseTitle'), description: t('brand.chooseBody') };
+      body = <section className="bsp-wz-body">{note(t('setup.brand.chooseHint'))}</section>;
     } else if (!may('brand.manage')) {
+      head = { title: t('setup.brand.title'), description: t('setup.brand.body') };
       body = (
-        <CustomerCard title={t('setup.brand.title')} description={t('setup.brand.body')}>
+        <section className="bsp-wz-body">
           {note(t('setup.noPermission'), 'setup-no-permission')}
-        </CustomerCard>
+        </section>
       );
     } else {
       const industries = await inBrandBrain(
@@ -213,12 +204,9 @@ export default async function OnboardingPage({
         async ({ db }) =>
           (await new TenantOnboardingPolicySource(db, currentEnvironment()).load()).industries,
       );
+      head = { title: t('setup.brand.title'), description: t('setup.brand.body') };
       body = (
-        <CustomerCard
-          title={t('setup.brand.title')}
-          description={t('setup.brand.body')}
-          testId="setup-brand"
-        >
+        <section className="bsp-wz-body" data-testid="setup-brand">
           <form
             action={createSetupBrandAction}
             encType="multipart/form-data"
@@ -351,7 +339,7 @@ export default async function OnboardingPage({
               </button>
             </div>
           </form>
-        </CustomerCard>
+        </section>
       );
     }
   } else if (brand && view === 'learn') {
@@ -364,12 +352,9 @@ export default async function OnboardingPage({
         select: { id: true, fileName: true, status: true },
       }),
     );
+    head = { title: t('setup.learn.title'), description: t('setup.learn.body') };
     body = (
-      <CustomerCard
-        title={t('setup.learn.title')}
-        description={t('setup.learn.body')}
-        testId="setup-learn"
-      >
+      <section className="bsp-wz-body" data-testid="setup-learn">
         <ul style={{ margin: 0, paddingInlineStart: spacingTokens.lg, ...typographyTokens.bodySm }}>
           {(['guidelines', 'profile', 'offers', 'presentations', 'faqs'] as const).map((kind) => (
             <li key={kind}>{t(`setup.learn.kind.${kind}` as MessageKey)}</li>
@@ -466,7 +451,7 @@ export default async function OnboardingPage({
             : null,
           facts.sources.total > 0 ? null : skip('connect'),
         )}
-      </CustomerCard>
+      </section>
     );
   } else if (brand && view === 'review') {
     /* ----------------------------------------------------------- review */
@@ -506,12 +491,9 @@ export default async function OnboardingPage({
       : (groups[0]?.area ?? null);
     const toReview = groups.reduce((total, group) => total + group.items.length, 0);
 
+    head = { title: t('setup.review.title'), description: t('setup.review.body') };
     body = (
-      <CustomerCard
-        title={t('setup.review.title')}
-        description={t('setup.review.body')}
-        testId="setup-review"
-      >
+      <section className="bsp-wz-body" data-testid="setup-review">
         {facts.sources.total === 0 ? (
           <>
             {note(t('setup.review.nothing'), 'setup-review-nothing')}
@@ -722,7 +704,7 @@ export default async function OnboardingPage({
             {actions(skip('connect'))}
           </>
         )}
-      </CustomerCard>
+      </section>
     );
   } else if (brand && view === 'connect') {
     /* ---------------------------------------------------------- connect */
@@ -746,14 +728,11 @@ export default async function OnboardingPage({
         })
       : { providers: [], connections: [] };
     const providerLabel = (provider: string) =>
-      optionalMessage(locale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
+      optionalMessage(messageLocale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
 
+    head = { title: t('setup.connect.title'), description: t('setup.connect.body') };
     body = (
-      <CustomerCard
-        title={t('setup.connect.title')}
-        description={t('setup.connect.body')}
-        testId="setup-connect"
-      >
+      <section className="bsp-wz-body" data-testid="setup-connect">
         {social.connections.length > 0 ? (
           <ul
             data-testid="setup-connections"
@@ -819,17 +798,14 @@ export default async function OnboardingPage({
             ? primaryLink(href('goal'), t('setup.continue'), 'setup-continue')
             : skip('goal'),
         )}
-      </CustomerCard>
+      </section>
     );
   } else if (brand && view === 'goal') {
     /* ------------------------------------------------------------- goal */
     const chosen = facts.goal?.objective ?? null;
+    head = { title: t('setup.goal.title'), description: t('setup.goal.body') };
     body = (
-      <CustomerCard
-        title={t('setup.goal.title')}
-        description={t('setup.goal.body')}
-        testId="setup-goal"
-      >
+      <section className="bsp-wz-body" data-testid="setup-goal">
         {may('brand_brain.edit') ? (
           <form
             action={saveFirstGoalAction}
@@ -838,30 +814,18 @@ export default async function OnboardingPage({
           >
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="brandId" value={brand.id} />
-            <fieldset
-              style={{ border: 0, margin: 0, padding: 0, display: 'grid', gap: spacingTokens.xs }}
-            >
+            {/* D-468 — the prototype's goal chips: three columns of choices (line 183). */}
+            <fieldset className="bsp-wz-goals">
               <legend style={visuallyHiddenStyle()}>{t('setup.goal.title')}</legend>
               {[...SETUP_GOALS, 'unsure' as const].map((goal) => (
-                <label
-                  key={goal}
-                  style={{
-                    display: 'flex',
-                    gap: spacingTokens.sm,
-                    alignItems: 'center',
-                    padding: spacingTokens.sm,
-                    borderRadius: radiusTokens.md,
-                    background: colorTokens.surfaceSoft,
-                    cursor: 'pointer',
-                    ...typographyTokens.bodySm,
-                  }}
-                >
+                <label key={goal} className="bsp-wz-chip">
                   <input
                     type="radio"
                     name="goal"
                     value={goal}
                     required
                     defaultChecked={goal === chosen}
+                    className="bsp-wz-radio"
                     data-testid={`setup-goal-${goal.toLowerCase()}`}
                   />
                   {t(`setup.goal.${goal}` as MessageKey)}
@@ -886,7 +850,7 @@ export default async function OnboardingPage({
             {actions(skip('done'))}
           </>
         )}
-      </CustomerCard>
+      </section>
     );
   } else if (brand) {
     /* ------------------------------------------------------------- done */
@@ -920,12 +884,12 @@ export default async function OnboardingPage({
           : t('setup.done.noGoal'),
       ],
     ];
+    head = {
+      title: t('setup.done.title').replace('{brand}', brand.name),
+      description: t('setup.done.body'),
+    };
     body = (
-      <CustomerCard
-        title={t('setup.done.title').replace('{brand}', brand.name)}
-        description={t('setup.done.body')}
-        testId="setup-done"
-      >
+      <section className="bsp-wz-body" data-testid="setup-done">
         <dl style={{ margin: 0, display: 'grid', gap: spacingTokens.xs }}>
           {summary.map(([term, value]) => (
             <div key={term} style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
@@ -944,57 +908,88 @@ export default async function OnboardingPage({
           second ? secondaryLink(second.href, second.label, second.testId) : null,
           secondaryLink(`/${locale}/overview`, t('setup.done.home'), 'setup-home'),
         )}
-      </CustomerCard>
+      </section>
     );
   }
 
+  /*
+   * Review of #67 — THE PROTOTYPE'S FIVE STEPS (`Auth.dc.html` line 242):
+   * Business · Brand · Teach · Accounts · Goal. Business is the workspace,
+   * already made by /onboarding/workspace; Teach is the product's two screens,
+   * learning and reviewing what was learned. Every state is still derived from
+   * real rows; nothing saved changes.
+   */
+  const stepOf = (key: string) => steps.find((step) => step.key === key);
+  const teachDone = Boolean(stepOf('learn')?.complete && stepOf('review')?.complete);
+  const frameSteps = [
+    {
+      key: 'workspace',
+      label: stepLabel('workspace'),
+      complete: true,
+      current: false,
+      href: null,
+    },
+    {
+      key: 'brand',
+      label: stepLabel('brand'),
+      complete: Boolean(stepOf('brand')?.complete),
+      current: view === 'brand',
+      href: href('brand'),
+    },
+    {
+      key: 'teach',
+      label: t('setup.step.teach'),
+      complete: teachDone,
+      current: view === 'learn' || view === 'review',
+      href: brand !== null ? href('learn') : null,
+    },
+    {
+      key: 'connect',
+      label: stepLabel('connect'),
+      complete: Boolean(stepOf('connect')?.complete),
+      current: view === 'connect',
+      href: brand !== null ? href('connect') : null,
+    },
+    {
+      key: 'goal',
+      label: stepLabel('goal'),
+      complete: Boolean(stepOf('goal')?.complete),
+      current: view === 'goal',
+      href: brand !== null ? href('goal') : null,
+    },
+  ];
+  const at = frameSteps.findIndex((step) => step.current);
+  const framePosition = view === 'done' ? frameSteps.length : at + 1;
+
   return (
-    <WorkspaceShell
-      brandContext={brandContext}
+    <SetupFrame
       locale={locale}
-      heading={t('setup.title')}
-      description={t('setup.subtitle')}
-      activePath="/onboarding"
-      workspaceName={workspace.workspaceName}
-      roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
-      customerName={customer.name ?? customer.email}
-      permissionKeys={workspace.permissionKeys}
-      focus
+      languageHref={`/${locale === 'ar' ? 'en' : 'ar'}/onboarding${view === 'done' ? '' : `?step=${view}`}`}
+      stepsLabel={t('setup.stepsLabel')}
+      doneLabel={t('setup.stepDone')}
+      steps={frameSteps}
+      heading={head.title}
+      description={head.description}
+      testId="setup-wizard"
+      view={view}
     >
       {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
-      <div
-        data-testid="setup-wizard"
-        data-view={view}
-        // Clear of the sticky header's fade, so a two-line description never
-        // runs into the step line beneath it.
-        style={{ display: 'grid', gap: spacingTokens.lg, paddingBlockStart: spacingTokens.md }}
-      >
-        <SetupProgress
-          label={t('setup.stepsLabel')}
-          position={position}
-          total={journey.length}
-          text={
-            view === 'done'
-              ? t('setup.progress.complete')
-              : t('setup.progress.step')
-                  .replace('{n}', String(position))
-                  .replace('{total}', String(journey.length))
-                  .replace('{step}', stepLabel(view))
-          }
-          exit={{ href: `/${locale}/overview`, label: t('setup.progress.exit') }}
-        />
-        <SetupStepper
-          label={t('setup.stepsLabel')}
-          steps={journey}
-          view={view}
-          hasBrand={brand !== null}
-          href={href}
-          stepLabel={stepLabel}
-          doneLabel={t('setup.stepDone')}
-        />
-        {body}
-      </div>
-    </WorkspaceShell>
+      {body}
+      <SetupProgress
+        label={t('setup.stepsLabel')}
+        position={framePosition}
+        total={frameSteps.length}
+        text={
+          view === 'done'
+            ? t('setup.progress.complete')
+            : t('setup.progress.step')
+                .replace('{n}', String(framePosition))
+                .replace('{total}', String(frameSteps.length))
+                .replace('{step}', frameSteps[at]?.label ?? '')
+        }
+        exit={{ href: `/${locale}/overview`, label: t('setup.progress.exit') }}
+      />
+    </SetupFrame>
   );
 }

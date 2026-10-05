@@ -280,6 +280,14 @@ const rowFor = (page: Page, fileName: string) =>
   page.locator('li[data-status]').filter({ hasText: fileName });
 
 /** Reload until the source reaches `status` — the worker runs in its own process. */
+/** "Review one by one" — a client toggle, pressed until the review card is there. */
+async function openReview(page: Page): Promise<void> {
+  await expect(async () => {
+    await page.getByTestId('review-one-by-one').click();
+    await expect(page.getByTestId('intel-card')).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
+}
+
 async function waitForStatus(
   page: Page,
   locale: 'en' | 'ar',
@@ -390,10 +398,11 @@ test.describe('Item 5 · uploads — every format through the worker', () => {
       await expect(row.locator('[data-testid^="source-pending-"]').first()).toBeVisible();
       await noSeriousViolations(page, '[data-testid="sources-card"]');
 
-      // The proposals wait in the ONE review inbox.
+      // The proposals wait in the ONE review inbox, behind the To review banner.
       await page.goto(`${DASHBOARD_BASE_URL}/${locale}/brand-brain`);
-      await expect(page.getByTestId('intel-card')).toBeVisible();
+      await expect(page.getByTestId('review-inbox-count')).toBeVisible();
       await expect(page.getByTestId('review-inbox-count')).not.toHaveText('0');
+      await openReview(page);
     });
   }
 });
@@ -543,8 +552,9 @@ test.describe('Item 5 · Read again, Remove with Keep or Drop, and re-upload', (
     const dialog = page.getByTestId(`source-remove-dialog-${id}`);
     await expect(dialog).toBeVisible();
     await noSeriousViolations(page, `[data-testid="source-remove-dialog-${id}"]`);
-    await expect(page.getByTestId(`source-remove-keep-${id}`)).toBeChecked();
-    await page.getByTestId(`source-remove-confirm-${id}`).click();
+    // The prototype's inline confirmation: Keep is the first choice, and focused.
+    await expect(page.getByTestId(`source-remove-keep-${id}`)).toBeFocused();
+    await page.getByTestId(`source-remove-keep-${id}`).click();
     await page.waitForURL(/ok=SOURCE_REMOVED/);
     await expect(rowFor(page, 'keep.txt')).toHaveCount(0);
 
@@ -610,8 +620,7 @@ test.describe('Item 5 · Read again, Remove with Keep or Drop, and re-upload', (
 
     await page.goto(sourcesUrl('en'));
     await page.getByTestId(`source-remove-${id}`).click();
-    await page.getByTestId(`source-remove-drop-${id}`).check();
-    await page.getByTestId(`source-remove-confirm-${id}`).click();
+    await page.getByTestId(`source-remove-drop-${id}`).click();
     await page.waitForURL(/ok=SOURCE_REMOVED_DROPPED/);
 
     const after = await withPlatformPrisma(async (prisma) => ({
@@ -660,7 +669,7 @@ test.describe('Item 5 · Read again, Remove with Keep or Drop, and re-upload', (
     await page.getByTestId(`source-remove-${id}`).focus();
     await page.keyboard.press('Enter');
     await expect(page.getByTestId(`source-remove-dialog-${id}`)).toBeVisible();
-    await expect(page.getByTestId(`source-remove-keep-${id}`)).toBeChecked();
+    await expect(page.getByTestId(`source-remove-keep-${id}`)).toBeFocused();
     await expect(page.getByTestId(`source-remove-drop-${id}`)).toBeVisible();
     // Escape closes it and nothing was removed.
     await page.keyboard.press('Escape');
@@ -766,7 +775,8 @@ test.describe('D11 · Performance — Save as learning', () => {
     const target = await world('learning', { roleKey: 'analyst' });
     const insightId = await seedPerformance(target);
     await enter(page, target);
-    const analytics = `${DASHBOARD_BASE_URL}/en/analytics?brand=${target.brandId}`;
+    // The finding's card is on the Insights tab, as the prototype draws it.
+    const analytics = `${DASHBOARD_BASE_URL}/en/analytics?brand=${target.brandId}&view=insights`;
     // A SECOND TAB opened now keeps the button after the first tab saves: the
     // stale form re-posts the same insight, which must add nothing.
     const stale = await page.context().newPage();
@@ -805,7 +815,7 @@ test.describe('D11 · Performance — Save as learning', () => {
     // A member without brand_brain.edit gets no button.
     await page.context().clearCookies();
     await enter(page, target, { as: 'member' });
-    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?brand=${target.brandId}`);
+    await page.goto(analytics);
     await expect(page.getByTestId(`insight-save-learning-${insightId}`)).toHaveCount(0);
   });
 });
@@ -844,10 +854,11 @@ test.describe('D12 · Home — facts waiting for review and what is missing', ()
       await expect(page.getByTestId('new-item-body-en')).toHaveAttribute('placeholder', /.+/);
       expect(question.length).toBeGreaterThan(0);
 
-      // The review row opens the inbox.
+      // The review row opens Brand Brain, where the banner opens the review.
       await page.goto(`${DASHBOARD_BASE_URL}/${locale}/overview`);
       await page.getByTestId('attention-action-brand-brain-review-waiting').click();
-      await expect(page.getByTestId('intel-card')).toBeVisible();
+      await expect(page.getByTestId('review-banner')).toBeVisible();
+      await openReview(page);
 
       // A copywriter (edit, no review) sees the missing row and no review row.
       await page.context().clearCookies();

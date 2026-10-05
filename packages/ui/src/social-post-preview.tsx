@@ -217,10 +217,14 @@ function MediaFrame({
             textAlign: 'center',
           }}
         >
-          <ImageIcon size={28} />
-          <span style={{ ...typographyTokens.caption, fontWeight: 600 }}>
-            {labels.missingMedia}
-          </span>
+          {labels.missingAction ?? (
+            <>
+              <ImageIcon size={28} />
+              <span style={{ ...typographyTokens.caption, fontWeight: 600 }}>
+                {labels.missingMedia}
+              </span>
+            </>
+          )}
         </div>
         {children}
       </div>

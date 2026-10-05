@@ -1,7 +1,6 @@
 import {
   Card,
   Field,
-  SettingsSplit,
   buttonStyle,
   colorTokens,
   inputStyle,
@@ -20,7 +19,7 @@ import {
   requireWorkspace,
 } from '../../../../server/customer-context';
 import { brandContextFor } from '../../../../server/brand-context';
-import { settingsNavItems } from '../../../../server/settings-nav';
+import { SettingsFrame } from '../../../../components/settings-frame';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import {
@@ -66,8 +65,8 @@ export default async function SecuritySettingsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale);
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale);
+  const t = translator(messageLocale);
 
   const policy = await withoutTenantContext(
     async (db) => new TenantOnboardingPolicySource(db, currentEnvironment()).load(),
@@ -135,10 +134,11 @@ export default async function SecuritySettingsPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('security.title')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
-      customerName={customer.email}
+      customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
@@ -146,18 +146,7 @@ export default async function SecuritySettingsPage({
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
 
-      <SettingsSplit
-        navLabel={t('settings.navLabel')}
-        items={settingsNavItems({
-          locale,
-          permissionKeys: workspace.permissionKeys,
-          selected: 'security',
-        }).map((item) => ({
-          href: item.href,
-          label: t(item.labelKey),
-          selected: item.selected,
-        }))}
-      >
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="security">
         <Card testId="mfa-card">
           <div style={{ display: 'grid', gap: spacingTokens.md }}>
             <div>
@@ -441,7 +430,7 @@ export default async function SecuritySettingsPage({
             </div>
           </form>
         </Card>
-      </SettingsSplit>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

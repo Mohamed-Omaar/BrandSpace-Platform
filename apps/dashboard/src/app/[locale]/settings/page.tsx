@@ -1,14 +1,5 @@
-import {
-  Card,
-  DraftForm,
-  Field,
-  SettingsSplit,
-  buttonStyle,
-  colorTokens,
-  inputStyle,
-  spacingTokens,
-  typographyTokens,
-} from '@brandspace/ui';
+import Link from 'next/link';
+import { Card, DraftForm, spacingTokens } from '@brandspace/ui';
 import { TenantOnboardingPolicySource } from '@brandspace/onboarding';
 import {
   EGYPT_CITY_CODES,
@@ -28,12 +19,11 @@ import { saveBarLabels, weekdayNames } from '../../../server/save-bar-labels';
 import { GeneralFields } from './general-fields';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
-import { settingsNavItems } from '../../../server/settings-nav';
+import { SettingsFrame } from '../../../components/settings-frame';
 import { inContentStudio } from '../../../server/content-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { saveSettingsAction } from './actions';
-import { saveRetentionAction } from '../content/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,8 +37,9 @@ export default async function SettingsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/settings');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
 
@@ -111,20 +102,6 @@ export default async function SettingsPage({
     websiteUrl: soleBrand?.websiteUrl ?? null,
   };
 
-  /*
-   * D-117 — the customer's own retention control, and its FLOOR.
-   *
-   * The floor is read from the activated `content` configuration rather than
-   * written here, so an owner who raises it raises what this form accepts
-   * (CLAUDE.md §2.2). The form is only a representation: the value is enforced
-   * server-side by `saveRetentionAction`, by `resolveContentExpiry` when
-   * content is written, and by a CHECK constraint in the database.
-   */
-  const retentionFloor = await inContentStudio(
-    workspace.workspaceId,
-    async ({ policy }) => (await policy()).retention.minCustomerRetentionDays,
-  );
-
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
@@ -135,10 +112,11 @@ export default async function SettingsPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('settings.title')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
-      customerName={customer.email}
+      customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
@@ -152,18 +130,7 @@ export default async function SettingsPage({
         Phase 2C does not have, and a row that leads nowhere is a placeholder
         link, not fidelity.
       */}
-      <SettingsSplit
-        navLabel={t('settings.navLabel')}
-        items={settingsNavItems({
-          locale,
-          permissionKeys: workspace.permissionKeys,
-          selected: 'settings',
-        }).map((item) => ({
-          href: item.href,
-          label: t(item.labelKey),
-          selected: item.selected,
-        }))}
-      >
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="settings">
         <Card testId="settings-card">
           {/*
             A9 / G1 (D-330) — THE GENERAL FIELDS, UNDER THE SAVE BAR.
@@ -205,6 +172,7 @@ export default async function SettingsPage({
                 localeHint: t('settings.hint.locale'),
                 localeAr: t('brandProfile.localeAr'),
                 localeEn: t('brandProfile.localeEn'),
+                more: t('studio.moreOptions'),
                 country: t('settings.country'),
                 countryHint: t('settings.hint.country'),
                 timezone: t('settings.timezone'),
@@ -231,57 +199,16 @@ export default async function SettingsPage({
         </Card>
 
         {/*
-          THE D-117 CONTROL, IN ITS OWN CARD.
-
-          Separate from the workspace form on purpose: it is a different kind of
-          promise. Renaming a workspace is cosmetic; shortening a retention
-          window deletes the customer's own generated content on a schedule, so
-          it gets its own explanation, its own save and its own audit event —
-          and the sentence naming what it can NEVER delete is part of the
-          control rather than a footnote somewhere else.
+          The prototype's note under General: what this name is for, and where
+          the brand's look and voice live.
         */}
-        <Card testId="retention-card">
-          <form action={saveRetentionAction} style={{ display: 'grid', gap: spacingTokens.md }}>
-            <input type="hidden" name="locale" value={locale} />
-            <div>
-              <b>{t('content.retention.title')}</b>
-              <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
-                {t('content.retention.body')}
-              </p>
-            </div>
-
-            <Field label={t('content.retention.label')} htmlFor="retentionDays">
-              <input
-                className="bs-control"
-                id="retentionDays"
-                name="retentionDays"
-                type="number"
-                inputMode="numeric"
-                min={retentionFloor}
-                step={1}
-                data-testid="retention-days"
-                defaultValue={row.aiContentRetentionDays ?? ''}
-                placeholder={t('content.retention.placeholder')}
-                aria-describedby="retention-note"
-                style={inputStyle()}
-              />
-            </Field>
-
-            <p
-              id="retention-note"
-              style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
-            >
-              {t('content.retention.min')}: {retentionFloor}. {t('content.retention.excluded')}
-            </p>
-
-            <div>
-              <button type="submit" data-testid="retention-save" style={buttonStyle('primary')}>
-                {t('content.retention.save')}
-              </button>
-            </div>
-          </form>
-        </Card>
-      </SettingsSplit>
+        <div className="bsp-sg-note" data-testid="settings-identity-note">
+          <span>{t('settings.bizNote')}</span>
+          <Link href={`/${locale}/brand-brain?tab=look`} className="bsp-btn bsp-sm bsp-sec">
+            {t('settings.toIdentity')} →
+          </Link>
+        </div>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

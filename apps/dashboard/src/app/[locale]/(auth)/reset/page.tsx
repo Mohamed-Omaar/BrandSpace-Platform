@@ -21,7 +21,7 @@ export default async function ResetRequestPage({
   const t = translator(locale);
 
   return (
-    <AuthCard locale={locale} heading={t('reset.title')}>
+    <AuthCard locale={locale} eyebrow={t('auth.eyebrow.password')} heading={t('reset.title')}>
       <form action={requestPasswordResetAction}>
         <input type="hidden" name="locale" value={locale} />
         <label htmlFor="email" style={{ display: 'block', ...typographyTokens.label }}>

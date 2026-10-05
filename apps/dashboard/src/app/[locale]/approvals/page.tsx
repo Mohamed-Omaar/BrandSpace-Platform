@@ -9,7 +9,7 @@ import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { mediaForVariants } from '../../../server/media-picker';
-import { messages, statusMessage, translator } from '../../../i18n/messages';
+import { statusMessage, translator, dictionaryFor } from '../../../i18n/messages';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { NotesPanel } from '../../../components/notes-panel';
 import { previewFormatFor } from '../../../server/composer-editor';
@@ -58,8 +58,9 @@ export default async function ApprovalsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/approvals');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
 
@@ -156,8 +157,14 @@ export default async function ApprovalsPage({
        * request for another brand's review gets the same not-found a
        * non-existent id would give.
        */
-      const subject = reviewId
-        ? await service.reviewSubject({ approvalId: reviewId, actor }).catch(() => null)
+      /*
+       * D-468 — A QUEUE OPENS ON ITS FIRST REVIEW, as the prototype's does: with
+       * no review asked for, "Waiting for me" shows the first one it lists.
+       */
+      const subjectId =
+        reviewId ?? (tab === 'forMe' && mayApprove ? (pending[0]?.id ?? null) : null);
+      const subject = subjectId
+        ? await service.reviewSubject({ approvalId: subjectId, actor }).catch(() => null)
         : null;
 
       const userIds = [
@@ -289,7 +296,7 @@ export default async function ApprovalsPage({
     : new Map<string, { id: string; name: string; kind: string; previewToken: string | null }>();
 
   // Only the preview's own keys cross to the client, not the whole dictionary.
-  const dictionary = previewDictionary(locale);
+  const dictionary = previewDictionary(messageLocale);
   const reviewView: ReviewSubjectView | null = review
     ? {
         approvalId: review.approvalId,
@@ -355,6 +362,7 @@ export default async function ApprovalsPage({
       brandContext={brandContext}
       locale={locale}
       activePath="/approvals"
+      eyebrow={t('nav.group.publish')}
       heading={t('approvals.title')}
       description={t('approvals.subtitle')}
       workspaceName={workspace.workspaceName}
@@ -392,7 +400,7 @@ export default async function ApprovalsPage({
 
 /** The keys `previewLabels` reads, in this locale — and nothing else. */
 function previewDictionary(locale: string): Record<string, string> {
-  const all = messages[locale === 'ar' ? 'ar' : 'en'] as Record<string, string>;
+  const all = dictionaryFor(locale) as Record<string, string>;
   return Object.fromEntries(
     Object.entries(all).filter(
       ([key]) =>

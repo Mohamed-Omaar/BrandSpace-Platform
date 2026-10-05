@@ -52,8 +52,11 @@ test.describe('§8.2 · dragging a post with a mouse', () => {
     await enter(page, workspace.slug);
     await openCalendar(page, month);
 
-    // A plain click is not a drag: it still opens the post.
+    // A plain click is not a drag: it still opens the post — its popover
+    // (D-468), whose Details is the post drawer.
     await chipOn(page, day(8), post.slotId).click();
+    await expect(page.getByTestId(`calendar-post-pop-${post.slotId}`)).toBeVisible();
+    await page.getByTestId('calendar-pop-details').click();
     await expect(page.getByTestId('reschedule-time')).toHaveValue('12:00');
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('reschedule-time')).toHaveCount(0);

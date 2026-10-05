@@ -10,6 +10,7 @@ import {
   type SearchableOption,
 } from '@brandspace/ui';
 import { IndustryField } from '../../../components/industry-field';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 import { timeZoneAfterCountryChange } from '../../../components/time-zone-suggestion';
 
 /**
@@ -32,6 +33,8 @@ export interface GeneralFieldsLabels {
   readonly localeHint: string;
   readonly localeAr: string;
   readonly localeEn: string;
+  /** "More options" — where the product's Locale sits (review of #67). */
+  readonly more: string;
   readonly country: string;
   readonly countryHint: string;
   readonly timezone: string;
@@ -121,9 +124,33 @@ export function GeneralFields({
     return () => controller.abort();
   }, [timezone, saved.timezone]);
 
+  /*
+   * THE PROTOTYPE'S GENERAL SECTION (`Main.dc.html` lines 1341–1345, review of
+   * #67): two columns — Business name and City, Website and Industry, Country
+   * and Time zone — then "Week starts on" as the segmented switch across both.
+   * The product's language field closes the grid; a field's helper line stays
+   * only where the prototype draws one (industry, country, time zone).
+   */
+  const weekMain = [6, 0, 1];
+  const weekOther = weekdays.map((_, index) => index).filter((index) => !weekMain.includes(index));
+  const [weekStart, setWeekStart] = useState(saved.weekStartsOn);
+  const weekRadio = (index: number) => (
+    <label key={index} className="bsp-sg-wk" data-on={weekStart === index ? 'true' : undefined}>
+      <input
+        type="radio"
+        name="weekStartsOn"
+        value={index}
+        checked={weekStart === index}
+        onChange={() => setWeekStart(index)}
+        data-testid={`settings-week-start-${index}`}
+      />
+      {weekdays[index]}
+    </label>
+  );
+
   return (
-    <>
-      <Field label={labels.name} htmlFor="name" hint={labels.nameHint}>
+    <div className="bsp-sg-grid">
+      <Field label={labels.name} htmlFor="name">
         <input
           className="bs-control"
           id="name"
@@ -131,81 +158,18 @@ export function GeneralFields({
           defaultValue={saved.name}
           required
           maxLength={120}
+          aria-describedby="name-hint"
           style={inputStyle()}
         />
+        {/* Review of #67 — the prototype draws no line under this field; what it
+            changes is still said, to assistive technology. */}
+        <span id="name-hint" className="bs-sr-only">
+          {labels.nameHint}
+        </span>
       </Field>
 
-      <div className="bs-form-row">
-        <Field label={labels.country} htmlFor="country" hint={labels.countryHint}>
-          <SearchableSelect
-            id="country"
-            name="country"
-            options={countries}
-            value={country}
-            onChange={(next) => {
-              // Typing clears the choice before a new one is picked; the zone is
-              // judged against the last country actually CHOSEN, not that blank.
-              setCountry(next);
-              if (next === '') return;
-              setTimezone((current) =>
-                timeZoneAfterCountryChange({
-                  previousCountry: lastCountry,
-                  nextCountry: next,
-                  currentZone: current,
-                  suggestions: suggestedZones,
-                }),
-              );
-              setLastCountry(next);
-            }}
-            placeholder={labels.choose}
-            noResultsLabel={labels.noResults}
-            required
-            testId="settings-country"
-          />
-        </Field>
-
-        <Field label={labels.timezone} htmlFor="timezone" hint={labels.timezoneHint}>
-          <SearchableSelect
-            id="timezone"
-            name="timezone"
-            options={timezones}
-            value={timezone}
-            onChange={setTimezone}
-            placeholder={labels.choose}
-            noResultsLabel={labels.noResults}
-            required
-            testId="settings-timezone"
-          />
-        </Field>
-      </div>
-
-      {preview && (preview.kept > 0 || preview.unplanned.length > 0) ? (
-        <Banner tone="warning" testId="settings-timezone-warning">
-          <div style={{ display: 'grid', gap: spacingTokens.xs }}>
-            {preview.kept > 0 ? (
-              <span>{labels.timezoneKept.replace('{count}', String(preview.kept))}</span>
-            ) : null}
-            {preview.unplanned.length > 0 ? (
-              <>
-                <span>{labels.timezoneUnplanned}</span>
-                <ul
-                  style={{ margin: 0, paddingInlineStart: spacingTokens.md }}
-                  data-testid="settings-timezone-unplanned"
-                >
-                  {preview.unplanned.map((post) => (
-                    <li key={`${post.title}-${post.localTime}`}>
-                      <bdi>{post.title}</bdi> — {post.localTime.replace('T', ' ')}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
-          </div>
-        </Banner>
-      ) : null}
-
       {country === 'EG' ? (
-        <Field label={labels.city} htmlFor="city" hint={labels.cityHint}>
+        <Field label={labels.city} htmlFor="city">
           <SearchableSelect
             id="city"
             name="city"
@@ -215,68 +179,156 @@ export function GeneralFields({
             noResultsLabel={labels.noResults}
             testId="settings-city"
           />
+          <span className="bs-sr-only">{labels.cityHint}</span>
         </Field>
       ) : null}
-
-      <div className="bs-form-row">
-        <Field label={labels.locale} htmlFor="defaultLocale" hint={labels.localeHint}>
-          <select
-            className="bs-control bs-select"
-            id="defaultLocale"
-            name="defaultLocale"
-            defaultValue={saved.defaultLocale}
-            style={inputStyle()}
-          >
-            <option value="AR">{labels.localeAr}</option>
-            <option value="EN">{labels.localeEn}</option>
-          </select>
-        </Field>
-
-        <Field label={labels.weekStart} htmlFor="weekStartsOn" hint={labels.weekStartHint}>
-          <select
-            className="bs-control bs-select"
-            id="weekStartsOn"
-            name="weekStartsOn"
-            data-testid="settings-week-start"
-            defaultValue={String(saved.weekStartsOn)}
-            style={inputStyle()}
-          >
-            {weekdays.map((day, index) => (
-              <option key={index} value={index}>
-                {day}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
 
       {brand ? (
         <>
           <input type="hidden" name="brandId" value={brand.brandId} />
-          <div className="bs-form-row">
-            <IndustryField
-              industries={industries}
-              saved={brand.industry}
-              labels={labels}
-              idPrefix=""
-              testIdPrefix="settings"
+          <Field label={labels.website} htmlFor="websiteUrl">
+            <input
+              className="bs-control"
+              id="websiteUrl"
+              name="websiteUrl"
+              type="url"
+              inputMode="url"
+              data-testid="settings-website"
+              defaultValue={brand.websiteUrl ?? ''}
+              maxLength={2048}
+              aria-describedby="websiteUrl-hint"
+              style={inputStyle()}
             />
-            <Field label={labels.website} htmlFor="websiteUrl" hint={labels.websiteHint}>
-              <input
-                className="bs-control"
-                id="websiteUrl"
-                name="websiteUrl"
-                type="url"
-                inputMode="url"
-                data-testid="settings-website"
-                defaultValue={brand.websiteUrl ?? ''}
-                maxLength={2048}
-                style={inputStyle()}
-              />
-            </Field>
-          </div>
+            <span id="websiteUrl-hint" className="bs-sr-only">
+              {labels.websiteHint}
+            </span>
+          </Field>
+          <IndustryField
+            industries={industries}
+            saved={brand.industry}
+            labels={labels}
+            idPrefix=""
+            testIdPrefix="settings"
+          />
         </>
       ) : null}
-    </>
+
+      <Field label={labels.country} htmlFor="country" hint={labels.countryHint}>
+        <SearchableSelect
+          id="country"
+          name="country"
+          options={countries}
+          value={country}
+          onChange={(next) => {
+            // Typing clears the choice before a new one is picked; the zone is
+            // judged against the last country actually CHOSEN, not that blank.
+            setCountry(next);
+            if (next === '') return;
+            setTimezone((current) =>
+              timeZoneAfterCountryChange({
+                previousCountry: lastCountry,
+                nextCountry: next,
+                currentZone: current,
+                suggestions: suggestedZones,
+              }),
+            );
+            setLastCountry(next);
+          }}
+          placeholder={labels.choose}
+          noResultsLabel={labels.noResults}
+          required
+          testId="settings-country"
+        />
+      </Field>
+
+      <Field label={labels.timezone} htmlFor="timezone" hint={labels.timezoneHint}>
+        <SearchableSelect
+          id="timezone"
+          name="timezone"
+          options={timezones}
+          value={timezone}
+          onChange={setTimezone}
+          placeholder={labels.choose}
+          noResultsLabel={labels.noResults}
+          required
+          testId="settings-timezone"
+        />
+      </Field>
+
+      {preview && (preview.kept > 0 || preview.unplanned.length > 0) ? (
+        <div className="bsp-sg-span">
+          <Banner tone="warning" testId="settings-timezone-warning">
+            <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+              {preview.kept > 0 ? (
+                <span>{labels.timezoneKept.replace('{count}', String(preview.kept))}</span>
+              ) : null}
+              {preview.unplanned.length > 0 ? (
+                <>
+                  <span>{labels.timezoneUnplanned}</span>
+                  <ul
+                    style={{ margin: 0, paddingInlineStart: spacingTokens.md }}
+                    data-testid="settings-timezone-unplanned"
+                  >
+                    {preview.unplanned.map((post) => (
+                      <li key={`${post.title}-${post.localTime}`}>
+                        <bdi>{post.title}</bdi> — {post.localTime.replace('T', ' ')}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+          </Banner>
+        </div>
+      ) : null}
+
+      {/*
+        "WEEK STARTS ON" — the prototype's `.seg` of Saturday, Sunday and
+        Monday. The product lets a week start on any day, so the other days
+        are the same choice under "⋯".
+      */}
+      <div className="bsp-sg-span bsp-sg-wkrow" role="radiogroup" aria-label={labels.weekStart}>
+        <span className="bsp-lbl">{labels.weekStart}</span>
+        <span className="bs-sr-only">{labels.weekStartHint}</span>
+        <div className="bsp-sg-wkline">
+          <div className="bsp-seg" data-testid="settings-week-start">
+            {weekMain.map(weekRadio)}
+          </div>
+          {weekOther.length > 0 ? (
+            <MoreDisclosure label={labels.weekStart} testId="settings-week-more" align="start">
+              <div className="bsp-seg bsp-sg-wkmore">{weekOther.map(weekRadio)}</div>
+            </MoreDisclosure>
+          ) : null}
+        </div>
+      </div>
+
+      {/*
+        Review of #67 — the prototype's General ends at "Week starts on". The
+        workspace's Locale, which it does not draw, is kept under "More
+        options"; a closed disclosure still submits it with the form.
+      */}
+      <div className="bsp-sg-span">
+        <MoreDisclosure
+          label={labels.more}
+          testId="settings-more"
+          align="start"
+          summary={labels.more}
+          summaryClassName="bsp-chip bsp-fdis-chip"
+        >
+          <Field label={labels.locale} htmlFor="defaultLocale" hint={labels.localeHint}>
+            <select
+              className="bs-control bs-select"
+              id="defaultLocale"
+              name="defaultLocale"
+              defaultValue={saved.defaultLocale}
+              style={inputStyle()}
+            >
+              <option value="AR">{labels.localeAr}</option>
+              <option value="EN">{labels.localeEn}</option>
+            </select>
+          </Field>
+        </MoreDisclosure>
+      </div>
+    </div>
   );
 }

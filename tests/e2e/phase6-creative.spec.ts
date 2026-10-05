@@ -33,6 +33,8 @@ test('the studio names the brand, its identity notes and a way to change them', 
 }) => {
   await signIn(page);
   await page.goto(`${DASHBOARD_BASE_URL}/en/creative`);
+  // Review of #67 — what the image draws on opens from the purple line.
+  await page.getByTestId('creative-uses').click();
   const identity = page.getByTestId('creative-identity');
   await expect(identity).toContainText(/What .+ images draw on/);
   // Counted from Brand Brain, or said plainly that there are none — never a score.

@@ -75,7 +75,7 @@ export function SegmentPill({ selector }: { readonly selector: string }) {
     onSelection.observe(box, {
       subtree: true,
       attributes: true,
-      attributeFilter: ['aria-current', 'aria-pressed', 'aria-selected'],
+      attributeFilter: ['aria-current', 'aria-pressed', 'aria-selected', 'aria-checked'],
     });
     const onResize = new ResizeObserver(() => place(false));
     onResize.observe(box);

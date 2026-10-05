@@ -2,7 +2,6 @@ import {
   Card,
   DraftForm,
   SectionHeader,
-  SettingsSplit,
   colorTokens,
   spacingTokens,
   typographyTokens,
@@ -11,7 +10,7 @@ import type { ResolvedApprovalPolicy } from '@brandspace/content';
 import { requireWorkspacePage } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { brandContextFor, listAccessibleBrands } from '../../../../server/brand-context';
-import { settingsNavItems } from '../../../../server/settings-nav';
+import { SettingsFrame } from '../../../../components/settings-frame';
 import { inContentStudio } from '../../../../server/content-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
@@ -47,8 +46,9 @@ export default async function ApprovalSettingsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/settings/approvals');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
 
@@ -82,24 +82,18 @@ export default async function ApprovalSettingsPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('settings.approvals')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
-      customerName={customer.email}
+      customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
       {ok && statusMessage(ok, locale) && (
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
-      <SettingsSplit
-        navLabel={t('settings.navLabel')}
-        items={settingsNavItems({
-          locale,
-          permissionKeys: workspace.permissionKeys,
-          selected: 'approvals',
-        }).map((item) => ({ href: item.href, label: t(item.labelKey), selected: item.selected }))}
-      >
+      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="approvals">
         <Card testId="approvals-policy">
           <SectionHeader
             title={t('approvals.policyTitle')}
@@ -154,7 +148,7 @@ export default async function ApprovalSettingsPage({
             </ul>
           )}
         </Card>
-      </SettingsSplit>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

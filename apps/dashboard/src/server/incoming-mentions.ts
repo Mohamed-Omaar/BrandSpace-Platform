@@ -7,6 +7,7 @@ import { optionalMessage } from '../i18n/messages';
 import { inContentStudio } from './content-context';
 import { noteThreadHref } from './note-links';
 import { shellSession } from './topbar-counts';
+import { requestMessageLocale } from './message-locale';
 
 /**
  * MO10 (Phase 2B-2b, owner option A) — THE INCOMING MENTIONS THE SHELL HANDS
@@ -46,8 +47,10 @@ export const incomingMentions = cache(
             })
           ).map((member) => [member.userId, member.user.name?.trim() || member.user.email]),
         );
-        const someone = optionalMessage(locale, 'notifications.feed.someone') ?? '';
-        const template = optionalMessage(locale, 'notifications.feed.mentioned') ?? '{name}';
+        const someone =
+          optionalMessage(requestMessageLocale(locale), 'notifications.feed.someone') ?? '';
+        const template =
+          optionalMessage(requestMessageLocale(locale), 'notifications.feed.mentioned') ?? '{name}';
         return mentions.map((mention) => {
           const name = authors.get(mention.authorUserId) ?? someone;
           return {

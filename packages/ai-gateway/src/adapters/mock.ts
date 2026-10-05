@@ -1,4 +1,4 @@
-import { assertNotProduction } from '@brandspace/shared';
+import { assertNotProduction, isInternalRecordText } from '@brandspace/shared';
 import { createHash } from 'node:crypto';
 
 import type {
@@ -266,7 +266,10 @@ function localizedFromMaterial(material: string, fallback: string): { ar: string
     .replace(/[0-9\u0660-\u0669]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  const text = clean === '' ? fallback : clean.slice(0, 160);
+  // Review of #67 — the material can be the platform's own evidence records;
+  // copying one out is the machine text the grounding gate refuses.
+  const text =
+    clean === '' || isInternalRecordText(clean.slice(0, 160)) ? fallback : clean.slice(0, 160);
   return { ar: text, en: text };
 }
 

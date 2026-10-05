@@ -34,8 +34,8 @@ export const dynamic = 'force-dynamic';
  */
 export default async function PermissionsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale);
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale);
+  const t = translator(messageLocale);
 
   const workspacePermissions = ALL_PERMISSIONS.filter((p) => p.minScope !== 'platform');
 
@@ -59,7 +59,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('perms.title')}
+      heading={t('nav.settings')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={customer.email}
@@ -73,7 +73,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
         <SectionHeader
           eyebrow={t('perms.eyebrow')}
           title={t('perms.rolesTitle')}
-          description={t('perms.rolesHint')}
+          description={t('settings.p.subtitle')}
         />
         <div style={{ marginBlockEnd: spacingTokens.md }}>
           <ContentGrid min="15rem" testId="role-grid">
@@ -186,7 +186,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
                         >
                           {/* P6-14 — the catalogue's description is English only; the
                             dictionary carries both, and the catalogue is the fallback. */}
-                          {optionalMessage(locale, `perms.desc.${p.key}`) ?? p.description}
+                          {optionalMessage(messageLocale, `perms.desc.${p.key}`) ?? p.description}
                         </span>
                       </td>
                       <td style={customerTdStyle()}>

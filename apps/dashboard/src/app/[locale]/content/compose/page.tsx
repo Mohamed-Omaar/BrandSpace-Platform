@@ -62,7 +62,7 @@ import {
   repurposeBrief,
 } from '../../../../server/create-post';
 import { GOAL_ITEM_KEY, storedGoal } from '../../../../server/setup-wizard-state';
-import { CreateEntry, IdeaPicker, RepurposePicker, type IdeaOption } from './create-entry';
+import { IdeaPicker, RepurposePicker, type IdeaOption } from './create-entry';
 import { CONTENT_TYPES } from '../content-types';
 import {
   cancelReviewAction,
@@ -113,8 +113,9 @@ export default async function ComposePage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const translate = translator(locale);
   const access = await requireWorkspacePage(locale, '/content/compose');
+  const { messageLocale } = access.session;
+  const translate = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
 
@@ -150,7 +151,7 @@ export default async function ComposePage({
    * reader arrived with — a campaign — travels with every choice.
    */
   const mode = itemId ? null : createModeFrom(single('mode'));
-  const tk = (key: string): string => optionalMessage(locale, key) ?? key;
+  const tk = (key: string): string => optionalMessage(messageLocale, key) ?? key;
   /*
    * G6 (D-329) — OPENED FROM A ★ DAY ON THE CALENDAR. A date shape, not in the
    * past for the workspace, and — when that day is one of the workspace's
@@ -393,6 +394,7 @@ export default async function ComposePage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
+      eyebrow={translate('nav.group.create')}
       heading={translate('content.composer.title')}
       description={translate('content.subtitle')}
       activePath="/content"
@@ -405,23 +407,16 @@ export default async function ComposePage({
     </WorkspaceShell>
   );
 
-  /* ------------------------------------------------ §17 — the entry */
-  if (!itemId && mode === null) {
-    return shell(
-      <CreateEntry
-        locale={locale}
-        t={tk}
-        carry={carry}
-        planned={
-          plannedDate
-            ? (plannedFor ? tk('create.plannedFor') : tk('create.plannedDate'))
-                .replace('{name}', plannedFor ?? '')
-                .replace('{date}', plannedDate.date)
-            : null
-        }
-      />,
-    );
-  }
+  /*
+   * §17 — THE ENTRY IS THE STUDIO (review of #67). The prototype's "New post"
+   * opens the Studio itself, where writing it yourself and having AI write it
+   * sit side by side; starting from an idea or repurposing a post are its "Or
+   * start from" chips, and each still opens its own picker (`?mode=`).
+   */
+  const startFrom = {
+    idea: `/${locale}/content/compose?${new URLSearchParams({ ...carry, mode: 'idea' }).toString()}`,
+    repurpose: `/${locale}/content/compose?${new URLSearchParams({ ...carry, mode: 'repurpose' }).toString()}`,
+  };
 
   const scope = brandIdQueryFilter({
     brandId: composingBrandId ?? undefined,
@@ -623,7 +618,7 @@ export default async function ComposePage({
         const shorter = /^shorter:([a-z0-9_-]+)$/.exec(key);
         const tone = /^tone:(friendly|professional):([a-z0-9_-]+)$/.exec(key);
         const platform = (value: string) =>
-          optionalMessage(locale, `content.platform.${value}`) ?? value;
+          optionalMessage(messageLocale, `content.platform.${value}`) ?? value;
         if (shorter) {
           return [
             {
@@ -1007,8 +1002,11 @@ export default async function ComposePage({
       flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
-      heading={translate(draft ? 'content.composer.editTitle' : 'content.composer.title')}
-      description={translate('content.subtitle')}
+      eyebrow={translate('nav.group.create')}
+      // The prototype's Studio is "New post" whether the post is new or being
+      // edited — the banner above the settings says which post it is.
+      heading={translate('content.composer.title')}
+      description={translate('studio.subtitle')}
       activePath="/content"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -1037,6 +1035,7 @@ export default async function ComposePage({
         now={now.getTime()}
         review={reviewFacts}
         mode={mode === 'write' ? 'write' : 'ai'}
+        startFrom={startFrom}
         initialBrief={initialBrief}
         initialCampaignId={initialCampaignId}
         sourceTitle={source?.title ?? null}
@@ -1168,6 +1167,19 @@ function translateOptional(
 
 /** The draft editor's own vocabulary (D-284). */
 const EDITOR_KEYS = [
+  // Review of #67 — the product's other AI edits, under "⋯".
+  'editor.ai.more',
+  // Review of #67, round 2 — the prototype's chip wording, bar and preview.
+  'editor.ai.translateTo',
+  'editor.ai.estimateOne',
+  'studio.addDesign',
+  'studio.reviewer',
+  'studio.reviewerAuto',
+  'studio.sendAfterSave',
+  'studio.rewriteSaved',
+  'topbar.copilot',
+  'studio.channelOff',
+  'studio.moreOptions',
   // Phase 2B-2 — carousel slide headlines (B9).
   'editor.slides.headline',
   'editor.slides.headlinePlaceholder',
@@ -1300,6 +1312,24 @@ const EDITOR_KEYS = [
 
 const COMPOSER_KEYS = [
   'create.carousel.outlineHint',
+  // Review of #67 — the Studio before the post exists.
+  'studio.briefLabel',
+  'studio.orStart',
+  'studio.briefHint',
+  'studio.aiWrite',
+  'studio.capPlaceholder',
+  'studio.toolsAfterSave',
+  'studio.designAfterSave',
+  'studio.saveDraft',
+  'studio.moreOptions',
+  'studio.moreFormats',
+  'studio.captionFirst',
+  'studio.notSaved',
+  'studio.whenAfterSave',
+  'create.mode.idea',
+  'create.mode.repurpose',
+  'editor.caption',
+  'editor.ai.label',
   // Phase 6 final — the draft editor (D-284).
   ...EDITOR_KEYS,
   // Phase 6 final — how the post was started, its goal and its format (D-283).
@@ -1383,6 +1413,24 @@ const COMPOSER_KEYS = [
   'content.preview.actions',
   // And the composer's own withdraw control, blank for the same reason.
   'content.composer.withdraw',
+  'studio.editing',
+  'studio.format',
+  'studio.postTo',
+  'studio.when',
+  'studio.whenTitle',
+  'studio.whenUnset',
+  'studio.whenDone',
+  'studio.tabWords',
+  'studio.tabVisual',
+  'studio.preview',
+  'studio.checks',
+  'studio.ready',
+  'studio.fix',
+  'studio.row.caption',
+  'studio.row.tags',
+  'studio.row.media',
+  'studio.tagsNone',
+  'studio.tagRemove',
   'content.composer.eyebrow',
   'content.composer.title',
   'content.composer.back',

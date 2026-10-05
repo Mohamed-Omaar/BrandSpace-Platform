@@ -816,6 +816,9 @@ describe('the design showcase cannot reach production', () => {
     // page. Every other file composes.
     const SHELLS = [
       'apps/dashboard/src/components/auth-card.tsx',
+      // Review of #67 — the standalone setup card is a shell like the auth card:
+      // onboarding has no app shell, and the card's heading is the page's h1.
+      'apps/dashboard/src/components/setup-frame.tsx',
       'apps/admin/src/components/platform-auth.tsx',
       // The public marketing site keeps its own shell and its own identity
       // blue: §15 scopes this revision to the dashboard and the console, and

@@ -236,7 +236,8 @@ test.describe('B11 · campaign results', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${planned}`);
     await page.getByTestId('campaign-start-now').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'CAMPAIGN_STARTED');
-    await expect(page.getByTestId('campaign-status')).toContainText('Active');
+    // Review of #67 — the prototype names a live campaign "Running".
+    await expect(page.getByTestId('campaign-status')).toContainText('Running');
     await expect(page.getByTestId('campaign-start-now')).toHaveCount(0);
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${ended}`);
@@ -297,6 +298,8 @@ test.describe('B12 + G13 (a) · automations v2', () => {
     await enter(page, ws.slug);
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+    // Edit is in the row's ⋯ menu (D-468).
+    await page.getByTestId(`automation-more-${ruleId}`).click();
     await page.getByTestId(`automation-edit-${ruleId}`).click();
     const form = page.getByTestId('automation-edit-form');
     await expect(form).toBeVisible();
@@ -310,8 +313,10 @@ test.describe('B12 + G13 (a) · automations v2', () => {
     await page.waitForURL((url) => url.searchParams.get('ok') === 'AUTOMATION_UPDATED');
     await expect(page.getByTestId('automation-rules')).toContainText('Early note');
     // Still disabled: editing never switches a rule on.
-    await expect(page.getByTestId('automation-rules')).toContainText('Disabled');
+    // Review of #67 — the prototype's state chip reads On / Off.
+    await expect(page.getByTestId('automation-rules')).toContainText('Off');
 
+    await page.getByTestId(`automation-more-${ruleId}`).click();
     await page.getByTestId(`automation-edit-${ruleId}`).click();
     await expect(page.getByTestId('automation-hour')).toHaveValue('7');
     await expect(page.getByTestId('automation-description')).toHaveValue('Before the stand-up.');
@@ -350,8 +355,8 @@ test.describe('B12 + G13 (a) · automations v2', () => {
     const ws = await ownWorkspace('auto-fields');
     await seedCampaign(ws, { name: 'Autumn', status: 'ACTIVE' });
     await enter(page, ws.slug);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
-    await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
+    await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
     const fields = page.getByTestId('automation-condition-field');
     await fields.selectOption('content.campaignId');
     await expect(page.getByTestId('automation-condition-value')).toContainText('Autumn');
@@ -406,6 +411,7 @@ test.describe('B12 + G13 (a) · automations v2', () => {
     await waiting.getByTestId('automation-skip').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'AUTOMATION_SKIPPED');
     await expect(page.getByTestId('automations-needs-you')).toHaveCount(0);
+    await page.getByTestId('automations-tab-runs').click();
     await expect(page.getByTestId('automation-runs')).toContainText('Skipped');
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);

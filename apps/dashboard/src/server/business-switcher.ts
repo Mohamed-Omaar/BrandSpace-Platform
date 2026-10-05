@@ -13,6 +13,7 @@ import { customerRoleName, translator } from '../i18n/messages';
 import { getCustomerAuth, getSessionToken, inWorkspace } from './customer-context';
 import { planDisplayName } from './plan-usage';
 import { switcherFoot, type SwitcherFoot } from './business-switcher-model';
+import { requestMessageLocale } from './message-locale';
 
 /**
  * THE RAIL'S BUSINESS SWITCHER (Q1 / Q2, D-326).
@@ -53,7 +54,7 @@ export const businessSwitcherModel = cache(
       .catch(() => null);
     if (!businesses || businesses.length === 0) return null;
 
-    const t = translator(locale);
+    const t = translator(requestMessageLocale(locale));
     const plans: readonly PlanDetail[] = await inWorkspace(currentWorkspaceId, async ({ db }) =>
       readPlanCatalogue(
         await new TenantCatalogueSource(db as unknown as PrismaClient, currentEnvironment()).load(

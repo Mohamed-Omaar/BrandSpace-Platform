@@ -420,6 +420,8 @@ test.describe('the team page performs real work', () => {
     await enterWorkspace(page, customer.workspaceSlug);
     await page.goto(`${DASHBOARD_BASE_URL}/en/members`);
 
+    // Review of #67 — the form opens from the prototype's "+ Invite".
+    await page.getByTestId('members-invite-open').click();
     await page.fill('#invite-email', invitee);
     await page.click('[data-testid="invite-submit"]');
 
@@ -455,9 +457,13 @@ test.describe('the team page performs real work', () => {
     await signIn(page, customer.email, customer.password);
     await enterWorkspace(page, customer.workspaceSlug);
     await page.goto(`${DASHBOARD_BASE_URL}/en/members`);
+    await page.getByTestId('members-invite-open').click();
     await page.fill('#invite-email', invitee);
     await page.click('[data-testid="invite-submit"]');
 
+    // Review of #67 — an invitation is a row of the team list; its revoke is
+    // under the row's "⋯".
+    await page.getByTestId(`invitation-more-${invitee}`).click();
     await page.click(`[data-testid="revoke-${invitee}"]`);
     await expect(page.getByTestId('success-banner')).toBeVisible();
     await expect(page.getByTestId(`invitation-${invitee}`)).toContainText('Revoked');
@@ -469,6 +475,8 @@ test.describe('the team page performs real work', () => {
     await enterWorkspace(page, customer.secondWorkspaceSlug);
     await page.goto(`${DASHBOARD_BASE_URL}/en/members`);
 
+    // Remove is on the member's own page (D-468), opened from their row.
+    await page.click(`[data-testid="member-manage-${customer.email}"]`);
     await page.click(`[data-testid="remove-member-${customer.email}"]`);
     await expect(page.getByTestId('error-banner')).toBeVisible();
 

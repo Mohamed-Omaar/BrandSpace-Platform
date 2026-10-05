@@ -117,11 +117,19 @@ async function seed(label: string): Promise<Seeded> {
   return { ws, campaignName, olderRuleId, runs };
 }
 
+/*
+ * D-468 — the event and the action are the prototype's grids of choices, real
+ * radio buttons; the other pickers are still selects. Both read the same way.
+ */
 const values = (page: Page, testId: string) =>
   page
     .getByTestId(testId)
-    .locator('option')
-    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    .locator('option, input[type="radio"]:not([value=""])')
+    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLInputElement).value));
+const chosen = (page: Page, testId: string) =>
+  page.getByTestId(testId).locator('input[type="radio"]:checked');
+const pick = (page: Page, testId: string, value: string) =>
+  page.getByTestId(`${testId}-${value}`).check();
 
 const COPY = {
   en: {
@@ -164,18 +172,14 @@ const COPY = {
 
 async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise<void> {
   const copy = COPY[locale];
-  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations`);
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations?new=1`);
   if (locale === 'ar') await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 
   // --- Nothing is chosen for the author, and nothing is saved unchosen ---------
-  const trigger = page.getByTestId('automation-trigger');
-  const action = page.getByTestId('automation-action');
-  await expect(trigger).toHaveValue('');
-  await expect(action).toHaveValue('');
-  await expect(trigger.locator('option').first()).toHaveText(copy.chooseTrigger);
-  await expect(action.locator('option').first()).toHaveText(copy.chooseAction);
-  // With no trigger there is no action to offer but the empty one.
-  expect(await values(page, 'automation-action')).toEqual(['']);
+  await expect(chosen(page, 'automation-trigger')).toHaveCount(0);
+  await expect(chosen(page, 'automation-action')).toHaveCount(0);
+  // With no trigger there is no action to offer.
+  expect(await values(page, 'automation-action')).toEqual([]);
   await noSeriousViolations(page);
 
   const unchosen = `G13 unchosen ${locale} ${randomUUID().slice(0, 6)}`;
@@ -184,13 +188,17 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await page.keyboard.press('Enter');
   // The browser refuses, in the page's language, and the form stays.
   const message = (testId: string) =>
-    page.getByTestId(testId).evaluate((node) => (node as HTMLSelectElement).validationMessage);
+    page
+      .getByTestId(testId)
+      .locator('input[type="radio"]:not(:disabled)')
+      .first()
+      .evaluate((node) => (node as HTMLInputElement).validationMessage);
   expect(await message('automation-trigger')).toBe(copy.chooseTrigger);
   expect(await message('automation-action')).toBe(copy.chooseAction);
   await expect(page).not.toHaveURL(/[?&](ok|error)=/);
   // A trigger alone is still not enough.
-  await trigger.selectOption('CONTENT_APPROVED');
-  await expect(action).toHaveValue('');
+  await pick(page, 'automation-trigger', 'CONTENT_APPROVED');
+  await expect(chosen(page, 'automation-action')).toHaveCount(0);
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');
   expect(await message('automation-trigger')).toBe('');
@@ -206,7 +214,6 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
 
   // --- The catalogue: the three G13 triggers, then PR 3's five timed ones -------
   expect(await values(page, 'automation-trigger')).toEqual([
-    '',
     'CONTENT_APPROVED',
     'POST_PUBLISHED',
     'POST_FAILED',
@@ -221,19 +228,17 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await expect(page.getByTestId('automation-trigger')).toContainText(copy.trigger);
 
   // --- Each trigger's actions: the compatibility table ------------------------
-  await page.getByTestId('automation-trigger').selectOption('POST_FAILED');
+  await pick(page, 'automation-trigger', 'POST_FAILED');
   // Phase 2B-3 PR 5 — the retry and the pause, which ask first, follow.
   expect(await values(page, 'automation-action')).toEqual([
-    '',
     'NOTIFY_PERSON',
     'MAKE_DRAFT_COPY',
     'RETRY_PUBLISH',
     'PAUSE_CAMPAIGN',
   ]);
   expect(await values(page, 'automation-condition-field')).toContain('publish.failureClass');
-  await page.getByTestId('automation-trigger').selectOption('CONTENT_APPROVED');
+  await pick(page, 'automation-trigger', 'CONTENT_APPROVED');
   expect(await values(page, 'automation-action')).toEqual([
-    '',
     'SCHEDULE_NEXT_FREE_SLOT',
     'NOTIFY_PERSON',
     'ADD_TO_CAMPAIGN',
@@ -245,34 +250,34 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
 
   // --- The action's own settings, and the keyboard reaches them ---------------
   // Changing the trigger kept no action for the author either.
-  await expect(action).toHaveValue('');
+  await expect(chosen(page, 'automation-action')).toHaveCount(0);
   await expect(page.getByTestId('automation-action-person')).toHaveCount(0);
   await expect(page.getByTestId('automation-action-campaign')).toHaveCount(0);
 
-  await action.selectOption('NOTIFY_PERSON');
+  await pick(page, 'automation-action', 'NOTIFY_PERSON');
   const person = page.getByTestId('automation-action-person');
   await expect(person).toBeVisible();
   await expect(page.locator('label', { has: person })).toContainText(copy.person);
   await expect(person.locator('option')).not.toHaveCount(0);
   // The picker is the next stop after the action, by Tab.
-  await action.focus();
+  await chosen(page, 'automation-action').focus();
   await page.keyboard.press('Tab');
   await expect(person).toBeFocused();
 
-  await action.selectOption('ADD_TO_CAMPAIGN');
+  await pick(page, 'automation-action', 'ADD_TO_CAMPAIGN');
   const campaign = page.getByTestId('automation-action-campaign');
   await expect(campaign).toBeVisible();
   await expect(page.locator('label', { has: campaign })).toContainText(copy.campaign);
   await expect(campaign).toContainText(seeded.campaignName);
   await expect(page.getByTestId('automation-action-person')).toHaveCount(0);
-  await action.focus();
+  await chosen(page, 'automation-action').focus();
   await page.keyboard.press('Tab');
   await expect(campaign).toBeFocused();
 
-  await action.selectOption('MAKE_DRAFT_COPY');
+  await pick(page, 'automation-action', 'MAKE_DRAFT_COPY');
   await expect(page.getByTestId('automation-action-person')).toHaveCount(0);
   await expect(page.getByTestId('automation-action-campaign')).toHaveCount(0);
-  await action.selectOption('ADD_TO_CAMPAIGN');
+  await pick(page, 'automation-action', 'ADD_TO_CAMPAIGN');
 
   // --- A rule created through the form, submitted from the keyboard -----------
   const name = `G13 ${locale} ${randomUUID().slice(0, 6)}`;
@@ -297,7 +302,9 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     copy.older,
   );
 
-  // --- Run history, in words ---------------------------------------------------
+  // --- Run history, in words, on its own tab -----------------------------------
+  await page.getByTestId('automations-tab-runs').click();
+  await expect(page.getByTestId('automation-runs')).toBeVisible();
   const { runs } = seeded;
   await expect(page.getByTestId(`automation-run-status-${runs.inReview}`)).toHaveText(copy.skipped);
   await expect(page.getByTestId(`automation-run-failure-${runs.inReview}`)).toHaveText(

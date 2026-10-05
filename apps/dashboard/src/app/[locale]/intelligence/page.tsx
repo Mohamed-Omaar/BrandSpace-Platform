@@ -86,8 +86,9 @@ export default async function IntelligencePage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/intelligence');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const session = access.session;
   const { workspace } = session;
@@ -226,7 +227,8 @@ export default async function IntelligencePage({
       locale={locale}
       heading={t('intelligence.title')}
       description={t('intelligence.subtitle')}
-      activePath="/intelligence"
+      // D-468: a finding is opened from Performance (its Insights tab).
+      activePath="/analytics"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={session.customer.name ?? session.customer.email}
@@ -403,7 +405,7 @@ export default async function IntelligencePage({
                       >
                         <NarrativeBlock
                           title={t('intelligence.why')}
-                          lines={[{ text: narrative.why, evidence: [] }]}
+                          lines={narrative.why ? [{ text: narrative.why, evidence: [] }] : []}
                           testId="narrative-why"
                           evidenceLabel={t('insights.evidence')}
                           locale={locale}

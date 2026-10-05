@@ -38,8 +38,8 @@ export default async function CheckoutReturnPage({
   const { locale, outcome } = await params;
   if (outcome !== 'success' && outcome !== 'cancelled') notFound();
 
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'billing.read');
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale, 'billing.read');
+  const t = translator(messageLocale);
   const query = await searchParams;
   const sessionParam = query['session'];
   const checkoutSessionId = typeof sessionParam === 'string' ? sessionParam : null;

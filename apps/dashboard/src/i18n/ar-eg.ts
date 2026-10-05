@@ -1,18 +1,19 @@
 import type { MessageKey } from './messages';
 
 /**
- * EGYPTIAN ARABIC — COLLECTED, NOT WIRED (owner decision D-468, 2026-10-02).
+ * EGYPTIAN ARABIC — the interface Arabic of an Egyptian workspace (D-468, D-470).
  *
  * The interface Arabic follows the workspace's country: Egypt gets the
  * prototype's Egyptian Arabic, every other country the product's formal Arabic
- * (`messages.ar`) until its own dialect is written. Until the owner approves
- * wiring that layer, `ar` stays formal Arabic and NOTHING READS THIS FILE.
+ * (`messages.ar`) until its own dialect is written. `messages.ts` lays this file
+ * over `ar` key by key (`dictionaryFor('ar-EG')`), so a key absent here falls
+ * back to the formal string. Nothing else reads it.
  *
  * WHAT IS HERE: every Arabic string of `prototype-2026-09-27` that differs from
  * the formal one the product ships for the same key, written exactly as the
- * prototype writes it — same keys, so the layer can be laid over `ar` key by key
- * with formal Arabic as the fallback. A key absent here means the prototype's
- * Arabic and the formal Arabic agree, or the prototype has no string for it.
+ * prototype writes it — same keys, same placeholders. A key absent here means
+ * the prototype's Arabic and the formal Arabic agree, or the prototype has no
+ * string for it.
  *
  * Collected screen by screen as each batch is ported; the batch that added an
  * entry is named in the comment above its group.
@@ -82,4 +83,192 @@ export const arEgOverrides = {
   'home.p.s.fb': 'مستني رأيك',
   'home.p.s.fbSub': 'منشورات عايزينك تشوفها قبل ما تنزل.',
   'home.p.s.empty': 'مفيش حاجة هنا دلوقتي.',
+
+  // Batch 2 — Calendar (Main.dc.html lines 599–660; copy at 2187 and 2660–2740).
+  'calendar.subtitle': 'اضغط على أي يوم فاضي عشان تعمل منشور فيه.',
+  'calendar.agenda': 'جدول',
+  'calendar.today': 'النهارده',
+  'calendar.weekN': 'أسبوع {n}',
+  'calendar.newPostDay': 'منشور جديد في اليوم ده',
+  'calendar.readyTitle': 'مسودات من غير ميعاد',
+  'calendar.noReady': 'مفيش مسودات من غير ميعاد.',
+  'calendar.agendaEmpty': 'مفيش منشورات في الشهر ده.',
+  'calendar.hint': 'اسحب أي منشور ليوم تاني عشان تغيّر ميعاده. الساعة بتفضل زي ما هي.',
+  'calendar.pickDay': 'اختار يوم جديد لـ «{title}»',
+  'calendar.pop.open': 'افتح',
+  'calendar.pop.move': 'انقله ليوم تاني',
+  'content.status.IN_REVIEW': 'في المراجعة',
+  'content.status.SCHEDULED': 'مجدولة',
+  'content.status.PUBLISHED': 'منشورة',
+  'content.status.FAILED': 'متعثرة',
+
+  // Batch 2 — Posts, the content library (Main.dc.html lines 538–566; copy at 2185, 2186, 2573).
+  'content.p.continue': 'كمّل',
+  'content.p.review': 'راجِع',
+  'content.p.retry': 'أعد المحاولة',
+  'content.menu.addCampaign': 'ضيفه لحملة',
+  'content.menu.changeCampaign': 'غيّر الحملة',
+
+  // Review of #67 — Posts' tabs and the card's date (Main.dc.html line 2185, 2450).
+  'content.tab.review': 'في المراجعة',
+  'content.tab.failed': 'متعثرة',
+  'content.p.noDate': 'من غير ميعاد',
+  'content.p.today': 'النهارده',
+
+  // Review of #67 — the Studio (Main.dc.html lines 329–537; copy at 2176–2177, 2895).
+  'studio.subtitle': 'اكتب المنشور وصمّمه وشوف معاينته، في مكان واحد.',
+  'studio.briefLabel': 'المنشور عن إيه؟',
+  'studio.briefHint': 'الذكاء بيكتب الكابشن تحت من الفكرة دي.',
+  'studio.aiWrite': 'اكتب الكابشن بالذكاء',
+  'studio.capPlaceholder': 'اكتب النص بنفسك، أو اطلب من الذكاء يكتبه من الموضوع فوق.',
+  'studio.captionFirst': 'اكتب النص الأول',
+
+  // Review of #67 — Media's Generate tab (Main.dc.html line 2958, Arabic at 2931).
+  'creative.usesBrand': 'بيستخدم ألوان وأسلوب {brand} من عقل العلامة.',
+
+  // Review of #67 — Brand Brain's areas (Main.dc.html, `areaNames`).
+  'bb.area.identity': 'نبذة عن النشاط',
+  'bb.area.doDont': 'افعل / لا تفعل',
+  'bb.area.learnings': 'الدروس',
+
+  // Review of #67 — Settings as one page (Main.dc.html line 3909, 2898).
+  // Review of #67 — Team & roles (Main.dc.html lines 2937–2938, 4019).
+  'members.inviteSent': 'دعوة مبعوتة',
+  // Campaigns (Main.dc.html line 2433).
+  'campaigns.status.ACTIVE': 'شغالة',
+  'campaigns.status.PLANNED': 'مخططة',
+  // Sign-in (Auth.dc.html line 224).
+  'signIn.noAccount': 'معندكش حساب؟',
+  'signIn.createAccount': 'اعمل حساب',
+  'notifications.markAllRead': 'علّم الكل كمقروء',
+  'signUp.trialNote': 'تجربة {days} يوم ببلاش و{credits} رصيد، ومن غير كارت.',
+  // Studio (Main.dc.html lines 2178, 2201).
+  'editor.ai.friendlier': 'أودّ',
+  'bb.status.IN_PROGRESS': 'ناقص',
+  'bb.expiredOne': '1 معلومة انتهت',
+  'bb.expiredMany': '{count} معلومة انتهت',
+  'editor.ai.professional': 'أرسمي',
+  // Automations (Main.dc.html AU and AU_T, lines 3795–3806).
+  'automations.on': 'شغّالة',
+  'automations.off': 'مقفولة',
+  'automations.tab.activity': 'اللي حصل',
+  'automations.listens': 'بتسمع لـ {source}',
+  'automations.ran': 'اشتغلت {count} مرات · آخر مرة {when}',
+  'automations.notRun': 'لسه ما اشتغلتش',
+  'automations.lastToday': 'النهارده {time}',
+  'automations.saveRule': 'احفظ القاعدة',
+  // Plan & billing (Main.dc.html line 2937).
+  'billing.buyCredits': 'اشترِ {credits} رصيد',
+  'settings.p.subtitle': 'نشاطك، وفريقك وصلاحياتهم، والخطة والأمان.',
+  'settings.bizNote':
+    'الاسم ده بيظهر في القائمة وفي التقارير. شكل العلامة وصوتها (اللوجو والألوان والخطوط والنبرة) في عقل العلامة ← الشكل والصوت.',
+  'settings.sec.brands.sub': 'العلامات اللي في المساحة دي وكل واحدة مربوطة بإيه.',
+  'settings.sec.team.sub': 'مين معاك، وكل واحد يقدر يعمل إيه.',
+  'settings.sec.appr.sub': 'مين بيوافق، وإمتى الموافقة مطلوبة.',
+  'settings.sec.conn.sub': 'الحسابات المربوطة وحالة كل ربط.',
+  'settings.sec.pub.sub': 'اللي بيتحط تلقائي في كل بوست جديد.',
+  'settings.sec.notif.sub': 'إيه اللي يوصلك، وفين.',
+  'settings.sec.ai.sub': 'بيكتب إزاي وبيصرف رصيد إمتى.',
+  'settings.sec.sec.sub': 'الدخول والأجهزة وسجل النشاط.',
+  'settings.sec.data.sub': 'تصدير بياناتك أو مسح المساحة.',
+
+  // Batch 2 — Studio (Main.dc.html lines 329–537; copy at 2176–2177, 2311, 2324–2326, 2577).
+  'studio.editing': 'بتعدّل',
+  'studio.postTo': 'انشر على',
+  'studio.when': 'ميعاد النشر',
+  'studio.whenTitle': 'هينزل إمتى؟',
+  'studio.whenUnset': 'لسه متجدولش',
+  'studio.whenDone': 'تمام',
+  'studio.tabWords': 'الكلام',
+  'studio.checks': 'هينزل صح؟',
+  'studio.fix': 'محتاج تعديل',
+  'studio.row.tags': 'الهاشتاجات',
+  'studio.tagsNone': 'لسه مفيش هاشتاجات.',
+  'studio.tagRemove': 'شيل {tag}',
+
+  // Batch 3 — Approvals (Main.dc.html lines 567–598; copy at 2183).
+  'approvals.subtitle': 'المنشورات اللي مستنية قرارك، بمعاينتها كاملة.',
+  'approvals.tabs.forMe': 'مستني قراري',
+  'approvals.tabs.sent': 'أنا بعته',
+  'approvals.queueEmptyTitle': 'مفيش حاجة مستنياك.',
+  'approvals.decisionNote': 'ملاحظة',
+
+  // Batch 3 — Campaigns (Main.dc.html lines 1159–1236; copy at 2433, 2929, 3658–3669).
+  'campaigns.hero.line': '{running} شغالة · {planned} مخططة · {ended} انتهت',
+  'campaigns.hero.endsIn': '{name} بتخلص بعد {days} يوم',
+  'campaigns.hero.endsToday': '{name} بتخلص النهارده',
+  'campaigns.hero.startsIn': '{name} بتبدأ بعد {days} يوم',
+  'campaigns.hero.none': 'مفيش حملة شغالة دلوقتي',
+  'campaigns.hero.running': '«{name}» شغالة دلوقتي',
+  'campaigns.hero.month': 'بوستات الحملات الشهر ده',
+  'campaigns.hero.monthSub': '{scheduled} مجدولة · {published} اتنشرت',
+  'campaigns.card.noPosts': 'لسه مفيش بوستات',
+  'campaigns.card.published': 'اتنشر',
+  'campaigns.card.allPublished': 'اتنشر كله',
+  'campaigns.room.edit': 'عدّل',
+  'campaigns.best.label': 'أنجح حملة',
+
+  // Batch 3 — Media (Main.dc.html lines 1237–1284).
+  'assets.media.generate': 'توليد',
+  'assets.media.use': 'استخدمه',
+  'assets.media.ai': 'بالذكاء',
+  'assets.media.filters': 'فلاتر',
+  'analytics.sourcesNote':
+    'الأرقام دي جاية من إحصائيات كل منصة بعد الربط. لو منصة مش بتنشر رقم معيّن هتشوف السبب، مش صفر.',
+  'analytics.vsPrev': 'مقارنة بالفترة اللي قبلها',
+  'analytics.dayByDay': 'يوم بيوم',
+  'analytics.tablesNote': 'كل الأرقام دي في ملف الـ CSV.',
+  'bb.pageSub': 'كل اللي المنصة عارفاه عن علامتك، وبتكتب منه كل حاجة.',
+  'bb.lead':
+    'كل مسودة وكل فكرة بتتكتب من المعلومات المعتمدة هنا بس. كل ما تكمّل مجالات أكتر، المسودات بتقرب من صوتك.',
+  'bb.askBrand': 'اسأل البراند',
+  'bb.uploadFiles': 'ارفع ملفات',
+  'bb.missingSub': 'جاوب على دول والمسودات هتبقى أدق.',
+  'bb.factsWaiting': '{count} معلومة مستنية مراجعتك',
+  'bb.acceptHigh': 'اقبل الواثق منها',
+  'bb.oneByOne': 'راجعها واحدة واحدة',
+  'bb.bulkTitle': 'هيتقبل {count} معلومات بثقة عالية:',
+  'bb.bulkOk': 'اقبلهم',
+  'bb.bulkNone': 'مفيش معلومات بثقة عالية دلوقتي. راجعهم واحدة واحدة.',
+  'bb.rvLeft': 'فاضل {count} معلومات',
+  'bb.rvLeftOne': 'فاضل معلومة واحدة',
+  'bb.rvArea': 'هتتحفظ في',
+  'bb.rvSaid': 'اللي لقيناه في المصدر',
+  'bb.rvOld': 'المعتمدة دلوقتي',
+  'bb.rvClose': 'قفل المراجعة',
+  'bb.rvDone': 'خلصت المراجعة',
+  'bb.rvDoneSub': 'كل المعلومات المستنية اتراجعت. هنبلغك لما يجي جديد.',
+  'bb.rvBack': 'رجوع للمعرفة',
+  'bb.confWhy': 'قد إيه BrandSpace متأكد إن المصدر بيقول كده',
+  'bb.waitingReview': 'مستنية مراجعتك',
+  'bb.usedBy': 'بيستخدمها: المسودات، الاستراتيجية، المساعد، والكلام مع العلامة.',
+  'bb.chatSubFacts': 'بيجاوب من {count} معلومة معتمدة',
+  'bb.voice.sub': 'ده اللي الذكاء بيقراه قبل ما يكتب أي كلمة.',
+  'bb.orbHint': 'دوس على أي نقطة تفتح مجالها، أو على المنتصف تسأل',
+
+  // Batch 6 — Automations (Main.dc.html lines 1304–1334, 1556–1569; copy at 3779).
+  'automations.form.when': 'لما',
+  'automations.form.then': 'اعمل',
+  'automations.asksFirst': 'بيستأذنك',
+  'automations.usesCredits': 'بيصرف رصيد',
+  'automations.more': 'أكتر',
+  'automations.notifLink':
+    'تنبيهاتك انت (منشور ما اتنشرش، موافقات، الرصيد، مراجعة Brand Brain) من الإعدادات ← الإشعارات',
+
+  // Batch 6 — Settings (Main.dc.html lines 1337–1340; copy at 3909).
+  'settings.group.workspace': 'المساحة',
+  'settings.group.people': 'الناس',
+  'settings.group.aiBilling': 'الذكاء والفوترة',
+
+  // Batch 6 — Plan & billing (Main.dc.html lines 1445–1463; copy at 3909).
+  'billing.changePlan': 'غيّر الخطة',
+
+  // Batch 6 — Sign-in and the entry screens (Auth.dc.html lines 39–117; copy at 260–330).
+  'signIn.welcome': 'أهلًا بيك تاني',
+  'signIn.welcomeSub': 'ادخل على مساحة شغلك في BrandSpace.',
+  'signUp.start': 'ابدأ مع BrandSpace',
+  'signUp.startSub': 'دقيقتين وتبقى جاهز تعمل أول بوست.',
+  'auth.eyebrow.verify': 'تأكيد الإيميل',
+  'auth.eyebrow.password': 'كلمة السر',
+  'auth.footer': 'دخول آمن · جلسات العملاء منفصلة عن إدارة المنصة',
 } as const satisfies Partial<Record<MessageKey, string>>;

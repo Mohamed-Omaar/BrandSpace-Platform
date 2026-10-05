@@ -5,17 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { flushSync } from 'react-dom';
 import {
+  AbstractMedia,
   Banner,
-  Button,
+  CalendarAgenda,
   CalendarDropStrip,
-  ContentCalendar,
   Dialog,
   Field,
   SideSheet,
   StateMessage,
-  StatusBadge,
-  statusTone,
-  buttonClass,
   buttonStyle,
   colorTokens,
   inputStyle,
@@ -25,40 +22,45 @@ import {
   stripDayKeys,
   useCalendarDrag,
   type CalendarDay,
+  type CalendarLabels,
   type DropState,
+  type MediaSeed,
   type PostRecord,
 } from '@brandspace/ui';
 import type { MoveSlotResult } from './actions';
 import { pendingMoves, withMoves } from './optimistic-moves';
 import { VariantPreview, previewLabels } from '../content/compose/variant-preview';
 import { CopilotLink } from '../../../components/copilot-link';
+import { FiltersDisclosure } from '../../../components/filters-disclosure';
+import { MoreDisclosure } from '../../../components/more-disclosure';
+import {
+  PrototypeCalendar,
+  type CalendarPostKind,
+  type CalendarViewMode,
+  type ProtoCalendarDay,
+  type ProtoCalendarPost,
+} from './prototype-calendar';
 
 /**
  * The Content Calendar — the customer screen.
  *
- * COMPOSED, NOT INVENTED. `ContentCalendar` already ships in `packages/ui`: a
- * month grid with real `role="grid"` semantics, a week view, and an AGENDA that
- * replaces the grid below `md` — because a seven-column calendar at 390px gives
- * each day about fifty pixels and every post becomes an unreadable sliver. It
- * was built as a port of the approved demo's `calendar()` and rendered fixtures;
- * this screen is the same composition with the workspace's own slots behind it
- * (UI-fidelity contract §6.2 rule 4 — reuse before creating).
+ * PORTED FROM `prototype-2026-09-27` (D-468, batch 2): the head row, the month,
+ * week and agenda views, the post and day popovers, the move banner and the
+ * legend are `PrototypeCalendar`, a transcription of `Main.dc.html` lines
+ * 599–660. Below 768px the product's phone agenda stays (D-468 (b)).
  *
- * WHAT THIS ADDS TO IT: live period navigation, and the three actions the
- * planning half of the module is for — schedule, move, take off.
+ * WHAT THIS OWNS, unchanged by the port: live period navigation in the URL,
+ * the filters, the Unscheduled tray, the scheduling dialog, the pointer drag
+ * and its Undo, and the post drawer (D-290) — every write goes through the
+ * same four actions, so F2, the quota, the approval gate, B-4, BrandScope and
+ * the audit are exactly what they were.
  *
  * THE MONTH LIVES IN THE URL. A calendar somebody links to a colleague, comes
  * back to, or reloads after moving a post has to come back to the same month.
- * State that lives only in the browser loses all three, and the Asset Library
- * and the content library both settled this the same way.
  *
- * NOTHING ON THIS SCREEN PUBLISHES, and that is not the same claim the header
- * used to make. It said "every slot's target is a mock", which was true of
- * Phase 5 and stopped being true when Phase 6 shipped real connections and the
- * scheduler began sweeping due slots into publish jobs. The three actions here
- * still reach no network — they move a plan — but the plan they move is one the
- * worker will act on, so P6-10 puts the publishing readiness of each scheduled
- * slot on the screen rather than a line saying nothing ever goes out.
+ * NOTHING ON THIS SCREEN PUBLISHES. The actions here reach no network — they
+ * move a plan — but the plan they move is one the worker will act on, so P6-10
+ * puts the publishing readiness of each scheduled slot in the drawer.
  */
 
 export interface SchedulableDraft {
@@ -174,6 +176,10 @@ export interface CalendarViewProps {
   readonly quotaUsed: number;
   readonly quotaLimit: number | null;
   readonly canSchedule: boolean;
+  /** D-468 — may start a post (`content.create`): "+ New post on this day", Duplicate. */
+  readonly canCreate?: boolean;
+  /** The seven weekday heads, from the configured week start (the prototype's `weekdays`). */
+  readonly weekdays?: readonly string[];
   /** D-290 — may send a draft for review from the post drawer (`content.submit`). */
   readonly canSubmit?: boolean;
   /**
@@ -185,7 +191,7 @@ export interface CalendarViewProps {
    * sends the WORD and this island composes the function, which is the only
    * half that has to run in the browser anyway.
    */
-  readonly labels: Omit<Parameters<typeof ContentCalendar>[0]['labels'], 'postsOnDay'>;
+  readonly labels: Omit<CalendarLabels, 'postsOnDay'>;
   /** The noun `postsOnDay` puts after the count, already translated. */
   readonly postsOnDayLabel: string;
   readonly actions: {
@@ -204,6 +210,8 @@ export interface CalendarViewProps {
     }): Promise<MoveSlotResult>;
     cancel(formData: FormData): Promise<void>;
     submitForReview?(formData: FormData): Promise<void>;
+    /** The popover's Duplicate: the content library's own action. */
+    duplicate?(formData: FormData): Promise<void>;
   };
 }
 
@@ -233,6 +241,8 @@ export function CalendarView({
   quotaUsed,
   quotaLimit,
   canSchedule,
+  canCreate = false,
+  weekdays = [],
   canSubmit = false,
   labels,
   postsOnDayLabel,
@@ -491,168 +501,330 @@ export function CalendarView({
       ? `${t['calendar.quota']}: ${quotaUsed} · ${t['calendar.quotaUnlimited']}`
       : `${t['calendar.quota']}: ${quotaUsed} / ${quotaLimit}`;
 
+  /*
+   * D-468 batch 2 — THE VIEW AND THE WEEK ARE THE PROTOTYPE'S: Month, Week or
+   * Agenda from its switch, and in the week view previous / next walk the
+   * month's weeks before they leave it. A phone opens on the agenda (D-306),
+   * and only a wide screen draws the prototype's own agenda list; below 768px
+   * the product's phone agenda stays (D-468 (b)).
+   */
+  const [view, setView] = useState<CalendarViewMode>('month');
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 768px)');
+    const apply = () => setWide(query.matches);
+    apply();
+    if (!query.matches) setView('agenda');
+    query.addEventListener('change', apply);
+    return () => query.removeEventListener('change', apply);
+  }, []);
+  const monthWeeks = Math.max(1, Math.ceil(days.length / 7));
+  const weekCount = Array.from({ length: monthWeeks }, (_unused, index) =>
+    days.slice(index * 7, index * 7 + 7),
+  ).filter((week) => week.some((day) => day.inCurrentPeriod)).length;
+  const [shownWeek, setShownWeek] = useState(weekIndex);
+  const nextWeekAt = useRef<'first' | 'last' | null>(null);
+  useEffect(() => {
+    const at = nextWeekAt.current;
+    nextWeekAt.current = null;
+    setShownWeek(at === 'last' ? Math.max(0, weekCount - 1) : at === 'first' ? 0 : weekIndex);
+  }, [month, weekCount, weekIndex]);
+
+  const kindOf = (post: PostRecord): CalendarPostKind => {
+    if (post.status === 'DRAFT') return post.approval === 'NEEDS_APPROVAL' ? 'review' : 'draft';
+    if (post.status === 'PUBLISHED' || post.status === 'PARTIALLY_PUBLISHED') return 'pub';
+    if (post.status === 'FAILED') return 'failed';
+    return 'sched';
+  };
+  const statusLabelOf = (post: PostRecord): string =>
+    kindOf(post) === 'review'
+      ? (t['content.status.IN_REVIEW'] ?? '')
+      : (t[`content.status.${post.status}`] ?? post.status);
+  const channelName = (key: string) => t[`content.platform.${key}`] ?? key;
+  const dayFormat = (dayKey: string, options: Intl.DateTimeFormatOptions) => {
+    const [year, monthNumber, dayNumber] = dayKey.split('-').map(Number);
+    return new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
+      ...options,
+      timeZone: 'UTC',
+    }).format(new Date(Date.UTC(year ?? 0, (monthNumber ?? 1) - 1, dayNumber ?? 1)));
+  };
+
+  const protoDays: ProtoCalendarDay[] = shownDays.map((day) => ({
+    key: day.key,
+    n: dayFormat(day.key, { day: 'numeric' }),
+    longLabel:
+      locale === 'ar'
+        ? dayFormat(day.key, { day: 'numeric', month: 'long' })
+        : dayFormat(day.key, { month: 'long', day: 'numeric' }),
+    short:
+      locale === 'ar'
+        ? dayFormat(day.key, { day: 'numeric', month: 'long' })
+        : dayFormat(day.key, { month: 'short', day: 'numeric' }),
+    inMonth: day.inCurrentPeriod,
+    isToday: day.isToday,
+    isPast: day.isPast === true,
+    markers: day.markers ?? [],
+    posts: day.posts.map((post): ProtoCalendarPost => {
+      const slot = slots.find((candidate) => candidate.slotId === post.id);
+      const channels = (slot?.channels ?? post.platforms).map((key) => ({
+        key,
+        name: channelName(key),
+      }));
+      return {
+        id: post.id,
+        itemId: slot?.contentItemId ?? '',
+        title: post.caption,
+        titleDir: post.captionDirection,
+        kind: kindOf(post),
+        statusLabel: statusLabelOf(post),
+        hhmm: slot?.time ?? post.whenLabel,
+        channels,
+        art: { src: post.mediaSrc ?? null, seed: post.mediaSeed },
+        meta: [channels.map((channel) => channel.name).join(' · '), slot?.campaignName]
+          .filter(Boolean)
+          .join(' · '),
+        caption: slot?.previewBody ?? '',
+        canMove: canSchedule && slot?.reschedulable !== false && actions.move !== undefined,
+        dragData: postDragData(post),
+      };
+    }),
+  }));
+
+  const filterHref = (changes: Partial<typeof filters>) => {
+    const next = new URLSearchParams(
+      Object.entries({ ...filters, ...changes }).filter(([, value]) => value !== ''),
+    );
+    next.set('month', month);
+    return `/${locale}/calendar?${next.toString()}`;
+  };
+
+  const emptyAction = canSchedule ? (
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '6px' }}>
+      <button
+        type="button"
+        className="bsp-btn bsp-sm"
+        data-testid="calendar-empty-schedule"
+        onClick={() => setScheduling(true)}
+      >
+        {t['calendar.emptySchedule']}
+      </button>
+      <Link
+        href={`/${locale}/content/compose`}
+        className="bsp-btn bsp-sm bsp-sec"
+        data-testid="calendar-empty-create"
+      >
+        {t['calendar.emptyCreate']}
+      </Link>
+    </span>
+  ) : undefined;
+
   return (
     <div
       ref={pageRef}
       data-testid="calendar-page"
-      style={{ display: 'grid', gap: spacingTokens.lg }}
+      style={{ display: 'flex', flexDirection: 'column', gap: '22px', minInlineSize: 0 }}
     >
       {pastDayNotice ? (
         <Banner tone="warning" testId="calendar-past-day">
           {t['calendar.pastDay']}
         </Banner>
       ) : null}
-      <ContentCalendar
+      <PrototypeCalendar
+        labels={{
+          calendarLabel: labels.calendarLabel,
+          previous: labels.previous,
+          next: labels.next,
+          today: labels.today,
+          month: labels.monthView,
+          week: labels.weekView,
+          agenda: labels.agendaView,
+          newPostDay: t['calendar.newPostDay'] ?? '',
+          readyTitle: t['calendar.readyTitle'] ?? '',
+          noReady: t['calendar.noReady'] ?? '',
+          agendaEmpty: t['calendar.agendaEmpty'] ?? '',
+          edit: t['calendar.pop.edit'] ?? '',
+          open: t['calendar.pop.open'] ?? '',
+          move: t['calendar.pop.move'] ?? '',
+          duplicate: t['calendar.pop.duplicate'] ?? '',
+          details: t['calendar.pop.details'] ?? '',
+          cancel: t['calendar.cancelMove'] ?? '',
+          pickDay: t['calendar.pickDay'] ?? '{title}',
+          hint: canSchedule ? (t['calendar.hint'] ?? '') : '',
+          legend: (
+            [
+              ['sched', 'SCHEDULED'],
+              ['review', 'IN_REVIEW'],
+              ['draft', 'DRAFT'],
+              ['pub', 'PUBLISHED'],
+              ['failed', 'FAILED'],
+            ] as const
+          ).map(([kind, status]) => ({ kind, label: t[`content.status.${status}`] ?? status })),
+        }}
         periodLabel={periodLabel}
-        days={shownDays}
-        labels={{ ...labels, postsOnDay: (count) => `${count} ${postsOnDayLabel}` }}
+        weekLabel={(week) =>
+          `${periodLabel} · ${(t['calendar.weekN'] ?? '{n}').replace('{n}', String(week))}`
+        }
+        weekdays={weekdays}
+        days={protoDays}
+        view={view}
+        onView={setView}
+        weekIndex={shownWeek}
+        onWeekIndex={setShownWeek}
+        isAway={month !== currentMonth}
         busy={pending}
-        onPrevious={() => goTo(previousMonth)}
-        onNext={() => goTo(nextMonth)}
+        onPrevious={() => {
+          if (view === 'week') nextWeekAt.current = 'last';
+          goTo(previousMonth);
+        }}
+        onNext={() => {
+          if (view === 'week') nextWeekAt.current = 'first';
+          goTo(nextMonth);
+        }}
         onToday={() => goTo(currentMonth)}
-        onOpenPost={onOpenPost}
-        createAction={
-          canSchedule ? (
-            <Button
-              variant="primary"
-              size="sm"
-              data-testid="calendar-schedule-open"
-              onClick={() => setScheduling(true)}
+        channelChips={(filterOptions?.platforms ?? []).map((platform) => ({
+          key: platform.key,
+          name: platform.label,
+          on: filters.platform === platform.key,
+          href: filterHref({ platform: filters.platform === platform.key ? '' : platform.key }),
+        }))}
+        headerAction={
+          /*
+            Review of #67 — the prototype's head row has neither the filter
+            row nor "Add to calendar": the brand, campaign and status filters,
+            the time zone and the count are under "Filters", and adding to the
+            calendar is under "⋯". Nothing is removed. The two stay together at
+            the row's end when it wraps, so the panels open over the month.
+          */
+          <span className="bsp-cal-acts">
+            <FiltersDisclosure
+              label={t['content.p.filters'] ?? ''}
+              active={[filters.brand, filters.campaign, filters.status].filter(Boolean).length}
+              testId="calendar-filters-toggle"
+              wide
             >
-              {t['calendar.scheduleSubmit']}
-            </Button>
-          ) : undefined
-        }
-        weekIndex={weekIndex}
-        emptyAction={
-          canSchedule ? (
-            <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
-              <Button
-                variant="primary"
-                size="sm"
-                data-testid="calendar-empty-schedule"
-                onClick={() => setScheduling(true)}
+              <div className="bsp-cal-filters" data-testid="calendar-filters">
+                {filterOptions ? (
+                  <form
+                    method="get"
+                    action={`/${locale}/calendar`}
+                    data-testid="calendar-filter-form"
+                    className="bsp-cal-filter-form"
+                  >
+                    <input type="hidden" name="month" value={month} />
+                    {filters.platform ? (
+                      <input type="hidden" name="platform" value={filters.platform} />
+                    ) : null}
+                    <FilterSelect
+                      id="calendar-filter-brand"
+                      name="brand"
+                      label={t['calendar.filter.brand'] ?? ''}
+                      allLabel={t['calendar.filter.all'] ?? ''}
+                      value={filters.brand}
+                      options={filterOptions.brands.map((b) => ({ value: b.id, label: b.name }))}
+                    />
+                    <FilterSelect
+                      id="calendar-filter-campaign"
+                      name="campaign"
+                      label={t['calendar.filter.campaign'] ?? ''}
+                      allLabel={t['calendar.filter.all'] ?? ''}
+                      value={filters.campaign}
+                      options={filterOptions.campaigns.map((c) => ({ value: c.id, label: c.name }))}
+                    />
+                    <FilterSelect
+                      id="calendar-filter-status"
+                      name="status"
+                      label={t['calendar.filter.status'] ?? ''}
+                      allLabel={t['calendar.filter.all'] ?? ''}
+                      value={filters.status}
+                      options={filterOptions.statuses.map((st) => ({
+                        value: st.key,
+                        label: st.label,
+                      }))}
+                    />
+                    <button
+                      type="submit"
+                      className="bsp-btn bsp-sm bsp-sec"
+                      data-testid="calendar-filter-apply"
+                    >
+                      {t['calendar.filter.apply']}
+                    </button>
+                  </form>
+                ) : null}
+                {/*
+                  THE ZONE IS STATED, ALWAYS. Every time on this screen is a
+                  wall-clock in the workspace's zone, and a calendar that does not
+                  say which zone it means is a calendar people misread — which is
+                  the whole reason the slot stores the intent (AC-14.2, AC-14.3).
+                */}
+                <span data-testid="calendar-timezone" className="bsp-cal-note">
+                  {t['calendar.timezoneNote']}: {timezone}
+                </span>
+                <span data-testid="calendar-quota" className="bsp-cal-note">
+                  {quotaText}
+                </span>
+              </div>
+            </FiltersDisclosure>
+            {canSchedule ? (
+              <MoreDisclosure
+                label={t['calendar.scheduleSubmit'] ?? ''}
+                testId="calendar-more"
+                align="end"
+                closeOnPick
               >
-                {t['calendar.emptySchedule']}
-              </Button>
-              <Link
-                href={`/${locale}/content/compose`}
-                className={buttonClass('neutral')}
-                style={buttonStyle('neutral', 'sm')}
-                data-testid="calendar-empty-create"
-              >
-                {t['calendar.emptyCreate']}
-              </Link>
-            </span>
-          ) : undefined
-        }
-        {...(canSchedule
-          ? {
-              dropTargets: true,
-              postDragData,
-              ...(dragging && stripDays.length > 0
-                ? {
-                    dropStrip: (
-                      <CalendarDropStrip days={stripDays} title={t['calendar.drag.strip'] ?? ''} />
-                    ),
-                  }
-                : {}),
-              // B7 — "new post" on an empty day: the scheduling dialog, dated.
-              onCreateOnDay: (day: string) => {
-                setPastDayNotice(false);
-                setScheduleDate(day);
-                setScheduleTime(proposedTime(day));
-                setScheduling(true);
-              },
-            }
-          : {})}
-        filters={
-          <>
-            {filterOptions ? (
-              <form
-                method="get"
-                action={`/${locale}/calendar`}
-                data-testid="calendar-filter-form"
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: spacingTokens.xs,
-                  alignItems: 'end',
-                }}
-              >
-                <input type="hidden" name="month" value={month} />
-                <FilterSelect
-                  id="calendar-filter-brand"
-                  name="brand"
-                  label={t['calendar.filter.brand'] ?? ''}
-                  allLabel={t['calendar.filter.all'] ?? ''}
-                  value={filters.brand}
-                  options={filterOptions.brands.map((b) => ({ value: b.id, label: b.name }))}
-                />
-                <FilterSelect
-                  id="calendar-filter-platform"
-                  name="platform"
-                  label={t['calendar.filter.platform'] ?? ''}
-                  allLabel={t['calendar.filter.all'] ?? ''}
-                  value={filters.platform}
-                  options={filterOptions.platforms.map((p) => ({ value: p.key, label: p.label }))}
-                />
-                <FilterSelect
-                  id="calendar-filter-campaign"
-                  name="campaign"
-                  label={t['calendar.filter.campaign'] ?? ''}
-                  allLabel={t['calendar.filter.all'] ?? ''}
-                  value={filters.campaign}
-                  options={filterOptions.campaigns.map((c) => ({ value: c.id, label: c.name }))}
-                />
-                <FilterSelect
-                  id="calendar-filter-status"
-                  name="status"
-                  label={t['calendar.filter.status'] ?? ''}
-                  allLabel={t['calendar.filter.all'] ?? ''}
-                  value={filters.status}
-                  options={filterOptions.statuses.map((st) => ({ value: st.key, label: st.label }))}
-                />
-                <Button
-                  type="submit"
-                  variant="neutral"
-                  size="sm"
-                  data-testid="calendar-filter-apply"
+                <button
+                  type="button"
+                  className="bsp-btn bsp-sm"
+                  data-testid="calendar-schedule-open"
+                  onClick={() => setScheduling(true)}
                 >
-                  {t['calendar.filter.apply']}
-                </Button>
-              </form>
+                  {t['calendar.scheduleSubmit']}
+                </button>
+              </MoreDisclosure>
             ) : null}
-            {/*
-              THE ZONE IS STATED, ALWAYS. Every time on this screen is a
-              wall-clock in the workspace's zone, and a calendar that does not
-              say which zone it means is a calendar people misread — which is
-              the whole reason the slot stores the intent (AC-14.2, AC-14.3).
-            */}
-            <span
-              data-testid="calendar-timezone"
-              style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
-            >
-              {t['calendar.timezoneNote']}: {timezone}
-            </span>
-            <span
-              data-testid="calendar-quota"
-              style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
-            >
-              {quotaText}
-            </span>
-          </>
+          </span>
+        }
+        newPostHref={canCreate ? (dayKey) => `/${locale}/content/compose?date=${dayKey}` : null}
+        drafts={
+          canSchedule
+            ? drafts.map((draft) => ({
+                id: draft.id,
+                title: draft.title,
+                art: { src: null, seed: (draft.id.charCodeAt(0) % 6) as MediaSeed },
+              }))
+            : null
+        }
+        onPlaceDraft={(itemId, dayKey) => openScheduleFor(itemId, dayKey)}
+        editHref={(post) => `/${locale}/content/compose?item=${post.itemId}`}
+        duplicate={canCreate && actions.duplicate ? { action: actions.duplicate, locale } : null}
+        onMove={(slotId, dayKey) => {
+          onDrop(`slot:${slotId}`, dayKey);
+        }}
+        onPastDay={() => setPastDayNotice(true)}
+        onOpenDetails={(slotId) => setOpenSlotId(slotId)}
+        dropTargets={canSchedule}
+        wideAgendaShown={wide}
+        phone={
+          <CalendarAgenda
+            days={shownDays}
+            labels={{ ...labels, postsOnDay: (count) => `${count} ${postsOnDayLabel}` }}
+            onOpenPost={onOpenPost}
+            postDragData={canSchedule ? postDragData : undefined}
+            emptyAction={emptyAction}
+          />
+        }
+        dropStrip={
+          canSchedule && dragging && stripDays.length > 0 ? (
+            <div className="bs-narrow-only">
+              <CalendarDropStrip days={stripDays} title={t['calendar.drag.strip'] ?? ''} />
+            </div>
+          ) : null
         }
       />
 
       {/* §8.2 — the hint under the phone's list: a long-press lifts a post. */}
       {canSchedule ? (
-        <p
-          className="bs-narrow-only"
-          data-testid="calendar-move-note"
-          style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
-        >
-          {t['calendar.moveFromPost']}
+        <p className="bs-narrow-only" data-testid="calendar-move-note" style={{ margin: 0 }}>
+          <span className="bsp-cal-note">{t['calendar.moveFromPost']}</span>
         </p>
       ) : null}
 
@@ -662,19 +834,8 @@ export function CalendarView({
         calendar is too quiet or too sparse for it to mean anything.
       */}
       {gaps.length > 0 ? (
-        <p
-          data-testid="calendar-gap"
-          style={{
-            margin: 0,
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            gap: spacingTokens.xs,
-            ...typographyTokens.caption,
-            color: colorTokens.textSecondary,
-          }}
-        >
-          <b style={{ color: colorTokens.textPrimary }}>{t['calendar.gap.title']}</b>
+        <p data-testid="calendar-gap" className="bsp-cal-gap">
+          <b>{t['calendar.gap.title']}</b>
           <span>{gaps.join(' ')}</span>
           {copilotHref ? (
             <CopilotLink href={copilotHref} testId="calendar-gap-copilot">
@@ -687,106 +848,70 @@ export function CalendarView({
       {/*
         D-290 — THE UNSCHEDULED TRAY: posts that could go on the calendar and
         are not on it. Drag one onto a day (desktop) or press Schedule — the
-        keyboard and touch path, never an afterthought.
+        keyboard and touch path, never an afterthought. Drawn as the
+        prototype's card and rows (D-468 (c)): the prototype has no tray.
       */}
       {canSchedule ? (
         <section
           data-testid="calendar-tray"
           aria-labelledby="calendar-tray-title"
-          style={{
-            display: 'grid',
-            gap: spacingTokens.sm,
-            padding: spacingTokens.md,
-            borderRadius: '1.375rem',
-            background: colorTokens.surfaceMuted,
-          }}
+          className="bsp-xcard bsp-cal-tray"
         >
-          <h2 id="calendar-tray-title" style={{ margin: 0, ...typographyTokens.label }}>
+          <h2 id="calendar-tray-title" className="bsp-sech">
             {(t['calendar.tray.title'] ?? '{count}').replace('{count}', String(drafts.length))}
           </h2>
           {drafts.length === 0 ? (
-            <p style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-              {t['calendar.tray.empty']}
-            </p>
+            <p className="bsp-xdesc">{t['calendar.tray.empty']}</p>
           ) : (
             <>
-              <p
-                style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
-              >
-                {t['calendar.tray.hint']}
-              </p>
-              <ul
-                style={{
-                  listStyle: 'none',
-                  margin: 0,
-                  padding: 0,
-                  // An even grid, not a ragged wrap: on a phone every draft is
-                  // one full-width row with its action at the end (D-306).
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 15rem), 1fr))',
-                  gap: spacingTokens.xs,
-                }}
-              >
+              <p className="bsp-xdesc">{t['calendar.tray.hint']}</p>
+              <ul className="bsp-cal-tray-list">
                 {(trayExpanded ? drafts : drafts.slice(0, TRAY_PREVIEW)).map((draft) => (
                   <li
                     key={draft.id}
                     // B7 / §8.2 — `item:` says a tray draft; a post already
                     // planned carries `slot:`. Dropping one opens the dialog.
                     data-drag-payload={`item:${draft.id}`}
+                    data-pid={draft.id}
                     data-testid={`calendar-tray-${draft.id}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: spacingTokens.xs,
-                      padding: `${spacingTokens.xs} ${spacingTokens.sm}`,
-                      borderRadius: '0.8125rem',
-                      background: colorTokens.surface,
-                      cursor: 'grab',
-                      maxInlineSize: '100%',
-                    }}
+                    className="bsp-cal-tray-row"
                   >
-                    <span style={{ display: 'grid', minInlineSize: 0 }}>
-                      <strong
-                        dir="auto"
-                        style={{
-                          ...typographyTokens.bodySm,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          maxInlineSize: '16rem',
-                        }}
-                      >
+                    <span className="bsp-cal-popx-art">
+                      <AbstractMedia seed={(draft.id.charCodeAt(0) % 6) as MediaSeed} alt="" />
+                    </span>
+                    <span className="bsp-cal-tray-copy">
+                      <strong dir="auto" className="bsp-cal-atitle">
                         {draft.title}
                       </strong>
-                      <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                        {[draft.channels.join(', '), draft.campaignName]
+                      <span className="bsp-cal-meta">
+                        {[draft.channels.map(channelName).join(' · '), draft.campaignName]
                           .filter(Boolean)
                           .join(' · ')}
                       </span>
                     </span>
                     {draft.status ? (
-                      <StatusBadge
-                        tone={statusTone(draft.status)}
-                        label={t[`content.status.${draft.status}`] ?? draft.status}
-                      />
+                      <span
+                        className={`bsp-xstatus ${draft.status === 'APPROVED' ? '' : draft.status === 'FAILED' ? 'bsp-bad' : 'bsp-neu'}`}
+                      >
+                        {t[`content.status.${draft.status}`] ?? draft.status}
+                      </span>
                     ) : null}
-                    <Button
-                      variant="neutral"
-                      size="sm"
+                    <button
+                      type="button"
+                      className="bsp-btn bsp-sm bsp-sec"
                       data-testid={`calendar-tray-schedule-${draft.id}`}
                       onClick={() => openScheduleFor(draft.id)}
                     >
                       {t['calendar.scheduleSubmit']}
-                    </Button>
+                    </button>
                   </li>
                 ))}
               </ul>
               {drafts.length > TRAY_PREVIEW ? (
                 <div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <button
+                    type="button"
+                    className="bsp-btn bsp-sm bsp-ghost"
                     aria-expanded={trayExpanded}
                     data-testid="calendar-tray-toggle"
                     onClick={() => setTrayExpanded((open) => !open)}
@@ -797,7 +922,7 @@ export function CalendarView({
                           '{count}',
                           String(drafts.length),
                         )}
-                  </Button>
+                  </button>
                 </div>
               ) : null}
             </>
@@ -1133,7 +1258,11 @@ export function CalendarView({
 /** How many tray rows show before "Show all" — the calendar stays in reach. */
 const TRAY_PREVIEW = 8;
 
-/** One labelled select in the filter row — the design system's control. */
+/**
+ * One filter: a native select drawn as the prototype's `.chip` (D-468 (c) — the
+ * prototype filters by channel only, with chips). The label stays for screen
+ * readers; the chip carries the choice.
+ */
 function FilterSelect({
   id,
   name,
@@ -1150,14 +1279,14 @@ function FilterSelect({
   readonly options: readonly { value: string; label: string }[];
 }) {
   return (
-    <Field label={label} htmlFor={id}>
+    <label htmlFor={id} className="bsp-cal-filter">
+      <span className="bsp-cal-filter-label">{label}</span>
       <select
-        className="bs-control"
+        className="bs-control bsp-chip bsp-cal-select"
         id={id}
         name={name}
         defaultValue={value}
         data-testid={id}
-        style={inputStyle({ size: 'sm' })}
       >
         <option value="">{allLabel}</option>
         {options.map((option) => (
@@ -1166,7 +1295,7 @@ function FilterSelect({
           </option>
         ))}
       </select>
-    </Field>
+    </label>
   );
 }
 

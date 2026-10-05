@@ -49,9 +49,49 @@ const STATUSES: readonly LibraryStatus[] = [
   'FAILED',
   'ARCHIVED',
 ];
-/** Always offered, whatever their count: where new work starts. */
-const ALWAYS: ReadonlySet<LibraryStatus> = new Set(['DRAFT']);
-const PLATFORMS = ['instagram', 'facebook', 'linkedin', 'tiktok', 'x'] as const;
+/**
+ * THE PROTOTYPE'S TABS (`Main.dc.html` line 2636, D-468): All, Drafts, In
+ * review, Scheduled, Published, Failed — always, with their counts — and
+ * Archived only while something is archived. Each tab is the product's
+ * statuses that mean it: a post sent back is a draft again, an approved one
+ * is on its way out. One exact status is still a filter, under Filters.
+ */
+const TAB_GROUPS: readonly {
+  readonly id: LibraryStatus;
+  readonly tab: string;
+  readonly label: string;
+  readonly statuses: readonly LibraryStatus[];
+  readonly onlyWhenAny?: boolean;
+}[] = [
+  {
+    id: 'DRAFT',
+    tab: 'draft',
+    label: 'content.tab.draft',
+    statuses: ['DRAFT', 'CHANGES_REQUESTED'],
+  },
+  { id: 'IN_REVIEW', tab: 'review', label: 'content.tab.review', statuses: ['IN_REVIEW'] },
+  {
+    id: 'SCHEDULED',
+    tab: 'scheduled',
+    label: 'content.tab.scheduled',
+    statuses: ['APPROVED', 'SCHEDULED', 'PUBLISHING'],
+  },
+  {
+    id: 'PUBLISHED',
+    tab: 'published',
+    label: 'content.tab.published',
+    statuses: ['PUBLISHED', 'PARTIALLY_PUBLISHED'],
+  },
+  { id: 'FAILED', tab: 'failed', label: 'content.tab.failed', statuses: ['FAILED'] },
+  {
+    id: 'ARCHIVED',
+    tab: 'archived',
+    label: 'content.tab.archived',
+    statuses: ['ARCHIVED'],
+    onlyWhenAny: true,
+  },
+];
+const PLATFORMS = ['instagram', 'facebook', 'tiktok', 'linkedin', 'x'] as const;
 
 export default async function ContentPage({
   params,
@@ -62,9 +102,10 @@ export default async function ContentPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const translate = translator(locale);
-  const t = (key: string): string => optionalMessage(locale, key) ?? key;
   const access = await requireWorkspacePage(locale, '/content');
+  const { messageLocale } = access.session;
+  const translate = translator(messageLocale);
+  const t = (key: string): string => optionalMessage(messageLocale, key) ?? key;
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
   const may = (key: string) => workspace.permissionKeys.includes(key);
@@ -80,6 +121,8 @@ export default async function ContentPage({
   const status = STATUSES.includes(rawStatus as LibraryStatus)
     ? (rawStatus as LibraryStatus)
     : undefined;
+  // One exact status (a filter) wins over a tab; the tab is a group of them.
+  const tabGroup = status ? undefined : TAB_GROUPS.find((group) => group.tab === single('tab'));
   const campaign = single('campaign');
   const rawFormat = single('format');
   const format = (CONTENT_TYPES as readonly string[]).includes(rawFormat ?? '')
@@ -126,7 +169,7 @@ export default async function ContentPage({
         library.listItems({
           ...(effectiveBrand ? { brandId: effectiveBrand } : {}),
           brandScope: workspace.brandScope,
-          ...(status ? { status } : {}),
+          ...(status ? { status } : tabGroup ? { statuses: [...tabGroup.statuses] } : {}),
           ...(search ? { search } : {}),
           ...(campaign ? { campaignId: campaign } : {}),
           ...(format ? { contentType: format } : {}),
@@ -237,7 +280,7 @@ export default async function ContentPage({
   const mayAttachCampaign = may('content.create') || may('campaigns.manage');
   const menuFacts = await inWorkspace(workspace.workspaceId, async ({ db }) => {
     const ids = items.map((item) => item.id);
-    const [workspaceRow, slots, jobs, campaignOptions] = await Promise.all([
+    const [workspaceRow, slots, jobs, campaignOptions, planned, connected] = await Promise.all([
       db.workspace.findUnique({
         where: { id: workspace.workspaceId },
         select: { timezone: true },
@@ -270,9 +313,57 @@ export default async function ContentPage({
             take: 200,
           })
         : Promise.resolve([]),
+      /*
+       * THE CARD'S DATE — the prototype's meta line is the channels and when
+       * the post goes (or went) out. Each post's latest slot that was not
+       * cancelled; a post with none says "No date".
+       */
+      ids.length > 0
+        ? db.calendarSlot.findMany({
+            where: { contentItemId: { in: ids }, cancelledAt: null },
+            select: { contentItemId: true, scheduledAtUtc: true },
+            orderBy: { scheduledAtUtc: 'desc' },
+          })
+        : Promise.resolve([]),
+      /*
+       * THE CHANNEL CHIPS are the brand's connected channels, as the
+       * prototype's are (`pfilters`); every platform stays a filter.
+       */
+      db.socialConnection.findMany({
+        where: {
+          status: { in: ['ACTIVE', 'NEEDS_REAUTH'] },
+          ...brandIdQueryFilter({ brandId: effectiveBrand, brandScope: workspace.brandScope }),
+        },
+        select: { provider: true },
+        distinct: ['provider'],
+      }),
     ]);
-    return { timezone: workspaceRow?.timezone ?? 'UTC', slots, jobs, campaignOptions };
+    return {
+      timezone: workspaceRow?.timezone ?? 'UTC',
+      slots,
+      jobs,
+      campaignOptions,
+      planned,
+      connected: new Set(connected.map((row) => row.provider.toLowerCase())),
+    };
   });
+  const today = formatLocalTime(now, menuFacts.timezone).slice(0, 10);
+  const dayLabel = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-US', {
+    day: 'numeric',
+    month: locale === 'ar' ? 'long' : 'short',
+    timeZone: 'UTC',
+    numberingSystem: 'latn',
+  });
+  const whenByItem = new Map<string, string>();
+  for (const slot of menuFacts.planned) {
+    if (whenByItem.has(slot.contentItemId)) continue;
+    const local = formatLocalTime(slot.scheduledAtUtc, menuFacts.timezone);
+    const date = local.slice(0, 10);
+    whenByItem.set(
+      slot.contentItemId,
+      `${date === today ? translate('content.p.today') : dayLabel.format(new Date(`${date}T00:00:00Z`))} · ${local.slice(11, 16)}`,
+    );
+  }
   const slotByItem = new Map(
     menuFacts.slots.map((slot) => {
       const local = formatLocalTime(slot.scheduledAtUtc, menuFacts.timezone);
@@ -288,7 +379,8 @@ export default async function ContentPage({
     const list = linksByItem.get(job.contentItemId) ?? [];
     list.push({
       label:
-        optionalMessage(locale, `content.platform.${job.provider.toLowerCase()}`) ?? job.provider,
+        optionalMessage(messageLocale, `content.platform.${job.provider.toLowerCase()}`) ??
+        job.provider,
       url: job.externalPostUrl,
     });
     linksByItem.set(job.contentItemId, list);
@@ -310,7 +402,12 @@ export default async function ContentPage({
       status: item.status as LibraryStatus,
       contentType: item.contentType,
       locale: item.primaryLocale,
-      platforms: [...new Set(item.variants.map((variant) => variant.platformKey))],
+      // In the prototype's order (Instagram, Facebook, TikTok, …), not the
+      // variants' alphabetical one.
+      platforms: [...new Set(item.variants.map((variant) => variant.platformKey))].sort(
+        (a, b) =>
+          (PLATFORMS as readonly string[]).indexOf(a) - (PLATFORMS as readonly string[]).indexOf(b),
+      ),
       campaignName: item.campaignId ? (campaignNames.get(item.campaignId) ?? null) : null,
       brandName: brandNames.get(item.brandId) ?? null,
       updatedLabel: relativeTime(item.updatedAt, now, locale),
@@ -323,6 +420,7 @@ export default async function ContentPage({
       campaignId: item.campaignId,
       slot: slotByItem.get(item.id) ?? null,
       links: linksByItem.get(item.id) ?? [],
+      when: whenByItem.get(item.id) ?? translate('content.p.noDate'),
     };
   });
 
@@ -391,6 +489,7 @@ export default async function ContentPage({
     Object.entries({
       q: search,
       status,
+      tab: tabGroup?.tab,
       brand: brandFilter,
       campaign,
       format,
@@ -401,12 +500,18 @@ export default async function ContentPage({
   );
   const tabHref = (next: string | undefined) => {
     const params = new URLSearchParams(filters);
-    if (next) params.set('status', next);
-    else params.delete('status');
+    params.delete('status');
+    if (next) params.set('tab', next);
+    else params.delete('tab');
     const text = params.toString();
     return `/${locale}/content${text ? `?${text}` : ''}`;
   };
   const total = STATUSES.reduce((sum, key) => sum + (counts[key] ?? 0), 0);
+  const groupCount = (group: (typeof TAB_GROUPS)[number]) =>
+    group.statuses.reduce((sum, key) => sum + (counts[key] ?? 0), 0);
+  const currentTab = status
+    ? (TAB_GROUPS.find((group) => group.statuses.includes(status))?.id ?? 'all')
+    : (tabGroup?.id ?? 'all');
   const tabs = [
     {
       id: 'all',
@@ -414,14 +519,14 @@ export default async function ContentPage({
       label: translate('content.tab.all'),
       badge: String(total),
     },
-    ...STATUSES.filter((key) => ALWAYS.has(key) || (counts[key] ?? 0) > 0 || key === status).map(
-      (key) => ({
-        id: key,
-        href: tabHref(key),
-        label: t(`content.status.${key}`),
-        badge: String(counts[key] ?? 0),
-      }),
-    ),
+    ...TAB_GROUPS.filter(
+      (group) => !group.onlyWhenAny || groupCount(group) > 0 || group.id === currentTab,
+    ).map((group) => ({
+      id: group.id,
+      href: tabHref(group.tab),
+      label: t(group.label),
+      badge: String(groupCount(group)),
+    })),
   ];
 
   const ok = single('ok') ?? null;
@@ -434,8 +539,17 @@ export default async function ContentPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
+      eyebrow={translate('nav.group.create')}
       heading={translate('content.title')}
-      description={translate('content.subtitle')}
+      description={
+        // The prototype's "Every Reema Café post in one place." — the brand in view.
+        effectiveBrand && brandNames.get(effectiveBrand)
+          ? translate('content.p.subtitleBrand').replace(
+              '{brand}',
+              brandNames.get(effectiveBrand) ?? '',
+            )
+          : translate('content.p.subtitleAll')
+      }
       activePath="/content"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -449,7 +563,7 @@ export default async function ContentPage({
         t={t}
         cards={cards}
         tabs={tabs}
-        currentStatus={status ?? 'all'}
+        currentStatus={currentTab}
         filters={filters}
         view={view}
         ideas={ideas}
@@ -463,9 +577,9 @@ export default async function ContentPage({
             changeCampaign: may('campaigns.manage'),
           },
           campaignsByBrand,
-          today: formatLocalTime(now, menuFacts.timezone).slice(0, 10),
+          today,
           labels: Object.fromEntries(
-            MENU_KEYS.map((key) => [key, optionalMessage(locale, key) ?? '']),
+            MENU_KEYS.map((key) => [key, optionalMessage(messageLocale, key) ?? '']),
           ),
         }}
         can={{
@@ -473,6 +587,9 @@ export default async function ContentPage({
           edit: may('content.edit'),
           submit: may('content.submit'),
           schedule: may('content.schedule'),
+          approve: may('content.approve'),
+          results: may('analytics.read'),
+          retry: may('publishing.read'),
         }}
         options={{
           brands:
@@ -481,6 +598,11 @@ export default async function ContentPage({
               : [],
           campaigns: campaigns.map((row) => ({ value: row.id, label: row.name })),
           platforms: PLATFORMS.map((key) => ({ value: key, label: t(`content.platform.${key}`) })),
+          // The chips: the connected channels, and a platform filtered on.
+          channels: PLATFORMS.filter((key) => menuFacts.connected.has(key) || platform === key).map(
+            (key) => ({ value: key, label: t(`content.platform.${key}`) }),
+          ),
+          statuses: STATUSES.map((key) => ({ value: key, label: t(`content.status.${key}`) })),
           formats: CONTENT_TYPES.map((key) => ({ value: key, label: t(`content.type.${key}`) })),
           languages: [
             { value: 'EN', label: translate('content.language.EN') },
@@ -513,4 +635,11 @@ const MENU_KEYS = [
   'content.archive.title',
   'content.archive.confirm',
   'content.archive.confirmBody',
+  'content.menu.back',
+  'content.menu.duplicate',
+  'content.menu.addCampaign',
+  'content.menu.changeCampaign',
+  'content.menu.archiveSure',
+  'content.action.requestApproval',
+  'content.action.schedule',
 ] as const;

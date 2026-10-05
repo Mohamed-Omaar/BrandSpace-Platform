@@ -1,4 +1,5 @@
 import { contentGapSchema, explanationSchema } from '@brandspace/analytics';
+import { isInternalRecordText } from '@brandspace/shared';
 
 /**
  * AN INSIGHT, AS THREE ANSWERS — "what happened", "why", "what next" (P6-11).
@@ -42,8 +43,10 @@ export interface InsightNarrative {
 
 type Localized = { readonly ar: string; readonly en: string };
 
+/** Review of #67 — the platform's own evidence record is never shown as prose. */
 function pick(text: Localized, locale: string): string {
-  return locale === 'ar' ? text.ar : text.en;
+  const value = locale === 'ar' ? text.ar : text.en;
+  return isInternalRecordText(value) ? '' : value;
 }
 
 /**
@@ -55,6 +58,20 @@ function pick(text: Localized, locale: string): string {
  * today, so there is no body shape to trust and none is guessed.
  */
 export function insightNarrative(input: {
+  readonly type: string;
+  readonly body: unknown;
+  readonly locale: string;
+  readonly shownEvidence: readonly number[];
+}): InsightNarrative | null {
+  const narrative = narrate(input);
+  if (!narrative) return null;
+  // Review of #67 — a line with nothing readable left (a dropped record) is not shown.
+  const kept = (lines: readonly NarrativeLine[]) =>
+    lines.filter((line) => line.text.replace(/[\s—]/g, '') !== '');
+  return { why: narrative.why, happened: kept(narrative.happened), next: kept(narrative.next) };
+}
+
+function narrate(input: {
   readonly type: string;
   readonly body: unknown;
   readonly locale: string;

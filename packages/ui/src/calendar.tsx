@@ -365,6 +365,14 @@ function MonthGrid({
  * days with full content chips reads better on a phone than any grid, and it is
  * what a person actually wants when the question is "what is going out next".
  */
+/**
+ * Exported for the prototype calendar (D-468 batch 2): below 768px the product
+ * keeps this phone agenda in place of the ported grid (D-468 (b)).
+ */
+export function CalendarAgenda(props: Parameters<typeof Agenda>[0]) {
+  return <Agenda {...props} />;
+}
+
 function Agenda({
   days,
   labels,

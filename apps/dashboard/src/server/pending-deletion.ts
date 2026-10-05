@@ -6,6 +6,8 @@ import {
   requireCustomer,
   type WorkspaceSession,
 } from './customer-context';
+import { messageLocaleFor } from '../i18n/messages';
+import { recordMessageLocale } from './message-locale';
 
 /**
  * THE SESSION'S WORKSPACE, WHEN — AND ONLY WHEN — IT IS PENDING DELETION
@@ -33,5 +35,12 @@ export async function pendingDeletionSession(locale: string): Promise<
   if (!workspace) redirect(`/${locale}/workspaces`);
   const scheduledFor = workspace.deletionScheduledFor ?? null;
   if (!scheduledFor) redirect(`/${locale}/overview`);
-  return { customer, workspace: { ...workspace, deletionScheduledFor: scheduledFor }, token };
+  const messageLocale = messageLocaleFor(locale, workspace.country);
+  recordMessageLocale(messageLocale);
+  return {
+    customer,
+    workspace: { ...workspace, deletionScheduledFor: scheduledFor },
+    token,
+    messageLocale,
+  };
 }

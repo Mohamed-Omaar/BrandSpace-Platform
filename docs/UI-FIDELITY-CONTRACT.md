@@ -237,7 +237,8 @@ named once as `--bsp-*` tokens with its exact values. The prototype has no `box-
 - Search (`⌘K`) is not drawn: there is no search feature (Q6, D-276).
 - "Switch business" stays in the account menu for a member with more than one business (D-302).
 - Arabic copy is the product's formal Arabic (owner answer to D-468, 3a). The prototype's Egyptian
-  strings are collected unwired in `apps/dashboard/src/i18n/ar-eg.ts`.
+  strings are collected in `apps/dashboard/src/i18n/ar-eg.ts`; batch 1 left them unwired, and D-470
+  wires them for Egyptian workspaces (§4.4).
 - P6-14 (every Arabic dictionary value is Arabic): the logotype "BrandSpace", the language square's
   letters and the language names are rendered as locale data, not dictionary entries — no visual
   difference results.
@@ -265,7 +266,8 @@ named once as `--bsp-*` tokens with its exact values. The prototype has no `box-
 - **Interim:** "AI Creative Studio" (Create) and "Marketing Intelligence" (Improve) stay on the rail as
   prototype rail items until the prototype screens that absorb them (Media's Generate, Performance's
   Insights) are ported in batches 3 and 4; without them a member who may open either could lose the
-  only general way in. Owner to confirm.
+  only general way in. Confirmed by the owner (D-470, 2026-10-04): they stay until those screens are
+  ported, then come off.
 
 **Accessibility findings in the prototype itself (listed, per D-468).** Three of its text colours fail
 WCAG 2.2 AA contrast for the small text they set, and the product's axe suites require zero
@@ -273,7 +275,8 @@ violations: the quiet grey `#8a8a92` (3.43:1 on white — menu headings, counts,
 group and eyebrow grey `#7a7a82` (3.97:1 on the rail) and the "waiting for you" amber `#b86e00`
 (3.99:1). Each is replaced by the prototype's own nearest passing colour — its secondary grey
 `#6a6a72` and its warning-status ink `#8a6b00`. Keeping the prototype's values would need the axe
-suites to exempt `color-contrast`; that is the owner's call, not this PR's.
+suites to exempt `color-contrast`. **Owner decision (D-470, 2026-10-04): the three darker
+replacements stay, and colour contrast is not exempted from the tests.**
 
 **Left out because the data or feature does not exist.**
 
@@ -296,6 +299,611 @@ suites to exempt `color-contrast`; that is the owner's call, not this PR's.
 1440×900 screenshots, prototype and product, English and Arabic, the prototype served the same local
 fonts) and `tests/unit/d468-home-prototype.test.ts` (the prototype's `kfmt`, `delta`, `spark` and
 `VA_meKind`, and the unwired Egyptian layer).
+
+## 4.4 D-470 — the interface Arabic follows the workspace's country
+
+Approved by the owner on 2026-10-04 (D-470), from the batch 1 design note.
+
+- **Where the country comes from.** `Workspace.country`, mapped onto the workspace context that
+  `listWorkspaces` already loads for every page (`CustomerWorkspaceContext.country`) — one more field
+  on a row already read, no extra query, no schema change.
+- **Which words.** `messageLocaleFor(routeLocale, country)`: `en` on the English route; on the Arabic
+  route `ar-EG` for Egypt and `ar` (formal) for every other country. `requireWorkspace` returns it as
+  `session.messageLocale`. `dictionaryFor('ar-EG')` is formal Arabic with `apps/dashboard/src/i18n/ar-eg.ts`
+  laid over it key by key, so a key the layer lacks reads the formal string.
+- **How screens read it.** A page passes `session.messageLocale` to `translator` / `optionalMessage`
+  and keeps the route locale for links, `dir` and number and date formatting. The shared server
+  components (the shell, the "no access" page, the settings and billing tabs, the notes panel, the
+  denial text) read the same value through `requestMessageLocale()`, recorded by `requireWorkspace`
+  for the length of one server render. Client components that translate for themselves read it from
+  the shell through `useMessageLocale()`. A unit guard fails any workspace page that translates with
+  the route locale.
+- **Server-rendered.** No flash, nothing decided in the browser. The route stays `/ar`; `dir` and the
+  document's `<html lang>` are unchanged. The shell's root carries `lang="ar-EG"` in an Egyptian
+  workspace, so assistive technology reads the dialect.
+- **Formal Arabic where there is no workspace.** Sign-in, sign-up, verification, reset, the workspace
+  chooser, the first onboarding step, errors outside the shell and the sign-in emails
+  (`packages/auth/src/email-templates.ts`) have no country and stay formal.
+- **Not changed.** The design note proposed `<html lang="ar">` in place of `ar-SA`. The tag is shared
+  by all three apps and existing suites read it, so it stays `ar-SA` and the dialect is carried on the
+  shell's root instead; changing the document tag remains open for the owner.
+- **Proven** by `tests/unit/d470-message-locale.test.ts` (country → words, per-key fallback, the
+  Egyptian dictionary's key set, the page guard) and `tests/e2e/d470-egyptian-arabic.spec.ts` (an
+  Egyptian and a Saudi workspace on the same `/ar` route; formal Arabic before a workspace exists).
+- Egyptian strings keep being collected in `ar-eg.ts` for every screen this PR ports.
+
+## 4.5 D-468 batches 2–6 — every difference from the prototype, screen by screen
+
+One pull request (D-470), one commit per screen. Each screen is ported from `Main.dc.html` (or
+`Auth.dc.html`) into its own `§3-…` section of `packages/ui/src/prototype.css` and wired to the
+product's existing data, permissions and actions. The rules of §4.3 carry over unchanged: entrances
+follow MO1 (D-349); below 768px the product keeps its phone layout (D-468 (b)); colours that fail
+WCAG 2.2 AA take the prototype's nearest passing colour (D-470); Arabic is formal, with every
+differing prototype string collected in `ar-eg.ts` and read by Egyptian workspaces (§4.4).
+
+### Calendar (`Main.dc.html` lines 599–660)
+
+Ported: the head row (previous, next, the month — "· week N" in the week view —, Today when away
+from the current month, the channel chips, the Month / Week / Agenda switch with its sliding pill),
+the month card of `.cal` days with the number badge, "Today", ★ moments, the hover "+" and the
+`.calchip` posts (status bar, picture, title, channel marks, time), the post's glass popover (picture,
+title, status, meta, two lines of caption; Edit or Open, Move to another day, Duplicate), an empty
+day's popover (+ New post on this day, Drafts without a date), the move banner, the week view's
+cards, the agenda list, the legend and its hint. Only the weeks the month reaches are drawn.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-290: the post drawer stays — preview, facts, readiness, approval, notes, reschedule, request
+  approval, take off the calendar — opened from the popover's "Details" (a control the prototype does
+  not have) and from a week card or an agenda row (which in the prototype open the editor).
+- D-290: the brand, campaign and status filters, the zone and quota notes, the gap line and the
+  Unscheduled tray stay, drawn in the prototype's language (chips, `.xcard`, its rows).
+- B7 / D-290: "Drafts without a date" opens the scheduling dialog for that day — a slot needs a time,
+  which the prototype's one-click placement does not ask for. "+ New post on this day" and the day's
+  "+" open the Studio dated, as the prototype's do.
+- §8.2 / D-353: moving keeps the pointer drag, its label, its Undo and the phone's drop strip; the
+  prototype's Move goes through the same move action.
+- P6-14: channel names are the product's translated names in Arabic ("إنستغرام"); the prototype
+  writes them in Latin.
+- The product's Schedule button ("Add to calendar") sits after the switch: the prototype schedules
+  only from the Studio.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the product's agenda stays.
+
+**(c) States the prototype does not draw.** A member who may not schedule has no drop targets, no
+Move and no hint; one who may not create has no "+" and no Duplicate. More channels than the
+prototype's three wrap the head row. A long list of undated drafts scrolls inside the day's popover.
+
+**Accessibility findings.** The day numbers of past days (`#9a9aa2`, 2.6:1) and of days outside the
+month (`#c4c4cb`, 1.7:1), the weekday heads and popover headings (`#7a7a82`), the empty notes and the
+hint (`#8a8a92`) take `#6a6a72`. The ★ moment is 17px tall in the prototype, under WCAG 2.5.8's 24px
+target; it keeps its look and gains the height. The day's "+" also shows on keyboard focus.
+
+**Left out — no data or feature.** "On hold" (a post held by a paused campaign) is not in the
+calendar's data, so its legend entry and its pause mark are not drawn.
+
+### Posts — the content library (`Main.dc.html` lines 538–566)
+
+Ported: the status tabs as the prototype's `.seg` with counts (red when posts failed), the channel
+chips and "+ New post", "From your strategy" with its ideas, the four-across grid of `.card lift`
+posts (picture, title and status pill, meta, the purple campaign chip, the one button and the "…"
+menu), the glass "…" menu in the prototype's order with its campaign sub-list (✓, Back) and its
+inline two-step archive ("Archive", then "Sure? Archive"), and the empty card.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-282: the library is media-first — a post's real first picture, a video tile, and a text-only
+  post's own words on the lavender card — rather than the prototype's sample artwork and overlay
+  headline. Its search, brand, campaign, format and language filters and the grid / list switch stay,
+  drawn as the calendar's chip selects and the prototype's `.seg`; the list view is the agenda's rows.
+- The status tabs are the product's lifecycle states (Draft, In review, Changes requested, Approved,
+  Scheduled, Publishing, Published, Failed, Archived — each when it has posts), not the prototype's six.
+- B8 / Q21: the menu keeps the product's Request approval, Schedule, Move… (its date-and-time
+  dialog), Unschedule, Restore and View on, each only when the permission and state allow; its first
+  item is the prototype's Edit / Open. A member offered nothing beyond opening gets no menu.
+- The card's one button follows the prototype's `kinds` (Continue, Review, Edit, Results, Retry,
+  Restore) for a member the destination admits; anyone else gets Open. An approved post, a state the
+  prototype does not have, offers Schedule.
+- "From your strategy" lists the product's ideas, each with its own verb ("Create a post for it",
+  "See the evidence"), not the prototype's single "Make it".
+
+**(c) States the prototype does not draw.** Three cards a row below 1100px and two below 900px; on
+a phone the product's card grid stays and the tabs scroll in their own track. A workspace with more
+campaigns than fit scrolls the "…" menu inside itself.
+
+**Left out — no data or feature.** The card's "Retry" opens the Publishing log, where the failed
+post's retry is: retrying needs the publish job, which a library card does not carry.
+
+### Studio — the post editor (`Main.dc.html` lines 329–537)
+
+Ported: the banner for the post being edited (its picture, "Editing", status, title and what that
+status means here, with the ways on, on the prototype's per-state backgrounds); the settings card's
+twelve-column grid (Format, "Post to", the publish time with its glass popover, Campaign); the editor
+card with its Words / Design tabs and sliding pill beside the 380px preview card with its channel
+tabs; the caption field, its count, the AI edit chips and their cost line; the hashtag block (count,
+the tags as removable chips, the field); the changed-fact warning (`capFix`: area, old → new, Rewrite,
+Keep as is) and the "Used N Brand Brain facts" line with its list (`bbUse`); "Will it land right?" —
+one card per channel with its status and its caption, hashtags and media rows; and the sticky bar
+(status, saved, the next step). A new post is the same frame: the settings card (Format as the
+prototype's segmented switch, "Post to" chips), the brief in the editor card, the preview card, and
+the bar with Estimate, Save without AI and Write the draft.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-277 §20–§22 / D-284: every channel keeps its own version of the post — the "Post to" chips are
+  the tabs that choose the version being edited (the prototype's chips add or remove a channel, which
+  a written post cannot), and the preview card's tabs follow the same choice.
+- §27: there is no autosave. The bar's Save is the version's save (it submits that version's form),
+  and the saved line says "Saved 5 min ago" or "Unsaved changes" rather than the prototype's
+  "saves as you type".
+- D-288 / Q10: the next step follows the brand's approval policy — Send for review (with the reviewer
+  picker in the prototype's reviewer chip) and, where approval is not needed or has been given,
+  Schedule. Changes requested is answered from the banner (reply, reviewer, resend).
+- B9 / F2: the publish-time popover holds the product's date and time, posted to the calendar's
+  schedule action, offered exactly where Schedule is; the prototype's "Best time automatically" and
+  "Right after approval" modes and its suggested times are not features of the product.
+- D-285 / §23–§25: the Design tab is the product's media slides (order, cover, replace, remove, slide
+  headlines) and media drawer (library, upload, Generate with AI). The prototype's source tiles,
+  brand-template panel and slide strip are not drawn.
+- AC-27.4: the preview is the product's `SocialPostPreview` — the post's real media, carousel paging
+  and format — with "Compare previews"; the prototype's hand-drawn Instagram, Facebook, TikTok and
+  LinkedIn frames are not.
+- D-224 / Q18: a new post's controls stay the product's — template, language, goal (with the
+  recommended goal and "Stop using" defaults), campaign — as fields of the settings card.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the cards stack in one column, the
+settings one field to a row, and the bar wraps.
+
+**(c) States the prototype does not draw.** A failed post's ways on (Reschedule, Make a new copy), a
+published post's read-only note, the in-review, approved and scheduled warnings, an image carried
+from the Creative Studio, and a changes request — all in the banner. The product's validation in
+words, each with its fix (Shorten with AI, Choose media), and an expired channel's explanation sit in
+that channel's check card. Restore, Save as template and Archive (asked first) sit under the checks.
+The format of a written post is shown, not offered: it is chosen when the post is written. More
+formats than the prototype's four wrap the switch. Below 1100px the editor and preview cards stack and
+the bar wraps; the bar keeps its end clear for the shell's floating Copilot, which stands where the
+prototype's bar has its own Copilot button.
+
+**Accessibility findings.** The tag's ✕ (`#8a6ad8`, 3.6:1 on `#f6f3ff`) takes the tag's purple ink
+and a 24px target; the popover note, the empty notes and the fact areas (`#8a8a92`) take `#6a6a72`.
+The Words / Design switch is a group of pressed buttons rather than the prototype's `role="tab"` with
+`aria-pressed`, which is not a valid pairing.
+
+**Left out — no data or feature.** The brief's "Or start from" ideas and "Write caption with AI" on a
+written post (AI edits are the chips; a new post is written from the brief), the content pillar
+("auto-picked"), the hashtag suggestion groups and "Other ideas", the size and safe-zone line, the
+post's notes count in the preview card (the notes stay below the Studio), "After publishing,
+BrandSpace opens the live post and checks…" (no such check exists), the bar's second "When" chip,
+"Open approvals", and the Copilot button. The product's own lifecycle path ("Where this post
+stands") and "Back to the library" link are not drawn: the prototype states the status as the bar's
+pill and leaves navigation to the rail.
+
+### Approvals (`Main.dc.html` lines 567–598)
+
+Ported: the 330px list card with the "Waiting for me" / "Sent by me" switch (its sliding pill and the
+waiting count), the queue's rows (52px picture, title, who sent it and when; the chosen row lavender)
+and the sent rows with Withdraw, beside the review card — the post as it will look, its title and
+facts (channels, who sent it), the note, and Approve, Request changes and Reject. A queue opens on its
+first review, as the prototype's does.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-288 / AC-29.1: the review shows the product's `SocialPostPreview` for every channel version, the
+  captions and the media under review, and the post's notes thread — not the prototype's single
+  sample picture.
+- B5: a reason is required to request changes (the field is required; Approve and Reject skip it),
+  and the verdict is the product's Approve — approving does not schedule the post, so the prototype's
+  "Approve & schedule" and its hint ("Approving schedules the post…") are not used.
+- D-122 / D-126: a review the reader may not decide (self-approval forbidden by the policy it was
+  opened under) says so on its row and offers no verdict.
+- A8: the approval rules live in Settings → Approvals; the queue keeps its pointer there for
+  `approvals.policy.manage`.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the list and the review stack.
+
+**(c) States the prototype does not draw.** A member who may not review (the queue explains why), an
+empty "Sent by me" with the way to the drafts, who a review is assigned to, who decided a sent one
+and why, and "Open in Studio". Below 1280px the review's two columns stack; below 1024px the list
+and the review do.
+
+**Left out — no data or feature.** The requested time and the campaign rows of the review's facts
+(a review carries neither), and the rows' real pictures (a queue row carries no media; the product's
+abstract art stands in, as on the calendar).
+
+### Campaigns (`Main.dc.html` lines 1159–1236)
+
+Ported, the list: the lavender-to-yellow hero (running · planned · ended, what ends or starts next,
+"+ New campaign", the stat tiles), the status switch with counts, and the two-across cards — the
+posts' pictures with "+N", the status chip and its dot, "No posts yet", the name, dates, channel marks
+and objective, what has been published with its bar, the next post, and Open. The room: "← All
+campaigns" and the head card (name and status, the facts line, what has been published with its bar,
+Edit, Start now, + New post), and the brief as the prototype's notes block.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-289: the room keeps its tabs — Overview, Content, Calendar, Assets, Performance and Activity —
+  under the head, with their contents unchanged; the prototype's goal and linked-strategy cards and its
+  post results table are not drawn above them.
+- D-341: the hero's "Best campaign" tile is the product's (engagement over impressions, pooled, for a
+  reader with `analytics.read`; "—" and "No campaign has published yet" otherwise).
+- The switch lists the product's statuses that have campaigns (Draft, Planned, Active, Paused,
+  Completed, Archived), not the prototype's four.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the hero and the cards are one column.
+
+**(c) States the prototype does not draw.** A workspace with no brand (create one), no campaigns
+(create one), and a campaign whose stored channel has no translated name (named by its key).
+
+**Accessibility findings.** The switch's counts (`#7a7a82`), the ratio line and "No posts yet"
+(`#8a8a92`) take `#6a6a72`.
+
+**Left out — no data or feature.** The goal row on the cards and in the room (a campaign has no KPI
+target), "Posts on hold" and the paused overlay (holding a paused campaign's posts is not in the
+data), Pause / Resume on a card (pausing is the campaign's edit form), "Add an existing post" in the
+room (the Posts menu files a post under a campaign), and the paused banner.
+
+### Media — the library and its Generate tab (`Main.dc.html` lines 1237–1284)
+
+Ported: the head row (the Library / Generate switch with its sliding pill, the kind chips, Upload), the
+storage card (the figure against the plan's limit, its percentage and bar), the six-across file cards
+(the picture, the AI pill, the name and Use), and the empty card with Upload and Generate. The Generate
+tab is the Creative Studio drawn as the prototype's: the description, the format switch, what the image
+draws on, Generate with its cost, and the result card (the picture in its own format, Use in post,
+Generate again) with the dashed empty state. The interim "AI Creative Studio" rail entry is gone (owner
+decision, batches 2–6); the top bar's Create menu and the Generate tab open it.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-287 / D-305: the library keeps its views (All, AI generated, Rights expiring, …), search, sort,
+  status and tag filters, folders and breadcrumbs, bulk actions, the detail drawer with versions and
+  the brand kit card, in the prototype's chips and cards. The head row carries the prototype's four
+  chips (All, Photos, Video, AI); every other kind and view, search, status, tag and sort sit one press
+  away under **Filters** (open by itself whenever one of them is in use), and the bulk bar appears once
+  a file is ticked.
+- AC-28: Generate keeps the quote before spending, one idempotency key per attempt, the scan step, the
+  "made by AI" label, "Open in library" and the other sizes as their own generations (Adapt).
+
+**(b) Post-launch — left out.** The phone layout: below 768px two files across and one column.
+
+**(c) States the prototype does not draw.** Every file's state with its word (uploading, processing,
+failed, quarantined, archived), its kind, size and dimensions, its badges (shared, rights expiring or
+expired) and where it is used, under the prototype's foot. Four files across below 1200px. A failed
+generation and the scan in progress.
+
+**Accessibility findings.** The storage notes (`#8a8a92`) take `#6a6a72`.
+
+**Left out — no data or feature.** The storage bar's categories and their legend (storage is one
+figure), "Big files" and "Plan →", a video's duration on its card (not in the card's data), and the
+generated example picture.
+
+### Brand Brain (`Main.dc.html` lines 757–926, and the orb's `makeOrb`)
+
+Ported: the four tabs in the prototype's segmented switch (Knowledge, Look & voice, Sources, Talk with
+the brand); the hero card — the orb in its 450px column with its hint, beside the count, the lead and
+the actions; "What's missing" with its question chips; the To review banner with "Accept the confident
+ones" (its card lists what it will accept) and "Review one by one" (the review card: where the fact
+goes, its confidence pill, the fact in large type, what was found in the source, old and new side by
+side, Accept · Edit · Reject · Later, and "All reviewed" when the queue is empty); the ten area cards
+four across; an open area IN PLACE of the grid ("← All areas", the head card with its key questions,
+Approved facts beside Waiting for your review); Look & voice as the prototype's cards (Logo, Colours,
+Voice and the fonts full width); Sources as the upload card and the list (type badge, name over meta,
+"n · Facts", Read again, Remove with the prototype's inline confirmation); and the chat card (the small
+orb, "Brand Brain", what it answers from, the log, suggestions, the mode switch with its glyphs, the
+input and Send, the note). The orb is a transcription of the prototype's canvas orb — its particle
+counts, scale, rotation, links, flares, pointer repulsion, no hole, and the six nodes on its ellipse —
+replacing the `brand-brain-native` orb.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-357: the hero counts key questions — "answered n of m", the number in the prototype's 52px figure —
+  not "areas complete out of 10", and there is no progress bar; an area's state and its card's count
+  come from its key questions too, and a node's line is that area's "n of m".
+- D-294: under the count, what BrandSpace understands, the four layers, the facts and sources; the
+  brand's name is the page's eyebrow (as on the prototype).
+- D-298 and the Copilot: "Ask about this brand" (the scoped Copilot) and "Brand profile" beside "Ask the
+  brand" and "Upload files".
+- D1: the Knowledge tab carries the number waiting for review; the tabs stay a keyboard tablist.
+- D-91 / D-86: the six nodes are real buttons placed on the prototype's ellipse each frame (so a keyboard
+  can open an area and a file can be dropped on one); reduced motion draws the prototype's `draw(0)`.
+- D-65 / D4: one review queue; a candidate that precedence refuses offers Reject and "Edit fact", with
+  the precedence note; the card names its source and its place in the queue, and an analytics
+  learning its evidence. "Edit" opens both languages of the title and the body.
+- D6 / D7: a fact's "valid until", its layer and authority, provenance and uses; adding a fact names
+  its key and both languages, and without review rights is sent for review; the chat keeps Add, Edit,
+  Remove (with Undo) and Attach.
+- CLAUDE.md §2.5: "Upload files" and a file dropped on the orb place the file on the Sources form to be
+  confirmed — nothing uploads silently; Remove asks Keep its facts / Drop its facts.
+
+**(b) Post-launch — left out.** Website reading ("Read my website" and the site card). The phone layout:
+below 768px the areas two across and everything else one column.
+
+**(c) States the prototype does not draw.** An empty brain, a member who may not review ("waiting for
+reviewers"), a document being read or failed, an upload in flight, a chat that cannot answer from
+approved knowledge, chat errors, a fact that has expired.
+
+**Accessibility findings.** The quiet greys (`#8a8a92`) take `#6a6a72`. "Edit, then accept" was a
+`<summary>` under 24px; it is now the prototype's Edit button (40px), which also meets the owner's 24px
+minimum.
+
+**Left out — no data or feature.** "Suggest from sources" on an area, a fact's version history and
+restore, the archived-facts list, the Look tab's templates card (Colours takes its column), the logo
+"Replace" tiles, the chat's inline teach / fix cards (the product's modes do this), and a per-fact
+"used by" from a chat answer.
+
+### Performance (`Main.dc.html` lines 661–756)
+
+Ported: the head row (Numbers · Insights with its count, the 7 / 28 / 90-day switch, the comparison chip,
+Export), the sources strip, the four headline figures as the prototype's KPI cards (label, figure,
+delta in green or red, the spark line, "vs the previous period"), the day-by-day chart on the
+prototype's 900×230 geometry (grid, axis labels and their thinning, the line, its end value), By
+channel (name, figure, share, the bar in the channel's colour), the Posts table, and the Insights tab
+as the prototype's two-column cards (glyph, state, what the finding is, where it rests, Open and Save as
+learning). All three are links, so the view, the period and the comparison are in the address. The
+interim "Marketing Intelligence" rail entry is gone (owner decision, batches 2–6); a finding opens from
+its Insights card, and the page highlights Performance.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-293: the story — what changed, why it might matter, what to try — stays first, as three of the
+  prototype's cards, with Explain and "Give to Copilot".
+- The product's own headline figures (impressions, reach, engagements, engagement rate) and its one
+  ranked figure on the Posts table (engagements); every figure that has no value says why (the six
+  reasons), never a zero; the mock-data and stale banners; "Repeat it" opens the Studio from that post.
+- D-351 (MO11, MO12): the headline figures count up to the exact server value, the day-by-day line
+  draws in with its end value after it, and the channel bars grow from their start edge.
+- D11: Save as learning on a finding, and its pending / saved state. It and Explain (asking why the
+  period moved) sit on the Insights tab with the findings, and both return to it.
+
+**(b) Post-launch — left out.** The phone layout: below 768px one column, the post table without its
+action column.
+
+**(c) States the prototype does not draw.** No brand chosen, no figures yet (the chart's reason), no
+findings, a finding saved as a learning, an explanation that failed.
+
+**Accessibility findings.** The quiet greys (`#8a8a92`) take `#6a6a72`. The chart keeps its data table
+for assistive technology (visually hidden), as every chart in the product does.
+
+**Left out — no data or feature.** The channel filter chips and the "not connected" card (figures are
+not split per channel on this screen), the hover day card and the published-post dots on the chart, the
+PDF report and the weekly email in Export (CSV only), By strategy pillar, Best time to post, the link
+clicks card, the Campaigns card, the strategy goal card, the Posts table's Channel, Reach, Saves and
+Clicks columns, and a post's picture (a neutral tile stands in). Below 1,000 the chart's grid steps by a
+quarter of its maximum (the prototype's smallest step, 500, would flatten a young account's line), and a
+day with no reading is a gap in the line, never a zero.
+
+### Copilot (`Main.dc.html` lines 1493–1525)
+
+Ported: the floating panel — 380px wide, up to 580px tall, the glass card at the bottom inline end in
+the floating button's place (the button steps aside while it is open), entering from its corner
+(`bsPanel`, 340 ms); its head (the 34px spark tile, "Copilot" and what it is attached to, the close
+chevron); the conversation as the prototype's bubbles (yours dark, the Copilot's grey, 16px corners);
+the plan as the prototype's lavender-edged card; the foot under its rule with the suggestion chips and
+the grey field beside the purple send button. Outside a click, Escape and the close button close it, and
+focus returns to the control that opened it.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-277 §37 / D-304: the panel carries the product's one conversation component, with its plan →
+  confirm → undo ceremony, its context line (brand, screen, object) and its inspection results; nothing
+  runs from here that the full Copilot screen would not run, and nothing without the same confirmation.
+- "Open full Copilot" stays in the head, and the control is still the link to the full screen (a
+  modified click or no script follows it).
+- D-294: "Give to Copilot" and "Ask about this Brand" open this panel with the request already in it.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the panel fills the screen less a 12px
+margin.
+
+**(c) States the prototype does not draw.** No brand chosen, a refusal (in words, never a code), credits
+too low, a plan that expired, a result and its undo, an undo that was refused.
+
+**Accessibility findings.** The speaker's name on each bubble, the field's label and the send button's
+word stay for assistive technology (visually hidden), as the prototype shows only the bubbles, the field
+and the arrow.
+
+**Left out — no data or feature.** The credit pill in the head (the panel has no balance to read), and
+the prototype's action button under an answer ("Open the Studio →"): the product's answers carry their
+own links inside the plan.
+
+### Notifications (`Main.dc.html` lines 162–170)
+
+Ported: the bell's popover — 340px, the glass card 10px under the bell at its inline end, 18px corners;
+the head (title and Dismiss under a rule); the rows (an 8px dot, purple while unread, the title at 13px /
+700, the meta line at 12px), the unread row's lavender ground; and the "See all" foot in purple on its
+light band. It opens and closes from the bell, Escape or an outside click, and returns focus to the bell.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-297: the three tabs — All, Mentions, Approvals — as the prototype's segmented control above the rows.
+- Each row opens the exact place it is about; a note's excerpt is quoted under its title; unread is a
+  word in the meta line as well as the dot (never colour alone). The bell is still the link to the full
+  Notifications screen (a modified click or no script follows it).
+
+**(b) Post-launch — left out.** The phone layout: below 768px the popover spans the screen less 16px.
+
+**(c) States the prototype does not draw.** Loading, a feed that failed to load, and an empty tab.
+
+**Accessibility findings.** The meta grey (`#8a8a92`) takes `#6a6a72`. The glass is drawn at `.94` white, not
+`.62`: at `.62` the page behind (Home's hero heading) showed through the feed's text and failed contrast.
+
+**Left out — no data or feature.** The unread count badge on the bell (the top bar is drawn before the
+feed is read, and it is not read on every page), and "Mark all as read" (no such action exists).
+
+### Automations (`Main.dc.html` lines 1304–1334, the rule builder at 1556–1569)
+
+Ported: the head row (Rules · Run history and "New rule"); the requests waiting for an OK as the
+prototype's amber card, Skip and Approve on each; the rules as one card of rows (the ↻ tile, the event →
+the action, the meta line with its "Asks first" and "Uses credits" pills, the on / off pill, the switch
+and the ⋯ menu with Edit and Delete); the "Suggested rules" row and the notes under the card, with the
+link to Settings → Notifications; Run history as the prototype's Activity card (when, what, which rule,
+the outcome's pill); and the rule builder as the prototype's 640px dialog — "1 · When" and "3 · Then" as
+two-column grids of choices, "2 · Only if", each choice's settings under the lavender edge, the rule
+read back in the gradient box, Cancel and Save. Both tabs and the dialog are addresses (`?view=runs`,
+`?new=1`, `?edit=<rule>`), so they work without script; with script, Escape, the veil and ✕ close the
+dialog and focus stays inside it while it is open.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- Phase 2B-3 (R4-1, PR 1–6): the builder is still built from the engine's closed registry — only the
+  actions a trigger supports, only the condition fields it produces, each field's own operators and
+  value control, a trigger whose thresholds are not set shown but not choosable, nothing preselected
+  on a new rule, the browser's "choose one" in the page's language, a saved value no longer offered
+  kept as "No longer available", an older automation captioned, the AI cap said on its rule.
+- A rule keeps its name (and, when edited, its description); its brand is chosen on a new rule and
+  fixed on an edited one, as are its event and action.
+- B12: the requests waiting for an OK show only actions this person can decide; "Confirm publish"
+  stays the publish's own words; Run history names who approved or skipped and who a request waits
+  for.
+- P6-12: Delete still asks twice.
+- D-277 §39 / D-296: the suggested row is "Automate by asking", which hands the Copilot an example;
+  its notes say a Copilot-prepared rule starts off and a publish always asks first.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the rows wrap and the builder is one
+column.
+
+**(c) States the prototype does not draw.** No rules, no runs, a refused save (the error banner), a
+waiting request this person cannot decide, a failed or blocked run with its reason in words, ideas
+drafted by a run (with the link to them), the conditions of a Copilot-written rule kept as they are.
+
+**Accessibility findings.** The quiet greys (`#8a8a92`) take `#6a6a72`. The choices are radio buttons
+(one tab stop per group, arrow keys between choices) with a visible focus ring on the tile. The switch
+and the ⋯ button are named with the rule.
+
+**Left out — no data or feature.** A rule's "Listens to …" line and its run count, each event's
+"Listens to …" sub-line in the builder, the suggested-rule templates (the product has none; the
+Copilot builds one from words instead), Duplicate in the ⋯ menu, the monthly cap chips (the cap is the
+plan's, set in the Control Center), the cost and "asks how" sentences in the read-back, and the hours
+left on a waiting request.
+
+### Team (`Main.dc.html` lines 1381–1402)
+
+Ported: the team as the prototype's card of rows — the head row with the count and "+ Invite", then a
+row per member (the rounded tile, the name at 14px / 700 over a 12px line, the role pill, "Manage →") —
+and a member opened on their own page at `?member=<membership>`: "← Team", the member's card (a 48px
+tile, the name at 19px / 800, who they are), the owner's lock card, the role as the prototype's chips and
+brand access in its own card.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- Each role chip is the existing role change, posted; brand access keeps its all-or-some choice and its
+  save; Remove stays (on the member's page); the last owner still cannot be removed, and says so.
+- The pending invitations (resend, revoke) and the invite form (email, role, brand access) stay, as a
+  second card in the same rows and fields.
+- A member's line carries their email, their brand access and when they joined (D-277 §45).
+
+**(b) Post-launch — left out.** "View as" (D-468), and the phone layout: below 768px the product's
+record lists stay, with their actions in each row.
+
+**(c) States the prototype does not draw.** No invitations, more invitations than shown, an invitation
+revoked or expired, a member not yet active, an error from a refused change, the invite form not
+offered (said, with who can).
+
+**Accessibility findings.** The quiet greys take `#6a6a72`.
+
+**Left out — no data or feature.** The seat count (the plan's seats are not read here; the count of
+people stands in), per-member permission switches and the "customised" pill (permissions are the
+role's), a role's one-line description, the audit note and the member page's save bar (each change is
+saved by its own button).
+
+### Settings (`Main.dc.html` lines 1336–1489)
+
+Ported: the Settings column — 210px, the prototype's five groups (Workspace · People · Publishing ·
+AI & billing · Security) under their small capitalised labels, each row the rail's `.nav` item, the
+current one dark — beside the section; and, in every section, the prototype's parts: cards at radius 24
+with the faint shadow, fields (`#e4e4e8` edge, radius 12, `9px 12px`, 14px), labels as `.lbl`, a card's
+heading as `.sech`, switches as the prototype's `.tgl` rows (label and line, the switch at the end), and
+the save bar — dark with a yellow dot while there are changes, glass with a green dot once saved.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-277 §3/§44, D-298: Settings is the one home of workspace administration — Team, Roles &
+  permissions, Activity, Connections and Billing & usage are rows of it; a member sees only the rows
+  they can open, and the table that decides is the one the guard test pins.
+- Each section keeps its own fields, saves and audit (A8–A10, G1–G3, D-117, D-330, D-331, P6-13); a
+  section's name is the page heading.
+- The product's rows the prototype does not list sit in the group the prototype would put them in:
+  Roles & permissions under People, Activity under Security.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the section list is one card above the
+section.
+
+**(c) States the prototype does not draw.** A refused or saved change (the banners), the sections only
+an owner can open, a member without a brand, the retention control, multi-factor setup and recovery
+codes, connected-account errors, data export in progress, workspace deletion pending.
+
+**Accessibility findings.** The group labels' `#8a8a92` takes `#6a6a72`. The switches stay native
+checkboxes (keyboard, form posting and the 24px target unchanged).
+
+**Left out — no data or feature.** The "unsaved" dot on a row in the column (a section's changes are its
+own form's), the prototype's per-section one-line subtitles under a second heading, each section's
+composition where the product's section has different content (General's combo boxes, Brands' gradient
+tiles and "Add brand", the notification e-mail column, the AI dialect chips, the activity log inside
+Security), which keep the product's controls in the prototype's parts.
+
+### Plan & billing (`Main.dc.html` lines 1445–1463)
+
+Ported: the plan and the credits side by side (1.2fr / 1fr cards at `padding: 20px 22px`): the plan's
+name at 20px / 800 with its monthly price, the status and the renewal date, "Change plan"; the credits at
+34px / 800 with what they are and a way to buy more; the plans and the credit packs as the prototype's
+tiles (`border-radius: 16px; padding: 12px`, the current one marked); the invoices as rows (number,
+date, amount, the status pill, View).
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- D-298: Billing & usage is one Settings row with two tabs (Billing, Usage).
+- Prices are the configured plan prices in the workspace's currency, never converted; a plan with no
+  price says why. "Current" means paid for, not merely assigned (a trial can still buy).
+- D-196: credits are prepaid, with a hard stop and no debt; packs ask before charging.
+- Downgrades are scheduled for the period end and can be withdrawn; the accounting export and the
+  cancellation stay, each in its own card.
+
+**(b) Post-launch — left out.** The phone layout: below 768px one column.
+
+**(c) States the prototype does not draw.** No subscription, a trial, past due, suspended, a scheduled
+cancellation (with Resume), a pending plan change, no invoices, no packs, a member without
+`billing.manage` (said, with who can).
+
+**Accessibility findings.** The quiet greys take `#6a6a72`.
+
+**Left out — no data or feature.** The usage bars in the plan card (they are the Usage tab's), the
+low-credit alert threshold, and a PDF button on each invoice (an invoice opens on its own page, which
+has its printable document).
+
+### Sign-in and onboarding (`Auth.dc.html`)
+
+Ported: the entry screens' card (lines 39–117) — one 540px card on the purple / pink / yellow wash, the
+logo and wordmark beside the 44px language button, the purple eyebrow pill naming the screen, the 42px
+heading over its 15px line (sign-in's "Welcome back" and sign-up's "Start with BrandSpace" are the
+prototype's), `.lb` labels, the 58px `#f4f4f5` fields, the 56px buttons (ink; purple for creating an
+account), the links row and the "Secure sign-in · separate customer and platform sessions" line —
+for sign-in, sign-up, "check your inbox", password reset (both steps), e-mail verification,
+two-factor sign-in and setup, an invitation, choosing a workspace, no workspace and deletion pending;
+and the setup wizard (lines 114–200) as the prototype's 900px card with its step bars (green done,
+purple current, grey ahead), each step's 34px heading over its 14px line, and its fields.
+
+**(a) Recorded owner decisions that keep the repo's behaviour.**
+
+- One generic sign-in failure for every cause (docs/SECURITY.md §3); sign-up keeps its fields (name,
+  e-mail, password with its rule, time zone) and the legal documents to accept, and says when sign-up is
+  closed; reset links expire.
+- D-303: "Step n of m · name" stays in words beside the bars, with "Finish later"; the wizard keeps
+  its five steps (brand, teach, connect, goal, done) and saves as it goes.
+- The wizard stays inside the signed-in shell in its focus mode (no rail), as the product's routing
+  places it after the workspace exists.
+
+**(b) Post-launch — left out.** The phone layout: below 768px the card fills the width and the bars wrap.
+
+**(c) States the prototype does not draw.** Sign-up closed, a refused sign-in, a locked or unverified account, an
+expired or used link, a two-factor challenge and recovery codes, an invitation for another address,
+no workspace yet, a workspace pending deletion, each wizard step's errors and empty states.
+
+**Accessibility findings.** The footer and quiet greys (`#8a8a92`, `#7a7a82`) take `#6a6a72`. The
+progress stays a real progressbar for assistive technology (visually the bars).
+
+**Left out — no data or feature.** The password "Show" button inside each password field, sign-in's
+"No account yet? Create account" (sign-up can be closed; it is reached from the public site), the trial note on sign-up (the trial is the configured plan's, stated on Billing), "I opened the link" on the inbox screens (the e-mailed link does it), the
+country combobox's search (the product's picker stays), the wizard's team-size chips, logo upload and
+colour swatches in the brand step, the "read my website" option, and the first post ideas on the last
+step.
 
 ## 5. How compliance is proven
 
@@ -966,6 +1574,42 @@ Approved design-system extensions, built only from what the screens already draw
   `bs-control` select and number input.
 
 No new colour family, font, shadow style, motion or interaction model.
+
+### 6.3.51 Review of #67 — product controls behind the prototype's affordances (D-471)
+
+The prototype's layout wins on every screen. A product control it does not draw is
+kept, behind an affordance it already has, and nothing it draws moves for it:
+
+| Screen                    | Moved behind                                                       | What                                                                                      |
+| ------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Posts                     | "Filters"                                                          | search, brand, campaign, format, language, platform, exact status, grid/list              |
+| Studio (new)              | "⋯" beside Post to                                                 | Video · Article · Thread, template, language, goal, defaults                              |
+| Studio (edit)             | "⋯"                                                                | the other AI edits, Compare previews                                                      |
+| Media                     | "Filters" / "⋯" beside Upload                                      | kinds, views, search, sort, scope, status, tags / New folder                              |
+| Brand Brain               | "⋯" in the hero                                                    | answered n of m, what it understands, layers, counts, Ask about this brand, Brand profile |
+| Settings → General        | "More options" / "⋯"                                               | Locale / the other first days of the week                                                 |
+| Settings → Team & roles   | "+ Invite" / a row's "⋯" / the member's page                       | the invite form / resend, revoke / address and joining date                               |
+| Settings → Plan & billing | "Change plan", "Buy … credits" (in place), "Usage & limits →", "⋯" | plans, packs, the usage tab, the accounting export and cancelling                         |
+| Settings → Security       | a related link                                                     | Activity                                                                                  |
+| Performance               | "Filters"; after the prototype's content                           | Compare with the previous period; What changed · Why · What to try                        |
+| Automations               | after the summary box; "⋯" in the footer                           | the rule's name and brand; the three notes                                                |
+| Notifications popover     | "⋯"                                                                | the kind filters, See all                                                                 |
+| Copilot drawer            | "⋯"                                                                | the line on how it works, Open the full Copilot                                           |
+| Approvals                 | "⋯"                                                                | the policy link, Open in the Studio                                                       |
+| Calendar                  | "Filters" / "⋯"                                                    | brand, campaign, status, the zone and count / Add to calendar                             |
+
+Onboarding is the standalone card (`SetupFrame`): Business (the workspace form), Brand,
+Teach (learn + review), Accounts, Goal. Every element still not built is listed, with its
+effort, in the PR for the owner.
+
+**Round 2 of the review.** The Studio's sticky bar is the prototype's — status · save
+state · hint · Reviewer · When · one purple "Send for review" · the round Copilot button
+(the floating Copilot steps aside on the Studio, as the prototype's `fabUp`). On an open
+post, "Save edit", the first comment, the tone, "Save as template" and Archive are under
+the bar's "⋯"; the calendar's Schedule is in the When panel; choosing a campaign files the
+post. "Post to" shows every channel, the post's own pressed. Brand Brain's notes are behind
+a "Notes" disclosure at the page's foot. Publish time and Campaign share the settings row as
+two equal columns until the Pillar exists.
 
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 

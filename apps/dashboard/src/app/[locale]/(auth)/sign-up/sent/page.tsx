@@ -37,7 +37,7 @@ export default async function SignUpSentPage({
   const failure = statusMessage(error, locale, ref);
 
   return (
-    <AuthCard locale={locale} heading={t('signUp.sentTitle')}>
+    <AuthCard locale={locale} eyebrow={t('auth.eyebrow.verify')} heading={t('signUp.sentTitle')}>
       {failure && (
         <p data-testid="signup-resend-error" role="alert" style={{ color: colorTokens.danger }}>
           {failure}

@@ -47,8 +47,8 @@ export default async function NotificationsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale);
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale);
+  const t = translator(messageLocale);
 
   const ok = typeof query.ok === 'string' ? query.ok : null;
   const error = typeof query.error === 'string' ? query.error : null;
@@ -123,7 +123,7 @@ export default async function NotificationsPage({
                  * `undefined` was rendered, leaving the row's title empty.
                  */
                 const headline =
-                  optionalMessage(locale, `notifications.template.${item.templateKey}`) ??
+                  optionalMessage(messageLocale, `notifications.template.${item.templateKey}`) ??
                   item.templateKey;
                 return (
                   <li

@@ -210,6 +210,8 @@ test.describe('the approval workflow', () => {
     // 3. The owner relaxes the brand's policy. This is the D-122 control
     //    surface, and it is gated on a permission only the owner and admin hold.
     //    The queue points to it; the rules themselves live in Settings (A8).
+    // Review of #67 — the link is under the queue's "⋯" (the prototype draws no card).
+    await page.getByTestId('approvals-more').click();
     await expect(page.getByTestId('approvals-policy-link')).toBeVisible();
     await page.getByTestId('approvals-policy-open').click();
     await page.waitForURL(/\/en\/settings\/approvals$/);
@@ -454,10 +456,13 @@ test.describe('accessibility and direction', () => {
     for (const item of ['activity', 'notifications']) {
       await expect(page.getByTestId(`nav-${item}`)).toHaveCount(0);
     }
-    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
-    await expect(
-      page.getByTestId('settings-nav').getByRole('link', { name: 'Activity' }),
-    ).toHaveAttribute('href', '/en/activity');
+    // Review of #67 — the prototype's Settings menu has no Activity row; the log
+    // is reached from the Security section it belongs to, still a real link.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/security`);
+    await expect(page.getByTestId('settings-related-activity')).toHaveAttribute(
+      'href',
+      '/en/activity',
+    );
   });
 
   test('the approvals screen is responsive on a phone', async ({ page }) => {

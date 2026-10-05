@@ -16,6 +16,8 @@
  * over the measured period.
  */
 
+import { isInternalRecordText } from '@brandspace/shared';
+
 export interface Bilingual {
   readonly ar: string;
   readonly en: string;
@@ -38,11 +40,21 @@ const record = (value: unknown): Record<string, unknown> | null =>
     ? (value as Record<string, unknown>)
     : null;
 
+/*
+ * Review of #67 — A SIDE THAT IS THE PLATFORM'S OWN EVIDENCE RECORD
+ * (`e | METRIC | metric.total | unit=COUNT …`) IS NOT PROSE, and is dropped
+ * like an empty one: a line with nothing readable left is not shown at all.
+ * The grounding gate now refuses such output; this also covers rows stored
+ * before it did.
+ */
+const readable = (text: unknown): string =>
+  typeof text === 'string' && !isInternalRecordText(text) ? text.trim() : '';
+
 function bilingual(value: unknown): Bilingual | null {
   const row = record(value);
   if (!row) return null;
-  const ar = typeof row['ar'] === 'string' ? row['ar'].trim() : '';
-  const en = typeof row['en'] === 'string' ? row['en'].trim() : '';
+  const ar = readable(row['ar']);
+  const en = readable(row['en']);
   return ar === '' && en === '' ? null : { ar, en };
 }
 

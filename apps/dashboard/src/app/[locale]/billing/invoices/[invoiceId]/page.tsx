@@ -36,8 +36,8 @@ export default async function InvoicePage({
   params: Promise<{ locale: string; invoiceId: string }>;
 }) {
   const { locale, invoiceId } = await params;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'billing.read');
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale, 'billing.read');
+  const t = translator(messageLocale);
 
   const detail = await invoiceDetailFor(workspace.workspaceId, invoiceId);
   const snapshot = await commerceSnapshotFor(workspace.workspaceId);

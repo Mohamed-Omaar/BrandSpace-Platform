@@ -62,12 +62,13 @@ const HUMAN_REASON_TYPES = new Set(['ADMIN_ADJUSTMENT', 'PROMOTIONAL_GRANT']);
 
 export default async function PlanPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
-  const t = translator(locale);
+  const access = await requireWorkspacePage(locale, '/plan');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
   const ledgerDate = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
     dateStyle: 'medium',
   });
-  const access = await requireWorkspacePage(locale, '/plan');
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
 
@@ -256,10 +257,11 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('plan.title')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
-      customerName={customer.email}
+      customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="billing">
@@ -397,7 +399,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                     {grants.map((grant) => (
                       <tr key={grant.id} data-testid={`allocation-${grant.id}`}>
                         <td style={customerTdStyle()}>
-                          {optionalMessage(locale, `plan.grantSource.${grant.source}`) ??
+                          {optionalMessage(messageLocale, `plan.grantSource.${grant.source}`) ??
                             grant.source}
                         </td>
                         <td style={customerTdStyle()}>
@@ -557,7 +559,8 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                           shown only where a person wrote it (an adjustment or a
                           promotional grant), marked as its own direction. */}
                         <td style={customerTdStyle()}>
-                          {optionalMessage(locale, `plan.ledgerType.${entry.type}`) ?? entry.type}
+                          {optionalMessage(messageLocale, `plan.ledgerType.${entry.type}`) ??
+                            entry.type}
                           {HUMAN_REASON_TYPES.has(entry.type) && entry.reason ? (
                             <span
                               dir="auto"

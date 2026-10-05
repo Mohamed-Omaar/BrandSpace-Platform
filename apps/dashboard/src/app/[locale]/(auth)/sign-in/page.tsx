@@ -1,6 +1,7 @@
 import Link from 'next/link';
+import { SignInPassword } from '../../../../components/sign-in-password';
 import { redirect } from 'next/navigation';
-import { Banner, Field, colorTokens, spacingTokens } from '@brandspace/ui';
+import { Banner, Field, spacingTokens } from '@brandspace/ui';
 import {
   customerLandingPath,
   getCustomer,
@@ -46,12 +47,17 @@ export default async function SignInPage({
   return (
     <AuthCard
       locale={locale}
-      heading={t('signIn.title')}
-      description={t('signIn.description')}
+      eyebrow={t('signIn.title')}
+      heading={t('signIn.welcome')}
+      description={t('signIn.welcomeSub')}
       footer={
-        <Link href={`/${locale}/reset`} style={{ color: colorTokens.brandPurple }}>
-          {t('signIn.forgot')}
-        </Link>
+        /* Review of #67 — the prototype's line under the button (line 49). */
+        <span className="bsp-auth-alt">
+          {t('signIn.noAccount')}{' '}
+          <Link href={`/${locale}/sign-up`} data-testid="signin-create-account">
+            {t('signIn.createAccount')}
+          </Link>
+        </span>
       }
     >
       {error && (
@@ -85,17 +91,13 @@ export default async function SignInPage({
             style={authInputStyle()}
           />
         </Field>
-        <Field label={t('signIn.password')} htmlFor="password" required>
-          <input
-            className="bs-control"
-            id="password"
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            style={authInputStyle()}
-          />
-        </Field>
+        <SignInPassword
+          label={t('signIn.password')}
+          forgot={t('signIn.forgot')}
+          forgotHref={`/${locale}/reset`}
+          show={t('password.show')}
+          hide={t('password.hide')}
+        />
 
         <button
           type="submit"

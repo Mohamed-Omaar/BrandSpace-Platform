@@ -9,6 +9,7 @@ export * from './env';
 export * from './errors';
 export * from './file-signature';
 export * from './geography';
+export * from './internal-record-text';
 export * from './logger';
 export * from './money';
 export * from './password-policy';

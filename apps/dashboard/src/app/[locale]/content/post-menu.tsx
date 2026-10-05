@@ -1,38 +1,37 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 import {
-  ConfirmDialog,
   Dialog,
-  DropdownMenu,
   Field,
   buttonStyle,
   inputStyle,
-  menuItemStyle,
   spacingTokens,
   visuallyHiddenStyle,
 } from '@brandspace/ui';
 
 /**
- * THE POSTS "…" MENU (B8) — what can be done to one post, from the library.
+ * THE POSTS "…" MENU — PORTED FROM `prototype-2026-09-27` (D-468 batch 2,
+ * `Main.dc.html` line 557 and `moreItems`): the glass menu above the card's
+ * action row, its items in the prototype's order, the campaign list as the
+ * prototype's sub-menu (with ✓ and Back), and Archive's two steps inline
+ * ("Archive", then "Sure? Archive").
  *
- * Every item is offered only when the permission AND the post's state allow
- * it, and every item posts to the SAME server action the calendar or the
- * Studio already uses — the menu adds no new way to change a post:
+ * EVERY ITEM IS OFFERED ONLY WHEN THE PERMISSION AND THE POST'S STATE ALLOW IT,
+ * and every item posts to the SAME server action the calendar, the Studio or
+ * the library already used (B8) — the menu adds no new way to change a post:
  *
- *   Move…         `rescheduleContentAction` (`content.schedule`, a plan that
- *                 has not started), same form as the calendar drawer
- *   Unschedule    `cancelScheduleAction` (same)
- *   Archive…      `transitionItemAction` with the confirmation `intent` the
- *                 server requires (two steps; `content.archive`)
- *   Restore       `transitionItemAction` back to DRAFT (`content.archive`)
- *   Campaign…     `setContentCampaignAction` — attach with `content.create`,
- *                 move or remove with `campaigns.manage` (Q21); the service
- *                 decides again
- *   View on …     the published post's own link, `https:` only
- *
- * Composed from `DropdownMenu`, `Dialog`, `ConfirmDialog`, `Field` and the
- * menu item style — the design system's own pieces (CLAUDE.md §4.2).
+ *   Edit / Open        the Studio
+ *   Duplicate          `duplicateContentAction` (`content.create`)
+ *   Request approval   `submitForReviewAction` (`content.submit`) — the product's
+ *   Schedule           the calendar's dialog, this post chosen (`content.schedule`)
+ *   Move…              `rescheduleContentAction`, the calendar drawer's form
+ *   Campaign           `setContentCampaignAction` — attach with `content.create`,
+ *                      move or remove with `campaigns.manage` (Q21)
+ *   Unschedule         `cancelScheduleAction`
+ *   View on …          the published post's own link, `https:` only
+ *   Archive / Restore  `transitionItemAction`, archive with its confirmation intent
  */
 
 export interface PostMenuProps {
@@ -46,6 +45,10 @@ export interface PostMenuProps {
   readonly slot: { readonly id: string; readonly date: string; readonly time: string } | null;
   readonly links: readonly { readonly label: string; readonly url: string }[];
   readonly today: string;
+  /** The first item: the Studio, as Edit or Open. */
+  readonly open: { readonly href: string; readonly label: string };
+  /** A per-render key so a double-clicked Duplicate makes one copy. */
+  readonly duplicateToken: string | null;
   readonly can: {
     readonly schedule: boolean;
     readonly archive: boolean;
@@ -53,6 +56,7 @@ export interface PostMenuProps {
     readonly attachCampaign: boolean;
     /** Q21 — move a post to another campaign, or remove it. */
     readonly changeCampaign: boolean;
+    readonly submit?: boolean;
   };
   readonly labels: Readonly<Record<string, string>>;
   readonly actions: {
@@ -60,6 +64,8 @@ export interface PostMenuProps {
     cancel(formData: FormData): Promise<void>;
     transition(formData: FormData): Promise<void>;
     setCampaign(formData: FormData): Promise<void>;
+    duplicate(formData: FormData): Promise<void>;
+    submit(formData: FormData): Promise<void>;
   };
 }
 
@@ -68,8 +74,13 @@ const ARCHIVABLE = new Set(['DRAFT', 'CHANGES_REQUESTED', 'APPROVED']);
 export function PostMenu(props: PostMenuProps) {
   const { locale, itemId, status, campaignId, campaigns, slot, links, can, labels, actions } =
     props;
-  const [dialog, setDialog] = useState<'move' | 'campaign' | 'archive' | null>(null);
-  const archiveForm = useRef<HTMLFormElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [sub, setSub] = useState(false);
+  const [sure, setSure] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const l = (key: string) => labels[key] ?? '';
 
   const mayMove = can.schedule && slot !== null;
@@ -79,11 +90,63 @@ export function PostMenu(props: PostMenuProps) {
     status !== 'PUBLISHED' &&
     status !== 'PUBLISHING' &&
     status !== 'PARTIALLY_PUBLISHED' &&
+    status !== 'ARCHIVED' &&
     campaigns.length > 0 &&
     (campaignId === null ? can.attachCampaign : can.changeCampaign);
+  const maySubmit = can.submit === true && (status === 'DRAFT' || status === 'CHANGES_REQUESTED');
+  const maySchedule = can.schedule && (status === 'APPROVED' || status === 'DRAFT');
   const channelLinks = links.filter((link) => link.url.startsWith('https://'));
 
-  if (!mayMove && !mayArchive && !mayRestore && !mayCampaign && channelLinks.length === 0) {
+  const close = (focusTrigger: boolean) => {
+    setOpen(false);
+    setSub(false);
+    setSure(false);
+    if (focusTrigger) triggerRef.current?.focus();
+  };
+
+  // The menu closes on Escape and on a press outside it; on opening, the first
+  // item takes focus and the arrow keys walk the items (the menu pattern).
+  useEffect(() => {
+    if (!open) return undefined;
+    const items = () =>
+      Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    items()[0]?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close(true);
+        return;
+      }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      event.preventDefault();
+      const list = items();
+      const at = list.indexOf(document.activeElement as HTMLElement);
+      const next = event.key === 'ArrowDown' ? at + 1 : at - 1;
+      list[(next + list.length) % list.length]?.focus();
+    };
+    const onDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && wrapRef.current?.contains(event.target)) return;
+      close(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown);
+    };
+  }, [open, sub]);
+
+  // Edit / Open is always the first item, and the card's own button already
+  // opens the post: a menu with nothing else in it is not drawn (B8).
+  const nothingElse =
+    props.duplicateToken === null &&
+    !maySubmit &&
+    !maySchedule &&
+    !mayMove &&
+    !mayCampaign &&
+    !mayArchive &&
+    !mayRestore;
+  if (nothingElse && channelLinks.length === 0) {
     return null;
   }
 
@@ -95,100 +158,242 @@ export function PostMenu(props: PostMenuProps) {
   );
 
   return (
-    <>
-      <DropdownMenu
-        label={l('content.menu.label')}
-        // The ellipsis is decoration; the trigger is NAMED by the label, which a
-        // screen reader reads and a sighted reader does not need.
-        triggerContent={
-          <>
-            <span aria-hidden="true">⋯</span>
-            <span style={visuallyHiddenStyle()}>{l('content.menu.label')}</span>
-          </>
-        }
-        testId={`post-menu-${itemId}`}
+    <div ref={wrapRef} style={{ display: 'contents' }}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="bsp-btn bsp-sm bsp-sec"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-testid={`post-menu-${itemId}`}
+        onClick={() => (open ? close(false) : setOpen(true))}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' && !open) {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
       >
-        {mayMove ? (
-          <button
-            type="button"
-            role="menuitem"
-            style={menuItemStyle()}
-            data-testid={`post-menu-move-${itemId}`}
-            onClick={() => setDialog('move')}
-          >
-            {l('content.menu.move')}
-          </button>
-        ) : null}
-        {mayMove && slot ? (
-          <form action={actions.cancel}>
-            {hidden}
-            <input type="hidden" name="slotId" value={slot.id} />
-            <button
-              type="submit"
-              role="menuitem"
-              style={menuItemStyle()}
-              data-testid={`post-menu-unschedule-${itemId}`}
-            >
-              {l('content.menu.unschedule')}
-            </button>
-          </form>
-        ) : null}
-        {mayCampaign ? (
-          <button
-            type="button"
-            role="menuitem"
-            style={menuItemStyle()}
-            data-testid={`post-menu-campaign-${itemId}`}
-            onClick={() => setDialog('campaign')}
-          >
-            {l('content.menu.campaign')}
-          </button>
-        ) : null}
-        {mayArchive ? (
-          <button
-            type="button"
-            role="menuitem"
-            style={menuItemStyle()}
-            data-testid={`post-menu-archive-${itemId}`}
-            onClick={() => setDialog('archive')}
-          >
-            {l('content.menu.archive')}
-          </button>
-        ) : null}
-        {mayRestore ? (
-          <form action={actions.transition}>
-            {hidden}
-            <input type="hidden" name="itemId" value={itemId} />
-            <input type="hidden" name="to" value="DRAFT" />
-            <button
-              type="submit"
-              role="menuitem"
-              style={menuItemStyle()}
-              data-testid={`post-menu-restore-${itemId}`}
-            >
-              {l('content.menu.restore')}
-            </button>
-          </form>
-        ) : null}
-        {channelLinks.map((link) => (
-          <a
-            key={link.url}
-            role="menuitem"
-            href={link.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={menuItemStyle()}
-            data-testid={`post-menu-view-${itemId}`}
-          >
-            {l('content.menu.viewOn').replace('{platform}', link.label)}
-          </a>
-        ))}
-      </DropdownMenu>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="19" cy="12" r="1.8" />
+        </svg>
+        <span style={visuallyHiddenStyle()}>{l('content.menu.label')}</span>
+      </button>
+      {open ? (
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label={l('content.menu.label')}
+          className="bsp-post-menu"
+          data-testid={`post-menu-${itemId}-menu`}
+        >
+          {sub ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="bsp-post-menu-item"
+                style={{ color: 'var(--bsp-faint)' }}
+                onClick={() => setSub(false)}
+              >
+                ← {l('content.menu.back')}
+              </button>
+              {can.changeCampaign || campaignId === null ? (
+                <form action={actions.setCampaign}>
+                  {hidden}
+                  <input type="hidden" name="itemId" value={itemId} />
+                  <input type="hidden" name="campaignId" value="" />
+                  <button
+                    type="submit"
+                    role="menuitem"
+                    className="bsp-post-menu-item"
+                    data-testid={`post-campaign-none-${itemId}`}
+                  >
+                    {campaignId === null ? '✓ ' : ''}
+                    {l('content.campaign.none')}
+                  </button>
+                </form>
+              ) : null}
+              {campaigns.map((campaign) => (
+                <form key={campaign.id} action={actions.setCampaign}>
+                  {hidden}
+                  <input type="hidden" name="itemId" value={itemId} />
+                  <input type="hidden" name="campaignId" value={campaign.id} />
+                  <button
+                    type="submit"
+                    role="menuitem"
+                    className="bsp-post-menu-item"
+                    style={
+                      campaign.id === campaignId ? { color: 'var(--bsp-purple-ink)' } : undefined
+                    }
+                    data-testid={`post-campaign-${itemId}-${campaign.id}`}
+                  >
+                    {campaign.id === campaignId ? '✓ ' : ''}
+                    {campaign.name}
+                  </button>
+                </form>
+              ))}
+            </>
+          ) : (
+            <>
+              <Link
+                href={props.open.href}
+                role="menuitem"
+                className="bsp-post-menu-item"
+                data-testid={`content-menu-edit-${itemId}`}
+              >
+                {props.open.label}
+              </Link>
+              {props.duplicateToken !== null ? (
+                <form action={actions.duplicate}>
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="itemId" value={itemId} />
+                  <input type="hidden" name="token" value={`${props.duplicateToken}:${itemId}`} />
+                  <button
+                    type="submit"
+                    role="menuitem"
+                    className="bsp-post-menu-item"
+                    data-testid={`content-duplicate-${itemId}`}
+                  >
+                    {l('content.menu.duplicate')}
+                  </button>
+                </form>
+              ) : null}
+              {maySubmit ? (
+                <form action={actions.submit}>
+                  {hidden}
+                  <input type="hidden" name="itemId" value={itemId} />
+                  <button
+                    type="submit"
+                    role="menuitem"
+                    className="bsp-post-menu-item"
+                    data-testid={`content-request-approval-${itemId}`}
+                  >
+                    {l('content.action.requestApproval')}
+                  </button>
+                </form>
+              ) : null}
+              {maySchedule ? (
+                <Link
+                  href={`/${locale}/calendar?item=${itemId}`}
+                  role="menuitem"
+                  className="bsp-post-menu-item"
+                  data-testid={`content-schedule-${itemId}`}
+                >
+                  {l('content.action.schedule')}
+                </Link>
+              ) : null}
+              {mayMove ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="bsp-post-menu-item"
+                  data-testid={`post-menu-move-${itemId}`}
+                  onClick={() => {
+                    close(false);
+                    setMoving(true);
+                  }}
+                >
+                  {l('content.menu.move')}
+                </button>
+              ) : null}
+              {mayCampaign ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="bsp-post-menu-item"
+                  data-testid={`post-menu-campaign-${itemId}`}
+                  onClick={() => setSub(true)}
+                >
+                  {campaignId === null
+                    ? l('content.menu.addCampaign')
+                    : l('content.menu.changeCampaign')}
+                </button>
+              ) : null}
+              {mayMove && slot ? (
+                <form action={actions.cancel}>
+                  {hidden}
+                  <input type="hidden" name="slotId" value={slot.id} />
+                  <button
+                    type="submit"
+                    role="menuitem"
+                    className="bsp-post-menu-item"
+                    data-testid={`post-menu-unschedule-${itemId}`}
+                  >
+                    {l('content.menu.unschedule')}
+                  </button>
+                </form>
+              ) : null}
+              {channelLinks.map((link) => (
+                <a
+                  key={link.url}
+                  role="menuitem"
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bsp-post-menu-item"
+                  data-testid={`post-menu-view-${itemId}`}
+                >
+                  {l('content.menu.viewOn').replace('{platform}', link.label)}
+                </a>
+              ))}
+              {mayRestore ? (
+                <form action={actions.transition}>
+                  {hidden}
+                  <input type="hidden" name="itemId" value={itemId} />
+                  <input type="hidden" name="to" value="DRAFT" />
+                  <button
+                    type="submit"
+                    role="menuitem"
+                    className="bsp-post-menu-item"
+                    data-testid={`post-menu-restore-${itemId}`}
+                  >
+                    {l('content.menu.restore')}
+                  </button>
+                </form>
+              ) : null}
+              {mayArchive ? (
+                sure ? (
+                  // Q21 — the second step: the same confirmation intent the server requires.
+                  <form action={actions.transition}>
+                    {hidden}
+                    <input type="hidden" name="itemId" value={itemId} />
+                    <input type="hidden" name="to" value="ARCHIVED" />
+                    <input type="hidden" name="intent" value="ARCHIVE" />
+                    <button
+                      type="submit"
+                      role="menuitem"
+                      className="bsp-post-menu-item"
+                      data-danger=""
+                      data-testid={`post-menu-archive-confirm-${itemId}`}
+                    >
+                      {l('content.menu.archiveSure')}
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="bsp-post-menu-item"
+                    data-danger=""
+                    data-testid={`post-menu-archive-${itemId}`}
+                    onClick={() => setSure(true)}
+                  >
+                    {l('content.menu.archive')}
+                  </button>
+                )
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
 
       {mayMove && slot ? (
         <Dialog
-          open={dialog === 'move'}
-          onClose={() => setDialog(null)}
+          open={moving}
+          onClose={() => setMoving(false)}
           title={l('content.move.title')}
           closeLabel={l('common.close')}
           testId={`post-move-dialog-${itemId}`}
@@ -226,6 +431,7 @@ export function PostMenu(props: PostMenuProps) {
             <div>
               <button
                 type="submit"
+                className="bs-pressable"
                 style={buttonStyle('primary')}
                 data-testid={`post-move-submit-${itemId}`}
               >
@@ -235,76 +441,6 @@ export function PostMenu(props: PostMenuProps) {
           </form>
         </Dialog>
       ) : null}
-
-      {mayCampaign ? (
-        <Dialog
-          open={dialog === 'campaign'}
-          onClose={() => setDialog(null)}
-          title={l('content.campaign.title')}
-          closeLabel={l('common.close')}
-          testId={`post-campaign-dialog-${itemId}`}
-        >
-          <form action={actions.setCampaign} style={{ display: 'grid', gap: spacingTokens.md }}>
-            {hidden}
-            <input type="hidden" name="itemId" value={itemId} />
-            <Field label={l('content.campaign.title')} htmlFor={`campaign-${itemId}`}>
-              <select
-                className="bs-control"
-                id={`campaign-${itemId}`}
-                name="campaignId"
-                required={!can.changeCampaign}
-                defaultValue={campaignId ?? ''}
-                data-testid={`post-campaign-select-${itemId}`}
-                style={inputStyle()}
-              >
-                {/* Removing a campaign is a change, so only a campaign manager is offered it. */}
-                {can.changeCampaign || campaignId === null ? (
-                  <option value="">{l('content.campaign.none')}</option>
-                ) : null}
-                {campaigns.map((campaign) => (
-                  <option key={campaign.id} value={campaign.id}>
-                    {campaign.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <div>
-              <button
-                type="submit"
-                style={buttonStyle('primary')}
-                data-testid={`post-campaign-submit-${itemId}`}
-              >
-                {l('content.campaign.submit')}
-              </button>
-            </div>
-          </form>
-        </Dialog>
-      ) : null}
-
-      {mayArchive ? (
-        <>
-          <form ref={archiveForm} action={actions.transition} hidden>
-            {hidden}
-            <input type="hidden" name="itemId" value={itemId} />
-            <input type="hidden" name="to" value="ARCHIVED" />
-            <input type="hidden" name="intent" value="ARCHIVE" />
-          </form>
-          <ConfirmDialog
-            open={dialog === 'archive'}
-            onClose={() => setDialog(null)}
-            onConfirm={() => {
-              setDialog(null);
-              archiveForm.current?.requestSubmit();
-            }}
-            title={l('content.archive.title')}
-            description={l('content.archive.confirmBody')}
-            confirmLabel={l('content.archive.confirm')}
-            cancelLabel={l('common.cancel')}
-            closeLabel={l('common.close')}
-            testId={`post-archive-dialog-${itemId}`}
-          />
-        </>
-      ) : null}
-    </>
+    </div>
   );
 }

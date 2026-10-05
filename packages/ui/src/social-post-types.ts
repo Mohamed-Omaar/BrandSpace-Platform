@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 /**
  * The social preview's TYPES and its platform tables.
  *
@@ -116,6 +117,11 @@ export interface SocialPostPreviewLabels {
   readonly showMore: string;
   readonly showLess: string;
   readonly missingMedia: string;
+  /**
+   * What stands in the empty picture instead of the icon and its line — the
+   * Studio's "+ Add the design" (review of #67). Optional; absent, the line shows.
+   */
+  readonly missingAction?: ReactNode;
   readonly loadingMedia: string;
   readonly videoBadge: string;
   readonly carouselLabel: (count: number) => string;

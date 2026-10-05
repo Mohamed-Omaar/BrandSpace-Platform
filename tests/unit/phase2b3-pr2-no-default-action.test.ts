@@ -32,16 +32,20 @@ describe('the form starts with nothing chosen', () => {
     expect(form).not.toMatch(/actionTypes\[0\]/);
   });
 
-  it('both pickers are required and lead with the empty "Choose …" option', () => {
-    for (const [testId, label] of [
-      ['automation-trigger', 'chooseTrigger'],
-      ['automation-action', 'chooseAction'],
+  it('both choice groups are required, and nothing in them starts chosen', () => {
+    // D-468: the event and the action are the prototype's grids of radio
+    // choices; no empty "Choose …" option leads them, so nothing is checked.
+    for (const [testId, name, checked] of [
+      ['automation-trigger', 'triggerType', 'checked={triggerType === option.type}'],
+      ['automation-action', 'actionType', 'checked={actionType === type}'],
     ] as const) {
       const start = form.indexOf(`data-testid="${testId}"`);
       expect(start).toBeGreaterThan(0);
-      const select = form.slice(start, form.indexOf('</select>', start));
-      expect(select).toMatch(/\brequired\b/);
-      expect(select).toContain(`<option value="">{props.labels.${label}}</option>`);
+      const group = form.slice(start, form.indexOf('</div>', start));
+      expect(group).toContain(`name="${name}"`);
+      expect(group).toMatch(/\brequired\b/);
+      expect(group).toContain(checked);
+      expect(group).not.toContain('defaultChecked');
     }
   });
 

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { openStudioMore } from './studio-bar';
 import { deterministicPng } from '@brandspace/ai-gateway';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
@@ -254,7 +255,10 @@ test('5 · a campaign is created through the form and appears in the list', asyn
   await page.waitForURL(/\/en\/campaigns\/[0-9a-f-]{36}\?ok=CAMPAIGN_CREATED/);
 
   await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns`);
-  const row = page.locator('[data-testid^="campaign-open-"]', { hasText: CAMPAIGN_NAME });
+  // The card carries the name; its Open link carries it in its accessible name.
+  const row = page
+    .locator('[data-testid^="campaign-row-"]', { hasText: CAMPAIGN_NAME })
+    .locator('[data-testid^="campaign-open-"]');
   await expect(row).toBeVisible();
 
   const href = await row.getAttribute('href');
@@ -350,8 +354,13 @@ test('6 · content is created and filed under the campaign', async ({ page }) =>
   expect(state.itemId, 'the composer is on a real draft').toBeTruthy();
 
   // FILE IT UNDER THE CAMPAIGN, through the control the composer offers.
+  // Review of #67, round 2: choosing the campaign files the post (no second Save).
+  const filed = page
+    .waitForResponse((response) => response.request().method() === 'POST', { timeout: 30_000 })
+    .catch(() => undefined);
   await page.getByTestId('content-campaign').selectOption(state.campaignId as string);
-  await clickAndSettle(page.getByTestId('content-campaign-save'), page);
+  await filed;
+  await page.waitForLoadState('networkidle');
   await expect(page.getByTestId('content-campaign')).toHaveValue(state.campaignId as string);
 });
 
@@ -365,7 +374,9 @@ test('7 · a picture is uploaded from the composer into the one library', async 
 
   const name = `journey-${RUN}.png`;
   state.uploadedAssetName = name;
-  // D-285: uploading lives in the composer's media drawer, still in the post.
+  // D-285: uploading lives in the composer's media drawer, still in the post
+  // (D-468: on the Studio's Design tab).
+  await page.getByTestId('studio-tab-visual').click();
   await page.locator('[data-testid^="content-media-"][data-testid$="-add"]').first().click();
   await page.getByTestId('media-tab-upload').click();
   await expect(page.getByTestId('composer-upload-form')).toBeVisible();
@@ -485,6 +496,7 @@ test('9 · media is attached to the variant and shows in the social preview', as
     .poll(
       async () => {
         await page.reload();
+        await page.getByTestId('studio-tab-visual').click();
         await addButton.first().click();
         const count = await page.locator('[data-testid^="media-choose-"]:not([disabled])').count();
         if (count === 0) await page.getByTestId('media-drawer-close').click();
@@ -494,7 +506,9 @@ test('9 · media is attached to the variant and shows in the social preview', as
     )
     .toBeGreaterThan(0);
   await page.locator('[data-testid^="media-choose-"]:not([disabled])').first().click();
-  await clickAndSettle(variantForm.locator('[data-testid^="editor-save-"]').first(), page);
+  // The Studio's Save sits under the sticky bar's "⋯", submitting the variant's form.
+  await openStudioMore(page);
+  await clickAndSettle(page.locator('[data-testid^="editor-save-"]').first(), page);
 
   // SAVED, AND SHOWN. The preview is the approved `SocialPostPreview` fed the
   // real caption and the real picture — what will actually be published.
@@ -607,6 +621,8 @@ test('11 · the post is scheduled and the calendar states its context', async ({
   expect(state.itemId, 'step 6 must have created a draft').toBeTruthy();
   await enter(page, '/calendar');
 
+  // Review of #67 — "Add to calendar" is under the head row's "⋯".
+  await page.getByTestId('calendar-more').click();
   await page.getByTestId('calendar-schedule-open').click();
   const picker = page.getByTestId('schedule-item');
   await expect(picker).toBeVisible();
@@ -665,7 +681,9 @@ test('11 · the post is scheduled and the calendar states its context', async ({
   // for — the campaign it belongs to, its publishing state, its media count.
   const chip = page.locator('[data-testid^="calendar-post-"]', { hasText: CONTENT_TITLE }).first();
   await expect(chip).toBeVisible();
+  // D-468 — the chip opens its popover; Details is the post drawer.
   await chip.click();
+  await page.getByTestId('calendar-pop-details').click();
   const facts = page.getByTestId('calendar-slot-facts');
   await expect(facts).toBeVisible();
   await expect(page.getByTestId('calendar-slot-status')).not.toBeEmpty();
@@ -803,7 +821,11 @@ test('14 · a learning is proposed and reaches the governed Brand Brain queue', 
   const after = await brandBrainCandidateCount(page);
   expect(after, 'the proposal reached the Brand Brain review queue').toBeGreaterThanOrEqual(before);
   expect(after, 'the review queue holds at least one candidate').toBeGreaterThan(0);
-  await expect(page.getByTestId('intel-card')).toBeVisible();
+  // The prototype's banner opens the one review card.
+  await expect(async () => {
+    await page.getByTestId('review-one-by-one').click();
+    await expect(page.getByTestId('intel-card')).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
 
   /*
    * AND IT IS STILL WAITING FOR A HUMAN. A count alone would not distinguish a
@@ -813,7 +835,7 @@ test('14 · a learning is proposed and reaches the governed Brand Brain queue', 
    * and checks it is sitting there with Reject, and Accept or — where a human
    * fact outranks it (D-65) — the precedence note, still to be decided.
    */
-  const card = page.getByTestId('intel-card').locator('.bb-learning').first();
+  const card = page.getByTestId('intel-card').locator('.bsp-bb-rv-body').first();
   const cardId = (await card.getAttribute('data-testid'))?.replace('intel-', '');
   expect(cardId, 'the queued candidate is on the inbox card').toBeTruthy();
   await expect(page.getByTestId(`reject-${cardId}`)).toBeVisible();
@@ -828,6 +850,10 @@ test('14 · a learning is proposed and reaches the governed Brand Brain queue', 
  */
 async function brandBrainCandidateCount(page: Page): Promise<number> {
   await page.goto(`${DASHBOARD_BASE_URL}/en/brand-brain`);
-  const text = await page.getByTestId('review-inbox-count').innerText();
+  await expect(page.getByTestId('brand-brain-tabs')).toBeVisible();
+  // D-468: the prototype draws the To review banner only when something waits.
+  const banner = page.getByTestId('review-inbox-count');
+  if ((await banner.count()) === 0) return 0;
+  const text = await banner.innerText();
   return Number(/\d+/.exec(text)?.[0] ?? '0');
 }

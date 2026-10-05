@@ -1,6 +1,6 @@
 import type { AssetKind, AssetStatus } from '@brandspace/database';
 import { canPreviewWithoutDerivative, isSelectable } from '@brandspace/assets';
-import { brandScopeFilter, systemClock } from '@brandspace/shared';
+import { brandScopeFilter, maySpendCredits, systemClock } from '@brandspace/shared';
 import {
   ASSET_VIEWS,
   RECENT_DAYS,
@@ -64,11 +64,12 @@ export default async function AssetsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
+  const access = await requireWorkspacePage(locale, '/assets');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   const countFormat = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
     numberingSystem: 'latn',
   });
-  const access = await requireWorkspacePage(locale, '/assets');
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
 
@@ -424,8 +425,9 @@ export default async function AssetsPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('assets.title')}
-      description={t('assets.subtitle')}
+      eyebrow={t('nav.group.create')}
+      heading={t('assets.media.title')}
+      description={t('assets.media.subtitle')}
       activePath="/assets"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -464,7 +466,10 @@ export default async function AssetsPage({
           ...(view ? { view } : {}),
           sort,
         }}
+        planHref={can('billing.read') ? `/${locale}/billing` : null}
         can={{
+          // D-468 — the Generate tab is the Creative Studio, behind its own gate.
+          generate: maySpendCredits(permissions, 'assets.upload'),
           upload: can('assets.upload'),
           edit: can('assets.edit'),
           manageTaxonomy: can('assets.manage_taxonomy'),

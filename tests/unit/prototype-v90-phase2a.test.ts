@@ -347,11 +347,16 @@ describe('E3 + Q18 · spending credits needs copilot.use as well as the feature 
       /generateMedia:\s*maySpendCredits\(workspace\.permissionKeys, 'assets\.upload'\)/,
     );
     const composer = read('apps/dashboard/src/app/[locale]/content/compose/composer-view.tsx');
+    // Review of #67 — "Write caption with AI" (the prototype's purple button)
+    // and the estimate link are both offered only with `can.generate`.
     expect(composer).toMatch(
-      /\{can\.generate \? \(\s*<button[^>]*?\s*type="button"\s*className="cs-ghost-button"/,
+      /\{can\.generate \? \(\s*<button[^>]*?\s*type="button"\s*className="bsp-btn bsp-pur bsp-sm bsp-st-aiw"/,
     );
+    expect(composer).toMatch(/\{can\.generate \? \(\s*<>\s*\{' · '\}\s*<button/);
     // Writing it yourself spends nothing and stays available.
-    expect(composer).toContain('const canWrite = hasInputs && draft === null;');
+    expect(composer).toContain(
+      "const canWrite = ready && caption.trim() !== '' && !captionTooLong && draft === null;",
+    );
     const pages: Array<[string, RegExp]> = [
       [
         'analytics/page.tsx',
@@ -713,7 +718,8 @@ describe('B4 / Q10 · default reviewer; anyone who may approve can decide', () =
 
   it('the composer lets the author choose, or leave it automatic, on submit and resubmit', () => {
     const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
-    expect(editor).toContain("{reviewerPicker('submit')}");
+    // Review of #67, round 2: the bar's picker belongs to the review form by `form=`.
+    expect(editor).toContain("reviewerPicker('submit', reviewFormId)");
     expect(editor).toContain("{reviewerPicker('resubmit')}");
     expect(editor).toContain('name="assignedToUserId"');
     const actions = read('apps/dashboard/src/app/[locale]/content/actions.ts');
@@ -743,7 +749,8 @@ describe('B5 · Approvals per person, and a reason for "request changes"', () =>
   it('the form requires the reason for "request changes", and Approve/Reject skip it', () => {
     const view = read('apps/dashboard/src/app/[locale]/approvals/approvals-view.tsx');
     const form = view.slice(view.indexOf('function DecisionForm('));
-    expect(form).toMatch(/name="note"\s*type="text"\s*required/);
+    // D-468: the reason is the prototype's textarea; still required.
+    expect(form).toMatch(/<textarea[^>]*?\s*name="note"\s*dir="auto"\s*required/);
     expect(form.match(/^\s+formNoValidate$/gm)).toHaveLength(2);
     const requestChanges = form.slice(form.indexOf('value="REQUEST_CHANGES"'));
     expect(requestChanges.slice(0, requestChanges.indexOf('</button>'))).not.toContain(
@@ -874,7 +881,9 @@ describe('B8 · the Posts "…" menu, and Q21 · who may file a post under a cam
       /if \(to === 'ARCHIVED' && formData\.get\('intent'\) !== 'ARCHIVE'\) \{\s*throw new AppError\('VALIDATION_FAILED'/,
     );
     expect(menu()).toContain('<input type="hidden" name="intent" value="ARCHIVE" />');
-    expect(menu()).toContain('<ConfirmDialog');
+    // D-468: the prototype's inline second step ("Sure? Archive") replaces the dialog.
+    expect(menu()).toContain('onClick={() => setSure(true)}');
+    expect(menu()).toContain("l('content.menu.archiveSure')");
     const studio = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
     expect(studio).toContain('<details data-testid="archive-disclosure">');
     expect(studio).toContain('<input type="hidden" name="intent" value="ARCHIVE" />');

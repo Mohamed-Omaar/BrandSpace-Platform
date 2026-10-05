@@ -86,7 +86,8 @@ test.describe('the Asset Library', () => {
     // looks like nothing on screen — which is why the route does not use
     // PageHeader.
     await expect(page.locator('h1')).toHaveCount(1);
-    await expect(page.locator('h1')).toHaveText(/media library/i);
+    // Review of #67 — the prototype titles the screen "Media".
+    await expect(page.locator('h1')).toHaveText(/^media$/i);
   });
 
   test('shows an honest empty state, not an invented number', async ({ page }) => {
@@ -107,8 +108,9 @@ test.describe('the Asset Library', () => {
     await openLibrary(page);
     const badge = page.getByTestId('assets-storage');
     await expect(badge).toBeVisible();
-    // Either a real "n of m GB" or an honest "Unlimited" — never a guess.
-    await expect(badge).toHaveText(/(\d+\s+of\s+\d+\s+GB)|(Unlimited)/i);
+    // Either a real "n GB of m GB" (the prototype's "3.1 GB of 50 GB") or an
+    // honest "Unlimited" — never a guess.
+    await expect(badge).toHaveText(/(\d+(\.\d+)?\s+GB\s+of\s+\d+\s+GB)|(Unlimited)/i);
   });
 
   test('takes an upload from the picker to a READY tile, through the worker', async ({ page }) => {
@@ -184,13 +186,13 @@ test.describe('the Asset Library', () => {
 
   test('filters and search are LINKS, so a filtered view is bookmarkable', async ({ page }) => {
     await openLibrary(page);
-    const imageFilter = page.getByRole('link', { name: 'Image', exact: true });
+    const imageFilter = page.getByRole('link', { name: 'Photos', exact: true });
     if (await imageFilter.isVisible().catch(() => false)) {
       await imageFilter.click();
       await page.waitForURL(/kind=IMAGE/);
       // The URL alone reproduces the view — no client state is required.
       await page.goto(page.url());
-      await expect(page.getByRole('link', { name: 'Image', exact: true })).toHaveAttribute(
+      await expect(page.getByRole('link', { name: 'Photos', exact: true })).toHaveAttribute(
         'aria-current',
         'true',
       );
@@ -200,6 +202,8 @@ test.describe('the Asset Library', () => {
   test('creates a folder and filters by it', async ({ page }) => {
     await openLibrary(page);
     const folderName = `E2E folder ${Date.now()}`;
+    // Review of #67 — "New folder" is under the "⋯" beside Upload.
+    await page.getByTestId('assets-more').click();
     await page.getByRole('button', { name: 'New folder' }).click();
     const dialog = page.getByTestId('assets-folder-dialog');
     await dialog.getByTestId('assets-folder-name').fill(folderName);
@@ -219,7 +223,7 @@ test.describe('both writing directions', () => {
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     // `ar-SA` — the app's own locale tag, which is what the shell sets.
     await expect(page.locator('html')).toHaveAttribute('lang', /^ar/);
-    await expect(page.locator('h1')).toHaveText('مكتبة الوسائط');
+    await expect(page.locator('h1')).toHaveText('الوسائط');
   });
 
   test('the toolbar reads right-to-left in Arabic and left-to-right in English', async ({

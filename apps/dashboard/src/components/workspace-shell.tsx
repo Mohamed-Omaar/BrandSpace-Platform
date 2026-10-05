@@ -39,6 +39,8 @@ import { businessSwitcherModel } from '../server/business-switcher';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
 import { signOutAction, switchWorkspaceAction } from '../app/[locale]/(auth)/actions';
+import { requestMessageLocale } from '../server/message-locale';
+import { MessageLocaleProvider } from '../i18n/message-locale-context';
 
 /**
  * The authenticated customer shell — PORTED FROM `prototype-2026-09-27` (D-468).
@@ -113,12 +115,6 @@ const NAV: readonly NavEntry[] = [
     glyph: 'media',
   },
   {
-    href: '/creative',
-    key: 'nav.creative',
-    permission: 'assets.upload',
-    glyph: 'spark',
-  },
-  {
     href: '/approvals',
     key: 'nav.approvals',
     permission: 'content.read',
@@ -143,12 +139,6 @@ const NAV: readonly NavEntry[] = [
     key: 'nav.rail.performance',
     permission: 'analytics.read',
     glyph: 'performance',
-  },
-  {
-    href: '/intelligence',
-    key: 'nav.intelligence',
-    permission: 'strategy.read',
-    glyph: 'brain',
   },
   {
     href: '/automations',
@@ -182,9 +172,9 @@ const NAV_GROUPS: readonly { titleKey: MessageKey | null; hrefs: readonly string
   { titleKey: null, hrefs: ['/overview'] },
   { titleKey: 'nav.group.brand', hrefs: ['/brand-brain'] },
   { titleKey: 'nav.group.plan', hrefs: ['/strategy', '/campaigns'] },
-  { titleKey: 'nav.group.create', hrefs: ['/content', '/assets', '/creative'] },
+  { titleKey: 'nav.group.create', hrefs: ['/content', '/assets'] },
   { titleKey: 'nav.group.publish', hrefs: ['/approvals', '/calendar', '/publishing'] },
-  { titleKey: 'nav.group.improve', hrefs: ['/analytics', '/intelligence'] },
+  { titleKey: 'nav.group.improve', hrefs: ['/analytics'] },
   { titleKey: 'nav.group.automate', hrefs: ['/automations', '/notes'] },
   { titleKey: 'nav.group.workspace', hrefs: ['/members', '/settings'] },
 ];
@@ -327,6 +317,7 @@ const MENU_NOTE = {
 
 export async function WorkspaceShell({
   locale,
+  eyebrow,
   heading,
   description,
   actions,
@@ -344,6 +335,12 @@ export async function WorkspaceShell({
   children,
 }: {
   locale: string;
+  /**
+   * The eyebrow over the title — the screen's group, as the prototype's
+   * `heads` table gives it ("Publish" over the calendar). Home's
+   * "Your business" when absent.
+   */
+  eyebrow?: string | undefined;
   /**
    * The page title. THE SHELL OWNS THE `h1`, so every page has exactly one and
    * no page can forget it — which is what the accessibility suite asserts.
@@ -387,7 +384,9 @@ export async function WorkspaceShell({
   flash?: { readonly tone: 'success'; readonly message: string } | undefined;
   children: ReactNode;
 }) {
-  const t = translator(locale);
+  // D-470: the words this member reads — `ar-EG` in an Egyptian workspace.
+  const words = requestMessageLocale(locale);
+  const t = translator(words);
   const other = locale === 'ar' ? 'en' : 'ar';
   /*
    * Each language by its own name and its code, the same in either interface
@@ -505,7 +504,9 @@ export async function WorkspaceShell({
         }
         current={{
           name: brandContext.brands[0]?.name ?? workspaceName,
-          caption: switcher.currentCaption,
+          // The prototype's card reads "Active brand"; Role · Plan stays on each
+          // business in the menu (review of #67, round 2).
+          caption: brandContext.brands[0] ? t('brand.selectedCaption') : switcher.currentCaption,
         }}
         options={switcher.options}
         action={switchWorkspaceAction}
@@ -658,7 +659,9 @@ export async function WorkspaceShell({
           load={loadNotificationFeed}
           strings={{
             title: t('notifications.title'),
-            close: t('common.close'),
+            close: t('notifications.dismiss'),
+            markAll: t('notifications.markAllRead'),
+            more: t('studio.moreOptions'),
             all: t('notifications.feed.all'),
             mentions: t('notifications.feed.mentions'),
             approvals: t('notifications.feed.approvals'),
@@ -712,10 +715,11 @@ export async function WorkspaceShell({
         brand={drawerBrand}
         surface={copilotSurfaceForPath(requestPath)}
         subject={drawerSubject}
-        labels={copilotLabels(locale, identity)}
+        labels={copilotLabels(words, identity)}
         rateMetricKeys={RATE_METRIC_KEYS}
         strings={{
           openFull: t('copilot.openFull'),
+          more: t('studio.moreOptions'),
           chooseBrandTitle: t('brand.chooseTitle'),
           chooseBrandBody: t('copilot.noBrandBody'),
         }}
@@ -801,42 +805,45 @@ export async function WorkspaceShell({
   );
 
   return (
-    <CustomerShell
-      // The logotype, drawn in Latin in both languages as the prototype and the
-      // brand mark's own title do — the brand's name, not copy to translate.
-      wordmark="BrandSpace"
-      sections={sections}
-      labels={{
-        primaryNavigation: t('nav.primary'),
-        openNavigation: t('nav.open'),
-        closeNavigation: t('nav.close'),
-        collapseSidebar: t('nav.collapseMenu'),
-        expandSidebar: t('nav.expandMenu'),
-      }}
-      brandCard={brandCard}
-      profile={profile}
-      pageEyebrow={t('page.eyebrow')}
-      pageTitle={heading}
-      pageDescription={description}
-      pageMeta={meta}
-      actions={headerActions}
-      fab={fab}
-    >
-      {hero ?? null}
-      {actions ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>{actions}</div>
-      ) : null}
-      <div className="bs-section-stack">{children}</div>
-      {/* `useSearchParams` in the host needs a boundary on a prerendered route. */}
-      <Suspense fallback={null}>
-        <ToastHost
-          flash={flash}
-          dismissLabel={t('toast.dismiss')}
-          incoming={await incomingMentions(locale)}
-          openLabel={t('notifications.incoming.open')}
-        />
-      </Suspense>
-    </CustomerShell>
+    <MessageLocaleProvider value={words}>
+      <CustomerShell
+        contentLang={words !== locale ? words : undefined}
+        // The logotype, drawn in Latin in both languages as the prototype and the
+        // brand mark's own title do — the brand's name, not copy to translate.
+        wordmark="BrandSpace"
+        sections={sections}
+        labels={{
+          primaryNavigation: t('nav.primary'),
+          openNavigation: t('nav.open'),
+          closeNavigation: t('nav.close'),
+          collapseSidebar: t('nav.collapseMenu'),
+          expandSidebar: t('nav.expandMenu'),
+        }}
+        brandCard={brandCard}
+        profile={profile}
+        pageEyebrow={eyebrow ?? t('page.eyebrow')}
+        pageTitle={heading}
+        pageDescription={description}
+        pageMeta={meta}
+        actions={headerActions}
+        fab={fab}
+      >
+        {hero ?? null}
+        {actions ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>{actions}</div>
+        ) : null}
+        <div className="bs-section-stack">{children}</div>
+        {/* `useSearchParams` in the host needs a boundary on a prerendered route. */}
+        <Suspense fallback={null}>
+          <ToastHost
+            flash={flash}
+            dismissLabel={t('toast.dismiss')}
+            incoming={await incomingMentions(locale)}
+            openLabel={t('notifications.incoming.open')}
+          />
+        </Suspense>
+      </CustomerShell>
+    </MessageLocaleProvider>
   );
 }
 

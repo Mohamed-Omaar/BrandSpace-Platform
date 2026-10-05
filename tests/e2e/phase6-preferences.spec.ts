@@ -107,6 +107,8 @@ test.describe('D-295 · a noticed preference becomes a default only when chosen'
     await expect(page.getByTestId(`home-preference-${habit.key}`)).toHaveCount(0);
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?mode=ai`);
+    // Review of #67 — the composer's stated defaults are under its "⋯".
+    await page.getByTestId('content-more').click();
     const stated = page.getByTestId(`content-default-${habit.key}`);
     await expect(stated).toBeVisible();
     await stated.getByRole('button').click();

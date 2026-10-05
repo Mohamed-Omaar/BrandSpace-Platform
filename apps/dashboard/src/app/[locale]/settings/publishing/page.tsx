@@ -4,7 +4,6 @@ import {
   DraftForm,
   Field,
   SectionHeader,
-  SettingsSplit,
   StateMessage,
   StatusBadge,
   buttonClass,
@@ -20,7 +19,7 @@ import { inContentStudio } from '../../../../server/content-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { CheckboxRow } from '../../../../components/checkbox-row';
 import { brandContextFor, listAccessibleBrands } from '../../../../server/brand-context';
-import { settingsNavItems } from '../../../../server/settings-nav';
+import { SettingsFrame } from '../../../../components/settings-frame';
 import { saveBarLabels } from '../../../../server/save-bar-labels';
 import {
   optionalMessage,
@@ -69,8 +68,9 @@ export default async function PublishingDefaultsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/settings/publishing');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
   const mayManageTemplates = workspace.permissionKeys.includes('templates.manage');
@@ -104,7 +104,8 @@ export default async function PublishingDefaultsPage({
     return { policy, brands, byBrand };
   });
 
-  const platformLabel = (key: string, labelKey: string) => optionalMessage(locale, labelKey) ?? key;
+  const platformLabel = (key: string, labelKey: string) =>
+    optionalMessage(messageLocale, labelKey) ?? key;
   const platforms = data.policy.platforms.map((platform) => ({
     key: platform.key,
     label: platformLabel(platform.key, platform.labelKey),
@@ -131,20 +132,18 @@ export default async function PublishingDefaultsPage({
       flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
-      heading={t('settings.publishing')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
-      customerName={customer.email}
+      customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
-      <SettingsSplit
-        navLabel={t('settings.navLabel')}
-        items={settingsNavItems({
-          locale,
-          permissionKeys: workspace.permissionKeys,
-          selected: 'publishing',
-        }).map((item) => ({ href: item.href, label: t(item.labelKey), selected: item.selected }))}
+      <SettingsFrame
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="publishing"
       >
         {data.brands.length === 0 ? (
           <Card testId="publishing-defaults">
@@ -527,7 +526,7 @@ export default async function PublishingDefaultsPage({
             </div>
           );
         })}
-      </SettingsSplit>
+      </SettingsFrame>
     </WorkspaceShell>
   );
 }

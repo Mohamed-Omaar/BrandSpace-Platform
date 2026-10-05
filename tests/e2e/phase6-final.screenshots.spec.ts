@@ -355,6 +355,7 @@ const SCREENS: readonly Screen[] = [
     key: '08-carousel-editor',
     path: (t) => (t.carouselId ? `/content/compose?item=${t.carouselId}` : null),
     then: async (page) => {
+      await page.getByTestId('studio-tab-visual').click();
       await expect(page.getByTestId('content-media-instagram-slide-2')).toBeVisible();
       // Page the preview once, so it reads "Slide 2 of 3".
       const next = page.getByTestId('preview-slide-next').first();
@@ -365,6 +366,7 @@ const SCREENS: readonly Screen[] = [
     key: '09-reel-editor',
     path: (t) => (t.reelId ? `/content/compose?item=${t.reelId}` : null),
     then: async (page) => {
+      await page.getByTestId('studio-tab-visual').click();
       await expect(page.getByTestId('content-media-instagram-slide-0')).toBeVisible();
     },
   },
@@ -373,6 +375,7 @@ const SCREENS: readonly Screen[] = [
     overlay: true,
     path: (t) => (t.feedId ? `/content/compose?item=${t.feedId}` : null),
     then: async (page) => {
+      await page.getByTestId('studio-tab-visual').click();
       await page.getByTestId('content-media-instagram-add').click();
       await expect(page.getByTestId('media-drawer')).toBeVisible();
     },

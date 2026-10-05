@@ -246,6 +246,14 @@ async function seedCandidates(
   });
 }
 
+/** "Review one by one" — a client toggle, pressed until the review card is there. */
+async function openReview(page: Page): Promise<void> {
+  await expect(async () => {
+    await page.getByTestId('review-one-by-one').click();
+    await expect(page.getByTestId('intel-card')).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
+}
+
 async function openBrandBrain(page: Page, locale = 'en', tab?: string): Promise<void> {
   await page.goto(`${DASHBOARD_BASE_URL}/${locale}/brand-brain${tab ? `?tab=${tab}` : ''}`);
   await expect(page.getByTestId('brand-brain-tabs')).toBeVisible();
@@ -276,9 +284,9 @@ test.describe('Item 2 · D1 tabs', () => {
       await page.getByTestId('tab-sources').click();
       await expect(page.getByTestId('sources-card')).toBeVisible();
 
-      // "Talk with the brand" is the hero with its chat showing.
+      // "Talk with the brand" is the prototype's chat card, on its own.
       await page.getByTestId('tab-chat').click();
-      await expect(page.getByTestId('hero-stats')).toHaveAttribute('data-chat-open', 'true');
+      await expect(page.getByTestId('brand-chat')).toBeVisible();
       await expect(page.getByTestId('area-grid')).toHaveCount(0);
 
       // The address survives a reload.
@@ -309,7 +317,7 @@ test.describe('Item 2 · Q19 key questions and "What\'s missing"', () => {
     const hero = page.getByTestId('completion-answered');
     await expect(hero).toHaveText(/^answered 0 of \d+$/);
     await expect(hero).not.toContainText('%');
-    await expect(page.getByTestId('area-answered-IDENTITY')).toHaveText(/^answered 0 of 4/);
+    await expect(page.getByTestId('area-answered-IDENTITY')).toHaveText(/^0 of 4 key questions/);
 
     const missing = page.getByTestId('brand-brain-missing-identity.what');
     await expect(missing).toBeVisible();
@@ -326,7 +334,7 @@ test.describe('Item 2 · Q19 key questions and "What\'s missing"', () => {
     await page.getByTestId('save-knowledge').click();
     await page.waitForURL(/ok=KNOWLEDGE_SAVED/);
 
-    await expect(page.getByTestId('area-answered-IDENTITY')).toHaveText(/^answered 1 of 4/);
+    await expect(page.getByTestId('area-answered-IDENTITY')).toHaveText(/^1 of 4 key questions/);
     await expect(page.getByTestId('brand-brain-missing-identity.what')).toHaveCount(0);
   });
 });
@@ -350,7 +358,11 @@ test.describe('Item 2 · D4 the one review inbox', () => {
     await enter(page, slug);
     await openBrandBrain(page);
 
-    await expect(page.getByTestId('review-inbox-count')).toHaveText('2 waiting');
+    await expect(page.getByTestId('review-inbox-count')).toHaveText(
+      '2 facts waiting for your review',
+    );
+    // The prototype's banner opens the one review card.
+    await openReview(page);
     await expect(page.getByTestId(`intel-${high}`)).toBeVisible();
     await expect(page.getByTestId(`intel-${low}`)).toHaveCount(0);
     await expect(page.getByTestId(`intel-confidence-${high}`)).toContainText('High confidence');
@@ -367,7 +379,10 @@ test.describe('Item 2 · D4 the one review inbox', () => {
 
     await page.getByTestId(`accept-${high}`).click();
     await page.waitForURL(/ok=CANDIDATE_ACCEPTED/);
-    await expect(page.getByTestId('review-inbox-count')).toHaveText('1 waiting');
+    await expect(page.getByTestId('review-inbox-count')).toHaveText(
+      '1 facts waiting for your review',
+    );
+    // The card stays open across its own post.
     await expect(page.getByTestId(`intel-${low}`)).toBeVisible();
   });
 
@@ -396,12 +411,17 @@ test.describe('Item 2 · D4 the one review inbox', () => {
     // Cancel changes nothing.
     await page.getByTestId('accept-confident-cancel').click();
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByTestId('review-inbox-count')).toHaveText('3 waiting');
+    await expect(page.getByTestId('review-inbox-count')).toHaveText(
+      '3 facts waiting for your review',
+    );
 
     await page.getByTestId('accept-confident-open').click();
     await page.getByTestId('accept-confident-confirm').click();
     await page.waitForURL(/ok=CANDIDATES_ACCEPTED/);
-    await expect(page.getByTestId('review-inbox-count')).toHaveText('1 waiting');
+    await expect(page.getByTestId('review-inbox-count')).toHaveText(
+      '1 facts waiting for your review',
+    );
+    await openReview(page);
     await expect(page.getByTestId(`intel-${lowId}`)).toBeVisible();
   });
 
@@ -421,6 +441,7 @@ test.describe('Item 2 · D4 the one review inbox', () => {
     ]);
     await enter(page, slug);
     await openBrandBrain(page);
+    await openReview(page);
 
     await expect(page.getByTestId(`inbox-current-${proposal}`)).toContainText('Busy parents');
     await expect(page.getByTestId(`inbox-proposed-${proposal}`)).toContainText('Retired teachers');
@@ -460,7 +481,8 @@ test.describe('Item 2 · D6 valid until', () => {
       'Expired · not used in writing',
     );
 
-    await page.getByTestId(`edit-item-${current.id}`).locator('summary').click();
+    // The prototype's Edit button opens the fact's edit box in place.
+    await page.getByTestId(`edit-item-${current.id}`).click();
     await page.getByTestId(`valid-until-${current.id}`).fill('2099-12-31');
     await page.getByTestId(`save-item-${current.id}`).click();
     await page.waitForURL(/ok=KNOWLEDGE_SAVED/);
@@ -552,6 +574,8 @@ test.describe('Item 1 · the composer’s goal and pillar ideas are writing inpu
       'Seasonal recipes',
     );
     await compose('ai');
+    // Review of #67 — the goal and its recommendation are under "⋯".
+    await page.getByTestId('content-more').click();
     await expect(page.getByTestId('content-goal-recommended')).toBeVisible();
 
     // The goal EXPIRED: no goal idea and no recommendation; the pillar stays.

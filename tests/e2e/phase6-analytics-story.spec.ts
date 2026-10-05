@@ -96,7 +96,7 @@ test.beforeAll(async () => {
 });
 
 test.describe('D-293 · analytics tells the story first', () => {
-  test('What changed, Why and What we can try come before the metrics', async ({ page }) => {
+  test('What changed, Why and What we can try follow the metrics', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?range=90`);
 
@@ -111,21 +111,24 @@ test.describe('D-293 · analytics tells the story first', () => {
     await expect(attempt).toContainText('evidence 1');
     await expect(attempt).not.toContainText('e1');
 
-    // The story is above the numbers, and the export is last.
+    // Review of #67 — the numbers come first, as the prototype's Numbers tab
+    // opens on the KPI cards, and the story follows them; the export sits in
+    // the head row (D-468).
     const order = await page.evaluate(() => {
       const at = (id: string) => document.querySelector(`[data-testid="${id}"]`);
       const story = at('analytics-what-changed');
       const metric = document.querySelector('[data-testid^="analytics-metric-"]');
       const exported = at('analytics-export');
+      const head = at('analytics-filters');
       const before = (a: Element | null, b: Element | null) =>
         !!a && !!b && !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
       return {
-        storyFirst: before(story, metric),
-        exportLast: exported ? before(metric, exported) : true,
+        metricsFirst: before(metric, story),
+        exportInHead: exported ? !!head && head.contains(exported) : true,
       };
     });
-    expect(order.storyFirst).toBe(true);
-    expect(order.exportLast).toBe(true);
+    expect(order.metricsFirst).toBe(true);
+    expect(order.exportInHead).toBe(true);
   });
 
   test('View evidence opens the one finding, with its period, scope and the loop', async ({

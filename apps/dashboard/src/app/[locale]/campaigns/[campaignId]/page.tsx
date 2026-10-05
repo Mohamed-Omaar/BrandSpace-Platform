@@ -21,11 +21,11 @@ import { mediaForVariants } from '../../../../server/media-picker';
 import { activityTimeline } from '../../../../server/activity-timeline';
 import { ActivityTimeline } from '../../../../components/activity-timeline';
 import { EmptyAction } from '../../../../components/empty-action';
-import { messages, type MessageKey, successFlash } from '../../../../i18n/messages';
+import { type MessageKey, successFlash, dictionaryFor } from '../../../../i18n/messages';
 import { brandContextFor } from '../../../../server/brand-context';
 import { inContentStudio } from '../../../../server/content-context';
 import { inAnalytics } from '../../../../server/analytics-context';
-import { statusMessage, translator } from '../../../../i18n/messages';
+import { optionalMessage, statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { NotesPanel } from '../../../../components/notes-panel';
 import { archiveCampaignAction, startCampaignNowAction, updateCampaignAction } from '../actions';
@@ -84,8 +84,8 @@ export default async function CampaignDetailPage({
 }) {
   const { locale, campaignId } = await params;
   const query = await searchParams;
-  const t = translator(locale);
-  const { customer, workspace } = await requireWorkspace(locale, 'campaigns.read');
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale, 'campaigns.read');
+  const t = translator(messageLocale);
 
   const single = (key: string): string | undefined => {
     const value = query[key];
@@ -94,6 +94,7 @@ export default async function CampaignDetailPage({
 
   const brandContext = await brandContextFor(workspace, '/campaigns');
   const mayManage = workspace.permissionKeys.includes('campaigns.manage');
+  const mayCreate = workspace.permissionKeys.includes('content.create');
 
   /*
    * A CAMPAIGN OUTSIDE THE MEMBER'S SCOPE IS INDISTINGUISHABLE FROM ONE THAT
@@ -301,9 +302,7 @@ export default async function CampaignDetailPage({
       : [];
 
   const brief = briefFrom(campaign.brief);
-  const dictionary = (locale === 'ar' ? messages.ar : messages.en) as Readonly<
-    Record<string, string | undefined>
-  >;
+  const dictionary = dictionaryFor(messageLocale) as Readonly<Record<string, string | undefined>>;
   const numberFormat = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
     numberingSystem: 'latn',
   });
@@ -415,6 +414,7 @@ export default async function CampaignDetailPage({
       flash={successFlash(single('ok'), locale)}
       brandContext={brandContext}
       locale={locale}
+      eyebrow={t('nav.group.plan')}
       heading={campaign.name}
       description={objectiveLabel(t, campaign.objective)}
       activePath="/campaigns"
@@ -422,15 +422,6 @@ export default async function CampaignDetailPage({
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
       customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
-      actions={
-        <Link
-          href={`/${locale}/campaigns`}
-          style={buttonStyle('neutral')}
-          data-testid="campaign-back"
-        >
-          {t('campaigns.back')}
-        </Link>
-      }
     >
       {single('error') && (
         <CustomerBanner tone="error">
@@ -439,88 +430,130 @@ export default async function CampaignDetailPage({
       )}
 
       <div style={{ display: 'grid', gap: spacingTokens.lg }}>
-        {/* ------------------------------------------------ the header --- */}
-        <Card testId="campaign-summary">
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: spacingTokens.md,
-              alignItems: 'center',
-            }}
-          >
-            <StatusBadge
-              tone={statusTone(campaign.status)}
-              label={statusLabel(t, campaign.status)}
-              testId="campaign-status"
-            />
-            <span style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
-              {t('campaigns.room.goal')}: {objectiveLabel(t, campaign.objective)}
-            </span>
-            <span style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
-              {periodLabel(campaign.startDate, campaign.endDate, locale, t('campaigns.noDates'))}
-            </span>
-            {endsIn !== null ? (
-              <span
-                style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
-                data-testid="campaign-ends-in"
-              >
-                {endsInLabel(endsIn, locale, t)}
+        {/*
+          THE ROOM'S HEAD — the prototype's (`Main.dc.html` lines 1201–1206):
+          "← All campaigns", then the name with its status, the facts line,
+          what has been published, and the ways on.
+        */}
+        <Link
+          href={`/${locale}/campaigns`}
+          className="bsp-btn bsp-sm bsp-ghost bsp-room-back"
+          data-testid="campaign-back"
+        >
+          <span className="bsp-room-arrow">←</span> {t('campaigns.back')}
+        </Link>
+        <section className="bsp-xcard bsp-room-head" data-testid="campaign-summary">
+          <div className="bsp-room-id">
+            <span className="bsp-room-title">
+              <span className="bsp-room-name" dir="auto">
+                {campaign.name}
               </span>
+              <span
+                className={`bsp-pill ${ROOM_PILL[campaign.status] ?? 'bsp-p-neu'}`}
+                data-testid="campaign-status"
+              >
+                {statusLabel(t, campaign.status)}
+              </span>
+            </span>
+            <span className="bsp-room-meta">
+              <span>
+                {periodLabel(campaign.startDate, campaign.endDate, locale, t('campaigns.noDates'))}
+              </span>
+              {' · '}
+              <span data-testid="campaign-channels-summary">
+                {campaign.channels.length === 0
+                  ? t('campaigns.noChannels')
+                  : campaign.channels
+                      .map(
+                        (key) =>
+                          optionalMessage(messageLocale, `content.platform.${key.toLowerCase()}`) ??
+                          key,
+                      )
+                      .join(' · ')}
+              </span>
+              {' · '}
+              <span>
+                {t('campaigns.room.goal')}: {objectiveLabel(t, campaign.objective)}
+              </span>
+              {endsIn !== null ? (
+                <>
+                  {' · '}
+                  <span data-testid="campaign-ends-in">{endsInLabel(endsIn, locale, t)}</span>
+                </>
+              ) : null}
+              {room.owner ? (
+                <>
+                  {' · '}
+                  <span data-testid="campaign-owner">
+                    {t('campaigns.room.owner')}: {room.owner}
+                  </span>
+                </>
+              ) : null}
+            </span>
+          </div>
+          <div className="bsp-room-prog">
+            <span className="bsp-room-prog-l">
+              {t('campaigns.room.publishedOf')
+                .replace('{published}', numberFormat.format(published))
+                .replace('{total}', numberFormat.format(items.length))}
+            </span>
+            <div className="bsp-room-bar" aria-hidden="true">
+              <div
+                style={{
+                  width: `${items.length === 0 ? 0 : Math.round((published / items.length) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+          <div className="bsp-room-acts">
+            {mayManage ? (
+              <Link
+                href={`${tabHref('overview')}#campaign-details`}
+                className="bsp-btn bsp-sm bsp-ghost"
+                data-testid="campaign-edit"
+              >
+                {t('campaigns.room.edit')}
+              </Link>
             ) : null}
-            <span
-              style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
-              data-testid="campaign-channels-summary"
-            >
-              {campaign.channels.length === 0
-                ? t('campaigns.noChannels')
-                : campaign.channels.join(' · ')}
-            </span>
-            {room.owner ? (
-              <span
-                style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
-                data-testid="campaign-owner"
+            {campaign.status === 'PLANNED' && mayManage ? (
+              /*
+               * B11 — "START NOW". A form, so it works before any script loads;
+               * the action is `CampaignService.startNow`, which is `update()`
+               * with today's date and ACTIVE — never a second start path.
+               */
+              <form action={startCampaignNowAction} title={t('campaigns.startNowHint')}>
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="campaignId" value={campaign.id} />
+                <input type="hidden" name="version" value={campaign.version} />
+                <button type="submit" className="bsp-btn bsp-sm" data-testid="campaign-start-now">
+                  {t('campaigns.startNow')}
+                </button>
+              </form>
+            ) : null}
+            {mayCreate && campaign.status !== 'ARCHIVED' ? (
+              <Link
+                href={`/${locale}/content/compose?campaign=${campaign.id}`}
+                className="bsp-btn bsp-sm bsp-pur"
+                data-testid="campaign-new-post"
               >
-                {t('campaigns.room.owner')}: {room.owner}
-              </span>
+                {t('content.create')}
+              </Link>
             ) : null}
           </div>
-          {campaign.status === 'PLANNED' && mayManage ? (
-            /*
-             * B11 — "START NOW". A form, so it works before any script loads;
-             * the action is `CampaignService.startNow`, which is `update()` with
-             * today's date and ACTIVE — never a second start path.
-             */
-            <form
-              action={startCampaignNowAction}
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                gap: spacingTokens.sm,
-              }}
-            >
-              <input type="hidden" name="locale" value={locale} />
-              <input type="hidden" name="campaignId" value={campaign.id} />
-              <input type="hidden" name="version" value={campaign.version} />
-              <button type="submit" style={buttonStyle('brand')} data-testid="campaign-start-now">
-                {t('campaigns.startNow')}
-              </button>
-              <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                {t('campaigns.startNowHint')}
-              </span>
-            </form>
-          ) : null}
-          {brief.en !== '' || brief.ar !== '' ? (
-            <p
-              style={{ ...typographyTokens.body, color: colorTokens.textPrimary, marginBlock: 0 }}
+        </section>
+        {brief.en !== '' || brief.ar !== '' ? (
+          /* The prototype's notes block (`x.room.notes`): the campaign's brief. */
+          <div className="bsp-room-notes">
+            <span className="bsp-room-notes-l">{t('campaigns.brief')}</span>
+            <span
+              className="bsp-room-notes-t"
               data-testid="campaign-brief"
               dir={locale === 'ar' ? 'rtl' : 'ltr'}
             >
               {locale === 'ar' ? brief.ar || brief.en : brief.en || brief.ar}
-            </p>
-          ) : null}
-        </Card>
+            </span>
+          </div>
+        ) : null}
 
         <LinkTabs
           label={t('campaigns.room.tabs')}
@@ -663,7 +696,7 @@ export default async function CampaignDetailPage({
             />
 
             {mayManage ? (
-              <details data-testid="campaign-details">
+              <details id="campaign-details" data-testid="campaign-details">
                 <summary style={{ ...typographyTokens.label, cursor: 'pointer' }}>
                   {t('campaigns.detailsTitle')}
                 </summary>
@@ -1108,6 +1141,16 @@ const thumbPlaceholder = {
  * six), and "Ends today" on the last day. The count uses Western digits
  * (CLAUDE.md §4).
  */
+/** The status pill of the room's head, as the prototype's run / paused / planned / ended. */
+const ROOM_PILL: Readonly<Record<string, string>> = {
+  ACTIVE: 'bsp-p-info',
+  PAUSED: 'bsp-p-neu',
+  PLANNED: 'bsp-p-warn',
+  COMPLETED: 'bsp-p-ok',
+  DRAFT: 'bsp-p-neu',
+  ARCHIVED: 'bsp-p-neu',
+};
+
 function endsInLabel(days: number, locale: string, t: (key: MessageKey) => string): string {
   if (days === 0) return t('campaigns.endsToday');
   const category = new Intl.PluralRules(locale === 'ar' ? 'ar' : 'en').select(days);

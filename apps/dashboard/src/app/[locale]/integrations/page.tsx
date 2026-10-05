@@ -65,8 +65,9 @@ export default async function IntegrationsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/integrations');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const session = access.session;
   const { workspace } = session;
@@ -331,8 +332,8 @@ export default async function IntegrationsPage({
      * returned as the sentence, which React renders as nothing at all.
      */
     return (
-      (failureCode ? optionalMessage(locale, `publishing.code.${failureCode}`) : null) ??
-      optionalMessage(locale, `publishing.failure.${failureClass.toLowerCase()}`) ??
+      (failureCode ? optionalMessage(messageLocale, `publishing.code.${failureCode}`) : null) ??
+      optionalMessage(messageLocale, `publishing.failure.${failureClass.toLowerCase()}`) ??
       t('publishing.failure.unknown')
     );
   };
@@ -367,8 +368,8 @@ export default async function IntegrationsPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
-      heading={t('integrations.title')}
-      description={t('integrations.subtitle')}
+      heading={t('nav.settings')}
+      description={t('settings.p.subtitle')}
       activePath="/integrations"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}

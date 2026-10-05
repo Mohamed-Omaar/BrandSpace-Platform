@@ -15,3 +15,6 @@ The product side shows the deterministic E2E fixture workspace, so its names,
 figures and greeting differ from the prototype's sample data by design.
 
 - `batch-1/` — the app shell and Home.
+- `batch-2-6/` — every other customer screen, frame 1 (`Auth.dc.html` for sign-in, sign-up and the
+  setup wizard; the Copilot and notifications pairs open the panel on Home; the Approvals pair seeds
+  one post in review on the E2E database first).

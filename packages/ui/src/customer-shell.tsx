@@ -257,6 +257,7 @@ export function CustomerShell({
   actions,
   fab,
   banner,
+  contentLang,
   children,
 }: {
   readonly wordmark: string;
@@ -272,6 +273,11 @@ export function CustomerShell({
   readonly pageMeta?: ReactNode;
   /** The top bar's controls: notes, notifications, language, Create. */
   readonly actions?: ReactNode;
+  /**
+   * The language tag of the words inside, when it is narrower than the
+   * document's (D-470: `ar-EG` for an Egyptian workspace). Absent otherwise.
+   */
+  readonly contentLang?: string | undefined;
   /** The floating Copilot. */
   readonly fab?: ReactNode;
   readonly banner?: ReactNode;
@@ -422,6 +428,7 @@ export function CustomerShell({
   return (
     <div
       className="bs-ambient-host"
+      lang={contentLang}
       data-testid="app-shell"
       data-sidebar-state={
         hydrated

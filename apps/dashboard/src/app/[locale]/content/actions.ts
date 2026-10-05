@@ -807,7 +807,7 @@ export async function saveRetentionAction(formData: FormData): Promise<void> {
         after: { aiContentRetentionDays: floored },
       });
     });
-    destination = `/${locale}/settings?ok=SAVED`;
+    destination = `/${locale}/settings/data?ok=SAVED`;
   } catch (error: unknown) {
     const correlationId = randomUUID();
     log.warn('retention action failed', {
@@ -815,9 +815,9 @@ export async function saveRetentionAction(formData: FormData): Promise<void> {
       action: 'saveRetention',
       ...internalErrorFields(error),
     });
-    destination = `/${locale}/settings?error=${actionErrorCode(error)}&ref=${correlationId}`;
+    destination = `/${locale}/settings/data?error=${actionErrorCode(error)}&ref=${correlationId}`;
   }
-  revalidatePath(`/${locale}/settings`);
+  revalidatePath(`/${locale}/settings/data`);
   redirect(destination);
 }
 

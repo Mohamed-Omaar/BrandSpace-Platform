@@ -85,10 +85,12 @@ describe('B-5 · the team screen offers no change to your own authority', () => 
 
   it('hides role and brand-access controls on the reader’s own row, desktop and phone', () => {
     expect(page).toContain('const isSelf = (member: { userId: string }) =>');
+    // D-468: on a wide screen the controls are on the opened member's page
+    // (`opened`), on a phone in the row (`m`) — gated the same way in both.
     expect(
-      page.match(/may\('member\.assign_role'\) && !isSelf\(m\) && assignableRoles/g),
+      page.match(/may\('member\.assign_role'\) && !isSelf\((m|opened)\) && assignableRoles/g),
     ).toHaveLength(2);
-    expect(page.match(/!isSelf\(m\) &&\s*!m\.isWorkspaceOwner/g)).toHaveLength(2);
+    expect(page.match(/!isSelf\((m|opened)\) &&\s*!(m|opened)\.isWorkspaceOwner/g)).toHaveLength(2);
   });
 });
 
@@ -98,9 +100,11 @@ describe('B-6 · the library offers Schedule only to members who may schedule', 
   const calendarActions = read('apps/dashboard/src/app/[locale]/calendar/actions.ts');
 
   it('gates the link on the same permission the calendar enforces', () => {
-    expect(library).toMatch(
-      /can\.schedule && \(card\.status === 'APPROVED' \|\| card\.status === 'DRAFT'\) \?/,
+    // D-468: Schedule is an item of the card's "…" menu, gated there.
+    expect(read('apps/dashboard/src/app/[locale]/content/post-menu.tsx')).toContain(
+      "const maySchedule = can.schedule && (status === 'APPROVED' || status === 'DRAFT');",
     );
+    expect(library).toContain('can={{ ...menu.can, submit: can.submit }}');
     expect(page).toContain("schedule: may('content.schedule')");
     // The server half the link leads to, so the two cannot drift apart.
     expect(calendarActions).toContain("requireWorkspaceAction(locale, 'content.schedule')");

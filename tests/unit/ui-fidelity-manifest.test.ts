@@ -337,70 +337,73 @@ describe('the Brand Brain stylesheet is a transcription of the snapshot', () => 
   });
 });
 
-describe('the orb component is a transcription of the snapshot', () => {
-  const snapshot = readFileSync(path.join(SNAPSHOT, 'brand-brain-native.js'), 'utf8');
+/*
+ * REPLACED (D-468, batch 4 — Brand Brain): the orb is now a transcription of
+ * the approved prototype's `makeOrb` (`prototype-2026-09-27/Main.dc.html`),
+ * which supersedes `brand-brain-native.js` for this route. The constants are
+ * quoted from the prototype, so the pair still cannot drift; the composition
+ * rule keeps its negative half (no surface, no filled centre, no brand name).
+ */
+describe('the orb component is a transcription of the prototype (D-468)', () => {
+  const snapshot = readFileSync(
+    path.join(ROOT, 'docs/visual-reference/prototype-2026-09-27/Main.dc.html'),
+    'utf8',
+  );
+  const make = snapshot.slice(snapshot.indexOf('  makeOrb(canvas, kind) {'));
   const orb = readFileSync(
     path.join(ROOT, 'apps/dashboard/src/app/[locale]/brand-brain/brand-orb.tsx'),
     'utf8',
   );
 
   /**
-   * The demo's own constants. Each is a number that changes what the orb looks
-   * like, and each is quoted from the snapshot so the pair cannot drift.
+   * The prototype's own constants, each quoted from `makeOrb` as it writes it
+   * and found again in the port.
    */
-  const CONSTANTS: ReadonlyArray<readonly [string, string]> = [
-    ['orb scale', '1.3'],
-    ['rotation rate', '0.000055'],
-    ['orbit rate', '0.000012'],
-    ['perspective', '700'],
-    ['node radius factor', '0.41'],
-    ['node ellipse factor', '0.72'],
-    ['pointer repulsion radius', '105'],
-    ['neighbour window', '24'],
-    ['energy decay', '0.965'],
+  const CONSTANTS: ReadonlyArray<readonly [string, string, string]> = [
+    ['orb scale', 'const S = 1.3', 'const S = 1.3'],
+    ['rotation rate', '0.000055', '0.000055'],
+    ['busy rotation rate', '0.00032', '0.00032'],
+    ['orbit rate', 't * 0.000012', 't * 0.000012'],
+    ['perspective', '700 / (700 + fz)', '700 / (700 + fz)'],
+    ['node radius', 'Math.min(W, H) * 0.41 * S * 0.72', 'Math.min(w, h) * 0.41 * S * 0.72'],
+    ['node ellipse', 'Math.cos(a) * R * 1.12', 'Math.cos(a) * R * 1.12'],
+    ['node ellipse height', 'Math.sin(a) * R * 0.86', 'Math.sin(a) * R * 0.86'],
+    ['pointer repulsion', 'dist < 90', 'dist < 90'],
+    ['neighbour window', 'Math.min(i + 24, pr.length)', 'Math.min(i + 24, pr.length)'],
+    ['energy decay', 'p.e *= 0.965', 'p.e *= 0.965'],
+    ['particle counts', 'sphere(small ? 60 : 170', 'sphere(small ? 60 : 170'],
+    ['inner particle counts', 'sphere(small ? 24 : 72', 'sphere(small ? 24 : 72'],
   ];
 
-  it.each(CONSTANTS)('keeps the demo’s %s', (_name, value) => {
-    // Present in the snapshot (possibly written `.000055`) and in the port.
-    const bare = value.replace(/^0\./, '.');
-    expect(snapshot.includes(value) || snapshot.includes(bare)).toBe(true);
-    expect(orb).toContain(value);
+  it.each(CONSTANTS)('keeps the prototype’s %s', (_name, inPrototype, inPort) => {
+    expect(make).toContain(inPrototype);
+    expect(orb).toContain(inPort);
   });
 
-  it('keeps the demo’s six orbit angles, in the demo’s order', () => {
-    expect(snapshot).toContain('[3.55,5.42,.3,2.83,1.62,4.7]');
+  it('keeps the prototype’s six orbit angles, in its order', () => {
+    expect(make).toContain('[3.55, 5.42, 0.3, 2.83, 1.62, 4.7]');
     expect(orb.replace(/\s+/g, '')).toContain('[3.55,5.42,0.3,2.83,1.62,4.7]');
   });
 
-  it('colours the particles with tokens carrying the demo’s exact values', () => {
+  it('colours the particles with tokens carrying the prototype’s exact values', () => {
     // The token trap, closed: a token that is CLOSE would repaint the orb.
     expect(brandBrainTokens.orbOuter).toBe('#7935fe');
     expect(brandBrainTokens.orbInner).toBe('#ffdd15');
     expect(brandBrainTokens.orbInk).toBe('#111114');
-    for (const value of Object.values(brandBrainTokens)) {
-      if (value === '#ffffff') continue; // the demo writes the flare as `#fff`.
-      expect(snapshot, `${value} is not a colour the demo uses`).toContain(value);
-    }
+    expect(make).toContain("OUT = '#7935fe', INN = '#ffdd15', INK = '#111114'");
+    expect(make).toContain("rgba('#ffffff', al)");
+    expect(brandBrainTokens.orbFlare).toBe('#ffffff');
   });
 
-  it('draws the demo’s composition and nothing else', () => {
-    // Positive: the four elements the demo puts on the stage.
-    for (const className of [
-      'bb-orb-stage',
-      'bb-orb-canvas',
-      'bb-orb-center',
-      'bb-orb-label',
-      'bb-orb-hint',
-      'bb-orbit-node',
-    ]) {
+  it('draws the prototype’s composition and nothing else', () => {
+    // Positive: the stage, its canvas, the 96px centre and the six nodes.
+    for (const className of ['bsp-bb-stage', 'bsp-bb-canvas', 'bsp-bb-centre', 'bsp-bb-node']) {
       expect(orb, `the stage no longer renders .${className}`).toContain(className);
     }
-
     /*
-     * Negative, and this half is the point. Each of these is something the
-     * Phase 5A orb did that the demo does not do, written as a rule so it cannot
-     * come back: no container surface behind the stage, no filled centre, no
-     * card-shaped node, and never the customer's brand name in the middle.
+     * Negative: what the Phase 5A orb did that no reference does — a container
+     * surface behind the stage, a filled centre, a card-shaped node, the
+     * customer's brand name in the middle.
      */
     expect(orb).not.toMatch(/brandName/);
     expect(orb).not.toMatch(/backgroundColor|borderRadius|boxShadow/);

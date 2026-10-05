@@ -117,13 +117,13 @@ export default async function OverviewPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale);
+  const t = translator(messageLocale);
   const fill = (key: MessageKey, values: Record<string, string>): string =>
     Object.entries(values).reduce(
       (text, [name, value]) => text.replaceAll(`{${name}}`, value),
       t(key),
     );
-  const { customer, workspace } = await requireWorkspace(locale);
   const may = (key: string) => workspace.permissionKeys.includes(key);
 
   const maySeeContent = may('content.read');
@@ -257,7 +257,8 @@ export default async function OverviewPage({
       .replace('{language}', t(`home.workflow.language.${workflow.locale}` as MessageKey))
       .replace(
         '{platform}',
-        optionalMessage(locale, `content.platform.${workflow.platformKey}`) ?? workflow.platformKey,
+        optionalMessage(messageLocale, `content.platform.${workflow.platformKey}`) ??
+          workflow.platformKey,
       )
       .replace('{made}', weekdayName(workflow.createdWeekday))
       .replace('{planned}', weekdayName(workflow.slotWeekday))
@@ -511,7 +512,7 @@ export default async function OverviewPage({
   const integer = (value: number) => value.toLocaleString('en-US');
   const pad = (value: number) => (value < 10 ? `0${value}` : String(value));
   const channelNames = (keys: readonly string[]) =>
-    keys.map((key) => optionalMessage(locale, `content.platform.${key}`) ?? key).join(' · ');
+    keys.map((key) => optionalMessage(messageLocale, `content.platform.${key}`) ?? key).join(' · ');
   const pick = (value: unknown) => {
     const text = localizedFrom(value as never);
     return (locale === 'ar' ? (text.ar ?? text.en) : (text.en ?? text.ar)) ?? '';
@@ -1114,8 +1115,10 @@ export default async function OverviewPage({
                             )
                         ).replace(
                           '{platform}',
-                          optionalMessage(locale, `content.platform.${preference.platformKey}`) ??
-                            preference.platformKey,
+                          optionalMessage(
+                            messageLocale,
+                            `content.platform.${preference.platformKey}`,
+                          ) ?? preference.platformKey,
                         )}
                       </span>
                       <span className="bsp-xdesc">

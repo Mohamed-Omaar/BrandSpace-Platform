@@ -174,11 +174,12 @@ const COPY = {
   },
 } as const;
 
+// D-468 — the event and the action are the prototype's grids of radio choices.
 const optionValues = (page: Page, testId: string) =>
   page
     .getByTestId(testId)
-    .locator('option')
-    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    .locator('input[type="radio"]:not([value=""])')
+    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLInputElement).value));
 
 async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise<void> {
   const copy = COPY[locale];
@@ -190,7 +191,9 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   // --- The rule card: the cap, in words, and no notification ------------------
   await expect(page.getByTestId(`automation-ai-cap-${seeded.ruleId}`)).toHaveText(copy.cap);
 
-  // --- Run history, every outcome in the approved words -----------------------
+  // --- Run history, every outcome in the approved words, on its own tab -------
+  await page.getByTestId('automations-tab-runs').click();
+  await expect(page.getByTestId('automation-runs')).toBeVisible();
   await expect(page.getByTestId(`automation-run-status-${seeded.drafting}`)).toHaveText(
     copy.drafting,
   );
@@ -215,13 +218,15 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await noSeriousViolations(page);
 
   // --- Authoring, from the keyboard: offered, and stored switched off ---------
-  await page.getByTestId('automation-trigger').selectOption('SCHEDULE_GAP');
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations?new=1`);
+  await page.getByTestId('automation-trigger-SCHEDULE_GAP').check();
   expect(await optionValues(page, 'automation-action')).toContain('DRAFT_IDEAS');
   const action = page.getByTestId('automation-action');
   await expect(action).toContainText(copy.action);
-  await action.focus();
-  await expect(action).toBeFocused();
-  await action.selectOption('DRAFT_IDEAS');
+  const ideas = page.getByTestId('automation-action-DRAFT_IDEAS');
+  await ideas.focus();
+  await expect(ideas).toBeFocused();
+  await ideas.check();
   const name = `Ideas ${locale} ${randomUUID().slice(0, 6)}`;
   await page.getByTestId('automation-name').fill(name);
   await page.getByTestId('automation-submit').focus();
@@ -256,6 +261,7 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await noSeriousViolations(page);
 
   // --- The ideas link opens the brand's drafts ---------------------------------
+  await page.getByTestId('automations-tab-runs').click();
   const link = page.getByTestId(`automation-run-ideas-${seeded.drafted}`);
   await expect(link).toHaveText(copy.drafted);
   await link.focus();

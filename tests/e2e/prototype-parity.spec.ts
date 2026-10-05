@@ -4,7 +4,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
-import { signIn } from './own-workspace';
+import { useBrand } from './brand';
+import { E2E_PARITY_FILE, type E2eParityFixture } from './env';
 
 /**
  * D-468 — SIDE-BY-SIDE EVIDENCE: the vendored prototype and the product, the
@@ -20,9 +21,9 @@ import { signIn } from './own-workspace';
  */
 
 const OUT = process.env['BRANDSPACE_PARITY_DIR'] ?? path.join(process.cwd(), 'test-results/parity');
-const PROTOTYPE = pathToFileURL(
-  path.join(process.cwd(), 'docs/visual-reference/prototype-2026-09-27/Main.dc.html'),
-).href;
+const prototypeFile = (name: string): string =>
+  pathToFileURL(path.join(process.cwd(), 'docs/visual-reference/prototype-2026-09-27', name)).href;
+const PROTOTYPE = prototypeFile('Main.dc.html');
 
 /**
  * THE PROTOTYPE'S FONTS, SERVED LOCALLY. Its `<link>` asks Google Fonts for
@@ -61,12 +62,194 @@ async function serveFonts(page: Page): Promise<void> {
   });
 }
 
+/** The prototype's own rail: press the item with this English / Arabic name. */
+const viaRail =
+  (en: string, ar: string) =>
+  async (page: Page): Promise<void> => {
+    await page
+      // An item may carry its count badge after the name ("Approvals 2").
+      .locator('nav .nav', { hasText: new RegExp(`^\\s*(${en}|${ar})\\s*\\d*\\s*$`) })
+      .first()
+      .click();
+  };
+
+/** Then press the first control with this English / Arabic name. */
+const thenPress =
+  (open: (page: Page) => Promise<void>, en: string, ar: string) =>
+  async (page: Page): Promise<void> => {
+    await open(page);
+    await page
+      .getByRole('button', { name: new RegExp(`^\\s*\\+?\\s*(${en}|${ar})\\s*$`) })
+      .first()
+      .click();
+  };
+
+/**
+ * INTO THE COMPARISON WORKSPACE (`seed-parity.ts`): the prototype's café, so a
+ * pair compares the design and not whatever the functional suites left behind.
+ * Run `tsx tests/e2e/seed-parity.ts` first.
+ */
+function parityFixture(): E2eParityFixture {
+  try {
+    return JSON.parse(readFileSync(E2E_PARITY_FILE, 'utf8')) as E2eParityFixture;
+  } catch {
+    throw new Error('The parity fixture is missing. Run `tsx tests/e2e/seed-parity.ts` first.');
+  }
+}
+
+async function signIn(page: Page, locale: 'en' | 'ar'): Promise<void> {
+  const fixture = parityFixture()[locale];
+  await useBrand(page, fixture.workspaceId, fixture.brandId);
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/sign-in`);
+  await page.fill('#email', fixture.email);
+  await page.fill('#password', fixture.password);
+  await page.click('[data-testid="signin-submit"]');
+  await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
+  const choose = page.getByTestId(`choose-workspace-${fixture.workspaceSlug}`);
+  if (await choose.isVisible().catch(() => false)) await choose.click();
+  await page.waitForURL(new RegExp(`/${locale}/overview$`));
+}
+
 /** The screens of a batch: the product route, and how the prototype is brought to it. */
 const SCREENS: readonly {
   readonly key: string;
   readonly route: string;
   readonly prototype?: (page: Page) => Promise<void>;
-}[] = [{ key: 'home', route: '/overview' }];
+  /** After the route: how the product is brought to the same screen. */
+  readonly product?: (page: Page) => Promise<void>;
+  /** Another prototype file (`Auth.dc.html`), and a product route seen signed out. */
+  readonly file?: string;
+  readonly signedOut?: boolean;
+  /** Before the product is opened: the state the screen needs to be worth comparing. */
+  readonly before?: () => Promise<void>;
+}[] = [
+  { key: 'home', route: '/overview' },
+  { key: 'calendar', route: '/calendar', prototype: viaRail('Calendar', 'التقويم') },
+  { key: 'posts', route: '/content', prototype: viaRail('Posts', 'المنشورات') },
+  {
+    key: 'approvals',
+    route: '/approvals',
+    prototype: viaRail('Approvals', 'الموافقات'),
+  },
+  { key: 'campaigns', route: '/campaigns', prototype: viaRail('Campaigns', 'الحملات') },
+  { key: 'media', route: '/assets', prototype: viaRail('Media', 'الوسائط') },
+  { key: 'brand-brain', route: '/brand-brain', prototype: viaRail('Brand Brain', 'عقل العلامة') },
+  { key: 'performance', route: '/analytics', prototype: viaRail('Performance', 'الأداء') },
+  { key: 'automations', route: '/automations', prototype: viaRail('Automations', 'الأتمتة') },
+  {
+    key: 'automations-new',
+    route: '/automations?new=1',
+    prototype: thenPress(viaRail('Automations', 'الأتمتة'), 'New rule', 'قاعدة جديدة'),
+  },
+  {
+    key: 'team',
+    route: '/members',
+    prototype: async (page) => {
+      await viaRail('Settings', 'الإعدادات')(page);
+      await viaRail('Team & roles', 'الفريق والأدوار')(page);
+    },
+  },
+  { key: 'settings', route: '/settings', prototype: viaRail('Settings', 'الإعدادات') },
+  {
+    key: 'billing',
+    route: '/billing',
+    prototype: async (page) => {
+      await viaRail('Settings', 'الإعدادات')(page);
+      await viaRail('Plan & billing', 'الخطة والفوترة')(page);
+    },
+  },
+  {
+    key: 'media-generate',
+    route: '/creative',
+    prototype: thenPress(viaRail('Media', 'الوسائط'), 'Generate', 'توليد'),
+  },
+  {
+    key: 'studio',
+    route: '/content/compose?mode=write',
+    prototype: thenPress(viaRail('Posts', 'المنشورات'), 'New post', 'منشور جديد'),
+  },
+  {
+    key: 'studio-post',
+    route: '/content',
+    prototype: thenPress(viaRail('Posts', 'المنشورات'), 'Continue', 'كمّل'),
+    product: async (page) => {
+      // The same card as the prototype's: the first draft's "Continue".
+      await page
+        .locator('[data-testid^="content-edit-"]')
+        .filter({ hasText: /^(Continue|كمّل|متابعة|أكمل)$/ })
+        .first()
+        .click();
+      await page.waitForURL(/content\/compose\?item=/);
+    },
+  },
+  {
+    key: 'copilot',
+    route: '/overview',
+    prototype: async (page) => {
+      await page
+        .getByRole('button', { name: /^(Copilot|المساعد)$/ })
+        .last()
+        .click();
+    },
+    product: async (page) => {
+      await page.getByTestId('global-copilot-trigger').locator('a').first().click();
+      await page.getByTestId('copilot-drawer').waitFor();
+    },
+  },
+  {
+    key: 'notifications',
+    route: '/overview',
+    prototype: async (page) => {
+      await page
+        .getByRole('button', { name: /^(Notifications|الإشعارات)$/ })
+        .first()
+        .click();
+    },
+    product: async (page) => {
+      await page.getByTestId('topbar-notifications').click();
+      await page.getByTestId('notifications-feed').waitFor();
+    },
+  },
+  {
+    key: 'onboarding',
+    route: '/onboarding?step=brand',
+    file: 'Auth.dc.html',
+    prototype: async (page) => {
+      await page
+        .getByRole('button', { name: /^(Create account|اعمل حساب)$/ })
+        .first()
+        .click();
+      // The terms box, then the purple "Create account".
+      await page.getByRole('checkbox').first().check();
+      await page
+        .getByRole('button', { name: /^(Create account|اعمل حساب)$/ })
+        .last()
+        .click();
+      await page
+        .getByRole('button', { name: /^(I opened the link in the email|فتحت اللينك من الإيميل)$/ })
+        .click();
+      // Review of #67 — the same step on both sides: the parity workspace
+      // exists, so the product opens on Brand, the prototype's step 2.
+      await page
+        .getByRole('button', { name: /^(Continue|كمّل|متابعة)$/ })
+        .first()
+        .click();
+    },
+  },
+  { key: 'sign-in', route: '/sign-in', file: 'Auth.dc.html', signedOut: true },
+  {
+    key: 'sign-up',
+    route: '/sign-up',
+    file: 'Auth.dc.html',
+    signedOut: true,
+    prototype: async (page) => {
+      await page
+        .getByRole('button', { name: /^(Create account|إنشاء حساب|اعمل حساب)$/ })
+        .first()
+        .click();
+    },
+  },
+];
 
 /**
  * The first 1440×900 view, then the rest of the screen: both sides scroll a
@@ -89,6 +272,9 @@ async function shoot(page: Page, file: (frame: number) => string): Promise<void>
 }
 
 async function settle(page: Page): Promise<void> {
+  // The pointer is left where the last click was; away from the screen, no
+  // card is shot mid-hover (review of #67, round 2: a lifted Posts card).
+  await page.mouse.move(0, 0);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(1200);
 }
@@ -114,14 +300,22 @@ test.describe('prototype parity screenshots (D-468)', () => {
             window.localStorage.setItem('bs.handoff', JSON.stringify({ lang: 'ar' })),
           );
         }
-        await proto.goto(PROTOTYPE, { waitUntil: 'networkidle' });
+        await proto.goto(screen.file ? prototypeFile(screen.file) : PROTOTYPE, {
+          waitUntil: 'networkidle',
+        });
+        // `Auth.dc.html` keeps its own language: its language button switches it.
+        if (screen.file && locale === 'ar') {
+          await proto.getByRole('button', { name: /^AR$/ }).first().click();
+        }
         if (screen.prototype) await screen.prototype(proto);
         await settle(proto);
         await shoot(proto, (n) => path.join(OUT, `${screen.key}-${locale}-${n}-prototype.png`));
         await proto.close();
 
-        await signIn(page, locale);
+        if (screen.before) await screen.before();
+        if (!screen.signedOut) await signIn(page, locale);
         await page.goto(`${DASHBOARD_BASE_URL}/${locale}${screen.route}`);
+        if (screen.product) await screen.product(page);
         await settle(page);
         await shoot(page, (n) => path.join(OUT, `${screen.key}-${locale}-${n}-product.png`));
       });

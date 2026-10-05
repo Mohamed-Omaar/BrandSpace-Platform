@@ -232,9 +232,14 @@ test.describe('§8 motion — foundation (D-348)', () => {
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/workspaces`);
     const tile = page.locator('[data-testid^="choose-workspace-"]').first();
-    await tile.hover();
+    // The list can still move under the pointer while the page settles (the
+    // suite's own runs leave the e2e owner with many workspaces), and a moved
+    // tile is no longer hovered: hover again on each reading.
     await expect
-      .poll(() => tile.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m42))
+      .poll(async () => {
+        await tile.hover();
+        return tile.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m42);
+      })
       .toBe(-2);
   });
 

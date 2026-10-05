@@ -406,6 +406,8 @@ test.describe('Item 3 · where the fonts apply', () => {
     await enter(page, slug);
     for (const locale of ['en', 'ar'] as const) {
       await page.goto(`${DASHBOARD_BASE_URL}/${locale}/creative?brand=${brandId}`);
+      // Review of #67 — the card opens from the purple line.
+      await page.getByTestId('creative-uses').click();
       const card = page.getByTestId('creative-identity');
       await expect(card).toBeVisible();
       await expect(page.getByTestId('creative-identity-font-en-heading')).toHaveAttribute(

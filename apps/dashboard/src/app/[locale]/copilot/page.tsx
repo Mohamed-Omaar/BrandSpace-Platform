@@ -52,8 +52,9 @@ export default async function CopilotPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/copilot');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const session = access.session;
   const { workspace } = session;
@@ -122,7 +123,7 @@ export default async function CopilotPage({
             // D-296 — a request handed over without script; put in the box, never sent.
             initialRequest={typeof query['ask'] === 'string' ? query['ask'].slice(0, 1_000) : ''}
             creditsLabel={wallet ? number.format(wallet.balanceCredits) : null}
-            labels={copilotLabels(locale, session.customer.name ?? session.customer.email)}
+            labels={copilotLabels(messageLocale, session.customer.name ?? session.customer.email)}
             rateMetricKeys={RATE_METRIC_KEYS}
           />
         )}

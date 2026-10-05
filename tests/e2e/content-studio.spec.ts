@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { openStudioMore } from './studio-bar';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
@@ -178,7 +179,9 @@ async function ensureBrandWithKnowledge(page: Page, locale = 'en'): Promise<void
 }
 
 /**
- * Fill the brief and pick one channel.
+ * Fill the brief and the caption, and pick one channel. Review of #67: the
+ * Studio has the prototype's two fields — the brief AI writes from, and the
+ * caption "Save draft" keeps word for word — so both are written.
  *
  * The brand select only appears when the workspace has more than one brand, so
  * it is set when present rather than unconditionally — a helper that assumed
@@ -186,6 +189,7 @@ async function ensureBrandWithKnowledge(page: Page, locale = 'en'): Promise<void
  */
 async function compose(page: Page, brief: string): Promise<void> {
   await page.getByTestId('content-brief').fill(brief);
+  await page.getByTestId('content-caption').fill(brief);
   const channel = page.getByTestId('content-channel').first();
   if ((await channel.getAttribute('aria-pressed')) !== 'true') await channel.click();
 }
@@ -212,18 +216,19 @@ test.describe('the content library', () => {
       expect(badge.trim()).toMatch(/^\d+$/);
     }
 
-    for (const filter of [
-      'content-search',
-      'content-platform',
-      'content-format',
-      'content-language',
-    ]) {
+    // Review of #67 — the product's filters are kept, behind "Filters".
+    await page.getByTestId('content-filters-toggle').click();
+    for (const filter of ['content-search', 'content-format', 'content-language']) {
       await expect(page.getByTestId(filter)).toBeVisible();
     }
+    // Review of #67 — the chips are the brand's CONNECTED channels, as the
+    // prototype's are; every platform stays a filter under Filters.
+    await expect(page.getByTestId('content-platform')).toBeVisible();
     await page.getByTestId('content-format').selectOption('POST');
     await page.getByTestId('content-apply').click();
     await expect(page).toHaveURL(/format=POST/);
 
+    await page.getByTestId('content-filters-toggle').click();
     await page.getByTestId('content-view').getByTestId('tab-list').click();
     await expect(page.getByTestId('content-library')).toHaveAttribute('data-view', 'list');
     await expect(page).toHaveURL(/view=list/);
@@ -242,11 +247,26 @@ test.describe('the content library', () => {
     const card = page.getByTestId('content-card').first();
     await expect(card).toBeVisible();
     const itemId = (await card.getAttribute('data-item-id')) ?? '';
+    // D-468 — Duplicate is an item of the card's "…" menu, as in the prototype.
+    await page.getByTestId(`post-menu-${itemId}`).click();
     const duplicate = page.getByTestId(`content-duplicate-${itemId}`);
     await expect(duplicate).toBeVisible();
     await duplicate.click();
-    await page.waitForURL(/\/content\/compose\?item=.*ok=DUPLICATED/);
-    expect(page.url()).not.toContain(`item=${itemId}&`);
+    // The menu's Duplicate is a server action: its redirect is a client
+    // navigation with no new document, so `load` never fires, and the shell
+    // turns `?ok=DUPLICATED` into its toast and then cleans the address. So:
+    // the Studio opens on a DIFFERENT item, and the toast says it was copied.
+    await expect
+      .poll(
+        () => {
+          const opened = new URL(page.url()).searchParams.get('item');
+          return opened !== null && opened !== itemId;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    expect(new URL(page.url()).pathname).toBe('/en/content/compose');
+    await expect(page.getByTestId('toast-host')).toContainText('A copy was made as a new draft.');
   });
 });
 
@@ -371,7 +391,7 @@ test.describe('generation', () => {
 
     // The screen is Arabic throughout: no English fallback leaked into a label.
     await expect(page.getByTestId('content-composer')).toBeVisible();
-    await expect(page.locator('.cs-view-toolbar')).toContainText(/[؀-ۿ]/);
+    await expect(page.locator('.bsp-st-set')).toContainText(/[؀-ۿ]/);
   });
 
   test('AC-11.6 — nothing on the page names a model, a provider or a prompt', async ({ page }) => {
@@ -467,7 +487,7 @@ test.describe('writing a post by hand', () => {
      * post, and a channel that cannot is disabled rather than silently dropped
      * at publish time.
      */
-    await page.getByTestId('content-format').selectOption('REEL');
+    await page.getByTestId('content-format').locator('button[data-value="REEL"]').click();
 
     // TWO channels that CAN carry a reel, so the fan-out is observable.
     const channels = page.locator('[data-testid="content-channel"]:not([disabled])');
@@ -482,7 +502,8 @@ test.describe('writing a post by hand', () => {
     }
     expect(picked.length).toBe(2);
 
-    await page.getByTestId('content-brief').fill(body);
+    // Review of #67 — the words a person writes are the caption.
+    await page.getByTestId('content-caption').fill(body);
 
     /*
      * THE CAMPAIGN IS NOT ASSERTED HERE. It used to be, conditionally — "if the
@@ -601,7 +622,8 @@ test.describe('writing a post by hand', () => {
        * anything had been written to it. `ok=SAVED` is what the action redirects
        * to, so it is the thing that says the save finished.
        */
-      await variant.locator('button[type="submit"]').first().click();
+      await openStudioMore(page);
+      await page.getByTestId(`editor-save-${platformKey}`).click();
       await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
 
       // THE ROW FIRST — if the save did not happen, say so here rather than
@@ -1099,7 +1121,7 @@ test.describe('the composer is the demo, in both directions', () => {
     await openComposer(page);
 
     const columns = async () =>
-      page.locator('.cs-composer').evaluate((el) => getComputedStyle(el).gridTemplateColumns);
+      page.locator('.bsp-st-grid').evaluate((el) => getComputedStyle(el).gridTemplateColumns);
 
     await page.setViewportSize({ width: 1440, height: 900 });
     expect((await columns()).split(' ')).toHaveLength(2);
@@ -1193,7 +1215,8 @@ test.describe('accessibility and keyboard', () => {
 test.describe('the retention control (D-117)', () => {
   test('is on the settings screen and is enforced server-side', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+    // Review of #67 — retention is Settings → Data, as the prototype states it.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/data`);
     await page.waitForLoadState('domcontentloaded');
 
     const field = page.getByTestId('retention-days');
@@ -1205,7 +1228,7 @@ test.describe('the retention control (D-117)', () => {
 
     await field.fill(String(Number(min) + 10));
     await page.getByTestId('retention-save').click();
-    await page.waitForURL(/\/settings/);
+    await page.waitForURL(/\/settings\/data/);
     await expect(page.getByTestId('retention-days')).toHaveValue(String(Number(min) + 10));
 
     // And the sentence naming what it can NEVER delete is part of the control.
@@ -1214,6 +1237,6 @@ test.describe('the retention control (D-117)', () => {
     // Put it back, so a later run starts where this one did.
     await page.getByTestId('retention-days').fill('');
     await page.getByTestId('retention-save').click();
-    await page.waitForURL(/\/settings/);
+    await page.waitForURL(/\/settings\/data/);
   });
 });

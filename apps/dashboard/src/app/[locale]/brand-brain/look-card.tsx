@@ -22,6 +22,7 @@ import {
   saveBrandTypographyAction,
   uploadBrandLogoAction,
 } from './look-actions';
+import { useMessageLocale } from '../../../i18n/message-locale-context';
 
 /**
  * PHASE 2C-2 (item 3) — LOOK & VOICE: COLOURS, LOGO AND FONTS.
@@ -120,20 +121,29 @@ export function LookCard({
   look,
   canManage,
   canUpload,
+  children,
 }: {
   locale: string;
   brandId: string;
   look: LookViewData;
   canManage: boolean;
   canUpload: boolean;
+  /** The Voice card, which the prototype sets between the colours and the fonts. */
+  children?: React.ReactNode;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
+  /*
+   * THE PROTOTYPE'S LOOK & VOICE GRID (`Main.dc.html` lines 869–876): Logo and
+   * Colours across the top (its third card, templates, is left out — the
+   * product has no design templates), then Voice, then the fonts, full width.
+   */
   return (
-    <div className="bb-source" data-testid="look-card" style={{ display: 'grid', gap: 20 }}>
-      <div className="bb-source-head">
-        <h4>{t('bb.look.title')}</h4>
-      </div>
-      <Colours locale={locale} brandId={brandId} palette={look.palette} canManage={canManage} />
+    <div
+      className="bsp-bb-lookgrid"
+      role="group"
+      data-testid="look-card"
+      aria-label={t('bb.look.title')}
+    >
       <Logo
         locale={locale}
         brandId={brandId}
@@ -143,6 +153,8 @@ export function LookCard({
         canManage={canManage}
         canUpload={canManage && canUpload}
       />
+      <Colours locale={locale} brandId={brandId} palette={look.palette} canManage={canManage} />
+      {children}
       <Slots locale={locale} brandId={brandId} look={look} canManage={canManage} />
       <FontManager
         locale={locale}
@@ -177,14 +189,18 @@ function Colours({
   palette: readonly string[];
   canManage: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const [colours, setColours] = useState<string[]>([...palette]);
   const headingId = useId();
 
   if (!canManage) {
     return (
-      <section aria-labelledby={headingId} data-testid="look-colours" style={sectionStyle}>
-        <h5 id={headingId} style={headingStyle}>
+      <section
+        aria-labelledby={headingId}
+        data-testid="look-colours"
+        className="bsp-card bsp-bb-lc bsp-bb-lc-2"
+      >
+        <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
           {t('bb.look.colours')}
         </h5>
         {palette.length === 0 ? (
@@ -207,8 +223,12 @@ function Colours({
     setColours((current) => current.map((colour, i) => (i === index ? value : colour)));
 
   return (
-    <section aria-labelledby={headingId} data-testid="look-colours" style={sectionStyle}>
-      <h5 id={headingId} style={headingStyle}>
+    <section
+      aria-labelledby={headingId}
+      data-testid="look-colours"
+      className="bsp-card bsp-bb-lc bsp-bb-lc-2"
+    >
+      <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
         {t('bb.look.colours')}
       </h5>
       <form action={saveBrandColoursAction} style={formStyle} data-testid="look-colours-form">
@@ -296,13 +316,13 @@ function Logo({
   canManage: boolean;
   canUpload: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const headingId = useId();
   const fileId = useId();
   const pickId = useId();
   return (
-    <section aria-labelledby={headingId} data-testid="look-logo" style={sectionStyle}>
-      <h5 id={headingId} style={headingStyle}>
+    <section aria-labelledby={headingId} data-testid="look-logo" className="bsp-card bsp-bb-lc">
+      <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
         {t('bb.look.logo')}
       </h5>
       {logo?.url ? (
@@ -389,7 +409,7 @@ function Slots({
   look: LookViewData;
   canManage: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const headingId = useId();
   const [chosen, setChosen] = useState<Record<string, string>>(() =>
     Object.fromEntries(
@@ -458,8 +478,12 @@ function Slots({
   ).flat();
 
   return (
-    <section aria-labelledby={headingId} data-testid="look-fonts" style={sectionStyle}>
-      <h5 id={headingId} style={headingStyle}>
+    <section
+      aria-labelledby={headingId}
+      data-testid="look-fonts"
+      className="bsp-card bsp-bb-lc bsp-bb-lc-full"
+    >
+      <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
         {t('bb.look.fonts')}
       </h5>
       <p style={mutedStyle}>{t('bb.look.fontsHint')}</p>
@@ -498,12 +522,16 @@ function FontManager({
   canManage: boolean;
   canUpload: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const headingId = useId();
   if (!canManage) return null;
   return (
-    <section aria-labelledby={headingId} data-testid="look-uploaded" style={sectionStyle}>
-      <h5 id={headingId} style={headingStyle}>
+    <section
+      aria-labelledby={headingId}
+      data-testid="look-uploaded"
+      className="bsp-card bsp-bb-lc bsp-bb-lc-full"
+    >
+      <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
         {t('bb.look.uploaded')}
       </h5>
       <p style={mutedStyle}>
@@ -536,7 +564,7 @@ function LanguageFonts({
   look: LookViewData;
   canUpload: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const fileId = useId();
   const nameId = useId();
   const fonts = look.fonts.filter((font) => font.language === language);
@@ -627,7 +655,7 @@ function FontRow({
   accept: string;
   canUpload: boolean;
 }) {
-  const t = translator(locale);
+  const t = translator(useMessageLocale(locale));
   const [confirming, setConfirming] = useState(false);
   const renameId = useId();
   const replaceId = useId();
@@ -745,7 +773,6 @@ function FontRow({
 
 /* ------------------------------------------------------------------ styles */
 
-const sectionStyle: React.CSSProperties = { display: 'grid', gap: 10 };
 const headingStyle: React.CSSProperties = {
   margin: 0,
   fontSize: typographyTokens.label.fontSize,

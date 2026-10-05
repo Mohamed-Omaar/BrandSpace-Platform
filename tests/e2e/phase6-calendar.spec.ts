@@ -237,20 +237,31 @@ test.describe('D-290 · the calendar', () => {
       .getByTestId(`calendar-day-${day(20)}`)
       .locator('[data-testid^="calendar-post-"]', { hasText: title });
     await expect(moved).toBeVisible();
+    // D-468 — the chip opens its popover; Details is the drawer.
     await moved.click();
+    await page.getByTestId('calendar-pop-details').click();
     await expect(page.getByTestId('reschedule-time')).toHaveValue('12:00');
   });
 
-  test('B7: "new post" on an empty future day opens scheduling with that day', async ({ page }) => {
+  test('B7: an empty future day offers a new post there, and schedules a draft on it', async ({
+    page,
+  }) => {
     test.skip(test.info().project.name.includes('mobile'), 'the grid is a desktop view');
-    await draft();
+    const { itemId } = await draft();
     const { month } = nextMonth();
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
+    // D-468 — the day's "+" is the prototype's: a new post in the Studio, dated.
     const create = page.locator('[data-testid^="calendar-new-"]').first();
     const key = ((await create.getAttribute('data-testid')) ?? '').replace('calendar-new-', '');
-    await create.click();
+    await expect(create).toHaveAttribute('href', `/en/content/compose?date=${key}`);
+    // …and pressing the empty day opens its popover, whose "Drafts without a
+    // date" schedules one of them on THAT day, through the same dialog.
+    await page.getByTestId(`calendar-day-${key}`).locator('.bsp-cal-hit').click();
+    await expect(page.getByTestId(`calendar-day-pop-${key}`)).toBeVisible();
+    await page.getByTestId(`calendar-day-pop-draft-${itemId}`).click();
     await expect(page.getByTestId('calendar-schedule-dialog')).toBeVisible();
+    await expect(page.getByTestId('schedule-item')).toHaveValue(itemId);
     await expect(page.getByTestId('schedule-date')).toHaveValue(key);
   });
 

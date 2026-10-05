@@ -117,6 +117,10 @@ test.describe('P6-16 · the customer top bar', () => {
     await page.getByTestId('topbar-notifications').click();
     const feed = page.getByTestId('notifications-feed');
     await expect(feed).toBeVisible();
+    // Review of #67 — the filters and "See all" are under the popover's "⋯";
+    // its footer is the prototype's "Mark all as read".
+    await expect(feed.getByTestId('notifications-mark-all')).toBeVisible();
+    await feed.getByTestId('notifications-more').click();
     await expect(feed.getByTestId('notifications-tab-mention')).toBeVisible();
     await feed.getByTestId('notifications-see-all').click();
     await page.waitForURL(/\/en\/notifications$/);

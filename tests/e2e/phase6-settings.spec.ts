@@ -48,16 +48,18 @@ test.afterAll(async () => {
 });
 
 test.describe('D-298 · settings, team, billing and history', () => {
-  test('Billing & usage is one Settings row with two tabs', async ({ page }) => {
+  test('Plan & billing is one Settings row, with usage as its detail page', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/billing`);
     const nav = page.getByTestId('settings-nav');
-    await expect(nav.getByRole('link', { name: 'Billing & usage' })).toHaveCount(1);
+    // Review of #67 — the prototype's menu names the section "Plan & billing".
+    await expect(nav.getByRole('link', { name: 'Plan & billing' })).toHaveCount(1);
     await expect(nav.getByRole('link', { name: 'Plan & usage' })).toHaveCount(0);
 
-    const tabs = page.getByTestId('billing-tabs');
-    await expect(tabs.getByTestId('tab-billing')).toHaveAttribute('aria-current', 'page');
-    await tabs.getByTestId('tab-usage').click();
+    // Review of #67 — Plan & billing is the prototype's section with no tab
+    // row; usage and limits are its detail page, opened from the plan card.
+    await expect(page.getByTestId('billing-tabs')).toHaveCount(0);
+    await page.getByTestId('billing-usage-link').click();
     await page.waitForURL(/\/en\/plan$/);
     await expect(page.getByTestId('billing-tabs').getByTestId('tab-usage')).toHaveAttribute(
       'aria-current',
@@ -66,7 +68,7 @@ test.describe('D-298 · settings, team, billing and history', () => {
     await expect(page.getByTestId('current-plan')).toBeVisible();
     // The section, not a second row, is current in the Settings nav.
     await expect(
-      page.getByTestId('settings-nav').getByRole('link', { name: 'Billing & usage' }),
+      page.getByTestId('settings-nav').getByRole('link', { name: 'Plan & billing' }),
     ).toHaveAttribute('aria-current', 'page');
   });
 
@@ -79,11 +81,15 @@ test.describe('D-298 · settings, team, billing and history', () => {
       await expect(list.getByText(/^Joined /).first()).toBeVisible();
       return;
     }
+    // D-468: the prototype's rows — each leads with the member, then says
+    // their brand access. Review of #67: the row is the prototype's one line;
+    // when they joined is on the member's own page, opened from the row.
     const table = page.getByTestId('members-table');
-    await expect(table.getByRole('columnheader', { name: 'Member' })).toBeVisible();
-    await expect(table.getByRole('columnheader', { name: 'Brand access' })).toBeVisible();
-    await expect(table.getByRole('columnheader', { name: 'Status' })).toBeVisible();
-    await expect(table.getByText(/^Joined /).first()).toBeVisible();
+    const first = table.getByRole('listitem').first();
+    await expect(first.locator('.bsp-tm-name')).toBeVisible();
+    await expect(first).toContainText('Brand access');
+    await first.locator('[data-testid^="member-manage-"]').click();
+    await expect(page.getByTestId('member-detail').getByText(/^Joined /)).toBeVisible();
   });
 
   test('a post shows its own history, in words, with who and when', async ({ page }) => {

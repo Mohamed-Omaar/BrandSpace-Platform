@@ -92,11 +92,19 @@ async function seed(label: string): Promise<Seeded> {
   return { ws, campaignName, runs };
 }
 
+/*
+ * D-468 — the event and the action are the prototype's grids of choices, real
+ * radio buttons; the other pickers are still selects. Both read the same way.
+ */
 const values = (page: Page, testId: string) =>
   page
     .getByTestId(testId)
-    .locator('option')
-    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value));
+    .locator('option, input[type="radio"]:not([value=""])')
+    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLInputElement).value));
+const chosen = (page: Page, testId: string) =>
+  page.getByTestId(testId).locator('input[type="radio"]:checked');
+const pick = (page: Page, testId: string, value: string) =>
+  page.getByTestId(`${testId}-${value}`).check();
 
 const COPY = {
   en: {
@@ -142,17 +150,16 @@ const CONTENT_FIELDS = [
 
 async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise<void> {
   const copy = COPY[locale];
-  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations`);
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations?new=1`);
   if (locale === 'ar') await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
 
   const trigger = page.getByTestId('automation-trigger');
   const action = page.getByTestId('automation-action');
-  await expect(trigger).toHaveValue('');
-  await expect(action).toHaveValue('');
+  await expect(chosen(page, 'automation-trigger')).toHaveCount(0);
+  await expect(chosen(page, 'automation-action')).toHaveCount(0);
 
   // --- The catalogue: the PR 2 triggers and the five timed ones ---------------
   expect(await values(page, 'automation-trigger')).toEqual([
-    '',
     'CONTENT_APPROVED',
     'POST_PUBLISHED',
     'POST_FAILED',
@@ -167,19 +174,19 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   for (const label of copy.triggers) await expect(trigger).toContainText(label);
 
   // --- Each timed trigger: its actions and its conditions ---------------------
-  await trigger.selectOption('REVIEW_WAITING_24H');
-  await expect(action).toHaveValue('');
-  expect(await values(page, 'automation-action')).toEqual(['', 'NOTIFY_PERSON', 'REMIND_REVIEWER']);
+  await pick(page, 'automation-trigger', 'REVIEW_WAITING_24H');
+  await expect(chosen(page, 'automation-action')).toHaveCount(0);
+  expect(await values(page, 'automation-action')).toEqual(['NOTIFY_PERSON', 'REMIND_REVIEWER']);
   await expect(action).toContainText(copy.remind);
   expect(await values(page, 'automation-condition-field')).toEqual(['', ...CONTENT_FIELDS]);
 
   for (const [boundary, actions] of [
     // Phase 2B-3 PR 5 — a campaign that starts may be paused (asks first).
-    ['CAMPAIGN_STARTED', ['', 'NOTIFY_PERSON', 'PAUSE_CAMPAIGN']],
-    ['CAMPAIGN_ENDED', ['', 'NOTIFY_PERSON']],
+    ['CAMPAIGN_STARTED', ['NOTIFY_PERSON', 'PAUSE_CAMPAIGN']],
+    ['CAMPAIGN_ENDED', ['NOTIFY_PERSON']],
   ] as const) {
-    await trigger.selectOption(boundary);
-    await expect(action).toHaveValue('');
+    await pick(page, 'automation-trigger', boundary);
+    await expect(chosen(page, 'automation-action')).toHaveCount(0);
     expect(await values(page, 'automation-action')).toEqual(actions);
     expect(await values(page, 'automation-condition-field')).toEqual(['', 'campaign.id']);
   }
@@ -190,17 +197,17 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await expect(page.getByTestId('automation-condition-value')).toContainText(seeded.campaignName);
 
   for (const state of ['SCHEDULE_GAP', 'FACT_EXPIRING']) {
-    await trigger.selectOption(state);
-    await expect(action).toHaveValue('');
-    expect(await values(page, 'automation-action')).toEqual(['', 'NOTIFY_PERSON']);
+    await pick(page, 'automation-trigger', state);
+    await expect(chosen(page, 'automation-action')).toHaveCount(0);
+    expect(await values(page, 'automation-action')).toEqual(['NOTIFY_PERSON']);
     // No condition to choose: the event is the condition.
     expect(await values(page, 'automation-condition-field')).toEqual(['']);
   }
   await noSeriousViolations(page);
 
   // --- Remind the reviewer: no settings, created from the keyboard ------------
-  await trigger.selectOption('REVIEW_WAITING_24H');
-  await action.selectOption('REMIND_REVIEWER');
+  await pick(page, 'automation-trigger', 'REVIEW_WAITING_24H');
+  await pick(page, 'automation-action', 'REMIND_REVIEWER');
   await expect(page.getByTestId('automation-action-person')).toHaveCount(0);
   await expect(page.getByTestId('automation-action-campaign')).toHaveCount(0);
   const name = `Remind ${locale} ${randomUUID().slice(0, 6)}`;
@@ -232,7 +239,9 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   expect(created.armedAt).not.toBeNull();
   await expect(page.getByTestId(`automation-older-${created.id}`)).toHaveCount(0);
 
-  // --- Run history: the reminder's two outcomes, in words ---------------------
+  // --- Run history: the reminder's two outcomes, in words, on its own tab ------
+  await page.getByTestId('automations-tab-runs').click();
+  await expect(page.getByTestId('automation-runs')).toBeVisible();
   const { runs } = seeded;
   await expect(page.getByTestId(`automation-run-status-${runs.stale}`)).toHaveText(copy.skipped);
   await expect(page.getByTestId(`automation-run-failure-${runs.stale}`)).toHaveText(copy.stale);

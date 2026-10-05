@@ -72,8 +72,9 @@ export default async function BrandBrainPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const t = translator(locale);
   const access = await requireWorkspacePage(locale, '/brand-brain');
+  const { messageLocale } = access.session;
+  const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
 
@@ -430,6 +431,7 @@ export default async function BrandBrainPage({
       })),
       pendingCandidates: area.pendingCandidates,
       attention: area.attention.map((reason) => t(`bb.attention.${reason}` as MessageKey)),
+      attentionCodes: area.attention,
       items: (itemsByArea.get(area.area) ?? []).map((item) => ({
         id: item.id,
         itemKey: item.itemKey,
@@ -481,7 +483,14 @@ export default async function BrandBrainPage({
         area,
         slot: ORB_SLOTS[area as keyof typeof ORB_SLOTS],
         label: card.label,
-        detail: `${card.activeItems} ${t('bb.itemsCount')}`,
+        // The prototype's node line is the area's own "n of m" (`a.sub`).
+        detail:
+          card.total > 0
+            ? t('bb.keyQuestionsOf')
+                .replace('{answered}', String(card.answered))
+                .replace('{total}', String(card.total))
+            : `${card.activeItems} ${t('bb.itemsCount')}`,
+        done: card.status === 'COMPLETE',
       },
     ];
   });
@@ -558,6 +567,7 @@ export default async function BrandBrainPage({
       confidencePercent: Math.round(candidate.confidenceMilli / 10),
       // D4 — High / Medium / Low from the CONFIGURED thresholds, and why.
       confidenceLabel: t(`bb.confidence.${label}` as MessageKey),
+      confidenceLevel: label,
       confidenceWhy: t(`bb.confidence.why.${why.reason}` as MessageKey).replace(
         '{hits}',
         reviewNumber.format(why.keywordHits ?? 0),
@@ -710,7 +720,8 @@ export default async function BrandBrainPage({
    * the add form's placeholder and its key already set.
    */
   const cardLabel = new Map(areaCards.map((card) => [card.area, card.label]));
-  const missing = completion.missing.slice(0, 5).map((entry) => ({
+  // The prototype's one row of four (review of #67).
+  const missing = completion.missing.slice(0, 4).map((entry) => ({
     area: entry.area,
     areaLabel: cardLabel.get(entry.area) ?? entry.area,
     itemKey: entry.question.itemKey,
@@ -836,6 +847,9 @@ export default async function BrandBrainPage({
       brandContext={brandContext}
       locale={locale}
       heading={t('bb.title')}
+      // The prototype's eyebrow over "Brand Brain" is the brand's own name.
+      eyebrow={brand.name}
+      description={t('bb.pageSub')}
       activePath="/brand-brain"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -873,6 +887,8 @@ export default async function BrandBrainPage({
         initialTab={initialTab}
         initialFocus={initialFocus}
         focusCandidateId={typeof query['candidate'] === 'string' ? query['candidate'] : null}
+        // The review card posts and comes back here: it stays open on the way back.
+        reviewOpen={status === 'CANDIDATE_ACCEPTED' || status === 'CANDIDATE_REJECTED'}
         confident={confident.map((entry) => ({
           id: entry.id,
           title: pick(entry.title, locale) || entry.itemKey,
@@ -917,12 +933,24 @@ export default async function BrandBrainPage({
         separation is structural — `packages/collaboration` has no dependency on
         `packages/brand-brain` in either direction.
       */}
-      <NotesPanel
-        locale={locale}
-        subject={{ type: 'BRAND', brandId: brand.id }}
-        returnPath={`/${locale}/brand-brain`}
-        highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
-      />
+      {/*
+        Review of #67, round 2 — the prototype's Brand Brain draws no notes
+        section, so the brand's notes are behind this disclosure at the foot of
+        the page; a link to one thread (`?thread=`) opens it.
+      */}
+      <details
+        className="bsp-bb-notes"
+        open={typeof query['thread'] === 'string'}
+        data-testid="brand-brain-notes"
+      >
+        <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>
+        <NotesPanel
+          locale={locale}
+          subject={{ type: 'BRAND', brandId: brand.id }}
+          returnPath={`/${locale}/brand-brain`}
+          highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
+        />
+      </details>
     </WorkspaceShell>
   );
 }

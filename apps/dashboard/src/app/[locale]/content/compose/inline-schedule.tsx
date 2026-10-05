@@ -16,8 +16,8 @@ import { useId, useState } from 'react';
  *     passed — the person chooses one, and the server refuses a past time,
  *     earlier today included, with the calendar's own message.
  *
- * AN APPROVED DESIGN-SYSTEM EXTENSION (UI-FIDELITY §6.3): the composer's own
- * `cs-field` inputs and `cs-dark-button`, nothing new.
+ * D-468: drawn as the prototype's "When" popover draws its date and time —
+ * the `1fr 110px` pair of labelled native controls (`bsp-st-when-*`).
  */
 export function InlineSchedule({
   locale,
@@ -49,57 +49,61 @@ export function InlineSchedule({
   const [time, setTime] = useState(firstDate === today ? '' : defaultTime);
 
   return (
-    <form action={action} className="cs-form-row" data-testid="editor-schedule-inline">
+    <form action={action} className="bsp-st-when-form" data-testid="editor-schedule-inline">
       <input type="hidden" name="locale" value={locale} />
       <input type="hidden" name="contentItemId" value={itemId} />
-      <div className="cs-field">
-        <label htmlFor={`${id}-date`}>{t['editor.schedule.date']}</label>
-        <input
-          id={`${id}-date`}
-          type="date"
-          name="date"
-          required
-          min={today}
-          value={date}
-          data-testid="editor-schedule-date"
-          onChange={(event) => {
-            const next = event.target.value;
-            setDate(next);
-            // Today: nothing proposed. Another day: the default, unless chosen.
-            setTime((current) =>
-              next === today
-                ? current === defaultTime
-                  ? ''
-                  : current
-                : current === ''
-                  ? defaultTime
-                  : current,
-            );
-          }}
-        />
+      <div className="bsp-st-when-grid">
+        <label className="bsp-st-when-field" htmlFor={`${id}-date`}>
+          <span>{t['editor.schedule.date']}</span>
+          <input
+            id={`${id}-date`}
+            className="bsp-st-when-input"
+            type="date"
+            name="date"
+            required
+            min={today}
+            value={date}
+            data-testid="editor-schedule-date"
+            onChange={(event) => {
+              const next = event.target.value;
+              setDate(next);
+              // Today: nothing proposed. Another day: the default, unless chosen.
+              setTime((current) =>
+                next === today
+                  ? current === defaultTime
+                    ? ''
+                    : current
+                  : current === ''
+                    ? defaultTime
+                    : current,
+              );
+            }}
+          />
+        </label>
+        <label className="bsp-st-when-field" htmlFor={`${id}-time`}>
+          <span>{t['editor.schedule.time']}</span>
+          <input
+            id={`${id}-time`}
+            className="bsp-st-when-input"
+            type="time"
+            name="time"
+            required
+            value={time}
+            data-testid="editor-schedule-time"
+            aria-describedby={date === today ? `${id}-today` : undefined}
+            onChange={(event) => setTime(event.target.value)}
+          />
+        </label>
       </div>
-      <div className="cs-field">
-        <label htmlFor={`${id}-time`}>{t['editor.schedule.time']}</label>
-        <input
-          id={`${id}-time`}
-          type="time"
-          name="time"
-          required
-          value={time}
-          data-testid="editor-schedule-time"
-          aria-describedby={date === today ? `${id}-today` : undefined}
-          onChange={(event) => setTime(event.target.value)}
-        />
-        {date === today ? (
-          <p id={`${id}-today`} className="cs-hint" data-testid="editor-schedule-today">
-            {t['editor.schedule.todayHint']}
-          </p>
-        ) : null}
-      </div>
-      <div className="cs-form-actions">
+      {date === today ? (
+        <p id={`${id}-today`} className="bsp-st-when-note" data-testid="editor-schedule-today">
+          {t['editor.schedule.todayHint']}
+        </p>
+      ) : null}
+      <div className="bsp-st-when-acts">
         <button
           type="submit"
-          className="cs-dark-button"
+          className="bsp-btn bsp-sm bsp-pur"
           disabled={disabled}
           data-testid="editor-schedule-submit"
         >

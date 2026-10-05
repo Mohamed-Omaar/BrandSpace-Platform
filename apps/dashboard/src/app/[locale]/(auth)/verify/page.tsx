@@ -50,7 +50,7 @@ export default async function VerifyPage({
   const result = token ? await service.verifyEmail(token).catch(() => null) : null;
 
   return (
-    <AuthCard locale={locale} heading={t('verify.title')}>
+    <AuthCard locale={locale} eyebrow={t('auth.eyebrow.verify')} heading={t('verify.title')}>
       {result ? (
         <>
           <p data-testid="verify-success">{t('verify.doneTitle')}</p>
