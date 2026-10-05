@@ -129,6 +129,12 @@ type FormAction = (formData: FormData) => Promise<void>;
 export interface AssetLibraryViewProps {
   readonly locale: string;
   /**
+   * The server's `systemClock.now()`, as ISO: the date every label here is
+   * read against (a date in another year shows its year). Handed down
+   * because this is a client component and never reads the real clock.
+   */
+  readonly now: string;
+  /**
    * `?upload=1` — the top bar's "Upload to the library" (P6-16) opens the
    * library's OWN upload dialog, not a second upload path. Honoured only when
    * the member may upload; the dialog's action refuses independently.
@@ -234,8 +240,8 @@ const KIND_LABEL: Readonly<Record<AssetKind, MessageKey>> = {
   FONT: 'assets.kind.FONT',
 };
 
-function formatDate(iso: string, locale: string): string {
-  return dayFormatter(locale, 'UTC').format(new Date(iso));
+function formatDate(iso: string, locale: string, now: string): string {
+  return dayFormatter(locale, 'UTC', new Date(now)).format(new Date(iso));
 }
 
 /** Build a URL for this route with one filter changed and the rest preserved. */
@@ -977,6 +983,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           <AssetDetail
             asset={props.selected}
             locale={props.locale}
+            now={props.now}
             brands={props.brands}
             folders={props.folders}
             can={can}
@@ -1375,6 +1382,7 @@ const STATE_X: Readonly<Record<AssetStatus, string>> = {
 function AssetDetail({
   asset,
   locale,
+  now,
   folders,
   can,
   actions,
@@ -1383,6 +1391,7 @@ function AssetDetail({
 }: {
   readonly asset: AssetDetailData;
   readonly locale: string;
+  readonly now: string;
   readonly brands: ReadonlyArray<{ id: string; name: string }>;
   readonly folders: readonly FolderData[];
   readonly can: AssetLibraryViewProps['can'];
@@ -1472,7 +1481,10 @@ function AssetDetail({
         >
           <Detail label={t('assets.detail.kind')} value={t(KIND_LABEL[asset.kind])} />
           <Detail label={t('assets.detail.size')} value={formatBytes(asset.sizeBytes, locale)} />
-          <Detail label={t('assets.detail.uploaded')} value={formatDate(asset.createdAt, locale)} />
+          <Detail
+            label={t('assets.detail.uploaded')}
+            value={formatDate(asset.createdAt, locale, now)}
+          />
           <Detail
             label={t('assets.detail.version')}
             value={new Intl.NumberFormat('en-US').format(asset.version)}
@@ -1501,7 +1513,7 @@ function AssetDetail({
           {asset.rightsExpiryAt ? (
             <Detail
               label={t('assets.detail.rightsExpiry')}
-              value={formatDate(asset.rightsExpiryAt, locale)}
+              value={formatDate(asset.rightsExpiryAt, locale, now)}
             />
           ) : null}
         </dl>
@@ -1543,7 +1555,7 @@ function AssetDetail({
                       t(`content.status.${use.status}` as MessageKey),
                       use.campaignName,
                       use.asCover ? t('assets.detail.asCover') : null,
-                      formatDate(use.updatedAt, locale),
+                      formatDate(use.updatedAt, locale, now),
                     ]
                       .filter(Boolean)
                       .join(' · ')}
@@ -1721,7 +1733,7 @@ function AssetDetail({
                     {new Intl.NumberFormat('en-US').format(version.versionNumber)}
                   </span>
                   <span>{formatBytes(version.sizeBytes, locale)}</span>
-                  <span>{formatDate(version.createdAt, locale)}</span>
+                  <span>{formatDate(version.createdAt, locale, now)}</span>
                   {version.versionNumber !== asset.version && can.version ? (
                     <form action={actions.restoreVersion} style={{ display: 'contents' }}>
                       <input type="hidden" name="locale" value={locale} />

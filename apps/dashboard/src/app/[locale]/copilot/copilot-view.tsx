@@ -125,6 +125,7 @@ const TRANSLATED_PREVIEW: Readonly<Record<string, string>> = {
 
 export function CopilotView({
   locale,
+  now: serverNow,
   brand,
   surface,
   labels,
@@ -135,6 +136,12 @@ export function CopilotView({
   panel = null,
 }: {
   readonly locale: string;
+  /**
+   * The server's `systemClock.now()`, as ISO: what this client view reads
+   * its dates against (a date in another year shows its year). It never reads
+   * the real clock for a label.
+   */
+  readonly now: string;
   /**
    * THE FLOATING PANEL'S EXTRAS (`Main.dc.html` lines 1494–1523, review of #67
    * round 3): the greeting bubble the conversation opens with and the three
@@ -215,7 +222,7 @@ export function CopilotView({
   const number = new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 2,
   });
-  const time = whenFormatter(locale, 'UTC');
+  const time = whenFormatter(locale, 'UTC', new Date(serverNow));
 
   /*
    * ONE CONVERSATION PER VISIT (P6-12). Every submit used to open a NEW

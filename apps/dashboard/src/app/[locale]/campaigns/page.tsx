@@ -264,7 +264,9 @@ export default async function CampaignsPage({
   const filterHref = (next: ListableStatus | undefined): string =>
     next ? `/${locale}/campaigns?status=${next}` : `/${locale}/campaigns`;
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const whenFormat = { format: (value: Date) => whenLabel(value, locale, posts.timezone) };
+  const whenFormat = {
+    format: (value: Date) => whenLabel(value, locale, posts.timezone, systemClock.now()),
+  };
 
   return (
     <WorkspaceShell

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { brandScopeFilter } from '@brandspace/shared';
+import { brandScopeFilter, systemClock } from '@brandspace/shared';
 import {
   SOCIAL_PROVIDERS,
   retryableAfterReconnect as failedOnItsAccount,
@@ -147,7 +147,7 @@ export default async function IntegrationsPage({
       : 0;
 
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()) };
   const stamp = (value: Date | null): string | null => (value ? formatter.format(value) : null);
 
   /*

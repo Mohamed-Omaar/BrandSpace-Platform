@@ -220,7 +220,7 @@ async function NoteThread({
   const threadId = thread.id;
   const status = thread.status;
   const now = systemClock.now();
-  const dayFormat = dayFormatter(locale, 'UTC');
+  const dayFormat = dayFormatter(locale, 'UTC', systemClock.now());
   const hidden = (
     <>
       <input type="hidden" name="locale" value={locale} />

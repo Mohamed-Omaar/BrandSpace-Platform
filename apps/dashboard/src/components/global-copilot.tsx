@@ -32,6 +32,7 @@ import { MoreDisclosure } from './more-disclosure';
  */
 export function GlobalCopilot({
   locale,
+  now,
   children,
   href,
   brand,
@@ -42,6 +43,12 @@ export function GlobalCopilot({
   strings,
 }: {
   readonly locale: string;
+  /**
+   * The server's `systemClock.now()`, as ISO: what this client view reads
+   * its dates against (a date in another year shows its year). It never reads
+   * the real clock for a label.
+   */
+  readonly now: string;
   /** The top bar's Copilot link, rendered on the server. */
   readonly children: ReactNode;
   /** The full Copilot screen, for this surface. */
@@ -215,6 +222,7 @@ export function GlobalCopilot({
               <CopilotView
                 key={conversation.key}
                 locale={locale}
+                now={now}
                 brand={brand}
                 surface={surface}
                 subject={subject}

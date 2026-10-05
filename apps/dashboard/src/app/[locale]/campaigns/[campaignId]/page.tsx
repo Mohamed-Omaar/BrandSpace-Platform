@@ -309,7 +309,9 @@ export default async function CampaignDetailPage({
     numberingSystem: 'latn',
   });
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const dateFormat = {
+    format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()),
+  };
   const byStatus = (status: string) => items.filter((item) => item.status === status).length;
   const published = byStatus('PUBLISHED') + byStatus('PARTIALLY_PUBLISHED');
   const waiting = byStatus('IN_REVIEW');

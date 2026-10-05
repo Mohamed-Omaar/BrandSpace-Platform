@@ -1,5 +1,5 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
-import { maySpendCredits } from '@brandspace/shared';
+import { maySpendCredits, systemClock } from '@brandspace/shared';
 import {
   BRAND_MEMORY_LAYERS,
   ORB_AREAS,
@@ -385,7 +385,7 @@ export default async function BrandBrainPage({
       documents: new Map(documents.map((document) => [document.id, document.fileName])),
     };
   });
-  const provenanceDay = dayFormatter(locale, 'UTC');
+  const provenanceDay = dayFormatter(locale, 'UTC', systemClock.now());
   const provenanceOf = (item: (typeof items)[number]): string =>
     [
       `${t('bb.provenance.updated')} ${provenanceDay.format(item.updatedAt)}`,
@@ -501,7 +501,7 @@ export default async function BrandBrainPage({
     style: 'percent',
     maximumFractionDigits: 1,
   });
-  const reviewDay = dayFormatter(locale, 'UTC');
+  const reviewDay = dayFormatter(locale, 'UTC', systemClock.now());
   /*
    * D4 — WHAT A CANDIDATE WOULD REPLACE, side by side. Either the approved fact
    * with its own key (accepting makes a new version of it) or the approved fact
@@ -640,7 +640,7 @@ export default async function BrandBrainPage({
   }));
   const areaLabelOf = (area: string) =>
     t(`bb.area.${areaDefinition(area as never).messageKey}` as MessageKey);
-  const uploadedOn = dayFormatter(locale, 'UTC');
+  const uploadedOn = dayFormatter(locale, 'UTC', systemClock.now());
 
   const sourceData: SourceData[] = sources.map((source) => ({
     id: source.id,

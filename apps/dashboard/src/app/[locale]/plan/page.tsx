@@ -305,7 +305,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                     style={{ margin: 0, ...typographyTokens.caption, textAlign: 'end' }}
                   >
                     {subscription.trialEndsAt && subscription.status === 'TRIALING'
-                      ? `${t('plan.trialEnds')} ${dayLabel(subscription.trialEndsAt, locale, 'UTC')}`
+                      ? `${t('plan.trialEnds')} ${dayLabel(subscription.trialEndsAt, locale, 'UTC', systemClock.now())}`
                       : t('plan.trialNone')}
                   </dd>
                 </div>

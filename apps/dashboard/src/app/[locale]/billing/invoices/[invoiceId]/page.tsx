@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { formatMoneyDisplay, type Money } from '@brandspace/shared';
+import { formatMoneyDisplay, type Money, systemClock } from '@brandspace/shared';
 import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { requireWorkspace } from '../../../../../server/customer-context';
 import { commerceSnapshotFor, invoiceDetailFor } from '../../../../../server/commerce-context';
@@ -45,7 +45,8 @@ export default async function InvoicePage({
   const brandContext = await brandContextFor(workspace, '/billing');
   const show = (value: Money): string => formatMoneyDisplay(value, locale);
   // Round 4 (1.8): the prototype's date.
-  const day = (value: Date | null): string => (value ? dayLabel(value, locale, 'UTC') : '—');
+  const day = (value: Date | null): string =>
+    value ? dayLabel(value, locale, 'UTC', systemClock.now()) : '—';
 
   if (!detail) {
     return (

@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { systemClock } from '@brandspace/shared';
 import { Suspense, type ReactNode } from 'react';
 import {
   CustomerShell,
@@ -775,6 +776,7 @@ export async function WorkspaceShell({
     focus || !copilot ? null : copilotLink ? (
       <GlobalCopilot
         locale={locale}
+        now={systemClock.now().toISOString()}
         href={copilotLink.href}
         brand={drawerBrand}
         surface={drawerSurface}

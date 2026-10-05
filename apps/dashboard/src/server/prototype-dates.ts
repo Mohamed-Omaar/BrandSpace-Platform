@@ -12,19 +12,6 @@
  * workspace's, or the slot's own — so the same instant never reads as two days.
  */
 
-import type { Clock } from '@brandspace/shared';
-
-/*
- * The clock a label is read against when the caller passes no `now`. Not
- * `systemClock` from `@brandspace/shared`: client components import this
- * module, and that package's entry also loads `node:crypto`. The type is
- * shared; the one real read is here, as `clock.ts` does it.
- */
-const labelClock: Clock = {
-  // eslint-disable-next-line no-restricted-syntax -- the one place this module reads a real clock
-  now: () => new Date(),
-};
-
 function tag(locale: string): string {
   return locale === 'ar' ? 'ar-u-nu-latn' : 'en-US';
 }
@@ -46,15 +33,12 @@ function parts(
 
 /**
  * "Oct 16" / "16 أكتوبر" — the date alone, with the year only when it is not
- * this one. `now` defaults to the injected clock (round 4): without it the year was
- * compared with itself, and a due date in 2030 read "Jan 15".
+ * this one. `now` is REQUIRED (round 4): read from the injected clock
+ * (`systemClock.now()`) by the server and handed down, so no label reads the
+ * real date and every test pins it. Optional, it was compared with the date's
+ * own year, and a due date in 2030 read "Jan 15".
  */
-export function dayLabel(
-  instant: Date,
-  locale: string,
-  timeZone: string,
-  now: Date = labelClock.now(),
-): string {
+export function dayLabel(instant: Date, locale: string, timeZone: string, now: Date): string {
   const p = parts(instant, locale, timeZone, { month: 'short', day: 'numeric', year: 'numeric' });
   const thisYear = parts(now, locale, timeZone, { year: 'numeric' }).year;
   const base = locale === 'ar' ? `${p.day} ${p.month}` : `${p.month} ${p.day}`;
@@ -72,7 +56,7 @@ export function clockLabel(instant: Date, locale: string, timeZone: string): str
 }
 
 /** "Oct 16 · 10:00" — a moment. */
-export function whenLabel(instant: Date, locale: string, timeZone: string, now?: Date): string {
+export function whenLabel(instant: Date, locale: string, timeZone: string, now: Date): string {
   return `${dayLabel(instant, locale, timeZone, now)} · ${clockLabel(instant, locale, timeZone)}`;
 }
 
@@ -81,7 +65,7 @@ export function whenLabel(instant: Date, locale: string, timeZone: string, now?:
  * `scheduledLocalTime`), read as written — no zone is applied to it, because
  * it has none.
  */
-export function localWhenLabel(local: string, locale: string, now?: Date): string | null {
+export function localWhenLabel(local: string, locale: string, now: Date): string | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local);
   if (!match) return null;
   const [, y, mo, d, h, mi] = match;
@@ -109,12 +93,12 @@ export interface DateFormatterLike {
 }
 
 /** `.format(date)` → "Oct 16" (the year only for another year). */
-export function dayFormatter(locale: string, timeZone = 'UTC', now?: Date): DateFormatterLike {
+export function dayFormatter(locale: string, timeZone: string, now: Date): DateFormatterLike {
   return { format: (value) => dayLabel(value, locale, timeZone, now) };
 }
 
 /** `.format(date)` → "Oct 16 · 10:00". */
-export function whenFormatter(locale: string, timeZone = 'UTC', now?: Date): DateFormatterLike {
+export function whenFormatter(locale: string, timeZone: string, now: Date): DateFormatterLike {
   return { format: (value) => whenLabel(value, locale, timeZone, now) };
 }
 

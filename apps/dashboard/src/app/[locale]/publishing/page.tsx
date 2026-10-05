@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { randomUUID } from 'node:crypto';
+import { systemClock } from '@brandspace/shared';
 import { retryableAfterReconnect } from '@brandspace/social-connectors';
 import {
   AssetThumb,
@@ -272,7 +273,7 @@ export default async function PublishingPage({
   };
 
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()) };
   const providerLabel = (provider: string): string =>
     optionalMessage(messageLocale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
   const failureText = (failureClass: string | null, failureCode: string | null): string | null =>

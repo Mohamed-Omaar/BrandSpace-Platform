@@ -255,7 +255,9 @@ export default async function ApprovalsPage({
    */
   const policyByBrand = new Map(policies.map((p) => [p.brandId, p] as const));
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const dateFormat = {
+    format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()),
+  };
   const nameOf = (userId: string) =>
     userId === customer.userId ? t('activity.you') : (memberNames.get(userId) ?? '—');
   const now = systemClock.now();

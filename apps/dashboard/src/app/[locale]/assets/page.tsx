@@ -438,6 +438,7 @@ export default async function AssetsPage({
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
       <AssetLibraryView
         locale={locale}
+        now={systemClock.now().toISOString()}
         notes={
           notesBrandId && selectedId && can(NOTE_PERMISSION) ? (
             <NotesPanel

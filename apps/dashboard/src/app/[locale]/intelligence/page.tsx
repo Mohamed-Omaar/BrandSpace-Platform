@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { maySpendCredits } from '@brandspace/shared';
+import { maySpendCredits, systemClock } from '@brandspace/shared';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
   Card,
@@ -119,7 +119,7 @@ export default async function IntelligencePage({
   );
   const brand = requiredBrand(brandContext);
 
-  const stamp = dayFormatter(locale, 'UTC');
+  const stamp = dayFormatter(locale, 'UTC', systemClock.now());
   const number = new Intl.NumberFormat('en-US');
 
   /*

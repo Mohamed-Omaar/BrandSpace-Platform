@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { colorTokens, spacingTokens, typographyTokens, buttonClass } from '@brandspace/ui';
+import { systemClock } from '@brandspace/shared';
 import { holdsPermission, inWorkspace } from '../../../server/customer-context';
 import { deletionRequestDetails } from '../../../server/deletion-request-details';
 import { pendingDeletionSession } from '../../../server/pending-deletion';
@@ -34,7 +35,7 @@ export default async function DeletionPendingPage({
   const { workspace, messageLocale } = await pendingDeletionSession(locale);
   const t = translator(messageLocale);
   const mayCancel = holdsPermission(workspace, 'workspace.delete');
-  const format = dayFormatter(locale, 'UTC');
+  const format = dayFormatter(locale, 'UTC', systemClock.now());
   const date = format.format(workspace.deletionScheduledFor);
   // Review item 9: who asked, and when — read in the workspace's own context.
   const request = await inWorkspace(workspace.workspaceId, ({ db }) =>

@@ -79,7 +79,9 @@ export default async function NotesPage({
     members.find((member) => member.userId === userId)?.name ?? t('notes.someone');
 
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const dateFormat = {
+    format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()),
+  };
 
   /** Where the conversation lives — the subject's own screen, the thread highlighted. */
   const subjectHref = (entry: NoteInboxEntry): string => noteThreadHref(locale, entry);

@@ -10,6 +10,7 @@ import {
   typographyTokens,
   buttonClass,
 } from '@brandspace/ui';
+import { systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { notificationService } from '../../../server/approvals-context';
@@ -64,7 +65,9 @@ export default async function NotificationsPage({
   });
 
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const dateFormat = {
+    format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()),
+  };
 
   const brandContext = await brandContextFor(workspace, '/notifications');
 

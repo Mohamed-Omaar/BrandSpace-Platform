@@ -137,8 +137,8 @@ export default async function AnalyticsPage({
     style: 'percent',
     maximumFractionDigits: 1,
   });
-  const day = dayFormatter(locale, 'UTC');
-  const stamp = whenFormatter(locale, 'UTC');
+  const day = dayFormatter(locale, 'UTC', systemClock.now());
+  const stamp = whenFormatter(locale, 'UTC', systemClock.now());
 
   const formatValue = (value: bigint | null, unit: string): string | null => {
     if (value === null) return null;
@@ -994,7 +994,9 @@ export default async function AnalyticsPage({
                             {post.title ?? post.contentItemId}
                           </span>
                           <span className="bsp-pf-post-m">
-                            {post.publishedAt ? dayLabel(post.publishedAt, locale, data.zone) : ''}
+                            {post.publishedAt
+                              ? dayLabel(post.publishedAt, locale, data.zone, systemClock.now())
+                              : ''}
                             {meta?.campaign?.name ? ` · ${meta.campaign.name}` : ''}
                           </span>
                         </span>

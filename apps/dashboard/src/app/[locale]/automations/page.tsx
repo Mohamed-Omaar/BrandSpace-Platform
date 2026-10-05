@@ -554,7 +554,7 @@ export default async function AutomationsPage({
     : null;
 
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const stamp = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const stamp = { format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()) };
 
   /*
    * D-468 — THE PROTOTYPE'S TWO TABS AND ITS RULE DIALOG, all in the address:
