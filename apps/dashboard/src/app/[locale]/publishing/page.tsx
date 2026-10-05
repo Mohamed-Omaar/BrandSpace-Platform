@@ -19,6 +19,7 @@ import { lateNoticeKey, publishingRescheduleOffered } from '../../../server/late
 import { requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 import { inSocial } from '../../../server/social-context';
 import { mediaForVariants } from '../../../server/media-picker';
 import {
@@ -326,7 +327,8 @@ export default async function PublishingPage({
       flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
-      heading={t('publishingHub.title')}
+      eyebrow={t('nav.group.publish')}
+      heading={t('nav.rail.publishingLog')}
       description={t('publishingHub.subtitle')}
       activePath="/publishing"
       workspaceName={workspace.workspaceName}
@@ -338,40 +340,62 @@ export default async function PublishingPage({
         <CustomerBanner tone="error">{statusMessage(error, locale, reference)}</CustomerBanner>
       ) : null}
 
-      <LinkTabs
-        label={t('publishingHub.tabsLabel')}
-        currentId={tab}
-        testId="publishing-tabs"
-        tabs={[
-          {
-            id: 'queue',
-            href: tabHref('queue'),
-            label: t('publishingHub.tab.queue'),
-            badge: badge(count(QUEUE_STATUSES)),
-          },
-          {
-            id: 'published',
-            href: tabHref('published'),
-            label: t('publishingHub.tab.published'),
-            badge: badge(count(['PUBLISHED'])),
-          },
-          {
-            id: 'failed',
-            href: tabHref('failed'),
-            label: t('publishingHub.tab.failed'),
-            badge: badge(count(['FAILED'])),
-          },
-          ...(may('integrations.read')
-            ? [
-                {
-                  id: 'accounts',
-                  href: tabHref('accounts'),
-                  label: t('publishingHub.tab.accounts'),
-                },
-              ]
-            : []),
-        ]}
-      />
+      {/*
+        Gate 2b — the prototype's three tabs (Queue · Published · Failed). The
+        product's Accounts view is behind "⋯" (D-471), and a tab only while open.
+      */}
+      <div className="bsp-pl-top">
+        <LinkTabs
+          label={t('publishingHub.tabsLabel')}
+          currentId={tab}
+          testId="publishing-tabs"
+          tabs={[
+            {
+              id: 'queue',
+              href: tabHref('queue'),
+              label: t('publishingHub.tab.queue'),
+              badge: badge(count(QUEUE_STATUSES)),
+            },
+            {
+              id: 'published',
+              href: tabHref('published'),
+              label: t('publishingHub.tab.published'),
+              badge: badge(count(['PUBLISHED'])),
+            },
+            {
+              id: 'failed',
+              href: tabHref('failed'),
+              label: t('publishingHub.tab.failed'),
+              badge: badge(count(['FAILED'])),
+            },
+            ...(may('integrations.read') && tab === 'accounts'
+              ? [
+                  {
+                    id: 'accounts',
+                    href: tabHref('accounts'),
+                    label: t('publishingHub.tab.accounts'),
+                  },
+                ]
+              : []),
+          ]}
+        />
+        {may('integrations.read') && tab !== 'accounts' ? (
+          <MoreDisclosure
+            label={t('publishingHub.tab.accounts')}
+            testId="publishing-more"
+            align="end"
+            closeOnPick
+          >
+            <Link
+              href={tabHref('accounts')}
+              className="bsp-btn bsp-sm bsp-ghost"
+              data-testid="publishing-more-accounts"
+            >
+              {t('publishingHub.tab.accounts')}
+            </Link>
+          </MoreDisclosure>
+        ) : null}
+      </div>
 
       {tab !== 'accounts' ? (
         <Card testId={`publishing-${tab}`}>

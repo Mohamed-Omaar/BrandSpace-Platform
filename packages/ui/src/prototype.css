@@ -9857,6 +9857,15 @@ img.bsp-pf-art {
   }
 }
 
+/* Gate 2b — the publishing log's tabs: the prototype's `.seg` at its own width,
+   with the product's "⋯" (Accounts) beside it. */
+.bsp-pl-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* Round 4 (5.5) — General's save bar. The prototype draws it after the whole
    settings grid (`position: sticky; bottom: 0; margin-top: 14px;
    margin-inline-start: 228px`), so its sticky range runs below the nav too and
