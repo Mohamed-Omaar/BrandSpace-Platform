@@ -303,3 +303,4 @@ A change is done when:
 | `docs/DECISIONS.md`               | Approved assumptions, recommendations, unresolved decisions, owner approvals needed               |
 | `docs/OPERATIONS.md`              | Backup, verification, restore, queue recovery, migration policy, rotation, incident response      |
 | `docs/UI-FIDELITY-CONTRACT.md`    | **Binding.** The demo as UI specification, the route-to-reference manifest, authorised deviations |
+| `docs/ARABIC-GLOSSARY.md`         | One formal Arabic term per concept; the wordmark and digit rules (D-474)                          |
