@@ -389,7 +389,7 @@ test.describe('strategy', () => {
     page,
   }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/strategy`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/strategy?view=next`);
 
     const form = page.getByTestId('strategy-form');
     await expect(form).toBeVisible();
