@@ -352,7 +352,10 @@ test.describe('Item 3 · fonts', () => {
     await page.getByTestId(`look-font-rename-input-${font.id}`).fill('Our Arabic Display');
     await page.getByTestId(`look-font-rename-${font.id}`).click();
     await page.waitForURL(/ok=BRAND_FONT_RENAMED/);
-    await expect(page.getByTestId(`look-font-${font.id}`)).toContainText('Our Arabic Display');
+    // Gate 2b — the name is drawn in the row's own name field, as the prototype's.
+    await expect(page.getByTestId(`look-font-rename-input-${font.id}`)).toHaveValue(
+      'Our Arabic Display',
+    );
 
     // Replace the file: the same font, a new asset; the old file archived.
     await page.getByTestId(`look-font-replace-file-${font.id}`).setInputFiles({

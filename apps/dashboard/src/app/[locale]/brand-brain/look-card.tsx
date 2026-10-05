@@ -762,6 +762,8 @@ function FontRow({
           {t('bb.look.fontName')}
         </label>
         <input
+          // Keyed on the stored name: after a rename it re-mounts with it.
+          key={font.displayName}
           id={renameId}
           className="bsp-lk-rename"
           name="displayName"
