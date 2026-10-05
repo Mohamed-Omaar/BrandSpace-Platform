@@ -88,14 +88,30 @@ test.describe('round 4 · the rail marks every page', () => {
     await signIn(page);
     // From the top of the rail to its foot and back, by the rail itself.
     for (const testId of ['nav-notes', 'nav-settings', 'nav-overview', 'nav-members']) {
-      // Record the pill's offset in the rail on every frame of the move.
+      // Record, on every frame of the move, the pill's offset in the rail and
+      // any frame where the current item paints its own fill while the pill
+      // is in charge (`data-ind`): that fill on the destination, with the pill
+      // still on its way, is the flash the owner saw (Gate 2b review).
       await page.evaluate(() => {
-        const w = window as unknown as { __pillYs: number[]; __pillStop: boolean };
+        const w = window as unknown as {
+          __pillYs: number[];
+          __ownFill: string[];
+          __pillStop: boolean;
+        };
         w.__pillYs = [];
+        w.__ownFill = [];
         w.__pillStop = false;
         const sample = () => {
-          const pill = document.querySelector<HTMLElement>('[data-testid="sidebar"] .bsp-nav-ind');
+          const nav = document.querySelector<HTMLElement>('[data-testid="sidebar"] nav');
+          const pill = nav?.querySelector<HTMLElement>('.bsp-nav-ind');
           if (pill) w.__pillYs.push(new DOMMatrixReadOnly(getComputedStyle(pill).transform).f);
+          const item = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+          if (nav?.hasAttribute('data-ind') && item) {
+            const fill = getComputedStyle(item).backgroundColor;
+            if (fill !== 'transparent' && !/^rgba\(.*,\s*0\)$/.test(fill)) {
+              w.__ownFill.push(`${item.dataset['testid']} ${fill}`);
+            }
+          }
           if (!w.__pillStop) requestAnimationFrame(sample);
         };
         requestAnimationFrame(sample);
@@ -103,12 +119,29 @@ test.describe('round 4 · the rail marks every page', () => {
       await page.getByTestId('sidebar').getByTestId(testId).click();
       const current = page.getByTestId('sidebar').locator('[aria-current="page"]');
       await expect(current).toHaveAttribute('data-testid', testId);
-      await page.waitForTimeout(900);
-      const ys = await page.evaluate(() => {
-        const w = window as unknown as { __pillYs?: number[]; __pillStop: boolean };
+      // The glide starts when the new page is first drawn, which on a busy
+      // machine comes well after its DOM exists: the move is judged once the
+      // pill's own animation has ended, not after a fixed time.
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              document
+                .querySelector<HTMLElement>('[data-testid="sidebar"] .bsp-nav-ind')
+                ?.getAnimations().length ?? -1,
+          ),
+        )
+        .toBe(0);
+      const { ys, ownFill } = await page.evaluate(() => {
+        const w = window as unknown as {
+          __pillYs?: number[];
+          __ownFill?: string[];
+          __pillStop: boolean;
+        };
         w.__pillStop = true;
-        return w.__pillYs ?? [];
+        return { ys: w.__pillYs ?? [], ownFill: w.__ownFill ?? [] };
       });
+      expect(ownFill, `${testId}: the item painted its own fill under a moving pill`).toEqual([]);
       // A new document after navigation starts a fresh record; what matters
       // is the move it shows: one direction, never back.
       const moves = ys.slice(1).map((y, i) => y - ys[i]!);
