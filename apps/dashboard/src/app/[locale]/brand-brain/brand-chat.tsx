@@ -571,30 +571,37 @@ export function BrandChat({
           <b>{labels.title}</b>
           <span>{busy ? labels.thinking : labels.subtitle}</span>
         </span>
-        <span className="bsp-bb-chat-ctx">
-          <span className="bsp-pill bsp-p-neu" data-testid="chat-context">
-            {areaLabel ?? labels.contextAll}
-          </span>
-          {onAreaDetails ? (
+        {/*
+          Gate 2b — the prototype's head carries no scope and no ×: the pill,
+          the area's details and the way back appear only when the chat is
+          scoped to one area.
+        */}
+        {areaLabel ? (
+          <span className="bsp-bb-chat-ctx">
+            <span className="bsp-pill bsp-p-neu" data-testid="chat-context">
+              {areaLabel}
+            </span>
+            {onAreaDetails ? (
+              <button
+                type="button"
+                className="bsp-btn bsp-sm bsp-ghost"
+                onClick={onAreaDetails}
+                data-testid="chat-area-details"
+              >
+                {labels.areaDetails}
+              </button>
+            ) : null}
             <button
               type="button"
-              className="bsp-btn bsp-sm bsp-ghost"
-              onClick={onAreaDetails}
-              data-testid="chat-area-details"
+              className="bsp-btn bsp-sm bsp-ghost bsp-bb-chat-x"
+              onClick={onClose}
+              aria-label={labels.close}
+              data-testid="chat-close"
             >
-              {labels.areaDetails}
+              ×
             </button>
-          ) : null}
-          <button
-            type="button"
-            className="bsp-btn bsp-sm bsp-ghost bsp-bb-chat-x"
-            onClick={onClose}
-            aria-label={labels.close}
-            data-testid="chat-close"
-          >
-            ×
-          </button>
-        </span>
+          </span>
+        ) : null}
       </header>
 
       {/*

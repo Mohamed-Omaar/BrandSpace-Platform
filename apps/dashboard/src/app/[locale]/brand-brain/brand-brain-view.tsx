@@ -207,6 +207,7 @@ const AREA_GLYPHS: Record<string, string> = {
 export function BrandBrainView({
   locale,
   brandId,
+  brandName,
   understanding,
   layers,
   missing,
@@ -980,7 +981,8 @@ export function BrandBrainView({
               send: t('bb.chatSend'),
               cancel: t('bb.chatCancel'),
               thinking: t('bb.chatThinking'),
-              empty: t('bb.chatEmpty'),
+              // The prototype's greeting (`chatHello`), naming the brand.
+              empty: t('bb.chatHello').replace('{brand}', brandName),
               sources: t('bb.chatSources'),
               insufficient: t('bb.chatInsufficient'),
               disclaimer: t('bb.chatDisclaimer'),

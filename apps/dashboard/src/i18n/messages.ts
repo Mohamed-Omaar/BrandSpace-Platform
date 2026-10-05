@@ -1302,6 +1302,7 @@ export const messages = {
     'bb.chatCancel': 'إلغاء',
     'bb.chatThinking': 'يقرأ عقل العلامة…',
     'bb.chatEmpty': 'اسأل سؤالًا وسأجيب من المعرفة المعتمدة فقط.',
+    'bb.chatHello': 'اسألني عن {brand}. أجيب من المعرفة المعتمدة فقط.',
     'bb.chatSources': 'المصادر',
     'bb.chatInsufficient':
       'لا أملك معلومات معتمدة كافية للإجابة على هذا. أضف معرفة في المنطقة المعنية ثم أعد المحاولة.',
@@ -5152,6 +5153,7 @@ export const messages = {
     'bb.chatCancel': 'Cancel',
     'bb.chatThinking': 'Reading Brand Brain\u2026',
     'bb.chatEmpty': 'Ask a question and I will answer only from approved knowledge.',
+    'bb.chatHello': 'Ask me about {brand}. I answer only from approved knowledge.',
     'bb.chatSources': 'Sources',
     'bb.chatInsufficient':
       'I do not have enough approved information to answer that. Add knowledge in the relevant area and try again.',
