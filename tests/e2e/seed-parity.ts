@@ -28,6 +28,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { WorkspaceAdminService, hashPassword } from '@brandspace/auth';
 import { CreditLedgerService } from '@brandspace/entitlements';
+import { ConfigurationService } from '@brandspace/config';
 import { withWorkspace } from '@brandspace/database';
 import { createObjectStore } from '@brandspace/storage';
 import { E2E_PARITY_FILE, loadE2eEnv, type E2eParityFixture, type E2eParityWorkspace } from './env';
@@ -265,6 +266,34 @@ const POSTS: ReadonlyArray<{
 ];
 
 /**
+ * ROUND 3 (D) — the published posts' strategy pillars, from the café's own
+ * "Content pillars" fact (morning coffee, behind the bar, weekend brunch).
+ */
+const PILLAR: Readonly<Record<string, readonly [string, string]>> = {
+  brunch0: ['Weekend brunch', 'برانش الويكند'],
+  founder: ['Behind the bar', 'ورا البار'],
+  summer: ['Morning coffee', 'قهوة الصبح'],
+  cold: ['Morning coffee', 'قهوة الصبح'],
+  iced: ['Behind the bar', 'ورا البار'],
+};
+
+/**
+ * ROUND 3 (D) — each channel's daily account reach, its engagement rate (%)
+ * and its new followers a day: the prototype's figures (`PCH`), so the
+ * Performance screen compares like for like. Marked as sample data.
+ */
+const CHANNEL_FIGURES: Readonly<Record<string, readonly [number, number, number]>> = {
+  INSTAGRAM: [820, 4.6, 14],
+  TIKTOK: [540, 3.9, 9],
+  FACEBOOK: [260, 3.1, 3],
+};
+
+/** A unique observation identity for a fixture row (the same fields ingestion keys on). */
+function fixtureObservationKey(parts: readonly string[]): string {
+  return createHash('sha256').update(parts.join('|')).digest('hex');
+}
+
+/**
  * A post's calendar slot: a draft or a review with a date is PLANNED (the
  * prototype's drafts and reviews carry their day), the rest as they went.
  */
@@ -287,6 +316,17 @@ const WORDS = {
       ramadan: 'Ramadan 2027',
       summer: 'Summer iced latte',
     },
+    // Round 3 (D) — the rules' names: each rule's own sentence, as the prototype names them.
+    rules: {
+      slot: 'Approved posts → next free slot',
+      pause: 'Engagement drops → pause the campaign',
+      remind: 'Waiting 24 hours → remind the reviewer',
+      ideas: 'Empty calendar → draft 3 ideas',
+    },
+    thread: [
+      ['sara', 'Can we change the photo? The one from the window is warmer.'],
+      ['reem', 'Good idea — I’ll swap it before it goes out.'],
+    ] as ReadonlyArray<readonly ['reem' | 'sara' | 'omar', string]>,
   },
   ar: {
     business: 'ريما كافيه',
@@ -297,6 +337,16 @@ const WORDS = {
       ramadan: 'رمضان 2027',
       summer: 'آيس لاتيه الصيف',
     },
+    rules: {
+      slot: 'منشور اتوافق عليه ← أقرب مكان فاضي',
+      pause: 'التفاعل يقل ← وقّف الحملة',
+      remind: 'مستني 24 ساعة ← فكّر المراجِع',
+      ideas: 'التقويم فاضي ← اكتب 3 أفكار',
+    },
+    thread: [
+      ['sara', 'ممكن نغيّر الصورة؟ اللي من الشباك أدفى.'],
+      ['reem', 'فكرة حلوة — هغيّرها قبل ما ينزل.'],
+    ] as ReadonlyArray<readonly ['reem' | 'sara' | 'omar', string]>,
   },
 } as const;
 
@@ -362,7 +412,14 @@ async function build(
       currency: 'EGP',
     },
   );
-  const workspace = await platform.workspace.findUniqueOrThrow({ where: { slug } });
+  /*
+   * ROUND 3 (D) — the week starts on Saturday, as an Egyptian business's does
+   * and as the prototype's calendar draws it.
+   */
+  const workspace = await platform.workspace.update({
+    where: { slug },
+    data: { weekStartsOn: 6 },
+  });
 
   const password = `e2e-${randomBytes(18).toString('base64url')}`;
   const owner = await platform.user.update({
@@ -449,7 +506,9 @@ async function build(
           slug: `reema-${lang}-${run}`,
           status: 'ACTIVE',
           // Free text: the industry catalogue is empty until an operator fills it.
-          industry: lang === 'ar' ? 'مقهى' : 'Café',
+          // Round 3 (D) — filed under the configured café industry, so its
+          // observances reach the calendar.
+          industry: PARITY_INDUSTRY,
           websiteUrl: 'https://reema.coffee',
           // The prototype café posts in both languages, Arabic first (round 3).
           defaultLocale: lang === 'ar' ? 'AR' : 'EN',
@@ -458,12 +517,13 @@ async function build(
         },
       });
 
+      const connectionIds: Record<string, string> = {};
       for (const [provider, name] of [
         ['INSTAGRAM', '@reema.cafe'],
         ['FACEBOOK', 'Reema Café'],
         ['TIKTOK', '@reemacafe'],
       ] as const) {
-        await db.socialConnection.create({
+        const connection = await db.socialConnection.create({
           data: {
             workspaceId: workspace.id,
             brandId: brand.id,
@@ -473,9 +533,84 @@ async function build(
             targetKind: 'MOCK',
             status: 'ACTIVE',
             connectedByUserId: owner.id,
-            connectedAt: new Date(),
+            connectedAt: new Date(Date.now() - 60 * DAY),
+            // ROUND 3 (D) — each channel's last sync, as the sources row says it.
+            lastSyncedAt: new Date(Date.now() - (provider === 'TIKTOK' ? 95 : 18) * 60_000),
           },
         });
+        connectionIds[provider] = connection.id;
+        // ROUND 3 (D) — the account readings' sync, which the freshness pill reads.
+        const synced = new Date(Date.now() - (provider === 'TIKTOK' ? 95 : 18) * 60_000);
+        for (const subjectType of ['ACCOUNT', 'POST'] as const) {
+          for (const granularity of ['DAY', 'WEEK', 'MONTH'] as const) {
+            await db.analyticsIngestionCursor.create({
+              data: {
+                workspaceId: workspace.id,
+                brandId: brand.id,
+                socialConnectionId: connection.id,
+                provider,
+                subjectType,
+                granularity,
+                lastCoveredPeriodEnd: new Date(
+                  `${new Date().toISOString().slice(0, 10)}T00:00:00Z`,
+                ),
+                lastSucceededAt: synced,
+                lastAttemptedAt: synced,
+                freshness: 'FRESH',
+              },
+            });
+          }
+        }
+
+        /*
+         * ROUND 3 (D) — THE LAST 28 DAYS OF ACCOUNT READINGS for this channel:
+         * reach and impressions with a gentle weekly rhythm, engagements at
+         * the channel's rate, and new followers a day. Relative to the seed's
+         * own day, so the Performance screen's default period is always full.
+         */
+        const [base, rate, followers] = CHANNEL_FIGURES[provider] ?? [300, 3, 2];
+        const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+        for (let back = 28; back >= 1; back -= 1) {
+          const periodStart = new Date(today.getTime() - back * DAY);
+          const periodEnd = new Date(periodStart.getTime() + DAY);
+          const wave = 1 + 0.18 * Math.sin((28 - back) / 2.2) + (28 - back) * 0.006;
+          const reach = Math.round(base * wave);
+          const readings: ReadonlyArray<readonly [string, number]> = [
+            ['reach', reach],
+            ['impressions', Math.round(reach * 1.4)],
+            ['engagements', Math.round((reach * rate) / 100)],
+            ['follower_change', followers + ((28 - back) % 4)],
+          ];
+          for (const [metricKey, value] of readings) {
+            await db.metricObservation.create({
+              data: {
+                workspaceId: workspace.id,
+                brandId: brand.id,
+                socialConnectionId: connection.id,
+                provider,
+                subjectType: 'ACCOUNT',
+                subjectExternalId: connection.externalAccountId,
+                metricKey,
+                granularity: 'DAY',
+                periodStart,
+                periodEnd,
+                value: BigInt(value),
+                unit: 'COUNT',
+                observedAt: periodEnd,
+                sourceKind: 'MOCK',
+                sourceVersion: 'e2e-parity-1',
+                observationKey: fixtureObservationKey([
+                  workspace.id,
+                  connection.id,
+                  'ACCOUNT',
+                  connection.externalAccountId,
+                  metricKey,
+                  periodStart.toISOString(),
+                ]),
+              },
+            });
+          }
+        }
       }
 
       const campaignDate = (days: number): Date =>
@@ -530,6 +665,7 @@ async function build(
         pictures[key] = asset.id;
       }
 
+      const postIds: Record<string, string> = {};
       for (const [index, post] of [...POSTS].entries()) {
         // The first post is the most recently changed, a second apart.
         const changedAt = new Date(Date.now() - index * 1_000);
@@ -545,14 +681,17 @@ async function build(
             primaryLocale: locale,
             status: post.status,
             campaignId: post.campaign ? (campaigns[post.campaign] ?? null) : null,
+            pillar: PILLAR[post.key] ? PILLAR[post.key]![lang === 'ar' ? 1 : 0] : null,
             createdByUserId: people[post.author],
             createdAt: changedAt,
             updatedAt: changedAt,
           },
         });
+        postIds[post.key] = item.id;
         const picture = pictures[post.art];
+        const variantIds: Record<string, string> = {};
         for (const platformKey of post.channels) {
-          await db.contentVariant.create({
+          const variant = await db.contentVariant.create({
             data: {
               workspaceId: workspace.id,
               brandId: brand.id,
@@ -575,9 +714,10 @@ async function build(
                   : [picture],
             },
           });
+          variantIds[platformKey] = variant.id;
         }
         if (when) {
-          await db.calendarSlot.create({
+          const slot = await db.calendarSlot.create({
             data: {
               workspaceId: workspace.id,
               brandId: brand.id,
@@ -590,6 +730,83 @@ async function build(
               createdByUserId: people[post.author],
             },
           });
+          /*
+           * ROUND 3 (D) — A PUBLISHED POST WENT OUT ON EACH OF ITS CHANNELS:
+           * one published job per channel, and the post's own readings (reach,
+           * engagements, saves, clicks) a day after it went out — what the
+           * Performance screen's posts table, pillars and best time read.
+           */
+          if (post.status === 'PUBLISHED') {
+            for (const platformKey of post.channels) {
+              const provider = platformKey.toUpperCase() as 'INSTAGRAM' | 'FACEBOOK' | 'TIKTOK';
+              const connection = connectionIds[provider];
+              const variantId = variantIds[platformKey];
+              if (!connection || !variantId) continue;
+              await db.publishJob.create({
+                data: {
+                  workspaceId: workspace.id,
+                  brandId: brand.id,
+                  calendarSlotId: slot.id,
+                  contentItemId: item.id,
+                  contentVariantId: variantId,
+                  socialConnectionId: connection,
+                  provider,
+                  status: 'PUBLISHED',
+                  idempotencyKey: `parity-${lang}-${run}-${post.key}-${platformKey}`,
+                  scheduledAtUtc: when.utc,
+                  maxAttempts: 3,
+                  attemptCount: 1,
+                  completedAt: when.utc,
+                  publishedAt: when.utc,
+                  externalPostId: `parity-${lang}-${run}-${post.key}-${platformKey}`,
+                  createdByUserId: people[post.author],
+                },
+              });
+              const [base, rate] = CHANNEL_FIGURES[provider] ?? [300, 3, 2];
+              const reach = Math.round(base * (2.2 + (post.key.length % 4) * 0.35));
+              const engagements = Math.round((reach * rate) / 100);
+              const figures: ReadonlyArray<readonly [string, number]> = [
+                ['reach', reach],
+                ['impressions', Math.round(reach * 1.4)],
+                ['engagements', engagements],
+                ['saves', Math.round(engagements * 0.18)],
+                ['clicks', Math.round(engagements * 0.12)],
+              ];
+              const periodStart = new Date(`${when.date}T00:00:00Z`);
+              const periodEnd = new Date(periodStart.getTime() + DAY);
+              for (const [metricKey, value] of figures) {
+                const subject = `parity-post-${post.key}-${platformKey}`;
+                await db.metricObservation.create({
+                  data: {
+                    workspaceId: workspace.id,
+                    brandId: brand.id,
+                    socialConnectionId: connection,
+                    provider,
+                    subjectType: 'POST',
+                    subjectExternalId: subject,
+                    contentItemId: item.id,
+                    metricKey,
+                    granularity: 'DAY',
+                    periodStart,
+                    periodEnd,
+                    value: BigInt(value),
+                    unit: 'COUNT',
+                    observedAt: periodEnd,
+                    sourceKind: 'MOCK',
+                    sourceVersion: 'e2e-parity-1',
+                    observationKey: fixtureObservationKey([
+                      workspace.id,
+                      connection,
+                      'POST',
+                      subject,
+                      metricKey,
+                      periodStart.toISOString(),
+                    ]),
+                  },
+                });
+              }
+            }
+          }
         }
         if (post.status === 'IN_REVIEW') {
           await db.approval.create({
@@ -844,6 +1061,116 @@ async function build(
           },
         });
       }
+      /*
+       * ROUND 3 (D) — THE PROTOTYPE'S FOUR RULES (`R0`), with their runs and
+       * one request waiting for a person: a post approved → the next free
+       * slot (6 runs); weekly engagement drops → pause a campaign, which asks
+       * first (1 run, waiting now); a review waiting 24 hours → remind the
+       * reviewer (3 runs); nothing scheduled for 3 days → draft 3 ideas (off).
+       */
+      const ruleSpecs = [
+        ['slot', 'CONTENT_APPROVED', 'SCHEDULE_NEXT_FREE_SLOT', {}, true, 6],
+        [
+          'pause',
+          'WEEKLY_ENGAGEMENT_DROPPED',
+          'PAUSE_CAMPAIGN',
+          { campaignId: campaigns.weekends },
+          true,
+          0,
+        ],
+        ['remind', 'REVIEW_WAITING_24H', 'REMIND_REVIEWER', {}, true, 3],
+        ['ideas', 'SCHEDULE_GAP', 'DRAFT_IDEAS', {}, false, 0],
+      ] as const;
+      const ruleIds: Record<string, string> = {};
+      for (const [index, [key, triggerType, actionType, actionConfig, enabled, runs]] of [
+        ...ruleSpecs,
+      ].entries()) {
+        const rule = await db.automationRule.create({
+          data: {
+            workspaceId: workspace.id,
+            brandId: brand.id,
+            name: words.rules[key],
+            enabled,
+            triggerType,
+            triggerConfig: {},
+            conditions: [],
+            actionType,
+            actionConfig: actionConfig as never,
+            maxRunsPerDay: 0,
+            createdByUserId: owner.id,
+            armedAt: new Date(Date.now() - (40 - index) * DAY),
+            // Newest first on the list: the prototype's first rule is the newest.
+            createdAt: new Date(Date.now() - (index + 1) * 60_000),
+          },
+        });
+        ruleIds[key] = rule.id;
+        for (let n = 0; n < runs; n += 1) {
+          const at = new Date(Date.now() - (n * 2 + 1) * DAY - (index + 1) * 3_600_000);
+          await db.automationRun.create({
+            data: {
+              workspaceId: workspace.id,
+              brandId: brand.id,
+              ruleId: rule.id,
+              status: 'SUCCEEDED',
+              triggerType,
+              actionType,
+              conditionsHeld: true,
+              idempotencyKey: `parity-${lang}-${run}-${key}-${n}`,
+              correlationId: randomUUID(),
+              startedAt: at,
+              finishedAt: new Date(at.getTime() + 1_200),
+              durationMs: 1_200,
+              createdAt: at,
+            },
+          });
+        }
+      }
+      await db.automationRun.create({
+        data: {
+          workspaceId: workspace.id,
+          brandId: brand.id,
+          ruleId: ruleIds.pause!,
+          status: 'AWAITING_CONFIRMATION',
+          triggerType: 'WEEKLY_ENGAGEMENT_DROPPED',
+          actionType: 'PAUSE_CAMPAIGN',
+          conditionsHeld: true,
+          resourceType: 'Campaign',
+          resourceId: campaigns.weekends!,
+          confirmationExpiresAt: new Date(Date.now() + 20 * 3_600_000),
+          idempotencyKey: `parity-${lang}-${run}-pause-waiting`,
+          correlationId: randomUUID(),
+          createdAt: new Date(Date.now() - 2 * 3_600_000),
+        },
+      });
+
+      /*
+       * ROUND 3 (D) — A NOTES THREAD ON ONE POST, as the prototype's Studio
+       * shows it: Sara asks about the photo on the menu board, Reem answers.
+       */
+      const menuboard = postIds.menuboard;
+      if (menuboard) {
+        const thread = await db.noteThread.create({
+          data: {
+            workspaceId: workspace.id,
+            brandId: brand.id,
+            subjectType: 'CONTENT_ITEM',
+            contentItemId: menuboard,
+            createdByUserId: people.sara,
+          },
+        });
+        for (const [index, [who, body]] of words.thread.entries()) {
+          await db.note.create({
+            data: {
+              workspaceId: workspace.id,
+              threadId: thread.id,
+              authorUserId: people[who],
+              body,
+              createdAt: new Date(Date.now() - (90 - index * 30) * 60_000),
+            },
+          });
+        }
+      }
+
       return brand.id;
     },
     { prisma: tenant },
@@ -885,6 +1212,13 @@ async function build(
       currentPeriodEnd: periodEnd,
     },
   });
+  // The wallet's next reset, as the scheduler stamps it at a period boundary
+  // (`runCycleResetWithin`'s `nextResetAt: currentPeriodEnd`): Home's credits
+  // card reads it for "of N · resets D".
+  await platform.creditWallet.update({
+    where: { workspaceId: workspace.id },
+    data: { nextResetAt: periodEnd },
+  });
   for (const [featureKey, limitValue] of [
     ['limit.storage_gb', 50],
     ['limit.seats', 8],
@@ -923,12 +1257,100 @@ async function build(
   return { email: ownerEmail, password, workspaceId: workspace.id, workspaceSlug: slug, brandId };
 }
 
+/** The café industry the parity brands are filed under (round 3, D). */
+const PARITY_INDUSTRY = 'e2e-parity-cafe';
+
+/**
+ * ROUND 3 (D) — THE CALENDAR'S ★ CHIPS FOR AN EGYPTIAN CAFÉ, as the prototype
+ * shows them in October: a public holiday for Egypt and two observances for a
+ * café. They are operator configuration (D-329), so the fixture activates them
+ * in the DEVELOPMENT environment through the configuration service — each
+ * entry replaced rather than appended, in this month so a run any day shows
+ * them. Test fixtures only.
+ */
+async function seedParityCalendar(platform: PrismaClient): Promise<void> {
+  const owner = await platform.platformUser.findFirstOrThrow({
+    where: { deletedAt: null },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, roleId: true },
+  });
+  const grants = await platform.rolePermission.findMany({
+    where: { roleId: owner.roleId },
+    include: { permission: true },
+  });
+  const actor = {
+    platformUserId: owner.id,
+    roleKey: 'platform_owner',
+    mfaVerified: true,
+    permissionKeys: grants.map((grant) => grant.permission.key),
+  };
+  const configuration = new ConfigurationService({ prisma: platform, cacheTtlMs: 0 });
+  const activate = async (domain: 'content' | 'onboarding', payload: Record<string, unknown>) => {
+    const draft = await configuration.createDraft(
+      actor,
+      domain,
+      'DEVELOPMENT',
+      'Parity fixture: the calendar moments of an Egyptian café.',
+      payload,
+    );
+    const report = await configuration.validateDraft(actor, draft.id);
+    if (!report.valid) {
+      throw new Error(report.issues.map((issue) => `${issue.path}: ${issue.message}`).join('; '));
+    }
+    await configuration.activate(actor, draft.id, { acknowledgeHighImpact: true });
+  };
+  const month = new Date().toISOString().slice(0, 7);
+  const ours = (name: { en?: string | undefined }) =>
+    ['National Holiday (fixture)', 'International Coffee Day', 'World Food Day'].includes(
+      name.en ?? '',
+    );
+  const content = await configuration.get('content', 'DEVELOPMENT');
+  await activate('content', {
+    ...content,
+    calendar: {
+      ...content.calendar,
+      holidays: [
+        ...content.calendar.holidays.filter((row) => !ours(row.name)),
+        {
+          country: 'EG',
+          date: `${month}-06`,
+          name: { en: 'National Holiday (fixture)', ar: 'عطلة وطنية (بيانات اختبار)' },
+        },
+      ],
+      observances: [
+        ...content.calendar.observances.filter((row) => row.industry !== PARITY_INDUSTRY),
+        {
+          industry: PARITY_INDUSTRY,
+          date: `${month}-01`,
+          name: { en: 'International Coffee Day', ar: 'اليوم العالمي للقهوة' },
+        },
+        {
+          industry: PARITY_INDUSTRY,
+          date: `${month}-16`,
+          name: { en: 'World Food Day', ar: 'يوم الغذاء العالمي' },
+        },
+      ],
+    },
+  });
+  const onboarding = await configuration.get('onboarding', 'DEVELOPMENT');
+  if (!onboarding.industries.some((industry) => industry.key === PARITY_INDUSTRY)) {
+    await activate('onboarding', {
+      ...onboarding,
+      industries: [
+        ...onboarding.industries,
+        { key: PARITY_INDUSTRY, name: { en: 'Café', ar: 'مقهى' }, offersQuestionSet: 'food' },
+      ],
+    });
+  }
+}
+
 async function main(): Promise<void> {
   refuseUnsafe();
   const platform = client('DATABASE_PLATFORM_URL');
   const tenant = client('DATABASE_URL');
   const run = randomUUID().slice(0, 6);
   try {
+    await seedParityCalendar(platform);
     const fixture: E2eParityFixture = {
       en: await build(platform, tenant, 'en', run),
       ar: await build(platform, tenant, 'ar', run),

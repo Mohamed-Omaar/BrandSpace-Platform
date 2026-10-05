@@ -110,6 +110,33 @@ async function signIn(page: Page, locale: 'en' | 'ar'): Promise<void> {
   await page.waitForURL(new RegExp(`/${locale}/overview$`));
 }
 
+/** The wizard's steps, in the prototype's order, by the product's `?step=` names. */
+const ONBOARDING_STEPS = ['business', 'brand', 'learn', 'connect', 'goal', 'done'] as const;
+
+/** The prototype from its sign-up to step `index` (0 is Business), one "Continue" a step. */
+async function onboardingStep(page: Page, index: number): Promise<void> {
+  await page
+    .getByRole('button', { name: /^(Create account|اعمل حساب)$/ })
+    .first()
+    .click();
+  // The terms box, then the purple "Create account".
+  await page.getByRole('checkbox').first().check();
+  await page
+    .getByRole('button', { name: /^(Create account|اعمل حساب)$/ })
+    .last()
+    .click();
+  await page
+    .getByRole('button', { name: /^(I opened the link in the email|فتحت اللينك من الإيميل)$/ })
+    .click();
+  for (let step = 0; step < index; step += 1) {
+    await page
+      .getByRole('button', { name: /^(Continue|كمّل|متابعة)$/ })
+      .first()
+      .click();
+    await page.waitForTimeout(500);
+  }
+}
+
 /** The screens of a batch: the product route, and how the prototype is brought to it. */
 const SCREENS: readonly {
   readonly key: string;
@@ -210,32 +237,17 @@ const SCREENS: readonly {
       await page.getByTestId('notifications-feed').waitFor();
     },
   },
-  {
-    key: 'onboarding',
-    route: '/onboarding?step=brand',
+  /*
+   * Review of #67, round 3 — every onboarding step, as a pair: the prototype's
+   * five steps and its "Ready" (Auth.dc.html), each reached by its own
+   * "Continue" from the Business step; the product's same step by its route.
+   */
+  ...ONBOARDING_STEPS.map((step, index) => ({
+    key: `onboarding-${index + 1}-${step}`,
+    route: `/onboarding?step=${step}`,
     file: 'Auth.dc.html',
-    prototype: async (page) => {
-      await page
-        .getByRole('button', { name: /^(Create account|اعمل حساب)$/ })
-        .first()
-        .click();
-      // The terms box, then the purple "Create account".
-      await page.getByRole('checkbox').first().check();
-      await page
-        .getByRole('button', { name: /^(Create account|اعمل حساب)$/ })
-        .last()
-        .click();
-      await page
-        .getByRole('button', { name: /^(I opened the link in the email|فتحت اللينك من الإيميل)$/ })
-        .click();
-      // Review of #67 — the same step on both sides: the parity workspace
-      // exists, so the product opens on Brand, the prototype's step 2.
-      await page
-        .getByRole('button', { name: /^(Continue|كمّل|متابعة)$/ })
-        .first()
-        .click();
-    },
-  },
+    prototype: (page: Page) => onboardingStep(page, index),
+  })),
   { key: 'sign-in', route: '/sign-in', file: 'Auth.dc.html', signedOut: true },
   {
     key: 'sign-up',
