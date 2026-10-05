@@ -8117,6 +8117,21 @@ img.bsp-pf-art {
 }
 /* The note under General: `background: #fbfaff; border-radius: 14px;
    padding: 10px 14px`, its words `font-size: 12px; color: #55555c`. */
+/* Round 4 (5.5) — General's save bar. The prototype draws it after the whole
+   settings grid (`position: sticky; bottom: 0; margin-top: 14px;
+   margin-inline-start: 228px`), so its sticky range runs below the nav too and
+   it rests only on the page's 40px bottom padding. Here it is the form's last
+   row: the column is stretched to the grid row (the nav is the taller side)
+   and the bar is pushed to its foot, giving the same range. */
+.bsp-sg-main:has(> .bsp-sg-form) {
+  align-self: stretch;
+}
+.bsp-sg-form {
+  flex: 1 0 auto;
+}
+.bsp-sg-form > :last-child {
+  margin-block-start: auto;
+}
 .bsp-sg-note {
   display: flex;
   align-items: center;

@@ -184,26 +184,40 @@ test.describe('Round 4 · 5.5 — the General save bar stays on the frame’s bo
     const positions = await page.evaluate(async () => {
       const scroller = document.querySelector<HTMLElement>('main.bsp-scroll');
       const bar = document.querySelector<HTMLElement>('[data-testid="settings-bar"]');
-      if (!scroller || !bar) return [];
+      const pageFlow = document.querySelector<HTMLElement>('.bsp-page');
+      const nav = document.querySelector<HTMLElement>('.bsp-sg-nav');
+      if (!scroller || !bar || !pageFlow || !nav) return [];
       const end = scroller.scrollHeight - scroller.clientHeight;
-      const out: { scrolls: boolean; gap: number }[] = [];
+      const padding = parseFloat(getComputedStyle(pageFlow).paddingBottom);
+      const out: { scrolls: boolean; gap: number; padding: number; belowNav: number }[] = [];
       for (const top of [0, Math.round(end / 2), end]) {
         scroller.scrollTop = top;
         await new Promise((done) => requestAnimationFrame(() => done(null)));
+        const barBox = bar.getBoundingClientRect();
         out.push({
           scrolls: end > 0,
-          gap: scroller.getBoundingClientRect().bottom - bar.getBoundingClientRect().bottom,
+          gap: scroller.getBoundingClientRect().bottom - barBox.bottom,
+          padding,
+          belowNav: barBox.bottom - nav.getBoundingClientRect().bottom,
         });
       }
       return out;
     });
     expect(positions).toHaveLength(3);
-    for (const { scrolls, gap } of positions) {
+    const [atTop, inMiddle, atEnd] = positions;
+    for (const { scrolls, gap } of [atTop, inMiddle]) {
       expect(scrolls).toBe(true);
-      // On the frame's bottom edge (its 8px inset), never carried up with the page.
+      // On the frame's bottom edge (its 8px inset), not carried up with the page.
       expect(gap).toBeGreaterThanOrEqual(0);
       expect(gap).toBeLessThanOrEqual(16);
     }
+    /*
+     * At the very end it rests only on the page's own bottom padding, as the
+     * prototype's bar (after the whole settings grid) rests on its 40px:
+     * nothing of the page is below it, the nav included.
+     */
+    expect(atEnd?.gap ?? Infinity).toBeLessThanOrEqual((atEnd?.padding ?? 0) + 1);
+    expect(atEnd?.belowNav ?? -Infinity).toBeGreaterThanOrEqual(-1);
     // The bar is the column's last row, under the note, as the prototype draws it.
     const order = await page.evaluate(() => {
       const note = document.querySelector('[data-testid="settings-identity-note"]');

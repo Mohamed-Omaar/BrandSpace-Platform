@@ -1718,7 +1718,9 @@ screen. Media: no "⋯" beside Upload — "New folder" and the brand kit are in 
 Filters panel. Brand Brain: the brand's notes are under its "⋯". Performance: what
 changed / why / what to try lead the Insights tab; the posts table shows covers.
 Copilot: "Working on" wraps. Settings → General: the save bar is the column's last
-row, after the note, and stays on the frame's bottom edge to the end of the page.
+row, after the note, and stays on the frame's bottom edge as the page scrolls; at the
+very end it rests on the page's 40px bottom padding, below the settings nav, as the
+prototype's bar (drawn after the whole settings grid) does.
 
 **Recorded interpretations for the owner to correct.** "Extra row" on Approvals is read
 as the two rows under the cover; "extra ⋯" as the queue's. The Business recap shows

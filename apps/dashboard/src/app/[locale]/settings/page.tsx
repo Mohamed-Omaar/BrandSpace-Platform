@@ -148,7 +148,10 @@ export default async function SettingsPage({
           its save bar is the column's last row, as the prototype draws it
           (after the note), and its sticky range is the whole column: it stays
           on the frame's bottom edge to the end of the page instead of leaving
-          with the card. The note has no field, so nothing new is posted.
+          with the card. The column is stretched to the settings nav's height
+          (`.bsp-sg-form`), so, as in the prototype, where the bar follows the
+          whole grid, it comes to rest only on the page's own bottom padding.
+          The note has no field, so nothing new is posted.
         */}
         <DraftForm
           key={JSON.stringify(saved)}
@@ -163,6 +166,7 @@ export default async function SettingsPage({
             save: t('settings.saveChanges'),
           }}
           // `.bsp-sg-main`'s own gap, between the card, the note and the bar.
+          className="bsp-sg-form"
           style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
         >
           <input type="hidden" name="locale" value={locale} />

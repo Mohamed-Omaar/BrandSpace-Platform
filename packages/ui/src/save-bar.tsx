@@ -144,6 +144,7 @@ export function DraftForm({
   saveTestId,
   testId,
   barTestId,
+  className,
   style,
 }: {
   readonly action: (formData: FormData) => void | Promise<void>;
@@ -152,6 +153,7 @@ export function DraftForm({
   readonly saveTestId?: string | undefined;
   readonly testId?: string | undefined;
   readonly barTestId?: string | undefined;
+  readonly className?: string | undefined;
   readonly style?: CSSProperties | undefined;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -186,7 +188,7 @@ export function DraftForm({
   }, [measure]);
 
   return (
-    <form ref={formRef} action={action} data-testid={testId} style={style}>
+    <form ref={formRef} action={action} data-testid={testId} className={className} style={style}>
       <Fragment key={generation}>{children}</Fragment>
       <SaveBar
         dirty={dirty}
