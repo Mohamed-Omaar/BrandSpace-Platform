@@ -717,6 +717,8 @@ async function build(
         });
         postIds[post.key] = item.id;
         const picture = pictures[post.art];
+        // Gate 2b — the prototype's cover headlines (`c.overlay`), on the first slide.
+        const overlay = OVERLAY[post.key]?.[lang === 'ar' ? 1 : 0];
         const variantIds: Record<string, string> = {};
         for (const platformKey of post.channels) {
           const variant = await db.contentVariant.create({
@@ -740,6 +742,7 @@ async function build(
                         .slice(0, 2),
                     ]
                   : [picture],
+              ...(picture && overlay ? { slides: [{ assetId: picture, headline: overlay }] } : {}),
             },
           });
           variantIds[platformKey] = variant.id;
@@ -1371,6 +1374,13 @@ async function build(
 
   return { email: ownerEmail, password, workspaceId: workspace.id, workspaceSlug: slug, brandId };
 }
+
+/** The prototype's cover headlines (`Main.dc.html` line 2502), by post. */
+const OVERLAY: Readonly<Record<string, readonly [string, string]>> = {
+  teaser: ['Autumn offer', 'عرض الخريف'],
+  brunch: ['Brunch is back', 'عودة البرانش'],
+  menuboard: ['Autumn menu', 'قائمة الخريف'],
+};
 
 /** The café industry the parity brands are filed under (round 3, D). */
 const PARITY_INDUSTRY = 'e2e-parity-cafe';

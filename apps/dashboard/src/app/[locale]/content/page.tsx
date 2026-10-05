@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { RESCHEDULABLE_SLOT_STATUSES, formatLocalTime } from '@brandspace/content';
+import { RESCHEDULABLE_SLOT_STATUSES, formatLocalTime, readSlides } from '@brandspace/content';
 import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
@@ -397,6 +397,11 @@ export default async function ContentPage({
       ownerName: item.createdByUserId ? (owners.get(item.createdByUserId) ?? null) : null,
       media: first ? { ...first, count: assetIds.length } : { kind: 'none' },
       excerpt: (primary?.body ?? '').slice(0, 280),
+      // The headline the Studio draws on the first picture (its slide), if one was written.
+      headline:
+        readSlides(primary?.slides)
+          .find((slide) => slide.assetId === assetIds[0])
+          ?.headline.trim() || null,
       brandId: item.brandId,
       campaignId: item.campaignId,
       slot: slotByItem.get(item.id) ?? null,
