@@ -100,7 +100,7 @@ export default async function DesignSystemPage({
         }}
       >
         <PageHeader
-          title={ar ? 'نظام تصميم براندسبيس' : 'BrandSpace design system'}
+          title={ar ? 'نظام تصميم BrandSpace' : 'BrandSpace design system'}
           description={
             ar
               ? 'معرض داخلي للمراجعة البصرية. لا يظهر في التنقل ولا يعمل في بيئة الإنتاج.'

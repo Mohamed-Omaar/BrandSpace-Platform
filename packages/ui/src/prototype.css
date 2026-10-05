@@ -9677,7 +9677,8 @@ img.bsp-pf-art {
   font-size: 11px;
   color: #6a6a72;
 }
-.bsp-lk-hex {
+.bs-control.bsp-lk-hex,
+.bs-control.bsp-lk-hex:hover:not(:disabled) {
   width: 64px;
   border: 0;
   background: transparent;
@@ -9820,7 +9821,8 @@ img.bsp-pf-art {
   gap: 8px;
   flex-wrap: wrap;
 }
-.bsp-lk-rename {
+.bs-control.bsp-lk-rename,
+.bs-control.bsp-lk-rename:hover:not(:disabled) {
   flex-grow: 1;
   min-width: 0;
   border: 1px solid transparent;

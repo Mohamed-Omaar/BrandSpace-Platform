@@ -7,11 +7,11 @@
  */
 export const messages = {
   ar: {
-    'app.title': 'مركز تحكم براندسبيس',
+    'app.title': 'مركز تحكم BrandSpace',
     // The rail's wordmark. `app.title` is the document title and does not fit
     // a 250px rail at 16px/800 — it truncated to "BrandSpace …" on every
     // console screen. The full name lives in the top-bar eyebrow instead.
-    'app.mark': 'براندسبيس',
+    'app.mark': 'BrandSpace',
     'app.subtitle': 'إدارة المنصة',
     'console.hero.eyebrow': 'مركز تحكم المنصة',
     'console.hero.title': 'رؤية واحدة واضحة للمنصة كلها.',

@@ -44,7 +44,7 @@ const COPY: Record<string, readonly [string, string]> = {
   ],
   approval_required: [
     "Not scheduled — this brand requires approval before scheduling, and the post isn't approved.",
-    'لم تتم الجدولة — تتطلب هذه العلامة التجارية الاعتماد قبل الجدولة، والمنشور غير معتمد.',
+    'لم تتم الجدولة — تتطلب هذه العلامة التجارية الموافقة قبل الجدولة، ولم تتم الموافقة على المنشور.',
   ],
   schedule_quota_reached: [
     "Not scheduled — your plan's limit on scheduled posts has been reached.",

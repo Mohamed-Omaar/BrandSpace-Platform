@@ -278,8 +278,8 @@ test.describe('Q12 · Home and the Calendar for the real Viewer (E7)', () => {
       await expect(page.getByTestId('home-feedback')).toBeVisible();
       const words = {
         'attention-action-content-in-review':
-          locale === 'ar' ? 'مستني موافقة' : 'Waiting for approval',
-        'attention-action-calendar-gap': locale === 'ar' ? 'شوف التقويم' : 'See the calendar',
+          locale === 'ar' ? 'بانتظار الموافقة' : 'Waiting for approval',
+        'attention-action-calendar-gap': locale === 'ar' ? 'اعرض التقويم' : 'See the calendar',
       };
       // The seeded brand always has posts in review, so that card is always here.
       await expect(page.getByTestId('attention-action-content-in-review')).toHaveText(

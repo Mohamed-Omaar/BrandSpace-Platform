@@ -85,6 +85,8 @@ describe('P6-14 · every Arabic string is Arabic', () => {
    * the platforms' names, not words to translate.
    */
   const SAME_IN_BOTH = new Set<string>([
+    // Round 4, Step 6.5: the wordmark is always "BrandSpace", never transliterated.
+    'app.title',
     'content.platform.instagram',
     'content.platform.facebook',
     'content.platform.tiktok',

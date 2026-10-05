@@ -301,7 +301,7 @@ function Colours({
                   />
                 </label>
                 <input
-                  className="bsp-ltr bsp-lk-hex"
+                  className="bs-control bsp-ltr bsp-lk-hex"
                   name="colorPalette"
                   value={colour}
                   onChange={(event) => set(index, event.target.value.trim())}
@@ -577,7 +577,7 @@ function Fonts({
                 </div>
               );
             })}
-            {/* The sample: `#f7f7f9; radius 14px; padding: 12px 14px`, 20px/800 over 13.5px. */}
+            {/* The sample (`fr.sampleH` over `fr.sampleB`, `Main.dc.html` line 876). */}
             <div className="bsp-lk-sample" dir={language === 'ar' ? 'rtl' : 'ltr'} lang={language}>
               <span
                 className="bsp-lk-sample-h"
@@ -753,7 +753,7 @@ function FontRow({
   const renameId = useId();
   const removeFormId = useId();
   return (
-    /* An uploaded font: `border: 1px solid #ececef; radius 13px; padding: 10px 12px; gap: 8px`. */
+    /* An uploaded font (`fr.ups`, `Main.dc.html` line 876). */
     <li className="bsp-lk-font" data-testid={`look-font-${font.id}`} data-status={font.status}>
       <form action={renameBrandFontAction} className="bsp-lk-font-row">
         <Hidden locale={locale} brandId={brandId} />
@@ -765,7 +765,7 @@ function FontRow({
           // Keyed on the stored name: after a rename it re-mounts with it.
           key={font.displayName}
           id={renameId}
-          className="bsp-lk-rename"
+          className="bs-control bsp-lk-rename"
           name="displayName"
           dir="auto"
           defaultValue={font.displayName}

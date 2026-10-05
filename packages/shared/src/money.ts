@@ -349,6 +349,8 @@ export function formatMoney(
       currencyDisplay: options?.display ?? 'code',
       minimumFractionDigits: money.scale,
       maximumFractionDigits: money.scale,
+      // Latin digits in both languages (round 4, Step 6.6), whatever the locale tag.
+      numberingSystem: 'latn',
     }).format(value);
   } catch {
     // An unknown-to-the-runtime currency still has to render. The exact digits
