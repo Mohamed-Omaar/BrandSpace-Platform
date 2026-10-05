@@ -9081,6 +9081,485 @@ img.bsp-pf-art {
   }
 }
 
+/* Gate 2b — STRATEGY, as the prototype draws it (`Main.dc.html` lines
+   975–1110). The period switch is the shared `.seg`, each half carrying its
+   `.xstatus` at `margin-inline-start: 4px`. */
+.bsp-seg.bsp-sp-seg {
+  align-self: flex-start;
+}
+.bsp-sp-segst {
+  margin-inline-start: 4px;
+}
+/* The hero: `border-radius: 26px; padding: 26px 28px; background:
+   linear-gradient(145deg, #eee6ff, #fff9d7); box-shadow: 0 5px 18px
+   rgba(20,16,35,.035)`, its column `gap: 12px`. */
+.bsp-sp-hero,
+.bsp-sp-start,
+.bsp-sp-draft {
+  border-radius: 26px;
+  padding: 26px 28px;
+  background: linear-gradient(145deg, #eee6ff, #fff9d7);
+}
+.bsp-sp-hero {
+  box-shadow: 0 5px 18px rgba(20, 16, 35, 0.035);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bsp-sp-pills {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bsp-pill.bsp-sp-pill-p {
+  background: rgba(121, 53, 254, 0.12);
+  color: #5f23da;
+  padding: 6px 10px;
+}
+.bsp-pill.bsp-sp-pill-w {
+  background: rgba(255, 255, 255, 0.85);
+  color: #26262b;
+  padding: 6px 10px;
+}
+/* `font-size: 26px; line-height: 1.25; font-weight: 700; letter-spacing: -0.03em`. */
+.bsp-sp-obj {
+  font-size: 26px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.bsp-sp-from {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #55555c;
+}
+.bsp-sp-mix {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: #55555c;
+}
+.bsp-sp-mix > b {
+  color: #111114;
+}
+.bsp-sp-why {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #26262b;
+}
+.bsp-sp-acts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bsp-btn.bsp-sp-next {
+  color: #5312c4;
+}
+[dir='rtl'] .bsp-sp-arrow {
+  display: inline-block;
+  transform: scaleX(-1);
+}
+/* No strategy yet (`x.es.stNone`): a `.card` at `max-width: 720px; padding:
+   34px 36px; gap: 12px; background: linear-gradient(135deg, #faf7ff,
+   #fffdf4)`, its title `22px -0.02em` and its line `14px/1.6 #55555c`. */
+.bsp-card.bsp-sp-empty {
+  max-width: 720px;
+  padding: 34px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+  background: linear-gradient(135deg, #faf7ff, #fffdf4);
+}
+.bsp-sp-empty-t {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.bsp-sp-empty-s {
+  font-size: 14px;
+  color: #55555c;
+  line-height: 1.6;
+  max-width: 560px;
+}
+.bsp-card.bsp-sp-empty > .bsp-sp-acts {
+  margin-top: 4px;
+}
+/* The Brand Brain alert: `gap: 10px; background: #fff9e6; border-radius:
+   14px; padding: 10px 14px`, its line `12.5px #26262b`. */
+.bsp-sp-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #fff9e6;
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+.bsp-sp-alert-t {
+  flex: 1 1 16rem;
+  font-size: 12.5px;
+  color: #26262b;
+}
+/* "Built on Brand Brain" (span 2) and the pillars, three across. */
+.bsp-xgrid.bsp-sp-grid,
+.bsp-xgrid.bsp-sp-opts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.bsp-xcard.bsp-sp-brain {
+  grid-column: span 2;
+  gap: 4px;
+}
+.bsp-sp-brain-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.bsp-xtitle.bsp-sp-brain-t {
+  margin-bottom: 2px;
+}
+.bsp-xdesc.bsp-sp-brain-s {
+  margin-bottom: 8px;
+}
+.bsp-sp-links {
+  display: flex;
+  flex-direction: column;
+}
+/* A fact: `gap: 10px; padding: 7px 0; border-top: 1px solid #f3f3f5`, the
+   area `92px, 11px/700 #5f23da`, the text `12.5px #26262b`, Open `11px/700
+   #5312c4`. */
+.bsp-sp-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid #f3f3f5;
+}
+.bsp-sp-link-a {
+  width: 92px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #5f23da;
+}
+.bsp-sp-link-t {
+  flex-grow: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: #26262b;
+  overflow-wrap: anywhere;
+}
+.bsp-sp-link-t > b {
+  font-weight: 600;
+}
+.bsp-sp-link-none {
+  color: #6a6a72;
+}
+.bsp-sp-link-o {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #5312c4;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.bsp-xcard.bsp-sp-pillars {
+  gap: 8px;
+}
+.bsp-sp-pil-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.bsp-xtitle.bsp-sp-pil-t {
+  margin-bottom: 4px;
+}
+.bsp-sp-pil {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  --bsp-pil: #7935fe;
+}
+.bsp-sp-pil[data-pil='1'],
+.bsp-chip.bsp-sp-chip[data-pil='1'] {
+  --bsp-pil: #111114;
+}
+.bsp-sp-pil[data-pil='2'],
+.bsp-chip.bsp-sp-chip[data-pil='2'] {
+  --bsp-pil: #e0b400;
+}
+.bsp-sp-pil[data-pil='3'],
+.bsp-chip.bsp-sp-chip[data-pil='3'] {
+  --bsp-pil: #16794b;
+}
+.bsp-sp-pil[data-pil='4'],
+.bsp-chip.bsp-sp-chip[data-pil='4'] {
+  --bsp-pil: #b83245;
+}
+.bsp-sp-pil[data-pil='5'],
+.bsp-chip.bsp-sp-chip[data-pil='5'] {
+  --bsp-pil: #175cd3;
+}
+.bsp-sp-pil-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.bsp-sp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bsp-pil, #7935fe);
+  flex-shrink: 0;
+}
+.bsp-sp-pil-n {
+  font-weight: 500;
+  flex-grow: 1;
+}
+.bsp-sp-pil-v {
+  font-size: 11px;
+  color: #6a6a72;
+}
+/* The bar: `height: 6px; border-radius: 99px; background: #f0f0f2`, the
+   planned share in the pillar's colour at `opacity: .35`. */
+.bsp-sp-pil-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 99px;
+  background: #f0f0f2;
+}
+.bsp-sp-pil-bar > span {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: 99px;
+  background: var(--bsp-pil, #7935fe);
+  opacity: 0.35;
+}
+.bsp-sp-pil-src {
+  font-size: 10.5px;
+  color: #8a8a92;
+}
+.bsp-sp-pil-note {
+  font-size: 11px;
+  color: #6a6a72;
+}
+/* The month: a `.sech` and two week cards across (`gap: 14px`). */
+.bsp-sp-month,
+.bsp-sp-drafts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bsp-sp-month-h {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.bsp-sp-month-hint {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-sp-weeks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.bsp-xcard.bsp-sp-week {
+  gap: 8px;
+}
+.bsp-sp-week-h {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bsp-sp-week-t {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.bsp-sp-week-th {
+  font-size: 11px;
+  color: #6a6a72;
+}
+/* A topic: `gap: 8px; background: #fbfbfc; border-radius: 12px; padding:
+   8px 10px`, `13px/500` over `11px #8a8a92`. */
+.bsp-sp-topic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fbfbfc;
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+.bsp-sp-topic-c {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bsp-sp-topic-t {
+  font-size: 13px;
+  font-weight: 500;
+}
+.bsp-sp-topic-m {
+  font-size: 11px;
+  color: #8a8a92;
+}
+.bsp-sp-week-acts {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+/* The topic's action: `padding: 4px 2px; 12px/700 #5312c4; nowrap`. */
+.bsp-sp-act {
+  border: 0;
+  background: transparent;
+  padding: 4px 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #5312c4;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.bsp-sp-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+}
+/* A new strategy: the gradient title (`gap: 6px`), then the ways to start,
+   each `border-radius: 24px; padding: 22px; min-height: 180px`. */
+.bsp-sp-start {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-sp-start-t {
+  font-size: 26px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.bsp-sp-start-s {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #55555c;
+}
+.bsp-sp-opt {
+  background: #fff;
+  border-radius: 24px;
+  padding: 22px;
+  box-shadow: 0 5px 18px rgba(20, 16, 35, 0.035);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 180px;
+}
+.bsp-xtitle.bsp-sp-opt-t {
+  margin: 14px 0 4px;
+}
+.bsp-sp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 14px;
+}
+.bsp-sp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-sp-form > .bsp-btn {
+  align-self: flex-start;
+}
+/* A draft: the gradient at `grid-template-columns: minmax(0, 1.5fr)
+   minmax(0, 1fr); gap: 24px`; its title `22px/700`, "Why" in a white box
+   (`rgba(255,255,255,.7); radius 14px; padding: 10px 12px`), and the right
+   panel `rgba(255,255,255,.78); radius 20px; padding: 18px 20px`. */
+.bsp-sp-draft {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.bsp-sp-draft-l {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bsp-sp-tag {
+  align-self: flex-start;
+}
+.bsp-sp-draft-t {
+  font-size: 22px;
+  font-weight: 700;
+}
+.bsp-sp-why-box {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bsp-sp-why-l {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5f23da;
+}
+.bsp-sp-why-t {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #26262b;
+}
+.bsp-btn.bsp-sp-discard {
+  color: #b83245;
+}
+.bsp-sp-draft-r {
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 20px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bsp-sp-k {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6a6a72;
+}
+.bsp-sp-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bsp-chip.bsp-sp-chip {
+  gap: 6px;
+}
+@media (max-width: 767.98px) {
+  .bsp-xgrid.bsp-sp-grid,
+  .bsp-xgrid.bsp-sp-opts,
+  .bsp-sp-weeks,
+  .bsp-sp-draft {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-xcard.bsp-sp-brain {
+    grid-column: auto;
+  }
+}
+
 /* Round 4 (5.5) — General's save bar. The prototype draws it after the whole
    settings grid (`position: sticky; bottom: 0; margin-top: 14px;
    margin-inline-start: 228px`), so its sticky range runs below the nav too and

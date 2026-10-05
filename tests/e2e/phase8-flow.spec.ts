@@ -209,7 +209,9 @@ test('3 · brand brain shows this brand knowledge', async ({ page }) => {
 // ---------------------------------------------------------------------------
 
 test('4 · a strategy can be asked for, and answers or refuses honestly', async ({ page }) => {
-  await enter(page, '/strategy');
+  // Gate 2b — the proposal form is the prototype's "Let BrandSpace draft it",
+  // under "Next strategy".
+  await enter(page, '/strategy?view=next');
 
   const form = page.getByTestId('strategy-form');
   await expect(form).toBeVisible();

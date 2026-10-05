@@ -173,9 +173,11 @@ test.describe('D-292 · the strategy reads as a plan', () => {
     page,
   }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/strategy`);
+    // Gate 2b — proposals are the prototype's drafts, under "Next strategy".
+    await page.goto(`${DASHBOARD_BASE_URL}/en/strategy?view=next`);
     const suggestions = page.getByTestId('strategy-suggestions');
     await expect(suggestions).toContainText('AI proposal');
+    await page.goto(`${DASHBOARD_BASE_URL}/en/strategy`);
     await expect(page.getByTestId('strategy-month')).not.toContainText(PROPOSAL_THEME);
   });
 
