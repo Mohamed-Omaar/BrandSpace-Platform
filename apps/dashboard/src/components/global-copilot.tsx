@@ -10,7 +10,6 @@ import {
 import Link from 'next/link';
 import { CopilotView } from '../app/[locale]/copilot/copilot-view';
 import { OPEN_COPILOT_EVENT } from './copilot-link';
-import { MoreDisclosure } from './more-disclosure';
 
 /**
  * THE GLOBAL COPILOT (Phase 6 final, D-277 §37).
@@ -64,8 +63,6 @@ export function GlobalCopilot({
   /** The metrics stored in parts per mille, from the server (Phase 2B-2b). */
   readonly rateMetricKeys?: readonly string[];
   readonly strings: {
-    readonly openFull: string;
-    readonly more: string;
     readonly chooseBrandTitle: string;
     readonly chooseBrandBody: string;
     /** "Working on: Home · Reema Café" — the head's second line. */
@@ -162,29 +159,26 @@ export function GlobalCopilot({
               </svg>
             </span>
             {/*
-              Review of #67 — the prototype's head is the mark, the title and
-              the close. The product's line on how the Copilot works and "Open
-              the full Copilot", which it does not draw, are under "⋯".
-            */}
-            {/*
               Round 3: the title and, under it, what the Copilot is working on
               (`x.ctx`, "Working on: Home") — with the brand every step acts on
               (D-190) — then the credits pill (`pill p-ai`) before the close.
+              Gate 2b review (4f, 4g) — no "⋯": the title is the way to the full
+              Copilot, whose page carries the line on how it works; the context
+              keeps to one line, its whole text on hover.
             */}
             <span className="bsp-cp-t">
-              <b>{labels.title}</b>
-              <span data-testid="copilot-context">{strings.context}</span>
-            </span>
-            <MoreDisclosure label={strings.more} testId="global-copilot-more" align="end">
-              <span className="bsp-cp-note">{labels.subtitle}</span>
               <Link
                 href={href}
-                className="bsp-btn bsp-sm bsp-ghost bsp-cp-full"
+                className="bsp-cp-title"
+                title={labels.subtitle}
                 data-testid="global-copilot-full"
               >
-                {strings.openFull}
+                {labels.title}
               </Link>
-            </MoreDisclosure>
+              <span data-testid="copilot-context" title={strings.context}>
+                {strings.context}
+              </span>
+            </span>
             {strings.credits ? (
               <span
                 className="bsp-pill bsp-p-ai"

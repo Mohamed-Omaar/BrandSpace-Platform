@@ -613,6 +613,20 @@ export default async function CampaignDetailPage({
                     </Link>
                   ),
                 )}
+                {/*
+                  Gate 2b review (4f) — the room's notes, one press away under
+                  "⋯" rather than a chip on the page; a link to one thread
+                  (`?thread=`) still opens them directly.
+                */}
+                {workspace.permissionKeys.includes(NOTE_PERMISSION) ? (
+                  <Link
+                    href={`/${locale}/campaigns/${campaign.id}?notes=1#campaign-notes`}
+                    className="bsp-btn bsp-sm bsp-ghost"
+                    data-testid="campaign-view-notes"
+                  >
+                    {t('notes.title')}
+                  </Link>
+                ) : null}
               </nav>
             </MoreDisclosure>
           </div>
@@ -797,10 +811,12 @@ export default async function CampaignDetailPage({
               a compact disclosure, as on Brand Brain; a link to one thread
               (`?thread=`) opens it.
             */}
-            {workspace.permissionKeys.includes(NOTE_PERMISSION) ? (
+            {workspace.permissionKeys.includes(NOTE_PERMISSION) &&
+            (query['notes'] === '1' || typeof query['thread'] === 'string') ? (
               <details
+                id="campaign-notes"
                 className="bsp-bb-notes"
-                open={typeof query['thread'] === 'string'}
+                open
                 data-testid="campaign-notes"
               >
                 <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>

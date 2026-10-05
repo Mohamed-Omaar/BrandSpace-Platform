@@ -161,6 +161,7 @@ export function IntegrationsView({
   mayManage,
   mayManagePublishing,
   pendingSelection,
+  showHistory = false,
   actions,
 }: {
   readonly locale: string;
@@ -171,6 +172,8 @@ export function IntegrationsView({
   readonly publishing: readonly PublishRow[];
   readonly mayManage: boolean;
   readonly mayManagePublishing: boolean;
+  /** Gate 2b review (4f) — the publishing history view (`?history=1`). */
+  readonly showHistory?: boolean;
   readonly pendingSelection: PendingSelection | null;
   readonly actions: {
     connect(formData: FormData): Promise<void>;
@@ -487,16 +490,12 @@ export function IntegrationsView({
       </section>
 
       {/*
-        Gate 2b — the prototype's Accounts section is the card above; the
-        product's publishing history (D-471) is a disclosure at the page's foot,
-        open by itself while a post has failed so its Retry is in reach.
+        Gate 2b review (4f) — the prototype's Accounts section is the card
+        above; the product's publishing history (D-471) is its own view of this
+        page (`?history=1`), behind the section's "⋯", and its Cancel and Retry
+        return to it. The Publishing log in the rail holds the same posts.
       */}
-      <details
-        className="bsp-bb-notes"
-        open={publishing.some((row) => row.status === 'FAILED')}
-        data-testid="publishing-history-disclosure"
-      >
-        <summary className="bsp-chip bsp-fdis-chip">{t('publishing.title')}</summary>
+      {showHistory ? (
         <Card testId="publishing-history">
           <SectionHeader
             eyebrow={t('publishing.eyebrow')}
@@ -571,6 +570,7 @@ export function IntegrationsView({
                       {row.canCancel ? (
                         <form action={actions.cancel} style={formStyle}>
                           <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="returnTo" value="/integrations?history=1" />
                           <input type="hidden" name="jobId" value={row.id} />
                           <button
                             type="submit"
@@ -584,6 +584,7 @@ export function IntegrationsView({
                       {row.canRetry ? (
                         <form action={actions.retry} style={formStyle}>
                           <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="returnTo" value="/integrations?history=1" />
                           <input type="hidden" name="jobId" value={row.id} />
                           <button
                             type="submit"
@@ -601,7 +602,7 @@ export function IntegrationsView({
             </ul>
           )}
         </Card>
-      </details>
+      ) : null}
     </Stack>
   );
 }

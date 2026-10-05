@@ -76,7 +76,8 @@ export default async function NotificationSettingsPage({
         <DraftForm
           key={JSON.stringify(preferences)}
           action={saveNotificationPreferencesAction}
-          className="bsp-nt"
+          // Gate 2b review (4b): the bar on the frame's bottom edge, as on General.
+          className="bsp-nt bsp-sg-form"
           testId="notification-preferences-form"
           barTestId="notification-preferences-bar"
           saveTestId="notification-preferences-save"

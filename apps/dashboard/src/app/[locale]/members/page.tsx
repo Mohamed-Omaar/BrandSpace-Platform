@@ -6,6 +6,7 @@ import {
   buttonClass,
   colorTokens,
   initialsFrom,
+  personInitials,
   inputStyle,
   layoutTokens,
   spacingTokens,
@@ -502,7 +503,7 @@ export default async function MembersPage({
             {/* The member: a 48px tile, the name at 19px, who they are. */}
             <section className="bsp-card bsp-tm-hero" data-testid="member-detail">
               <TeamAvatar
-                initials={initialsFrom(opened.name?.trim() || opened.email)}
+                initials={personInitials(opened.name, opened.email)}
                 index={Math.max(0, members.indexOf(opened))}
                 size={48}
               />
@@ -654,10 +655,7 @@ export default async function MembersPage({
                       className="bsp-row bsp-tm-row"
                       data-testid={`member-${m.email}`}
                     >
-                      <TeamAvatar
-                        initials={initialsFrom(m.name?.trim() || m.email)}
-                        index={index}
-                      />
+                      <TeamAvatar initials={personInitials(m.name, m.email)} index={index} />
                       <span className="bsp-tm-main">
                         <span className="bsp-tm-name" data-testid={`member-name-${m.email}`}>
                           {m.name?.trim() || m.email}

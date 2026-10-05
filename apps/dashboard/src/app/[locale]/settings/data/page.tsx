@@ -96,6 +96,9 @@ export default async function DataControlsPage({
     { key: 'workspaceExport', available: false },
   ];
 
+  const surface = controls.filter((control) => control.key === 'workspaceExport');
+  const more = controls.filter((control) => control.key !== 'workspaceExport');
+
   const brandContext = await brandContextFor(workspace, '/settings');
 
   return (
@@ -128,30 +131,22 @@ export default async function DataControlsPage({
           one that does not exist (a whole-workspace export) still says so.
         */}
         <div className="bsp-dt" data-testid="data-controls">
-          {controls.map((control) => (
-            <section
-              key={control.key}
-              className="bsp-xcard bsp-dt-row"
-              data-testid={`data-control-${control.key}`}
-            >
-              <span className="bsp-dt-text">
-                <span className="bsp-dt-title">{t(`data.${control.key}.title` as MessageKey)}</span>
-                <span className="bsp-dt-sub">
-                  {control.detail ?? t(`data.${control.key}.body` as MessageKey)}
-                </span>
-              </span>
-              {control.available && control.href ? (
-                <Link href={`/${locale}${control.href}`} className="bsp-btn bsp-sm">
-                  {t('data.open')}
-                </Link>
-              ) : (
-                <span className="bsp-pill bsp-p-neu">{t('data.unavailable')}</span>
-              )}
-            </section>
+          {/*
+            Gate 2b review (4c) — THE PROTOTYPE'S THREE ROWS FIRST, IN ITS
+            ORDER: Export all your data, Data retention, Delete workspace. The
+            retention row states the product's own rule (the D-117 sentence);
+            the product's other rows and its retention control are behind one
+            "More" under them (D-471).
+          */}
+          {surface.map((control) => (
+            <ControlRow key={control.key} control={control} locale={locale} t={t} />
           ))}
-
-          {/* Review of #67 — retention lives in Data, as the prototype states it. */}
-          <RetentionCard locale={locale} workspaceId={workspace.workspaceId} />
+          <section className="bsp-xcard bsp-dt-row" data-testid="data-retention">
+            <span className="bsp-dt-text">
+              <span className="bsp-dt-title">{t('data.dataRetention.title')}</span>
+              <span className="bsp-dt-sub">{t('content.retention.body')}</span>
+            </span>
+          </section>
 
           <section className="bsp-xcard bsp-dt-danger" data-testid="workspace-deletion">
             <span className="bsp-dt-title bsp-dt-danger-t">
@@ -207,8 +202,56 @@ export default async function DataControlsPage({
               </span>
             )}
           </section>
+
+          <details
+            className="bsp-bb-notes bsp-dt-more"
+            data-testid="data-more"
+            // Open by itself when a control behind it has just answered.
+            open={ok !== null || error !== null}
+          >
+            <summary className="bsp-chip bsp-fdis-chip">{t('data.more')}</summary>
+            {more.map((control) => (
+              <ControlRow key={control.key} control={control} locale={locale} t={t} />
+            ))}
+            {/* Review of #67 — retention lives in Data, as the prototype states it. */}
+            <RetentionCard locale={locale} workspaceId={workspace.workspaceId} />
+          </details>
         </div>
       </SettingsFrame>
     </WorkspaceShell>
+  );
+}
+
+/** One `xcard` row: the title at 14px / 600 over its 12px line, the action at the end. */
+function ControlRow({
+  control,
+  locale,
+  t,
+}: {
+  readonly control: {
+    readonly key: string;
+    readonly available: boolean;
+    readonly detail?: string;
+    readonly href?: string;
+  };
+  readonly locale: string;
+  readonly t: (key: MessageKey) => string;
+}) {
+  return (
+    <section className="bsp-xcard bsp-dt-row" data-testid={`data-control-${control.key}`}>
+      <span className="bsp-dt-text">
+        <span className="bsp-dt-title">{t(`data.${control.key}.title` as MessageKey)}</span>
+        <span className="bsp-dt-sub">
+          {control.detail ?? t(`data.${control.key}.body` as MessageKey)}
+        </span>
+      </span>
+      {control.available && control.href ? (
+        <Link href={`/${locale}${control.href}`} className="bsp-btn bsp-sm">
+          {t('data.open')}
+        </Link>
+      ) : (
+        <span className="bsp-pill bsp-p-neu">{t('data.unavailable')}</span>
+      )}
+    </section>
   );
 }

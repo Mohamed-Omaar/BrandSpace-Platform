@@ -1784,7 +1784,7 @@ Brand templates are left out (owner).
 
 **PARTLY rows closed.** Settings → General: "Business name", "Time zone". Publishing log:
 the "Publish" eyebrow, "Publishing log", the prototype's subtitle, the segment at its own
-width, Accounts behind "⋯". Brand Brain chat: the greeting names the brand; the scope pill,
+width (its Accounts view is reached from Home and the Calendar; see the owner's review below). Brand Brain chat: the greeting names the brand; the scope pill,
 the area's details and × appear only when the chat is scoped to an area. Sources: the
 counts in the row's chip ("6 approved · 1 to review · Facts"), no "Ready" pill (only
 reading or failed), the upload card at the prototype's first column, sending once a file
@@ -1793,10 +1793,53 @@ is chosen. Plan & billing: "Storage (GB)", "Usage & limits" behind the card's "�
 **After the parity pairs.** The campaign room sits under the Campaigns heading, as the
 prototype draws it. Strategy's eyebrow is "Plan". Settings → Accounts: the row's title is
 the platform and its line is the handle; the brand facts are in the row's "⋯"; the
-publishing history is a disclosure, open when a post failed; Disconnect is the danger
-button. Notes: "Post", "On a post / campaign / the brand / a file", "Open", and the
+publishing history is Accounts' own view behind the frame's "⋯" (`?history=1`, see the
+owner's review below); Disconnect is the danger button. Notes: "Post", "On a post / campaign / the brand / a file", "Open", and the
 prototype's reply hint. Posts: an image card shows its cover's headline over the picture
 (the first slide's `headline`, which Studio already stores) — no headline, no overlay.
+
+**The owner's review of Gate 2b (item 4, a–i).** Each product control the prototype does
+not draw moved behind an existing affordance (D-471); none was deleted, and no
+permission, API path or schema changed.
+
+- (a) Look & voice: the parity fixture carries the brand's logo, four voice words and one
+  rule. Each voice row is one field — the reader's language — and the other language opens
+  from the row's own "عربي" / "English" chip, for that row only.
+- (b) One settings frame, one place for the bar: General, Approvals, AI, Notifications and
+  Publishing defaults each end in the form marked `.bsp-sg-form`, so the save bar sits on
+  the frame's bottom edge (the prototype's sticky range) and its end keeps clear of the
+  floating Copilot. With several brands each brand keeps its own form and bar (a recorded
+  deviation: the prototype draws one brand); every bar sits on the frame's edge while its
+  form crosses it, and the last brand's closes the column.
+- (c) Data: the prototype's three rows first, in its order — Export all your data, Data
+  retention (the product's own rule), Delete workspace — then one "More" holding the
+  product's other rows and its retention control.
+- (d) Publishing defaults: the times as chips (the configured suggestions, then "Other",
+  which opens the time field; there is no native time input otherwise). "Best time
+  automatically" stays left out. Post templates are their own view behind the frame's
+  "⋯" (`?templates=1`). A chosen channel is drawn as the chosen chip.
+- (e) Security: compact rows (the requirement is one switch row with its Save at the
+  end), and one name on the page and in its messages: "Two-step verification".
+- (f) Off the surface: the campaign's Notes (under "⋯", `?notes=1`; a link to one thread
+  still opens them), Accounts' "Publishing history" (under "⋯", `?history=1`), the
+  notifications popover's "⋯" (its title opens the full page, where the kinds are tabs and
+  Mentions is the Notes inbox), the Copilot panel's "⋯" (its title opens the full Copilot,
+  whose page carries the line on how it works) and the Publishing log tabs' "⋯" (its
+  Accounts view is opened where it is needed — Home's attention items and the Calendar's
+  readiness fix — and Settings → Accounts holds the accounts themselves).
+- (g) The Copilot's "Working on: <screen> · <brand>" is one line, its whole text on hover.
+- (h) The Publishing log shows a count on every tab, zero included.
+- (i) Arabic: the brand switcher's caption is "العلامة النشطة", which fits; a person's
+  initials are Latin in both languages (the name when it has Latin letters, else the
+  address — `personInitials`).
+
+**The rail's glide (a product defect the owner saw on staging).** The rail is drawn again
+on every page. The pill took over the current item only after the item had been styled,
+so the new page's first frame painted the item's own dark fill and the `.bsp-nav`
+background transition then faded it while the pill glided in: the destination flashed
+dark under a moving pill. The pill now takes over (`data-ind`) before the first
+measurement. `r4-rail-active.spec.ts` fails on any frame where the current item paints
+its own fill while the pill is in charge.
 
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 

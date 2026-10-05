@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  LinkTabs,
   Card,
   SectionHeader,
   Stack,
@@ -56,13 +57,25 @@ export default async function NotificationsPage({
   const error = typeof query.error === 'string' ? query.error : null;
   const reference = typeof query.ref === 'string' ? query.ref : undefined;
 
-  const { items, unread } = await inWorkspace(workspace.workspaceId, async ({ db }) => {
+  /*
+   * Gate 2b review (4f) — THE KIND FILTER, moved here from the bell's popover
+   * (where it sat behind a "⋯" the prototype does not draw): every
+   * notification, or only the approvals ones. Mentions are notes, so their
+   * view is the Notes inbox, one link away.
+   */
+  const kind = query['kind'] === 'approval' ? 'approval' : 'all';
+  const { items: allItems, unread } = await inWorkspace(workspace.workspaceId, async ({ db }) => {
     const service = notificationService({ db, workspaceId: workspace.workspaceId });
     return {
       items: await service.list({ userId: customer.userId, take: 50 }),
       unread: await service.unreadCount(customer.userId),
     };
   });
+
+  const items =
+    kind === 'approval'
+      ? allItems.filter((item) => item.templateKey.startsWith('approval.'))
+      : allItems;
 
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
   const dateFormat = {
@@ -107,6 +120,28 @@ export default async function NotificationsPage({
               ) : undefined
             }
           />
+          <LinkTabs
+            label={t('notifications.title')}
+            testId="notifications-kinds"
+            currentId={kind}
+            tabs={[
+              {
+                id: 'all',
+                href: `/${locale}/notifications`,
+                label: t('notifications.feed.all'),
+              },
+              {
+                id: 'approval',
+                href: `/${locale}/notifications?kind=approval`,
+                label: t('notifications.feed.approvals'),
+              },
+              {
+                id: 'mention',
+                href: `/${locale}/notes`,
+                label: t('notifications.feed.mentions'),
+              },
+            ]}
+          />
           <p style={metaStyle} data-testid="notifications-unread-count">
             {t('notifications.unread')}: {unread}
           </p>
@@ -136,6 +171,7 @@ export default async function NotificationsPage({
                     style={item.readAt ? rowStyle : unreadRowStyle}
                     data-testid={`notification-${item.id}`}
                     data-read={item.readAt ? 'true' : 'false'}
+                    data-kind={item.templateKey.startsWith('approval.') ? 'approval' : 'other'}
                   >
                     <div style={headRowStyle}>
                       <strong style={headlineStyle}>{headline}</strong>

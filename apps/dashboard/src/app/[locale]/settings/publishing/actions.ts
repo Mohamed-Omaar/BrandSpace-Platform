@@ -34,6 +34,14 @@ function failed(locale: string, error: unknown, what: string): string {
   return `/${locale}${PAGE}?error=${actionErrorCode(error)}&ref=${correlationId}`;
 }
 
+/*
+ * Gate 2b review (4d) — the templates are their own view of the page
+ * (`?templates=1`, behind the section's "⋯"): a template action returns there.
+ */
+function inTemplates(destination: string): string {
+  return `${destination}&templates=1`;
+}
+
 function chosenPostTime(formData: FormData): string {
   const choice = formData.get('defaultPostTimeChoice');
   if (choice === null || String(choice) === 'other') {
@@ -110,9 +118,9 @@ export async function saveTemplateAction(formData: FormData): Promise<void> {
         });
       }
     });
-    destination = done(locale, 'TEMPLATE_SAVED');
+    destination = inTemplates(done(locale, 'TEMPLATE_SAVED'));
   } catch (error: unknown) {
-    destination = failed(locale, error, 'template save');
+    destination = inTemplates(failed(locale, error, 'template save'));
   }
   revalidatePath(`/${locale}${PAGE}`);
   redirect(destination);
@@ -133,9 +141,9 @@ export async function deleteTemplateAction(formData: FormData): Promise<void> {
         },
       }),
     );
-    destination = done(locale, 'TEMPLATE_DELETED');
+    destination = inTemplates(done(locale, 'TEMPLATE_DELETED'));
   } catch (error: unknown) {
-    destination = failed(locale, error, 'template delete');
+    destination = inTemplates(failed(locale, error, 'template delete'));
   }
   revalidatePath(`/${locale}${PAGE}`);
   redirect(destination);
@@ -159,9 +167,9 @@ export async function setDefaultTemplateAction(formData: FormData): Promise<void
         },
       }),
     );
-    destination = done(locale, 'TEMPLATE_DEFAULT_CHANGED');
+    destination = inTemplates(done(locale, 'TEMPLATE_DEFAULT_CHANGED'));
   } catch (error: unknown) {
-    destination = failed(locale, error, 'template default');
+    destination = inTemplates(failed(locale, error, 'template default'));
   }
   revalidatePath(`/${locale}${PAGE}`);
   redirect(destination);

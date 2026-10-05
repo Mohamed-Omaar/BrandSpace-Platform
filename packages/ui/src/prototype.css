@@ -7145,19 +7145,28 @@ img.bsp-pf-art {
   flex-grow: 1;
   min-inline-size: 0;
 }
-.bsp-cp-t > b {
+/* Gate 2b review (4f) — the title is the way to the full Copilot: drawn as
+   the prototype's `b` at 16px / 800, underlined only when pointed at. */
+.bsp-cp-t > .bsp-cp-title {
   font-size: 16px;
   font-weight: 800;
+  color: inherit;
+  text-decoration: none;
+  align-self: flex-start;
 }
-/* Round 4 (5.7) — "Working on: …" is never cut: the prototype's line
-   (`font-size: 12px; color: #6a6a72`) wraps, it has no ellipsis. */
+.bsp-cp-t > .bsp-cp-title:hover,
+.bsp-cp-t > .bsp-cp-title:focus-visible {
+  text-decoration: underline;
+}
+/* Gate 2b review (4g) — "Working on: …" on ONE line, as the prototype's
+   (`font-size: 12px; color: #6a6a72`): with the "⋯" gone it fits; a longer
+   brand name ends in an ellipsis, its whole text on hover. */
 .bsp-cp-t > span {
   font-size: 12px;
   color: #6a6a72;
-  overflow-wrap: anywhere;
-}
-.bsp-btn.bsp-cp-full {
-  color: #55555c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* `.ibtn` at 34px on a transparent ground. */
 .bsp-cp-x {
@@ -7357,9 +7366,15 @@ img.bsp-pf-art {
   font-size: 14px;
   font-weight: 800;
 }
-/* The three tabs (D-297), a `.seg` under the head. */
-.bsp-seg.bsp-ntf-tabs {
-  margin: 10px 14px 4px;
+/* Gate 2b review (4f) — the title is the way to the full page: drawn as the
+   prototype's title, underlined only when pointed at or focused. */
+.bsp-ntf-title {
+  color: inherit;
+  text-decoration: none;
+}
+.bsp-ntf-title:hover,
+.bsp-ntf-title:focus-visible {
+  text-decoration: underline;
 }
 .bsp-ntf-list {
   list-style: none;
@@ -8365,9 +8380,11 @@ img.bsp-pf-art {
 .bsp-card.bsp-sa-pol {
   overflow: hidden;
 }
+.bsp-sa-pols,
 .bsp-sa-pol-form {
   display: flex;
   flex-direction: column;
+  gap: 14px;
 }
 .bsp-sa-pol .bsp-tg-row {
   padding: 13px 18px;
@@ -8390,9 +8407,6 @@ img.bsp-pf-art {
   padding: 13px 18px;
   font-size: 13px;
   color: #6a6a72;
-}
-.bsp-sa-pol-form > :last-child {
-  margin: 10px 12px 12px;
 }
 
 /* Round 4, Gate 2b — Settings → AI (`Main.dc.html` lines 1369–1374): an
@@ -8624,10 +8638,19 @@ img.bsp-pf-art {
   padding: 6px 8px;
   text-align: center;
 }
+/* Gate 2b review (4e) — the prototype's compact row ("Required for the whole
+   team": the label and its line, the switch at the end); the product's Save
+   is the one control after the switch, on the same row. */
 .bsp-secu-req {
-  padding: 0 18px 12px;
+  display: flex;
+  /* A row, over the column `.bsp-secu-block` gives every block. */
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
 }
 .bsp-secu-req .bsp-tg-row {
+  flex-grow: 1;
   border-block-start: 0;
 }
 .bsp-secu-req .bsp-tg-l {
@@ -8638,7 +8661,7 @@ img.bsp-pf-art {
   font-size: 12px;
 }
 .bsp-btn.bsp-secu-req-save {
-  align-self: flex-start;
+  flex-shrink: 0;
 }
 .bsp-secu > .bsp-row:last-child {
   border-block-end: 0;
@@ -8691,44 +8714,23 @@ img.bsp-pf-art {
   opacity: 0;
   margin: 0;
 }
-.bsp-chip.bsp-pd-chip:has(.bsp-pd-in:focus-visible),
-.bsp-pd-seg-o:has(.bsp-pd-in:focus-visible) {
+.bsp-chip.bsp-pd-chip:has(.bsp-pd-in:focus-visible) {
   outline: 2px solid #7935fe;
   outline-offset: 2px;
 }
-.bsp-pd-times {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.bsp-seg.bsp-pd-seg {
-  align-self: flex-start;
-}
-/* A segment: the `.seg button` geometry, the pressed look when checked. */
-.bsp-pd-seg-o {
-  position: relative;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 9px;
-  padding: 6px 12px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #55555c;
-  min-block-size: 30px;
-  box-sizing: border-box;
-}
-.bsp-pd-seg-o:has(.bsp-pd-in:checked) {
-  background: #fff;
-  color: #111114;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-}
+/* Gate 2b review (4d) — the times are chips, as the channels are; the time
+   field is not on the surface until "Other" is chosen. */
 .bsp-pd-time.bs-control {
   inline-size: 130px;
-}
-.bsp-pd:has(.bsp-pd-seg-o:not(:last-child) .bsp-pd-in:checked) .bsp-pd-time {
   display: none;
+}
+.bsp-pd:has(.bsp-pd-other:checked) .bsp-pd-time.bs-control {
+  display: block;
+}
+.bsp-pd-brandset {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 .bsp-pd-hint {
   font-size: 11.5px;
@@ -9742,6 +9744,49 @@ img.bsp-pf-art {
   font-weight: 700;
   color: #6a6a72;
 }
+/* Gate 2b review (4a) — the Voice card's one field per column, as the
+   prototype draws it (`Main.dc.html` line 874): the field and its button in one
+   row. The other language's field is behind the row's own chip (a checkbox
+   drawn as a chip, pressed while open), shown under the row. */
+.bsp-vc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+}
+.bsp-vc-row > .bsp-vc-field {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+.bsp-chip.bsp-vc-lang {
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 11.5px;
+  padding: 4px 9px;
+}
+.bsp-vc-toggle {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  margin: 0;
+}
+.bsp-chip.bsp-vc-lang:has(.bsp-vc-toggle:checked) {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
+.bsp-chip.bsp-vc-lang:has(.bsp-vc-toggle:focus-visible) {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bsp-vc-form:not(:has(.bsp-vc-toggle:checked)) > .bsp-vc-other {
+  display: none;
+}
+.bsp-vc-other {
+  min-inline-size: 0;
+}
 .bsp-lk-chips {
   display: flex;
   gap: 6px;
@@ -9880,17 +9925,28 @@ img.bsp-pf-art {
   }
 }
 
-/* Round 4 (5.5) — General's save bar. The prototype draws it after the whole
-   settings grid (`position: sticky; bottom: 0; margin-top: 14px;
-   margin-inline-start: 228px`), so its sticky range runs below the nav too and
-   it rests only on the page's 40px bottom padding. Here it is the form's last
-   row: the column is stretched to the grid row (the nav is the taller side)
-   and the bar is pushed to its foot, giving the same range. */
-.bsp-sg-main:has(> .bsp-sg-form) {
+/* Round 4 (5.5), Gate 2b review (4b) — ONE SETTINGS FRAME, ONE PLACE FOR
+   THE BAR. The prototype draws a section's save bar after the whole settings
+   grid (`position: sticky; bottom: 0; margin-top: 14px; margin-inline-start:
+   228px`), so its sticky range runs below the nav too and it rests only on
+   the page's 40px bottom padding. In every section the form marked
+   `.bsp-sg-form` (General, Approvals, AI, Notifications, Publishing defaults;
+   with several brands, the last brand's) is the column's last row: the column
+   is stretched to the grid row (the nav is the taller side), every box between
+   it and the form grows with it (`.bsp-sg-grow`), and the bar is pushed to the
+   form's foot — the same range as the prototype's, in every section. */
+.bsp-sg-main:has(.bsp-sg-form) {
   align-self: stretch;
+}
+.bsp-sg-grow {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 .bsp-sg-form {
   flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 .bsp-sg-form > :last-child {
   margin-block-start: auto;
@@ -9898,7 +9954,7 @@ img.bsp-pf-art {
 /* Review of 2a (5) — the prototype's content column ends in
    `padding-bottom: 70px` before the bar's `margin-top: 14px`, so on a
    1440 × 900 screen its bar is held on the frame's bottom edge rather than
-   resting under the note. The same 70px sits under the note here. */
+   resting under the content. The same 70px sits under the content here. */
 .bsp-sg-form > :nth-last-child(2) {
   margin-block-end: 70px;
 }
@@ -9909,7 +9965,7 @@ img.bsp-pf-art {
   /* As specific as the bar's own padding rule below
      (`.bsp-sg-main div[data-state]:has(> span[role='status'])`), and after it
      in effect, so the end is kept clear. */
-  .bsp-sg-main > .bsp-sg-form > div[data-state]:has(> span[role='status']):last-child {
+  .bsp-sg-main .bsp-sg-form > div[data-state]:has(> span[role='status']):last-child {
     padding-inline-end: 168px !important;
   }
 }

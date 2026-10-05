@@ -19,7 +19,6 @@ import { lateNoticeKey, publishingRescheduleOffered } from '../../../server/late
 import { requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
-import { MoreDisclosure } from '../../../components/more-disclosure';
 import { inSocial } from '../../../server/social-context';
 import { mediaForVariants } from '../../../server/media-picker';
 import {
@@ -286,7 +285,8 @@ export default async function PublishingPage({
 
   const count = (statuses: readonly string[]) =>
     statuses.reduce((sum, status) => sum + (data.counts[status] ?? 0), 0);
-  const badge = (value: number) => (value > 0 ? String(value) : undefined);
+  // Gate 2b review (4h) — every tab carries its count, as the prototype's do.
+  const badge = (value: number) => String(value);
   const tabHref = (id: Tab) => `/${locale}/publishing${id === 'queue' ? '' : `?tab=${id}`}`;
 
   /** Hidden fields every action from this screen carries, so it returns here. */
@@ -341,8 +341,8 @@ export default async function PublishingPage({
       ) : null}
 
       {/*
-        Gate 2b — the prototype's three tabs (Queue · Published · Failed). The
-        product's Accounts view is behind "⋯" (D-471), and a tab only while open.
+        Gate 2b — the prototype's three tabs (Queue · Published · Failed), each
+        with its count. The product's Accounts view is a tab only while open.
       */}
       <div className="bsp-pl-top">
         <LinkTabs
@@ -379,22 +379,12 @@ export default async function PublishingPage({
               : []),
           ]}
         />
-        {may('integrations.read') && tab !== 'accounts' ? (
-          <MoreDisclosure
-            label={t('publishingHub.tab.accounts')}
-            testId="publishing-more"
-            align="end"
-            closeOnPick
-          >
-            <Link
-              href={tabHref('accounts')}
-              className="bsp-btn bsp-sm bsp-ghost"
-              data-testid="publishing-more-accounts"
-            >
-              {t('publishingHub.tab.accounts')}
-            </Link>
-          </MoreDisclosure>
-        ) : null}
+        {/*
+          Gate 2b review (4f) — no "⋯" beside the tabs. The Accounts view is
+          reached where it is needed: Home's attention items and the
+          Calendar's readiness fix link to it, and Settings → Accounts holds
+          the accounts themselves; while it is open it is a tab here.
+        */}
       </div>
 
       {tab !== 'accounts' ? (

@@ -87,17 +87,18 @@ export default async function AiSettingsPage({
           prototype's dialect chips (Egyptian / Modern Standard / mixed), "AI
           drafts go to review" and the credit alert (owner decision, Gate 2).
         */}
-        <div className="bsp-ai" data-testid="ai-settings">
+        <div className="bsp-ai bsp-sg-grow" data-testid="ai-settings">
           {brands.length === 0 ? (
             <section className="bsp-xcard">
               <p className="bsp-ai-empty">{t('aiSettings.noBrand')}</p>
             </section>
           ) : (
-            brands.map((brand) => (
+            brands.map((brand, index) => (
               <DraftForm
                 key={`${brand.id}:${brand.defaultLocale}:${String(brand.aiSuggestionsEnabled)}:${String(brand.useBrandBrain)}`}
                 action={saveAiLanguageAction}
-                className="bsp-ai-form"
+                // Gate 2b review (4b): the last form's bar on the frame's bottom edge.
+                className={index === brands.length - 1 ? 'bsp-ai-form bsp-sg-form' : 'bsp-ai-form'}
                 testId={`ai-form-${brand.id}`}
                 barTestId={`ai-bar-${brand.id}`}
                 saveTestId={`ai-save-${brand.id}`}

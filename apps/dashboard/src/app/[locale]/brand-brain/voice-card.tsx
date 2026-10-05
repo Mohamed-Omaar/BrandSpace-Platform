@@ -1,5 +1,6 @@
 'use client';
 
+import { useId } from 'react';
 import Link from 'next/link';
 import { CONTROL_CLASS, buttonClass, colorTokens, typographyTokens } from '@brandspace/ui';
 import { translator } from '../../../i18n/messages';
@@ -74,6 +75,7 @@ export function VoiceCard({
           {canEdit ? (
             <form
               action={voice.words ? updateKnowledgeAction : createKnowledgeAction}
+              className="bsp-vc-form"
               style={formStyle}
               data-testid="voice-words-form"
             >
@@ -86,34 +88,19 @@ export function VoiceCard({
               {/* The fact's own title, in both catalogues' words — never typed here. */}
               <input type="hidden" name="titleEn" value={translator('en')('bb.voice.words')} />
               <input type="hidden" name="titleAr" value={translator('ar')('bb.voice.words')} />
-              <input
-                className={CONTROL_CLASS}
-                name="bodyEn"
-                dir="ltr"
-                defaultValue={voice.words?.edit.bodyEn ?? ''}
-                placeholder={t('bb.voice.wordsPlaceholderEn')}
-                aria-label={t('bb.newItem.bodyEn')}
-                data-testid="voice-words-en"
-                style={inputStyle}
+              <OneFieldRow
+                locale={locale}
+                testId="voice-words"
+                values={{ en: voice.words?.edit.bodyEn ?? '', ar: voice.words?.edit.bodyAr ?? '' }}
+                placeholders={{
+                  en: t('bb.voice.wordsPlaceholderEn'),
+                  ar: t('bb.voice.wordsPlaceholderAr'),
+                }}
+                labels={{ en: t('bb.newItem.bodyEn'), ar: t('bb.newItem.bodyAr') }}
+                submit={t('common.save')}
+                submitTestId="voice-words-save"
+                inputTestId={(language) => `voice-words-${language}`}
               />
-              <input
-                className={CONTROL_CLASS}
-                name="bodyAr"
-                dir="rtl"
-                defaultValue={voice.words?.edit.bodyAr ?? ''}
-                placeholder={t('bb.voice.wordsPlaceholderAr')}
-                aria-label={t('bb.newItem.bodyAr')}
-                data-testid="voice-words-ar"
-                style={inputStyle}
-              />
-              <button
-                type="submit"
-                className={buttonClass('neutral', 'sm')}
-                style={{ justifySelf: 'start' }}
-                data-testid="voice-words-save"
-              >
-                {t('common.save')}
-              </button>
             </form>
           ) : null}
         </section>
@@ -248,39 +235,90 @@ function RuleList({
         </ul>
       )}
       {canEdit && prefix ? (
-        <form action={createKnowledgeAction} style={formStyle} data-testid={`${testId}-add`}>
+        <form
+          action={createKnowledgeAction}
+          className="bsp-vc-form"
+          style={formStyle}
+          data-testid={`${testId}-add`}
+        >
           <Hidden locale={locale} brandId={brandId} area={area} />
           <input type="hidden" name="itemKeyPrefix" value={prefix} />
           <input type="hidden" name="titleFromBody" value="1" />
-          <input
-            className={CONTROL_CLASS}
-            name="bodyEn"
-            dir="ltr"
-            placeholder={t('bb.newItem.bodyEn')}
-            aria-label={`${addLabel} — ${t('bb.newItem.bodyEn')}`}
-            data-testid={`${testId}-add-en`}
-            style={inputStyle}
+          <OneFieldRow
+            locale={locale}
+            testId={testId}
+            values={{ en: '', ar: '' }}
+            placeholders={{ en: t('bb.newItem.bodyEn'), ar: t('bb.newItem.bodyAr') }}
+            labels={{
+              en: `${addLabel} — ${t('bb.newItem.bodyEn')}`,
+              ar: `${addLabel} — ${t('bb.newItem.bodyAr')}`,
+            }}
+            submit={addLabel}
+            submitTestId={`${testId}-add-submit`}
+            inputTestId={(language) => `${testId}-add-${language}`}
           />
-          <input
-            className={CONTROL_CLASS}
-            name="bodyAr"
-            dir="rtl"
-            placeholder={t('bb.newItem.bodyAr')}
-            aria-label={`${addLabel} — ${t('bb.newItem.bodyAr')}`}
-            data-testid={`${testId}-add-ar`}
-            style={inputStyle}
-          />
-          <button
-            type="submit"
-            className={buttonClass('neutral', 'sm')}
-            style={{ justifySelf: 'start' }}
-            data-testid={`${testId}-add-submit`}
-          >
-            {addLabel}
-          </button>
         </form>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Gate 2b review (4a) — ONE FIELD PER COLUMN, as the prototype's Voice card
+ * draws it (`Main.dc.html` line 874: a field and its "Add" in one row). The
+ * field is in the reader's language; the other language's field is behind the
+ * row's own chip, which shows it under the row. Both are posted either way, so
+ * saving in one language never clears the other; an empty one is left out.
+ */
+function OneFieldRow({
+  locale,
+  testId,
+  values,
+  placeholders,
+  labels,
+  submit,
+  submitTestId,
+  inputTestId,
+}: {
+  locale: string;
+  testId: string;
+  values: { en: string; ar: string };
+  placeholders: { en: string; ar: string };
+  labels: { en: string; ar: string };
+  submit: string;
+  submitTestId: string;
+  inputTestId: (language: 'en' | 'ar') => string;
+}) {
+  const t = translator(useMessageLocale(locale));
+  const first: 'en' | 'ar' = locale === 'ar' ? 'ar' : 'en';
+  const second: 'en' | 'ar' = first === 'ar' ? 'en' : 'ar';
+  const otherId = useId();
+  const field = (language: 'en' | 'ar', className: string) => (
+    <input
+      className={`${CONTROL_CLASS} ${className}`}
+      name={language === 'en' ? 'bodyEn' : 'bodyAr'}
+      dir={language === 'ar' ? 'rtl' : 'ltr'}
+      defaultValue={values[language]}
+      placeholder={placeholders[language]}
+      aria-label={labels[language]}
+      data-testid={inputTestId(language)}
+      {...(className === 'bsp-vc-other' ? { id: otherId } : {})}
+    />
+  );
+  return (
+    <>
+      <div className="bsp-vc-row">
+        {field(first, 'bsp-vc-field')}
+        <button type="submit" className={buttonClass('neutral', 'sm')} data-testid={submitTestId}>
+          {submit}
+        </button>
+        <label className="bsp-chip bsp-vc-lang" data-testid={`${testId}-other-language`}>
+          <input type="checkbox" className="bsp-vc-toggle" aria-controls={otherId} />
+          {second === 'ar' ? t('brandProfile.localeAr') : t('brandProfile.localeEn')}
+        </label>
+      </div>
+      {field(second, 'bsp-vc-other')}
+    </>
   );
 }
 
@@ -307,5 +345,3 @@ const bodyStyle: React.CSSProperties = {
   lineHeight: 1.6,
 };
 const formStyle: React.CSSProperties = { display: 'grid', gap: 8, alignContent: 'start' };
-// The prototype's form field comes from `.bs-control` (round 4); only the grid fit is local.
-const inputStyle: React.CSSProperties = { minWidth: 0 };

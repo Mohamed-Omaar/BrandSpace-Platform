@@ -84,7 +84,22 @@ test.describe('Round 4 · Gate 2b — the Settings pages', () => {
     page,
   }) => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/data`);
-    await expect(page.locator('.bsp-dt-row').first()).toBeVisible();
+    // Gate 2b review (4c) — the prototype's three rows first, in its order; the
+    // product's rows and its retention control behind one "More".
+    await expect(page.locator('.bsp-dt > section').nth(0)).toHaveAttribute(
+      'data-testid',
+      'data-control-workspaceExport',
+    );
+    await expect(page.locator('.bsp-dt > section').nth(1)).toHaveAttribute(
+      'data-testid',
+      'data-retention',
+    );
+    await expect(page.locator('.bsp-dt > section').nth(2)).toHaveAttribute(
+      'data-testid',
+      'workspace-deletion',
+    );
+    await expect(page.getByTestId('retention-card')).toBeHidden();
+    await page.getByTestId('data-more').locator('summary').click();
     await expect(page.getByTestId('retention-card')).toBeVisible();
     const danger = page.getByTestId('workspace-deletion');
     await expect(danger).toHaveClass(/bsp-dt-danger/);
@@ -111,7 +126,11 @@ test.describe('Round 4 · Gate 2b — the Settings pages', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/publishing`);
     const form = page.locator('[data-testid^="publishing-defaults-form-"]').first();
     await expect(form.locator('.bsp-pd-chip').first()).toBeVisible();
-    await expect(form.locator('.bsp-pd-seg')).toBeVisible();
+    // Gate 2b review (4d) — the times are chips too, and the time field is not
+    // on the surface until "Other" is chosen.
+    await expect(
+      form.locator('label.bsp-pd-chip:has([name="defaultPostTimeChoice"])').first(),
+    ).toBeVisible();
     await expect(form.locator('[data-testid$="-other"]')).toHaveCount(1);
     // Nothing that has no feature behind it is drawn.
     await expect(page.getByText(/link tracking/i)).toHaveCount(0);

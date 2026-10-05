@@ -83,6 +83,9 @@ export default async function NotesPage({
   const members = await mentionableMembers(locale);
   const nameOf = (userId: string): string =>
     members.find((member) => member.userId === userId)?.name ?? t('notes.someone');
+  const initialsOf = (userId: string): string =>
+    members.find((member) => member.userId === userId)?.initials ??
+    initialsFrom(t('notes.someone'));
   const toneOf = (userId: string): number =>
     Math.max(
       0,
@@ -344,7 +347,7 @@ export default async function NotesPage({
                         className="bsp-tm-av bsp-nts-av"
                         data-c={toneOf(note.authorUserId)}
                       >
-                        {initialsFrom(who)}
+                        {initialsOf(note.authorUserId)}
                       </span>
                       <div className="bsp-nts-msg-b">
                         <span className="bsp-nts-who">

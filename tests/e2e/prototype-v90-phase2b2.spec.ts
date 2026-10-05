@@ -126,6 +126,8 @@ test.describe('A8 · Settings → Publishing defaults, under the save bar', () =
     const channels = page.locator(`[data-testid^="publishing-default-channel-${brandId}-"]`);
     await expect(channels.first()).toBeVisible();
     await channels.first().check();
+    // Gate 2b review (4d) — the time field opens from the "Other" chip.
+    await page.getByTestId(`publishing-default-time-${brandId}-other`).check();
     await page.getByTestId(`publishing-default-time-${brandId}`).fill('10:30');
     await page.getByTestId(`publishing-default-hashtags-${brandId}`).check();
     await expect(bar).toHaveAttribute('data-state', 'dirty');
@@ -158,6 +160,10 @@ test.describe('E4 / B2 · a post template: saved, made default, and used by a ne
     await enter(page, slug);
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/publishing`);
+    // Gate 2b review (4d) — the templates are behind the section's "⋯".
+    await page.getByTestId('publishing-more').click();
+    await page.getByTestId('publishing-more-templates').click();
+    await page.waitForURL(/templates=1/);
     await expect(page.getByTestId(`templates-empty-${brandId}`)).toBeVisible();
     await page.getByTestId(`template-name-${brandId}`).fill('Weekly offer');
     await page.getByTestId(`template-format-${brandId}`).selectOption('POST');
@@ -203,7 +209,7 @@ test.describe('E4 / B2 · a post template: saved, made default, and used by a ne
     ).toHaveValue(/#?offer[ ,]+#?weekly/);
 
     // Deleting asks twice.
-    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/publishing`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/publishing?templates=1`);
     const deletion = page.locator('[data-testid^="template-delete-"]').first();
     await deletion.locator('summary').click();
     await deletion.locator('[data-testid^="template-delete-confirm-"]').click();
@@ -292,7 +298,8 @@ test.describe('B9 · the Studio: inline date and time, and "Save as template"', 
     expect(new URL(page.url()).searchParams.get('item')).toBeTruthy();
     await expect(page.getByTestId('editor-when-label')).toContainText('12:30');
 
-    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/publishing`);
+    // Gate 2b review (4d) — the templates are their own view, behind the section's "⋯".
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings/publishing?templates=1`);
     await expect(page.getByTestId(`templates-${brandId}`)).toContainText('From the Studio');
   });
 });

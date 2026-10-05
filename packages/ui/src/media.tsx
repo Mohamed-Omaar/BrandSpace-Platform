@@ -431,3 +431,19 @@ export function initialsFrom(value: string): string {
   const letters = parts.length > 1 ? `${parts[0]![0]}${parts[1]![0]}` : local.slice(0, 2);
   return letters.toUpperCase();
 }
+
+/**
+ * Gate 2b review (4i) — A PERSON'S INITIALS ARE LATIN IN BOTH LANGUAGES, as
+ * the prototype's Arabic screens draw them ("SN", "OK"): the name when it has
+ * Latin letters, else the local part of the address; the name alone only when
+ * there is no address.
+ */
+export function personInitials(
+  name: string | null | undefined,
+  email: string | null | undefined,
+): string {
+  const named = name?.trim() ?? '';
+  if (/[A-Za-z]/.test(named)) return initialsFrom(named);
+  if (email) return initialsFrom(email);
+  return initialsFrom(named);
+}

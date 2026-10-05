@@ -733,10 +733,6 @@ export async function WorkspaceShell({
             title: t('notifications.title'),
             close: t('notifications.dismiss'),
             markAll: t('notifications.markAllRead'),
-            more: t('studio.moreOptions'),
-            all: t('notifications.feed.all'),
-            mentions: t('notifications.feed.mentions'),
-            approvals: t('notifications.feed.approvals'),
             seeAll: t('notifications.feed.seeAll'),
             open: t('notifications.view'),
             unread: t('notifications.unread'),
@@ -791,8 +787,6 @@ export async function WorkspaceShell({
         labels={copilotLabels(words, identity)}
         rateMetricKeys={RATE_METRIC_KEYS}
         strings={{
-          openFull: t('copilot.openFull'),
-          more: t('studio.moreOptions'),
           chooseBrandTitle: t('brand.chooseTitle'),
           chooseBrandBody: t('copilot.noBrandBody'),
           context: drawerContext,

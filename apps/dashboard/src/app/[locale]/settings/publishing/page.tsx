@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { MoreDisclosure } from '../../../../components/more-disclosure';
 import {
   Card,
   DraftForm,
@@ -127,6 +128,14 @@ export default async function PublishingDefaultsPage({
   const labelOf = (key: string) => platforms.find((p) => p.key === key)?.label ?? key;
 
   const editId = typeof query['edit'] === 'string' ? query['edit'] : null;
+  /*
+   * Gate 2b review (4d) — POST TEMPLATES BEHIND THE SECTION'S "⋯". The
+   * prototype's Publishing defaults has no templates; the product's are kept
+   * whole one press away (D-471), as their own view of this page, which every
+   * template action returns to.
+   */
+  const showTemplates = query['templates'] === '1' || editId !== null;
+  const templatesHref = `/${locale}/settings/publishing?templates=1`;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
@@ -159,6 +168,32 @@ export default async function PublishingDefaultsPage({
         locale={locale}
         permissionKeys={workspace.permissionKeys}
         selected="publishing"
+        more={
+          showTemplates ? (
+            <Link
+              href={`/${locale}/settings/publishing`}
+              className="bsp-btn bsp-sm bsp-ghost"
+              data-testid="publishing-defaults-back"
+            >
+              ← {t('settings.sec.pub')}
+            </Link>
+          ) : data.brands.length > 0 ? (
+            <MoreDisclosure
+              label={t('templates.title')}
+              testId="publishing-more"
+              align="end"
+              closeOnPick
+            >
+              <Link
+                href={templatesHref}
+                className="bsp-btn bsp-sm bsp-ghost"
+                data-testid="publishing-more-templates"
+              >
+                {t('templates.title')}
+              </Link>
+            </MoreDisclosure>
+          ) : null
+        }
       >
         {data.brands.length === 0 ? (
           <Card testId="publishing-defaults">
@@ -168,7 +203,7 @@ export default async function PublishingDefaultsPage({
             />
           </Card>
         ) : null}
-        {data.brands.map((brand) => {
+        {data.brands.map((brand, index) => {
           const templates = data.byBrand.get(brand.id) ?? [];
           const editing = templates.find((template) => template.id === editId) ?? null;
           const saved = {
@@ -177,7 +212,16 @@ export default async function PublishingDefaultsPage({
             hashtags: brand.hashtagsInFirstComment,
           };
           return (
-            <div key={brand.id} style={{ display: 'grid', gap: spacingTokens.md }}>
+            <div
+              key={brand.id}
+              // Gate 2b review (4b): the last brand's form holds the bar on the
+              // frame's bottom edge.
+              className={
+                !showTemplates && index === data.brands.length - 1
+                  ? 'bsp-pd-brandset bsp-sg-grow'
+                  : 'bsp-pd-brandset'
+              }
+            >
               {/*
                 ROUND 4, GATE 2b — THE PROTOTYPE'S PUBLISHING DEFAULTS
                 (`Main.dc.html` lines 1356–1361): an `xcard` with the channel
@@ -188,54 +232,60 @@ export default async function PublishingDefaultsPage({
                 out, with no feature behind them: "Link tracking" (Q15) and
                 "Fit the size to each platform automatically".
               */}
-              <DraftForm
-                key={JSON.stringify(saved)}
-                action={savePublishingDefaultsAction}
-                className="bsp-pd"
-                testId={`publishing-defaults-form-${brand.id}`}
-                barTestId={`publishing-defaults-bar-${brand.id}`}
-                saveTestId={`publishing-defaults-save-${brand.id}`}
-                labels={saveBarLabels(t)}
-              >
-                <input type="hidden" name="locale" value={locale} />
-                <input type="hidden" name="brandId" value={brand.id} />
-                <section
-                  className="bsp-xcard bsp-pd-main"
-                  data-testid={`publishing-defaults-${brand.id}`}
+              {showTemplates ? null : (
+                <DraftForm
+                  key={JSON.stringify(saved)}
+                  action={savePublishingDefaultsAction}
+                  className={index === data.brands.length - 1 ? 'bsp-pd bsp-sg-form' : 'bsp-pd'}
+                  testId={`publishing-defaults-form-${brand.id}`}
+                  barTestId={`publishing-defaults-bar-${brand.id}`}
+                  saveTestId={`publishing-defaults-save-${brand.id}`}
+                  labels={saveBarLabels(t)}
                 >
-                  {data.brands.length > 1 ? (
-                    <strong className="bsp-pd-brand">{brand.name}</strong>
-                  ) : null}
-                  <fieldset className="bsp-pd-set">
-                    <legend className="bsp-lbl">{t('publishingDefaults.channels')}</legend>
-                    <div className="bsp-pd-chips">
-                      {platforms.map((platform) => (
-                        <label key={platform.key} className="bsp-chip bsp-pd-chip">
-                          <input
-                            type="checkbox"
-                            name="platformKeys"
-                            value={platform.key}
-                            defaultChecked={brand.defaultPlatformKeys.includes(platform.key)}
-                            className="bsp-pd-in"
-                            data-testid={`publishing-default-channel-${brand.id}-${platform.key}`}
-                          />
-                          <ChannelMark
-                            channel={{ key: platform.key, name: platform.label }}
-                            size={14}
-                            label={false}
-                          />
-                          <span className="bsp-ltr">{platform.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                    <span className="bsp-pd-hint">{t('publishingDefaults.channelsHint')}</span>
-                  </fieldset>
-                  <fieldset className="bsp-pd-set">
-                    <legend className="bsp-lbl">{t('publishingDefaults.time')}</legend>
-                    <div className="bsp-pd-times">
-                      <div className="bsp-seg bsp-pd-seg" role="radiogroup">
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="brandId" value={brand.id} />
+                  <section
+                    className="bsp-xcard bsp-pd-main"
+                    data-testid={`publishing-defaults-${brand.id}`}
+                  >
+                    {data.brands.length > 1 ? (
+                      <strong className="bsp-pd-brand">{brand.name}</strong>
+                    ) : null}
+                    <fieldset className="bsp-pd-set">
+                      <legend className="bsp-lbl">{t('publishingDefaults.channels')}</legend>
+                      <div className="bsp-pd-chips">
+                        {platforms.map((platform) => (
+                          <label key={platform.key} className="bsp-chip bsp-pd-chip">
+                            <input
+                              type="checkbox"
+                              name="platformKeys"
+                              value={platform.key}
+                              defaultChecked={brand.defaultPlatformKeys.includes(platform.key)}
+                              className="bsp-pd-in"
+                              data-testid={`publishing-default-channel-${brand.id}-${platform.key}`}
+                            />
+                            <ChannelMark
+                              channel={{ key: platform.key, name: platform.label }}
+                              size={14}
+                              label={false}
+                            />
+                            <span className="bsp-ltr">{platform.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <span className="bsp-pd-hint">{t('publishingDefaults.channelsHint')}</span>
+                    </fieldset>
+                    <fieldset className="bsp-pd-set">
+                      <legend className="bsp-lbl">{t('publishingDefaults.time')}</legend>
+                      {/*
+                      Gate 2b review (4d) — the times as chips, as the channels
+                      are; "Other" opens the time field, which is not on the
+                      surface otherwise. A brand with no default time has no
+                      chip chosen, and saving keeps it so.
+                    */}
+                      <div className="bsp-pd-chips" role="radiogroup">
                         {data.suggestedTimes.map((time) => (
-                          <label key={time} className="bsp-pd-seg-o bsp-ltr">
+                          <label key={time} className="bsp-chip bsp-pd-chip bsp-ltr">
                             <input
                               type="radio"
                               name="defaultPostTimeChoice"
@@ -247,15 +297,16 @@ export default async function PublishingDefaultsPage({
                             {time}
                           </label>
                         ))}
-                        <label className="bsp-pd-seg-o">
+                        <label className="bsp-chip bsp-pd-chip">
                           <input
                             type="radio"
                             name="defaultPostTimeChoice"
                             value="other"
                             defaultChecked={
+                              (brand.defaultPostTime ?? '') !== '' &&
                               !data.suggestedTimes.includes(brand.defaultPostTime ?? '')
                             }
-                            className="bsp-pd-in"
+                            className="bsp-pd-in bsp-pd-other"
                             data-testid={`publishing-default-time-${brand.id}-other`}
                           />
                           {t('publishingDefaults.timeOther')}
@@ -274,312 +325,310 @@ export default async function PublishingDefaultsPage({
                             : (brand.defaultPostTime ?? '')
                         }
                       />
-                    </div>
-                    <span className="bsp-pd-hint">{t('publishingDefaults.timeHint')}</span>
-                  </fieldset>
-                </section>
-                <section className="bsp-xcard bsp-pd-tgls">
-                  <CheckboxRow
-                    name="hashtagsInFirstComment"
-                    label={t('publishingDefaults.hashtags')}
-                    hint={t('publishingDefaults.hashtagsHint')}
-                    checked={brand.hashtagsInFirstComment}
-                    testId={`publishing-default-hashtags-${brand.id}`}
-                  />
-                </section>
-              </DraftForm>
+                      <span className="bsp-pd-hint">{t('publishingDefaults.timeHint')}</span>
+                    </fieldset>
+                  </section>
+                  <section className="bsp-xcard bsp-pd-tgls">
+                    <CheckboxRow
+                      name="hashtagsInFirstComment"
+                      label={t('publishingDefaults.hashtags')}
+                      hint={t('publishingDefaults.hashtagsHint')}
+                      checked={brand.hashtagsInFirstComment}
+                      testId={`publishing-default-hashtags-${brand.id}`}
+                    />
+                  </section>
+                </DraftForm>
+              )}
 
-              <Card testId={`templates-${brand.id}`}>
-                <SectionHeader
-                  title={t('templates.title')}
-                  description={
-                    mayManageTemplates ? t('templates.body') : t('templates.bodyReadOnly')
-                  }
-                />
-                {templates.length === 0 ? (
-                  <StateMessage
-                    title={t('templates.empty')}
+              {showTemplates ? (
+                <Card testId={`templates-${brand.id}`}>
+                  <SectionHeader
+                    title={t('templates.title')}
                     description={
-                      mayManageTemplates ? t('templates.emptyBody') : t('templates.emptyReadOnly')
+                      mayManageTemplates ? t('templates.body') : t('templates.bodyReadOnly')
                     }
-                    testId={`templates-empty-${brand.id}`}
                   />
-                ) : (
-                  <ul style={listStyle}>
-                    {templates.map((template) => (
-                      <li
-                        key={template.id}
-                        data-testid={`template-${template.id}`}
-                        style={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: spacingTokens.sm,
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          paddingBlock: spacingTokens.xs,
-                          borderBlockEnd: `1px solid ${colorTokens.border}`,
-                        }}
-                      >
-                        <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
-                          <span
-                            style={{
-                              display: 'flex',
-                              gap: spacingTokens.xs,
-                              alignItems: 'center',
-                            }}
-                          >
-                            <strong dir="auto" style={typographyTokens.bodySm}>
-                              {template.name}
-                            </strong>
-                            {template.isDefault ? (
-                              <StatusBadge
-                                tone="info"
-                                label={t('templates.default')}
-                                testId={`template-default-${template.id}`}
-                              />
-                            ) : null}
-                          </span>
-                          <span style={hintStyle}>
-                            {[
-                              t(`content.type.${template.contentType}` as MessageKey),
-                              template.platformKeys.map(labelOf).join(' · ') ||
-                                t('templates.noChannels'),
-                            ].join(' — ')}
-                          </span>
-                        </span>
-                        {mayManageTemplates ? (
-                          <span
-                            style={{
-                              display: 'flex',
-                              flexWrap: 'wrap',
-                              gap: spacingTokens.xs,
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Link
-                              href={`/${locale}/settings/publishing?edit=${template.id}#template-form-${brand.id}`}
-
-                              className={buttonClass('ghost', 'sm')}
-                              data-testid={`template-edit-${template.id}`}
+                  {templates.length === 0 ? (
+                    <StateMessage
+                      title={t('templates.empty')}
+                      description={
+                        mayManageTemplates ? t('templates.emptyBody') : t('templates.emptyReadOnly')
+                      }
+                      testId={`templates-empty-${brand.id}`}
+                    />
+                  ) : (
+                    <ul style={listStyle}>
+                      {templates.map((template) => (
+                        <li
+                          key={template.id}
+                          data-testid={`template-${template.id}`}
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: spacingTokens.sm,
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            paddingBlock: spacingTokens.xs,
+                            borderBlockEnd: `1px solid ${colorTokens.border}`,
+                          }}
+                        >
+                          <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
+                            <span
+                              style={{
+                                display: 'flex',
+                                gap: spacingTokens.xs,
+                                alignItems: 'center',
+                              }}
                             >
-                              {t('templates.edit')}
-                            </Link>
-                            <form action={setDefaultTemplateAction}>
-                              <input type="hidden" name="locale" value={locale} />
-                              <input type="hidden" name="brandId" value={brand.id} />
-                              <input
-                                type="hidden"
-                                name="templateId"
-                                value={template.isDefault ? '' : template.id}
-                              />
-                              <button
-                                type="submit"
+                              <strong dir="auto" style={typographyTokens.bodySm}>
+                                {template.name}
+                              </strong>
+                              {template.isDefault ? (
+                                <StatusBadge
+                                  tone="info"
+                                  label={t('templates.default')}
+                                  testId={`template-default-${template.id}`}
+                                />
+                              ) : null}
+                            </span>
+                            <span style={hintStyle}>
+                              {[
+                                t(`content.type.${template.contentType}` as MessageKey),
+                                template.platformKeys.map(labelOf).join(' · ') ||
+                                  t('templates.noChannels'),
+                              ].join(' — ')}
+                            </span>
+                          </span>
+                          {mayManageTemplates ? (
+                            <span
+                              style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: spacingTokens.xs,
+                                alignItems: 'center',
+                              }}
+                            >
+                              <Link
+                                href={`/${locale}/settings/publishing?edit=${template.id}#template-form-${brand.id}`}
 
                                 className={buttonClass('ghost', 'sm')}
-                                data-testid={`template-set-default-${template.id}`}
+                                data-testid={`template-edit-${template.id}`}
                               >
-                                {template.isDefault
-                                  ? t('templates.clearDefault')
-                                  : t('templates.makeDefault')}
-                              </button>
-                            </form>
-                            {/* DELETE ASKS TWICE — the Automations screen's pattern. */}
-                            <details data-testid={`template-delete-${template.id}`}>
-                              <summary
-                                style={{ listStyle: 'none' }}
-                                className={buttonClass('ghost', 'sm')}
-                              >
-                                {t('templates.delete')}
-                              </summary>
-                              <form
-                                action={deleteTemplateAction}
-                                style={{
-                                  display: 'grid',
-                                  gap: spacingTokens.xs,
-                                  marginBlockStart: spacingTokens.xs,
-                                }}
-                              >
+                                {t('templates.edit')}
+                              </Link>
+                              <form action={setDefaultTemplateAction}>
                                 <input type="hidden" name="locale" value={locale} />
-                                <input type="hidden" name="templateId" value={template.id} />
-                                <span style={hintStyle}>{t('templates.deleteBody')}</span>
+                                <input type="hidden" name="brandId" value={brand.id} />
+                                <input
+                                  type="hidden"
+                                  name="templateId"
+                                  value={template.isDefault ? '' : template.id}
+                                />
                                 <button
                                   type="submit"
 
-                                  className={buttonClass('danger', 'sm')}
-                                  data-testid={`template-delete-confirm-${template.id}`}
+                                  className={buttonClass('ghost', 'sm')}
+                                  data-testid={`template-set-default-${template.id}`}
                                 >
-                                  {t('templates.deleteConfirm')}
+                                  {template.isDefault
+                                    ? t('templates.clearDefault')
+                                    : t('templates.makeDefault')}
                                 </button>
                               </form>
-                            </details>
-                          </span>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                              {/* DELETE ASKS TWICE — the Automations screen's pattern. */}
+                              <details data-testid={`template-delete-${template.id}`}>
+                                <summary
+                                  style={{ listStyle: 'none' }}
+                                  className={buttonClass('ghost', 'sm')}
+                                >
+                                  {t('templates.delete')}
+                                </summary>
+                                <form
+                                  action={deleteTemplateAction}
+                                  style={{
+                                    display: 'grid',
+                                    gap: spacingTokens.xs,
+                                    marginBlockStart: spacingTokens.xs,
+                                  }}
+                                >
+                                  <input type="hidden" name="locale" value={locale} />
+                                  <input type="hidden" name="templateId" value={template.id} />
+                                  <span style={hintStyle}>{t('templates.deleteBody')}</span>
+                                  <button
+                                    type="submit"
 
-                {mayManageTemplates ? (
-                  <form
-                    key={editing?.id ?? 'new'}
-                    id={`template-form-${brand.id}`}
-                    action={saveTemplateAction}
-                    data-testid={`template-form-${brand.id}`}
-                    style={{
-                      display: 'grid',
-                      gap: spacingTokens.sm,
-                      marginBlockStart: spacingTokens.md,
-                      paddingBlockStart: spacingTokens.md,
-                      borderBlockStart: `1px solid ${colorTokens.border}`,
-                    }}
-                  >
-                    <strong style={typographyTokens.bodySm}>
-                      {editing ? t('templates.editTitle') : t('templates.newTitle')}
-                    </strong>
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="brandId" value={brand.id} />
-                    {editing ? (
-                      <>
-                        <input type="hidden" name="templateId" value={editing.id} />
-                        <input type="hidden" name="expectedVersion" value={editing.version} />
-                      </>
-                    ) : null}
-                    <Field label={t('templates.name')} htmlFor={`template-name-${brand.id}`}>
-                      <input
-                        className="bs-control"
-                        id={`template-name-${brand.id}`}
-                        name="name"
-                        required
-                        maxLength={80}
-                        defaultValue={editing?.name ?? ''}
-                        data-testid={`template-name-${brand.id}`}
-                        style={inputStyle()}
-                      />
-                    </Field>
-                    <Field label={t('templates.format')} htmlFor={`template-format-${brand.id}`}>
-                      <select
-                        className="bs-control bs-select"
-                        id={`template-format-${brand.id}`}
-                        name="contentType"
-                        defaultValue={editing?.contentType ?? 'POST'}
-                        data-testid={`template-format-${brand.id}`}
-                        style={inputStyle()}
-                      >
-                        {CONTENT_TYPES.map((type) => (
-                          <option key={type} value={type}>
-                            {t(`content.type.${type}` as MessageKey)}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <fieldset
-                      style={{
-                        border: 0,
-                        margin: 0,
-                        padding: 0,
-                        display: 'grid',
-                        gap: spacingTokens['2xs'],
-                      }}
-                    >
-                      <legend style={{ ...typographyTokens.bodySm, fontWeight: 600 }}>
-                        {t('templates.channels')}
-                      </legend>
-                      {platforms.map((platform) => (
-                        <CheckboxRow
-                          key={platform.key}
-                          name="platformKeys"
-                          value={platform.key}
-                          label={platform.label}
-                          checked={editing?.platformKeys.includes(platform.key) ?? false}
-                          testId={`template-channel-${brand.id}-${platform.key}`}
-                        />
+                                    className={buttonClass('danger', 'sm')}
+                                    data-testid={`template-delete-confirm-${template.id}`}
+                                  >
+                                    {t('templates.deleteConfirm')}
+                                  </button>
+                                </form>
+                              </details>
+                            </span>
+                          ) : null}
+                        </li>
                       ))}
-                    </fieldset>
-                    <Field
-                      label={t('templates.caption')}
-                      htmlFor={`template-body-${brand.id}`}
-                      hint={t('templates.captionHint')}
-                    >
-                      <textarea
-                        className="bs-control"
-                        id={`template-body-${brand.id}`}
-                        name="body"
-                        maxLength={5000}
-                        rows={4}
-                        dir="auto"
-                        defaultValue={editing?.body ?? ''}
-                        data-testid={`template-body-${brand.id}`}
-                        style={{ ...inputStyle(), minBlockSize: '6rem' }}
-                      />
-                    </Field>
-                    <Field
-                      label={t('templates.hashtags')}
-                      htmlFor={`template-hashtags-${brand.id}`}
-                      hint={t('templates.hashtagsHint')}
-                    >
-                      <input
-                        className="bs-control"
-                        id={`template-hashtags-${brand.id}`}
-                        name="hashtags"
-                        dir="auto"
-                        defaultValue={editing?.hashtags.map((tag) => `#${tag}`).join(' ') ?? ''}
-                        data-testid={`template-hashtags-${brand.id}`}
-                        style={inputStyle()}
-                      />
-                    </Field>
-                    <Field
-                      label={t('templates.firstComment')}
-                      htmlFor={`template-first-comment-${brand.id}`}
-                    >
-                      <textarea
-                        className="bs-control"
-                        id={`template-first-comment-${brand.id}`}
-                        name="firstComment"
-                        maxLength={2200}
-                        rows={2}
-                        dir="auto"
-                        defaultValue={editing?.firstComment ?? ''}
-                        data-testid={`template-first-comment-${brand.id}`}
-                        style={inputStyle()}
-                      />
-                    </Field>
-                    {editing ? null : (
-                      <CheckboxRow
-                        name="isDefault"
-                        label={t('templates.makeDefaultOnSave')}
-                        checked={templates.length === 0}
-                        testId={`template-default-new-${brand.id}`}
-                      />
-                    )}
-                    <span
+                    </ul>
+                  )}
+
+                  {mayManageTemplates ? (
+                    <form
+                      key={editing?.id ?? 'new'}
+                      id={`template-form-${brand.id}`}
+                      action={saveTemplateAction}
+                      data-testid={`template-form-${brand.id}`}
                       style={{
-                        display: 'flex',
-                        gap: spacingTokens.xs,
-                        flexWrap: 'wrap',
-                        minBlockSize: layoutTokens.minTargetSize,
+                        display: 'grid',
+                        gap: spacingTokens.sm,
+                        marginBlockStart: spacingTokens.md,
+                        paddingBlockStart: spacingTokens.md,
+                        borderBlockStart: `1px solid ${colorTokens.border}`,
                       }}
                     >
-                      <button
-                        type="submit"
-
-                        className={buttonClass('primary', 'sm')}
-                        data-testid={`template-save-${brand.id}`}
-                      >
-                        {t('templates.save')}
-                      </button>
+                      <strong style={typographyTokens.bodySm}>
+                        {editing ? t('templates.editTitle') : t('templates.newTitle')}
+                      </strong>
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="brandId" value={brand.id} />
                       {editing ? (
-                        <Link
-                          href={`/${locale}/settings/publishing`}
-
-                          className={buttonClass('ghost', 'sm')}
-                        >
-                          {t('templates.cancelEdit')}
-                        </Link>
+                        <>
+                          <input type="hidden" name="templateId" value={editing.id} />
+                          <input type="hidden" name="expectedVersion" value={editing.version} />
+                        </>
                       ) : null}
-                    </span>
-                  </form>
-                ) : null}
-              </Card>
+                      <Field label={t('templates.name')} htmlFor={`template-name-${brand.id}`}>
+                        <input
+                          className="bs-control"
+                          id={`template-name-${brand.id}`}
+                          name="name"
+                          required
+                          maxLength={80}
+                          defaultValue={editing?.name ?? ''}
+                          data-testid={`template-name-${brand.id}`}
+                          style={inputStyle()}
+                        />
+                      </Field>
+                      <Field label={t('templates.format')} htmlFor={`template-format-${brand.id}`}>
+                        <select
+                          className="bs-control bs-select"
+                          id={`template-format-${brand.id}`}
+                          name="contentType"
+                          defaultValue={editing?.contentType ?? 'POST'}
+                          data-testid={`template-format-${brand.id}`}
+                          style={inputStyle()}
+                        >
+                          {CONTENT_TYPES.map((type) => (
+                            <option key={type} value={type}>
+                              {t(`content.type.${type}` as MessageKey)}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <fieldset
+                        style={{
+                          border: 0,
+                          margin: 0,
+                          padding: 0,
+                          display: 'grid',
+                          gap: spacingTokens['2xs'],
+                        }}
+                      >
+                        <legend style={{ ...typographyTokens.bodySm, fontWeight: 600 }}>
+                          {t('templates.channels')}
+                        </legend>
+                        {platforms.map((platform) => (
+                          <CheckboxRow
+                            key={platform.key}
+                            name="platformKeys"
+                            value={platform.key}
+                            label={platform.label}
+                            checked={editing?.platformKeys.includes(platform.key) ?? false}
+                            testId={`template-channel-${brand.id}-${platform.key}`}
+                          />
+                        ))}
+                      </fieldset>
+                      <Field
+                        label={t('templates.caption')}
+                        htmlFor={`template-body-${brand.id}`}
+                        hint={t('templates.captionHint')}
+                      >
+                        <textarea
+                          className="bs-control"
+                          id={`template-body-${brand.id}`}
+                          name="body"
+                          maxLength={5000}
+                          rows={4}
+                          dir="auto"
+                          defaultValue={editing?.body ?? ''}
+                          data-testid={`template-body-${brand.id}`}
+                          style={{ ...inputStyle(), minBlockSize: '6rem' }}
+                        />
+                      </Field>
+                      <Field
+                        label={t('templates.hashtags')}
+                        htmlFor={`template-hashtags-${brand.id}`}
+                        hint={t('templates.hashtagsHint')}
+                      >
+                        <input
+                          className="bs-control"
+                          id={`template-hashtags-${brand.id}`}
+                          name="hashtags"
+                          dir="auto"
+                          defaultValue={editing?.hashtags.map((tag) => `#${tag}`).join(' ') ?? ''}
+                          data-testid={`template-hashtags-${brand.id}`}
+                          style={inputStyle()}
+                        />
+                      </Field>
+                      <Field
+                        label={t('templates.firstComment')}
+                        htmlFor={`template-first-comment-${brand.id}`}
+                      >
+                        <textarea
+                          className="bs-control"
+                          id={`template-first-comment-${brand.id}`}
+                          name="firstComment"
+                          maxLength={2200}
+                          rows={2}
+                          dir="auto"
+                          defaultValue={editing?.firstComment ?? ''}
+                          data-testid={`template-first-comment-${brand.id}`}
+                          style={inputStyle()}
+                        />
+                      </Field>
+                      {editing ? null : (
+                        <CheckboxRow
+                          name="isDefault"
+                          label={t('templates.makeDefaultOnSave')}
+                          checked={templates.length === 0}
+                          testId={`template-default-new-${brand.id}`}
+                        />
+                      )}
+                      <span
+                        style={{
+                          display: 'flex',
+                          gap: spacingTokens.xs,
+                          flexWrap: 'wrap',
+                          minBlockSize: layoutTokens.minTargetSize,
+                        }}
+                      >
+                        <button
+                          type="submit"
+
+                          className={buttonClass('primary', 'sm')}
+                          data-testid={`template-save-${brand.id}`}
+                        >
+                          {t('templates.save')}
+                        </button>
+                        {editing ? (
+                          <Link href={templatesHref} className={buttonClass('ghost', 'sm')}>
+                            {t('templates.cancelEdit')}
+                          </Link>
+                        ) : null}
+                      </span>
+                    </form>
+                  ) : null}
+                </Card>
+              ) : null}
             </div>
           );
         })}

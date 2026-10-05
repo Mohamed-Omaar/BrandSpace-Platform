@@ -1,7 +1,7 @@
 import { DraftForm } from '@brandspace/ui';
 import type { ResolvedApprovalPolicy } from '@brandspace/content';
 import Link from 'next/link';
-import { initialsFrom } from '@brandspace/ui';
+import { personInitials } from '@brandspace/ui';
 import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { brandContextFor, listAccessibleBrands } from '../../../../server/brand-context';
@@ -157,7 +157,7 @@ export default async function ApprovalSettingsPage({
                       className="bsp-tm-av bsp-sa-who-av"
                       data-c={team.indexOf(member) % 4}
                     >
-                      {initialsFrom(name)}
+                      {personInitials(member.name, member.email)}
                     </span>
                     <span className="bsp-sa-who-text">
                       <span className="bsp-sa-who-name">{name}</span>
@@ -184,16 +184,25 @@ export default async function ApprovalSettingsPage({
           the end. Same form, same action, same permission and audit as before;
           the save bar is the product's (G1, D-330).
         */}
-        <section className="bsp-card bsp-sa-pol" data-testid="approvals-policy">
+        {/*
+          Gate 2b review (4b) — the bar on the frame's bottom edge, as on
+          General: each brand's form holds its card of rows, and its bar comes
+          after the card; the last form's bar is the column's last row.
+        */}
+        <div className="bsp-sa-pols bsp-sg-grow" data-testid="approvals-policy">
           {policies.length === 0 ? (
-            <p className="bsp-sa-pol-empty">{t('settings.approvalsNoBrand')}</p>
+            <section className="bsp-card bsp-sa-pol">
+              <p className="bsp-sa-pol-empty">{t('settings.approvalsNoBrand')}</p>
+            </section>
           ) : (
-            policies.map((policy) => (
+            policies.map((policy, index) => (
               /* G1 (D-330): the save bar — keyed on the saved rules, so a save starts clean. */
               <DraftForm
                 key={`${policy.brandId}-${policy.requireApprovalBeforeScheduling}-${policy.allowSelfApproval}`}
                 action={saveApprovalPolicyAction}
-                className="bsp-sa-pol-form"
+                className={
+                  index === policies.length - 1 ? 'bsp-sa-pol-form bsp-sg-form' : 'bsp-sa-pol-form'
+                }
                 testId={`policy-form-${policy.brandId}`}
                 barTestId={`policy-bar-${policy.brandId}`}
                 saveTestId={`policy-save-${policy.brandId}`}
@@ -201,27 +210,29 @@ export default async function ApprovalSettingsPage({
               >
                 <input type="hidden" name="locale" value={locale} />
                 <input type="hidden" name="brandId" value={policy.brandId} />
-                {policies.length > 1 ? (
-                  <strong className="bsp-sa-pol-brand">{policy.brandName}</strong>
-                ) : null}
-                <CheckboxRow
-                  name="requireApproval"
-                  label={t('approvals.policyRequire')}
-                  hint={t('approvals.policyRequireSub')}
-                  checked={policy.requireApprovalBeforeScheduling}
-                  testId={`policy-require-${policy.brandId}`}
-                />
-                <CheckboxRow
-                  name="allowSelfApproval"
-                  label={t('approvals.policySelf')}
-                  hint={t('approvals.policySelfSub')}
-                  checked={policy.allowSelfApproval}
-                  testId={`policy-self-${policy.brandId}`}
-                />
+                <section className="bsp-card bsp-sa-pol">
+                  {policies.length > 1 ? (
+                    <strong className="bsp-sa-pol-brand">{policy.brandName}</strong>
+                  ) : null}
+                  <CheckboxRow
+                    name="requireApproval"
+                    label={t('approvals.policyRequire')}
+                    hint={t('approvals.policyRequireSub')}
+                    checked={policy.requireApprovalBeforeScheduling}
+                    testId={`policy-require-${policy.brandId}`}
+                  />
+                  <CheckboxRow
+                    name="allowSelfApproval"
+                    label={t('approvals.policySelf')}
+                    hint={t('approvals.policySelfSub')}
+                    checked={policy.allowSelfApproval}
+                    testId={`policy-self-${policy.brandId}`}
+                  />
+                </section>
               </DraftForm>
             ))
           )}
-        </section>
+        </div>
       </SettingsFrame>
     </WorkspaceShell>
   );

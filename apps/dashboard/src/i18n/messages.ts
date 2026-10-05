@@ -239,7 +239,7 @@ export const messages = {
     'ws.unavailableUpgrade': 'قم بالترقية لإضافة مساحة عمل أخرى.',
     'brand.allBrands': 'كل العلامات التجارية',
     'brand.allBrandsCaption': 'كل ما يمكنك الوصول إليه',
-    'brand.selectedCaption': 'العلامة التجارية النشطة',
+    'brand.selectedCaption': 'العلامة النشطة',
     'brand.noneSelected': 'لم تُحدَّد علامة تجارية',
     'brand.noneSelectedCaption': 'اختر واحدة للمتابعة',
     'brand.noBrands': 'لا توجد علامة تجارية',
@@ -507,8 +507,7 @@ export const messages = {
     'security.mfaHeading': 'التحقق بخطوتين',
     'security.mfaOn': 'مُفعَّل',
     'security.mfaOff': 'غير مُفعَّل',
-    'security.mfaExplain':
-      'يطلب رمزًا من تطبيق المصادقة بعد كلمة المرور، فلا تكفي كلمة المرور وحدها للدخول إلى حسابك.',
+    'security.mfaExplain': 'رمز من تطبيق المصادقة بعد كلمة المرور.',
     'security.enrolStart': 'تفعيل التحقق بخطوتين',
     'security.enrolScan': 'امسح الرمز في تطبيق المصادقة، ثم أدخل الرمز المعروض.',
     'security.enrolUri': 'أو أدخل هذا العنوان يدويًا في التطبيق:',
@@ -523,9 +522,8 @@ export const messages = {
       'تتطلب {workspace} التحقق بخطوتين، لذلك لا يمكن إيقافه ما دمت عضوًا فيها.',
     'security.orPassword': 'أو كلمة المرور',
     'security.requireHeading': 'التحقق بخطوتين للجميع',
-    'security.requireLabel': 'إلزام التحقق بخطوتين في {workspace}',
-    'security.requireHint':
-      'يُطلب ممن لم يفعّله إعداده قبل المتابعة، ولا يمكن لأحد هنا إيقافه ما دام هذا الخيار مفعّلًا. فعّل التحقق الخاص بك أولًا.',
+    'security.requireLabel': 'إلزامي للفريق كله',
+    'security.requireHint': 'يُعدّه من لم يفعّله قبل أن يتابع. فعّل التحقق الخاص بك أولًا.',
     'security.recoverySaved': 'حفظتها',
     'mfaSetup.title': 'إعداد التحقق بخطوتين',
     'mfaSetup.body': 'تتطلب {workspace} التحقق بخطوتين. أعدّه على هاتفك للمتابعة.',
@@ -542,7 +540,7 @@ export const messages = {
     'security.recoveryOnce': 'هذه هي المرة الوحيدة التي تُعرض فيها هذه الرموز.',
     'security.recoveryRegenerate': 'إنشاء مجموعة جديدة',
     'security.recoveryRegenerateExplain': 'يتطلب رمزًا صالحًا، ويُلغي المجموعة السابقة بالكامل.',
-    'security.sessionsHeading': 'الجلسات',
+    'security.sessionsHeading': 'الأجهزة المسجّلة',
     'security.sessionsExplain': 'تسجيل الخروج من كل الأجهزة الأخرى، مع إبقاء هذه الجلسة.',
     'security.signOutOthers': 'تسجيل الخروج من الأجهزة الأخرى',
     'security.activityLog': 'سجل النشاط',
@@ -594,6 +592,8 @@ export const messages = {
     'data.subtitle': 'ما يمكن لBrandSpace فعله ببياناتك اليوم، وما لا يمكنه بعد.',
     'data.open': 'فتح',
     'data.unavailable': 'غير متاح بعد',
+    'data.dataRetention.title': 'الاحتفاظ بالبيانات',
+    'data.more': 'المزيد',
     'data.retention.title': 'الاحتفاظ بمحتوى الذكاء الاصطناعي',
     'data.retention.default': 'يُحتفظ به للمدة التي تحددها خطتك. غيّرها من إعدادات النشاط التجاري.',
     'data.retention.days':
@@ -4340,12 +4340,11 @@ export const messages = {
     'perms.desc.automation.read': 'View automation rules and their run history',
     'perms.desc.automation.manage': 'Create, edit and enable automation rules',
     'security.title': 'Security',
-    'security.mfaHeading': 'Two-factor authentication',
+    'security.mfaHeading': 'Two-step verification',
     'security.mfaOn': 'On',
     'security.mfaOff': 'Off',
-    'security.mfaExplain':
-      'Asks for a code from your authenticator app after your password, so a stolen password is not enough to reach your account.',
-    'security.enrolStart': 'Turn on two-factor authentication',
+    'security.mfaExplain': 'A code from your authenticator app after your password.',
+    'security.enrolStart': 'Turn on two-step verification',
     'security.enrolScan': 'Scan this in your authenticator app, then enter the code it shows.',
     'security.enrolUri': 'Or enter this address in the app by hand:',
     'security.code': 'Code',
@@ -4359,9 +4358,9 @@ export const messages = {
       '{workspace} requires two-step verification, so it can’t be turned off while you belong to it.',
     'security.orPassword': 'Or your password',
     'security.requireHeading': 'Two-step verification for everyone',
-    'security.requireLabel': 'Require two-step verification in {workspace}',
+    'security.requireLabel': 'Required for the whole team',
     'security.requireHint':
-      'Members without it are asked to set it up before they can continue, and nobody here can turn it off while this is on. Turn on your own first.',
+      'Anyone without it sets it up before they can continue. Turn on your own first.',
     'security.recoverySaved': 'I have saved them',
     'mfaSetup.title': 'Set up two-step verification',
     'mfaSetup.body':
@@ -4369,7 +4368,7 @@ export const messages = {
     'mfaSetup.start': 'Set it up',
     'mfaSetup.other': 'Use another workspace',
     'security.confirm': 'Confirm',
-    'security.disable': 'Turn off two-factor authentication',
+    'security.disable': 'Turn off two-step verification',
     'security.disableExplain':
       'Needs a current code or your password: a stolen session alone must not be enough to remove the protection.',
     'security.recoveryHeading': 'Recovery codes',
@@ -4380,12 +4379,11 @@ export const messages = {
     'security.recoveryRegenerate': 'Generate a new set',
     'security.recoveryRegenerateExplain':
       'Requires a working code, and invalidates the whole previous set.',
-    'security.sessionsHeading': 'Sessions',
+    'security.sessionsHeading': 'Signed-in devices',
     'security.sessionsExplain': 'Sign out everywhere else, keeping this session.',
-    'security.signOutOthers': 'Sign out other devices',
+    'security.signOutOthers': 'Sign out the others',
     'security.activityLog': 'Activity log',
-    'security.unavailable':
-      'Two-factor authentication is not available on this platform right now.',
+    'security.unavailable': 'Two-step verification is not available on this platform right now.',
     'settings.title': 'Business settings',
     'settings.navLabel': 'Settings sections',
     'settings.group.workspace': 'Workspace',
@@ -4433,6 +4431,8 @@ export const messages = {
     'data.subtitle': 'What BrandSpace can do with your data today, and what it cannot yet.',
     'data.open': 'Open',
     'data.unavailable': 'Not available yet',
+    'data.dataRetention.title': 'Data retention',
+    'data.more': 'More',
     'data.retention.title': 'AI content retention',
     'data.retention.default': 'Kept for the period your plan sets. Change it in Business settings.',
     'data.retention.days':
@@ -8376,7 +8376,7 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   },
   // Phase 4 — the customer's own security controls.
   MFA_ENABLED: {
-    en: 'Two-factor authentication is on. Save your recovery codes now.',
+    en: 'Two-step verification is on. Save your recovery codes now.',
     ar: 'تم تفعيل التحقق بخطوتين. احفظ رموز الاسترداد الآن.',
   },
   // G4 / Q23 (D-333).
@@ -8397,7 +8397,7 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     ar: 'فعّل التحقق بخطوتين الخاص بك أولًا.',
   },
   MFA_DISABLED: {
-    en: 'Two-factor authentication is off.',
+    en: 'Two-step verification is off.',
     ar: 'تم إيقاف التحقق بخطوتين.',
   },
   RECOVERY_CODES_REPLACED: {

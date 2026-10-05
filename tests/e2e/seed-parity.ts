@@ -21,7 +21,7 @@
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -387,7 +387,13 @@ async function build(
 ): Promise<E2eParityWorkspace> {
   const words = WORDS[lang];
   const slug = `e2e-parity-${lang}-${run}`;
-  const ownerEmail = `e2e-parity-${lang}-${run}@brandspace.test`;
+  /*
+   * Gate 2b review (4i) — initials are Latin in both languages: an Arabic name
+   * has none, so they come from the address, which carries the person's Latin
+   * name as a real address would ("RE", "SN", "OK", as the prototype draws).
+   */
+  const LATIN = { reem: 'reem.essam', sara: 'sara.nabil', omar: 'omar.khaled' } as const;
+  const ownerEmail = `${LATIN.reem}.${lang}-${run}@parity.brandspace.test`;
 
   const platformOwner = await platform.platformUser.findFirstOrThrow({
     where: { deletedAt: null },
@@ -469,7 +475,7 @@ async function build(
   ] as const) {
     const user = await platform.user.create({
       data: {
-        email: `e2e-parity-${lang}-${run}-${key}@brandspace.test`,
+        email: `${LATIN[key]}.${lang}-${run}@parity.brandspace.test`,
         name: words.people[key],
         status: 'ACTIVE',
         emailVerifiedAt: new Date(),
@@ -518,6 +524,11 @@ async function build(
           defaultLocale: lang === 'ar' ? 'AR' : 'EN',
           supportedLocales: ['AR', 'EN'],
           colorPalette: ['#111114', '#FFD60A', '#F3E9D7'],
+          // Gate 2b review — the prototype's publishing defaults (`pc.chans:
+          // ['instagram', 'facebook'], time: '09:00'`), so the pair shows chosen
+          // chips the way the prototype does.
+          defaultPlatformKeys: ['instagram', 'facebook'],
+          defaultPostTime: '09:00',
         },
       });
 
@@ -693,6 +704,57 @@ async function build(
         pictures[key] = asset.id;
       }
 
+      /*
+       * Gate 2b review (4a) — THE BRAND'S LOGO, so Look & voice can be judged:
+       * the prototype's mark (a yellow "R" on ink, `Main.dc.html` line 871) as
+       * one real image, stored the way an upload is and set as the brand's
+       * primary logo (D-193).
+       */
+      {
+        const bytes = readFileSync(new URL('./parity-logo.png', import.meta.url));
+        const storageKey = `parity/${workspace.id}/logo.png`;
+        const checksum = createHash('sha256').update(bytes).digest('hex');
+        await store.put(storageKey, bytes, 'image/png');
+        const logo = await db.asset.create({
+          data: {
+            workspaceId: workspace.id,
+            brandId: brand.id,
+            name: 'reema-logo.png',
+            kind: 'IMAGE',
+            mimeType: 'image/png',
+            sizeBytes: bytes.length,
+            width: 256,
+            height: 256,
+            storageKey,
+            checksumSha256: checksum,
+            status: 'READY',
+            scanStatus: 'CLEAN',
+            scannedAt: new Date(),
+            uploadedByUserId: owner.id,
+          },
+        });
+        await db.assetVersion.create({
+          data: {
+            workspaceId: workspace.id,
+            brandId: brand.id,
+            assetId: logo.id,
+            versionNumber: 1,
+            storageKey,
+            checksumSha256: checksum,
+            mimeType: 'image/png',
+            sizeBytes: bytes.length,
+            width: 256,
+            height: 256,
+            scanStatus: 'CLEAN',
+            createdByUserId: owner.id,
+          },
+        });
+        await db.brand.update({
+          where: { id: brand.id },
+          data: { primaryLogoAssetId: logo.id },
+        });
+      }
+
       const postIds: Record<string, string> = {};
       for (const [index, post] of [...POSTS].entries()) {
         // The first post is the most recently changed, a second apart.
@@ -767,6 +829,45 @@ async function build(
            * engagements, saves, clicks) a day after it went out — what the
            * Performance screen's posts table, pillars and best time read.
            */
+          /*
+           * Gate 2b review (4h) — THE PUBLISHING LOG READS JOBS. A scheduled
+           * post waits as a pending job per channel and a failed post holds the
+           * failed job the worker recorded, as the product writes them, so the
+           * log's Queue and Failed tabs count what the rail's badge counts.
+           */
+          if (post.status === 'SCHEDULED' || post.status === 'FAILED') {
+            for (const platformKey of post.channels) {
+              const provider = platformKey.toUpperCase() as 'INSTAGRAM' | 'FACEBOOK' | 'TIKTOK';
+              const connection = connectionIds[provider];
+              const variantId = variantIds[platformKey];
+              if (!connection || !variantId) continue;
+              const failed = post.status === 'FAILED';
+              await db.publishJob.create({
+                data: {
+                  workspaceId: workspace.id,
+                  brandId: brand.id,
+                  calendarSlotId: slot.id,
+                  contentItemId: item.id,
+                  contentVariantId: variantId,
+                  socialConnectionId: connection,
+                  provider,
+                  status: failed ? 'FAILED' : 'PENDING',
+                  idempotencyKey: `parity-${lang}-${run}-${post.key}-${platformKey}`,
+                  scheduledAtUtc: when.utc,
+                  maxAttempts: 3,
+                  attemptCount: failed ? 3 : 0,
+                  ...(failed
+                    ? {
+                        completedAt: when.utc,
+                        failureClass: 'MEDIA_INVALID' as const,
+                        failureCode: 'media_invalid',
+                      }
+                    : {}),
+                  createdByUserId: people[post.author],
+                },
+              });
+            }
+          }
           if (post.status === 'PUBLISHED') {
             for (const platformKey of post.channels) {
               const provider = platformKey.toUpperCase() as 'INSTAGRAM' | 'FACEBOOK' | 'TIKTOK';
@@ -955,6 +1056,24 @@ async function build(
           'درجة الرسمية',
           'Warm and casual, never stiff.',
           'ودود وبسيط، من غير تكلّف.',
+        ],
+        // Gate 2b review (4a) — the voice words and one rule, as the
+        // prototype's Voice card draws them.
+        [
+          'TONE_OF_VOICE',
+          'voice.words',
+          'Voice words',
+          'كلمات الأسلوب',
+          'Warm, Simple, Friendly, No exaggeration',
+          'دافئ، بسيط، ودود، بلا مبالغة',
+        ],
+        [
+          'DO_DONT',
+          'do.price',
+          'Say the price',
+          'اذكر السعر',
+          'Say the price whenever a post is about an offer.',
+          'اذكر السعر في كل منشور عن عرض.',
         ],
         [
           'OFFERS',
@@ -1454,6 +1573,12 @@ async function seedParityCalendar(platform: PrismaClient): Promise<void> {
           date: `${month}-16`,
           name: { en: 'World Food Day', ar: 'يوم الغذاء العالمي' },
         },
+      ],
+      // Gate 2b review (4d) — the prototype's publish-time chips (09:00, 13:00,
+      // 18:00) are the times the calendar suggests for the workspace's country.
+      suggestedTimes: [
+        ...(content.calendar.suggestedTimes ?? []).filter((row) => row.country !== 'EG'),
+        { country: 'EG', times: ['09:00', '13:00', '18:00'] },
       ],
     },
   });

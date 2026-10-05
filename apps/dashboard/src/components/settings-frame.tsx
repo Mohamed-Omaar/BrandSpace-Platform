@@ -81,6 +81,7 @@ export async function SettingsFrame({
   permissionKeys,
   brandSource,
   selected,
+  more,
   children,
 }: {
   readonly locale: string;
@@ -88,6 +89,11 @@ export async function SettingsFrame({
   /** The session's workspace, so the frame can count the brands it may see. */
   readonly brandSource: BrandContextSource;
   readonly selected: SettingsNavKey;
+  /**
+   * Gate 2b review — a section's "⋯" at the end of its head: where a product
+   * control the prototype does not draw is kept (D-471), e.g. Post templates.
+   */
+  readonly more?: ReactNode;
   readonly children: ReactNode;
 }) {
   const t = translator(requestMessageLocale(locale));
@@ -160,6 +166,7 @@ export async function SettingsFrame({
               {t(related.labelKey)} →
             </Link>
           ) : null}
+          {more}
         </div>
         {children}
       </div>

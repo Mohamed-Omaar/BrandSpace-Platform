@@ -703,7 +703,8 @@ test('11 · the post is scheduled and the calendar states its context', async ({
 // ---------------------------------------------------------------------------
 
 test('12 · the pipeline publishes it and the history says what happened', async ({ page }) => {
-  await enter(page, '/integrations');
+  // Gate 2b review (4f) — the history is Accounts' own view, behind its "⋯".
+  await enter(page, '/integrations?history=1');
 
   /*
    * NOTHING IS PUSHED HERE. A due slot becomes a publish job when the platform's

@@ -1278,6 +1278,8 @@ test.describe('the retention control (D-117)', () => {
     // Review of #67 — retention is Settings → Data, as the prototype states it.
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/data`);
     await page.waitForLoadState('domcontentloaded');
+    // Gate 2b review (4c) — the retention control is behind Data's "More".
+    await page.getByTestId('data-more').locator('summary').click();
 
     const field = page.getByTestId('retention-days');
     await expect(field).toBeVisible();

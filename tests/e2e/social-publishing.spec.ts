@@ -112,7 +112,8 @@ test.describe('the publishing history', () => {
     page,
   }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    // Gate 2b review (4f) — the history is its own view, behind the section's "⋯".
+    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations?history=1`);
 
     const history = page.locator('[data-testid="publishing-list"]');
     await expect(history).toBeVisible();
@@ -145,13 +146,14 @@ test.describe('the publishing history', () => {
     );
     expect(refreshed.count, 'the seeded failed post must exist').toBeGreaterThan(0);
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    // Gate 2b review (4f) — the history is its own view, behind the section's "⋯".
+    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations?history=1`);
     await expect(page.locator('[data-testid^="retry-"]').first()).toBeVisible();
   });
 
   test('shows the attempt count against the configured ceiling', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations?history=1`);
     await expect(page.locator('[data-testid="publishing-list"]')).toContainText('Attempts');
   });
 });
@@ -159,7 +161,7 @@ test.describe('the publishing history', () => {
 test.describe('Arabic, right to left', () => {
   test('renders the screen in Arabic with the correct direction', async ({ page }) => {
     await signIn(page, 'ar');
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations?history=1`);
 
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     // `ar-SA`, not `ar`: the shell emits the REGIONAL tag the platform uses, and
@@ -180,7 +182,7 @@ test.describe('Arabic, right to left', () => {
 
   test('the whole page is inside the right-to-left flow', async ({ page }) => {
     await signIn(page, 'ar');
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations?history=1`);
     const direction = await page
       .locator('[data-testid="connected-accounts"]')
       .evaluate((node) => getComputedStyle(node).direction);
@@ -190,7 +192,7 @@ test.describe('Arabic, right to left', () => {
   test('no horizontal overflow at phone width in Arabic', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page, 'ar');
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations?history=1`);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );

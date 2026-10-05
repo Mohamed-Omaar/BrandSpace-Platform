@@ -17,6 +17,7 @@ import {
   type MessageKey,
 } from '../../../i18n/messages';
 import { SettingsFrame } from '../../../components/settings-frame';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   IntegrationsView,
@@ -66,6 +67,8 @@ export default async function IntegrationsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
+  // Gate 2b review (4f) — the publishing history is its own view, behind "⋯".
+  const showHistory = query['history'] === '1';
   const access = await requireWorkspacePage(locale, '/integrations');
   const { messageLocale } = access.session;
   const t = translator(messageLocale);
@@ -379,6 +382,24 @@ export default async function IntegrationsPage({
         locale={locale}
         permissionKeys={permissions}
         selected="connections"
+        more={
+          showHistory ? null : (
+            <MoreDisclosure
+              label={t('publishing.title')}
+              testId="integrations-more"
+              align="end"
+              closeOnPick
+            >
+              <Link
+                href={`/${locale}/integrations?history=1`}
+                className="bsp-btn bsp-sm bsp-ghost"
+                data-testid="integrations-more-history"
+              >
+                {t('publishing.title')}
+              </Link>
+            </MoreDisclosure>
+          )
+        }
       >
         {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
         {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
@@ -403,6 +424,7 @@ export default async function IntegrationsPage({
         ) : null}
         <IntegrationsView
           locale={locale}
+          showHistory={showHistory}
           t={t}
           connections={connectionRows}
           connectable={connectableProviders}
