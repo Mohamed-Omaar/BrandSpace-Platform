@@ -55,9 +55,9 @@ test.afterAll(async () => {
 });
 
 async function newFolder(page: Page, name: string): Promise<void> {
-  // Review of #67 — "New folder" is under the "⋯" beside Upload.
-  await page.getByTestId('assets-more').click();
-  await page.getByRole('button', { name: 'New folder' }).click();
+  // Round 4 (5.6) — "New folder" is in the library's Filters panel (no ⋯ beside Upload).
+  await page.getByTestId('assets-filters-toggle').click();
+  await page.getByTestId('assets-new-folder').click();
   const dialog = page.getByTestId('assets-folder-dialog');
   await dialog.getByTestId('assets-folder-name').fill(name);
   await dialog.getByRole('button', { name: 'Create' }).click();
@@ -86,9 +86,9 @@ test('a folder is a place: cards, a breadcrumb, and new folders made where you a
   await parentCard.click();
   await page.waitForURL(/[?&]folder=/);
   await expect(page.getByTestId('assets-crumb-current')).toHaveText(parent);
-  // Review of #67 — "New folder" is under the "⋯" beside Upload.
-  await page.getByTestId('assets-more').click();
-  await page.getByRole('button', { name: 'New folder' }).click();
+  // Round 4 (5.6) — "New folder" is in the library's Filters panel (no ⋯ beside Upload).
+  await page.getByTestId('assets-filters-toggle').click();
+  await page.getByTestId('assets-new-folder').click();
   const parentSelect = page.getByTestId('assets-folder-parent');
   await expect(parentSelect.locator('option:checked')).toHaveText(parent);
   await page.getByTestId('assets-folder-dialog').getByRole('button', { name: 'Cancel' }).click();

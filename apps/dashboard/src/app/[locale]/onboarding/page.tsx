@@ -28,7 +28,13 @@ import { SetupFooter, SetupFrame } from '../../../components/setup-frame';
 import { uploadSourceAction } from '../brand-brain/actions';
 import { connectAccountAction } from '../integrations/actions';
 import { ChannelMark } from '../calendar/prototype-calendar';
-import { createSetupBrandAction, reviewSetupCandidateAction, saveFirstGoalAction } from './actions';
+import {
+  createSetupBrandAction,
+  reviewSetupCandidateAction,
+  acceptAllSetupCandidatesAction,
+  saveFirstGoalAction,
+} from './actions';
+import { SetupUploadTile } from './upload-tile';
 import { IndustryField } from '../../../components/industry-field';
 import { SetupBrandLanguages } from '../../../components/setup-brand-languages';
 
@@ -502,7 +508,7 @@ export default async function OnboardingPage({
     const reading = sources.filter((source) => source.status === 'PROCESSING').length;
     head = { title: t('setup.wz.teach.title'), description: t('setup.wz.teach.body') };
     body = (
-      <section className="bsp-wz-body" data-testid="setup-learn">
+      <section className="bsp-wz-body bsp-wz-scroll" data-testid="setup-learn">
         {/*
           The prototype's two sources: "Read my website" is post-launch
           (D-468 (b)), so the one source is "Upload files" — the Brand Brain's
@@ -514,31 +520,19 @@ export default async function OnboardingPage({
               action={uploadSourceAction}
               encType="multipart/form-data"
               data-testid="setup-upload-form"
-              className="bsp-wz-tile"
+              className="bsp-wz-upform"
             >
               <input type="hidden" name="locale" value={locale} />
               <input type="hidden" name="brandId" value={brand.id} />
               <input type="hidden" name="area" value="" />
               <input type="hidden" name="returnTo" value="/onboarding" />
               <input type="hidden" name="step" value="learn" />
-              <span className="bsp-wz-tile-t">{t('setup.wz.teach.upload')}</span>
-              <span className="bsp-wz-tile-s">{t('setup.wz.teach.kinds')}</span>
-              <span className="bsp-wz-tile-acts">
-                <input
-                  type="file"
-                  name="file"
-                  required
-                  aria-label={t('bb.uploadChoose')}
-                  data-testid="setup-upload-input"
-                />
-                <button
-                  type="submit"
-                  className="bsp-wz-btn bsp-wz-sec bsp-wz-sm"
-                  data-testid="setup-upload-submit"
-                >
-                  {t('bb.upload')}
-                </button>
-              </span>
+              <SetupUploadTile
+                title={t('setup.wz.teach.upload')}
+                kinds={t('setup.wz.teach.kinds')}
+                chooseLabel={t('bb.uploadChoose')}
+                sendingLabel={t('setup.wz.teach.uploading')}
+              />
               {sources.length > 0 ? (
                 <span className="bsp-wz-tile-s" data-testid="setup-sources">
                   {sources
@@ -562,6 +556,20 @@ export default async function OnboardingPage({
               <span>
                 {t('setup.wz.teach.understood').replace('{count}', String(candidates.length))}
               </span>
+              {/* Round 4 (4.3) — the prototype's "Accept all": each fact's own Accept, in turn. */}
+              <form action={acceptAllSetupCandidatesAction}>
+                <input type="hidden" name="locale" value={locale} />
+                {candidates.map((candidate) => (
+                  <input key={candidate.id} type="hidden" name="candidateId" value={candidate.id} />
+                ))}
+                <button
+                  type="submit"
+                  className="bsp-wz-btn bsp-wz-pur bsp-wz-all"
+                  data-testid="setup-accept-all"
+                >
+                  {t('setup.wz.teach.acceptAll')}
+                </button>
+              </form>
             </div>
             {candidates.map((candidate) => {
               const hidden = (decision: string) => (

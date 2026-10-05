@@ -1676,6 +1676,54 @@ permission sits behind "All permissions", by description. The rail marks Team th
 sees (WCAG 1.4.13). The full status of every route and surface is in
 `docs/R4-PARITY-INVENTORY.md`.
 
+### 6.3.53 Review of #68, round 4 — the Studio, the owner's decisions, the screen fixes (Gate 2a)
+
+**Studio (Step 3).** The first input — words, a hashtag, Design, When — creates the
+draft through the same `createManualDraftAction` (same permission, audit, no credit),
+and a DRAFT, CHANGES_REQUESTED or FAILED post saves as it is edited through the same
+`saveVariantAction` ("Saves as you type" / "Saving…" / "Saved just now"). An APPROVED,
+IN_REVIEW or SCHEDULED post still waits for "Save edit": a save there revokes an
+approval, withdraws a review or unschedules. "Save draft" is gone; "Send for review"
+is the bar's action. One visit is one draft (the idempotency key is the visit's).
+Opening the Studio and leaving creates nothing; a template's words alone create
+nothing. All four formats are always drawn — dimmed with the reason on a new post,
+locked with the reason on a saved one. A scheduled post shows its date and time and
+moves in place through the calendar's own reschedule. The preview is the prototype's
+card (avatar, handle, ···, a 4:5 frame, the corner Draft mark) and draws a cover
+headline. A cost quote is shown with one decimal, rounded up
+(`docs/BILLING-AND-CREDITS.md` §13.1). The server saves as typed only a DRAFT,
+CHANGES_REQUESTED or FAILED post: an autosave that arrives for a post already in
+review, approved or scheduled is refused, so it can never withdraw or revoke anything.
+
+**Owner decisions (Step 4).** Sign-up has one password field with Show and no zone
+question (the browser's zone is posted; onboarding step 1 says it and "Change" opens it).
+Settings has no Brands row with one brand (the brand profile is one link away from
+General). Teach has "Accept all" — each fact's own Accept, in turn. The rail names the
+person (email only without a name) with Latin initials. Home's reach change is "—"
+unless the previous 28 days were measured from their first day; Home's credits are
+Billing's balance, "of N · resets D" and the bar. Media's storage card shows the
+meter's exact bytes, the file count and, under a limit, the bar in four parts — Photos,
+Videos, AI images, Brand files — regrouped from the rows the meter sums (display only).
+
+**Screen fixes (Step 5).** Approvals: titles and meta wrap; the self-approval reason is
+where the verdicts would be; "Preview on every channel", the notes and "Open in Studio"
+are under the review's one "⋯"; the queue has no "⋯" (the rules are Settings →
+Approvals). Automations: no line above the first rule; the switch turns in place; the
+sub-line is "Listens to … · Ran N times · last …" (the rule's name is the line's
+hover title); the prototype's trigger titles. The rule dialog is set at the
+prototype's normal line height so it fits, and "Only if" draws its four chips before
+a trigger (three waiting until "When" is chosen). Teach: the prototype's upload tile
+(no native control), and a long step scrolls inside the card with its footer on
+screen. Media: no "⋯" beside Upload — "New folder" and the brand kit are in the
+Filters panel. Brand Brain: the brand's notes are under its "⋯". Performance: what
+changed / why / what to try lead the Insights tab; the posts table shows covers.
+Copilot: "Working on" wraps. Settings → General: the save bar is the column's last
+row, after the note, and stays on the frame's bottom edge to the end of the page.
+
+**Recorded interpretations for the owner to correct.** "Extra row" on Approvals is read
+as the two rows under the cover; "extra ⋯" as the queue's. The Business recap shows
+every configured industry; the suite's configuration holds two.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

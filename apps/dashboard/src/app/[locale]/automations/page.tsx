@@ -49,6 +49,7 @@ import Link from 'next/link';
 import { AutomationForm, type AutomationFormInitial } from './automation-form';
 import { RuleDialog } from './rule-dialog';
 import { RuleMenu } from './rule-menu';
+import { RuleToggle } from './rule-toggle';
 import { MoreDisclosure } from '../../../components/more-disclosure';
 import {
   confirmAutomationRunAction,
@@ -787,7 +788,8 @@ export default async function AutomationsPage({
                         ↻
                       </span>
                       <span className="bsp-au-main">
-                        <span className="bsp-au-line">
+                        {/* The rule's own name: its hover title (Round 4, 5.2), never repeated in the line. */}
+                        <span className="bsp-au-line" title={rule.name}>
                           <b>{t(`automations.trigger.${rule.triggerType}` as MessageKey)}</b>{' '}
                           <span className="bsp-au-arrow" aria-hidden="true">
                             →
@@ -795,9 +797,10 @@ export default async function AutomationsPage({
                           <b>{t(`automations.action.${rule.actionType}` as MessageKey)}</b>
                         </span>
                         {/*
-                          Review of #67 — the prototype's sub-line: what the
-                          rule listens to and how often it has run, from the
-                          run rows. The rule's own name and brand stay, after.
+                          Review of #67 / Round 4 (5.2) — the prototype's
+                          sub-line, exactly: "Listens to … · Ran N times · last
+                          …", then its badges. Not the rule's title again, and
+                          not the brand (the rail says which brand is in view).
                         */}
                         <span className="bsp-au-meta">
                           <span data-testid={`automation-listens-${rule.id}`}>
@@ -810,14 +813,6 @@ export default async function AutomationsPage({
                           </span>
                           <span aria-hidden="true">·</span>
                           <span data-testid={`automation-ran-${rule.id}`}>{ranLine(rule.id)}</span>
-                          <span aria-hidden="true">·</span>
-                          <span>{rule.name}</span>
-                          {brandNames.get(rule.brandId) ? (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span>{brandNames.get(rule.brandId)}</span>
-                            </>
-                          ) : null}
                           {asksFirst(rule.actionType) ? (
                             <span className="bsp-xstatus bsp-warn">
                               {t('automations.asksFirst')}
@@ -847,30 +842,30 @@ export default async function AutomationsPage({
                           </span>
                         ) : null}
                       </span>
-                      <span
-                        className={`bsp-xstatus${rule.enabled ? '' : ' bsp-neu'}`}
-                        data-testid={`automation-state-${rule.id}`}
-                      >
-                        {t(rule.enabled ? 'automations.on' : 'automations.off')}
-                      </span>
+                      {!mayManage ? (
+                        <span
+                          className={`bsp-xstatus${rule.enabled ? '' : ' bsp-neu'}`}
+                          data-testid={`automation-state-${rule.id}`}
+                        >
+                          {t(rule.enabled ? 'automations.on' : 'automations.off')}
+                        </span>
+                      ) : null}
                       {mayManage ? (
                         <>
-                          <form action={toggleAutomationAction} className="bsp-au-tglf">
-                            <input type="hidden" name="locale" value={locale} />
-                            <input type="hidden" name="ruleId" value={rule.id} />
-                            <input type="hidden" name="enabled" value={rule.enabled ? '0' : '1'} />
-                            <button
-                              type="submit"
-                              className="bsp-tgl"
-                              aria-pressed={rule.enabled}
-                              aria-label={`${t(
-                                rule.enabled ? 'automations.disable' : 'automations.enable',
-                              )}: ${rule.name}`}
-                              data-testid={`automation-toggle-${rule.id}`}
-                            >
-                              <span className="bsp-tgl-k" aria-hidden="true" />
-                            </button>
-                          </form>
+                          {/* Round 4 (5.2) — the switch turns in place: no reload, no reset. */}
+                          <RuleToggle
+                            locale={locale}
+                            ruleId={rule.id}
+                            enabled={rule.enabled}
+                            label={{
+                              on: `${t('automations.disable')}: ${rule.name}`,
+                              off: `${t('automations.enable')}: ${rule.name}`,
+                            }}
+                            onLabel={t('automations.on')}
+                            offLabel={t('automations.off')}
+                            failedLabel={t('automations.toggleFailed')}
+                            action={toggleAutomationAction}
+                          />
                           {/*
                             THE ROW'S ⋯ MENU — Edit, and Delete, which still asks
                             twice (P6-12). Native disclosures, so both work
@@ -1229,6 +1224,7 @@ export default async function AutomationsPage({
               name: t('automations.nameLabel'),
               when: t('automations.form.when'),
               onlyIf: t('automations.form.onlyIf'),
+              chooseWhenFirst: t('automations.form.chooseWhenFirst'),
               then: t('automations.form.then'),
               preview: t('automations.form.preview'),
               previewEmpty: t('automations.form.previewEmpty'),

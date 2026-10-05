@@ -825,6 +825,14 @@ export default async function BrandBrainPage({
     ? await lookDataFor({ session: access.session, locale, brandId: brand.id })
     : null;
 
+  const brandNotes = (
+    <NotesPanel
+      locale={locale}
+      subject={{ type: 'BRAND', brandId: brand.id }}
+      returnPath={`/${locale}/brand-brain`}
+      highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
+    />
+  );
   return (
     <WorkspaceShell
       /*
@@ -860,6 +868,7 @@ export default async function BrandBrainPage({
         <style data-testid="brand-look-fonts" dangerouslySetInnerHTML={{ __html: look.css }} />
       ) : null}
       <BrandBrainView
+        notes={typeof query['thread'] === 'string' ? null : brandNotes}
         locale={locale}
         brandId={brand.id}
         brandName={brand.name}
@@ -926,23 +935,16 @@ export default async function BrandBrainPage({
         `packages/brand-brain` in either direction.
       */}
       {/*
-        Review of #67, round 2 — the prototype's Brand Brain draws no notes
-        section, so the brand's notes are behind this disclosure at the foot of
-        the page; a link to one thread (`?thread=`) opens it.
+        Review of #67, round 2 / Round 4 (5.6) — the prototype's Brand Brain
+        draws no notes, so the brand's notes are under the head's "⋯" (passed
+        to the view). A link to one thread (`?thread=`) opens them here, open.
       */}
-      <details
-        className="bsp-bb-notes"
-        open={typeof query['thread'] === 'string'}
-        data-testid="brand-brain-notes"
-      >
-        <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>
-        <NotesPanel
-          locale={locale}
-          subject={{ type: 'BRAND', brandId: brand.id }}
-          returnPath={`/${locale}/brand-brain`}
-          highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
-        />
-      </details>
+      {typeof query['thread'] === 'string' ? (
+        <details className="bsp-bb-notes" open data-testid="brand-brain-notes">
+          <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>
+          {brandNotes}
+        </details>
+      ) : null}
     </WorkspaceShell>
   );
 }

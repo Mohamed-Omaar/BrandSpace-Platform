@@ -254,8 +254,9 @@ test.describe('D-288 · the reviewer sees the post and its conversation', () => 
       await signIn(page, f.brandId);
       await page.goto(`${DASHBOARD_BASE_URL}/en/approvals?review=${approvalId}`);
       const subject = page.getByTestId('approvals-review-subject');
-      // Review of #67, round 3 — the per-channel previews and the post's notes
-      // are compact disclosures under the cover card.
+      // Round 4 (5.1) — the per-channel previews and the post's notes are under
+      // the review's one "⋯" (the prototype draws neither row).
+      await subject.getByTestId('approvals-review-more').click();
       await subject.getByTestId('review-channels-more').locator('summary').click();
       await expect(subject.getByTestId('review-preview-instagram')).toContainText(
         'The words under review',

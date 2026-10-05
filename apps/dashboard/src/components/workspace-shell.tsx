@@ -447,7 +447,18 @@ export async function WorkspaceShell({
   const railPath = activePath ?? railPathFromRequest(requestPath);
   const localeHref = (target: string): string =>
     switchLocalePath(requestPath, target, `/${target}${railPath ?? '/overview'}`);
-  const identity = customerName ?? workspaceName;
+  /*
+   * ROUND 4 (4.4) — THE PERSON'S NAME, EVERYWHERE. The rail's card names the
+   * signed-in person from their own account, whatever a page passed: the name,
+   * and the email only when there is no name. The initials are Latin in both
+   * languages — from the name when it is written in Latin letters, else from
+   * the email — so the avatar reads the same in `ar` and `en`.
+   */
+  const me = await getCustomer().catch(() => null);
+  const personName = me?.name?.trim() ?? '';
+  const personEmail = me?.email ?? customerName;
+  const identity = personName || personEmail || workspaceName;
+  const latinInitialsFrom = personName && /[A-Za-z]/.test(personName) ? personName : personEmail;
 
   const counts = await topbarCounts();
   const topbar = topbarModel({ locale, permissionKeys, requestPath, counts });
@@ -485,9 +496,7 @@ export async function WorkspaceShell({
     .filter((part): part is string => part !== null)
     .join(' · ');
   // The greeting's name is the person's own first name, never their email.
-  const firstName = copilotLink
-    ? greetingName((await getCustomer().catch(() => null))?.name)
-    : null;
+  const firstName = copilotLink ? greetingName(me?.name) : null;
 
   /*
    * THE BRAND PROFILE ROW NEEDS A BRAND *AND* THE PERMISSION TO READ ONE:
@@ -512,9 +521,7 @@ export async function WorkspaceShell({
    * (`.bmenu`: "Workspaces · 1/2", "+ New workspace  1/2", the note).
    */
   const activeWorkspaceId =
-    brandContext && brandContext.brands.length < 2
-      ? ((await getCustomer().catch(() => null))?.activeWorkspaceId ?? null)
-      : null;
+    brandContext && brandContext.brands.length < 2 ? (me?.activeWorkspaceId ?? null) : null;
   const switcher = activeWorkspaceId
     ? await businessSwitcherModel(locale, activeWorkspaceId)
     : null;
@@ -831,9 +838,9 @@ export async function WorkspaceShell({
     <PrototypeUserCard
       label={t('nav.account')}
       name={identity}
-      email={customerName}
+      email={personName ? personEmail : undefined}
       role={customerRoleName(roleName)}
-      initials={initialsFrom(identity)}
+      initials={initialsFrom(latinInitialsFrom ?? identity)}
     >
       {typeof counts.credits === 'number' && permissionKeys.includes('billing.read') ? (
         <PrototypeMenuLink

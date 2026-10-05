@@ -150,7 +150,12 @@ export default async function BrandProfilePage({
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
 
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="brand">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="brand"
+      >
         {data === null ? (
           /*
            * THE TWO HONEST ABSENCES, told apart (D-191). "Choose one" and

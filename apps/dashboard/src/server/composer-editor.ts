@@ -212,13 +212,23 @@ export function lifecycleIndex(status: string): number {
  * Kept as a string end to end: the estimate crosses the wire as one because a
  * `bigint` has no JSON form, and turning it into a `number` here would put a
  * financial figure through a float for the sake of dividing by a thousand.
+ *
+ * ROUND 4 (3.6) — THE DISPLAY ROUNDING RULE (docs/BILLING-AND-CREDITS.md):
+ * at most ONE decimal, rounded AWAY FROM ZERO to the next tenth, and a
+ * trailing `.0` dropped — `369` milli reads "0.4", `1050` "1.1", `2000` "2".
+ * Up, so a quoted cost is never shown below what it is. PRESENTATION ONLY:
+ * the milli-credit figure, the reservation and the ledger are untouched.
  */
 export function formatCredits(milli: string): string {
   const negative = milli.startsWith('-');
-  const digits = (negative ? milli.slice(1) : milli).padStart(4, '0');
-  const whole = digits.slice(0, -3).replace(/^0+(?=\d)/, '');
-  const fraction = digits.slice(-3).replace(/0+$/, '');
-  return `${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`;
+  const magnitude = BigInt(
+    /^\d+$/.test(negative ? milli.slice(1) : milli) ? (negative ? milli.slice(1) : milli) : '0',
+  );
+  // Tenths of a credit, rounded away from zero: 100 milli is one tenth.
+  const tenths = (magnitude + 99n) / 100n;
+  const whole = (tenths / 10n).toString();
+  const fraction = (tenths % 10n).toString();
+  return `${negative && tenths > 0n ? '-' : ''}${whole}${fraction === '0' ? '' : `.${fraction}`}`;
 }
 
 /**

@@ -13,7 +13,8 @@ import { runPresentation } from '../../apps/dashboard/src/server/automation-run-
 
 const APPROVED: Record<string, readonly [string, string]> = {
   'automations.trigger.REVIEW_WAITING_24H': [
-    'When a post waits for review for over 24 hours',
+    // Round 4 (5.2): the prototype's title ('A post waits for review over 24 hours').
+    'When a post waits for review over 24 hours',
     'عند انتظار منشور للمراجعة أكثر من 24 ساعة',
   ],
   'automations.trigger.CAMPAIGN_STARTED': ['When a campaign starts', 'عند بدء حملة'],

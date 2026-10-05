@@ -4276,10 +4276,29 @@ span.bsp-cal-hol {
 }
 /* The queue row keeps to the prototype's two lines; the rest of the line is
    still read out (the row's link carries all of it). */
+/* Round 4 (5.1) — the row's lines wrap as the prototype's do ("… · assigned
+   to Sara" on a second line), never cut with an ellipsis. */
 .bsp-apr-row .bsp-apr-meta {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+/* Round 4 (5.1) — the self-approval reason where the verdicts would be, in the
+   prototype's `.p-warn` pair (`#fff3cc` / `#7a5600`). */
+.bsp-apr-blocked {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff3cc;
+  color: #7a5600;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+/* The review's one "⋯" holds the channel previews and the notes: wider, and
+   scrolling inside rather than past the frame. */
+.bsp-apr-side-col .bsp-fdis-panel {
+  inline-size: 340px;
+  max-block-size: 70vh;
+  overflow: auto;
 }
 /* The line under the verdicts: `font-size: 12px; color: #6a6a72`. */
 .bsp-apr-hint {
@@ -4861,6 +4880,51 @@ span.bsp-cal-hol {
 }
 .bsp-med-sto-bar > span {
   height: 100%;
+  background: #7935fe;
+}
+/* Round 4 (4.7) — the bar in four parts and their legend (`Main.dc.html`
+   lines 1248–1250): `STO_C = #7935fe, #eb6834, #1baf7a, #2a78d6`. */
+.bsp-med-sto-mid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.bsp-med-sto-bar > span[data-cat='videos'],
+.bsp-med-sto-dot[data-cat='videos'] {
+  background: #eb6834;
+}
+.bsp-med-sto-bar > span[data-cat='ai'],
+.bsp-med-sto-dot[data-cat='ai'] {
+  background: #1baf7a;
+}
+.bsp-med-sto-bar > span[data-cat='brand'],
+.bsp-med-sto-dot[data-cat='brand'] {
+  background: #2a78d6;
+}
+.bsp-med-sto-cats {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.bsp-med-sto-cats > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #4d4c53;
+}
+.bsp-med-sto-cats b {
+  color: #111114;
+}
+/* `color: #8a8a92` → `#6a6a72` for contrast, as the card's notes. */
+.bsp-med-sto-n {
+  color: #6a6a72;
+}
+.bsp-med-sto-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
   background: #7935fe;
 }
 /* The card's third column: "Videos (largest)" and "Plan & storage →". */
@@ -6793,6 +6857,11 @@ button.bsp-chip.bsp-bb-q {
   flex-shrink: 0;
   background: linear-gradient(135deg, #efe7ff, #fff4c7);
 }
+/* Round 4 (5.8) — a real cover: the same 36px, 10px radius, cropped to fill. */
+img.bsp-pf-art {
+  display: block;
+  object-fit: cover;
+}
 .bsp-pf-rowacts {
   display: flex;
   justify-content: flex-end;
@@ -6910,12 +6979,12 @@ button.bsp-chip.bsp-bb-q {
   font-size: 16px;
   font-weight: 800;
 }
+/* Round 4 (5.7) — "Working on: …" is never cut: the prototype's line
+   (`font-size: 12px; color: #6a6a72`) wraps, it has no ellipsis. */
 .bsp-cp-t > span {
   font-size: 12px;
   color: #6a6a72;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .bsp-btn.bsp-cp-full {
   color: #55555c;
@@ -7347,6 +7416,16 @@ button.bsp-chip.bsp-bb-q {
   padding: 14px 20px;
   border-block-start: 1px solid #f3f3f5;
 }
+/* Round 4 (5.2) — no line above the first rule: the rules divide each other,
+   not the card's top edge. */
+.bsp-au-rule:first-child {
+  border-block-start: 0;
+}
+/* A refused switch says so beside itself (`font-size: 11.5px`, the danger red). */
+.bsp-au-tgl-failed {
+  font-size: 11.5px;
+  color: #b83245;
+}
 .bsp-xicon.bsp-au-ico {
   inline-size: 36px;
   block-size: 36px;
@@ -7573,6 +7652,25 @@ button.bsp-chip.bsp-bb-q {
 }
 .bsp-au-dialog:focus {
   outline: none;
+}
+/* Round 4 (5.3) — THE DIALOG FITS THE FRAME. The prototype's text is set at the
+   browser's normal line height; at the product's 1.5 every tile grew and Save
+   fell below the frame. */
+.bsp-au-dialog {
+  line-height: normal;
+}
+.bsp-au-iff {
+  display: grid;
+  gap: 10px;
+}
+/* Named for assistive technology, not drawn ("Optional condition"). */
+.bsp-au-sr {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .bsp-au-dialog-h {
   display: flex;
@@ -8726,6 +8824,25 @@ button.bsp-chip.bsp-bb-q {
 .bsp-wz.bsp-wz-solo {
   margin-block-start: 0;
 }
+/* Round 4 (5.4) — THE CARD NEVER OUTGROWS THE FRAME, AND ITS FOOTER STAYS.
+   The prototype's card is `max-height: 100%` of its stage; here a long step
+   (Teach, with many facts) scrolls inside its own body, so Back, Skip and
+   Continue are always on screen. Scoped to the scrolling step: a step with a
+   searchable list keeps its popover unclipped. */
+@media (min-width: 768px) {
+  /* The phone layout scrolls the page itself, as every other phone screen does. */
+  .bsp-wz.bsp-wz-solo:has(> .bsp-wz-scroll) {
+    max-block-size: calc(100vh - 64px);
+  }
+  .bsp-wz-solo > .bsp-wz-scroll {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    overflow: auto;
+  }
+  .bsp-wz-solo:has(> .bsp-wz-scroll) > :not(.bsp-wz-scroll) {
+    flex-shrink: 0;
+  }
+}
 .bsp-wz-brand {
   display: flex;
   align-items: center;
@@ -8997,6 +9114,16 @@ button.bsp-chip.bsp-bb-q {
 .bsp-wz-more[open] > summary {
   margin-block-end: 12px;
 }
+/* Round 4 (4.1) — "Change" beside the detected zone: the "More" summary's own look. */
+.bsp-wz-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  color: #5312c4;
+}
 /* The Brand step: `grid-template-columns: 1.3fr 1fr; gap: 20px`. */
 .bsp-wz-brandgrid {
   display: grid;
@@ -9163,6 +9290,57 @@ button.bsp-chip.bsp-bb-q {
 }
 .bsp-wz-facts-h > span {
   flex-grow: 1;
+}
+/* Round 4 (5.4) — THE PROTOTYPE'S UPLOAD TILE (`Auth.dc.html` line 150): the
+   `.chip` — `border: 1px solid #e4e4e8; border-radius: 14px; font-weight: 700;
+   min-block-size: 46px` — laid out `flex-direction: column; align-items:
+   flex-start; gap: 4px; padding: 14px`, the kinds `12.5px / 600 / #6a6a72`. */
+.bsp-wz-upform {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-wz-up {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid #e4e4e8;
+  background: #fff;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  min-block-size: 46px;
+  text-align: start;
+  cursor: pointer;
+}
+.bsp-wz-up:hover {
+  border-color: #c9b5ff;
+}
+.bsp-wz-up:has(.bsp-wz-up-input:focus-visible) {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bsp-wz-up-s {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #6a6a72;
+}
+/* The native control is in the form, named and focusable, never drawn. */
+.bsp-wz-up-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+/* Round 4 (4.3) — "Accept all": `min-block-size: 38px; padding: 6px 12px; font-size: 13px` (Auth.dc.html line 154). */
+.bsp-wz-btn.bsp-wz-all {
+  min-block-size: 38px;
+  padding: 6px 12px;
+  font-size: 13px;
 }
 .bsp-wz-fact {
   display: flex;
@@ -9848,6 +10026,11 @@ select.bs-select.bsp-chevron {
   font-size: 12px;
   cursor: pointer;
 }
+/* Round 4 (5.3) — a condition chip drawn before "When" is chosen waits, dimmed. */
+.bsp-chip.bsp-au-chip[data-waiting='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .bsp-au-chip > .bsp-au-radio {
   position: absolute;
   inset: 0;
@@ -10214,4 +10397,64 @@ select.bs-select.bsp-chevron {
   .bsp-pg {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/*
+ * Round 4 (3.5) — THE STUDIO'S POST PREVIEW, from `Main.dc.html` lines
+ * 442–446: a white card in a 1px `#ececef` border with a 16px radius; the
+ * identity row `padding: 9px 12px; gap: 8px`, a 28px avatar on the brand's
+ * pastel (`#fff1c2 → #fde8ec → #ece6ff`, ink `#1d1a12`, 11px/800), the handle
+ * 12.5px/700, `···` 800 `#6a6a72`; and the DRAFT mark in the picture's corner
+ * (`rgba(17,17,20,.72)`, 10px/800, `.08em`, radius 6, `3px 7px`).
+ */
+.bsp-pv-card {
+  border: 1px solid #ececef;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+}
+.bsp-pv-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+}
+.bsp-pv-av {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #fff1c2 0%, #fde8ec 55%, #ece6ff 100%);
+  color: #1d1a12;
+  font-size: 11px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.bsp-pv-handle {
+  font-size: 12.5px;
+  font-weight: 700;
+  flex-grow: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bsp-pv-dots {
+  font-weight: 800;
+  color: #6a6a72;
+}
+.bsp-pv-draft {
+  position: absolute;
+  top: 10px;
+  inset-inline-end: 10px;
+  z-index: 1;
+  background: rgba(17, 17, 20, 0.72);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 6px;
+  padding: 3px 7px;
 }

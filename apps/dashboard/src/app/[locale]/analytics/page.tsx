@@ -19,6 +19,7 @@ import {
   type MetricAbsenceReason,
 } from '@brandspace/analytics';
 import { requireWorkspacePage } from '../../../server/customer-context';
+import { firstPictures } from '../../../server/first-pictures';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
@@ -534,6 +535,44 @@ export default async function AnalyticsPage({
     ...data.reachByProvider.map((row) => (row.value === null ? 0 : Number(row.value))),
   );
   const postMetaById = new Map(data.postMeta.map((row) => [row.id, row] as const));
+  /*
+   * Round 4 (5.8) — THE POSTS TABLE SHOWS EACH POST'S COVER: its first
+   * picture, through the same expiring inline grant Approvals uses
+   * (`firstPictures`), for a member who may read the library. A post with no
+   * picture keeps the prototype's art square.
+   */
+  const topItemIds = data.topPosts.map((post) => post.contentItemId);
+  const firstAsset = new Map<string, string>();
+  if (topItemIds.length > 0) {
+    const variants = await inAnalytics(workspace.workspaceId, async (services) =>
+      services.db.contentVariant.findMany({
+        where: {
+          contentItemId: { in: topItemIds },
+          ...brandScopeFilter(workspace.brandScope),
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { contentItemId: true, assetIds: true },
+      }),
+    ).catch(() => []);
+    for (const variant of variants) {
+      const id = variant.assetIds[0];
+      if (id && !firstAsset.has(variant.contentItemId)) firstAsset.set(variant.contentItemId, id);
+    }
+  }
+  const covers = await firstPictures({
+    locale,
+    workspaceId: workspace.workspaceId,
+    actor: {
+      userId: session.customer.userId,
+      permissionKeys: workspace.permissionKeys,
+      brandScope: workspace.brandScope,
+    },
+    assetIds: [...firstAsset.values()],
+  }).catch(() => new Map());
+  const coverOf = (itemId: string) => {
+    const asset = firstAsset.get(itemId);
+    return asset ? covers.get(asset) : undefined;
+  };
   const engagementPosts = [...data.postEngagements.values()];
   const pillars = pillarTotals(
     engagementPosts.map((post) => ({
@@ -554,6 +593,146 @@ export default async function AnalyticsPage({
     })
     .sort((a, b) => Number(b.rateMilli - a.rateMilli));
   const campaignMax = Math.max(1, ...campaigns.map((row) => Number(row.rateMilli)));
+
+  const story = (
+    <div className="bsp-pf-story">
+      <section className="bsp-xcard bsp-pf-card" data-testid="analytics-what-changed">
+        <h2 className="bsp-sech">{t('analytics.story.changed')}</h2>
+        {changes.length === 0 && !data.shift && explained.notableChanges.length === 0 ? (
+          <p className="bsp-pf-muted" data-testid="analytics-nothing-changed">
+            {compare ? t('analytics.story.nothingChanged') : t('analytics.story.noComparison')}
+          </p>
+        ) : (
+          <ul className="bsp-pf-list">
+            {changes.map((change) => (
+              <li key={change.metricKey} data-testid={`analytics-change-${change.metricKey}`}>
+                {t(change.changeMilli > 0 ? 'analytics.story.rose' : 'analytics.story.fell')
+                  .replace('{metric}', t(`analytics.metric.${change.metricKey}` as MessageKey))
+                  .replace('{change}', percent.format(Math.abs(change.changeMilli) / 1_000))
+                  .replace('{days}', number.format(days))}
+              </li>
+            ))}
+            {data.shift ? (
+              <li data-testid="analytics-shift">
+                <span
+                  className={`bsp-xstatus ${data.shift.direction === 'above' ? '' : 'bsp-warn'}`}
+                >
+                  {t(`analytics.shift.${data.shift.direction}` as MessageKey)}
+                </span>{' '}
+                {t('analytics.shift.body')
+                  .replace('{metric}', t(`analytics.metric.${data.shift.metricKey}` as MessageKey))
+                  .replace('{day}', day.format(data.shift.periodStart))
+                  .replace('{observed}', number.format(Number(data.shift.observedValue)))
+                  .replace('{baseline}', number.format(Number(data.shift.baselineValue)))
+                  .replace('{periods}', number.format(data.shift.baselinePeriods))
+                  .replace('{deviation}', percent.format(data.shift.deviationMilli / 1_000))
+                  .replace('{threshold}', percent.format(data.shift.thresholdMilli / 1_000))}
+              </li>
+            ) : null}
+            {topPost ? (
+              <li data-testid="analytics-top-post">
+                {t('analytics.story.topPost')
+                  .replace('{title}', topPost.title ?? t('publishing.untitled'))
+                  .replace('{value}', number.format(Number(topPost.value)))}
+              </li>
+            ) : null}
+            {explained.notableChanges.map((line, index) => (
+              <li key={`n${index}`} dir="auto">
+                {pickText(line.text, locale)}
+                {cites(line.evidenceRefs)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="bsp-xcard bsp-pf-card" data-testid="analytics-why">
+        <h2 className="bsp-sech">{t('analytics.story.why')}</h2>
+        {explained.claims.length > 0 || explained.summary ? (
+          <>
+            {explained.summary ? (
+              <p className="bsp-pf-text" dir="auto">
+                {pickText(explained.summary, locale)}
+              </p>
+            ) : null}
+            <ul className="bsp-pf-list">
+              {explained.claims.map((line, index) => (
+                <li key={index} dir="auto">
+                  {pickText(line.text, locale)}
+                  {cites(line.evidenceRefs)}
+                </li>
+              ))}
+            </ul>
+            <p className="bsp-pf-muted">{t('analytics.story.correlation')}</p>
+          </>
+        ) : (
+          <>
+            <p className="bsp-pf-muted">{t('analytics.story.noExplanation')}</p>
+            {mayExplain ? (
+              <span className="bsp-pf-acts">
+                <ExplainForm
+                  locale={locale}
+                  brandId={brand.id}
+                  days={days}
+                  compare={compare}
+                  label={t('analytics.explain')}
+                  testId="analytics-explain-shift"
+                />
+                <span className="bsp-pf-muted">{t('analytics.explainHint')}</span>
+              </span>
+            ) : null}
+          </>
+        )}
+      </section>
+
+      <section className="bsp-xcard bsp-pf-card" data-testid="analytics-next">
+        <span className="bsp-pf-cardh">
+          <h2 className="bsp-sech">{t('analytics.story.try')}</h2>
+          {workspace.permissionKeys.includes('copilot.use') ? (
+            <CopilotLink
+              href={copilotHref(locale, 'analytics')}
+              className="bsp-btn bsp-sm bsp-ghost bsp-pf-link"
+              data-testid="analytics-ask-copilot"
+            >
+              {t('home.recommended.giveToCopilot')}
+            </CopilotLink>
+          ) : null}
+        </span>
+        {explained.recommendations.length === 0 && trySteps.length === 0 ? (
+          <p className="bsp-pf-muted">{t('analytics.story.nothingToTry')}</p>
+        ) : (
+          <ul className="bsp-pf-list">
+            {explained.recommendations.map((line, index) => (
+              <li key={`r${index}`} className="bsp-pf-try" data-testid={`analytics-try-${index}`}>
+                <span dir="auto">
+                  {pickText(line.text, locale)}
+                  {cites(line.evidenceRefs)}
+                </span>
+                {data.explanation ? (
+                  <Link
+                    href={`/${locale}/intelligence?insight=${data.explanation.id}`}
+                    className="bsp-pf-a"
+                  >
+                    {t('home.recommended.viewEvidence')}
+                  </Link>
+                ) : null}
+              </li>
+            ))}
+            {trySteps.map((step) => (
+              <li key={step.key} className="bsp-pf-step" data-testid={`analytics-next-${step.key}`}>
+                <span>{t(`analytics.next.${step.key}` as MessageKey)}</span>
+                {step.href ? (
+                  <Link href={`/${locale}${step.href}`} className="bsp-btn bsp-sm bsp-sec">
+                    {t(`analytics.next.${step.key}.action` as MessageKey)}
+                  </Link>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
 
   return (
     <WorkspaceShell
@@ -988,7 +1167,19 @@ export default async function AnalyticsPage({
                   return (
                     <div key={post.contentItemId} className="bsp-pf-tr">
                       <span className="bsp-pf-post">
-                        <span className="bsp-pf-art" aria-hidden="true" />
+                        {(() => {
+                          const cover = coverOf(post.contentItemId);
+                          return cover?.kind === 'image' ? (
+                            <img
+                              className="bsp-pf-art"
+                              src={cover.src}
+                              alt=""
+                              data-testid={`analytics-post-cover-${post.contentItemId}`}
+                            />
+                          ) : (
+                            <span className="bsp-pf-art" aria-hidden="true" />
+                          );
+                        })()}
                         <span className="bsp-pf-post-t">
                           <span dir="auto" className="bsp-pf-post-n">
                             {post.title ?? post.contentItemId}
@@ -1090,179 +1281,23 @@ export default async function AnalyticsPage({
               </section>
             ) : null}
             {/*
-              D-293 — what changed, why it might matter, what to try. Review of
-              #67: the prototype's Numbers tab opens on the KPI cards, so the
-              story, which it does not draw, follows everything it does. Every
-              line is a measurement or a line of a stored explanation whose
-              claims were checked.
+              D-293 — what changed, why it might matter, what to try. Round 4
+              (5.6): the prototype's Numbers tab does not draw these three, so
+              they are on the Insights tab beside it — the page's own existing
+              way to them. A member who cannot read insights keeps them here.
             */}
-            <div className="bsp-pf-story">
-              <section className="bsp-xcard bsp-pf-card" data-testid="analytics-what-changed">
-                <h2 className="bsp-sech">{t('analytics.story.changed')}</h2>
-                {changes.length === 0 && !data.shift && explained.notableChanges.length === 0 ? (
-                  <p className="bsp-pf-muted" data-testid="analytics-nothing-changed">
-                    {compare
-                      ? t('analytics.story.nothingChanged')
-                      : t('analytics.story.noComparison')}
-                  </p>
-                ) : (
-                  <ul className="bsp-pf-list">
-                    {changes.map((change) => (
-                      <li
-                        key={change.metricKey}
-                        data-testid={`analytics-change-${change.metricKey}`}
-                      >
-                        {t(change.changeMilli > 0 ? 'analytics.story.rose' : 'analytics.story.fell')
-                          .replace(
-                            '{metric}',
-                            t(`analytics.metric.${change.metricKey}` as MessageKey),
-                          )
-                          .replace('{change}', percent.format(Math.abs(change.changeMilli) / 1_000))
-                          .replace('{days}', number.format(days))}
-                      </li>
-                    ))}
-                    {data.shift ? (
-                      <li data-testid="analytics-shift">
-                        <span
-                          className={`bsp-xstatus ${data.shift.direction === 'above' ? '' : 'bsp-warn'}`}
-                        >
-                          {t(`analytics.shift.${data.shift.direction}` as MessageKey)}
-                        </span>{' '}
-                        {t('analytics.shift.body')
-                          .replace(
-                            '{metric}',
-                            t(`analytics.metric.${data.shift.metricKey}` as MessageKey),
-                          )
-                          .replace('{day}', day.format(data.shift.periodStart))
-                          .replace('{observed}', number.format(Number(data.shift.observedValue)))
-                          .replace('{baseline}', number.format(Number(data.shift.baselineValue)))
-                          .replace('{periods}', number.format(data.shift.baselinePeriods))
-                          .replace('{deviation}', percent.format(data.shift.deviationMilli / 1_000))
-                          .replace(
-                            '{threshold}',
-                            percent.format(data.shift.thresholdMilli / 1_000),
-                          )}
-                      </li>
-                    ) : null}
-                    {topPost ? (
-                      <li data-testid="analytics-top-post">
-                        {t('analytics.story.topPost')
-                          .replace('{title}', topPost.title ?? t('publishing.untitled'))
-                          .replace('{value}', number.format(Number(topPost.value)))}
-                      </li>
-                    ) : null}
-                    {explained.notableChanges.map((line, index) => (
-                      <li key={`n${index}`} dir="auto">
-                        {pickText(line.text, locale)}
-                        {cites(line.evidenceRefs)}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-
-              <section className="bsp-xcard bsp-pf-card" data-testid="analytics-why">
-                <h2 className="bsp-sech">{t('analytics.story.why')}</h2>
-                {explained.claims.length > 0 || explained.summary ? (
-                  <>
-                    {explained.summary ? (
-                      <p className="bsp-pf-text" dir="auto">
-                        {pickText(explained.summary, locale)}
-                      </p>
-                    ) : null}
-                    <ul className="bsp-pf-list">
-                      {explained.claims.map((line, index) => (
-                        <li key={index} dir="auto">
-                          {pickText(line.text, locale)}
-                          {cites(line.evidenceRefs)}
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="bsp-pf-muted">{t('analytics.story.correlation')}</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="bsp-pf-muted">{t('analytics.story.noExplanation')}</p>
-                    {mayExplain ? (
-                      <span className="bsp-pf-acts">
-                        <ExplainForm
-                          locale={locale}
-                          brandId={brand.id}
-                          days={days}
-                          compare={compare}
-                          label={t('analytics.explain')}
-                          testId="analytics-explain-shift"
-                        />
-                        <span className="bsp-pf-muted">{t('analytics.explainHint')}</span>
-                      </span>
-                    ) : null}
-                  </>
-                )}
-              </section>
-
-              <section className="bsp-xcard bsp-pf-card" data-testid="analytics-next">
-                <span className="bsp-pf-cardh">
-                  <h2 className="bsp-sech">{t('analytics.story.try')}</h2>
-                  {workspace.permissionKeys.includes('copilot.use') ? (
-                    <CopilotLink
-                      href={copilotHref(locale, 'analytics')}
-                      className="bsp-btn bsp-sm bsp-ghost bsp-pf-link"
-                      data-testid="analytics-ask-copilot"
-                    >
-                      {t('home.recommended.giveToCopilot')}
-                    </CopilotLink>
-                  ) : null}
-                </span>
-                {explained.recommendations.length === 0 && trySteps.length === 0 ? (
-                  <p className="bsp-pf-muted">{t('analytics.story.nothingToTry')}</p>
-                ) : (
-                  <ul className="bsp-pf-list">
-                    {explained.recommendations.map((line, index) => (
-                      <li
-                        key={`r${index}`}
-                        className="bsp-pf-try"
-                        data-testid={`analytics-try-${index}`}
-                      >
-                        <span dir="auto">
-                          {pickText(line.text, locale)}
-                          {cites(line.evidenceRefs)}
-                        </span>
-                        {data.explanation ? (
-                          <Link
-                            href={`/${locale}/intelligence?insight=${data.explanation.id}`}
-                            className="bsp-pf-a"
-                          >
-                            {t('home.recommended.viewEvidence')}
-                          </Link>
-                        ) : null}
-                      </li>
-                    ))}
-                    {trySteps.map((step) => (
-                      <li
-                        key={step.key}
-                        className="bsp-pf-step"
-                        data-testid={`analytics-next-${step.key}`}
-                      >
-                        <span>{t(`analytics.next.${step.key}` as MessageKey)}</span>
-                        {step.href ? (
-                          <Link href={`/${locale}${step.href}`} className="bsp-btn bsp-sm bsp-sec">
-                            {t(`analytics.next.${step.key}.action` as MessageKey)}
-                          </Link>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            </div>
+            {mayReadInsights ? null : story}
           </>
         ) : (
           /*
            * INSIGHTS — the prototype's two-column cards (lines 738–751): a
            * glyph and the finding's state, what it is, where it rests, and its
            * actions — open it with its evidence, save it as a learning.
+           * Round 4 (5.6): what changed, why it might matter, what to try
+           * lead it, moved here from under the numbers.
            */
           <>
+            {story}
             {mayExplain ? (
               <section className="bsp-card bsp-pf-explain">
                 <span className="bsp-pf-muted">

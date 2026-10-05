@@ -233,7 +233,9 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await page.getByTestId('automation-name').fill(name);
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByTestId('automation-rules')).toContainText(name);
+  await expect(page.getByTestId('automation-rules').getByTitle(name, { exact: true })).toHaveCount(
+    1,
+  );
   const stored = await withPlatformPrisma((prisma) =>
     prisma.automationRule.findFirstOrThrow({
       where: { workspaceId: ws.workspaceId, name },

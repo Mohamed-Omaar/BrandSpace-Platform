@@ -313,7 +313,9 @@ test.describe('B12 + G13 (a) · automations v2', () => {
     await form.getByTestId('automation-hour').selectOption('7');
     await form.getByTestId('automation-edit-submit').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'AUTOMATION_UPDATED');
-    await expect(page.getByTestId('automation-rules')).toContainText('Early note');
+    await expect(
+      page.getByTestId('automation-rules').getByTitle('Early note', { exact: true }),
+    ).toHaveCount(1);
     // Still disabled: editing never switches a rule on.
     // Review of #67 — the prototype's state chip reads On / Off.
     await expect(page.getByTestId('automation-rules')).toContainText('Off');

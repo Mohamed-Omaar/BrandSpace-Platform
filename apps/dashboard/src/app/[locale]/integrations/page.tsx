@@ -374,7 +374,12 @@ export default async function IntegrationsPage({
       customerName={session.customer.name ?? session.customer.email}
       permissionKeys={permissions}
     >
-      <SettingsFrame locale={locale} permissionKeys={permissions} selected="connections">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={permissions}
+        selected="connections"
+      >
         {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
         {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
         {retryableAfterReconnect > 0 ? (

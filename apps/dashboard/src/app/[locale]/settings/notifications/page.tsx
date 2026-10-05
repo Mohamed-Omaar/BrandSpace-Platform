@@ -61,6 +61,7 @@ export default async function NotificationSettingsPage({
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
       <SettingsFrame
+        brandSource={workspace}
         locale={locale}
         permissionKeys={workspace.permissionKeys}
         selected="notifications"

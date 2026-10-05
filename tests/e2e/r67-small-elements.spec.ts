@@ -101,7 +101,8 @@ test.describe('review of #67 · the prototype’s small elements, from real data
     await expect(summary).toContainText('The rule');
     await expect(summary).toContainText('Choose when it runs and what it does.');
     await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
-    await expect(summary).toContainText('When content is approved');
+    // Round 4 (5.2): the prototype's wording.
+    await expect(summary).toContainText('When a post is approved');
   });
 
   test('the bell’s “Mark all as read” marks the reader’s notes read', async ({ page }) => {

@@ -567,19 +567,25 @@ async function build(
          * reach and impressions with a gentle weekly rhythm, engagements at
          * the channel's rate, and new followers a day. Relative to the seed's
          * own day, so the Performance screen's default period is always full.
+         *
+         * ROUND 4 (4.5) — 56 DAYS, so the previous 28 are complete and Home's
+         * change compares two whole periods. The last 28 days are the same
+         * figures as before (the same formula over the same days). This file
+         * only — the parity fixture, never a customer workspace.
          */
         const [base, rate, followers] = CHANNEL_FIGURES[provider] ?? [300, 3, 2];
         const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
-        for (let back = 28; back >= 1; back -= 1) {
+        for (let back = 56; back >= 1; back -= 1) {
           const periodStart = new Date(today.getTime() - back * DAY);
           const periodEnd = new Date(periodStart.getTime() + DAY);
-          const wave = 1 + 0.18 * Math.sin((28 - back) / 2.2) + (28 - back) * 0.006;
+          const step = 28 - back;
+          const wave = 1 + 0.18 * Math.sin(step / 2.2) + step * 0.006;
           const reach = Math.round(base * wave);
           const readings: ReadonlyArray<readonly [string, number]> = [
             ['reach', reach],
             ['impressions', Math.round(reach * 1.4)],
             ['engagements', Math.round((reach * rate) / 100)],
-            ['follower_change', followers + ((28 - back) % 4)],
+            ['follower_change', followers + (((step % 4) + 4) % 4)],
           ];
           for (const [metricKey, value] of readings) {
             await db.metricObservation.create({

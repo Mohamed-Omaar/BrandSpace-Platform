@@ -68,6 +68,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
       permissionKeys={workspace.permissionKeys}
     >
       <SettingsFrame
+        brandSource={workspace}
         locale={locale}
         permissionKeys={workspace.permissionKeys}
         selected="permissions"

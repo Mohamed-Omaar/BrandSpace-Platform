@@ -534,7 +534,7 @@ test.describe('automations', () => {
 
     const rules = page.getByTestId('automation-rules');
     await expect(rules).toBeVisible();
-    await expect(rules).toContainText(name);
+    await expect(rules.getByTitle(name, { exact: true })).toHaveCount(1);
   });
 
   test('AN OLDER SCHEDULED RULE IS STILL EDITABLE, with its hour and days', async ({ page }) => {
@@ -566,17 +566,21 @@ test.describe('automations', () => {
     await automationDone(page, 'AUTOMATION_UPDATED');
 
     const rules = page.getByTestId('automation-rules');
-    await expect(rules).toContainText(name);
+    await expect(rules.getByTitle(name, { exact: true })).toHaveCount(1);
     await expect(page.getByTestId(`automation-older-${ruleId}`)).toBeVisible();
 
     // AND IT ENABLES, which is the second, deliberate act.
-    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    const row = page
+      .locator('[data-testid="automation-rules"] li')
+      .filter({ has: page.getByTitle(name, { exact: true }) })
+      .first();
+    // Round 4 (5.2): the switch turns in place — no redirect, no toast.
     await row.getByRole('button', { name: /enable/i }).click();
-    await automationDone(page, 'AUTOMATION_UPDATED');
     // The row's switch is on, and now offers to switch it off.
     await expect(
       page
-        .locator('[data-testid="automation-rules"] li', { hasText: name })
+        .locator('[data-testid="automation-rules"] li')
+        .filter({ has: page.getByTitle(name, { exact: true }) })
         .first()
         .getByRole('button', { name: /disable/i }),
     ).toHaveAttribute('aria-pressed', 'true');
@@ -604,15 +608,21 @@ test.describe('automations', () => {
     await page.getByTestId('automation-edit-submit').click();
     await automationDone(page, 'AUTOMATION_UPDATED');
 
-    await expect(page.getByTestId('automation-rules')).toContainText(name);
+    await expect(
+      page.getByTestId('automation-rules').getByTitle(name, { exact: true }),
+    ).toHaveCount(1);
 
-    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    const row = page
+      .locator('[data-testid="automation-rules"] li')
+      .filter({ has: page.getByTitle(name, { exact: true }) })
+      .first();
+    // Round 4 (5.2): the switch turns in place — no redirect, no toast.
     await row.getByRole('button', { name: /enable/i }).click();
-    await automationDone(page, 'AUTOMATION_UPDATED');
     // The row's switch is on, and now offers to switch it off.
     await expect(
       page
-        .locator('[data-testid="automation-rules"] li', { hasText: name })
+        .locator('[data-testid="automation-rules"] li')
+        .filter({ has: page.getByTitle(name, { exact: true }) })
         .first()
         .getByRole('button', { name: /disable/i }),
     ).toHaveAttribute('aria-pressed', 'true');
@@ -742,14 +752,20 @@ test.describe('automations', () => {
 
     // IT WAS ACCEPTED, and it enables — the engine validated field, operator
     // and value kind, and none of them was refused.
-    await expect(page.getByTestId('automation-rules')).toContainText(name);
-    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    await expect(
+      page.getByTestId('automation-rules').getByTitle(name, { exact: true }),
+    ).toHaveCount(1);
+    const row = page
+      .locator('[data-testid="automation-rules"] li')
+      .filter({ has: page.getByTitle(name, { exact: true }) })
+      .first();
+    // Round 4 (5.2): the switch turns in place — no redirect, no toast.
     await row.getByRole('button', { name: /enable/i }).click();
-    await automationDone(page, 'AUTOMATION_UPDATED');
     // The row's switch is on, and now offers to switch it off.
     await expect(
       page
-        .locator('[data-testid="automation-rules"] li', { hasText: name })
+        .locator('[data-testid="automation-rules"] li')
+        .filter({ has: page.getByTitle(name, { exact: true }) })
         .first()
         .getByRole('button', { name: /disable/i }),
     ).toHaveAttribute('aria-pressed', 'true');
@@ -780,14 +796,20 @@ test.describe('automations', () => {
     await page.getByTestId('automation-submit').click();
     await automationDone(page, 'AUTOMATION_CREATED');
 
-    await expect(page.getByTestId('automation-rules')).toContainText(name);
-    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    await expect(
+      page.getByTestId('automation-rules').getByTitle(name, { exact: true }),
+    ).toHaveCount(1);
+    const row = page
+      .locator('[data-testid="automation-rules"] li')
+      .filter({ has: page.getByTitle(name, { exact: true }) })
+      .first();
+    // Round 4 (5.2): the switch turns in place — no redirect, no toast.
     await row.getByRole('button', { name: /enable/i }).click();
-    await automationDone(page, 'AUTOMATION_UPDATED');
     // The row's switch is on, and now offers to switch it off.
     await expect(
       page
-        .locator('[data-testid="automation-rules"] li', { hasText: name })
+        .locator('[data-testid="automation-rules"] li')
+        .filter({ has: page.getByTitle(name, { exact: true }) })
         .first()
         .getByRole('button', { name: /disable/i }),
     ).toHaveAttribute('aria-pressed', 'true');
@@ -830,7 +852,9 @@ test.describe('automations', () => {
     await chooseHarmlessAction(page);
     await page.getByTestId('automation-submit').click();
     await automationDone(page, 'AUTOMATION_CREATED');
-    await expect(page.getByTestId('automation-rules')).toContainText(name);
+    await expect(
+      page.getByTestId('automation-rules').getByTitle(name, { exact: true }),
+    ).toHaveCount(1);
   });
 
   test('A LIST OPERATOR POSTS A REAL ARRAY, FROM A MULTIPLE PICKER', async ({ page }) => {
@@ -862,14 +886,20 @@ test.describe('automations', () => {
     // ACCEPTED — the engine refuses a list operator whose value is not a
     // non-empty array of members of the closed set, so reaching the list at all
     // is the proof that a real array was posted.
-    await expect(page.getByTestId('automation-rules')).toContainText(name);
-    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    await expect(
+      page.getByTestId('automation-rules').getByTitle(name, { exact: true }),
+    ).toHaveCount(1);
+    const row = page
+      .locator('[data-testid="automation-rules"] li')
+      .filter({ has: page.getByTitle(name, { exact: true }) })
+      .first();
+    // Round 4 (5.2): the switch turns in place — no redirect, no toast.
     await row.getByRole('button', { name: /enable/i }).click();
-    await automationDone(page, 'AUTOMATION_UPDATED');
     // The row's switch is on, and now offers to switch it off.
     await expect(
       page
-        .locator('[data-testid="automation-rules"] li', { hasText: name })
+        .locator('[data-testid="automation-rules"] li')
+        .filter({ has: page.getByTitle(name, { exact: true }) })
         .first()
         .getByRole('button', { name: /disable/i }),
     ).toHaveAttribute('aria-pressed', 'true');
@@ -1121,7 +1151,10 @@ test.describe('P6-12 · copilot and automations', () => {
     await page.getByTestId('automation-submit').click();
     await automationDone(page, 'AUTOMATION_CREATED');
 
-    const row = page.locator('[data-testid="automation-rules"] li', { hasText: name }).first();
+    const row = page
+      .locator('[data-testid="automation-rules"] li')
+      .filter({ has: page.getByTitle(name, { exact: true }) })
+      .first();
     const confirmDelete = row.getByRole('button', { name: /delete this rule/i });
     // Not reachable in one click: the destructive button is behind the row's ⋯
     // menu (D-468) and, inside it, a second disclosure.

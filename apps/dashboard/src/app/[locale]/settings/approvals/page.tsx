@@ -93,7 +93,12 @@ export default async function ApprovalSettingsPage({
       {ok && statusMessage(ok, locale) && (
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="approvals">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="approvals"
+      >
         <Card testId="approvals-policy">
           <SectionHeader
             title={t('approvals.policyTitle')}

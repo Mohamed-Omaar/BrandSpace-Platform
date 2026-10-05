@@ -483,7 +483,12 @@ export default async function MembersPage({
       customerName={session.customer.name ?? session.customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="members">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="members"
+      >
         {error && <Banner tone="error">{statusMessage(error, locale, ref)}</Banner>}
         {ok && statusMessage(ok, locale) && (
           <Banner tone="success">{statusMessage(ok, locale)}</Banner>

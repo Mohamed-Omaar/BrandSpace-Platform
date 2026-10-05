@@ -1,5 +1,7 @@
 import type React from 'react';
 import { notFound } from 'next/navigation';
+import { dayLabel, localWhenLabel } from '../../../../server/prototype-dates';
+import { rescheduleContentAction } from '../../calendar/actions';
 import {
   CONTENT_TOOLS,
   DEFAULT_POST_TIME,
@@ -700,6 +702,40 @@ export default async function ComposePage({
         })
       : null;
   /*
+   * ROUND 4 (3.3) — THE PUBLISH TIME, AS A TIME. A post on the calendar shows
+   * its slot's own wall clock ("Oct 16 · 09:00"), never "Scheduled", and the
+   * Studio's panel moves it in place through the calendar's own reschedule.
+   * A ★ day the calendar proposed shows as that day.
+   */
+  const liveSlot = draft
+    ? await inWorkspace(workspace.workspaceId, async ({ db }) =>
+        db.calendarSlot.findFirst({
+          where: {
+            workspaceId: workspace.workspaceId,
+            contentItemId: draft.id,
+            status: { in: ['PLANNED', 'SCHEDULED'] },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, scheduledLocalTime: true },
+        }),
+      )
+    : null;
+  const publishTime = liveSlot
+    ? {
+        label: localWhenLabel(liveSlot.scheduledLocalTime, locale, now) ?? '',
+        slotId: liveSlot.id,
+        date: liveSlot.scheduledLocalTime.slice(0, 10),
+        time: liveSlot.scheduledLocalTime.slice(11, 16),
+      }
+    : plannedDate
+      ? {
+          label: dayLabel(new Date(`${plannedDate.date}T12:00:00Z`), locale, 'UTC', now),
+          slotId: null,
+          date: plannedDate.date,
+          time: null,
+        }
+      : null;
+  /*
    * ITEM 9 (D-332 amended) — A FAILED POST: what the Publishing screen would
    * say about it. Its failed jobs past their lateness deadline carry the late
    * message (the account wording when an account failure caused it); a post
@@ -1068,6 +1104,7 @@ export default async function ComposePage({
         campaigns={campaigns}
         mediaOptions={allMedia}
         carriedMedia={carried}
+        openOn={single('open') ?? null}
         plannedDate={plannedDate?.date ?? null}
         plannedFor={plannedFor}
         expiredChannels={expiredChannels}
@@ -1147,6 +1184,7 @@ export default async function ComposePage({
             maySpendCredits(workspace.permissionKeys, 'content.edit') && !composerDraft?.readOnly,
         }}
         scheduling={scheduling}
+        publishTime={publishTime}
         failed={failed}
         creativeFormats={CREATIVE_FORMATS.map((format) => ({
           key: format.key,
@@ -1163,6 +1201,7 @@ export default async function ComposePage({
           uploadMedia: uploadComposerMediaAction,
           createManualDraft: createManualDraftAction,
           scheduleFromStudio: scheduleFromStudioAction,
+          reschedule: rescheduleContentAction,
           saveAsTemplate: saveDraftAsTemplateAction,
           keepFactChange: keepFactChangeAction,
           listCampaignOptions: listCampaignOptionsAction,
@@ -1230,6 +1269,7 @@ const EDITOR_KEYS = [
   'editor.schedule.date',
   'editor.schedule.time',
   'editor.schedule.submit',
+  'editor.schedule.move',
   'editor.schedule.todayHint',
   'editor.template.save',
   'editor.template.name',
@@ -1378,6 +1418,13 @@ const COMPOSER_KEYS = [
   'studio.moreFormats',
   'studio.captionFirst',
   'studio.notSaved',
+  'studio.autosave',
+  'studio.formatUnavailable',
+  'studio.formatUnavailableOne',
+  'studio.formatLocked',
+  'common.listSeparator',
+  'studio.saving',
+  'studio.saveFailed',
   'studio.whenAfterSave',
   'create.mode.idea',
   'create.mode.repurpose',

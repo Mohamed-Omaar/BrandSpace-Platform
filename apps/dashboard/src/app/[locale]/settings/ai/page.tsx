@@ -81,7 +81,12 @@ export default async function AiSettingsPage({
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="ai">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="ai"
+      >
         <Card testId="ai-settings">
           <SectionHeader title={t('aiSettings.title')} description={t('aiSettings.body')} />
           {brands.length === 0 ? (

@@ -52,6 +52,24 @@ export function compactCount(value: number): string {
  * baseline. From the analytics layer's own change (parts per mille), which is
  * already null when either side is missing or the baseline is zero.
  */
+/**
+ * ROUND 4 (4.5) — A CHANGE ONLY AGAINST A COMPLETE PREVIOUS PERIOD.
+ *
+ * The owner saw "+3321%": a workspace whose data began a few days into the
+ * previous 28 compared a full month with a handful of days. The change is
+ * shown only when the previous window was measured FROM ITS FIRST DAY (its
+ * series has a value on day one); otherwise it is "—", never a percentage.
+ * Presentation only: the analytics figures themselves are unchanged.
+ */
+export function comparableChange(
+  changeMilli: number | null,
+  previousPoints: readonly (number | null)[],
+): number | null {
+  if (changeMilli === null) return null;
+  const first = previousPoints[0];
+  return first === undefined || first === null ? null : changeMilli;
+}
+
 export function deltaText(changeMilli: number | null): {
   readonly text: string;
   readonly tone: 'up' | 'down' | 'none';

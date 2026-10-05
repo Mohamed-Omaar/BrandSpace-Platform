@@ -314,7 +314,12 @@ test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; s
     // Review of #67 — the chip opens the Studio itself, the day stated there
     // and as its publish time; the day travels with the other ways to start.
     await expect(page.getByTestId('content-composer')).toBeVisible();
-    await expect(page.getByTestId('composer-when')).toContainText(day);
+    // Round 4 (3.3): the day in the shared date style ("Oct 8"), not its ISO form.
+    await expect(page.getByTestId('composer-when')).toContainText(
+      new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(
+        new Date(`${day}T00:00:00Z`),
+      ),
+    );
     await expect(page.getByTestId('create-mode-idea')).toHaveAttribute(
       'href',
       new RegExp(`date=${day}`),
@@ -944,33 +949,30 @@ test.describe('G5 / Q22 · a time-zone change keeps local times, and says what i
 });
 
 test.describe('G8 / Q16 · sign-up, reset and a new workspace from inside the app', () => {
-  test('a refused sign-up comes back with the name, email and time zone — never the password', async ({
+  test('a refused sign-up comes back with the name and email — never the password', async ({
     page,
   }) => {
     const email = `e2e-draft-${randomUUID().slice(0, 8)}@example.local`;
     await page.goto(`${DASHBOARD_BASE_URL}/en/sign-up`);
     await page.fill('#name', 'Draft Keeper');
     await page.fill('#email', email);
-    await page.fill('#timezone', 'Africa/Cairo');
-    await page.press('#timezone', 'Enter');
+    // Round 4 (4.1): one password field, no zone question (the browser's zone).
+    await expect(page.locator('#password-confirm')).toHaveCount(0);
+    await expect(page.locator('#timezone')).toHaveCount(0);
+    await expect(page.getByTestId('signup-timezone')).not.toHaveValue('');
     // The browser's own length check is lifted so the SERVER refuses the
     // password — the refusal this feature is about.
     await page.evaluate(() => {
-      for (const id of ['password', 'password-confirm']) {
-        document.getElementById(id)?.removeAttribute('minlength');
-      }
+      document.getElementById('password')?.removeAttribute('minlength');
     });
     await page.fill('#password', 'short');
-    await page.fill('#password-confirm', 'short');
     const terms = page.locator('[data-testid="accept-terms-of-service"] input[type="checkbox"]');
     if ((await terms.count()) > 0) await terms.check();
     await page.click('[data-testid="signup-submit"]');
     await page.waitForURL(/\/en\/sign-up\?error=/);
     await expect(page.locator('#name')).toHaveValue('Draft Keeper');
     await expect(page.locator('#email')).toHaveValue(email);
-    await expect(page.locator('#timezone')).toHaveValue(/Cairo/);
     await expect(page.locator('#password')).toHaveValue('');
-    await expect(page.locator('#password-confirm')).toHaveValue('');
     // The email is not in the address bar.
     expect(page.url()).not.toContain(encodeURIComponent(email));
   });

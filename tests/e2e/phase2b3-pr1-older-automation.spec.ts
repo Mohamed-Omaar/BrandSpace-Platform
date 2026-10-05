@@ -103,7 +103,7 @@ test.describe('Phase 2B-3 PR 1 · older automations', () => {
     // --- English, left to right ---------------------------------------------
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
     const rules = page.getByTestId('automation-rules');
-    await expect(rules).toContainText('Old anomaly note');
+    await expect(rules.getByTitle('Old anomaly note', { exact: true })).toHaveCount(1);
     await expect(rules).toContainText('When an anomaly is detected');
     await expect(page.getByTestId(`automation-older-${older}`)).toContainText('(older automation)');
     await expect(page.getByTestId(`automation-older-${current}`)).toHaveCount(0);

@@ -578,7 +578,8 @@ test('10 · the post is submitted, the reviewer sees its media, and it is approv
   await expect(link).toBeVisible();
   await clickAndSettle(link, page);
 
-  // Review of #67, round 3 — every channel's version is under the cover card.
+  // Round 4 (5.1) — every channel's version is under the review's one "⋯".
+  await page.getByTestId('approvals-review-more').click();
   await page.getByTestId('review-channels-more').locator('summary').click();
   const review = page.getByTestId('review-variants');
   await expect(review).toBeVisible();

@@ -126,7 +126,12 @@ export default async function DataControlsPage({
       {ok && statusMessage(ok, locale) && (
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="data">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="data"
+      >
         <Card testId="data-controls">
           <SectionHeader title={t('settings.data')} description={t('data.subtitle')} />
           <ul

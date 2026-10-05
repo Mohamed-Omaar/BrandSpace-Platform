@@ -203,12 +203,8 @@ test.describe('the owner connects Resend, and a customer signup uses it', () => 
     await signup.locator('#name').fill('Email Journey Customer');
     await signup.locator('#email').fill(address);
     await signup.locator('#password').fill('An-Adequately-Long-Passphrase-9');
-    await signup.locator('#password-confirm').fill('An-Adequately-Long-Passphrase-9');
-    await signup.locator('#timezone').fill('Asia/Riyadh');
-    await signup.locator('#timezone').press('Enter');
-    await expect(signup.locator('input[type="hidden"][name="timezone"]')).toHaveValue(
-      'Asia/Riyadh',
-    );
+    // Round 4 (4.1): one password field, and the browser's zone is posted.
+    await expect(signup.locator('input[type="hidden"][name="timezone"]')).not.toHaveValue('');
     for (const box of await signup.locator('input[type="checkbox"][required]').all()) {
       await box.check();
     }

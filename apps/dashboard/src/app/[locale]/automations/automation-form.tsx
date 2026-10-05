@@ -34,6 +34,13 @@ import { colorTokens, inputStyle, spacingTokens, typographyTokens } from '@brand
  * took the Copilot screen down at render, and it is not repeated here.
  */
 
+/** Round 4 (5.3) — the prototype's three condition chips, shown before a trigger. */
+const PREVIEW_CONDITION_FIELDS: readonly string[] = [
+  'content.channels',
+  'content.campaignId',
+  'content.type',
+];
+
 export interface TriggerOption {
   readonly type: string;
   readonly label: string;
@@ -97,6 +104,8 @@ export interface AutomationFormLabels {
   /** D-468 — the prototype builder's three steps, its read-back and its pills. */
   readonly when: string;
   readonly onlyIf: string;
+  /** Round 4 (5.3) — why a condition chip waits before a trigger is chosen. */
+  readonly chooseWhenFirst?: string | undefined;
   readonly then: string;
   readonly preview: string;
   /** The summary box before a trigger is chosen. */
@@ -583,7 +592,8 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
       </div>
 
       <span className="bsp-lbl">2 · {props.labels.onlyIf}</span>
-      <div className="bsp-au-subb">
+      {/* Round 4 (5.3) — the chips sit straight under "Only if", as the prototype's. */}
+      <div className="bsp-au-iff">
         {keepConditions ? (
           <p style={caption} data-testid="automation-conditions-kept">
             {(props.labels.conditionsKept ?? '').replace(
@@ -604,7 +614,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
             }}
             data-testid="automation-condition"
           >
-            <legend style={caption}>{props.labels.conditionLegend}</legend>
+            <legend className="bsp-au-sr">{props.labels.conditionLegend}</legend>
             {/*
               ROUND 3 — THE PROTOTYPE'S CHIPS ("No condition", "Channel is",
               "Campaign is", …), one radio each: ONLY THE FIELDS THIS TRIGGER
@@ -619,32 +629,44 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
               className="bsp-au-chips"
               data-testid="automation-condition-field"
             >
-              {['', ...(trigger?.conditionFields ?? [])].map((name) => (
-                <label
-                  key={name || 'none'}
-                  className="bsp-chip bsp-au-chip"
-                  data-on={conditionField === name ? 'true' : undefined}
-                >
-                  <input
-                    type="radio"
-                    name="conditionField"
-                    value={name}
-                    checked={conditionField === name}
-                    className="bs-control bsp-au-radio"
-                    data-testid={`automation-condition-field-${name || 'none'}`}
-                    onChange={() => {
-                      setConditionField(name);
-                      // THE OPERATOR MUST NOT SURVIVE THE FIELD. `greater_than`
-                      // is legal on a count and meaningless on a provider;
-                      // carrying it across would post a pair the engine refuses.
-                      setConditionOperator('');
-                    }}
-                  />
-                  {name === ''
-                    ? props.labels.conditionNone
-                    : (props.conditionCatalogue[name]?.label ?? name)}
-                </label>
-              ))}
+              {/*
+                ROUND 4 (5.3) — THE FOUR CHIPS BEFORE A TRIGGER IS CHOSEN: the
+                prototype's "No condition · Channels · Campaign · Format" are
+                drawn at once. Until "When" is chosen the three fields wait,
+                dimmed and saying why — which fields are legal still depends on
+                the trigger, so none can be picked before it.
+              */}
+              {['', ...(trigger ? trigger.conditionFields : PREVIEW_CONDITION_FIELDS)].map(
+                (name) => (
+                  <label
+                    key={name || 'none'}
+                    className="bsp-chip bsp-au-chip"
+                    data-on={conditionField === name ? 'true' : undefined}
+                    data-waiting={!trigger && name !== '' ? 'true' : undefined}
+                    title={!trigger && name !== '' ? props.labels.chooseWhenFirst : undefined}
+                  >
+                    <input
+                      type="radio"
+                      name="conditionField"
+                      value={name}
+                      checked={conditionField === name}
+                      disabled={!trigger && name !== ''}
+                      className="bs-control bsp-au-radio"
+                      data-testid={`automation-condition-field-${name || 'none'}`}
+                      onChange={() => {
+                        setConditionField(name);
+                        // THE OPERATOR MUST NOT SURVIVE THE FIELD. `greater_than`
+                        // is legal on a count and meaningless on a provider;
+                        // carrying it across would post a pair the engine refuses.
+                        setConditionOperator('');
+                      }}
+                    />
+                    {name === ''
+                      ? props.labels.conditionNone
+                      : (props.conditionCatalogue[name]?.label ?? name)}
+                  </label>
+                ),
+              )}
             </div>
             {field === undefined ? null : (
               <>

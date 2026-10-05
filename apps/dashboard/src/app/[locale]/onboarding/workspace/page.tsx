@@ -134,6 +134,8 @@ export default async function CreateWorkspacePage({
             cityNone: t('settings.cityNone'),
             more: t('setup.wz.more'),
             zoneLine: t('setup.wz.business.zoneFromCountry'),
+            zoneDetected: t('setup.wz.business.zoneDetected'),
+            zoneChange: t('setup.wz.business.zoneChange'),
             saved: t('setup.wz.saved'),
           }}
           back={

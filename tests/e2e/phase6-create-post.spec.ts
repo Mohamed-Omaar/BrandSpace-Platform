@@ -60,9 +60,13 @@ test.describe('Create Post — the entry (§17)', () => {
       'href',
       /mode=repurpose/,
     );
-    // The prototype's two purple actions: "Write caption with AI" and Save draft.
-    await expect(page.getByTestId('content-write-manual')).toHaveClass(/bsp-pur/);
+    // "Write caption with AI" is purple. Round 4 (3.1): there is no Save draft —
+    // the words save themselves ("Saves as you type"), and the bar's action is
+    // the prototype's "Send for review", live once the draft exists.
     await expect(page.getByTestId('content-generate')).toHaveClass(/bsp-pur/);
+    await expect(page.getByTestId('content-write-manual')).toHaveCount(0);
+    await expect(page.getByTestId('composer-saved')).toHaveText('Saves as you type');
+    await expect(page.getByTestId('composer-send')).toBeDisabled();
 
     // No goal on a post the person writes word for word.
     await page.goto(compose('en', '?mode=write'));
@@ -276,11 +280,22 @@ test.describe('Create Post — the draft editor (§20-§22, §27)', () => {
     await expect(page.getByTestId('content-preview-instagram')).toContainText(
       'A caption typed just now.',
     );
-    await expect(page.getByTestId('editor-saved-instagram')).toHaveText('Unsaved changes');
-    // An AI edit starts from the SAVED words, so it waits for Save.
+    // Round 4 (3.1): a draft saves as you type — the bar says so, then that it did.
+    await expect(page.getByTestId('editor-saved-instagram')).toHaveText('Saving…');
+    // An AI edit starts from the SAVED words, so it waits for the save.
     await expect(
       page.locator('[data-testid="editor-ai-instagram"] [data-action="shorten"]'),
     ).toBeDisabled();
+    await expect(page.getByTestId('editor-saved-instagram')).toHaveText('Saved just now', {
+      timeout: 30_000,
+    });
+    const savedBody = await withPlatformPrisma((prisma) =>
+      prisma.contentVariant.findFirstOrThrow({
+        where: { contentItemId: itemId, platformKey: 'instagram' },
+        select: { body: true },
+      }),
+    );
+    expect(savedBody.body).toBe('A caption typed just now.');
 
     // The other platform's version is one tab away — and the keyboard gets there too.
     await page.getByTestId('variant-tab-instagram').focus();
@@ -319,6 +334,16 @@ test.describe('Create Post — the draft editor (§20-§22, §27)', () => {
     );
     const form = page.locator('[data-testid="content-variant"][data-platform="instagram"]');
     await form.locator('textarea').fill('Changed after approval.');
+    /*
+     * Round 4 (3.1): a DRAFT saves as you type — an approved post does NOT. A
+     * save here revokes the approval, which must never happen on a pause.
+     */
+    await page.waitForTimeout(2_000);
+    await expect(page.getByTestId('editor-saved-instagram')).toHaveText('Unsaved changes');
+    const untouched = await withPlatformPrisma((prisma) =>
+      prisma.contentItem.findUniqueOrThrow({ where: { id: itemId }, select: { status: true } }),
+    );
+    expect(untouched.status).toBe('APPROVED');
     await openStudioMore(page);
     await page.getByTestId('editor-save-instagram').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
@@ -546,8 +571,8 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     await page.goto(compose('en', `?mode=write&asset=${picture}`));
     await expect(page.getByTestId('content-carried-media')).toContainText(`creative-${tag}.png`);
 
+    // Round 4 (3.1): the words make the draft, after a pause — no button.
     await page.getByTestId('content-caption').fill(`Carried from Creative, ${tag}.`);
-    await page.getByTestId('content-write-manual').click();
     await page.waitForURL((url) => url.searchParams.get('attach') === picture, {
       timeout: 60_000,
     });

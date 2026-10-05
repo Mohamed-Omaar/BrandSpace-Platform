@@ -203,6 +203,8 @@ test.describe('D-287 · the Asset Library', () => {
     await signIn(page);
     await useBrand(page, loaded.customer.workspaceId, brandId);
     await page.goto(assets('en'));
+    // Round 4 (5.6) — the brand kit is in the library's Filters panel, off the main surface.
+    await page.getByTestId('assets-filters-toggle').click();
     const kit = page.getByTestId('assets-brand-kit');
     await expect(kit).toContainText(`Kit ${suffix} brand kit`);
     await expect(kit.getByTestId('assets-kit-palette')).toContainText('#7935FE');

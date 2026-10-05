@@ -98,3 +98,18 @@ export function generationKeyFor(ask: ComposerAsk, draftId: string | null): stri
 export function manualKeyFor(ask: ComposerAsk, campaignId: string): string {
   return `ui-manual:${digest([...sharedMaterial(ask), campaignId])}`;
 }
+
+/**
+ * ROUND 4 (3.1) — THE KEY FOR A STUDIO VISIT, which is how a draft is now made.
+ *
+ * The draft creates itself on the first meaningful input (the owner's
+ * autosave decision), so the ask is no longer a finished caption pressed
+ * once: it is a visit. One key per visit makes every trigger in it — words, a
+ * hashtag, Design, the time, a retried request — the SAME draft, and a new
+ * visit a NEW one. Keying on the caption instead would collapse two new posts
+ * that both start from an empty caption (Design first) into one old draft.
+ * `manualKeyFor` remains the derivation for a whole ask (its tests stand).
+ */
+export function visitKeyFor(visitId: string): string {
+  return `ui-manual:visit:${visitId}`;
+}

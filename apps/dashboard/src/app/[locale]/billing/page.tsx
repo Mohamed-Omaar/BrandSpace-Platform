@@ -303,7 +303,12 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
       customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="billing">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="billing"
+      >
         {/* A5/E6 — changing the plan or payment method is owner-only; say so
           once, where the buttons would be, instead of leaving them missing. */}
         {mayManage ? null : (

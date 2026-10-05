@@ -210,10 +210,11 @@ test.describe('the approval workflow', () => {
     // 3. The owner relaxes the brand's policy. This is the D-122 control
     //    surface, and it is gated on a permission only the owner and admin hold.
     //    The queue points to it; the rules themselves live in Settings (A8).
-    // Review of #67 — the link is under the queue's "⋯" (the prototype draws no card).
-    await page.getByTestId('approvals-more').click();
-    await expect(page.getByTestId('approvals-policy-link')).toBeVisible();
-    await page.getByTestId('approvals-policy-open').click();
+    // Round 4 (5.1) — the queue has no "⋯" (the prototype draws none): the
+    // rules are Settings → Approvals, reached from the Settings menu.
+    await expect(page.getByTestId('approvals-more')).toHaveCount(0);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
+    await page.getByTestId('settings-nav-approvals').click();
     await page.waitForURL(/\/en\/settings\/approvals$/);
     await expect(page.getByTestId('approvals-policy')).toBeVisible();
     const selfToggle = page.locator('[data-testid^="policy-self-"]').first();

@@ -108,9 +108,10 @@ test.describe('the Asset Library', () => {
     await openLibrary(page);
     const badge = page.getByTestId('assets-storage');
     await expect(badge).toBeVisible();
-    // Either a real "n GB of m GB" (the prototype's "3.1 GB of 50 GB") or an
-    // honest "Unlimited" — never a guess.
-    await expect(badge).toHaveText(/(\d+(\.\d+)?\s+GB\s+of\s+\d+\s+GB)|(Unlimited)/i);
+    // Either a real "n of m GB" (the prototype's "3.1 GB of 50 GB") or an
+    // honest "Unlimited" — never a guess. Round 4 (4.7): the used figure is the
+    // meter's exact bytes in the unit that fits ("412 MB of 5 GB · 8.1%").
+    await expect(badge).toHaveText(/(\d+(\.\d+)?\s+(B|KB|MB|GB|TB)\s*of\s+\d+\s+GB)|(Unlimited)/i);
   });
 
   test('takes an upload from the picker to a READY tile, through the worker', async ({ page }) => {
@@ -202,9 +203,9 @@ test.describe('the Asset Library', () => {
   test('creates a folder and filters by it', async ({ page }) => {
     await openLibrary(page);
     const folderName = `E2E folder ${Date.now()}`;
-    // Review of #67 — "New folder" is under the "⋯" beside Upload.
-    await page.getByTestId('assets-more').click();
-    await page.getByRole('button', { name: 'New folder' }).click();
+    // Round 4 (5.6) — "New folder" is in the library's Filters panel (no ⋯ beside Upload).
+    await page.getByTestId('assets-filters-toggle').click();
+    await page.getByTestId('assets-new-folder').click();
     const dialog = page.getByTestId('assets-folder-dialog');
     await dialog.getByTestId('assets-folder-name').fill(folderName);
     // SCOPED TO THE DIALOG. The top bar carries its own "Create" button, so an

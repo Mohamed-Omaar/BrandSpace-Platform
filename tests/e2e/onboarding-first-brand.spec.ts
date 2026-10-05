@@ -38,13 +38,9 @@ async function signUpVerifyAndSignIn(page: Page, locale = 'en'): Promise<string>
   await page.fill('#name', 'Onboarding Journey');
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
-  // P6-03a: sign-up now asks for the password twice. The confirmation is the
-  // customer's own check against a typo — the server validates the password
-  // itself and never reads this field — but it IS required, so a journey that
-  // skips it is a journey the browser will not submit.
-  await page.fill('#password-confirm', PASSWORD);
-  await page.fill('#timezone', 'Europe/London');
-  await page.press('#timezone', 'Enter');
+  // Round 4 (4.1): one password field (with Show), and no zone question — the
+  // browser's zone is posted and shown again on onboarding step 1.
+  await expect(page.getByTestId('signup-timezone')).not.toHaveValue('');
   await page.check('[data-testid="accept-terms-of-service"] input[type="checkbox"]');
   await page.click('[data-testid="signup-submit"]');
   await expect(page.locator('[data-testid="signup-sent"]')).toBeVisible();
@@ -175,7 +171,7 @@ test.describe('onboarding reaches a first real brand', () => {
         'utf8',
       ),
     });
-    await page.getByTestId('setup-upload-submit').click();
+    // Round 4 (5.4): the prototype's tile — choosing the file sends it; no button.
     await page.waitForURL(/step=learn/);
     await expect(page).toHaveURL(/ok=SOURCE_UPLOADED/);
     // Review of #67 — learning and reviewing are one step, Teach, still current.

@@ -264,7 +264,12 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
       customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="billing">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="billing"
+      >
         <BillingTabs locale={locale} current="usage" />
         {/*
         `.dashboard-grid { grid-template-columns: 1.25fr .75fr }` — the plan on

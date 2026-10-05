@@ -218,6 +218,7 @@ export function BrandBrainView({
   confident,
   copilotHref,
   profileHref,
+  notes = null,
   answered,
   totalQuestions,
   totalActiveItems,
@@ -262,6 +263,8 @@ export function BrandBrainView({
   copilotHref: string | null;
   /** D-298 (§11) — the brand's identity, one click from its knowledge; null without `brand.read`. */
   profileHref: string | null;
+  /** Round 4 (5.6) — the brand's notes, under the "⋯" rather than under the areas. */
+  notes?: React.ReactNode;
   /** Q19 — key questions answered across every area, and how many there are. No score. */
   answered: number;
   totalQuestions: number;
@@ -646,6 +649,12 @@ export function BrandBrainView({
                             </Link>
                           ) : null}
                         </div>
+                      ) : null}
+                      {notes ? (
+                        <details className="bsp-bb-notes" data-testid="brand-brain-notes">
+                          <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>
+                          {notes}
+                        </details>
                       ) : null}
                     </MoreDisclosure>
                   </div>

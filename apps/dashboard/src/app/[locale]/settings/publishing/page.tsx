@@ -140,6 +140,7 @@ export default async function PublishingDefaultsPage({
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
       <SettingsFrame
+        brandSource={workspace}
         locale={locale}
         permissionKeys={workspace.permissionKeys}
         selected="publishing"

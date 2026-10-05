@@ -111,10 +111,14 @@ describe('B9 / F2 · inline date and time', () => {
   it('proposes tomorrow at the default time, offers no past day, and nothing on today', () => {
     const view = read('apps/dashboard/src/app/[locale]/content/compose/inline-schedule.tsx');
     expect(view).toContain('min={today}');
-    expect(view).toContain(
-      'const firstDate = plannedDate && plannedDate >= today ? plannedDate : tomorrow;',
+    // Round 4 (3.3): a post already on the calendar starts from its own time;
+    // a new one is proposed exactly as before.
+    expect(view).toMatch(
+      /const firstDate = initial\s*\?\s*initial\.date\s*:\s*plannedDate && plannedDate >= today\s*\?\s*plannedDate\s*:\s*tomorrow;/,
     );
-    expect(view).toContain("useState(firstDate === today ? '' : defaultTime)");
+    expect(view).toMatch(
+      /useState\(\s*initial \? initial\.time : firstDate === today \? '' : defaultTime,?\s*\)/,
+    );
     const page = read('apps/dashboard/src/app/[locale]/content/compose/page.tsx');
     expect(page).toContain('defaultTime: brand?.defaultPostTime ?? DEFAULT_POST_TIME,');
   });

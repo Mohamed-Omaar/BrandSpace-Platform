@@ -50,6 +50,8 @@ export interface VariantPreviewMedia {
   readonly kind: string;
   readonly previewToken: string | null;
   readonly durationMs?: number | null;
+  /** Round 4 (3.5) — the slide headline this picture carries, when one is set. */
+  readonly headline?: string | undefined;
 }
 
 export function VariantPreview({
@@ -122,11 +124,13 @@ export function VariantPreview({
           kind: 'image',
           alt: first.name,
           count: media.length,
+          ...(first.headline ? { headline: first.headline } : {}),
           ...(srcOf(first) ? { src: srcOf(first) } : {}),
           ...(media.length > 1
             ? {
                 slides: media.map((item) => ({
                   alt: item.name,
+                  ...(item.headline ? { headline: item.headline } : {}),
                   ...(srcOf(item) ? { src: srcOf(item) } : {}),
                 })),
               }
@@ -142,7 +146,8 @@ export function VariantPreview({
           // `resolveAspect` inside the component forces a story/reel to 9:16 and
           // falls back to the platform's first allowed ratio, so a square
           // request on TikTok cannot render as a square.
-          aspect: '1:1' as PostAspect,
+          // Round 4 (3.5) — the ratio the size line above states (`previewGeometry`).
+          aspect: (platformKey === 'linkedin' ? '1:1' : '4:5') as PostAspect,
           status,
           approval,
           account: {
@@ -156,6 +161,7 @@ export function VariantPreview({
           media: previewMedia,
         }}
         labels={labels}
+        look="prototype"
       />
     </div>
   );

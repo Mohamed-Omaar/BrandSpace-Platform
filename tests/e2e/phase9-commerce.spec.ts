@@ -45,9 +45,8 @@ async function signUpAndVerify(page: Page, locale = 'en'): Promise<NewCustomer> 
   await page.fill('#name', 'Phase 9 Journey');
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
-  await page.fill('#password-confirm', PASSWORD);
-  await page.fill('#timezone', 'Europe/London');
-  await page.press('#timezone', 'Enter');
+  // Round 4 (4.1): no zone question — the browser's zone is posted.
+  await expect(page.getByTestId('signup-timezone')).not.toHaveValue('');
   // THE TERMS CHECKBOX IS REQUIRED AND VERSIONED. The form renders it from the
   // activated document, so the version travels with the acceptance.
   await page.check('[data-testid="accept-terms-of-service"] input[type="checkbox"]');

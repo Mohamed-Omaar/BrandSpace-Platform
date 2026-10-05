@@ -78,6 +78,8 @@ export interface ReviewSubjectView {
   readonly requestNote: string | null;
   readonly requestedByLabel: string;
   readonly mayDecide: boolean;
+  /** Round 4 (5.1) — the reader sent it and the brand forbids self-approval. */
+  readonly blockedAsSelf?: boolean | undefined;
   /**
    * PHASE 6 FINAL (D-288) — the post as it will look, and the conversation
    * about it, beside the verdict. Rendered by the page (the preview is the
@@ -159,27 +161,23 @@ export function ApprovalsView({
   t,
   queue,
   mine,
-  policies,
   review,
   tab,
   tabs,
   mayReview,
   mayReadContent,
-  mayManagePolicy,
   actions,
 }: {
   readonly locale: string;
   readonly t: (key: MessageKey) => string;
   readonly queue: readonly ApprovalRow[];
   readonly mine: readonly ApprovalRow[];
-  readonly policies: readonly BrandPolicyRow[];
   readonly review: ReviewSubjectView | null;
   /** B5 — which list is showing, and the two links between them. */
   readonly tab: 'forMe' | 'sent';
   readonly tabs: readonly LinkTab[];
   readonly mayReview: boolean;
   readonly mayReadContent: boolean;
-  readonly mayManagePolicy: boolean;
   readonly actions: {
     decide(formData: FormData): Promise<void>;
     withdraw(formData: FormData): Promise<void>;
@@ -216,32 +214,10 @@ export function ApprovalsView({
                 ))}
               </nav>
               {/*
-                The approval rules live in Settings → Approvals (A8, prototype
-                v94), for the permission that may change them. Review of #67:
-                the prototype's queue has no policy card; the link is under the
-                tabs' "⋯".
+                Round 4 (5.1) — no "⋯" beside the tabs: the prototype's queue
+                has none. The approval rules are Settings → Approvals (A8), in
+                the Settings menu, for the permission that may change them.
               */}
-              {tab === 'forMe' && mayManagePolicy && policies.length > 0 ? (
-                <MoreDisclosure
-                  label={t('approvals.policyTitle')}
-                  testId="approvals-more"
-                  align="end"
-                >
-                  <section className="bsp-card bsp-apr-policy" data-testid="approvals-policy-link">
-                    <span className="bsp-apr-copy">
-                      <span className="bsp-apr-title">{t('approvals.policyTitle')}</span>
-                      <span className="bsp-apr-meta">{t('approvals.policyMoved')}</span>
-                    </span>
-                    <Link
-                      href={`/${locale}/settings/approvals`}
-                      className="bsp-btn bsp-sm bsp-sec"
-                      data-testid="approvals-policy-open"
-                    >
-                      {t('approvals.policyOpen')}
-                    </Link>
-                  </section>
-                </MoreDisclosure>
-              ) : null}
             </div>
 
             {tab === 'forMe' ? (
@@ -434,71 +410,6 @@ export function ApprovalsView({
                   </div>
                 ) : null}
               </div>
-              <details className="bsp-apr-more" data-testid="review-channels-more">
-                <summary>
-                  <span>{t('approvals.everyChannel')}</span>
-                  <span className="bsp-ltr">{review.variants.length}</span>
-                </summary>
-                {review.previews ? (
-                  <div className="bsp-apr-prev-list" data-testid="review-previews">
-                    {review.previews}
-                  </div>
-                ) : null}
-                {review.requestNote ? (
-                  <p className="bsp-apr-quote" dir="auto">
-                    {review.requestNote}
-                  </p>
-                ) : null}
-                <ul className="bsp-apr-variants" data-testid="review-variants">
-                  {review.variants.map((variant) => (
-                    <li key={variant.id}>
-                      <span className="bsp-lbl">
-                        {t(`content.platform.${variant.platformKey}` as MessageKey)}
-                      </span>
-                      <p dir="auto">{variant.body}</p>
-                      {variant.hashtags.length > 0 ? (
-                        <span className="bsp-apr-meta">
-                          {variant.hashtags.map((h) => `#${h}`).join(' ')}
-                        </span>
-                      ) : null}
-                      {/*
-                        WHAT IS ACTUALLY BEING APPROVED (AC-29.1). The thumbnails
-                        are the media the publish pipeline will send — the same
-                        asset ids, in the same order — so a reviewer's decision is
-                        about the post rather than about its words.
-                      */}
-                      {variant.media.length > 0 ? (
-                        <ul className="bsp-apr-media" data-testid={`approval-media-${variant.id}`}>
-                          {variant.media.map((item) => (
-                            <li key={item.id}>
-                              {item.previewToken ? (
-                                <AssetThumb
-                                  src={`/${locale}/assets/file/${item.previewToken}`}
-                                  alt={item.name}
-                                  size="3.5rem"
-                                  testId={`approval-media-thumb-${item.id}`}
-                                />
-                              ) : (
-                                <span className="bsp-apr-meta">{item.name}</span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-              {review.conversation ? (
-                /* C1 — the post's notes as a compact card, never a full-width block. */
-                <details className="bsp-apr-more bsp-apr-notes" data-testid="review-notes-more">
-                  <summary>
-                    <span>{t('approvals.notes')}</span>
-                    <span className="bsp-apr-open">{t('approvals.openConversation')}</span>
-                  </summary>
-                  <div className="bsp-apr-thread">{review.conversation}</div>
-                </details>
-              ) : null}
             </div>
             <div className="bsp-apr-side-col">
               <div>
@@ -540,25 +451,112 @@ export function ApprovalsView({
                   tab={tab}
                   action={actions.decide}
                 />
-              ) : null}
-              {mayReadContent ? (
-                /* Review of #67 — not drawn by the prototype; kept under "⋯". */
-                <MoreDisclosure
-                  label={t('calendar.openInStudio')}
-                  testId="approvals-review-more"
-                  align="start"
+              ) : review.blockedAsSelf ? (
+                /*
+                 * Round 4 (5.1) — WHERE THE VERDICTS WOULD BE, the reason there
+                 * are none (D-122): the reader sent it and the brand forbids
+                 * self-approval. The server refuses it regardless.
+                 */
+                <p
+                  className="bsp-apr-blocked"
+                  role="note"
+                  data-testid={`self-blocked-review-${review.itemId}`}
                 >
-                  <Link
-                    className="bsp-apr-studio"
-                    href={`/${locale}/content/compose?item=${review.itemId}`}
-                  >
-                    {t('calendar.openInStudio')}
-                  </Link>
-                  <span className="bsp-apr-meta">
-                    {review.brandName} · {t('approvals.cycle')} {review.cycle}
-                  </span>
-                </MoreDisclosure>
+                  {t('approvals.selfBlocked')}
+                </p>
               ) : null}
+              {/*
+                Round 4 (5.1) — ONE "⋯", for what the prototype does not draw:
+                every channel's preview and versions, the post's notes, and
+                opening it in the Studio. Nothing was removed; it is all here.
+              */}
+              <MoreDisclosure
+                label={t('approvals.everyChannel')}
+                testId="approvals-review-more"
+                align="start"
+              >
+                <details className="bsp-apr-more" data-testid="review-channels-more">
+                  <summary>
+                    <span>{t('approvals.everyChannel')}</span>
+                    <span className="bsp-ltr">{review.variants.length}</span>
+                  </summary>
+                  {review.previews ? (
+                    <div className="bsp-apr-prev-list" data-testid="review-previews">
+                      {review.previews}
+                    </div>
+                  ) : null}
+                  {review.requestNote ? (
+                    <p className="bsp-apr-quote" dir="auto">
+                      {review.requestNote}
+                    </p>
+                  ) : null}
+                  <ul className="bsp-apr-variants" data-testid="review-variants">
+                    {review.variants.map((variant) => (
+                      <li key={variant.id}>
+                        <span className="bsp-lbl">
+                          {t(`content.platform.${variant.platformKey}` as MessageKey)}
+                        </span>
+                        <p dir="auto">{variant.body}</p>
+                        {variant.hashtags.length > 0 ? (
+                          <span className="bsp-apr-meta">
+                            {variant.hashtags.map((h) => `#${h}`).join(' ')}
+                          </span>
+                        ) : null}
+                        {/*
+                          WHAT IS ACTUALLY BEING APPROVED (AC-29.1). The thumbnails
+                          are the media the publish pipeline will send — the same
+                          asset ids, in the same order — so a reviewer's decision is
+                          about the post rather than about its words.
+                        */}
+                        {variant.media.length > 0 ? (
+                          <ul
+                            className="bsp-apr-media"
+                            data-testid={`approval-media-${variant.id}`}
+                          >
+                            {variant.media.map((item) => (
+                              <li key={item.id}>
+                                {item.previewToken ? (
+                                  <AssetThumb
+                                    src={`/${locale}/assets/file/${item.previewToken}`}
+                                    alt={item.name}
+                                    size="3.5rem"
+                                    testId={`approval-media-thumb-${item.id}`}
+                                  />
+                                ) : (
+                                  <span className="bsp-apr-meta">{item.name}</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+                {review.conversation ? (
+                  /* C1 — the post's notes as a compact card, never a full-width block. */
+                  <details className="bsp-apr-more bsp-apr-notes" data-testid="review-notes-more">
+                    <summary>
+                      <span>{t('approvals.notes')}</span>
+                      <span className="bsp-apr-open">{t('approvals.openConversation')}</span>
+                    </summary>
+                    <div className="bsp-apr-thread">{review.conversation}</div>
+                  </details>
+                ) : null}
+                {mayReadContent ? (
+                  <>
+                    <Link
+                      className="bsp-apr-studio"
+                      href={`/${locale}/content/compose?item=${review.itemId}`}
+                    >
+                      {t('calendar.openInStudio')}
+                    </Link>
+                    <span className="bsp-apr-meta">
+                      {review.brandName} · {t('approvals.cycle')} {review.cycle}
+                    </span>
+                  </>
+                ) : null}
+              </MoreDisclosure>
             </div>
           </section>
         ) : null}

@@ -219,7 +219,7 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');
   const rules = page.getByTestId('automation-rules');
-  await expect(rules).toContainText(name);
+  await expect(rules.getByTitle(name, { exact: true })).toHaveCount(1);
   await expect(rules).toContainText(copy.remind);
   const created = await withPlatformPrisma((prisma) =>
     prisma.automationRule.findFirstOrThrow({

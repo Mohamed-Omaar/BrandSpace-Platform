@@ -146,7 +146,12 @@ export default async function SecuritySettingsPage({
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
 
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="security">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="security"
+      >
         <Card testId="mfa-card">
           <div style={{ display: 'grid', gap: spacingTokens.md }}>
             <div>

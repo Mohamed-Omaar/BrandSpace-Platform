@@ -135,7 +135,12 @@ export default async function ActivityPage({
       customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="activity">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="activity"
+      >
         <Stack>
           <Card testId="activity-log">
             <SectionHeader

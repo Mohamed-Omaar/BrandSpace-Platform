@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { formatCredits } from '../../../server/composer-editor';
 import { useEffect, useState } from 'react';
 import {
   Banner,
@@ -552,7 +553,7 @@ export function CopilotView({
             title={t('copilot.plan')}
             description={
               costMilli > 0
-                ? `${t('copilot.estimatedCost')}: ${number.format(costMilli / 1_000)} ${t(
+                ? `${t('copilot.estimatedCost')}: ${formatCredits(plan?.estimatedCreditsMilli ?? '0')} ${t(
                     'copilot.credits',
                   )}`
                 : t('copilot.noCost')

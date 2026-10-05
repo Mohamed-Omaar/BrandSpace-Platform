@@ -201,11 +201,22 @@ export async function skipAutomationRunAction(formData: FormData): Promise<void>
   redirect(`/${locale}/automations?ok=AUTOMATION_SKIPPED`);
 }
 
-export async function toggleAutomationAction(formData: FormData): Promise<void> {
+/**
+ * ROUND 4 (5.2) — THE SWITCH TURNS IN PLACE. Asked with `inPlace=1` (the
+ * row's switch, with script), the SAME action — same permission, same
+ * `updateRule`, same audit — answers instead of redirecting, so only the
+ * switch changes: no reload, no flicker, the list where it was. Without
+ * script the form posts and redirects exactly as before.
+ */
+export type ToggleResult =
+  { readonly ok: true; readonly enabled: boolean } | { readonly ok: false; readonly code: string };
+
+export async function toggleAutomationAction(formData: FormData): Promise<void | ToggleResult> {
   const locale = String(formData.get('locale') ?? 'en');
   const session = await requireWorkspace(locale, 'automation.manage');
   const ruleId = String(formData.get('ruleId') ?? '');
   const enabled = formData.get('enabled') === '1';
+  const inPlace = formData.get('inPlace') === '1';
 
   try {
     await inAnalytics(session.workspace.workspaceId, async (services) => {
@@ -222,9 +233,11 @@ export async function toggleAutomationAction(formData: FormData): Promise<void> 
       });
     });
   } catch (error: unknown) {
+    if (inPlace) return { ok: false, code: codeFrom(error) };
     redirect(`/${locale}/automations?error=${codeFrom(error)}`);
   }
 
+  if (inPlace) return { ok: true, enabled };
   revalidatePath(`/${locale}/automations`);
   redirect(`/${locale}/automations?ok=AUTOMATION_UPDATED`);
 }
