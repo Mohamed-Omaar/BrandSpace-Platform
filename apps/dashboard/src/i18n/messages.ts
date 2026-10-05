@@ -5,7 +5,6 @@
  * first-class. Typed, so a missing key is a compile error rather than a
  * placeholder that ships.
  */
-import { arEgOverrides } from './ar-eg';
 
 export const messages = {
   ar: {
@@ -7805,42 +7804,27 @@ export const messages = {
 export type MessageKey = keyof (typeof messages)['en'];
 
 /**
- * WHICH WORDS A READER GETS (D-470).
+ * WHICH WORDS A READER GETS (round 4, Step 6 — replaces D-470).
  *
- * The ROUTE locale (`en` / `ar`) decides the URL, `dir` and number and date
- * formatting. The MESSAGE locale decides only the words: Arabic follows the
- * workspace's country, so a reader of `/ar` in an Egyptian workspace reads
- * `ar-EG` — the Egyptian layer laid over formal Arabic key by key — and every
- * other Arabic reader reads formal Arabic. A screen before a workspace exists
- * (sign-in, sign-up, the first onboarding step) has no country and stays
- * formal. Adding a dialect is one strings file and one line in `DIALECTS`.
+ * ONE ARABIC FOR EVERY COUNTRY. The route locale (`en` / `ar`) decides the URL,
+ * `dir`, number and date formatting and the words: an Arabic reader reads the
+ * product's formal Arabic whatever the workspace's country. The Egyptian layer
+ * (`ar-EG`) and the country switch that chose it are gone; no runtime path can
+ * select another dictionary.
  */
-export type MessageLocale = 'en' | 'ar' | 'ar-EG';
+export type MessageLocale = 'en' | 'ar';
 
-const DIALECTS: Readonly<Record<string, Exclude<MessageLocale, 'en' | 'ar'>>> = {
-  EG: 'ar-EG',
-};
-
-export function messageLocaleFor(
-  locale: string,
-  country: string | null | undefined,
-): MessageLocale {
-  if (locale !== 'ar') return 'en';
-  const dialect = country ? DIALECTS[country.toUpperCase()] : undefined;
-  return dialect === undefined ? 'ar' : dialect;
+export function messageLocaleFor(locale: string): MessageLocale {
+  return locale === 'ar' ? 'ar' : 'en';
 }
 
 type Dictionary = Readonly<Record<MessageKey, string>>;
 
-/** Formal Arabic with the Egyptian layer on top: a key absent from the layer keeps the formal string. */
-const arEg: Dictionary = { ...messages.ar, ...arEgOverrides };
-
 /**
- * The dictionary for a route locale or a message locale. Anything that is not
- * Arabic is English, as `translator` has always treated an unknown locale.
+ * The dictionary for a locale. Anything that is not Arabic is English, as
+ * `translator` has always treated an unknown locale.
  */
 export function dictionaryFor(locale: string): Dictionary {
-  if (locale === 'ar-EG') return arEg;
   return locale === 'ar' ? messages.ar : messages.en;
 }
 

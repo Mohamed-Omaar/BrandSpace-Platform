@@ -300,7 +300,14 @@ replacements stay, and colour contrast is not exempted from the tests.**
 fonts) and `tests/unit/d468-home-prototype.test.ts` (the prototype's `kfmt`, `delta`, `spark` and
 `VA_meKind`, and the unwired Egyptian layer).
 
-## 4.4 D-470 — the interface Arabic follows the workspace's country
+## 4.4 D-470 — the interface Arabic follows the workspace's country (RETIRED by D-474)
+
+> **Retired in round 4, Step 6 (D-474).** There is one Arabic for every country: an Egyptian
+> workspace reads the same formal `ar` as every other. `apps/dashboard/src/i18n/ar-eg.ts` is
+> deleted, `messageLocaleFor` takes only the route locale, and no runtime path can select another
+> dictionary (`tests/unit/d470-message-locale.test.ts`, `tests/e2e/d470-egyptian-arabic.spec.ts`).
+> The prototype's Arabic wording is an allowed difference; its Arabic layout is ported. The text
+> below is kept as the record of what D-470 built.
 
 Approved by the owner on 2026-10-04 (D-470), from the batch 1 design note.
 
@@ -1726,6 +1733,62 @@ prototype's bar (drawn after the whole settings grid) does.
 **Recorded interpretations for the owner to correct.** "Extra row" on Approvals is read
 as the two rows under the cover; "extra ⋯" as the queue's. The Business recap shows
 every configured industry; the suite's configuration holds two.
+
+### 6.3.54 Review of #68, round 4 — the NOT PORTED pages and the PARTLY rows (Gate 2b, D-473)
+
+**Settings.** Approvals: "Who approves" — each member of the team, marked "Approves",
+"Approves others' posts" or "Doesn't approve" from the existing eligible-reviewer rule,
+with "Edit" to Team — over the two policy rules as switch rows. AI: the writing language
+as two chips (the same `defaultLocale`). Data: the prototype's rows, the retention card
+and the danger card with its inline confirmation (the server still checks the name and
+the password). Security: one card of rows (two-step, devices, the activity log). Publishing
+defaults: channel chips, the suggested times as a segmented choice with "Other" and its
+time field. Notifications: the event table with its "In app" column only (the Email
+column is BLOCKED). Accounts: a row per account (channel tile, status pill, "⋯" with its
+facts, Check and Disconnect) and a "Connect" row per platform not connected; the full
+connect form is behind the card's "⋯".
+
+**Notes.** Two panes: "For you" and "Other open" on the left, the chosen thread
+(`?thread=`, else the first) on the right with its subject, Open, Resolve / Reopen, the
+assignment, due date and Mark read under "⋯", the messages and the composer
+(Mention, Important, Post).
+
+**The campaign room.** One page: the head (name, status, the facts line, published of
+total, Edit · Start now · + New post · "⋯"), "Linked to" (the objective, a link to
+Strategy when the campaign came from one), the brief, the paused line, and "Post
+results" — every post by date with its reach, engagement rate and clicks over the
+campaign's dates (the existing `topPosts` query, one metric at a time; "—" where nothing
+was measured) and its status. The goal card is left out: a campaign stores no target.
+Content by status, the calendar, the files, Performance (with the headline results) and
+Activity are behind "⋯", and a strip moves between them once one is open.
+
+**Strategy.** "This strategy" / "Next strategy" as the prototype's period switch. This
+strategy: the gradient hero (accepted on, basis, the summary, "From your setup goal",
+the channel mix with its reasons behind "Why this mix", Copilot, "Plan the next
+strategy"), the Brand Brain alert as one line, "Built on Brand Brain" (audience and key
+messages, each with Open) beside the pillars (dot, share, the planned bar, "↳" the
+reason), the month as week cards with their three actions, and the evidence behind a
+disclosure. No strategy yet: the prototype's card with "Plan a strategy". Next strategy:
+the start title, "Let BrandSpace draft it" holding the proposal form, and each AI
+proposal as the prototype's draft (tag, title, "Why", Accept / Dismiss / Propose
+learnings, its pillars as chips). The weekly number and "Early signals" are left out
+(owner).
+
+**Look & voice.** The logo on two 72px tiles (ink and cream) with "Replace" (the file
+button; sending appears once a file is chosen) and the library pick behind "⋯"; the
+colours as 52px swatches that are the colour picker, the hex under each (still
+typeable), × and the dashed "+"; the voice words as chips; the fonts as one card of two
+language columns — each slot a row of chips drawn in their own face, the sample in the
+chosen pair, and the uploaded fonts with their name field, status, Replace and Remove.
+Brand templates are left out (owner).
+
+**PARTLY rows closed.** Settings → General: "Business name", "Time zone". Publishing log:
+the "Publish" eyebrow, "Publishing log", the prototype's subtitle, the segment at its own
+width, Accounts behind "⋯". Brand Brain chat: the greeting names the brand; the scope pill,
+the area's details and × appear only when the chat is scoped to an area. Sources: the
+counts in the row's chip ("6 approved · 1 to review · Facts"), no "Ready" pill (only
+reading or failed), the upload card at the prototype's first column, sending once a file
+is chosen. Plan & billing: "Storage (GB)", "Usage & limits" behind the card's "⋯".
 
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 

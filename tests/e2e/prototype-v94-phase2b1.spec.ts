@@ -451,10 +451,10 @@ test.describe('A9 / G1 · Settings → General, under the save bar', () => {
 
     // And in Arabic.
     await page.goto(`${DASHBOARD_BASE_URL}/ar/settings`);
-    // The workspace is Egyptian by now (saved above), so General speaks the
-    // prototype's Egyptian Arabic (D-470).
+    // The workspace is Egyptian by now (saved above), and since round 4,
+    // Step 6, it reads the same formal Arabic as every other country.
     await expect(page.getByTestId('settings-bar-status')).toHaveText(
-      'كل التعديلات محفوظة · عدّل أي حاجة وزرار الحفظ هيشتغل',
+      'تم حفظ كل التغييرات · عدّل أي شيء ويعمل زر الحفظ',
     );
   });
 });

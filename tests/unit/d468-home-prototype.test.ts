@@ -5,7 +5,6 @@ import {
   homeKindFor,
   sparkPath,
 } from '../../apps/dashboard/src/server/home-prototype';
-import { arEgOverrides } from '../../apps/dashboard/src/i18n/ar-eg';
 import { messages } from '../../apps/dashboard/src/i18n/messages';
 
 /**
@@ -81,45 +80,27 @@ describe('sparkPath — `spark(vals)` on a 120×30 box', () => {
   });
 });
 
-describe('the Egyptian Arabic layer is collected and keyed (D-468), and read only by messages.ts (D-470)', () => {
-  const ar = messages.ar as Record<string, string>;
-  const entries = Object.entries(arEgOverrides as Record<string, string>);
-
-  it('collects something for this batch', () => {
-    expect(entries.length).toBeGreaterThan(20);
-  });
-
-  it('overrides only keys the formal Arabic has, and only where it differs', () => {
-    for (const [key, value] of entries) {
-      expect(ar[key], key).toBeDefined();
-      expect(value, key).not.toBe(ar[key]);
-    }
-  });
-
-  it('keeps every placeholder of the formal string', () => {
-    for (const [key, value] of entries) {
-      const wanted = (ar[key]?.match(/\{[a-zA-Z]+\}/g) ?? []).sort().join();
-      expect((value.match(/\{[a-zA-Z]+\}/g) ?? []).sort().join(), key).toBe(wanted);
-    }
-  });
-
-  it('only the dictionary reads it: every screen asks `translator`, never the file (D-470)', async () => {
-    const { readdirSync, readFileSync, statSync } = await import('node:fs');
+describe('one Arabic for every country (round 4, Step 6 — the Egyptian layer is retired)', () => {
+  it('no dashboard source imports an Arabic dialect layer, and the file is gone', async () => {
+    const { existsSync, readdirSync, readFileSync, statSync } = await import('node:fs');
     const path = await import('node:path');
     const root = path.resolve(__dirname, '../../apps/dashboard/src');
+    expect(existsSync(path.join(root, 'i18n', 'ar-eg.ts'))).toBe(false);
     const readers: string[] = [];
     const walk = (dir: string): void => {
       for (const entry of readdirSync(dir)) {
         const full = path.join(dir, entry);
         if (statSync(full).isDirectory()) walk(full);
-        else if (/\.tsx?$/.test(entry) && !full.endsWith('ar-eg.ts')) {
+        else if (/\.tsx?$/.test(entry)) {
           if (/from ['"][^'"]*ar-eg['"]/.test(readFileSync(full, 'utf8'))) readers.push(full);
         }
       }
     };
     walk(root);
-    expect(readers.map((file) => path.relative(root, file))).toEqual([
-      path.join('i18n', 'messages.ts'),
-    ]);
+    expect(readers).toEqual([]);
+  });
+
+  it('formal Arabic is the one Arabic dictionary', () => {
+    expect(Object.keys(messages.ar).length).toBeGreaterThan(1000);
   });
 });

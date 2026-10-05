@@ -421,7 +421,7 @@ export async function WorkspaceShell({
   flash?: { readonly tone: 'success'; readonly message: string } | undefined;
   children: ReactNode;
 }) {
-  // D-470: the words this member reads — `ar-EG` in an Egyptian workspace.
+  // The words this member reads (one Arabic for every country, round 4 Step 6).
   const words = requestMessageLocale(locale);
   const t = translator(words);
   const other = locale === 'ar' ? 'en' : 'ar';

@@ -182,8 +182,9 @@ or changing one. In short:
   website reading, the connection-expiry alert), left out, and (c) states the prototype does not draw
   (errors, permission refusals, admin), built in its visual language. A prototype element that needs
   data or a feature that does not exist is left out and listed. Every use is listed in the PR.
-- **Arabic follows the workspace's country** (D-468): Egypt gets the prototype's Egyptian Arabic,
-  every other country the product's formal Arabic. Until that layer is wired, formal Arabic is `ar`.
+- **One Arabic for every country** (round 4, Step 6, D-474, replacing D-470): every Arabic reader,
+  Egypt included, reads the product's simple formal Arabic (`ar`). The Egyptian layer is retired;
+  the prototype's Arabic wording is not ported, its Arabic layout (RTL, spacing, sizes, fonts) is.
 - The approved demo is a **UI specification**, not a loose visual reference or a mood board.
 - Implementations **mechanically port** the demo's HTML, CSS, layout, motion and interaction. Numeric
   constants are transcribed exactly; geometry keeps the same formula; composition keeps the same

@@ -317,7 +317,7 @@ export function CustomerShell({
   readonly actions?: ReactNode;
   /**
    * The language tag of the words inside, when it is narrower than the
-   * document's (D-470: `ar-EG` for an Egyptian workspace). Absent otherwise.
+   * document's. Absent otherwise (one Arabic for every country since round 4).
    */
   readonly contentLang?: string | undefined;
   /** The floating Copilot. */

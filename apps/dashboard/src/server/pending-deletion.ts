@@ -35,7 +35,7 @@ export async function pendingDeletionSession(locale: string): Promise<
   if (!workspace) redirect(`/${locale}/workspaces`);
   const scheduledFor = workspace.deletionScheduledFor ?? null;
   if (!scheduledFor) redirect(`/${locale}/overview`);
-  const messageLocale = messageLocaleFor(locale, workspace.country);
+  const messageLocale = messageLocaleFor(locale);
   recordMessageLocale(messageLocale);
   return {
     customer,
