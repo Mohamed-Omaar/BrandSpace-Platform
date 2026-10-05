@@ -3857,6 +3857,11 @@ span.bsp-cal-hol {
   field-sizing: content;
   max-inline-size: 220px;
   padding-inline-end: 18px;
+  /* The chip's own height, not the shared 40px trigger: the name sits on the
+     label's line (a customizable select draws its text at the top otherwise). */
+  block-size: 30px;
+  min-block-size: 30px;
+  align-items: center;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -8185,6 +8190,14 @@ img.bsp-pf-art {
    resting under the note. The same 70px sits under the note here. */
 .bsp-sg-form > :nth-last-child(2) {
   margin-block-end: 70px;
+}
+/* On the frame's bottom edge the bar shares the corner with the floating
+   Copilot: its end keeps the button clear, as the Studio's bar does
+   (`.bsp-st-bar`), so "Save changes" is never under it. */
+@media (min-width: 768px) {
+  .bsp-sg-form > :last-child {
+    padding-inline-end: 168px !important;
+  }
 }
 .bsp-sg-note {
   display: flex;

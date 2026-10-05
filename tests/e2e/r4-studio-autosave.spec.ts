@@ -305,8 +305,10 @@ test.describe('Round 4 · 3.3 (review of 2a, 6) — a day carried to a brand tha
       const brand = await prisma.brand.create({
         data: {
           workspaceId: customer.workspaceId,
-          name: `Approval first ${suffix}`,
-          slug: `approval-first-${suffix}`,
+          // Sorted LAST among the workspace's brands (lists are by name), so a
+          // spec that edits "the first brand's" rules never edits this one.
+          name: `Zz approval first ${suffix}`,
+          slug: `zz-approval-first-${suffix}`,
           status: 'ACTIVE',
           defaultLocale: 'EN',
           supportedLocales: ['EN'],
@@ -322,34 +324,44 @@ test.describe('Round 4 · 3.3 (review of 2a, 6) — a day carried to a brand tha
       });
       return brand.id;
     });
-    await useBrand(page, customer.workspaceId, brandId);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
-    await page.fill('#email', customer.email);
-    await page.fill('#password', customer.password);
-    await page.click('[data-testid="signin-submit"]');
-    await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
-    const choose = page.getByTestId(`choose-workspace-${customer.workspaceSlug}`);
-    if (await choose.isVisible().catch(() => false)) await choose.click();
-    await page.waitForURL(/\/en\/overview$/);
+    try {
+      await useBrand(page, customer.workspaceId, brandId);
+      await page.goto(`${DASHBOARD_BASE_URL}/en/sign-in`);
+      await page.fill('#email', customer.email);
+      await page.fill('#password', customer.password);
+      await page.click('[data-testid="signin-submit"]');
+      await page.waitForURL((url) => !url.pathname.endsWith('/sign-in'));
+      const choose = page.getByTestId(`choose-workspace-${customer.workspaceSlug}`);
+      if (await choose.isVisible().catch(() => false)) await choose.click();
+      await page.waitForURL(/\/en\/overview$/);
 
-    const day = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?mode=write&date=${day}`);
-    await expect(page.getByTestId('composer-planned-date')).toBeVisible();
-    // Said where the day is named, before anything is written.
-    await expect(page.getByTestId('composer-planned-approval-first')).toContainText(
-      'this day is not kept',
-    );
+      const day = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+      await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?mode=write&date=${day}`);
+      await expect(page.getByTestId('composer-planned-date')).toBeVisible();
+      // Said where the day is named, before anything is written.
+      await expect(page.getByTestId('composer-planned-approval-first')).toContainText(
+        'this day is not kept',
+      );
 
-    // The draft's When offers no date or time to choose — only the reason.
-    const channel = page.getByTestId('content-channel').first();
-    if ((await channel.getAttribute('aria-pressed')) !== 'true') await channel.click();
-    await page.getByTestId('content-caption').fill(`Approval first ${suffix}`);
-    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
-    await page.getByTestId('editor-when').click();
-    const panel = page.getByTestId('editor-when-panel');
-    await expect(panel).toBeVisible();
-    await expect(panel).toContainText('this day is not kept');
-    await expect(panel.locator('input[type="date"], input[type="time"]')).toHaveCount(0);
-    await expect(page.getByTestId('editor-schedule')).toHaveCount(0);
+      // The draft's When offers no date or time to choose — only the reason.
+      const channel = page.getByTestId('content-channel').first();
+      if ((await channel.getAttribute('aria-pressed')) !== 'true') await channel.click();
+      await page.getByTestId('content-caption').fill(`Approval first ${suffix}`);
+      await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+      await page.getByTestId('editor-when').click();
+      const panel = page.getByTestId('editor-when-panel');
+      await expect(panel).toBeVisible();
+      await expect(panel).toContainText('this day is not kept');
+      await expect(panel.locator('input[type="date"], input[type="time"]')).toHaveCount(0);
+      await expect(page.getByTestId('editor-schedule')).toHaveCount(0);
+    } finally {
+      // Retired as a deleted brand is, so no later list counts it.
+      await withPlatformPrisma((prisma) =>
+        prisma.brand.update({
+          where: { id: brandId },
+          data: { status: 'ARCHIVED', deletedAt: new Date() },
+        }),
+      );
+    }
   });
 });

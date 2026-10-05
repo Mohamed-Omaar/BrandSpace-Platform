@@ -261,6 +261,17 @@ test.describe('Round 4 · 5.5 (review of 2a) — on a 1440 × 900 screen, as the
       expect(box.edgeGap).toBeGreaterThanOrEqual(0);
       expect(box.edgeGap).toBeLessThanOrEqual(16);
     }
+    // "Save changes" is never under the floating Copilot.
+    const save = await page.getByTestId('settings-save').boundingBox();
+    const fab = await page.locator('.bsp-fab').first().boundingBox();
+    if (save && fab) {
+      const overlaps =
+        save.x < fab.x + fab.width &&
+        fab.x < save.x + save.width &&
+        save.y < fab.y + fab.height &&
+        fab.y < save.y + save.height;
+      expect(overlaps).toBe(false);
+    }
   });
 });
 
