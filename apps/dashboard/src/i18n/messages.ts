@@ -759,6 +759,7 @@ export const messages = {
     'plan.usageTitle': 'الاستخدام في هذه الدورة',
     'plan.usageScheduled': 'المنشورات المجدولة',
     'plan.usageStorage': 'التخزين',
+    'billing.usageStorageGb': 'التخزين (جيجابايت)',
     // C7 (Phase 2B-2b) — where the stored bytes sit.
     'plan.storageBreakdownTitle': 'أين يُستخدم التخزين',
     'plan.storageBreakdownBody':
@@ -4601,6 +4602,7 @@ export const messages = {
     'plan.usageTitle': 'Usage this cycle',
     'plan.usageScheduled': 'Scheduled posts',
     'plan.usageStorage': 'Storage',
+    'billing.usageStorageGb': 'Storage (GB)',
     // C7 (Phase 2B-2b) — where the stored bytes sit.
     'plan.storageBreakdownTitle': 'Where your storage goes',
     'plan.storageBreakdownBody':

@@ -59,6 +59,8 @@ test.describe('D-298 · settings, team, billing and history', () => {
     // Review of #67 — Plan & billing is the prototype's section with no tab
     // row; usage and limits are its detail page, opened from the plan card.
     await expect(page.getByTestId('billing-tabs')).toHaveCount(0);
+    // Gate 2b — "Usage & limits" is under the plan card's "⋯" (D-471).
+    await page.getByTestId('billing-more').click();
     await page.getByTestId('billing-usage-link').click();
     await page.waitForURL(/\/en\/plan$/);
     await expect(page.getByTestId('billing-tabs').getByTestId('tab-usage')).toHaveAttribute(

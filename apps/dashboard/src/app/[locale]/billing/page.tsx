@@ -121,11 +121,11 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
           feature: QUOTA_FEATURES.scheduledPostsPerMonth,
         },
         {
+          // Gate 2b — the prototype's row: "Storage (GB)", then "3.1 / 50".
           key: 'storage',
-          label: t('plan.usageStorage'),
+          label: t('billing.usageStorageGb'),
           used: counted(QUOTA_FEATURES.storageGb),
           feature: QUOTA_FEATURES.storageGb,
-          unit: ' GB',
         },
       ];
       return rows.map((row) => {
@@ -447,7 +447,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
             <div className="bsp-bl-acts">
               {/*
                 "Change plan" opens the plans in place, as the prototype's does
-                (line 1452); "Usage & limits" is the detail page; the export and
+                (line 1452); "Usage & limits" (the detail page), the export and
                 cancelling, which the prototype does not draw, are under "⋯".
               */}
               <details className="bsp-bl-change">
@@ -550,14 +550,15 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                   </div>
                 </div>
               </details>
-              <Link
-                href={`/${locale}/plan`}
-                className="bsp-btn bsp-sm bsp-ghost"
-                data-testid="billing-usage-link"
-              >
-                {t('billing.usageLink')} →
-              </Link>
+              {/* Gate 2b — "Usage & limits", which the prototype does not draw, is under "⋯" (D-471). */}
               <MoreDisclosure label={t('billing.more')} testId="billing-more" align="start">
+                <Link
+                  href={`/${locale}/plan`}
+                  className="bsp-btn bsp-sm bsp-ghost"
+                  data-testid="billing-usage-link"
+                >
+                  {t('billing.usageLink')} →
+                </Link>
                 {exportForm}
                 {cancelForm}
                 <p style={mutedStyle}>{t('billing.creditNoteNotice')}</p>
