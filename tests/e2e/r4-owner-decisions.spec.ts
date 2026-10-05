@@ -223,6 +223,23 @@ test.describe('Round 4 · 5.5 — the General save bar stays on the frame’s bo
      */
     expect(atEnd?.gap ?? Infinity).toBeLessThanOrEqual((atEnd?.padding ?? 0) + 1);
     expect(atEnd?.belowNav ?? -Infinity).toBeGreaterThanOrEqual(-1);
+
+    // Pinned on the frame's edge, "Save changes" is never under the floating Copilot.
+    await page.evaluate(() => {
+      const scroller = document.querySelector<HTMLElement>('main.bsp-scroll');
+      if (scroller) scroller.scrollTop = 0;
+    });
+    const save = await page.getByTestId('settings-save').boundingBox();
+    const fab = await page.locator('.bsp-fab').first().boundingBox();
+    expect(save).not.toBeNull();
+    if (save && fab) {
+      const overlaps =
+        save.x < fab.x + fab.width &&
+        fab.x < save.x + save.width &&
+        save.y < fab.y + fab.height &&
+        fab.y < save.y + save.height;
+      expect(overlaps).toBe(false);
+    }
     // The bar is the column's last row, under the note, as the prototype draws it.
     const order = await page.evaluate(() => {
       const note = document.querySelector('[data-testid="settings-identity-note"]');

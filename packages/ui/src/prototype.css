@@ -8195,7 +8195,10 @@ img.bsp-pf-art {
    Copilot: its end keeps the button clear, as the Studio's bar does
    (`.bsp-st-bar`), so "Save changes" is never under it. */
 @media (min-width: 768px) {
-  .bsp-sg-form > :last-child {
+  /* As specific as the bar's own padding rule below
+     (`.bsp-sg-main div[data-state]:has(> span[role='status'])`), and after it
+     in effect, so the end is kept clear. */
+  .bsp-sg-main > .bsp-sg-form > div[data-state]:has(> span[role='status']):last-child {
     padding-inline-end: 168px !important;
   }
 }
