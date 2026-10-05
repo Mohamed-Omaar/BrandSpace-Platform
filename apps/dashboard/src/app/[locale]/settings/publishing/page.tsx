@@ -7,7 +7,6 @@ import {
   StateMessage,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   layoutTokens,
@@ -301,8 +300,8 @@ export default async function PublishingDefaultsPage({
                           >
                             <Link
                               href={`/${locale}/settings/publishing?edit=${template.id}#template-form-${brand.id}`}
-                              style={buttonStyle('ghost', 'sm')}
-                              className={buttonClass('ghost')}
+
+                              className={buttonClass('ghost', 'sm')}
                               data-testid={`template-edit-${template.id}`}
                             >
                               {t('templates.edit')}
@@ -317,8 +316,8 @@ export default async function PublishingDefaultsPage({
                               />
                               <button
                                 type="submit"
-                                style={buttonStyle('ghost', 'sm')}
-                                className={buttonClass('ghost')}
+
+                                className={buttonClass('ghost', 'sm')}
                                 data-testid={`template-set-default-${template.id}`}
                               >
                                 {template.isDefault
@@ -329,8 +328,8 @@ export default async function PublishingDefaultsPage({
                             {/* DELETE ASKS TWICE — the Automations screen's pattern. */}
                             <details data-testid={`template-delete-${template.id}`}>
                               <summary
-                                style={{ ...buttonStyle('ghost', 'sm'), listStyle: 'none' }}
-                                className={buttonClass('ghost')}
+                                style={{ listStyle: 'none' }}
+                                className={buttonClass('ghost', 'sm')}
                               >
                                 {t('templates.delete')}
                               </summary>
@@ -347,8 +346,8 @@ export default async function PublishingDefaultsPage({
                                 <span style={hintStyle}>{t('templates.deleteBody')}</span>
                                 <button
                                   type="submit"
-                                  style={buttonStyle('danger', 'sm')}
-                                  className={buttonClass('danger')}
+
+                                  className={buttonClass('danger', 'sm')}
                                   data-testid={`template-delete-confirm-${template.id}`}
                                 >
                                   {t('templates.deleteConfirm')}
@@ -504,8 +503,8 @@ export default async function PublishingDefaultsPage({
                     >
                       <button
                         type="submit"
-                        style={buttonStyle('primary', 'sm')}
-                        className={buttonClass('primary')}
+
+                        className={buttonClass('primary', 'sm')}
                         data-testid={`template-save-${brand.id}`}
                       >
                         {t('templates.save')}
@@ -513,8 +512,8 @@ export default async function PublishingDefaultsPage({
                       {editing ? (
                         <Link
                           href={`/${locale}/settings/publishing`}
-                          style={buttonStyle('ghost', 'sm')}
-                          className={buttonClass('ghost')}
+
+                          className={buttonClass('ghost', 'sm')}
                         >
                           {t('templates.cancelEdit')}
                         </Link>

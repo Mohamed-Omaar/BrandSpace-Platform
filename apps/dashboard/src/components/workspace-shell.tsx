@@ -169,6 +169,20 @@ const NAV: readonly NavEntry[] = [
   { href: '/settings', key: 'nav.settings', permission: null, glyph: 'settings' },
 ];
 
+/**
+ * The rail item a route belongs to, from the real request path
+ * (`x-brandspace-path`): the item itself, the Settings section (or Settings
+ * for a page under one), or the deepest rail item the route sits under.
+ */
+function railPathFromRequest(requestPath: string | null): string | undefined {
+  if (!requestPath) return undefined;
+  const path = (requestPath.split('?')[0] ?? '').replace(/^\/(?:en|ar)(?=\/|$)/, '') || '/';
+  const under = (base: string) => path === base || path.startsWith(`${base}/`);
+  const deepest = (candidates: readonly string[]) =>
+    [...candidates].filter(under).sort((a, b) => b.length - a.length)[0];
+  return deepest(SETTINGS_PATHS) ?? deepest(NAV.map((item) => item.href));
+}
+
 const NAV_GROUPS: readonly { titleKey: MessageKey | null; hrefs: readonly string[] }[] = [
   { titleKey: null, hrefs: ['/overview'] },
   { titleKey: 'nav.group.brand', hrefs: ['/brand-brain'] },
@@ -234,6 +248,12 @@ function navSections(
         );
       }),
   );
+  /*
+   * Round 4, 2.3 — Roles & permissions is the prototype's "Team & roles": the
+   * rail marks Team there, as the prototype's does. A member without Team on
+   * the rail keeps Settings, the section's own parent.
+   */
+  const current = activePath === '/permissions' && onRail.has('/members') ? '/members' : activePath;
   const sections: CustomerNavSection[] = [];
   for (const group of NAV_GROUPS) {
     const items = group.hrefs
@@ -250,11 +270,11 @@ function navSections(
         // Settings stands for its sections — unless the section has its own
         // rail entry (Team): one current item, never two (round 3, C3).
         active:
-          activePath === item.href ||
+          current === item.href ||
           (item.href === '/settings' &&
-            activePath !== undefined &&
-            SETTINGS_PATHS.includes(activePath) &&
-            !onRail.has(activePath)),
+            current !== undefined &&
+            SETTINGS_PATHS.includes(current) &&
+            !onRail.has(current)),
         // The existing convention, preserved: renaming these would drop the
         // end-to-end assertions that use them.
         testId: `nav-${item.href.slice(1)}`,
@@ -417,15 +437,22 @@ export async function WorkspaceShell({
    * changed. `activePath` is the fallback.
    */
   const requestPath = (await headers()).get('x-brandspace-path');
+  /*
+   * ROUND 4 (2.3) — EVERY PAGE MARKS ITS RAIL ITEM. A page that names no
+   * `activePath` (Notes, every Settings section, Billing, an invoice) is
+   * placed by its own route: a Settings section or sub-page marks Settings,
+   * any other sub-page marks its parent.
+   */
+  const railPath = activePath ?? railPathFromRequest(requestPath);
   const localeHref = (target: string): string =>
-    switchLocalePath(requestPath, target, `/${target}${activePath ?? '/overview'}`);
+    switchLocalePath(requestPath, target, `/${target}${railPath ?? '/overview'}`);
   const identity = customerName ?? workspaceName;
 
   const counts = await topbarCounts();
   const topbar = topbarModel({ locale, permissionKeys, requestPath, counts });
   const sections = focus
     ? []
-    : navSections(permissionKeys, locale, activePath, t, brandContext, counts);
+    : navSections(permissionKeys, locale, railPath, t, brandContext, counts);
 
   /*
    * THE GLOBAL COPILOT (D-277 §37): what the drawer opens with — the rail's
@@ -762,7 +789,7 @@ export async function WorkspaceShell({
           context: drawerContext,
           credits:
             typeof counts.credits === 'number' && permissionKeys.includes('billing.read')
-              ? counts.credits.toLocaleString(locale === 'ar' ? 'ar' : 'en')
+              ? counts.credits.toLocaleString('en-US')
               : null,
           creditsLabel: t('account.credits'),
           greeting: firstName
@@ -813,9 +840,7 @@ export async function WorkspaceShell({
           trailing={
             <span className="bsp-pill bsp-p-ai">
               <PrototypeIcon glyph="spark" size={12} stroke={0} />
-              <span className="bsp-ltr">
-                {counts.credits.toLocaleString(locale === 'ar' ? 'ar' : 'en')}
-              </span>
+              <span className="bsp-ltr">{counts.credits.toLocaleString('en-US')}</span>
             </span>
           }
         >
@@ -941,9 +966,7 @@ export function CustomerBanner({
  * file's note. Server callers keep their existing import path.
  */
 export {
-  customerButtonStyle,
   customerInputStyle,
-  customerSecondaryButtonStyle,
   customerTableStyle,
   customerTdStyle,
   customerThStyle,

@@ -6,7 +6,6 @@ import {
   CONTROL_CLASS,
   Dialog,
   buttonClass,
-  buttonStyle,
   colorTokens,
   typographyTokens,
   visuallyHiddenStyle,
@@ -260,8 +259,8 @@ function Colours({
                 />
                 <button
                   type="button"
-                  className={buttonClass('ghost')}
-                  style={buttonStyle('ghost', 'sm')}
+                  className={buttonClass('ghost', 'sm')}
+
                   onClick={() => setColours((current) => current.filter((_, i) => i !== index))}
                   aria-label={t('bb.look.colourRemove').replace('{n}', number)}
                   data-testid={`look-colour-remove-${index}`}
@@ -275,8 +274,8 @@ function Colours({
         <div style={rowStyle}>
           <button
             type="button"
-            className={buttonClass('neutral')}
-            style={buttonStyle('neutral', 'sm')}
+            className={buttonClass('neutral', 'sm')}
+
             disabled={colours.length >= MAX_COLOURS}
             onClick={() => setColours((current) => [...current, colorTokens.brandPurple])}
             data-testid="look-colour-add"
@@ -285,8 +284,8 @@ function Colours({
           </button>
           <button
             type="submit"
-            className={buttonClass('brand')}
-            style={buttonStyle('brand', 'sm')}
+            className={buttonClass('brand', 'sm')}
+
             data-testid="look-colours-save"
           >
             {t('common.save')}
@@ -360,8 +359,8 @@ function Logo({
           </select>
           <button
             type="submit"
-            className={buttonClass('neutral')}
-            style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
+            className={buttonClass('neutral', 'sm')}
+            style={{ justifySelf: 'start' }}
             data-testid="look-logo-choose-save"
           >
             {t('common.save')}
@@ -384,8 +383,8 @@ function Logo({
           />
           <button
             type="submit"
-            className={buttonClass('neutral')}
-            style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
+            className={buttonClass('neutral', 'sm')}
+            style={{ justifySelf: 'start' }}
             data-testid="look-logo-submit"
           >
             {t('bb.look.logoReplace')}
@@ -493,8 +492,8 @@ function Slots({
           <div style={slotGridStyle}>{body}</div>
           <button
             type="submit"
-            className={buttonClass('brand')}
-            style={{ ...buttonStyle('brand', 'sm'), justifySelf: 'start' }}
+            className={buttonClass('brand', 'sm')}
+            style={{ justifySelf: 'start' }}
             data-testid="look-fonts-save"
           >
             {t('common.save')}
@@ -629,8 +628,8 @@ function LanguageFonts({
             />
             <button
               type="submit"
-              className={buttonClass('neutral')}
-              style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
+              className={buttonClass('neutral', 'sm')}
+              style={{ justifySelf: 'start' }}
               data-testid={`look-font-add-submit-${language}`}
             >
               {t('bb.look.fontAdd')}
@@ -696,8 +695,8 @@ function FontRow({
         />
         <button
           type="submit"
-          className={buttonClass('ghost')}
-          style={buttonStyle('ghost', 'sm')}
+          className={buttonClass('ghost', 'sm')}
+
           data-testid={`look-font-rename-${font.id}`}
         >
           {t('bb.look.fontRename')}
@@ -720,8 +719,8 @@ function FontRow({
           />
           <button
             type="submit"
-            className={buttonClass('ghost')}
-            style={buttonStyle('ghost', 'sm')}
+            className={buttonClass('ghost', 'sm')}
+
             data-testid={`look-font-replace-${font.id}`}
           >
             {t('bb.look.fontReplace')}
@@ -731,8 +730,8 @@ function FontRow({
       <div>
         <button
           type="button"
-          className={buttonClass('ghost')}
-          style={buttonStyle('ghost', 'sm')}
+          className={buttonClass('ghost', 'sm')}
+
           onClick={() => setConfirming(true)}
           data-testid={`look-font-remove-${font.id}`}
         >
@@ -789,7 +788,7 @@ const bodyStyle: React.CSSProperties = {
   lineHeight: 1.6,
 };
 const mutedStyle: React.CSSProperties = { ...bodyStyle, color: colorTokens.textMuted };
-const formStyle: React.CSSProperties = { display: 'grid', gap: 8 };
+const formStyle: React.CSSProperties = { display: 'grid', gap: 8, alignContent: 'start' };
 const rowStyle: React.CSSProperties = {
   display: 'flex',
   flexWrap: 'wrap',
@@ -801,14 +800,8 @@ const slotGridStyle: React.CSSProperties = {
   gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))',
   gap: 14,
 };
-const inputStyle: React.CSSProperties = {
-  padding: '8px 10px',
-  borderRadius: 10,
-  border: '1px solid rgba(17,17,20,.14)',
-  font: 'inherit',
-  fontSize: typographyTokens.bodySm.fontSize,
-  minWidth: 0,
-};
+// The prototype's form field comes from `.bs-control` (round 4); only the grid fit is local.
+const inputStyle: React.CSSProperties = { minWidth: 0 };
 const swatchListStyle: React.CSSProperties = {
   margin: 0,
   padding: 0,

@@ -69,7 +69,7 @@ export function SourceRow({
   const keepRef = useRef<HTMLButtonElement | null>(null);
   const removeRef = useRef<HTMLButtonElement | null>(null);
   const failed = source.status === 'FAILED';
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const number = new Intl.NumberFormat('en-US');
   const count = (key: 'bb.source.approvedCount' | 'bb.source.pendingCount', n: number) =>
     t(key).replace('{n}', number.format(n));
 

@@ -496,20 +496,21 @@ export default async function CalendarPage({
     timeZone: 'UTC',
     day: 'numeric',
   });
-  const longFormatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+  const longFormatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
     timeZone: 'UTC',
     weekday: 'long',
     day: 'numeric',
     month: 'long',
   });
-  const weekdayFormatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+  const weekdayFormatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
     timeZone: 'UTC',
     weekday: 'short',
   });
-  const timeFormatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+  const timeFormatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
     timeZone: timezone,
     hour: '2-digit',
     minute: '2-digit',
+    hourCycle: 'h23',
   });
 
   /** Slots bucketed by the local day they fall on. */

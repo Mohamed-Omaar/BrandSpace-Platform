@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { buttonStyle, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { colorTokens, spacingTokens, typographyTokens, buttonClass } from '@brandspace/ui';
 import { holdsPermission, inWorkspace } from '../../../server/customer-context';
 import { deletionRequestDetails } from '../../../server/deletion-request-details';
 import { pendingDeletionSession } from '../../../server/pending-deletion';
@@ -7,6 +7,7 @@ import { statusMessage, translator } from '../../../i18n/messages';
 import { AuthCard } from '../../../components/auth-card';
 import { signOutAction } from '../(auth)/actions';
 import { cancelWorkspaceDeletionAction } from './actions';
+import { dayFormatter } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,10 +34,7 @@ export default async function DeletionPendingPage({
   const { workspace, messageLocale } = await pendingDeletionSession(locale);
   const t = translator(messageLocale);
   const mayCancel = holdsPermission(workspace, 'workspace.delete');
-  const format = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
-    dateStyle: 'long',
-    timeZone: 'UTC',
-  });
+  const format = dayFormatter(locale, 'UTC');
   const date = format.format(workspace.deletionScheduledFor);
   // Review item 9: who asked, and when — read in the workspace's own context.
   const request = await inWorkspace(workspace.workspaceId, ({ db }) =>
@@ -72,7 +70,7 @@ export default async function DeletionPendingPage({
         {mayCancel ? (
           <form action={cancelWorkspaceDeletionAction}>
             <input type="hidden" name="locale" value={locale} />
-            <button type="submit" style={buttonStyle('primary')} data-testid="deletion-cancel">
+            <button type="submit" className={buttonClass('primary')} data-testid="deletion-cancel">
               {t('deletion.cancel')}
             </button>
           </form>
@@ -85,12 +83,12 @@ export default async function DeletionPendingPage({
           </p>
         )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.sm }}>
-          <Link href={`/${locale}/workspaces`} style={buttonStyle('ghost', 'sm')}>
+          <Link href={`/${locale}/workspaces`} className={buttonClass('ghost', 'sm')}>
             {t('deletion.otherWorkspace')}
           </Link>
           <form action={signOutAction}>
             <input type="hidden" name="locale" value={locale} />
-            <button type="submit" style={buttonStyle('ghost', 'sm')} data-testid="sign-out">
+            <button type="submit" className={buttonClass('ghost', 'sm')} data-testid="sign-out">
               {t('nav.signOut')}
             </button>
           </form>

@@ -5,7 +5,6 @@ import {
   SectionHeader,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   spacingTokens,
@@ -81,7 +80,7 @@ export default async function DataControlsPage({
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
 
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const number = new Intl.NumberFormat('en-US');
 
   const controls: readonly {
     key: string;
@@ -162,8 +161,8 @@ export default async function DataControlsPage({
                 {control.available && control.href ? (
                   <Link
                     href={`/${locale}${control.href}`}
-                    style={buttonStyle('ghost', 'sm')}
-                    className={buttonClass('ghost')}
+
+                    className={buttonClass('ghost', 'sm')}
                   >
                     {t('data.open')}
                   </Link>
@@ -188,7 +187,8 @@ export default async function DataControlsPage({
           {mayDelete ? (
             <details>
               <summary
-                style={{ ...buttonStyle('neutral'), listStyle: 'none', display: 'inline-flex' }}
+                className={buttonClass('neutral')}
+                style={{ listStyle: 'none', display: 'inline-flex' }}
                 data-testid="workspace-deletion-open"
               >
                 {t('data.workspaceDeletion.start')}
@@ -242,7 +242,7 @@ export default async function DataControlsPage({
                 <div>
                   <button
                     type="submit"
-                    style={buttonStyle('danger')}
+                    className={buttonClass('danger')}
                     data-testid="workspace-deletion-confirm"
                   >
                     {t('data.workspaceDeletion.confirm')}

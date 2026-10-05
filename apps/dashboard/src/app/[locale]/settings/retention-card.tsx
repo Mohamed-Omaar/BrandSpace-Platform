@@ -1,11 +1,11 @@
 import {
   Card,
   Field,
-  buttonStyle,
   colorTokens,
   inputStyle,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { inWorkspace } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
@@ -88,7 +88,7 @@ export async function RetentionCard({
           </p>
 
           <div>
-            <button type="submit" data-testid="retention-save" style={buttonStyle('primary')}>
+            <button type="submit" data-testid="retention-save" className={buttonClass('primary')}>
               {t('content.retention.save')}
             </button>
           </div>

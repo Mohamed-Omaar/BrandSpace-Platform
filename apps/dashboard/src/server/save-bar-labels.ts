@@ -21,7 +21,7 @@ export function saveBarLabels(
  * 7 January 2024 was a Sunday.
  */
 export function weekdayNames(locale: string): string[] {
-  const format = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+  const format = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
     weekday: 'long',
     timeZone: 'UTC',
   });

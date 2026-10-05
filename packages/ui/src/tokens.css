@@ -347,6 +347,25 @@ html {
   }
 }
 
+/*
+ * ROUND 4 — THE CUSTOMER FRAME DRAWS THE PROTOTYPE'S SCROLLBAR IN EVERY ENGINE.
+ *
+ * `prototype-2026-09-27` sets `*{scrollbar-width:thin;scrollbar-color:
+ * rgba(20,16,35,.2) transparent}`. Chromium 121+ and Firefox honour it (and
+ * Chromium then ignores the pseudo-elements, exactly as it does in the
+ * prototype); Safari, which has only the pseudo-elements, draws the
+ * prototype's `::-webkit-scrollbar` rules ported in `prototype.css`. The
+ * owner's "wide grey scrollbar" on the rail was the design system's UI-1 bar
+ * drawn where the prototype draws its thin one. Scoped to the customer frame
+ * and its page, so the rest of the product keeps UI-1.
+ */
+html:has(.bsp-frame),
+.bsp-frame,
+.bsp-frame * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 16, 35, 0.2) transparent;
+}
+
 /* The sidebar navigation scrolls without a visible bar — `.nav-scroll` in the
    demo, transcribed with BOTH of its rules. */
 .bs-nav-scroll {
@@ -719,7 +738,7 @@ h4 {
  * and a filled control with no hover feedback feels dead.
  */
 .bs-control {
-  background: var(--bs-control-surface);
+  background-color: var(--bs-control-surface);
   border: 1px solid var(--bs-control-border);
   transition:
     background-color var(--bs-duration-fast) var(--bs-ease-out),
@@ -727,16 +746,16 @@ h4 {
 }
 
 .bs-control:hover:not(:disabled):not([aria-disabled='true']) {
-  background: var(--bs-control-surface-hover);
+  background-color: var(--bs-control-surface-hover);
 }
 
 .bs-control:focus-visible {
-  background: var(--bs-control-surface-focus);
+  background-color: var(--bs-control-surface-focus);
 }
 
 .bs-control:disabled,
 .bs-control[aria-disabled='true'] {
-  background: var(--bs-control-surface-disabled);
+  background-color: var(--bs-control-surface-disabled);
   color: var(--bs-text-muted);
   cursor: not-allowed;
 }
@@ -771,16 +790,17 @@ h4 {
  * inset for its size. Nothing overrides the IMAGE.
  */
 select {
-  --bs-select-chevron-inset: 0.9375rem;
-  --bs-select-chevron-space: 2.75rem;
+  --bs-select-chevron-inset: 12px;
+  --bs-select-chevron-space: 34px;
 
   appearance: none;
   -webkit-appearance: none;
   padding-inline-end: var(--bs-select-chevron-space);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%234d4c53' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  /* The prototype's thin chevron: `m6 9 6 6 6-6`, 14px, stroke `#8a8a92`, width 2 (round 4). */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a8a92' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right var(--bs-select-chevron-inset) center;
-  background-size: 0.875rem;
+  background-size: 14px;
 }
 
 html[dir='rtl'] select {
@@ -1747,53 +1767,50 @@ select option {
    * the control's ordinary padding for the same reason: nothing of ours is
    * occupying it.
    */
-  select {
-    background-image: none;
-    padding-inline-end: var(--bs-space-md);
-  }
-
-  select.bs-control,
-  select.bs-select {
-    padding-inline-end: var(--bs-space-md) !important;
-  }
-
+  /*
+   * ROUND 4: THE PROTOTYPE'S CHEVRON, NEVER THE BROWSER'S. The customizable
+   * select is kept for its popover (`::picker(select)`, styled below as the
+   * prototype's glass listbox), but its `::picker-icon` — a browser-drawn
+   * marker the owner read as the native ▼ — is removed, and the thin chevron
+   * above is the only marker in every browser.
+   */
   select:not([multiple]) {
     appearance: base-select;
   }
 
-  select:not([multiple])::picker(select) {
-    appearance: base-select;
-    margin-block-start: 0.375rem;
-    padding: var(--bs-space-xs);
-    max-block-size: 18rem;
-    overflow-y: auto;
-    border: 1px solid transparent;
-    border-radius: var(--bs-radius-control);
-    background: var(--bs-surface);
-    box-shadow: 0 14px 36px rgba(17, 17, 20, 0.14);
+  select::picker-icon {
+    display: none;
   }
 
+  /* The prototype's `role="listbox"`: glass, radius 16, padding 6, gap 2. */
+  select:not([multiple])::picker(select) {
+    appearance: base-select;
+    margin-block-start: 6px;
+    padding: 6px;
+    max-block-size: 18rem;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.62);
+    backdrop-filter: blur(22px) saturate(180%);
+    box-shadow:
+      0 22px 55px rgba(40, 20, 90, 0.14),
+      0 0 0 1px rgba(20, 16, 35, 0.05);
+  }
+
+  /* `role="option"`: radius 10, padding 8px 10px, 13px; the chosen row `#f6f3ff`. */
   select:not([multiple]) option {
-    min-block-size: 2.5rem;
-    padding: var(--bs-space-sm) var(--bs-space-md);
-    border-radius: var(--bs-radius-control);
-    /*
-     * A HAIRLINE OF AIR, SO TWO HIGHLIGHTED ROWS NEVER MERGE (P6-02).
-     *
-     * The rows are rounded but had no separation, so the selected row and the
-     * row the pointer was on — which are adjacent as soon as you move one step
-     * — met edge to edge and read as ONE taller lavender block with a pinched
-     * waist, rather than as two rows one of which is chosen. `.bs-dropdown-option`
-     * never showed this because its panel gives it room; the native list had
-     * none.
-     */
+    min-block-size: 0;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 13px;
     margin-block: 1px;
   }
 
   select:not([multiple]) option:hover,
   select:not([multiple]) option:focus,
   select:not([multiple]) option:checked {
-    background: var(--bs-surface-lavender);
+    background: #f6f3ff;
   }
 
   select:not([multiple]) option::checkmark {

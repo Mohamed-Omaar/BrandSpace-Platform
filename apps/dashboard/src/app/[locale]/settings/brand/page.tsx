@@ -3,13 +3,13 @@ import {
   Card,
   Field,
   StateMessage,
-  buttonStyle,
   colorTokens,
   layoutTokens,
   inputStyle,
   radiusTokens,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
@@ -446,7 +446,7 @@ export default async function BrandProfilePage({
                 <div>
                   <button
                     type="submit"
-                    style={buttonStyle('primary')}
+                    className={buttonClass('primary')}
                     data-testid="brand-profile-save"
                   >
                     {t('brandProfile.save')}

@@ -36,7 +36,7 @@ import { explainPeriodAction, saveInsightLearningAction } from './actions';
 import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { bestPostingHours, channelChart, pillarTotals } from '../../../server/performance-view';
-import { dayLabel } from '../../../server/prototype-dates';
+import { dayFormatter, dayLabel, whenFormatter } from '../../../server/prototype-dates';
 
 import { EmptyAction } from '../../../components/empty-action';
 
@@ -132,21 +132,13 @@ export default async function AnalyticsPage({
   );
   const brand = requiredBrand(brandContext);
 
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
-  const percent = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+  const number = new Intl.NumberFormat('en-US');
+  const percent = new Intl.NumberFormat('en-US', {
     style: 'percent',
     maximumFractionDigits: 1,
   });
-  const day = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  });
-  const stamp = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  });
+  const day = dayFormatter(locale, 'UTC');
+  const stamp = whenFormatter(locale, 'UTC');
 
   const formatValue = (value: bigint | null, unit: string): string | null => {
     if (value === null) return null;

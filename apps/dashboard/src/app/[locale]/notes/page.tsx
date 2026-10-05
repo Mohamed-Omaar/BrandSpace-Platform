@@ -5,10 +5,10 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
-  buttonStyle,
   colorTokens,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { NotesService, type NoteInboxEntry } from '@brandspace/collaboration';
 import { systemClock } from '@brandspace/shared';
@@ -126,7 +126,7 @@ export default async function NotesPage({
       <div style={actionRowStyle}>
         <Link
           href={subjectHref(entry)}
-          style={buttonStyle('ghost')}
+          className={buttonClass('ghost')}
           data-testid={`notes-open-${entry.threadId}`}
         >
           {t('notesInbox.openSubject')}

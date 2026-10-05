@@ -282,7 +282,9 @@ export function ToastHost({
       style={{
         position: 'fixed',
         insetInline: 0,
-        insetBlockEnd: spacingTokens.lg,
+        // `.toastx { bottom: 26px }` inside the frame, which sits 20px in from
+        // the viewport: 46px from the window's foot, measured (round 4).
+        insetBlockEnd: '46px',
         zIndex: zIndexTokens.toast,
         display: 'flex',
         flexDirection: 'column',

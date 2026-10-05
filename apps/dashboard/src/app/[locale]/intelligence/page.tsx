@@ -8,7 +8,6 @@ import {
   StateMessage,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   spacingTokens,
@@ -36,6 +35,7 @@ import {
 } from './actions';
 
 import { EmptyAction } from '../../../components/empty-action';
+import { dayFormatter } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,11 +119,8 @@ export default async function IntelligencePage({
   );
   const brand = requiredBrand(brandContext);
 
-  const stamp = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-    timeZone: 'UTC',
-  });
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const stamp = dayFormatter(locale, 'UTC');
+  const number = new Intl.NumberFormat('en-US');
 
   /*
    * WHAT BELONGS TO THIS AREA, DECLARED RATHER THAN "everything recent".
@@ -269,8 +266,8 @@ export default async function IntelligencePage({
           <div>
             <CopilotLink
               href={copilotHref(locale, 'intelligence')}
-              style={buttonStyle('ghost', 'sm')}
-              className={buttonClass('ghost')}
+
+              className={buttonClass('ghost', 'sm')}
               data-testid="intelligence-ask-copilot"
             >
               {t('copilot.ask')}
@@ -317,7 +314,7 @@ export default async function IntelligencePage({
                   <p style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
                     {t('intelligence.basisNotice')}
                   </p>
-                  <button type="submit" style={buttonStyle('brand', 'sm')}>
+                  <button type="submit" className={buttonClass('brand', 'sm')}>
                     {t('intelligence.analyse')}
                   </button>
                 </form>
@@ -470,7 +467,7 @@ export default async function IntelligencePage({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="insightId" value={insight.id} />
                           <input type="hidden" name="decision" value="accept" />
-                          <button type="submit" style={buttonStyle('brand', 'sm')}>
+                          <button type="submit" className={buttonClass('brand', 'sm')}>
                             {t('insights.accept')}
                           </button>
                         </form>
@@ -478,7 +475,7 @@ export default async function IntelligencePage({
                           <input type="hidden" name="locale" value={locale} />
                           <input type="hidden" name="insightId" value={insight.id} />
                           <input type="hidden" name="decision" value="dismiss" />
-                          <button type="submit" style={buttonStyle('ghost', 'sm')}>
+                          <button type="submit" className={buttonClass('ghost', 'sm')}>
                             {t('insights.dismiss')}
                           </button>
                         </form>
@@ -489,8 +486,8 @@ export default async function IntelligencePage({
                       <div>
                         <CopilotLink
                           href={copilotHref(locale, 'intelligence')}
-                          style={buttonStyle('ghost', 'sm')}
-                          className={buttonClass('ghost')}
+
+                          className={buttonClass('ghost', 'sm')}
                           data-testid={`intelligence-copilot-${insight.id}`}
                         >
                           {t('home.recommended.giveToCopilot')}
@@ -513,7 +510,7 @@ export default async function IntelligencePage({
                           <input type="hidden" name="insightId" value={insight.id} />
                           <button
                             type="submit"
-                            style={buttonStyle('neutral', 'sm')}
+                            className={buttonClass('neutral', 'sm')}
                             data-testid="propose-learnings"
                           >
                             {t('insights.proposeLearnings')}

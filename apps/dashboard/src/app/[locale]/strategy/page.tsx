@@ -13,7 +13,6 @@ import {
   StateMessage,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   radiusTokens,
@@ -56,6 +55,7 @@ import {
 } from './actions';
 
 import { EmptyAction } from '../../../components/empty-action';
+import { type DateFormatterLike, dayFormatter } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,11 +117,8 @@ export default async function StrategyPage({
   );
   const brand = requiredBrand(brandContext);
 
-  const stamp = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-    timeZone: 'UTC',
-  });
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const stamp = dayFormatter(locale, 'UTC');
+  const number = new Intl.NumberFormat('en-US');
 
   const data = brand
     ? await inAnalytics(workspace.workspaceId, async ({ db }) => {
@@ -264,8 +261,8 @@ export default async function StrategyPage({
                       <input type="hidden" name="insightId" value={data.accepted.id} />
                       <button
                         type="submit"
-                        className={buttonClass('ghost')}
-                        style={buttonStyle('ghost', 'sm')}
+                        className={buttonClass('ghost', 'sm')}
+
                         data-testid="strategy-brain-changed-acknowledge"
                       >
                         {t('strategy.brainChanged.acknowledge')}
@@ -315,8 +312,8 @@ export default async function StrategyPage({
                   <div>
                     <CopilotLink
                       href={copilot}
-                      style={buttonStyle('ghost', 'sm')}
-                      className={buttonClass('ghost')}
+
+                      className={buttonClass('ghost', 'sm')}
                       data-testid="strategy-copilot"
                     >
                       {t('home.recommended.giveToCopilot')}
@@ -456,8 +453,8 @@ export default async function StrategyPage({
                               channels: leadingChannels(plan),
                               objective: campaignObjectiveFor(firstGoal),
                             })}
-                            style={buttonStyle('neutral', 'sm')}
-                            className={buttonClass('neutral')}
+
+                            className={buttonClass('neutral', 'sm')}
                             data-testid={`strategy-week-campaign-${week.weekNumber}`}
                           >
                             {t('strategy.createCampaign')}
@@ -466,8 +463,8 @@ export default async function StrategyPage({
                         {may('content.create') ? (
                           <Link
                             href={contentHref({ locale, week })}
-                            style={buttonStyle('neutral', 'sm')}
-                            className={buttonClass('neutral')}
+
+                            className={buttonClass('neutral', 'sm')}
                             data-testid={`strategy-week-content-${week.weekNumber}`}
                           >
                             {t('strategy.sendToContent')}
@@ -476,8 +473,8 @@ export default async function StrategyPage({
                         {copilot ? (
                           <CopilotLink
                             href={copilot}
-                            style={buttonStyle('ghost', 'sm')}
-                            className={buttonClass('ghost')}
+
+                            className={buttonClass('ghost', 'sm')}
                           >
                             {t('home.recommended.giveToCopilot')}
                           </CopilotLink>
@@ -544,8 +541,8 @@ export default async function StrategyPage({
                     <div>
                       <button
                         type="submit"
-                        style={buttonStyle('brand', 'sm')}
-                        className={buttonClass('brand')}
+
+                        className={buttonClass('brand', 'sm')}
                       >
                         {t('strategy.generate')}
                       </button>
@@ -603,8 +600,8 @@ export default async function StrategyPage({
                                   <input type="hidden" name="decision" value="accept" />
                                   <button
                                     type="submit"
-                                    style={buttonStyle('brand', 'sm')}
-                                    className={buttonClass('brand')}
+
+                                    className={buttonClass('brand', 'sm')}
                                     data-testid={`strategy-accept-${proposal.id}`}
                                   >
                                     {t('insights.accept')}
@@ -616,8 +613,8 @@ export default async function StrategyPage({
                                   <input type="hidden" name="decision" value="dismiss" />
                                   <button
                                     type="submit"
-                                    style={buttonStyle('ghost', 'sm')}
-                                    className={buttonClass('ghost')}
+
+                                    className={buttonClass('ghost', 'sm')}
                                   >
                                     {t('insights.dismiss')}
                                   </button>
@@ -628,8 +625,8 @@ export default async function StrategyPage({
                                     <input type="hidden" name="insightId" value={proposal.id} />
                                     <button
                                       type="submit"
-                                      style={buttonStyle('neutral', 'sm')}
-                                      className={buttonClass('neutral')}
+
+                                      className={buttonClass('neutral', 'sm')}
                                       data-testid="propose-learnings"
                                     >
                                       {t('insights.proposeLearnings')}
@@ -700,8 +697,8 @@ function KnowledgeList({
           <div>
             <Link
               href={addHref}
-              style={buttonStyle('ghost', 'sm')}
-              className={buttonClass('ghost')}
+
+              className={buttonClass('ghost', 'sm')}
             >
               {addLabel}
             </Link>
@@ -745,7 +742,7 @@ function EvidenceList({
     periodEnd: Date | null;
   }[];
   readonly t: (key: MessageKey) => string;
-  readonly stamp: Intl.DateTimeFormat;
+  readonly stamp: DateFormatterLike;
   readonly number: Intl.NumberFormat;
 }) {
   return (

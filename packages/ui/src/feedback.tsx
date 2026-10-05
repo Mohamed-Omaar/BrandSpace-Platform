@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
-import { colorTokens, radiusTokens, shadowTokens, spacingTokens, typographyTokens } from './tokens';
+import { colorTokens, radiusTokens, spacingTokens, typographyTokens } from './tokens';
 import { AlertIcon, CheckIcon, EmptyBoxIcon, InfoIcon, LockIcon, SearchIcon } from './icons';
 
 /**
@@ -148,48 +148,36 @@ export function Toast({
   readonly className?: string | undefined;
   readonly testId?: string | undefined;
 }) {
-  const style = toneStyle(tone);
+  /*
+   * ROUND 4 — THE PROTOTYPE'S TOAST (`.toastx`, `Main.dc.html`): one glass pill
+   * — a 24px tone circle, the message at 13px/600, an optional `btn sm ghost`
+   * action and a 24px round dismiss. The prototype draws only the success
+   * circle (`#dff6e8` / `#178a4c`); error, warning and info take the same shape
+   * with the prototype's own pill colours (`.p-bad`, `.p-warn`, `.p-info`).
+   * Every value is in `prototype.css` (`.bsp-toast`).
+   */
   return (
     <div
       {...(announce ? { role: 'status', 'aria-live': 'polite' as const } : {})}
-      className={className}
+      className={['bsp-toast', className].filter(Boolean).join(' ')}
+      data-tone={tone}
       data-testid={testId ?? 'toast'}
-      style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: spacingTokens.sm,
-        maxInlineSize: '24rem',
-        padding: spacingTokens.md,
-        borderRadius: radiusTokens.lg,
-        background: colorTokens.surface,
-        border: '1px solid transparent',
-        boxShadow: shadowTokens.overlay,
-        ...typographyTokens.bodySm,
-        color: colorTokens.textPrimary,
-      }}
     >
       <span
+        className="bsp-toast-ic"
         // MO8: a success check draws itself.
         {...(tone === 'success' ? { 'data-toast-check': '' } : {})}
-        style={{ color: style.color, flexShrink: 0, display: 'inline-flex' }}
+        {...(icon ? { 'data-custom': '' } : {})}
       >
-        {icon ?? style.icon}
+        {icon ?? TOAST_ICON[tone]}
       </span>
-      <span style={{ minInlineSize: 0, flex: 1 }}>{children}</span>
+      <span className="bsp-toast-msg">{children}</span>
       {action?.href ? (
         <Link
           href={action.href}
           onClick={action.onAction}
           data-testid={action.testId}
-          className="bs-control"
-          style={{
-            flexShrink: 0,
-            alignSelf: 'center',
-            ...typographyTokens.bodySm,
-            fontWeight: 600,
-            color: colorTokens.brandPurplePressed,
-            textDecoration: 'none',
-          }}
+          className="bsp-btn bsp-sm bsp-ghost bsp-toast-act"
         >
           {action.label}
         </Link>
@@ -198,19 +186,7 @@ export function Toast({
           type="button"
           onClick={action.onAction}
           data-testid={action.testId}
-          className="bs-control"
-          style={{
-            flexShrink: 0,
-            background: 'transparent',
-            border: 0,
-            padding: 0,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            ...typographyTokens.bodySm,
-            fontWeight: 600,
-            color: colorTokens.brandPurplePressed,
-            minBlockSize: '24px',
-          }}
+          className="bsp-btn bsp-sm bsp-ghost bsp-toast-act"
         >
           {action.label}
         </button>
@@ -221,22 +197,86 @@ export function Toast({
           onClick={onDismiss}
           aria-label={dismissLabel}
           data-testid={`${testId ?? 'toast'}-dismiss`}
-          style={{
-            background: 'transparent',
-            border: 0,
-            cursor: 'pointer',
-            color: colorTokens.textSecondary,
-            fontSize: typographyTokens.bodySm.fontSize,
-            minInlineSize: '24px',
-            minBlockSize: '24px',
-          }}
+          className="bsp-toast-x"
         >
-          {'×'}
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg>
         </button>
       ) : null}
     </div>
   );
 }
+
+/** The prototype's toast glyphs: its check (`m5 12.5 4.5 4.5L19 7.5`, stroke 3), and an exclamation for the rest. */
+const TOAST_ICON: Record<Tone, ReactNode> = {
+  success: (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m5 12.5 4.5 4.5L19 7.5" />
+    </svg>
+  ),
+  error: (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 6v7M12 17.5v.5" />
+    </svg>
+  ),
+  warning: (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 6v7M12 17.5v.5" />
+    </svg>
+  ),
+  info: (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 11v7M12 6.5V7" />
+    </svg>
+  ),
+};
 
 type StateKind = 'empty' | 'no-results' | 'error' | 'forbidden';
 

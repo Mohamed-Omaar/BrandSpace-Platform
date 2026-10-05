@@ -247,12 +247,27 @@
 .bsp-cnt[data-tone='quiet'] {
   background: transparent;
   color: #6a6a72; /* prototype #8a8a92: see the accessibility finding at the top */
-  font-weight: 400;
+  font-weight: 600;
   padding: 0;
   min-inline-size: 0;
 }
+/* On the dark current item the prototype keeps `#8a8a92` (5.6:1 on `#111114`). */
 .bsp-nav[aria-current='page'] .bsp-cnt[data-tone='quiet'] {
-  color: #fff;
+  color: #8a8a92;
+}
+/* Round 4 — the current item's count is the prototype's white circle with ink figures. */
+.bsp-nav[aria-current='page'] .bsp-cnt[data-tone='ink'] {
+  background: #fff;
+  color: #111114;
+}
+
+/* A <select> drawn as the prototype's chip: the chevron sits 10px in, with room for it. */
+select.bsp-chip {
+  padding-inline-end: 30px;
+  background-position: right 10px center;
+}
+[dir='rtl'] select.bsp-chip {
+  background-position: left 10px center;
 }
 
 /* `.ibtn` */
@@ -339,11 +354,68 @@
   min-block-size: 32px;
   border-radius: 10px;
 }
+/* The hero's large `.btn`: `min-block-size: 48px; padding: 12px 20px; font-size: 14.5px`. */
+.bsp-btn.bsp-lg {
+  padding: 12px 20px;
+  font-size: 14.5px;
+  min-block-size: 48px;
+}
+/* A destructive action: the prototype's `.btn` with `color: #b83245` (Remove, Delete, Disconnect). */
+.bsp-btn.bsp-danger {
+  color: #b83245;
+}
 .bsp-btn[disabled],
 .bsp-btn[aria-disabled='true'] {
   background: #ececef;
   color: #9a9aa2;
   cursor: not-allowed;
+}
+
+/*
+ * THE ONE FORM FIELD (review of #68, round 4, step 1). Measured from the
+ * prototype at runtime: its form fields are `border: 1px solid #e4e4e8;
+ * border-radius: 12px; padding: 9px 12px; font-size: 14px; background: #fff`
+ * with no stated height — a text field is its padding and one line (37px in
+ * Inter), while the dropdown triggers state `min-block-size: 40px` — and its
+ * form textareas `padding: 10px 12px`. Every input, select and textarea in the
+ * customer app inherits it; the zero-specificity `:where()` lets a screen's own
+ * ported field (the Studio's soft caption, the chat box, the auth `.in`) keep
+ * the prototype's different treatment where the prototype draws one.
+ */
+.bsp-frame
+  :where(
+    input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']):not(
+        [type='range']
+      ):not([type='color']),
+    select,
+    textarea
+  ).bs-control {
+  box-sizing: border-box;
+  min-block-size: auto;
+  border: 1px solid #e4e4e8;
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-size: 14px;
+  line-height: normal;
+  color: #111114;
+  background-color: #fff;
+}
+.bsp-frame :where(select).bs-control {
+  padding-inline-end: 34px;
+  block-size: 40px;
+}
+.bsp-frame :where(textarea).bs-control {
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+.bsp-frame
+  :where(
+    input:not([type='checkbox']):not([type='radio']):not([type='hidden']):not([type='file']),
+    select,
+    textarea
+  ).bs-control:hover:not(:disabled) {
+  background-color: #fff;
+  border-color: #c9c9d1;
 }
 
 /* `.card` */
@@ -1487,7 +1559,8 @@ button.bsp-xcard:hover {
   align-items: center;
   gap: 7px;
   border: 1px solid #e4e4e8;
-  background: #fff;
+  /* The colour only: a chip that is a <select> keeps the chevron (round 4). */
+  background-color: #fff;
   border-radius: 99px;
   padding: 5px 11px;
   font-size: 12.5px;
@@ -2318,6 +2391,11 @@ span.bsp-cal-hol {
   background: transparent;
   box-shadow: none;
 }
+/* A tab's count, as the prototype writes it beside the label ("Insights 2"). */
+.bsp-seg-n {
+  font-variant-numeric: tabular-nums;
+}
+
 /* A channel chip that filters by address: its "on" is the pressed chip. */
 .bsp-chip[aria-current='true'] {
   background: #111114;
@@ -2644,7 +2722,8 @@ span.bsp-cal-hol {
    #f5f5f7; border-radius: 12px; padding: 10px 12px; font-size: 13.5px`. */
 .bsp-fdis-control {
   border: 1px solid transparent;
-  background: #f5f5f7;
+  /* The colour only, so a select keeps the prototype's chevron (round 4). */
+  background-color: #f5f5f7;
   border-radius: 12px;
   padding: 8px 12px;
   font: inherit;
@@ -7769,7 +7848,7 @@ button.bsp-chip.bsp-bb-q {
   border-radius: 12px;
   padding: 9px 12px;
   font-size: 14px;
-  background: #fff;
+  background-color: #fff;
   color: #111114;
 }
 .bsp-tm-wide {
@@ -9994,4 +10073,145 @@ select.bs-select.bsp-chevron {
 .bsp-pf-camp-m {
   color: #6a6a72;
   font-size: 11px;
+}
+
+/*
+ * `.toastx` (round 4): one glass pill, 26px above the frame's foot, centred.
+ * `display:flex; gap:10px; background:rgba(255,255,255,.62);
+ * backdrop-filter:blur(22px) saturate(180%); border:1px solid
+ * rgba(255,255,255,.85); border-radius:99px; padding:7px 8px; font-size:13px;
+ * font-weight:600; box-shadow:0 16px 40px rgba(40,20,90,.14), 0 0 0 1px
+ * rgba(20,16,35,.04)`.
+ */
+.bsp-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-inline-size: min(560px, calc(100vw - 32px));
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  color: #111114;
+  border-radius: 99px;
+  padding: 7px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: normal;
+  box-shadow:
+    0 16px 40px rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.04);
+}
+.bsp-toast-ic {
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: #dff6e8;
+  color: #178a4c;
+}
+.bsp-toast[data-tone='error'] .bsp-toast-ic {
+  background: #fdecef;
+  color: #b83245;
+}
+.bsp-toast[data-tone='warning'] .bsp-toast-ic {
+  background: #fff3cc;
+  color: #7a5600;
+}
+.bsp-toast[data-tone='info'] .bsp-toast-ic {
+  background: #eaf3ff;
+  color: #175cd3;
+}
+.bsp-toast-ic[data-custom] {
+  background: transparent;
+}
+.bsp-toast-msg {
+  padding-inline-end: 4px;
+  min-inline-size: 0;
+}
+/* The undo: `btn sm ghost` with `min-block-size: 26px; padding: 3px 10px; color: #5312c4`. */
+.bsp-btn.bsp-toast-act {
+  min-block-size: 26px;
+  padding: 3px 10px;
+  color: #5312c4;
+}
+.bsp-toast-x {
+  inline-size: 24px;
+  block-size: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 16, 35, 0.06);
+  color: #55555c;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/*
+ * Roles & permissions (round 4, 2.1): `display:grid; grid-template-columns:
+ * repeat(2,minmax(0,1fr)); gap:14px`; each group a `.card` with `overflow:
+ * hidden`, its title `padding:12px 16px 6px; font-size:14px; font-weight:800`,
+ * each row `.row` at `padding:10px 16px`, the label 13.5px/700, the note
+ * 11.5px `#6a6a72` (`#b83245` on the two sensitive ones), the `.pill.p-neu`.
+ */
+.bsp-pg {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.bsp-pg-card {
+  overflow: hidden;
+}
+.bsp-pg-h {
+  padding: 12px 16px 6px;
+  font-size: 14px;
+  font-weight: 800;
+}
+.bsp-row.bsp-pg-row {
+  padding: 10px 16px;
+}
+.bsp-pg-main {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.bsp-pg-label {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.bsp-pg-row[data-state='none'] .bsp-pg-label {
+  color: #6a6a72;
+}
+.bsp-pg-note {
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+.bsp-pg-note[data-sensitive] {
+  color: #b83245;
+}
+.bsp-pg-audit {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-pg-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.bsp-pg-more > summary::-webkit-details-marker {
+  display: none;
+}
+.bsp-pg-more[open] > summary {
+  margin-block-end: 10px;
+}
+@media (max-width: 900px) {
+  .bsp-pg {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

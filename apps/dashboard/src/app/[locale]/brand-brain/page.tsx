@@ -47,6 +47,7 @@ import type { ChatStart } from './brand-chat';
  */
 import '@brandspace/ui/brand-brain.css';
 import { createBrandAction } from './actions';
+import { dayFormatter } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -384,10 +385,7 @@ export default async function BrandBrainPage({
       documents: new Map(documents.map((document) => [document.id, document.fileName])),
     };
   });
-  const provenanceDay = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-    timeZone: 'UTC',
-  });
+  const provenanceDay = dayFormatter(locale, 'UTC');
   const provenanceOf = (item: (typeof items)[number]): string =>
     [
       `${t('bb.provenance.updated')} ${provenanceDay.format(item.updatedAt)}`,
@@ -498,16 +496,12 @@ export default async function BrandBrainPage({
   const itemTitles = new Map(
     items.map((item) => [item.id, pick(localizedFrom(item.title), locale) || item.itemKey]),
   );
-  const reviewNumber = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
-  const reviewPercent = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+  const reviewNumber = new Intl.NumberFormat('en-US');
+  const reviewPercent = new Intl.NumberFormat('en-US', {
     style: 'percent',
     maximumFractionDigits: 1,
   });
-  const reviewDay = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  });
+  const reviewDay = dayFormatter(locale, 'UTC');
   /*
    * D4 — WHAT A CANDIDATE WOULD REPLACE, side by side. Either the approved fact
    * with its own key (accepting makes a new version of it) or the approved fact
@@ -646,9 +640,7 @@ export default async function BrandBrainPage({
   }));
   const areaLabelOf = (area: string) =>
     t(`bb.area.${areaDefinition(area as never).messageKey}` as MessageKey);
-  const uploadedOn = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-  });
+  const uploadedOn = dayFormatter(locale, 'UTC');
 
   const sourceData: SourceData[] = sources.map((source) => ({
     id: source.id,

@@ -6,11 +6,11 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
-  buttonStyle,
   colorTokens,
   inputStyle,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
@@ -185,7 +185,7 @@ export default async function ActivityPage({
                       </option>
                     ))}
                   </select>
-                  <button type="submit" style={buttonStyle('ghost')}>
+                  <button type="submit" className={buttonClass('ghost')}>
                     {t('activity.filterAction')}
                   </button>
                 </form>
@@ -230,7 +230,7 @@ export default async function ActivityPage({
                 {page.nextCursor ? (
                   <Link
                     href={buildHref(locale, action, page.nextCursor)}
-                    style={buttonStyle('ghost')}
+                    className={buttonClass('ghost')}
                     data-testid="activity-more"
                   >
                     {t('activity.more')}

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { StateMessage, buttonStyle, spacingTokens } from '@brandspace/ui';
+import { StateMessage, spacingTokens, buttonClass } from '@brandspace/ui';
 import { requireWorkspacePage } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../../server/brand-context';
@@ -80,7 +80,7 @@ export default async function NewCampaignPage({
       actions={
         <Link
           href={`/${locale}/campaigns`}
-          style={buttonStyle('neutral')}
+          className={buttonClass('neutral')}
           data-testid="campaign-back"
         >
           {t('campaigns.back')}

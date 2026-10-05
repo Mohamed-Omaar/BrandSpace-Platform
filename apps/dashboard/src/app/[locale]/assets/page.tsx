@@ -67,7 +67,7 @@ export default async function AssetsPage({
   const access = await requireWorkspacePage(locale, '/assets');
   const { messageLocale } = access.session;
   const t = translator(messageLocale);
-  const countFormat = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+  const countFormat = new Intl.NumberFormat('en-US', {
     numberingSystem: 'latn',
   });
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;

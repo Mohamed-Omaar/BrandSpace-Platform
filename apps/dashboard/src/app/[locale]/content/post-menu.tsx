@@ -5,10 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   Field,
-  buttonStyle,
   inputStyle,
   spacingTokens,
   visuallyHiddenStyle,
+  buttonClass,
 } from '@brandspace/ui';
 
 /**
@@ -431,8 +431,8 @@ export function PostMenu(props: PostMenuProps) {
             <div>
               <button
                 type="submit"
-                className="bs-pressable"
-                style={buttonStyle('primary')}
+                className={buttonClass('primary')}
+
                 data-testid={`post-move-submit-${itemId}`}
               >
                 {l('content.move.submit')}

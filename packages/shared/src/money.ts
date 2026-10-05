@@ -356,3 +356,39 @@ export function formatMoney(
     return `${money.toDecimalString()} ${money.currency}`;
   }
 }
+
+/**
+ * THE CUSTOMER'S MONEY DISPLAY (review of #68, round 4, step 1.8).
+ *
+ * `prototype-2026-09-27` writes a price as `$79 / month` and an invoice total
+ * as `$79.00` — a symbol, Latin digits in both languages, and the cents only
+ * where they are owed. `formatMoney` stays the accounting string (`USD 79.00`,
+ * used by the invoice document and the Control Center); every customer screen
+ * that shows an amount uses this. PRESENTATION ONLY: it reads the same exact
+ * minor units and changes nothing.
+ *
+ * `wholeUnits: true` drops `.00` from a whole amount (a plan's price); a
+ * fractional amount always keeps its digits, so no figure is ever rounded.
+ */
+export function formatMoneyDisplay(
+  money: Money,
+  _locale: string,
+  options?: { readonly wholeUnits?: boolean },
+): string {
+  const value = Number(money.minorUnits) / 10 ** money.scale;
+  const whole = Number(money.minorUnits) % 10 ** money.scale === 0;
+  const digits = options?.wholeUnits === true && whole ? 0 : money.scale;
+  try {
+    // `en-US` in both languages: the prototype writes `$79` in Arabic too, and
+    // §4 asks for Western digits.
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: money.currency,
+      currencyDisplay: 'narrowSymbol',
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(value);
+  } catch {
+    return `${money.toDecimalString()} ${money.currency}`;
+  }
+}

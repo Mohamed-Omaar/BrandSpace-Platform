@@ -1,11 +1,11 @@
 import {
   Card,
   Field,
-  buttonStyle,
   colorTokens,
   inputStyle,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { getPrisma, withoutTenantContext } from '@brandspace/database';
 import { SignupService } from '@brandspace/auth';
@@ -169,7 +169,7 @@ export default async function SecuritySettingsPage({
             {mfaAvailable && !account.mfaEnabled && !pending && (
               <form action={beginMfaEnrolmentAction}>
                 <input type="hidden" name="locale" value={locale} />
-                <button type="submit" data-testid="mfa-begin" style={buttonStyle('primary')}>
+                <button type="submit" data-testid="mfa-begin" className={buttonClass('primary')}>
                   {t('security.enrolStart')}
                 </button>
               </form>
@@ -205,7 +205,7 @@ export default async function SecuritySettingsPage({
                   <button
                     type="submit"
                     data-testid="mfa-new-phone-cancel"
-                    style={buttonStyle('ghost')}
+                    className={buttonClass('ghost')}
                   >
                     {t('common.cancel')}
                   </button>
@@ -236,7 +236,7 @@ export default async function SecuritySettingsPage({
                   <button
                     type="submit"
                     data-testid="mfa-new-phone-begin"
-                    style={buttonStyle('neutral')}
+                    className={buttonClass('neutral')}
                   >
                     {t('security.newPhone')}
                   </button>
@@ -286,7 +286,11 @@ export default async function SecuritySettingsPage({
                   </Field>
                 </div>
                 <div>
-                  <button type="submit" data-testid="mfa-disable" style={buttonStyle('neutral')}>
+                  <button
+                    type="submit"
+                    data-testid="mfa-disable"
+                    className={buttonClass('neutral')}
+                  >
                     {t('security.disable')}
                   </button>
                 </div>
@@ -316,7 +320,11 @@ export default async function SecuritySettingsPage({
                 testId="mfa-require"
               />
               <div>
-                <button type="submit" data-testid="mfa-require-save" style={buttonStyle('primary')}>
+                <button
+                  type="submit"
+                  data-testid="mfa-require-save"
+                  className={buttonClass('primary')}
+                >
                   {t('common.save')}
                 </button>
               </div>
@@ -362,7 +370,7 @@ export default async function SecuritySettingsPage({
                     <button
                       type="submit"
                       data-testid="recovery-codes-saved"
-                      style={buttonStyle('neutral')}
+                      className={buttonClass('neutral')}
                     >
                       {t('security.recoverySaved')}
                     </button>
@@ -399,7 +407,7 @@ export default async function SecuritySettingsPage({
                       <button
                         type="submit"
                         data-testid="recovery-regenerate"
-                        style={buttonStyle('neutral')}
+                        className={buttonClass('neutral')}
                       >
                         {t('security.recoveryRegenerate')}
                       </button>
@@ -424,7 +432,11 @@ export default async function SecuritySettingsPage({
               </p>
             </div>
             <div>
-              <button type="submit" data-testid="sessions-revoke" style={buttonStyle('neutral')}>
+              <button
+                type="submit"
+                data-testid="sessions-revoke"
+                className={buttonClass('neutral')}
+              >
                 {t('security.signOutOthers')}
               </button>
             </div>

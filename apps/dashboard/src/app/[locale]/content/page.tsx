@@ -329,7 +329,7 @@ export default async function ContentPage({
     };
   });
   const today = formatLocalTime(now, menuFacts.timezone).slice(0, 10);
-  const dayLabel = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-US', {
+  const dayLabel = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en-US', {
     day: 'numeric',
     month: locale === 'ar' ? 'long' : 'short',
     timeZone: 'UTC',

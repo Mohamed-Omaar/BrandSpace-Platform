@@ -9,7 +9,6 @@ import {
   StateMessage,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   spacingTokens,
   typographyTokens,
@@ -306,8 +305,8 @@ export default async function PublishingPage({
         <input type="hidden" name="brandId" value={forBrand} />
         <button
           type="submit"
-          style={buttonStyle('primary', 'sm')}
-          className={buttonClass('primary')}
+
+          className={buttonClass('primary', 'sm')}
           data-testid={testId}
         >
           {t('publishingHub.reconnect').replace('{provider}', providerLabel(provider))}
@@ -532,8 +531,8 @@ export default async function PublishingPage({
                             href={job.externalPostUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={buttonStyle('ghost', 'sm')}
-                            className={buttonClass('ghost')}
+
+                            className={buttonClass('ghost', 'sm')}
                             data-testid={`post-link-${job.id}`}
                           >
                             {t('publishing.viewPost')}
@@ -545,8 +544,8 @@ export default async function PublishingPage({
                             <input type="hidden" name="jobId" value={job.id} />
                             <button
                               type="submit"
-                              style={buttonStyle('primary', 'sm')}
-                              className={buttonClass('primary')}
+
+                              className={buttonClass('primary', 'sm')}
                               data-testid={`retry-reconnected-${job.id}`}
                             >
                               {t('publishing.retry')}
@@ -569,8 +568,8 @@ export default async function PublishingPage({
                             <input type="hidden" name="jobId" value={job.id} />
                             <button
                               type="submit"
-                              style={buttonStyle('neutral', 'sm')}
-                              className={buttonClass('neutral')}
+
+                              className={buttonClass('neutral', 'sm')}
                               data-testid={`retry-${job.id}`}
                             >
                               {t('publishing.retry')}
@@ -588,8 +587,8 @@ export default async function PublishingPage({
                           data.approvalRequired.get(job.brandId) ? (
                             <Link
                               href={`/${locale}/content/compose?item=${job.contentItemId}`}
-                              style={buttonStyle('primary', 'sm')}
-                              className={buttonClass('primary')}
+
+                              className={buttonClass('primary', 'sm')}
                               data-testid={`reschedule-${job.id}`}
                             >
                               {t('publishing.resendForReview')}
@@ -597,8 +596,8 @@ export default async function PublishingPage({
                           ) : (
                             <Link
                               href={`/${locale}/calendar?item=${job.contentItemId}`}
-                              style={buttonStyle('primary', 'sm')}
-                              className={buttonClass('primary')}
+
+                              className={buttonClass('primary', 'sm')}
                               data-testid={`reschedule-${job.id}`}
                             >
                               {t('publishing.reschedule')}
@@ -618,8 +617,8 @@ export default async function PublishingPage({
                             />
                             <button
                               type="submit"
-                              style={buttonStyle('neutral', 'sm')}
-                              className={buttonClass('neutral')}
+
+                              className={buttonClass('neutral', 'sm')}
                               data-testid={`copy-${job.id}`}
                             >
                               {t('content.action.duplicate')}
@@ -632,8 +631,8 @@ export default async function PublishingPage({
                             <input type="hidden" name="jobId" value={job.id} />
                             <button
                               type="submit"
-                              style={buttonStyle('ghost', 'sm')}
-                              className={buttonClass('ghost')}
+
+                              className={buttonClass('ghost', 'sm')}
                               data-testid={`cancel-${job.id}`}
                             >
                               {t('publishing.cancel')}
@@ -656,8 +655,8 @@ export default async function PublishingPage({
             actions={
               <Link
                 href={`/${locale}/integrations`}
-                style={buttonStyle('ghost', 'sm')}
-                className={buttonClass('ghost')}
+
+                className={buttonClass('ghost', 'sm')}
                 data-testid="publishing-manage-connections"
               >
                 {t('publishingHub.manageConnections')}
@@ -720,8 +719,8 @@ export default async function PublishingPage({
                       <input type="hidden" name="connectionId" value={connection.id} />
                       <button
                         type="submit"
-                        style={buttonStyle('ghost', 'sm')}
-                        className={buttonClass('ghost')}
+
+                        className={buttonClass('ghost', 'sm')}
                         data-testid={`check-${connection.id}`}
                       >
                         {t('integrations.check')}

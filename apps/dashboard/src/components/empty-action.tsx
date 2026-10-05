@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { buttonClass, buttonStyle } from '@brandspace/ui';
+import { buttonClass } from '@brandspace/ui';
 
 /**
  * THE "WHAT CAN I DO NOW" OF AN EMPTY STATE (Phase 6 final, D-277 §43, D-299).
@@ -23,8 +23,8 @@ export function EmptyAction({
   return (
     <Link
       href={href}
-      className={buttonClass(tone)}
-      style={buttonStyle(tone, 'sm')}
+      className={buttonClass(tone, 'sm')}
+
       data-testid={testId}
     >
       {label}

@@ -105,13 +105,23 @@ function useRailPill(
     const measure = () => {
       const link = nav.querySelector<HTMLElement>('a[aria-current="page"]');
       if (!link) return null;
-      // `placeNavInd`: offsets inside the nav, plus its own scroll.
-      return {
-        x: link.offsetLeft,
-        y: link.offsetTop,
-        w: link.offsetWidth,
-        h: link.offsetHeight,
-      };
+      /*
+       * `placeNavInd`: offsets inside the nav, plus its own scroll. Summed up
+       * to the nav (round 4, 2.2): collapsed, each link sits in its label's
+       * positioned wrapper, so its own `offsetTop` is 0 — the pill stayed on
+       * the first row and the current item was never scrolled into view.
+       */
+      let x = 0;
+      let y = 0;
+      for (
+        let node: HTMLElement | null = link;
+        node && node !== nav;
+        node = node.offsetParent as HTMLElement | null
+      ) {
+        x += node.offsetLeft;
+        y += node.offsetTop;
+      }
+      return { x, y, w: link.offsetWidth, h: link.offsetHeight };
     };
     const put = (at: { x: number; y: number; w: number; h: number }, glide: boolean) => {
       pill.style.transition = glide && !prefersReducedMotion() ? '' : 'none';

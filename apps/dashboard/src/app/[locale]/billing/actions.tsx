@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
-import { Button, Dialog, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import {
-  customerButtonStyle,
-  customerInputStyle,
-  customerSecondaryButtonStyle,
-} from '../../../components/customer-styles';
+  buttonClass,
+  Button,
+  Dialog,
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
+
+import { useState, type CSSProperties } from 'react';
+import { customerInputStyle } from '../../../components/customer-styles';
 
 /**
  * The commercial actions, as client components.
@@ -87,7 +91,7 @@ export function BuyPlanButton({
         type="button"
         data-testid={testId}
         disabled={disabled || state === 'busy'}
-        style={customerButtonStyle()}
+        className={buttonClass('primary')}
         onClick={async () => {
           setState('busy');
           const response = await post('/api/commerce/checkout/subscription', {
@@ -180,7 +184,7 @@ export function BuyPackButton({
         type="button"
         data-testid={testId}
         disabled={state === 'busy'}
-        style={customerButtonStyle()}
+        className={buttonClass('primary')}
         onClick={() => setState('confirming')}
       >
         {state === 'busy' ? busyLabel : label}
@@ -248,7 +252,7 @@ export function ScheduleDowngradeButton({
         type="button"
         data-testid={testId}
         disabled={busy}
-        style={customerSecondaryButtonStyle()}
+        className={buttonClass('neutral')}
         onClick={async () => {
           setBusy(true);
           setFailed(false);
@@ -288,7 +292,7 @@ export function SimpleActionButton({
         type="button"
         data-testid={testId}
         disabled={busy}
-        style={variant === 'primary' ? customerButtonStyle() : customerSecondaryButtonStyle()}
+        className={buttonClass(variant === 'primary' ? 'primary' : 'neutral')}
         onClick={async () => {
           setBusy(true);
           setFailed(false);
@@ -385,7 +389,7 @@ export function CancelSubscriptionForm({
         type="submit"
         data-testid="cancel-subscription-submit"
         disabled={!confirmed || reason.trim().length < 4 || busy}
-        style={customerSecondaryButtonStyle()}
+        className={buttonClass('neutral')}
       >
         {busy ? busyLabel : submitLabel}
       </button>

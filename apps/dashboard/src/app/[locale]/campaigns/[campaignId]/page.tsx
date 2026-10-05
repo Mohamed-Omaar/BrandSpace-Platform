@@ -8,11 +8,11 @@ import {
   SectionHeader,
   StateMessage,
   StatusBadge,
-  buttonStyle,
   colorTokens,
   spacingTokens,
   statusTone,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { isAppError, systemClock } from '@brandspace/shared';
 import { campaignResultsPeriod, daysUntilCampaignEnds } from '@brandspace/content';
@@ -305,7 +305,7 @@ export default async function CampaignDetailPage({
 
   const brief = briefFrom(campaign.brief);
   const dictionary = dictionaryFor(messageLocale) as Readonly<Record<string, string | undefined>>;
-  const numberFormat = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+  const numberFormat = new Intl.NumberFormat('en-US', {
     numberingSystem: 'latn',
   });
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
@@ -401,7 +401,7 @@ export default async function CampaignDetailPage({
   const writePost = (
     <Link
       href={`/${locale}/content/compose?campaign=${campaign.id}`}
-      style={buttonStyle('brand')}
+      className={buttonClass('brand')}
       data-testid="campaign-write-post"
     >
       {t('campaigns.contentEmptyAction')}
@@ -761,7 +761,7 @@ export default async function CampaignDetailPage({
                       </p>
                       <button
                         type="submit"
-                        style={buttonStyle('neutral')}
+                        className={buttonClass('neutral')}
                         data-testid="campaign-archive"
                       >
                         {t('campaigns.archive')}
@@ -921,7 +921,8 @@ export default async function CampaignDetailPage({
             )}
             <Link
               href={`/${locale}/calendar?campaign=${campaign.id}`}
-              style={{ ...buttonStyle('neutral'), marginBlockStart: spacingTokens.sm }}
+              className={buttonClass('neutral')}
+              style={{ marginBlockStart: spacingTokens.sm }}
               data-testid="campaign-open-calendar"
             >
               {t('campaigns.room.openCalendar')}
@@ -1172,6 +1173,6 @@ function endsInLabel(days: number, locale: string, t: (key: MessageKey) => strin
   ) as MessageKey;
   return t(key).replace(
     '{count}',
-    new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', { numberingSystem: 'latn' }).format(days),
+    new Intl.NumberFormat('en-US', { numberingSystem: 'latn' }).format(days),
   );
 }

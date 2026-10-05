@@ -6,12 +6,12 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
-  buttonStyle,
   colorTokens,
   radiusTokens,
   spacingTokens,
   typographyTokens,
   type BadgeTone,
+  buttonClass,
 } from '@brandspace/ui';
 import type { MessageKey } from '../../../i18n/messages';
 
@@ -225,7 +225,11 @@ export function IntegrationsView({
                 </label>
               ))}
             </fieldset>
-            <button type="submit" style={buttonStyle('primary')} data-testid="select-target-submit">
+            <button
+              type="submit"
+              className={buttonClass('primary')}
+              data-testid="select-target-submit"
+            >
               {t('integrations.selectTargetSubmit')}
             </button>
           </form>
@@ -289,7 +293,7 @@ export function IntegrationsView({
                     <input type="hidden" name="connectionId" value={row.id} />
                     <button
                       type="submit"
-                      style={buttonStyle('neutral')}
+                      className={buttonClass('neutral')}
                       data-testid={`check-${row.id}`}
                     >
                       {t('integrations.check')}
@@ -306,7 +310,8 @@ export function IntegrationsView({
                   {mayManage ? (
                     <details style={formStyle}>
                       <summary
-                        style={{ ...buttonStyle('neutral'), listStyle: 'none' }}
+                        className={buttonClass('neutral')}
+                        style={{ listStyle: 'none' }}
                         data-testid={`disconnect-${row.id}`}
                       >
                         {t('integrations.disconnect')}
@@ -318,7 +323,7 @@ export function IntegrationsView({
                         <p style={noticeStyle}>{t('integrations.disconnectConfirmBody')}</p>
                         <button
                           type="submit"
-                          style={buttonStyle('danger')}
+                          className={buttonClass('danger')}
                           data-testid={`disconnect-confirm-${row.id}`}
                         >
                           {t('integrations.disconnectConfirmSubmit')}
@@ -390,7 +395,7 @@ export function IntegrationsView({
                   ))}
                 </select>
               </label>
-              <button type="submit" style={buttonStyle('primary')} data-testid="connect-submit">
+              <button type="submit" className={buttonClass('primary')} data-testid="connect-submit">
                 {t('integrations.connect')}
               </button>
               {/*
@@ -488,7 +493,7 @@ export function IntegrationsView({
                         <input type="hidden" name="jobId" value={row.id} />
                         <button
                           type="submit"
-                          style={buttonStyle('neutral')}
+                          className={buttonClass('neutral')}
                           data-testid={`cancel-${row.id}`}
                         >
                           {t('publishing.cancel')}
@@ -501,7 +506,7 @@ export function IntegrationsView({
                         <input type="hidden" name="jobId" value={row.id} />
                         <button
                           type="submit"
-                          style={buttonStyle('neutral')}
+                          className={buttonClass('neutral')}
                           data-testid={`retry-${row.id}`}
                         >
                           {t('publishing.retry')}
@@ -604,17 +609,17 @@ const connectFormStyle = {
 
 const labelStyle = { display: 'grid', gap: spacingTokens.xs } as const;
 
-const selectStyle = {
-  ...typographyTokens.bodySm,
-  minBlockSize: '44px',
-  paddingInline: spacingTokens.sm,
-  borderRadius: '10px',
-  border: `1px solid ${colorTokens.border}`,
-  background: colorTokens.surface,
-  color: colorTokens.textPrimary,
-} as const;
+// The prototype's form field comes from `.bs-control` (round 4).
+const selectStyle = {} as const;
 
-const buttonRowStyle = { display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' } as const;
+/* Round 4 — the row's buttons keep their own 40px; stretched to the tallest
+   item (the disconnect disclosure) they were 44px. */
+const buttonRowStyle = {
+  display: 'flex',
+  gap: spacingTokens.xs,
+  flexWrap: 'wrap',
+  alignItems: 'flex-start',
+} as const;
 
 const capabilityListStyle = {
   listStyle: 'none',

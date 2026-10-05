@@ -77,3 +77,34 @@ export function rangeDay(instant: Date, locale: string, timeZone: string): strin
 export function rangeLabel(start: Date, end: Date, locale: string, timeZone: string): string {
   return `${rangeDay(start, locale, timeZone)} – ${rangeDay(end, locale, timeZone)}`;
 }
+
+/*
+ * ROUND 4 (1.8) — DROP-IN FORMATTERS, so a screen that held an
+ * `Intl.DateTimeFormat` keeps calling `.format(date)` and gets the one style.
+ */
+export interface DateFormatterLike {
+  format(value: Date): string;
+}
+
+/** `.format(date)` → "Oct 16" (the year only for another year). */
+export function dayFormatter(locale: string, timeZone = 'UTC', now?: Date): DateFormatterLike {
+  return { format: (value) => dayLabel(value, locale, timeZone, now) };
+}
+
+/** `.format(date)` → "Oct 16 · 10:00". */
+export function whenFormatter(locale: string, timeZone = 'UTC', now?: Date): DateFormatterLike {
+  return { format: (value) => whenLabel(value, locale, timeZone, now) };
+}
+
+/**
+ * The locale tag for a formatter that writes names (a weekday, a month) and
+ * must still write Western digits: `ar-u-nu-latn` in Arabic, `en-US` in English.
+ */
+export function latinTag(locale: string): string {
+  return tag(locale);
+}
+
+/** A number as the prototype writes it in both languages: `1,240`. */
+export function numberLabel(value: number, options?: Intl.NumberFormatOptions): string {
+  return new Intl.NumberFormat('en-US', options).format(value);
+}

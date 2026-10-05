@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { CheckIcon } from './icons';
-import { buttonStyle } from './primitives';
+import { buttonClass } from './primitives';
 import {
   colorTokens,
   radiusTokens,
@@ -95,7 +95,7 @@ export function SaveBar({
             type="button"
             onClick={onCancel}
             data-testid={`${testId}-cancel`}
-            style={buttonStyle('ghost')}
+            className={buttonClass('ghost')}
           >
             {labels.cancel}
           </button>
@@ -105,10 +105,8 @@ export function SaveBar({
           disabled={!dirty}
           aria-disabled={!dirty}
           data-testid={saveTestId ?? `${testId}-save`}
-          style={{
-            ...buttonStyle('primary'),
-            ...(dirty ? null : { opacity: 0.45, cursor: 'not-allowed' }),
-          }}
+          className={buttonClass('primary')}
+          style={dirty ? undefined : { opacity: 0.45, cursor: 'not-allowed' }}
         >
           {labels.save}
         </button>

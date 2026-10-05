@@ -2,14 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import {
-  Button,
-  buttonClass,
-  buttonStyle,
-  colorTokens,
-  spacingTokens,
-  typographyTokens,
-} from '@brandspace/ui';
+import { Button, buttonClass, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { translator } from '../../i18n/messages';
 import { RouteState } from '../../components/route-state';
 
@@ -50,8 +43,8 @@ export default function RouteError({
           </Button>
           <Link
             href={`/${locale}/overview`}
-            className={buttonClass('neutral')}
-            style={buttonStyle('neutral', 'sm')}
+            className={buttonClass('neutral', 'sm')}
+
             data-testid="route-error-home"
           >
             {t('errors.route.home')}

@@ -13,7 +13,9 @@ import {
 } from '@brandspace/ui';
 import { requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
-import { optionalMessage, translator } from '../../../i18n/messages';
+import { OWNER_ONLY_PERMISSIONS, optionalMessage, translator } from '../../../i18n/messages';
+import { permissionGroups } from '../../../server/permission-groups';
+import { PermissionGroupsList } from '../../../components/permission-groups-view';
 import { SettingsFrame } from '../../../components/settings-frame';
 import {
   CustomerCard,
@@ -152,64 +154,95 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
           </ContentGrid>
         </div>
 
-        <CustomerCard testId="permissions-card">
-          <p style={{ marginBlockStart: 0 }}>
+        <div
+          data-testid="permissions-card"
+          style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+        >
+          <p style={{ margin: 0 }}>
             <strong>{t('perms.yourRole')}:</strong>{' '}
             <span data-testid="your-role">
               {locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
             </span>
           </p>
 
-          <div
-            style={scrollContainerStyle()}
-            tabIndex={0}
-            role="group"
-            aria-label={t('perms.permission')}
-          >
-            <table style={customerTableStyle()} data-testid="permissions-table">
-              <thead>
-                <tr>
-                  <th style={customerThStyle()}>{t('perms.permission')}</th>
-                  <th style={customerThStyle()}>{t('members.status')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {workspacePermissions.map((p) => {
-                  const held = workspace.permissionKeys.includes(p.key);
-                  return (
-                    <tr key={p.key} data-testid={`permission-${p.key}`}>
-                      <td style={customerTdStyle()}>
-                        <code>{p.key}</code>
-                        <br />
-                        <span
-                          style={{ color: colorTokens.textSecondary, ...typographyTokens.label }}
-                        >
-                          {/* P6-14 — the catalogue's description is English only; the
-                            dictionary carries both, and the catalogue is the fallback. */}
-                          {optionalMessage(messageLocale, `perms.desc.${p.key}`) ?? p.description}
-                        </span>
-                      </td>
-                      <td style={customerTdStyle()}>
-                        <span data-testid={`permission-state-${p.key}`}>
-                          {held ? t('common.enabled') : t('common.disabled')}
-                        </span>
-                        {/* E6/Q4 — no per-member override exists: every row is the
-                          role's, and says so rather than looking editable. */}
-                        <br />
-                        <span
-                          data-testid={`permission-source-${p.key}`}
-                          style={{ color: colorTokens.textSecondary, ...typographyTokens.label }}
-                        >
-                          {t('perms.fromRole')}
-                        </span>
-                      </td>
+          {/*
+            Round 4, 2.1 — the prototype's grouped view (`T.groups`): the
+            role's permissions as plain-language actions in seven groups. No
+            permission key is rendered; the key is only the row's identity.
+          */}
+          <PermissionGroupsList
+            groups={permissionGroups(workspace.permissionKeys, OWNER_ONLY_PERMISSIONS)}
+            t={t}
+            testId="perm-groups"
+          />
+
+          {/*
+            Every workspace permission, the ones the groups do not name
+            included, behind the existing "All permissions" disclosure —
+            listed by what it lets you do, never by its key. Still the
+            effective set for this session (E6/Q4: no per-member override).
+          */}
+          <details className="bsp-pg-more">
+            <summary className="bsp-btn bsp-ghost bsp-sm" data-testid="permissions-all">
+              {t('perms.allPermissions')}
+            </summary>
+            <CustomerCard>
+              <div
+                style={scrollContainerStyle()}
+                tabIndex={0}
+                role="group"
+                aria-label={t('perms.permission')}
+              >
+                <table style={customerTableStyle()} data-testid="permissions-table">
+                  <thead>
+                    <tr>
+                      <th style={customerThStyle()}>{t('perms.permission')}</th>
+                      <th style={customerThStyle()}>{t('members.status')}</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CustomerCard>
+                  </thead>
+                  <tbody>
+                    {workspacePermissions.map((p) => {
+                      const held = workspace.permissionKeys.includes(p.key);
+                      return (
+                        <tr key={p.key} data-testid={`permission-${p.key}`}>
+                          <td style={customerTdStyle()}>
+                            {/* P6-14 — the catalogue's description is English only; the
+                            dictionary carries both, and the catalogue is the fallback. */}
+                            {optionalMessage(messageLocale, `perms.desc.${p.key}`) ?? p.description}
+                          </td>
+                          <td style={customerTdStyle()}>
+                            <span data-testid={`permission-state-${p.key}`}>
+                              {held ? t('common.enabled') : t('common.disabled')}
+                            </span>
+                            {/* E6/Q4 — no per-member override exists: every row is the
+                            role's, and says so rather than looking editable. */}
+                            <br />
+                            <span
+                              data-testid={`permission-source-${p.key}`}
+                              style={{
+                                color: colorTokens.textSecondary,
+                                ...typographyTokens.label,
+                              }}
+                            >
+                              {t('perms.fromRole')}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CustomerCard>
+          </details>
+          <p
+            className="bsp-pg-audit"
+            style={{ marginBlockEnd: 0 }}
+            data-testid="permissions-logged"
+          >
+            {t('perms.logged')}
+          </p>
+        </div>
       </SettingsFrame>
     </WorkspaceShell>
   );

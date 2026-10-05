@@ -5,10 +5,10 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
-  buttonStyle,
   colorTokens,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
@@ -93,7 +93,11 @@ export default async function NotificationsPage({
               unread > 0 ? (
                 <form action={markAllNotificationsReadAction}>
                   <input type="hidden" name="locale" value={locale} />
-                  <button type="submit" style={buttonStyle('ghost')} data-testid="mark-all-read">
+                  <button
+                    type="submit"
+                    className={buttonClass('ghost')}
+                    data-testid="mark-all-read"
+                  >
                     {t('notifications.markAllRead')}
                   </button>
                 </form>
@@ -146,7 +150,7 @@ export default async function NotificationsPage({
                       {item.linkPath ? (
                         <Link
                           href={`/${locale}${item.linkPath}`}
-                          style={buttonStyle('ghost')}
+                          className={buttonClass('ghost')}
                           data-testid={`notification-link-${item.id}`}
                         >
                           {t('notifications.view')}
@@ -158,7 +162,7 @@ export default async function NotificationsPage({
                           <input type="hidden" name="id" value={item.id} />
                           <button
                             type="submit"
-                            style={buttonStyle('ghost')}
+                            className={buttonClass('ghost')}
                             data-testid={`mark-read-${item.id}`}
                           >
                             {t('notifications.markRead')}

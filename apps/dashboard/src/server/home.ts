@@ -46,7 +46,9 @@ export function greetingName(name: string | null | undefined): string | null {
  * translated template.
  */
 export function relativeTime(date: Date, now: Date, locale: string): string {
-  const format = new Intl.RelativeTimeFormat(locale === 'ar' ? 'ar' : 'en', { numeric: 'auto' });
+  const format = new Intl.RelativeTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
+    numeric: 'auto',
+  });
   const seconds = Math.round((date.getTime() - now.getTime()) / 1000);
   const abs = Math.abs(seconds);
   if (abs < 60) return format.format(seconds, 'second');

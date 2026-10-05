@@ -30,7 +30,7 @@ import {
   customerTdStyle,
   customerThStyle,
 } from '../../../components/workspace-shell';
-import { dayLabel } from '../../../server/prototype-dates';
+import { dayLabel, rangeLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,7 +66,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
   const access = await requireWorkspacePage(locale, '/plan');
   const { messageLocale } = access.session;
   const t = translator(messageLocale);
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const number = new Intl.NumberFormat('en-US');
   // Round 3 (C2) — the prototype's day style: "Oct 16".
   const ledgerDate = { format: (value: Date) => dayLabel(value, locale, 'UTC', systemClock.now()) };
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
@@ -305,7 +305,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                     style={{ margin: 0, ...typographyTokens.caption, textAlign: 'end' }}
                   >
                     {subscription.trialEndsAt && subscription.status === 'TRIALING'
-                      ? `${t('plan.trialEnds')} ${subscription.trialEndsAt.toISOString().slice(0, 10)}`
+                      ? `${t('plan.trialEnds')} ${dayLabel(subscription.trialEndsAt, locale, 'UTC')}`
                       : t('plan.trialNone')}
                   </dd>
                 </div>
@@ -323,8 +323,12 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                     data-testid="billing-cycle"
                     style={{ margin: 0, ...typographyTokens.caption, textAlign: 'end' }}
                   >
-                    {subscription.currentPeriodStart.toISOString().slice(0, 10)} →{' '}
-                    {subscription.currentPeriodEnd.toISOString().slice(0, 10)}
+                    {rangeLabel(
+                      subscription.currentPeriodStart,
+                      subscription.currentPeriodEnd,
+                      locale,
+                      'UTC',
+                    )}
                   </dd>
                 </div>
               </dl>

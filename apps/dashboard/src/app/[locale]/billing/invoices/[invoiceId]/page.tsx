@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { formatMoney, type Money } from '@brandspace/shared';
+import { formatMoneyDisplay, type Money } from '@brandspace/shared';
 import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { requireWorkspace } from '../../../../../server/customer-context';
 import { commerceSnapshotFor, invoiceDetailFor } from '../../../../../server/commerce-context';
@@ -13,6 +13,7 @@ import {
   customerTdStyle,
   customerThStyle,
 } from '../../../../../components/workspace-shell';
+import { dayLabel } from '../../../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,8 +43,9 @@ export default async function InvoicePage({
   const detail = await invoiceDetailFor(workspace.workspaceId, invoiceId);
   const snapshot = await commerceSnapshotFor(workspace.workspaceId);
   const brandContext = await brandContextFor(workspace, '/billing');
-  const show = (value: Money): string => formatMoney(value, locale === 'ar' ? 'ar' : 'en');
-  const day = (value: Date | null): string => (value ? value.toISOString().slice(0, 10) : '—');
+  const show = (value: Money): string => formatMoneyDisplay(value, locale);
+  // Round 4 (1.8): the prototype's date.
+  const day = (value: Date | null): string => (value ? dayLabel(value, locale, 'UTC') : '—');
 
   if (!detail) {
     return (

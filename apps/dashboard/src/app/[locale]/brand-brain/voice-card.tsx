@@ -1,13 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  CONTROL_CLASS,
-  buttonClass,
-  buttonStyle,
-  colorTokens,
-  typographyTokens,
-} from '@brandspace/ui';
+import { CONTROL_CLASS, buttonClass, colorTokens, typographyTokens } from '@brandspace/ui';
 import { translator } from '../../../i18n/messages';
 import type { AreaItemData, VoiceData } from './brand-brain-view';
 import { archiveKnowledgeAction, createKnowledgeAction, updateKnowledgeAction } from './actions';
@@ -95,8 +89,8 @@ export function VoiceCard({
               />
               <button
                 type="submit"
-                className={buttonClass('neutral')}
-                style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
+                className={buttonClass('neutral', 'sm')}
+                style={{ justifySelf: 'start' }}
                 data-testid="voice-words-save"
               >
                 {t('common.save')}
@@ -221,8 +215,8 @@ function RuleList({
                   <input type="hidden" name="itemId" value={item.id} />{' '}
                   <button
                     type="submit"
-                    className={buttonClass('ghost')}
-                    style={buttonStyle('ghost', 'sm')}
+                    className={buttonClass('ghost', 'sm')}
+
                     data-testid={`voice-remove-${item.id}`}
                     aria-label={`${t('bb.archive')}: ${item.body || item.title}`}
                   >
@@ -259,8 +253,8 @@ function RuleList({
           />
           <button
             type="submit"
-            className={buttonClass('neutral')}
-            style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
+            className={buttonClass('neutral', 'sm')}
+            style={{ justifySelf: 'start' }}
             data-testid={`${testId}-add-submit`}
           >
             {addLabel}
@@ -282,7 +276,7 @@ function Hidden({ locale, brandId, area }: { locale: string; brandId: string; ar
   );
 }
 
-const sectionStyle: React.CSSProperties = { display: 'grid', gap: 8 };
+const sectionStyle: React.CSSProperties = { display: 'grid', gap: 8, alignContent: 'start' };
 const headingStyle: React.CSSProperties = {
   margin: 0,
   fontSize: typographyTokens.label.fontSize,
@@ -293,12 +287,6 @@ const bodyStyle: React.CSSProperties = {
   fontSize: typographyTokens.bodySm.fontSize,
   lineHeight: 1.6,
 };
-const formStyle: React.CSSProperties = { display: 'grid', gap: 8 };
-const inputStyle: React.CSSProperties = {
-  padding: '8px 10px',
-  borderRadius: 10,
-  border: '1px solid rgba(17,17,20,.14)',
-  font: 'inherit',
-  fontSize: typographyTokens.bodySm.fontSize,
-  minWidth: 0,
-};
+const formStyle: React.CSSProperties = { display: 'grid', gap: 8, alignContent: 'start' };
+// The prototype's form field comes from `.bs-control` (round 4); only the grid fit is local.
+const inputStyle: React.CSSProperties = { minWidth: 0 };

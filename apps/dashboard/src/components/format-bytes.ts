@@ -9,7 +9,7 @@
  * Shared by the Asset Library and the storage breakdown (Phase 2B-2b), so the
  * same bytes read the same way on both screens.
  */
-export function formatBytes(bytes: number, locale: string): string {
+export function formatBytes(bytes: number, _locale: string): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = bytes;
   let unit = 0;
@@ -17,7 +17,7 @@ export function formatBytes(bytes: number, locale: string): string {
     value /= 1024;
     unit += 1;
   }
-  const formatted = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+  const formatted = new Intl.NumberFormat('en-US', {
     maximumFractionDigits: value < 10 && unit > 0 ? 1 : 0,
   }).format(value);
   return `${formatted} ${units[unit]}`;

@@ -76,7 +76,7 @@ export default async function CopilotPage({
       )
     : null;
 
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const number = new Intl.NumberFormat('en-US');
 
   return (
     <WorkspaceShell

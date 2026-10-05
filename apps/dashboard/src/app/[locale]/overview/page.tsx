@@ -251,7 +251,7 @@ export default async function OverviewPage({
         })
       : { noticedPreferences: [], noticedWorkflows: [] };
   const weekdayName = (day: number) =>
-    new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+    new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
       weekday: 'long',
       timeZone: 'UTC',
     }).format(new Date(Date.UTC(2023, 0, 1 + day)));

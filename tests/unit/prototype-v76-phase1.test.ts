@@ -137,7 +137,7 @@ describe('B-9 · disconnecting an account takes two deliberate steps', () => {
     expect(block.indexOf("t('integrations.disconnectConfirmBody')")).toBeGreaterThan(form);
     expect(block).toContain('name="intent" value="DISCONNECT"');
     expect(block).toContain('data-testid={`disconnect-confirm-${row.id}`}');
-    expect(block).toContain("buttonStyle('danger')");
+    expect(block).toContain("buttonClass('danger')");
   });
 
   it('the server refuses a disconnect that did not come through the confirmation', () => {
@@ -174,7 +174,7 @@ describe('B-10 · buying credits is confirmed in the app, with credits and price
 
   it('states the credits and the price the server resolved', () => {
     expect(page).toMatch(
-      /fill\('billing\.packConfirmBody', \{\s*credits: String\(offer\.pack\.credits\),\s*price: show\(offer\.price\),/,
+      /fill\('billing\.packConfirmBody', \{\s*credits: String\(offer\.pack\.credits\),\s*price: price\(offer\.price\),/,
     );
     for (const key of [
       'billing.packConfirmTitle',

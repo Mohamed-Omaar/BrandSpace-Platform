@@ -24,7 +24,6 @@ import {
   Stack,
   StateMessage,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   radiusTokens,
@@ -37,6 +36,7 @@ import { formatBytes } from '../../../components/format-bytes';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
 import { MoreDisclosure } from '../../../components/more-disclosure';
+import { dayFormatter } from '../../../server/prototype-dates';
 
 /**
  * The Asset Library screen.
@@ -235,9 +235,7 @@ const KIND_LABEL: Readonly<Record<AssetKind, MessageKey>> = {
 };
 
 function formatDate(iso: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-  }).format(new Date(iso));
+  return dayFormatter(locale, 'UTC').format(new Date(iso));
 }
 
 /** Build a URL for this route with one filter changed and the rest preserved. */
@@ -804,8 +802,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               {props.pastFirstPage ? (
                 <Link
                   href={filterHref(props.locale, filters, {})}
-                  className={buttonClass('neutral')}
-                  style={buttonStyle('neutral', 'sm')}
+                  className={buttonClass('neutral', 'sm')}
+
                   data-testid="assets-first-page"
                 >
                   {t('assets.firstPage')}
@@ -1477,7 +1475,7 @@ function AssetDetail({
           <Detail label={t('assets.detail.uploaded')} value={formatDate(asset.createdAt, locale)} />
           <Detail
             label={t('assets.detail.version')}
-            value={new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en').format(asset.version)}
+            value={new Intl.NumberFormat('en-US').format(asset.version)}
           />
           {asset.width !== null && asset.height !== null ? (
             <Detail
@@ -1720,9 +1718,7 @@ function AssetDetail({
                 >
                   <span>
                     {t('assets.detail.version')}{' '}
-                    {new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en').format(
-                      version.versionNumber,
-                    )}
+                    {new Intl.NumberFormat('en-US').format(version.versionNumber)}
                   </span>
                   <span>{formatBytes(version.sizeBytes, locale)}</span>
                   <span>{formatDate(version.createdAt, locale)}</span>

@@ -1648,6 +1648,34 @@ two equal columns until the Pillar exists.
 - **Contrast** — the prototype's tan team avatar (`#b8794a`, 3.58:1 with white initials)
   is `#9c6539` (4.85:1, same hue), as D-470 (2) settled for text colours.
 
+### 6.3.52 Review of #68, round 4 — one control system, measured (Gate 1)
+
+The shared controls are the prototype's, and a spec measures them against the
+prototype at runtime (`tests/e2e/r4-control-size-parity.spec.ts`; tolerance 0.5px on
+lengths, exact on weight):
+
+- buttons are the `.btn` class system (`buttonClass()`); `buttonStyle` is the Control
+  Center's only;
+- a text field is `9px 12px`, 14px, radius 12, with no stated height, like the
+  prototype's;
+- a select is the 40px dropdown trigger with the thin chevron (`::picker-icon` hidden);
+- one toast (`.toastx`);
+- the current rail item's count is a white circle;
+- the collapsed rail's squares are centred, and the pill and scroll-into-view measure the
+  link inside its label wrapper;
+- channel icons include X;
+- amounts are written as `formatMoneyDisplay` writes them, dates and times in 24-hour
+  Latin digits.
+
+Roles & permissions shows the prototype's seven groups (`T.groups`) on `/permissions`
+and on a member's page, over the product's own keys. No key is rendered; every other
+permission sits behind "All permissions", by description. The rail marks Team there.
+
+**Recorded deviation.** The collapsed rail's label on hover is the product's `Tooltip`
+(shown on focus too), not the prototype's native `title`, which a keyboard user never
+sees (WCAG 1.4.13). The full status of every route and surface is in
+`docs/R4-PARITY-INVENTORY.md`.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

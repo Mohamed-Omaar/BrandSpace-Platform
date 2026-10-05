@@ -501,10 +501,10 @@ export function CreativeStudioView({
  * is how rounding becomes revenue. This is the one place it becomes a decimal,
  * and only to be read.
  */
-function formatCredits(milli: string, locale: string): string {
+function formatCredits(milli: string, _locale: string): string {
   const value = Number(milli);
   if (!Number.isFinite(value)) return '—';
-  return new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+  return new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 2,
     numberingSystem: 'latn',
   }).format(value / 1000);
