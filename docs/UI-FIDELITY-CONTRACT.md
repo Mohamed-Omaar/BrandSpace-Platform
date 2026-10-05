@@ -1790,6 +1790,14 @@ counts in the row's chip ("6 approved · 1 to review · Facts"), no "Ready" pill
 reading or failed), the upload card at the prototype's first column, sending once a file
 is chosen. Plan & billing: "Storage (GB)", "Usage & limits" behind the card's "⋯".
 
+**After the parity pairs.** The campaign room sits under the Campaigns heading, as the
+prototype draws it. Strategy's eyebrow is "Plan". Settings → Accounts: the row's title is
+the platform and its line is the handle; the brand facts are in the row's "⋯"; the
+publishing history is a disclosure, open when a post failed; Disconnect is the danger
+button. Notes: "Post", "On a post / campaign / the brand / a file", "Open", and the
+prototype's reply hint. Posts: an image card shows its cover's headline over the picture
+(the first slide's `headline`, which Studio already stores) — no headline, no overlay.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
