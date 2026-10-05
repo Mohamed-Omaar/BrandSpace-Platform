@@ -330,8 +330,6 @@ export default async function BrandBrainPage({
           storageKey: true,
           createdAt: true,
           status: true,
-          pageCount: true,
-          chunkCount: true,
           failureMessage: true,
         },
       }),
@@ -679,14 +677,11 @@ export default async function BrandBrainPage({
      * `failureMessage` holds a stable reason key, so the customer reads why in
      * their own language and never reads a parser's own words — which name
      * offsets, object numbers and library versions, and belong in an operator
-     * log (CLAUDE.md §4 and docs/SECURITY.md).
+     * log (CLAUDE.md §4 and docs/SECURITY.md). Gate 2b: the prototype's row
+     * has no second line otherwise — a bare "pages · chunks" pair named
+     * nothing a reader could use.
      */
-    detail:
-      source.status === 'FAILED'
-        ? failureText(source.failureMessage, t)
-        : source.pageCount
-          ? `${source.pageCount} · ${source.chunkCount}`
-          : `${source.chunkCount}`,
+    detail: source.status === 'FAILED' ? failureText(source.failureMessage, t) : '',
   }));
 
   /*

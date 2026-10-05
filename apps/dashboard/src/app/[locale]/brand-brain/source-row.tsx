@@ -9,8 +9,8 @@ import { useMessageLocale } from '../../../i18n/message-locale-context';
  * ONE SOURCE, WITH WHAT IT IS RESPONSIBLE FOR (Phase 2C-4, D5) — the
  * prototype's source row (`Main.dc.html` lines 889–893, D-468).
  *
- * The type badge, the name over its meta (type, size, date, the reader's
- * detail and the counts), then the actions: "n facts · Show" (the facts and
+ * The type badge, the name over its meta (type, size, date; a failure's
+ * reason under it), then the actions: "n facts · Show" (the facts and
  * candidates it is responsible for), Read again, and Remove — which opens the
  * prototype's inline confirmation: remove and keep its facts, or (with
  * `brand_brain.edit`) remove it and its facts, or Cancel. Removing is a
@@ -90,7 +90,9 @@ export function SourceRow({
         <span className="bsp-bb-srow-t">
           <b className="bsp-ltr">{source.fileName}</b>
           <span data-testid={`source-meta-${source.id}`}>{source.meta}</span>
-          <span data-testid={`source-detail-${source.id}`}>{source.detail}</span>
+          {source.detail ? (
+            <span data-testid={`source-detail-${source.id}`}>{source.detail}</span>
+          ) : null}
         </span>
         {canUpload && source.reading ? (
           <span
