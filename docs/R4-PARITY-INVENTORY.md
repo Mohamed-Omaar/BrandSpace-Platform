@@ -147,3 +147,67 @@ definition.
 | Performance                                     | PORTED          | The three story cards on the Insights tab (5.6); covers in the posts table (5.8)                                                                                                                                       |
 | Copilot drawer                                  | PORTED          | "Working on" wraps (5.7)                                                                                                                                                                                               |
 | Settings → General save bar                     | PORTED          | 5.5: the bar is the column's last row, after the note, and stays on the frame's bottom edge as the page scrolls; at the very end it rests on the page's 40px bottom padding, as the prototype's does                   |
+
+## After Gate 2b (the NOT PORTED pages, the PARTLY rows, Step 6)
+
+Every row ends **PORTED**, or carries a named, sized left-out item (S / M / L), or is **BLOCKED**
+with its reason. "Left out" items need data, a feature, a schema change or an owner decision;
+none was built around. Pairs: English and Arabic, 1440 × 900, prototype | product.
+
+### The NOT PORTED pages
+
+| Route / surface                | Status after 2b                       | What it is now, and what is left out (size)                                                                                                                                                                                                                                                   |
+| ------------------------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Settings → Approvals           | PORTED                                | "Who approves" from the eligible-reviewer rule, each member marked, "Edit in Team"; the two rules as switch rows. Recorded deviation: each brand's policy has its own save bar inside the card (the prototype has one page bar)                                                               |
+| Settings → AI                  | PORTED                                | Language chips. Left out: the dialect chips (Egyptian / MSA / both — no per-brand dialect setting, M); the credit alert (owner); "AI drafts go to review" (no setting, S)                                                                                                                     |
+| Settings → Data                | PORTED                                | The prototype's rows, retention card, the danger card with its inline confirmation. The product's other rows (AI retention, the exports, Brand Brain documents) stay as rows. Left out: "Download file" (a one-file export of everything does not exist, L)                                   |
+| Settings → Security            | PORTED                                | One card of rows; the activity log row. Left out: backup codes' "Show" and "New phone" as separate rows (the product's MFA panel holds them, S)                                                                                                                                               |
+| Settings → Publishing defaults | PORTED                                | Channel chips, the suggested times and "Other". Left out: "Best time automatically" (an empty default is a fixed time, not a best time, M); link tracking (owner); "Fit the size to each platform" (no setting, M). The post templates section stays below (product)                          |
+| Settings → Notifications       | PORTED (in-app) / **BLOCKED** (email) | The event table with "In app"; the Email column is BLOCKED (per-event email preferences are a new notification path, L); "Credits are running low" and "Weekly performance report" have no events (M)                                                                                         |
+| Accounts (`/integrations`)     | PORTED                                | A row per platform (the platform, the handle under it, the pill, "⋯" with brand, dates and Check, Disconnect), a "Connect" row per platform not connected, the connect form behind the card's "⋯"; the publishing history is a disclosure at the foot, open by itself while a post has failed |
+| Notes                          | PORTED                                | Two panes; "On a post" / "Open" / "Post note" as the prototype. Left out: the "Mention" button beside Important (the composer's @ list does it, S)                                                                                                                                            |
+| Campaign detail                | PORTED                                | One page under the Campaigns head: the room head, Linked to, the brief, the paused line, Post results; the other views behind "⋯". Left out: the goal card (no KPI target on a campaign — schema, M), the pillar and facts in Linked to (M), Pause and Add existing (S each)                  |
+| Strategy                       | PORTED                                | The period switch, the hero, Built on Brand Brain, the pillars, the month, the drafts under "Next strategy". Left out: the weekly number and Early signals (owner); Edit strategy, History, planned-vs-actual, "Start from the current strategy", "Start empty" (M each)                      |
+| Look & voice                   | PORTED                                | Logo tiles with Replace, swatches with × and +, voice words as chips, font chips with the sample and the uploaded fonts in each language. Left out: brand templates (owner); the Voice card's one field per column (the product keeps a field per language per fact, S)                       |
+
+### The PARTLY rows
+
+| Row                               | Status after 2b       | Done in 2b, or what remains (size)                                                                                                            |
+| --------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shell — Top bar                   | PORTED with left-outs | "Search anything ⌘K" (L)                                                                                                                      |
+| Shell — Brand / user menus        | PORTED                | (4.4 in 2a)                                                                                                                                   |
+| Shell — Create menu               | PORTED                | Pair `pop-create`                                                                                                                             |
+| Shell — Notifications popover     | PORTED                | Pair `pop-bell`; the product's "⋯" (notification settings) beside Dismiss                                                                     |
+| Shell — Notes popover             | Left out (M)          | The top-bar Notes button opens `/notes`; a popover of threads needs the inbox read on every page                                              |
+| Shell — Copilot panel             | PORTED                | Pair `pop-copilot`                                                                                                                            |
+| Controls — Select (open list)     | Owner decision        | Kept as is (Gate 2 answer)                                                                                                                    |
+| Controls — File input             | PORTED                | Look & voice and Teach use the prototype's file button                                                                                        |
+| Home                              | PORTED with left-out  | "Needs you" naming each post (r3 #13, M)                                                                                                      |
+| Brand Brain — Knowledge           | PORTED with left-out  | Short chip labels (r3 #21, S)                                                                                                                 |
+| Brand Brain — Sources             | PORTED                | The counts in the chip, no "Ready" pill, the upload card at the first column. "Read website" is post-launch (D-468 (b))                       |
+| Brand Brain — Talk with the brand | PORTED                | The greeting names the brand; the scope pill and × only when scoped. Recorded: the "+" (attach a source, product) and the true retention line |
+| Campaigns list                    | PORTED with left-outs | The cards' goal row (no target, M), Pause on the card (S), "Posts on hold" (pausing holds nothing here)                                       |
+| Campaign form                     | Left out (M)          | A page, where the prototype opens a 560px dialog                                                                                              |
+| Posts                             | PORTED with left-out  | The cover headline (2b). "Search anything" (L)                                                                                                |
+| Calendar                          | PORTED                | Pair `calendar`                                                                                                                               |
+| Publishing log                    | PORTED                | The "Publish" eyebrow, the title and line, the segment at its width, Accounts behind "⋯"                                                      |
+| Approvals                         | PARTLY → Fix PR 2     | "Approve & schedule" (owner: Fix PR 2)                                                                                                        |
+| Performance                       | PORTED with left-outs | Link clicks (r3 #10, L), channel filter (r3 #12, M)                                                                                           |
+| Automations                       | PORTED with left-outs | Duplicate (r3 #17, S), suggested rules (r3 #16, S)                                                                                            |
+| Notifications page, Copilot page  | Product-only          | Built in the prototype's language                                                                                                             |
+| Settings → General                | PORTED                | "Business name", "Time zone". Left out: city as free text (r3 #6, S)                                                                          |
+| Settings → Brands                 | Left out (M)          | Multi-brand only: the brand form keeps its earlier layout                                                                                     |
+| Team & roles                      | PORTED with left-out  | "View as" (post-launch)                                                                                                                       |
+| Plan & billing                    | PORTED with left-outs | "Usage & limits" behind "⋯", "Storage (GB)". The low-credit note (r3 #19, M), "Buy 1,000 credits" (configuration)                             |
+| Sign-in, sign-up, onboarding      | PORTED with left-outs | r3 #22–#28 as listed in #68                                                                                                                   |
+
+### Step 6 — Arabic
+
+| Item                             | Status                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------ |
+| 6.1 One Arabic for every country | Done: `ar-eg.ts` deleted, no country switch, no runtime path to another dictionary (D-474) |
+| 6.2 Arabic layout                | Ported with each screen; Arabic pairs for every pair above                                 |
+| 6.3 Egyptian strings             | Swept; a guard fails any Egyptian word (`r4-arabic-glossary`)                              |
+| 6.4 Glossary                     | `docs/ARABIC-GLOSSARY.md`; retired alternates guarded                                      |
+| 6.5 Wordmark                     | `BrandSpace` everywhere (dashboard, website, admin, config)                                |
+| 6.6 Digits                       | Latin; `formatMoney` pins `latn`; four strings fixed                                       |
