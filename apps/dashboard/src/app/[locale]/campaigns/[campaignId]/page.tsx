@@ -459,8 +459,10 @@ export default async function CampaignDetailPage({
       brandContext={brandContext}
       locale={locale}
       eyebrow={t('nav.group.plan')}
-      heading={campaign.name}
-      description={objectiveLabel(t, campaign.objective)}
+      // Gate 2b — the room sits under the Campaigns screen's own head, as the
+      // prototype's (`x.campRoom` is inside the campaigns screen); the name is the room's head.
+      heading={t('campaigns.title')}
+      description={t('campaigns.subtitle')}
       activePath="/campaigns"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}

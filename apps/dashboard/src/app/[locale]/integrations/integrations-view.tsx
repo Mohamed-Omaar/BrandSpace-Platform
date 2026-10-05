@@ -269,9 +269,13 @@ export function IntegrationsView({
                 />
               </span>
               <span className="bsp-acc-text">
-                <span className="bsp-acc-name bsp-ltr">{row.displayName}</span>
-                <span className="bsp-acc-sub">
-                  {row.providerLabel} · {row.targetKindLabel} · {row.brandName}
+                {/* The prototype's row: the platform, the handle under it. */}
+                <span className="bsp-acc-name">{row.providerLabel}</span>
+                <span
+                  className="bsp-acc-sub bsp-ltr"
+                  title={`${row.targetKindLabel} · ${row.brandName}`}
+                >
+                  {row.displayName}
                 </span>
                 {/*
                   A WARNING BEFORE IT BREAKS, not after. A token inside its last
@@ -302,6 +306,10 @@ export function IntegrationsView({
                 align="end"
               >
                 <dl className="bsp-acc-facts">
+                  <Fact
+                    label={t('integrations.brand')}
+                    value={`${row.brandName} · ${row.targetKindLabel}`}
+                  />
                   <Fact label={t('integrations.connectedAt')} value={row.connectedAtLabel} />
                   <Fact label={t('integrations.lastSynced')} value={row.lastSyncedAtLabel} />
                   <Fact label={t('integrations.tokenExpires')} value={row.tokenExpiresAtLabel} />
@@ -478,110 +486,122 @@ export function IntegrationsView({
         ) : null}
       </section>
 
-      <Card testId="publishing-history">
-        <SectionHeader
-          eyebrow={t('publishing.eyebrow')}
-          title={t('publishing.title')}
-          description={t('publishing.body')}
-        />
-        {publishing.length === 0 ? (
-          <StateMessage
-            title={t('publishing.emptyTitle')}
-            description={t('publishing.emptyBody')}
+      {/*
+        Gate 2b — the prototype's Accounts section is the card above; the
+        product's publishing history (D-471) is a disclosure at the page's foot,
+        open by itself while a post has failed so its Retry is in reach.
+      */}
+      <details
+        className="bsp-bb-notes"
+        open={publishing.some((row) => row.status === 'FAILED')}
+        data-testid="publishing-history-disclosure"
+      >
+        <summary className="bsp-chip bsp-fdis-chip">{t('publishing.title')}</summary>
+        <Card testId="publishing-history">
+          <SectionHeader
+            eyebrow={t('publishing.eyebrow')}
+            title={t('publishing.title')}
+            description={t('publishing.body')}
           />
-        ) : (
-          <ul style={listStyle} data-testid="publishing-list">
-            {publishing.map((row) => (
-              <li key={row.id} style={rowStyle} data-testid={`publish-job-${row.id}`}>
-                <div style={headerRowStyle}>
-                  <span style={titleStyle}>{row.itemTitle}</span>
-                  <StatusBadge
-                    tone={PUBLISH_TONE[row.status]}
-                    label={t(PUBLISH_STATUS_KEY[row.status])}
-                  />
-                </div>
-                <span style={metaStyle}>
-                  {row.providerLabel} · {row.brandName} · {row.scheduledAtLabel}
-                </span>
-                {row.publishedAtLabel ? (
+          {publishing.length === 0 ? (
+            <StateMessage
+              title={t('publishing.emptyTitle')}
+              description={t('publishing.emptyBody')}
+            />
+          ) : (
+            <ul style={listStyle} data-testid="publishing-list">
+              {publishing.map((row) => (
+                <li key={row.id} style={rowStyle} data-testid={`publish-job-${row.id}`}>
+                  <div style={headerRowStyle}>
+                    <span style={titleStyle}>{row.itemTitle}</span>
+                    <StatusBadge
+                      tone={PUBLISH_TONE[row.status]}
+                      label={t(PUBLISH_STATUS_KEY[row.status])}
+                    />
+                  </div>
                   <span style={metaStyle}>
-                    {t('publishing.publishedAt')} {row.publishedAtLabel}
+                    {row.providerLabel} · {row.brandName} · {row.scheduledAtLabel}
                   </span>
-                ) : null}
-                {row.externalPostUrl ? (
-                  <Link
-                    href={row.externalPostUrl}
-                    style={linkStyle}
-                    rel="noreferrer noopener"
-                    target="_blank"
-                    data-testid={`post-link-${row.id}`}
-                  >
-                    {t('publishing.viewPost')}
-                  </Link>
-                ) : null}
-                {/*
+                  {row.publishedAtLabel ? (
+                    <span style={metaStyle}>
+                      {t('publishing.publishedAt')} {row.publishedAtLabel}
+                    </span>
+                  ) : null}
+                  {row.externalPostUrl ? (
+                    <Link
+                      href={row.externalPostUrl}
+                      style={linkStyle}
+                      rel="noreferrer noopener"
+                      target="_blank"
+                      data-testid={`post-link-${row.id}`}
+                    >
+                      {t('publishing.viewPost')}
+                    </Link>
+                  ) : null}
+                  {/*
                   THE FAILURE IS OURS AND IT IS TRANSLATED. `failureMessage` was
                   resolved from a stable code by the page; a provider's own
                   words never reach here, because they routinely echo the
                   caption that was rejected.
                 */}
-                {row.failureMessage ? (
-                  <p style={noticeStyle} data-testid={`failure-${row.id}`}>
-                    {row.failureMessage}
-                  </p>
-                ) : null}
-                {row.lateNotice ? (
-                  <p style={noticeStyle} data-testid={`late-${row.id}`}>
-                    {row.lateNotice}
-                  </p>
-                ) : null}
-                {row.needsReconnect ? (
-                  <p style={noticeStyle} data-testid={`reconnect-${row.id}`}>
-                    {t('publishing.reconnectNeeded')}
-                  </p>
-                ) : null}
-                <span style={metaStyle}>
-                  {t('publishing.attempts')}: {row.attemptCount}/{row.maxAttempts}
-                  {row.nextAttemptAtLabel
-                    ? ` · ${t('publishing.nextAttempt')} ${row.nextAttemptAtLabel}`
-                    : ''}
-                </span>
+                  {row.failureMessage ? (
+                    <p style={noticeStyle} data-testid={`failure-${row.id}`}>
+                      {row.failureMessage}
+                    </p>
+                  ) : null}
+                  {row.lateNotice ? (
+                    <p style={noticeStyle} data-testid={`late-${row.id}`}>
+                      {row.lateNotice}
+                    </p>
+                  ) : null}
+                  {row.needsReconnect ? (
+                    <p style={noticeStyle} data-testid={`reconnect-${row.id}`}>
+                      {t('publishing.reconnectNeeded')}
+                    </p>
+                  ) : null}
+                  <span style={metaStyle}>
+                    {t('publishing.attempts')}: {row.attemptCount}/{row.maxAttempts}
+                    {row.nextAttemptAtLabel
+                      ? ` · ${t('publishing.nextAttempt')} ${row.nextAttemptAtLabel}`
+                      : ''}
+                  </span>
 
-                {mayManagePublishing ? (
-                  <div style={buttonRowStyle}>
-                    {row.canCancel ? (
-                      <form action={actions.cancel} style={formStyle}>
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="jobId" value={row.id} />
-                        <button
-                          type="submit"
-                          className={buttonClass('neutral')}
-                          data-testid={`cancel-${row.id}`}
-                        >
-                          {t('publishing.cancel')}
-                        </button>
-                      </form>
-                    ) : null}
-                    {row.canRetry ? (
-                      <form action={actions.retry} style={formStyle}>
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="jobId" value={row.id} />
-                        <button
-                          type="submit"
-                          className={buttonClass('neutral')}
-                          data-testid={`retry-${row.id}`}
-                        >
-                          {t('publishing.retry')}
-                        </button>
-                      </form>
-                    ) : null}
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+                  {mayManagePublishing ? (
+                    <div style={buttonRowStyle}>
+                      {row.canCancel ? (
+                        <form action={actions.cancel} style={formStyle}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="jobId" value={row.id} />
+                          <button
+                            type="submit"
+                            className={buttonClass('neutral')}
+                            data-testid={`cancel-${row.id}`}
+                          >
+                            {t('publishing.cancel')}
+                          </button>
+                        </form>
+                      ) : null}
+                      {row.canRetry ? (
+                        <form action={actions.retry} style={formStyle}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="jobId" value={row.id} />
+                          <button
+                            type="submit"
+                            className={buttonClass('neutral')}
+                            data-testid={`retry-${row.id}`}
+                          >
+                            {t('publishing.retry')}
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </details>
     </Stack>
   );
 }

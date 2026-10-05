@@ -209,6 +209,7 @@ export default async function StrategyPage({
     <WorkspaceShell
       brandContext={brandContext}
       locale={locale}
+      eyebrow={t('nav.group.plan')}
       heading={t('strategy.title')}
       description={t('strategy.subtitle')}
       activePath="/strategy"

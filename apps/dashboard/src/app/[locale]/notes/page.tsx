@@ -414,7 +414,7 @@ export default async function NotesPage({
                       className="bsp-btn bsp-sm bsp-pur"
                       data-testid={`note-reply-submit-${thread.id}`}
                     >
-                      {t('notes.reply')}
+                      {t('notes.post')}
                     </button>
                   </div>
                 </div>

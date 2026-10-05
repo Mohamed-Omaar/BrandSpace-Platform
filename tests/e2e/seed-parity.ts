@@ -1293,6 +1293,82 @@ async function build(
     data: { brandScope: [brandId] },
   });
 
+  /*
+   * GATE 2b — the prototype's strategy (`Main.dc.html` lines 1001–1060), as the
+   * brand's ACCEPTED strategy: the objective, three pillars, the channel mix and
+   * four weeks. Test data for the parity pair only, in this run's own workspace.
+   */
+  const both = (en: string, ar: string) => ({ en, ar });
+  const why = (en: string, ar: string) => ({ evidenceRefs: [], text: both(en, ar) });
+  await platform.insight.create({
+    data: {
+      workspaceId: workspace.id,
+      brandId,
+      type: 'STRATEGY',
+      status: 'ACCEPTED',
+      basis: 'BRAND_CONTEXT',
+      title: both('Strategy', 'الاستراتيجية'),
+      body: {
+        summary: both('More weekday morning visits', 'زيارات صباحية أكثر في أيام الأسبوع'),
+        pillars: [
+          {
+            name: both('Morning coffee', 'قهوة الصباح'),
+            sharePercent: 40,
+            rationale: why(
+              'From Offers · Latte, flat white, cortado',
+              'من العروض · لاتيه وفلات وايت وكورتادو',
+            ),
+          },
+          {
+            name: both('Seasonal offers', 'العروض الموسمية'),
+            sharePercent: 35,
+            rationale: why('From Offers · the autumn menu', 'من العروض · قائمة الخريف'),
+          },
+          {
+            name: both('Behind the bar', 'خلف البار'),
+            sharePercent: 25,
+            rationale: why('From Story · the team and the beans', 'من القصة · الفريق والبن'),
+          },
+        ],
+        channelMix: [
+          {
+            platformKey: 'instagram',
+            sharePercent: 60,
+            rationale: why('Most visits start here.', 'تبدأ معظم الزيارات من هنا.'),
+          },
+          {
+            platformKey: 'tiktok',
+            sharePercent: 25,
+            rationale: why(
+              'Short videos reach new people.',
+              'الفيديوهات القصيرة تصل إلى أشخاص جدد.',
+            ),
+          },
+          {
+            platformKey: 'facebook',
+            sharePercent: 15,
+            rationale: why('Regulars and families.', 'الزبائن الدائمون والعائلات.'),
+          },
+        ],
+        monthlyPlan: [1, 2, 3, 4].map((week) => ({
+          weekNumber: week,
+          theme: [
+            both('Autumn menu launch', 'إطلاق قائمة الخريف'),
+            both('Morning rituals', 'طقوس الصباح'),
+            both('Meet the team', 'تعرّف على الفريق'),
+            both('Weekend brunch', 'برانش نهاية الأسبوع'),
+          ][week - 1],
+          postsPlanned: 3,
+          rationale: why('Built on this month’s goal.', 'مبنية على هدف هذا الشهر.'),
+        })),
+      },
+      periodStart: new Date('2026-10-05T00:00:00Z'),
+      periodEnd: new Date('2027-01-02T00:00:00Z'),
+      reviewedAt: new Date('2026-10-05T08:00:00Z'),
+      idempotencyKey: `e2e-parity-strategy-${lang}-${run}`,
+    },
+  });
+
   return { email: ownerEmail, password, workspaceId: workspace.id, workspaceSlug: slug, brandId };
 }
 

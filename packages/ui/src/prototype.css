@@ -4710,6 +4710,7 @@ span.bsp-cal-hol {
    `grid-template-columns: 1.4fr 1fr auto; gap: 20px; align-items: center`. */
 .bsp-btn.bsp-room-back {
   align-self: flex-start;
+  justify-self: start;
 }
 [dir='rtl'] .bsp-room-arrow {
   display: inline-block;
@@ -9086,6 +9087,8 @@ img.bsp-pf-art {
    `.xstatus` at `margin-inline-start: 4px`. */
 .bsp-seg.bsp-sp-seg {
   align-self: flex-start;
+  justify-self: start;
+  inline-size: fit-content;
 }
 .bsp-sp-segst {
   margin-inline-start: 4px;
