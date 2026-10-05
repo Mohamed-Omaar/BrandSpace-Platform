@@ -49,9 +49,28 @@ export function VoiceCard({
       <div className="bsp-bb-voice-grid">
         <section data-testid="voice-words" style={sectionStyle}>
           <h5 style={headingStyle}>{t('bb.voice.words')}</h5>
-          <p style={bodyStyle} data-testid="voice-words-value">
-            {voice.words ? voice.words.body || voice.words.title : t('bb.voice.wordsEmpty')}
-          </p>
+          {/*
+            Gate 2b — the prototype's word chips (`x.voiceChips`): the one
+            `voice.words` fact, read in the reader's language and drawn a chip
+            per word. Display only; it is saved as the one text it always was.
+          */}
+          {voice.words ? (
+            <div className="bsp-lk-chips" data-testid="voice-words-value">
+              {(voice.words.body || voice.words.title)
+                .split(/[,،]/)
+                .map((word) => word.trim())
+                .filter((word) => word !== '')
+                .map((word, index) => (
+                  <span key={index} className="bsp-chip" dir="auto">
+                    {word}
+                  </span>
+                ))}
+            </div>
+          ) : (
+            <p style={bodyStyle} data-testid="voice-words-value">
+              {t('bb.voice.wordsEmpty')}
+            </p>
+          )}
           {canEdit ? (
             <form
               action={voice.words ? updateKnowledgeAction : createKnowledgeAction}

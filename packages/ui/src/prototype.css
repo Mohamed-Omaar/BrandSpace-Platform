@@ -9560,6 +9560,303 @@ img.bsp-pf-art {
   }
 }
 
+/* Gate 2b — LOOK & VOICE, as the prototype draws it (`Main.dc.html` lines
+   869–876). The logo card: the label, two 72px tiles (`border-radius: 18px`,
+   ink `#111114` and cream `#fff4c7`), and "Replace" (`btn sm sec`). */
+.bsp-lk-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.bsp-lk-tiles {
+  display: flex;
+  gap: 10px;
+}
+.bsp-lk-tile {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.bsp-lk-tile-d {
+  background: #111114;
+}
+.bsp-lk-tile-l {
+  background: #fff4c7;
+}
+.bsp-lk-tile > img {
+  max-width: 78%;
+  max-height: 78%;
+  object-fit: contain;
+}
+/* The file button: `label.btn.sm.sec` over a transparent file input. */
+.bsp-btn.bsp-lk-file {
+  position: relative;
+  align-self: flex-start;
+  cursor: pointer;
+}
+.bsp-btn.bsp-lk-file > input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+}
+.bsp-btn.bsp-lk-file:focus-within {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bsp-lk-picked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bsp-lk-meta {
+  font-size: 11.5px;
+  color: #8a8a92;
+  line-height: 1.45;
+}
+.bsp-lk-muted {
+  margin: 0;
+  font-size: 13px;
+  color: #6a6a72;
+}
+.bsp-lk-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bsp-btn.bsp-lk-start {
+  align-self: flex-start;
+}
+/* The swatches: `gap: 8px`, each a 52px tile (`border-radius: 14px; border:
+   1px solid #ececef`) over its hex (`11px #6a6a72`), × at its corner
+   (`18px, #111114`), and the dashed "+" (`1.5px dashed #d2d2d8`). */
+.bsp-lk-swatches {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bsp-lk-sw {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  position: relative;
+}
+.bsp-lk-sw-tile {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1px solid #ececef;
+  cursor: pointer;
+  display: block;
+  position: relative;
+}
+.bsp-lk-sw-tile > input[type='color'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+.bsp-lk-sw-tile:focus-within {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bsp-lk-hex,
+.bsp-lk-hex-t {
+  font-size: 11px;
+  color: #6a6a72;
+}
+.bsp-lk-hex {
+  width: 64px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: center;
+  font: inherit;
+  font-size: 11px;
+}
+.bsp-lk-sw-x {
+  position: absolute;
+  top: -6px;
+  inset-inline-end: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 0;
+  background: #111114;
+  color: #fff;
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0;
+}
+.bsp-lk-sw-add {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1.5px dashed #d2d2d8;
+  background: transparent;
+  font-size: 20px;
+  color: #8a8a92;
+  cursor: pointer;
+}
+/* The fonts: two columns (`1fr 1fr; gap: 20px`), each `gap: 10px` — the
+   language `13.5px`, each slot's label `11.5px/700 #6a6a72` over its chips
+   (`gap: 6px`), the sample (`#f7f7f9; radius 14px; padding: 12px 14px`,
+   `20px/800` over `13.5px #4d4c53`), then the uploads. */
+.bsp-lk-langs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.bsp-lk-lang {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.bsp-lk-lang-t {
+  font-size: 13.5px;
+}
+.bsp-lk-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-lk-slot-l {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #6a6a72;
+}
+.bsp-lk-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bsp-chip.bsp-lk-chip {
+  position: relative;
+  cursor: pointer;
+}
+.bsp-chip.bsp-lk-chip > input[type='radio'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.bsp-chip.bsp-lk-chip:has(input:checked) {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
+.bsp-chip.bsp-lk-chip:has(input:focus-visible) {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bsp-lk-up {
+  font-family: Inter, Cairo, sans-serif;
+  font-size: 10px;
+  opacity: 0.65;
+}
+.bsp-lk-sample {
+  background: #f7f7f9;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bsp-lk-sample-h {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.bsp-lk-sample-b {
+  font-size: 13.5px;
+  color: #4d4c53;
+}
+.bsp-lk-yours {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bs-control.bsp-lk-name {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+/* An uploaded font: `border: 1px solid #ececef; border-radius: 13px; padding:
+   10px 12px; gap: 8px; background: #fff`, its name in a `#f5f5f7` field
+   (`radius 9px; padding: 6px 9px; 14px/700`). */
+.bsp-lk-fonts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bsp-lk-font {
+  border: 1px solid #ececef;
+  border-radius: 13px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fff;
+}
+.bsp-lk-font-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bsp-lk-rename {
+  flex-grow: 1;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  border-radius: 9px;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+.bsp-lk-font-acts {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.bsp-btn.bsp-lk-remove {
+  color: #b83245;
+}
+.bsp-lk-save {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bsp-lk-note {
+  font-size: 12px;
+  color: #6a6a72;
+  line-height: 1.5;
+}
+@media (max-width: 767.98px) {
+  .bsp-lk-langs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Round 4 (5.5) — General's save bar. The prototype draws it after the whole
    settings grid (`position: sticky; bottom: 0; margin-top: 14px;
    margin-inline-start: 228px`), so its sticky range runs below the nav too and
