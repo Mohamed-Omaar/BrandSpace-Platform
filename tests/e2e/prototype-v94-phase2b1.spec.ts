@@ -1069,6 +1069,8 @@ test.describe('G8 / Q16 · sign-up, reset and a new workspace from inside the ap
     const egypt = new Intl.DisplayNames(['en'], { type: 'region' }).of('EG') ?? 'Egypt';
     await page.fill('[data-testid="country-select"]', egypt);
     await page.press('[data-testid="country-select"]', 'Enter');
+    // Review of #67, round 3: the city is with the account's fields, under "More".
+    await page.getByTestId('create-workspace-more').locator('summary').click();
     await expect(page.getByTestId('city-select')).toBeVisible();
     const back = page.getByTestId('create-workspace-back');
     await expect(back).toHaveAttribute('href', '/en/overview');

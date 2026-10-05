@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { spacingTokens, typographyTokens, colorTokens } from '@brandspace/ui';
 import {
@@ -83,10 +82,12 @@ export default async function CreateWorkspacePage({
         current: key === 'workspace',
         href: null,
       }))}
-      heading={t('createWorkspace.title')}
+      heading={t('setup.wz.business.title')}
+      description={t('setup.wz.business.body')}
+      stepText={t('setup.wz.stepOf').replace('{n}', '1')}
       testId="create-workspace-card"
     >
-      <div className="bsp-auth-body">
+      <>
         {trial ? (
           <p
             data-testid="trial-terms"
@@ -131,22 +132,19 @@ export default async function CreateWorkspacePage({
             localeEn: t('brandProfile.localeEn'),
             city: t('settings.city'),
             cityNone: t('settings.cityNone'),
+            more: t('setup.wz.more'),
+            zoneLine: t('setup.wz.business.zoneFromCountry'),
+            saved: t('setup.wz.saved'),
           }}
+          back={
+            existing.length > 0
+              ? // G8 (D-335): a new workspace started from inside the app starts
+                // blank, and has a way back to the one this person came from.
+                { href: `/${locale}/overview`, label: t('createWorkspace.back') }
+              : null
+          }
         />
-        {/*
-        G8 (D-335): A NEW WORKSPACE STARTED FROM INSIDE THE APP starts blank —
-        nothing is copied from the current one — and has a way back to it.
-      */}
-        {existing.length > 0 ? (
-          <Link
-            href={`/${locale}/overview`}
-            data-testid="create-workspace-back"
-            style={{ display: 'inline-block', marginBlockStart: spacingTokens.md }}
-          >
-            {t('createWorkspace.back')}
-          </Link>
-        ) : null}
-      </div>
+      </>
     </SetupFrame>
   );
 }

@@ -101,6 +101,8 @@ async function createWorkspace(page: Page): Promise<string> {
   await expect(page.locator('[data-testid="create-workspace-form"]')).toBeVisible();
   await page.fill('#name', 'Security Workspace');
   const slug = `sec-${crypto.randomUUID().slice(0, 8)}`;
+  // Review of #67, round 3: the account's own fields are under the Business step's "More".
+  await page.getByTestId('create-workspace-more').locator('summary').click();
   await page.fill('#slug', slug);
   const countryName = new Intl.DisplayNames(['en'], { type: 'region' }).of('GB') ?? 'GB';
   await page.fill('[data-testid="country-select"]', countryName);

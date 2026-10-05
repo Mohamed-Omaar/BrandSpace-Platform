@@ -8604,6 +8604,438 @@ button.bsp-chip.bsp-bb-q {
   cursor: pointer;
 }
 
+/*
+ * REVIEW OF #67, ROUND 3 — THE WIZARD'S STEPS, from `Auth.dc.html` lines
+ * 116–200 and its classes (`.eyebrow`, `.lb`, `.chip`, `.btn`, `.pill`).
+ */
+/* "STEP n OF 5" beside the wordmark: `.eyebrow` with `margin-inline-start: 8px`. */
+.bsp-wz-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 8px;
+  background: #f0e9ff;
+  color: #5312c4;
+  border-radius: 99px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* `.lb`: 11.5px / 800, `.08em`, uppercase, `#6a6a72`, 8px under. */
+.bsp-wz-lb {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a6a72;
+  margin-block-end: 8px;
+  padding: 0;
+}
+/* `.in` is `display: block; inline-size: 100%`. */
+.bsp-wz input.bs-control:not([type='checkbox']):not([type='radio']):not([type='file']),
+.bsp-wz select.bs-control {
+  display: block;
+  inline-size: 100%;
+  box-sizing: border-box;
+}
+.bsp-wz-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: #6a6a72;
+  line-height: 1.5;
+}
+.bsp-wz-error {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b83245;
+}
+/* The Business step: `grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px`. */
+.bsp-wz-grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.bsp-wz-full {
+  grid-column: 1 / -1;
+}
+.bsp-wz-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bsp-wz-fs {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+/* The `.chip` pressed state, for a chip drawn without a radio. */
+.bsp-wz-chip[aria-pressed='true'],
+.bsp-wz-chip:has(.bsp-wz-radio:checked) {
+  border-color: #7935fe;
+  background: #f6f3ff;
+  box-shadow: 0 0 0 3px #efe7ff;
+}
+.bsp-wz-chip[aria-disabled='true'] {
+  cursor: default;
+}
+/* A small chip: `min-block-size: 38px; padding: 6px 12px; font-size: 13px`. */
+.bsp-wz-chip.bsp-wz-chip-sm {
+  min-block-size: 38px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+/* The product's own fields the prototype does not draw: behind "More". */
+.bsp-wz-more {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bsp-wz-more > summary {
+  align-self: flex-start;
+  list-style: none;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #5312c4;
+}
+.bsp-wz-more > summary::-webkit-details-marker {
+  display: none;
+}
+.bsp-wz-more[open] > summary {
+  margin-block-end: 12px;
+}
+/* The Brand step: `grid-template-columns: 1.3fr 1fr; gap: 20px`. */
+.bsp-wz-brandgrid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.bsp-wz-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-inline-size: 0;
+}
+/* "Logo and colours": `gap: 10px; background: #fbfbfc; border-radius: 18px; padding: 16px`. */
+.bsp-wz-look {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fbfbfc;
+  border-radius: 18px;
+  padding: 16px;
+  min-inline-size: 0;
+}
+.bsp-wz-logo-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+/* `width: 64px; height: 64px; border-radius: 16px; background: #111114; color: #ffd60a; font-size: 26px; font-weight: 800`. */
+.bsp-wz-logo {
+  inline-size: 64px;
+  block-size: 64px;
+  border-radius: 16px;
+  background: #111114;
+  color: #ffd60a;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.bsp-wz-swatches {
+  display: flex;
+  gap: 8px;
+}
+/* `width: 40px; height: 40px; border-radius: 12px; border: 1px solid #ececef`. */
+.bsp-wz-swatch {
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: 12px;
+  border: 1px solid #ececef;
+  display: block;
+}
+/* The logo's file picker, drawn as the prototype's "Upload logo" `.btn.sec`. */
+.bsp-wz-file {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.bsp-wz-file > input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+/* `.btn`: radius 14, `padding: 12px 20px`, 15px / 800, `min-block-size: 56px`. */
+.bsp-wz-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 20px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  background: #111114;
+  color: #fff;
+  min-block-size: 56px;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+.bsp-wz-btn.bsp-wz-pur {
+  background: #7935fe;
+}
+.bsp-wz-btn.bsp-wz-sec {
+  background: #f2f2f4;
+  color: #111114;
+}
+.bsp-wz-btn.bsp-wz-ghost {
+  background: transparent;
+  color: #111114;
+}
+.bsp-wz-btn.bsp-wz-sm {
+  min-block-size: 40px;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+.bsp-wz-btn.bsp-wz-xs {
+  min-block-size: 34px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+}
+.bsp-wz-btn[disabled] {
+  background: #ececef;
+  color: #9a9aa2;
+  cursor: not-allowed;
+}
+/* The Teach step's sources: two `.chip` tiles, `padding: 14px`, column, gap 4. */
+.bsp-wz-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.bsp-wz-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  border: 1px solid #e4e4e8;
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  min-inline-size: 0;
+}
+.bsp-wz-tile-t {
+  font-size: 14px;
+  font-weight: 700;
+}
+.bsp-wz-tile-s {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #6a6a72;
+  overflow-wrap: anywhere;
+}
+.bsp-wz-tile-acts {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-block-start: 6px;
+}
+/* What was understood: `border: 1px solid #ececef; border-radius: 18px`, a
+   `#fbfbfc` head row, then one row per fact. */
+.bsp-wz-facts {
+  border: 1px solid #ececef;
+  border-radius: 18px;
+  overflow: hidden;
+}
+.bsp-wz-facts-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #fbfbfc;
+  font-size: 14px;
+  font-weight: 800;
+}
+.bsp-wz-facts-h > span {
+  flex-grow: 1;
+}
+.bsp-wz-fact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-block-start: 1px solid #f0f0f2;
+}
+.bsp-wz-fact-t {
+  flex-grow: 1;
+  min-inline-size: 0;
+  font-size: 13.5px;
+}
+.bsp-wz-fact-c {
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+/* `border: 1.5px dashed #d8d8de; border-radius: 16px; padding: 18px; font-size: 13.5px; color: #6a6a72`. */
+.bsp-wz-empty {
+  border: 1.5px dashed #d8d8de;
+  border-radius: 16px;
+  padding: 18px;
+  font-size: 13.5px;
+  color: #6a6a72;
+}
+/* The Accounts step: two columns of cards — `gap: 12px; border: 1px solid #ececef;
+   border-radius: 16px; padding: 12px 14px`, a 40px `#f3f3f5` mark. */
+.bsp-wz-accs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.bsp-wz-acc {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #ececef;
+  border-radius: 16px;
+  padding: 12px 14px;
+  min-inline-size: 0;
+}
+.bsp-wz-acc-mark {
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: 12px;
+  background: #f3f3f5;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.bsp-wz-acc-copy {
+  flex-grow: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+.bsp-wz-acc-name {
+  font-size: 14.5px;
+  font-weight: 800;
+  text-align: start;
+}
+.bsp-wz-acc-sub {
+  font-size: 12.5px;
+  color: #6a6a72;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Ready: three `#fbfbfc` tiles (`radius 16; padding 14px`, the value at 24px / 800). */
+.bsp-wz-sum {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.bsp-wz-sum > div {
+  background: #fbfbfc;
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.bsp-wz-sum b {
+  font-size: 24px;
+  font-weight: 800;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.bsp-wz-sum span {
+  font-size: 12.5px;
+  color: #6a6a72;
+}
+.bsp-wz-sub {
+  font-size: 14px;
+  font-weight: 800;
+}
+.bsp-wz-idea {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #ececef;
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+.bsp-wz-idea-art {
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #fff1c2 0%, #fde8ec 55%, #ece6ff 100%);
+}
+.bsp-wz-idea-art[data-seed='1'] {
+  background: linear-gradient(135deg, #e7ddff 0%, #c9b3ff 100%);
+}
+.bsp-wz-idea-art[data-seed='2'] {
+  background: linear-gradient(135deg, #fff4c2 0%, #ffd60a 100%);
+}
+.bsp-wz-idea-copy {
+  flex-grow: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+.bsp-wz-idea-copy > b {
+  font-size: 14px;
+  font-weight: 800;
+}
+.bsp-wz-idea-copy > span {
+  font-size: 12.5px;
+  color: #6a6a72;
+}
+/* The footer: `gap: 10px; border-block-start: 1px solid #f0f0f2; padding-top: 16px`. */
+.bsp-wz-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-block-start: 1px solid #f0f0f2;
+  padding-block-start: 16px;
+  flex-wrap: wrap;
+}
+.bsp-wz-note {
+  flex-grow: 1;
+  font-size: 12.5px;
+  color: #6a6a72;
+}
+@media (max-width: 767.98px) {
+  .bsp-wz-grid2,
+  .bsp-wz-brandgrid,
+  .bsp-wz-tiles,
+  .bsp-wz-accs,
+  .bsp-wz-sum {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bsp-wz-brand {
+    flex-wrap: wrap;
+  }
+  .bsp-wz-fact {
+    flex-wrap: wrap;
+  }
+}
+
 /* Choosing a workspace: rows on `#f4f4f5`, radius 18, `padding: 14px 16px`, a 50px gradient tile, the name at 18px / 800. */
 .bsp-auth-wslist {
   list-style: none;

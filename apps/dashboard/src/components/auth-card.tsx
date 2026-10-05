@@ -36,7 +36,10 @@ export function AuthCard({
             <span data-testid="auth-brand-mark" className="bsp-auth-logo">
               <BrandGlyph size="46px" />
             </span>
-            <span className="bsp-auth-word">{t('app.title')}</span>
+            {/* The product's name, in Latin in both languages, as the prototype writes it. */}
+            <span className="bsp-auth-word bsp-ltr" lang="en">
+              BrandSpace
+            </span>
             <nav
               aria-label={locale === 'ar' ? 'التنقل الرئيسي' : 'Main navigation'}
               className="bsp-auth-lang"

@@ -451,6 +451,10 @@ async function build(
           // Free text: the industry catalogue is empty until an operator fills it.
           industry: lang === 'ar' ? 'مقهى' : 'Café',
           websiteUrl: 'https://reema.coffee',
+          // The prototype café posts in both languages, Arabic first (round 3).
+          defaultLocale: lang === 'ar' ? 'AR' : 'EN',
+          supportedLocales: ['AR', 'EN'],
+          colorPalette: ['#111114', '#FFD60A', '#F3E9D7'],
         },
       });
 

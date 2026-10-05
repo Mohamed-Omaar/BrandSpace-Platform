@@ -1,27 +1,15 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import {
-  CONTROL_CLASS,
-  Field,
-  StatusBadge,
-  buttonClass,
-  buttonStyle,
-  colorTokens,
-  inputStyle,
-  radiusTokens,
-  spacingTokens,
-  typographyTokens,
-  visuallyHiddenStyle,
-} from '@brandspace/ui';
-import { areaDefinition, localizedFrom } from '@brandspace/brand-brain';
+import { localizedFrom, areaDefinition } from '@brandspace/brand-brain';
 import { TenantOnboardingPolicySource } from '@brandspace/onboarding';
-import { currentEnvironment } from '@brandspace/shared';
-import { requireWorkspace } from '../../../server/customer-context';
+import { countryOptions, currentEnvironment } from '@brandspace/shared';
+import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 import { inSocial } from '../../../server/social-context';
 import { copilotHref } from '../../../server/copilot-surface';
 import { setupFactsFor } from '../../../server/setup-wizard';
+import { paletteFrom } from '../../../server/brand-profile';
 import {
   SETUP_GOALS,
   recommendedFirstAction,
@@ -36,58 +24,39 @@ import {
   type MessageKey,
 } from '../../../i18n/messages';
 import { CustomerBanner } from '../../../components/workspace-shell';
-import { SetupFrame } from '../../../components/setup-frame';
+import { SetupFooter, SetupFrame } from '../../../components/setup-frame';
 import { uploadSourceAction } from '../brand-brain/actions';
 import { connectAccountAction } from '../integrations/actions';
+import { ChannelMark } from '../calendar/prototype-calendar';
 import { createSetupBrandAction, reviewSetupCandidateAction, saveFirstGoalAction } from './actions';
-import { SetupProgress } from './setup-stepper';
 import { IndustryField } from '../../../components/industry-field';
 import { SetupBrandLanguages } from '../../../components/setup-brand-languages';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * THE FIRST-RUN SETUP WIZARD (Phase 6 final, D-277 §6).
+ * THE FIRST-RUN SETUP WIZARD — `Auth.dc.html` lines 114–200 (D-468; review of
+ * #67, round 3).
  *
- * Workspace → Add brand → Let BrandSpace learn → Review what it found →
- * Connect socials → First goal → "You're ready to start".
+ * The prototype's five steps and its Ready screen, each with its own form:
+ * Business · Brand · Teach · Accounts · Goal, then "<brand> is ready". The work
+ * each step does is still the product's own: the workspace form makes the
+ * workspace (/onboarding/workspace); creating the brand is the one creation
+ * path; uploading and reviewing documents are the Brand Brain's own actions;
+ * connecting is the Connections OAuth flow; the goal is a knowledge item in the
+ * brand's strategy memory. Each returns here through a closed-set `returnTo`.
  *
- * IT REPLACES A CHECKLIST OF LINKS TO OTHER PAGES with one guided journey — but
- * the work each step does is still the product's own. Creating the brand is the
- * one creation path; uploading and reviewing documents are the Brand Brain's
- * own actions; connecting is the Connections OAuth flow; the goal is a knowledge
- * item in the brand's strategy memory. Each returns here through a closed-set
- * `returnTo`, never a caller-supplied URL.
+ * A STEP ALWAYS SHOWS ITS FORM. Where the data already exists (the workspace,
+ * the brand) the form is drawn prefilled; it cannot be saved from here yet
+ * (the Settings actions return to Settings), so its fields are read-only and
+ * the step says where to change them.
  *
  * NOTHING HERE IS A STORED POSITION. `setupSteps` derives every step from real
- * rows (`server/setup-wizard-state.ts`), `?step=` only chooses which screen to
- * show, and "Skip for now" is a link.
- *
- * NO REFERENCE DESIGN EXISTS for this screen: it is an APPROVED DESIGN-SYSTEM
- * EXTENSION (CLAUDE.md §4.2) composed of the shell, `Card`, `Field`, the
- * button variants and `StatusBadge` — see docs/UI-FIDELITY-CONTRACT.md §6.
+ * rows (`server/setup-wizard-state.ts`); `?step=` only chooses which screen to
+ * show, and Skip is a link.
  */
 
-const AREA_ORDER = [
-  'IDENTITY',
-  'AUDIENCE',
-  'OFFERS',
-  'TONE_OF_VOICE',
-  'DO_DONT',
-  'PROOF_POINTS',
-  'GLOSSARY',
-  'COMPETITORS',
-  'STRATEGY',
-  'LEARNINGS',
-] as const;
-
-const SOURCE_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger' | 'info'> = {
-  UPLOADED: 'info',
-  PROCESSING: 'info',
-  READY: 'success',
-  FAILED: 'danger',
-  QUARANTINED: 'danger',
-};
+type WizardView = SetupView | 'business';
 
 export default async function OnboardingPage({
   params,
@@ -112,7 +81,9 @@ export default async function OnboardingPage({
 
   const facts = await setupFactsFor(workspace.workspaceId, brand?.id ?? null);
   const steps = setupSteps(facts);
-  const view = setupView(query['step'], steps);
+  // "business" shows the workspace's own form; it never decides a position.
+  const view: WizardView =
+    query['step'] === 'business' ? 'business' : setupView(query['step'], steps);
 
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const error = typeof query['error'] === 'string' ? query['error'] : null;
@@ -120,594 +91,550 @@ export default async function OnboardingPage({
   const successText = ok ? statusMessage(ok, locale) : null;
   const errorText = error ? (statusMessage(error, locale, reference) ?? t('setup.error')) : null;
 
-  const href = (target: SetupView) => `/${locale}/onboarding?step=${target}`;
+  const href = (target: WizardView) => `/${locale}/onboarding?step=${target}`;
   const stepLabel = (key: string) => t(`setup.step.${key}` as MessageKey);
+  const pickText = (value: unknown) => {
+    const text = localizedFrom(value as never);
+    return (locale === 'ar' ? (text.ar ?? text.en) : (text.en ?? text.ar)) ?? '';
+  };
 
-  const primaryLink = (target: string, label: string, testId: string) => (
-    <Link
-      href={target}
-      data-testid={testId}
-      className={buttonClass('brand')}
-      style={buttonStyle('brand')}
-    >
-      {label}
+  /* The footer's controls (`Auth.dc.html` line 196). */
+  const backLink = (target: WizardView) => (
+    <Link href={href(target)} className="bsp-wz-btn bsp-wz-ghost" data-testid="setup-back">
+      {t('setup.wz.back')}
     </Link>
   );
-  const secondaryLink = (target: string, label: string, testId: string) => (
-    <Link
-      href={target}
-      data-testid={testId}
-      className={buttonClass('neutral')}
-      style={buttonStyle('neutral')}
-    >
-      {label}
+  const skipLink = (target: WizardView) => (
+    <Link href={href(target)} className="bsp-wz-btn bsp-wz-ghost" data-testid="setup-skip">
+      {t('setup.wz.skip')}
     </Link>
   );
-  const skip = (target: SetupView) => secondaryLink(href(target), t('setup.skip'), 'setup-skip');
-  const actions = (...children: ReactNode[]) => (
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: spacingTokens.sm,
-        marginBlockStart: spacingTokens.lg,
-      }}
-    >
-      {children}
-    </div>
+  const continueLink = (target: WizardView) => (
+    <Link href={href(target)} className="bsp-wz-btn bsp-wz-pur" data-testid="setup-continue">
+      {t('setup.continue')}
+    </Link>
   );
   const note = (text: string, testId?: string) => (
-    <p
-      data-testid={testId}
-      style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
-    >
+    <p className="bsp-wz-hint" data-testid={testId}>
       {text}
     </p>
   );
+  const savedNote = t('setup.wz.saved');
 
-  let body: ReactNode;
-  // Review of #67 — the step's heading and line, drawn by the setup card.
+  let body: ReactNode = null;
+  let footer: ReactNode = null;
   let head: { title: string; description?: string } = { title: t('setup.title') };
 
-  /* ------------------------------------------------------------------ brand */
-  if (view === 'brand') {
+  /* --------------------------------------------------------------- business */
+  if (view === 'business') {
+    const [row, industries, brandRow] = await Promise.all([
+      inWorkspace(workspace.workspaceId, ({ db }) =>
+        db.workspace.findUniqueOrThrow({
+          where: { id: workspace.workspaceId },
+          select: { name: true, country: true, timezone: true },
+        }),
+      ),
+      inBrandBrain(
+        workspace.workspaceId,
+        async ({ db }) =>
+          (await new TenantOnboardingPolicySource(db, currentEnvironment()).load()).industries,
+      ),
+      brand
+        ? inWorkspace(workspace.workspaceId, ({ db }) =>
+            db.brand.findUnique({ where: { id: brand.id }, select: { industry: true } }),
+          )
+        : Promise.resolve(null),
+    ]);
+    const country = countryOptions(locale).find((option) => option.value === row.country);
+    head = { title: t('setup.wz.business.title'), description: t('setup.wz.business.body') };
+    body = (
+      <section className="bsp-wz-body" data-testid="setup-business">
+        <div className="bsp-wz-grid2">
+          <div>
+            <label className="bsp-wz-lb" htmlFor="setup-business-name">
+              {t('setup.wz.business.name')}
+            </label>
+            <input
+              id="setup-business-name"
+              className="bs-control"
+              value={row.name}
+              readOnly
+              dir="auto"
+            />
+          </div>
+          <div>
+            <label className="bsp-wz-lb" htmlFor="setup-business-country">
+              {t('setup.wz.business.country')}
+            </label>
+            <input
+              id="setup-business-country"
+              className="bs-control"
+              value={country?.label ?? row.country ?? ''}
+              readOnly
+            />
+          </div>
+          {/* The industry is the brand's; shown here, as the prototype asks it here. */}
+          <div className="bsp-wz-full">
+            <span className="bsp-wz-lb" id="setup-business-industry">
+              {t('setup.wz.business.industry')}
+            </span>
+            <div className="bsp-wz-chips" role="group" aria-labelledby="setup-business-industry">
+              {industries.map((industry) => (
+                <span
+                  key={industry.key}
+                  className="bsp-wz-chip bsp-wz-chip-sm"
+                  aria-pressed={brandRow?.industry === industry.key}
+                  aria-disabled="true"
+                >
+                  {locale === 'ar' ? industry.name.ar : industry.name.en}
+                </span>
+              ))}
+            </div>
+          </div>
+          <span className="bsp-wz-full bsp-wz-hint" data-testid="setup-business-zone">
+            {t('setup.wz.business.zone').replace('{zone}', row.timezone)}{' '}
+            {may('workspace.update') ? (
+              <Link href={`/${locale}/settings`} className="bsp-lnk">
+                {t('setup.wz.changeInSettings')}
+              </Link>
+            ) : null}
+          </span>
+        </div>
+      </section>
+    );
+    footer = <SetupFooter note={savedNote} next={continueLink('brand')} />;
+  } else if (view === 'brand') {
+    /* ---------------------------------------------------------------- brand */
+    head = { title: t('setup.brand.title'), description: t('setup.wz.brand.body') };
     if (brand) {
-      head = {
-        title: t('setup.brand.readyTitle').replace('{brand}', brand.name),
-        description: t('setup.brand.readyBody'),
-      };
+      // A STEP ALWAYS SHOWS ITS FORM (round 3): the brand's own answers, prefilled.
+      const row = await inWorkspace(workspace.workspaceId, ({ db }) =>
+        db.brand.findUnique({
+          where: { id: brand.id },
+          select: {
+            name: true,
+            websiteUrl: true,
+            supportedLocales: true,
+            colorPalette: true,
+            primaryLogoAssetId: true,
+          },
+        }),
+      );
+      const palette = paletteFrom(row?.colorPalette).slice(0, 3);
+      const languages = (row?.supportedLocales as readonly string[] | undefined) ?? [];
       body = (
         <section className="bsp-wz-body" data-testid="setup-brand-ready">
-          {actions(
-            primaryLink(href('learn'), t('setup.continue'), 'setup-continue'),
-            secondaryLink(
-              `/${locale}/settings/brand`,
-              t('setup.brand.editProfile'),
-              'setup-edit-profile',
-            ),
-          )}
+          <div className="bsp-wz-brandgrid">
+            <div className="bsp-wz-col">
+              <div>
+                <label className="bsp-wz-lb" htmlFor="setup-brand-name">
+                  {t('setup.brand.name')}
+                </label>
+                <input
+                  id="setup-brand-name"
+                  className="bs-control"
+                  value={row?.name ?? brand.name}
+                  readOnly
+                  dir="auto"
+                  data-testid="setup-brand-name"
+                />
+              </div>
+              <div>
+                <label className="bsp-wz-lb" htmlFor="setup-brand-website">
+                  {t('setup.wz.brand.website')}
+                </label>
+                <input
+                  id="setup-brand-website"
+                  className="bs-control bsp-ltr"
+                  value={row?.websiteUrl ?? ''}
+                  readOnly
+                  dir="ltr"
+                />
+              </div>
+              <div>
+                <span className="bsp-wz-lb" id="setup-brand-langs">
+                  {t('setup.wz.brand.languages')}
+                </span>
+                <div className="bsp-wz-chips" role="group" aria-labelledby="setup-brand-langs">
+                  {(['AR', 'EN'] as const).map((code) => (
+                    <span
+                      key={code}
+                      className="bsp-wz-chip bsp-wz-chip-sm"
+                      aria-pressed={languages.includes(code)}
+                      aria-disabled="true"
+                    >
+                      {t(code === 'AR' ? 'brandProfile.localeAr' : 'brandProfile.localeEn')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="bsp-wz-look">
+              <span className="bsp-wz-lb">{t('setup.wz.brand.logoColours')}</span>
+              <div className="bsp-wz-logo-row">
+                <span className="bsp-wz-logo" aria-hidden="true">
+                  {(row?.name ?? brand.name).trim().charAt(0).toUpperCase()}
+                </span>
+                {may('brand.read') ? (
+                  <Link
+                    href={`/${locale}/settings/brand`}
+                    className="bsp-wz-btn bsp-wz-sec"
+                    data-testid="setup-edit-profile"
+                  >
+                    {row?.primaryLogoAssetId
+                      ? t('setup.wz.brand.changeLogo')
+                      : t('setup.wz.brand.uploadLogo')}
+                  </Link>
+                ) : null}
+              </div>
+              {palette.length > 0 ? (
+                <div className="bsp-wz-swatches">
+                  {palette.map((hex) => (
+                    <span
+                      key={hex}
+                      className="bsp-wz-swatch"
+                      style={{ background: hex }}
+                      title={hex}
+                      aria-label={hex}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              <span className="bsp-wz-hint">{t('setup.wz.brand.inSettings')}</span>
+            </div>
+          </div>
         </section>
+      );
+      footer = (
+        <SetupFooter note={savedNote} back={backLink('business')} next={continueLink('learn')} />
       );
     } else if (unselected) {
       head = { title: t('brand.chooseTitle'), description: t('brand.chooseBody') };
       body = <section className="bsp-wz-body">{note(t('setup.brand.chooseHint'))}</section>;
+      footer = <SetupFooter note={savedNote} back={backLink('business')} />;
     } else if (!may('brand.manage')) {
-      head = { title: t('setup.brand.title'), description: t('setup.brand.body') };
       body = (
         <section className="bsp-wz-body">
           {note(t('setup.noPermission'), 'setup-no-permission')}
         </section>
       );
+      footer = <SetupFooter note={savedNote} back={backLink('business')} />;
     } else {
       const industries = await inBrandBrain(
         workspace.workspaceId,
         async ({ db }) =>
           (await new TenantOnboardingPolicySource(db, currentEnvironment()).load()).industries,
       );
-      head = { title: t('setup.brand.title'), description: t('setup.brand.body') };
       body = (
         <section className="bsp-wz-body" data-testid="setup-brand">
           <form
+            id="setup-brand-form"
             action={createSetupBrandAction}
             encType="multipart/form-data"
             data-testid="setup-brand-form"
-            style={{ display: 'grid', gap: spacingTokens.md, maxInlineSize: '36rem' }}
+            className="bsp-wz-brandgrid"
           >
             <input type="hidden" name="locale" value={locale} />
-            <Field label={t('setup.brand.name')} htmlFor="setup-brand-name" required>
-              <input
-                id="setup-brand-name"
-                name="name"
-                // D-303 — the business name the account was set up with; the
-                // brand is usually the business, and the field stays editable.
-                defaultValue={workspace.workspaceName}
-                required
-                minLength={2}
-                maxLength={120}
-                className={CONTROL_CLASS}
-                style={inputStyle()}
-                data-testid="setup-brand-name"
-              />
-            </Field>
-            <Field
-              label={t('setup.brand.website')}
-              htmlFor="setup-brand-website"
-              hint={t('setup.optional')}
-            >
-              <input
-                id="setup-brand-website"
-                name="websiteUrl"
-                type="url"
-                inputMode="url"
-                maxLength={2048}
-                placeholder={t('setup.brand.websitePlaceholder')}
-                dir="ltr"
-                className={CONTROL_CLASS}
-                style={inputStyle()}
-              />
-            </Field>
-            {/*
-              D-335 — the activated industry list with "Something else", the
-              same field Settings → General offers (G6, D-329).
-            */}
-            <IndustryField
-              industries={industries.map((industry) => ({
-                value: industry.key,
-                label: locale === 'ar' ? industry.name.ar : industry.name.en,
-              }))}
-              saved={null}
-              labels={{
-                industry: t('setup.brand.industry'),
-                industryHint: t('setup.optional'),
-                industryNone: t('settings.industryNone'),
-                industryOther: t('settings.industryOther'),
-                industryOtherLabel: t('settings.industryOtherLabel'),
-              }}
-              idPrefix="setup-brand-"
-              testIdPrefix="setup-brand"
-            />
-            {/*
-              D-331 (amends D-277): the AI language starts as the creator's
-              interface language. D-335: at least one publishing language, and
-              exactly one decides the AI language.
-            */}
-            <SetupBrandLanguages
-              initialDefault={locale === 'ar' ? 'AR' : 'EN'}
-              labels={{
-                defaultLanguage: t('setup.brand.defaultLanguage'),
-                defaultLanguageHint: t('setup.brand.defaultLanguageHint'),
-                languages: t('setup.brand.languages'),
-                localeEn: t('brandProfile.localeEn'),
-                localeAr: t('brandProfile.localeAr'),
-                atLeastOne: t('setup.brand.languagesRequired'),
-              }}
-            />
-            {/*
-              D-303 — the optional identity details sit behind one disclosure,
-              so the first step asks only for what the brand needs to exist.
-            */}
-            <details data-testid="setup-brand-optional">
-              <summary
-                style={{
-                  cursor: 'pointer',
-                  ...typographyTokens.label,
-                  marginBlockEnd: spacingTokens.sm,
+            <div className="bsp-wz-col">
+              <div>
+                <label className="bsp-wz-lb" htmlFor="setup-brand-name">
+                  {t('setup.brand.name')}
+                </label>
+                <input
+                  id="setup-brand-name"
+                  name="name"
+                  // D-303 — the business name the account was set up with; the
+                  // brand is usually the business, and the field stays editable.
+                  defaultValue={workspace.workspaceName}
+                  required
+                  minLength={2}
+                  maxLength={120}
+                  className="bs-control"
+                  dir="auto"
+                  data-testid="setup-brand-name"
+                />
+              </div>
+              <div>
+                <label className="bsp-wz-lb" htmlFor="setup-brand-website">
+                  {t('setup.wz.brand.website')}
+                </label>
+                <input
+                  id="setup-brand-website"
+                  name="websiteUrl"
+                  type="url"
+                  inputMode="url"
+                  maxLength={2048}
+                  placeholder={t('setup.brand.websitePlaceholder')}
+                  dir="ltr"
+                  className="bs-control"
+                />
+              </div>
+              {/*
+                D-331 (amends D-277): the AI language starts as the creator's
+                interface language. D-335: at least one publishing language,
+                and exactly one decides the AI language.
+              */}
+              <SetupBrandLanguages
+                initialDefault={locale === 'ar' ? 'AR' : 'EN'}
+                moreLabel={t('setup.wz.more')}
+                labels={{
+                  defaultLanguage: t('setup.brand.defaultLanguage'),
+                  defaultLanguageHint: t('setup.brand.defaultLanguageHint'),
+                  languages: t('setup.wz.brand.languages'),
+                  localeEn: t('brandProfile.localeEn'),
+                  localeAr: t('brandProfile.localeAr'),
+                  atLeastOne: t('setup.brand.languagesRequired'),
                 }}
-              >
-                {t('setup.brand.optionalDetails')}
-              </summary>
-              <div style={{ display: 'grid', gap: spacingTokens.md }}>
-                <Field
-                  label={t('setup.brand.colours')}
-                  htmlFor="setup-brand-colours"
-                  hint={t('setup.brand.coloursHint')}
-                >
-                  <input
-                    id="setup-brand-colours"
-                    name="colorPalette"
-                    maxLength={120}
-                    dir="ltr"
-                    className={CONTROL_CLASS}
-                    style={inputStyle()}
-                  />
-                </Field>
-                {may('assets.upload') ? (
-                  <Field
-                    label={t('setup.brand.logo')}
-                    htmlFor="setup-brand-logo"
-                    hint={t('setup.brand.logoHint')}
-                  >
+              />
+              {/*
+                D-335 — the activated industry list with "Something else". The
+                prototype asks it with the business; a workspace does not store
+                it, so it stays with the brand, behind its own disclosure.
+              */}
+              <details className="bsp-wz-more" data-testid="setup-brand-industry-more">
+                <summary>{t('setup.brand.industry')}</summary>
+                <IndustryField
+                  industries={industries.map((industry) => ({
+                    value: industry.key,
+                    label: locale === 'ar' ? industry.name.ar : industry.name.en,
+                  }))}
+                  saved={null}
+                  labels={{
+                    industry: t('setup.brand.industry'),
+                    industryHint: t('setup.optional'),
+                    industryNone: t('settings.industryNone'),
+                    industryOther: t('settings.industryOther'),
+                    industryOtherLabel: t('settings.industryOtherLabel'),
+                  }}
+                  idPrefix="setup-brand-"
+                  testIdPrefix="setup-brand"
+                />
+              </details>
+            </div>
+            {/* "Logo and colours" — the prototype's soft panel (`.bsp-wz-look`). */}
+            <div className="bsp-wz-look">
+              <span className="bsp-wz-lb">{t('setup.wz.brand.logoColours')}</span>
+              {may('assets.upload') ? (
+                <div className="bsp-wz-logo-row">
+                  <span className="bsp-wz-logo" aria-hidden="true">
+                    {workspace.workspaceName.trim().charAt(0).toUpperCase()}
+                  </span>
+                  <label className="bsp-wz-btn bsp-wz-sec bsp-wz-file">
+                    {t('setup.wz.brand.uploadLogo')}
                     <input
                       id="setup-brand-logo"
                       name="logo"
                       type="file"
                       accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      style={{ font: 'inherit', ...typographyTokens.bodySm }}
+                      aria-describedby="setup-brand-logo-hint"
                     />
-                  </Field>
-                ) : null}
+                  </label>
+                </div>
+              ) : null}
+              <div>
+                <label className="bsp-wz-lb" htmlFor="setup-brand-colours">
+                  {t('setup.brand.colours')}
+                </label>
+                <input
+                  id="setup-brand-colours"
+                  name="colorPalette"
+                  maxLength={120}
+                  dir="ltr"
+                  className="bs-control"
+                  aria-describedby="setup-brand-colours-hint"
+                />
               </div>
-            </details>
-            <div>
-              <button
-                type="submit"
-                data-testid="setup-create-brand"
-                className={buttonClass('brand')}
-                style={buttonStyle('brand')}
-              >
-                {t('setup.brand.submit')}
-              </button>
+              <span id="setup-brand-colours-hint" className="bsp-wz-hint">
+                {t('setup.brand.coloursHint')}
+              </span>
+              <span id="setup-brand-logo-hint" className="bsp-wz-hint">
+                {t('setup.brand.logoHint')}
+              </span>
             </div>
           </form>
         </section>
       );
-    }
-  } else if (brand && view === 'learn') {
-    /* ------------------------------------------------------------ learn */
-    const sources = await inBrandBrain(workspace.workspaceId, ({ db }) =>
-      db.brandSourceDocument.findMany({
-        where: { brandId: brand.id, deletedAt: null },
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-        select: { id: true, fileName: true, status: true },
-      }),
-    );
-    head = { title: t('setup.learn.title'), description: t('setup.learn.body') };
-    body = (
-      <section className="bsp-wz-body" data-testid="setup-learn">
-        <ul style={{ margin: 0, paddingInlineStart: spacingTokens.lg, ...typographyTokens.bodySm }}>
-          {(['guidelines', 'profile', 'offers', 'presentations', 'faqs'] as const).map((kind) => (
-            <li key={kind}>{t(`setup.learn.kind.${kind}` as MessageKey)}</li>
-          ))}
-        </ul>
-        {may('brand_brain.upload') ? (
-          <form
-            action={uploadSourceAction}
-            encType="multipart/form-data"
-            data-testid="setup-upload-form"
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: spacingTokens.sm,
-              alignItems: 'center',
-              marginBlockStart: spacingTokens.md,
-            }}
-          >
-            <input type="hidden" name="locale" value={locale} />
-            <input type="hidden" name="brandId" value={brand.id} />
-            <input type="hidden" name="area" value="" />
-            <input type="hidden" name="returnTo" value="/onboarding" />
-            <input type="hidden" name="step" value="learn" />
-            <input
-              type="file"
-              name="file"
-              required
-              aria-label={t('bb.uploadChoose')}
-              data-testid="setup-upload-input"
-              style={{ font: 'inherit', ...typographyTokens.bodySm }}
-            />
+      footer = (
+        <SetupFooter
+          note={savedNote}
+          back={backLink('business')}
+          next={
             <button
               type="submit"
-              data-testid="setup-upload-submit"
-              className={buttonClass('primary')}
-              style={buttonStyle('primary')}
+              form="setup-brand-form"
+              className="bsp-wz-btn bsp-wz-pur"
+              data-testid="setup-create-brand"
             >
-              {t('bb.upload')}
+              {t('setup.continue')}
             </button>
-          </form>
+          }
+        />
+      );
+    }
+  } else if (brand && (view === 'learn' || view === 'review')) {
+    /* ---------------------------------------------------- teach (learn + review) */
+    const [sources, candidates] = await Promise.all([
+      inBrandBrain(workspace.workspaceId, ({ db }) =>
+        db.brandSourceDocument.findMany({
+          where: { brandId: brand.id, deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          select: { id: true, fileName: true, status: true },
+        }),
+      ),
+      may('brand_brain.review')
+        ? inBrandBrain(workspace.workspaceId, ({ db }) =>
+            db.brandKnowledgeCandidate.findMany({
+              where: { brandId: brand.id, status: 'PENDING', sourceKind: 'DOCUMENT' },
+              orderBy: { createdAt: 'asc' },
+              take: 50,
+              select: {
+                id: true,
+                area: true,
+                extractedTitle: true,
+                extractedBody: true,
+                confidenceMilli: true,
+              },
+            }),
+          )
+        : Promise.resolve([]),
+    ]);
+    const reading = sources.filter((source) => source.status === 'PROCESSING').length;
+    head = { title: t('setup.wz.teach.title'), description: t('setup.wz.teach.body') };
+    body = (
+      <section className="bsp-wz-body" data-testid="setup-learn">
+        {/*
+          The prototype's two sources: "Read my website" is post-launch
+          (D-468 (b)), so the one source is "Upload files" — the Brand Brain's
+          own upload, back to this step.
+        */}
+        <div className="bsp-wz-tiles">
+          {may('brand_brain.upload') ? (
+            <form
+              action={uploadSourceAction}
+              encType="multipart/form-data"
+              data-testid="setup-upload-form"
+              className="bsp-wz-tile"
+            >
+              <input type="hidden" name="locale" value={locale} />
+              <input type="hidden" name="brandId" value={brand.id} />
+              <input type="hidden" name="area" value="" />
+              <input type="hidden" name="returnTo" value="/onboarding" />
+              <input type="hidden" name="step" value="learn" />
+              <span className="bsp-wz-tile-t">{t('setup.wz.teach.upload')}</span>
+              <span className="bsp-wz-tile-s">{t('setup.wz.teach.kinds')}</span>
+              <span className="bsp-wz-tile-acts">
+                <input
+                  type="file"
+                  name="file"
+                  required
+                  aria-label={t('bb.uploadChoose')}
+                  data-testid="setup-upload-input"
+                />
+                <button
+                  type="submit"
+                  className="bsp-wz-btn bsp-wz-sec bsp-wz-sm"
+                  data-testid="setup-upload-submit"
+                >
+                  {t('bb.upload')}
+                </button>
+              </span>
+              {sources.length > 0 ? (
+                <span className="bsp-wz-tile-s" data-testid="setup-sources">
+                  {sources
+                    .map(
+                      (source) =>
+                        `${source.fileName} · ${t(`setup.source.${source.status}` as MessageKey)}`,
+                    )
+                    .join(' · ')}
+                </span>
+              ) : null}
+            </form>
+          ) : (
+            note(t('setup.noPermission'), 'setup-no-permission')
+          )}
+        </div>
+        {reading > 0 ? note(t('setup.learn.processing'), 'setup-processing') : null}
+        {candidates.length > 0 ? (
+          /* "We understood n things · review them", one row per fact (lines 156–168). */
+          <div className="bsp-wz-facts" data-testid="setup-review-summary">
+            <div className="bsp-wz-facts-h">
+              <span>
+                {t('setup.wz.teach.understood').replace('{count}', String(candidates.length))}
+              </span>
+            </div>
+            {candidates.map((candidate) => {
+              const hidden = (decision: string) => (
+                <>
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="area" value={candidate.area} />
+                  <input type="hidden" name="candidateId" value={candidate.id} />
+                  <input type="hidden" name="decision" value={decision} />
+                </>
+              );
+              return (
+                <div
+                  key={candidate.id}
+                  className="bsp-wz-fact"
+                  data-testid={`setup-candidate-${candidate.id}`}
+                >
+                  <span className="bsp-pill bsp-p-ai">
+                    {t(`bb.area.${areaDefinition(candidate.area).messageKey}` as MessageKey)}
+                  </span>
+                  {/* One line per fact, as the prototype's: the body adds only what the title does not say. */}
+                  <span className="bsp-wz-fact-t" dir="auto">
+                    {factLine(
+                      pickText(candidate.extractedTitle),
+                      pickText(candidate.extractedBody),
+                    )}
+                  </span>
+                  <span className="bsp-wz-fact-c bsp-ltr">
+                    {Math.round(candidate.confidenceMilli / 10)}%
+                  </span>
+                  <form action={reviewSetupCandidateAction}>
+                    {hidden('accept')}
+                    <button
+                      type="submit"
+                      className="bsp-wz-btn bsp-wz-sec bsp-wz-xs"
+                      data-testid={`setup-accept-${candidate.id}`}
+                    >
+                      {t('setup.wz.teach.accept')}
+                    </button>
+                  </form>
+                  <form action={reviewSetupCandidateAction}>
+                    {hidden('reject')}
+                    <button
+                      type="submit"
+                      className="bsp-wz-btn bsp-wz-ghost bsp-wz-xs"
+                      data-testid={`setup-reject-${candidate.id}`}
+                    >
+                      {t('setup.wz.teach.reject')}
+                    </button>
+                  </form>
+                </div>
+              );
+            })}
+          </div>
+        ) : facts.sources.total > 0 && reading === 0 ? (
+          note(
+            t('setup.review.allDone').replace('{count}', String(facts.activeKnowledge)),
+            'setup-review-done',
+          )
         ) : (
-          note(t('setup.noPermission'), 'setup-no-permission')
-        )}
-        <p
-          style={{
-            margin: `${spacingTokens.xs} 0 0`,
-            ...typographyTokens.caption,
-            color: colorTokens.textMuted,
-          }}
-        >
-          {t('bb.uploadHint')}
-        </p>
-        {sources.length > 0 ? (
-          <ul
-            data-testid="setup-sources"
-            style={{
-              listStyle: 'none',
-              margin: `${spacingTokens.md} 0 0`,
-              padding: 0,
-              display: 'grid',
-              gap: spacingTokens.xs,
-            }}
-          >
-            {sources.map((source) => (
-              <li
-                key={source.id}
-                style={{
-                  display: 'flex',
-                  gap: spacingTokens.sm,
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <span style={{ ...typographyTokens.bodySm, overflowWrap: 'anywhere' }}>
-                  {source.fileName}
-                </span>
-                {/* MO13: a source still being read pulses. */}
-                <span className={source.status === 'PROCESSING' ? 'bs-pulse' : undefined}>
-                  <StatusBadge
-                    label={t(`setup.source.${source.status}` as MessageKey)}
-                    tone={SOURCE_TONE[source.status] ?? 'neutral'}
-                  />
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {facts.sources.processing > 0
-          ? note(t('setup.learn.processing'), 'setup-processing')
-          : null}
-        {actions(
-          facts.sources.total > 0
-            ? primaryLink(href('review'), t('setup.continue'), 'setup-continue')
-            : null,
-          facts.sources.total > 0 ? null : skip('connect'),
+          <div className="bsp-wz-empty">{t('setup.wz.teach.empty')}</div>
         )}
       </section>
     );
-  } else if (brand && view === 'review') {
-    /* ----------------------------------------------------------- review */
-    const candidates = may('brand_brain.review')
-      ? await inBrandBrain(workspace.workspaceId, ({ db }) =>
-          db.brandKnowledgeCandidate.findMany({
-            where: { brandId: brand.id, status: 'PENDING', sourceKind: 'DOCUMENT' },
-            orderBy: { createdAt: 'asc' },
-            take: 50,
-            select: {
-              id: true,
-              area: true,
-              extractedTitle: true,
-              extractedBody: true,
-              confidenceMilli: true,
-            },
-          }),
-        )
-      : [];
-    const pick = (value: unknown) => {
-      const text = localizedFrom(value as never);
-      return (locale === 'ar' ? (text.ar ?? text.en) : (text.en ?? text.ar)) ?? '';
-    };
-    const groups = AREA_ORDER.map((area) => ({
-      area,
-      items: candidates.filter((candidate) => candidate.area === area),
-    })).filter((group) => group.items.length > 0);
-    /*
-     * D-303 — ONE AREA OPEN AT A TIME. Every area is a disclosure titled with
-     * its count; the one the reader just acted in (the review action returns
-     * `?area=`) stays open, otherwise the first. Nothing is decided for them —
-     * each fact is still accepted, edited or rejected one by one.
-     */
-    const requestedArea = typeof query['area'] === 'string' ? query['area'] : null;
-    const openArea = groups.some((group) => group.area === requestedArea)
-      ? requestedArea
-      : (groups[0]?.area ?? null);
-    const toReview = groups.reduce((total, group) => total + group.items.length, 0);
-
-    head = { title: t('setup.review.title'), description: t('setup.review.body') };
-    body = (
-      <section className="bsp-wz-body" data-testid="setup-review">
-        {facts.sources.total === 0 ? (
-          <>
-            {note(t('setup.review.nothing'), 'setup-review-nothing')}
-            {actions(
-              secondaryLink(href('learn'), t('setup.review.addDocuments'), 'setup-back-learn'),
-              skip('connect'),
-            )}
-          </>
-        ) : !may('brand_brain.review') ? (
-          <>
-            {note(t('setup.noPermission'), 'setup-no-permission')}
-            {actions(skip('connect'))}
-          </>
-        ) : groups.length === 0 ? (
-          <>
-            {facts.sources.processing > 0
-              ? note(t('setup.learn.processing'), 'setup-processing')
-              : note(
-                  t('setup.review.allDone').replace('{count}', String(facts.activeKnowledge)),
-                  'setup-review-done',
-                )}
-            {actions(
-              facts.sources.processing > 0
-                ? secondaryLink(href('review'), t('setup.refresh'), 'setup-refresh')
-                : null,
-              primaryLink(href('connect'), t('setup.continue'), 'setup-continue'),
-            )}
-          </>
-        ) : (
-          <>
-            {note(
-              t('setup.review.summary')
-                .replace('{count}', String(toReview))
-                .replace('{areas}', String(groups.length)),
-              'setup-review-summary',
-            )}
-            <div style={{ display: 'grid', gap: spacingTokens.sm }}>
-              {groups.map((group) => (
-                <details
-                  key={group.area}
-                  open={group.area === openArea}
-                  data-testid={`setup-area-${group.area}`}
-                  style={{
-                    borderRadius: radiusTokens.lg,
-                    border: `1px solid ${colorTokens.border}`,
-                    padding: spacingTokens.sm,
-                  }}
-                >
-                  <summary
-                    style={{
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      alignItems: 'center',
-                      gap: spacingTokens.xs,
-                      ...typographyTokens.cardTitle,
-                    }}
-                  >
-                    {t(`bb.area.${areaDefinition(group.area).messageKey}` as MessageKey)}
-                    <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                      {t('setup.review.toReview').replace('{count}', String(group.items.length))}
-                    </span>
-                  </summary>
-                  <ul
-                    style={{
-                      listStyle: 'none',
-                      margin: `${spacingTokens.sm} 0 0`,
-                      padding: 0,
-                      display: 'grid',
-                      gap: spacingTokens.sm,
-                    }}
-                  >
-                    {group.items.map((candidate) => {
-                      const title = localizedFrom(candidate.extractedTitle);
-                      const text = localizedFrom(candidate.extractedBody);
-                      const hidden = (decision: string) => (
-                        <>
-                          <input type="hidden" name="locale" value={locale} />
-                          <input type="hidden" name="area" value={candidate.area} />
-                          <input type="hidden" name="candidateId" value={candidate.id} />
-                          <input type="hidden" name="decision" value={decision} />
-                        </>
-                      );
-                      return (
-                        <li
-                          key={candidate.id}
-                          data-testid={`setup-candidate-${candidate.id}`}
-                          style={{
-                            display: 'grid',
-                            gap: spacingTokens.xs,
-                            padding: spacingTokens.md,
-                            borderRadius: radiusTokens.lg,
-                            background: colorTokens.surfaceSoft,
-                          }}
-                        >
-                          <strong style={typographyTokens.bodySm}>
-                            {pick(candidate.extractedTitle)}
-                          </strong>
-                          <span
-                            style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
-                          >
-                            {pick(candidate.extractedBody)}
-                          </span>
-                          <span
-                            style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
-                          >
-                            {t('setup.review.confidence').replace(
-                              '{percent}',
-                              String(Math.round(candidate.confidenceMilli / 10)),
-                            )}
-                          </span>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
-                            <form action={reviewSetupCandidateAction}>
-                              {hidden('accept')}
-                              <button
-                                type="submit"
-                                data-testid={`setup-accept-${candidate.id}`}
-                                className={buttonClass('primary')}
-                                style={buttonStyle('primary', 'sm')}
-                              >
-                                {t('bb.reviewAccept')}
-                              </button>
-                            </form>
-                            <form action={reviewSetupCandidateAction}>
-                              {hidden('reject')}
-                              <button
-                                type="submit"
-                                data-testid={`setup-reject-${candidate.id}`}
-                                className={buttonClass('neutral')}
-                                style={buttonStyle('neutral', 'sm')}
-                              >
-                                {t('bb.reviewReject')}
-                              </button>
-                            </form>
-                          </div>
-                          <details>
-                            <summary
-                              style={{
-                                cursor: 'pointer',
-                                ...typographyTokens.caption,
-                                fontWeight: 700,
-                              }}
-                            >
-                              {t('bb.reviewEdit')}
-                            </summary>
-                            <form
-                              action={reviewSetupCandidateAction}
-                              style={{
-                                display: 'grid',
-                                gap: spacingTokens.xs,
-                                marginBlockStart: spacingTokens.xs,
-                              }}
-                            >
-                              {hidden('accept_edited')}
-                              <input
-                                name="titleEn"
-                                defaultValue={title.en ?? ''}
-                                aria-label={t('bb.reviewEditTitleEn')}
-                                dir="ltr"
-                                className={CONTROL_CLASS}
-                                style={inputStyle()}
-                              />
-                              <input
-                                name="titleAr"
-                                defaultValue={title.ar ?? ''}
-                                aria-label={t('bb.reviewEditTitleAr')}
-                                dir="rtl"
-                                className={CONTROL_CLASS}
-                                style={inputStyle()}
-                              />
-                              <textarea
-                                name="bodyEn"
-                                rows={3}
-                                defaultValue={text.en ?? ''}
-                                aria-label={t('bb.reviewEditBodyEn')}
-                                dir="ltr"
-                                className={CONTROL_CLASS}
-                                style={{ ...inputStyle(), resize: 'vertical' }}
-                              />
-                              <textarea
-                                name="bodyAr"
-                                rows={3}
-                                defaultValue={text.ar ?? ''}
-                                aria-label={t('bb.reviewEditBodyAr')}
-                                dir="rtl"
-                                className={CONTROL_CLASS}
-                                style={{ ...inputStyle(), resize: 'vertical' }}
-                              />
-                              <div>
-                                <button
-                                  type="submit"
-                                  data-testid={`setup-accept-edited-${candidate.id}`}
-                                  className={buttonClass('primary')}
-                                  style={buttonStyle('primary', 'sm')}
-                                >
-                                  {t('bb.reviewAcceptEdited')}
-                                </button>
-                              </div>
-                            </form>
-                          </details>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </details>
-              ))}
-            </div>
-            {actions(skip('connect'))}
-          </>
-        )}
-      </section>
+    footer = (
+      <SetupFooter
+        note={savedNote}
+        back={backLink('brand')}
+        skip={skipLink('connect')}
+        next={continueLink('connect')}
+      />
     );
   } else if (brand && view === 'connect') {
-    /* ---------------------------------------------------------- connect */
+    /* ---------------------------------------------------------- accounts */
     const social = may('integrations.read')
       ? await inSocial(workspace.workspaceId, async (services) => {
           const registry = await services.registry();
@@ -730,93 +657,83 @@ export default async function OnboardingPage({
     const providerLabel = (provider: string) =>
       optionalMessage(messageLocale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
 
-    head = { title: t('setup.connect.title'), description: t('setup.connect.body') };
+    head = { title: t('setup.wz.connect.title'), description: t('setup.wz.connect.body') };
     body = (
       <section className="bsp-wz-body" data-testid="setup-connect">
-        {social.connections.length > 0 ? (
-          <ul
-            data-testid="setup-connections"
-            style={{
-              listStyle: 'none',
-              margin: `0 0 ${spacingTokens.md}`,
-              padding: 0,
-              display: 'grid',
-              gap: spacingTokens.xs,
-            }}
-          >
-            {social.connections.map((connection) => (
-              <li
-                key={connection.id}
-                style={{
-                  display: 'flex',
-                  gap: spacingTokens.sm,
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <span style={typographyTokens.bodySm}>
-                  {providerLabel(connection.provider)} · {connection.displayName}
-                </span>
-                <StatusBadge
-                  label={t(
-                    connection.status === 'ACTIVE'
-                      ? 'setup.connect.connected'
-                      : 'setup.connect.attention',
-                  )}
-                  tone={connection.status === 'ACTIVE' ? 'success' : 'warning'}
-                />
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {!may('integrations.manage') ? (
-          note(t('setup.noPermission'), 'setup-no-permission')
-        ) : social.providers.length === 0 ? (
+        {social.providers.length === 0 && social.connections.length === 0 ? (
           note(t('setup.connect.none'), 'setup-connect-none')
         ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.sm }}>
-            {social.providers.map((provider) => (
-              <form key={provider} action={connectAccountAction}>
-                <input type="hidden" name="locale" value={locale} />
-                <input type="hidden" name="provider" value={provider} />
-                <input type="hidden" name="brandId" value={brand.id} />
-                <input type="hidden" name="returnTo" value="/onboarding" />
-                <button
-                  type="submit"
-                  data-testid={`setup-connect-${provider.toLowerCase()}`}
-                  className={buttonClass('primary')}
-                  style={buttonStyle('primary')}
-                >
-                  {t('setup.connect.provider').replace('{provider}', providerLabel(provider))}
-                </button>
-              </form>
-            ))}
+          /* One card per channel: mark, name, its state, Connect (lines 171–180). */
+          <div className="bsp-wz-accs" data-testid="setup-connections">
+            {social.providers.map((provider) => {
+              const connection = social.connections.find((entry) => entry.provider === provider);
+              const name = providerLabel(provider);
+              return (
+                <div key={provider} className="bsp-wz-acc">
+                  <span className="bsp-wz-acc-mark">
+                    <ChannelMark
+                      channel={{ key: provider.toLowerCase(), name }}
+                      size={20}
+                      label={false}
+                    />
+                  </span>
+                  <span className="bsp-wz-acc-copy">
+                    <span className="bsp-wz-acc-name bsp-ltr">{name}</span>
+                    <span className="bsp-wz-acc-sub">
+                      {connection
+                        ? connection.status === 'ACTIVE'
+                          ? connection.displayName
+                          : t('setup.connect.attention')
+                        : t('setup.wz.connect.notConnected')}
+                    </span>
+                  </span>
+                  {connection?.status === 'ACTIVE' ? (
+                    <span className="bsp-pill bsp-p-ok">{t('setup.connect.connected')}</span>
+                  ) : may('integrations.manage') ? (
+                    <form action={connectAccountAction}>
+                      <input type="hidden" name="locale" value={locale} />
+                      <input type="hidden" name="provider" value={provider} />
+                      <input type="hidden" name="brandId" value={brand.id} />
+                      <input type="hidden" name="returnTo" value="/onboarding" />
+                      <button
+                        type="submit"
+                        className="bsp-wz-btn bsp-wz-ink bsp-wz-sm"
+                        data-testid={`setup-connect-${provider.toLowerCase()}`}
+                        aria-label={t('setup.connect.provider').replace('{provider}', name)}
+                      >
+                        {t('setup.wz.connect.connect')}
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
-        {actions(
-          facts.activeConnections > 0
-            ? primaryLink(href('goal'), t('setup.continue'), 'setup-continue')
-            : skip('goal'),
-        )}
+        {!may('integrations.manage') ? note(t('setup.noPermission'), 'setup-no-permission') : null}
       </section>
+    );
+    footer = (
+      <SetupFooter
+        note={savedNote}
+        back={backLink('learn')}
+        skip={skipLink('goal')}
+        next={continueLink('goal')}
+      />
     );
   } else if (brand && view === 'goal') {
     /* ------------------------------------------------------------- goal */
     const chosen = facts.goal?.objective ?? null;
-    head = { title: t('setup.goal.title'), description: t('setup.goal.body') };
+    head = { title: t('setup.wz.goal.title'), description: t('setup.wz.goal.body') };
     body = (
       <section className="bsp-wz-body" data-testid="setup-goal">
         {may('brand_brain.edit') ? (
-          <form
-            action={saveFirstGoalAction}
-            data-testid="setup-goal-form"
-            style={{ display: 'grid', gap: spacingTokens.md }}
-          >
+          <form id="setup-goal-form" action={saveFirstGoalAction} data-testid="setup-goal-form">
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="brandId" value={brand.id} />
             {/* D-468 — the prototype's goal chips: three columns of choices (line 183). */}
             <fieldset className="bsp-wz-goals">
-              <legend style={visuallyHiddenStyle()}>{t('setup.goal.title')}</legend>
+              <legend className="bs-sr-only">{t('setup.wz.goal.title')}</legend>
               {[...SETUP_GOALS, 'unsure' as const].map((goal) => (
                 <label key={goal} className="bsp-wz-chip">
                   <input
@@ -832,92 +749,144 @@ export default async function OnboardingPage({
                 </label>
               ))}
             </fieldset>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.sm }}>
-              <button
-                type="submit"
-                data-testid="setup-goal-submit"
-                className={buttonClass('brand')}
-                style={buttonStyle('brand')}
-              >
-                {t('setup.goal.submit')}
-              </button>
-              {skip('done')}
-            </div>
           </form>
         ) : (
-          <>
-            {note(t('setup.noPermission'), 'setup-no-permission')}
-            {actions(skip('done'))}
-          </>
+          note(t('setup.noPermission'), 'setup-no-permission')
         )}
       </section>
     );
+    footer = (
+      <SetupFooter
+        note={savedNote}
+        back={backLink('connect')}
+        skip={skipLink('done')}
+        next={
+          may('brand_brain.edit') ? (
+            <button
+              type="submit"
+              form="setup-goal-form"
+              className="bsp-wz-btn bsp-wz-pur"
+              data-testid="setup-goal-submit"
+            >
+              {t('setup.continue')}
+            </button>
+          ) : null
+        }
+      />
+    );
   } else if (brand) {
-    /* ------------------------------------------------------------- done */
+    /* ------------------------------------------------------------ ready */
     const recommended = recommendedFirstAction(facts);
-    const plan = may('copilot.use')
-      ? {
-          href: copilotHref(locale, 'campaigns'),
-          label: t('setup.done.plan'),
-          testId: 'setup-plan',
-        }
+    const goalLabel = facts.goal?.objective
+      ? t(`setup.goal.${facts.goal.objective}` as MessageKey)
       : null;
-    const create = may('content.create')
-      ? {
-          href: `/${locale}/content/compose`,
-          label: t('setup.done.create'),
-          testId: 'setup-create-post',
-        }
-      : null;
-    const [first, second] =
-      recommended === 'plan'
-        ? [plan ?? create, plan ? create : null]
-        : [create ?? plan, create ? plan : null];
-    const summary: readonly [string, string][] = [
-      [t('setup.step.brand'), brand.name],
-      [t('setup.done.knowledge'), String(facts.activeKnowledge)],
-      [t('setup.done.connections'), String(facts.activeConnections)],
-      [
-        t('setup.step.goal'),
-        facts.goal?.objective
-          ? t(`setup.goal.${facts.goal.objective}` as MessageKey)
-          : t('setup.done.noGoal'),
-      ],
-    ];
+    /*
+     * THE FIRST IDEAS (line 189): the product's own next steps, not invented
+     * posts — writing for the goal just chosen, a first post, and a plan with
+     * the Copilot — each only where this member may take it.
+     */
+    const ideas = [
+      goalLabel && may('content.create')
+        ? {
+            key: 'goal',
+            title: t('create.idea.goalTitle').replace('{goal}', goalLabel),
+            meta: t('create.idea.goalReason'),
+            href: `/${locale}/content/compose?${new URLSearchParams({
+              mode: 'ai',
+              brief: t('create.idea.goalBrief').replace('{goal}', goalLabel),
+            }).toString()}`,
+            testId: 'setup-idea-goal',
+          }
+        : null,
+      may('content.create')
+        ? {
+            key: 'create',
+            title: t('setup.done.create'),
+            meta: t('setup.done.whyCreate'),
+            href: `/${locale}/content/compose`,
+            testId: 'setup-create-post',
+          }
+        : null,
+      may('copilot.use')
+        ? {
+            key: 'plan',
+            title: t('setup.done.plan'),
+            meta: t('setup.done.whyPlan'),
+            href: copilotHref(locale, 'campaigns'),
+            testId: 'setup-plan',
+          }
+        : null,
+    ].filter((idea): idea is NonNullable<typeof idea> => idea !== null);
+    // The recommended first move (with approved knowledge, a plan) leads.
+    if (recommended === 'plan') {
+      const plan = ideas.findIndex((idea) => idea.key === 'plan');
+      if (plan > 0) ideas.unshift(...ideas.splice(plan, 1));
+    }
     head = {
-      title: t('setup.done.title').replace('{brand}', brand.name),
-      description: t('setup.done.body'),
+      title: t('setup.wz.ready.title').replace('{brand}', brand.name),
+      description: t('setup.wz.ready.body'),
     };
     body = (
       <section className="bsp-wz-body" data-testid="setup-done">
-        <dl style={{ margin: 0, display: 'grid', gap: spacingTokens.xs }}>
-          {summary.map(([term, value]) => (
-            <div key={term} style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
-              <dt style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
-                {term}
-              </dt>
-              <dd style={{ margin: 0, ...typographyTokens.bodySm, fontWeight: 600 }}>{value}</dd>
-            </div>
-          ))}
-        </dl>
-        {first
-          ? note(t(recommended === 'plan' && plan ? 'setup.done.whyPlan' : 'setup.done.whyCreate'))
-          : null}
-        {actions(
-          first ? primaryLink(first.href, first.label, first.testId) : null,
-          second ? secondaryLink(second.href, second.label, second.testId) : null,
-          secondaryLink(`/${locale}/overview`, t('setup.done.home'), 'setup-home'),
-        )}
+        <div className="bsp-wz-sum">
+          <div>
+            <b className="bsp-ltr">{facts.activeKnowledge}</b>
+            <span>{t('setup.wz.ready.facts')}</span>
+          </div>
+          <div>
+            <b className="bsp-ltr">{facts.activeConnections}</b>
+            <span>{t('setup.wz.ready.accounts')}</span>
+          </div>
+          <div>
+            <b>{goalLabel ?? t('setup.done.noGoal')}</b>
+            <span>{t('setup.wz.ready.goal')}</span>
+          </div>
+        </div>
+        {ideas.length > 0 ? (
+          <>
+            <span className="bsp-wz-sub">{t('setup.wz.ready.ideas')}</span>
+            {ideas.map((idea, index) => (
+              <div key={idea.key} className="bsp-wz-idea">
+                <span className="bsp-wz-idea-art" data-seed={index % 3} aria-hidden="true" />
+                <span className="bsp-wz-idea-copy">
+                  <b>{idea.title}</b>
+                  <span>{idea.meta}</span>
+                </span>
+                <Link
+                  href={idea.href}
+                  className="bsp-wz-btn bsp-wz-pur bsp-wz-sm"
+                  data-testid={idea.testId}
+                >
+                  {t('setup.wz.ready.make')}
+                </Link>
+              </div>
+            ))}
+          </>
+        ) : null}
       </section>
+    );
+    footer = (
+      <SetupFooter
+        note={savedNote}
+        back={backLink('goal')}
+        next={
+          <Link
+            href={`/${locale}/overview`}
+            className="bsp-wz-btn bsp-wz-ink"
+            data-testid="setup-home"
+          >
+            {t('setup.done.home')}
+          </Link>
+        }
+      />
     );
   }
 
   /*
-   * Review of #67 — THE PROTOTYPE'S FIVE STEPS (`Auth.dc.html` line 242):
-   * Business · Brand · Teach · Accounts · Goal. Business is the workspace,
-   * already made by /onboarding/workspace; Teach is the product's two screens,
-   * learning and reviewing what was learned. Every state is still derived from
-   * real rows; nothing saved changes.
+   * THE PROTOTYPE'S FIVE STEPS (`Auth.dc.html` line 242): Business · Brand ·
+   * Teach · Accounts · Goal. Business is the workspace; Teach is the product's
+   * learning and reviewing, in one step. Every state is still derived from real
+   * rows; nothing saved changes.
    */
   const stepOf = (key: string) => steps.find((step) => step.key === key);
   const teachDone = Boolean(stepOf('learn')?.complete && stepOf('review')?.complete);
@@ -926,8 +895,8 @@ export default async function OnboardingPage({
       key: 'workspace',
       label: stepLabel('workspace'),
       complete: true,
-      current: false,
-      href: null,
+      current: view === 'business',
+      href: href('business'),
     },
     {
       key: 'brand',
@@ -959,7 +928,6 @@ export default async function OnboardingPage({
     },
   ];
   const at = frameSteps.findIndex((step) => step.current);
-  const framePosition = view === 'done' ? frameSteps.length : at + 1;
 
   return (
     <SetupFrame
@@ -968,28 +936,23 @@ export default async function OnboardingPage({
       stepsLabel={t('setup.stepsLabel')}
       doneLabel={t('setup.stepDone')}
       steps={frameSteps}
+      stepText={at >= 0 ? t('setup.wz.stepOf').replace('{n}', String(at + 1)) : undefined}
       heading={head.title}
       description={head.description}
       testId="setup-wizard"
       view={view}
+      footer={footer}
     >
       {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
       {body}
-      <SetupProgress
-        label={t('setup.stepsLabel')}
-        position={framePosition}
-        total={frameSteps.length}
-        text={
-          view === 'done'
-            ? t('setup.progress.complete')
-            : t('setup.progress.step')
-                .replace('{n}', String(framePosition))
-                .replace('{total}', String(frameSteps.length))
-                .replace('{step}', frameSteps[at]?.label ?? '')
-        }
-        exit={{ href: `/${locale}/overview`, label: t('setup.progress.exit') }}
-      />
     </SetupFrame>
   );
+}
+
+/** A reviewed fact on one line: its title, and its body only where it adds to it. */
+function factLine(title: string, body: string): string {
+  if (!title) return body;
+  if (!body || body === title || body.startsWith(title)) return body || title;
+  return `${title} — ${body}`;
 }
