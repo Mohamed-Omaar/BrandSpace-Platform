@@ -189,6 +189,7 @@ export async function SimpleCustomers({
       </div>
 
       <LinkTabs
+        look="console"
         label={copy('cust.filter')}
         testId="customer-filters"
         currentId={status ?? 'all'}
