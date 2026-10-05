@@ -7460,6 +7460,38 @@ button.bsp-chip.bsp-bb-q {
   margin: 0;
   padding: 0;
 }
+/* The team avatar: a solid tile with white initials (`members[i][4]`), 36px
+   in a row and 48px on the member's page (review of #67, round 3). */
+.bsp-tm-av {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 36px;
+  block-size: 36px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.bsp-tm-av[data-size='48'] {
+  inline-size: 48px;
+  block-size: 48px;
+  border-radius: 14px;
+  font-size: 15px;
+}
+.bsp-tm-av[data-c='0'] {
+  background: #7935fe;
+}
+.bsp-tm-av[data-c='1'] {
+  background: #111114;
+}
+.bsp-tm-av[data-c='2'] {
+  background: #b8794a;
+}
+.bsp-tm-av[data-c='3'] {
+  background: #16794b;
+}
 .bsp-row.bsp-tm-row {
   background: #fff;
 }

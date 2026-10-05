@@ -167,8 +167,16 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
   const currentTier = snapshot.plans.find((plan) => plan.key === subscription?.planKey)?.tier ?? -1;
 
   const brandContext = await brandContextFor(workspace, '/billing');
+  /*
+   * THE PRICE BESIDE THE PLAN'S NAME (review of #67, round 3) is what this
+   * workspace pays: the subscription's pinned price for its interval, not the
+   * catalogue's price for a new subscriber in its country (which a plan may
+   * not have, as the comparison workspace's plan does not).
+   */
   const currentPrice = subscription
-    ? (snapshot.availability.find((a) => a.planKey === subscription.planKey)?.monthly ?? null)
+    ? subscription.billingInterval === 'YEAR'
+      ? subscription.annual
+      : subscription.monthly
     : null;
 
   const exportForm = (
@@ -349,7 +357,12 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                   </span>
                   {currentPrice ? (
                     <span className="bsp-ltr bsp-bl-price">
-                      {show(currentPrice)} / {t('billing.perMonth')}
+                      {show(currentPrice)} /{' '}
+                      {t(
+                        subscription.billingInterval === 'YEAR'
+                          ? 'billing.perYear'
+                          : 'billing.perMonth',
+                      )}
                     </span>
                   ) : null}
                 </div>

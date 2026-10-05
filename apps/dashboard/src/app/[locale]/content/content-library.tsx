@@ -1,15 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import {
-  AssetMedia,
-  NoteIcon,
-  PlayIcon,
-  SegmentPill,
-  colorTokens,
-  radiusTokens,
-  spacingTokens,
-  typographyTokens,
-} from '@brandspace/ui';
+import { AssetMedia, NoteIcon, PlayIcon, SegmentPill, colorTokens } from '@brandspace/ui';
 import {
   duplicateContentAction,
   setContentCampaignAction,
@@ -403,12 +394,15 @@ export function ContentLibrary({
       </span>
     );
 
-  const countChip = (card: LibraryCard) =>
-    card.media.kind !== 'none' && card.media.count > 1 ? (
-      <span style={countChipStyle}>
-        {t('content.mediaCount').replace('{count}', String(card.media.count))}
-      </span>
-    ) : null;
+  /*
+   * Review of #67, round 3 — the prototype's cover carries no media count, so
+   * the count is not drawn on the picture; it stays in the cover link's
+   * accessible name ("Weekend brunch · 3 media").
+   */
+  const coverLabel = (card: LibraryCard) =>
+    card.media.kind !== 'none' && card.media.count > 1
+      ? `${card.title} · ${t('content.mediaCount').replace('{count}', String(card.media.count))}`
+      : card.title;
 
   return (
     <div data-testid="content-library" data-view={view} className="bsp-posts">
@@ -565,12 +559,11 @@ export function ContentLibrary({
               <article className="bsp-card bsp-lift bsp-post">
                 <Link
                   href={studio(card)}
-                  aria-label={card.title}
+                  aria-label={coverLabel(card)}
                   tabIndex={-1}
                   className="bsp-post-art"
                 >
                   {media(card)}
-                  {countChip(card)}
                 </Link>
                 <div className="bsp-post-body">
                   <div className="bsp-post-top">
@@ -678,14 +671,4 @@ const centeredStyle = {
   display: 'grid',
   placeItems: 'center',
   color: colorTokens.textSecondary,
-} as const;
-const countChipStyle = {
-  position: 'absolute',
-  insetBlockStart: spacingTokens.xs,
-  insetInlineEnd: spacingTokens.xs,
-  paddingInline: spacingTokens.xs,
-  borderRadius: radiusTokens.full,
-  background: colorTokens.ink,
-  color: colorTokens.inkInk,
-  ...typographyTokens.caption,
 } as const;
