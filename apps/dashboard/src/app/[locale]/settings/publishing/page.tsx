@@ -29,6 +29,8 @@ import {
 } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { CONTENT_TYPES } from '../../content/content-types';
+import { ChannelMark } from '../../calendar/prototype-calendar';
+import { suggestedPostingTimes } from '@brandspace/content';
 import {
   deleteTemplateAction,
   savePublishingDefaultsAction,
@@ -88,6 +90,19 @@ export default async function PublishingDefaultsPage({
         hashtagsInFirstComment: true,
       },
     });
+    /*
+     * Round 4, Gate 2b — the prototype's publish-time choices are the times
+     * the calendar suggests (`suggestedPostingTimes`, the workspace's country
+     * in the activated calendar configuration), the same the calendar shows.
+     */
+    const workspaceRow = await services.db.workspace.findUnique({
+      where: { id: workspace.workspaceId },
+      select: { country: true },
+    });
+    const suggestedTimes = suggestedPostingTimes(policy.calendar, {
+      measured: [],
+      country: workspaceRow?.country ?? null,
+    }).times;
     const templates = await services.templates();
     const byBrand = new Map(
       await Promise.all(
@@ -100,7 +115,7 @@ export default async function PublishingDefaultsPage({
         ),
       ),
     );
-    return { policy, brands, byBrand };
+    return { policy, brands, byBrand, suggestedTimes };
   });
 
   const platformLabel = (key: string, labelKey: string) =>
@@ -163,65 +178,107 @@ export default async function PublishingDefaultsPage({
           };
           return (
             <div key={brand.id} style={{ display: 'grid', gap: spacingTokens.md }}>
-              <Card testId={`publishing-defaults-${brand.id}`}>
-                <SectionHeader
-                  title={
-                    data.brands.length > 1
-                      ? `${t('publishingDefaults.title')} · ${brand.name}`
-                      : t('publishingDefaults.title')
-                  }
-                  description={t('publishingDefaults.body')}
-                />
-                <DraftForm
-                  key={JSON.stringify(saved)}
-                  action={savePublishingDefaultsAction}
-                  style={{ display: 'grid', gap: spacingTokens.md }}
-                  testId={`publishing-defaults-form-${brand.id}`}
-                  barTestId={`publishing-defaults-bar-${brand.id}`}
-                  saveTestId={`publishing-defaults-save-${brand.id}`}
-                  labels={saveBarLabels(t)}
+              {/*
+                ROUND 4, GATE 2b — THE PROTOTYPE'S PUBLISHING DEFAULTS
+                (`Main.dc.html` lines 1356–1361): an `xcard` with the channel
+                chips and the publish-time choices, then an `xcard` of switch
+                rows. The chips are the channels' checkboxes and the times are
+                radios over the calendar's suggested times, with "Other" for
+                any time; the same fields are posted to the same action. Left
+                out, with no feature behind them: "Link tracking" (Q15) and
+                "Fit the size to each platform automatically".
+              */}
+              <DraftForm
+                key={JSON.stringify(saved)}
+                action={savePublishingDefaultsAction}
+                className="bsp-pd"
+                testId={`publishing-defaults-form-${brand.id}`}
+                barTestId={`publishing-defaults-bar-${brand.id}`}
+                saveTestId={`publishing-defaults-save-${brand.id}`}
+                labels={saveBarLabels(t)}
+              >
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="brandId" value={brand.id} />
+                <section
+                  className="bsp-xcard bsp-pd-main"
+                  data-testid={`publishing-defaults-${brand.id}`}
                 >
-                  <input type="hidden" name="locale" value={locale} />
-                  <input type="hidden" name="brandId" value={brand.id} />
-                  <fieldset
-                    style={{
-                      border: 0,
-                      margin: 0,
-                      padding: 0,
-                      display: 'grid',
-                      gap: spacingTokens['2xs'],
-                    }}
-                  >
-                    <legend style={{ ...typographyTokens.bodySm, fontWeight: 600 }}>
-                      {t('publishingDefaults.channels')}
-                    </legend>
-                    <span style={hintStyle}>{t('publishingDefaults.channelsHint')}</span>
-                    {platforms.map((platform) => (
-                      <CheckboxRow
-                        key={platform.key}
-                        name="platformKeys"
-                        value={platform.key}
-                        label={platform.label}
-                        checked={brand.defaultPlatformKeys.includes(platform.key)}
-                        testId={`publishing-default-channel-${brand.id}-${platform.key}`}
-                      />
-                    ))}
+                  {data.brands.length > 1 ? (
+                    <strong className="bsp-pd-brand">{brand.name}</strong>
+                  ) : null}
+                  <fieldset className="bsp-pd-set">
+                    <legend className="bsp-lbl">{t('publishingDefaults.channels')}</legend>
+                    <div className="bsp-pd-chips">
+                      {platforms.map((platform) => (
+                        <label key={platform.key} className="bsp-chip bsp-pd-chip">
+                          <input
+                            type="checkbox"
+                            name="platformKeys"
+                            value={platform.key}
+                            defaultChecked={brand.defaultPlatformKeys.includes(platform.key)}
+                            className="bsp-pd-in"
+                            data-testid={`publishing-default-channel-${brand.id}-${platform.key}`}
+                          />
+                          <ChannelMark
+                            channel={{ key: platform.key, name: platform.label }}
+                            size={14}
+                            label={false}
+                          />
+                          <span className="bsp-ltr">{platform.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <span className="bsp-pd-hint">{t('publishingDefaults.channelsHint')}</span>
                   </fieldset>
-                  <Field
-                    label={t('publishingDefaults.time')}
-                    htmlFor={`publishing-default-time-${brand.id}`}
-                    hint={t('publishingDefaults.timeHint')}
-                  >
-                    <input
-                      className="bs-control"
-                      type="time"
-                      id={`publishing-default-time-${brand.id}`}
-                      name="defaultPostTime"
-                      data-testid={`publishing-default-time-${brand.id}`}
-                      defaultValue={brand.defaultPostTime ?? ''}
-                      style={inputStyle()}
-                    />
-                  </Field>
+                  <fieldset className="bsp-pd-set">
+                    <legend className="bsp-lbl">{t('publishingDefaults.time')}</legend>
+                    <div className="bsp-pd-times">
+                      <div className="bsp-seg bsp-pd-seg" role="radiogroup">
+                        {data.suggestedTimes.map((time) => (
+                          <label key={time} className="bsp-pd-seg-o bsp-ltr">
+                            <input
+                              type="radio"
+                              name="defaultPostTimeChoice"
+                              value={time}
+                              defaultChecked={brand.defaultPostTime === time}
+                              className="bsp-pd-in"
+                              data-testid={`publishing-default-time-${brand.id}-${time}`}
+                            />
+                            {time}
+                          </label>
+                        ))}
+                        <label className="bsp-pd-seg-o">
+                          <input
+                            type="radio"
+                            name="defaultPostTimeChoice"
+                            value="other"
+                            defaultChecked={
+                              !data.suggestedTimes.includes(brand.defaultPostTime ?? '')
+                            }
+                            className="bsp-pd-in"
+                            data-testid={`publishing-default-time-${brand.id}-other`}
+                          />
+                          {t('publishingDefaults.timeOther')}
+                        </label>
+                      </div>
+                      <input
+                        className="bs-control bsp-pd-time"
+                        type="time"
+                        id={`publishing-default-time-${brand.id}`}
+                        name="defaultPostTime"
+                        aria-label={t('publishingDefaults.timeOther')}
+                        data-testid={`publishing-default-time-${brand.id}`}
+                        defaultValue={
+                          data.suggestedTimes.includes(brand.defaultPostTime ?? '')
+                            ? ''
+                            : (brand.defaultPostTime ?? '')
+                        }
+                      />
+                    </div>
+                    <span className="bsp-pd-hint">{t('publishingDefaults.timeHint')}</span>
+                  </fieldset>
+                </section>
+                <section className="bsp-xcard bsp-pd-tgls">
                   <CheckboxRow
                     name="hashtagsInFirstComment"
                     label={t('publishingDefaults.hashtags')}
@@ -229,8 +286,8 @@ export default async function PublishingDefaultsPage({
                     checked={brand.hashtagsInFirstComment}
                     testId={`publishing-default-hashtags-${brand.id}`}
                   />
-                </DraftForm>
-              </Card>
+                </section>
+              </DraftForm>
 
               <Card testId={`templates-${brand.id}`}>
                 <SectionHeader

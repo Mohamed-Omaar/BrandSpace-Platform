@@ -80,6 +80,8 @@ test.describe('the connected accounts screen', () => {
   test('offers connect and disconnect to a member who may manage accounts', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    // Round 4, Gate 2b: the full connect form is behind the Accounts card's "⋯".
+    await page.getByTestId('connect-more').click();
     // The form EXISTS and is not submitted: submitting would redirect to a
     // provider that does not exist in this environment.
     await expect(page.locator('[data-testid="connect-form"]')).toBeVisible();
@@ -97,6 +99,8 @@ test.describe('the connected accounts screen', () => {
      */
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    // Round 4, Gate 2b: the full connect form is behind the Accounts card's "⋯".
+    await page.getByTestId('connect-more').click();
     const capabilities = page.locator('[data-testid="provider-capabilities"]');
     await expect(capabilities).toBeVisible();
     await expect(capabilities).toContainText('max characters');
@@ -214,6 +218,8 @@ test.describe('accessibility', () => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
 
+    // Round 4, Gate 2b: the full connect form is behind the Accounts card's "⋯".
+    await page.getByTestId('connect-more').click();
     // The two selects and the submit are focusable in order, which is what a
     // person using a keyboard needs before anything else.
     await page.locator('[data-testid="connect-provider"]').focus();
@@ -311,6 +317,8 @@ test.describe('P6-R1 — the OAuth callback a provider would actually reach', ()
     });
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    // Round 4, Gate 2b: the full connect form is behind the Accounts card's "⋯".
+    await page.getByTestId('connect-more').click();
     await page.selectOption('[data-testid="connect-provider"]', 'LINKEDIN');
     await page.click('[data-testid="connect-submit"]');
 

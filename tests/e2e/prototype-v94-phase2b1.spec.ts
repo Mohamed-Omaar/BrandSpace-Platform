@@ -217,14 +217,13 @@ test.describe('A8 · the owner deletes a workspace, it waits, and the owner canc
     await page.waitForURL(/\/en\/overview$/);
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/data`);
-    await page.getByTestId('workspace-deletion-open').click();
+    // Round 4, Gate 2b: the prototype's inline confirmation (no "open" step).
     // A wrong name is refused on the server, and nothing is scheduled.
     await page.getByTestId('workspace-deletion-name').fill('not the name');
     await page.getByTestId('workspace-deletion-password').fill(customer.password);
     await page.getByTestId('workspace-deletion-confirm').click();
     await page.waitForURL(/error=DELETION_NAME_MISMATCH/);
 
-    await page.getByTestId('workspace-deletion-open').click();
     await page.getByTestId('workspace-deletion-name').fill(name);
     await page.getByTestId('workspace-deletion-password').fill(customer.password);
     await page.getByTestId('workspace-deletion-confirm').click();
@@ -559,11 +558,12 @@ test.describe('A10 / G2 / G3 · my notification switches, and the AI writing lan
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/ai`);
     const aiBar = page.getByTestId(`ai-bar-${brandId}`);
     await expect(aiBar).toHaveAttribute('data-state', 'clean');
-    await page.getByTestId(`ai-language-${brandId}`).selectOption('AR');
+    // Round 4, Gate 2b: the prototype's language chips (radios) for the select.
+    await page.getByTestId(`ai-language-${brandId}`).getByText('Arabic', { exact: true }).click();
     await expect(aiBar).toHaveAttribute('data-state', 'dirty');
     await page.getByTestId(`ai-save-${brandId}`).click();
     await page.waitForURL(/ok=SETTINGS_SAVED/);
-    await expect(page.getByTestId(`ai-language-${brandId}`)).toHaveValue('AR');
+    await expect(page.getByTestId(`ai-language-${brandId}-AR`)).toBeChecked();
 
     // And in Arabic.
     await page.goto(`${DASHBOARD_BASE_URL}/ar/settings/notifications`);

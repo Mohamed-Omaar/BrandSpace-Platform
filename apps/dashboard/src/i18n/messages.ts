@@ -545,6 +545,7 @@ export const messages = {
     'security.sessionsHeading': 'الجلسات',
     'security.sessionsExplain': 'تسجيل الخروج من كل الأجهزة الأخرى، مع إبقاء هذه الجلسة.',
     'security.signOutOthers': 'تسجيل الخروج من الأجهزة الأخرى',
+    'security.activityLog': 'سجل النشاط',
     'security.unavailable': 'التحقق بخطوتين غير متاح حاليًا على هذه المنصة.',
     'settings.title': 'إعدادات النشاط التجاري',
     'settings.navLabel': 'أقسام الإعدادات',
@@ -583,6 +584,13 @@ export const messages = {
     'settings.data': 'التحكم في البيانات',
     'settings.approvals': 'الموافقات',
     'settings.approvalsNoBrand': 'أنشئ علامتك التجارية أولًا، ثم اضبط قواعد الموافقة لها هنا.',
+    'settings.whoApproves.title': 'من يوافق',
+    'settings.whoApproves.sub':
+      'تُحسب من صلاحيات الفريق: كل من لديه «{permission}» وصلاحية على {brand}. يذهب المنشور إلى أول شخص متاح، ويمكنك تغييره من الاستوديو.',
+    'settings.whoApproves.edit': 'التعديل في الفريق',
+    'settings.whoApproves.approves': 'يوافق',
+    'settings.whoApproves.others': 'يوافق على منشورات غيره',
+    'settings.whoApproves.not': 'لا يوافق',
     'data.subtitle': 'ما يمكن لبراندسبيس فعله ببياناتك اليوم، وما لا يمكنه بعد.',
     'data.open': 'فتح',
     'data.unavailable': 'غير متاح بعد',
@@ -618,10 +626,11 @@ export const messages = {
     'publishingDefaults.title': 'الإعدادات الافتراضية للنشر',
     'publishingDefaults.body':
       'ما يبدأ به المنشور الجديد لهذه العلامة. كل ما هنا اقتراح يمكن تغييره في أي منشور.',
-    'publishingDefaults.channels': 'القنوات الافتراضية',
+    'publishingDefaults.channels': 'القنوات الافتراضية لكل منشور جديد',
     'publishingDefaults.channelsHint':
       'يبدأ المنشور الجديد بهذه القنوات، ما لم يحدد القالب المختار قنواته.',
-    'publishingDefaults.time': 'الوقت الافتراضي',
+    'publishingDefaults.time': 'وقت النشر الافتراضي',
+    'publishingDefaults.timeOther': 'وقت آخر',
     'publishingDefaults.timeHint':
       'الوقت الذي يُقترح للنشر الجديد، في يوم الغد. اتركه فارغًا لاستخدام الوقت المعتاد.',
     'publishingDefaults.hashtags': 'الوسوم في التعليق الأول',
@@ -659,6 +668,8 @@ export const messages = {
     'templates.save': 'حفظ القالب',
     'templates.cancelEdit': 'إلغاء',
     'notificationPrefs.title': 'ما الذي يصلني إشعار به',
+    'notificationPrefs.colEvent': 'الحدث',
+    'notificationPrefs.colInApp': 'داخل التطبيق',
     'notificationPrefs.body':
       'مفاتيحك الخاصة لجرس الإشعارات في مساحة العمل هذه. لا يراها أحد غيرك. تصلك دائمًا الإشعارات الخاصة بمساحة العمل نفسها، وبحساب يحتاج إلى إعادة الربط، وبمنشور مجدول أعاده تغيير المنطقة الزمنية إلى المخطط.',
     'notificationPrefs.approvals': 'الموافقات',
@@ -2020,6 +2031,8 @@ export const messages = {
     'integrations.connectTitle': 'ربط حساب جديد',
     'integrations.connectBody': 'سننقلك إلى المنصة لتمنح الإذن. لا نطلب كلمة المرور أبدًا.',
     'integrations.connect': 'ربط الحساب',
+    'integrations.connectShort': 'ربط',
+    'integrations.notConnected': 'غير متصل',
     'integrations.disconnect': 'فصل الحساب',
     'integrations.disconnectConfirmBody':
       'لن تُنشر المنشورات المجدولة لهذا الحساب ما دام مفصولًا. هل تريد فصله؟',
@@ -2178,7 +2191,9 @@ export const messages = {
     'approvals.policyBody': 'تُطبَّق هذه القواعد على محتوى هذه العلامة وحدها.',
     'approvals.policyBrand': 'العلامة',
     'approvals.policyRequire': 'اشترط الاعتماد قبل الجدولة',
-    'approvals.policySelf': 'اسمح باعتماد المحتوى الذي أرسله المراجع نفسه',
+    'approvals.policySelf': 'يمكن للمراجع اعتماد منشوراته بنفسه',
+    'approvals.policyRequireSub': 'يذهب كل منشور إلى المراجعة قبل جدولته',
+    'approvals.policySelfSub': 'عند الإيقاف = يجب أن يعتمده شخص آخر',
     'approvals.policySave': 'حفظ السياسة',
     'approvals.policyNoPermission': 'تعديل السياسة يحتاج صلاحية إدارة الموافقات.',
     'approvals.policyMoved': 'تُضبط قواعد الموافقة الآن من الإعدادات ← الموافقات.',
@@ -4337,6 +4352,7 @@ export const messages = {
     'security.sessionsHeading': 'Sessions',
     'security.sessionsExplain': 'Sign out everywhere else, keeping this session.',
     'security.signOutOthers': 'Sign out other devices',
+    'security.activityLog': 'Activity log',
     'security.unavailable':
       'Two-factor authentication is not available on this platform right now.',
     'settings.title': 'Business settings',
@@ -4376,6 +4392,13 @@ export const messages = {
     'settings.data': 'Data controls',
     'settings.approvals': 'Approvals',
     'settings.approvalsNoBrand': 'Create your brand first, then set its approval rules here.',
+    'settings.whoApproves.title': 'Who approves',
+    'settings.whoApproves.sub':
+      'Worked out from Team permissions: anyone with “{permission}” and access to {brand}. A post goes to the first one available, and you can change it in the Studio.',
+    'settings.whoApproves.edit': 'Edit in Team',
+    'settings.whoApproves.approves': 'Approves',
+    'settings.whoApproves.others': 'Approves others’ posts',
+    'settings.whoApproves.not': 'Doesn’t approve',
     'data.subtitle': 'What BrandSpace can do with your data today, and what it cannot yet.',
     'data.open': 'Open',
     'data.unavailable': 'Not available yet',
@@ -4413,10 +4436,11 @@ export const messages = {
     'publishingDefaults.title': 'Publishing defaults',
     'publishingDefaults.body':
       'What a new post for this brand starts with. Everything here is a suggestion that any post can change.',
-    'publishingDefaults.channels': 'Default channels',
+    'publishingDefaults.channels': 'Default channels for every new post',
     'publishingDefaults.channelsHint':
       'A new post starts with these channels, unless the template chosen names its own.',
-    'publishingDefaults.time': 'Default time',
+    'publishingDefaults.time': 'Default publish time',
+    'publishingDefaults.timeOther': 'Other',
     'publishingDefaults.timeHint':
       'The time proposed for a new post, tomorrow. Leave empty to use the usual time.',
     'publishingDefaults.hashtags': 'Hashtags in the first comment',
@@ -4455,6 +4479,8 @@ export const messages = {
     'templates.save': 'Save template',
     'templates.cancelEdit': 'Cancel',
     'notificationPrefs.title': 'What notifies me',
+    'notificationPrefs.colEvent': 'Event',
+    'notificationPrefs.colInApp': 'In app',
     'notificationPrefs.body':
       'Your own switches for the bell in this workspace. Nobody else sees them. Notices about the workspace itself, an account that needs reconnecting, and a scheduled post a time-zone change sent back to planned always arrive.',
     'notificationPrefs.approvals': 'Approvals',
@@ -5855,6 +5881,8 @@ export const messages = {
     'integrations.connectBody':
       'We send you to the platform to grant access. We never ask for your password.',
     'integrations.connect': 'Connect account',
+    'integrations.connectShort': 'Connect',
+    'integrations.notConnected': 'Not connected',
     'integrations.disconnect': 'Disconnect',
     'integrations.disconnectConfirmBody':
       'Posts scheduled for this account will not be published while it is disconnected. Disconnect it?',
@@ -6021,7 +6049,9 @@ export const messages = {
     'approvals.policyBody': 'These rules apply to this brand\u2019s content only.',
     'approvals.policyBrand': 'Brand',
     'approvals.policyRequire': 'Require approval before scheduling',
-    'approvals.policySelf': 'Allow reviewers to approve what they sent themselves',
+    'approvals.policySelf': 'Approvers can approve their own posts',
+    'approvals.policyRequireSub': 'Every post goes to review before it is scheduled',
+    'approvals.policySelfSub': 'Off = someone else must approve',
     'approvals.policySave': 'Save policy',
     'approvals.policyNoPermission': 'Changing the policy needs approval-management permission.',
     'approvals.policyMoved': 'Approval rules are set in Settings → Approvals.',

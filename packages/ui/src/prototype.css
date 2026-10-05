@@ -8169,6 +8169,578 @@ img.bsp-pf-art {
 }
 /* The note under General: `background: #fbfaff; border-radius: 14px;
    padding: 10px 14px`, its words `font-size: 12px; color: #55555c`. */
+/* Round 4, Gate 2b — Settings → Approvals, "Who approves" (`Main.dc.html`
+   lines 1436–1440): `section.xcard; gap: 10px`; the head row
+   `justify-content: space-between; align-items: baseline` with a ghost
+   "Edit in Team →" in `#5312c4`; each person `gap: 10px; padding: 8px 0;
+   border-top: 1px solid #f3f3f5`, a 30px round avatar at 11px / 700, the name
+   at 13px / 600 over the role at 11px `#6a6a72`, and the status pill. */
+.bsp-xcard.bsp-sa-who {
+  gap: 10px;
+}
+.bsp-sa-who-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.bsp-btn.bsp-ghost.bsp-sa-who-edit {
+  color: #5312c4;
+}
+.bsp-sa-who-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid #f3f3f5;
+}
+.bsp-tm-av.bsp-sa-who-av {
+  inline-size: 30px;
+  block-size: 30px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+}
+.bsp-sa-who-text {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.bsp-sa-who-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.bsp-sa-who-role {
+  font-size: 11px;
+  color: #6a6a72;
+}
+
+/* The rules: `section.card; overflow: hidden` of `.row`s (13px 18px), the
+   label `font-size: 14px; font-weight: 700`, its line `12px #6a6a72`. */
+.bsp-card.bsp-sa-pol {
+  overflow: hidden;
+}
+.bsp-sa-pol-form {
+  display: flex;
+  flex-direction: column;
+}
+.bsp-sa-pol .bsp-tg-row {
+  padding: 13px 18px;
+  border-block-start: 0;
+  border-block-end: 1px solid #f0f0f2;
+}
+.bsp-sa-pol .bsp-tg-l {
+  font-size: 14px;
+  font-weight: 700;
+}
+.bsp-sa-pol .bsp-tg-s {
+  font-size: 12px;
+}
+.bsp-sa-pol-brand {
+  padding: 13px 18px 0;
+  font-size: 13px;
+}
+.bsp-sa-pol-empty {
+  margin: 0;
+  padding: 13px 18px;
+  font-size: 13px;
+  color: #6a6a72;
+}
+.bsp-sa-pol-form > :last-child {
+  margin: 10px 12px 12px;
+}
+
+/* Round 4, Gate 2b — Settings → AI (`Main.dc.html` lines 1369–1374): an
+   `xcard` with `gap: 14px` holding the label and the chips (`gap: 6px`), then
+   an `xcard` with `padding: 4px 0` of switch rows (`padding: 14px 20px;
+   border-top: 1px solid #f3f3f5`). A chip is a label around a radio: the
+   radio is read by assistive technology and the keyboard, the chip is drawn. */
+.bsp-ai,
+.bsp-ai-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bsp-xcard.bsp-ai-lang {
+  gap: 8px;
+}
+.bsp-ai-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bsp-chip.bsp-ai-chip {
+  cursor: pointer;
+  position: relative;
+}
+.bsp-chip.bsp-ai-chip:has(.bsp-ai-radio:checked) {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
+.bsp-chip.bsp-ai-chip:has(.bsp-ai-radio:focus-visible) {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bsp-ai-radio {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  margin: 0;
+}
+.bsp-ai-hint,
+.bsp-ai-empty {
+  margin: 0;
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+.bsp-ai-brand {
+  font-size: 13px;
+}
+.bsp-xcard.bsp-ai-tgls {
+  padding: 4px 0;
+}
+.bsp-ai-tgls .bsp-tg-row {
+  padding: 14px 20px;
+}
+.bsp-ai-tgls .bsp-tg-row:first-child {
+  border-block-start: 0;
+}
+
+/* Round 4, Gate 2b — Settings → Data (`Main.dc.html` lines 1376–1379). A row:
+   `section.xcard; flex-direction: row; align-items: center; gap: 14px`, the
+   title `14px / 600`, its line `12px #6a6a72`. The danger card:
+   `gap: 10px; border: 1px solid #f3d2d8`, the title in `#b83245`, the input
+   and the `background: #b83245` button in one row (`gap: 8px`). */
+.bsp-dt {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bsp-xcard.bsp-dt-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+}
+.bsp-dt-text {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.bsp-dt-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.bsp-dt-sub {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-xcard.bsp-dt-ret {
+  gap: 2px;
+}
+.bsp-dt-ret-form {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bsp-dt-ret-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-block: 10px 6px;
+}
+.bsp-dt-ret-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.bsp-dt-ret-row .bsp-dt-input {
+  inline-size: 160px;
+}
+.bsp-xcard.bsp-dt-danger {
+  gap: 10px;
+  border: 1px solid #f3d2d8;
+}
+.bsp-dt-title.bsp-dt-danger-t {
+  color: #b83245;
+}
+.bsp-dt-confirm {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bsp-dt-confirm .bsp-dt-input {
+  flex-grow: 1;
+  min-inline-size: 160px;
+}
+.bsp-dt-confirm .bsp-dt-pass {
+  flex-grow: 0;
+  inline-size: 200px;
+}
+.bsp-btn.bsp-dt-del {
+  background: #b83245;
+  color: #fff;
+}
+.bsp-btn.bsp-dt-del:hover {
+  background: #9e2a3b;
+}
+.bsp-dt-owner {
+  align-self: flex-start;
+}
+
+/* Round 4, Gate 2b — Settings → Security (`Main.dc.html` lines 1465–1472):
+   one `section.card; overflow: hidden` of `.row`s, the title at 14px / 700
+   (13px for the backup codes) over its 12px `#6a6a72` line; each flow an inset
+   panel `margin: 0 18px 14px; padding: 14px 16px; border-radius: 16px` —
+   `#faf8ff` with `#ece4ff` to set up, `#f7f7f9` for the codes (4 columns of
+   12.5px monospace on white), `#fff7f8` with `#f6d6dc` to turn it off. */
+.bsp-card.bsp-secu {
+  overflow: hidden;
+}
+.bsp-secu-block {
+  display: flex;
+  flex-direction: column;
+  border-block-end: 1px solid #f0f0f2;
+}
+.bsp-secu-block > .bsp-row {
+  border-block-end: 0;
+}
+.bsp-secu-text,
+.bsp-secu-grow {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.bsp-secu-t {
+  font-size: 14px;
+  font-weight: 700;
+}
+.bsp-secu-t.bsp-sm {
+  font-size: 13px;
+}
+.bsp-secu-s {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-secu-panel {
+  margin: 0 18px 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #f7f7f9;
+}
+.bsp-secu-setup {
+  background: #faf8ff;
+  border: 1px solid #ece4ff;
+}
+.bsp-secu-off {
+  background: #fff7f8;
+  border: 1px solid #f6d6dc;
+}
+.bsp-secu-note {
+  font-size: 12.5px;
+  color: #55555c;
+}
+.bsp-secu-pt {
+  font-size: 14px;
+}
+.bsp-secu-fields {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bsp-secu-in.bs-control {
+  inline-size: 200px;
+}
+.bsp-secu-code-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  direction: ltr;
+}
+.bsp-secu-code-grid code {
+  display: block;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12.5px;
+  background: #fff;
+  border: 1px solid #ececef;
+  border-radius: 8px;
+  padding: 6px 8px;
+  text-align: center;
+}
+.bsp-secu-req {
+  padding: 0 18px 12px;
+}
+.bsp-secu-req .bsp-tg-row {
+  border-block-start: 0;
+}
+.bsp-secu-req .bsp-tg-l {
+  font-size: 14px;
+  font-weight: 700;
+}
+.bsp-secu-req .bsp-tg-s {
+  font-size: 12px;
+}
+.bsp-btn.bsp-secu-req-save {
+  align-self: flex-start;
+}
+.bsp-secu > .bsp-row:last-child {
+  border-block-end: 0;
+}
+
+/* Round 4, Gate 2b — Settings → Publishing defaults (`Main.dc.html` lines
+   1356–1361): `section.xcard; gap: 14px`, each group `gap: 8px` — the channel
+   chips (`gap: 6px`, a 14px mark) and the time `.seg` — then `section.xcard`
+   of switch rows (`padding: 4px 0`, rows `14px 20px`). A chip or a segment is
+   a label around its checkbox or radio, drawn pressed when it is checked. */
+.bsp-pd {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bsp-xcard.bsp-pd-main {
+  gap: 14px;
+}
+.bsp-pd-set {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-inline-size: 0;
+}
+.bsp-pd-set > legend {
+  padding: 0;
+  margin-block-end: 8px;
+}
+.bsp-pd-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bsp-chip.bsp-pd-chip {
+  position: relative;
+  cursor: pointer;
+}
+.bsp-chip.bsp-pd-chip:has(.bsp-pd-in:checked) {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
+.bsp-pd-in {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  margin: 0;
+}
+.bsp-chip.bsp-pd-chip:has(.bsp-pd-in:focus-visible),
+.bsp-pd-seg-o:has(.bsp-pd-in:focus-visible) {
+  outline: 2px solid #7935fe;
+  outline-offset: 2px;
+}
+.bsp-pd-times {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bsp-seg.bsp-pd-seg {
+  align-self: flex-start;
+}
+/* A segment: the `.seg button` geometry, the pressed look when checked. */
+.bsp-pd-seg-o {
+  position: relative;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #55555c;
+  min-block-size: 30px;
+  box-sizing: border-box;
+}
+.bsp-pd-seg-o:has(.bsp-pd-in:checked) {
+  background: #fff;
+  color: #111114;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.bsp-pd-time.bs-control {
+  inline-size: 130px;
+}
+.bsp-pd:has(.bsp-pd-seg-o:not(:last-child) .bsp-pd-in:checked) .bsp-pd-time {
+  display: none;
+}
+.bsp-pd-hint {
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+.bsp-pd-brand {
+  font-size: 13px;
+}
+.bsp-xcard.bsp-pd-tgls {
+  padding: 4px 0;
+}
+.bsp-pd-tgls .bsp-tg-row {
+  padding: 14px 20px;
+  border-block-start: 0;
+}
+
+/* Round 4, Gate 2b — Settings → Notifications (`Main.dc.html` lines
+   1363–1367): `section.xcard; padding: 4px 0`; the head row
+   `grid-template-columns: minmax(0, 1fr) 90px; gap: 8px; padding: 10px 20px;
+   font-size: 11px; font-weight: 700; color: #8a8a92`; each row the same grid,
+   `align-items: center; padding: 12px 20px; border-top: 1px solid #f3f3f5`,
+   the event at 13px. The product's line under each event stays, at 11.5px. */
+.bsp-nt {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bsp-xcard.bsp-nt-card {
+  padding: 4px 0;
+}
+.bsp-nt-head,
+.bsp-nt-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px;
+  gap: 8px;
+}
+.bsp-nt-head {
+  padding: 10px 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a8a92;
+}
+.bsp-nt-row {
+  align-items: center;
+  padding: 12px 20px;
+  border-top: 1px solid #f3f3f5;
+  cursor: pointer;
+}
+.bsp-nt-l {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  min-inline-size: 0;
+}
+.bsp-nt-hint {
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+.bsp-nt-c {
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+/* Round 4, Gate 2b — Accounts (`Main.dc.html` lines 1430–1433):
+   `section.card; overflow: hidden` of `.row`s; the tile `38px; border-radius:
+   11px; background: #f2f2f4`, the 18px mark in the platform's colour; the
+   name `14px / 700` over `12px #6a6a72`; the pill, then the action. */
+.bsp-card.bsp-acc {
+  overflow: visible;
+}
+.bsp-row.bsp-acc-row {
+  flex-wrap: wrap;
+}
+.bsp-acc-ic {
+  inline-size: 38px;
+  block-size: 38px;
+  border-radius: 11px;
+  background: #f2f2f4;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #111114;
+}
+.bsp-acc-text {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.bsp-acc-name {
+  font-size: 14px;
+  font-weight: 700;
+  text-align: start;
+}
+.bsp-acc-sub {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-acc-warn {
+  font-size: 12px;
+  color: #8a6b00;
+}
+.bsp-acc-facts {
+  margin: 0 0 8px;
+  display: grid;
+  gap: 6px;
+}
+.bsp-acc-disc > summary {
+  list-style: none;
+}
+.bsp-acc-disc > summary::-webkit-details-marker {
+  display: none;
+}
+.bsp-acc-disc[open] {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bsp-acc-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bsp-btn.bsp-acc-danger {
+  background: #b83245;
+  color: #fff;
+}
+.bsp-acc-brand.bs-control {
+  inline-size: auto;
+  min-inline-size: 140px;
+}
+.bsp-row.bsp-acc-more {
+  justify-content: flex-start;
+}
+.bsp-acc-connect-form {
+  display: grid;
+  gap: 10px;
+  min-inline-size: 260px;
+}
+.bsp-acc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-acc-caps {
+  margin: 0;
+  padding-inline-start: 18px;
+  font-size: 11.5px;
+  color: #6a6a72;
+}
+
 /* Round 4 (5.5) — General's save bar. The prototype draws it after the whole
    settings grid (`position: sticky; bottom: 0; margin-top: 14px;
    margin-inline-start: 228px`), so its sticky range runs below the nav too and
