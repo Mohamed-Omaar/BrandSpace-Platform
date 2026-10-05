@@ -187,6 +187,8 @@ test.describe('round 4 · shared controls match the prototype, measured', () => 
 
     // A page that hands its `?ok=` to the one toast host (C8).
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/ai?ok=SETTINGS_SAVED`);
+    // Hovering holds the toast for as long as it is measured (C8).
+    await page.getByTestId('toast').hover();
     const productToast = await measure(page, '[data-testid="toast"]', 'product toast');
     expectSame(productToast, toast, 'toast', ALL);
   });

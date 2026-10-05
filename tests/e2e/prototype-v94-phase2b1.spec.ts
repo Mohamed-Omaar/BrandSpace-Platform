@@ -232,7 +232,8 @@ test.describe('A8 · the owner deletes a workspace, it waits, and the owner canc
     await expect(page.getByTestId('deletion-pending-date')).toContainText(name);
     // Review item 9: who asked for it, and when.
     await expect(page.getByTestId('deletion-requested')).toContainText(
-      /asked for the deletion on \d{1,2} \w+ \d{4}\./,
+      // Round 4 (1.8): the prototype's date — "Oct 5", the year for another year.
+      /asked for the deletion on [A-Z][a-z]{2} \d{1,2}(, \d{4})?\./,
     );
 
     // Closed: every page of the workspace lands on this screen.

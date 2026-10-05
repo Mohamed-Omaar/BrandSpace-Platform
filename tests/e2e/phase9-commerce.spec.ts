@@ -173,8 +173,11 @@ test.describe('a stranger becomes a paying customer', () => {
     await expect(page.locator('[data-testid="plans-card"]')).toBeVisible();
 
     // 26.00 USD, from the activated fixture catalogue. Nothing converted.
-    await expect(page.locator('[data-testid="plan-price-fixture-starter"]')).toContainText('26.00');
-    await expect(page.locator('[data-testid="plan-price-fixture-starter"]')).toContainText('USD');
+    // Round 4 (1.8): written as the prototype writes a price — `$26 / month`.
+    await expect(page.locator('[data-testid="plan-price-fixture-starter"]')).toContainText('$26');
+    await expect(page.locator('[data-testid="plan-price-fixture-starter"]')).toContainText(
+      '/ month',
+    );
 
     // The trial gave 200 credits, and the page says they are prepaid.
     await expect(page.locator('[data-testid="credit-balance"]')).toHaveText('200');

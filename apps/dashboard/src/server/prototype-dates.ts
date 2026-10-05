@@ -31,10 +31,19 @@ function parts(
   return out;
 }
 
-/** "Oct 16" / "16 أكتوبر" — the date alone, with the year only when it is not this one. */
-export function dayLabel(instant: Date, locale: string, timeZone: string, now?: Date): string {
+/**
+ * "Oct 16" / "16 أكتوبر" — the date alone, with the year only when it is not
+ * this one. `now` defaults to the clock (round 4): without it the year was
+ * compared with itself, and a due date in 2030 read "Jan 15".
+ */
+export function dayLabel(
+  instant: Date,
+  locale: string,
+  timeZone: string,
+  now: Date = new Date(),
+): string {
   const p = parts(instant, locale, timeZone, { month: 'short', day: 'numeric', year: 'numeric' });
-  const thisYear = now ? parts(now, locale, timeZone, { year: 'numeric' }).year : p.year;
+  const thisYear = parts(now, locale, timeZone, { year: 'numeric' }).year;
   const base = locale === 'ar' ? `${p.day} ${p.month}` : `${p.month} ${p.day}`;
   return p.year === thisYear ? base : `${base}, ${p.year}`;
 }
