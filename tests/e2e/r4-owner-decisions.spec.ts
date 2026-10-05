@@ -210,11 +210,11 @@ test.describe('Round 4 · 5.5 — the General save bar stays on the frame’s bo
     });
     expect(positions).toHaveLength(3);
     const [atTop, inMiddle, atEnd] = positions;
-    for (const { scrolls, gap } of [atTop, inMiddle]) {
-      expect(scrolls).toBe(true);
+    for (const position of [atTop, inMiddle]) {
+      expect(position?.scrolls).toBe(true);
       // On the frame's bottom edge (its 8px inset), not carried up with the page.
-      expect(gap).toBeGreaterThanOrEqual(0);
-      expect(gap).toBeLessThanOrEqual(16);
+      expect(position?.gap ?? -1).toBeGreaterThanOrEqual(0);
+      expect(position?.gap ?? Infinity).toBeLessThanOrEqual(16);
     }
     /*
      * At the very end it rests only on the page's own bottom padding, as the
