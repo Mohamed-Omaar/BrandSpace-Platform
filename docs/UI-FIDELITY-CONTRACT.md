@@ -1711,7 +1711,8 @@ are under the review's one "⋯"; the queue has no "⋯" (the rules are Settings
 Approvals). Automations: no line above the first rule; the switch turns in place; the
 sub-line is "Listens to … · Ran N times · last …" (the rule's name is the line's
 hover title); the prototype's trigger titles. The rule dialog is set at the
-prototype's normal line height so it fits, and "Only if" draws its four chips before
+prototype's normal line height, and when the product's longer list scrolls, it scrolls
+above the prototype's Cancel/Save row, so Save is always in the frame; and "Only if" draws its four chips before
 a trigger (three waiting until "When" is chosen). Teach: the prototype's upload tile
 (no native control), and a long step scrolls inside the card with its footer on
 screen. Media: no "⋯" beside Upload — "New folder" and the brand kit are in the

@@ -227,3 +227,26 @@ test.describe('Round 4 · 5.5 — the General save bar stays on the frame’s bo
     expect(order).toBeTruthy();
   });
 });
+
+test.describe('Round 4 · 5.3 — the new-rule dialog keeps Save in the frame', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('Save is inside the dialog and on screen without scrolling', async ({ page }) => {
+    await signIn(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
+    const save = page.getByTestId('automation-submit');
+    await expect(save).toBeVisible();
+    const boxes = await page.evaluate(() => {
+      const dialog = document.querySelector('.bsp-au-dialog');
+      const button = document.querySelector('[data-testid="automation-submit"]');
+      if (!dialog || !button) return null;
+      const d = dialog.getBoundingClientRect();
+      const b = button.getBoundingClientRect();
+      return { dialogBottom: d.bottom, saveTop: b.top, saveBottom: b.bottom, screen: innerHeight };
+    });
+    expect(boxes).not.toBeNull();
+    expect(boxes?.saveBottom ?? Infinity).toBeLessThanOrEqual(boxes?.dialogBottom ?? 0);
+    expect(boxes?.saveBottom ?? Infinity).toBeLessThanOrEqual(boxes?.screen ?? 0);
+    expect(boxes?.saveTop ?? -1).toBeGreaterThanOrEqual(0);
+  });
+});

@@ -7811,6 +7811,32 @@ img.bsp-pf-art {
   justify-content: flex-end;
   gap: 8px;
 }
+/* Round 4 (5.3) — SAVE STAYS IN THE FRAME. The product's dialog holds more than
+   the prototype's (two more actions, "Name and brand"), so at 1440 × 900 it can
+   scroll: the rule's parts scroll in `.bsp-au-body` and the prototype's own
+   Cancel/Save row stays under them. The 4px inset keeps the tiles' focus rings
+   inside the scrolling area; the negative margin keeps every tile where it was. */
+.bsp-au-dialog {
+  display: flex;
+  flex-direction: column;
+}
+.bsp-au-dialog > .bsp-au-form {
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+.bsp-au-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: auto;
+  padding: 4px;
+  margin: -4px;
+}
+.bsp-au-foot {
+  flex: none;
+}
 
 /* ------------------------------------------------------------- §3-TM ---- */
 
