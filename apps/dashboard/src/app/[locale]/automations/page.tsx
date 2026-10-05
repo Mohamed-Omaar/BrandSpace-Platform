@@ -37,6 +37,7 @@ import {
 import { createAutomationAiQuota, workspaceMonthLabel } from '@brandspace/entitlements';
 import { inAnalytics } from '../../../server/analytics-context';
 import {
+  optionalMessage,
   statusMessage,
   translator,
   type MessageKey,
@@ -57,6 +58,7 @@ import {
   toggleAutomationAction,
   updateAutomationAction,
 } from './actions';
+import { whenLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -551,11 +553,8 @@ export default async function AutomationsPage({
       })()
     : null;
 
-  const stamp = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  });
+  // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
+  const stamp = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
 
   /*
    * D-468 — THE PROTOTYPE'S TWO TABS AND ITS RULE DIALOG, all in the address:
@@ -605,19 +604,14 @@ export default async function AutomationsPage({
     hourCycle: 'h23',
     numberingSystem: 'latn',
   });
-  const shortDay = new Intl.DateTimeFormat(tag, {
-    timeZone: zone,
-    day: 'numeric',
-    month: 'short',
-    numberingSystem: 'latn',
-  });
   const ranLine = (ruleId: string): string => {
     const ran = ranByRule.get(ruleId);
     if (!ran || ran.count === 0 || !ran.last) return t('automations.notRun');
     const when =
       dayOf(ran.last) === dayOf(systemClock.now())
         ? t('automations.lastToday').replace('{time}', clock.format(ran.last))
-        : `${shortDay.format(ran.last)} ${clock.format(ran.last)}`;
+        : // Round 3 (C2) — the prototype's one style: "Oct 4 · 02:31".
+          whenLabel(ran.last, locale, zone, systemClock.now());
     return t('automations.ran').replace('{count}', String(ran.count)).replace('{when}', when);
   };
 
@@ -685,7 +679,11 @@ export default async function AutomationsPage({
             </Link>
           </nav>
           {selectedBrand ? (
-            <span className="bsp-au-brand" data-testid="automations-brand-filter">
+            /*
+              Round 3 — the prototype's tab row carries no "Rules and runs for …"
+              line; which brand the lists are for is still said to a screen reader.
+            */
+            <span className="bs-sr-only" data-testid="automations-brand-filter">
               {t('automations.brandFilter').replace('{brand}', selectedBrand.name)}
             </span>
           ) : null}
@@ -1113,6 +1111,13 @@ export default async function AutomationsPage({
             ).map((trigger) => ({
               type: trigger.type,
               label: t(`automations.trigger.${trigger.type}` as MessageKey),
+              // Round 3 — the tile's own words, where the prototype has them.
+              ...(optionalMessage(messageLocale, `automations.tile.${trigger.type}`)
+                ? {
+                    tileLabel:
+                      optionalMessage(messageLocale, `automations.tile.${trigger.type}`) ?? '',
+                  }
+                : {}),
               // Review of #67 — the tile's "Listens to …" line.
               listens: t('automations.listens').replace(
                 '{source}',
@@ -1227,6 +1232,8 @@ export default async function AutomationsPage({
               then: t('automations.form.then'),
               preview: t('automations.form.preview'),
               previewEmpty: t('automations.form.previewEmpty'),
+              moreFields: t('automations.form.moreFields'),
+              pickTriggerFirst: t('automations.form.pickTriggerFirst'),
               asksFirst: t('automations.asksFirst'),
               usesCredits: t('automations.usesCredits'),
               brand: t('analytics.brandLabel'),

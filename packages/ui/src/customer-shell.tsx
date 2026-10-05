@@ -124,6 +124,18 @@ function useRailPill(
       nav.removeAttribute('data-ind');
       return undefined;
     }
+    /*
+     * Round 3 (C3) — THE ACTIVE ITEM IS IN VIEW, as the prototype's rail
+     * scrolls to it: a page low in the rail (Automations, Notes, Team,
+     * Settings) opens with its own entry showing, once, without animating.
+     */
+    if (!placedOnce.current) {
+      const top = target.y;
+      const bottom = target.y + target.h;
+      if (top < nav.scrollTop || bottom > nav.scrollTop + nav.clientHeight) {
+        nav.scrollTop = Math.max(0, top - (nav.clientHeight - target.h) / 2);
+      }
+    }
     if (!placedOnce.current && lastPill && track) {
       put(lastPill, false);
       void pill.offsetWidth;

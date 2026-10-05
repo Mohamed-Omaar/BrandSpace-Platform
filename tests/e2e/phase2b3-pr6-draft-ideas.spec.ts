@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import { enter, noSeriousViolations, ownWorkspace, type OwnWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
+import { openRuleMore } from './automation-form';
 
 /**
  * PHASE 2B-3, PR 6 — DRAFT 3 IDEAS WITH AI, IN ENGLISH AND IN ARABIC (RTL).
@@ -228,6 +229,7 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await expect(ideas).toBeFocused();
   await ideas.check();
   const name = `Ideas ${locale} ${randomUUID().slice(0, 6)}`;
+  await openRuleMore(page);
   await page.getByTestId('automation-name').fill(name);
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');

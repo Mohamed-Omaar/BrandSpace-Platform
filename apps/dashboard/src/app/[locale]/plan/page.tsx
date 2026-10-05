@@ -5,7 +5,7 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { mayReadCreditBalance } from '@brandspace/shared';
+import { mayReadCreditBalance, systemClock } from '@brandspace/shared';
 import {
   MULTI_BRAND_FEATURE,
   QUOTA_FEATURES,
@@ -30,6 +30,7 @@ import {
   customerTdStyle,
   customerThStyle,
 } from '../../../components/workspace-shell';
+import { dayLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,9 +67,8 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
   const { messageLocale } = access.session;
   const t = translator(messageLocale);
   const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
-  const ledgerDate = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
-    dateStyle: 'medium',
-  });
+  // Round 3 (C2) — the prototype's day style: "Oct 16".
+  const ledgerDate = { format: (value: Date) => dayLabel(value, locale, 'UTC', systemClock.now()) };
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
 

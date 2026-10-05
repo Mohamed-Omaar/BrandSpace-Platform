@@ -1,7 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import {
   countCharacters,
   fill,
@@ -50,8 +58,23 @@ import type {
  * screen are saved, and stop a navigation that would lose them.
  */
 
+/**
+ * ROUND 3 (C1) — THE POST'S NOTES AS THE PROTOTYPE DRAWS THEM: a compact card
+ * under the preview (`Main.dc.html` lines 507–510) — "NOTES · n", "Open
+ * conversation", and the latest note. The conversation itself (the ordinary
+ * Notes panel, rendered on the server) opens in place under it.
+ */
+export interface StudioNotes {
+  readonly count: number;
+  readonly last: { readonly who: string; readonly text: string } | null;
+  readonly panel: ReactNode;
+  /** A deep link to one of its threads opens it. */
+  readonly open: boolean;
+}
+
 export interface DraftEditorProps {
   readonly locale: string;
+  readonly notes?: StudioNotes | null;
   /** Q9 (D-332): a channel whose account has expired — "Expired", and what it means. */
   readonly expiredChannels?: Readonly<
     Record<string, { readonly label: string; readonly explanation: string }>
@@ -184,6 +207,7 @@ function liveOf(
 
 export function DraftEditor({
   locale,
+  notes = null,
   t,
   draft,
   platforms,
@@ -249,13 +273,33 @@ export function DraftEditor({
     return seeded;
   });
   const live = (variant: ComposerVariant): LiveVariant => liveOf(edits, variant);
+  /*
+   * ROUND 3 — THE PROTOTYPE'S HASHTAG FIELD: one tag typed, then "Add". What
+   * is typed and not yet added still counts — it is saved with the version and
+   * shown in the preview — so nothing typed is lost to a missed click.
+   */
+  const [tagDrafts, setTagDrafts] = useState<Readonly<Record<string, string>>>({});
+  const tagTextOf = (variant: ComposerVariant): string =>
+    [live(variant).hashtagText, tagDrafts[variant.id] ?? ''].join(' ').trim();
+  const addTags = (variant: ComposerVariant) => {
+    setEdits((current) => ({
+      ...current,
+      [variant.id]: {
+        ...live(variant),
+        hashtagText: parseHashtags(tagTextOf(variant))
+          .map((tag) => `#${tag}`)
+          .join(' '),
+      },
+    }));
+    setTagDrafts((current) => ({ ...current, [variant.id]: '' }));
+  };
   const change = (variant: ComposerVariant, patch: Partial<LiveVariant>) =>
     setEdits((current) => ({ ...current, [variant.id]: { ...live(variant), ...patch } }));
   const isDirty = (variant: ComposerVariant): boolean => {
     const value = live(variant);
     return (
       value.body !== variant.body ||
-      value.hashtagText.trim() !== hashtagTextOf(variant) ||
+      tagTextOf(variant) !== hashtagTextOf(variant) ||
       value.firstComment !== (variant.firstComment ?? '') ||
       value.assetIds.join(',') !== variant.assetIds.join(',') ||
       value.cover !== (variant.coverAssetId ?? null) ||
@@ -364,7 +408,7 @@ export function DraftEditor({
         platformKey={variant.platformKey}
         format={format}
         body={value.body}
-        hashtags={parseHashtags(value.hashtagText)}
+        hashtags={parseHashtags(tagTextOf(variant))}
         media={mediaFor(value.assetIds)}
         cover={value.cover ? (mediaFor([value.cover])[0] ?? null) : null}
         accountName={brandName}
@@ -543,7 +587,7 @@ export function DraftEditor({
   const checkOf = (variant: ComposerVariant) => {
     const platform = platforms.find((p) => p.key === variant.platformKey);
     const value = live(variant);
-    const hashtags = parseHashtags(value.hashtagText);
+    const hashtags = parseHashtags(tagTextOf(variant));
     const media = mediaFor(value.assetIds);
     const issues = platform
       ? variantIssues(platform, draft.contentType, {
@@ -614,12 +658,6 @@ export function DraftEditor({
   const activePlatform = activeVariant
     ? platforms.find((p) => p.key === activeVariant.platformKey)
     : undefined;
-  const hasMore =
-    (activeVariant !== undefined && can.edit) ||
-    activePlatform?.allowsFirstComment === true ||
-    (can.edit && tools.includes('tone')) ||
-    can.archive ||
-    (can.manageTemplates === true && actions.saveAsTemplate !== undefined);
 
   /*
    * THE PUBLISH-TIME PANEL, under whichever "When" opened it (review of #67,
@@ -693,6 +731,29 @@ export function DraftEditor({
       </div>
     </>
   );
+
+  /*
+   * Round 3 (C1) — the post's notes, as the prototype's compact card: the
+   * count, the latest note, and the conversation opening in place.
+   */
+  const notesCard = notes ? (
+    <details className="bsp-st-notes" open={notes.open} data-testid="studio-notes">
+      <summary>
+        <span className="bsp-lbl">
+          {t['studio.notesLabel']} · <span className="bsp-ltr">{notes.count}</span>
+        </span>
+        <span className="bsp-st-notes-open" data-testid="studio-notes-open">
+          {t['studio.openConversation']}
+        </span>
+      </summary>
+      {notes.last ? (
+        <div className="bsp-st-notes-last">
+          <b>{notes.last.who}</b> <span dir="auto">{notes.last.text}</span>
+        </div>
+      ) : null}
+      <div className="bsp-st-notes-panel">{notes.panel}</div>
+    </details>
+  ) : null;
 
   return (
     <div className="bsp-st" data-testid="draft-editor">
@@ -1056,9 +1117,13 @@ export function DraftEditor({
       </section>
 
       {draft.variants.length === 0 ? (
-        <section className="bsp-card bsp-st-ed" aria-live="polite" data-testid="content-results">
-          <p className="bsp-st-none">{t['content.composer.resultsEmpty']}</p>
-        </section>
+        <>
+          <section className="bsp-card bsp-st-ed" aria-live="polite" data-testid="content-results">
+            <p className="bsp-st-none">{t['content.composer.resultsEmpty']}</p>
+          </section>
+          {/* A draft with no versions yet still has its conversation. */}
+          {notesCard}
+        </>
       ) : (
         <div className="bsp-st-grid">
           {/* ------------------------------------------------ the editor --- */}
@@ -1141,6 +1206,7 @@ export function DraftEditor({
               const value = live(variant);
               const selected = variant.id === activeVariant?.id;
               const hashtags = parseHashtags(value.hashtagText);
+              const hashtagAction = actionsFor.find((action) => action.key === 'hashtags');
               const { characters, limit } = checkOf(variant);
               const dirty = isDirty(variant);
               const toolButton = (action: (typeof actionsFor)[number]) => (
@@ -1254,14 +1320,20 @@ export function DraftEditor({
                           {actionsFor
                             .filter((action) => MAIN_TOOLS.includes(action.key))
                             .map(toolButton)}
-                          {actionsFor.some((action) => !MAIN_TOOLS.includes(action.key)) ? (
+                          {actionsFor.some(
+                            (action) =>
+                              !MAIN_TOOLS.includes(action.key) && action.key !== 'hashtags',
+                          ) ? (
                             <MoreDisclosure
                               label={t['editor.ai.more'] ?? ''}
                               testId={`editor-ai-more-${variant.platformKey}`}
                             >
                               <div className="bsp-st-chips">
                                 {actionsFor
-                                  .filter((action) => !MAIN_TOOLS.includes(action.key))
+                                  .filter(
+                                    (action) =>
+                                      !MAIN_TOOLS.includes(action.key) && action.key !== 'hashtags',
+                                  )
                                   .map(toolButton)}
                               </div>
                             </MoreDisclosure>
@@ -1288,8 +1360,9 @@ export function DraftEditor({
 
                     {/*
                       THE HASHTAG FIELD IS ALWAYS RENDERED (PHASE 2 correction):
-                      it is the only hashtag input in the product. The chips
-                      above it are the same line, one tag each.
+                      it is the only hashtag input in the product. Round 3 — the
+                      prototype's: the chips, one tag typed beside "Add", then
+                      where suggestions come from (`Main.dc.html` lines 378–383).
                     */}
                     <div className="bsp-st-tags">
                       <div className="bsp-st-tags-head">
@@ -1297,7 +1370,7 @@ export function DraftEditor({
                           {t['content.composer.hashtags']}
                         </label>
                         <span className="bsp-st-tags-count bsp-ltr">
-                          {hashtags.length} / {platform?.maxHashtags ?? 0}
+                          {parseHashtags(tagTextOf(variant)).length} / {platform?.maxHashtags ?? 0}
                         </span>
                       </div>
                       <div className="bsp-st-tag-row">
@@ -1329,16 +1402,58 @@ export function DraftEditor({
                           <span className="bsp-st-none">{t['studio.tagsNone']}</span>
                         ) : null}
                       </div>
-                      <input
-                        id={`${fieldId}-${variant.id}-tags`}
-                        className="bsp-st-tag-input"
-                        name="hashtags"
-                        value={value.hashtagText}
-                        placeholder={t['content.composer.hashtags']}
-                        readOnly={!can.edit}
-                        onChange={(event) => change(variant, { hashtagText: event.target.value })}
-                        data-testid={`content-hashtags-${variant.platformKey}`}
-                      />
+                      <input type="hidden" name="hashtags" value={tagTextOf(variant)} />
+                      {can.edit ? (
+                        <div className="bsp-st-tag-add">
+                          <input
+                            id={`${fieldId}-${variant.id}-tags`}
+                            className="bsp-st-tag-input"
+                            dir="auto"
+                            value={tagDrafts[variant.id] ?? ''}
+                            placeholder={t['studio.tagPlaceholder']}
+                            onChange={(event) =>
+                              setTagDrafts((current) => ({
+                                ...current,
+                                [variant.id]: event.target.value,
+                              }))
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                addTags(variant);
+                              }
+                            }}
+                            data-testid={`content-hashtags-${variant.platformKey}`}
+                          />
+                          <button
+                            type="button"
+                            className="bsp-btn bsp-sm bsp-sec"
+                            disabled={(tagDrafts[variant.id] ?? '').trim() === ''}
+                            onClick={() => addTags(variant)}
+                            data-testid={`content-hashtags-add-${variant.platformKey}`}
+                          >
+                            {t['studio.tagAdd']}
+                          </button>
+                        </div>
+                      ) : null}
+                      {/*
+                        "From Brand Brain": the product's own hashtag edit, which
+                        writes from the brand's approved facts (it was under the
+                        caption tools' "⋯"). The prototype's "Trending near you"
+                        has no source in the product and is left out.
+                      */}
+                      {can.edit && hashtagAction ? (
+                        <div
+                          className="bsp-st-tag-group"
+                          data-testid={`content-tags-brain-${variant.platformKey}`}
+                        >
+                          <span className="bsp-st-tag-glabel">
+                            {t['studio.tagsFromBrain']}
+                            <span className="bsp-xstatus bsp-ai">AI</span>
+                          </span>
+                          <div className="bsp-st-chips">{toolButton(hashtagAction)}</div>
+                        </div>
+                      ) : null}
                       {/*
                         FIRST COMMENT, ONLY WHERE THE PLATFORM ALLOWS ONE. The
                         field is under the bar's "⋯" (review of #67, round 2);
@@ -1487,7 +1602,8 @@ export function DraftEditor({
                   its current AI version recorded (M5), at the version it used,
                   and what each is now. Never read from the words.
                 */}
-                {activeVariant ? (
+                {activeVariant &&
+                ((activeVariant.knowledge?.length ?? 0) > 0 || draft.brandBrainOn === false) ? (
                   <section className="bsp-st-bb" data-testid="variant-facts">
                     <div className="bsp-st-bb-line">
                       <SparkGlyph />
@@ -1534,38 +1650,6 @@ export function DraftEditor({
                     ) : null}
                   </section>
                 ) : null}
-
-                {/*
-                  §20 — THE BRAND BRAIN IS AUTOMATIC, AND SAYS SO QUIETLY. The
-                  sources are what retrieval returned for this draft, never the
-                  model's claims.
-                */}
-                <details className="bsp-st-bb" data-testid="draft-brain">
-                  <summary className="bsp-st-bb-line bsp-st-summary">
-                    {fill(t['editor.brain.using'] ?? '{brand}', { brand: brandName })}
-                  </summary>
-                  {draft.citations.length > 0 ? (
-                    <div className="bsp-st-bb-list" data-testid="content-citations">
-                      <span className="bsp-st-area">{t['editor.brain.basedOn']}</span>
-                      {draft.citations.map((citation, index) => (
-                        <span
-                          key={`${citation.label}-${index}`}
-                          className="bsp-st-bb-row"
-                          dir="auto"
-                        >
-                          {citation.label}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="bsp-st-hint">{t['editor.brain.noSources']}</p>
-                  )}
-                  {can.readBrain ? (
-                    <Link className="bsp-st-link" href={brainHref}>
-                      {t['editor.brain.open']} →
-                    </Link>
-                  ) : null}
-                </details>
 
                 {draft.insufficientKnowledge ? (
                   <div className="bsp-st-capfix" role="status" data-testid="content-insufficient">
@@ -1658,6 +1742,7 @@ export function DraftEditor({
               : activeVariant
                 ? previewOf(activeVariant, `content-preview-${activeVariant.platformKey}`)
                 : null}
+            {notesCard}
           </section>
         </div>
       )}
@@ -1667,6 +1752,7 @@ export function DraftEditor({
         <section className="bsp-card bsp-st-checks" data-testid="studio-checks">
           <div className="bsp-st-checks-head">
             <span className="bsp-lbl">{t['studio.checks']}</span>
+            <span className="bsp-st-checks-sub">{t['studio.checksSub']}</span>
           </div>
           <div className="bsp-st-checks-grid">
             {draft.variants.map((variant) => {
@@ -1837,7 +1923,8 @@ export function DraftEditor({
             {t['editor.next.schedule']}
           </button>
         ) : null}
-        {hasMore ? (
+        {/* Always drawn: the Brand Brain's sources line lives here (round 3). */}
+        {
           <MoreDisclosure
             label={t['studio.moreOptions'] ?? ''}
             testId="editor-bar-more"
@@ -1973,8 +2060,39 @@ export function DraftEditor({
                 </form>
               </details>
             ) : null}
+            {/*
+              Round 3 — the prototype has no "Using … Brand Brain" line; the
+              sources retrieval returned for this draft are kept here.
+            */}
+            {/*
+              §20 — THE BRAND BRAIN IS AUTOMATIC, AND SAYS SO QUIETLY. The
+              sources are what retrieval returned for this draft, never the
+              model's claims.
+            */}
+            <details className="bsp-st-bb" data-testid="draft-brain">
+              <summary className="bsp-st-bb-line bsp-st-summary">
+                {fill(t['editor.brain.using'] ?? '{brand}', { brand: brandName })}
+              </summary>
+              {draft.citations.length > 0 ? (
+                <div className="bsp-st-bb-list" data-testid="content-citations">
+                  <span className="bsp-st-area">{t['editor.brain.basedOn']}</span>
+                  {draft.citations.map((citation, index) => (
+                    <span key={`${citation.label}-${index}`} className="bsp-st-bb-row" dir="auto">
+                      {citation.label}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="bsp-st-hint">{t['editor.brain.noSources']}</p>
+              )}
+              {can.readBrain ? (
+                <Link className="bsp-st-link" href={brainHref}>
+                  {t['editor.brain.open']} →
+                </Link>
+              ) : null}
+            </details>
           </MoreDisclosure>
-        ) : null}
+        }
         <StudioCopilotButton label={t['topbar.copilot'] ?? ''} />
       </div>
 

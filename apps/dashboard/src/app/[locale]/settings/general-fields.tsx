@@ -49,6 +49,8 @@ export interface GeneralFieldsLabels {
   readonly industryNone: string;
   readonly industryOther: string;
   readonly industryOtherLabel: string;
+  /** Back from "your own words" to the list (round 3). */
+  readonly industryList: string;
   readonly website: string;
   readonly websiteHint: string;
   readonly choose: string;
@@ -209,6 +211,8 @@ export function GeneralFields({
             labels={labels}
             idPrefix=""
             testIdPrefix="settings"
+            single
+            backLabel={labels.industryList}
           />
         </>
       ) : null}
@@ -284,8 +288,9 @@ export function GeneralFields({
 
       {/*
         "WEEK STARTS ON" — the prototype's `.seg` of Saturday, Sunday and
-        Monday. The product lets a week start on any day, so the other days
-        are the same choice under "⋯".
+        Monday, where its General ends. Round 3 — the product's own extras sit
+        behind ONE "⋯" at the end of that row: the other days a week may start
+        on, and the workspace's Locale. A closed disclosure still submits them.
       */}
       <div className="bsp-sg-span bsp-sg-wkrow" role="radiogroup" aria-label={labels.weekStart}>
         <span className="bsp-lbl">{labels.weekStart}</span>
@@ -294,40 +299,27 @@ export function GeneralFields({
           <div className="bsp-seg" data-testid="settings-week-start">
             {weekMain.map(weekRadio)}
           </div>
-          {weekOther.length > 0 ? (
-            <MoreDisclosure label={labels.weekStart} testId="settings-week-more" align="start">
-              <div className="bsp-seg bsp-sg-wkmore">{weekOther.map(weekRadio)}</div>
-            </MoreDisclosure>
-          ) : null}
+          <MoreDisclosure label={labels.more} testId="settings-more" align="start">
+            {weekOther.length > 0 ? (
+              <div className="bsp-sg-wkmore-wrap" data-testid="settings-week-more">
+                <span className="bsp-lbl">{labels.weekStart}</span>
+                <div className="bsp-seg bsp-sg-wkmore">{weekOther.map(weekRadio)}</div>
+              </div>
+            ) : null}
+            <Field label={labels.locale} htmlFor="defaultLocale" hint={labels.localeHint}>
+              <select
+                className="bs-control bs-select bsp-chevron"
+                id="defaultLocale"
+                name="defaultLocale"
+                defaultValue={saved.defaultLocale}
+                style={inputStyle()}
+              >
+                <option value="AR">{labels.localeAr}</option>
+                <option value="EN">{labels.localeEn}</option>
+              </select>
+            </Field>
+          </MoreDisclosure>
         </div>
-      </div>
-
-      {/*
-        Review of #67 — the prototype's General ends at "Week starts on". The
-        workspace's Locale, which it does not draw, is kept under "More
-        options"; a closed disclosure still submits it with the form.
-      */}
-      <div className="bsp-sg-span">
-        <MoreDisclosure
-          label={labels.more}
-          testId="settings-more"
-          align="start"
-          summary={labels.more}
-          summaryClassName="bsp-chip bsp-fdis-chip"
-        >
-          <Field label={labels.locale} htmlFor="defaultLocale" hint={labels.localeHint}>
-            <select
-              className="bs-control bs-select"
-              id="defaultLocale"
-              name="defaultLocale"
-              defaultValue={saved.defaultLocale}
-              style={inputStyle()}
-            >
-              <option value="AR">{labels.localeAr}</option>
-              <option value="EN">{labels.localeEn}</option>
-            </select>
-          </Field>
-        </MoreDisclosure>
       </div>
     </div>
   );

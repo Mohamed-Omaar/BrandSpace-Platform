@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import { enter, noSeriousViolations, ownWorkspace, type OwnWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
+import { openRuleMore } from './automation-form';
 
 /**
  * Prototype v90, Phase 2B-2b (PR A) — campaign results, automations v2, the
@@ -306,6 +307,7 @@ test.describe('B12 + G13 (a) · automations v2', () => {
     // Trigger and action are named, not offered.
     await expect(form.getByTestId('automation-trigger')).toHaveCount(0);
     await expect(form.getByTestId('automation-hour')).toHaveValue('9');
+    await openRuleMore(page);
     await form.getByTestId('automation-name').fill('Early note');
     await form.getByTestId('automation-description').fill('Before the stand-up.');
     await form.getByTestId('automation-hour').selectOption('7');
@@ -340,6 +342,7 @@ test.describe('B12 + G13 (a) · automations v2', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations?edit=${ruleId}`);
     await expect(page.getByTestId('automation-conditions-kept')).toContainText('2 conditions');
     await expect(page.getByTestId('automation-condition')).toHaveCount(0);
+    await openRuleMore(page);
     await page.getByTestId('automation-name').fill('Two conditions, renamed');
     await page.getByTestId('automation-edit-submit').click();
     await page.waitForURL((url) => url.searchParams.get('ok') === 'AUTOMATION_UPDATED');
@@ -357,12 +360,12 @@ test.describe('B12 + G13 (a) · automations v2', () => {
     await enter(page, ws.slug);
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
     await page.getByTestId('automation-trigger-CONTENT_APPROVED').check();
-    const fields = page.getByTestId('automation-condition-field');
-    await fields.selectOption('content.campaignId');
+    // Round 3 — "2 · Only if" is the prototype's chips.
+    await page.getByTestId('automation-condition-field-content.campaignId').check();
     await expect(page.getByTestId('automation-condition-value')).toContainText('Autumn');
-    await fields.selectOption('content.type');
+    await page.getByTestId('automation-condition-field-content.type').check();
     await expect(page.getByTestId('automation-condition-value')).toContainText('Reel');
-    await fields.selectOption('content.authorUserId');
+    await page.getByTestId('automation-condition-field-content.authorUserId').check();
     await expect(page.getByTestId('automation-condition-value').locator('option')).not.toHaveCount(
       0,
     );

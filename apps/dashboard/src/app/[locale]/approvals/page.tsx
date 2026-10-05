@@ -3,12 +3,15 @@ import {
   policyFromSnapshot,
   type ResolvedApprovalPolicy,
 } from '@brandspace/content';
-import { brandScopeFilter } from '@brandspace/shared';
+import { brandScopeFilter, systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { mediaForVariants } from '../../../server/media-picker';
+import { firstPictures } from '../../../server/first-pictures';
+import { relativeTime } from '../../../server/home';
+import { localWhenLabel } from '../../../server/prototype-dates';
 import { statusMessage, translator, dictionaryFor } from '../../../i18n/messages';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { NotesPanel } from '../../../components/notes-panel';
@@ -22,6 +25,7 @@ import {
   type ReviewSubjectView,
 } from './approvals-view';
 import { decideApprovalAction, withdrawApprovalAction } from './actions';
+import { whenLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,9 +105,8 @@ export default async function ApprovalsPage({
     brandScope: workspace.brandScope,
   };
 
-  const { policies, queue, mine, memberNames, review } = await inContentStudio(
-    workspace.workspaceId,
-    async ({ approvals, db }) => {
+  const { policies, queue, mine, memberNames, review, firstAsset, plannedLocal, campaignName } =
+    await inContentStudio(workspace.workspaceId, async ({ approvals, db }) => {
       const service = await approvals();
 
       /*
@@ -181,15 +184,67 @@ export default async function ApprovalsPage({
             })
           : [];
 
+      /*
+       * ROUND 3 — WHAT THE PROTOTYPE'S ROWS AND REVIEW SHOW: each post's first
+       * picture, and for the review its planned time and campaign. Read here
+       * through the same tenant-scoped client, under the same brand scope the
+       * rows above were read with.
+       */
+      const itemIds = [
+        ...new Set(
+          [
+            ...pending.map((p) => p.contentItemId),
+            ...own.map((o) => o.contentItemId),
+            subject?.itemId ?? null,
+          ].filter((id): id is string => typeof id === 'string' && id.length > 0),
+        ),
+      ];
+      const variantRows =
+        itemIds.length > 0
+          ? await db.contentVariant.findMany({
+              where: {
+                workspaceId: workspace.workspaceId,
+                contentItemId: { in: itemIds },
+                ...brandScopeFilter(workspace.brandScope),
+              },
+              orderBy: { createdAt: 'asc' },
+              select: { contentItemId: true, assetIds: true },
+            })
+          : [];
+      const firstAsset = new Map<string, string>();
+      for (const variant of variantRows) {
+        const id = variant.assetIds[0];
+        if (id && !firstAsset.has(variant.contentItemId)) firstAsset.set(variant.contentItemId, id);
+      }
+      const slot = subject
+        ? await db.calendarSlot.findFirst({
+            where: {
+              workspaceId: workspace.workspaceId,
+              contentItemId: subject.itemId,
+              status: { in: ['PLANNED', 'SCHEDULED'] },
+            },
+            orderBy: { scheduledAtUtc: 'asc' },
+            select: { scheduledLocalTime: true },
+          })
+        : null;
+      const subjectItem = subject
+        ? await db.contentItem.findFirst({
+            where: { id: subject.itemId, workspaceId: workspace.workspaceId },
+            select: { campaign: { select: { name: true } } },
+          })
+        : null;
+
       return {
         policies: resolved,
         queue: pending,
         mine: own,
         review: subject,
+        firstAsset,
+        plannedLocal: slot?.scheduledLocalTime ?? null,
+        campaignName: subjectItem?.campaign?.name ?? null,
         memberNames: new Map(members.map((m) => [m.userId, m.user.name ?? m.user.email] as const)),
       };
-    },
-  );
+    });
 
   /*
    * A member who can neither read content nor review any brand is shown the
@@ -199,13 +254,29 @@ export default async function ApprovalsPage({
    * shows to every member would be a dead link, which §20 forbids.
    */
   const policyByBrand = new Map(policies.map((p) => [p.brandId, p] as const));
-  const dateFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  });
+  // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
+  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
   const nameOf = (userId: string) =>
     userId === customer.userId ? t('activity.you') : (memberNames.get(userId) ?? '—');
+  const now = systemClock.now();
+  const fromLabel = (userId: string, at: Date) =>
+    t('approvals.fromWhen')
+      .replace('{name}', nameOf(userId))
+      .replace('{when}', relativeTime(at, now, locale));
+  const pictures = await firstPictures({
+    locale,
+    workspaceId: workspace.workspaceId,
+    actor: {
+      userId: customer.userId,
+      permissionKeys: workspace.permissionKeys,
+      brandScope: workspace.brandScope,
+    },
+    assetIds: [...firstAsset.values()],
+  });
+  const coverOf = (itemId: string | null) => {
+    const asset = itemId ? firstAsset.get(itemId) : undefined;
+    return (asset ? pictures.get(asset) : undefined) ?? null;
+  };
 
   const queueRows: ApprovalRow[] = queue.map((row) => {
     /*
@@ -251,6 +322,8 @@ export default async function ApprovalsPage({
       assignedToLabel,
       mayWithdraw: false,
       mayOpenInStudio: maySeeContent,
+      cover: coverOf(row.contentItemId),
+      fromLabel: fromLabel(row.requestedByUserId, row.createdAt),
     };
   });
 
@@ -276,6 +349,7 @@ export default async function ApprovalsPage({
     decisionNote: row.decisionNote,
     mayWithdraw: row.status === 'PENDING',
     mayOpenInStudio: maySeeContent,
+    cover: coverOf(row.contentItemId),
   }));
 
   /*
@@ -307,6 +381,16 @@ export default async function ApprovalsPage({
         requestNote: review.requestNote,
         requestedByLabel: nameOf(review.requestedByUserId),
         mayDecide: review.mayDecide,
+        cover: coverOf(review.itemId),
+        caption: review.variants[0]?.body ?? '',
+        fromLabel: (() => {
+          const opened = [...queue, ...mine].find((row) => row.id === review.approvalId);
+          return opened ? fromLabel(review.requestedByUserId, opened.createdAt) : undefined;
+        })(),
+        requestedTimeLabel: plannedLocal
+          ? (localWhenLabel(plannedLocal, locale, now) ?? undefined)
+          : undefined,
+        campaignLabel: campaignName ?? undefined,
         previews: review.variants.map((v) => (
           <DictionaryVariantPreview
             key={v.id}

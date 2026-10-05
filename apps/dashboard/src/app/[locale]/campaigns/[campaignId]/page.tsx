@@ -16,6 +16,7 @@ import {
 } from '@brandspace/ui';
 import { isAppError, systemClock } from '@brandspace/shared';
 import { campaignResultsPeriod, daysUntilCampaignEnds } from '@brandspace/content';
+import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
 import { mediaForVariants } from '../../../../server/media-picker';
 import { activityTimeline } from '../../../../server/activity-timeline';
@@ -40,6 +41,7 @@ import {
   statusLabel,
 } from '../labels';
 import { briefFrom } from '../../../../server/campaign-form';
+import { whenLabel } from '../../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -306,11 +308,8 @@ export default async function CampaignDetailPage({
   const numberFormat = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
     numberingSystem: 'latn',
   });
-  const dateFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  });
+  // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
+  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
   const byStatus = (status: string) => items.filter((item) => item.status === status).length;
   const published = byStatus('PUBLISHED') + byStatus('PARTIALLY_PUBLISHED');
   const waiting = byStatus('IN_REVIEW');
@@ -686,14 +685,26 @@ export default async function CampaignDetailPage({
             {/*
               THE CONVERSATION LIVES IN THE ROOM (P6-05) — contextual, never a
               tab of its own. The panel renders nothing for a member who may
-              not read this campaign's notes.
+              not read this campaign's notes. Review of #67, round 3 (C1): the
+              prototype draws no full-width notes block, so the conversation is
+              a compact disclosure, as on Brand Brain; a link to one thread
+              (`?thread=`) opens it.
             */}
-            <NotesPanel
-              locale={locale}
-              subject={{ type: 'CAMPAIGN', campaignId: campaign.id }}
-              returnPath={`/${locale}/campaigns/${campaign.id}`}
-              highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
-            />
+            {workspace.permissionKeys.includes(NOTE_PERMISSION) ? (
+              <details
+                className="bsp-bb-notes"
+                open={typeof query['thread'] === 'string'}
+                data-testid="campaign-notes"
+              >
+                <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>
+                <NotesPanel
+                  locale={locale}
+                  subject={{ type: 'CAMPAIGN', campaignId: campaign.id }}
+                  returnPath={`/${locale}/campaigns/${campaign.id}`}
+                  highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
+                />
+              </details>
+            ) : null}
 
             {mayManage ? (
               <details id="campaign-details" data-testid="campaign-details">

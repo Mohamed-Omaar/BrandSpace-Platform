@@ -52,7 +52,8 @@ test.describe('Create Post — the entry (§17)', () => {
     await expect(page.getByTestId('create-entry')).toHaveCount(0);
     await expect(page.getByTestId('content-brief')).toBeVisible();
     await expect(page.getByTestId('content-caption')).toBeVisible();
-    await expect(page.getByText('Caption', { exact: true })).toBeVisible();
+    // The caption field's own label (round 3: the checks card also has a "Caption" row).
+    await expect(page.locator('label', { hasText: /^Caption$/ })).toBeVisible();
     // Starting from an idea or a post is the "Or start from" chips, each an address.
     await expect(page.getByTestId('create-mode-idea')).toHaveAttribute('href', /mode=idea/);
     await expect(page.getByTestId('create-mode-repurpose')).toHaveAttribute(

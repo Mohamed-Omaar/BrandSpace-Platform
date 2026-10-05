@@ -70,7 +70,9 @@ describe('P6-08/09 · every subject the domain supports has a screen', () => {
      * would render nothing, which looks like a bug rather than a state.
      */
     const source = readFileSync(PAGES.CONTENT_ITEM, 'utf8');
-    expect(source).toMatch(/\{draft \? \(\s*<NotesPanel/);
+    // Review of #67, round 3 (C1) — the panel is the compact Notes card's,
+    // handed to the editor only once a draft exists.
+    expect(source).toMatch(/draft && notesSummary\s*\?[\s\S]*?<NotesPanel/);
   });
 });
 

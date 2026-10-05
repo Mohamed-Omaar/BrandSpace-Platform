@@ -14,7 +14,7 @@ import {
   typographyTokens,
   visuallyHiddenStyle,
 } from '@brandspace/ui';
-import { brandScopeFilter } from '@brandspace/shared';
+import { brandScopeFilter, systemClock } from '@brandspace/shared';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import {
   inWorkspace,
@@ -41,6 +41,7 @@ import {
   revokeInvitationAction,
   changeBrandAccessAction,
 } from './actions';
+import { dayLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -373,7 +374,8 @@ export default async function MembersPage({
    * member: their name where they gave one, the address under it, and when
    * they joined. Nothing is invented for a member without a name.
    */
-  const joined = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', { dateStyle: 'medium' });
+  // Round 3 (C2) — the prototype's day style: "Oct 16".
+  const joined = { format: (value: Date) => dayLabel(value, locale, 'UTC', systemClock.now()) };
   const memberIdentity = (m: (typeof members)[number]) => (
     <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
       {m.name?.trim() ? (

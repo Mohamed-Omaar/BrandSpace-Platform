@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { canPreviewWithoutDerivative, isSelectable } from '@brandspace/assets';
 import { RESCHEDULABLE_SLOT_STATUSES, formatLocalTime } from '@brandspace/content';
 import { brandIdQueryFilter, brandScopeFilter, systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
-import { inAssetLibrary } from '../../../server/assets-context';
+import { firstPictures } from '../../../server/first-pictures';
 import { relativeTime } from '../../../server/home';
 import { optionalMessage, statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
@@ -236,40 +235,22 @@ export default async function ContentPage({
 
   /*
    * THE FIRST PICTURE OF EACH POST, as an expiring grant — only for an asset
-   * that is ready, clean and previewable inline. A video is shown as a video,
-   * never as a broken image.
+   * that is ready, clean and previewable inline (`firstPictures`).
    */
   const firstAssets = items.map((item) => ({
     itemId: item.id,
     assetIds: [...new Set(item.variants.flatMap((variant) => variant.assetIds))],
   }));
-  const wanted = [...new Set(firstAssets.flatMap((entry) => entry.assetIds.slice(0, 1)))];
-  const media = new Map<string, { kind: 'image'; src: string } | { kind: 'video' }>();
-  if (wanted.length > 0 && may('assets.read')) {
-    await inAssetLibrary(workspace.workspaceId, async (services) => {
-      const assets = await services.db.asset.findMany({
-        where: { id: { in: wanted }, deletedAt: null },
-      });
-      const download = await services.download();
-      const actor = {
-        userId: customer.userId,
-        permissionKeys: workspace.permissionKeys,
-        brandScope: workspace.brandScope,
-      };
-      for (const asset of assets) {
-        if (!isSelectable(asset)) continue;
-        if (asset.kind === 'VIDEO') {
-          media.set(asset.id, { kind: 'video' });
-        } else if (canPreviewWithoutDerivative(asset.mimeType, asset.sizeBytes)) {
-          const grant = await download
-            .grantFor({ assetId: asset.id, actor, disposition: 'inline' })
-            .then((issued) => issued.grant.token)
-            .catch(() => null);
-          if (grant) media.set(asset.id, { kind: 'image', src: `/${locale}/assets/file/${grant}` });
-        }
-      }
-    });
-  }
+  const media = await firstPictures({
+    locale,
+    workspaceId: workspace.workspaceId,
+    actor: {
+      userId: customer.userId,
+      permissionKeys: workspace.permissionKeys,
+      brandScope: workspace.brandScope,
+    },
+    assetIds: firstAssets.flatMap((entry) => entry.assetIds.slice(0, 1)),
+  });
 
   /*
    * B8 — WHAT THE POSTS MENU NEEDS, read once for the page in the tenant

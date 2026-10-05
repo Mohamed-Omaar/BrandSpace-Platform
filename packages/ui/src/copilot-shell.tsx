@@ -389,6 +389,7 @@ export function CopilotBody({
   state,
   messages,
   suggestions = [],
+  onSuggestion,
   attachments = [],
   tools = [],
   context,
@@ -403,6 +404,8 @@ export function CopilotBody({
   readonly state: CopilotState;
   readonly messages: readonly CopilotMessage[];
   readonly suggestions?: readonly CopilotSuggestion[];
+  /** What a suggestion chip does when pressed; without it the chips are labels only. */
+  readonly onSuggestion?: ((id: string) => void) | undefined;
   readonly attachments?: readonly string[];
   readonly tools?: readonly CopilotToolRun[];
   readonly context?: CopilotContext | undefined;
@@ -681,6 +684,8 @@ export function CopilotBody({
                 key={suggestion.id}
                 type="button"
                 disabled={disabled}
+                onClick={onSuggestion ? () => onSuggestion(suggestion.id) : undefined}
+                data-testid={`copilot-suggestion-${suggestion.id}`}
                 className="bs-pressable bs-cpb-chip"
                 style={{
                   display: 'inline-flex',

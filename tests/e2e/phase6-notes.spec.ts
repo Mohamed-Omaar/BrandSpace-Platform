@@ -6,6 +6,7 @@ import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { withPlatformPrisma } from './platform-prisma';
 import { E2E_CREDENTIALS_FILE, brandFixtures, type E2eAdminCredentials } from './env';
+import { openStudioNotes } from './studio-bar';
 
 /**
  * PHASE 6 FINAL · D-277 §28, D-281 — NOTES AS CONVERSATIONS.
@@ -80,6 +81,8 @@ test.describe('D-281 · notes as conversations', () => {
     const { itemId, colleague } = await fixtures();
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
+    // Review of #67, round 3 — the conversation opens from the Notes card.
+    await openStudioNotes(page);
 
     // --- @Sa → Sara: the typeahead offers the colleague, and Enter picks.
     const body = page.getByTestId('note-body');
@@ -170,6 +173,7 @@ test.describe('D-281 · notes as conversations', () => {
     await signIn(page, 'ar');
     await page.goto(`${DASHBOARD_BASE_URL}/ar/content/compose?item=${itemId}`);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await openStudioNotes(page);
     await expect(page.getByTestId('notes-panel')).toBeVisible();
     const results = await new AxeBuilder({ page })
       .include('[data-testid="notes-panel"]')

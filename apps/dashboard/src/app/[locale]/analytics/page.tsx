@@ -12,19 +12,31 @@ import {
   type ChartPoint,
   type SocialPlatform,
 } from '@brandspace/ui';
-import { systemClock, maySpendCredits } from '@brandspace/shared';
-import { detectAnomalies, type MetricAbsenceReason } from '@brandspace/analytics';
+import { brandScopeFilter, systemClock, maySpendCredits } from '@brandspace/shared';
+import {
+  countPublishedPosts,
+  detectAnomalies,
+  type MetricAbsenceReason,
+} from '@brandspace/analytics';
 import { requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
-import { evidenceRefs, statusMessage, translator, type MessageKey } from '../../../i18n/messages';
+import {
+  evidenceRefs,
+  optionalMessage,
+  statusMessage,
+  translator,
+  type MessageKey,
+} from '../../../i18n/messages';
 import { analyticsNextSteps, latestShift } from '../../../server/performance-patterns';
 import { measuredChanges, parseExplanation, pickText } from '../../../server/analytics-story';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
 import { explainPeriodAction, saveInsightLearningAction } from './actions';
 import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
+import { bestPostingHours, channelChart, pillarTotals } from '../../../server/performance-view';
+import { dayLabel } from '../../../server/prototype-dates';
 
 import { EmptyAction } from '../../../components/empty-action';
 
@@ -57,8 +69,13 @@ export const dynamic = 'force-dynamic';
 const RANGES = [7, 28, 90] as const;
 type Range = (typeof RANGES)[number];
 
-/** The metrics the overview leads with. Everything else is on the tables. */
-const HEADLINE_METRICS = ['impressions', 'reach', 'engagements', 'engagement_rate'] as const;
+/**
+ * The metrics the overview leads with — the prototype's Reach · Engagement rate
+ * · (Posts published) · New followers (round 3). Everything else is on the
+ * tables; `clicks` is read for the posts table, not drawn as a figure.
+ */
+const HEADLINE_METRICS = ['reach', 'engagement_rate', 'follower_change'] as const;
+const SUMMARY_METRICS = [...HEADLINE_METRICS, 'clicks'] as const;
 
 function parseRange(value: unknown): Range {
   const days = Number(value);
@@ -184,12 +201,17 @@ export default async function AnalyticsPage({
       ? { start: new Date(period.start.getTime() - days * 86_400_000), end: period.start }
       : undefined;
 
+    /*
+     * ROUND 3 (B8) — THE ACCOUNT'S OWN READINGS for the headline figures and
+     * the reach lines: a post's reach is part of its account's, so summing the
+     * two would count the same people twice.
+     */
     const summary = await queries.summary({
-      scope: { brandId: brand.id },
+      scope: { brandId: brand.id, subjectType: 'ACCOUNT' },
       period,
       ...(comparison ? { comparison } : {}),
       brandScope: workspace.brandScope,
-      metricKeys: HEADLINE_METRICS,
+      metricKeys: SUMMARY_METRICS,
     });
 
     const series = await queries.series({
@@ -206,13 +228,129 @@ export default async function AnalyticsPage({
       brandScope: workspace.brandScope,
     });
 
-    const topPosts = await queries.topPosts({
+    /*
+     * ONE ROW PER POST (round 3): the query ranks a post on each channel; the
+     * prototype's table lists the post once with its channels, its figure the
+     * sum over them.
+     */
+    const rankedOnChannels = await queries.topPosts({
       scope: { brandId: brand.id },
       period,
       metricKey: 'engagements',
-      limit: 5,
+      limit: 20,
       brandScope: workspace.brandScope,
     });
+    const topPosts = [
+      ...rankedOnChannels
+        .reduce((posts, row) => {
+          const seen = posts.get(row.contentItemId);
+          posts.set(
+            row.contentItemId,
+            seen
+              ? {
+                  ...seen,
+                  value: seen.value + row.value,
+                  providers: [...seen.providers, row.provider],
+                }
+              : { ...row, providers: [row.provider] },
+          );
+          return posts;
+        }, new Map<string, (typeof rankedOnChannels)[number] & { providers: (typeof rankedOnChannels)[number]['provider'][] }>())
+        .values(),
+    ]
+      .sort((a, b) => Number(b.value - a.value))
+      .slice(0, 5);
+
+    /*
+     * ROUND 3 (B8) — WHAT THE PROTOTYPE'S PERFORMANCE SCREEN READS, from the
+     * same queries and the same brand scope: reach per channel and per day
+     * (one line each), the posts' own figures for the table and the pillar and
+     * best-time cards, the posts published, and the campaigns' rates.
+     */
+    const reachByProvider = await queries.byProvider({
+      scope: { brandId: brand.id, subjectType: 'ACCOUNT' },
+      period,
+      metricKey: 'reach',
+      brandScope: workspace.brandScope,
+    });
+    const reachSeries = await queries.series({
+      scope: { brandId: brand.id, subjectType: 'ACCOUNT' },
+      period,
+      metricKey: 'reach',
+      brandScope: workspace.brandScope,
+    });
+    const reachByChannel = await Promise.all(
+      reachByProvider.map(async (row) => ({
+        provider: row.provider,
+        series: await queries.series({
+          scope: { brandId: brand.id, provider: row.provider, subjectType: 'ACCOUNT' },
+          period,
+          metricKey: 'reach',
+          brandScope: workspace.brandScope,
+        }),
+      })),
+    );
+    const postFigures = async (metricKey: string) => {
+      const sums = new Map<string, (typeof rankedOnChannels)[number]>();
+      for (const row of await queries.topPosts({
+        scope: { brandId: brand.id },
+        period,
+        metricKey,
+        limit: 200,
+        brandScope: workspace.brandScope,
+      })) {
+        const seen = sums.get(row.contentItemId);
+        sums.set(row.contentItemId, seen ? { ...seen, value: seen.value + row.value } : row);
+      }
+      return sums;
+    };
+    const [postEngagements, postReach, postSaves, postClicks] = await Promise.all([
+      postFigures('engagements'),
+      postFigures('reach'),
+      postFigures('saves'),
+      postFigures('clicks'),
+    ]);
+    const postIds = [...postEngagements.keys()];
+    const postMeta =
+      postIds.length > 0
+        ? await services.db.contentItem.findMany({
+            where: {
+              workspaceId: workspace.workspaceId,
+              id: { in: postIds },
+              ...brandScopeFilter(workspace.brandScope),
+            },
+            select: { id: true, pillar: true, campaign: { select: { name: true } } },
+          })
+        : [];
+    const postsPublished = await countPublishedPosts(services.db, {
+      workspaceId: workspace.workspaceId,
+      brandId: brand.id,
+      brandScope: workspace.brandScope,
+      period,
+    });
+    const campaignRates = await queries.campaignEngagementRates({
+      brandId: brand.id,
+      brandScope: workspace.brandScope,
+    });
+    const campaignRows =
+      campaignRates.size > 0
+        ? await services.db.campaign.findMany({
+            where: {
+              workspaceId: workspace.workspaceId,
+              id: { in: [...campaignRates.keys()] },
+              deletedAt: null,
+              ...brandScopeFilter(workspace.brandScope),
+            },
+            select: { id: true, name: true, status: true },
+          })
+        : [];
+    const zone =
+      (
+        await services.db.workspace.findUnique({
+          where: { id: workspace.workspaceId },
+          select: { timezone: true },
+        })
+      )?.timezone ?? 'UTC';
 
     /*
      * INSIGHTS ARE READ ONLY WHEN THE READER MAY SEE THEM. A count fetched and
@@ -290,6 +428,18 @@ export default async function AnalyticsPage({
       series,
       byProvider,
       topPosts,
+      reachByProvider,
+      reachSeries,
+      reachByChannel,
+      postEngagements,
+      postReach,
+      postSaves,
+      postClicks,
+      postMeta,
+      postsPublished,
+      campaignRates,
+      campaignRows,
+      zone,
       insights,
       period,
       shift,
@@ -310,28 +460,6 @@ export default async function AnalyticsPage({
     unreviewedFindings: data.insights.filter((insight) => insight.status === 'NEW').length,
     permissionKeys: workspace.permissionKeys,
   });
-
-  const seriesLabels: ChartLabels = {
-    title: t('analytics.metric.engagements'),
-    description: `${t('analytics.trend')} — ${t('analytics.metric.engagements')}`,
-    tableCaption: `${t('analytics.trend')} — ${t('analytics.metric.engagements')}`,
-    periodColumn: t('analytics.tablePeriod'),
-    valueColumn: t('analytics.tableValue'),
-    noValue: t('analytics.noValue'),
-  };
-
-  const seriesPoints: readonly ChartPoint[] = data.series.points.map((point) => ({
-    label: day.format(point.periodStart),
-    value: point.value === null ? null : Number(point.value),
-    formatted: formatValue(point.value, 'COUNT') ?? undefined,
-    absentLabel: absentText(data.series.absent),
-  }));
-
-  const providerPoints: readonly ChartPoint[] = data.byProvider.map((row) => ({
-    label: t(`integrations.provider.${row.provider.toLowerCase()}` as MessageKey),
-    value: row.value === null ? null : Number(row.value),
-    formatted: formatValue(row.value, 'COUNT') ?? undefined,
-  }));
 
   const exportHref = `/${locale}/analytics/export?brand=${brand.id}&range=${days}`;
 
@@ -364,16 +492,76 @@ export default async function AnalyticsPage({
     }
     return `/${locale}/analytics?${next.toString()}`;
   };
-  const chart = reachChart(seriesPoints);
-  const providerTotal = data.byProvider.reduce(
+  const mayRepeat = workspace.permissionKeys.includes('content.create');
+
+  /* ROUND 3 (B8) — the prototype's figures, sections and their scales. */
+  const metricOf = (key: string) => data.summary.metrics.find((metric) => metric.metricKey === key);
+  const kpis = [
+    metricOf('reach'),
+    metricOf('engagement_rate'),
+    {
+      metricKey: 'posts_published',
+      value: null,
+      unit: 'COUNT',
+      absent: null,
+      changeMilli: null,
+    } as const,
+    metricOf('follower_change'),
+  ].filter((metric): metric is NonNullable<typeof metric> => metric !== undefined);
+  const reachDay = (points: readonly { periodStart: Date; value: bigint | null }[]) =>
+    points.map((point) => ({
+      label: day.format(point.periodStart),
+      value: point.value === null ? null : Number(point.value),
+    }));
+  const reachPoints: readonly ChartPoint[] = data.reachSeries.points.map((point) => ({
+    label: day.format(point.periodStart),
+    value: point.value === null ? null : Number(point.value),
+    formatted: formatValue(point.value, 'COUNT') ?? undefined,
+    absentLabel: absentText(data.reachSeries.absent),
+  }));
+  const reachLabels: ChartLabels = {
+    title: t('analytics.reachDayByDay'),
+    description: `${t('analytics.trend')} — ${t('analytics.metric.reach')}`,
+    tableCaption: `${t('analytics.trend')} — ${t('analytics.metric.reach')}`,
+    periodColumn: t('analytics.tablePeriod'),
+    valueColumn: t('analytics.tableValue'),
+    noValue: t('analytics.noValue'),
+  };
+  const channelLines = channelChart(
+    data.reachByChannel.map((entry) => ({
+      key: entry.provider.toLowerCase(),
+      points: reachDay(entry.series.points),
+    })),
+  );
+  const reachTotal = data.reachByProvider.reduce(
     (sum, row) => sum + (row.value === null ? 0 : Number(row.value)),
     0,
   );
-  const providerMax = Math.max(
+  const reachMax = Math.max(
     1,
-    ...data.byProvider.map((row) => (row.value === null ? 0 : Number(row.value))),
+    ...data.reachByProvider.map((row) => (row.value === null ? 0 : Number(row.value))),
   );
-  const mayRepeat = workspace.permissionKeys.includes('content.create');
+  const postMetaById = new Map(data.postMeta.map((row) => [row.id, row] as const));
+  const engagementPosts = [...data.postEngagements.values()];
+  const pillars = pillarTotals(
+    engagementPosts.map((post) => ({
+      pillar: postMetaById.get(post.contentItemId)?.pillar ?? null,
+      value: Number(post.value),
+    })),
+  );
+  const pillarMax = Math.max(1, ...pillars.map((row) => row.total));
+  const best = bestPostingHours(
+    engagementPosts.map((post) => ({ publishedAt: post.publishedAt, value: Number(post.value) })),
+    data.zone,
+  );
+  const bestMax = Math.max(1, ...best.map((slot) => slot.average));
+  const campaigns = data.campaignRows
+    .flatMap((row) => {
+      const rate = data.campaignRates.get(row.id);
+      return rate ? [{ ...row, rateMilli: rate.rateMilli }] : [];
+    })
+    .sort((a, b) => Number(b.rateMilli - a.rateMilli));
+  const campaignMax = Math.max(1, ...campaigns.map((row) => Number(row.rateMilli)));
 
   return (
     <WorkspaceShell
@@ -526,11 +714,18 @@ export default async function AnalyticsPage({
               <span className="bsp-pf-src-note">{t('analytics.sourcesNote')}</span>
             </section>
 
-            {/* The four headline figures: `.xcard` with `padding: 16px 18px; gap: 4px`. */}
+            {/*
+              ROUND 3 (B8) — THE PROTOTYPE'S FOUR FIGURES: Reach · Engagement
+              rate · Posts published · New followers (`.xcard`, `padding: 16px
+              18px; gap: 4px`). A figure with no reading says why, never 0.
+            */}
             <div className="bsp-xgrid bsp-pf-kpis">
-              {data.summary.metrics.map((metric) => {
-                const value = formatValue(metric.value, metric.unit);
-                const spark = metric.metricKey === 'engagements' ? sparkPath(seriesPoints) : null;
+              {kpis.map((metric) => {
+                const value =
+                  metric.metricKey === 'posts_published'
+                    ? number.format(data.postsPublished)
+                    : formatValue(metric.value, metric.unit);
+                const spark = metric.metricKey === 'reach' ? sparkPath(reachPoints) : null;
                 return (
                   <section
                     key={metric.metricKey}
@@ -538,7 +733,8 @@ export default async function AnalyticsPage({
                     data-testid={`analytics-metric-${metric.metricKey}`}
                   >
                     <span className="bsp-pf-kpi-l">
-                      {t(`analytics.metric.${metric.metricKey}` as MessageKey)}
+                      {optionalMessage(messageLocale, `analytics.kpi.${metric.metricKey}`) ??
+                        t(`analytics.metric.${metric.metricKey}` as MessageKey)}
                     </span>
                     {value === null ? (
                       <span className="bsp-pf-kpi-none">{absentText(metric.absent)}</span>
@@ -575,15 +771,28 @@ export default async function AnalyticsPage({
               })}
             </div>
 
-            {/* The day-by-day line: the prototype's 900×230 chart, its table for assistive tech. */}
+            {/*
+              "REACH, DAY BY DAY" — the prototype's 900×230 chart with one line
+              per channel and its legend; the total's table for assistive tech.
+            */}
             <section className="bsp-xcard bsp-pf-chartcard">
               <div className="bsp-pf-cardh bsp-pf-charth">
-                <h2 className="bsp-sech">{t('analytics.dayByDay')}</h2>
-                <span className="bsp-pf-sub">{t('analytics.metric.engagements')}</span>
+                <h2 className="bsp-sech">{t('analytics.reachDayByDay')}</h2>
+                <span className="bsp-pf-sub">{t('analytics.reachDaySub')}</span>
+                {channelLines && channelLines.lines.length > 1 ? (
+                  <span className="bsp-pf-legend">
+                    {channelLines.lines.map((line) => (
+                      <span key={line.key} className="bsp-ltr" data-provider={line.key}>
+                        <span className="bsp-pf-legend-l" aria-hidden="true" />
+                        {t(`integrations.provider.${line.key}` as MessageKey)}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
               </div>
-              {chart === null ? (
+              {channelLines === null ? (
                 <p className="bsp-pf-muted">
-                  {t('analytics.emptyTitle')} — {absentText(data.series.absent)}
+                  {t('analytics.emptyTitle')} — {absentText(data.reachSeries.absent)}
                 </p>
               ) : (
                 <figure className="bsp-pf-chart" data-testid="analytics-trend" dir="ltr">
@@ -591,9 +800,9 @@ export default async function AnalyticsPage({
                     viewBox="0 0 900 230"
                     width="100%"
                     role="img"
-                    aria-label={seriesLabels.description}
+                    aria-label={reachLabels.description}
                   >
-                    {chart.grid.map((line) => (
+                    {channelLines.grid.map((line) => (
                       <g key={line.y}>
                         <line x1="48" x2="830" y1={line.y} y2={line.y} className="bsp-pf-grid" />
                         <text x="40" y={line.y + 4} textAnchor="end" className="bsp-pf-axis">
@@ -601,7 +810,7 @@ export default async function AnalyticsPage({
                         </text>
                       </g>
                     ))}
-                    {chart.xlabels.map((label) => (
+                    {channelLines.xlabels.map((label) => (
                       <text
                         key={label.x}
                         x={label.x}
@@ -612,63 +821,231 @@ export default async function AnalyticsPage({
                         {label.label}
                       </text>
                     ))}
-                    {/* MO11 (D-351): the line draws in, its end value pops in after it. */}
-                    <g className="bs-chart-line" data-dir="ltr">
-                      {chart.paths.map((d) => (
-                        <path key={d} d={d} className="bsp-pf-line" />
-                      ))}
-                    </g>
-                    {chart.end ? (
-                      <text x={chart.end.x} y={chart.end.y} className="bsp-pf-endv bs-chart-dot">
-                        {chart.end.label}
-                      </text>
-                    ) : null}
+                    {/* MO11 (D-351): each line draws in, its end value pops in after it. */}
+                    {channelLines.lines.map((line) => (
+                      <g key={line.key} className="bs-chart-line" data-dir="ltr">
+                        {line.paths.map((d) => (
+                          <path key={d} d={d} className="bsp-pf-line" data-provider={line.key} />
+                        ))}
+                        {line.end ? (
+                          <text x={line.end.x} y={line.end.y} className="bsp-pf-endv bs-chart-dot">
+                            {line.end.label}
+                          </text>
+                        ) : null}
+                      </g>
+                    ))}
                   </svg>
                   <div style={visuallyHiddenStyle()}>
-                    <ChartDataTable labels={seriesLabels} points={seriesPoints} />
+                    <ChartDataTable labels={reachLabels} points={reachPoints} />
                   </div>
                 </figure>
               )}
             </section>
 
-            {/* By channel: name, figure, share and bar per platform (line 703). */}
-            <section className="bsp-xcard bsp-pf-card" data-testid="analytics-by-platform">
-              <h2 className="bsp-sech">{t('analytics.byPlatform')}</h2>
-              {providerPoints.length === 0 ? (
-                <p className="bsp-pf-muted">{t('analytics.absent.no_connection')}</p>
-              ) : (
-                data.byProvider.map((row, index) => {
-                  const value = row.value === null ? 0 : Number(row.value);
-                  return (
-                    <div
-                      key={row.provider}
-                      className="bsp-pf-ch"
-                      data-provider={row.provider.toLowerCase()}
-                    >
-                      <span className="bsp-pf-ch-row">
-                        {platformOf(row.provider) ? (
-                          <PlatformIcon platform={platformOf(row.provider)!} size={13} />
-                        ) : null}
-                        <span className="bsp-ltr bsp-pf-ch-name">
-                          {t(`integrations.provider.${row.provider.toLowerCase()}` as MessageKey)}
+            {/* By channel · By strategy pillar · Best time to post (lines 702–717). */}
+            <div className="bsp-pf-three">
+              <section className="bsp-xcard bsp-pf-card" data-testid="analytics-by-platform">
+                <h2 className="bsp-sech">{t('analytics.byChannel')}</h2>
+                {data.reachByProvider.length === 0 ? (
+                  <p className="bsp-pf-muted">{t('analytics.absent.no_connection')}</p>
+                ) : (
+                  data.reachByProvider.map((row, index) => {
+                    const value = row.value === null ? 0 : Number(row.value);
+                    return (
+                      <div
+                        key={row.provider}
+                        className="bsp-pf-ch"
+                        data-provider={row.provider.toLowerCase()}
+                      >
+                        <span className="bsp-pf-ch-row">
+                          {platformOf(row.provider) ? (
+                            <PlatformIcon platform={platformOf(row.provider)!} size={13} />
+                          ) : null}
+                          <span className="bsp-ltr bsp-pf-ch-name">
+                            {t(`integrations.provider.${row.provider.toLowerCase()}` as MessageKey)}
+                          </span>
+                          <b className="bsp-ltr">{row.value === null ? '—' : kfmt(value)}</b>
+                          <span className="bsp-pf-ch-share">
+                            {reachTotal > 0 ? percent.format(value / reachTotal) : '—'}
+                          </span>
                         </span>
-                        <b className="bsp-ltr">
-                          {row.value === null ? '—' : (formatValue(row.value, 'COUNT') ?? '—')}
-                        </b>
-                        <span className="bsp-pf-ch-share">
-                          {providerTotal > 0 ? percent.format(value / providerTotal) : '—'}
+                        <span className="bsp-pf-bar">
+                          {/* MO11 (D-351): each bar grows from its start edge, 35 ms apart. */}
+                          <span
+                            className="bs-chart-bar"
+                            data-dir={locale === 'ar' ? 'rtl' : 'ltr'}
+                            data-provider={row.provider.toLowerCase()}
+                            style={{
+                              ...({ '--i': index } as CSSProperties),
+                              inlineSize: `${Math.max(2, Math.round((value / reachMax) * 100))}%`,
+                            }}
+                          />
                         </span>
+                      </div>
+                    );
+                  })
+                )}
+                <span className="bsp-pf-foot">
+                  {t('analytics.metric.reach')} · {t(`analytics.range.${days}` as MessageKey)}
+                </span>
+              </section>
+
+              <section className="bsp-xcard bsp-pf-card" data-testid="analytics-by-pillar">
+                <div className="bsp-pf-cardh">
+                  <h2 className="bsp-sech">{t('analytics.byPillar')}</h2>
+                  <Link
+                    href={`/${locale}/strategy`}
+                    className="bsp-btn bsp-sm bsp-ghost bsp-pf-go"
+                    aria-label={t('nav.strategy')}
+                  >
+                    →
+                  </Link>
+                </div>
+                {pillars.length === 0 ? (
+                  <p className="bsp-pf-muted">{t('analytics.byPillarEmpty')}</p>
+                ) : (
+                  pillars.map((row, index) => (
+                    <div key={row.pillar} className="bsp-pf-pil">
+                      <span className="bsp-pf-pil-row">
+                        <span dir="auto">{row.pillar}</span>
+                        <b className="bsp-ltr">{kfmt(row.total)}</b>
                       </span>
-                      <span className="bsp-pf-bar">
-                        {/* MO11 (D-351): each bar grows from its start edge, 35 ms apart. */}
+                      <span className="bsp-pf-pbar">
                         <span
                           className="bs-chart-bar"
                           data-dir={locale === 'ar' ? 'rtl' : 'ltr'}
+                          data-shade={index % 3}
                           style={{
                             ...({ '--i': index } as CSSProperties),
-                            inlineSize: `${Math.max(2, Math.round((value / providerMax) * 100))}%`,
+                            inlineSize: `${Math.max(2, Math.round((row.total / pillarMax) * 100))}%`,
                           }}
                         />
+                      </span>
+                    </div>
+                  ))
+                )}
+                <span className="bsp-pf-foot">
+                  {t('analytics.metric.engagements')} · {t(`analytics.range.${days}` as MessageKey)}
+                </span>
+              </section>
+
+              <section className="bsp-xcard bsp-pf-card" data-testid="analytics-best-time">
+                <h2 className="bsp-sech">{t('analytics.bestTime')}</h2>
+                <span className="bsp-pf-foot bsp-pf-best-sub">
+                  {t('analytics.bestTimeSub').replace(
+                    '{period}',
+                    t(`analytics.range.${days}` as MessageKey),
+                  )}
+                </span>
+                {best.length === 0 ? (
+                  <p className="bsp-pf-muted">{t('analytics.bestTimeEmpty')}</p>
+                ) : (
+                  best.map((slot, index) => (
+                    <div key={slot.hour} className="bsp-pf-best">
+                      <span className="bsp-ltr bsp-pf-best-t">
+                        {String(slot.hour).padStart(2, '0')}:00
+                      </span>
+                      <span className="bsp-pf-best-bar">
+                        <span
+                          className="bs-chart-bar"
+                          data-dir={locale === 'ar' ? 'rtl' : 'ltr'}
+                          data-top={index === 0 ? 'true' : undefined}
+                          style={{
+                            ...({ '--i': index } as CSSProperties),
+                            inlineSize: `${Math.max(2, Math.round((slot.average / bestMax) * 100))}%`,
+                          }}
+                        />
+                      </span>
+                      <span className="bsp-ltr bsp-pf-best-v">{kfmt(slot.average)}</span>
+                    </div>
+                  ))
+                )}
+                {best.length > 0 && mayRepeat ? (
+                  <Link
+                    href={`/${locale}/content/compose`}
+                    className="bsp-btn bsp-sm bsp-sec bsp-pf-use"
+                  >
+                    {t('analytics.bestTimeUse')} →
+                  </Link>
+                ) : null}
+              </section>
+            </div>
+
+            {/* Posts: the prototype's table — Post · Channel · Reach · Eng. · Saves · Clicks. */}
+            <section className="bsp-xcard bsp-pf-posts" data-testid="analytics-top-posts">
+              <div className="bsp-pf-posts-h">
+                <h2 className="bsp-sech">{t('analytics.posts')}</h2>
+                {mayExport ? <span className="bsp-pf-sub">{t('analytics.tablesNote')}</span> : null}
+              </div>
+              <div className="bsp-pf-tr bsp-pf-th" aria-hidden={data.topPosts.length === 0}>
+                <span>{t('analytics.post')}</span>
+                <span>{t('analytics.col.channel')}</span>
+                <span className="bsp-pf-num">{t('analytics.metric.reach')}</span>
+                <span className="bsp-pf-num">{t('analytics.col.eng')}</span>
+                <span className="bsp-pf-num">{t('analytics.metric.saves')}</span>
+                <span className="bsp-pf-num">{t('analytics.col.clicks')}</span>
+                <span />
+              </div>
+              {data.topPosts.length === 0 ? (
+                <div className="bsp-pf-none">{t('analytics.topPostsEmpty')}</div>
+              ) : (
+                data.topPosts.map((post) => {
+                  const meta = postMetaById.get(post.contentItemId);
+                  const figure = (row: { value: bigint } | undefined) =>
+                    row ? number.format(Number(row.value)) : '—';
+                  return (
+                    <div key={post.contentItemId} className="bsp-pf-tr">
+                      <span className="bsp-pf-post">
+                        <span className="bsp-pf-art" aria-hidden="true" />
+                        <span className="bsp-pf-post-t">
+                          <span dir="auto" className="bsp-pf-post-n">
+                            {post.title ?? post.contentItemId}
+                          </span>
+                          <span className="bsp-pf-post-m">
+                            {post.publishedAt ? dayLabel(post.publishedAt, locale, data.zone) : ''}
+                            {meta?.campaign?.name ? ` · ${meta.campaign.name}` : ''}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="bsp-pf-chs">
+                        {post.providers.map((provider) =>
+                          platformOf(provider) ? (
+                            <PlatformIcon
+                              key={provider}
+                              platform={platformOf(provider)!}
+                              size={13}
+                            />
+                          ) : (
+                            <span key={provider} className="bsp-ltr">
+                              {provider}
+                            </span>
+                          ),
+                        )}
+                      </span>
+                      <span className="bsp-ltr bsp-pf-num bsp-pf-strong">
+                        {figure(data.postReach.get(post.contentItemId))}
+                      </span>
+                      <span className="bsp-ltr bsp-pf-num">
+                        {number.format(Number(post.value))}
+                      </span>
+                      <span className="bsp-ltr bsp-pf-num">
+                        {figure(data.postSaves.get(post.contentItemId))}
+                      </span>
+                      <span className="bsp-ltr bsp-pf-num">
+                        {figure(data.postClicks.get(post.contentItemId))}
+                      </span>
+                      <span className="bsp-pf-rowacts">
+                        {mayRepeat ? (
+                          <Link
+                            href={`/${locale}/content/compose?${new URLSearchParams({
+                              mode: 'ai',
+                              source: post.contentItemId,
+                            }).toString()}`}
+                            className="bsp-btn bsp-sm bsp-sec"
+                          >
+                            {t('analytics.repeat')}
+                          </Link>
+                        ) : null}
                       </span>
                     </div>
                   );
@@ -676,46 +1053,48 @@ export default async function AnalyticsPage({
               )}
             </section>
 
-            {/* Posts: the prototype's table, with the one figure the product ranks by. */}
-            <section className="bsp-xcard bsp-pf-posts" data-testid="analytics-top-posts">
-              <div className="bsp-pf-posts-h">
-                <h2 className="bsp-sech">{t('analytics.topPosts')}</h2>
-                {mayExport ? <span className="bsp-pf-sub">{t('analytics.tablesNote')}</span> : null}
-              </div>
-              <div className="bsp-pf-tr bsp-pf-th" aria-hidden={data.topPosts.length === 0}>
-                <span>{t('analytics.post')}</span>
-                <span className="bsp-pf-num">{t('analytics.metric.engagements')}</span>
-                <span />
-              </div>
-              {data.topPosts.length === 0 ? (
-                <div className="bsp-pf-none">{t('analytics.topPostsEmpty')}</div>
-              ) : (
-                data.topPosts.map((post) => (
-                  <div key={post.contentItemId} className="bsp-pf-tr">
-                    <span className="bsp-pf-post">
-                      <span className="bsp-pf-art" aria-hidden="true" />
-                      <span dir="auto">{post.title ?? post.contentItemId}</span>
+            {/* Campaigns: each campaign's engagement rate, from its posts (line 739). */}
+            {campaigns.length > 0 ? (
+              <section className="bsp-xcard bsp-pf-card" data-testid="analytics-campaigns">
+                <div className="bsp-pf-cardh">
+                  <h2 className="bsp-sech">{t('analytics.campaigns')}</h2>
+                  <Link
+                    href={`/${locale}/campaigns`}
+                    className="bsp-btn bsp-sm bsp-ghost bsp-pf-go"
+                  >
+                    {t('analytics.allCampaigns')} →
+                  </Link>
+                </div>
+                {campaigns.map((campaign, index) => (
+                  <Link
+                    key={campaign.id}
+                    href={`/${locale}/campaigns/${campaign.id}`}
+                    className="bsp-pf-camp"
+                  >
+                    <span className="bsp-pf-camp-row">
+                      <b dir="auto">{campaign.name}</b>
+                      <span className="bsp-pf-camp-m">{t('analytics.metric.engagement_rate')}</span>
+                      <span className="bsp-ltr bsp-pf-strong">
+                        {percent.format(Number(campaign.rateMilli) / 1_000)}
+                      </span>
+                      <span className={`bsp-xstatus ${CAMPAIGN_X[campaign.status] ?? 'bsp-neu'}`}>
+                        {t(`campaigns.status.${campaign.status}` as MessageKey)}
+                      </span>
                     </span>
-                    <span className="bsp-ltr bsp-pf-num bsp-pf-strong">
-                      {number.format(Number(post.value))}
+                    <span className="bsp-pf-camp-bar">
+                      <span
+                        className="bs-chart-bar"
+                        data-dir={locale === 'ar' ? 'rtl' : 'ltr'}
+                        style={{
+                          ...({ '--i': index } as CSSProperties),
+                          inlineSize: `${Math.max(2, Math.round((Number(campaign.rateMilli) / campaignMax) * 100))}%`,
+                        }}
+                      />
                     </span>
-                    <span className="bsp-pf-rowacts">
-                      {mayRepeat ? (
-                        <Link
-                          href={`/${locale}/content/compose?${new URLSearchParams({
-                            mode: 'ai',
-                            source: post.contentItemId,
-                          }).toString()}`}
-                          className="bsp-btn bsp-sm bsp-sec"
-                        >
-                          {t('analytics.repeat')}
-                        </Link>
-                      ) : null}
-                    </span>
-                  </div>
-                ))
-              )}
-            </section>
+                  </Link>
+                ))}
+              </section>
+            ) : null}
             {/*
               D-293 — what changed, why it might matter, what to try. Review of
               #67: the prototype's Numbers tab opens on the KPI cards, so the
@@ -1059,6 +1438,16 @@ function platformOf(provider: string): SocialPlatform | null {
 }
 
 /** The freshness chip, in the prototype's `xstatus` tones. */
+/** A campaign's status pill, as the Campaigns screen colours it. */
+const CAMPAIGN_X: Readonly<Record<string, string>> = {
+  ACTIVE: 'bsp-ok',
+  PLANNED: 'bsp-ai',
+  PAUSED: 'bsp-warn',
+  COMPLETED: 'bsp-neu',
+  DRAFT: 'bsp-neu',
+  ARCHIVED: 'bsp-neu',
+};
+
 const FRESHNESS_X: Readonly<Record<string, string>> = {
   FRESH: '',
   STALE: 'bsp-warn',
@@ -1093,71 +1482,4 @@ function sparkPath(points: readonly ChartPoint[]): string | null {
         )}`,
     )
     .join(' ');
-}
-
-/**
- * The prototype's day-by-day chart geometry (`CW = 900, CH = 230, PL0 = 48,
- * PR = 70, PT = 12, PB = 26`), its grid steps and its date-label thinning,
- * over the product's own series. Two departures, both about real data: a day
- * with no reading is a GAP in the line, never a zero; and below 1,000 the
- * grid steps by a quarter of the maximum, because the prototype's smallest
- * step (500) would flatten a young account's line onto the axis.
- */
-function reachChart(points: readonly ChartPoint[]): {
-  readonly grid: readonly { y: number; label: string }[];
-  readonly xlabels: readonly { x: number; label: string }[];
-  readonly paths: readonly string[];
-  readonly end: { x: number; y: number; label: string } | null;
-} | null {
-  if (points.length === 0 || points.every((point) => point.value === null)) return null;
-  const CW = 900;
-  const CH = 230;
-  const PL0 = 48;
-  const PR = 70;
-  const PT = 12;
-  const PB = 26;
-  const pw = CW - PL0 - PR;
-  const ph = CH - PT - PB;
-  let ymax = Math.max(...points.map((point) => point.value ?? 0));
-  const step =
-    ymax > 8000
-      ? 2000
-      : ymax > 4000
-        ? 1000
-        : ymax > 1000
-          ? 500
-          : Math.max(1, Math.ceil(ymax / 4 / 5) * 5);
-  ymax = Math.ceil(ymax / step) * step || step;
-  const X = (i: number) => PL0 + (points.length === 1 ? pw / 2 : (i / (points.length - 1)) * pw);
-  const Y = (v: number) => PT + ph - (v / ymax) * ph;
-  const grid: { y: number; label: string }[] = [];
-  for (let g = 0; g <= ymax; g += step) grid.push({ y: Y(g), label: kfmt(g) });
-  const n = points.length;
-  const every = n <= 28 ? 7 : 21;
-  const xlabels = points
-    .map((point, i) => ({ i, label: point.label }))
-    .filter((entry) => n <= 7 || entry.i % every === (n - 1) % every)
-    .map((entry) => ({ x: X(entry.i), label: entry.label }));
-  const paths: string[] = [];
-  let current = '';
-  points.forEach((point, i) => {
-    if (point.value === null) {
-      if (current) paths.push(current);
-      current = '';
-      return;
-    }
-    current += `${current ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(point.value).toFixed(1)} `;
-  });
-  if (current) paths.push(current.trim());
-  const lastIndex = points.map((point) => point.value !== null).lastIndexOf(true);
-  const last = points[lastIndex];
-  return {
-    grid,
-    xlabels,
-    paths,
-    end:
-      last && last.value !== null
-        ? { x: X(lastIndex) + 8, y: Y(last.value) + 4, label: kfmt(last.value) }
-        : null,
-  };
 }

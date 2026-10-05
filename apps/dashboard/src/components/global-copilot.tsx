@@ -61,6 +61,14 @@ export function GlobalCopilot({
     readonly more: string;
     readonly chooseBrandTitle: string;
     readonly chooseBrandBody: string;
+    /** "Working on: Home · Reema Café" — the head's second line. */
+    readonly context: string;
+    /** The balance for the head's pill; null where it may not be read (§2.2). */
+    readonly credits: string | null;
+    readonly creditsLabel: string;
+    readonly greeting: string;
+    readonly placeholder: string;
+    readonly suggestions: readonly { readonly id: string; readonly label: string }[];
   };
 }) {
   const [open, setOpen] = useState(false);
@@ -151,8 +159,14 @@ export function GlobalCopilot({
               the close. The product's line on how the Copilot works and "Open
               the full Copilot", which it does not draw, are under "⋯".
             */}
+            {/*
+              Round 3: the title and, under it, what the Copilot is working on
+              (`x.ctx`, "Working on: Home") — with the brand every step acts on
+              (D-190) — then the credits pill (`pill p-ai`) before the close.
+            */}
             <span className="bsp-cp-t">
               <b>{labels.title}</b>
+              <span data-testid="copilot-context">{strings.context}</span>
             </span>
             <MoreDisclosure label={strings.more} testId="global-copilot-more" align="end">
               <span className="bsp-cp-note">{labels.subtitle}</span>
@@ -164,6 +178,15 @@ export function GlobalCopilot({
                 {strings.openFull}
               </Link>
             </MoreDisclosure>
+            {strings.credits ? (
+              <span
+                className="bsp-pill bsp-p-ai"
+                data-testid="copilot-credits"
+                aria-label={`${strings.creditsLabel}: ${strings.credits}`}
+              >
+                <span className="bsp-ltr">{strings.credits}</span>
+              </span>
+            ) : null}
             <button
               type="button"
               className="bsp-cp-x"
@@ -199,6 +222,11 @@ export function GlobalCopilot({
                 creditsLabel={null}
                 labels={labels}
                 rateMetricKeys={rateMetricKeys}
+                panel={{
+                  greeting: strings.greeting,
+                  placeholder: strings.placeholder,
+                  suggestions: strings.suggestions,
+                }}
               />
             ) : (
               <StateMessage

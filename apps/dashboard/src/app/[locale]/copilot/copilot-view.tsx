@@ -132,8 +132,24 @@ export function CopilotView({
   subject = null,
   initialRequest = '',
   rateMetricKeys = [],
+  panel = null,
 }: {
   readonly locale: string;
+  /**
+   * THE FLOATING PANEL'S EXTRAS (`Main.dc.html` lines 1494–1523, review of #67
+   * round 3): the greeting bubble the conversation opens with and the three
+   * suggestion chips above the field. A chip puts its request in the field and
+   * sends nothing — the person reads it and presses send, and the plan and
+   * confirmation apply as always (the same rule as D-296's hand-over). The
+   * panel's head states the context, so the line above the conversation is
+   * not drawn twice.
+   */
+  readonly panel?: {
+    readonly greeting: string;
+    /** The field's short placeholder ("Ask or request something…"). */
+    readonly placeholder: string;
+    readonly suggestions: readonly { readonly id: string; readonly label: string }[];
+  } | null;
   /**
    * The metrics stored in parts per mille, from the analytics catalogue on the
    * server — so a rate from a result recorded before results carried their
@@ -454,19 +470,21 @@ export function CopilotView({
         Now the header states what the conversation is about, the plan and its
         results follow, and the one composer is the conversation's own.
       */}
-      <p
-        data-testid="copilot-context"
-        style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
-      >
-        {t('copilot.contextBrand').replace('{brand}', brand.name)}
-        {surface !== 'general'
-          ? ` · ${t('copilot.contextFrom').replace(
-              '{screen}',
-              tOr(`copilot.surface.${surface}`, surface),
-            )}`
-          : ''}
-        {subject ? ` · ${t('copilot.contextSubject').replace('{subject}', subject.title)}` : ''}
-      </p>
+      {panel ? null : (
+        <p
+          data-testid="copilot-context"
+          style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textSecondary }}
+        >
+          {t('copilot.contextBrand').replace('{brand}', brand.name)}
+          {surface !== 'general'
+            ? ` · ${t('copilot.contextFrom').replace(
+                '{screen}',
+                tOr(`copilot.surface.${surface}`, surface),
+              )}`
+            : ''}
+          {subject ? ` · ${t('copilot.contextSubject').replace('{subject}', subject.title)}` : ''}
+        </p>
+      )}
 
       {plan && steps.length === 0 ? (
         <div data-testid="copilot-answered" style={{ display: 'grid', gap: spacingTokens.sm }}>
@@ -746,9 +764,22 @@ export function CopilotView({
        */}
       <Card>
         <CopilotBody
-          labels={labels}
+          labels={panel ? { ...labels, promptPlaceholder: panel.placeholder } : labels}
           state={busy ? 'streaming' : proposedAction ? 'approval' : 'idle'}
-          messages={messages}
+          messages={
+            panel
+              ? [{ id: 'copilot-hello', author: 'assistant', text: panel.greeting }, ...messages]
+              : messages
+          }
+          {...(panel
+            ? {
+                suggestions: panel.suggestions,
+                onSuggestion: (id: string) => {
+                  const chosen = panel.suggestions.find((entry) => entry.id === id);
+                  if (chosen && !busy) setRequest(chosen.label);
+                },
+              }
+            : {})}
           tools={tools}
           {...(creditsLabel
             ? { credits: { label: t('overview.metric.credits'), value: creditsLabel } }

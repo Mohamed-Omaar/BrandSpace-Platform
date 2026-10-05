@@ -221,7 +221,11 @@ export const arEgOverrides = {
   'approvals.tabs.forMe': 'مستني قراري',
   'approvals.tabs.sent': 'أنا بعته',
   'approvals.queueEmptyTitle': 'مفيش حاجة مستنياك.',
-  'approvals.decisionNote': 'ملاحظة',
+  'approvals.decisionNote': 'ملاحظة (اختياري)',
+  'approvals.notePlaceholder': 'لو فيه تعديل اكتبه هنا…',
+  'approvals.noCampaign': 'من غير حملة',
+  'approvals.approveHint':
+    'الموافقة بتخلّي المنشور جاهز للجدولة، ومفيش حاجة بتتنشر قبل ما يتجدول. طلب التعديل محتاج ملاحظة.',
 
   // Batch 3 — Campaigns (Main.dc.html lines 1159–1236; copy at 2433, 2929, 3658–3669).
   'campaigns.hero.line': '{running} شغالة · {planned} مخططة · {ended} انتهت',
@@ -301,4 +305,30 @@ export const arEgOverrides = {
   'auth.eyebrow.verify': 'تأكيد الإيميل',
   'auth.eyebrow.password': 'كلمة السر',
   'auth.footer': 'دخول آمن · جلسات العملاء منفصلة عن إدارة المنصة',
+  // The Copilot panel (Main.dc.html line 2944–2945).
+  'copilot.workingOn': 'شغّال على: {screen}',
+  'copilot.askPlaceholder': 'اسأل أو اطلب حاجة…',
+  'copilot.hello': 'أهلًا {name}. أقدر أساعدك في الصفحة دي، أو أعمل مسودات وأحطها في التقويم.',
+  'copilot.suggest.posts': 'اعمل 3 بوستات للأسبوع الجاي',
+  'copilot.suggest.engagement': 'ليه التفاعل قلّ؟',
+  // The Studio's lower half (Main.dc.html lines 2324, 4235).
+  'studio.tagAdd': 'ضيف',
+  'studio.tagPlaceholder': 'اكتب هاشتاج…',
+  // Settings → General's save bar (Main.dc.html line 3913).
+  'settings.allSaved': 'كل التعديلات محفوظة · عدّل أي حاجة وزرار الحفظ هيشتغل',
+  'settings.saveChanges': 'احفظ التعديلات',
+  // The rule builder's tiles (Main.dc.html lines 3796–3806).
+  'automations.tile.CONTENT_APPROVED': 'منشور يتوافق عليه',
+  'automations.tile.POST_PUBLISHED': 'منشور يتنشر',
+  'automations.tile.POST_FAILED': 'منشور يتعثر في النشر',
+  'automations.tile.REVIEW_WAITING_24H': 'منشور مستني مراجعة أكتر من 24 ساعة',
+  'automations.tile.CAMPAIGN_STARTED': 'حملة تبدأ',
+  'automations.tile.CAMPAIGN_ENDED': 'حملة تخلص',
+  'automations.tile.WEEKLY_ENGAGEMENT_DROPPED': 'تفاعل الأسبوع يقل 20%',
+  'automations.tile.SCHEDULE_GAP': 'مفيش منشورات متجدولة في الـ 3 أيام الجايين',
+  'automations.tile.POST_TOP_10_PERCENT': 'منشور في أعلى 10% أداء',
+  'automations.tile.FACT_EXPIRING': 'معلومة في Brand Brain هتنتهي خلال 7 أيام',
+  // Performance (Main.dc.html lines 2700s, `pf.L`).
+  'analytics.reachDayByDay': 'الوصول يوم بيوم',
+  'analytics.bestTime': 'أحسن وقت للنشر',
 } as const satisfies Partial<Record<MessageKey, string>>;

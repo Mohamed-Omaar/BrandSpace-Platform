@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import { enter, noSeriousViolations, ownWorkspace, type OwnWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
+import { openRuleMore } from './automation-form';
 
 /**
  * PHASE 2B-3, PR 5 — THE RETRY AND THE PAUSE ASK FIRST, IN ENGLISH AND IN
@@ -278,6 +279,7 @@ const pick = (page: Page, testId: string, value: string) =>
   page.getByTestId(`${testId}-${value}`).check();
 
 async function create(page: Page, name: string): Promise<void> {
+  await openRuleMore(page);
   await page.getByTestId('automation-name').fill(name);
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');

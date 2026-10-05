@@ -21,6 +21,7 @@ import { ChannelMark } from '../calendar/prototype-calendar';
 import { objectiveLabel, periodLabel, statusLabel } from './labels';
 
 import { EmptyAction } from '../../../components/empty-action';
+import { whenLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -262,15 +263,8 @@ export default async function CampaignsPage({
 
   const filterHref = (next: ListableStatus | undefined): string =>
     next ? `/${locale}/campaigns?status=${next}` : `/${locale}/campaigns`;
-  const whenFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: posts.timezone,
-    numberingSystem: 'latn',
-  });
+  // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
+  const whenFormat = { format: (value: Date) => whenLabel(value, locale, posts.timezone) };
 
   return (
     <WorkspaceShell
@@ -362,7 +356,17 @@ export default async function CampaignsPage({
           >
             {t('campaigns.filterAll')} <span className="bsp-ltr bsp-camp-count">{live.length}</span>
           </Link>
-          {LISTABLE.filter((value) => countOf(value) > 0 || value === status).map((value) => (
+          {/*
+            Round 3 (C5) — the prototype's four tabs are always there (Running ·
+            Paused · Planned · Ended); the product's draft and archived appear
+            when they have campaigns.
+          */}
+          {LISTABLE.filter(
+            (value) =>
+              (PROTOTYPE_ORDER as readonly string[]).includes(value) ||
+              countOf(value) > 0 ||
+              value === status,
+          ).map((value) => (
             <Link
               key={value}
               href={filterHref(value)}

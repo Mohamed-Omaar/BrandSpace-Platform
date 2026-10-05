@@ -49,6 +49,7 @@ import {
 import { ActivityTimeline } from '../../../../components/activity-timeline';
 import { activityTimeline } from '../../../../server/activity-timeline';
 import { NotesPanel } from '../../../../components/notes-panel';
+import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { inSocial } from '../../../../server/social-context';
 import { retryableAfterReconnect } from '@brandspace/social-connectors';
 import { relativeTime } from '../../../../server/home';
@@ -997,6 +998,46 @@ export default async function ComposePage({
       })
     : [];
 
+  /*
+   * ROUND 3 (C1) — THE POST'S NOTES AS A COMPACT CARD under the preview: how
+   * many there are and the latest one, read for a member who may see notes
+   * (the panel itself renders nothing otherwise), in this post's brand scope.
+   */
+  const highlightThread = typeof query['thread'] === 'string' ? query['thread'] : null;
+  const notesSummary =
+    draft && workspace.permissionKeys.includes(NOTE_PERMISSION)
+      ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
+          const where = {
+            workspaceId: workspace.workspaceId,
+            deletedAt: null,
+            thread: { contentItemId: draft.id, ...brandScopeFilter(workspace.brandScope) },
+          };
+          const [count, last] = await Promise.all([
+            db.note.count({ where }),
+            db.note.findFirst({
+              where,
+              orderBy: { createdAt: 'desc' },
+              select: { body: true, authorUserId: true },
+            }),
+          ]);
+          const author = last
+            ? await db.membership.findFirst({
+                where: { workspaceId: workspace.workspaceId, userId: last.authorUserId },
+                select: { user: { select: { name: true, email: true } } },
+              })
+            : null;
+          return {
+            count,
+            last: last
+              ? {
+                  who: author?.user.name?.trim() || author?.user.email || '—',
+                  text: last.body,
+                }
+              : null,
+          };
+        })
+      : null;
+
   return (
     <WorkspaceShell
       flash={successFlash(ok, locale)}
@@ -1030,6 +1071,24 @@ export default async function ComposePage({
         plannedDate={plannedDate?.date ?? null}
         plannedFor={plannedFor}
         expiredChannels={expiredChannels}
+        notes={
+          draft && notesSummary
+            ? {
+                ...notesSummary,
+                // Open on a deep link to a thread; a post revalidates in place,
+                // so a card the reader opened stays open.
+                open: highlightThread !== null,
+                panel: (
+                  <NotesPanel
+                    locale={locale}
+                    subject={{ type: 'CONTENT_ITEM', contentItemId: draft.id }}
+                    returnPath={`/${locale}/content/compose?item=${draft.id}`}
+                    highlightThreadId={highlightThread}
+                  />
+                ),
+              }
+            : null
+        }
         // Q18 — the AI edits spend credits, so without `copilot.use` none is offered.
         tools={maySpendCredits(workspace.permissionKeys, 'content.edit') ? CONTENT_TOOLS : []}
         now={now.getTime()}
@@ -1111,26 +1170,10 @@ export default async function ComposePage({
       />
 
       {/*
-        THE CONVERSATION ABOUT THIS DRAFT (P6-09).
-      
-        Rendered only once a draft EXISTS — there is nothing to have a
-        conversation about before the item has an id, and a panel offering to
-        discuss a thing that has not been created yet is a control that cannot
-        work.
-      
-        THIS IS WHERE A "NEEDS WORK" VERDICT LANDS. P6-06 puts the reviewer's
-        note on the content item; this is the screen the author opens next, so
-        the request and the work are finally on the same page and the author can
-        answer it rather than re-reading a closed approval cycle.
+        THE CONVERSATION ABOUT THIS DRAFT (P6-09) is the compact Notes card in
+        the preview column (round 3, C1), opened in place — the same panel,
+        where a "needs work" verdict lands.
       */}
-      {draft ? (
-        <NotesPanel
-          locale={locale}
-          subject={{ type: 'CONTENT_ITEM', contentItemId: draft.id }}
-          returnPath={`/${locale}/content/compose?item=${draft.id}`}
-          highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
-        />
-      ) : null}
       {history.length > 0 ? (
         <CustomerCard title={translate('content.history.title')} testId="post-history">
           <ActivityTimeline entries={history} testId="post-history-list" />
@@ -1312,6 +1355,16 @@ const EDITOR_KEYS = [
 
 const COMPOSER_KEYS = [
   'create.carousel.outlineHint',
+  // Review of #67, round 3 — the Studio's lower half.
+  'studio.tagAdd',
+  'studio.tagPlaceholder',
+  'studio.tagsFromBrain',
+  'studio.tagsAfterSave',
+  'studio.checksSub',
+  'studio.notesLabel',
+  'studio.openConversation',
+  'studio.notesAfterSave',
+  'studio.saveHere',
   // Review of #67 — the Studio before the post exists.
   'studio.briefLabel',
   'studio.orStart',

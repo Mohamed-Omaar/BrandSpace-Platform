@@ -382,7 +382,10 @@ test.describe('A9 / G1 · Settings → General, under the save bar', () => {
     const save = page.getByTestId('settings-save');
     // Clean: said, and nothing to save.
     await expect(bar).toHaveAttribute('data-state', 'clean');
-    await expect(page.getByTestId('settings-bar-status')).toHaveText('All changes saved');
+    // Review of #67, round 3 — General's bar says the prototype's own words.
+    await expect(page.getByTestId('settings-bar-status')).toHaveText(
+      'All changes saved · edit anything and Save turns on',
+    );
     await expect(save).toBeDisabled();
     await expect(page.getByTestId('settings-bar-cancel')).toHaveCount(0);
 
@@ -443,7 +446,11 @@ test.describe('A9 / G1 · Settings → General, under the save bar', () => {
 
     // And in Arabic.
     await page.goto(`${DASHBOARD_BASE_URL}/ar/settings`);
-    await expect(page.getByTestId('settings-bar-status')).toHaveText('تم حفظ كل التغييرات');
+    // The workspace is Egyptian by now (saved above), so General speaks the
+    // prototype's Egyptian Arabic (D-470).
+    await expect(page.getByTestId('settings-bar-status')).toHaveText(
+      'كل التعديلات محفوظة · عدّل أي حاجة وزرار الحفظ هيشتغل',
+    );
   });
 });
 

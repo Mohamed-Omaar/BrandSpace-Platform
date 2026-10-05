@@ -98,7 +98,10 @@ describe('the Automations screen', () => {
   it('shows an unavailable trigger, named, but not choosable', () => {
     const form = read('apps/dashboard/src/app/[locale]/automations/automation-form.tsx');
     expect(form).toContain('disabled={option.unavailable}');
-    expect(form).toContain("props.labels.triggerUnavailable.replace('{trigger}', option.label)");
+    // Review of #67, round 3 — the tile is named in its own words where it has them.
+    expect(form).toMatch(
+      /props\.labels\.triggerUnavailable\.replace\(\s*'\{trigger\}',\s*option\.tileLabel \?\? option\.label,?\s*\)/,
+    );
   });
 
   it('says so in both languages, naming the trigger', () => {

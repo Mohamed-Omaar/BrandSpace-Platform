@@ -293,6 +293,8 @@ test.describe('generation', () => {
     await openComposer(page);
     await compose(page, 'Announce the new collection in a calm, useful tone.');
 
+    // Review of #67, round 3 — the estimate is under the brief's "⋯".
+    await page.getByTestId('composer-estimate-more').click();
     await page.getByTestId('content-estimate').click();
     const quote = page.getByTestId('content-quote');
     await expect(quote).toBeVisible({ timeout: 30_000 });
@@ -372,6 +374,8 @@ test.describe('generation', () => {
       await expect(page.getByTestId('content-variant').first()).toBeVisible();
       // AC-11.4: the sources come from retrieval, so a grounded draft has them —
       // one quiet "Using … Brand Brain" away (D-284).
+      // Review of #67, round 3 — the sources line is under the bar's "⋯".
+      await openStudioMore(page);
       await page.getByTestId('draft-brain').locator('summary').click();
       await expect(page.getByTestId('content-citations')).toBeVisible();
     }
@@ -641,9 +645,13 @@ test.describe('writing a post by hand', () => {
       // RELOADED FROM THE SERVER, not from whatever the last render left behind.
       await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
       await expect(page.getByTestId('content-composer')).toBeVisible();
-      await expect(page.getByTestId(`content-hashtags-${platformKey}`)).toHaveValue(
-        /#launch.*#autumn/,
-      );
+      // Review of #67, round 3 — the field is the prototype's "type one, Add";
+      // the version's saved hashtags are the form's own value and its chips.
+      await expect(
+        page
+          .locator(`[data-testid="content-variant"][data-platform="${platformKey}"]`)
+          .locator('input[name="hashtags"]'),
+      ).toHaveValue(/#launch.*#autumn/);
     } finally {
       await withPlatformPrisma(async (prisma) => {
         await prisma.asset.deleteMany({ where: { tags: { has: tag } } });

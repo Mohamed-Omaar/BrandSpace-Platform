@@ -39,6 +39,7 @@ import {
 import { duplicateContentAction } from '../content/actions';
 
 import { EmptyAction } from '../../../components/empty-action';
+import { whenLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -271,11 +272,8 @@ export default async function PublishingPage({
     CHANGES_REQUESTED: 'approvals.status.CHANGES_REQUESTED',
   };
 
-  const formatter = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  });
+  // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
+  const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
   const providerLabel = (provider: string): string =>
     optionalMessage(messageLocale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
   const failureText = (failureClass: string | null, failureCode: string | null): string | null =>
