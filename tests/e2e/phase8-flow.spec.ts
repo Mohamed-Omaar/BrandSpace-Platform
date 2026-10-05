@@ -278,6 +278,8 @@ test('5 · a campaign is created through the form and appears in the list', asyn
    * What must be true is that the panel EXISTS and is honest about which of the
    * two states it is in.
    */
+  // Gate 2b — the results are in the room's Performance view, behind "⋯".
+  await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${state.campaignId}?tab=performance`);
   const metrics = page.getByTestId('campaign-metrics');
   const empty = page.getByTestId('campaign-performance-empty');
   await expect.poll(async () => (await metrics.count()) + (await empty.count())).toBeGreaterThan(0);

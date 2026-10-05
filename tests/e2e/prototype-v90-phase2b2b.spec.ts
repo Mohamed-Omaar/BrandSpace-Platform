@@ -192,14 +192,21 @@ test.describe('B11 · campaign results', () => {
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${id}`);
     await expect(page.getByTestId('campaign-ends-in')).toHaveText('Ends in 5 days');
+    // Gate 2b — the room is one page; its post-results row reads the same
+    // figures: 47 engagements over 1,000 impressions, and no clicks reported.
+    const row = page.locator('[data-testid^="campaign-post-"]');
+    await expect(row).toHaveCount(1);
+    await expect(row.locator('.bsp-room-n-e')).toHaveText('4.7%');
+    await expect(row.locator('.bsp-room-n-c')).toHaveText('—');
+
+    // The headline results moved with the rest of Performance, behind "⋯".
+    await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${id}?tab=performance`);
     await expect(page.getByTestId('campaign-results-period')).toContainText(
       'Over the campaign’s dates',
     );
     // 47 per mille is 4.7% — never the raw 47.
     await expect(page.getByTestId('campaign-metric-engagement_rate')).toContainText('4.7%');
     await expect(page.getByTestId('campaign-metric-clicks')).toContainText('—');
-
-    await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${id}?tab=performance`);
     await expect(page.getByTestId('campaign-what-changed')).toContainText(
       'What changed · last 30 days',
     );
@@ -215,8 +222,10 @@ test.describe('B11 · campaign results', () => {
     const id = await seedCampaign(ws, { name: 'Undated', status: 'DRAFT' });
     await enter(page, ws.slug);
     await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${id}`);
-    await expect(page.getByTestId('campaign-performance-empty')).toContainText('No results yet');
     await expect(page.getByTestId('campaign-ends-in')).toHaveCount(0);
+    // Gate 2b — the results are in the Performance view, behind "⋯".
+    await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${id}?tab=performance`);
+    await expect(page.getByTestId('campaign-performance-empty')).toContainText('No results yet');
   });
 
   test('"Start now" starts a planned campaign today; one past its end is refused', async ({
