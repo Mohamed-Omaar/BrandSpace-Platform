@@ -295,3 +295,29 @@ export function noteTooLong(): AppError {
 export function assigneeNotEligible(): AppError {
   return new AppError('NOT_FOUND', 'That reviewer is not available for this content.');
 }
+
+/**
+ * Round 5 (B) — a post's format and channels change only while it is a draft
+ * (DRAFT or CHANGES_REQUESTED). Once sent for review they are what was
+ * reviewed.
+ */
+export const SHAPE_LOCKED_REASON = 'shape_locked';
+
+export function shapeLocked(): AppError {
+  return new AppError(
+    'CONFLICT',
+    'This post was sent for review; its format and channels are fixed now.',
+    { reason: SHAPE_LOCKED_REASON },
+  );
+}
+
+/** Round 5 (B) — a channel that cannot carry the chosen format, named. */
+export const FORMAT_NOT_CARRIED_REASON = 'format_not_carried';
+
+export function formatNotCarried(platformKeys: readonly string[], contentType: string): AppError {
+  return new AppError(
+    'VALIDATION_FAILED',
+    `${platformKeys.join(', ')} cannot post a ${contentType}.`,
+    { reason: FORMAT_NOT_CARRIED_REASON, platformKeys: platformKeys.join(','), contentType },
+  );
+}

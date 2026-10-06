@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { takeStudioCarry, type StudioCarry, type StudioHandoff } from './studio-carry';
-import type { AutosaveResult } from '../actions';
+import type { AutosaveResult, ShapeResult } from '../actions';
 import { AUTOSAVE_STATUSES } from './autosave-statuses';
 import {
   useEffect,
@@ -166,8 +166,12 @@ export interface DraftEditorProps {
   readonly startFrom?: { readonly idea: string; readonly repurpose: string };
   /** Round 5 (A) — what the new-post Studio was doing as this draft opened. */
   readonly handoff?: StudioHandoff | null;
+  /** Round 5 (B) — which channels carry each format, from the publishing policy. */
+  readonly formatPlatforms?: Readonly<Record<string, readonly string[]>>;
   readonly actions: {
     save(formData: FormData): Promise<void | AutosaveResult>;
+    /** Round 5 (B, D-478) — a draft's format and channels. */
+    changeShape?(formData: FormData): Promise<ShapeResult>;
     transition(formData: FormData): Promise<void>;
     submitForReview(formData: FormData): Promise<void>;
     cancelReview(formData: FormData): Promise<void>;
@@ -278,6 +282,7 @@ export function DraftEditor({
   failed = null,
   startFrom,
   handoff = null,
+  formatPlatforms,
   onTool,
   actions,
 }: DraftEditorProps) {
@@ -587,11 +592,16 @@ export function DraftEditor({
    * on a draft that saves itself, the press saves them first, then submits.
    */
   const flushThenSubmit = (event: FormEvent<HTMLFormElement>) => {
-    if (!autosaves || (pendingRef.current().length === 0 && !inflightRef.current)) return;
+    if (
+      !autosaves ||
+      (pendingRef.current().length === 0 && !inflightRef.current && !shapeRunRef.current)
+    ) {
+      return;
+    }
     event.preventDefault();
     const form = event.currentTarget;
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
-    void flushSaves().then((ok) => {
+    void settleAll().then((ok) => {
       if (ok) form.requestSubmit(submitter ?? undefined);
     });
   };
@@ -632,6 +642,154 @@ export function DraftEditor({
     },
     [],
   );
+
+  /*
+   * ROUND 5 (B, D-478) — THE FORMAT AND THE CHANNELS, CHANGED ON A DRAFT.
+   * While the post is a draft (DRAFT, CHANGES_REQUESTED) the switch and the
+   * "Post to" chips change it, through `changeDraftShapeAction` (the same
+   * `content.edit`, audited). The press shows at once; what is waiting to be
+   * saved is saved first, then the change is sent, and presses made while it
+   * travels are sent next — the last one the person made is the one kept. A
+   * refusal says why, in words, and puts the switch back.
+   */
+  const shapeEditable =
+    actions.changeShape !== undefined &&
+    can.edit &&
+    !draft.readOnly &&
+    (draft.status === 'DRAFT' || draft.status === 'CHANGES_REQUESTED');
+  const serverChannels = draft.variants.map((variant) => variant.platformKey);
+  const [shape, setShape] = useState<{
+    readonly format: string;
+    readonly channels: readonly string[];
+  } | null>(null);
+  const shownFormat = shape?.format ?? draft.contentType;
+  const shownChannels = shape?.channels ?? serverChannels;
+  const [shapeNote, setShapeNote] = useState<string | null>(null);
+  const carriesFormat = (type: string, key: string) =>
+    !formatPlatforms || (formatPlatforms[type] ?? []).includes(key);
+  const channelLabel = (key: string) =>
+    platforms.find((platform) => platform.key === key)?.label ?? key;
+  const formatLabel = (type: string) => t[`content.type.${type}`] ?? type;
+  const shapeTargetRef = useRef<{ format: string; channels: readonly string[] } | null>(null);
+  const shapeRunningRef = useRef(false);
+  // The running change, so an action that needs the draft settled can wait for it.
+  const shapeRunRef = useRef<Promise<void> | null>(null);
+  const sendShape = () => {
+    if (shapeRunningRef.current || !actions.changeShape) return shapeRunRef.current;
+    shapeRunningRef.current = true;
+    const run = runShapes().finally(() => {
+      shapeRunningRef.current = false;
+      shapeRunRef.current = null;
+    });
+    shapeRunRef.current = run;
+    return run;
+  };
+  const runShapes = async () => {
+    if (!actions.changeShape) return;
+    {
+      while (shapeTargetRef.current) {
+        const target = shapeTargetRef.current;
+        shapeTargetRef.current = null;
+        if (!(await flushSaves())) {
+          setShape(null);
+          setShapeNote(t['studio.saveFailed'] ?? null);
+          break;
+        }
+        const data = new FormData();
+        data.set('locale', locale);
+        data.set('itemId', draft.id);
+        data.set('contentType', target.format);
+        for (const key of target.channels) data.append('platformKeys', key);
+        const result = await actions.changeShape(data);
+        if (!result.ok) {
+          shapeTargetRef.current = null;
+          setShape(null);
+          setShapeNote(
+            result.reason === 'format_not_carried'
+              ? fill(t['studio.shape.notCarried'] ?? '{channels}', {
+                  channels: (result.platformKeys ?? []).map(channelLabel).join(', '),
+                  format: formatLabel(target.format),
+                })
+              : result.reason === 'shape_locked'
+                ? (t['studio.shape.locked'] ?? '')
+                : (t['content.error.generic'] ?? ''),
+          );
+          break;
+        }
+        setShapeNote(
+          result.mediaDropped.length > 0
+            ? fill(t['studio.shape.mediaDropped'] ?? '{channels}', {
+                channels: result.mediaDropped.map(channelLabel).join(', '),
+              })
+            : null,
+        );
+        router.refresh();
+      }
+    }
+  };
+  /*
+   * Everything the person did, settled: the words saved and any format or
+   * channel change sent. "Set" and "Send for review" wait for this, so a time
+   * set right after a format change cannot schedule the post before it.
+   */
+  const settleAll = async (): Promise<boolean> => {
+    if (shapeRunRef.current) await shapeRunRef.current;
+    return flushSaves();
+  };
+  const askShape = (next: { format: string; channels: readonly string[] }) => {
+    setShape(next);
+    shapeTargetRef.current = next;
+    void sendShape();
+  };
+  // The page answered with what was asked: the local copy steps aside.
+  useEffect(() => {
+    if (!shape || shapeTargetRef.current || shapeRunningRef.current) return;
+    const same =
+      draft.contentType === shape.format &&
+      serverChannels.length === shape.channels.length &&
+      serverChannels.every((key) => shape.channels.includes(key));
+    if (same) setShape(null);
+  }, [draft, shape, serverChannels]);
+  const chooseFormat = (type: string) => {
+    const blocked = shownChannels.filter((key) => !carriesFormat(type, key));
+    if (blocked.length > 0) {
+      setShapeNote(
+        fill(t['studio.shape.notCarried'] ?? '{channels}', {
+          channels: blocked.map(channelLabel).join(', '),
+          format: formatLabel(type),
+        }),
+      );
+      return;
+    }
+    setShapeNote(null);
+    askShape({ format: type, channels: shownChannels });
+  };
+  const toggleChannel = (key: string) => {
+    const on = shownChannels.includes(key);
+    if (on && shownChannels.length === 1) return;
+    const next = on ? shownChannels.filter((other) => other !== key) : [...shownChannels, key];
+    if (on) {
+      const leaving = draft.variants.find((variant) => variant.platformKey === key);
+      const staying = draft.variants.find((variant) => variant.platformKey !== key);
+      if (leaving && staying && leaving.id === active) setActive(staying.id);
+    }
+    askShape({ format: shownFormat, channels: next });
+  };
+  /*
+   * Round 5 (B) — a channel or format chosen on the new post while its draft
+   * was being made is applied to the draft as it opens: the person's last
+   * choice is the one kept.
+   */
+  useEffect(() => {
+    if (!arrival || !shapeEditable) return;
+    const wanted = arrival.target;
+    const same =
+      wanted.format === draft.contentType &&
+      wanted.channels.length === serverChannels.length &&
+      wanted.channels.every((key) => serverChannels.includes(key));
+    if (!same && wanted.channels.length > 0) askShape(wanted);
+    // Once, as the editor opens.
+  }, []);
 
   /*
    * THE MEDIA DRAWER — for which variant, and whether it replaces a slide.
@@ -696,7 +854,7 @@ export function DraftEditor({
     tabRefs.current[target.id]?.focus();
   };
 
-  const format = previewFormatFor(draft.contentType);
+  const format = previewFormatFor(shownFormat);
   const labels = useMemo(() => previewLabels(t), [t]);
   const actionsFor = inlineActionsFor(tools);
   const brainHref = `/${locale}/brand-brain`;
@@ -899,7 +1057,7 @@ export function DraftEditor({
     const hashtags = parseHashtags(tagTextOf(variant));
     const media = mediaFor(value.assetIds);
     const issues = platform
-      ? variantIssues(platform, draft.contentType, {
+      ? variantIssues(platform, shownFormat, {
           body: value.body,
           hashtags,
           mediaKinds: media.map((option) => option.kind),
@@ -998,21 +1156,27 @@ export function DraftEditor({
         can.schedule &&
         ((draft.status === 'DRAFT' && review && !review.requiresApproval) ||
           draft.status === 'APPROVED') ? (
-          <InlineSchedule
-            locale={locale}
-            itemId={draft.id}
-            today={scheduling.today}
-            tomorrow={scheduling.tomorrow}
-            defaultTime={scheduling.defaultTime}
-            plannedDate={plannedDate}
-            // Round 5 (A): a draft's words save first — the press waits, it is not refused.
-            disabled={anyDirty && !autosaves}
-            {...(autosaves ? { beforeSubmit: flushSaves } : {})}
-            initial={arrival?.when ? { date: arrival.when.date, time: arrival.when.time } : null}
-            submitOnMount={arrival?.when?.submit === true}
-            action={actions.scheduleFromStudio}
-            t={t}
-          />
+          <>
+            {/* Round 5 (4): what setting the time does, said before it is set. */}
+            <p className="bsp-st-when-note" data-testid="editor-when-schedules">
+              {t['studio.when.schedulesNow']}
+            </p>
+            <InlineSchedule
+              locale={locale}
+              itemId={draft.id}
+              today={scheduling.today}
+              tomorrow={scheduling.tomorrow}
+              defaultTime={scheduling.defaultTime}
+              plannedDate={plannedDate}
+              // Round 5 (A): a draft's words save first — the press waits, it is not refused.
+              disabled={anyDirty && !autosaves}
+              {...(autosaves ? { beforeSubmit: () => settleAll() } : {})}
+              initial={arrival?.when ? { date: arrival.when.date, time: arrival.when.time } : null}
+              submitOnMount={arrival?.when?.submit === true}
+              action={actions.scheduleFromStudio}
+              t={t}
+            />
+          </>
         ) : scheduling &&
           actions.reschedule &&
           can.schedule &&
@@ -1286,40 +1450,53 @@ export function DraftEditor({
         <div className="bsp-st-f bsp-st-f5">
           <span className="bsp-lbl">{t['studio.format']}</span>
           {/*
-            THE PROTOTYPE'S SWITCH (review of #67). The format is chosen when a
-            post is written and is not changed afterwards, so the switch shows
-            the post's format pressed and the others are not offered.
+            THE PROTOTYPE'S SWITCH (review of #67). Round 5 (B, D-478): live
+            while the post is a draft; once it is sent for review the format
+            is fixed, the others are not offered, and the reason is said.
           */}
           <div
             className="bsp-seg bsp-st-seg-full"
             role="group"
             aria-label={t['studio.format']}
             data-testid="editor-format"
-            data-value={draft.contentType}
+            data-value={shownFormat}
           >
             <SegmentPill selector='[aria-pressed="true"]' />
             {[
               ...EDITOR_FORMATS,
-              ...(EDITOR_FORMATS.includes(draft.contentType) ? [] : [draft.contentType]),
-            ].map((type) => (
-              <button
-                key={type}
-                type="button"
-                className="bsp-seg-item"
-                aria-pressed={type === draft.contentType}
-                disabled={type !== draft.contentType}
-                data-locked={type === draft.contentType ? undefined : 'true'}
-                title={type === draft.contentType ? undefined : t['studio.formatLocked']}
-                data-value={type}
-              >
-                {t[`content.type.${type}`] ?? type}
-              </button>
-            ))}
+              ...(EDITOR_FORMATS.includes(shownFormat) ? [] : [shownFormat]),
+            ].map((type) => {
+              const locked = !shapeEditable && type !== shownFormat;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  className="bsp-seg-item"
+                  aria-pressed={type === shownFormat}
+                  disabled={locked}
+                  data-locked={locked ? 'true' : undefined}
+                  title={locked ? t['studio.formatLocked'] : undefined}
+                  data-value={type}
+                  onClick={
+                    shapeEditable && type !== shownFormat ? () => chooseFormat(type) : undefined
+                  }
+                >
+                  {formatLabel(type)}
+                </button>
+              );
+            })}
           </div>
-          {/* Round 4 (3.4) — locked after the post was made, and said so. */}
-          <span className="bsp-st-hint" data-testid="editor-format-locked">
-            {t['studio.formatLocked']}
-          </span>
+          {shapeEditable ? null : (
+            /* Round 4 (3.4) — fixed once sent for review, and said so. */
+            <span className="bsp-st-hint" data-testid="editor-format-locked">
+              {t['studio.formatLocked']}
+            </span>
+          )}
+          {shapeNote ? (
+            <span className="bsp-st-hint" role="status" data-testid="editor-shape-note">
+              {shapeNote}
+            </span>
+          ) : null}
           {draft.arabicDialect ? (
             <span className="bsp-st-hint" data-testid="content-dialect">
               {t['content.composer.dialect']} ·{' '}
@@ -1334,8 +1511,9 @@ export function DraftEditor({
           {/*
             ALL THE CHANNELS, THE POST'S OWN HIGHLIGHTED (review of #67, round
             2), as the prototype's "Post to" row. The post's channels are its
-            versions — the tabs that choose which one is edited; the others are
-            shown, and are chosen when a post is written.
+            versions — the tabs that choose which one is edited. Round 5 (B):
+            on a draft the others are pressed to add them, and each of the
+            post's own has a "✕" to take it off.
           */}
           <div className="bsp-st-chips" data-testid="editor-post-to">
             {draft.variants.length > 0 ? (
@@ -1346,8 +1524,10 @@ export function DraftEditor({
                 data-testid="variant-tabs"
               >
                 {draft.variants.map((variant, index) => {
+                  if (!shownChannels.includes(variant.platformKey)) return null;
                   const selected = variant.id === activeVariant?.id;
                   const channel = channelOf(variant.platformKey);
+                  const removable = shapeEditable && shownChannels.length > 1;
                   return (
                     <button
                       key={variant.id}
@@ -1363,12 +1543,42 @@ export function DraftEditor({
                       className="bsp-chip"
                       data-chosen="true"
                       data-testid={`variant-tab-${variant.platformKey}`}
+                      {...(removable ? { 'aria-keyshortcuts': 'Delete' } : {})}
                       onClick={() => setActive(variant.id)}
-                      onKeyDown={(event) => onTabKey(event, index)}
+                      onKeyDown={(event) => {
+                        if (removable && (event.key === 'Delete' || event.key === 'Backspace')) {
+                          event.preventDefault();
+                          toggleChannel(variant.platformKey);
+                          return;
+                        }
+                        onTabKey(event, index);
+                      }}
                     >
                       <ChannelMark channel={channel} size={14} label={false} />
                       <span className="bsp-ltr">{channel.name}</span>
                       {isDirty(variant) ? <span aria-hidden="true"> •</span> : null}
+                      {removable ? (
+                        /*
+                          Round 5 (B) — take a channel off the draft: the tag
+                          chip's own "✕" inside the tab, for a pointer; Delete
+                          on the tab does the same from the keyboard (a tab
+                          list holds tabs only, so it is not a second button).
+                        */
+                        <span
+                          className="bsp-st-tag-x"
+                          aria-hidden="true"
+                          title={fill(t['studio.channelRemove'] ?? '{channel}', {
+                            channel: channel.name,
+                          })}
+                          data-testid={`editor-channel-remove-${variant.platformKey}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleChannel(variant.platformKey);
+                          }}
+                        >
+                          ✕
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -1376,38 +1586,50 @@ export function DraftEditor({
             ) : null}
             {platforms
               .filter((platform) => !draft.variants.some((v) => v.platformKey === platform.key))
-              .map((platform) => (
-                <span
-                  key={platform.key}
-                  className="bsp-chip bsp-st-off"
-                  aria-disabled="true"
-                  title={t['studio.channelOff']}
-                  data-testid={`editor-channel-off-${platform.key}`}
-                >
-                  <ChannelMark
-                    channel={{ key: platform.key, name: platform.label }}
-                    size={14}
-                    label={false}
-                  />
-                  <span className="bsp-ltr">{platform.label}</span>
-                </span>
-              ))}
-          </div>
-          {arrival?.unapplied ? (
-            /* Round 5 (A): chosen after the draft was made — said, never dropped silently. */
-            <span className="bsp-st-hint" role="status" data-testid="editor-unapplied">
-              {fill(t['studio.unapplied'] ?? '{what}', {
-                what: [
-                  ...arrival.unapplied.channels.map(
-                    (key) => platforms.find((platform) => platform.key === key)?.label ?? key,
-                  ),
-                  ...(arrival.unapplied.format
-                    ? [t[`content.type.${arrival.unapplied.format}`] ?? arrival.unapplied.format]
-                    : []),
-                ].join(', '),
+              .map((platform) => {
+                const chosen = shownChannels.includes(platform.key);
+                const able = shapeEditable && carriesFormat(shownFormat, platform.key);
+                return able ? (
+                  <button
+                    key={platform.key}
+                    type="button"
+                    className="bsp-chip"
+                    aria-pressed={chosen}
+                    data-testid={`editor-channel-add-${platform.key}`}
+                    onClick={() => toggleChannel(platform.key)}
+                  >
+                    <ChannelMark
+                      channel={{ key: platform.key, name: platform.label }}
+                      size={14}
+                      label={false}
+                    />
+                    <span className="bsp-ltr">{platform.label}</span>
+                  </button>
+                ) : (
+                  <span
+                    key={platform.key}
+                    className="bsp-chip bsp-st-off"
+                    aria-disabled="true"
+                    title={
+                      shapeEditable
+                        ? fill(t['studio.shape.notCarried'] ?? '{channels}', {
+                            channels: platform.label,
+                            format: formatLabel(shownFormat),
+                          })
+                        : t['studio.channelOff']
+                    }
+                    data-testid={`editor-channel-off-${platform.key}`}
+                  >
+                    <ChannelMark
+                      channel={{ key: platform.key, name: platform.label }}
+                      size={14}
+                      label={false}
+                    />
+                    <span className="bsp-ltr">{platform.label}</span>
+                  </span>
+                );
               })}
-            </span>
-          ) : null}
+          </div>
         </div>
         {/* Publish time and Campaign share the row until the Pillar exists (round 2). */}
         <div className="bsp-st-f bsp-st-f6">
@@ -2247,12 +2469,19 @@ export function DraftEditor({
           </span>
         ) : null}
         <span className="bsp-st-note">
-          {anyDirty &&
-          !autosaves &&
-          can.submit &&
-          (draft.status === 'DRAFT' || draft.status === 'FAILED')
-            ? t['editor.saveBeforeReview']
-            : null}
+          {draft.status === 'SCHEDULED' && can.edit && !draft.readOnly ? (
+            /* Round 5 (4): what an edit does to a scheduled post (D-223), said. */
+            <span data-testid="editor-scheduled-edits">
+              {can.schedule
+                ? t['studio.when.scheduledEdits']
+                : t['studio.when.scheduledEditsUnschedule']}
+            </span>
+          ) : anyDirty &&
+            !autosaves &&
+            can.submit &&
+            (draft.status === 'DRAFT' || draft.status === 'FAILED') ? (
+            t['editor.saveBeforeReview']
+          ) : null}
         </span>
         {/*
           D-288 — THE NEXT STEP FOLLOWS THE BRAND'S POLICY. Sending for review

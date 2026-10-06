@@ -1873,8 +1873,14 @@ Behaviour, not composition. Two states the prototype does not draw, in its own l
   `bsp-st-when` panel, the same date and time controls) opens on the first press while the draft is
   still being made; a "Set" pressed there is handed to the draft's panel, which sets it. Drawn under
   whichever "When" opened it, as the editor's.
-- **"Not applied: …"** — one `bsp-st-hint` line under "Post to" when a channel or format was chosen
-  after the draft was made (no path changes them yet; round 5 B). `studio.unapplied`, ar + en.
+- **The format and the channels on a draft (round 5 B, D-478).** The prototype's format switch is
+  live while the post is a draft (the lock and its reason come with the review). A channel not on the
+  post is the prototype's `.chip`, pressed to add it; a channel on the post keeps its tab and gains the
+  tag chip's own `✕` (`bsp-st-tag-x`) inside it, with Delete from the keyboard (a tab list holds tabs
+  only). A refusal is one `bsp-st-hint` line under the switch (`studio.shape.*`, ar + en).
+- **What setting the time does (round 5, item 4, D-479).** One `bsp-st-when-note` line above the date
+  and time ("Setting a time schedules this post now."), and on a scheduled post the bar's note says
+  what an edit needs and what saving does (`studio.when.*`, ar + en).
 
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 

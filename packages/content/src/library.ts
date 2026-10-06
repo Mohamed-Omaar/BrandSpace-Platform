@@ -11,6 +11,8 @@ import {
   contentItemNotFound,
   contentNotEditable,
   draftLimitReached,
+  formatNotCarried,
+  shapeLocked,
   sourceCampaignUnavailable,
   transitionNotAllowed,
   unsupportedPlatform,
@@ -721,6 +723,173 @@ export class ContentLibraryService {
       actorUserId: input.actorUserId,
       actorBrandScope: input.actorBrandScope,
     });
+  }
+
+  /**
+   * ROUND 5 (B) — CHANGE A DRAFT'S FORMAT AND CHANNELS (owner decision D-478).
+   *
+   * Autosave makes the draft at the first keystroke, so the format and the
+   * channels chosen in that second used to be final. They are now the draft's
+   * to change while it is a draft (DRAFT, CHANGES_REQUESTED); sending it for
+   * review fixes them, because then they are what is reviewed.
+   *
+   * - The item is read under the actor's brand scope: another workspace's
+   *   post, or one outside the scope, is the same not-found a miss gives.
+   * - Channels must be enabled (`assertPlatforms`) and, when the caller passes
+   *   them, among the ones the publishing capability registry says carry the
+   *   format (`carriers`; the dashboard reads it from the publishing policy,
+   *   as the composer does). A channel that cannot is NAMED in the refusal.
+   * - A removed channel's version is deleted with the item's own cascade. An
+   *   added channel starts from a kept version's words, tags and media; media
+   *   the new channel cannot take is left off and reported in `mediaDropped`,
+   *   never refused silently and never half-written.
+   * - What a format needs that the post does not hold yet (a Reel's video, a
+   *   carousel's second slide) is not refused here: the editor's checks say
+   *   it, as they do for any draft.
+   * - One audit event, `content.item.reshaped`, with before and after.
+   */
+  async changeDraftShape(input: {
+    readonly itemId: string;
+    readonly contentType: ContentItem['contentType'];
+    readonly platformKeys: readonly string[];
+    /** The channels that carry `contentType`; null when the registry cannot say. */
+    readonly carriers: readonly string[] | null;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+  }): Promise<{
+    item: ContentItem;
+    variants: ContentVariant[];
+    added: string[];
+    removed: string[];
+    mediaDropped: string[];
+  }> {
+    const item = await this.db.contentItem.findFirst({
+      where: {
+        id: input.itemId,
+        deletedAt: null,
+        ...brandIdQueryFilter({ brandScope: input.actorBrandScope }),
+      },
+      include: { variants: { orderBy: { createdAt: 'asc' } } },
+    });
+    if (!item) throw contentItemNotFound();
+    if (item.status !== 'DRAFT' && item.status !== 'CHANGES_REQUESTED') throw shapeLocked();
+
+    const keys = [...new Set(input.platformKeys)];
+    if (keys.length !== input.platformKeys.length) throw unsupportedPlatform();
+    const platforms = this.assertPlatforms(keys);
+    if (input.carriers) {
+      const refused = keys.filter((key) => !input.carriers?.includes(key));
+      if (refused.length > 0) throw formatNotCarried(refused, input.contentType);
+    }
+
+    const current = item.variants.filter((variant) => variant.locale === item.primaryLocale);
+    const removedRows = current.filter((variant) => !keys.includes(variant.platformKey));
+    const added = keys.filter((key) => !current.some((variant) => variant.platformKey === key));
+    if (added.length === 0 && removedRows.length === 0 && item.contentType === input.contentType) {
+      return {
+        item,
+        variants: item.variants,
+        added: [],
+        removed: [],
+        mediaDropped: [],
+      };
+    }
+
+    // The words a new channel starts from: a version that stays, else the first.
+    const source =
+      current.find((variant) => keys.includes(variant.platformKey)) ?? current[0] ?? null;
+    const resolver = new ContentMediaResolver({ db: this.db, workspaceId: this.workspaceId });
+    const dialect = item.primaryLocale === 'AR' ? await this.resolveDialectFor(item.brandId) : null;
+    const mediaDropped: string[] = [];
+    const newRows: Prisma.ContentVariantCreateManyInput[] = [];
+    for (const key of added) {
+      const platform = platforms[keys.indexOf(key)];
+      /* c8 ignore next -- assertPlatforms threw for anything unresolvable. */
+      if (!platform) continue;
+      let assetIds: string[] = [];
+      if (source && source.assetIds.length > 0) {
+        try {
+          const media = await resolver.resolveForPlatform({
+            assetIds: source.assetIds,
+            brandId: item.brandId,
+            brandScope: input.actorBrandScope,
+            platformKey: key,
+            policy: this.policy,
+          });
+          assetIds = media.map((asset) => asset.id);
+        } catch (error: unknown) {
+          if (!(error instanceof AppError)) throw error;
+          mediaDropped.push(key);
+        }
+      }
+      const body = source?.body ?? '';
+      const hashtags = source?.hashtags ?? [];
+      const firstComment = platform.allowsFirstComment ? (source?.firstComment ?? null) : null;
+      const validation = validateVariant(platform, { body, hashtags, firstComment });
+      const slides =
+        assetIds.length > 0 ? normaliseSlides(readSlides(source?.slides), assetIds) : null;
+      newRows.push({
+        workspaceId: this.workspaceId,
+        brandId: item.brandId,
+        contentItemId: item.id,
+        platformKey: key,
+        locale: item.primaryLocale,
+        body,
+        hashtags: [...hashtags],
+        firstComment,
+        linkUrl: source?.linkUrl ?? null,
+        assetIds,
+        ...(slides ? { slides: slides as Prisma.InputJsonValue } : {}),
+        characterCount: validation.characterCount,
+        validationState: validation.state,
+        ...(validation.errors.length > 0
+          ? { validationErrors: validation.errors as unknown as Prisma.InputJsonValue }
+          : {}),
+        origin: 'HUMAN',
+        arabicDialect: dialect ? dialect.key : null,
+        expiresAt: item.expiresAt,
+      });
+    }
+
+    if (removedRows.length > 0) {
+      await this.db.contentVariant.deleteMany({
+        where: { contentItemId: item.id, id: { in: removedRows.map((row) => row.id) } },
+      });
+    }
+    if (newRows.length > 0) await this.db.contentVariant.createMany({ data: newRows });
+    const updated = await this.db.contentItem.update({
+      where: { id: item.id },
+      data: { contentType: input.contentType },
+    });
+
+    await writeAuditEvent(this.db, this.workspaceId, {
+      action: 'content.item.reshaped',
+      actorType: 'USER',
+      actorId: input.actorUserId,
+      resourceType: 'ContentItem',
+      resourceId: item.id,
+      brandId: item.brandId,
+      before: {
+        contentType: item.contentType,
+        platformKeys: current.map((variant) => variant.platformKey),
+      },
+      after: {
+        contentType: input.contentType,
+        platformKeys: keys,
+        ...(mediaDropped.length > 0 ? { mediaDropped } : {}),
+      },
+    });
+
+    return {
+      item: updated,
+      variants: await this.db.contentVariant.findMany({
+        where: { contentItemId: item.id },
+        orderBy: { createdAt: 'asc' },
+      }),
+      added,
+      removed: removedRows.map((row) => row.platformKey),
+      mediaDropped,
+    };
   }
 
   /**

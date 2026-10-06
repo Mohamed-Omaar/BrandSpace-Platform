@@ -1724,8 +1724,16 @@ export const messages = {
     'editor.ai.translateTo': 'ترجم إلى {language}',
     'studio.addDesign': '+ أضف التصميم',
     'studio.channelOff': 'تُختار القنوات عند كتابة المنشور.',
-    'studio.unapplied':
-      'لم يُطبَّق: {what}. حُفظت المسودة بالقنوات والشكل الظاهرين قبل هذا الاختيار.',
+    'studio.shape.notCarried':
+      'لا يمكن نشر {format} على {channels}. أزل {channels} من «النشر على» أولًا.',
+    'studio.shape.locked': 'أُرسل هذا المنشور للمراجعة؛ شكله وقنواته ثابتة الآن.',
+    'studio.shape.mediaDropped': '{channels}: لم تُنسخ الوسائط إلى هذه القناة؛ أضفها من «التصميم».',
+    'studio.channelRemove': 'إزالة {channel}',
+    'studio.when.schedulesNow': 'تحديد الوقت يجدول هذا المنشور الآن.',
+    'studio.when.scheduledEdits':
+      'هذا المنشور مجدول. التعديلات الآن تحتاج إلى «حفظ التعديل»، ويبقى مجدولًا في موعده.',
+    'studio.when.scheduledEditsUnschedule':
+      'هذا المنشور مجدول. التعديلات الآن تحتاج إلى «حفظ التعديل»، والحفظ يعيده إلى المسودة.',
     'studio.reviewer': 'المراجِع',
     'studio.reviewerAuto': 'تلقائي',
     'studio.sendAfterSave': 'احفظ المسودة أولًا؛ تبدأ المراجعة من المنشور المحفوظ.',
@@ -2246,6 +2254,7 @@ export const messages = {
     'activity.action.content.approval_policy_changed': 'تغيّرت سياسة الموافقة',
     'activity.action.content.archived': 'أُرشف محتوى',
     'activity.action.content.item.authored': 'كُتب محتوى',
+    'activity.action.content.item.reshaped': 'تغيّر شكل المحتوى أو قنواته',
     'activity.action.content.item.generated': 'أُعدّت مسودة محتوى بالذكاء الاصطناعي',
     'activity.action.content.item.transitioned': 'انتقل محتوى إلى مرحلة جديدة',
     'activity.action.content.scheduled': 'جُدول محتوى',
@@ -5597,8 +5606,17 @@ export const messages = {
     'editor.ai.translateTo': 'Translate to {language}',
     'studio.addDesign': '+ Add the design',
     'studio.channelOff': 'Channels are chosen when a post is written.',
-    'studio.unapplied':
-      'Not applied: {what}. The draft was saved with the channels and format shown before you chose it.',
+    'studio.shape.notCarried':
+      '{channels} can’t post a {format}. Take {channels} out of “Post to” first.',
+    'studio.shape.locked': 'This post was sent for review; its format and channels are fixed now.',
+    'studio.shape.mediaDropped':
+      '{channels}: the media could not be copied to this channel. Add it in Design.',
+    'studio.channelRemove': 'Remove {channel}',
+    'studio.when.schedulesNow': 'Setting a time schedules this post now.',
+    'studio.when.scheduledEdits':
+      'This post is scheduled. Edits now need “Save edit”; it stays scheduled at its time.',
+    'studio.when.scheduledEditsUnschedule':
+      'This post is scheduled. Edits now need “Save edit”, and saving returns it to draft.',
     'studio.reviewer': 'Reviewer',
     'studio.reviewerAuto': 'Automatic',
     'studio.sendAfterSave': 'Save the draft first; review starts from the saved post.',
@@ -6139,6 +6157,7 @@ export const messages = {
     'activity.action.content.approval_policy_changed': 'The approval policy changed',
     'activity.action.content.archived': 'Content was archived',
     'activity.action.content.item.authored': 'Content was written',
+    'activity.action.content.item.reshaped': 'The format or channels changed',
     'activity.action.content.item.generated': 'Content was drafted with AI',
     'activity.action.content.item.transitioned': 'Content moved to a new stage',
     'activity.action.content.scheduled': 'Content was scheduled',
