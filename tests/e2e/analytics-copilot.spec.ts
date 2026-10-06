@@ -404,6 +404,9 @@ test.describe('strategy', () => {
      */
     const evidence = page.getByTestId('insight-evidence');
     if ((await evidence.count()) > 0) {
+      // Gate 2b — a proposal's evidence is one press away, under its own
+      // "Evidence" disclosure (the prototype's draft card does not draw it).
+      await page.locator('details:has([data-testid="insight-evidence"]) > summary').first().click();
       await expect(evidence.first()).toBeVisible();
     }
     const rendered = (await page.content()).toLowerCase();
