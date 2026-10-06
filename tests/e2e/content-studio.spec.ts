@@ -261,10 +261,21 @@ test.describe('the content library', () => {
 
   test('a text-only post shows its words, and Duplicate makes a new draft', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/content?status=DRAFT`);
-    const card = page.getByTestId('content-card').first();
+    /*
+     * Round 5 (G, option a): the draft duplicated is one this test writes. It
+     * used to take the FIRST draft card of the shared workspace, and a spec
+     * running beside it (phase6-assets, "a lapsed licence…") could put a draft
+     * there whose file's licence had ended — which Duplicate refuses.
+     */
+    await openComposer(page);
+    const channel = page.getByTestId('content-channel').first();
+    if ((await channel.getAttribute('aria-pressed')) !== 'true') await channel.click();
+    const words = `Duplicate me ${Date.now().toString(36)}`;
+    await writeCaption(page, words);
+    const itemId = await awaitDraft(page);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content?status=DRAFT&q=${encodeURIComponent(words)}`);
+    const card = page.locator(`[data-testid="content-card"][data-item-id="${itemId}"]`);
     await expect(card).toBeVisible();
-    const itemId = (await card.getAttribute('data-item-id')) ?? '';
     // D-468 — Duplicate is an item of the card's "…" menu, as in the prototype.
     await page.getByTestId(`post-menu-${itemId}`).click();
     const duplicate = page.getByTestId(`content-duplicate-${itemId}`);

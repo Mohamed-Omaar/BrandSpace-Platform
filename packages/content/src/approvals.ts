@@ -30,6 +30,7 @@ import {
 } from './errors';
 import { NotificationService } from '@brandspace/notifications';
 import type { ContentPolicy } from './policy';
+import { readSlides } from './slides';
 import { RESCHEDULABLE_ITEM_STATUS, liveSlotWhere } from './calendar';
 
 /**
@@ -187,6 +188,8 @@ export interface ReviewSubject {
     hashtags: readonly string[];
     /** PHASE 8 — the media the reviewer is approving (AC-29.1). */
     assetIds: readonly string[];
+    /** Round 5 (F1) — the headline designed on the cover image; '' when there is none. */
+    coverHeadline: string;
   }[];
 }
 
@@ -1091,6 +1094,7 @@ export class ContentApprovalService {
             body: true,
             hashtags: true,
             assetIds: true,
+            slides: true,
           },
         },
       },
@@ -1136,6 +1140,15 @@ export class ContentApprovalService {
         body: v.body ?? '',
         hashtags: v.hashtags,
         assetIds: v.assetIds,
+        /*
+         * Round 5 (F1) — the headline DESIGNED on the cover image (B9), if
+         * any. The review screen draws a headline over the cover only when
+         * there is one; without it the cover is the picture alone.
+         */
+        coverHeadline:
+          readSlides(v.slides)
+            .find((slide) => slide.assetId === v.assetIds[0])
+            ?.headline.trim() ?? '',
       })),
     };
   }

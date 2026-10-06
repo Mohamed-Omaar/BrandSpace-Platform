@@ -830,3 +830,17 @@ workers, sharding, reporter and test selection did not change.
   measured runs (about 3 s of database time per 11 minutes of E2E), but under production load a slow
   pass would compound. The proposed fix — skip a tick while the previous pass is still running — is
   deferred by owner decision on #64.
+
+## 12. Launch checklist — what the owner configures before customers arrive (round 5)
+
+Found when the owner tested staging. None of these is code; each is a setting or a decision.
+
+1. **Trial credits.** A new workspace's credits card reads "200 of 500": the trial subscription
+   carries the plan's monthly credit figure (500) while the trial grant is 200. The owner sets the
+   trial grant in Control Center → Plans (the trial values), so the two figures agree before launch.
+2. **Industries.** Only two industries are configured. The rest are added in the Control Center;
+   nothing seeds them.
+3. **Open question for the owner — the server region.** Staging runs in Amsterdam and the owner
+   tested from Egypt; every request pays that distance before any work is done (the server's own
+   times were healthy: p50 18 ms). Moving the region closer to the customers, or adding one, is an
+   owner decision on hosting, not a code change, and is not made here.

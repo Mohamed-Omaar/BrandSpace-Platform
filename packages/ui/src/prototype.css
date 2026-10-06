@@ -6098,6 +6098,10 @@ button.bsp-chip.bsp-bb-q {
 .bsp-chip.bsp-bb-q[aria-pressed='true'] {
   border-color: #7935fe;
   background: #f6f3ff;
+  /* Round 5 (C): the chip's own ink. The shared pressed chip is white on
+     black, and only its fill was replaced here, so the words were white on
+     the pale fill. */
+  color: #111114;
 }
 .bsp-bb-q-m {
   font-weight: 800;

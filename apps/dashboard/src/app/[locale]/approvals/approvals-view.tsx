@@ -90,6 +90,8 @@ export interface ReviewSubjectView {
   /** Round 3 — the cover card: the first picture and the first caption. */
   readonly cover?: ApprovalCover | null | undefined;
   readonly caption?: string | undefined;
+  /** Round 5 (F1) — the headline designed on the cover image; '' when there is none. */
+  readonly coverHeadline?: string | undefined;
   /** "From Omar · 2 hours ago" under the title. */
   readonly fromLabel?: string | undefined;
   /** The planned time ("Oct 16 · 10:00"), or the words for none. */
@@ -400,9 +402,22 @@ export function ApprovalsView({
                   ) : (
                     <AbstractMedia seed={(review.itemId.charCodeAt(0) % 6) as MediaSeed} alt="" />
                   )}
-                  <span className="bsp-apr-overlay" dir="auto" aria-hidden="true">
-                    {review.itemTitle}
-                  </span>
+                  {/*
+                    Round 5 (F1): the headline DESIGNED on the cover, when the
+                    post has one. Without it the title (the caption's opening)
+                    was drawn large over the picture and hid it; the caption
+                    stays in its card under the cover.
+                  */}
+                  {review.coverHeadline ? (
+                    <span
+                      className="bsp-apr-overlay"
+                      dir="auto"
+                      aria-hidden="true"
+                      data-testid="review-cover-headline"
+                    >
+                      {review.coverHeadline}
+                    </span>
+                  ) : null}
                 </div>
                 {review.caption ? (
                   <div className="bsp-apr-caption" dir="auto">
