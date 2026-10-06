@@ -844,6 +844,37 @@ Found when the owner tested staging. None of these is code; each is a setting or
    tested from Egypt; every request pays that distance before any work is done (the server's own
    times were healthy: p50 18 ms). Moving the region closer to the customers, or adding one, is an
    owner decision on hosting, not a code change, and is not made here.
+4. **Channel post kinds (round 6, D-481).** A new environment ships every channel disabled and
+   text-only, so a customer can make only a text Post, and the Control Center shows the warning
+   "Publishing is not configured: customers can only make text posts." until this is set. Formats
+   follow each channel's `postKinds` alone; `enabled` decides only whether customers can connect
+   the channel and publish to it. In the production Control Center:
+   1. Configuration → the `publishing` domain (`/en/console/configuration?domain=publishing`). Drafting
+      needs `platform.configuration.manage`; activating needs `platform.configuration.activate`.
+   2. Type a change reason (8 characters or more), for example "Set channel post kinds for launch",
+      and press **Create draft**. The draft is a copy of the active configuration, or of the
+      defaults if production has never been set.
+   3. In the draft's JSON, under `"providers"`, set only `"postKinds"` for each channel, leaving
+      every other field as it is:
+
+      | Channel     | `"postKinds"`                                             |
+      | ----------- | --------------------------------------------------------- |
+      | `instagram` | `["text", "image", "carousel", "video", "reel", "story"]` |
+      | `facebook`  | `["text", "image", "carousel", "video", "reel", "story"]` |
+      | `tiktok`    | `["text", "image", "video", "reel"]`                      |
+      | `linkedin`  | `["text", "image", "carousel", "video", "article"]`       |
+      | `x`         | `["text", "image", "video", "thread"]`                    |
+
+      Post needs `text` or `image`, Carousel `carousel`, Reel `reel`, Story `story`.
+
+   4. **Save**, then **Validate** that version, then tick the high-impact acknowledgement in the
+      preview and **Activate**. The warning leaves the Control Center once a channel declares a kind
+      beyond text and image and at least one channel is enabled.
+   5. **`"enabled": true` in production** needs, for that channel, a real connector registered and
+      its app set under `integrations.social-apps` (app id, redirect URI, the client secret in the
+      vault). No real connector ships yet, so production stays at `"enabled": false`: customers can
+      draft every format the channel carries, and the Studio says "{channel} can't be connected
+      yet." On staging, `true` uses the built-in test connector (simulated accounts and publishing).
 
 ## 13. Incident log
 

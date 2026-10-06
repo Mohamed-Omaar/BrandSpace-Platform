@@ -1,12 +1,17 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { cookies } from 'next/headers';
+import { Banner } from '@brandspace/ui';
 import { redirect } from 'next/navigation';
 import { AdminShell } from '../../../components/admin-shell';
 import {
   currentEnvironment,
+  getConfigService,
   getPlatformActor,
   getSupportModeService,
 } from '../../../server/platform-context';
+import { publishingGaps, type PublishingProviderShape } from '../../../server/publishing-readiness';
+import { translator } from '../../../i18n/messages';
 import { SUPPORT_COOKIE } from '../../../server/support-cookie';
 import { getConsoleMode } from '../../../server/console-mode-cookie';
 
@@ -42,6 +47,39 @@ export default async function ConsoleLayout({
         .catch(() => null)
     : null;
 
+  /*
+   * Round 6 (D-481, item d) — PUBLISHING LEFT AT ITS DEFAULTS IS SAID ON EVERY
+   * PAGE, to anyone who may read configuration, until it is configured: a new
+   * environment cannot ship with customers limited to text posts unnoticed.
+   */
+  const t = translator(locale);
+  const gaps = actor.permissionKeys.includes('platform.configuration.read')
+    ? await getConfigService()
+        .get('publishing', currentEnvironment())
+        .then((publishing) =>
+          publishingGaps(
+            publishing.providers as unknown as Record<string, PublishingProviderShape | undefined>,
+          ),
+        )
+        .catch(() => null)
+    : null;
+  const publishingWarning =
+    gaps && (gaps.textOnly || gaps.noneEnabled) ? (
+      <Banner tone="warning" testId="publishing-not-configured">
+        <span>
+          {gaps.textOnly ? <strong>{t('console.publishing.textOnly')}</strong> : null}
+          {gaps.textOnly && gaps.noneEnabled ? ' ' : null}
+          {gaps.noneEnabled ? t('console.publishing.noneEnabled') : null}{' '}
+          <Link
+            href={`/${locale}/console/configuration?domain=publishing`}
+            data-testid="publishing-not-configured-fix"
+          >
+            {t('console.publishing.fix')}
+          </Link>
+        </span>
+      </Banner>
+    ) : null;
+
   return (
     <AdminShell
       locale={locale}
@@ -62,6 +100,7 @@ export default async function ConsoleLayout({
           : null
       }
     >
+      {publishingWarning}
       {children}
     </AdminShell>
   );

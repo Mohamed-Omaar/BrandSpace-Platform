@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { takeStudioCarry, type StudioCarry, type StudioHandoff } from './studio-carry';
+import { ChannelAccessLine, type ChannelAccess } from './channel-access-line';
+import { fitOf, formatForChannels, listOf } from './format-fit';
 import type { AutosaveResult, ShapeResult } from '../actions';
 import { AUTOSAVE_STATUSES } from './autosave-statuses';
 import {
@@ -168,6 +170,8 @@ export interface DraftEditorProps {
   readonly handoff?: StudioHandoff | null;
   /** Round 5 (B) — which channels carry each format, from the publishing policy. */
   readonly formatPlatforms?: Readonly<Record<string, readonly string[]>>;
+  /** Round 6 (D-481) — which chosen channels still need an account, per brand. */
+  readonly channelAccess?: ChannelAccess | null | undefined;
   readonly actions: {
     save(formData: FormData): Promise<void | AutosaveResult>;
     /** Round 5 (B, D-478) — a draft's format and channels. */
@@ -283,6 +287,7 @@ export function DraftEditor({
   startFrom,
   handoff = null,
   formatPlatforms,
+  channelAccess,
   onTool,
   actions,
 }: DraftEditorProps) {
@@ -763,21 +768,42 @@ export function DraftEditor({
       serverChannels.every((key) => shape.channels.includes(key));
     if (same) setShape(null);
   }, [draft, shape, serverChannels]);
+  /*
+   * Round 6 (D-481) — NO SILENT PRESS ON A DRAFT EITHER. A format the post's
+   * channels cannot all carry is dimmed before the press with the reason
+   * beside the switch; its press names who can carry it and offers the fix in
+   * one press (take the others out and switch). A channel the format cannot
+   * carry answers the same way (switch to a format that takes it, and add it).
+   */
+  const carriersOf = (type: string) =>
+    platforms.filter((platform) => carriesFormat(type, platform.key)).map((p) => p.key);
+  const fitFor = (type: string) => fitOf(carriersOf(type), shownChannels);
+  const names = (keys: readonly string[]) => listOf(locale, keys.map(channelLabel));
+  const [fitAsk, setFitAsk] = useState<
+    | { readonly kind: 'format'; readonly type: string }
+    | { readonly kind: 'channel'; readonly key: string }
+    | null
+  >(null);
+  const reshape = (next: { format: string; channels: readonly string[] }) => {
+    setFitAsk(null);
+    setShapeNote(null);
+    const activeKey = draft.variants.find((variant) => variant.id === active)?.platformKey;
+    if (!next.channels.some((key) => key === activeKey)) {
+      const staying = draft.variants.find((variant) => next.channels.includes(variant.platformKey));
+      if (staying) setActive(staying.id);
+    }
+    askShape(next);
+  };
   const chooseFormat = (type: string) => {
-    const blocked = shownChannels.filter((key) => !carriesFormat(type, key));
-    if (blocked.length > 0) {
-      setShapeNote(
-        fill(t['studio.shape.notCarried'] ?? '{channels}', {
-          channels: blocked.map(channelLabel).join(', '),
-          format: formatLabel(type),
-        }),
-      );
+    if (fitFor(type).state !== 'ok') {
+      setShapeNote(null);
+      setFitAsk({ kind: 'format', type });
       return;
     }
-    setShapeNote(null);
-    askShape({ format: type, channels: shownChannels });
+    reshape({ format: type, channels: shownChannels });
   };
   const toggleChannel = (key: string) => {
+    setFitAsk(null);
     const on = shownChannels.includes(key);
     if (on && shownChannels.length === 1) return;
     const next = on ? shownChannels.filter((other) => other !== key) : [...shownChannels, key];
@@ -1480,6 +1506,8 @@ export function DraftEditor({
               ...(EDITOR_FORMATS.includes(shownFormat) ? [] : [shownFormat]),
             ].map((type) => {
               const locked = !shapeEditable && type !== shownFormat;
+              const fit = fitFor(type);
+              const dim = shapeEditable && type !== shownFormat && fit.state !== 'ok';
               return (
                 <button
                   key={type}
@@ -1487,8 +1515,23 @@ export function DraftEditor({
                   className="bsp-seg-item"
                   aria-pressed={type === shownFormat}
                   disabled={locked}
+                  aria-disabled={dim || undefined}
                   data-locked={locked ? 'true' : undefined}
-                  title={locked ? t['studio.formatLocked'] : undefined}
+                  data-unavailable={dim ? 'true' : undefined}
+                  title={
+                    locked
+                      ? t['studio.formatLocked']
+                      : dim
+                        ? fit.state === 'none'
+                          ? fill(t['studio.fit.notSetUp'] ?? '{format}', {
+                              format: formatLabel(type),
+                            })
+                          : fill(t['studio.fit.isFor'] ?? '{format}', {
+                              format: formatLabel(type),
+                              channels: names(fit.carriers),
+                            })
+                        : undefined
+                  }
                   data-value={type}
                   onClick={
                     shapeEditable && type !== shownFormat ? () => chooseFormat(type) : undefined
@@ -1505,7 +1548,108 @@ export function DraftEditor({
               {t['studio.formatLocked']}
             </span>
           )}
-          {shapeNote ? (
+          {shapeEditable
+            ? (() => {
+                const dimmed = EDITOR_FORMATS.filter(
+                  (type) => type !== shownFormat && fitFor(type).state !== 'ok',
+                );
+                if (dimmed.length === 0) return null;
+                const none = dimmed.filter((type) => fitFor(type).state === 'none');
+                const parts = [
+                  ...(none.length > 0
+                    ? [
+                        fill(t['studio.fit.notSetUpMany'] ?? '{formats}', {
+                          formats: listOf(locale, none.map(formatLabel)),
+                        }),
+                      ]
+                    : []),
+                  ...dimmed
+                    .filter((type) => fitFor(type).state === 'fix')
+                    .map((type) =>
+                      fill(t['studio.fit.cantGo'] ?? '{format}', {
+                        format: formatLabel(type),
+                        channels: names(fitFor(type).blockers),
+                      }),
+                    ),
+                ];
+                return (
+                  <span className="bsp-st-hint" data-testid="editor-format-unavailable">
+                    {parts.join(' ')}
+                  </span>
+                );
+              })()
+            : null}
+          {fitAsk && shapeEditable ? (
+            (() => {
+              if (fitAsk.kind === 'format') {
+                const fit = fitFor(fitAsk.type);
+                if (fit.state === 'ok') return null;
+                const kept = shownChannels.filter((key) => fit.carriers.includes(key));
+                return (
+                  <span
+                    className="bsp-st-hint bsp-st-fit"
+                    role="status"
+                    data-testid="editor-shape-note"
+                  >
+                    {fit.state === 'none'
+                      ? fill(t['studio.fit.notSetUp'] ?? '{format}', {
+                          format: formatLabel(fitAsk.type),
+                        })
+                      : fill(t['studio.fit.isFor'] ?? '{format}', {
+                          format: formatLabel(fitAsk.type),
+                          channels: names(fit.carriers),
+                        })}
+                    {fit.state === 'fix' ? (
+                      <button
+                        type="button"
+                        className="bsp-btn bsp-sm bsp-sec"
+                        data-testid="editor-shape-fix"
+                        onClick={() => reshape({ format: fitAsk.type, channels: fit.next })}
+                      >
+                        {kept.length > 0
+                          ? fill(t['studio.fit.removeAndSwitch'] ?? '{channels}', {
+                              channels: names(fit.blockers),
+                              format: formatLabel(fitAsk.type),
+                            })
+                          : fill(t['studio.fit.replaceAndSwitch'] ?? '{channel}', {
+                              channel: names(fit.next),
+                              format: formatLabel(fitAsk.type),
+                            })}
+                      </button>
+                    ) : null}
+                  </span>
+                );
+              }
+              const key = fitAsk.key;
+              if (carriesFormat(shownFormat, key)) return null;
+              const target = formatForChannels(EDITOR_FORMATS, carriersOf, [...shownChannels, key]);
+              return (
+                <span
+                  className="bsp-st-hint bsp-st-fit"
+                  role="status"
+                  data-testid="editor-shape-note"
+                >
+                  {fill(t['studio.fit.chipCant'] ?? '{channel}', {
+                    channel: channelLabel(key),
+                    format: formatLabel(shownFormat),
+                  })}
+                  {target ? (
+                    <button
+                      type="button"
+                      className="bsp-btn bsp-sm bsp-sec"
+                      data-testid="editor-shape-fix"
+                      onClick={() => reshape({ format: target, channels: [...shownChannels, key] })}
+                    >
+                      {fill(t['studio.fit.switchAndAdd'] ?? '{channel}', {
+                        format: formatLabel(target),
+                        channel: channelLabel(key),
+                      })}
+                    </button>
+                  ) : null}
+                </span>
+              );
+            })()
+          ) : shapeNote ? (
             <span className="bsp-st-hint" role="status" data-testid="editor-shape-note">
               {shapeNote}
             </span>
@@ -1602,14 +1746,33 @@ export function DraftEditor({
               .map((platform) => {
                 const chosen = shownChannels.includes(platform.key);
                 const able = shapeEditable && carriesFormat(shownFormat, platform.key);
-                return able ? (
+                /*
+                  Round 6 (D-481): on a draft a channel this format cannot carry
+                  is dimmed, not mute — its press says why and offers the format
+                  that takes it.
+                */
+                return shapeEditable ? (
                   <button
                     key={platform.key}
                     type="button"
                     className="bsp-chip"
                     aria-pressed={chosen}
+                    aria-disabled={!able || undefined}
+                    data-unavailable={able ? undefined : 'true'}
+                    title={
+                      able
+                        ? undefined
+                        : fill(t['studio.fit.chipCant'] ?? '{channel}', {
+                            channel: platform.label,
+                            format: formatLabel(shownFormat),
+                          })
+                    }
                     data-testid={`editor-channel-add-${platform.key}`}
-                    onClick={() => toggleChannel(platform.key)}
+                    onClick={() =>
+                      able
+                        ? toggleChannel(platform.key)
+                        : setFitAsk({ kind: 'channel', key: platform.key })
+                    }
                   >
                     <ChannelMark
                       channel={{ key: platform.key, name: platform.label }}
@@ -1623,14 +1786,7 @@ export function DraftEditor({
                     key={platform.key}
                     className="bsp-chip bsp-st-off"
                     aria-disabled="true"
-                    title={
-                      shapeEditable
-                        ? fill(t['studio.shape.notCarried'] ?? '{channels}', {
-                            channels: platform.label,
-                            format: formatLabel(shownFormat),
-                          })
-                        : t['studio.channelOff']
-                    }
+                    title={t['studio.channelOff']}
                     data-testid={`editor-channel-off-${platform.key}`}
                   >
                     <ChannelMark
@@ -1643,6 +1799,14 @@ export function DraftEditor({
                 );
               })}
           </div>
+          <ChannelAccessLine
+            access={channelAccess}
+            brandId={draft.brandId}
+            channels={shownChannels}
+            labelOf={channelLabel}
+            locale={locale}
+            t={t}
+          />
         </div>
         {/* Publish time and Campaign share the row until the Pillar exists (round 2). */}
         <div className="bsp-st-f bsp-st-f6">

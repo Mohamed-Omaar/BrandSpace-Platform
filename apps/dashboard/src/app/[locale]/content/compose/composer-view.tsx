@@ -15,6 +15,8 @@ import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
 import { StudioCopilotButton } from './studio-copilot';
+import { ChannelAccessLine, type ChannelAccess } from './channel-access-line';
+import { fitOf, formatForChannels, listOf } from './format-fit';
 import {
   countCharacters,
   fill,
@@ -320,6 +322,8 @@ export interface ComposerViewProps {
    * Absent means "no registry answer": every format, every platform.
    */
   readonly formatPlatforms?: Readonly<Record<string, readonly string[]>>;
+  /** Round 6 (D-481) — which chosen channels still need an account, per brand. */
+  readonly channelAccess?: ChannelAccess | null;
   /** E4 / B2 — the templates of `defaultBrandId`, the default first. */
   readonly templates?: readonly ComposerTemplate[];
   /** E4 / B2 — a template the reader arrived with (`?template=`), already checked. */
@@ -406,6 +410,7 @@ export function ComposerView({
   forgetDefault,
   initialGoal = '',
   formatPlatforms,
+  channelAccess = null,
   templates = [],
   initialTemplateId = '',
   now = 0,
@@ -460,6 +465,9 @@ export function ComposerView({
       !formatPlatforms || (formatPlatforms[type] ?? []).includes(platformKey),
     [formatPlatforms],
   );
+  // Round 6 (D-481): the channels that can carry a format, in the chips' order.
+  const carriersOf = (type: string) =>
+    platforms.filter((platform) => carries(type, platform.key)).map((platform) => platform.key);
 
   /*
    * E4 / B2 — THE TEMPLATE A NEW POST STARTS FROM: the one the reader arrived
@@ -1062,6 +1070,7 @@ export function ComposerView({
   };
 
   const chooseFormat = (next: string) => {
+    setFitAsk(null);
     setContentType(next);
     setQuote(null);
     setSelected((current) => {
@@ -1070,6 +1079,35 @@ export function ComposerView({
       const first = platforms.find((platform) => carries(next, platform.key));
       return first ? [first.key] : [];
     });
+  };
+
+  /*
+   * Round 6 (D-481) — NO SILENT PRESS. A format the chosen channels cannot all
+   * carry, or that no channel carries, is dimmed before anyone presses it and
+   * the reason sits beside the switch; pressing it opens that format's own
+   * reason and, where there is one, the fix in one press. A channel the format
+   * cannot carry answers its press the same way.
+   */
+  const [fitAsk, setFitAsk] = useState<
+    | { readonly kind: 'format'; readonly type: string }
+    | { readonly kind: 'channel'; readonly key: string }
+    | null
+  >(null);
+  const platformLabel = (key: string) =>
+    platforms.find((platform) => platform.key === key)?.label ?? key;
+  const typeLabel = (type: string) => t[`content.type.${type}`] ?? type;
+  const names = (keys: readonly string[]) => listOf(locale, keys.map(platformLabel));
+  const fitFor = (type: string) => fitOf(carriersOf(type), selected);
+  const pressFormat = (type: string) => {
+    if (type === contentType) return;
+    if (fitFor(type).state === 'ok') chooseFormat(type);
+    else setFitAsk({ kind: 'format', type });
+  };
+  const switchTo = (type: string, channels: readonly string[]) => {
+    setFitAsk(null);
+    setContentType(type);
+    setQuote(null);
+    setSelected([...channels]);
   };
 
   const labels = useMemo(() => previewLabels(t), [t]);
@@ -1169,6 +1207,7 @@ export function ComposerView({
           openOn={openOn}
           handoff={handoffFor(draft)}
           {...(formatPlatforms ? { formatPlatforms } : {})}
+          channelAccess={channelAccess}
           draft={draft}
           platforms={platforms}
           campaigns={campaigns}
@@ -1267,33 +1306,151 @@ export function ComposerView({
                   post kind for it) is dimmed and says why, never hidden.
                 */}
                 {MAIN_FORMATS.map((type) => {
-                  const able = offeredTypes.includes(type);
+                  const fit = fitFor(type);
+                  const dim = type !== contentType && fit.state !== 'ok';
                   return (
                     <button
                       key={type}
                       type="button"
                       className="bsp-seg-item"
                       aria-pressed={type === contentType}
-                      disabled={!able}
-                      data-unavailable={able ? undefined : 'true'}
-                      title={able ? undefined : t['studio.formatUnavailableOne']}
+                      aria-disabled={dim || undefined}
+                      aria-describedby={dim ? `${fieldId}-fit` : undefined}
+                      data-unavailable={dim ? 'true' : undefined}
+                      title={
+                        dim
+                          ? fit.state === 'none'
+                            ? fill(t['studio.fit.notSetUp'] ?? '{format}', {
+                                format: typeLabel(type),
+                              })
+                            : fill(t['studio.fit.isFor'] ?? '{format}', {
+                                format: typeLabel(type),
+                                channels: names(fit.carriers),
+                              })
+                          : undefined
+                      }
                       data-value={type}
-                      onClick={() => chooseFormat(type)}
+                      onClick={() => pressFormat(type)}
                     >
-                      {t[`content.type.${type}`] ?? type}
+                      {typeLabel(type)}
                     </button>
                   );
                 })}
               </div>
-              {MAIN_FORMATS.some((type) => !offeredTypes.includes(type)) ? (
-                <span className="bsp-st-hint" data-testid="content-format-unavailable">
-                  {fill(t['studio.formatUnavailable'] ?? '{formats}', {
-                    formats: MAIN_FORMATS.filter((type) => !offeredTypes.includes(type))
-                      .map((type) => t[`content.type.${type}`] ?? type)
-                      .join(t['common.listSeparator'] ?? ', '),
-                  })}
-                </span>
-              ) : null}
+              {(() => {
+                /*
+                  The reason, beside the switch, before any press: the formats
+                  nothing carries yet, then each one a chosen channel cannot take.
+                */
+                const dimmed = MAIN_FORMATS.filter(
+                  (type) => type !== contentType && fitFor(type).state !== 'ok',
+                );
+                if (dimmed.length === 0) return null;
+                const none = dimmed.filter((type) => fitFor(type).state === 'none');
+                const fix = dimmed.filter((type) => fitFor(type).state === 'fix');
+                const parts = [
+                  ...(none.length > 0
+                    ? [
+                        fill(t['studio.fit.notSetUpMany'] ?? '{formats}', {
+                          formats: listOf(locale, none.map(typeLabel)),
+                        }),
+                      ]
+                    : []),
+                  ...fix.map((type) =>
+                    fill(t['studio.fit.cantGo'] ?? '{format}', {
+                      format: typeLabel(type),
+                      channels: names(fitFor(type).blockers),
+                    }),
+                  ),
+                ];
+                return (
+                  <span
+                    className="bsp-st-hint"
+                    id={`${fieldId}-fit`}
+                    data-testid="content-format-unavailable"
+                  >
+                    {parts.join(' ')}
+                  </span>
+                );
+              })()}
+              {fitAsk
+                ? (() => {
+                    if (fitAsk.kind === 'format') {
+                      const fit = fitFor(fitAsk.type);
+                      if (fit.state === 'ok') return null;
+                      const kept = selected.filter((key) => fit.carriers.includes(key));
+                      return (
+                        <span
+                          className="bsp-st-hint bsp-st-fit"
+                          role="status"
+                          data-testid="content-format-fix"
+                        >
+                          {fit.state === 'none'
+                            ? fill(t['studio.fit.notSetUp'] ?? '{format}', {
+                                format: typeLabel(fitAsk.type),
+                              })
+                            : fill(t['studio.fit.isFor'] ?? '{format}', {
+                                format: typeLabel(fitAsk.type),
+                                channels: names(fit.carriers),
+                              })}
+                          {fit.state === 'fix' ? (
+                            <button
+                              type="button"
+                              className="bsp-btn bsp-sm bsp-sec"
+                              data-testid="content-format-fix-apply"
+                              onClick={() => switchTo(fitAsk.type, fit.next)}
+                            >
+                              {kept.length > 0
+                                ? fill(t['studio.fit.removeAndSwitch'] ?? '{channels}', {
+                                    channels: names(fit.blockers),
+                                    format: typeLabel(fitAsk.type),
+                                  })
+                                : fill(t['studio.fit.replaceAndSwitch'] ?? '{channel}', {
+                                    channel: names(fit.next),
+                                    format: typeLabel(fitAsk.type),
+                                  })}
+                            </button>
+                          ) : null}
+                        </span>
+                      );
+                    }
+                    const key = fitAsk.key;
+                    if (carries(contentType, key)) return null;
+                    const target = formatForChannels(
+                      [
+                        ...MAIN_FORMATS,
+                        ...offeredTypes.filter((type) => !MAIN_FORMATS.includes(type)),
+                      ],
+                      carriersOf,
+                      [...selected, key],
+                    );
+                    return (
+                      <span
+                        className="bsp-st-hint bsp-st-fit"
+                        role="status"
+                        data-testid="content-format-fix"
+                      >
+                        {fill(t['studio.fit.chipCant'] ?? '{channel}', {
+                          channel: platformLabel(key),
+                          format: typeLabel(contentType),
+                        })}
+                        {target ? (
+                          <button
+                            type="button"
+                            className="bsp-btn bsp-sm bsp-sec"
+                            data-testid="content-format-fix-apply"
+                            onClick={() => switchTo(target, [...selected, key])}
+                          >
+                            {fill(t['studio.fit.switchAndAdd'] ?? '{channel}', {
+                              format: typeLabel(target),
+                              channel: platformLabel(key),
+                            })}
+                          </button>
+                        ) : null}
+                      </span>
+                    );
+                  })()
+                : null}
               {/* D-300 (§23) — what Generate does differently for a carousel. */}
               {contentType === 'CAROUSEL' ? (
                 <span className="bsp-st-hint" data-testid="carousel-outline-hint">
@@ -1331,17 +1488,27 @@ export function ComposerView({
                   {platforms.map((platform) => {
                     const on = selected.includes(platform.key);
                     const able = carries(contentType, platform.key);
+                    /*
+                      Round 6 (D-481): a channel this format cannot carry is
+                      dimmed, never `disabled` — its press says why and offers
+                      the format that takes it, so no press goes unanswered.
+                    */
                     return (
                       <button
                         key={platform.key}
                         type="button"
                         className="bsp-chip"
                         aria-pressed={on}
-                        disabled={!able}
+                        aria-disabled={!able || undefined}
+                        data-unavailable={able ? undefined : 'true'}
                         title={able ? undefined : t['create.format.unsupported']}
                         data-testid="content-channel"
                         data-platform={platform.key}
-                        onClick={() => toggle(platform.key)}
+                        onClick={() =>
+                          able
+                            ? toggle(platform.key)
+                            : setFitAsk({ kind: 'channel', key: platform.key })
+                        }
                       >
                         <ChannelMark
                           channel={{ key: platform.key, name: platform.label }}
@@ -1373,8 +1540,16 @@ export function ComposerView({
                               type="button"
                               className="bsp-chip bsp-st-sm"
                               aria-pressed={type === contentType}
+                              aria-disabled={
+                                (type !== contentType && fitFor(type).state !== 'ok') || undefined
+                              }
+                              data-unavailable={
+                                type !== contentType && fitFor(type).state !== 'ok'
+                                  ? 'true'
+                                  : undefined
+                              }
                               data-value={type}
-                              onClick={() => chooseFormat(type)}
+                              onClick={() => pressFormat(type)}
                             >
                               {t[`content.type.${type}`] ?? type}
                             </button>
@@ -1482,6 +1657,14 @@ export function ComposerView({
                   ) : null}
                 </MoreDisclosure>
               </div>
+              <ChannelAccessLine
+                access={channelAccess}
+                brandId={brandId || null}
+                channels={selected}
+                labelOf={platformLabel}
+                locale={locale}
+                t={t}
+              />
             </div>
 
             {/*

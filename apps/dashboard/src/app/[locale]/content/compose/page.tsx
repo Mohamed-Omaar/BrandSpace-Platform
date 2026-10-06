@@ -812,6 +812,35 @@ export default async function ComposePage({
     );
   }).catch(() => ({ POST: policy.platforms.map((platform) => platform.key) }));
 
+  /*
+   * Round 6 (D-481) — WHICH CHOSEN CHANNELS STILL NEED AN ACCOUNT. Drafting
+   * never waits for one; the Studio says, beside "Post to", which channels
+   * must be connected before the post can go out, and which cannot be
+   * connected at all yet (the operator has not enabled them).
+   */
+  const channelAccess = await inSocial(workspace.workspaceId, async (services) => {
+    const publishing = await services.policy();
+    const rows = await (await services.connections()).list({ brandScope: workspace.brandScope });
+    const connected: Record<string, string[]> = {};
+    for (const row of rows) {
+      if (row.status !== 'ACTIVE') continue;
+      (connected[row.brandId] ??= []).push(row.provider.toLowerCase());
+    }
+    const providers = publishing.providers as unknown as Record<
+      string,
+      { enabled: boolean } | undefined
+    >;
+    return {
+      connected,
+      connectable: policy.platforms
+        .map((platform) => platform.key)
+        .filter((key) => providers[key]?.enabled === true),
+      connectHref: workspace.permissionKeys.includes('integrations.manage')
+        ? `/${locale}/integrations`
+        : null,
+    };
+  }).catch(() => null);
+
   const platforms: ComposerPlatform[] = policy.platforms.map((platform) => ({
     key: platform.key,
     // The CONFIGURED label key, translated. The demo writes "◎ Instagram"
@@ -1169,6 +1198,7 @@ export default async function ComposePage({
         defaultsBrandId={composingBrandId ?? ''}
         forgetDefault={decidePreferenceAction}
         formatPlatforms={formatPlatforms}
+        channelAccess={channelAccess}
         templates={templates}
         initialTemplateId={initialTemplateId}
         can={{
@@ -1290,6 +1320,17 @@ const EDITOR_KEYS = [
   'studio.shape.locked',
   'studio.shape.mediaDropped',
   'studio.channelRemove',
+  'studio.fit.isFor',
+  'studio.fit.notSetUp',
+  'studio.fit.cantGo',
+  'studio.fit.notSetUpMany',
+  'studio.fit.removeAndSwitch',
+  'studio.fit.replaceAndSwitch',
+  'studio.fit.chipCant',
+  'studio.fit.switchAndAdd',
+  'studio.connect.line',
+  'studio.connect.link',
+  'studio.connect.unavailable',
   'studio.when.schedulesNow',
   'studio.when.scheduledEdits',
   'studio.when.scheduledEditsUnschedule',

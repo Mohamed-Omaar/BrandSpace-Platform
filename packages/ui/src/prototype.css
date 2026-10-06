@@ -1607,6 +1607,22 @@ a[data-pending] {
   background: transparent;
   box-shadow: none;
 }
+/*
+ * Round 6 (D-481) — A FORMAT OR CHANNEL THAT CANNOT BE USED IS DIMMED BEFORE
+ * THE PRESS. The segment had no dimmed state at all, so a format the registry
+ * refused looked exactly like one that worked. It stays pressable: the press
+ * opens its reason and, where there is one, the fix (`.bsp-st-fit`).
+ */
+.bsp-seg button:disabled,
+.bsp-seg button[data-unavailable='true'],
+.bsp-chip[data-unavailable='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.bsp-seg button[data-unavailable='true'],
+.bsp-chip[data-unavailable='true'] {
+  cursor: help;
+}
 
 /* `.chip` */
 .bsp-chip {
@@ -3323,6 +3339,26 @@ span.bsp-cal-hol {
   color: #6a6a72;
   align-self: center;
   margin: 0;
+}
+/* Round 6 (D-481) — a dimmed format's reason, and its fix in one press. */
+.bsp-st-hint.bsp-st-fit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #26262b;
+}
+/* Round 6 (D-481) — the calm line beside "Post to": what still needs an account. */
+.bsp-st-hint.bsp-st-connect {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-self: flex-start;
+  flex-basis: 100%;
+}
+.bsp-st-connect a {
+  color: #5312c4;
+  font-weight: 700;
 }
 .bsp-st-f > .bsp-st-hint,
 .bsp-st-field > .bsp-st-start-hint {
@@ -10742,8 +10778,11 @@ img.bsp-pf-art {
    searchable list keeps its popover unclipped. */
 @media (min-width: 768px) {
   /* The phone layout scrolls the page itself, as every other phone screen does. */
+  /* Round 6 (item 5): never taller than the prototype's card either — its
+     900px stage less the 32px padding each side is 836px, whatever the
+     window's height (a 1080px window allowed 1016px). */
   .bsp-wz.bsp-wz-solo:has(> .bsp-wz-scroll) {
-    max-block-size: calc(100vh - 64px);
+    max-block-size: min(calc(100vh - 64px), 836px);
   }
   .bsp-wz-solo > .bsp-wz-scroll {
     flex: 1 1 auto;

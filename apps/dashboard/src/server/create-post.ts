@@ -21,9 +21,16 @@ export function createModeFrom(value: unknown): CreateMode | null {
  *
  * Each content format needs one of these post kinds from the publishing
  * capability registry (`publishing.providers.<key>.postKinds`, owner
- * configuration). A format is offered only for platforms whose ENABLED
- * provider declares a kind it needs; a platform with no enabled provider can
+ * configuration). A format is offered for every platform whose provider
+ * declares a kind it needs; a platform the registry does not describe can
  * still be drafted for, as a plain post, because nothing about it is known.
+ *
+ * Round 6 (owner decision D-481) — WHAT A CHANNEL CAN CARRY IS ITS TYPE'S,
+ * NOT WHETHER IT CAN BE CONNECTED. `enabled` says whether a channel may be
+ * connected at all right now; it gates connecting and publishing (the
+ * connector registry, publish readiness), never which formats a post may be
+ * drafted in. A brand-new workspace drafts a Reel the moment the operator has
+ * declared that Instagram carries reels.
  */
 export const FORMAT_POST_KINDS: Readonly<Record<string, readonly string[]>> = {
   POST: ['text', 'image'],
@@ -45,7 +52,8 @@ export interface ProviderKinds {
 
 /**
  * For each format, the platforms that can carry it. A format with no platform
- * is absent from the result, so the composer cannot offer it.
+ * is absent from the result, so the composer cannot offer it. `enabled` is
+ * read nowhere here (D-481).
  */
 export function platformsByFormat(
   formats: readonly string[],
@@ -57,7 +65,7 @@ export function platformsByFormat(
     const needs = FORMAT_POST_KINDS[format] ?? [];
     const supported = platformKeys.filter((key) => {
       const provider = providers[key];
-      if (!provider?.enabled) return format === 'POST';
+      if (!provider) return format === 'POST';
       return needs.some((kind) => provider.postKinds.includes(kind));
     });
     if (supported.length > 0) result[format] = supported;

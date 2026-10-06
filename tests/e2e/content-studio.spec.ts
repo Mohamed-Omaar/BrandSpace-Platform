@@ -523,7 +523,9 @@ test.describe('writing a post by hand', () => {
     await page.getByTestId('content-format').locator('button[data-value="REEL"]').click();
 
     // TWO channels that CAN carry a reel, so the fan-out is observable.
-    const channels = page.locator('[data-testid="content-channel"]:not([disabled])');
+    const channels = page.locator(
+      '[data-testid="content-channel"]:not([disabled]):not([aria-disabled="true"])',
+    );
     const count = await channels.count();
     const picked: string[] = [];
     for (let index = 0; index < count && picked.length < 2; index += 1) {
