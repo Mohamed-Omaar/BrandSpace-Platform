@@ -830,3 +830,45 @@ workers, sharding, reporter and test selection did not change.
   measured runs (about 3 s of database time per 11 minutes of E2E), but under production load a slow
   pass would compound. The proposed fix — skip a tick while the previous pass is still running — is
   deferred by owner decision on #64.
+
+## 12. Launch checklist — what the owner configures before customers arrive (round 5)
+
+Found when the owner tested staging. None of these is code; each is a setting or a decision.
+
+1. **Trial credits.** A new workspace's credits card reads "200 of 500": the trial subscription
+   carries the plan's monthly credit figure (500) while the trial grant is 200. The owner sets the
+   trial grant in Control Center → Plans (the trial values), so the two figures agree before launch.
+2. **Industries.** Only two industries are configured. The rest are added in the Control Center;
+   nothing seeds them.
+3. **Open question for the owner — the server region.** Staging runs in Amsterdam and the owner
+   tested from Egypt; every request pays that distance before any work is done (the server's own
+   times were healthy: p50 18 ms). Moving the region closer to the customers, or adding one, is an
+   owner decision on hosting, not a code change, and is not made here.
+
+## 13. Incident log
+
+### 2026-10-06 — a commit reached `staging` without a pull request
+
+**What happened.** Round 5's first fix, `25f37c1` (the Studio under a slow link, D-476), was pushed
+straight to `staging`: no pull request, no review, no "Merge approved". Railway deployed it to the
+staging dashboard (status "Success"); the other services reported "No deployment needed", and the
+`migration-staging` and `staging-owner-bootstrap` jobs ran and succeeded (the commit has no
+migration). GitHub Actions CI did not run on it: the workflow runs on pushes to `main` and on pull
+requests only. Its first CI run is the next pull request into `staging`, which contains it.
+
+**Cause.** The task branch was recreated from `staging` with
+`git checkout -B <task-branch> origin/staging`. That sets `origin/staging` as the branch's upstream,
+and the following `git push -u origin <task-branch>` pushed to that upstream — `staging` — rather
+than to a branch of the task's name. Git said so (`<task-branch> -> staging`).
+
+**Decision.** The owner kept `25f37c1` on `staging` (no force push, no revert); the rest of round 5
+goes through a Draft pull request as usual (D-477).
+
+**Guard.**
+
+1. The task branch has no upstream, and the clone's `push.default` is `nothing`: a `git push`
+   without an explicit refspec refuses to run.
+2. Every push names its target: `git push origin HEAD:refs/heads/<task-branch>`.
+3. A local `pre-push` hook refuses any push to `refs/heads/staging` or `refs/heads/main`.
+4. A branch is recreated from `staging` with `--no-track`
+   (`git checkout --no-track -B <task-branch> origin/staging`), so it never inherits an upstream.

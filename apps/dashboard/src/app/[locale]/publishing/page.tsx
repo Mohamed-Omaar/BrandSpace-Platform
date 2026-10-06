@@ -39,6 +39,7 @@ import {
 import { duplicateContentAction } from '../content/actions';
 
 import { EmptyAction } from '../../../components/empty-action';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 import { whenLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
@@ -76,14 +77,15 @@ const STATUS_KEY: Record<string, MessageKey> = {
   CANCELLED: 'publishing.status.cancelled',
 };
 
-const STATUS_TONE: Record<string, BadgeTone> = {
-  PENDING: 'neutral',
-  QUEUED: 'info',
-  PUBLISHING: 'info',
-  VERIFICATION_PENDING: 'warning',
-  PUBLISHED: 'success',
-  FAILED: 'danger',
-  CANCELLED: 'neutral',
+/** Round 5 (F2) — the prototype's status chips (`pill p-info / p-ok / p-bad / p-neu`). */
+const STATUS_PILL: Record<string, string> = {
+  PENDING: 'bsp-p-info',
+  QUEUED: 'bsp-p-info',
+  PUBLISHING: 'bsp-p-info',
+  VERIFICATION_PENDING: 'bsp-p-warn',
+  PUBLISHED: 'bsp-p-ok',
+  FAILED: 'bsp-p-bad',
+  CANCELLED: 'bsp-p-neu',
 };
 
 const CONNECTION_KEY: Record<string, MessageKey> = {
@@ -388,8 +390,8 @@ export default async function PublishingPage({
       </div>
 
       {tab !== 'accounts' ? (
-        <Card testId={`publishing-${tab}`}>
-          {data.jobs.length === 0 ? (
+        data.jobs.length === 0 ? (
+          <Card testId={`publishing-${tab}`}>
             <StateMessage
               title={t(emptyKey[tab][0])}
               description={t(emptyKey[tab][1])}
@@ -405,8 +407,11 @@ export default async function PublishingPage({
                 ) : undefined
               }
             />
-          ) : (
-            <ul style={listStyle} data-testid="publishing-rows">
+          </Card>
+        ) : (
+          /* Round 5 (F2): the prototype's `section.card` of `.row`s. */
+          <section className="bsp-card bsp-pl-card" data-testid={`publishing-${tab}`}>
+            <ul className="bsp-pl-list" data-testid="publishing-rows">
               {data.jobs.map((job) => {
                 const title = data.titles.get(job.contentItemId) ?? t('publishing.untitled');
                 const failure = failureText(job.failureClass, job.failureCode);
@@ -445,37 +450,131 @@ export default async function PublishingPage({
                   job.status === 'PUBLISHED' && job.publishedAt
                     ? job.publishedAt
                     : job.scheduledAtUtc;
+                const account = data.jobConnections.get(job.socialConnectionId);
+                const ready = account?.status === 'ACTIVE';
+                const reviewKey = REVIEW_KEY[data.latestReview.get(job.contentItemId) ?? ''];
+                const openHref = `/${locale}/content/compose?item=${job.contentItemId}`;
+                /*
+                 * ROUND 5 (F2) — THE PROTOTYPE'S ROW (`Main.dc.html` lines
+                 * 1291–1297): the picture, the title, ONE meta line (and the
+                 * reason, in red, where there is one), the status chip and ONE
+                 * button — Retry on a failure, Results once published, Open
+                 * otherwise. The product's other controls (the account and its
+                 * readiness, the review, Cancel, the published post, a new copy)
+                 * are behind the row's own "⋯".
+                 */
+                const retryReconnected = data.reconnected.has(job.id);
+                const reconnectFirst =
+                  (job.needsReconnect || job.failureClass === 'AUTH_EXPIRED') &&
+                  job.status === 'FAILED' &&
+                  !retryReconnected;
+                const retryHere =
+                  job.canRetry &&
+                  job.status === 'FAILED' &&
+                  !retryReconnected &&
+                  !lateNotice &&
+                  !superseded &&
+                  may('publishing.manage');
+                const primaryIsOpen =
+                  !retryReconnected &&
+                  !reconnectFirst &&
+                  !retryHere &&
+                  !rescheduleOffered &&
+                  job.status !== 'PUBLISHED';
+                // Reschedule, written once: the row's button, or inside "⋯"
+                // when Reconnect is the row's button.
+                const reschedule = (
+                  <>
+                    {rescheduleOffered ? (
+                      data.approvalRequired.get(job.brandId) ? (
+                        <Link
+                          href={`/${locale}/content/compose?item=${job.contentItemId}`}
+                          className="bsp-btn bsp-sm bsp-sec"
+                          data-testid={`reschedule-${job.id}`}
+                        >
+                          {t('publishing.resendForReview')}
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/${locale}/calendar?item=${job.contentItemId}`}
+                          className="bsp-btn bsp-sm bsp-sec"
+                          data-testid={`reschedule-${job.id}`}
+                        >
+                          {t('publishing.reschedule')}
+                        </Link>
+                      )
+                    ) : null}
+                  </>
+                );
+                const primary = retryReconnected ? (
+                  <form action={retryOnReconnectedAction}>
+                    {back}
+                    <input type="hidden" name="jobId" value={job.id} />
+                    <button
+                      type="submit"
+                      className="bsp-btn bsp-sm bsp-sec"
+                      data-testid={`retry-reconnected-${job.id}`}
+                    >
+                      {t('publishing.retry')}
+                    </button>
+                  </form>
+                ) : reconnectFirst ? (
+                  reconnect(job.provider, job.brandId, `reconnect-${job.id}`)
+                ) : retryHere && !reconnectFirst ? (
+                  <form action={retryPublishAction}>
+                    {back}
+                    <input type="hidden" name="jobId" value={job.id} />
+                    <button
+                      type="submit"
+                      className="bsp-btn bsp-sm bsp-sec"
+                      data-testid={`retry-${job.id}`}
+                    >
+                      {t('publishing.retry')}
+                    </button>
+                  </form>
+                ) : rescheduleOffered ? (
+                  reschedule
+                ) : job.status === 'PUBLISHED' ? (
+                  <Link
+                    href={`/${locale}/analytics`}
+                    className="bsp-btn bsp-sm bsp-sec"
+                    data-testid={`results-${job.id}`}
+                  >
+                    {t('content.p.results')}
+                  </Link>
+                ) : (
+                  <Link
+                    href={openHref}
+                    className="bsp-btn bsp-sm bsp-sec"
+                    data-testid={`open-${job.id}`}
+                  >
+                    {t('content.action.open')}
+                  </Link>
+                );
                 return (
-                  <li key={job.id} style={jobRowStyle} data-testid={`publish-job-${job.id}`}>
+                  <li key={job.id} className="bsp-row" data-testid={`publish-job-${job.id}`}>
                     {(() => {
                       const coverId = data.coverOf.get(job.contentVariantId);
                       const media = coverId ? covers.get(coverId) : undefined;
                       return media?.previewToken ? (
-                        <AssetThumb
-                          src={`/${locale}/assets/file/${media.previewToken}`}
-                          alt=""
-                          size="3rem"
-                        />
+                        <span className="bsp-pl-thumb">
+                          <AssetThumb
+                            src={`/${locale}/assets/file/${media.previewToken}`}
+                            alt=""
+                            size="44px"
+                          />
+                        </span>
                       ) : (
-                        <span aria-hidden="true" style={textThumbStyle}>
+                        <span aria-hidden="true" className="bsp-pl-thumb bsp-pl-thumb-text">
                           {title.slice(0, 1)}
                         </span>
                       );
                     })()}
-                    <div style={jobBodyStyle}>
-                      <div style={headStyle}>
-                        <Link
-                          href={`/${locale}/content/compose?item=${job.contentItemId}`}
-                          style={titleStyle}
-                        >
-                          {title}
-                        </Link>
-                        <StatusBadge
-                          label={t(STATUS_KEY[job.status] ?? 'publishing.status.pending')}
-                          tone={STATUS_TONE[job.status] ?? 'neutral'}
-                        />
-                      </div>
-                      <span style={metaStyle}>
+                    <span className="bsp-pl-body">
+                      <span className="bsp-pl-title" dir="auto">
+                        {title}
+                      </span>
+                      <span className="bsp-pl-meta">
                         {providerLabel(job.provider)} ·{' '}
                         {data.brandNames.get(job.brandId) ?? t('integrations.unknownBrand')} ·{' '}
                         {job.status === 'PUBLISHED'
@@ -483,107 +582,78 @@ export default async function PublishingPage({
                           : t('publishingHub.scheduledFor')}{' '}
                         <time dateTime={when.toISOString()}>{formatter.format(when)}</time>
                       </span>
-                      {tab === 'queue' ? (
-                        <span style={headStyle}>
-                          {(() => {
-                            const account = data.jobConnections.get(job.socialConnectionId);
-                            const ready = account?.status === 'ACTIVE';
-                            return (
-                              <span data-testid={`readiness-${job.id}`}>
-                                <StatusBadge
-                                  label={
-                                    ready
-                                      ? t('publishingHub.readiness.ready')
-                                      : t('publishingHub.readiness.reconnect')
-                                  }
-                                  tone={ready ? 'success' : 'warning'}
-                                />
-                              </span>
-                            );
-                          })()}
-                          {data.latestReview.get(job.contentItemId) &&
-                          REVIEW_KEY[data.latestReview.get(job.contentItemId) ?? ''] ? (
-                            <span data-testid={`review-${job.id}`} style={metaStyle}>
-                              {t('calendar.approvalState')}:{' '}
-                              {t(
-                                REVIEW_KEY[
-                                  data.latestReview.get(job.contentItemId) ?? ''
-                                ] as MessageKey,
-                              )}
-                            </span>
-                          ) : null}
-                          {may('integrations.read') &&
-                          data.jobConnections.get(job.socialConnectionId)?.displayName ? (
-                            <span style={metaStyle}>
-                              {data.jobConnections.get(job.socialConnectionId)?.displayName}
-                            </span>
-                          ) : null}
+                      {failure ? (
+                        <span className="bsp-pl-reason" data-testid={`failure-${job.id}`}>
+                          {failure}
                         </span>
                       ) : null}
-                      {failure ? (
-                        <p style={failureStyle} data-testid={`failure-${job.id}`}>
-                          {failure}
-                        </p>
-                      ) : null}
                       {lateNotice ? (
-                        <p style={lateStyle} data-testid={`late-${job.id}`}>
+                        <span className="bsp-pl-reason" data-testid={`late-${job.id}`}>
                           {lateNotice}
-                        </p>
+                        </span>
                       ) : null}
                       {superseded ? (
-                        <p style={lateStyle} data-testid={`superseded-${job.id}`}>
+                        <span className="bsp-pl-reason" data-testid={`superseded-${job.id}`}>
                           {t('publishing.superseded')}
-                        </p>
+                        </span>
                       ) : null}
-                      {data.reconnected.has(job.id) ? (
-                        <p style={reconnectedStyle} data-testid={`reconnected-${job.id}`}>
+                      {retryReconnected ? (
+                        <span className="bsp-pl-ok" data-testid={`reconnected-${job.id}`}>
                           {t('publishingHub.reconnected')}
-                        </p>
+                        </span>
                       ) : null}
-                      <div style={actionsStyle}>
+                    </span>
+                    <span
+                      className={`bsp-pill ${STATUS_PILL[job.status] ?? 'bsp-p-neu'}`}
+                      data-testid={`status-${job.id}`}
+                    >
+                      {t(STATUS_KEY[job.status] ?? 'publishing.status.pending')}
+                    </span>
+                    {primary}
+                    <MoreDisclosure
+                      label={t('data.more')}
+                      testId={`publish-more-${job.id}`}
+                      align="end"
+                    >
+                      <span className="bsp-pl-more">
+                        {tab === 'queue' ? (
+                          <span data-testid={`readiness-${job.id}`}>
+                            <StatusBadge
+                              label={
+                                ready
+                                  ? t('publishingHub.readiness.ready')
+                                  : t('publishingHub.readiness.reconnect')
+                              }
+                              tone={ready ? 'success' : 'warning'}
+                            />
+                          </span>
+                        ) : null}
+                        {tab === 'queue' && reviewKey ? (
+                          <span data-testid={`review-${job.id}`} className="bsp-pl-meta">
+                            {t('calendar.approvalState')}: {t(reviewKey as MessageKey)}
+                          </span>
+                        ) : null}
+                        {may('integrations.read') && account?.displayName ? (
+                          <span className="bsp-pl-meta bsp-ltr">{account.displayName}</span>
+                        ) : null}
                         {job.status === 'PUBLISHED' && job.externalPostUrl ? (
                           <a
                             href={job.externalPostUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-
                             className={buttonClass('ghost', 'sm')}
                             data-testid={`post-link-${job.id}`}
                           >
                             {t('publishing.viewPost')}
                           </a>
                         ) : null}
-                        {data.reconnected.has(job.id) ? (
-                          <form action={retryOnReconnectedAction}>
-                            {back}
-                            <input type="hidden" name="jobId" value={job.id} />
-                            <button
-                              type="submit"
-
-                              className={buttonClass('primary', 'sm')}
-                              data-testid={`retry-reconnected-${job.id}`}
-                            >
-                              {t('publishing.retry')}
-                            </button>
-                          </form>
-                        ) : null}
-                        {(job.needsReconnect || job.failureClass === 'AUTH_EXPIRED') &&
-                        job.status === 'FAILED' &&
-                        !data.reconnected.has(job.id)
-                          ? reconnect(job.provider, job.brandId, `reconnect-${job.id}`)
-                          : null}
-                        {job.canRetry &&
-                        job.status === 'FAILED' &&
-                        !data.reconnected.has(job.id) &&
-                        !lateNotice &&
-                        !superseded &&
-                        may('publishing.manage') ? (
+                        {/* Reconnect took the row's one button: the rest stay one press away. */}
+                        {reconnectFirst && retryHere ? (
                           <form action={retryPublishAction}>
                             {back}
                             <input type="hidden" name="jobId" value={job.id} />
                             <button
                               type="submit"
-
                               className={buttonClass('neutral', 'sm')}
                               data-testid={`retry-${job.id}`}
                             >
@@ -591,34 +661,7 @@ export default async function PublishingPage({
                             </button>
                           </form>
                         ) : null}
-                        {/*
-                          ITEM 9 (D-332 amended, owner's Option 1) — RESCHEDULE
-                          the same post as a NEW slot: the calendar's schedule
-                          dialog for it, or — where the brand requires approval
-                          — the post, to send it for review again. Only for a
-                          post that failed with nothing published.
-                        */}
-                        {rescheduleOffered ? (
-                          data.approvalRequired.get(job.brandId) ? (
-                            <Link
-                              href={`/${locale}/content/compose?item=${job.contentItemId}`}
-
-                              className={buttonClass('primary', 'sm')}
-                              data-testid={`reschedule-${job.id}`}
-                            >
-                              {t('publishing.resendForReview')}
-                            </Link>
-                          ) : (
-                            <Link
-                              href={`/${locale}/calendar?item=${job.contentItemId}`}
-
-                              className={buttonClass('primary', 'sm')}
-                              data-testid={`reschedule-${job.id}`}
-                            >
-                              {t('publishing.reschedule')}
-                            </Link>
-                          )
-                        ) : null}
+                        {reconnectFirst ? reschedule : null}
                         {lateNotice && may('content.create') ? (
                           // The existing "Make a new copy" (duplicateContentAction):
                           // a person's click, never an automatic duplicate.
@@ -632,7 +675,6 @@ export default async function PublishingPage({
                             />
                             <button
                               type="submit"
-
                               className={buttonClass('neutral', 'sm')}
                               data-testid={`copy-${job.id}`}
                             >
@@ -646,7 +688,6 @@ export default async function PublishingPage({
                             <input type="hidden" name="jobId" value={job.id} />
                             <button
                               type="submit"
-
                               className={buttonClass('ghost', 'sm')}
                               data-testid={`cancel-${job.id}`}
                             >
@@ -654,14 +695,23 @@ export default async function PublishingPage({
                             </button>
                           </form>
                         ) : null}
-                      </div>
-                    </div>
+                        {primaryIsOpen ? null : (
+                          <Link
+                            href={openHref}
+                            className={buttonClass('ghost', 'sm')}
+                            data-testid={`open-more-${job.id}`}
+                          >
+                            {t('content.action.open')}
+                          </Link>
+                        )}
+                      </span>
+                    </MoreDisclosure>
                   </li>
                 );
               })}
             </ul>
-          )}
-        </Card>
+          </section>
+        )
       ) : (
         <Card testId="publishing-accounts">
           <SectionHeader
@@ -767,39 +817,6 @@ const rowStyle = {
   borderBlockEnd: `1px solid ${colorTokens.border}`,
 } as const;
 
-const jobRowStyle = {
-  ...rowStyle,
-  gridTemplateColumns: '3rem minmax(0, 1fr)',
-  columnGap: spacingTokens.sm,
-  alignItems: 'start',
-} as const;
-
-const jobBodyStyle = { display: 'grid', gap: spacingTokens['3xs'], minInlineSize: 0 } as const;
-
-/** A text-only post: an intentional neutral tile, never fake art (§15). */
-const textThumbStyle = {
-  display: 'grid',
-  placeItems: 'center',
-  inlineSize: '3rem',
-  blockSize: '3rem',
-  borderRadius: '0.75rem',
-  background: colorTokens.surfaceMuted,
-  color: colorTokens.textSecondary,
-  ...typographyTokens.label,
-} as const;
-
-const lateStyle = {
-  ...typographyTokens.bodySm,
-  margin: 0,
-  color: colorTokens.textMuted,
-} as const;
-
-const reconnectedStyle = {
-  ...typographyTokens.bodySm,
-  margin: 0,
-  color: colorTokens.success,
-} as const;
-
 const headStyle = {
   display: 'flex',
   gap: spacingTokens.xs,
@@ -820,8 +837,3 @@ const titleStyle = {
   color: colorTokens.textPrimary,
 } as const;
 const metaStyle = { ...typographyTokens.caption, color: colorTokens.textMuted } as const;
-const failureStyle = {
-  ...typographyTokens.bodySm,
-  margin: 0,
-  color: colorTokens.danger,
-} as const;

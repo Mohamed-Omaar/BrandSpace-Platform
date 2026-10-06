@@ -78,6 +78,7 @@ import {
   setContentCampaignAction,
   uploadComposerMediaAction,
   saveVariantAction,
+  changeDraftShapeAction,
   submitForReviewAction,
   resubmitAfterChangesAction,
   transitionItemAction,
@@ -1215,6 +1216,7 @@ export default async function ComposePage({
         }))}
         actions={{
           save: saveVariantAction,
+          changeShape: changeDraftShapeAction,
           transition: transitionItemAction,
           submitForReview: submitForReviewAction,
           resubmit: resubmitAfterChangesAction,
@@ -1284,7 +1286,13 @@ const EDITOR_KEYS = [
   'studio.rewriteSaved',
   'topbar.copilot',
   'studio.channelOff',
-  'studio.unapplied',
+  'studio.shape.notCarried',
+  'studio.shape.locked',
+  'studio.shape.mediaDropped',
+  'studio.channelRemove',
+  'studio.when.schedulesNow',
+  'studio.when.scheduledEdits',
+  'studio.when.scheduledEditsUnschedule',
   'studio.moreOptions',
   // Phase 2B-2 — carousel slide headlines (B9).
   'editor.slides.headline',

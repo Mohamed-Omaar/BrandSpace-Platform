@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { AutosaveResult } from '../actions';
+import type { AutosaveResult, ShapeResult } from '../actions';
 import { STUDIO_CARRY_KEY, type StudioHandoff } from './studio-carry';
 import { InlineSchedule } from './inline-schedule';
 import { useRouter } from 'next/navigation';
@@ -326,6 +326,8 @@ export interface ComposerViewProps {
   readonly initialTemplateId?: string;
   readonly actions: {
     save(formData: FormData): Promise<void | AutosaveResult>;
+    /** Round 5 (B, D-478) — a draft's format and channels. */
+    changeShape?(formData: FormData): Promise<ShapeResult>;
     transition(formData: FormData): Promise<void>;
     submitForReview(formData: FormData): Promise<void>;
     cancelReview(formData: FormData): Promise<void>;
@@ -993,24 +995,30 @@ export function ComposerView({
           {plannedDate ? t['create.plannedNeedsApproval'] : t['editor.next.needsApproval']}
         </span>
       ) : scheduling && can.schedule ? (
-        <InlineSchedule
-          locale={locale}
-          itemId=""
-          today={scheduling.today}
-          tomorrow={scheduling.tomorrow}
-          defaultTime={scheduling.defaultTime}
-          plannedDate={plannedDate}
-          disabled={false}
-          // Never posts from here: the draft's own panel does, once it exists.
-          action={async () => undefined}
-          onValues={onWhenValues}
-          beforeSubmit={async () => {
-            setWhenPressed(true);
-            createDraft('when');
-            return false;
-          }}
-          t={t}
-        />
+        <>
+          {/* Round 5 (4): what setting the time does, said before it is set. */}
+          <p className="bsp-st-when-note" data-testid="composer-when-schedules">
+            {t['studio.when.schedulesNow']}
+          </p>
+          <InlineSchedule
+            locale={locale}
+            itemId=""
+            today={scheduling.today}
+            tomorrow={scheduling.tomorrow}
+            defaultTime={scheduling.defaultTime}
+            plannedDate={plannedDate}
+            disabled={false}
+            // Never posts from here: the draft's own panel does, once it exists.
+            action={async () => undefined}
+            onValues={onWhenValues}
+            beforeSubmit={async () => {
+              setWhenPressed(true);
+              createDraft('when');
+              return false;
+            }}
+            t={t}
+          />
+        </>
       ) : null}
       <button
         type="button"
@@ -1032,12 +1040,6 @@ export function ComposerView({
     const activeId = active?.getAttribute('data-testid') ?? '';
     const focus =
       activeId === 'content-caption' ? 'caption' : activeId === 'composer-tag-input' ? 'tag' : null;
-    const kept = new Set(opened.variants.map((variant) => variant.platformKey));
-    const channels = [
-      ...selected.filter((key) => !kept.has(key)),
-      ...[...kept].filter((key) => !selected.includes(key)),
-    ];
-    const format = contentType !== opened.contentType ? contentType : null;
     return {
       itemId: opened.id,
       caption,
@@ -1055,7 +1057,7 @@ export function ComposerView({
               submit: whenPressed,
             }
           : null,
-      unapplied: channels.length > 0 || format !== null ? { channels, format } : null,
+      target: { channels: selected, format: contentType },
     };
   };
 
@@ -1166,6 +1168,7 @@ export function ComposerView({
           t={t}
           openOn={openOn}
           handoff={handoffFor(draft)}
+          {...(formatPlatforms ? { formatPlatforms } : {})}
           draft={draft}
           platforms={platforms}
           campaigns={campaigns}

@@ -2,7 +2,15 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { AbstractMedia, AssetMedia, SegmentPill, type MediaSeed } from '@brandspace/ui';
 
 /**
@@ -266,6 +274,9 @@ export function PrototypeCalendar({
 }) {
   const [postPop, setPostPop] = useState<string | null>(null);
   const [dayPop, setDayPop] = useState<string | null>(null);
+  // Round 5 (D) — each popover kept inside the frame (see `useInFrame`).
+  const postPopStyle = useInFrame(postPop ? `calendar-post-pop-${postPop}` : null);
+  const dayPopStyle = useInFrame(dayPop ? `calendar-day-pop-${dayPop}` : null);
   const [moving, setMoving] = useState<ProtoCalendarPost | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
@@ -457,6 +468,7 @@ export function PrototypeCalendar({
                   aria-label={post.title}
                   className="bsp-cal-pop"
                   data-testid={`calendar-post-pop-${post.id}`}
+                  style={postPopStyle}
                 >
                   <span className="bsp-cal-pop-art">
                     <PostArt art={post.art} />
@@ -550,6 +562,7 @@ export function PrototypeCalendar({
             role="dialog"
             aria-label={day.longLabel}
             data-testid={`calendar-day-pop-${day.key}`}
+            style={dayPopStyle}
           >
             <span className="bsp-cal-popx-title">{day.longLabel}</span>
             {newPostHref ? (
@@ -821,4 +834,92 @@ export function PrototypeCalendar({
       {dropStrip}
     </section>
   );
+}
+
+/**
+ * ROUND 5 (D) — A POPOVER STAYS INSIDE THE FRAME.
+ *
+ * The prototype opens a post's popover 30px below the top of its day and 6px
+ * from its start, wherever the day is. On the last row that put its buttons
+ * (Edit, Move to another day) under the page's bar at the foot of the window,
+ * and on the last column past the frame's edge. The owner's ask: fully inside,
+ * on any day. So once it is drawn where the prototype draws it, it is
+ * measured, and only if it does not fit is it moved: up above its post when
+ * the bottom does not fit, and inward when the side does not. A popover that
+ * fits is left exactly as the prototype places it.
+ */
+const FRAME_GAP = 8;
+
+function useInFrame(testId: string | null): CSSProperties | undefined {
+  // A resize draws it where the prototype does again, and it is measured anew.
+  const [tick, setTick] = useState(0);
+  const [placed, setPlaced] = useState<{
+    id: string;
+    tick: number;
+    style: CSSProperties;
+  } | null>(null);
+  useEffect(() => {
+    if (!testId) return undefined;
+    const again = () => setTick((n) => n + 1);
+    window.addEventListener('resize', again);
+    return () => window.removeEventListener('resize', again);
+  }, [testId]);
+  useLayoutEffect(() => {
+    if (!testId) return;
+    // Measured where the prototype puts it (no placement is drawn yet).
+    const pop = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+    const day = pop?.offsetParent;
+    if (!pop || !(day instanceof HTMLElement)) return;
+    const box = pop.getBoundingClientRect();
+    const dayBox = day.getBoundingClientRect();
+    let top = 0;
+    let bottom = window.innerHeight;
+    let left = 0;
+    let right = document.documentElement.clientWidth;
+    // Every clipping ancestor narrows the frame.
+    for (let node = day.parentElement; node; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (!/(auto|scroll|hidden|clip)/.test(style.overflowX + style.overflowY)) continue;
+      const r = node.getBoundingClientRect();
+      top = Math.max(top, r.top);
+      bottom = Math.min(bottom, r.bottom);
+      left = Math.max(left, r.left);
+      right = Math.min(right, r.right);
+    }
+    // A bar drawn over the foot of the frame (fixed or sticky) is not room.
+    for (const x of [box.left + 12, box.left + box.width / 2, box.right - 12]) {
+      const hit = document.elementFromPoint(x, Math.min(box.bottom, bottom) - 2);
+      if (hit && !pop.contains(hit) && !day.contains(hit)) {
+        for (let node: Element | null = hit; node; node = node.parentElement) {
+          const position = getComputedStyle(node).position;
+          if (position === 'fixed' || position === 'sticky') {
+            bottom = Math.min(bottom, node.getBoundingClientRect().top);
+            break;
+          }
+        }
+      }
+    }
+    const style: CSSProperties = {};
+    if (box.bottom > bottom - FRAME_GAP) {
+      // Up: above the post that opened it, or as high as the frame allows.
+      const opener = pop.previousElementSibling;
+      const anchor =
+        opener instanceof HTMLElement && opener.classList.contains('bsp-calchip')
+          ? opener.getBoundingClientRect().top
+          : box.top;
+      const above = anchor - 4 - box.height;
+      const clamped = Math.max(top + FRAME_GAP, Math.min(above, bottom - FRAME_GAP - box.height));
+      style.top = `${Math.round(clamped - dayBox.top)}px`;
+    }
+    let dx = 0;
+    if (box.right > right - FRAME_GAP) dx = right - FRAME_GAP - box.right;
+    if (box.left + dx < left + FRAME_GAP) dx = left + FRAME_GAP - box.left;
+    if (dx !== 0) {
+      const start = parseFloat(getComputedStyle(pop).insetInlineStart) || 0;
+      const rtl = getComputedStyle(pop).direction === 'rtl';
+      style.insetInlineStart = `${Math.round(start + (rtl ? -dx : dx))}px`;
+    }
+    setPlaced({ id: testId, tick, style });
+  }, [testId, tick]);
+  return placed && placed.id === testId && placed.tick === tick ? placed.style : undefined;
 }

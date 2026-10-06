@@ -200,10 +200,18 @@ test.describe('Round 4 · 3.4 / 3.5 — every format, and the prototype preview 
   }) => {
     await openNewPost(page);
     await page.getByTestId('content-caption').fill(`Locked format ${Date.now().toString(36)}`);
-    await awaitDraft(page);
+    const itemId = (await awaitDraft(page)).searchParams.get('item') ?? '';
     const format = page.getByTestId('editor-format');
     await expect(format.locator('button[aria-pressed="true"]')).toHaveCount(1);
-    const locked = format.locator('button[data-locked="true"]');
+    // Round 5 (B, D-478): on a draft the format can still be changed, so
+    // nothing is locked yet; the lock (and its reason) comes with the review.
+    await expect(format.locator('button[data-locked="true"]')).toHaveCount(0);
+    await expect(page.getByTestId('editor-format-locked')).toHaveCount(0);
+    await withPlatformPrisma((prisma) =>
+      prisma.contentItem.update({ where: { id: itemId }, data: { status: 'IN_REVIEW' } }),
+    );
+    await page.reload();
+    const locked = page.getByTestId('editor-format').locator('button[data-locked="true"]');
     expect(await locked.count()).toBeGreaterThan(0);
     await expect(locked.first()).toBeDisabled();
     await expect(page.getByTestId('editor-format-locked')).toBeVisible();

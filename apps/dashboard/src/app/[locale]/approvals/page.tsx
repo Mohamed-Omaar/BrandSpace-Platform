@@ -386,6 +386,8 @@ export default async function ApprovalsPage({
         blockedAsSelf: queueRows.some((row) => row.id === review.approvalId && row.blockedAsSelf),
         cover: coverOf(review.itemId),
         caption: review.variants[0]?.body ?? '',
+        // Round 5 (F1): only a designed headline is drawn over the cover.
+        coverHeadline: review.variants[0]?.coverHeadline ?? '',
         fromLabel: (() => {
           const opened = [...queue, ...mine].find((row) => row.id === review.approvalId);
           return opened ? fromLabel(review.requestedByUserId, opened.createdAt) : undefined;

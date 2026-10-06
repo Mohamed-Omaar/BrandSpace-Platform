@@ -282,6 +282,9 @@ test.describe('D-332 · a failed post past its deadline is not retried', () => {
       'مضى موعد هذا المنشور أثناء انفصال الحساب، لذا لم يُنشر متأخرًا. أعد جدولته أو أنشئ نسخة جديدة منه.',
     );
     await expect(page.getByTestId(`retry-reconnected-${late.jobId}`)).toHaveCount(0);
+    // Round 5 (F2): "Make a new copy" is behind the row's own "⋯" (the
+    // prototype's row has one button, here Reschedule).
+    await page.getByTestId(`publish-more-${late.jobId}`).click();
     await expect(page.getByTestId(`copy-${late.jobId}`)).toBeVisible();
   });
 });

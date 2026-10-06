@@ -24,6 +24,9 @@ import {
 } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
 import { inContentStudio } from '../../../server/content-context';
+import { inSocial } from '../../../server/social-context';
+import { platformsByFormat } from '../../../server/create-post';
+import { CONTENT_TYPES } from './content-types';
 import { inNotes } from '../../../server/notes-context';
 import { resolveContentLanguage } from '../../../server/content-language';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
@@ -321,6 +324,72 @@ function attachParam(formData: FormData): { attach?: string } {
 function plannedDateParam(formData: FormData): { date?: string } {
   const value = String(formData.get('plannedDate') ?? '');
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? { date: value } : {};
+}
+
+/**
+ * ROUND 5 (B) — A DRAFT'S FORMAT AND CHANNELS, CHANGED IN THE STUDIO (D-478).
+ *
+ * `content.edit`, the same authority as saving its words; the library's
+ * `changeDraftShape` holds the rules (draft only, brand scope, enabled
+ * channels, audit). The channels that carry the format come from the
+ * publishing policy, as the composer reads them. Answered with a result, not a
+ * redirect: the Studio stays where the person is and re-reads the page.
+ */
+export type ShapeResult =
+  | { readonly ok: true; readonly itemId: string; readonly mediaDropped: readonly string[] }
+  | {
+      readonly ok: false;
+      readonly code: string;
+      readonly ref: string;
+      readonly reason?: string;
+      readonly platformKeys?: readonly string[];
+    };
+
+export async function changeDraftShapeAction(formData: FormData): Promise<ShapeResult> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const itemId = String(formData.get('itemId') ?? '');
+  try {
+    const session = await requireWorkspaceAction(locale, 'content.edit');
+    const contentType = parseContentType(formData.get('contentType'));
+    if (!contentType) throw new AppError('VALIDATION_FAILED', 'That format is not available.');
+    const platformKeys = formData.getAll('platformKeys').map((value) => String(value));
+    const result = await inContentStudio(session.workspace.workspaceId, async (services) => {
+      const library = await services.library();
+      const contentPolicy = await services.policy();
+      const carriers = await inSocial(session.workspace.workspaceId, async (social) => {
+        const publishing = await social.policy();
+        return (
+          platformsByFormat(
+            CONTENT_TYPES,
+            contentPolicy.platforms.map((platform) => platform.key),
+            publishing.providers as unknown as Record<
+              string,
+              { enabled: boolean; postKinds: readonly string[] }
+            >,
+          )[contentType] ?? []
+        );
+      }).catch(() => null);
+      return library.changeDraftShape({
+        itemId,
+        contentType,
+        platformKeys,
+        carriers,
+        ...actorOf(session),
+      });
+    });
+    return { ok: true, itemId, mediaDropped: result.mediaDropped };
+  } catch (error: unknown) {
+    const failed = autosaveFailure(error, 'changeDraftShape');
+    if (failed.ok) return { ok: true, itemId, mediaDropped: [] };
+    const details = isAppError(error) ? error.publicDetails : undefined;
+    const reason = typeof details?.['reason'] === 'string' ? details['reason'] : undefined;
+    const keys = typeof details?.['platformKeys'] === 'string' ? details['platformKeys'] : '';
+    return {
+      ...failed,
+      ...(reason ? { reason } : {}),
+      ...(keys ? { platformKeys: keys.split(',') } : {}),
+    };
+  }
 }
 
 /** Save a person's own edit to a caption. No gateway, no credits. */

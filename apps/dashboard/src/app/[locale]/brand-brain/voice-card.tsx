@@ -39,7 +39,36 @@ export function VoiceCard({
   canEdit: boolean;
   profileHref: string | null;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const messageLocale = useMessageLocale(locale);
+  const t = translator(messageLocale);
+  // The reader's language: its list of words is the one shown and changed here.
+  const language: 'en' | 'ar' = messageLocale === 'ar' ? 'ar' : 'en';
+  const own = voice.words
+    ? language === 'ar'
+      ? voice.words.edit.bodyAr
+      : voice.words.edit.bodyEn
+    : '';
+  const words = wordsIn(own || (voice.words ? voice.words.body || voice.words.title : ''));
+  const saveWords = (data: FormData, next: readonly string[]) => {
+    const text = [...new Set(next)].join(language === 'ar' ? '، ' : ', ');
+    const form = new FormData();
+    for (const [key, value] of [
+      ['locale', locale],
+      ['brandId', brandId],
+      ['area', 'TONE_OF_VOICE'],
+      ['tab', 'look'],
+      ['titleEn', translator('en')('bb.voice.words')],
+      ['titleAr', translator('ar')('bb.voice.words')],
+      ['bodyEn', language === 'en' ? text : (voice.words?.edit.bodyEn ?? '')],
+      ['bodyAr', language === 'ar' ? text : (voice.words?.edit.bodyAr ?? '')],
+    ] as const) {
+      form.set(key, value);
+    }
+    if (voice.words) form.set('itemId', voice.words.id);
+    else form.set('itemKey', 'voice.words');
+    void data;
+    return voice.words ? updateKnowledgeAction(form) : createKnowledgeAction(form);
+  };
   return (
     <section className="bsp-card bsp-bb-lc bsp-bb-lc-full" data-testid="voice-card">
       {/* The prototype's Voice card (line 874): the label, what it is for, three columns. */}
@@ -51,21 +80,37 @@ export function VoiceCard({
         <section data-testid="voice-words" style={sectionStyle}>
           <h5 style={headingStyle}>{t('bb.voice.words')}</h5>
           {/*
-            Gate 2b — the prototype's word chips (`x.voiceChips`): the one
-            `voice.words` fact, read in the reader's language and drawn a chip
-            per word. Display only; it is saved as the one text it always was.
+            Round 5 (F3) — THE PROTOTYPE'S WORD CHIPS (`x.voiceChips`, line
+            874): one chip per word, each with its own "×", and one "Add a
+            word" field with Add. The words are still the one `voice.words`
+            fact, in the reader's language; each press is an ordinary Brand
+            Brain update (`brand_brain.edit`, a new version, audited) that
+            writes that language's list and leaves the other as it was.
           */}
-          {voice.words ? (
+          {words.length > 0 ? (
             <div className="bsp-lk-chips" data-testid="voice-words-value">
-              {(voice.words.body || voice.words.title)
-                .split(/[,،]/)
-                .map((word) => word.trim())
-                .filter((word) => word !== '')
-                .map((word, index) => (
-                  <span key={index} className="bsp-chip" dir="auto">
-                    {word}
-                  </span>
-                ))}
+              {words.map((word, index) => (
+                <span key={`${word}-${index}`} className="bsp-chip bsp-vc-word" dir="auto">
+                  {word}
+                  {canEdit ? (
+                    <form
+                      action={(data) =>
+                        saveWords(
+                          data,
+                          words.filter((_, i) => i !== index),
+                        )
+                      }
+                    >
+                      <button
+                        type="submit"
+                        className="bsp-vc-word-x"
+                        aria-label={`${t('bb.voice.wordRemove')} ${word}`}
+                        data-testid={`voice-words-remove-${index}`}
+                      />
+                    </form>
+                  ) : null}
+                </span>
+              ))}
             </div>
           ) : (
             <p style={bodyStyle} data-testid="voice-words-value">
@@ -74,33 +119,28 @@ export function VoiceCard({
           )}
           {canEdit ? (
             <form
-              action={voice.words ? updateKnowledgeAction : createKnowledgeAction}
-              className="bsp-vc-form"
-              style={formStyle}
+              action={(data) =>
+                saveWords(data, [...words, ...wordsIn(String(data.get('word') ?? ''))])
+              }
+              className="bsp-vc-row"
               data-testid="voice-words-form"
             >
-              <Hidden locale={locale} brandId={brandId} area="TONE_OF_VOICE" />
-              {voice.words ? (
-                <input type="hidden" name="itemId" value={voice.words.id} />
-              ) : (
-                <input type="hidden" name="itemKey" value="voice.words" />
-              )}
-              {/* The fact's own title, in both catalogues' words — never typed here. */}
-              <input type="hidden" name="titleEn" value={translator('en')('bb.voice.words')} />
-              <input type="hidden" name="titleAr" value={translator('ar')('bb.voice.words')} />
-              <OneFieldRow
-                locale={locale}
-                testId="voice-words"
-                values={{ en: voice.words?.edit.bodyEn ?? '', ar: voice.words?.edit.bodyAr ?? '' }}
-                placeholders={{
-                  en: t('bb.voice.wordsPlaceholderEn'),
-                  ar: t('bb.voice.wordsPlaceholderAr'),
-                }}
-                labels={{ en: t('bb.newItem.bodyEn'), ar: t('bb.newItem.bodyAr') }}
-                submit={t('common.save')}
-                submitTestId="voice-words-save"
-                inputTestId={(language) => `voice-words-${language}`}
+              <input
+                name="word"
+                dir="auto"
+                className={`${CONTROL_CLASS} bsp-vc-field`}
+                placeholder={t('bb.voice.wordAdd')}
+                aria-label={t('bb.voice.wordAdd')}
+                data-testid={`voice-words-${language}`}
+                required
               />
+              <button
+                type="submit"
+                className="bsp-btn bsp-sm bsp-sec"
+                data-testid="voice-words-save"
+              >
+                {t('studio.tagAdd')}
+              </button>
             </form>
           ) : null}
         </section>
@@ -331,6 +371,14 @@ function Hidden({ locale, brandId, area }: { locale: string; brandId: string; ar
       <input type="hidden" name="tab" value="look" />
     </>
   );
+}
+
+/** The words of a `voice.words` text, split where a person separates them. */
+function wordsIn(text: string): string[] {
+  return text
+    .split(/[,،]/)
+    .map((word) => word.trim())
+    .filter((word) => word !== '');
 }
 
 const sectionStyle: React.CSSProperties = { display: 'grid', gap: 8, alignContent: 'start' };

@@ -38,8 +38,7 @@ export function takeStudioCarry(itemId: string): StudioCarry | null {
  * draft opens, so it hands the editor what the person is doing AT THAT
  * MOMENT: the words and tags (the carry above, newest), a tag half-typed,
  * where the cursor was, and what was pressed while the draft was being
- * made — Design, the time (and its "Set"), or a channel or format the
- * draft was already made without.
+ * made — Design, the time (and its "Set"), a channel or a format.
  */
 export interface StudioHandoff extends StudioCarry {
   readonly open: 'words' | 'visual' | 'when' | 'tags' | null;
@@ -47,9 +46,9 @@ export interface StudioHandoff extends StudioCarry {
   readonly focus: 'caption' | 'tag' | null;
   readonly caret: number | null;
   readonly when: { readonly date: string; readonly time: string; readonly submit: boolean } | null;
-  /** Chosen after the draft was made, which cannot change them yet. */
-  readonly unapplied: {
-    readonly channels: readonly string[];
-    readonly format: string | null;
-  } | null;
+  /**
+   * The format and channels on screen as the draft opened. Round 5 (B): one
+   * chosen while the draft was being made is applied to it (D-478).
+   */
+  readonly target: { readonly channels: readonly string[]; readonly format: string };
 }

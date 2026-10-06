@@ -23,6 +23,7 @@ import { CloseIcon, MenuIcon } from './icons';
 import { prefersReducedMotion } from './motion';
 import { usePresence } from './motion-hooks';
 import { Tooltip, useOverlayBehaviour } from './overlays';
+import { LinkPendingMark, usePrefetchOnIntent } from './prefetch-link';
 import { PrototypeIcon } from './prototype-icons';
 import {
   colorTokens,
@@ -96,14 +97,17 @@ function useRailPill(
   pillRef: React.RefObject<HTMLSpanElement | null>,
   activeHref: string | undefined,
   track: boolean,
-): void {
+): React.RefObject<((link: HTMLElement) => void) | null> {
   const placedOnce = useRef(false);
+  const pressRef = useRef<((link: HTMLElement) => void) | null>(null);
   useLayoutEffect(() => {
     const nav = navRef.current;
     const pill = pillRef.current;
     if (!nav || !pill) return undefined;
+    // The item pressed on this page, until its page arrives (round 5, E).
+    let pressed: HTMLElement | null = null;
     const measure = () => {
-      const link = nav.querySelector<HTMLElement>('a[aria-current="page"]');
+      const link = pressed ?? nav.querySelector<HTMLElement>('a[aria-current="page"]');
       if (!link) return null;
       /*
        * `placeNavInd`: offsets inside the nav, plus its own scroll. Summed up
@@ -123,11 +127,50 @@ function useRailPill(
       }
       return { x, y, w: link.offsetWidth, h: link.offsetHeight };
     };
+    /*
+     * Round 5 (F4) — THE LABEL UNDER THE PILL IS WHITE, THE REST INK, ON EVERY
+     * FRAME OF THE GLIDE. The label's colour followed `aria-current`, which
+     * changes at once, while the pill takes 440 ms to arrive: the item left
+     * behind turned ink on the still-dark pill, and the new one turned white
+     * on the light rail. Each frame now lights the rows the pill covers more
+     * than half of (`data-lit`), and the CSS colours by that alone.
+     */
+    let frame = 0;
+    const light = () => {
+      const box = pill.getBoundingClientRect();
+      for (const row of Array.from(nav.querySelectorAll<HTMLElement>('.bsp-nav'))) {
+        const r = row.getBoundingClientRect();
+        const covered =
+          Math.max(0, Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top)) *
+          (Math.min(r.right, box.right) > Math.max(r.left, box.left) ? 1 : 0);
+        const lit = r.height > 0 && covered > r.height / 2;
+        if (lit !== row.hasAttribute('data-lit')) row.toggleAttribute('data-lit', lit);
+      }
+    };
+    // Until the pill's own animation has ended — not a fixed time: on a busy
+    // page (a click also starts the next page's fetch) frames come late and
+    // the glide outlasts any timer. Capped, and `transitionend` lights once
+    // more in case the last frame came before it.
+    const follow = () => {
+      cancelAnimationFrame(frame);
+      const started = performance.now();
+      const step = () => {
+        light();
+        const now = performance.now();
+        if (now - started < 3000 && (now - started < 100 || pill.getAnimations().length > 0)) {
+          frame = requestAnimationFrame(step);
+        }
+      };
+      frame = requestAnimationFrame(step);
+    };
     const put = (at: { x: number; y: number; w: number; h: number }, glide: boolean) => {
-      pill.style.transition = glide && !prefersReducedMotion() ? '' : 'none';
+      const moving = glide && !prefersReducedMotion();
+      pill.style.transition = moving ? '' : 'none';
       pill.style.transform = `translate(${at.x}px, ${at.y}px)`;
       pill.style.width = `${at.w}px`;
       pill.style.height = `${at.h}px`;
+      light();
+      if (moving) follow();
     };
     /*
      * Gate 2b review — THE PILL TAKES OVER BEFORE ANYTHING IS MEASURED. The
@@ -143,8 +186,12 @@ function useRailPill(
     const target = measure();
     if (!target) {
       nav.removeAttribute('data-ind');
+      for (const row of Array.from(nav.querySelectorAll('[data-lit]'))) {
+        row.removeAttribute('data-lit');
+      }
       return undefined;
     }
+    pill.addEventListener('transitionend', light);
     /*
      * Round 3 (C3) — THE ACTIVE ITEM IS IN VIEW, as the prototype's rail
      * scrolls to it: a page low in the rail (Automations, Notes, Team,
@@ -176,6 +223,20 @@ function useRailPill(
     if (track) lastPill = target;
 
     let placed = target;
+    /*
+     * Round 5 (E) — THE PRESS MOVES THE PILL AT ONCE. The prototype changes
+     * view on the click; here the next page is a round trip away, and nothing
+     * moved until it came. The pill now glides to the pressed item the moment
+     * it is pressed, and the next page finds it already there.
+     */
+    pressRef.current = (link) => {
+      pressed = link;
+      const at = measure();
+      if (!at) return;
+      put(at, true);
+      placed = at;
+      if (track) lastPill = at;
+    };
     const observer = new ResizeObserver(() => {
       const now = measure();
       if (!now) return;
@@ -202,24 +263,31 @@ function useRailPill(
       observer.observe(row);
     }
     return () => {
+      cancelAnimationFrame(frame);
+      pill.removeEventListener('transitionend', light);
+      pressRef.current = null;
       observer.disconnect();
       nav.removeEventListener('wheel', stopRevealing);
       nav.removeEventListener('touchstart', stopRevealing);
       nav.removeEventListener('keydown', stopRevealing);
     };
   }, [navRef, pillRef, activeHref, track]);
+  return pressRef;
 }
 
 function RailLink({
   item,
   collapsed,
   onNavigate,
+  onPress,
 }: {
   readonly item: CustomerNavItem;
   readonly collapsed: boolean;
   readonly onNavigate?: (() => void) | undefined;
+  readonly onPress?: ((link: HTMLElement) => void) | undefined;
 }) {
   const name = item.count ? `${item.label}, ${item.count.label}` : item.label;
+  const intent = usePrefetchOnIntent(item.href);
   const link = (
     <Link
       href={item.href}
@@ -228,7 +296,19 @@ function RailLink({
       aria-label={name}
       aria-current={item.active ? 'page' : undefined}
       {...(collapsed ? {} : { title: item.label })}
-      {...(onNavigate ? { onClick: onNavigate } : {})}
+      onPointerEnter={intent.onPointerEnter}
+      onFocus={intent.onFocus}
+      onClick={(event) => {
+        const plain =
+          event.button === 0 &&
+          !event.defaultPrevented &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.shiftKey &&
+          !event.altKey;
+        if (plain && !item.active) onPress?.(event.currentTarget);
+        onNavigate?.();
+      }}
     >
       {item.icon}
       <span className="bsp-nl bs-nav-label">{item.label}</span>
@@ -242,6 +322,7 @@ function RailLink({
           {item.count.text}
         </span>
       ) : null}
+      <LinkPendingMark />
     </Link>
   );
   return collapsed ? (
@@ -269,7 +350,8 @@ function RailNav({
   const navRef = useRef<HTMLElement | null>(null);
   const pillRef = useRef<HTMLSpanElement | null>(null);
   const activeHref = sections.flatMap((section) => section.items).find((item) => item.active)?.href;
-  useRailPill(navRef, pillRef, activeHref, scope === 'rail');
+  const pressRef = useRailPill(navRef, pillRef, activeHref, scope === 'rail');
+  const onPress = useCallback((link: HTMLElement) => pressRef.current?.(link), [pressRef]);
   const groupId = useId();
   return (
     <nav ref={navRef} aria-label={label} className="bsp-sbnav">
@@ -292,7 +374,13 @@ function RailNav({
             </div>
           ) : null}
           {section.items.map((item) => (
-            <RailLink key={item.href} item={item} collapsed={collapsed} onNavigate={onNavigate} />
+            <RailLink
+              key={item.href}
+              item={item}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+              onPress={onPress}
+            />
           ))}
         </div>
       ))}
