@@ -21,6 +21,15 @@ const nextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: '24mb' },
     proxyClientMaxBodySize: '24mb',
+    /*
+     * ROUND 5 (E) — A PAGE FETCHED ON HOVER IS USED FOR 30 SECONDS, NOT FIVE
+     * MINUTES. The rail, the Create menu and "New post" ask for the whole page
+     * while the hand is on them (`PrefetchLink`), and Next keeps a whole-page
+     * prefetch for `static` seconds (default 300). Thirty — Next's minimum —
+     * keeps a page someone hovered and opened later no older than a page left
+     * open for half a minute. `dynamic` stays 0: nothing else is kept.
+     */
+    staleTimes: { dynamic: 0, static: 30 },
   },
   /*
    * SECURITY HEADERS LIVE IN `src/middleware.ts` (Phase 10 §21), not here.

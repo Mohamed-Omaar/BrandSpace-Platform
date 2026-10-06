@@ -1,6 +1,13 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { AssetMedia, NoteIcon, PlayIcon, SegmentPill, colorTokens } from '@brandspace/ui';
+import {
+  AssetMedia,
+  NoteIcon,
+  PlayIcon,
+  PrefetchLink,
+  SegmentPill,
+  colorTokens,
+} from '@brandspace/ui';
 import {
   duplicateContentAction,
   setContentCampaignAction,
@@ -510,14 +517,14 @@ export function ContentLibrary({
             </Link>
           ))}
           {can.create ? (
-            <Link
+            <PrefetchLink
               href={`/${locale}/content/compose`}
               className="bsp-btn bsp-sm bsp-pur"
               style={{ marginInlineStart: '6px' }}
               data-testid="content-create"
             >
               {t('content.create')}
-            </Link>
+            </PrefetchLink>
           ) : null}
         </div>
       </div>
@@ -552,13 +559,13 @@ export function ContentLibrary({
             {filtered ? t('content.emptyFilteredBody') : t('content.emptyBody')}
           </p>
           {!filtered && can.create ? (
-            <Link
+            <PrefetchLink
               href={`/${locale}/content/compose`}
               className="bsp-btn bsp-sm bsp-pur"
               data-testid="content-empty-create"
             >
               {t('content.create')}
-            </Link>
+            </PrefetchLink>
           ) : null}
         </section>
       ) : view === 'grid' ? (

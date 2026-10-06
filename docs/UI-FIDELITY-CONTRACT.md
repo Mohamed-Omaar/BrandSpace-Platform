@@ -1882,6 +1882,43 @@ Behaviour, not composition. Two states the prototype does not draw, in its own l
   and time ("Setting a time schedules this post now."), and on a scheduled post the bar's note says
   what an edit needs and what saving does (`studio.when.*`, ar + en).
 
+### 6.3.57 Round 5 (C–F) — contrast, the calendar popover, speed, and the review of the last pairs
+
+- **C · Selected states keep their words.** The Brand Brain key question, once chosen, replaced only
+  the shared pressed chip's fill (`#f6f3ff`) and kept its white text; it now carries the chip's own
+  ink `#111114`. A sweep of every chip, tab, segment and toggle on the customer screens (selected,
+  hover, focus and disabled; en + ar; 1,020 readings) found no other failure: the rail's 69 readings
+  are its labels over the pill, a separate element, which F4 measures. Guards:
+  `tests/unit/r5-selected-state-contrast.test.ts` (a rule that fills a selected state must set its
+  text colour) and `tests/e2e/r5-selected-contrast.spec.ts` (computed contrast, WCAG 2.2 AA).
+- **D · The calendar's popovers stay inside the frame.** The prototype's placement (`.bsp-cal-pop`
+  under the chip, `.bsp-cal-popx` on the day) is kept wherever it fits. Where it would cross the
+  window, a clipping ancestor or a fixed bar, it moves up above the chip, or inward along the row
+  (mirrored in Arabic), by exactly the overflow. `tests/e2e/r5-calendar-popover.spec.ts` opens a
+  post on each of a month's last seven days.
+- **E · A press shows at once.** The rail's pill glides to the pressed item on the click, as the
+  prototype's does, instead of when the next page arrives. A button-shaped link waiting for its page
+  is pressed (`scale: .97`, the prototype's own press amount) and the cursor says it is working; a
+  Create menu row keeps its hover fill. Hovering or focusing a rail item, a Create menu row or "New
+  post" fetches the page (D-480). No new visual element.
+- **F1 · Approvals.** The cover draws a headline only when the post's design has one
+  (`review-cover-headline`); otherwise the picture is shown as it is.
+- **F2 · Publishing log.** Each row is the prototype's `.row` in its `.card`: thumbnail, title, one
+  meta line, the reason when there is one, the status pill and ONE primary action (reconnect, retry,
+  reschedule, Results or Open, in that order of need). Everything else the old row carried — the
+  readiness and review lines, the account, the post link, copy, cancel, the second action — sits
+  behind the row's own "More" affordance (D-471), unchanged in behaviour.
+- **F3 · Voice words.** Each word is a chip with its own "×"; one "Add a word" field adds one or
+  more (commas split). Only the reader's language is written.
+- **The Studio's time panel closes once the time it set has landed.** Since A the editor stays
+  mounted through the schedule's answer, so the panel stayed open and the next "When" closed it
+  instead of opening the reschedule; it now closes as the post's time changes, as it did when the
+  page was re-made.
+- **F4 · The rail's label through the glide.** A label is white while the pill covers more than
+  half of it and ink otherwise, frame by frame, instead of switching on `aria-current` 0.26 s
+  behind a pill that takes 0.44 s. Counts follow the same rule. `tests/e2e/r5-rail-label.spec.ts`
+  reads every frame of four moves, en + ar.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

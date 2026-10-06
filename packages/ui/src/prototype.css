@@ -202,6 +202,30 @@
   background: transparent;
   box-shadow: none;
 }
+/*
+ * Round 5 (F4) — with the pill in charge, a label is white only while the pill
+ * is under it (`data-lit`, set on every frame of the glide by `useRailPill`),
+ * and its colour switches with the pill, not 0.26 s behind `aria-current`.
+ */
+.bsp-sbnav[data-ind] .bsp-nav {
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.26s ease,
+    scale 0.12s ease;
+}
+.bsp-sbnav[data-ind] .bsp-nav[aria-current='page'] {
+  color: #26262b;
+}
+.bsp-sbnav[data-ind] .bsp-nav[data-lit] {
+  color: #fff;
+}
+.bsp-sbnav[data-ind] .bsp-nav[data-lit],
+.bsp-sbnav[data-ind] .bsp-nav[data-lit]:hover {
+  /* A pressed item is still hovered when the pill reaches it: its hover fill
+     goes at once, not over 0.18 s on top of the pill under a white label. */
+  background: transparent;
+  transition: scale 0.12s ease;
+}
 
 /* `.grp` */
 .bsp-grp {
@@ -257,6 +281,21 @@
 }
 /* Round 4 — the current item's count is the prototype's white circle with ink figures. */
 .bsp-nav[aria-current='page'] .bsp-cnt[data-tone='ink'] {
+  background: #fff;
+  color: #111114;
+}
+/* Round 5 (F4) — with the pill in charge, the counts follow the pill as the label does. */
+.bsp-sbnav[data-ind] .bsp-nav[aria-current='page']:not([data-lit]) .bsp-cnt[data-tone='quiet'] {
+  color: #6a6a72;
+}
+.bsp-sbnav[data-ind] .bsp-nav[aria-current='page']:not([data-lit]) .bsp-cnt[data-tone='ink'] {
+  background: #111114;
+  color: #fff;
+}
+.bsp-sbnav[data-ind] .bsp-nav[data-lit] .bsp-cnt[data-tone='quiet'] {
+  color: #8a8a92;
+}
+.bsp-sbnav[data-ind] .bsp-nav[data-lit] .bsp-cnt[data-tone='ink'] {
   background: #fff;
   color: #111114;
 }
@@ -1165,6 +1204,22 @@ button.bsp-xcard:hover {
   background: #f6f3ff;
 }
 .bsp-create-item:hover {
+  background: rgba(20, 16, 35, 0.04);
+}
+/*
+ * Round 5 (E) — A LINK WHOSE PAGE IS ON ITS WAY IS PRESSED, AT ONCE
+ * (`data-pending`, set by `PrefetchLink` / the rail). The button keeps the
+ * prototype's own press amount (`scale: .97`, its `bsPop` start) on its own
+ * `scale` transition; a menu row keeps its hover fill. The rail's press is
+ * the pill, which moves on the click.
+ */
+a[data-pending] {
+  cursor: progress;
+}
+.bsp-btn[data-pending] {
+  scale: 0.97;
+}
+.bsp-create-item[data-pending] {
   background: rgba(20, 16, 35, 0.04);
 }
 .bsp-create-icon {
@@ -12401,4 +12456,95 @@ select.bs-select.bsp-chevron {
 .bsp-tm-access input[type='radio'],
 .bsp-tm-access input[type='checkbox'] {
   accent-color: #111114;
+}
+
+/* Round 5 (F2) — the Publishing log's row, ported from `Main.dc.html`
+   lines 1290–1297: `section.card` (overflow hidden) of `.row`s — a 44px
+   picture at radius 12, the title 14/700, one meta line 12 #6a6a72, the
+   reason 12 #b83245, the status `.pill`, and one `.btn.sm.sec`. The product's
+   other controls sit in the row's own "⋯". */
+.bsp-pl-card {
+  overflow: hidden;
+}
+.bsp-pl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bsp-pl-thumb {
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: block;
+}
+.bsp-pl-thumb > * {
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: 12px;
+}
+.bsp-pl-thumb-text {
+  display: grid;
+  place-items: center;
+  background: #f2f2f4;
+  color: #4d4c53;
+  font-size: 15px;
+  font-weight: 700;
+}
+.bsp-pl-body {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.bsp-pl-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+.bsp-pl-meta {
+  font-size: 12px;
+  color: #6a6a72;
+}
+.bsp-pl-reason {
+  font-size: 12px;
+  color: #b83245;
+}
+.bsp-pl-ok {
+  font-size: 12px;
+  color: #16794b;
+}
+.bsp-pl-more {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px;
+  min-inline-size: 200px;
+}
+
+/* Round 5 (F3) — a voice word, the prototype's `.chip` with its own "×"
+   (`Main.dc.html` line 874: gap 4px, padding-inline-end 6px; the "×" with
+   no border or fill, #8a8a92, padding 0 2px). */
+.bsp-chip.bsp-vc-word {
+  gap: 4px;
+  padding-inline-end: 6px;
+}
+.bsp-chip.bsp-vc-word > form {
+  display: contents;
+}
+.bsp-vc-word-x {
+  border: 0;
+  background: transparent;
+  color: #8a8a92;
+  cursor: pointer;
+  padding: 0 2px;
+  font: inherit;
+  line-height: 1;
+}
+/* The "×" is drawn, so the chip's own text stays the word; the button's name is its label. */
+.bsp-vc-word-x::before {
+  content: '×';
+  content: '×' / '';
 }

@@ -1072,3 +1072,56 @@ describe('notifications are produced by the domain, not by a screen', () => {
     expect(byOwner).toBe(true);
   });
 });
+
+/*
+ * ROUND 5 (F1) — THE REVIEW'S COVER CARRIES A HEADLINE ONLY WHEN ONE WAS
+ * DESIGNED. The review card drew a headline over every cover; a post whose
+ * design has none must reach the screen with none, and a designed one must
+ * reach it as designed (the first image's slide headline, trimmed).
+ */
+describe('round 5 (F1) — the review subject names the designed cover headline', () => {
+  it('is empty without a designed headline, and the headline when there is one', async () => {
+    const before = await inA(({ db }) =>
+      db.contentVariant.findMany({
+        where: { contentItemId: itemId() },
+        select: { id: true, assetIds: true, slides: true },
+      }),
+    );
+    const first = before[0];
+    expect(first).toBeTruthy();
+    const asset = '0f0f0f0f-1111-4222-8333-444444444444';
+    try {
+      await inA(({ db }) =>
+        db.contentVariant.update({
+          where: { id: first?.id ?? '' },
+          data: { assetIds: [asset], slides: [] },
+        }),
+      );
+      const approval = await inA(({ approvals }) =>
+        approvals.submit({ itemId: itemId(), actor: author() }),
+      );
+      const plain = await inA(({ approvals }) =>
+        approvals.reviewSubject({ approvalId: approval.id, actor: reviewer() }),
+      );
+      expect(plain.variants.find((v) => v.id === first?.id)?.coverHeadline).toBe('');
+
+      await inA(({ db }) =>
+        db.contentVariant.update({
+          where: { id: first?.id ?? '' },
+          data: { slides: [{ assetId: asset, headline: '  Spring menu  ' }] },
+        }),
+      );
+      const designed = await inA(({ approvals }) =>
+        approvals.reviewSubject({ approvalId: approval.id, actor: reviewer() }),
+      );
+      expect(designed.variants.find((v) => v.id === first?.id)?.coverHeadline).toBe('Spring menu');
+    } finally {
+      await inA(({ db }) =>
+        db.contentVariant.update({
+          where: { id: first?.id ?? '' },
+          data: { assetIds: first?.assetIds ?? [], slides: first?.slides ?? [] },
+        }),
+      );
+    }
+  });
+});

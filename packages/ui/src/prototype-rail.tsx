@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { DropdownMenu } from './overlays';
+import { PrefetchLink } from './prefetch-link';
 import { PrototypeIcon, type PrototypeGlyph } from './prototype-icons';
 
 /**
@@ -497,7 +498,7 @@ export function PrototypeCreateMenu({
       menuStyle={{ top: '50px', insetInlineEnd: 0, width: '330px', zIndex: 20 }}
     >
       {items.map((item) => (
-        <Link
+        <PrefetchLink
           key={item.key}
           href={item.href}
           role="menuitem"
@@ -511,7 +512,7 @@ export function PrototypeCreateMenu({
             <span className="bsp-create-label">{item.label}</span>
             <span className="bsp-create-sub">{item.sub}</span>
           </span>
-        </Link>
+        </PrefetchLink>
       ))}
     </DropdownMenu>
   );

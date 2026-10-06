@@ -22,6 +22,7 @@ export * from './media';
 export * from './media-image';
 export * from './menu-style';
 export * from './overlays';
+export * from './prefetch-link';
 export * from './toast-bus';
 export * from './toast-host';
 export * from './toast-timing';

@@ -313,6 +313,19 @@ export function DraftEditor({
     setWhenAt(at);
   };
   /*
+   * Round 5 — THE PANEL CLOSES WHEN THE TIME IT SET HAS LANDED. The editor
+   * now stays mounted through the schedule's answer (A), so the panel used to
+   * stay open over the scheduled post, and the next "When" closed it instead
+   * of opening the reschedule.
+   */
+  const placed = publishTime ? `${publishTime.slotId ?? ''}:${publishTime.label}` : '';
+  const placedRef = useRef(placed);
+  useEffect(() => {
+    if (placedRef.current === placed) return;
+    placedRef.current = placed;
+    setWhenOpen(false);
+  }, [placed]);
+  /*
    * Step 7 (7.2) — THE PANEL IS A DIALOG, SO ESCAPE CLOSES IT, and focus goes
    * back to the "When" that opened it (WCAG 2.1.2). It stayed open over the
    * Words / Design tabs.
