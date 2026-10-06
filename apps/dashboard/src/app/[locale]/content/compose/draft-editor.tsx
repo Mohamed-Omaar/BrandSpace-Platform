@@ -1,15 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { takeStudioCarry } from './studio-carry';
+import { takeStudioCarry, type StudioCarry, type StudioHandoff } from './studio-carry';
 import type { AutosaveResult } from '../actions';
 import { AUTOSAVE_STATUSES } from './autosave-statuses';
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type FormEvent,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
@@ -162,6 +164,8 @@ export interface DraftEditorProps {
   readonly onTool: (variantId: string, tool: string, argument?: string) => void;
   /** Review of #67, round 2 — the Studio's "Or start from:" chips, kept on an open post. */
   readonly startFrom?: { readonly idea: string; readonly repurpose: string };
+  /** Round 5 (A) — what the new-post Studio was doing as this draft opened. */
+  readonly handoff?: StudioHandoff | null;
   readonly actions: {
     save(formData: FormData): Promise<void | AutosaveResult>;
     transition(formData: FormData): Promise<void>;
@@ -233,6 +237,21 @@ function liveOf(
   };
 }
 
+/** A variant's on-screen copy with what was typed while its draft was made. */
+function withCarry(base: LiveVariant, carry: StudioCarry): LiveVariant {
+  const hashtagText =
+    carry.tags.length > 0
+      ? [...new Set([...parseHashtags(base.hashtagText), ...carry.tags])]
+          .map((tag) => `#${tag}`)
+          .join(' ')
+      : base.hashtagText;
+  // Only words that are there: an empty carry never clears a template's.
+  const body = carry.caption.trim() !== '' ? carry.caption : base.body;
+  return body !== base.body || hashtagText !== base.hashtagText
+    ? { ...base, body, hashtagText }
+    : base;
+}
+
 export function DraftEditor({
   locale,
   notes = null,
@@ -258,6 +277,7 @@ export function DraftEditor({
   publishTime = null,
   failed = null,
   startFrom,
+  handoff = null,
   onTool,
   actions,
 }: DraftEditorProps) {
@@ -269,10 +289,14 @@ export function DraftEditor({
   const [compare, setCompare] = useState(false);
   const [toneArgument, setToneArgument] = useState('');
   // The prototype's Words / Design tabs; an image carried in opens on Design.
+  // Round 5 (A) — the hand-off for THIS draft, as it stood when the editor opened.
+  const [arrival] = useState(() => (handoff && handoff.itemId === draft.id ? handoff : null));
+  // The hand-off is newer than the address, which was written as the draft was made.
+  const opened = arrival ? arrival.open : openOn;
   const [tab, setTab] = useState<'words' | 'visual'>(
-    attach || openOn === 'visual' ? 'visual' : 'words',
+    attach || opened === 'visual' ? 'visual' : 'words',
   );
-  const [whenOpen, setWhenOpen] = useState(openOn === 'when');
+  const [whenOpen, setWhenOpen] = useState(opened === 'when' || Boolean(arrival?.when));
   /*
    * WHICH "WHEN" OPENED THE PUBLISH-TIME PANEL — the settings card's chip or
    * the bar's (review of #67, round 2). One panel, drawn under the chip that
@@ -310,12 +334,24 @@ export function DraftEditor({
    * newer words.
    */
   const [edits, setEdits] = useState<Readonly<Record<string, LiveVariant>>>(() => {
-    if (!attach) return {};
     const seeded: Record<string, LiveVariant> = {};
+    /*
+     * Round 5 (A) — THE HAND-OFF IS THE FIRST THING DRAWN. The words the
+     * person is typing are in the field from the editor's very first frame,
+     * so a key pressed as it opens lands in them — not in the row as it was
+     * saved a round trip ago, to be overwritten a moment later.
+     */
+    if (arrival && can.edit) {
+      for (const variant of draft.variants) {
+        const base = liveOf({}, variant);
+        seeded[variant.id] = withCarry(base, arrival);
+      }
+    }
+    if (!attach) return seeded;
     for (const variant of draft.variants) {
       const platform = platforms.find((p) => p.key === variant.platformKey);
       if (!platform || platform.maxMediaItems === 0) continue;
-      const base = liveOf({}, variant);
+      const base = seeded[variant.id] ?? liveOf({}, variant);
       if (base.assetIds.includes(attach.id) || base.assetIds.length >= platform.maxMediaItems) {
         continue;
       }
@@ -330,34 +366,56 @@ export function DraftEditor({
    */
   useEffect(() => {
     if (!can.edit) return;
-    const carry = takeStudioCarry(draft.id);
-    if (!carry) return;
+    // The live hand-off was drawn first (above); the stored carry is then discarded.
+    const stored = takeStudioCarry(draft.id);
+    if (arrival || !stored) return;
     setEdits((current) => {
       const next = { ...current };
       for (const variant of draft.variants) {
         const base = liveOf(current, variant);
-        const hashtagText =
-          carry.tags.length > 0
-            ? [...new Set([...parseHashtags(base.hashtagText), ...carry.tags])]
-                .map((tag) => `#${tag}`)
-                .join(' ')
-            : base.hashtagText;
-        // Only words that are there: an empty carry never clears a template's.
-        const body = carry.caption.trim() !== '' ? carry.caption : base.body;
-        if (body !== base.body || hashtagText !== base.hashtagText) {
-          next[variant.id] = { ...base, body, hashtagText };
-        }
+        const carried = withCarry(base, stored);
+        if (carried !== base) next[variant.id] = carried;
       }
       return next;
     });
     // Once, for the draft this editor opened on.
   }, [draft.id]);
   /*
+   * ROUND 5 (A) — THE CURSOR STAYS WHERE IT WAS. The composer's caption is
+   * replaced by this editor's as the draft opens; the person typing in it
+   * keeps typing here, at the same place, rather than into nothing.
+   */
+  useLayoutEffect(() => {
+    if (!arrival || !can.edit || arrival.focus === null) return;
+    const first = draft.variants[0];
+    if (!first) return;
+    const target = document.getElementById(
+      arrival.focus === 'tag' ? `${fieldId}-${first.id}-tags` : `${fieldId}-${first.id}`,
+    );
+    if (!(target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)) return;
+    target.focus();
+    // Only while the field still holds exactly what was handed over: a key
+    // typed since has put the cursor where the person wants it.
+    const place = () => {
+      if (document.activeElement !== target || arrival.focus !== 'caption') return;
+      if (target.value !== arrival.caption || arrival.caret === null) return;
+      target.setSelectionRange(arrival.caret, arrival.caret);
+    };
+    // Once now, and once the carried words are in the field.
+    place();
+    window.setTimeout(place, 0);
+    // Once, as the editor opens.
+  }, []);
+  /*
    * ROUND 3 — THE PROTOTYPE'S HASHTAG FIELD: one tag typed, then "Add". What
    * is typed and not yet added still counts — it is saved with the version and
    * shown in the preview — so nothing typed is lost to a missed click.
    */
-  const [tagDrafts, setTagDrafts] = useState<Readonly<Record<string, string>>>({});
+  const [tagDrafts, setTagDrafts] = useState<Readonly<Record<string, string>>>(() =>
+    arrival && arrival.tagDraft.trim() !== '' && draft.variants[0]
+      ? { [draft.variants[0].id]: arrival.tagDraft }
+      : {},
+  );
   const tagTextOf = (variant: ComposerVariant): string =>
     [live(variant).hashtagText, tagDrafts[variant.id] ?? ''].join(' ').trim();
   const addTags = (variant: ComposerVariant) => {
@@ -442,48 +500,138 @@ export function DraftEditor({
   const autosaves = AUTOSAVE_STATUSES.includes(draft.status);
   const pendingAutosave =
     autosaves && can.edit && !draft.readOnly ? draft.variants.find(unsavedForAutosave) : undefined;
+  /*
+   * ROUND 5 (A) — THE SAVE NEVER STANDS BETWEEN THE PERSON AND A CONTROL.
+   * Tested from Egypt against Amsterdam, a save took a round trip or more, and
+   * the page then re-read itself in full — which also re-fetched every link
+   * in the rail. "Send for review", the bar's "Schedule" and the time's "Set"
+   * were disabled for all of that, after every keystroke, so a click landed
+   * or did not depending on timing. Now:
+   *
+   *   - one save at a time (`inflightRef`), and what was typed while it ran is
+   *     saved next, so the last state the person set is the one saved;
+   *   - an action that needs the words saved first saves them at once
+   *     (`flushSaves`) and then runs — it is never disabled for a save;
+   *   - the page is re-read once, when nothing more is waiting to be saved.
+   */
+  const inflightRef = useRef<Promise<boolean> | null>(null);
+  const pendingRef = useRef<() => readonly ComposerVariant[]>(() => []);
+  pendingRef.current = () =>
+    autosaves && can.edit && !draft.readOnly ? draft.variants.filter(unsavedForAutosave) : [];
+  const runSave = (variant: ComposerVariant): Promise<boolean> => {
+    const form = document.getElementById(panelId(variant));
+    if (!(form instanceof HTMLFormElement)) return Promise.resolve(true);
+    const data = new FormData(form);
+    data.set('autosave', '1');
+    // What was added, not a tag still being typed.
+    const sent = live(variant);
+    data.set('hashtags', sent.hashtagText);
+    savingRef.current = true;
+    setAutosave('saving');
+    const run = actions
+      .save(data)
+      .then((result) => {
+        if (result && result.ok && result.version) {
+          const version = result.version;
+          setSavedAs((current) => ({ ...current, [variant.id]: { version, value: sent } }));
+          setEdits((current) => {
+            const edit = current[variant.id] ?? liveOf(current, variant);
+            return {
+              ...current,
+              [variant.id]: { ...edit, version, basedOn: variant.updatedAt },
+            };
+          });
+          setAutosave('saved');
+          return true;
+        }
+        setAutosave('failed');
+        return false;
+      })
+      .catch(() => {
+        setAutosave('failed');
+        return false;
+      })
+      .finally(() => {
+        savingRef.current = false;
+        inflightRef.current = null;
+      });
+    inflightRef.current = run;
+    return run;
+  };
+  /* Everything typed, saved now: waits for a save under way, then saves the rest. */
+  // One flush at a time: a second caller joins it, and its rounds re-read what waits.
+  const flushRef = useRef<Promise<boolean> | null>(null);
+  const flushSaves = (): Promise<boolean> => {
+    if (flushRef.current) return flushRef.current;
+    const run = (async () => {
+      for (let round = 0; round < 5; round += 1) {
+        if (inflightRef.current && !(await inflightRef.current)) return false;
+        // Let the answer's state land before asking what is still unsaved.
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+        const waiting = pendingRef.current();
+        if (waiting.length === 0) return true;
+        // The latest render's save: it reads what is on screen now.
+        for (const variant of waiting) {
+          if (!(await runSaveRef.current(variant))) return false;
+        }
+      }
+      return pendingRef.current().length === 0;
+    })().finally(() => {
+      flushRef.current = null;
+    });
+    flushRef.current = run;
+    return run;
+  };
+  /*
+   * A form whose action needs the words saved (send for review, resubmit):
+   * on a draft that saves itself, the press saves them first, then submits.
+   */
+  const flushThenSubmit = (event: FormEvent<HTMLFormElement>) => {
+    if (!autosaves || (pendingRef.current().length === 0 && !inflightRef.current)) return;
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    void flushSaves().then((ok) => {
+      if (ok) form.requestSubmit(submitter ?? undefined);
+    });
+  };
   useEffect(() => {
     if (!pendingAutosave || savingRef.current) return undefined;
-    const variant = pendingAutosave;
+    // One pause saves every version waiting (each channel has its own), not
+    // one per pause — under a slow link that was a pause and a round trip each.
     const timer = window.setTimeout(() => {
       if (submittedRef.current) return;
-      const form = document.getElementById(panelId(variant));
-      if (!(form instanceof HTMLFormElement)) return;
-      const data = new FormData(form);
-      data.set('autosave', '1');
-      // What was added, not a tag still being typed.
-      const sent = live(variant);
-      data.set('hashtags', sent.hashtagText);
-      savingRef.current = true;
-      setAutosave('saving');
-      void actions
-        .save(data)
-        .then((result) => {
-          savingRef.current = false;
-          if (result && result.ok && result.version) {
-            const version = result.version;
-            setSavedAs((current) => ({ ...current, [variant.id]: { version, value: sent } }));
-            setEdits((current) => {
-              const edit = current[variant.id] ?? liveOf(current, variant);
-              return {
-                ...current,
-                [variant.id]: { ...edit, version, basedOn: variant.updatedAt },
-              };
-            });
-            setAutosave('saved');
-            router.refresh();
-          } else {
-            setAutosave('failed');
-          }
-        })
-        .catch(() => {
-          savingRef.current = false;
-          setAutosave('failed');
-        });
+      void flushSaves();
     }, 900);
     return () => window.clearTimeout(timer);
     // The pending version's words are the dependency: each change restarts the pause.
   }, [pendingAutosave?.id, pendingAutosave ? JSON.stringify(live(pendingAutosave)) : '']);
+  /*
+   * The page is re-read (checks, preview, the saved line) once the saves have
+   * gone quiet — not after each one, which under a slow link queued a full
+   * page behind every pause in typing.
+   */
+  const quiet = autosave === 'saved' && !pendingAutosave;
+  useEffect(() => {
+    if (!quiet) return undefined;
+    const timer = window.setTimeout(() => {
+      if (!savingRef.current && pendingRef.current().length === 0) router.refresh();
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [quiet, router]);
+  /*
+   * Leaving the Studio inside the pause (a rail link, the back button) saves
+   * what is waiting: a layout cleanup, so the forms are still in the page.
+   */
+  const runSaveRef = useRef(runSave);
+  runSaveRef.current = runSave;
+  useLayoutEffect(
+    () => () => {
+      if (submittedRef.current || inflightRef.current) return;
+      for (const variant of pendingRef.current()) void runSaveRef.current(variant);
+    },
+    [],
+  );
 
   /*
    * THE MEDIA DRAWER — for which variant, and whether it replaces a slide.
@@ -857,7 +1005,11 @@ export function DraftEditor({
             tomorrow={scheduling.tomorrow}
             defaultTime={scheduling.defaultTime}
             plannedDate={plannedDate}
-            disabled={anyDirty}
+            // Round 5 (A): a draft's words save first — the press waits, it is not refused.
+            disabled={anyDirty && !autosaves}
+            {...(autosaves ? { beforeSubmit: flushSaves } : {})}
+            initial={arrival?.when ? { date: arrival.when.date, time: arrival.when.time } : null}
+            submitOnMount={arrival?.when?.submit === true}
             action={actions.scheduleFromStudio}
             t={t}
           />
@@ -1090,7 +1242,11 @@ export function DraftEditor({
               </p>
             ) : null}
             {can.submit ? (
-              <form action={actions.resubmit} className="bsp-st-resubmit">
+              <form
+                action={actions.resubmit}
+                className="bsp-st-resubmit"
+                onSubmit={flushThenSubmit}
+              >
                 <input type="hidden" name="locale" value={locale} />
                 <input type="hidden" name="itemId" value={draft.id} />
                 {(review?.changes?.threadIds ?? []).map((threadId) => (
@@ -1112,8 +1268,8 @@ export function DraftEditor({
                   <button
                     type="submit"
                     className="bsp-btn bsp-sm bsp-pur"
-                    disabled={anyDirty}
-                    title={anyDirty ? t['editor.saveBeforeReview'] : undefined}
+                    disabled={anyDirty && !autosaves}
+                    title={anyDirty && !autosaves ? t['editor.saveBeforeReview'] : undefined}
                     data-testid="resubmit-submit"
                   >
                     {t['editor.changes.resubmit']}
@@ -1237,6 +1393,21 @@ export function DraftEditor({
                 </span>
               ))}
           </div>
+          {arrival?.unapplied ? (
+            /* Round 5 (A): chosen after the draft was made — said, never dropped silently. */
+            <span className="bsp-st-hint" role="status" data-testid="editor-unapplied">
+              {fill(t['studio.unapplied'] ?? '{what}', {
+                what: [
+                  ...arrival.unapplied.channels.map(
+                    (key) => platforms.find((platform) => platform.key === key)?.label ?? key,
+                  ),
+                  ...(arrival.unapplied.format
+                    ? [t[`content.type.${arrival.unapplied.format}`] ?? arrival.unapplied.format]
+                    : []),
+                ].join(', '),
+              })}
+            </span>
+          ) : null}
         </div>
         {/* Publish time and Campaign share the row until the Pillar exists (round 2). */}
         <div className="bsp-st-f bsp-st-f6">
@@ -2076,7 +2247,10 @@ export function DraftEditor({
           </span>
         ) : null}
         <span className="bsp-st-note">
-          {anyDirty && can.submit && (draft.status === 'DRAFT' || draft.status === 'FAILED')
+          {anyDirty &&
+          !autosaves &&
+          can.submit &&
+          (draft.status === 'DRAFT' || draft.status === 'FAILED')
             ? t['editor.saveBeforeReview']
             : null}
         </span>
@@ -2086,7 +2260,12 @@ export function DraftEditor({
           step is the calendar, which the When panel opens.
         */}
         {mayReview ? (
-          <form id={reviewFormId} action={actions.submitForReview} hidden>
+          <form
+            id={reviewFormId}
+            action={actions.submitForReview}
+            hidden
+            onSubmit={flushThenSubmit}
+          >
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="itemId" value={draft.id} />
           </form>
@@ -2119,8 +2298,8 @@ export function DraftEditor({
             type="submit"
             form={reviewFormId}
             className="bsp-btn bsp-pur"
-            disabled={anyDirty}
-            title={anyDirty ? t['editor.saveBeforeReview'] : undefined}
+            disabled={anyDirty && !autosaves}
+            title={anyDirty && !autosaves ? t['editor.saveBeforeReview'] : undefined}
             data-testid="submit-for-review"
           >
             {t['content.composer.submit']}
@@ -2129,7 +2308,7 @@ export function DraftEditor({
           <button
             type="button"
             className="bsp-btn bsp-pur"
-            disabled={anyDirty}
+            disabled={anyDirty && !autosaves}
             data-testid="editor-schedule-open"
             onClick={() => {
               setWhenAt('bar');

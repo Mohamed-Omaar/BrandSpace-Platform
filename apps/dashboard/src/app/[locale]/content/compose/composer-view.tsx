@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import type { AutosaveResult } from '../actions';
-import { STUDIO_CARRY_KEY } from './studio-carry';
+import { STUDIO_CARRY_KEY, type StudioHandoff } from './studio-carry';
+import { InlineSchedule } from './inline-schedule';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { SegmentPill, visuallyHiddenStyle } from '@brandspace/ui';
@@ -848,14 +849,41 @@ export function ComposerView({
   const creatingRef = useRef(false);
   const latestRef = useRef({ caption, tags });
   latestRef.current = { caption, tags };
+  /*
+   * ROUND 5 (A) — NOTHING PRESSED WHILE THE DRAFT IS BEING MADE IS DROPPED.
+   * Under a slow link the draft takes a round trip or more to exist, and
+   * the person keeps going: Design, the time, more words. What they last
+   * asked to open is kept (`intentRef`), the time panel opens at once
+   * (`whenOpen`), and the draft's editor is handed what is on screen as it
+   * opens (`handoff`), the cursor included, and takes over at the same place.
+   */
+  const intentRef = useRef<'words' | 'visual' | 'when' | 'tags'>('words');
+  const [whenOpen, setWhenOpen] = useState(false);
+  // Which "When" opened the panel: it is drawn under that one, as the editor's.
+  const [whenAt, setWhenAt] = useState<'card' | 'bar'>('card');
+  const [whenValues, setWhenValues] = useState<{ date: string; time: string } | null>(null);
+  const [whenPressed, setWhenPressed] = useState(false);
+  const onWhenValues = useCallback((date: string, time: string) => {
+    setWhenValues((current) =>
+      current && current.date === date && current.time === time ? current : { date, time },
+    );
+  }, []);
+  // The draft as it was asked for: what changed after that is said, not lost.
+  const sentRef = useRef<{ channels: readonly string[]; format: string } | null>(null);
   const mayCreate = ready && !captionTooLong && draft === null && can.create;
   const createDraft = useCallback(
     (open: 'words' | 'visual' | 'when' | 'tags') => {
+      // The latest ask wins; words alone never take the place of one.
+      if (open !== 'words') intentRef.current = open;
       if (creatingRef.current || !mayCreate || manualIdempotencyKey === '') return;
       const form = document.getElementById(manualFormId);
       if (!(form instanceof HTMLFormElement)) return;
       const data = new FormData(form);
       data.set('autosave', '1');
+      sentRef.current = {
+        channels: data.getAll('platformKeys').map((value) => String(value)),
+        format: String(data.get('contentType') ?? ''),
+      };
       creatingRef.current = true;
       setCreating('saving');
       setFailure(null);
@@ -873,7 +901,7 @@ export function ComposerView({
               // Storage refused: what was saved is on the draft already.
             }
             const params = new URLSearchParams({ item: result.itemId });
-            if (open !== 'words') params.set('open', open);
+            if (intentRef.current !== 'words') params.set('open', intentRef.current);
             if (carriedMedia) params.set('attach', carriedMedia.id);
             if (plannedDate) params.set('date', plannedDate);
             router.replace(`/${locale}/content/compose?${params.toString()}`);
@@ -912,11 +940,13 @@ export function ComposerView({
    */
   const [wrote, setWrote] = useState(false);
   const meaningful = wrote && (caption.trim() !== '' || tags.length > 0);
+  // Round 5 (A): a channel or format chosen restarts the pause too, so the
+  // draft is not made while the person is still choosing what it is.
   useEffect(() => {
     if (!meaningful || !mayCreate || creatingRef.current) return undefined;
     const timer = window.setTimeout(() => createDraft('words'), 900);
     return () => window.clearTimeout(timer);
-  }, [meaningful, mayCreate, caption, tags, campaignId, createDraft]);
+  }, [meaningful, mayCreate, caption, tags, campaignId, selected, contentType, createDraft]);
   const addTag = () => {
     const added = tagDraft
       .split(/[\s,]+/)
@@ -927,6 +957,106 @@ export function ComposerView({
       setTags((current) => [...current, ...added]);
     }
     setTagDraft('');
+  };
+
+  useEffect(() => {
+    if (!whenOpen) return undefined;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setWhenOpen(false);
+      document
+        .querySelector<HTMLElement>(
+          `[data-testid="${whenAt === 'bar' ? 'composer-bar-when' : 'composer-when'}"]`,
+        )
+        ?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [whenOpen, whenAt]);
+  const toggleWhen = (at: 'card' | 'bar') => {
+    setWhenOpen((open) => (whenAt === at ? !open : true));
+    setWhenAt(at);
+    createDraft('when');
+  };
+
+  const whenPanel = (at: 'card' | 'bar') => (
+    <div
+      role="dialog"
+      aria-label={t['studio.whenTitle']}
+      className={`bsp-st-when${at === 'bar' ? ' bsp-st-when-up' : ''}`}
+      hidden={!whenOpen}
+      data-testid="composer-when-panel"
+    >
+      <span className="bsp-st-when-title">{t['studio.whenTitle']}</span>
+      {brands.find((brand) => brand.id === brandId)?.approvalFirst ? (
+        <span className="bsp-st-when-note">
+          {plannedDate ? t['create.plannedNeedsApproval'] : t['editor.next.needsApproval']}
+        </span>
+      ) : scheduling && can.schedule ? (
+        <InlineSchedule
+          locale={locale}
+          itemId=""
+          today={scheduling.today}
+          tomorrow={scheduling.tomorrow}
+          defaultTime={scheduling.defaultTime}
+          plannedDate={plannedDate}
+          disabled={false}
+          // Never posts from here: the draft's own panel does, once it exists.
+          action={async () => undefined}
+          onValues={onWhenValues}
+          beforeSubmit={async () => {
+            setWhenPressed(true);
+            createDraft('when');
+            return false;
+          }}
+          t={t}
+        />
+      ) : null}
+      <button
+        type="button"
+        className="bsp-btn bsp-sm bsp-st-end"
+        onClick={() => setWhenOpen(false)}
+      >
+        {t['studio.whenDone']}
+      </button>
+    </div>
+  );
+
+  /*
+   * THE HAND-OFF, read as the draft arrives — while this page is still the
+   * one on screen, so the field being typed in and the cursor are known.
+   */
+  const handoffFor = (opened: ComposerDraft): StudioHandoff | null => {
+    if (sentRef.current === null) return null;
+    const active = typeof document === 'undefined' ? null : document.activeElement;
+    const activeId = active?.getAttribute('data-testid') ?? '';
+    const focus =
+      activeId === 'content-caption' ? 'caption' : activeId === 'composer-tag-input' ? 'tag' : null;
+    const kept = new Set(opened.variants.map((variant) => variant.platformKey));
+    const channels = [
+      ...selected.filter((key) => !kept.has(key)),
+      ...[...kept].filter((key) => !selected.includes(key)),
+    ];
+    const format = contentType !== opened.contentType ? contentType : null;
+    return {
+      itemId: opened.id,
+      caption,
+      tags,
+      open: intentRef.current,
+      tagDraft,
+      focus,
+      caret:
+        focus === 'caption' && active instanceof HTMLTextAreaElement ? active.selectionStart : null,
+      when:
+        whenOpen || whenPressed
+          ? {
+              date: whenValues?.date ?? scheduling?.tomorrow ?? '',
+              time: whenValues?.time ?? scheduling?.defaultTime ?? '',
+              submit: whenPressed,
+            }
+          : null,
+      unapplied: channels.length > 0 || format !== null ? { channels, format } : null,
+    };
   };
 
   const chooseFormat = (next: string) => {
@@ -1035,6 +1165,7 @@ export function ComposerView({
           locale={locale}
           t={t}
           openOn={openOn}
+          handoff={handoffFor(draft)}
           draft={draft}
           platforms={platforms}
           campaigns={campaigns}
@@ -1357,26 +1488,36 @@ export function ComposerView({
             */}
             <div className="bsp-st-f bsp-st-f6">
               <span className="bsp-lbl">{t['studio.when']}</span>
-              {/* Round 4 (3.2) — choosing a time makes the draft and opens its time. */}
-              <button
-                type="button"
-                className="bsp-chip bsp-st-wide"
-                data-testid="composer-when"
-                disabled={!mayCreate}
-                title={mayCreate ? undefined : t['content.composer.channelsHint']}
-                onClick={() => createDraft('when')}
-              >
-                <span className="bsp-st-when-label">
-                  <CalendarGlyph />
-                  <span>
-                    {publishTime ? (
-                      <span className="bsp-ltr">{publishTime.label}</span>
-                    ) : (
-                      t['studio.whenUnset']
-                    )}
+              {/*
+                Round 4 (3.2) — choosing a time makes the draft and opens its
+                time. Round 5 (A): the panel opens at once; the time chosen
+                here, and a "Set" pressed before the draft exists, are handed
+                to the draft's own panel, which sets it.
+              */}
+              <span className="bsp-st-anchor">
+                <button
+                  type="button"
+                  className="bsp-chip bsp-st-wide"
+                  aria-haspopup="dialog"
+                  aria-expanded={whenOpen}
+                  data-testid="composer-when"
+                  disabled={!mayCreate}
+                  title={mayCreate ? undefined : t['content.composer.channelsHint']}
+                  onClick={() => toggleWhen('card')}
+                >
+                  <span className="bsp-st-when-label">
+                    <CalendarGlyph />
+                    <span>
+                      {publishTime ? (
+                        <span className="bsp-ltr">{publishTime.label}</span>
+                      ) : (
+                        t['studio.whenUnset']
+                      )}
+                    </span>
                   </span>
-                </span>
-              </button>
+                </button>
+                {whenAt === 'card' ? whenPanel('card') : null}
+              </span>
             </div>
 
             {/*
@@ -1422,7 +1563,11 @@ export function ComposerView({
                   className="bsp-seg-item"
                   aria-selected={editorTab === 'words'}
                   data-testid="studio-tab-words"
-                  onClick={() => setEditorTab('words')}
+                  onClick={() => {
+                    setEditorTab('words');
+                    // Round 5 (A): the last tab pressed is the one the draft opens on.
+                    intentRef.current = 'words';
+                  }}
                 >
                   {t['studio.tabWords']}
                   {caption.trim() !== '' ? <span className="bsp-st-ok"> ✓</span> : null}
@@ -1938,23 +2083,28 @@ export function ComposerView({
               <span className="bsp-st-rev-label">{t['studio.reviewer']}</span>
               <span>{t['studio.reviewerAuto']}</span>
             </span>
-            <button
-              type="button"
-              className="bsp-chip"
-              disabled={!mayCreate}
-              title={mayCreate ? undefined : t['content.composer.channelsHint']}
-              data-testid="composer-bar-when"
-              onClick={() => createDraft('when')}
-            >
-              <CalendarGlyph />
-              <span>
-                {publishTime ? (
-                  <span className="bsp-ltr">{publishTime.label}</span>
-                ) : (
-                  t['studio.whenUnset']
-                )}
-              </span>
-            </button>
+            <span className="bsp-st-anchor">
+              <button
+                type="button"
+                className="bsp-chip"
+                aria-haspopup="dialog"
+                aria-expanded={whenOpen && whenAt === 'bar'}
+                disabled={!mayCreate}
+                title={mayCreate ? undefined : t['content.composer.channelsHint']}
+                data-testid="composer-bar-when"
+                onClick={() => toggleWhen('bar')}
+              >
+                <CalendarGlyph />
+                <span>
+                  {publishTime ? (
+                    <span className="bsp-ltr">{publishTime.label}</span>
+                  ) : (
+                    t['studio.whenUnset']
+                  )}
+                </span>
+              </button>
+              {whenAt === 'bar' ? whenPanel('bar') : null}
+            </span>
             {/*
               Round 4 (3.1) — "Save draft" is gone: the draft saves itself. The
               bar's one primary is the prototype's "Send for review", disabled

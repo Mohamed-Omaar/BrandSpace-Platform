@@ -278,7 +278,13 @@ export async function createManualDraftAction(formData: FormData): Promise<void 
     });
 
     if (isAutosave(formData)) {
-      revalidatePath(`/${locale}/content`);
+      /*
+       * Round 5 (A) — no `revalidatePath` on an answer the Studio reads: it
+       * made Next.js render the whole page into this answer and drop every
+       * prefetched link, a round trip or more under a slow link, before the
+       * Studio could open the draft. The Studio navigates to the draft itself,
+       * and every page here is rendered per request.
+       */
       return { ok: true, itemId };
     }
     destination = pageUrl(locale, '/compose', {
@@ -398,8 +404,9 @@ export async function saveVariantAction(formData: FormData): Promise<void | Auto
       });
     });
     if (isAutosave(formData)) {
-      revalidatePath(`/${locale}/content`);
-      // The saved version, so the Studio keeps what was typed since.
+      // The saved version, so the Studio keeps what was typed since. Round 5
+      // (A): no `revalidatePath` here (see `createManualDraftAction`) — the
+      // Studio re-reads the page once, when its saves have gone quiet.
       return { ok: true, itemId, version: saved.updatedAt.toISOString() };
     }
     destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SAVED' });

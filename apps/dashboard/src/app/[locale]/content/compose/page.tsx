@@ -1284,6 +1284,7 @@ const EDITOR_KEYS = [
   'studio.rewriteSaved',
   'topbar.copilot',
   'studio.channelOff',
+  'studio.unapplied',
   'studio.moreOptions',
   // Phase 2B-2 — carousel slide headlines (B9).
   'editor.slides.headline',

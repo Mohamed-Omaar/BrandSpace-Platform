@@ -1865,6 +1865,17 @@ its own fill while the pill is in charge.
 - **Brand access (7.6)** keeps its native radios and checkboxes (it works without script),
   drawn in ink rather than the browser's blue.
 
+### 6.3.56 Round 5 (A) — the Studio under a slow link
+
+Behaviour, not composition. Two states the prototype does not draw, in its own language (D-468 c):
+
+- **The new post's time panel opens at once.** The prototype's "When" popover (the editor's own
+  `bsp-st-when` panel, the same date and time controls) opens on the first press while the draft is
+  still being made; a "Set" pressed there is handed to the draft's panel, which sets it. Drawn under
+  whichever "When" opened it, as the editor's.
+- **"Not applied: …"** — one `bsp-st-hint` line under "Post to" when a channel or format was chosen
+  after the draft was made (no path changes them yet; round 5 B). `studio.unapplied`, ar + en.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

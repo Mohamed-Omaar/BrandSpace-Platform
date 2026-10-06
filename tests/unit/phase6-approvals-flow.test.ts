@@ -24,8 +24,10 @@ describe('D-288', () => {
     // Review of #67, round 2: "Send for review" is the bar's one purple primary
     // wherever review is open; the brand's policy decides whether the calendar
     // is offered (the When panel), not the button's colour.
+    // Round 5 (A): on a draft that saves itself the button is never disabled
+    // for a save — pressing it saves the words first (`flushThenSubmit`).
     expect(editor).toMatch(
-      /className="bsp-btn bsp-pur"\s+disabled=\{anyDirty\}[\s\S]{0,160}data-testid="submit-for-review"/,
+      /className="bsp-btn bsp-pur"\s+disabled=\{anyDirty && !autosaves\}[\s\S]{0,200}data-testid="submit-for-review"/,
     );
     expect(editor).toMatch(/review && !review\.requiresApproval/);
     expect(editor).toMatch(/can\.schedule &&/);

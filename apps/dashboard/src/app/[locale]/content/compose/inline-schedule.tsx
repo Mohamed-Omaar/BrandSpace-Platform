@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 /**
  * B9 / F2 (Phase 2B-2) — DATE AND TIME IN THE STUDIO, inline.
@@ -33,6 +33,9 @@ export function InlineSchedule({
   hidden = {},
   submitLabel,
   testId = 'editor-schedule-inline',
+  onValues,
+  beforeSubmit,
+  submitOnMount = false,
 }: {
   readonly locale: string;
   readonly itemId: string;
@@ -53,6 +56,15 @@ export function InlineSchedule({
   readonly submitLabel?: string | undefined;
   /** A reschedule is its own form: `editor-reschedule-inline`. */
   readonly testId?: string;
+  /** Round 5 (A) — the date and time as they are chosen, for the new-post Studio. */
+  readonly onValues?: (date: string, time: string) => void;
+  /**
+   * Round 5 (A) — what must happen before the time is set: the draft's words
+   * saved. The press waits for it rather than being refused; false keeps it.
+   */
+  readonly beforeSubmit?: () => Promise<boolean>;
+  /** Round 5 (A) — "Set time" was pressed before the draft existed: press it now, once. */
+  readonly submitOnMount?: boolean;
 }) {
   const id = useId();
   const firstDate = initial
@@ -62,9 +74,39 @@ export function InlineSchedule({
       : tomorrow;
   const [date, setDate] = useState(firstDate);
   const [time, setTime] = useState(initial ? initial.time : firstDate === today ? '' : defaultTime);
+  useEffect(() => {
+    onValues?.(date, time);
+  }, [date, time, onValues]);
+  const formRef = useRef<HTMLFormElement>(null);
+  const cleared = useRef(false);
+  const pressedOnce = useRef(false);
+  useEffect(() => {
+    if (!submitOnMount || pressedOnce.current) return;
+    pressedOnce.current = true;
+    formRef.current?.requestSubmit();
+  }, [submitOnMount]);
 
   return (
-    <form action={action} className="bsp-st-when-form" data-testid={testId}>
+    <form
+      ref={formRef}
+      action={action}
+      className="bsp-st-when-form"
+      data-testid={testId}
+      onSubmit={(event) => {
+        if (!beforeSubmit || cleared.current) {
+          cleared.current = false;
+          return;
+        }
+        // The press is kept: it runs once what it depends on is saved.
+        event.preventDefault();
+        const form = event.currentTarget;
+        void beforeSubmit().then((ok) => {
+          if (!ok) return;
+          cleared.current = true;
+          form.requestSubmit();
+        });
+      }}
+    >
       <input type="hidden" name="locale" value={locale} />
       <input type="hidden" name="contentItemId" value={itemId} />
       {Object.entries(hidden).map(([name, value]) => (

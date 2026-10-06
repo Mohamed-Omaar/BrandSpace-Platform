@@ -1724,6 +1724,8 @@ export const messages = {
     'editor.ai.translateTo': 'ترجم إلى {language}',
     'studio.addDesign': '+ أضف التصميم',
     'studio.channelOff': 'تُختار القنوات عند كتابة المنشور.',
+    'studio.unapplied':
+      'لم يُطبَّق: {what}. حُفظت المسودة بالقنوات والشكل الظاهرين قبل هذا الاختيار.',
     'studio.reviewer': 'المراجِع',
     'studio.reviewerAuto': 'تلقائي',
     'studio.sendAfterSave': 'احفظ المسودة أولًا؛ تبدأ المراجعة من المنشور المحفوظ.',
@@ -5595,6 +5597,8 @@ export const messages = {
     'editor.ai.translateTo': 'Translate to {language}',
     'studio.addDesign': '+ Add the design',
     'studio.channelOff': 'Channels are chosen when a post is written.',
+    'studio.unapplied':
+      'Not applied: {what}. The draft was saved with the channels and format shown before you chose it.',
     'studio.reviewer': 'Reviewer',
     'studio.reviewerAuto': 'Automatic',
     'studio.sendAfterSave': 'Save the draft first; review starts from the saved post.',

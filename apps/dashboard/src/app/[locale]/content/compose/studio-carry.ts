@@ -32,3 +32,24 @@ export function takeStudioCarry(itemId: string): StudioCarry | null {
     return null;
   }
 }
+
+/**
+ * ROUND 5 (A) — THE HAND-OFF, LIVE. The composer stays mounted while its
+ * draft opens, so it hands the editor what the person is doing AT THAT
+ * MOMENT: the words and tags (the carry above, newest), a tag half-typed,
+ * where the cursor was, and what was pressed while the draft was being
+ * made — Design, the time (and its "Set"), or a channel or format the
+ * draft was already made without.
+ */
+export interface StudioHandoff extends StudioCarry {
+  readonly open: 'words' | 'visual' | 'when' | 'tags' | null;
+  readonly tagDraft: string;
+  readonly focus: 'caption' | 'tag' | null;
+  readonly caret: number | null;
+  readonly when: { readonly date: string; readonly time: string; readonly submit: boolean } | null;
+  /** Chosen after the draft was made, which cannot change them yet. */
+  readonly unapplied: {
+    readonly channels: readonly string[];
+    readonly format: string | null;
+  } | null;
+}
