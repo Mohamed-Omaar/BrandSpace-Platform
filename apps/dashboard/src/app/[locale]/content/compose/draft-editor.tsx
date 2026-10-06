@@ -283,6 +283,25 @@ export function DraftEditor({
     setWhenOpen((open) => (whenAt === at ? !open : true));
     setWhenAt(at);
   };
+  /*
+   * Step 7 (7.2) — THE PANEL IS A DIALOG, SO ESCAPE CLOSES IT, and focus goes
+   * back to the "When" that opened it (WCAG 2.1.2). It stayed open over the
+   * Words / Design tabs.
+   */
+  useEffect(() => {
+    if (!whenOpen) return undefined;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setWhenOpen(false);
+      document
+        .querySelector<HTMLElement>(
+          `[data-testid="${whenAt === 'bar' ? 'editor-bar-when' : 'editor-when'}"]`,
+        )
+        ?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [whenOpen, whenAt]);
 
   /*
    * WHAT IS ON SCREEN, PER VARIANT. Keyed by the variant's `updatedAt`, so a

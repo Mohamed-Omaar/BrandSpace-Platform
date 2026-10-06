@@ -562,10 +562,18 @@ export async function uploadComposerMediaAction(formData: FormData): Promise<voi
       folderId: null,
     });
 
-    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'ASSET_UPLOADED' });
+    // Step 7 (7.2): back on Design, where the upload was made.
+    destination = pageUrl(locale, '/compose', {
+      item: itemId,
+      open: 'visual',
+      ok: 'ASSET_UPLOADED',
+    });
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
-    destination = failure(locale, error, 'uploadComposerMedia', '/compose', { item: itemId });
+    destination = failure(locale, error, 'uploadComposerMedia', '/compose', {
+      item: itemId,
+      open: 'visual',
+    });
   }
   revalidatePath(`/${locale}/content`);
   redirect(destination);

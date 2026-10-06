@@ -554,7 +554,9 @@ export default async function OnboardingPage({
           <div className="bsp-wz-facts" data-testid="setup-review-summary">
             <div className="bsp-wz-facts-h">
               <span>
-                {t('setup.wz.teach.understood').replace('{count}', String(candidates.length))}
+                {candidates.length === 1
+                  ? t('setup.wz.teach.understood.one')
+                  : t('setup.wz.teach.understood').replace('{count}', String(candidates.length))}
               </span>
               {/* Round 4 (4.3) — the prototype's "Accept all": each fact's own Accept, in turn. */}
               <form action={acceptAllSetupCandidatesAction}>

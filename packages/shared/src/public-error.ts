@@ -26,6 +26,8 @@ export const PUBLIC_ERROR_CODES = [
   'INVALID_INPUT',
   'INVALID_JSON',
   'CONCURRENT_EDIT',
+  // Step 7 (7.2) — a file uploaded again: say where it already is.
+  'ALREADY_IN_LIBRARY',
   'CONFLICT',
   'FORBIDDEN',
   'UNAUTHENTICATED',
@@ -99,6 +101,9 @@ export function toPublicErrorCode(error: unknown): PublicErrorCode {
     // rather than retry, and saying so costs nothing.
     if (error.code === 'CONFLICT' && 'expectedLockVersion' in error.publicDetails) {
       return 'CONCURRENT_EDIT';
+    }
+    if (error.code === 'CONFLICT' && error.publicDetails['reason'] === 'duplicate') {
+      return 'ALREADY_IN_LIBRARY';
     }
     return APP_ERROR_CODE_MAP[error.code] ?? 'INTERNAL';
   }

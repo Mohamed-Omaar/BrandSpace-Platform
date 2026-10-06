@@ -18,6 +18,10 @@ const ERROR_TEXT: Record<PublicErrorCode, { en: string; ar: string }> = {
     en: 'The payload is not valid JSON.',
     ar: 'المحتوى ليس JSON صالحًا.',
   },
+  ALREADY_IN_LIBRARY: {
+    en: 'This file is already in the library.',
+    ar: 'هذا الملف موجود في المكتبة بالفعل.',
+  },
   CONCURRENT_EDIT: {
     en: 'This draft was changed by someone else since you loaded it. Reload before saving, so neither edit is lost.',
     ar: 'عدّل شخص آخر هذه المسودة بعد فتحك لها. أعد التحميل قبل الحفظ حتى لا يضيع أي تعديل.',

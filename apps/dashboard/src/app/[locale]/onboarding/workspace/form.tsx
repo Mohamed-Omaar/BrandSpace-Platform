@@ -6,6 +6,7 @@ import { Field, SearchableSelect, type SearchableOption } from '@brandspace/ui';
 import { authInputStyle } from '../../../../components/auth-card';
 import { timeZoneAfterCountryChange } from '../../../../components/time-zone-suggestion';
 import { detectedTimeZone } from '../../../../components/browser-time-zone';
+import { suggestedWorkspaceAddress } from '../../../../components/workspace-address';
 
 interface ApiFailurePayload {
   readonly error?: {
@@ -89,6 +90,9 @@ export function CreateWorkspaceForm({
   };
 }) {
   const more = useRef<HTMLDetailsElement>(null);
+  // Step 7 (7.1): the address follows the business name until it is edited.
+  const address = useRef<HTMLInputElement>(null);
+  const addressEdited = useRef(false);
   const [country, setCountry] = useState('');
   const [lastCountry, setLastCountry] = useState('');
   const [timezone, setTimezone] = useState('');
@@ -195,6 +199,13 @@ export function CreateWorkspaceForm({
             maxLength={120}
             autoComplete="organization"
             style={authInputStyle()}
+            onInput={(event) => {
+              if (addressEdited.current || !address.current) return;
+              address.current.value = suggestedWorkspaceAddress(
+                event.currentTarget.value,
+                defaultEmail,
+              );
+            }}
           />
         </Field>
 
@@ -267,6 +278,10 @@ export function CreateWorkspaceForm({
               className="bs-control"
               id="slug"
               name="slug"
+              ref={address}
+              onInput={() => {
+                addressEdited.current = true;
+              }}
               required
               pattern="[a-z0-9][a-z0-9-]{1,48}[a-z0-9]"
               maxLength={50}

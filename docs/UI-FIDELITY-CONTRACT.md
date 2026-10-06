@@ -1841,6 +1841,30 @@ dark under a moving pill. The pill now takes over (`data-ind`) before the first
 measurement. `r4-rail-active.spec.ts` fails on any frame where the current item paints
 its own fill while the pill is in charge.
 
+### 6.3.55 Round 4, Step 7 — what the flow walk on a fresh workspace changed
+
+- **Business step (7.1).** The step asks its two questions; the workspace address under
+  "More" follows the business name (or, for a name with no Latin letters, the account's
+  address) until the person edits it, so Continue no longer stops on an empty required field
+  the step never asked for. The server still validates the address and reports one taken.
+- **Teach (7.1) and Team (7.6).** "We understood one thing · review it" and "1 person" in
+  the singular (en + ar).
+- **The Studio's media parts (7.2) — AN APPROVED DESIGN-SYSTEM EXTENSION.** The Design
+  tab's media list, the "Add media" sheet and the carousel slides kept the retired
+  full-demo `cs-*` scale (8–10px) and read variables only `.content-page` set, which no
+  Studio page renders any more: the sheet's chosen tab was white on white. They now take
+  the platform's own label, hint, segmented control, chip and button (`prototype.css`,
+  "Step 7 (flow 7.2)"); no markup or test id changed except the buttons, which are
+  `buttonClass`.
+- **The "When" panel (7.2)** is a dialog: Escape closes it and focus returns to the "When"
+  that opened it.
+- **An upload from Design (7.2)** returns to Design; a file already in Media says so ("This
+  file is already in Media. Choose it from the library.") instead of a generic conflict.
+- **Media → "Use" (7.4).** The Studio's notice says the file comes "from Media" (it said
+  "from Creative Studio" for an upload).
+- **Brand access (7.6)** keeps its native radios and checkboxes (it works without script),
+  drawn in ink rather than the browser's blue.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

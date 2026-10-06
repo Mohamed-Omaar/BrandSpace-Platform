@@ -193,6 +193,7 @@ export default async function MembersPage({
     const all = current.length === 0 && !viewerRestricted;
     return (
       <fieldset
+        className="bsp-tm-access"
         style={{ border: 0, margin: 0, padding: 0, display: 'grid', gap: spacingTokens.xs }}
         data-testid={`${idPrefix}-access`}
       >
@@ -625,7 +626,9 @@ export default async function MembersPage({
                     ? t('members.seats')
                         .replace('{used}', String(activeSeats))
                         .replace('{limit}', String(seatLimit))
-                    : t('members.count').replace('{count}', String(members.length))}
+                    : members.length === 1
+                      ? t('members.count.one')
+                      : t('members.count').replace('{count}', String(members.length))}
                 </span>
                 {/*
                   "+ Invite" opens the invitation form in place (review of #67,

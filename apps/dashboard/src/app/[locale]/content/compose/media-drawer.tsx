@@ -1,7 +1,14 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
-import { AssetThumb, MediaChip, SideSheet, colorTokens, radiusTokens } from '@brandspace/ui';
+import {
+  AssetThumb,
+  MediaChip,
+  buttonClass,
+  SideSheet,
+  colorTokens,
+  radiusTokens,
+} from '@brandspace/ui';
 import {
   aspectLabel,
   durationLabel,
@@ -218,7 +225,11 @@ export function MediaDrawer({
             data-testid="composer-upload-file"
           />
           <p className="cs-hint">{t['content.media.uploadNotice']}</p>
-          <button type="submit" className="cs-dark-button" data-testid="composer-upload-submit">
+          <button
+            type="submit"
+            className={buttonClass('primary', 'md')}
+            data-testid="composer-upload-submit"
+          >
             {t['content.media.uploadSubmit']}
           </button>
         </form>
@@ -269,7 +280,7 @@ export function MediaDrawer({
           <div className="cs-form-actions">
             <button
               type="button"
-              className="cs-ghost-button cs-compact"
+              className={buttonClass('neutral', 'sm')}
               disabled={busy}
               data-testid="media-generate-quote"
               onClick={async () => {
@@ -283,7 +294,7 @@ export function MediaDrawer({
             </button>
             <button
               type="button"
-              className="cs-dark-button"
+              className={buttonClass('primary', 'md')}
               disabled={busy || prompt.trim() === ''}
               data-testid="media-generate-submit"
               onClick={async () => {

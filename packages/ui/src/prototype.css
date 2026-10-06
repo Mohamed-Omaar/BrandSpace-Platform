@@ -12310,3 +12310,91 @@ select.bs-select.bsp-chevron {
   border-radius: 6px;
   padding: 3px 7px;
 }
+
+/* Step 7 (flow 7.2) — THE STUDIO'S MEDIA PARTS IN THE PLATFORM'S OWN
+   LANGUAGE. The Design tab's media list, the "Add media" sheet and the
+   carousel's slides kept the retired full-demo classes (`content-studio.css`,
+   `cs-*`) at their 8–10px scale, and those rules read variables set only on
+   `.content-page` — which no Studio page renders any more — so the sheet's
+   chosen tab was white on white. AN APPROVED DESIGN-SYSTEM EXTENSION (CLAUDE.md
+   §4.2): nothing new is drawn; each part takes the tokens and sizes the
+   platform already ships — the label (`.bsp-lbl`), the Studio's hint
+   (`.bsp-st-hint`), the segmented control (`.bsp-seg`) and the chip. */
+.bsp-frame {
+  --cs-ink: #111114;
+  --cs-soft: #f2f2f4;
+  --cs-purple: #7935fe;
+  --cs-muted: #6a6a72;
+  --cs-success: #16794b;
+  --cs-warning: #875f00;
+  --cs-soft-shadow: 0 5px 18px rgba(20, 16, 35, 0.035);
+}
+.bsp-frame .cs-section-kicker,
+.bsp-frame .cs-field label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6a6a72;
+}
+.bsp-frame .cs-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #6a6a72;
+}
+.bsp-frame .cs-field textarea,
+.bsp-frame .cs-field select,
+.bsp-frame .cs-slide-list li,
+.bsp-frame .cs-slide-headline {
+  font-size: 13px;
+}
+/* The sheet's tabs: the segmented control. */
+.bsp-frame .cs-channel-row {
+  display: inline-flex;
+  gap: 2px;
+  background: #f2f2f4;
+  border-radius: 12px;
+  padding: 3px;
+  margin-block-end: 14px;
+}
+.bsp-frame .cs-channel-row > .cs-channel {
+  background: transparent;
+  border-radius: 9px;
+  padding: 6px 12px;
+  min-block-size: 30px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #55555c;
+}
+.bsp-frame .cs-channel-row > .cs-channel.selected {
+  background: #fff;
+  color: #111114;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+/* A slide's actions: chips. */
+.bsp-frame .cs-slide-actions > .cs-channel {
+  background: #fff;
+  border: 1px solid #e4e4e8;
+  border-radius: 99px;
+  padding: 5px 11px;
+  min-block-size: 30px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #111114;
+}
+.bsp-frame .cs-slide-actions > .cs-channel.selected {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
+.bsp-frame .cs-inline-link {
+  color: #7935fe;
+  font-weight: 700;
+}
+/* Step 7 (flow 7.6) — Brand access keeps its native radios and checkboxes
+   (it works without script), drawn in the platform's ink rather than the
+   browser's blue, as every other chosen control is. */
+.bsp-tm-access input[type='radio'],
+.bsp-tm-access input[type='checkbox'] {
+  accent-color: #111114;
+}
