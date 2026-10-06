@@ -143,8 +143,8 @@ describe('Q12 · Home tells the Viewer what is happening, not what to do', () =>
     const en = messages.en as Record<string, string>;
     const ar = messages.ar as Record<string, string>;
     expect(en['home.action.awaitApproval']).toBe('Waiting for approval');
-    expect(ar['home.action.awaitApproval']).toBe('مستني موافقة');
+    expect(ar['home.action.awaitApproval']).toBe('بانتظار الموافقة');
     expect(en['home.action.seeCalendar']).toBe('See the calendar');
-    expect(ar['home.action.seeCalendar']).toBe('شوف التقويم');
+    expect(ar['home.action.seeCalendar']).toBe('اعرض التقويم');
   });
 });

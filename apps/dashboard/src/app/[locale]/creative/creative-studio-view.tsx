@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { formatCredits as formatCreditDisplay } from '../../../server/composer-editor';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { AssetMedia, SegmentPill } from '@brandspace/ui';
@@ -501,11 +502,7 @@ export function CreativeStudioView({
  * is how rounding becomes revenue. This is the one place it becomes a decimal,
  * and only to be read.
  */
-function formatCredits(milli: string, locale: string): string {
-  const value = Number(milli);
-  if (!Number.isFinite(value)) return '—';
-  return new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
-    maximumFractionDigits: 2,
-    numberingSystem: 'latn',
-  }).format(value / 1000);
+function formatCredits(milli: string, _locale: string): string {
+  // Round 4 (3.6) — the one display rule: at most one decimal, rounded up.
+  return /^-?\d+$/.test(milli) ? formatCreditDisplay(milli) : '—';
 }

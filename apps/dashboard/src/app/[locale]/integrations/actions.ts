@@ -40,6 +40,7 @@ function pageUrl(
   const search = new URLSearchParams({
     ...(back.path === '/onboarding' ? { step: 'connect' } : {}),
     ...(back.tab ? { tab: back.tab } : {}),
+    ...(back.history ? { history: '1' } : {}),
     ...params,
   });
   const query = search.toString();
@@ -58,6 +59,8 @@ function pageUrl(
 interface ReturnTo {
   readonly path: '/integrations' | '/publishing' | '/onboarding';
   readonly tab?: 'queue' | 'published' | 'failed' | 'accounts' | undefined;
+  /** Gate 2b review (4f) — Settings → Accounts' publishing history view (`?history=1`). */
+  readonly history?: boolean | undefined;
 }
 
 const PUBLISHING_TABS = new Set(['queue', 'published', 'failed', 'accounts']);
@@ -65,6 +68,7 @@ const PUBLISHING_TABS = new Set(['queue', 'published', 'failed', 'accounts']);
 function returnToOf(formData: FormData): ReturnTo {
   const requested = String(formData.get('returnTo') ?? '');
   if (requested === '/onboarding') return { path: '/onboarding' };
+  if (requested === '/integrations?history=1') return { path: '/integrations', history: true };
   if (requested !== '/publishing') return { path: '/integrations' };
   const tab = String(formData.get('tab') ?? '');
   return {

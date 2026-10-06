@@ -1,13 +1,4 @@
-import {
-  Card,
-  DraftForm,
-  Field,
-  SectionHeader,
-  colorTokens,
-  inputStyle,
-  spacingTokens,
-  typographyTokens,
-} from '@brandspace/ui';
+import { DraftForm } from '@brandspace/ui';
 import { inWorkspace, requireWorkspacePage } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { CheckboxRow } from '../../../../components/checkbox-row';
@@ -81,84 +72,97 @@ export default async function AiSettingsPage({
       permissionKeys={workspace.permissionKeys}
     >
       {error && <CustomerBanner tone="error">{statusMessage(error, locale, ref)}</CustomerBanner>}
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="ai">
-        <Card testId="ai-settings">
-          <SectionHeader title={t('aiSettings.title')} description={t('aiSettings.body')} />
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="ai"
+      >
+        {/*
+          ROUND 4, GATE 2b — THE PROTOTYPE'S AI SETTINGS (`Main.dc.html` lines
+          1369–1374): "Writing language" as chips in an `xcard`, then the
+          switches as rows. The product's languages are the brand's two content
+          languages (`defaultLocale`), so two chips, each a radio posting the
+          same field as the select did. Left out, with nothing behind them: the
+          prototype's dialect chips (Egyptian / Modern Standard / mixed), "AI
+          drafts go to review" and the credit alert (owner decision, Gate 2).
+        */}
+        <div className="bsp-ai bsp-sg-grow" data-testid="ai-settings">
           {brands.length === 0 ? (
-            <p style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary, margin: 0 }}>
-              {t('aiSettings.noBrand')}
-            </p>
+            <section className="bsp-xcard">
+              <p className="bsp-ai-empty">{t('aiSettings.noBrand')}</p>
+            </section>
           ) : (
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                display: 'grid',
-                gap: spacingTokens.md,
-              }}
-            >
-              {brands.map((brand) => (
-                <li key={brand.id}>
-                  <DraftForm
-                    key={`${brand.defaultLocale}:${String(brand.aiSuggestionsEnabled)}:${String(brand.useBrandBrain)}`}
-                    action={saveAiLanguageAction}
-                    style={{ display: 'grid', gap: spacingTokens.sm }}
-                    testId={`ai-form-${brand.id}`}
-                    barTestId={`ai-bar-${brand.id}`}
-                    saveTestId={`ai-save-${brand.id}`}
-                    labels={saveBarLabels(t)}
+            brands.map((brand, index) => (
+              <DraftForm
+                key={`${brand.id}:${brand.defaultLocale}:${String(brand.aiSuggestionsEnabled)}:${String(brand.useBrandBrain)}`}
+                action={saveAiLanguageAction}
+                // Gate 2b review (4b): the last form's bar on the frame's bottom edge.
+                className={index === brands.length - 1 ? 'bsp-ai-form bsp-sg-form' : 'bsp-ai-form'}
+                testId={`ai-form-${brand.id}`}
+                barTestId={`ai-bar-${brand.id}`}
+                saveTestId={`ai-save-${brand.id}`}
+                labels={saveBarLabels(t)}
+              >
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="brandId" value={brand.id} />
+                <section className="bsp-xcard bsp-ai-lang">
+                  {brands.length > 1 ? (
+                    <strong className="bsp-ai-brand">{brand.name}</strong>
+                  ) : null}
+                  <span className="bsp-lbl" id={`ai-language-label-${brand.id}`}>
+                    {t('aiSettings.language')}
+                  </span>
+                  <div
+                    className="bsp-ai-chips"
+                    role="radiogroup"
+                    aria-labelledby={`ai-language-label-${brand.id}`}
+                    data-testid={`ai-language-${brand.id}`}
                   >
-                    <input type="hidden" name="locale" value={locale} />
-                    <input type="hidden" name="brandId" value={brand.id} />
-                    {brands.length > 1 ? (
-                      <strong style={typographyTokens.bodySm}>{brand.name}</strong>
-                    ) : null}
-                    <Field
-                      label={t('aiSettings.language')}
-                      htmlFor={`ai-language-${brand.id}`}
-                      hint={t('aiSettings.languageHint')}
-                    >
-                      <select
-                        className="bs-control bs-select"
-                        id={`ai-language-${brand.id}`}
-                        name="defaultLocale"
-                        data-testid={`ai-language-${brand.id}`}
-                        defaultValue={brand.defaultLocale}
-                        style={inputStyle()}
-                      >
-                        <option value="EN">{t('brandProfile.localeEn')}</option>
-                        <option value="AR">{t('brandProfile.localeAr')}</option>
-                      </select>
-                    </Field>
-                    {/*
-                      D7 (Phase 2B-2) — the Home "Recommended by BrandSpace"
-                      card for this brand, and only that card.
-                    */}
-                    <CheckboxRow
-                      name="aiSuggestionsEnabled"
-                      label={t('aiSettings.suggestions')}
-                      hint={t('aiSettings.suggestionsHint')}
-                      checked={brand.aiSuggestionsEnabled}
-                      testId={`ai-suggestions-${brand.id}`}
-                    />
-                    {/*
-                      Phase 2C (D9) — "Use Brand Brain": whether this brand's
-                      facts ground AI writing at all. The same CheckboxRow.
-                    */}
-                    <CheckboxRow
-                      name="useBrandBrain"
-                      label={t('aiSettings.useBrandBrain')}
-                      hint={t('aiSettings.useBrandBrainHint')}
-                      checked={brand.useBrandBrain}
-                      testId={`ai-use-brand-brain-${brand.id}`}
-                    />
-                  </DraftForm>
-                </li>
-              ))}
-            </ul>
+                    {(['EN', 'AR'] as const).map((value) => (
+                      <label key={value} className="bsp-chip bsp-ai-chip">
+                        <input
+                          type="radio"
+                          name="defaultLocale"
+                          value={value}
+                          defaultChecked={brand.defaultLocale === value}
+                          className="bsp-ai-radio"
+                          data-testid={`ai-language-${brand.id}-${value}`}
+                        />
+                        {value === 'EN' ? t('brandProfile.localeEn') : t('brandProfile.localeAr')}
+                      </label>
+                    ))}
+                  </div>
+                  <span className="bsp-ai-hint">{t('aiSettings.languageHint')}</span>
+                </section>
+                <section className="bsp-xcard bsp-ai-tgls">
+                  {/*
+                    Phase 2C (D9) — "Use Brand Brain": whether this brand's facts
+                    ground AI writing at all.
+                  */}
+                  <CheckboxRow
+                    name="useBrandBrain"
+                    label={t('aiSettings.useBrandBrain')}
+                    hint={t('aiSettings.useBrandBrainHint')}
+                    checked={brand.useBrandBrain}
+                    testId={`ai-use-brand-brain-${brand.id}`}
+                  />
+                  {/*
+                    D7 (Phase 2B-2) — the Home "Recommended by BrandSpace" card
+                    for this brand, and only that card.
+                  */}
+                  <CheckboxRow
+                    name="aiSuggestionsEnabled"
+                    label={t('aiSettings.suggestions')}
+                    hint={t('aiSettings.suggestionsHint')}
+                    checked={brand.aiSuggestionsEnabled}
+                    testId={`ai-suggestions-${brand.id}`}
+                  />
+                </section>
+              </DraftForm>
+            ))
           )}
-        </Card>
+        </div>
       </SettingsFrame>
     </WorkspaceShell>
   );

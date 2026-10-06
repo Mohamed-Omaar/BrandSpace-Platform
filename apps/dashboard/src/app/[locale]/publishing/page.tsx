@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { randomUUID } from 'node:crypto';
+import { systemClock } from '@brandspace/shared';
 import { retryableAfterReconnect } from '@brandspace/social-connectors';
 import {
   AssetThumb,
@@ -9,7 +10,6 @@ import {
   StateMessage,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   spacingTokens,
   typographyTokens,
@@ -273,7 +273,7 @@ export default async function PublishingPage({
   };
 
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()) };
   const providerLabel = (provider: string): string =>
     optionalMessage(messageLocale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
   const failureText = (failureClass: string | null, failureCode: string | null): string | null =>
@@ -285,7 +285,8 @@ export default async function PublishingPage({
 
   const count = (statuses: readonly string[]) =>
     statuses.reduce((sum, status) => sum + (data.counts[status] ?? 0), 0);
-  const badge = (value: number) => (value > 0 ? String(value) : undefined);
+  // Gate 2b review (4h) — every tab carries its count, as the prototype's do.
+  const badge = (value: number) => String(value);
   const tabHref = (id: Tab) => `/${locale}/publishing${id === 'queue' ? '' : `?tab=${id}`}`;
 
   /** Hidden fields every action from this screen carries, so it returns here. */
@@ -306,8 +307,8 @@ export default async function PublishingPage({
         <input type="hidden" name="brandId" value={forBrand} />
         <button
           type="submit"
-          style={buttonStyle('primary', 'sm')}
-          className={buttonClass('primary')}
+
+          className={buttonClass('primary', 'sm')}
           data-testid={testId}
         >
           {t('publishingHub.reconnect').replace('{provider}', providerLabel(provider))}
@@ -326,7 +327,8 @@ export default async function PublishingPage({
       flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
-      heading={t('publishingHub.title')}
+      eyebrow={t('nav.group.publish')}
+      heading={t('nav.rail.publishingLog')}
       description={t('publishingHub.subtitle')}
       activePath="/publishing"
       workspaceName={workspace.workspaceName}
@@ -338,40 +340,52 @@ export default async function PublishingPage({
         <CustomerBanner tone="error">{statusMessage(error, locale, reference)}</CustomerBanner>
       ) : null}
 
-      <LinkTabs
-        label={t('publishingHub.tabsLabel')}
-        currentId={tab}
-        testId="publishing-tabs"
-        tabs={[
-          {
-            id: 'queue',
-            href: tabHref('queue'),
-            label: t('publishingHub.tab.queue'),
-            badge: badge(count(QUEUE_STATUSES)),
-          },
-          {
-            id: 'published',
-            href: tabHref('published'),
-            label: t('publishingHub.tab.published'),
-            badge: badge(count(['PUBLISHED'])),
-          },
-          {
-            id: 'failed',
-            href: tabHref('failed'),
-            label: t('publishingHub.tab.failed'),
-            badge: badge(count(['FAILED'])),
-          },
-          ...(may('integrations.read')
-            ? [
-                {
-                  id: 'accounts',
-                  href: tabHref('accounts'),
-                  label: t('publishingHub.tab.accounts'),
-                },
-              ]
-            : []),
-        ]}
-      />
+      {/*
+        Gate 2b — the prototype's three tabs (Queue · Published · Failed), each
+        with its count. The product's Accounts view is a tab only while open.
+      */}
+      <div className="bsp-pl-top">
+        <LinkTabs
+          label={t('publishingHub.tabsLabel')}
+          currentId={tab}
+          testId="publishing-tabs"
+          tabs={[
+            {
+              id: 'queue',
+              href: tabHref('queue'),
+              label: t('publishingHub.tab.queue'),
+              badge: badge(count(QUEUE_STATUSES)),
+            },
+            {
+              id: 'published',
+              href: tabHref('published'),
+              label: t('publishingHub.tab.published'),
+              badge: badge(count(['PUBLISHED'])),
+            },
+            {
+              id: 'failed',
+              href: tabHref('failed'),
+              label: t('publishingHub.tab.failed'),
+              badge: badge(count(['FAILED'])),
+            },
+            ...(may('integrations.read') && tab === 'accounts'
+              ? [
+                  {
+                    id: 'accounts',
+                    href: tabHref('accounts'),
+                    label: t('publishingHub.tab.accounts'),
+                  },
+                ]
+              : []),
+          ]}
+        />
+        {/*
+          Gate 2b review (4f) — no "⋯" beside the tabs. The Accounts view is
+          reached where it is needed: Home's attention items and the
+          Calendar's readiness fix link to it, and Settings → Accounts holds
+          the accounts themselves; while it is open it is a tab here.
+        */}
+      </div>
 
       {tab !== 'accounts' ? (
         <Card testId={`publishing-${tab}`}>
@@ -532,8 +546,8 @@ export default async function PublishingPage({
                             href={job.externalPostUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={buttonStyle('ghost', 'sm')}
-                            className={buttonClass('ghost')}
+
+                            className={buttonClass('ghost', 'sm')}
                             data-testid={`post-link-${job.id}`}
                           >
                             {t('publishing.viewPost')}
@@ -545,8 +559,8 @@ export default async function PublishingPage({
                             <input type="hidden" name="jobId" value={job.id} />
                             <button
                               type="submit"
-                              style={buttonStyle('primary', 'sm')}
-                              className={buttonClass('primary')}
+
+                              className={buttonClass('primary', 'sm')}
                               data-testid={`retry-reconnected-${job.id}`}
                             >
                               {t('publishing.retry')}
@@ -569,8 +583,8 @@ export default async function PublishingPage({
                             <input type="hidden" name="jobId" value={job.id} />
                             <button
                               type="submit"
-                              style={buttonStyle('neutral', 'sm')}
-                              className={buttonClass('neutral')}
+
+                              className={buttonClass('neutral', 'sm')}
                               data-testid={`retry-${job.id}`}
                             >
                               {t('publishing.retry')}
@@ -588,8 +602,8 @@ export default async function PublishingPage({
                           data.approvalRequired.get(job.brandId) ? (
                             <Link
                               href={`/${locale}/content/compose?item=${job.contentItemId}`}
-                              style={buttonStyle('primary', 'sm')}
-                              className={buttonClass('primary')}
+
+                              className={buttonClass('primary', 'sm')}
                               data-testid={`reschedule-${job.id}`}
                             >
                               {t('publishing.resendForReview')}
@@ -597,8 +611,8 @@ export default async function PublishingPage({
                           ) : (
                             <Link
                               href={`/${locale}/calendar?item=${job.contentItemId}`}
-                              style={buttonStyle('primary', 'sm')}
-                              className={buttonClass('primary')}
+
+                              className={buttonClass('primary', 'sm')}
                               data-testid={`reschedule-${job.id}`}
                             >
                               {t('publishing.reschedule')}
@@ -618,8 +632,8 @@ export default async function PublishingPage({
                             />
                             <button
                               type="submit"
-                              style={buttonStyle('neutral', 'sm')}
-                              className={buttonClass('neutral')}
+
+                              className={buttonClass('neutral', 'sm')}
                               data-testid={`copy-${job.id}`}
                             >
                               {t('content.action.duplicate')}
@@ -632,8 +646,8 @@ export default async function PublishingPage({
                             <input type="hidden" name="jobId" value={job.id} />
                             <button
                               type="submit"
-                              style={buttonStyle('ghost', 'sm')}
-                              className={buttonClass('ghost')}
+
+                              className={buttonClass('ghost', 'sm')}
                               data-testid={`cancel-${job.id}`}
                             >
                               {t('publishing.cancel')}
@@ -656,8 +670,8 @@ export default async function PublishingPage({
             actions={
               <Link
                 href={`/${locale}/integrations`}
-                style={buttonStyle('ghost', 'sm')}
-                className={buttonClass('ghost')}
+
+                className={buttonClass('ghost', 'sm')}
                 data-testid="publishing-manage-connections"
               >
                 {t('publishingHub.manageConnections')}
@@ -720,8 +734,8 @@ export default async function PublishingPage({
                       <input type="hidden" name="connectionId" value={connection.id} />
                       <button
                         type="submit"
-                        style={buttonStyle('ghost', 'sm')}
-                        className={buttonClass('ghost')}
+
+                        className={buttonClass('ghost', 'sm')}
                         data-testid={`check-${connection.id}`}
                       >
                         {t('integrations.check')}

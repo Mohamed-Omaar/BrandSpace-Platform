@@ -55,7 +55,7 @@ export function SetupFrame({
   readonly footer?: ReactNode;
   readonly children: ReactNode;
 }) {
-  // D-470: the words this member reads — `ar-EG` in an Egyptian workspace.
+  // The words this member reads (one Arabic for every country, round 4 Step 6).
   const words = requestMessageLocale(locale);
   const t = translator(words);
   const target = locale === 'ar' ? 'en' : 'ar';
@@ -70,12 +70,7 @@ export function SetupFrame({
   return (
     <div className="bsp-auth">
       <main id="main" className="bsp-auth-stage">
-        <div
-          className="bsp-wz bsp-wz-solo"
-          data-testid={testId}
-          data-view={view}
-          lang={words === 'ar-EG' ? 'ar-EG' : undefined}
-        >
+        <div className="bsp-wz bsp-wz-solo" data-testid={testId} data-view={view}>
           <div className="bsp-wz-brand">
             <span className="bsp-auth-logo" data-testid="auth-brand-mark">
               <BrandGlyph size="40px" />

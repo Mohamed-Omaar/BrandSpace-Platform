@@ -508,7 +508,11 @@ test.describe('Item 2 · C4 the Voice card', () => {
     await page.getByTestId('voice-words-ar').fill('ودود، واضح');
     await page.getByTestId('voice-words-save').click();
     await page.waitForURL(/tab=look/);
-    await expect(page.getByTestId('voice-words-value')).toHaveText('ودود، واضح');
+    // Gate 2b — the saved words are drawn as the prototype's chips, one per word.
+    await expect(page.getByTestId('voice-words-value').locator('.bsp-chip')).toHaveText([
+      'ودود',
+      'واضح',
+    ]);
 
     await page.getByTestId('voice-do-add-ar').fill('اذكر اسم الحي دائمًا');
     await page.getByTestId('voice-do-add-submit').click();

@@ -2156,7 +2156,7 @@ const templatesSchema = z.object({
 });
 
 const websiteSchema = z.object({
-  siteName: localizedText.default({ ar: 'براندسبيس', en: 'BrandSpace' }),
+  siteName: localizedText.default({ ar: 'BrandSpace', en: 'BrandSpace' }),
   defaultLocale: z.enum(['ar', 'en']).default('ar'),
   announcement: localizedText.nullable().default(null),
   pages: z

@@ -1,8 +1,7 @@
 import { mkdirSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { test, type Page } from '@playwright/test';
+import { PROTOTYPE, prototypeFile, serveFonts } from './prototype-runtime';
 import { DASHBOARD_BASE_URL } from './apps';
 import { useBrand } from './brand';
 import { E2E_PARITY_FILE, type E2eParityFixture } from './env';
@@ -21,46 +20,6 @@ import { E2E_PARITY_FILE, type E2eParityFixture } from './env';
  */
 
 const OUT = process.env['BRANDSPACE_PARITY_DIR'] ?? path.join(process.cwd(), 'test-results/parity');
-const prototypeFile = (name: string): string =>
-  pathToFileURL(path.join(process.cwd(), 'docs/visual-reference/prototype-2026-09-27', name)).href;
-const PROTOTYPE = prototypeFile('Main.dc.html');
-
-/**
- * THE PROTOTYPE'S FONTS, SERVED LOCALLY. Its `<link>` asks Google Fonts for
- * Inter and Cairo; the run answers that request with the same @fontsource faces
- * the product self-hosts, so both sides of every pair are set in the same
- * typefaces whatever the network allows. Nothing in the prototype is edited.
- */
-const fontsource = createRequire(path.join(process.cwd(), 'apps/dashboard/package.json'));
-const FONT_HOST = 'https://fonts.gstatic.com/__fontsource';
-function fontCss(): string {
-  return (['inter', 'cairo'] as const)
-    .flatMap((family) =>
-      [400, 500, 600, 700, 800].map((weight) =>
-        readFileSync(fontsource.resolve(`@fontsource/${family}/${weight}.css`), 'utf8').replaceAll(
-          './files/',
-          `${FONT_HOST}/${family}/`,
-        ),
-      ),
-    )
-    .join('\n');
-}
-async function serveFonts(page: Page): Promise<void> {
-  await page.route('https://fonts.googleapis.com/**', (route) =>
-    route.fulfill({ contentType: 'text/css', body: fontCss() }),
-  );
-  await page.route(`${FONT_HOST}/**`, (route) => {
-    const [family, file] = new URL(route.request().url()).pathname.split('/').slice(-2);
-    return route.fulfill({
-      path: path.join(
-        path.dirname(fontsource.resolve(`@fontsource/${family}/400.css`)),
-        'files',
-        file ?? '',
-      ),
-      headers: { 'access-control-allow-origin': '*' },
-    });
-  });
-}
 
 /** The prototype's own rail: press the item with this English / Arabic name. */
 const viaRail =

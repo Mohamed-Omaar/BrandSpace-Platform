@@ -130,7 +130,7 @@ const COPY = {
       'بدء حملة',
       'انتهاء حملة',
       'لا منشورات مجدولة في الأيام الثلاثة القادمة',
-      'معلومة في Brand Brain تنتهي خلال 7 أيام',
+      'معلومة في عقل العلامة تنتهي خلال 7 أيام',
     ],
     remind: 'تذكير المراجِع',
     campaignField: 'الحملة',
@@ -219,7 +219,7 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');
   const rules = page.getByTestId('automation-rules');
-  await expect(rules).toContainText(name);
+  await expect(rules.getByTitle(name, { exact: true })).toHaveCount(1);
   await expect(rules).toContainText(copy.remind);
   const created = await withPlatformPrisma((prisma) =>
     prisma.automationRule.findFirstOrThrow({

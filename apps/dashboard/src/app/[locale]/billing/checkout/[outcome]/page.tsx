@@ -1,16 +1,12 @@
+import { buttonClass, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Money, formatMoney } from '@brandspace/shared';
-import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { Money, formatMoneyDisplay } from '@brandspace/shared';
 import { requireWorkspace } from '../../../../../server/customer-context';
 import { checkoutStateFor } from '../../../../../server/commerce-context';
 import { brandContextFor } from '../../../../../server/brand-context';
 import { translator } from '../../../../../i18n/messages';
-import {
-  CustomerCard,
-  WorkspaceShell,
-  customerSecondaryButtonStyle,
-} from '../../../../../components/workspace-shell';
+import { CustomerCard, WorkspaceShell } from '../../../../../components/workspace-shell';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,9 +64,9 @@ export default async function CheckoutReturnPage({
           : { title: t('billing.checkoutPendingTitle'), body: t('billing.checkoutPendingBody') };
 
   const total = session
-    ? formatMoney(
+    ? formatMoneyDisplay(
         Money.ofMinor(session.currency, session.totalMinor, session.currencyScale),
-        locale === 'ar' ? 'ar' : 'en',
+        locale,
       )
     : null;
 
@@ -112,7 +108,7 @@ export default async function CheckoutReturnPage({
             // reconciliation has actually established by then.
             <Link
               href={`/${locale}/billing/checkout/${outcome}?session=${encodeURIComponent(checkoutSessionId)}`}
-              style={customerSecondaryButtonStyle()}
+              className={buttonClass('neutral')}
               data-testid="checkout-refresh"
             >
               {t('billing.checkoutRefresh')}

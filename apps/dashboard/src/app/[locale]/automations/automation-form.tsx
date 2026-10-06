@@ -34,6 +34,13 @@ import { colorTokens, inputStyle, spacingTokens, typographyTokens } from '@brand
  * took the Copilot screen down at render, and it is not repeated here.
  */
 
+/** Round 4 (5.3) — the prototype's three condition chips, shown before a trigger. */
+const PREVIEW_CONDITION_FIELDS: readonly string[] = [
+  'content.channels',
+  'content.campaignId',
+  'content.type',
+];
+
 export interface TriggerOption {
   readonly type: string;
   readonly label: string;
@@ -97,6 +104,8 @@ export interface AutomationFormLabels {
   /** D-468 — the prototype builder's three steps, its read-back and its pills. */
   readonly when: string;
   readonly onlyIf: string;
+  /** Round 4 (5.3) — why a condition chip waits before a trigger is chosen. */
+  readonly chooseWhenFirst?: string | undefined;
   readonly then: string;
   readonly preview: string;
   /** The summary box before a trigger is chosen. */
@@ -398,214 +407,223 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
       className="bsp-au-form"
       data-testid={editing ? 'automation-edit-form' : 'automation-form'}
     >
-      <input type="hidden" name="locale" value={props.locale} />
-      {initial ? (
-        <>
-          <input type="hidden" name="ruleId" value={initial.ruleId} />
-          <input type="hidden" name="version" value={initial.version} />
-          {keepConditions ? <input type="hidden" name="conditionsMode" value="keep" /> : null}
-        </>
-      ) : null}
+      {/*
+        Round 4 (5.3) — SAVE STAYS IN THE FRAME. The product's dialog holds
+        more than the prototype's (two more actions, "Name and brand"), so at
+        1440 × 900 it can scroll. The rule's parts scroll here, and the
+        prototype's Cancel/Save row stays under them, never covered by them and
+        never covering them.
+      */}
+      <div className="bsp-au-body">
+        <input type="hidden" name="locale" value={props.locale} />
+        {initial ? (
+          <>
+            <input type="hidden" name="ruleId" value={initial.ruleId} />
+            <input type="hidden" name="version" value={initial.version} />
+            {keepConditions ? <input type="hidden" name="conditionsMode" value="keep" /> : null}
+          </>
+        ) : null}
 
-      <span className="bsp-lbl" id={`${formId}-when`}>
-        1 · {props.labels.when}
-      </span>
-      {initial ? (
-        <div className="bsp-au-tiles">
-          <span className="bsp-au-tile" data-on="true">
-            <span className="bsp-au-tile-l">
-              {trigger?.tileLabel ?? trigger?.label ?? initial.triggerType}
-            </span>
-          </span>
-        </div>
-      ) : (
-        <div
-          role="radiogroup"
-          aria-labelledby={`${formId}-when`}
-          className="bsp-au-tiles"
-          data-testid="automation-trigger"
-        >
-          {props.triggers.map((option, index) => (
-            <label
-              key={option.type}
-              className="bsp-au-tile"
-              data-on={triggerType === option.type ? 'true' : undefined}
-              data-off={option.unavailable ? 'true' : undefined}
-            >
-              <input
-                type="radio"
-                name="triggerType"
-                value={option.type}
-                required
-                disabled={option.unavailable}
-                checked={triggerType === option.type}
-                ref={index === firstTrigger ? triggerPicker : undefined}
-                className="bs-control bsp-au-radio"
-                data-testid={`automation-trigger-${option.type}`}
-                onChange={() => {
-                  setTriggerType(option.type);
-                  // A field that is not produced by the NEW trigger must not
-                  // survive the change.
-                  setConditionField('');
-                }}
-              />
+        <span className="bsp-lbl" id={`${formId}-when`}>
+          1 · {props.labels.when}
+        </span>
+        {initial ? (
+          <div className="bsp-au-tiles">
+            <span className="bsp-au-tile" data-on="true">
               <span className="bsp-au-tile-l">
-                {option.unavailable
-                  ? props.labels.triggerUnavailable.replace(
-                      '{trigger}',
-                      option.tileLabel ?? option.label,
-                    )
-                  : (option.tileLabel ?? option.label)}
+                {trigger?.tileLabel ?? trigger?.label ?? initial.triggerType}
               </span>
-              {option.listens ? <span className="bsp-au-tile-s">{option.listens}</span> : null}
-            </label>
-          ))}
-        </div>
-      )}
-      <div className="bsp-au-subb">
-        {trigger?.needsSchedule ? (
-          <fieldset
-            style={{
-              border: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'grid',
-              gap: spacingTokens.sm,
-            }}
-            data-testid="automation-schedule"
+            </span>
+          </div>
+        ) : (
+          <div
+            role="radiogroup"
+            aria-labelledby={`${formId}-when`}
+            className="bsp-au-tiles"
+            data-testid="automation-trigger"
           >
-            <div style={{ display: 'flex', gap: spacingTokens.md, flexWrap: 'wrap' }}>
+            {props.triggers.map((option, index) => (
+              <label
+                key={option.type}
+                className="bsp-au-tile"
+                data-on={triggerType === option.type ? 'true' : undefined}
+                data-off={option.unavailable ? 'true' : undefined}
+              >
+                <input
+                  type="radio"
+                  name="triggerType"
+                  value={option.type}
+                  required
+                  disabled={option.unavailable}
+                  checked={triggerType === option.type}
+                  ref={index === firstTrigger ? triggerPicker : undefined}
+                  className="bs-control bsp-au-radio"
+                  data-testid={`automation-trigger-${option.type}`}
+                  onChange={() => {
+                    setTriggerType(option.type);
+                    // A field that is not produced by the NEW trigger must not
+                    // survive the change.
+                    setConditionField('');
+                  }}
+                />
+                <span className="bsp-au-tile-l">
+                  {option.unavailable
+                    ? props.labels.triggerUnavailable.replace(
+                        '{trigger}',
+                        option.tileLabel ?? option.label,
+                      )
+                    : (option.tileLabel ?? option.label)}
+                </span>
+                {option.listens ? <span className="bsp-au-tile-s">{option.listens}</span> : null}
+              </label>
+            ))}
+          </div>
+        )}
+        <div className="bsp-au-subb">
+          {trigger?.needsSchedule ? (
+            <fieldset
+              style={{
+                border: 'none',
+                padding: 0,
+                margin: 0,
+                display: 'grid',
+                gap: spacingTokens.sm,
+              }}
+              data-testid="automation-schedule"
+            >
+              <div style={{ display: 'flex', gap: spacingTokens.md, flexWrap: 'wrap' }}>
+                <label style={FIELD}>
+                  <span style={caption}>{props.labels.hour}</span>
+                  <select
+                    name="hourLocal"
+                    className="bs-control"
+                    data-testid="automation-hour"
+                    defaultValue={initial?.hourLocal ?? undefined}
+                  >
+                    {Array.from({ length: 24 }, (_, hour) => (
+                      <option key={hour} value={hour}>
+                        {String(hour).padStart(2, '0')}:00
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
+                <legend style={caption}>{props.labels.days}</legend>
+                <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
+                  {props.labels.weekdays.map((day, index) => (
+                    <label
+                      key={day}
+                      style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', ...caption }}
+                    >
+                      <input
+                        type="checkbox"
+                        name="daysOfWeek"
+                        value={index}
+                        defaultChecked={initial?.daysOfWeek.includes(index) ?? false}
+                      />
+                      <span>{day}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </fieldset>
+          ) : null}
+
+          {trigger?.needsThreshold ? (
+            <fieldset
+              style={{
+                border: 'none',
+                padding: 0,
+                margin: 0,
+                display: 'flex',
+                gap: spacingTokens.md,
+                flexWrap: 'wrap',
+              }}
+              data-testid="automation-threshold"
+            >
               <label style={FIELD}>
-                <span style={caption}>{props.labels.hour}</span>
+                <span style={caption}>{props.labels.metric}</span>
                 <select
-                  name="hourLocal"
+                  name="metricKey"
                   className="bs-control"
-                  data-testid="automation-hour"
-                  defaultValue={initial?.hourLocal ?? undefined}
+                  data-testid="automation-metric"
+                  defaultValue={initial?.metricKey ?? undefined}
                 >
-                  {Array.from({ length: 24 }, (_, hour) => (
-                    <option key={hour} value={hour}>
-                      {String(hour).padStart(2, '0')}:00
+                  {props.metrics.map((metric) => (
+                    <option key={metric.key} value={metric.key}>
+                      {metric.label}
                     </option>
                   ))}
                 </select>
               </label>
-            </div>
-            <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
-              <legend style={caption}>{props.labels.days}</legend>
-              <div style={{ display: 'flex', gap: spacingTokens.sm, flexWrap: 'wrap' }}>
-                {props.labels.weekdays.map((day, index) => (
-                  <label
-                    key={day}
-                    style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', ...caption }}
-                  >
-                    <input
-                      type="checkbox"
-                      name="daysOfWeek"
-                      value={index}
-                      defaultChecked={initial?.daysOfWeek.includes(index) ?? false}
-                    />
-                    <span>{day}</span>
-                  </label>
-                ))}
-              </div>
+              <label style={FIELD}>
+                <span style={caption}>{props.labels.direction}</span>
+                <select
+                  name="direction"
+                  className="bs-control"
+                  data-testid="automation-direction"
+                  defaultValue={initial?.direction ?? undefined}
+                >
+                  <option value="above">{props.labels.above}</option>
+                  <option value="below">{props.labels.below}</option>
+                </select>
+              </label>
+              <label style={FIELD}>
+                <span style={caption}>{props.labels.threshold}</span>
+                <input
+                  name="threshold"
+                  type="number"
+                  step={1}
+                  required
+                  defaultValue={initial?.threshold ?? undefined}
+                  className="bs-control"
+                  style={inputStyle()}
+                  data-testid="automation-threshold-value"
+                />
+              </label>
+              <label style={FIELD}>
+                <span style={caption}>{props.labels.windowDays}</span>
+                <input
+                  name="windowDays"
+                  type="number"
+                  min={1}
+                  max={90}
+                  defaultValue={initial?.windowDays ?? 7}
+                  className="bs-control"
+                  style={inputStyle()}
+                  data-testid="automation-window"
+                />
+              </label>
             </fieldset>
-          </fieldset>
-        ) : null}
+          ) : null}
+        </div>
 
-        {trigger?.needsThreshold ? (
-          <fieldset
-            style={{
-              border: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'flex',
-              gap: spacingTokens.md,
-              flexWrap: 'wrap',
-            }}
-            data-testid="automation-threshold"
-          >
-            <label style={FIELD}>
-              <span style={caption}>{props.labels.metric}</span>
-              <select
-                name="metricKey"
-                className="bs-control"
-                data-testid="automation-metric"
-                defaultValue={initial?.metricKey ?? undefined}
-              >
-                {props.metrics.map((metric) => (
-                  <option key={metric.key} value={metric.key}>
-                    {metric.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={FIELD}>
-              <span style={caption}>{props.labels.direction}</span>
-              <select
-                name="direction"
-                className="bs-control"
-                data-testid="automation-direction"
-                defaultValue={initial?.direction ?? undefined}
-              >
-                <option value="above">{props.labels.above}</option>
-                <option value="below">{props.labels.below}</option>
-              </select>
-            </label>
-            <label style={FIELD}>
-              <span style={caption}>{props.labels.threshold}</span>
-              <input
-                name="threshold"
-                type="number"
-                step={1}
-                required
-                defaultValue={initial?.threshold ?? undefined}
-                className="bs-control"
-                style={inputStyle()}
-                data-testid="automation-threshold-value"
-              />
-            </label>
-            <label style={FIELD}>
-              <span style={caption}>{props.labels.windowDays}</span>
-              <input
-                name="windowDays"
-                type="number"
-                min={1}
-                max={90}
-                defaultValue={initial?.windowDays ?? 7}
-                className="bs-control"
-                style={inputStyle()}
-                data-testid="automation-window"
-              />
-            </label>
-          </fieldset>
-        ) : null}
-      </div>
-
-      <span className="bsp-lbl">2 · {props.labels.onlyIf}</span>
-      <div className="bsp-au-subb">
-        {keepConditions ? (
-          <p style={caption} data-testid="automation-conditions-kept">
-            {(props.labels.conditionsKept ?? '').replace(
-              '{count}',
-              String((initial?.extraConditions ?? 0) + 1),
-            )}
-          </p>
-        ) : (
-          <fieldset
-            style={{
-              border: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'flex',
-              gap: spacingTokens.md,
-              flexWrap: 'wrap',
-              alignItems: 'end',
-            }}
-            data-testid="automation-condition"
-          >
-            <legend style={caption}>{props.labels.conditionLegend}</legend>
-            {/*
+        <span className="bsp-lbl">2 · {props.labels.onlyIf}</span>
+        {/* Round 4 (5.3) — the chips sit straight under "Only if", as the prototype's. */}
+        <div className="bsp-au-iff">
+          {keepConditions ? (
+            <p style={caption} data-testid="automation-conditions-kept">
+              {(props.labels.conditionsKept ?? '').replace(
+                '{count}',
+                String((initial?.extraConditions ?? 0) + 1),
+              )}
+            </p>
+          ) : (
+            <fieldset
+              style={{
+                border: 'none',
+                padding: 0,
+                margin: 0,
+                display: 'flex',
+                gap: spacingTokens.md,
+                flexWrap: 'wrap',
+                alignItems: 'end',
+              }}
+              data-testid="automation-condition"
+            >
+              <legend className="bsp-au-sr">{props.labels.conditionLegend}</legend>
+              {/*
               ROUND 3 — THE PROTOTYPE'S CHIPS ("No condition", "Channel is",
               "Campaign is", …), one radio each: ONLY THE FIELDS THIS TRIGGER
               ACTUALLY PRODUCES. The server derived the list from
@@ -613,63 +631,75 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
               held to — so a customer cannot pick a field that would compare
               false for ever on the rule they are writing.
             */}
-            <div
-              role="radiogroup"
-              aria-label={props.labels.conditionField}
-              className="bsp-au-chips"
-              data-testid="automation-condition-field"
-            >
-              {['', ...(trigger?.conditionFields ?? [])].map((name) => (
-                <label
-                  key={name || 'none'}
-                  className="bsp-chip bsp-au-chip"
-                  data-on={conditionField === name ? 'true' : undefined}
-                >
-                  <input
-                    type="radio"
-                    name="conditionField"
-                    value={name}
-                    checked={conditionField === name}
-                    className="bs-control bsp-au-radio"
-                    data-testid={`automation-condition-field-${name || 'none'}`}
-                    onChange={() => {
-                      setConditionField(name);
-                      // THE OPERATOR MUST NOT SURVIVE THE FIELD. `greater_than`
-                      // is legal on a count and meaningless on a provider;
-                      // carrying it across would post a pair the engine refuses.
-                      setConditionOperator('');
-                    }}
-                  />
-                  {name === ''
-                    ? props.labels.conditionNone
-                    : (props.conditionCatalogue[name]?.label ?? name)}
-                </label>
-              ))}
-            </div>
-            {field === undefined ? null : (
-              <>
-                <label style={FIELD}>
-                  <span style={caption}>{props.labels.conditionOperator}</span>
-                  <select
-                    name="conditionOperator"
-                    className="bs-control"
-                    data-testid="automation-condition-operator"
-                    value={operator}
-                    onChange={(event) => setConditionOperator(event.target.value)}
-                  >
-                    {operators.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {needsValue ? (
+              <div
+                role="radiogroup"
+                aria-label={props.labels.conditionField}
+                className="bsp-au-chips"
+                data-testid="automation-condition-field"
+              >
+                {/*
+                ROUND 4 (5.3) — THE FOUR CHIPS BEFORE A TRIGGER IS CHOSEN: the
+                prototype's "No condition · Channels · Campaign · Format" are
+                drawn at once. Until "When" is chosen the three fields wait,
+                dimmed and saying why — which fields are legal still depends on
+                the trigger, so none can be picked before it.
+              */}
+                {['', ...(trigger ? trigger.conditionFields : PREVIEW_CONDITION_FIELDS)].map(
+                  (name) => (
+                    <label
+                      key={name || 'none'}
+                      className="bsp-chip bsp-au-chip"
+                      data-on={conditionField === name ? 'true' : undefined}
+                      data-waiting={!trigger && name !== '' ? 'true' : undefined}
+                      title={!trigger && name !== '' ? props.labels.chooseWhenFirst : undefined}
+                    >
+                      <input
+                        type="radio"
+                        name="conditionField"
+                        value={name}
+                        checked={conditionField === name}
+                        disabled={!trigger && name !== ''}
+                        className="bs-control bsp-au-radio"
+                        data-testid={`automation-condition-field-${name || 'none'}`}
+                        onChange={() => {
+                          setConditionField(name);
+                          // THE OPERATOR MUST NOT SURVIVE THE FIELD. `greater_than`
+                          // is legal on a count and meaningless on a provider;
+                          // carrying it across would post a pair the engine refuses.
+                          setConditionOperator('');
+                        }}
+                      />
+                      {name === ''
+                        ? props.labels.conditionNone
+                        : (props.conditionCatalogue[name]?.label ?? name)}
+                    </label>
+                  ),
+                )}
+              </div>
+              {field === undefined ? null : (
+                <>
                   <label style={FIELD}>
-                    <span style={caption}>
-                      {isList ? props.labels.conditionValues : props.labels.conditionValue}
-                    </span>
-                    {/*
+                    <span style={caption}>{props.labels.conditionOperator}</span>
+                    <select
+                      name="conditionOperator"
+                      className="bs-control"
+                      data-testid="automation-condition-operator"
+                      value={operator}
+                      onChange={(event) => setConditionOperator(event.target.value)}
+                    >
+                      {operators.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {needsValue ? (
+                    <label style={FIELD}>
+                      <span style={caption}>
+                        {isList ? props.labels.conditionValues : props.labels.conditionValue}
+                      </span>
+                      {/*
                     THE CONTROL IS THE FIELD'S KIND, NOT ALWAYS A TEXT BOX.
 
                     A closed or catalogued field gets a picker, so a status that
@@ -679,339 +709,340 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                     a number input, so `greater_than` compares numerically
                     instead of refusing a mixed comparison.
                   */}
-                    {field.options.length > 0 ? (
-                      <select
-                        name="conditionValue"
-                        multiple={isList}
-                        className="bs-control"
-                        data-testid="automation-condition-value"
-                        defaultValue={
-                          isList
-                            ? Array.isArray(savedDefault)
-                              ? (savedDefault as string[])
-                              : []
-                            : typeof savedDefault === 'string'
+                      {field.options.length > 0 ? (
+                        <select
+                          name="conditionValue"
+                          multiple={isList}
+                          className="bs-control"
+                          data-testid="automation-condition-value"
+                          defaultValue={
+                            isList
+                              ? Array.isArray(savedDefault)
+                                ? (savedDefault as string[])
+                                : []
+                              : typeof savedDefault === 'string'
+                                ? savedDefault
+                                : field.options[0]?.value
+                          }
+                        >
+                          {field.options.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          name="conditionValue"
+                          type={field.kind === 'number' ? 'number' : 'text'}
+                          step={field.kind === 'number' ? 1 : undefined}
+                          maxLength={field.kind === 'number' ? undefined : 200}
+                          required
+                          defaultValue={
+                            typeof savedDefault === 'string' || typeof savedDefault === 'number'
                               ? savedDefault
-                              : field.options[0]?.value
-                        }
-                      >
-                        {field.options.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        name="conditionValue"
-                        type={field.kind === 'number' ? 'number' : 'text'}
-                        step={field.kind === 'number' ? 1 : undefined}
-                        maxLength={field.kind === 'number' ? undefined : 200}
-                        required
-                        defaultValue={
-                          typeof savedDefault === 'string' || typeof savedDefault === 'number'
-                            ? savedDefault
-                            : Array.isArray(savedDefault)
-                              ? (savedDefault as string[]).join(', ')
-                              : undefined
-                        }
-                        className="bs-control"
-                        style={inputStyle()}
-                        data-testid="automation-condition-value"
-                      />
-                    )}
-                    {isList && field.options.length === 0 ? (
-                      <span style={caption}>{props.labels.conditionValuesHint}</span>
-                    ) : null}
-                  </label>
-                ) : null}
-              </>
-            )}
-          </fieldset>
-        )}
-      </div>
-
-      <span className="bsp-lbl" id={`${formId}-then`}>
-        3 · {props.labels.then}
-      </span>
-      {initial ? (
-        <div className="bsp-au-tiles">
-          <span className="bsp-au-tile bsp-au-act" data-on="true">
-            {actionLabel}
-            {pills(initial.actionType)}
-          </span>
+                              : Array.isArray(savedDefault)
+                                ? (savedDefault as string[]).join(', ')
+                                : undefined
+                          }
+                          className="bs-control"
+                          style={inputStyle()}
+                          data-testid="automation-condition-value"
+                        />
+                      )}
+                      {isList && field.options.length === 0 ? (
+                        <span style={caption}>{props.labels.conditionValuesHint}</span>
+                      ) : null}
+                    </label>
+                  ) : null}
+                </>
+              )}
+            </fieldset>
+          )}
         </div>
-      ) : (
-        /*
-         * ONLY THE ACTIONS THIS TRIGGER SUPPORTS. `actionSupportsTrigger`
-         * decided this list on the server; an action that needs a content item
-         * is simply absent from a trigger that has none, so an incompatible pair
-         * cannot be chosen rather than being refused after submit.
-         */
-        <div
-          role="radiogroup"
-          ref={actionGroup}
-          aria-labelledby={`${formId}-then`}
-          className="bsp-au-tiles"
-          data-testid="automation-action"
-        >
-          {(trigger?.actionTypes ?? []).map((type) => (
-            <label
-              key={type}
-              className="bsp-au-tile bsp-au-act"
-              data-on={actionType === type ? 'true' : undefined}
-            >
-              <input
-                type="radio"
-                name="actionType"
-                value={type}
-                required
-                checked={actionType === type}
-                className="bs-control bsp-au-radio"
-                data-testid={`automation-action-${type}`}
-                onChange={() => setChosenAction(type)}
-              />
-              {props.actionLabels[type] ?? type}
-              {pills(type)}
-            </label>
-          ))}
-          {/*
+
+        <span className="bsp-lbl" id={`${formId}-then`}>
+          3 · {props.labels.then}
+        </span>
+        {initial ? (
+          <div className="bsp-au-tiles">
+            <span className="bsp-au-tile bsp-au-act" data-on="true">
+              {actionLabel}
+              {pills(initial.actionType)}
+            </span>
+          </div>
+        ) : (
+          /*
+           * ONLY THE ACTIONS THIS TRIGGER SUPPORTS. `actionSupportsTrigger`
+           * decided this list on the server; an action that needs a content item
+           * is simply absent from a trigger that has none, so an incompatible pair
+           * cannot be chosen rather than being refused after submit.
+           */
+          <div
+            role="radiogroup"
+            ref={actionGroup}
+            aria-labelledby={`${formId}-then`}
+            className="bsp-au-tiles"
+            data-testid="automation-action"
+          >
+            {(trigger?.actionTypes ?? []).map((type) => (
+              <label
+                key={type}
+                className="bsp-au-tile bsp-au-act"
+                data-on={actionType === type ? 'true' : undefined}
+              >
+                <input
+                  type="radio"
+                  name="actionType"
+                  value={type}
+                  required
+                  checked={actionType === type}
+                  className="bs-control bsp-au-radio"
+                  data-testid={`automation-action-${type}`}
+                  onChange={() => setChosenAction(type)}
+                />
+                {props.actionLabels[type] ?? type}
+                {pills(type)}
+              </label>
+            ))}
+            {/*
             ROUND 3 — "3 · THEN" IS DRAWN BEFORE A TRIGGER IS PICKED, as the
             prototype draws it: every action as a tile that waits for the
             trigger (only the trigger decides which of them may follow it).
           */}
-          {trigger === undefined
-            ? Object.keys(props.actionLabels)
-                .filter((type) =>
-                  props.triggers.some(
-                    (option) => !option.unavailable && option.actionTypes.includes(type),
-                  ),
-                )
-                .map((type) => (
-                  <span
-                    key={type}
-                    className="bsp-au-tile bsp-au-act"
-                    data-off="true"
-                    title={props.labels.pickTriggerFirst}
-                    data-testid={`automation-action-waiting-${type}`}
-                  >
-                    {props.actionLabels[type] ?? type}
-                    {pills(type)}
-                  </span>
-                ))
-            : null}
-          {/*
+            {trigger === undefined
+              ? Object.keys(props.actionLabels)
+                  .filter((type) =>
+                    props.triggers.some(
+                      (option) => !option.unavailable && option.actionTypes.includes(type),
+                    ),
+                  )
+                  .map((type) => (
+                    <span
+                      key={type}
+                      className="bsp-au-tile bsp-au-act"
+                      data-off="true"
+                      title={props.labels.pickTriggerFirst}
+                      data-testid={`automation-action-waiting-${type}`}
+                    >
+                      {props.actionLabels[type] ?? type}
+                      {pills(type)}
+                    </span>
+                  ))
+              : null}
+            {/*
             No trigger chosen yet: the radio the browser reports, so "choose an
             action" is said even while there is nothing to choose from.
           */}
-          {(trigger?.actionTypes ?? []).length === 0 ? (
-            <input
-              type="radio"
-              name="actionType"
-              value=""
-              required
-              tabIndex={-1}
-              aria-hidden="true"
-              className="bs-control bsp-au-radio bsp-au-ghost"
-              onChange={() => undefined}
-              checked={false}
-            />
-          ) : null}
-        </div>
-      )}
-      <div className="bsp-au-subb">
-        {/*
+            {(trigger?.actionTypes ?? []).length === 0 ? (
+              <input
+                type="radio"
+                name="actionType"
+                value=""
+                required
+                tabIndex={-1}
+                aria-hidden="true"
+                className="bs-control bsp-au-radio bsp-au-ghost"
+                onChange={() => undefined}
+                checked={false}
+              />
+            ) : null}
+          </div>
+        )}
+        <div className="bsp-au-subb">
+          {/*
           PHASE 2B-3 PR 2 — THE G13 ACTIONS' OWN SETTINGS. The person to notify
           and the campaign are picked from lists built for the rule's brand, so
           nothing typed becomes a target; the engine re-checks both on save and
           on every run. A saved choice that is no longer offered stays selected
           as "No longer available", so an edit never silently changes it.
         */}
-        {actionType === 'NOTIFY_PERSON' ? (
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.actionPerson}</span>
-            <select
-              name="actionUserId"
-              required
-              className="bs-control"
-              data-testid="automation-action-person"
-              defaultValue={initial?.actionUserId ?? undefined}
-              key={`person-${brandId}`}
-            >
-              {targetChoices(props.actionPeopleByBrand, initial?.actionUserId ?? null).map(
-                (option) => (
+          {actionType === 'NOTIFY_PERSON' ? (
+            <label style={FIELD}>
+              <span style={caption}>{props.labels.actionPerson}</span>
+              <select
+                name="actionUserId"
+                required
+                className="bs-control"
+                data-testid="automation-action-person"
+                defaultValue={initial?.actionUserId ?? undefined}
+                key={`person-${brandId}`}
+              >
+                {targetChoices(props.actionPeopleByBrand, initial?.actionUserId ?? null).map(
+                  (option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+          ) : null}
+          {actionType === 'ADD_TO_CAMPAIGN' ? (
+            <label style={FIELD}>
+              <span style={caption}>{props.labels.actionCampaign}</span>
+              <select
+                name="actionCampaignId"
+                required
+                className="bs-control"
+                data-testid="automation-action-campaign"
+                defaultValue={initial?.actionCampaignId ?? undefined}
+                key={`campaign-${brandId}`}
+              >
+                {targetChoices(props.actionCampaignsByBrand, initial?.actionCampaignId ?? null).map(
+                  (option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+          ) : null}
+
+          {actionType === 'PAUSE_CAMPAIGN' ? (
+            <label style={FIELD}>
+              <span style={caption}>{props.labels.actionCampaign}</span>
+              <select
+                name="actionCampaignId"
+                required
+                className="bs-control"
+                data-testid="automation-action-pause-campaign"
+                defaultValue={initial?.actionCampaignId ?? undefined}
+                key={`pause-campaign-${brandId}`}
+                aria-describedby="automation-pause-note"
+              >
+                {targetChoices(
+                  props.actionPausableCampaignsByBrand,
+                  initial?.actionCampaignId ?? null,
+                ).map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
-                ),
-              )}
-            </select>
-          </label>
-        ) : null}
-        {actionType === 'ADD_TO_CAMPAIGN' ? (
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.actionCampaign}</span>
-            <select
-              name="actionCampaignId"
-              required
-              className="bs-control"
-              data-testid="automation-action-campaign"
-              defaultValue={initial?.actionCampaignId ?? undefined}
-              key={`campaign-${brandId}`}
-            >
-              {targetChoices(props.actionCampaignsByBrand, initial?.actionCampaignId ?? null).map(
-                (option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ),
-              )}
-            </select>
-          </label>
-        ) : null}
+                ))}
+              </select>
+              <span id="automation-pause-note" style={caption} data-testid="automation-pause-note">
+                {props.labels.pauseNote}
+              </span>
+            </label>
+          ) : null}
 
-        {actionType === 'PAUSE_CAMPAIGN' ? (
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.actionCampaign}</span>
-            <select
-              name="actionCampaignId"
-              required
-              className="bs-control"
-              data-testid="automation-action-pause-campaign"
-              defaultValue={initial?.actionCampaignId ?? undefined}
-              key={`pause-campaign-${brandId}`}
-              aria-describedby="automation-pause-note"
-            >
-              {targetChoices(
-                props.actionPausableCampaignsByBrand,
-                initial?.actionCampaignId ?? null,
-              ).map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <span id="automation-pause-note" style={caption} data-testid="automation-pause-note">
-              {props.labels.pauseNote}
-            </span>
-          </label>
-        ) : null}
+          {initial && initial.offsetHours !== null ? (
+            <label style={FIELD}>
+              <span style={caption}>{props.labels.offsetHours}</span>
+              <input
+                name="offsetHours"
+                type="number"
+                min={0}
+                max={720}
+                step={1}
+                required
+                defaultValue={initial.offsetHours}
+                className="bs-control"
+                style={inputStyle()}
+                data-testid="automation-offset-hours"
+              />
+            </label>
+          ) : null}
+        </div>
 
-        {initial && initial.offsetHours !== null ? (
-          <label style={FIELD}>
-            <span style={caption}>{props.labels.offsetHours}</span>
-            <input
-              name="offsetHours"
-              type="number"
-              min={0}
-              max={720}
-              step={1}
-              required
-              defaultValue={initial.offsetHours}
-              className="bs-control"
-              style={inputStyle()}
-              data-testid="automation-offset-hours"
-            />
-          </label>
-        ) : null}
-      </div>
-
-      {/*
+        {/*
         "THE RULE" — the prototype's summary box, always drawn (review of #67):
         the rule read back as one line, its condition included, or what is
         still to choose.
       */}
-      <div className="bsp-au-prev" data-testid="automation-preview">
-        <span className="bsp-au-prev-t">{props.labels.preview}</span>
-        <span className="bsp-au-prev-l">
-          {trigger ? (
-            <>
-              {trigger.label}
-              {field
-                ? ` · ${props.conditionCatalogue[conditionField]?.label ?? conditionField}`
-                : ''}
-              {actionLabel ? ` → ${actionLabel}` : ''}
-            </>
-          ) : (
-            (props.labels.previewEmpty ?? '')
-          )}
-        </span>
-      </div>
+        <div className="bsp-au-prev" data-testid="automation-preview">
+          <span className="bsp-au-prev-t">{props.labels.preview}</span>
+          <span className="bsp-au-prev-l">
+            {trigger ? (
+              <>
+                {trigger.label}
+                {field
+                  ? ` · ${props.conditionCatalogue[conditionField]?.label ?? conditionField}`
+                  : ''}
+                {actionLabel ? ` → ${actionLabel}` : ''}
+              </>
+            ) : (
+              (props.labels.previewEmpty ?? '')
+            )}
+          </span>
+        </div>
 
-      {/*
+        {/*
         Review of #67, round 3 — the prototype's dialog starts at "1 · When"
         and has no name or brand field: a rule is read as its sentence. The
         product's name and brand are kept under one "⋯" before the buttons; the
         name follows the sentence until it is typed, so a closed "⋯" still posts
         one, and the browser's own refusal opens it.
       */}
-      <details
-        ref={moreRef}
-        className="bsp-au-more"
-        data-testid="automation-more"
-        open={editing ? true : undefined}
-      >
-        <summary className="bsp-chip bsp-fdis-chip" aria-label={props.labels.moreFields}>
-          <span aria-hidden="true">⋯</span>
-          <span className="bsp-au-more-l">{props.labels.moreFields}</span>
-        </summary>
-        <div className="bsp-au-fields">
+        <details
+          ref={moreRef}
+          className="bsp-au-more"
+          data-testid="automation-more"
+          open={editing ? true : undefined}
+        >
+          <summary className="bsp-chip bsp-fdis-chip" aria-label={props.labels.moreFields}>
+            <span aria-hidden="true">⋯</span>
+            <span className="bsp-au-more-l">{props.labels.moreFields}</span>
+          </summary>
+          <div className="bsp-au-fields">
+            <label className="bsp-au-field">
+              <span className="bsp-lbl">{props.labels.name}</span>
+              <input
+                name="name"
+                required
+                maxLength={120}
+                className="bs-control bsp-au-input"
+                data-testid="automation-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+            {initial ? (
+              /*
+               * FIXED ON AN EXISTING RULE: the brand, the trigger and the action are
+               * named, not offered. Nothing is posted for them; the server uses the
+               * stored ones.
+               */
+              <div className="bsp-au-field">
+                <span className="bsp-lbl">{props.labels.brand}</span>
+                <span className="bsp-au-fixed">{initial.brandName}</span>
+              </div>
+            ) : (
+              <label className="bsp-au-field">
+                <span className="bsp-lbl">{props.labels.brand}</span>
+                <select
+                  name="brandId"
+                  className="bs-control bsp-au-input bs-select bsp-chevron"
+                  data-testid="automation-brand"
+                  value={brandId}
+                  onChange={(event) => setBrandId(event.target.value)}
+                >
+                  {props.brands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+        </details>
+
+        {initial ? (
           <label className="bsp-au-field">
-            <span className="bsp-lbl">{props.labels.name}</span>
-            <input
-              name="name"
-              required
-              maxLength={120}
+            <span className="bsp-lbl">{props.labels.description}</span>
+            <textarea
+              name="description"
+              maxLength={500}
+              rows={2}
+              defaultValue={initial.description}
               className="bs-control bsp-au-input"
-              data-testid="automation-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+              data-testid="automation-description"
             />
           </label>
-          {initial ? (
-            /*
-             * FIXED ON AN EXISTING RULE: the brand, the trigger and the action are
-             * named, not offered. Nothing is posted for them; the server uses the
-             * stored ones.
-             */
-            <div className="bsp-au-field">
-              <span className="bsp-lbl">{props.labels.brand}</span>
-              <span className="bsp-au-fixed">{initial.brandName}</span>
-            </div>
-          ) : (
-            <label className="bsp-au-field">
-              <span className="bsp-lbl">{props.labels.brand}</span>
-              <select
-                name="brandId"
-                className="bs-control bsp-au-input bs-select bsp-chevron"
-                data-testid="automation-brand"
-                value={brandId}
-                onChange={(event) => setBrandId(event.target.value)}
-              >
-                {props.brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>
-                    {brand.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-      </details>
-
-      {initial ? (
-        <label className="bsp-au-field">
-          <span className="bsp-lbl">{props.labels.description}</span>
-          <textarea
-            name="description"
-            maxLength={500}
-            rows={2}
-            defaultValue={initial.description}
-            className="bs-control bsp-au-input"
-            data-testid="automation-description"
-          />
-        </label>
-      ) : null}
+        ) : null}
+      </div>
 
       <div className="bsp-au-foot">
         {props.cancelHref ? (

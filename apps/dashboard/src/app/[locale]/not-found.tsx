@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { buttonClass, buttonStyle } from '@brandspace/ui';
+import { buttonClass } from '@brandspace/ui';
 import { translator } from '../../i18n/messages';
 import { RouteState } from '../../components/route-state';
 
@@ -31,8 +31,8 @@ export default function NotFound() {
       action={
         <Link
           href={`/${locale}/overview`}
-          className={buttonClass('brand')}
-          style={buttonStyle('brand', 'sm')}
+          className={buttonClass('brand', 'sm')}
+
           data-testid="route-not-found-home"
         >
           {t('errors.route.home')}

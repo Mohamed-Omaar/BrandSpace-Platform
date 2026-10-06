@@ -443,6 +443,19 @@ creditRevenueAttributed
 The allocation rule (how much of a subscription price is attributed to credits vs. platform features) is
 configuration, set by the owner. It is an internal reporting construct — customers never see it.
 
+### 13.1 How a cost QUOTE is displayed (Round 4, 3.6)
+
+Credits are accounted in milli-credits. A **cost quote** shown to a customer before an AI action — the
+Studio tool and rewrite estimates, the Media generation estimate and the Copilot plan's estimated cost —
+is displayed with **at most one decimal, rounded away from zero to the next tenth, and a trailing `.0`
+dropped**: `369` milli reads "0.4", `1050` reads "1.1", `2000` reads "2". Up, so a quote is never shown
+below what it is. One formatter does it (`formatCredits` in `apps/dashboard/src/server/composer-editor.ts`),
+on the string figure, never through a float.
+
+This is **presentation only**. The reservation, the confirmed charge and every ledger row keep their
+exact milli-credit value; nothing here changes reserve → confirm → settle. Balances (remaining,
+reserved) are not quotes and are not rounded up — rounding a balance up would overstate it.
+
 ---
 
 ## 14. Edge Cases and Their Resolutions

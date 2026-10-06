@@ -34,17 +34,53 @@ export type ButtonVariant = 'primary' | 'brand' | 'accent' | 'neutral' | 'ghost'
 export type ControlSize = 'sm' | 'md' | 'lg';
 
 /*
- * `.primary-button, .dark-button, .ghost-button, .soft-button { min-height:
- *  40px; padding: 0 15px; font-size: 10px; font-weight: 800; radius: 12px }`
- * with `.compact { min-height: 38px }` and
- * `.filter-row button, .segmented button { min-height: 36px; padding: 0 11px;
- *  font-size: 9px; font-weight: 750; radius: 10px }`.
+ * THE CONTROL HEIGHTS OF `prototype-2026-09-27` (review of #68, round 4, step 1).
  *
- * THREE HEIGHTS, DELIBERATELY. The demo does not run one control size, and
- * flattening them into a single token is what makes a filter chip look like a
- * primary action. §27 rules that out explicitly.
+ * Measured from the prototype at runtime, not read off a screenshot: `.btn` is
+ * 40px, `.btn.sm` 32px, the hero's large `.btn` 48px. They are the only three
+ * button heights the prototype draws, and the only three the product may.
  */
 const CONTROL_HEIGHT: Record<ControlSize, string> = {
+  sm: '32px',
+  md: '40px',
+  lg: '48px',
+};
+
+/**
+ * THE ONE BUTTON SYSTEM — the prototype's `.btn`, ported as `.bsp-btn` in
+ * `prototype.css`, with its variants and sizes as classes.
+ *
+ * ROUND 4 RETIRED THE INLINE BUTTON STYLE. `buttonStyle()` painted the fill and
+ * the geometry inline, from the retired full-demo reference (36px, 9px type),
+ * and an inline fill beats every `:hover` rule — so a third of the product's
+ * buttons were the wrong size and had no hover. Every button is now a class:
+ * one geometry, one set of fills, the prototype's hover and disabled states.
+ *
+ *   primary → `.btn`            ink `#111114`, hover `#2a2a30`
+ *   brand   → `.btn.pur`        purple `#7935fe`, hover `#6528e0`
+ *   neutral → `.btn.sec`        `#f2f2f4`, hover `#e6e6ea`
+ *   ghost   → `.btn.ghost`      transparent, hover `#f2f2f4`
+ *   danger  → `.btn.sec` with the prototype's destructive red text `#b83245`
+ *   accent  → `.btn.sec` (the prototype draws no yellow button)
+ *
+ * Use it on a plain `<button type="submit">` or a `<Link>` wherever `Button`
+ * cannot be used (a no-JavaScript form, a navigation).
+ */
+export function buttonClass(variant: ButtonVariant = 'primary', size: ControlSize = 'md'): string {
+  const fill: Record<ButtonVariant, string> = {
+    primary: '',
+    brand: ' bsp-pur',
+    neutral: ' bsp-sec',
+    ghost: ' bsp-ghost',
+    danger: ' bsp-sec bsp-danger',
+    accent: ' bsp-sec',
+  };
+  const scale = size === 'sm' ? ' bsp-sm' : size === 'lg' ? ' bsp-lg' : '';
+  return `bsp-btn${fill[variant]}${scale}`;
+}
+
+/** The retired full-demo heights, for the Control Center's `buttonStyle` only. */
+const LEGACY_CONTROL_HEIGHT: Record<ControlSize, string> = {
   sm: layoutTokens.controlHeightXs,
   md: layoutTokens.controlHeight,
   lg: '3rem',
@@ -56,7 +92,7 @@ function buttonBase(size: ControlSize): CSSProperties {
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacingTokens.sm,
-    minBlockSize: CONTROL_HEIGHT[size],
+    minBlockSize: LEGACY_CONTROL_HEIGHT[size],
     paddingInline: size === 'sm' ? '0.6875rem' : '0.9375rem',
     paddingBlock: 0,
     borderRadius: size === 'sm' ? radiusTokens.md : radiusTokens.control,
@@ -74,24 +110,11 @@ function buttonBase(size: ControlSize): CSSProperties {
 }
 
 /**
- * Button styling by variant.
- *
- * SIX VARIANTS, ONE RULE: none of them is a stroked box.
- *
- * THE PRIMARY IS BLACK, AND THAT IS THE DIRECTION (D-59). The approved
- * reference carries almost every action — the hero call to action, "Schedule
- * post", "Export", "Edit post", "Ask Copilot" — on a near-black `.dark-button`,
- * and reserves purple for the single "+ Create" entry point in the top bar.
- * Reproducing only the purple half would have turned a black-and-white product
- * with one accent into a purple product, which is precisely what §3 of the
- * brief forbids. So `primary` is ink and `brand` is the one accent, and the
- * ratio between how often each appears is part of the design.
- *
- * `accent` is the yellow, which carries near-black text and is used sparingly;
- * `neutral` is a soft grey fill; `ghost` has no resting surface at all;
- * `danger` is a soft red fill rather than a red outline — a red-outlined button
- * beside a filled one reads as equally routine, and these are the actions
- * CLAUDE.md §2.5 calls high-impact.
+ * CONTROL CENTER ONLY — the inline button style of the retired full-demo
+ * reference, kept for `apps/admin`, which is not a customer screen and keeps
+ * its own look. Customer code uses `buttonClass()`/`Button`; a unit test
+ * (`tests/unit/r4-shared-controls.test.ts`) refuses `buttonStyle` anywhere in
+ * `apps/dashboard` or in the customer components of this package.
  */
 export function buttonStyle(
   variant: ButtonVariant = 'primary',
@@ -128,33 +151,6 @@ export function buttonStyle(
   }
 }
 
-/**
- * The interaction classes a button needs for hover, active and disabled.
- *
- * EXPORTED SINCE P6-02, because `buttonStyle` alone is half a button. The
- * inline style carries the fill and the geometry; `:hover`, `:active` and
- * `:disabled` cannot be expressed inline at all, so a call site that took the
- * style and not the class got a control that looked right and felt dead.
- *
- * `Button` remains the right answer wherever a client component is acceptable.
- * This exists for the places it is not — chiefly a plain `<button type="submit">`
- * inside a no-JavaScript form, where `Button`'s `type="button"` default would
- * stop the form submitting.
- */
-export function buttonClass(variant: ButtonVariant): string {
-  if (variant === 'neutral' || variant === 'ghost') return 'bs-pressable bs-control';
-  if (variant === 'primary') return 'bs-pressable bs-filled-ink';
-  if (variant === 'brand') return 'bs-pressable bs-filled-brand';
-  return 'bs-pressable';
-}
-
-/**
- * Hover for the filled variants, which `bs-control` does not cover.
- *
- * A black button with no hover response feels dead, and `:hover` cannot be
- * expressed inline — so the two ink-filled variants carry their own class.
- */
-
 export function Button({
   variant = 'primary',
   size = 'md',
@@ -177,19 +173,19 @@ export function Button({
   readonly loading?: boolean;
   readonly loadingLabel?: string | undefined;
 }) {
+  const extra: CSSProperties = {
+    ...(fullWidth ? { inlineSize: '100%' } : {}),
+    ...(loading ? { opacity: 0.75 } : {}),
+    ...style,
+  };
   return (
     <button
       type="button"
       {...rest}
       disabled={rest.disabled === true || loading}
       aria-busy={loading || undefined}
-      className={[buttonClass(variant), className].filter(Boolean).join(' ')}
-      style={{
-        ...buttonStyle(variant, size),
-        ...(fullWidth ? { inlineSize: '100%' } : {}),
-        ...(loading ? { opacity: 0.75 } : {}),
-        ...style,
-      }}
+      className={[buttonClass(variant, size), className].filter(Boolean).join(' ')}
+      {...(Object.keys(extra).length > 0 ? { style: extra } : {})}
     >
       {loading ? <Spinner /> : icon}
       {loading && loadingLabel ? loadingLabel : children}
@@ -246,14 +242,12 @@ export function IconButton({
       type="button"
       aria-label={label}
       {...rest}
-      className={[buttonClass(variant), className].filter(Boolean).join(' ')}
+      className={[buttonClass(variant, size), className].filter(Boolean).join(' ')}
       style={{
-        ...buttonStyle(variant, size),
         inlineSize: edge,
         blockSize: edge,
-        minInlineSize: layoutTokens.minTargetSize,
         paddingInline: 0,
-        borderRadius: circular ? radiusTokens.full : radiusTokens.md,
+        ...(circular ? { borderRadius: radiusTokens.full } : {}),
         ...style,
       }}
     >
@@ -275,22 +269,25 @@ export type ControlTone = 'default' | 'error' | 'success';
 export function inputStyle(
   options: { tone?: ControlTone; size?: ControlSize } = {},
 ): CSSProperties {
-  const { tone = 'default', size = 'md' } = options;
+  const { tone = 'default' } = options;
   const toneBorder =
     tone === 'error' ? colorTokens.danger : tone === 'success' ? colorTokens.success : undefined;
+  // The prototype's form field (round 4): `9px 12px`, radius 12, 14px, and no
+  // stated height — its padding and one line, as measured; a select is the
+  // dropdown trigger's 40px (`prototype.css`). The fill and the `#e4e4e8`
+  // border come from `.bs-control` in `prototype.css`. `size` no longer
+  // shrinks a field.
   return {
     inlineSize: '100%',
-    minBlockSize: CONTROL_HEIGHT[size],
-    paddingInline: spacingTokens.md,
-    paddingBlock: spacingTokens.sm,
-    borderRadius: radiusTokens.md,
-    // `bs-control` supplies the fill and the transparent resting border; a tone
-    // overrides only the colour, so high-contrast mode still wins on default.
+    boxSizing: 'border-box',
+    paddingInline: '12px',
+    paddingBlock: '9px',
+    borderRadius: '12px',
     ...(toneBorder ? { border: `1px solid ${toneBorder}` } : {}),
     color: colorTokens.textPrimary,
     fontFamily: 'inherit',
-    fontSize: typographyTokens.bodySm.fontSize,
-    lineHeight: typographyTokens.bodySm.lineHeight,
+    fontSize: '14px',
+    lineHeight: 'normal',
   };
 }
 
@@ -302,8 +299,8 @@ export function textareaStyle(options: { tone?: ControlTone } = {}): CSSProperti
     ...inputStyle(options),
     minBlockSize: '7rem',
     resize: 'vertical',
-    paddingBlock: spacingTokens.sm,
-    lineHeight: typographyTokens.body.lineHeight,
+    paddingBlock: '10px',
+    lineHeight: 1.5,
   };
 }
 

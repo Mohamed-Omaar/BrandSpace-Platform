@@ -207,6 +207,7 @@ const AREA_GLYPHS: Record<string, string> = {
 export function BrandBrainView({
   locale,
   brandId,
+  brandName,
   understanding,
   layers,
   missing,
@@ -218,6 +219,7 @@ export function BrandBrainView({
   confident,
   copilotHref,
   profileHref,
+  notes = null,
   answered,
   totalQuestions,
   totalActiveItems,
@@ -262,6 +264,8 @@ export function BrandBrainView({
   copilotHref: string | null;
   /** D-298 (§11) — the brand's identity, one click from its knowledge; null without `brand.read`. */
   profileHref: string | null;
+  /** Round 4 (5.6) — the brand's notes, under the "⋯" rather than under the areas. */
+  notes?: React.ReactNode;
   /** Q19 — key questions answered across every area, and how many there are. No score. */
   answered: number;
   totalQuestions: number;
@@ -647,6 +651,12 @@ export function BrandBrainView({
                           ) : null}
                         </div>
                       ) : null}
+                      {notes ? (
+                        <details className="bsp-bb-notes" data-testid="brand-brain-notes">
+                          <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>
+                          {notes}
+                        </details>
+                      ) : null}
                     </MoreDisclosure>
                   </div>
                 </div>
@@ -913,7 +923,10 @@ export function BrandBrainView({
                       {chosenName}
                     </span>
                   ) : null}
-                  <UploadSubmit label={t('bb.upload')} pendingLabel={t('bb.uploading')} />
+                  {/* Gate 2b — the prototype's one button; sending appears once a file is chosen. */}
+                  {chosenName ? (
+                    <UploadSubmit label={t('bb.upload')} pendingLabel={t('bb.uploading')} />
+                  ) : null}
                 </span>
                 <small className="bsp-bb-uphint">{t('bb.uploadHint')}</small>
               </form>
@@ -971,7 +984,8 @@ export function BrandBrainView({
               send: t('bb.chatSend'),
               cancel: t('bb.chatCancel'),
               thinking: t('bb.chatThinking'),
-              empty: t('bb.chatEmpty'),
+              // The prototype's greeting (`chatHello`), naming the brand.
+              empty: t('bb.chatHello').replace('{brand}', brandName),
               sources: t('bb.chatSources'),
               insufficient: t('bb.chatInsufficient'),
               disclaimer: t('bb.chatDisclaimer'),

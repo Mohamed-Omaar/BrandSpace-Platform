@@ -105,13 +105,23 @@ function useRailPill(
     const measure = () => {
       const link = nav.querySelector<HTMLElement>('a[aria-current="page"]');
       if (!link) return null;
-      // `placeNavInd`: offsets inside the nav, plus its own scroll.
-      return {
-        x: link.offsetLeft,
-        y: link.offsetTop,
-        w: link.offsetWidth,
-        h: link.offsetHeight,
-      };
+      /*
+       * `placeNavInd`: offsets inside the nav, plus its own scroll. Summed up
+       * to the nav (round 4, 2.2): collapsed, each link sits in its label's
+       * positioned wrapper, so its own `offsetTop` is 0 — the pill stayed on
+       * the first row and the current item was never scrolled into view.
+       */
+      let x = 0;
+      let y = 0;
+      for (
+        let node: HTMLElement | null = link;
+        node && node !== nav;
+        node = node.offsetParent as HTMLElement | null
+      ) {
+        x += node.offsetLeft;
+        y += node.offsetTop;
+      }
+      return { x, y, w: link.offsetWidth, h: link.offsetHeight };
     };
     const put = (at: { x: number; y: number; w: number; h: number }, glide: boolean) => {
       pill.style.transition = glide && !prefersReducedMotion() ? '' : 'none';
@@ -119,6 +129,17 @@ function useRailPill(
       pill.style.width = `${at.w}px`;
       pill.style.height = `${at.h}px`;
     };
+    /*
+     * Gate 2b review — THE PILL TAKES OVER BEFORE ANYTHING IS MEASURED. The
+     * rail is new on every page, and `measure()` makes the browser style it.
+     * With `data-ind` set only afterwards, the current item's first style was
+     * its own ink fill; the switch to transparent then ran the item's
+     * background transition, so the new page opened with its item dark while
+     * the pill glided in from where it last stood — the destination flashed,
+     * and the pill seemed to jump onto it. Set first, the item is never
+     * styled with its own fill once script runs.
+     */
+    nav.setAttribute('data-ind', '1');
     const target = measure();
     if (!target) {
       nav.removeAttribute('data-ind');
@@ -152,7 +173,6 @@ function useRailPill(
       put(target, placedOnce.current);
     }
     placedOnce.current = true;
-    nav.setAttribute('data-ind', '1');
     if (track) lastPill = target;
 
     let placed = target;
@@ -174,9 +194,13 @@ function useRailPill(
      * The nav's own box, and every row in it: a row above the current one
      * that grows after the first placement (a count arriving, a font) moves
      * the current link without resizing the nav, and the pill must follow.
+     * The rows themselves: the nav's children are the pill and the groups,
+     * and a group is `display: contents`, which has no box to observe.
      */
     observer.observe(nav);
-    for (const child of Array.from(nav.children)) observer.observe(child);
+    for (const row of Array.from(nav.querySelectorAll('.bsp-nav, .bsp-grp'))) {
+      observer.observe(row);
+    }
     return () => {
       observer.disconnect();
       nav.removeEventListener('wheel', stopRevealing);
@@ -307,7 +331,7 @@ export function CustomerShell({
   readonly actions?: ReactNode;
   /**
    * The language tag of the words inside, when it is narrower than the
-   * document's (D-470: `ar-EG` for an Egyptian workspace). Absent otherwise.
+   * document's. Absent otherwise (one Arabic for every country since round 4).
    */
   readonly contentLang?: string | undefined;
   /** The floating Copilot. */

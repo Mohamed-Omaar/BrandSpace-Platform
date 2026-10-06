@@ -1,15 +1,17 @@
 import Link from 'next/link';
 import {
+  LinkTabs,
   Card,
   SectionHeader,
   Stack,
   StateMessage,
   StatusBadge,
-  buttonStyle,
   colorTokens,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
+import { systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor } from '../../../server/brand-context';
 import { notificationService } from '../../../server/approvals-context';
@@ -55,7 +57,14 @@ export default async function NotificationsPage({
   const error = typeof query.error === 'string' ? query.error : null;
   const reference = typeof query.ref === 'string' ? query.ref : undefined;
 
-  const { items, unread } = await inWorkspace(workspace.workspaceId, async ({ db }) => {
+  /*
+   * Gate 2b review (4f) — THE KIND FILTER, moved here from the bell's popover
+   * (where it sat behind a "⋯" the prototype does not draw): every
+   * notification, or only the approvals ones. Mentions are notes, so their
+   * view is the Notes inbox, one link away.
+   */
+  const kind = query['kind'] === 'approval' ? 'approval' : 'all';
+  const { items: allItems, unread } = await inWorkspace(workspace.workspaceId, async ({ db }) => {
     const service = notificationService({ db, workspaceId: workspace.workspaceId });
     return {
       items: await service.list({ userId: customer.userId, take: 50 }),
@@ -63,8 +72,15 @@ export default async function NotificationsPage({
     };
   });
 
+  const items =
+    kind === 'approval'
+      ? allItems.filter((item) => item.templateKey.startsWith('approval.'))
+      : allItems;
+
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const dateFormat = {
+    format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()),
+  };
 
   const brandContext = await brandContextFor(workspace, '/notifications');
 
@@ -93,12 +109,38 @@ export default async function NotificationsPage({
               unread > 0 ? (
                 <form action={markAllNotificationsReadAction}>
                   <input type="hidden" name="locale" value={locale} />
-                  <button type="submit" style={buttonStyle('ghost')} data-testid="mark-all-read">
+                  <button
+                    type="submit"
+                    className={buttonClass('ghost')}
+                    data-testid="mark-all-read"
+                  >
                     {t('notifications.markAllRead')}
                   </button>
                 </form>
               ) : undefined
             }
+          />
+          <LinkTabs
+            label={t('notifications.title')}
+            testId="notifications-kinds"
+            currentId={kind}
+            tabs={[
+              {
+                id: 'all',
+                href: `/${locale}/notifications`,
+                label: t('notifications.feed.all'),
+              },
+              {
+                id: 'approval',
+                href: `/${locale}/notifications?kind=approval`,
+                label: t('notifications.feed.approvals'),
+              },
+              {
+                id: 'mention',
+                href: `/${locale}/notes`,
+                label: t('notifications.feed.mentions'),
+              },
+            ]}
           />
           <p style={metaStyle} data-testid="notifications-unread-count">
             {t('notifications.unread')}: {unread}
@@ -129,6 +171,7 @@ export default async function NotificationsPage({
                     style={item.readAt ? rowStyle : unreadRowStyle}
                     data-testid={`notification-${item.id}`}
                     data-read={item.readAt ? 'true' : 'false'}
+                    data-kind={item.templateKey.startsWith('approval.') ? 'approval' : 'other'}
                   >
                     <div style={headRowStyle}>
                       <strong style={headlineStyle}>{headline}</strong>
@@ -146,7 +189,7 @@ export default async function NotificationsPage({
                       {item.linkPath ? (
                         <Link
                           href={`/${locale}${item.linkPath}`}
-                          style={buttonStyle('ghost')}
+                          className={buttonClass('ghost')}
                           data-testid={`notification-link-${item.id}`}
                         >
                           {t('notifications.view')}
@@ -158,7 +201,7 @@ export default async function NotificationsPage({
                           <input type="hidden" name="id" value={item.id} />
                           <button
                             type="submit"
-                            style={buttonStyle('ghost')}
+                            className={buttonClass('ghost')}
                             data-testid={`mark-read-${item.id}`}
                           >
                             {t('notifications.markRead')}

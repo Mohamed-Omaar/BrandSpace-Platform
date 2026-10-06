@@ -203,6 +203,8 @@ test.describe('Item 3 · colours and logo', () => {
     await waitForReady({ brandId, kind: 'IMAGE' });
     await look(page, brandId);
     if (!(await page.getByTestId('look-logo-image').isVisible())) {
+      // Gate 2b — the logo from the library is behind the logo card's "⋯".
+      await page.getByTestId('look-logo-more').click();
       await page.getByTestId('look-logo-select').selectOption({ label: 'logo.png' });
       await page.getByTestId('look-logo-choose-save').click();
       await page.waitForURL(/ok=BRAND_LOGO_SAVED/);
@@ -231,12 +233,16 @@ test.describe('Item 3 · fonts', () => {
       'bsf-cairo',
     );
 
-    // By keyboard, on the native select.
-    const heading = page.getByTestId('look-slot-select-en-heading');
-    await heading.selectOption({ label: 'Playfair Display' });
-    await page.getByTestId('look-slot-select-en-body').selectOption({ label: 'Lora' });
-    await page.getByTestId('look-slot-select-ar-heading').selectOption({ label: 'Amiri' });
-    await page.getByTestId('look-slot-select-ar-body').selectOption({ label: 'Tajawal' });
+    // Gate 2b — each slot is the prototype's row of chips (native radios).
+    const pick = (slot: string, name: string) =>
+      page
+        .getByTestId(`look-slot-select-${slot}`)
+        .getByRole('radio', { name, exact: true })
+        .check();
+    await pick('en-heading', 'Playfair Display');
+    await pick('en-body', 'Lora');
+    await pick('ar-heading', 'Amiri');
+    await pick('ar-body', 'Tajawal');
     await expect(page.getByTestId('look-slot-preview-en-heading')).toHaveAttribute(
       'data-font-family',
       'bsf-playfair-display',
@@ -307,7 +313,8 @@ test.describe('Item 3 · fonts', () => {
     // Use it for Arabic headings.
     await page
       .getByTestId('look-slot-select-ar-heading')
-      .selectOption({ label: 'Our Arabic (uploaded)' });
+      .getByRole('radio', { name: 'Our Arabic (uploaded)', exact: true })
+      .check();
     await page.getByTestId('look-fonts-save').click();
     await page.waitForURL(/ok=BRAND_FONTS_SAVED/);
     await expect(page.getByTestId('look-slot-preview-ar-heading')).toHaveAttribute(
@@ -345,7 +352,10 @@ test.describe('Item 3 · fonts', () => {
     await page.getByTestId(`look-font-rename-input-${font.id}`).fill('Our Arabic Display');
     await page.getByTestId(`look-font-rename-${font.id}`).click();
     await page.waitForURL(/ok=BRAND_FONT_RENAMED/);
-    await expect(page.getByTestId(`look-font-${font.id}`)).toContainText('Our Arabic Display');
+    // Gate 2b — the name is drawn in the row's own name field, as the prototype's.
+    await expect(page.getByTestId(`look-font-rename-input-${font.id}`)).toHaveValue(
+      'Our Arabic Display',
+    );
 
     // Replace the file: the same font, a new asset; the old file archived.
     await page.getByTestId(`look-font-replace-file-${font.id}`).setInputFiles({

@@ -40,8 +40,65 @@ export function LinkTabs({
   tabs,
   currentId,
   testId,
+  look = 'prototype',
 }: {
   /** The navigation's accessible name. */
+  readonly label: string;
+  readonly tabs: readonly LinkTab[];
+  readonly currentId: string;
+  readonly testId?: string | undefined;
+  /**
+   * `console`: the Control Center's own tabs, unchanged — it is not a
+   * customer screen and keeps its own look (round 4). Customer screens take
+   * the default, the prototype's `.seg`.
+   */
+  readonly look?: 'prototype' | 'console';
+}) {
+  if (look === 'console') {
+    return <ConsoleLinkTabs label={label} tabs={tabs} currentId={currentId} testId={testId} />;
+  }
+  /*
+   * ROUND 4 — THE PROTOTYPE'S `.seg` (`bsp-seg` in `prototype.css`): the
+   * `#f2f2f4` track, 3px in; each tab 30px, `6px 12px`, 12.5px/700, `#55555c`;
+   * the current one the white raised pill with ink text. It was the retired
+   * full-demo tab (36px, the pressed-purple label) — the one tab control on
+   * Media, the publishing log, a campaign's room and Billing that did not
+   * match the rest.
+   */
+  return (
+    <nav
+      aria-label={label}
+      data-testid={testId ?? 'link-tabs'}
+      className="bsp-seg"
+      style={{ flexWrap: 'wrap', maxInlineSize: '100%' }}
+    >
+      {/* MO4: the current tab's pill slides between tabs. */}
+      <SegmentPill selector='[aria-current="page"]' />
+      {tabs.map((tab) => {
+        const current = tab.id === currentId;
+        return (
+          <Link
+            key={tab.id}
+            href={tab.href}
+            aria-current={current ? 'page' : undefined}
+            data-testid={`tab-${tab.id}`}
+          >
+            {tab.label}
+            {tab.badge ? <span className="bsp-seg-n">{tab.badge}</span> : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** The Control Center's tabs, exactly as they were before round 4. */
+function ConsoleLinkTabs({
+  label,
+  tabs,
+  currentId,
+  testId,
+}: {
   readonly label: string;
   readonly tabs: readonly LinkTab[];
   readonly currentId: string;
@@ -61,7 +118,6 @@ export function LinkTabs({
         maxInlineSize: '100%',
       }}
     >
-      {/* MO4: the current tab's pill slides between tabs. */}
       <SegmentPill selector='[aria-current="page"]' />
       {tabs.map((tab) => {
         const current = tab.id === currentId;

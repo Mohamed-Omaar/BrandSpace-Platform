@@ -67,6 +67,8 @@ export interface LibraryCard {
     | { readonly kind: 'none' };
   /** The caption, for a text-only card. */
   readonly excerpt: string;
+  /** Gate 2b — the cover headline (`c.overlay`): the first picture's slide headline, if any. */
+  readonly headline?: string | null;
   /** B8 — what the Posts menu needs: the brand, the campaign, the live plan, the links. */
   readonly brandId?: string;
   readonly campaignId?: string | null;
@@ -369,7 +371,14 @@ export function ContentLibrary({
 
   const media = (card: LibraryCard, compact = false) =>
     card.media.kind === 'image' ? (
-      <AssetMedia src={card.media.src} alt="" />
+      <>
+        <AssetMedia src={card.media.src} alt="" />
+        {card.headline && !compact ? (
+          <span dir="auto" className="bsp-post-overlay" data-testid={`content-headline-${card.id}`}>
+            {card.headline}
+          </span>
+        ) : null}
+      </>
     ) : card.media.kind === 'video' ? (
       <span style={centeredStyle}>
         <PlayIcon size={compact ? 20 : 32} aria-hidden="true" />

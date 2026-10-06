@@ -119,17 +119,30 @@ const at = (r: Room, query = '') =>
   `${DASHBOARD_BASE_URL}/en/campaigns/${r.campaignId}${query ? `?${query}` : ''}`;
 
 test.describe('D-289 · the campaign project room', () => {
-  test('overview: progress, approvals waiting and next publish from real rows', async ({
+  test('one page: progress in the head, Linked to, and a results row per post from real rows', async ({
     page,
   }) => {
     const r = await room();
     await signIn(page);
     await page.goto(at(r));
-    await expect(page.getByTestId('campaign-tabs')).toBeVisible();
-    await expect(page.getByTestId('campaign-progress')).toContainText('0 of 2 posts published');
-    await expect(page.getByTestId('campaign-waiting')).toContainText('1 posts are waiting');
-    await expect(page.getByTestId('campaign-next')).toContainText('Nothing is scheduled yet');
-    await expect(page.getByTestId('campaign-recent-activity')).toContainText(/./);
+    // Gate 2b — the prototype's room is one page: no tab strip on it.
+    await expect(page.getByTestId('campaign-tabs')).toHaveCount(0);
+    await expect(page.getByTestId('campaign-summary')).toContainText('0 of 2 posts published');
+    await expect(page.getByTestId('campaign-linked')).toContainText('Linked to');
+    await expect(page.locator('[data-testid^="campaign-post-"]')).toHaveCount(2);
+    await expect(page.getByTestId(`campaign-post-${r.reviewId}`)).toContainText(
+      /Waiting for review|In review/,
+    );
+    // Nothing was measured, so every figure reads "—", never 0.
+    await expect(
+      page.getByTestId(`campaign-post-${r.draftId}`).locator('.bsp-room-n-r'),
+    ).toHaveText('—');
+    // The room's other views are behind the head's "⋯".
+    await page.getByTestId('campaign-more').click();
+    for (const view of ['content', 'calendar', 'assets', 'performance']) {
+      await expect(page.getByTestId(`campaign-view-${view}`)).toBeVisible();
+    }
+    await expect(page.getByTestId('campaign-all-activity')).toBeVisible();
   });
 
   test('content: filter by status, and each row says what the post is', async ({ page }) => {
@@ -170,11 +183,12 @@ test.describe('D-289 · the campaign project room', () => {
     await expect(page.getByTestId('campaign-what-changed')).toBeVisible();
     await expect(page.getByTestId('campaign-what-to-try')).toBeVisible();
 
-    // Activity is not a standing tab; the Overview links to the full trail.
-    await page.goto(at(r));
+    // Activity is not a standing tab; the room's "⋯" links to the full trail.
     await expect(
       page.getByTestId('campaign-tabs').getByRole('link', { name: 'Activity' }),
     ).toHaveCount(0);
+    await page.goto(at(r));
+    await page.getByTestId('campaign-more').click();
     await page.getByTestId('campaign-all-activity').click();
     await page.waitForURL((url) => url.searchParams.get('tab') === 'activity');
     await expect(page.getByTestId('campaign-activity')).not.toContainText('No activity');
@@ -184,7 +198,7 @@ test.describe('D-289 · the campaign project room', () => {
     const r = await room();
     await signIn(page, 'ar');
     await page.goto(`${DASHBOARD_BASE_URL}/ar/campaigns/${r.campaignId}`);
-    await expect(page.getByTestId('campaign-tabs')).toBeVisible();
+    await expect(page.getByTestId('campaign-posts')).toBeVisible();
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
       .analyze();

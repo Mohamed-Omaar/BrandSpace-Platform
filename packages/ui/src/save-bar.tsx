@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { CheckIcon } from './icons';
-import { buttonStyle } from './primitives';
+import { buttonClass } from './primitives';
 import {
   colorTokens,
   radiusTokens,
@@ -95,7 +95,7 @@ export function SaveBar({
             type="button"
             onClick={onCancel}
             data-testid={`${testId}-cancel`}
-            style={buttonStyle('ghost')}
+            className={buttonClass('ghost')}
           >
             {labels.cancel}
           </button>
@@ -105,10 +105,8 @@ export function SaveBar({
           disabled={!dirty}
           aria-disabled={!dirty}
           data-testid={saveTestId ?? `${testId}-save`}
-          style={{
-            ...buttonStyle('primary'),
-            ...(dirty ? null : { opacity: 0.45, cursor: 'not-allowed' }),
-          }}
+          className={buttonClass('primary')}
+          style={dirty ? undefined : { opacity: 0.45, cursor: 'not-allowed' }}
         >
           {labels.save}
         </button>
@@ -146,6 +144,7 @@ export function DraftForm({
   saveTestId,
   testId,
   barTestId,
+  className,
   style,
 }: {
   readonly action: (formData: FormData) => void | Promise<void>;
@@ -154,6 +153,7 @@ export function DraftForm({
   readonly saveTestId?: string | undefined;
   readonly testId?: string | undefined;
   readonly barTestId?: string | undefined;
+  readonly className?: string | undefined;
   readonly style?: CSSProperties | undefined;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -188,7 +188,7 @@ export function DraftForm({
   }, [measure]);
 
   return (
-    <form ref={formRef} action={action} data-testid={testId} style={style}>
+    <form ref={formRef} action={action} data-testid={testId} className={className} style={style}>
       <Fragment key={generation}>{children}</Fragment>
       <SaveBar
         dirty={dirty}

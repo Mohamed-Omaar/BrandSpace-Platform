@@ -69,7 +69,14 @@ export type PreviewMedia =
        * can be paged: arrows, dots and "Slide 2 of 5". `src`/`alt` above stay
        * the first slide's, so a caller that passes no slides is unchanged.
        */
-      readonly slides?: readonly { readonly src?: string | undefined; readonly alt: string }[];
+      readonly slides?: readonly {
+        readonly src?: string | undefined;
+        readonly alt: string;
+        /** Round 4 (3.5) — the slide's headline, drawn on it as the prototype does. */
+        readonly headline?: string | undefined;
+      }[];
+      /** Round 4 (3.5) — the cover's headline (the first slide's), when one is set. */
+      readonly headline?: string | undefined;
       /**
        * PHASE 8 — the REAL asset's bytes, as an opaque expiring grant.
        *

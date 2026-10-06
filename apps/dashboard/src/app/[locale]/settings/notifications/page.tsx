@@ -1,4 +1,4 @@
-import { Card, DraftForm, SectionHeader, spacingTokens } from '@brandspace/ui';
+import { DraftForm } from '@brandspace/ui';
 import { NOTIFICATION_CATEGORIES, NotificationPreferenceService } from '@brandspace/notifications';
 import { inWorkspace, requireWorkspace } from '../../../../server/customer-context';
 import { brandContextFor } from '../../../../server/brand-context';
@@ -6,7 +6,6 @@ import { SettingsFrame } from '../../../../components/settings-frame';
 import { saveBarLabels } from '../../../../server/save-bar-labels';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
-import { CheckboxRow } from '../../../../components/checkbox-row';
 import { saveNotificationPreferencesAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -61,38 +60,58 @@ export default async function NotificationSettingsPage({
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
       <SettingsFrame
+        brandSource={workspace}
         locale={locale}
         permissionKeys={workspace.permissionKeys}
         selected="notifications"
       >
-        <Card testId="notification-preferences">
-          <SectionHeader
-            title={t('notificationPrefs.title')}
-            description={t('notificationPrefs.body')}
-          />
-          <DraftForm
-            key={JSON.stringify(preferences)}
-            action={saveNotificationPreferencesAction}
-            style={{ display: 'grid', gap: spacingTokens.sm }}
-            testId="notification-preferences-form"
-            barTestId="notification-preferences-bar"
-            saveTestId="notification-preferences-save"
-            labels={saveBarLabels(t)}
-          >
-            <input type="hidden" name="locale" value={locale} />
+        {/*
+          ROUND 4, GATE 2b — THE PROTOTYPE'S NOTIFICATIONS (`Main.dc.html`
+          lines 1363–1367): an `xcard` table — a head row (Event · In app) and
+          one row per event with its switch centred in a 90px column. The
+          Email column is BLOCKED (owner decision, Gate 2: per-event email
+          preferences do not exist), so only "In app" is drawn. Each switch is
+          the same category checkbox, posted to the same action.
+        */}
+        <DraftForm
+          key={JSON.stringify(preferences)}
+          action={saveNotificationPreferencesAction}
+          // Gate 2b review (4b): the bar on the frame's bottom edge, as on General.
+          className="bsp-nt bsp-sg-form"
+          testId="notification-preferences-form"
+          barTestId="notification-preferences-bar"
+          saveTestId="notification-preferences-save"
+          labels={saveBarLabels(t)}
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <section className="bsp-xcard bsp-nt-card" data-testid="notification-preferences">
+            <div className="bsp-nt-head" aria-hidden="true">
+              <span>{t('notificationPrefs.colEvent')}</span>
+              <span className="bsp-nt-c">{t('notificationPrefs.colInApp')}</span>
+            </div>
             {NOTIFICATION_CATEGORIES.map((category) => (
-              <CheckboxRow
-                key={category}
-                name="category"
-                value={category}
-                label={t(`notificationPrefs.${category}`)}
-                hint={t(`notificationPrefs.${category}.hint`)}
-                checked={preferences[category]}
-                testId={`notification-pref-${category}`}
-              />
+              <label key={category} className="bsp-nt-row">
+                <span className="bsp-nt-l">
+                  {t(`notificationPrefs.${category}`)}
+                  <span className="bsp-nt-hint" id={`notification-pref-${category}-hint`}>
+                    {t(`notificationPrefs.${category}.hint`)}
+                  </span>
+                </span>
+                <span className="bsp-nt-c">
+                  <input
+                    type="checkbox"
+                    name="category"
+                    value={category}
+                    defaultChecked={preferences[category]}
+                    className="bsp-tgl-in"
+                    aria-describedby={`notification-pref-${category}-hint`}
+                    data-testid={`notification-pref-${category}`}
+                  />
+                </span>
+              </label>
             ))}
-          </DraftForm>
-        </Card>
+          </section>
+        </DraftForm>
       </SettingsFrame>
     </WorkspaceShell>
   );

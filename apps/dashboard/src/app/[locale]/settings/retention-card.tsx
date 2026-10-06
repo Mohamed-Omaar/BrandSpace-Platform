@@ -1,12 +1,3 @@
-import {
-  Card,
-  Field,
-  buttonStyle,
-  colorTokens,
-  inputStyle,
-  spacingTokens,
-  typographyTokens,
-} from '@brandspace/ui';
 import { inWorkspace } from '../../../server/customer-context';
 import { inContentStudio } from '../../../server/content-context';
 import { translator } from '../../../i18n/messages';
@@ -53,47 +44,42 @@ export async function RetentionCard({
           and the sentence naming what it can NEVER delete is part of the
           control rather than a footnote somewhere else.
         */}
-      <Card testId="retention-card">
-        <form action={saveRetentionAction} style={{ display: 'grid', gap: spacingTokens.md }}>
+      {/*
+        Round 4, Gate 2b — the prototype's retention card (`Main.dc.html` line
+        1378): an `xcard` with the title at 14px / 600 over its 12px line; the
+        product's own control (D-117) under it.
+      */}
+      <section className="bsp-xcard bsp-dt-ret" data-testid="retention-card">
+        <form action={saveRetentionAction} className="bsp-dt-ret-form">
           <input type="hidden" name="locale" value={locale} />
-          <div>
-            <b>{t('content.retention.title')}</b>
-            <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
-              {t('content.retention.body')}
-            </p>
-          </div>
-
-          <Field label={t('content.retention.label')} htmlFor="retentionDays">
-            <input
-              className="bs-control"
-              id="retentionDays"
-              name="retentionDays"
-              type="number"
-              inputMode="numeric"
-              min={retentionFloor}
-              step={1}
-              data-testid="retention-days"
-              defaultValue={row.aiContentRetentionDays ?? ''}
-              placeholder={t('content.retention.placeholder')}
-              aria-describedby="retention-note"
-              style={inputStyle()}
-            />
-          </Field>
-
-          <p
-            id="retention-note"
-            style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
-          >
+          <span className="bsp-dt-title">{t('content.retention.title')}</span>
+          <span className="bsp-dt-sub">{t('content.retention.body')}</span>
+          <label className="bsp-dt-ret-field" htmlFor="retentionDays">
+            <span className="bsp-lbl">{t('content.retention.label')}</span>
+            <span className="bsp-dt-ret-row">
+              <input
+                className="bs-control bsp-dt-input"
+                id="retentionDays"
+                name="retentionDays"
+                type="number"
+                inputMode="numeric"
+                min={retentionFloor}
+                step={1}
+                data-testid="retention-days"
+                defaultValue={row.aiContentRetentionDays ?? ''}
+                placeholder={t('content.retention.placeholder')}
+                aria-describedby="retention-note"
+              />
+              <button type="submit" data-testid="retention-save" className="bsp-btn bsp-sm bsp-pur">
+                {t('content.retention.save')}
+              </button>
+            </span>
+          </label>
+          <span id="retention-note" className="bsp-dt-sub">
             {t('content.retention.min')}: {retentionFloor}. {t('content.retention.excluded')}
-          </p>
-
-          <div>
-            <button type="submit" data-testid="retention-save" style={buttonStyle('primary')}>
-              {t('content.retention.save')}
-            </button>
-          </div>
+          </span>
         </form>
-      </Card>
+      </section>
     </>
   );
 }

@@ -217,14 +217,13 @@ test.describe('A8 · the owner deletes a workspace, it waits, and the owner canc
     await page.waitForURL(/\/en\/overview$/);
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/data`);
-    await page.getByTestId('workspace-deletion-open').click();
+    // Round 4, Gate 2b: the prototype's inline confirmation (no "open" step).
     // A wrong name is refused on the server, and nothing is scheduled.
     await page.getByTestId('workspace-deletion-name').fill('not the name');
     await page.getByTestId('workspace-deletion-password').fill(customer.password);
     await page.getByTestId('workspace-deletion-confirm').click();
     await page.waitForURL(/error=DELETION_NAME_MISMATCH/);
 
-    await page.getByTestId('workspace-deletion-open').click();
     await page.getByTestId('workspace-deletion-name').fill(name);
     await page.getByTestId('workspace-deletion-password').fill(customer.password);
     await page.getByTestId('workspace-deletion-confirm').click();
@@ -232,7 +231,8 @@ test.describe('A8 · the owner deletes a workspace, it waits, and the owner canc
     await expect(page.getByTestId('deletion-pending-date')).toContainText(name);
     // Review item 9: who asked for it, and when.
     await expect(page.getByTestId('deletion-requested')).toContainText(
-      /asked for the deletion on \d{1,2} \w+ \d{4}\./,
+      // Round 4 (1.8): the prototype's date — "Oct 5", the year for another year.
+      /asked for the deletion on [A-Z][a-z]{2} \d{1,2}(, \d{4})?\./,
     );
 
     // Closed: every page of the workspace lands on this screen.
@@ -313,7 +313,12 @@ test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; s
     // Review of #67 — the chip opens the Studio itself, the day stated there
     // and as its publish time; the day travels with the other ways to start.
     await expect(page.getByTestId('content-composer')).toBeVisible();
-    await expect(page.getByTestId('composer-when')).toContainText(day);
+    // Round 4 (3.3): the day in the shared date style ("Oct 8"), not its ISO form.
+    await expect(page.getByTestId('composer-when')).toContainText(
+      new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(
+        new Date(`${day}T00:00:00Z`),
+      ),
+    );
     await expect(page.getByTestId('create-mode-idea')).toHaveAttribute(
       'href',
       new RegExp(`date=${day}`),
@@ -446,10 +451,10 @@ test.describe('A9 / G1 · Settings → General, under the save bar', () => {
 
     // And in Arabic.
     await page.goto(`${DASHBOARD_BASE_URL}/ar/settings`);
-    // The workspace is Egyptian by now (saved above), so General speaks the
-    // prototype's Egyptian Arabic (D-470).
+    // The workspace is Egyptian by now (saved above), and since round 4,
+    // Step 6, it reads the same formal Arabic as every other country.
     await expect(page.getByTestId('settings-bar-status')).toHaveText(
-      'كل التعديلات محفوظة · عدّل أي حاجة وزرار الحفظ هيشتغل',
+      'تم حفظ كل التغييرات · عدّل أي شيء ويعمل زر الحفظ',
     );
   });
 });
@@ -553,11 +558,12 @@ test.describe('A10 / G2 / G3 · my notification switches, and the AI writing lan
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/ai`);
     const aiBar = page.getByTestId(`ai-bar-${brandId}`);
     await expect(aiBar).toHaveAttribute('data-state', 'clean');
-    await page.getByTestId(`ai-language-${brandId}`).selectOption('AR');
+    // Round 4, Gate 2b: the prototype's language chips (radios) for the select.
+    await page.getByTestId(`ai-language-${brandId}`).getByText('Arabic', { exact: true }).click();
     await expect(aiBar).toHaveAttribute('data-state', 'dirty');
     await page.getByTestId(`ai-save-${brandId}`).click();
     await page.waitForURL(/ok=SETTINGS_SAVED/);
-    await expect(page.getByTestId(`ai-language-${brandId}`)).toHaveValue('AR');
+    await expect(page.getByTestId(`ai-language-${brandId}-AR`)).toBeChecked();
 
     // And in Arabic.
     await page.goto(`${DASHBOARD_BASE_URL}/ar/settings/notifications`);
@@ -943,33 +949,30 @@ test.describe('G5 / Q22 · a time-zone change keeps local times, and says what i
 });
 
 test.describe('G8 / Q16 · sign-up, reset and a new workspace from inside the app', () => {
-  test('a refused sign-up comes back with the name, email and time zone — never the password', async ({
+  test('a refused sign-up comes back with the name and email — never the password', async ({
     page,
   }) => {
     const email = `e2e-draft-${randomUUID().slice(0, 8)}@example.local`;
     await page.goto(`${DASHBOARD_BASE_URL}/en/sign-up`);
     await page.fill('#name', 'Draft Keeper');
     await page.fill('#email', email);
-    await page.fill('#timezone', 'Africa/Cairo');
-    await page.press('#timezone', 'Enter');
+    // Round 4 (4.1): one password field, no zone question (the browser's zone).
+    await expect(page.locator('#password-confirm')).toHaveCount(0);
+    await expect(page.locator('#timezone')).toHaveCount(0);
+    await expect(page.getByTestId('signup-timezone')).not.toHaveValue('');
     // The browser's own length check is lifted so the SERVER refuses the
     // password — the refusal this feature is about.
     await page.evaluate(() => {
-      for (const id of ['password', 'password-confirm']) {
-        document.getElementById(id)?.removeAttribute('minlength');
-      }
+      document.getElementById('password')?.removeAttribute('minlength');
     });
     await page.fill('#password', 'short');
-    await page.fill('#password-confirm', 'short');
     const terms = page.locator('[data-testid="accept-terms-of-service"] input[type="checkbox"]');
     if ((await terms.count()) > 0) await terms.check();
     await page.click('[data-testid="signup-submit"]');
     await page.waitForURL(/\/en\/sign-up\?error=/);
     await expect(page.locator('#name')).toHaveValue('Draft Keeper');
     await expect(page.locator('#email')).toHaveValue(email);
-    await expect(page.locator('#timezone')).toHaveValue(/Cairo/);
     await expect(page.locator('#password')).toHaveValue('');
-    await expect(page.locator('#password-confirm')).toHaveValue('');
     // The email is not in the address bar.
     expect(page.url()).not.toContain(encodeURIComponent(email));
   });

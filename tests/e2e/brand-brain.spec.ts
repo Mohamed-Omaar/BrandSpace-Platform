@@ -664,8 +664,9 @@ test.describe('an upload is processed by the WORKER, not by the request', () => 
     if (!(await upload.isVisible().catch(() => false))) test.skip();
 
     const marker = `Ospreyline ${Date.now()}`;
+    const fileName = `brand-notes-${Date.now()}.txt`;
     await upload.setInputFiles({
-      name: `brand-notes-${Date.now()}.txt`,
+      name: fileName,
       mimeType: 'text/plain',
       buffer: Buffer.from(
         [
@@ -689,7 +690,11 @@ test.describe('an upload is processed by the WORKER, not by the request', () => 
     const sources = page.getByTestId('sources-card');
     await expect(async () => {
       await page.reload();
-      await expect(sources).toContainText(/Ready|جاهز/);
+      // Gate 2b — the prototype's row pills only a read in progress or a failure;
+      // a READY source is the row with no pill, its counts, and "Read again".
+      const row = sources.locator('li[data-status]', { hasText: fileName });
+      await expect(row).toHaveAttribute('data-status', 'READY');
+      await expect(row).toContainText(/Read again|اقرأ مجددًا/);
     }).toPass({ timeout: 60_000, intervals: [1_000, 2_000, 3_000] });
   });
 });

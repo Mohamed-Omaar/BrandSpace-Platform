@@ -103,8 +103,9 @@ const disabled = (page: Page, testId: string) =>
 
 const COPY = {
   en: {
-    weekly: 'When weekly engagement drops by 20% or more',
-    top: 'When a post ranks in your top 10%',
+    // Round 4 (5.2): the prototype's titles.
+    weekly: 'When weekly engagement drops 20%',
+    top: 'When a post lands in your top 10%',
     // Round 3 — the tiles' own words (the prototype's).
     weeklyTile: 'Weekly engagement drops 20%',
     topTile: 'A post lands in your top 10%',
@@ -115,8 +116,8 @@ const COPY = {
     stale: 'Skipped — what started this automation had changed by the time it ran.',
   },
   ar: {
-    weekly: 'عند انخفاض التفاعل الأسبوعي بنسبة 20% أو أكثر',
-    top: 'عند وصول منشور إلى أفضل 10% من منشوراتك',
+    weekly: 'عند انخفاض التفاعل الأسبوعي 20%',
+    top: 'عند وصول منشور إلى أعلى 10% أداءً',
     weeklyTile: 'انخفاض تفاعل الأسبوع 20%',
     topTile: 'منشور ضمن أعلى 10% أداءً',
     unavailable: 'غير متاح بعد',
@@ -141,7 +142,9 @@ async function create(page: Page, name: string): Promise<void> {
   await page.getByTestId('automation-name').fill(name);
   await page.getByTestId('automation-submit').focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByTestId('automation-rules')).toContainText(name);
+  await expect(page.getByTestId('automation-rules').getByTitle(name, { exact: true })).toHaveCount(
+    1,
+  );
 }
 
 async function stored(workspaceId: string, name: string) {

@@ -1,10 +1,12 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Field, SearchableSelect, type SearchableOption } from '@brandspace/ui';
 import { authInputStyle } from '../../../../components/auth-card';
 import { timeZoneAfterCountryChange } from '../../../../components/time-zone-suggestion';
+import { detectedTimeZone } from '../../../../components/browser-time-zone';
+import { suggestedWorkspaceAddress } from '../../../../components/workspace-address';
 
 interface ApiFailurePayload {
   readonly error?: {
@@ -81,13 +83,32 @@ export function CreateWorkspaceForm({
     /** Review of #67, round 3 — the prototype's step: "More", the zone line, the footer note. */
     more: string;
     zoneLine: string;
+    /** Round 4 (4.1) — the zone the browser reported, and a way to change it. */
+    zoneDetected: string;
+    zoneChange: string;
     saved: string;
   };
 }) {
   const more = useRef<HTMLDetailsElement>(null);
+  // Step 7 (7.1): the address follows the business name until it is edited.
+  const address = useRef<HTMLInputElement>(null);
+  const addressEdited = useRef(false);
   const [country, setCountry] = useState('');
   const [lastCountry, setLastCountry] = useState('');
   const [timezone, setTimezone] = useState('');
+  /*
+   * ROUND 4 (4.1) — THE DETECTED ZONE, SHOWN ON STEP 1. Sign-up no longer
+   * asks; the browser's zone is the starting answer here, stated in words
+   * and changeable in one click. A zone that is not in the runtime's list is
+   * not offered. Being already set, the country never replaces it (Q7).
+   */
+  const [detected, setDetected] = useState('');
+  useEffect(() => {
+    const zone = detectedTimeZone();
+    if (!timezones.some((option) => option.value === zone)) return;
+    setDetected(zone);
+    setTimezone((current) => (current === '' ? zone : current));
+  }, [timezones]);
   const [city, setCity] = useState('');
   const [state, setState] = useState<{ busy: boolean; error: string | null }>({
     busy: false,
@@ -178,6 +199,13 @@ export function CreateWorkspaceForm({
             maxLength={120}
             autoComplete="organization"
             style={authInputStyle()}
+            onInput={(event) => {
+              if (addressEdited.current || !address.current) return;
+              address.current.value = suggestedWorkspaceAddress(
+                event.currentTarget.value,
+                defaultEmail,
+              );
+            }}
           />
         </Field>
 
@@ -213,7 +241,28 @@ export function CreateWorkspaceForm({
         </Field>
       </div>
       <span className="bsp-wz-hint" data-testid="create-workspace-zone">
-        {timezone ? labels.zoneLine.replace('{zone}', timezone) : labels.countryHint}
+        {timezone
+          ? (timezone === detected ? labels.zoneDetected : labels.zoneLine).replace(
+              '{zone}',
+              timezone,
+            )
+          : labels.countryHint}
+        {timezone !== '' && timezone === detected ? (
+          <>
+            {' '}
+            <button
+              type="button"
+              className="bsp-wz-link"
+              data-testid="create-workspace-zone-change"
+              onClick={() => {
+                if (more.current) more.current.open = true;
+                document.getElementById('timezone')?.focus();
+              }}
+            >
+              {labels.zoneChange}
+            </button>
+          </>
+        ) : null}
       </span>
       {/*
         THE ACCOUNT'S OTHER FACTS, which the prototype sets for the customer
@@ -229,6 +278,10 @@ export function CreateWorkspaceForm({
               className="bs-control"
               id="slug"
               name="slug"
+              ref={address}
+              onInput={() => {
+                addressEdited.current = true;
+              }}
               required
               pattern="[a-z0-9][a-z0-9-]{1,48}[a-z0-9]"
               maxLength={50}

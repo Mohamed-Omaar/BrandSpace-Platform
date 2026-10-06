@@ -19,7 +19,7 @@ import {
   typographyTokens,
   zIndexTokens,
 } from './tokens';
-import { Button, buttonStyle } from './primitives';
+import { Button, buttonClass } from './primitives';
 import { ChevronDownIcon, CloseIcon } from './icons';
 import { OverlayStack, type StackedOverlay } from './overlay-stack';
 import { usePresence } from './motion-hooks';
@@ -248,6 +248,12 @@ export function Tooltip({
    * rail's nav rows ended up 22px wide and sixteen pixels left of the rail's
    * centre line, while the workspace and profile cards beside them were
    * correctly centred.
+   *
+   * Round 4, 2.2: stretched, the trigger is also CENTRED in it. A collapsed
+   * rail row is the prototype's 42px square (`.sb.min .nav`) inside the
+   * 76px rail, and `.sb.min nav { align-items: center }` centres it; a full
+   * width wrapper otherwise holds it at the start edge, 17px off the rail's
+   * centre line. A trigger that fills the wrapper is unaffected.
    */
   readonly stretch?: boolean;
   readonly children: ReactNode;
@@ -273,7 +279,7 @@ export function Tooltip({
       style={{
         position: 'relative',
         display: 'inline-flex',
-        ...(stretch ? { inlineSize: '100%' } : {}),
+        ...(stretch ? { inlineSize: '100%', justifyContent: 'center' } : {}),
       }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
@@ -286,7 +292,10 @@ export function Tooltip({
     >
       <span
         aria-describedby={open ? id : undefined}
-        style={{ display: 'inline-flex', ...(stretch ? { inlineSize: '100%' } : {}) }}
+        style={{
+          display: 'inline-flex',
+          ...(stretch ? { inlineSize: '100%', justifyContent: 'center' } : {}),
+        }}
       >
         {children}
       </span>
@@ -438,7 +447,7 @@ export function DropdownMenu({
             ? 'bs-pressable'
             : trigger === 'primary'
               ? 'bs-pressable bs-filled-brand'
-              : undefined)
+              : buttonClass('neutral', 'sm'))
         }
         /*
          * A CARD TRIGGER IS NAMED EXPLICITLY, because its visible copy can be
@@ -492,7 +501,6 @@ export function DropdownMenu({
                     cursor: 'pointer',
                   }
                 : {
-                    ...buttonStyle('neutral', 'sm'),
                     gap: spacingTokens.xs,
                     maxInlineSize: '100%',
                     inlineSize: fullWidth ? '100%' : undefined,
@@ -664,15 +672,8 @@ export function Dialog({
             aria-label={closeLabel}
             data-testid="dialog-close"
             onClick={onClose}
-            className="bs-pressable bs-control"
-            style={{
-              ...buttonStyle('ghost', 'sm'),
-              inlineSize: '2.25rem',
-              blockSize: '2.25rem',
-              paddingInline: 0,
-              borderRadius: radiusTokens.full,
-              color: colorTokens.textSecondary,
-            }}
+            className={buttonClass('ghost', 'sm')}
+            style={{ color: colorTokens.textSecondary }}
           >
             <CloseIcon size={18} />
           </button>
@@ -1010,15 +1011,8 @@ export function SideSheet({
             aria-label={closeLabel}
             data-testid={`${testId}-close`}
             onClick={onClose}
-            className="bs-pressable bs-control"
-            style={{
-              ...buttonStyle('ghost', 'sm'),
-              inlineSize: '2.25rem',
-              blockSize: '2.25rem',
-              paddingInline: 0,
-              borderRadius: radiusTokens.full,
-              color: colorTokens.textSecondary,
-            }}
+            className={buttonClass('ghost', 'sm')}
+            style={{ color: colorTokens.textSecondary }}
           >
             <CloseIcon size={18} />
           </button>

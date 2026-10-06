@@ -53,10 +53,18 @@ export function MoreDisclosure({
       }
       if (!panel.contains(event.target as Node)) panel.open = false;
     };
-    document.addEventListener('pointerdown', close);
+    /*
+     * Round 4 (5.1) — CLOSED ON THE CLICK, NOT ON THE PRESS. Closing on
+     * `pointerdown` shrank the page under the pointer (a tall panel, Approvals'
+     * every-channel previews, is part of the scroll height), so the button the
+     * press began on had moved by the release and the click was lost — "Approve"
+     * pressed with the review's "⋯" open did nothing. On `click` the press has
+     * already landed where it was aimed; the panel closes after.
+     */
+    document.addEventListener('click', close);
     document.addEventListener('keydown', close);
     return () => {
-      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('click', close);
       document.removeEventListener('keydown', close);
     };
   }, []);

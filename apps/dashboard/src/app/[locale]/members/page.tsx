@@ -4,9 +4,9 @@ import {
   RecordList,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   initialsFrom,
+  personInitials,
   inputStyle,
   layoutTokens,
   spacingTokens,
@@ -14,7 +14,7 @@ import {
   typographyTokens,
   visuallyHiddenStyle,
 } from '@brandspace/ui';
-import { brandScopeFilter, systemClock } from '@brandspace/shared';
+import { ROLE_DEFINITIONS, brandScopeFilter, systemClock } from '@brandspace/shared';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
 import {
   inWorkspace,
@@ -25,6 +25,7 @@ import { NoAccessPage } from '../../../components/no-access-page';
 import { PermissionNotice } from '../../../components/permission-notice';
 import { brandContextFor } from '../../../server/brand-context';
 import {
+  OWNER_ONLY_PERMISSIONS,
   customerRoleName,
   optionalMessage,
   statusMessage,
@@ -42,6 +43,8 @@ import {
   changeBrandAccessAction,
 } from './actions';
 import { dayLabel } from '../../../server/prototype-dates';
+import { permissionGroups } from '../../../server/permission-groups';
+import { PermissionGroupsList } from '../../../components/permission-groups-view';
 
 export const dynamic = 'force-dynamic';
 
@@ -190,6 +193,7 @@ export default async function MembersPage({
     const all = current.length === 0 && !viewerRestricted;
     return (
       <fieldset
+        className="bsp-tm-access"
         style={{ border: 0, margin: 0, padding: 0, display: 'grid', gap: spacingTokens.xs }}
         data-testid={`${idPrefix}-access`}
       >
@@ -245,10 +249,7 @@ export default async function MembersPage({
   function accessForm(membershipId: string, current: readonly string[], testKey: string) {
     return (
       <details data-testid={`brand-access-${testKey}`}>
-        <summary
-          style={{ ...buttonStyle('ghost', 'sm'), listStyle: 'none' }}
-          className={buttonClass('ghost')}
-        >
+        <summary style={{ listStyle: 'none' }} className={buttonClass('ghost', 'sm')}>
           {t('members.access.change')}
         </summary>
         <form
@@ -260,8 +261,8 @@ export default async function MembersPage({
           {accessFields(`member-${testKey}`, current)}
           <button
             type="submit"
-            style={buttonStyle('neutral', 'sm')}
-            className={buttonClass('neutral')}
+
+            className={buttonClass('neutral', 'sm')}
             data-testid={`save-brand-access-${testKey}`}
           >
             {t('common.save')}
@@ -315,7 +316,7 @@ export default async function MembersPage({
         <button
           type="submit"
           data-testid={`change-role-${email}`}
-          style={buttonStyle('neutral', 'sm')}
+          className={buttonClass('neutral', 'sm')}
         >
           {t('common.save')}
         </button>
@@ -331,7 +332,7 @@ export default async function MembersPage({
         <button
           type="submit"
           data-testid={`remove-member-${email}`}
-          style={buttonStyle('danger', 'sm')}
+          className={buttonClass('danger', 'sm')}
         >
           {t('members.remove')}
         </button>
@@ -349,7 +350,7 @@ export default async function MembersPage({
           <button
             type="submit"
             data-testid={`resend-${email}`}
-            style={buttonStyle('neutral', 'sm')}
+            className={buttonClass('neutral', 'sm')}
           >
             {t('members.resend')}
           </button>
@@ -360,7 +361,7 @@ export default async function MembersPage({
           <button
             type="submit"
             data-testid={`revoke-${email}`}
-            style={buttonStyle('neutral', 'sm')}
+            className={buttonClass('neutral', 'sm')}
           >
             {t('members.revoke')}
           </button>
@@ -484,7 +485,12 @@ export default async function MembersPage({
       customerName={session.customer.name ?? session.customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="members">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="members"
+      >
         {error && <Banner tone="error">{statusMessage(error, locale, ref)}</Banner>}
         {ok && statusMessage(ok, locale) && (
           <Banner tone="success">{statusMessage(ok, locale)}</Banner>
@@ -498,7 +504,7 @@ export default async function MembersPage({
             {/* The member: a 48px tile, the name at 19px, who they are. */}
             <section className="bsp-card bsp-tm-hero" data-testid="member-detail">
               <TeamAvatar
-                initials={initialsFrom(opened.name?.trim() || opened.email)}
+                initials={personInitials(opened.name, opened.email)}
                 index={Math.max(0, members.indexOf(opened))}
                 size={48}
               />
@@ -581,6 +587,25 @@ export default async function MembersPage({
               </section>
             ) : null}
 
+            {/*
+              Round 4, 2.1 — WHAT THIS MEMBER CAN DO, as the prototype's
+              two-column groups under the role (lines 1409–1420). Read from
+              the role's definition, the same one the role chips change; the
+              rows state the role's answer where the prototype draws its
+              locked "From the role" pill. No permission key is rendered.
+            */}
+            <PermissionGroupsList
+              groups={permissionGroups(
+                ROLE_DEFINITIONS.find((role) => role.key === opened.roleKey)?.permissionKeys ?? [],
+                OWNER_ONLY_PERMISSIONS,
+              )}
+              t={t}
+              testId="member-perms"
+            />
+            <p className="bsp-pg-audit" style={{ margin: 0 }}>
+              {t('perms.logged')}
+            </p>
+
             {may('member.remove') ? (
               <section className="bsp-card bsp-tm-box bsp-tm-end">
                 {removeForm(opened.membershipId, opened.email)}
@@ -601,7 +626,9 @@ export default async function MembersPage({
                     ? t('members.seats')
                         .replace('{used}', String(activeSeats))
                         .replace('{limit}', String(seatLimit))
-                    : t('members.count').replace('{count}', String(members.length))}
+                    : members.length === 1
+                      ? t('members.count.one')
+                      : t('members.count').replace('{count}', String(members.length))}
                 </span>
                 {/*
                   "+ Invite" opens the invitation form in place (review of #67,
@@ -631,10 +658,7 @@ export default async function MembersPage({
                       className="bsp-row bsp-tm-row"
                       data-testid={`member-${m.email}`}
                     >
-                      <TeamAvatar
-                        initials={initialsFrom(m.name?.trim() || m.email)}
-                        index={index}
-                      />
+                      <TeamAvatar initials={personInitials(m.name, m.email)} index={index} />
                       <span className="bsp-tm-main">
                         <span className="bsp-tm-name" data-testid={`member-name-${m.email}`}>
                           {m.name?.trim() || m.email}

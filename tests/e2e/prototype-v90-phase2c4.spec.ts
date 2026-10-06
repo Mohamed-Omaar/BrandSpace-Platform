@@ -385,8 +385,9 @@ test.describe('Item 5 · uploads — every format through the worker', () => {
       // Each row: type, size, date and counts; its facts on demand, by keyboard.
       const row = rowFor(page, 'notes.txt');
       const id = await sourceIdOf(page, 'notes.txt');
-      await expect(page.getByTestId(`source-meta-${id}`)).toContainText(
-        locale === 'ar' ? 'بانتظار المراجعة' : 'pending',
+      // Gate 2b — the counts are in the row's chip, as the prototype's.
+      await expect(page.getByTestId(`source-toggle-${id}`)).toContainText(
+        locale === 'ar' ? 'بانتظار المراجعة' : 'to review',
       );
       await page.getByTestId(`source-toggle-${id}`).focus();
       await page.keyboard.press('Enter');
@@ -510,7 +511,7 @@ test.describe('Item 5 · Read again, Remove with Keep or Drop, and re-upload', (
     });
 
     await page.goto(sourcesUrl('en'));
-    await expect(page.getByTestId(`source-meta-${id}`)).toContainText('1 approved');
+    await expect(page.getByTestId(`source-toggle-${id}`)).toContainText('1 approved');
     await page.getByTestId(`source-read-again-${id}`).click();
     await page.waitForURL(/ok=SOURCE_READ_AGAIN/);
     await waitForStatus(page, 'en', 'reread.txt', 'READY');

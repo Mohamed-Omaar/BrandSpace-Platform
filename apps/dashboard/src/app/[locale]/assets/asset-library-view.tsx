@@ -24,7 +24,6 @@ import {
   Stack,
   StateMessage,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   radiusTokens,
@@ -34,9 +33,10 @@ import {
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { ASSET_VIEWS, type RightsState } from '../../../server/asset-views';
 import { formatBytes } from '../../../components/format-bytes';
+import { mediaStorageRemainder, type MediaStorageCategory } from '../../../server/media-storage';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
-import { MoreDisclosure } from '../../../components/more-disclosure';
+import { dayFormatter } from '../../../server/prototype-dates';
 
 /**
  * The Asset Library screen.
@@ -129,6 +129,12 @@ type FormAction = (formData: FormData) => Promise<void>;
 export interface AssetLibraryViewProps {
   readonly locale: string;
   /**
+   * The server's `systemClock.now()`, as ISO: the date every label here is
+   * read against (a date in another year shows its year). Handed down
+   * because this is a client component and never reads the real clock.
+   */
+  readonly now: string;
+  /**
    * `?upload=1` — the top bar's "Upload to the library" (P6-16) opens the
    * library's OWN upload dialog, not a second upload path. Honoured only when
    * the member may upload; the dialog's action refuses independently.
@@ -149,6 +155,11 @@ export interface AssetLibraryViewProps {
   readonly tags: ReadonlyArray<{ tag: string; count: number }>;
   readonly storageLimitGb: number | null;
   readonly storageUsedGb: number;
+  /** Round 4 (4.7) — the meter's exact bytes, and the prototype's four categories. */
+  readonly storageUsedBytes: number;
+  /** The plan's limit in bytes, by the meter's own `BYTES_PER_GB`; null when unlimited. */
+  readonly storageLimitBytes: number | null;
+  readonly storageCategories: readonly MediaStorageCategory[];
   /** "Plan & storage →" — the billing screen, for a member who may open it. */
   readonly planHref?: string | null;
   readonly maxFileBytes: Readonly<Record<string, number>>;
@@ -234,10 +245,8 @@ const KIND_LABEL: Readonly<Record<AssetKind, MessageKey>> = {
   FONT: 'assets.kind.FONT',
 };
 
-function formatDate(iso: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-  }).format(new Date(iso));
+function formatDate(iso: string, locale: string, now: string): string {
+  return dayFormatter(locale, 'UTC', new Date(now)).format(new Date(iso));
 }
 
 /** Build a URL for this route with one filter changed and the rest preserved. */
@@ -302,10 +311,23 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
     filters.sort !== 'createdAt' ? filters.sort : undefined,
   ].filter((value) => value !== undefined).length;
 
+  /*
+   * ROUND 4 (4.7) — THE PROTOTYPE'S STORAGE CARD. Used and the file count are
+   * always shown; "of N GB", the bar and the four categories when the plan
+   * states a limit. The percentage is the prototype's: one decimal, at least
+   * 1% once anything is stored. Display only — the meter is B-1's.
+   */
+  const limitBytes =
+    props.storageLimitBytes === null || props.storageLimitBytes <= 0
+      ? null
+      : props.storageLimitBytes;
   const storagePct =
-    props.storageLimitGb === null || props.storageLimitGb <= 0
+    limitBytes === null || props.storageUsedBytes <= 0
       ? 0
-      : Math.min(100, Math.round((props.storageUsedGb / props.storageLimitGb) * 100));
+      : Math.max(1, Math.min(100, Math.round((props.storageUsedBytes / limitBytes) * 1000) / 10));
+  const storageFiles = props.storageCategories.reduce((total, row) => total + row.files, 0);
+  // Review of 2a (2): what the counter holds beyond the four, so the parts add up.
+  const storageRest = mediaStorageRemainder(props.storageUsedBytes, props.storageCategories);
 
   return (
     <div className="bsp-med">
@@ -375,6 +397,26 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           wide
           align="start"
         >
+          {/*
+            Round 4 (5.6) — NOTHING BESIDE UPLOAD BUT UPLOAD. The prototype's
+            toolbar has no "⋯": "New folder" and the brand kit live in this
+            panel, the library's one existing disclosure. Both keep their
+            behaviour; neither is on the main surface any more.
+          */}
+          {can.manageTaxonomy ? (
+            <button
+              type="button"
+              className="bsp-chip bsp-st-sm bsp-med-newfolder"
+              data-testid="assets-new-folder"
+              onClick={(event) => {
+                // The panel closes behind the dialog, as a menu does when its item is chosen.
+                event.currentTarget.closest('details')?.removeAttribute('open');
+                setFolderOpen(true);
+              }}
+            >
+              {t('assets.newFolder')}
+            </button>
+          ) : null}
           <div className="bsp-med-filters">
             <nav
               className="bsp-med-kinds"
@@ -542,24 +584,136 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               </div>
             </Card>
           </div>
+          {props.brandKit &&
+          (props.brandKit.logos.length > 0 ||
+            props.brandKit.palette.length > 0 ||
+            props.brandKit.fonts.length > 0) ? (
+            <Card
+              title={t('assets.kit.title').replace('{brand}', props.brandKit.brandName)}
+              description={t('assets.kit.body')}
+              testId="assets-brand-kit"
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: spacingTokens.lg,
+                  alignItems: 'flex-start',
+                }}
+              >
+                {props.brandKit.logos.map((logo) => (
+                  <a
+                    key={logo.assetId}
+                    href={filterHref(props.locale, filters, { asset: logo.assetId } as never)}
+                    className={CONTROL_CLASS}
+                    data-testid={`assets-kit-logo-${logo.role}`}
+                    style={{
+                      display: 'grid',
+                      gap: spacingTokens['3xs'],
+                      justifyItems: 'center',
+                      textDecoration: 'none',
+                      color: colorTokens.textSecondary,
+                      ...typographyTokens.caption,
+                    }}
+                  >
+                    {logo.token ? (
+                      <img
+                        src={`/${props.locale}/assets/file/${logo.token}`}
+                        alt=""
+                        style={{
+                          inlineSize: '4rem',
+                          blockSize: '4rem',
+                          objectFit: 'contain',
+                          borderRadius: radiusTokens.md,
+                          background: colorTokens.surfaceMuted,
+                        }}
+                      />
+                    ) : (
+                      <IconTile tone="neutral" icon={<ImageIcon size={20} />} />
+                    )}
+                    {t(
+                      logo.role === 'primary'
+                        ? 'assets.kit.primaryLogo'
+                        : 'assets.kit.secondaryLogo',
+                    )}
+                  </a>
+                ))}
+                {props.brandKit.palette.length > 0 ? (
+                  <div
+                    data-testid="assets-kit-palette"
+                    style={{ display: 'grid', gap: spacingTokens.xs }}
+                  >
+                    <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                      {t('assets.kit.palette')}
+                    </span>
+                    <ul
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: spacingTokens.xs,
+                        margin: 0,
+                        padding: 0,
+                        listStyle: 'none',
+                      }}
+                    >
+                      {props.brandKit.palette.map((colour) => (
+                        <li
+                          key={colour}
+                          style={{
+                            display: 'grid',
+                            justifyItems: 'center',
+                            gap: spacingTokens['3xs'],
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              inlineSize: '2rem',
+                              blockSize: '2rem',
+                              borderRadius: radiusTokens.full,
+                              // The brand's OWN colour, as data — not a design literal.
+                              background: colour,
+                              border: `1px solid ${colorTokens.cardBorder}`,
+                            }}
+                          />
+                          <span
+                            style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}
+                          >
+                            {colour}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {props.brandKit.fonts.length > 0 ? (
+                  <div
+                    data-testid="assets-kit-fonts"
+                    style={{ display: 'grid', gap: spacingTokens.xs }}
+                  >
+                    <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
+                      {t('assets.kit.typography')}
+                    </span>
+                    <span style={typographyTokens.bodySm}>{props.brandKit.fonts.join(' · ')}</span>
+                  </div>
+                ) : null}
+              </div>
+              <a
+                href={`/${props.locale}/settings/brand`}
+                className={CONTROL_CLASS}
+                style={{
+                  display: 'inline-flex',
+                  marginBlockStart: spacingTokens.sm,
+                  ...typographyTokens.label,
+                  color: colorTokens.brandPurple,
+                }}
+              >
+                {t('assets.kit.edit')}
+              </a>
+            </Card>
+          ) : null}
         </FiltersDisclosure>
         <span className="bsp-med-acts">
-          {can.manageTaxonomy ? (
-            <MoreDisclosure
-              label={t('assets.media.more')}
-              testId="assets-more"
-              align="end"
-              closeOnPick
-            >
-              <button
-                type="button"
-                className="bsp-chip bsp-st-sm"
-                onClick={() => setFolderOpen(true)}
-              >
-                {t('assets.newFolder')}
-              </button>
-            </MoreDisclosure>
-          ) : null}
           {can.upload ? (
             <button
               type="button"
@@ -575,49 +729,91 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
 
       {/*
         STORAGE — the prototype's card (`grid-template-columns: 250px
-        minmax(0, 1fr) auto`): the figure against the REAL plan limit, and the
-        bar. An unlimited plan says so rather than drawing a bar to nowhere.
+        minmax(0, 1fr) auto`, `Main.dc.html` lines 1246–1253): the used figure
+        against the REAL plan limit, the bar in four parts and their legend.
+        An unlimited plan says so rather than drawing a bar to nowhere.
       */}
-      <section className="bsp-card bsp-med-sto">
+      <section className="bsp-card bsp-med-sto" data-testid="assets-storage-card">
         <div className="bsp-med-sto-copy">
           <span className="bsp-lbl">{t('assets.storageUsed')}</span>
           <span className="bsp-med-sto-figure" data-testid="assets-storage">
-            {props.storageLimitGb === null ? (
-              <b>{t('assets.storageUnlimited')}</b>
+            <b className="bsp-ltr">{formatBytes(props.storageUsedBytes, props.locale)}</b>
+            {limitBytes !== null && props.storageLimitGb !== null ? (
+              <span>
+                {t('assets.storageOf')} <span className="bsp-ltr">{props.storageLimitGb} GB</span>
+                {' · '}
+                <span className="bsp-ltr">{storagePct}%</span>
+              </span>
             ) : (
-              <>
-                <b className="bsp-ltr">{props.storageUsedGb} GB</b>{' '}
-                <span>
-                  {t('assets.storageOf')} <span className="bsp-ltr">{props.storageLimitGb} GB</span>
-                  {' · '}
-                  <span className="bsp-ltr">{storagePct}%</span>
-                </span>
-              </>
+              <span>{t('assets.storageUnlimited')}</span>
             )}
           </span>
-          {props.storageLimitGb !== null ? (
+          {limitBytes !== null ? (
             <span className="bsp-med-sto-note" data-testid="assets-storage-left">
-              {t('assets.storageLeft').replace(
+              {(t('assets.storageLeftBytes') ?? '{left}').replace(
                 '{left}',
-                String(
-                  Math.max(0, Math.round((props.storageLimitGb - props.storageUsedGb) * 10) / 10),
-                ),
+                formatBytes(Math.max(0, limitBytes - props.storageUsedBytes), props.locale),
               )}
             </span>
           ) : null}
+          <span className="bsp-med-sto-note" data-testid="assets-storage-files">
+            {(t('assets.storageFiles') ?? '{count}').replace(
+              '{count}',
+              storageFiles.toLocaleString('en-US'),
+            )}
+          </span>
           {props.countLabel ? (
             <span className="bsp-med-sto-note" data-testid="assets-count">
               {props.countLabel}
             </span>
           ) : null}
         </div>
-        {props.storageLimitGb !== null ? (
-          <div
-            className="bsp-med-sto-bar"
-            role="img"
-            aria-label={`${t('assets.storageUsed')} ${props.storageUsedGb} / ${props.storageLimitGb} GB`}
-          >
-            <span style={{ width: `${storagePct}%` }} />
+        {limitBytes !== null && props.storageLimitGb !== null ? (
+          <div className="bsp-med-sto-mid">
+            <div
+              className="bsp-med-sto-bar"
+              role="img"
+              aria-label={`${t('assets.storageUsed')} ${formatBytes(props.storageUsedBytes, props.locale)} / ${props.storageLimitGb} GB`}
+            >
+              {props.storageCategories
+                .filter((row) => row.bytes > 0)
+                .map((row) => (
+                  <span
+                    key={row.key}
+                    data-cat={row.key}
+                    style={{ width: `${Math.max(0.6, (row.bytes / limitBytes) * 100)}%` }}
+                  />
+                ))}
+              {storageRest > 0 ? (
+                <span
+                  data-cat="rest"
+                  style={{ width: `${Math.max(0.6, (storageRest / limitBytes) * 100)}%` }}
+                />
+              ) : null}
+            </div>
+            <div className="bsp-med-sto-cats" data-testid="assets-storage-cats">
+              {props.storageCategories.map((row) => (
+                <span key={row.key} data-testid={`assets-storage-cat-${row.key}`}>
+                  <span className="bsp-med-sto-dot" data-cat={row.key} aria-hidden="true" />
+                  {t(`assets.storageCat.${row.key}`)}{' '}
+                  <b className="bsp-ltr">{formatBytes(row.bytes, props.locale)}</b>
+                  <span className="bsp-med-sto-n">
+                    {' · '}
+                    {(t('assets.storageFiles') ?? '{count}').replace(
+                      '{count}',
+                      row.files.toLocaleString('en-US'),
+                    )}
+                  </span>
+                </span>
+              ))}
+              {storageRest > 0 ? (
+                <span data-testid="assets-storage-cat-rest" title={t('assets.storageRestHint')}>
+                  <span className="bsp-med-sto-dot" data-cat="rest" aria-hidden="true" />
+                  {t('assets.storageCat.rest')}{' '}
+                  <b className="bsp-ltr">{formatBytes(storageRest, props.locale)}</b>
+                </span>
+              ) : null}
+            </div>
           </div>
         ) : null}
         {/*
@@ -804,8 +1000,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               {props.pastFirstPage ? (
                 <Link
                   href={filterHref(props.locale, filters, {})}
-                  className={buttonClass('neutral')}
-                  style={buttonStyle('neutral', 'sm')}
+                  className={buttonClass('neutral', 'sm')}
+
                   data-testid="assets-first-page"
                 >
                   {t('assets.firstPage')}
@@ -838,126 +1034,6 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
         </Stack>
       </div>
 
-      {/* The brand kit: below the library, never above the prototype's grid. */}
-      {props.brandKit &&
-      (props.brandKit.logos.length > 0 ||
-        props.brandKit.palette.length > 0 ||
-        props.brandKit.fonts.length > 0) ? (
-        <Card
-          title={t('assets.kit.title').replace('{brand}', props.brandKit.brandName)}
-          description={t('assets.kit.body')}
-          testId="assets-brand-kit"
-        >
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: spacingTokens.lg,
-              alignItems: 'flex-start',
-            }}
-          >
-            {props.brandKit.logos.map((logo) => (
-              <a
-                key={logo.assetId}
-                href={filterHref(props.locale, filters, { asset: logo.assetId } as never)}
-                className={CONTROL_CLASS}
-                data-testid={`assets-kit-logo-${logo.role}`}
-                style={{
-                  display: 'grid',
-                  gap: spacingTokens['3xs'],
-                  justifyItems: 'center',
-                  textDecoration: 'none',
-                  color: colorTokens.textSecondary,
-                  ...typographyTokens.caption,
-                }}
-              >
-                {logo.token ? (
-                  <img
-                    src={`/${props.locale}/assets/file/${logo.token}`}
-                    alt=""
-                    style={{
-                      inlineSize: '4rem',
-                      blockSize: '4rem',
-                      objectFit: 'contain',
-                      borderRadius: radiusTokens.md,
-                      background: colorTokens.surfaceMuted,
-                    }}
-                  />
-                ) : (
-                  <IconTile tone="neutral" icon={<ImageIcon size={20} />} />
-                )}
-                {t(logo.role === 'primary' ? 'assets.kit.primaryLogo' : 'assets.kit.secondaryLogo')}
-              </a>
-            ))}
-            {props.brandKit.palette.length > 0 ? (
-              <div
-                data-testid="assets-kit-palette"
-                style={{ display: 'grid', gap: spacingTokens.xs }}
-              >
-                <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                  {t('assets.kit.palette')}
-                </span>
-                <ul
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: spacingTokens.xs,
-                    margin: 0,
-                    padding: 0,
-                    listStyle: 'none',
-                  }}
-                >
-                  {props.brandKit.palette.map((colour) => (
-                    <li
-                      key={colour}
-                      style={{ display: 'grid', justifyItems: 'center', gap: spacingTokens['3xs'] }}
-                    >
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          inlineSize: '2rem',
-                          blockSize: '2rem',
-                          borderRadius: radiusTokens.full,
-                          // The brand's OWN colour, as data — not a design literal.
-                          background: colour,
-                          border: `1px solid ${colorTokens.cardBorder}`,
-                        }}
-                      />
-                      <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                        {colour}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {props.brandKit.fonts.length > 0 ? (
-              <div
-                data-testid="assets-kit-fonts"
-                style={{ display: 'grid', gap: spacingTokens.xs }}
-              >
-                <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                  {t('assets.kit.typography')}
-                </span>
-                <span style={typographyTokens.bodySm}>{props.brandKit.fonts.join(' · ')}</span>
-              </div>
-            ) : null}
-          </div>
-          <a
-            href={`/${props.locale}/settings/brand`}
-            className={CONTROL_CLASS}
-            style={{
-              display: 'inline-flex',
-              marginBlockStart: spacingTokens.sm,
-              ...typographyTokens.label,
-              color: colorTokens.brandPurple,
-            }}
-          >
-            {t('assets.kit.edit')}
-          </a>
-        </Card>
-      ) : null}
-
       {/*
         D-287 — VIEWS: derived filters over real columns and references. The
         word is "view" because nothing here is a stored collection.
@@ -979,6 +1055,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           <AssetDetail
             asset={props.selected}
             locale={props.locale}
+            now={props.now}
             brands={props.brands}
             folders={props.folders}
             can={can}
@@ -1377,6 +1454,7 @@ const STATE_X: Readonly<Record<AssetStatus, string>> = {
 function AssetDetail({
   asset,
   locale,
+  now,
   folders,
   can,
   actions,
@@ -1385,6 +1463,7 @@ function AssetDetail({
 }: {
   readonly asset: AssetDetailData;
   readonly locale: string;
+  readonly now: string;
   readonly brands: ReadonlyArray<{ id: string; name: string }>;
   readonly folders: readonly FolderData[];
   readonly can: AssetLibraryViewProps['can'];
@@ -1474,10 +1553,13 @@ function AssetDetail({
         >
           <Detail label={t('assets.detail.kind')} value={t(KIND_LABEL[asset.kind])} />
           <Detail label={t('assets.detail.size')} value={formatBytes(asset.sizeBytes, locale)} />
-          <Detail label={t('assets.detail.uploaded')} value={formatDate(asset.createdAt, locale)} />
+          <Detail
+            label={t('assets.detail.uploaded')}
+            value={formatDate(asset.createdAt, locale, now)}
+          />
           <Detail
             label={t('assets.detail.version')}
-            value={new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en').format(asset.version)}
+            value={new Intl.NumberFormat('en-US').format(asset.version)}
           />
           {asset.width !== null && asset.height !== null ? (
             <Detail
@@ -1503,7 +1585,7 @@ function AssetDetail({
           {asset.rightsExpiryAt ? (
             <Detail
               label={t('assets.detail.rightsExpiry')}
-              value={formatDate(asset.rightsExpiryAt, locale)}
+              value={formatDate(asset.rightsExpiryAt, locale, now)}
             />
           ) : null}
         </dl>
@@ -1545,7 +1627,7 @@ function AssetDetail({
                       t(`content.status.${use.status}` as MessageKey),
                       use.campaignName,
                       use.asCover ? t('assets.detail.asCover') : null,
-                      formatDate(use.updatedAt, locale),
+                      formatDate(use.updatedAt, locale, now),
                     ]
                       .filter(Boolean)
                       .join(' · ')}
@@ -1720,12 +1802,10 @@ function AssetDetail({
                 >
                   <span>
                     {t('assets.detail.version')}{' '}
-                    {new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en').format(
-                      version.versionNumber,
-                    )}
+                    {new Intl.NumberFormat('en-US').format(version.versionNumber)}
                   </span>
                   <span>{formatBytes(version.sizeBytes, locale)}</span>
-                  <span>{formatDate(version.createdAt, locale)}</span>
+                  <span>{formatDate(version.createdAt, locale, now)}</span>
                   {version.versionNumber !== asset.version && can.version ? (
                     <form action={actions.restoreVersion} style={{ display: 'contents' }}>
                       <input type="hidden" name="locale" value={locale} />

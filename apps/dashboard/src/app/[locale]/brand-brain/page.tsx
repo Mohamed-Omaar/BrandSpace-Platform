@@ -1,5 +1,5 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
-import { maySpendCredits } from '@brandspace/shared';
+import { maySpendCredits, systemClock } from '@brandspace/shared';
 import {
   BRAND_MEMORY_LAYERS,
   ORB_AREAS,
@@ -47,6 +47,7 @@ import type { ChatStart } from './brand-chat';
  */
 import '@brandspace/ui/brand-brain.css';
 import { createBrandAction } from './actions';
+import { dayFormatter } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -329,8 +330,6 @@ export default async function BrandBrainPage({
           storageKey: true,
           createdAt: true,
           status: true,
-          pageCount: true,
-          chunkCount: true,
           failureMessage: true,
         },
       }),
@@ -384,10 +383,7 @@ export default async function BrandBrainPage({
       documents: new Map(documents.map((document) => [document.id, document.fileName])),
     };
   });
-  const provenanceDay = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-    timeZone: 'UTC',
-  });
+  const provenanceDay = dayFormatter(locale, 'UTC', systemClock.now());
   const provenanceOf = (item: (typeof items)[number]): string =>
     [
       `${t('bb.provenance.updated')} ${provenanceDay.format(item.updatedAt)}`,
@@ -498,16 +494,12 @@ export default async function BrandBrainPage({
   const itemTitles = new Map(
     items.map((item) => [item.id, pick(localizedFrom(item.title), locale) || item.itemKey]),
   );
-  const reviewNumber = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
-  const reviewPercent = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+  const reviewNumber = new Intl.NumberFormat('en-US');
+  const reviewPercent = new Intl.NumberFormat('en-US', {
     style: 'percent',
     maximumFractionDigits: 1,
   });
-  const reviewDay = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  });
+  const reviewDay = dayFormatter(locale, 'UTC', systemClock.now());
   /*
    * D4 — WHAT A CANDIDATE WOULD REPLACE, side by side. Either the approved fact
    * with its own key (accepting makes a new version of it) or the approved fact
@@ -646,9 +638,7 @@ export default async function BrandBrainPage({
   }));
   const areaLabelOf = (area: string) =>
     t(`bb.area.${areaDefinition(area as never).messageKey}` as MessageKey);
-  const uploadedOn = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
-    dateStyle: 'medium',
-  });
+  const uploadedOn = dayFormatter(locale, 'UTC', systemClock.now());
 
   const sourceData: SourceData[] = sources.map((source) => ({
     id: source.id,
@@ -687,14 +677,11 @@ export default async function BrandBrainPage({
      * `failureMessage` holds a stable reason key, so the customer reads why in
      * their own language and never reads a parser's own words — which name
      * offsets, object numbers and library versions, and belong in an operator
-     * log (CLAUDE.md §4 and docs/SECURITY.md).
+     * log (CLAUDE.md §4 and docs/SECURITY.md). Gate 2b: the prototype's row
+     * has no second line otherwise — a bare "pages · chunks" pair named
+     * nothing a reader could use.
      */
-    detail:
-      source.status === 'FAILED'
-        ? failureText(source.failureMessage, t)
-        : source.pageCount
-          ? `${source.pageCount} · ${source.chunkCount}`
-          : `${source.chunkCount}`,
+    detail: source.status === 'FAILED' ? failureText(source.failureMessage, t) : '',
   }));
 
   /*
@@ -833,6 +820,14 @@ export default async function BrandBrainPage({
     ? await lookDataFor({ session: access.session, locale, brandId: brand.id })
     : null;
 
+  const brandNotes = (
+    <NotesPanel
+      locale={locale}
+      subject={{ type: 'BRAND', brandId: brand.id }}
+      returnPath={`/${locale}/brand-brain`}
+      highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
+    />
+  );
   return (
     <WorkspaceShell
       /*
@@ -868,6 +863,7 @@ export default async function BrandBrainPage({
         <style data-testid="brand-look-fonts" dangerouslySetInnerHTML={{ __html: look.css }} />
       ) : null}
       <BrandBrainView
+        notes={typeof query['thread'] === 'string' ? null : brandNotes}
         locale={locale}
         brandId={brand.id}
         brandName={brand.name}
@@ -934,23 +930,16 @@ export default async function BrandBrainPage({
         `packages/brand-brain` in either direction.
       */}
       {/*
-        Review of #67, round 2 — the prototype's Brand Brain draws no notes
-        section, so the brand's notes are behind this disclosure at the foot of
-        the page; a link to one thread (`?thread=`) opens it.
+        Review of #67, round 2 / Round 4 (5.6) — the prototype's Brand Brain
+        draws no notes, so the brand's notes are under the head's "⋯" (passed
+        to the view). A link to one thread (`?thread=`) opens them here, open.
       */}
-      <details
-        className="bsp-bb-notes"
-        open={typeof query['thread'] === 'string'}
-        data-testid="brand-brain-notes"
-      >
-        <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>
-        <NotesPanel
-          locale={locale}
-          subject={{ type: 'BRAND', brandId: brand.id }}
-          returnPath={`/${locale}/brand-brain`}
-          highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
-        />
-      </details>
+      {typeof query['thread'] === 'string' ? (
+        <details className="bsp-bb-notes" open data-testid="brand-brain-notes">
+          <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>
+          {brandNotes}
+        </details>
+      ) : null}
     </WorkspaceShell>
   );
 }

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   clockLabel,
@@ -19,27 +21,41 @@ import {
  * screen's arithmetic). Every instant here is fixed: nothing reads the clock.
  */
 const OCT_16_0700_UTC = new Date('2026-10-16T07:00:00Z');
+/** The day the labels are read on: a label's year depends on it. */
+const NOW = new Date('2026-10-05T12:00:00Z');
 
 describe('the prototype’s date style (C2)', () => {
+  it('never reads the real clock: the caller passes the date (round 4)', () => {
+    const source = readFileSync(
+      join(__dirname, '..', '..', 'apps', 'dashboard', 'src', 'server', 'prototype-dates.ts'),
+      'utf8',
+    );
+    expect(source).not.toMatch(/new Date\(\s*\)/);
+    expect(source).not.toMatch(/Date\.now\(/);
+    expect(source).not.toMatch(/eslint-disable/);
+  });
+
   it('writes a moment as "Oct 16 · 10:00", 24-hour, in the zone it is given', () => {
-    expect(whenLabel(OCT_16_0700_UTC, 'en', 'Africa/Cairo')).toBe('Oct 16 · 10:00');
-    expect(whenLabel(OCT_16_0700_UTC, 'en', 'UTC')).toBe('Oct 16 · 07:00');
+    expect(whenLabel(OCT_16_0700_UTC, 'en', 'Africa/Cairo', NOW)).toBe('Oct 16 · 10:00');
+    expect(whenLabel(OCT_16_0700_UTC, 'en', 'UTC', NOW)).toBe('Oct 16 · 07:00');
     expect(clockLabel(new Date('2026-10-16T21:05:00Z'), 'en', 'UTC')).toBe('21:05');
   });
 
   it('writes Arabic with Arabic month names and Western digits, day first', () => {
-    expect(whenLabel(OCT_16_0700_UTC, 'ar', 'Africa/Cairo')).toBe('16 أكتوبر · 10:00');
+    expect(whenLabel(OCT_16_0700_UTC, 'ar', 'Africa/Cairo', NOW)).toBe('16 أكتوبر · 10:00');
   });
 
   it('adds the year only for another year', () => {
     const now = new Date('2026-10-05T12:00:00Z');
     expect(dayLabel(OCT_16_0700_UTC, 'en', 'UTC', now)).toBe('Oct 16');
     expect(dayLabel(new Date('2025-12-30T12:00:00Z'), 'en', 'UTC', now)).toBe('Dec 30, 2025');
+    // Round 4: a date in a later year keeps it — the 2030 due date that read "Jan 15".
+    expect(dayLabel(new Date('2030-01-15T12:00:00Z'), 'en', 'UTC', NOW)).toBe('Jan 15, 2030');
   });
 
   it('reads a stored wall-clock intent as written, with no zone applied', () => {
-    expect(localWhenLabel('2026-10-16T10:00', 'en')).toBe('Oct 16 · 10:00');
-    expect(localWhenLabel('not a time', 'en')).toBeNull();
+    expect(localWhenLabel('2026-10-16T10:00', 'en', NOW)).toBe('Oct 16 · 10:00');
+    expect(localWhenLabel('not a time', 'en', NOW)).toBeNull();
   });
 
   it('writes a span as "5 Oct – 1 Nov", day first', () => {

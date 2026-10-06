@@ -69,6 +69,8 @@ test.describe('P6-13 · team, activity, settings, plan', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/data`);
     const card = page.getByTestId('data-controls');
     await expect(card).toBeVisible();
+    // Gate 2b review (4c) — the product's own rows are behind "More".
+    await page.getByTestId('data-more').locator('summary').click();
     await expect(page.getByTestId('data-control-retention')).toBeVisible();
     // What does not exist is still said: there is no self-serve workspace export.
     await expect(page.getByTestId('data-control-workspaceExport')).toContainText(

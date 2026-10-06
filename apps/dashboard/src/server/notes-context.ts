@@ -1,6 +1,7 @@
 import 'server-only';
 import { NotesService, type NoteActor, type NoteSubject } from '@brandspace/collaboration';
 import { systemClock } from '@brandspace/shared';
+import { personInitials } from '@brandspace/ui';
 import { inWorkspace, requireWorkspace } from './customer-context';
 
 /**
@@ -58,7 +59,9 @@ export async function inNotes<T>(
  */
 export async function mentionableMembers(
   locale: string,
-): Promise<readonly { readonly userId: string; readonly name: string }[]> {
+): Promise<
+  readonly { readonly userId: string; readonly name: string; readonly initials: string }[]
+> {
   const { workspace } = await requireWorkspace(locale);
   return inWorkspace(workspace.workspaceId, async (scoped) => {
     const members = await scoped.db.membership.findMany({
@@ -72,6 +75,9 @@ export async function mentionableMembers(
       // The name, or the address when somebody has not set one — never an
       // empty label, which reads as a broken row rather than a person.
       name: member.user.name?.trim() || member.user.email,
+      // Gate 2b review (4i) — Latin initials in both languages, computed here
+      // so the address itself never leaves the server.
+      initials: personInitials(member.user.name, member.user.email),
     }));
   });
 }

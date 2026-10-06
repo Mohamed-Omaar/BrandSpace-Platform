@@ -31,10 +31,16 @@ function parts(
   return out;
 }
 
-/** "Oct 16" / "16 أكتوبر" — the date alone, with the year only when it is not this one. */
-export function dayLabel(instant: Date, locale: string, timeZone: string, now?: Date): string {
+/**
+ * "Oct 16" / "16 أكتوبر" — the date alone, with the year only when it is not
+ * this one. `now` is REQUIRED (round 4): read from the injected clock
+ * (`systemClock.now()`) by the server and handed down, so no label reads the
+ * real date and every test pins it. Optional, it was compared with the date's
+ * own year, and a due date in 2030 read "Jan 15".
+ */
+export function dayLabel(instant: Date, locale: string, timeZone: string, now: Date): string {
   const p = parts(instant, locale, timeZone, { month: 'short', day: 'numeric', year: 'numeric' });
-  const thisYear = now ? parts(now, locale, timeZone, { year: 'numeric' }).year : p.year;
+  const thisYear = parts(now, locale, timeZone, { year: 'numeric' }).year;
   const base = locale === 'ar' ? `${p.day} ${p.month}` : `${p.month} ${p.day}`;
   return p.year === thisYear ? base : `${base}, ${p.year}`;
 }
@@ -50,7 +56,7 @@ export function clockLabel(instant: Date, locale: string, timeZone: string): str
 }
 
 /** "Oct 16 · 10:00" — a moment. */
-export function whenLabel(instant: Date, locale: string, timeZone: string, now?: Date): string {
+export function whenLabel(instant: Date, locale: string, timeZone: string, now: Date): string {
   return `${dayLabel(instant, locale, timeZone, now)} · ${clockLabel(instant, locale, timeZone)}`;
 }
 
@@ -59,7 +65,7 @@ export function whenLabel(instant: Date, locale: string, timeZone: string, now?:
  * `scheduledLocalTime`), read as written — no zone is applied to it, because
  * it has none.
  */
-export function localWhenLabel(local: string, locale: string, now?: Date): string | null {
+export function localWhenLabel(local: string, locale: string, now: Date): string | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local);
   if (!match) return null;
   const [, y, mo, d, h, mi] = match;
@@ -76,4 +82,35 @@ export function rangeDay(instant: Date, locale: string, timeZone: string): strin
 /** "5 Oct – 1 Nov" — a span of days, day first. */
 export function rangeLabel(start: Date, end: Date, locale: string, timeZone: string): string {
   return `${rangeDay(start, locale, timeZone)} – ${rangeDay(end, locale, timeZone)}`;
+}
+
+/*
+ * ROUND 4 (1.8) — DROP-IN FORMATTERS, so a screen that held an
+ * `Intl.DateTimeFormat` keeps calling `.format(date)` and gets the one style.
+ */
+export interface DateFormatterLike {
+  format(value: Date): string;
+}
+
+/** `.format(date)` → "Oct 16" (the year only for another year). */
+export function dayFormatter(locale: string, timeZone: string, now: Date): DateFormatterLike {
+  return { format: (value) => dayLabel(value, locale, timeZone, now) };
+}
+
+/** `.format(date)` → "Oct 16 · 10:00". */
+export function whenFormatter(locale: string, timeZone: string, now: Date): DateFormatterLike {
+  return { format: (value) => whenLabel(value, locale, timeZone, now) };
+}
+
+/**
+ * The locale tag for a formatter that writes names (a weekday, a month) and
+ * must still write Western digits: `ar-u-nu-latn` in Arabic, `en-US` in English.
+ */
+export function latinTag(locale: string): string {
+  return tag(locale);
+}
+
+/** A number as the prototype writes it in both languages: `1,240`. */
+export function numberLabel(value: number, options?: Intl.NumberFormatOptions): string {
+  return new Intl.NumberFormat('en-US', options).format(value);
 }

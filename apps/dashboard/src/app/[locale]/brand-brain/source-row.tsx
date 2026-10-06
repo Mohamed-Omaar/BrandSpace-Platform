@@ -9,8 +9,8 @@ import { useMessageLocale } from '../../../i18n/message-locale-context';
  * ONE SOURCE, WITH WHAT IT IS RESPONSIBLE FOR (Phase 2C-4, D5) — the
  * prototype's source row (`Main.dc.html` lines 889–893, D-468).
  *
- * The type badge, the name over its meta (type, size, date, the reader's
- * detail and the counts), then the actions: "n facts · Show" (the facts and
+ * The type badge, the name over its meta (type, size, date; a failure's
+ * reason under it), then the actions: "n facts · Show" (the facts and
  * candidates it is responsible for), Read again, and Remove — which opens the
  * prototype's inline confirmation: remove and keep its facts, or (with
  * `brand_brain.edit`) remove it and its facts, or Cancel. Removing is a
@@ -69,7 +69,7 @@ export function SourceRow({
   const keepRef = useRef<HTMLButtonElement | null>(null);
   const removeRef = useRef<HTMLButtonElement | null>(null);
   const failed = source.status === 'FAILED';
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const number = new Intl.NumberFormat('en-US');
   const count = (key: 'bb.source.approvedCount' | 'bb.source.pendingCount', n: number) =>
     t(key).replace('{n}', number.format(n));
 
@@ -89,11 +89,10 @@ export function SourceRow({
         </span>
         <span className="bsp-bb-srow-t">
           <b className="bsp-ltr">{source.fileName}</b>
-          <span data-testid={`source-meta-${source.id}`}>
-            {source.meta} · {count('bb.source.approvedCount', source.approvedCount)} ·{' '}
-            {count('bb.source.pendingCount', source.pendingCount)}
-          </span>
-          <span data-testid={`source-detail-${source.id}`}>{source.detail}</span>
+          <span data-testid={`source-meta-${source.id}`}>{source.meta}</span>
+          {source.detail ? (
+            <span data-testid={`source-detail-${source.id}`}>{source.detail}</span>
+          ) : null}
         </span>
         {canUpload && source.reading ? (
           <span
@@ -103,14 +102,15 @@ export function SourceRow({
           >
             {t('bb.source.reading')}
           </span>
-        ) : (
+        ) : failed || source.status !== 'READY' ? (
+          /* Gate 2b — the prototype pills only a read in progress or a failure. */
           <span
-            className={failed ? 'bsp-pill bsp-p-bad' : 'bsp-pill bsp-p-ok'}
+            className={failed ? 'bsp-pill bsp-p-bad' : 'bsp-pill bsp-p-neu'}
             data-testid={`source-status-${source.id}`}
           >
             {source.statusLabel}
           </span>
-        )}
+        ) : null}
         <button
           type="button"
           className="bsp-chip bsp-bb-srow-show"
@@ -119,7 +119,9 @@ export function SourceRow({
           onClick={() => setOpen((value) => !value)}
           data-testid={`source-toggle-${source.id}`}
         >
-          {number.format(source.approvedCount + source.pendingCount)} ·{' '}
+          {/* The prototype's chip: "6 approved · 1 to review · Facts". */}
+          {count('bb.source.approvedCount', source.approvedCount)} ·{' '}
+          {count('bb.source.pendingCount', source.pendingCount)} ·{' '}
           {open ? t('bb.source.hideDetails') : t('bb.source.showDetails')}
         </button>
         {canUpload && source.canReadAgain ? (

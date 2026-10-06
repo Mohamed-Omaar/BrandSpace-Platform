@@ -209,7 +209,9 @@ test('3 · brand brain shows this brand knowledge', async ({ page }) => {
 // ---------------------------------------------------------------------------
 
 test('4 · a strategy can be asked for, and answers or refuses honestly', async ({ page }) => {
-  await enter(page, '/strategy');
+  // Gate 2b — the proposal form is the prototype's "Let BrandSpace draft it",
+  // under "Next strategy".
+  await enter(page, '/strategy?view=next');
 
   const form = page.getByTestId('strategy-form');
   await expect(form).toBeVisible();
@@ -278,6 +280,8 @@ test('5 · a campaign is created through the form and appears in the list', asyn
    * What must be true is that the panel EXISTS and is honest about which of the
    * two states it is in.
    */
+  // Gate 2b — the results are in the room's Performance view, behind "⋯".
+  await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${state.campaignId}?tab=performance`);
   const metrics = page.getByTestId('campaign-metrics');
   const empty = page.getByTestId('campaign-performance-empty');
   await expect.poll(async () => (await metrics.count()) + (await empty.count())).toBeGreaterThan(0);
@@ -578,7 +582,8 @@ test('10 · the post is submitted, the reviewer sees its media, and it is approv
   await expect(link).toBeVisible();
   await clickAndSettle(link, page);
 
-  // Review of #67, round 3 — every channel's version is under the cover card.
+  // Round 4 (5.1) — every channel's version is under the review's one "⋯".
+  await page.getByTestId('approvals-review-more').click();
   await page.getByTestId('review-channels-more').locator('summary').click();
   const review = page.getByTestId('review-variants');
   await expect(review).toBeVisible();
@@ -698,7 +703,8 @@ test('11 · the post is scheduled and the calendar states its context', async ({
 // ---------------------------------------------------------------------------
 
 test('12 · the pipeline publishes it and the history says what happened', async ({ page }) => {
-  await enter(page, '/integrations');
+  // Gate 2b review (4f) — the history is Accounts' own view, behind its "⋯".
+  await enter(page, '/integrations?history=1');
 
   /*
    * NOTHING IS PUSHED HERE. A due slot becomes a publish job when the platform's

@@ -1,16 +1,4 @@
 import Link from 'next/link';
-import {
-  Card,
-  Field,
-  SectionHeader,
-  StatusBadge,
-  buttonClass,
-  buttonStyle,
-  colorTokens,
-  inputStyle,
-  spacingTokens,
-  typographyTokens,
-} from '@brandspace/ui';
 import { TenantOnboardingPolicySource } from '@brandspace/onboarding';
 import {
   currentEnvironment,
@@ -41,13 +29,11 @@ export const dynamic = 'force-dynamic';
  * whole workspace, so it is listed as "not available" with no invented process
  * attached.
  *
- * WORKSPACE DELETION (A8, D-328) is the Owner's (`workspace.delete`): two steps
- * in the no-JavaScript `<details>` pattern — the first click explains what
- * happens and when, the second submits with the workspace's name typed back
- * and the password. Other members see who can do it.
+ * WORKSPACE DELETION (A8, D-328) is the Owner's (`workspace.delete`): the
+ * danger card says what happens and when, and submits with the workspace's
+ * name typed back and the password. Other members see who can do it.
  *
- * DESIGN-SYSTEM EXTENSION (CLAUDE.md §4.2): the same `SettingsSplit`, `Card`,
- * `SectionHeader` and `StatusBadge` the other Settings sections use.
+ * Round 4, Gate 2b: the prototype's Data section (see below).
  */
 export default async function DataControlsPage({
   params,
@@ -81,7 +67,7 @@ export default async function DataControlsPage({
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
 
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const number = new Intl.NumberFormat('en-US');
 
   const controls: readonly {
     key: string;
@@ -110,6 +96,9 @@ export default async function DataControlsPage({
     { key: 'workspaceExport', available: false },
   ];
 
+  const surface = controls.filter((control) => control.key === 'workspaceExport');
+  const more = controls.filter((control) => control.key !== 'workspaceExport');
+
   const brandContext = await brandContextFor(workspace, '/settings');
 
   return (
@@ -127,134 +116,142 @@ export default async function DataControlsPage({
       {ok && statusMessage(ok, locale) && (
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="data">
-        <Card testId="data-controls">
-          <SectionHeader title={t('settings.data')} description={t('data.subtitle')} />
-          <ul
-            style={{
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              display: 'grid',
-              gap: spacingTokens.md,
-            }}
-          >
-            {controls.map((control) => (
-              <li
-                key={control.key}
-                data-testid={`data-control-${control.key}`}
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: spacingTokens.sm,
-                }}
-              >
-                <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
-                  <strong style={typographyTokens.bodySm}>
-                    {t(`data.${control.key}.title` as MessageKey)}
-                  </strong>
-                  <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                    {control.detail ?? t(`data.${control.key}.body` as MessageKey)}
-                  </span>
-                </span>
-                {control.available && control.href ? (
-                  <Link
-                    href={`/${locale}${control.href}`}
-                    style={buttonStyle('ghost', 'sm')}
-                    className={buttonClass('ghost')}
-                  >
-                    {t('data.open')}
-                  </Link>
-                ) : (
-                  <StatusBadge tone="neutral" label={t('data.unavailable')} />
-                )}
-              </li>
-            ))}
-          </ul>
-        </Card>
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="data"
+      >
+        {/*
+          ROUND 4, GATE 2b — THE PROTOTYPE'S DATA SECTION (`Main.dc.html` lines
+          1376–1379): one `xcard` row per control (the title at 14px / 600 over
+          its 12px line, the action at the end), the retention card, then the
+          danger card with its red border, title and inline confirmation.
+          Every control is the product's own, linking where it lives; the
+          one that does not exist (a whole-workspace export) still says so.
+        */}
+        <div className="bsp-dt" data-testid="data-controls">
+          {/*
+            Gate 2b review (4c) — THE PROTOTYPE'S THREE ROWS FIRST, IN ITS
+            ORDER: Export all your data, Data retention, Delete workspace. The
+            retention row states the product's own rule (the D-117 sentence);
+            the product's other rows and its retention control are behind one
+            "More" under them (D-471).
+          */}
+          {surface.map((control) => (
+            <ControlRow key={control.key} control={control} locale={locale} t={t} />
+          ))}
+          <section className="bsp-xcard bsp-dt-row" data-testid="data-retention">
+            <span className="bsp-dt-text">
+              <span className="bsp-dt-title">{t('data.dataRetention.title')}</span>
+              <span className="bsp-dt-sub">{t('content.retention.body')}</span>
+            </span>
+          </section>
 
-        {/* Review of #67 — retention lives in Data, as the prototype states it. */}
-        <RetentionCard locale={locale} workspaceId={workspace.workspaceId} />
-        <Card testId="workspace-deletion">
-          <SectionHeader
-            title={t('data.workspaceDeletion.title')}
-            description={t('data.workspaceDeletion.body').replace(
-              '{days}',
-              number.format(graceDays),
-            )}
-          />
-          {mayDelete ? (
-            <details>
-              <summary
-                style={{ ...buttonStyle('neutral'), listStyle: 'none', display: 'inline-flex' }}
-                data-testid="workspace-deletion-open"
-              >
-                {t('data.workspaceDeletion.start')}
-              </summary>
-              <form
-                action={requestWorkspaceDeletionAction}
-                style={{
-                  display: 'grid',
-                  gap: spacingTokens.sm,
-                  marginBlockStart: spacingTokens.sm,
-                }}
-              >
+          <section className="bsp-xcard bsp-dt-danger" data-testid="workspace-deletion">
+            <span className="bsp-dt-title bsp-dt-danger-t">
+              {t('data.workspaceDeletion.title')}
+            </span>
+            <span className="bsp-dt-sub">
+              {t('data.workspaceDeletion.body').replace('{days}', number.format(graceDays))}
+            </span>
+            {mayDelete ? (
+              /*
+                The prototype's inline confirmation: the business name typed
+                back, then the red button. The product also asks for the
+                password, and the server checks both (D-328).
+              */
+              <form action={requestWorkspaceDeletionAction} className="bsp-dt-confirm">
                 <input type="hidden" name="locale" value={locale} />
-                <p style={{ ...typographyTokens.bodySm, margin: 0, color: colorTokens.danger }}>
-                  {t('data.workspaceDeletion.warning').replace('{days}', number.format(graceDays))}
-                </p>
-                <Field
-                  label={t('data.workspaceDeletion.confirmName').replace(
+                <input
+                  id="typedWorkspaceName"
+                  name="typedWorkspaceName"
+                  required
+                  dir="auto"
+                  autoComplete="off"
+                  className="bs-control bsp-dt-input"
+                  placeholder={workspace.workspaceName}
+                  aria-label={t('data.workspaceDeletion.confirmName').replace(
                     '{name}',
                     workspace.workspaceName,
                   )}
-                  htmlFor="typedWorkspaceName"
+                  data-testid="workspace-deletion-name"
+                />
+                <input
+                  id="deletionPassword"
+                  name="password"
+                  type="password"
                   required
+                  autoComplete="current-password"
+                  className="bs-control bsp-dt-input bsp-dt-pass"
+                  placeholder={t('data.workspaceDeletion.password')}
+                  aria-label={t('data.workspaceDeletion.password')}
+                  data-testid="workspace-deletion-password"
+                />
+                <button
+                  type="submit"
+                  className="bsp-btn bsp-dt-del"
+                  data-testid="workspace-deletion-confirm"
                 >
-                  <input
-                    id="typedWorkspaceName"
-                    name="typedWorkspaceName"
-                    required
-                    autoComplete="off"
-                    className="bs-control"
-                    style={inputStyle()}
-                    data-testid="workspace-deletion-name"
-                  />
-                </Field>
-                <Field
-                  label={t('data.workspaceDeletion.password')}
-                  htmlFor="deletionPassword"
-                  required
-                >
-                  <input
-                    id="deletionPassword"
-                    name="password"
-                    type="password"
-                    required
-                    autoComplete="current-password"
-                    className="bs-control"
-                    style={inputStyle()}
-                    data-testid="workspace-deletion-password"
-                  />
-                </Field>
-                <div>
-                  <button
-                    type="submit"
-                    style={buttonStyle('danger')}
-                    data-testid="workspace-deletion-confirm"
-                  >
-                    {t('data.workspaceDeletion.confirm')}
-                  </button>
-                </div>
+                  {t('data.workspaceDeletion.confirm')}
+                </button>
               </form>
-            </details>
-          ) : (
-            <StatusBadge tone="neutral" label={t('data.workspaceDeletion.ownerOnly')} />
-          )}
-        </Card>
+            ) : (
+              <span className="bsp-pill bsp-p-neu bsp-dt-owner">
+                {t('data.workspaceDeletion.ownerOnly')}
+              </span>
+            )}
+          </section>
+
+          <details
+            className="bsp-bb-notes bsp-dt-more"
+            data-testid="data-more"
+            // Open by itself when a control behind it has just answered.
+            open={ok !== null || error !== null}
+          >
+            <summary className="bsp-chip bsp-fdis-chip">{t('data.more')}</summary>
+            {more.map((control) => (
+              <ControlRow key={control.key} control={control} locale={locale} t={t} />
+            ))}
+            {/* Review of #67 — retention lives in Data, as the prototype states it. */}
+            <RetentionCard locale={locale} workspaceId={workspace.workspaceId} />
+          </details>
+        </div>
       </SettingsFrame>
     </WorkspaceShell>
+  );
+}
+
+/** One `xcard` row: the title at 14px / 600 over its 12px line, the action at the end. */
+function ControlRow({
+  control,
+  locale,
+  t,
+}: {
+  readonly control: {
+    readonly key: string;
+    readonly available: boolean;
+    readonly detail?: string;
+    readonly href?: string;
+  };
+  readonly locale: string;
+  readonly t: (key: MessageKey) => string;
+}) {
+  return (
+    <section className="bsp-xcard bsp-dt-row" data-testid={`data-control-${control.key}`}>
+      <span className="bsp-dt-text">
+        <span className="bsp-dt-title">{t(`data.${control.key}.title` as MessageKey)}</span>
+        <span className="bsp-dt-sub">
+          {control.detail ?? t(`data.${control.key}.body` as MessageKey)}
+        </span>
+      </span>
+      {control.available && control.href ? (
+        <Link href={`/${locale}${control.href}`} className="bsp-btn bsp-sm">
+          {t('data.open')}
+        </Link>
+      ) : (
+        <span className="bsp-pill bsp-p-neu">{t('data.unavailable')}</span>
+      )}
+    </section>
   );
 }

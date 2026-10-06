@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { StateMessage, buttonClass, buttonStyle } from '@brandspace/ui';
+import { StateMessage, buttonClass } from '@brandspace/ui';
 import { translator } from '../i18n/messages';
 import { brandContextFor } from '../server/brand-context';
 import { memberDisplayName, workspaceOwnerName, type PageAccess } from '../server/customer-context';
@@ -55,8 +55,8 @@ export async function NoAccessPage({
         action={
           <Link
             href={`/${locale}/overview`}
-            className={buttonClass('brand')}
-            style={buttonStyle('brand', 'sm')}
+            className={buttonClass('brand', 'sm')}
+
             data-testid="route-no-access-home"
           >
             {t('errors.route.home')}

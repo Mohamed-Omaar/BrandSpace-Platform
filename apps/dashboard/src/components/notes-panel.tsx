@@ -4,7 +4,6 @@ import {
   StateMessage,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   spacingTokens,
@@ -31,6 +30,7 @@ import {
   startNoteThreadAction,
 } from '../app/[locale]/notes-actions';
 import { requestMessageLocale } from '../server/message-locale';
+import { dayFormatter } from '../server/prototype-dates';
 
 /**
  * CONTEXTUAL COLLABORATION, RENDERED WHERE THE WORK IS (P6-05).
@@ -182,12 +182,7 @@ export async function NotesPanel({
         </noscript>
 
         <div>
-          <button
-            type="submit"
-            data-testid="note-submit"
-            className={buttonClass('primary')}
-            style={buttonStyle('primary', 'sm')}
-          >
+          <button type="submit" data-testid="note-submit" className={buttonClass('primary', 'sm')}>
             {t('notes.post')}
           </button>
         </div>
@@ -225,10 +220,7 @@ async function NoteThread({
   const threadId = thread.id;
   const status = thread.status;
   const now = systemClock.now();
-  const dayFormat = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
-    dateStyle: 'medium',
-    timeZone: 'UTC',
-  });
+  const dayFormat = dayFormatter(locale, 'UTC', systemClock.now());
   const hidden = (
     <>
       <input type="hidden" name="locale" value={locale} />
@@ -373,8 +365,8 @@ async function NoteThread({
           <div style={{ display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' }}>
             <button
               type="submit"
-              className={buttonClass('neutral')}
-              style={buttonStyle('neutral', 'sm')}
+              className={buttonClass('neutral', 'sm')}
+
               data-testid={`note-reply-submit-${threadId}`}
             >
               {t('notes.reply')}
@@ -391,8 +383,8 @@ async function NoteThread({
             <input type="hidden" name="returnPath" value={returnPath} />
             <button
               type="submit"
-              className={buttonClass('ghost')}
-              style={buttonStyle('ghost', 'sm')}
+              className={buttonClass('ghost', 'sm')}
+
               data-testid={`note-${status === 'RESOLVED' ? 'reopen' : 'resolve'}-${threadId}`}
             >
               {t(status === 'RESOLVED' ? 'notes.reopen' : 'notes.resolve')}
@@ -412,8 +404,8 @@ async function NoteThread({
           <input type="hidden" name="returnPath" value={returnPath} />
           <button
             type="submit"
-            className={buttonClass('ghost')}
-            style={buttonStyle('ghost', 'sm')}
+            className={buttonClass('ghost', 'sm')}
+
             data-testid={`note-mark-read-${threadId}`}
           >
             {t('notes.markRead')}
@@ -455,11 +447,7 @@ async function NoteThread({
                   </option>
                 ))}
               </select>
-              <button
-                type="submit"
-                className={buttonClass('neutral')}
-                style={buttonStyle('neutral', 'sm')}
-              >
+              <button type="submit" className={buttonClass('neutral', 'sm')}>
                 {t('notes.save')}
               </button>
             </form>
@@ -479,8 +467,8 @@ async function NoteThread({
               />
               <button
                 type="submit"
-                className={buttonClass('neutral')}
-                style={buttonStyle('neutral', 'sm')}
+                className={buttonClass('neutral', 'sm')}
+
                 data-testid={`note-due-save-${threadId}`}
               >
                 {t('notes.save')}
@@ -495,8 +483,8 @@ async function NoteThread({
               />
               <button
                 type="submit"
-                className={buttonClass('neutral')}
-                style={buttonStyle('neutral', 'sm')}
+                className={buttonClass('neutral', 'sm')}
+
                 data-testid={`note-importance-${threadId}`}
               >
                 {t(thread.importance === 'IMPORTANT' ? 'notes.markNormal' : 'notes.markImportant')}

@@ -130,90 +130,108 @@ export default async function SettingsPage({
         Phase 2C does not have, and a row that leads nowhere is a placeholder
         link, not fidelity.
       */}
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="settings">
-        <Card testId="settings-card">
-          {/*
-            A9 / G1 (D-330) — THE GENERAL FIELDS, UNDER THE SAVE BAR.
-
-            Keyed on the SAVED values, so a successful save re-renders a clean
-            form. Each field says underneath what it changes. Industry and
-            website are the sole brand's, shown only while multi-brand is off
-            and only to a member who manages that brand.
-          */}
-          <DraftForm
-            key={JSON.stringify(saved)}
-            action={saveSettingsAction}
-            testId="settings-form"
-            barTestId="settings-bar"
-            saveTestId="settings-save"
-            labels={{
-              ...saveBarLabels(t),
-              // Round 3 — the prototype's own words for this bar.
-              saved: t('settings.allSaved'),
-              save: t('settings.saveChanges'),
-            }}
-            style={{ display: 'grid', gap: spacingTokens.md }}
-          >
-            <input type="hidden" name="locale" value={locale} />
-            <GeneralFields
-              saved={saved}
-              countries={countryOptions(locale)}
-              timezones={timeZoneOptions(locale)}
-              cities={EGYPT_CITY_CODES.map((code) => ({
-                value: code,
-                label: t(`geo.city.${code}`),
-              }))}
-              weekdays={weekdayNames(locale)}
-              industries={onboarding.industries.map((industry) => ({
-                value: industry.key,
-                label: locale === 'ar' ? industry.name.ar : industry.name.en,
-              }))}
-              suggestedZones={suggestedTimeZones()}
-              brand={soleBrand}
-              labels={{
-                name: t('settings.name'),
-                nameHint: t('settings.hint.name'),
-                locale: t('settings.locale'),
-                localeHint: t('settings.hint.locale'),
-                localeAr: t('brandProfile.localeAr'),
-                localeEn: t('brandProfile.localeEn'),
-                more: t('studio.moreOptions'),
-                country: t('settings.country'),
-                countryHint: t('settings.hint.country'),
-                timezone: t('settings.timezone'),
-                timezoneHint: t('settings.hint.timezone'),
-                city: t('settings.city'),
-                cityHint: t('settings.hint.city'),
-                cityNone: t('settings.cityNone'),
-                weekStart: t('settings.weekStart'),
-                weekStartHint: t('settings.hint.weekStart'),
-                industry: t('settings.industry'),
-                industryHint: t('settings.hint.industry'),
-                industryNone: t('settings.industryNone'),
-                industryOther: t('settings.industryOther'),
-                industryOtherLabel: t('settings.industryOtherLabel'),
-                industryList: t('settings.industryList'),
-                website: t('settings.website'),
-                websiteHint: t('settings.hint.website'),
-                choose: t('createWorkspace.choose'),
-                noResults: t('common.noResults'),
-                timezoneKept: t('settings.timezoneKept'),
-                timezoneUnplanned: t('settings.timezoneUnplanned'),
-              }}
-            />
-          </DraftForm>
-        </Card>
-
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="settings"
+      >
         {/*
-          The prototype's note under General: what this name is for, and where
-          the brand's look and voice live.
+          A9 / G1 (D-330) — THE GENERAL FIELDS, ABOVE THE SAVE BAR.
+
+          Keyed on the SAVED values, so a successful save re-renders a clean
+          form. Each field says underneath what it changes. Industry and
+          website are the sole brand's, shown only while multi-brand is off
+          and only to a member who manages that brand.
+
+          Round 4 (5.5) — the form holds the card AND the note under it, so
+          its save bar is the column's last row, as the prototype draws it
+          (after the note), and its sticky range is the whole column: it stays
+          on the frame's bottom edge to the end of the page instead of leaving
+          with the card. The column is stretched to the settings nav's height
+          (`.bsp-sg-form`), so, as in the prototype, where the bar follows the
+          whole grid, it comes to rest only on the page's own bottom padding.
+          The note has no field, so nothing new is posted.
         */}
-        <div className="bsp-sg-note" data-testid="settings-identity-note">
-          <span>{t('settings.bizNote')}</span>
-          <Link href={`/${locale}/brand-brain?tab=look`} className="bsp-btn bsp-sm bsp-sec">
-            {t('settings.toIdentity')} →
-          </Link>
-        </div>
+        <DraftForm
+          key={JSON.stringify(saved)}
+          action={saveSettingsAction}
+          testId="settings-form"
+          barTestId="settings-bar"
+          saveTestId="settings-save"
+          labels={{
+            ...saveBarLabels(t),
+            // Round 3 — the prototype's own words for this bar.
+            saved: t('settings.allSaved'),
+            save: t('settings.saveChanges'),
+          }}
+          // `.bsp-sg-main`'s own gap, between the card, the note and the bar.
+          className="bsp-sg-form"
+          style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+        >
+          <input type="hidden" name="locale" value={locale} />
+          <Card testId="settings-card">
+            <div style={{ display: 'grid', gap: spacingTokens.md }}>
+              <GeneralFields
+                saved={saved}
+                countries={countryOptions(locale)}
+                timezones={timeZoneOptions(locale)}
+                cities={EGYPT_CITY_CODES.map((code) => ({
+                  value: code,
+                  label: t(`geo.city.${code}`),
+                }))}
+                weekdays={weekdayNames(locale)}
+                industries={onboarding.industries.map((industry) => ({
+                  value: industry.key,
+                  label: locale === 'ar' ? industry.name.ar : industry.name.en,
+                }))}
+                suggestedZones={suggestedTimeZones()}
+                brand={soleBrand}
+                labels={{
+                  name: t('settings.name'),
+                  nameHint: t('settings.hint.name'),
+                  locale: t('settings.locale'),
+                  localeHint: t('settings.hint.locale'),
+                  localeAr: t('brandProfile.localeAr'),
+                  localeEn: t('brandProfile.localeEn'),
+                  more: t('studio.moreOptions'),
+                  country: t('settings.country'),
+                  countryHint: t('settings.hint.country'),
+                  timezone: t('settings.timezone'),
+                  timezoneHint: t('settings.hint.timezone'),
+                  city: t('settings.city'),
+                  cityHint: t('settings.hint.city'),
+                  cityNone: t('settings.cityNone'),
+                  weekStart: t('settings.weekStart'),
+                  weekStartHint: t('settings.hint.weekStart'),
+                  industry: t('settings.industry'),
+                  industryHint: t('settings.hint.industry'),
+                  industryNone: t('settings.industryNone'),
+                  industryOther: t('settings.industryOther'),
+                  industryOtherLabel: t('settings.industryOtherLabel'),
+                  industryList: t('settings.industryList'),
+                  website: t('settings.website'),
+                  websiteHint: t('settings.hint.website'),
+                  choose: t('createWorkspace.choose'),
+                  noResults: t('common.noResults'),
+                  timezoneKept: t('settings.timezoneKept'),
+                  timezoneUnplanned: t('settings.timezoneUnplanned'),
+                }}
+              />
+            </div>
+          </Card>
+
+          {/*
+            The prototype's note under General: what this name is for, and where
+            the brand's look and voice live.
+          */}
+          <div className="bsp-sg-note" data-testid="settings-identity-note">
+            <span>{t('settings.bizNote')}</span>
+            <Link href={`/${locale}/brand-brain?tab=look`} className="bsp-btn bsp-sm bsp-sec">
+              {t('settings.toIdentity')} →
+            </Link>
+          </div>
+        </DraftForm>
       </SettingsFrame>
     </WorkspaceShell>
   );

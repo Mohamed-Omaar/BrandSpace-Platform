@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { systemClock } from '@brandspace/shared';
 import { Suspense, type ReactNode } from 'react';
 import {
   CustomerShell,
@@ -169,6 +170,20 @@ const NAV: readonly NavEntry[] = [
   { href: '/settings', key: 'nav.settings', permission: null, glyph: 'settings' },
 ];
 
+/**
+ * The rail item a route belongs to, from the real request path
+ * (`x-brandspace-path`): the item itself, the Settings section (or Settings
+ * for a page under one), or the deepest rail item the route sits under.
+ */
+function railPathFromRequest(requestPath: string | null): string | undefined {
+  if (!requestPath) return undefined;
+  const path = (requestPath.split('?')[0] ?? '').replace(/^\/(?:en|ar)(?=\/|$)/, '') || '/';
+  const under = (base: string) => path === base || path.startsWith(`${base}/`);
+  const deepest = (candidates: readonly string[]) =>
+    [...candidates].filter(under).sort((a, b) => b.length - a.length)[0];
+  return deepest(SETTINGS_PATHS) ?? deepest(NAV.map((item) => item.href));
+}
+
 const NAV_GROUPS: readonly { titleKey: MessageKey | null; hrefs: readonly string[] }[] = [
   { titleKey: null, hrefs: ['/overview'] },
   { titleKey: 'nav.group.brand', hrefs: ['/brand-brain'] },
@@ -234,6 +249,12 @@ function navSections(
         );
       }),
   );
+  /*
+   * Round 4, 2.3 — Roles & permissions is the prototype's "Team & roles": the
+   * rail marks Team there, as the prototype's does. A member without Team on
+   * the rail keeps Settings, the section's own parent.
+   */
+  const current = activePath === '/permissions' && onRail.has('/members') ? '/members' : activePath;
   const sections: CustomerNavSection[] = [];
   for (const group of NAV_GROUPS) {
     const items = group.hrefs
@@ -250,11 +271,11 @@ function navSections(
         // Settings stands for its sections — unless the section has its own
         // rail entry (Team): one current item, never two (round 3, C3).
         active:
-          activePath === item.href ||
+          current === item.href ||
           (item.href === '/settings' &&
-            activePath !== undefined &&
-            SETTINGS_PATHS.includes(activePath) &&
-            !onRail.has(activePath)),
+            current !== undefined &&
+            SETTINGS_PATHS.includes(current) &&
+            !onRail.has(current)),
         // The existing convention, preserved: renaming these would drop the
         // end-to-end assertions that use them.
         testId: `nav-${item.href.slice(1)}`,
@@ -400,7 +421,7 @@ export async function WorkspaceShell({
   flash?: { readonly tone: 'success'; readonly message: string } | undefined;
   children: ReactNode;
 }) {
-  // D-470: the words this member reads — `ar-EG` in an Egyptian workspace.
+  // The words this member reads (one Arabic for every country, round 4 Step 6).
   const words = requestMessageLocale(locale);
   const t = translator(words);
   const other = locale === 'ar' ? 'en' : 'ar';
@@ -417,15 +438,33 @@ export async function WorkspaceShell({
    * changed. `activePath` is the fallback.
    */
   const requestPath = (await headers()).get('x-brandspace-path');
+  /*
+   * ROUND 4 (2.3) — EVERY PAGE MARKS ITS RAIL ITEM. A page that names no
+   * `activePath` (Notes, every Settings section, Billing, an invoice) is
+   * placed by its own route: a Settings section or sub-page marks Settings,
+   * any other sub-page marks its parent.
+   */
+  const railPath = activePath ?? railPathFromRequest(requestPath);
   const localeHref = (target: string): string =>
-    switchLocalePath(requestPath, target, `/${target}${activePath ?? '/overview'}`);
-  const identity = customerName ?? workspaceName;
+    switchLocalePath(requestPath, target, `/${target}${railPath ?? '/overview'}`);
+  /*
+   * ROUND 4 (4.4) — THE PERSON'S NAME, EVERYWHERE. The rail's card names the
+   * signed-in person from their own account, whatever a page passed: the name,
+   * and the email only when there is no name. The initials are Latin in both
+   * languages — from the name when it is written in Latin letters, else from
+   * the email — so the avatar reads the same in `ar` and `en`.
+   */
+  const me = await getCustomer().catch(() => null);
+  const personName = me?.name?.trim() ?? '';
+  const personEmail = me?.email ?? customerName;
+  const identity = personName || personEmail || workspaceName;
+  const latinInitialsFrom = personName && /[A-Za-z]/.test(personName) ? personName : personEmail;
 
   const counts = await topbarCounts();
   const topbar = topbarModel({ locale, permissionKeys, requestPath, counts });
   const sections = focus
     ? []
-    : navSections(permissionKeys, locale, activePath, t, brandContext, counts);
+    : navSections(permissionKeys, locale, railPath, t, brandContext, counts);
 
   /*
    * THE GLOBAL COPILOT (D-277 §37): what the drawer opens with — the rail's
@@ -457,9 +496,7 @@ export async function WorkspaceShell({
     .filter((part): part is string => part !== null)
     .join(' · ');
   // The greeting's name is the person's own first name, never their email.
-  const firstName = copilotLink
-    ? greetingName((await getCustomer().catch(() => null))?.name)
-    : null;
+  const firstName = copilotLink ? greetingName(me?.name) : null;
 
   /*
    * THE BRAND PROFILE ROW NEEDS A BRAND *AND* THE PERMISSION TO READ ONE:
@@ -484,9 +521,7 @@ export async function WorkspaceShell({
    * (`.bmenu`: "Workspaces · 1/2", "+ New workspace  1/2", the note).
    */
   const activeWorkspaceId =
-    brandContext && brandContext.brands.length < 2
-      ? ((await getCustomer().catch(() => null))?.activeWorkspaceId ?? null)
-      : null;
+    brandContext && brandContext.brands.length < 2 ? (me?.activeWorkspaceId ?? null) : null;
   const switcher = activeWorkspaceId
     ? await businessSwitcherModel(locale, activeWorkspaceId)
     : null;
@@ -698,10 +733,6 @@ export async function WorkspaceShell({
             title: t('notifications.title'),
             close: t('notifications.dismiss'),
             markAll: t('notifications.markAllRead'),
-            more: t('studio.moreOptions'),
-            all: t('notifications.feed.all'),
-            mentions: t('notifications.feed.mentions'),
-            approvals: t('notifications.feed.approvals'),
             seeAll: t('notifications.feed.seeAll'),
             open: t('notifications.view'),
             unread: t('notifications.unread'),
@@ -748,6 +779,7 @@ export async function WorkspaceShell({
     focus || !copilot ? null : copilotLink ? (
       <GlobalCopilot
         locale={locale}
+        now={systemClock.now().toISOString()}
         href={copilotLink.href}
         brand={drawerBrand}
         surface={drawerSurface}
@@ -755,14 +787,12 @@ export async function WorkspaceShell({
         labels={copilotLabels(words, identity)}
         rateMetricKeys={RATE_METRIC_KEYS}
         strings={{
-          openFull: t('copilot.openFull'),
-          more: t('studio.moreOptions'),
           chooseBrandTitle: t('brand.chooseTitle'),
           chooseBrandBody: t('copilot.noBrandBody'),
           context: drawerContext,
           credits:
             typeof counts.credits === 'number' && permissionKeys.includes('billing.read')
-              ? counts.credits.toLocaleString(locale === 'ar' ? 'ar' : 'en')
+              ? counts.credits.toLocaleString('en-US')
               : null,
           creditsLabel: t('account.credits'),
           greeting: firstName
@@ -802,9 +832,9 @@ export async function WorkspaceShell({
     <PrototypeUserCard
       label={t('nav.account')}
       name={identity}
-      email={customerName}
+      email={personName ? personEmail : undefined}
       role={customerRoleName(roleName)}
-      initials={initialsFrom(identity)}
+      initials={initialsFrom(latinInitialsFrom ?? identity)}
     >
       {typeof counts.credits === 'number' && permissionKeys.includes('billing.read') ? (
         <PrototypeMenuLink
@@ -813,9 +843,7 @@ export async function WorkspaceShell({
           trailing={
             <span className="bsp-pill bsp-p-ai">
               <PrototypeIcon glyph="spark" size={12} stroke={0} />
-              <span className="bsp-ltr">
-                {counts.credits.toLocaleString(locale === 'ar' ? 'ar' : 'en')}
-              </span>
+              <span className="bsp-ltr">{counts.credits.toLocaleString('en-US')}</span>
             </span>
           }
         >
@@ -941,9 +969,7 @@ export function CustomerBanner({
  * file's note. Server callers keep their existing import path.
  */
 export {
-  customerButtonStyle,
   customerInputStyle,
-  customerSecondaryButtonStyle,
   customerTableStyle,
   customerTdStyle,
   customerThStyle,

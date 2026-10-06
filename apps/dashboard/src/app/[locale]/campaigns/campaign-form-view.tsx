@@ -1,13 +1,13 @@
 import {
   Card,
   Field,
-  buttonStyle,
   colorTokens,
   inputStyle,
   radiusTokens,
   spacingTokens,
   textareaStyle,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import type { MessageKey } from '../../../i18n/messages';
 import { CAMPAIGN_OBJECTIVES, CAMPAIGN_STATUSES } from '../../../server/campaign-form';
@@ -254,7 +254,7 @@ export function CampaignFormView({
         </fieldset>
 
         <div>
-          <button type="submit" style={buttonStyle('brand')} data-testid="campaign-submit">
+          <button type="submit" className={buttonClass('brand')} data-testid="campaign-submit">
             {labels.submit}
           </button>
         </div>

@@ -71,8 +71,8 @@ export async function bestCampaign(input: {
 }
 
 /** A per-mille rate as the card shows it: one decimal, Western digits, a `%`. */
-export function formatRateMilli(rateMilli: bigint, locale: string): string {
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+export function formatRateMilli(rateMilli: bigint, _locale: string): string {
+  const number = new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 1,
     numberingSystem: 'latn',
   }).format(Number(rateMilli) / 10);

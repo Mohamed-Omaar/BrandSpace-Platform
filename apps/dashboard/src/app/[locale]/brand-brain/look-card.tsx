@@ -1,16 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
-import {
-  Button,
-  CONTROL_CLASS,
-  Dialog,
-  buttonClass,
-  buttonStyle,
-  colorTokens,
-  typographyTokens,
-  visuallyHiddenStyle,
-} from '@brandspace/ui';
+import { Button, CONTROL_CLASS, Dialog, colorTokens, visuallyHiddenStyle } from '@brandspace/ui';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import {
   addBrandFontAction,
@@ -23,16 +14,22 @@ import {
   uploadBrandLogoAction,
 } from './look-actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 
 /**
- * PHASE 2C-2 (item 3) — LOOK & VOICE: COLOURS, LOGO AND FONTS.
+ * LOOK & VOICE: COLOURS, LOGO AND FONTS — as the prototype draws them
+ * (`Main.dc.html` lines 869–876; Gate 2b of round 4).
  *
- * An APPROVED DESIGN-SYSTEM EXTENSION (UI-FIDELITY-CONTRACT §6.3.47): the
- * route's own `.bb-source` card, the drawer's controls, native inputs for every
- * value (a colour input beside its hex text, native selects for the font
- * slots, native file inputs), the shared `Dialog` to confirm a removal. No new
- * colour family, font for the interface, shadow or interaction model; nothing
- * here animates.
+ * The logo on its two tiles with "Replace"; the colours as 52px swatches, each
+ * a colour picker with its hex under it, × to remove and a dashed "+" to add;
+ * the fonts as one card of two columns, one per language, each slot a row of
+ * chips drawn in their own font, a sample in the chosen pair, and the brand's
+ * uploaded fonts for that language under it.
+ *
+ * Left out, as the owner decided: the brand templates card. What the product
+ * has and the prototype does not draw sits behind an existing affordance: the
+ * logo picked from the Asset Library is behind the logo card's "⋯", and the
+ * hex under a swatch stays typeable.
  *
  * EVERY CONTROL IS REAL OR ABSENT. Editing needs `brand.manage` (the E3
  * deviation); uploading also needs `assets.upload`, which the asset service
@@ -104,16 +101,17 @@ const fallbackStack: Record<Language, string> = {
   ar: "system-ui, 'Segoe UI', Tahoma, Arial, sans-serif",
 };
 
-function previewStyle(cssFamily: string, language: Language, role: Role): React.CSSProperties {
-  return {
-    margin: 0,
-    fontFamily: `'${cssFamily}', ${fallbackStack[language]}`,
-    fontWeight: role === 'heading' ? 700 : 400,
-    fontSynthesis: 'none',
-    fontSize: role === 'heading' ? typographyTokens.h3.fontSize : typographyTokens.bodySm.fontSize,
-    lineHeight: 1.4,
-  };
+function family(cssFamily: string, language: Language): React.CSSProperties {
+  return { fontFamily: `'${cssFamily}', ${fallbackStack[language]}`, fontSynthesis: 'none' };
 }
+
+/** A font's state as the prototype's pill tones. */
+const FONT_PILL: Readonly<Record<LookViewData['fonts'][number]['status'], string>> = {
+  ready: 'bsp-p-ok',
+  processing: 'bsp-p-info',
+  failed: 'bsp-p-bad',
+  unavailable: 'bsp-p-neu',
+};
 
 export function LookCard({
   locale,
@@ -155,8 +153,7 @@ export function LookCard({
       />
       <Colours locale={locale} brandId={brandId} palette={look.palette} canManage={canManage} />
       {children}
-      <Slots locale={locale} brandId={brandId} look={look} canManage={canManage} />
-      <FontManager
+      <Fonts
         locale={locale}
         brandId={brandId}
         look={look}
@@ -173,6 +170,53 @@ function Hidden({ locale, brandId }: { locale: string; brandId: string }) {
       <input type="hidden" name="locale" value={locale} />
       <input type="hidden" name="brandId" value={brandId} />
     </>
+  );
+}
+
+/**
+ * The prototype's file button: `label.btn.sm.sec` over a transparent file
+ * input. Choosing a file shows what was chosen and the button that sends it —
+ * nothing is uploaded on the pick alone.
+ */
+function FileButton({
+  label,
+  accept,
+  testId,
+  ariaLabel,
+  onPick,
+}: {
+  label: string;
+  accept: string;
+  testId: string;
+  ariaLabel: string;
+  onPick: (name: string | null) => void;
+}) {
+  return (
+    <label className="bsp-btn bsp-sm bsp-sec bsp-lk-file">
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M12 16V4M7 9l5-5 5 5M4 20h16" />
+      </svg>
+      {label}
+      <input
+        type="file"
+        name="file"
+        accept={accept}
+        required
+        aria-label={ariaLabel}
+        data-testid={testId}
+        onChange={(event) => onPick(event.target.files?.[0]?.name ?? null)}
+      />
+    </label>
   );
 }
 
@@ -204,13 +248,17 @@ function Colours({
           {t('bb.look.colours')}
         </h5>
         {palette.length === 0 ? (
-          <p style={mutedStyle}>{t('bb.look.coloursEmpty')}</p>
+          <p className="bsp-lk-muted">{t('bb.look.coloursEmpty')}</p>
         ) : (
-          <ul style={swatchListStyle}>
+          <ul className="bsp-lk-swatches">
             {palette.map((colour) => (
-              <li key={colour} style={swatchItemStyle} data-testid={`look-swatch-${colour}`}>
-                <span aria-hidden="true" style={{ ...swatchStyle, background: colour }} />
-                <span style={bodyStyle}>{colour}</span>
+              <li key={colour} className="bsp-lk-sw" data-testid={`look-swatch-${colour}`}>
+                <span
+                  aria-hidden="true"
+                  className="bsp-lk-sw-tile"
+                  style={{ background: colour }}
+                />
+                <span className="bsp-ltr bsp-lk-hex-t">{colour}</span>
               </li>
             ))}
           </ul>
@@ -231,24 +279,29 @@ function Colours({
       <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
         {t('bb.look.colours')}
       </h5>
-      <form action={saveBrandColoursAction} style={formStyle} data-testid="look-colours-form">
+      <form action={saveBrandColoursAction} className="bsp-lk-form" data-testid="look-colours-form">
         <Hidden locale={locale} brandId={brandId} />
-        {colours.length === 0 ? <p style={mutedStyle}>{t('bb.look.coloursEmpty')}</p> : null}
-        <ul style={{ ...swatchListStyle, flexDirection: 'column', alignItems: 'stretch' }}>
+        {colours.length === 0 ? <p className="bsp-lk-muted">{t('bb.look.coloursEmpty')}</p> : null}
+        {/*
+          The swatches (`x.swatches`): a 52px tile that is the colour picker,
+          the hex under it, and × at its corner; then the dashed "+".
+        */}
+        <ul className="bsp-lk-swatches">
           {colours.map((colour, index) => {
             const number = String(index + 1);
             return (
-              <li key={index} style={swatchItemStyle} data-testid={`look-colour-${index}`}>
+              <li key={index} className="bsp-lk-sw" data-testid={`look-colour-${index}`}>
+                <label className="bsp-lk-sw-tile" style={{ background: sixDigit(colour) }}>
+                  <input
+                    type="color"
+                    value={sixDigit(colour)}
+                    onChange={(event) => set(index, event.target.value.toUpperCase())}
+                    aria-label={t('bb.look.colourPicker').replace('{n}', number)}
+                    data-testid={`look-colour-picker-${index}`}
+                  />
+                </label>
                 <input
-                  type="color"
-                  value={sixDigit(colour)}
-                  onChange={(event) => set(index, event.target.value.toUpperCase())}
-                  aria-label={t('bb.look.colourPicker').replace('{n}', number)}
-                  data-testid={`look-colour-picker-${index}`}
-                  style={{ inlineSize: 40, blockSize: 32, padding: 0, border: 0 }}
-                />
-                <input
-                  className={CONTROL_CLASS}
+                  className="bs-control bsp-ltr bsp-lk-hex"
                   name="colorPalette"
                   value={colour}
                   onChange={(event) => set(index, event.target.value.trim())}
@@ -256,42 +309,40 @@ function Colours({
                   dir="ltr"
                   maxLength={7}
                   data-testid={`look-colour-hex-${index}`}
-                  style={{ ...inputStyle, maxInlineSize: 120 }}
                 />
                 <button
                   type="button"
-                  className={buttonClass('ghost')}
-                  style={buttonStyle('ghost', 'sm')}
+                  className="bsp-lk-sw-x"
                   onClick={() => setColours((current) => current.filter((_, i) => i !== index))}
                   aria-label={t('bb.look.colourRemove').replace('{n}', number)}
                   data-testid={`look-colour-remove-${index}`}
                 >
-                  {t('bb.archive')}
+                  ×
                 </button>
               </li>
             );
           })}
+          {colours.length < MAX_COLOURS ? (
+            <li className="bsp-lk-sw">
+              <button
+                type="button"
+                className="bsp-lk-sw-add"
+                onClick={() => setColours((current) => [...current, colorTokens.brandPurple])}
+                aria-label={t('bb.look.colourAdd')}
+                data-testid="look-colour-add"
+              >
+                +
+              </button>
+            </li>
+          ) : null}
         </ul>
-        <div style={rowStyle}>
-          <button
-            type="button"
-            className={buttonClass('neutral')}
-            style={buttonStyle('neutral', 'sm')}
-            disabled={colours.length >= MAX_COLOURS}
-            onClick={() => setColours((current) => [...current, colorTokens.brandPurple])}
-            data-testid="look-colour-add"
-          >
-            {t('bb.look.colourAdd')}
-          </button>
-          <button
-            type="submit"
-            className={buttonClass('brand')}
-            style={buttonStyle('brand', 'sm')}
-            data-testid="look-colours-save"
-          >
-            {t('common.save')}
-          </button>
-        </div>
+        <button
+          type="submit"
+          className="bsp-btn bsp-sm bsp-pur bsp-lk-start"
+          data-testid="look-colours-save"
+        >
+          {t('common.save')}
+        </button>
       </form>
     </section>
   );
@@ -318,198 +369,97 @@ function Logo({
 }) {
   const t = translator(useMessageLocale(locale));
   const headingId = useId();
-  const fileId = useId();
   const pickId = useId();
+  const [picked, setPicked] = useState<string | null>(null);
   return (
     <section aria-labelledby={headingId} data-testid="look-logo" className="bsp-card bsp-bb-lc">
-      <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
-        {t('bb.look.logo')}
-      </h5>
+      <span className="bsp-lk-head">
+        <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
+          {t('bb.look.logo')}
+        </h5>
+        {canManage && options.length > 0 ? (
+          /* The logo from the Asset Library, behind the card's "⋯". */
+          <MoreDisclosure label={t('bb.look.logoFromLibrary')} testId="look-logo-more" align="end">
+            <form
+              action={chooseBrandLogoAction}
+              className="bsp-lk-form"
+              data-testid="look-logo-choose"
+            >
+              <Hidden locale={locale} brandId={brandId} />
+              <label htmlFor={pickId} className="bsp-lbl">
+                {t('bb.look.logoFromLibrary')}
+              </label>
+              <select
+                id={pickId}
+                name="primaryLogoAssetId"
+                className={CONTROL_CLASS}
+                defaultValue={logo?.assetId ?? ''}
+                data-testid="look-logo-select"
+              >
+                <option value="">{t('bb.look.logoNone')}</option>
+                {options.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="bsp-btn bsp-sm bsp-pur bsp-lk-start"
+                data-testid="look-logo-choose-save"
+              >
+                {t('common.save')}
+              </button>
+            </form>
+          </MoreDisclosure>
+        ) : null}
+      </span>
       {logo?.url ? (
-        <img
-          src={logo.url}
-          alt={t('bb.look.logoAlt')}
-          data-testid="look-logo-image"
-          style={{ maxInlineSize: 160, maxBlockSize: 80, objectFit: 'contain' }}
-        />
+        /* The mark on the prototype's two tiles: ink and cream. */
+        <div className="bsp-lk-tiles">
+          <span className="bsp-lk-tile bsp-lk-tile-d">
+            <img src={logo.url} alt={t('bb.look.logoAlt')} data-testid="look-logo-image" />
+          </span>
+          <span className="bsp-lk-tile bsp-lk-tile-l" aria-hidden="true">
+            <img src={logo.url} alt="" />
+          </span>
+        </div>
       ) : (
-        <p style={mutedStyle} data-testid="look-logo-empty">
+        <p className="bsp-lk-muted" data-testid="look-logo-empty">
           {t('bb.look.logoEmpty')}
         </p>
       )}
-      {canManage && options.length > 0 ? (
-        <form action={chooseBrandLogoAction} style={formStyle} data-testid="look-logo-choose">
-          <Hidden locale={locale} brandId={brandId} />
-          <label htmlFor={pickId} style={labelStyle}>
-            {t('bb.look.logoChoose')}
-          </label>
-          <select
-            id={pickId}
-            name="primaryLogoAssetId"
-            className={CONTROL_CLASS}
-            defaultValue={logo?.assetId ?? ''}
-            data-testid="look-logo-select"
-            style={inputStyle}
-          >
-            <option value="">{t('bb.look.logoNone')}</option>
-            {options.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            className={buttonClass('neutral')}
-            style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
-            data-testid="look-logo-choose-save"
-          >
-            {t('common.save')}
-          </button>
-        </form>
-      ) : null}
       {canUpload ? (
-        <form action={uploadBrandLogoAction} style={formStyle} data-testid="look-logo-form">
+        <form action={uploadBrandLogoAction} className="bsp-lk-form" data-testid="look-logo-form">
           <Hidden locale={locale} brandId={brandId} />
-          <label htmlFor={fileId} style={labelStyle}>
-            {t('bb.look.logoUpload')}
-          </label>
-          <input
-            id={fileId}
-            type="file"
-            name="file"
+          <FileButton
+            label={t('bb.look.replace')}
             accept={accept}
-            required
-            data-testid="look-logo-file"
+            testId="look-logo-file"
+            ariaLabel={t('bb.look.logoUpload')}
+            onPick={setPicked}
           />
-          <button
-            type="submit"
-            className={buttonClass('neutral')}
-            style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
-            data-testid="look-logo-submit"
-          >
-            {t('bb.look.logoReplace')}
-          </button>
+          {picked ? (
+            <span className="bsp-lk-picked">
+              <span className="bsp-ltr bsp-lk-meta">{picked}</span>
+              <button
+                type="submit"
+                className="bsp-btn bsp-sm bsp-pur"
+                data-testid="look-logo-submit"
+              >
+                {t('bb.look.logoReplace')}
+              </button>
+            </span>
+          ) : null}
         </form>
       ) : null}
     </section>
   );
 }
 
-/* ------------------------------------------------------------------ slots */
+/* ------------------------------------------------------------------ fonts */
 
-function Slots({
-  locale,
-  brandId,
-  look,
-  canManage,
-}: {
-  locale: string;
-  brandId: string;
-  look: LookViewData;
-  canManage: boolean;
-}) {
-  const t = translator(useMessageLocale(locale));
-  const headingId = useId();
-  const [chosen, setChosen] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      LANGUAGES.flatMap((language) =>
-        ROLES.map((role) => [`${language}-${role}`, look.slots[language][role].value]),
-      ),
-    ),
-  );
-
-  const body = LANGUAGES.map((language) =>
-    ROLES.map((role) => {
-      const key = `${language}-${role}`;
-      const slot = look.slots[language][role];
-      const option = look.options[language].find((entry) => entry.value === chosen[key]);
-      // Unchanged: draw what the reader actually gets (the fallback, if any).
-      const unchanged = chosen[key] === slot.value;
-      const cssFamily = unchanged ? slot.cssFamily : (option?.cssFamily ?? slot.cssFamily);
-      const selectId = `${headingId}-${key}`;
-      return (
-        <div key={key} style={{ display: 'grid', gap: 6 }} data-testid={`look-slot-${key}`}>
-          <label htmlFor={selectId} style={labelStyle}>
-            {t(`bb.look.slot.${language}.${role}` as MessageKey)}
-          </label>
-          {canManage ? (
-            <select
-              id={selectId}
-              name={`font-${language}-${role}`}
-              className={CONTROL_CLASS}
-              value={chosen[key]}
-              onChange={(event) =>
-                setChosen((current) => ({ ...current, [key]: event.target.value }))
-              }
-              data-testid={`look-slot-select-${key}`}
-              style={inputStyle}
-            >
-              {look.options[language].map((entry) => (
-                <option key={entry.value} value={entry.value}>
-                  {entry.uploaded
-                    ? t('bb.look.uploadedOption').replace('{name}', entry.label)
-                    : entry.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <p style={bodyStyle} id={selectId}>
-              {slot.name}
-            </p>
-          )}
-          <p
-            dir={language === 'ar' ? 'rtl' : 'ltr'}
-            lang={language}
-            style={previewStyle(cssFamily, language, role)}
-            data-testid={`look-slot-preview-${key}`}
-            data-font-family={cssFamily}
-          >
-            {translator(language)(`bb.look.sample.${role}` as MessageKey)}
-          </p>
-          {unchanged && slot.fellBack ? (
-            <p style={mutedStyle} data-testid={`look-slot-fallback-${key}`}>
-              {t('bb.look.fallbackNote').replace('{font}', slot.name)}
-            </p>
-          ) : null}
-        </div>
-      );
-    }),
-  ).flat();
-
-  return (
-    <section
-      aria-labelledby={headingId}
-      data-testid="look-fonts"
-      className="bsp-card bsp-bb-lc bsp-bb-lc-full"
-    >
-      <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
-        {t('bb.look.fonts')}
-      </h5>
-      <p style={mutedStyle}>{t('bb.look.fontsHint')}</p>
-      {canManage ? (
-        <form action={saveBrandTypographyAction} style={formStyle} data-testid="look-fonts-form">
-          <Hidden locale={locale} brandId={brandId} />
-          <div style={slotGridStyle}>{body}</div>
-          <button
-            type="submit"
-            className={buttonClass('brand')}
-            style={{ ...buttonStyle('brand', 'sm'), justifySelf: 'start' }}
-            data-testid="look-fonts-save"
-          >
-            {t('common.save')}
-          </button>
-        </form>
-      ) : (
-        <div style={slotGridStyle}>{body}</div>
-      )}
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ uploaded fonts */
-
-function FontManager({
+function Fonts({
   locale,
   brandId,
   look,
@@ -524,32 +474,174 @@ function FontManager({
 }) {
   const t = translator(useMessageLocale(locale));
   const headingId = useId();
-  if (!canManage) return null;
+  const formId = useId();
+  const [chosen, setChosen] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      LANGUAGES.flatMap((language) =>
+        ROLES.map((role) => [`${language}-${role}`, look.slots[language][role].value]),
+      ),
+    ),
+  );
+
+  /** What a slot draws in: the stored face while unchanged (its fallback, if any). */
+  const drawn = (language: Language, role: Role): string => {
+    const key = `${language}-${role}`;
+    const slot = look.slots[language][role];
+    if (chosen[key] === slot.value) return slot.cssFamily;
+    return (
+      look.options[language].find((entry) => entry.value === chosen[key])?.cssFamily ??
+      slot.cssFamily
+    );
+  };
+
   return (
     <section
       aria-labelledby={headingId}
-      data-testid="look-uploaded"
+      data-testid="look-fonts"
       className="bsp-card bsp-bb-lc bsp-bb-lc-full"
     >
       <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
-        {t('bb.look.uploaded')}
+        {t('bb.look.fonts')}
       </h5>
-      <p style={mutedStyle}>
-        {t('bb.look.uploadedHint').replace('{max}', String(look.maxPerLanguage))}
-      </p>
-      {LANGUAGES.map((language) => (
-        <LanguageFonts
-          key={language}
-          locale={locale}
-          brandId={brandId}
-          language={language}
-          look={look}
-          canUpload={canUpload}
-        />
-      ))}
+      {canManage ? (
+        /*
+         * The slots' form is empty and its controls point at it (`form=`), so
+         * each language's own upload forms can sit in its column, as the
+         * prototype draws them, without nesting one form in another.
+         */
+        <form id={formId} action={saveBrandTypographyAction} data-testid="look-fonts-form" hidden>
+          <Hidden locale={locale} brandId={brandId} />
+        </form>
+      ) : null}
+      <div className="bsp-lk-langs">
+        {LANGUAGES.map((language) => (
+          <div key={language} className="bsp-lk-lang">
+            <b className="bsp-lk-lang-t">{t(`bb.look.language.${language}` as MessageKey)}</b>
+            {ROLES.map((role) => {
+              const key = `${language}-${role}`;
+              const slot = look.slots[language][role];
+              const label = t(`bb.look.slot.${language}.${role}` as MessageKey);
+              return (
+                <div key={key} className="bsp-lk-slot" data-testid={`look-slot-${key}`}>
+                  <span className="bsp-lk-slot-l" id={`${headingId}-${key}`}>
+                    {label}
+                  </span>
+                  {canManage ? (
+                    <div
+                      className="bsp-lk-chips"
+                      role="radiogroup"
+                      aria-labelledby={`${headingId}-${key}`}
+                      data-testid={`look-slot-select-${key}`}
+                    >
+                      {look.options[language].map((entry) => (
+                        <label
+                          key={entry.value}
+                          className="bsp-chip bsp-lk-chip"
+                          style={family(entry.cssFamily, language)}
+                        >
+                          <input
+                            type="radio"
+                            form={formId}
+                            name={`font-${language}-${role}`}
+                            value={entry.value}
+                            checked={chosen[key] === entry.value}
+                            onChange={() =>
+                              setChosen((current) => ({ ...current, [key]: entry.value }))
+                            }
+                            aria-label={
+                              entry.uploaded
+                                ? t('bb.look.uploadedOption').replace('{name}', entry.label)
+                                : entry.label
+                            }
+                          />
+                          {entry.label}
+                          {entry.uploaded ? (
+                            <span aria-hidden="true" className="bsp-lk-up">
+                              ↑
+                            </span>
+                          ) : null}
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bsp-lk-chips">
+                      <span
+                        className="bsp-chip bsp-lk-chip"
+                        aria-pressed="true"
+                        style={family(slot.cssFamily, language)}
+                      >
+                        {slot.name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {/* The sample (`fr.sampleH` over `fr.sampleB`, `Main.dc.html` line 876). */}
+            <div className="bsp-lk-sample" dir={language === 'ar' ? 'rtl' : 'ltr'} lang={language}>
+              <span
+                className="bsp-lk-sample-h"
+                style={family(drawn(language, 'heading'), language)}
+                data-testid={`look-slot-preview-${language}-heading`}
+                data-font-family={drawn(language, 'heading')}
+              >
+                {translator(language)('bb.look.sample.heading')}
+              </span>
+              <span
+                className="bsp-lk-sample-b"
+                style={family(drawn(language, 'body'), language)}
+                data-testid={`look-slot-preview-${language}-body`}
+                data-font-family={drawn(language, 'body')}
+              >
+                {translator(language)('bb.look.sample.body')}
+              </span>
+            </div>
+            {ROLES.map((role) => {
+              const key = `${language}-${role}`;
+              const slot = look.slots[language][role];
+              return chosen[key] === slot.value && slot.fellBack ? (
+                <span key={key} className="bsp-lk-meta" data-testid={`look-slot-fallback-${key}`}>
+                  {t('bb.look.fallbackNote').replace('{font}', slot.name)}
+                </span>
+              ) : null;
+            })}
+            {canManage ? (
+              <LanguageFonts
+                locale={locale}
+                brandId={brandId}
+                language={language}
+                look={look}
+                canUpload={canUpload}
+              />
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {canManage ? (
+        <div className="bsp-lk-save">
+          <button
+            type="submit"
+            form={formId}
+            className="bsp-btn bsp-sm bsp-pur"
+            data-testid="look-fonts-save"
+          >
+            {t('common.save')}
+          </button>
+          <span className="bsp-lk-note">{t('bb.look.fontsHint')}</span>
+        </div>
+      ) : (
+        <span className="bsp-lk-note">{t('bb.look.fontsHint')}</span>
+      )}
+      {canManage ? (
+        <span className="bsp-lk-note" data-testid="look-uploaded">
+          {t('bb.look.uploadedHint').replace('{max}', String(look.maxPerLanguage))}
+        </span>
+      ) : null}
     </section>
   );
 }
+
+/* ------------------------------------------------------------------ uploaded fonts */
 
 function LanguageFonts({
   locale,
@@ -565,79 +657,79 @@ function LanguageFonts({
   canUpload: boolean;
 }) {
   const t = translator(useMessageLocale(locale));
-  const fileId = useId();
   const nameId = useId();
+  const [picked, setPicked] = useState<string | null>(null);
   const fonts = look.fonts.filter((font) => font.language === language);
   const full = fonts.length >= look.maxPerLanguage;
+  const languageName = t(`bb.look.language.${language}` as MessageKey);
   return (
-    <div style={{ display: 'grid', gap: 8 }} data-testid={`look-uploaded-${language}`}>
-      <h6 style={{ ...headingStyle, fontSize: typographyTokens.bodySm.fontSize }}>
-        {t(`bb.look.language.${language}` as MessageKey)}
-      </h6>
-      {fonts.length === 0 ? (
-        <p style={mutedStyle} data-testid={`look-uploaded-empty-${language}`}>
-          {t('bb.look.uploadedEmpty')}
-        </p>
-      ) : (
-        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 10 }}>
-          {fonts.map((font) => (
-            <FontRow
-              key={font.id}
-              locale={locale}
-              brandId={brandId}
-              font={font}
-              accept={look.acceptFonts}
-              canUpload={canUpload}
-            />
-          ))}
-        </ul>
-      )}
+    <div className="bsp-lk-yours" data-testid={`look-uploaded-${language}`}>
       {canUpload ? (
         full ? (
-          <p style={mutedStyle} data-testid={`look-uploaded-full-${language}`}>
+          <span className="bsp-lk-meta" data-testid={`look-uploaded-full-${language}`}>
             {t('bb.look.uploadedFull').replace('{max}', String(look.maxPerLanguage))}
-          </p>
+          </span>
         ) : (
           <form
             action={addBrandFontAction}
-            style={formStyle}
+            className="bsp-lk-form"
             data-testid={`look-font-add-${language}`}
           >
             <Hidden locale={locale} brandId={brandId} />
             <input type="hidden" name="language" value={language} />
-            <label htmlFor={fileId} style={labelStyle}>
-              {t('bb.look.fontFile')}
-            </label>
-            <input
-              id={fileId}
-              type="file"
-              name="file"
+            <FileButton
+              label={t('bb.look.fontAdd')}
               accept={look.acceptFonts}
-              required
-              data-testid={`look-font-file-${language}`}
+              testId={`look-font-file-${language}`}
+              ariaLabel={`${t('bb.look.fontAdd')} · ${languageName}`}
+              onPick={setPicked}
             />
-            <label htmlFor={nameId} style={labelStyle}>
-              {t('bb.look.fontName')}
-            </label>
-            <input
-              id={nameId}
-              className={CONTROL_CLASS}
-              name="displayName"
-              maxLength={80}
-              data-testid={`look-font-name-${language}`}
-              style={inputStyle}
-            />
-            <button
-              type="submit"
-              className={buttonClass('neutral')}
-              style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
-              data-testid={`look-font-add-submit-${language}`}
-            >
-              {t('bb.look.fontAdd')}
-            </button>
+            {picked ? (
+              <span className="bsp-lk-picked">
+                <label htmlFor={nameId} style={visuallyHiddenStyle()}>
+                  {t('bb.look.fontName')}
+                </label>
+                <input
+                  id={nameId}
+                  className={`${CONTROL_CLASS} bsp-lk-name`}
+                  name="displayName"
+                  maxLength={80}
+                  placeholder={picked}
+                  data-testid={`look-font-name-${language}`}
+                />
+                <button
+                  type="submit"
+                  className="bsp-btn bsp-sm bsp-pur"
+                  data-testid={`look-font-add-submit-${language}`}
+                >
+                  {t('bb.look.fontAdd')}
+                </button>
+              </span>
+            ) : null}
           </form>
         )
       ) : null}
+      {fonts.length === 0 ? (
+        <span className="bsp-lk-meta" data-testid={`look-uploaded-empty-${language}`}>
+          {t('bb.look.uploadedEmpty')}
+        </span>
+      ) : (
+        <>
+          <span className="bsp-lk-slot-l">{t('bb.look.uploaded')}</span>
+          <ul className="bsp-lk-fonts">
+            {fonts.map((font) => (
+              <FontRow
+                key={font.id}
+                locale={locale}
+                brandId={brandId}
+                font={font}
+                accept={look.acceptFonts}
+                canUpload={canUpload}
+              />
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
@@ -657,82 +749,73 @@ function FontRow({
 }) {
   const t = translator(useMessageLocale(locale));
   const [confirming, setConfirming] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
   const renameId = useId();
-  const replaceId = useId();
   const removeFormId = useId();
   return (
-    <li
-      data-testid={`look-font-${font.id}`}
-      data-status={font.status}
-      style={{
-        display: 'grid',
-        gap: 8,
-        padding: 12,
-        borderRadius: 14,
-        background: colorTokens.surfaceSoft,
-      }}
-    >
-      <div style={{ ...rowStyle, justifyContent: 'space-between' }}>
-        <b style={bodyStyle}>{font.displayName}</b>
-        <span className="bb-badge" data-testid={`look-font-status-${font.id}`}>
-          {t(`bb.look.status.${font.status}` as MessageKey)}
-        </span>
-      </div>
-      <form action={renameBrandFontAction} style={rowStyle}>
+    /* An uploaded font (`fr.ups`, `Main.dc.html` line 876). */
+    <li className="bsp-lk-font" data-testid={`look-font-${font.id}`} data-status={font.status}>
+      <form action={renameBrandFontAction} className="bsp-lk-font-row">
         <Hidden locale={locale} brandId={brandId} />
         <input type="hidden" name="brandFontId" value={font.id} />
         <label htmlFor={renameId} style={visuallyHiddenStyle()}>
           {t('bb.look.fontName')}
         </label>
         <input
+          // Keyed on the stored name: after a rename it re-mounts with it.
+          key={font.displayName}
           id={renameId}
-          className={CONTROL_CLASS}
+          className="bs-control bsp-lk-rename"
           name="displayName"
+          dir="auto"
           defaultValue={font.displayName}
           maxLength={80}
           required
           data-testid={`look-font-rename-input-${font.id}`}
-          style={{ ...inputStyle, flex: '1 1 10rem' }}
         />
         <button
           type="submit"
-          className={buttonClass('ghost')}
-          style={buttonStyle('ghost', 'sm')}
+          className="bsp-btn bsp-sm bsp-ghost"
           data-testid={`look-font-rename-${font.id}`}
         >
           {t('bb.look.fontRename')}
         </button>
+        <span
+          className={`bsp-pill ${FONT_PILL[font.status]}`}
+          data-testid={`look-font-status-${font.id}`}
+        >
+          {t(`bb.look.status.${font.status}` as MessageKey)}
+        </span>
       </form>
-      {canUpload ? (
-        <form action={replaceBrandFontAction} style={rowStyle}>
-          <Hidden locale={locale} brandId={brandId} />
-          <input type="hidden" name="brandFontId" value={font.id} />
-          <label htmlFor={replaceId} style={labelStyle}>
-            {t('bb.look.fontReplaceFile')}
-          </label>
-          <input
-            id={replaceId}
-            type="file"
-            name="file"
-            accept={accept}
-            required
-            data-testid={`look-font-replace-file-${font.id}`}
-          />
-          <button
-            type="submit"
-            className={buttonClass('ghost')}
-            style={buttonStyle('ghost', 'sm')}
-            data-testid={`look-font-replace-${font.id}`}
-          >
-            {t('bb.look.fontReplace')}
-          </button>
-        </form>
-      ) : null}
-      <div>
+      <div className="bsp-lk-font-acts">
+        {canUpload ? (
+          <form action={replaceBrandFontAction} className="bsp-lk-font-row">
+            <Hidden locale={locale} brandId={brandId} />
+            <input type="hidden" name="brandFontId" value={font.id} />
+            <FileButton
+              label={t('bb.look.fontReplace')}
+              accept={accept}
+              testId={`look-font-replace-file-${font.id}`}
+              ariaLabel={`${t('bb.look.fontReplace')} · ${font.displayName}`}
+              onPick={setPicked}
+            />
+            {picked ? (
+              <>
+                <span className="bsp-ltr bsp-lk-meta">{picked}</span>
+                <button
+                  type="submit"
+                  className="bsp-btn bsp-sm bsp-pur"
+                  data-testid={`look-font-replace-${font.id}`}
+                >
+                  {t('bb.look.fontReplaceSend')}
+                </button>
+              </>
+            ) : null}
+          </form>
+        ) : null}
         <button
           type="button"
-          className={buttonClass('ghost')}
-          style={buttonStyle('ghost', 'sm')}
+          className="bsp-btn bsp-sm bsp-ghost bsp-lk-remove"
           onClick={() => setConfirming(true)}
           data-testid={`look-font-remove-${font.id}`}
         >
@@ -770,57 +853,3 @@ function FontRow({
     </li>
   );
 }
-
-/* ------------------------------------------------------------------ styles */
-
-const headingStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: typographyTokens.label.fontSize,
-  fontWeight: 800,
-};
-const labelStyle: React.CSSProperties = {
-  fontSize: typographyTokens.caption.fontSize,
-  fontWeight: 800,
-  color: colorTokens.textSecondary,
-};
-const bodyStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: typographyTokens.bodySm.fontSize,
-  lineHeight: 1.6,
-};
-const mutedStyle: React.CSSProperties = { ...bodyStyle, color: colorTokens.textMuted };
-const formStyle: React.CSSProperties = { display: 'grid', gap: 8 };
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  alignItems: 'center',
-  gap: 8,
-};
-const slotGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))',
-  gap: 14,
-};
-const inputStyle: React.CSSProperties = {
-  padding: '8px 10px',
-  borderRadius: 10,
-  border: '1px solid rgba(17,17,20,.14)',
-  font: 'inherit',
-  fontSize: typographyTokens.bodySm.fontSize,
-  minWidth: 0,
-};
-const swatchListStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 0,
-  listStyle: 'none',
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 8,
-};
-const swatchItemStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 };
-const swatchStyle: React.CSSProperties = {
-  inlineSize: 24,
-  blockSize: 24,
-  borderRadius: 8,
-  border: '1px solid rgba(17,17,20,.14)',
-};

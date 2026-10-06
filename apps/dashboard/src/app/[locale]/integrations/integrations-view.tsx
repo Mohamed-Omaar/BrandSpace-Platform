@@ -6,14 +6,16 @@ import {
   Stack,
   StateMessage,
   StatusBadge,
-  buttonStyle,
   colorTokens,
   radiusTokens,
   spacingTokens,
   typographyTokens,
   type BadgeTone,
+  buttonClass,
 } from '@brandspace/ui';
 import type { MessageKey } from '../../../i18n/messages';
+import { MoreDisclosure } from '../../../components/more-disclosure';
+import { ChannelMark } from '../calendar/prototype-calendar';
 
 /**
  * Connected accounts and publishing history — Phase 6.
@@ -98,14 +100,6 @@ export interface PublishRow {
   readonly lateNotice: string | null;
 }
 
-const CONNECTION_TONE: Record<ConnectionRow['status'], BadgeTone> = {
-  PENDING: 'neutral',
-  ACTIVE: 'success',
-  NEEDS_REAUTH: 'warning',
-  REVOKED: 'neutral',
-  DISABLED: 'danger',
-};
-
 const PUBLISH_TONE: Record<PublishRow['status'], BadgeTone> = {
   PENDING: 'neutral',
   QUEUED: 'info',
@@ -114,6 +108,15 @@ const PUBLISH_TONE: Record<PublishRow['status'], BadgeTone> = {
   PUBLISHED: 'success',
   FAILED: 'danger',
   CANCELLED: 'neutral',
+};
+
+/* The prototype's pills: `p-ok` connected, `p-bad` expired, `p-neu` otherwise. */
+const CONNECTION_PILL: Record<ConnectionRow['status'], string> = {
+  PENDING: 'bsp-p-neu',
+  ACTIVE: 'bsp-p-ok',
+  NEEDS_REAUTH: 'bsp-p-bad',
+  REVOKED: 'bsp-p-neu',
+  DISABLED: 'bsp-p-bad',
 };
 
 const CONNECTION_STATUS_KEY: Record<ConnectionRow['status'], MessageKey> = {
@@ -158,6 +161,7 @@ export function IntegrationsView({
   mayManage,
   mayManagePublishing,
   pendingSelection,
+  showHistory = false,
   actions,
 }: {
   readonly locale: string;
@@ -168,6 +172,8 @@ export function IntegrationsView({
   readonly publishing: readonly PublishRow[];
   readonly mayManage: boolean;
   readonly mayManagePublishing: boolean;
+  /** Gate 2b review (4f) — the publishing history view (`?history=1`). */
+  readonly showHistory?: boolean;
   readonly pendingSelection: PendingSelection | null;
   readonly actions: {
     connect(formData: FormData): Promise<void>;
@@ -225,296 +231,378 @@ export function IntegrationsView({
                 </label>
               ))}
             </fieldset>
-            <button type="submit" style={buttonStyle('primary')} data-testid="select-target-submit">
+            <button
+              type="submit"
+              className={buttonClass('primary')}
+              data-testid="select-target-submit"
+            >
               {t('integrations.selectTargetSubmit')}
             </button>
           </form>
         </Card>
       ) : null}
-      <Card testId="connected-accounts">
-        <SectionHeader
-          eyebrow={t('integrations.eyebrow')}
-          title={t('integrations.accountsTitle')}
-          description={t('integrations.accountsBody')}
-        />
-        {connections.length === 0 ? (
-          <StateMessage
-            title={t('integrations.emptyTitle')}
-            description={t('integrations.emptyBody')}
-          />
-        ) : (
-          <ul style={listStyle} data-testid="connected-accounts-list">
-            {connections.map((row) => (
-              <li key={row.id} style={rowStyle} data-testid={`connection-${row.id}`}>
-                <div style={headerRowStyle}>
-                  <span style={titleStyle}>{row.displayName}</span>
-                  <StatusBadge
-                    tone={CONNECTION_TONE[row.status]}
-                    label={t(CONNECTION_STATUS_KEY[row.status])}
-                  />
-                </div>
-                <span style={metaStyle}>
-                  {row.providerLabel} · {row.targetKindLabel} · {row.brandName}
+      {/*
+        ROUND 4, GATE 2b — THE PROTOTYPE'S ACCOUNTS (`Main.dc.html` lines
+        1430–1433): one card of rows — the platform's 38px tile with its mark,
+        the name over its handle, the status pill and one action. A platform
+        with nothing connected is a row with "Connect" (the same connect
+        action, for the brand); a connected account keeps the product's
+        two-step Disconnect. Moved behind the row's "⋯" (nothing deleted):
+        "Check connection" and the connection's dates. Moved behind the
+        card's "⋯": the full connect form (another account, another brand)
+        and the platforms' declared capabilities.
+      */}
+      <section className="bsp-card bsp-acc" data-testid="connected-accounts">
+        {connections.length === 0 && connectable.length === 0 ? (
+          <div className="bsp-row">
+            <span className="bsp-acc-text">
+              <span className="bsp-acc-name">{t('integrations.emptyTitle')}</span>
+              <span className="bsp-acc-sub">{t('integrations.emptyBody')}</span>
+            </span>
+          </div>
+        ) : null}
+        <div data-testid="connected-accounts-list">
+          {connections.map((row) => (
+            <div key={row.id} className="bsp-row bsp-acc-row" data-testid={`connection-${row.id}`}>
+              <span className="bsp-acc-ic" aria-hidden="true">
+                <ChannelMark
+                  channel={{ key: row.provider.toLowerCase(), name: row.providerLabel }}
+                  size={18}
+                  label={false}
+                />
+              </span>
+              <span className="bsp-acc-text">
+                {/* The prototype's row: the platform, the handle under it. */}
+                <span className="bsp-acc-name">{row.providerLabel}</span>
+                <span
+                  className="bsp-acc-sub bsp-ltr"
+                  title={`${row.targetKindLabel} · ${row.brandName}`}
+                >
+                  {row.displayName}
                 </span>
-                <dl style={factsStyle}>
+                {/*
+                  A WARNING BEFORE IT BREAKS, not after. A token inside its last
+                  day still works, so this is a notice rather than an error.
+                */}
+                {row.expiringSoon ? (
+                  <span className="bsp-acc-warn" data-testid={`expiring-${row.id}`}>
+                    {t('integrations.expiringSoon')}
+                  </span>
+                ) : null}
+                {row.status === 'NEEDS_REAUTH' ? (
+                  <span className="bsp-acc-warn" data-testid={`needs-reauth-${row.id}`}>
+                    {t('integrations.needsReauthBody')}
+                  </span>
+                ) : null}
+                {row.consecutiveFailureCount > 0 ? (
+                  <span className="bsp-acc-sub" data-testid={`failures-${row.id}`}>
+                    {t('integrations.recentFailures')}: {row.consecutiveFailureCount}
+                  </span>
+                ) : null}
+              </span>
+              <span className={`bsp-pill ${CONNECTION_PILL[row.status]}`}>
+                {t(CONNECTION_STATUS_KEY[row.status])}
+              </span>
+              <MoreDisclosure
+                label={t('integrations.check')}
+                testId={`connection-more-${row.id}`}
+                align="end"
+              >
+                <dl className="bsp-acc-facts">
+                  <Fact
+                    label={t('integrations.brand')}
+                    value={`${row.brandName} · ${row.targetKindLabel}`}
+                  />
                   <Fact label={t('integrations.connectedAt')} value={row.connectedAtLabel} />
                   <Fact label={t('integrations.lastSynced')} value={row.lastSyncedAtLabel} />
                   <Fact label={t('integrations.tokenExpires')} value={row.tokenExpiresAtLabel} />
                 </dl>
-                {/*
-                  A WARNING BEFORE IT BREAKS, not after. A token inside its last
-                  day still works, so this is a notice rather than an error —
-                  the distinction a customer needs to know whether their
-                  Thursday post is at risk.
-                */}
-                {row.expiringSoon ? (
-                  <p style={noticeStyle} data-testid={`expiring-${row.id}`}>
-                    {t('integrations.expiringSoon')}
-                  </p>
-                ) : null}
-                {row.status === 'NEEDS_REAUTH' ? (
-                  <p style={noticeStyle} data-testid={`needs-reauth-${row.id}`}>
-                    {t('integrations.needsReauthBody')}
-                  </p>
-                ) : null}
-                {row.consecutiveFailureCount > 0 ? (
-                  <p style={metaStyle} data-testid={`failures-${row.id}`}>
-                    {t('integrations.recentFailures')}: {row.consecutiveFailureCount}
-                  </p>
-                ) : null}
-
-                <div style={buttonRowStyle}>
-                  <form action={actions.check} style={formStyle}>
+                <form action={actions.check}>
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="connectionId" value={row.id} />
+                  <button
+                    type="submit"
+                    className="bsp-btn bsp-sm bsp-sec"
+                    data-testid={`check-${row.id}`}
+                  >
+                    {t('integrations.check')}
+                  </button>
+                </form>
+              </MoreDisclosure>
+              {/*
+                B-9 — DISCONNECTING IS TWO STEPS (CLAUDE.md §2.5): the first
+                click opens the explanation; the second, a separate danger
+                button, submits. No client JavaScript.
+              */}
+              {mayManage ? (
+                <details className="bsp-acc-disc">
+                  <summary
+                    className="bsp-btn bsp-sm bsp-ghost"
+                    data-testid={`disconnect-${row.id}`}
+                  >
+                    {t('integrations.disconnect')}
+                  </summary>
+                  <form action={actions.disconnect} className="bsp-acc-confirm">
                     <input type="hidden" name="locale" value={locale} />
                     <input type="hidden" name="connectionId" value={row.id} />
+                    <input type="hidden" name="intent" value="DISCONNECT" />
+                    <span className="bsp-acc-sub">{t('integrations.disconnectConfirmBody')}</span>
                     <button
                       type="submit"
-                      style={buttonStyle('neutral')}
-                      data-testid={`check-${row.id}`}
+                      className="bsp-btn bsp-sm bsp-acc-danger"
+                      data-testid={`disconnect-confirm-${row.id}`}
                     >
-                      {t('integrations.check')}
+                      {t('integrations.disconnectConfirmSubmit')}
                     </button>
                   </form>
-                  {/*
-                    B-9 — DISCONNECTING IS TWO STEPS (CLAUDE.md §2.5). The first
-                    click only opens the explanation; the second, a separate
-                    danger button, submits. The same `<details>` pattern the
-                    automations screen uses for delete: no client JavaScript, so
-                    it works with scripting off. The action also refuses a post
-                    that did not come through the confirming button.
-                  */}
-                  {mayManage ? (
-                    <details style={formStyle}>
-                      <summary
-                        style={{ ...buttonStyle('neutral'), listStyle: 'none' }}
-                        data-testid={`disconnect-${row.id}`}
+                </details>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        {/* A platform with nothing connected: the prototype's "Not connected" row and "Connect". */}
+        {mayManage && brands.length > 0
+          ? connectable
+              .filter((option) => !connections.some((row) => row.provider === option.provider))
+              .map((option) => (
+                <form
+                  key={option.provider}
+                  action={actions.connect}
+                  className="bsp-row bsp-acc-row"
+                  data-testid={`connect-row-${option.provider}`}
+                >
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="provider" value={option.provider} />
+                  <span className="bsp-acc-ic" aria-hidden="true">
+                    <ChannelMark
+                      channel={{ key: option.provider.toLowerCase(), name: option.label }}
+                      size={18}
+                      label={false}
+                    />
+                  </span>
+                  <span className="bsp-acc-text">
+                    <span className="bsp-acc-name bsp-ltr">{option.label}</span>
+                    <span className="bsp-acc-sub">{t('integrations.notConnected')}</span>
+                  </span>
+                  <span className="bsp-pill bsp-p-neu">{t('integrations.notConnected')}</span>
+                  {brands.length === 1 ? (
+                    <input type="hidden" name="brandId" value={brands[0]?.id ?? ''} />
+                  ) : (
+                    <select
+                      name="brandId"
+                      className={`${CONTROL_CLASS} bsp-acc-brand`}
+                      aria-label={t('integrations.brand')}
+                      required
+                    >
+                      {brands.map((brand) => (
+                        <option key={brand.id} value={brand.id}>
+                          {brand.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button type="submit" className="bsp-btn bsp-sm bsp-pur">
+                    {t('integrations.connectShort')}
+                  </button>
+                </form>
+              ))
+          : null}
+        {/*
+          THE CONNECT FORM, BEHIND THE CARD'S "⋯" — any platform, any brand,
+          a second account. ABSENT WITHOUT THE PERMISSION, and the action
+          refuses independently (D-62/D-130).
+        */}
+        {mayManage ? (
+          <div className="bsp-row bsp-acc-more">
+            <MoreDisclosure
+              label={t('integrations.connectTitle')}
+              testId="connect-more"
+              summary={<span>{t('integrations.connectTitle')}</span>}
+              summaryClassName="bsp-btn bsp-sm bsp-ghost"
+            >
+              <div className="bsp-acc-connect" data-testid="connect-account">
+                {connectable.length === 0 ? (
+                  <span className="bsp-acc-sub">{t('integrations.noProvidersBody')}</span>
+                ) : brands.length === 0 ? (
+                  <span className="bsp-acc-sub">{t('integrations.noBrandsBody')}</span>
+                ) : (
+                  <form
+                    action={actions.connect}
+                    className="bsp-acc-connect-form"
+                    data-testid="connect-form"
+                  >
+                    <input type="hidden" name="locale" value={locale} />
+                    <label className="bsp-acc-field">
+                      <span className="bsp-lbl">{t('integrations.provider')}</span>
+                      <select
+                        name="provider"
+                        className={CONTROL_CLASS}
+                        data-testid="connect-provider"
+                        required
                       >
-                        {t('integrations.disconnect')}
-                      </summary>
-                      <form action={actions.disconnect} style={formStyle}>
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="connectionId" value={row.id} />
-                        <input type="hidden" name="intent" value="DISCONNECT" />
-                        <p style={noticeStyle}>{t('integrations.disconnectConfirmBody')}</p>
-                        <button
-                          type="submit"
-                          style={buttonStyle('danger')}
-                          data-testid={`disconnect-confirm-${row.id}`}
-                        >
-                          {t('integrations.disconnectConfirmSubmit')}
-                        </button>
-                      </form>
-                    </details>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+                        {connectable.map((option) => (
+                          <option key={option.provider} value={option.provider}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="bsp-acc-field">
+                      <span className="bsp-lbl">{t('integrations.brand')}</span>
+                      <select
+                        name="brandId"
+                        className={CONTROL_CLASS}
+                        data-testid="connect-brand"
+                        required
+                      >
+                        {brands.map((brand) => (
+                          <option key={brand.id} value={brand.id}>
+                            {brand.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="submit"
+                      className="bsp-btn bsp-sm bsp-pur"
+                      data-testid="connect-submit"
+                    >
+                      {t('integrations.connect')}
+                    </button>
+                    {/*
+                      CAPABILITIES ARE DECLARED, AND THE CUSTOMER SEES THEM
+                      BEFORE THEY COMMIT.
+                    */}
+                    <ul className="bsp-acc-caps" data-testid="provider-capabilities">
+                      {connectable.map((option) => (
+                        <li key={option.provider}>
+                          {option.label}: {option.postKinds.join(', ')} ·{' '}
+                          {t('integrations.maxCharacters')} {option.maxBodyCharacters}
+                        </li>
+                      ))}
+                    </ul>
+                  </form>
+                )}
+              </div>
+            </MoreDisclosure>
+          </div>
+        ) : null}
+      </section>
 
       {/*
-        THE CONNECT PANEL IS ABSENT WITHOUT THE PERMISSION, and the action
-        refuses independently. A Viewer (read-only) never reaches this page at
-        all — the route requires `integrations.read` (D-62/D-130).
+        Gate 2b review (4f) — the prototype's Accounts section is the card
+        above; the product's publishing history (D-471) is its own view of this
+        page (`?history=1`), behind the section's "⋯", and its Cancel and Retry
+        return to it. The Publishing log in the rail holds the same posts.
       */}
-      {mayManage ? (
-        <Card testId="connect-account">
+      {showHistory ? (
+        <Card testId="publishing-history">
           <SectionHeader
-            eyebrow={t('integrations.connectEyebrow')}
-            title={t('integrations.connectTitle')}
-            description={t('integrations.connectBody')}
+            eyebrow={t('publishing.eyebrow')}
+            title={t('publishing.title')}
+            description={t('publishing.body')}
           />
-          {connectable.length === 0 ? (
+          {publishing.length === 0 ? (
             <StateMessage
-              title={t('integrations.noProvidersTitle')}
-              description={t('integrations.noProvidersBody')}
-            />
-          ) : brands.length === 0 ? (
-            <StateMessage
-              title={t('integrations.noBrandsTitle')}
-              description={t('integrations.noBrandsBody')}
+              title={t('publishing.emptyTitle')}
+              description={t('publishing.emptyBody')}
             />
           ) : (
-            <form action={actions.connect} style={connectFormStyle} data-testid="connect-form">
-              <input type="hidden" name="locale" value={locale} />
-              <label style={labelStyle}>
-                <span style={metaStyle}>{t('integrations.provider')}</span>
-                <select
-                  name="provider"
-                  className={CONTROL_CLASS}
-                  style={selectStyle}
-                  data-testid="connect-provider"
-                  required
-                >
-                  {connectable.map((option) => (
-                    <option key={option.provider} value={option.provider}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={labelStyle}>
-                <span style={metaStyle}>{t('integrations.brand')}</span>
-                <select
-                  name="brandId"
-                  className={CONTROL_CLASS}
-                  style={selectStyle}
-                  data-testid="connect-brand"
-                  required
-                >
-                  {brands.map((brand) => (
-                    <option key={brand.id} value={brand.id}>
-                      {brand.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="submit" style={buttonStyle('primary')} data-testid="connect-submit">
-                {t('integrations.connect')}
-              </button>
-              {/*
-                CAPABILITIES ARE DECLARED, AND THE CUSTOMER SEES THEM BEFORE
-                THEY COMMIT. Telling somebody a platform's ceiling after they
-                have written 3,000 characters is telling them too late.
-              */}
-              <ul style={capabilityListStyle} data-testid="provider-capabilities">
-                {connectable.map((option) => (
-                  <li key={option.provider} style={metaStyle}>
-                    {option.label}: {option.postKinds.join(', ')} ·{' '}
-                    {t('integrations.maxCharacters')} {option.maxBodyCharacters}
-                  </li>
-                ))}
-              </ul>
-            </form>
-          )}
-        </Card>
-      ) : null}
-
-      <Card testId="publishing-history">
-        <SectionHeader
-          eyebrow={t('publishing.eyebrow')}
-          title={t('publishing.title')}
-          description={t('publishing.body')}
-        />
-        {publishing.length === 0 ? (
-          <StateMessage
-            title={t('publishing.emptyTitle')}
-            description={t('publishing.emptyBody')}
-          />
-        ) : (
-          <ul style={listStyle} data-testid="publishing-list">
-            {publishing.map((row) => (
-              <li key={row.id} style={rowStyle} data-testid={`publish-job-${row.id}`}>
-                <div style={headerRowStyle}>
-                  <span style={titleStyle}>{row.itemTitle}</span>
-                  <StatusBadge
-                    tone={PUBLISH_TONE[row.status]}
-                    label={t(PUBLISH_STATUS_KEY[row.status])}
-                  />
-                </div>
-                <span style={metaStyle}>
-                  {row.providerLabel} · {row.brandName} · {row.scheduledAtLabel}
-                </span>
-                {row.publishedAtLabel ? (
+            <ul style={listStyle} data-testid="publishing-list">
+              {publishing.map((row) => (
+                <li key={row.id} style={rowStyle} data-testid={`publish-job-${row.id}`}>
+                  <div style={headerRowStyle}>
+                    <span style={titleStyle}>{row.itemTitle}</span>
+                    <StatusBadge
+                      tone={PUBLISH_TONE[row.status]}
+                      label={t(PUBLISH_STATUS_KEY[row.status])}
+                    />
+                  </div>
                   <span style={metaStyle}>
-                    {t('publishing.publishedAt')} {row.publishedAtLabel}
+                    {row.providerLabel} · {row.brandName} · {row.scheduledAtLabel}
                   </span>
-                ) : null}
-                {row.externalPostUrl ? (
-                  <Link
-                    href={row.externalPostUrl}
-                    style={linkStyle}
-                    rel="noreferrer noopener"
-                    target="_blank"
-                    data-testid={`post-link-${row.id}`}
-                  >
-                    {t('publishing.viewPost')}
-                  </Link>
-                ) : null}
-                {/*
+                  {row.publishedAtLabel ? (
+                    <span style={metaStyle}>
+                      {t('publishing.publishedAt')} {row.publishedAtLabel}
+                    </span>
+                  ) : null}
+                  {row.externalPostUrl ? (
+                    <Link
+                      href={row.externalPostUrl}
+                      style={linkStyle}
+                      rel="noreferrer noopener"
+                      target="_blank"
+                      data-testid={`post-link-${row.id}`}
+                    >
+                      {t('publishing.viewPost')}
+                    </Link>
+                  ) : null}
+                  {/*
                   THE FAILURE IS OURS AND IT IS TRANSLATED. `failureMessage` was
                   resolved from a stable code by the page; a provider's own
                   words never reach here, because they routinely echo the
                   caption that was rejected.
                 */}
-                {row.failureMessage ? (
-                  <p style={noticeStyle} data-testid={`failure-${row.id}`}>
-                    {row.failureMessage}
-                  </p>
-                ) : null}
-                {row.lateNotice ? (
-                  <p style={noticeStyle} data-testid={`late-${row.id}`}>
-                    {row.lateNotice}
-                  </p>
-                ) : null}
-                {row.needsReconnect ? (
-                  <p style={noticeStyle} data-testid={`reconnect-${row.id}`}>
-                    {t('publishing.reconnectNeeded')}
-                  </p>
-                ) : null}
-                <span style={metaStyle}>
-                  {t('publishing.attempts')}: {row.attemptCount}/{row.maxAttempts}
-                  {row.nextAttemptAtLabel
-                    ? ` · ${t('publishing.nextAttempt')} ${row.nextAttemptAtLabel}`
-                    : ''}
-                </span>
+                  {row.failureMessage ? (
+                    <p style={noticeStyle} data-testid={`failure-${row.id}`}>
+                      {row.failureMessage}
+                    </p>
+                  ) : null}
+                  {row.lateNotice ? (
+                    <p style={noticeStyle} data-testid={`late-${row.id}`}>
+                      {row.lateNotice}
+                    </p>
+                  ) : null}
+                  {row.needsReconnect ? (
+                    <p style={noticeStyle} data-testid={`reconnect-${row.id}`}>
+                      {t('publishing.reconnectNeeded')}
+                    </p>
+                  ) : null}
+                  <span style={metaStyle}>
+                    {t('publishing.attempts')}: {row.attemptCount}/{row.maxAttempts}
+                    {row.nextAttemptAtLabel
+                      ? ` · ${t('publishing.nextAttempt')} ${row.nextAttemptAtLabel}`
+                      : ''}
+                  </span>
 
-                {mayManagePublishing ? (
-                  <div style={buttonRowStyle}>
-                    {row.canCancel ? (
-                      <form action={actions.cancel} style={formStyle}>
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="jobId" value={row.id} />
-                        <button
-                          type="submit"
-                          style={buttonStyle('neutral')}
-                          data-testid={`cancel-${row.id}`}
-                        >
-                          {t('publishing.cancel')}
-                        </button>
-                      </form>
-                    ) : null}
-                    {row.canRetry ? (
-                      <form action={actions.retry} style={formStyle}>
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="jobId" value={row.id} />
-                        <button
-                          type="submit"
-                          style={buttonStyle('neutral')}
-                          data-testid={`retry-${row.id}`}
-                        >
-                          {t('publishing.retry')}
-                        </button>
-                      </form>
-                    ) : null}
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+                  {mayManagePublishing ? (
+                    <div style={buttonRowStyle}>
+                      {row.canCancel ? (
+                        <form action={actions.cancel} style={formStyle}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="returnTo" value="/integrations?history=1" />
+                          <input type="hidden" name="jobId" value={row.id} />
+                          <button
+                            type="submit"
+                            className={buttonClass('neutral')}
+                            data-testid={`cancel-${row.id}`}
+                          >
+                            {t('publishing.cancel')}
+                          </button>
+                        </form>
+                      ) : null}
+                      {row.canRetry ? (
+                        <form action={actions.retry} style={formStyle}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="returnTo" value="/integrations?history=1" />
+                          <input type="hidden" name="jobId" value={row.id} />
+                          <button
+                            type="submit"
+                            className={buttonClass('neutral')}
+                            data-testid={`retry-${row.id}`}
+                          >
+                            {t('publishing.retry')}
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
     </Stack>
   );
 }
@@ -585,13 +673,6 @@ const noticeStyle = {
   overflowWrap: 'anywhere',
 } as const;
 
-const factsStyle = {
-  display: 'flex',
-  gap: spacingTokens.md,
-  flexWrap: 'wrap',
-  margin: 0,
-} as const;
-
 const factStyle = { display: 'grid', gap: '2px' } as const;
 
 const formStyle = { display: 'grid', gap: spacingTokens.xs } as const;
@@ -602,26 +683,15 @@ const connectFormStyle = {
   maxInlineSize: '32rem',
 } as const;
 
-const labelStyle = { display: 'grid', gap: spacingTokens.xs } as const;
+// The prototype's form field comes from `.bs-control` (round 4).
 
-const selectStyle = {
-  ...typographyTokens.bodySm,
-  minBlockSize: '44px',
-  paddingInline: spacingTokens.sm,
-  borderRadius: '10px',
-  border: `1px solid ${colorTokens.border}`,
-  background: colorTokens.surface,
-  color: colorTokens.textPrimary,
-} as const;
-
-const buttonRowStyle = { display: 'flex', gap: spacingTokens.xs, flexWrap: 'wrap' } as const;
-
-const capabilityListStyle = {
-  listStyle: 'none',
-  margin: 0,
-  padding: 0,
-  display: 'grid',
-  gap: '2px',
+/* Round 4 — the row's buttons keep their own 40px; stretched to the tallest
+   item (the disconnect disclosure) they were 44px. */
+const buttonRowStyle = {
+  display: 'flex',
+  gap: spacingTokens.xs,
+  flexWrap: 'wrap',
+  alignItems: 'flex-start',
 } as const;
 
 const linkStyle = {

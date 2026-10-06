@@ -76,6 +76,9 @@ const ASPECT_RATIO: Record<PostAspect, string> = {
 };
 
 /** A tiny platform mark. A badge, never a theme. */
+/** Round 4 (3.5) — which composition a preview is drawn in. */
+type PreviewLook = 'demo' | 'prototype';
+
 function PlatformBadge({
   platform,
   labels,
@@ -159,12 +162,15 @@ function MediaFrame({
   labels,
   aspect,
   radius = '0',
+  look = 'demo',
   children,
 }: {
   readonly content: SocialPostPreviewContent;
   readonly labels: SocialPostPreviewLabels;
   readonly aspect: PostAspect;
   readonly radius?: string;
+  /** Round 4 (3.5) — `prototype`: the corner DRAFT mark, the picture undimmed. */
+  readonly look?: PreviewLook;
   readonly children?: ReactNode;
 }) {
   const media = content.media ?? { kind: 'missing' as const };
@@ -265,6 +271,42 @@ function MediaFrame({
       ) : (
         <AbstractMedia seed={media.seed ?? 0} alt={shownAlt} />
       )}
+      {/*
+        Round 4 (3.5) — THE COVER HEADLINE, where the prototype draws a slide's
+        (`curSlideHead`): over the picture, at its foot, 22px/800 in white with
+        a soft shadow. The current slide's when the frame is paged.
+      */}
+      {(() => {
+        const headline =
+          media.kind === 'image' ? (current ? current.headline : media.headline) : '';
+        return headline && headline.trim() !== '' ? (
+          <span
+            data-testid="preview-headline"
+            style={{
+              position: 'absolute',
+              insetInline: 0,
+              insetBlockEnd: 0,
+              display: 'flex',
+              alignItems: 'flex-end',
+              padding: '18px',
+              pointerEvents: 'none',
+            }}
+          >
+            <span
+              dir="auto"
+              style={{
+                fontSize: '22px',
+                lineHeight: 1.1,
+                fontWeight: 800,
+                color: colorTokens.textInverse,
+                textShadow: '0 2px 12px rgba(0, 0, 0, 0.3)',
+              }}
+            >
+              {headline}
+            </span>
+          </span>
+        ) : null;
+      })()}
       {media.kind === 'video' ? (
         <>
           <span
@@ -299,7 +341,14 @@ function MediaFrame({
         </>
       ) : null}
       {content.status === 'DRAFT' ? (
-        <MediaStateOverlay label={labels.statusLabels.DRAFT} testId="preview-draft-overlay" />
+        look === 'prototype' ? (
+          /* `Main.dc.html` line 446: the corner mark; the picture keeps its contrast. */
+          <span className="bsp-pv-draft" data-testid="preview-draft-overlay">
+            {labels.statusLabels.DRAFT}
+          </span>
+        ) : (
+          <MediaStateOverlay label={labels.statusLabels.DRAFT} testId="preview-draft-overlay" />
+        )
       ) : null}
       {content.status === 'FAILED' ? (
         <MediaStateOverlay
@@ -495,12 +544,14 @@ function FeedPreview({
   aspect,
   expanded,
   onToggle,
+  look = 'demo',
 }: {
   readonly content: SocialPostPreviewContent;
   readonly labels: SocialPostPreviewLabels;
   readonly aspect: PostAspect;
   readonly expanded: boolean;
   readonly onToggle: () => void;
+  readonly look?: PreviewLook;
 }) {
   const captionLeads = content.platform === 'x' || content.platform === 'linkedin';
   /* `.social-caption { padding: 0 11px 15px }`. */
@@ -514,6 +565,34 @@ function FeedPreview({
       <Caption content={content} labels={labels} expanded={expanded} onToggle={onToggle} />
     </div>
   );
+
+  if (look === 'prototype') {
+    /*
+      Round 4 (3.5) — THE PROTOTYPE'S POST (`Main.dc.html` lines 442–446): one
+      line of identity — a 28px avatar on the brand's pastel and the handle at
+      12.5px/700 — over the picture at the ratio the size line states.
+    */
+    return (
+      <>
+        <header className="bsp-pv-head">
+          {/* The prototype's `brandIni`: the brand's first letter. */}
+          <span className="bsp-pv-av" aria-hidden="true">
+            {content.account.initials.slice(0, 1)}
+          </span>
+          <span className="bsp-pv-handle">{content.account.handle.replace(/^@/, '')}</span>
+          <span className="bsp-pv-dots" aria-hidden="true">
+            ···
+          </span>
+        </header>
+        {captionLeads ? caption : null}
+        <MediaFrame content={content} labels={labels} aspect={aspect} look="prototype" />
+        <div style={{ padding: '0.6875rem' }}>
+          <ActionStrip variant="feed" labels={labels} />
+        </div>
+        {captionLeads ? null : caption}
+      </>
+    );
+  }
 
   return (
     <>
@@ -722,7 +801,14 @@ export function SocialPostPreview({
   labels,
   head,
   testId,
+  look = 'demo',
 }: {
+  /**
+   * Round 4 (3.5) — `prototype`: the Studio's post as `prototype-2026-09-27`
+   * draws it (a bordered white card, one-line identity, the corner DRAFT mark).
+   * `demo` is the earlier composition the showcase and the composer kit keep.
+   */
+  readonly look?: PreviewLook;
   readonly content: SocialPostPreviewContent;
   readonly labels: SocialPostPreviewLabels;
   /**
@@ -761,12 +847,17 @@ export function SocialPostPreview({
       }}
     >
       <div
-        style={{
-          background: colorTokens.previewPanelAlpha,
-          borderRadius: radiusTokens['2xl'],
-          boxShadow: shadowTokens.card,
-          overflow: 'hidden',
-        }}
+        className={look === 'prototype' && !vertical ? 'bsp-pv-card' : undefined}
+        style={
+          look === 'prototype' && !vertical
+            ? undefined
+            : {
+                background: colorTokens.previewPanelAlpha,
+                borderRadius: radiusTokens['2xl'],
+                boxShadow: shadowTokens.card,
+                overflow: 'hidden',
+              }
+        }
       >
         {/* `.preview-head { padding: 14px; font-size: 10px; font-weight: 800 }`. */}
         {head ? (
@@ -806,6 +897,7 @@ export function SocialPostPreview({
               content={content}
               labels={labels}
               aspect={aspect}
+              look={look}
               expanded={expanded}
               onToggle={() => setExpanded((value) => !value)}
             />

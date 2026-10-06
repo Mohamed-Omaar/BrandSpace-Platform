@@ -4,22 +4,20 @@ import { DASHBOARD_BASE_URL } from './apps';
 import { withPlatformPrisma } from './platform-prisma';
 
 /**
- * D-470 — THE INTERFACE ARABIC FOLLOWS THE WORKSPACE'S COUNTRY, IN A REAL BROWSER.
+ * ROUND 4, STEP 6 — ONE ARABIC FOR EVERY COUNTRY, IN A REAL BROWSER (replaces D-470).
  *
  * Two strangers sign up and each creates a first workspace through the real
- * form: one in Egypt, one in Saudi Arabia. On the same `/ar` route, the
- * Egyptian workspace reads the Egyptian layer (`ar-EG`) and the Saudi one reads
- * the product's formal Arabic. The route, `dir` and `<html lang>` are the same
- * for both: only the words differ. English is untouched by either.
+ * form: one in Egypt, one in Saudi Arabia. On the same `/ar` route BOTH read the
+ * product's formal Arabic: the Egyptian layer (`ar-EG`) is retired, and nothing
+ * on the page carries its language tag. English is untouched.
  *
  * The control read is the language square's name — on every workspace screen,
- * the same on a phone and a desktop, and different in the two dictionaries.
- * Nothing here depends on the date or on another suite's data: each test makes
- * its own person and its own workspace.
+ * the same on a phone and a desktop — which the retired layer worded
+ * differently. Each test makes its own person and its own workspace.
  */
 
 const PASSWORD = 'an-end-to-end-fixture-password';
-const EGYPTIAN = 'حوّل للإنجليزي';
+const RETIRED_EGYPTIAN = 'حوّل للإنجليزي';
 const FORMAL = 'التبديل إلى الإنجليزية';
 
 /** Sign up through the REAL form; mint the verification token's hash, as phase9-commerce does. */
@@ -30,9 +28,8 @@ async function signUpAndVerify(page: Page): Promise<string> {
   await page.fill('#name', 'Dialect Check');
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
-  await page.fill('#password-confirm', PASSWORD);
-  await page.fill('#timezone', 'Europe/London');
-  await page.press('#timezone', 'Enter');
+  // Round 4 (4.1): no zone question — the browser's zone is posted.
+  await expect(page.getByTestId('signup-timezone')).not.toHaveValue('');
   await page.check('[data-testid="accept-terms-of-service"] input[type="checkbox"]');
   await page.click('[data-testid="signup-submit"]');
   await expect(page.locator('[data-testid="signup-sent"]')).toBeVisible();
@@ -81,27 +78,26 @@ async function createWorkspace(page: Page, country: string): Promise<void> {
   await page.waitForURL(/\/en\/onboarding$/, { timeout: 30_000 });
 }
 
-test.describe('D-470: Arabic follows the workspace country', () => {
-  test('an Egyptian workspace reads Egyptian Arabic; the route, dir and html lang are unchanged', async ({
+test.describe('Round 4, Step 6: one Arabic for every country', () => {
+  test('an Egyptian workspace reads the formal Arabic; the route, dir and html lang are unchanged', async ({
     page,
   }) => {
     const email = await signUpAndVerify(page);
 
-    // BEFORE A WORKSPACE EXISTS there is no country: the Arabic sign-in is formal.
     await signIn(page, email, 'ar');
     await expect(page.locator('[lang="ar-EG"]')).toHaveCount(0);
 
     await createWorkspace(page, 'EG');
-    // Review of #67 — onboarding is the standalone card with no app shell, so
-    // the shell's dialect is read on Settings, a screen inside it.
     await page.goto(`${DASHBOARD_BASE_URL}/ar/settings`);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     await expect(page.locator('html')).toHaveAttribute('lang', /^ar\b/);
-    await expect(page.locator('[data-testid="app-shell"]')).toHaveAttribute('lang', 'ar-EG');
+    await expect(page.locator('[data-testid="app-shell"]')).not.toHaveAttribute('lang', /.+/);
+    await expect(page.locator('[lang="ar-EG"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="locale-switch"]')).toHaveAttribute(
       'aria-label',
-      EGYPTIAN,
+      FORMAL,
     );
+    await expect(page.getByText(RETIRED_EGYPTIAN)).toHaveCount(0);
 
     // English stays English for the same workspace.
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings`);
@@ -112,7 +108,7 @@ test.describe('D-470: Arabic follows the workspace country', () => {
     );
   });
 
-  test('a non-Egyptian workspace reads the formal Arabic on the same route', async ({ page }) => {
+  test('a non-Egyptian workspace reads the same formal Arabic', async ({ page }) => {
     const email = await signUpAndVerify(page);
     await signIn(page, email, 'en');
     await createWorkspace(page, 'SA');

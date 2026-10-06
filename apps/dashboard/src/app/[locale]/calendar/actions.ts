@@ -45,6 +45,16 @@ function pageUrl(locale: string, params: Record<string, string> = {}): string {
  * the calendar (the default).
  */
 function landing(locale: string, formData: FormData, params: Record<string, string>): string {
+  /*
+   * Round 4 (3.3) — moved from the Studio's own publish-time panel: back to
+   * that post. The id is a shape only; the page resolves it in the session's
+   * workspace like any other `?item=`.
+   */
+  const item = String(formData.get('item') ?? '');
+  if (formData.get('returnTo') === '/content/compose' && /^[0-9a-f-]{36}$/i.test(item)) {
+    const search = new URLSearchParams({ item, ...params }).toString();
+    return `/${locale === 'ar' ? 'ar' : 'en'}/content/compose?${search}`;
+  }
   if (formData.get('returnTo') === '/content') {
     const search = new URLSearchParams(params).toString();
     return `/${locale === 'ar' ? 'ar' : 'en'}/content${search ? `?${search}` : ''}`;
@@ -151,7 +161,10 @@ export async function rescheduleContentAction(formData: FormData): Promise<void>
     destination = landing(locale, formData, { ...period, ok: 'CONTENT_RESCHEDULED' });
   } catch (error: unknown) {
     destination = failure(locale, error, 'reschedule', period);
-    if (formData.get('returnTo') === '/content') {
+    if (
+      formData.get('returnTo') === '/content' ||
+      formData.get('returnTo') === '/content/compose'
+    ) {
       const failed = new URL(destination, 'http://x').searchParams;
       destination = landing(locale, formData, {
         error: failed.get('error') ?? '',

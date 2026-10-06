@@ -5,10 +5,14 @@ import {
   QUOTA_FEATURES,
   TOTAL_RESOURCE_DIMENSIONS,
 } from '@brandspace/entitlements';
-import { formatMoney, systemClock, type Money, mayReadCreditBalance } from '@brandspace/shared';
+import {
+  formatMoneyDisplay,
+  systemClock,
+  type Money,
+  mayReadCreditBalance,
+} from '@brandspace/shared';
 import {
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   spacingTokens,
@@ -35,6 +39,7 @@ import {
   ScheduleDowngradeButton,
   SimpleActionButton,
 } from './actions';
+import { dayLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,11 +121,11 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
           feature: QUOTA_FEATURES.scheduledPostsPerMonth,
         },
         {
+          // Gate 2b — the prototype's row: "Storage (GB)", then "3.1 / 50".
           key: 'storage',
-          label: t('plan.usageStorage'),
+          label: t('billing.usageStorageGb'),
           used: counted(QUOTA_FEATURES.storageGb),
           feature: QUOTA_FEATURES.storageGb,
-          unit: ' GB',
         },
       ];
       return rows.map((row) => {
@@ -142,8 +147,12 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
     },
   ).catch(() => []);
 
-  const show = (value: Money): string => formatMoney(value, locale === 'ar' ? 'ar' : 'en');
-  const day = (value: Date | null): string => (value ? value.toISOString().slice(0, 10) : '—');
+  // Round 4 (1.8): the prototype's money — `$79` for a price, `$79.00` for an amount owed.
+  const show = (value: Money): string => formatMoneyDisplay(value, locale);
+  const price = (value: Money): string => formatMoneyDisplay(value, locale, { wholeUnits: true });
+  // Round 4 (1.8): the prototype's date — `Oct 16`, the year only for another year.
+  const day = (value: Date | null): string =>
+    value ? dayLabel(value, locale, 'UTC', systemClock.now()) : '—';
 
   /*
    * A DEFAULT PERIOD OF THE LAST TWELVE MONTHS, which is the span an accountant
@@ -253,12 +262,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
             (an accountant on a locked-down machine). So it takes the same
             style and the same interaction classes by the same functions.
           */}
-          <button
-            type="submit"
-            data-testid="export-submit"
-            className={buttonClass('primary')}
-            style={buttonStyle('primary')}
-          >
+          <button type="submit" data-testid="export-submit" className={buttonClass('primary')}>
             {t('billing.exportSubmit')}
           </button>
         </form>
@@ -299,7 +303,12 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
       customerName={customer.name ?? customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="billing">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="billing"
+      >
         {/* A5/E6 — changing the plan or payment method is owner-only; say so
           once, where the buttons would be, instead of leaving them missing. */}
         {mayManage ? null : (
@@ -357,7 +366,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                   </span>
                   {currentPrice ? (
                     <span className="bsp-ltr bsp-bl-price">
-                      {show(currentPrice)} /{' '}
+                      {price(currentPrice)} /{' '}
                       {t(
                         subscription.billingInterval === 'YEAR'
                           ? 'billing.perYear'
@@ -438,7 +447,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
             <div className="bsp-bl-acts">
               {/*
                 "Change plan" opens the plans in place, as the prototype's does
-                (line 1452); "Usage & limits" is the detail page; the export and
+                (line 1452); "Usage & limits" (the detail page), the export and
                 cancelling, which the prototype does not draw, are under "⋯".
               */}
               <details className="bsp-bl-change">
@@ -485,14 +494,14 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                               data-testid={`plan-price-${plan.key}`}
                               className="bsp-ltr bsp-bl-tprice"
                             >
-                              {show(availability.monthly)}{' '}
+                              {price(availability.monthly)}{' '}
                               <span
                                 style={{
                                   ...typographyTokens.caption,
                                   color: colorTokens.textMuted,
                                 }}
                               >
-                                {t('billing.perMonth')}
+                                / {t('billing.perMonth')}
                               </span>
                             </p>
                           ) : (
@@ -541,14 +550,15 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                   </div>
                 </div>
               </details>
-              <Link
-                href={`/${locale}/plan`}
-                className="bsp-btn bsp-sm bsp-ghost"
-                data-testid="billing-usage-link"
-              >
-                {t('billing.usageLink')} →
-              </Link>
+              {/* Gate 2b — "Usage & limits", which the prototype does not draw, is under "⋯" (D-471). */}
               <MoreDisclosure label={t('billing.more')} testId="billing-more" align="start">
+                <Link
+                  href={`/${locale}/plan`}
+                  className="bsp-btn bsp-sm bsp-ghost"
+                  data-testid="billing-usage-link"
+                >
+                  {t('billing.usageLink')} →
+                </Link>
                 {exportForm}
                 {cancelForm}
                 <p style={mutedStyle}>{t('billing.creditNoteNotice')}</p>
@@ -601,7 +611,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                           <p style={{ margin: 0, ...typographyTokens.bodySm }}>
                             {fill('billing.packCredits', { credits: String(offer.pack.credits) })}
                           </p>
-                          <p className="bsp-ltr bsp-bl-tprice">{show(offer.price)}</p>
+                          <p className="bsp-ltr bsp-bl-tprice">{price(offer.price)}</p>
                           {offer.pack.expiryDays ? (
                             <p style={mutedStyle}>
                               {fill('billing.packExpiry', { days: String(offer.pack.expiryDays) })}
@@ -618,7 +628,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                                 title: t('billing.packConfirmTitle'),
                                 body: fill('billing.packConfirmBody', {
                                   credits: String(offer.pack.credits),
-                                  price: show(offer.price),
+                                  price: price(offer.price),
                                 }),
                                 submitLabel: t('billing.packConfirmSubmit'),
                                 cancelLabel: t('billing.packConfirmCancel'),

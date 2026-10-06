@@ -300,7 +300,14 @@ replacements stay, and colour contrast is not exempted from the tests.**
 fonts) and `tests/unit/d468-home-prototype.test.ts` (the prototype's `kfmt`, `delta`, `spark` and
 `VA_meKind`, and the unwired Egyptian layer).
 
-## 4.4 D-470 — the interface Arabic follows the workspace's country
+## 4.4 D-470 — the interface Arabic follows the workspace's country (RETIRED by D-474)
+
+> **Retired in round 4, Step 6 (D-474).** There is one Arabic for every country: an Egyptian
+> workspace reads the same formal `ar` as every other. `apps/dashboard/src/i18n/ar-eg.ts` is
+> deleted, `messageLocaleFor` takes only the route locale, and no runtime path can select another
+> dictionary (`tests/unit/d470-message-locale.test.ts`, `tests/e2e/d470-egyptian-arabic.spec.ts`).
+> The prototype's Arabic wording is an allowed difference; its Arabic layout is ported. The text
+> below is kept as the record of what D-470 built.
 
 Approved by the owner on 2026-10-04 (D-470), from the batch 1 design note.
 
@@ -1647,6 +1654,216 @@ two equal columns until the Pillar exists.
   its bar. The campaign room's notes are a compact disclosure, as Brand Brain's (C1).
 - **Contrast** — the prototype's tan team avatar (`#b8794a`, 3.58:1 with white initials)
   is `#9c6539` (4.85:1, same hue), as D-470 (2) settled for text colours.
+
+### 6.3.52 Review of #68, round 4 — one control system, measured (Gate 1)
+
+The shared controls are the prototype's, and a spec measures them against the
+prototype at runtime (`tests/e2e/r4-control-size-parity.spec.ts`; tolerance 0.5px on
+lengths, exact on weight):
+
+- buttons are the `.btn` class system (`buttonClass()`); `buttonStyle` is the Control
+  Center's only;
+- a text field is `9px 12px`, 14px, radius 12, with no stated height, like the
+  prototype's;
+- a select is the 40px dropdown trigger with the thin chevron (`::picker-icon` hidden);
+- one toast (`.toastx`);
+- the current rail item's count is a white circle;
+- the collapsed rail's squares are centred, and the pill and scroll-into-view measure the
+  link inside its label wrapper;
+- channel icons include X;
+- amounts are written as `formatMoneyDisplay` writes them, dates and times in 24-hour
+  Latin digits.
+
+Roles & permissions shows the prototype's seven groups (`T.groups`) on `/permissions`
+and on a member's page, over the product's own keys. No key is rendered; every other
+permission sits behind "All permissions", by description. The rail marks Team there.
+
+**Recorded deviation.** The collapsed rail's label on hover is the product's `Tooltip`
+(shown on focus too), not the prototype's native `title`, which a keyboard user never
+sees (WCAG 1.4.13). The full status of every route and surface is in
+`docs/R4-PARITY-INVENTORY.md`.
+
+### 6.3.53 Review of #68, round 4 — the Studio, the owner's decisions, the screen fixes (Gate 2a)
+
+**Studio (Step 3).** The first input — words, a hashtag, Design, When — creates the
+draft through the same `createManualDraftAction` (same permission, audit, no credit),
+and a DRAFT, CHANGES_REQUESTED or FAILED post saves as it is edited through the same
+`saveVariantAction` ("Saves as you type" / "Saving…" / "Saved just now"). An APPROVED,
+IN_REVIEW or SCHEDULED post still waits for "Save edit": a save there revokes an
+approval, withdraws a review or unschedules. "Save draft" is gone; "Send for review"
+is the bar's action. One visit is one draft (the idempotency key is the visit's).
+Opening the Studio and leaving creates nothing; a template's words alone create
+nothing. All four formats are always drawn — dimmed with the reason on a new post,
+locked with the reason on a saved one. A scheduled post shows its date and time and
+moves in place through the calendar's own reschedule. The preview is the prototype's
+card (avatar, handle, ···, a 4:5 frame, the corner Draft mark) and draws a cover
+headline. A cost quote is shown with one decimal, rounded up
+(`docs/BILLING-AND-CREDITS.md` §13.1). The server saves as typed only a DRAFT,
+CHANGES_REQUESTED or FAILED post: an autosave that arrives for a post already in
+review, approved or scheduled is refused, so it can never withdraw or revoke anything.
+
+**Owner decisions (Step 4).** Sign-up has one password field with Show and no zone
+question (the browser's zone is posted; onboarding step 1 says it and "Change" opens it).
+Settings has no Brands row with one brand (the brand profile is one link away from
+General). Teach has "Accept all" — each fact's own Accept, in turn. The rail names the
+person (email only without a name) with Latin initials. Home's reach change is "—"
+unless the previous 28 days were measured from their first day; Home's credits are
+Billing's balance, "of N · resets D" and the bar. Media's storage card shows the
+meter's exact bytes, the file count and, under a limit, the bar in four parts — Photos,
+Videos, AI images, Brand files — regrouped from the rows the meter sums (display only).
+
+**Screen fixes (Step 5).** Approvals: titles and meta wrap; the self-approval reason is
+where the verdicts would be; "Preview on every channel", the notes and "Open in Studio"
+are under the review's one "⋯"; the queue has no "⋯" (the rules are Settings →
+Approvals). Automations: no line above the first rule; the switch turns in place; the
+sub-line is "Listens to … · Ran N times · last …" (the rule's name is the line's
+hover title); the prototype's trigger titles. The rule dialog is set at the
+prototype's normal line height, and when the product's longer list scrolls, it scrolls
+above the prototype's Cancel/Save row, so Save is always in the frame; and "Only if" draws its four chips before
+a trigger (three waiting until "When" is chosen). Teach: the prototype's upload tile
+(no native control), and a long step scrolls inside the card with its footer on
+screen. Media: no "⋯" beside Upload — "New folder" and the brand kit are in the
+Filters panel. Brand Brain: the brand's notes are under its "⋯". Performance: what
+changed / why / what to try lead the Insights tab; the posts table shows covers.
+Copilot: "Working on" wraps. Settings → General: the save bar is the column's last
+row, after the note, and stays on the frame's bottom edge as the page scrolls; at the
+very end it rests on the page's 40px bottom padding, below the settings nav, as the
+prototype's bar (drawn after the whole settings grid) does.
+
+**Recorded interpretations for the owner to correct.** "Extra row" on Approvals is read
+as the two rows under the cover; "extra ⋯" as the queue's. The Business recap shows
+every configured industry; the suite's configuration holds two.
+
+### 6.3.54 Review of #68, round 4 — the NOT PORTED pages and the PARTLY rows (Gate 2b, D-473)
+
+**Settings.** Approvals: "Who approves" — each member of the team, marked "Approves",
+"Approves others' posts" or "Doesn't approve" from the existing eligible-reviewer rule,
+with "Edit" to Team — over the two policy rules as switch rows. AI: the writing language
+as two chips (the same `defaultLocale`). Data: the prototype's rows, the retention card
+and the danger card with its inline confirmation (the server still checks the name and
+the password). Security: one card of rows (two-step, devices, the activity log). Publishing
+defaults: channel chips, the suggested times as a segmented choice with "Other" and its
+time field. Notifications: the event table with its "In app" column only (the Email
+column is BLOCKED). Accounts: a row per account (channel tile, status pill, "⋯" with its
+facts, Check and Disconnect) and a "Connect" row per platform not connected; the full
+connect form is behind the card's "⋯".
+
+**Notes.** Two panes: "For you" and "Other open" on the left, the chosen thread
+(`?thread=`, else the first) on the right with its subject, Open, Resolve / Reopen, the
+assignment, due date and Mark read under "⋯", the messages and the composer
+(Mention, Important, Post).
+
+**The campaign room.** One page: the head (name, status, the facts line, published of
+total, Edit · Start now · + New post · "⋯"), "Linked to" (the objective, a link to
+Strategy when the campaign came from one), the brief, the paused line, and "Post
+results" — every post by date with its reach, engagement rate and clicks over the
+campaign's dates (the existing `topPosts` query, one metric at a time; "—" where nothing
+was measured) and its status. The goal card is left out: a campaign stores no target.
+Content by status, the calendar, the files, Performance (with the headline results) and
+Activity are behind "⋯", and a strip moves between them once one is open.
+
+**Strategy.** "This strategy" / "Next strategy" as the prototype's period switch. This
+strategy: the gradient hero (accepted on, basis, the summary, "From your setup goal",
+the channel mix with its reasons behind "Why this mix", Copilot, "Plan the next
+strategy"), the Brand Brain alert as one line, "Built on Brand Brain" (audience and key
+messages, each with Open) beside the pillars (dot, share, the planned bar, "↳" the
+reason), the month as week cards with their three actions, and the evidence behind a
+disclosure. No strategy yet: the prototype's card with "Plan a strategy". Next strategy:
+the start title, "Let BrandSpace draft it" holding the proposal form, and each AI
+proposal as the prototype's draft (tag, title, "Why", Accept / Dismiss / Propose
+learnings, its pillars as chips). The weekly number and "Early signals" are left out
+(owner).
+
+**Look & voice.** The logo on two 72px tiles (ink and cream) with "Replace" (the file
+button; sending appears once a file is chosen) and the library pick behind "⋯"; the
+colours as 52px swatches that are the colour picker, the hex under each (still
+typeable), × and the dashed "+"; the voice words as chips; the fonts as one card of two
+language columns — each slot a row of chips drawn in their own face, the sample in the
+chosen pair, and the uploaded fonts with their name field, status, Replace and Remove.
+Brand templates are left out (owner).
+
+**PARTLY rows closed.** Settings → General: "Business name", "Time zone". Publishing log:
+the "Publish" eyebrow, "Publishing log", the prototype's subtitle, the segment at its own
+width (its Accounts view is reached from Home and the Calendar; see the owner's review below). Brand Brain chat: the greeting names the brand; the scope pill,
+the area's details and × appear only when the chat is scoped to an area. Sources: the
+counts in the row's chip ("6 approved · 1 to review · Facts"), no "Ready" pill (only
+reading or failed), the upload card at the prototype's first column, sending once a file
+is chosen. Plan & billing: "Storage (GB)", "Usage & limits" behind the card's "⋯".
+
+**After the parity pairs.** The campaign room sits under the Campaigns heading, as the
+prototype draws it. Strategy's eyebrow is "Plan". Settings → Accounts: the row's title is
+the platform and its line is the handle; the brand facts are in the row's "⋯"; the
+publishing history is Accounts' own view behind the frame's "⋯" (`?history=1`, see the
+owner's review below); Disconnect is the danger button. Notes: "Post", "On a post / campaign / the brand / a file", "Open", and the
+prototype's reply hint. Posts: an image card shows its cover's headline over the picture
+(the first slide's `headline`, which Studio already stores) — no headline, no overlay.
+
+**The owner's review of Gate 2b (item 4, a–i).** Each product control the prototype does
+not draw moved behind an existing affordance (D-471); none was deleted, and no
+permission, API path or schema changed.
+
+- (a) Look & voice: the parity fixture carries the brand's logo, four voice words and one
+  rule. Each voice row is one field — the reader's language — and the other language opens
+  from the row's own "عربي" / "English" chip, for that row only.
+- (b) One settings frame, one place for the bar: General, Approvals, AI, Notifications and
+  Publishing defaults each end in the form marked `.bsp-sg-form`, so the save bar sits on
+  the frame's bottom edge (the prototype's sticky range) and its end keeps clear of the
+  floating Copilot. With several brands each brand keeps its own form and bar (a recorded
+  deviation: the prototype draws one brand); every bar sits on the frame's edge while its
+  form crosses it, and the last brand's closes the column.
+- (c) Data: the prototype's three rows first, in its order — Export all your data, Data
+  retention (the product's own rule), Delete workspace — then one "More" holding the
+  product's other rows and its retention control.
+- (d) Publishing defaults: the times as chips (the configured suggestions, then "Other",
+  which opens the time field; there is no native time input otherwise). "Best time
+  automatically" stays left out. Post templates are their own view behind the frame's
+  "⋯" (`?templates=1`). A chosen channel is drawn as the chosen chip.
+- (e) Security: compact rows (the requirement is one switch row with its Save at the
+  end), and one name on the page and in its messages: "Two-step verification".
+- (f) Off the surface: the campaign's Notes (under "⋯", `?notes=1`; a link to one thread
+  still opens them), Accounts' "Publishing history" (under "⋯", `?history=1`), the
+  notifications popover's "⋯" (its title opens the full page, where the kinds are tabs and
+  Mentions is the Notes inbox), the Copilot panel's "⋯" (its title opens the full Copilot,
+  whose page carries the line on how it works) and the Publishing log tabs' "⋯" (its
+  Accounts view is opened where it is needed — Home's attention items and the Calendar's
+  readiness fix — and Settings → Accounts holds the accounts themselves).
+- (g) The Copilot's "Working on: <screen> · <brand>" is one line, its whole text on hover.
+- (h) The Publishing log shows a count on every tab, zero included.
+- (i) Arabic: the brand switcher's caption is "العلامة النشطة", which fits; a person's
+  initials are Latin in both languages (the name when it has Latin letters, else the
+  address — `personInitials`).
+
+**The rail's glide (a product defect the owner saw on staging).** The rail is drawn again
+on every page. The pill took over the current item only after the item had been styled,
+so the new page's first frame painted the item's own dark fill and the `.bsp-nav`
+background transition then faded it while the pill glided in: the destination flashed
+dark under a moving pill. The pill now takes over (`data-ind`) before the first
+measurement. `r4-rail-active.spec.ts` fails on any frame where the current item paints
+its own fill while the pill is in charge.
+
+### 6.3.55 Round 4, Step 7 — what the flow walk on a fresh workspace changed
+
+- **Business step (7.1).** The step asks its two questions; the workspace address under
+  "More" follows the business name (or, for a name with no Latin letters, the account's
+  address) until the person edits it, so Continue no longer stops on an empty required field
+  the step never asked for. The server still validates the address and reports one taken.
+- **Teach (7.1) and Team (7.6).** "We understood one thing · review it" and "1 person" in
+  the singular (en + ar).
+- **The Studio's media parts (7.2) — AN APPROVED DESIGN-SYSTEM EXTENSION.** The Design
+  tab's media list, the "Add media" sheet and the carousel slides kept the retired
+  full-demo `cs-*` scale (8–10px) and read variables only `.content-page` set, which no
+  Studio page renders any more: the sheet's chosen tab was white on white. They now take
+  the platform's own label, hint, segmented control, chip and button (`prototype.css`,
+  "Step 7 (flow 7.2)"); no markup or test id changed except the buttons, which are
+  `buttonClass`.
+- **The "When" panel (7.2)** is a dialog: Escape closes it and focus returns to the "When"
+  that opened it.
+- **An upload from Design (7.2)** returns to Design; a file already in Media says so ("This
+  file is already in Media. Choose it from the library.") instead of a generic conflict.
+- **Media → "Use" (7.4).** The Studio's notice says the file comes "from Media" (it said
+  "from Creative Studio" for an upload).
+- **Brand access (7.6)** keeps its native radios and checkboxes (it works without script),
+  drawn in ink rather than the browser's blue.
 
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 

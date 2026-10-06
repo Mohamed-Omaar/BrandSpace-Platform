@@ -1,11 +1,11 @@
 import QRCode from 'qrcode';
 import {
   Field,
-  buttonStyle,
   colorTokens,
   inputStyle,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 
 /**
@@ -95,7 +95,7 @@ export async function MfaEnrolmentPanel({
         />
       </Field>
       <div>
-        <button type="submit" data-testid={`${testId}-confirm`} style={buttonStyle('primary')}>
+        <button type="submit" data-testid={`${testId}-confirm`} className={buttonClass('primary')}>
           {labels.confirm}
         </button>
       </div>

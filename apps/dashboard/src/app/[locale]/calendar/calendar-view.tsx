@@ -13,7 +13,6 @@ import {
   Field,
   SideSheet,
   StateMessage,
-  buttonStyle,
   colorTokens,
   inputStyle,
   spacingTokens,
@@ -26,6 +25,7 @@ import {
   type DropState,
   type MediaSeed,
   type PostRecord,
+  buttonClass,
 } from '@brandspace/ui';
 import type { MoveSlotResult } from './actions';
 import { pendingMoves, withMoves } from './optimistic-moves';
@@ -1021,11 +1021,10 @@ export function CalendarView({
                   <button
                     key={time}
                     type="button"
-                    className="bs-pressable"
+                    className={buttonClass(scheduleTime === time ? 'primary' : 'neutral', 'sm')}
                     data-testid={`schedule-suggested-${time}`}
                     aria-pressed={scheduleTime === time}
                     onClick={() => setScheduleTime(time)}
-                    style={buttonStyle(scheduleTime === time ? 'primary' : 'neutral', 'sm')}
                   >
                     {time}
                   </button>
@@ -1034,7 +1033,11 @@ export function CalendarView({
             ) : null}
 
             <div>
-              <button type="submit" data-testid="schedule-submit" style={buttonStyle('primary')}>
+              <button
+                type="submit"
+                data-testid="schedule-submit"
+                className={buttonClass('primary')}
+              >
                 {t['calendar.scheduleSubmit']}
               </button>
             </div>
@@ -1195,7 +1198,7 @@ export function CalendarView({
                   <button
                     type="submit"
                     data-testid="reschedule-submit"
-                    style={buttonStyle('primary')}
+                    className={buttonClass('primary')}
                   >
                     {t['calendar.rescheduleSubmit']}
                   </button>
@@ -1207,7 +1210,7 @@ export function CalendarView({
               <a
                 href={`/${locale}/content/compose?item=${openSlot.contentItemId}`}
                 data-testid="calendar-open-studio"
-                style={buttonStyle('neutral')}
+                className={buttonClass('neutral')}
               >
                 {t['calendar.openInStudio']}
               </a>
@@ -1226,7 +1229,7 @@ export function CalendarView({
                   <button
                     type="submit"
                     data-testid="calendar-request-approval"
-                    style={buttonStyle('neutral')}
+                    className={buttonClass('neutral')}
                   >
                     {t['calendar.drawer.requestApproval']}
                   </button>
@@ -1241,7 +1244,7 @@ export function CalendarView({
                   <button
                     type="submit"
                     data-testid="calendar-cancel-submit"
-                    style={buttonStyle('neutral')}
+                    className={buttonClass('neutral')}
                   >
                     {t['calendar.cancelSubmit']}
                   </button>

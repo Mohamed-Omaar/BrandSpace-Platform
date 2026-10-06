@@ -907,6 +907,39 @@ describe('the editing tools — rewrite, shorten, expand, tone and translation',
     expect(variant.hashtags).toEqual(['spring', 'sale']);
   });
 
+  it('Step 7 (7.2): the hashtag tool keeps the post’s own tags and adds the new ones', async () => {
+    nextOutput = reply([{ platformKey: 'instagram', body: 'Words with tags.' }]);
+    const generated = await inA((studio) =>
+      studio.generate({ ...baseInput(), idempotencyKey: key() }),
+    );
+    const variantId = generated.variants[0]?.id ?? '';
+    await inA((_studio, db) =>
+      db.contentVariant.update({
+        where: { id: variantId },
+        data: { hashtags: ['kunafa', 'Spring'] },
+      }),
+    );
+    const run = () =>
+      inA((studio) =>
+        studio.applyTool({
+          variantId,
+          tool: 'hashtags',
+          idempotencyKey: key(),
+          actorUserId: fixtures.a.userId,
+          planKey: null,
+          actorBrandScope: [],
+          actorPermissionKeys: ['content.edit', 'content.schedule'],
+        }),
+      );
+
+    nextOutput = JSON.stringify({ body: 'ignored', hashtags: ['spring', 'sale'] });
+    expect((await run()).variant.hashtags).toEqual(['kunafa', 'Spring', 'sale']);
+
+    // A model that proposes nothing takes nothing away.
+    nextOutput = JSON.stringify({ body: 'ignored', hashtags: [] });
+    expect((await run()).variant.hashtags).toEqual(['kunafa', 'Spring', 'sale']);
+  });
+
   it('D-284: an AI edit of an APPROVED post returns it to Draft, audibly', async () => {
     nextOutput = reply([{ platformKey: 'instagram', body: 'Reviewed words.' }]);
     const generated = await inA((studio) =>

@@ -9,6 +9,8 @@ import {
   type AssetView,
 } from '../../../server/asset-views';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
+import { BYTES_PER_GB, measureStorageBreakdown } from '@brandspace/entitlements';
+import { mediaStorageCategories } from '../../../server/media-storage';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inAssetLibrary } from '../../../server/assets-context';
@@ -67,7 +69,7 @@ export default async function AssetsPage({
   const access = await requireWorkspacePage(locale, '/assets');
   const { messageLocale } = access.session;
   const t = translator(messageLocale);
-  const countFormat = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+  const countFormat = new Intl.NumberFormat('en-US', {
     numberingSystem: 'latn',
   });
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
@@ -240,12 +242,34 @@ export default async function AssetsPage({
         withTotal: true,
       });
 
-      const [folders, tags, storageLimitGb, usedCounter] = await Promise.all([
-        library.listFolders(actor),
-        library.tagFacets(actor),
-        services.storageLimitGb(),
-        services.db.usageCounter.findFirst({ where: { featureKey: 'limit.storage_gb' } }),
-      ]);
+      const [folders, tags, storageLimitGb, usedCounter, breakdown, libraryCounts, bbFiles] =
+        await Promise.all([
+          library.listFolders(actor),
+          library.tagFacets(actor),
+          services.storageLimitGb(),
+          services.db.usageCounter.findFirst({ where: { featureKey: 'limit.storage_gb' } }),
+          /*
+           * Round 4 (4.7) — the four categories, regrouped from the rows the
+           * meter sums, and the live file counts. Read-only, workspace-wide
+           * like the meter.
+           */
+          measureStorageBreakdown(services.db, workspace.workspaceId),
+          services.db.asset.groupBy({
+            by: ['kind', 'source'],
+            where: { deletedAt: null },
+            _count: { _all: true },
+          }),
+          services.db.brandSourceDocument.count({ where: { deletedAt: null } }),
+        ]);
+      const storageCategories = mediaStorageCategories(
+        breakdown,
+        libraryCounts.map((row) => ({
+          kind: row.kind,
+          source: row.source,
+          files: row._count._all,
+        })),
+        bbFiles,
+      );
 
       const selected =
         selectedId !== undefined ? await library.get(selectedId, actor).catch(() => null) : null;
@@ -338,6 +362,11 @@ export default async function AssetsPage({
         tags: tags.map((facet) => ({ tag: facet.tag, count: facet.count })),
         storageLimitGb,
         storageUsedGb: usedCounter?.usedValue ?? 0,
+        // The meter's exact bytes (B-1), shown as bytes rather than its rounded-up gigabytes.
+        storageUsedBytes: Number(usedCounter?.usedBytes ?? 0n),
+        storageLimitBytes:
+          storageLimitGb === null ? null : Math.floor(Math.max(0, storageLimitGb) * BYTES_PER_GB),
+        storageCategories,
         maxFileBytes: policy.upload.maxFileBytes,
         allowedMimeTypes: Object.values(policy.upload.allowedMimeTypes).flat(),
         selected: selected
@@ -438,6 +467,7 @@ export default async function AssetsPage({
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
       <AssetLibraryView
         locale={locale}
+        now={systemClock.now().toISOString()}
         notes={
           notesBrandId && selectedId && can(NOTE_PERMISSION) ? (
             <NotesPanel

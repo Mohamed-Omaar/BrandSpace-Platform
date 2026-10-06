@@ -112,34 +112,40 @@ test.describe('D-297 · the bell', () => {
     // Stays on the screen the reader was on.
     expect(new URL(page.url()).pathname).toBe('/en/overview');
 
-    // Review of #67 — the kind filters are under the popover's "⋯".
-    await feed.getByTestId('notifications-more').click();
-    await feed.getByTestId('notifications-tab-mention').click();
+    // Gate 2b review (4f) — the popover is the whole feed, as the prototype's;
+    // the kinds are tabs on the full page, and Mentions there is the Notes inbox.
     const mention = feed.getByTestId(`feed-m:${threadId}`);
     await expect(mention).toContainText('mentioned you');
     await expect(mention).toContainText(WORDS);
     await expect(mention).toHaveAttribute('data-kind', 'mention');
-    // Mentions only under Mentions.
-    await expect(feed.locator('[data-kind="approval"]')).toHaveCount(0);
 
     await mention.getByTestId(`feed-open-m:${threadId}`).click();
     await page.waitForURL(new RegExp(`thread=${threadId}`));
+
+    // Mentions only under Mentions: the full page's Mentions tab is the Notes inbox.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/notifications`);
+    await expect(
+      page.getByTestId('notifications-kinds').getByTestId('tab-mention'),
+    ).toHaveAttribute('href', '/en/notes');
   });
 
   test('an approval reads as the post it is about, under Approvals', async ({ page }) => {
     await signIn(page);
     await page.getByTestId('topbar-notifications').click();
     const feed = page.getByTestId('notifications-feed');
-    await feed.getByTestId('notifications-more').click();
-    await feed.getByTestId('notifications-tab-approval').click();
     const row = feed.getByTestId(`feed-n:${notificationId}`);
     await expect(row).toContainText('waiting for your review');
     await expect(row).toContainText(TITLE);
-    await expect(feed.locator('[data-kind="mention"]')).toHaveCount(0);
+    await expect(row).toHaveAttribute('data-kind', 'approval');
     await expect(row.getByTestId(`feed-open-n:${notificationId}`)).toHaveAttribute(
       'href',
       '/en/approvals',
     );
+    // Gate 2b review (4f) — "Approvals" is the full page's tab: approvals only.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/notifications?kind=approval`);
+    await expect(page.getByTestId(`notification-${notificationId}`)).toBeVisible();
+    await expect(page.getByTestId('notifications-kinds')).toBeVisible();
+    await expect(page.locator('[data-testid^="notification-"][data-kind="other"]')).toHaveCount(0);
   });
 
   test('the feed is clean under axe in Arabic', async ({ page }) => {

@@ -53,7 +53,7 @@ export function versionNotFound(): AppError {
 }
 
 export function duplicateAsset(): AppError {
-  return new AppError('CONFLICT', 'This file is already in the library.');
+  return new AppError('CONFLICT', 'This file is already in the library.', { reason: 'duplicate' });
 }
 
 export function unsupportedFileType(): AppError {

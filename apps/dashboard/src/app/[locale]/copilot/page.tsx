@@ -1,5 +1,5 @@
 import { StateMessage, Stack, spacingTokens } from '@brandspace/ui';
-import { mayReadCreditBalance } from '@brandspace/shared';
+import { mayReadCreditBalance, systemClock } from '@brandspace/shared';
 import { copilotSurface } from '../../../server/copilot-surface';
 import { RATE_METRIC_KEYS, copilotLabels } from '../../../server/copilot-labels';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
@@ -76,7 +76,7 @@ export default async function CopilotPage({
       )
     : null;
 
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en');
+  const number = new Intl.NumberFormat('en-US');
 
   return (
     <WorkspaceShell
@@ -118,6 +118,7 @@ export default async function CopilotPage({
         ) : (
           <CopilotView
             locale={locale}
+            now={systemClock.now().toISOString()}
             brand={{ id: brand.id, name: brand.name }}
             surface={surface}
             // D-296 — a request handed over without script; put in the box, never sent.

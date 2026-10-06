@@ -1,12 +1,4 @@
-import {
-  Card,
-  Field,
-  buttonStyle,
-  colorTokens,
-  inputStyle,
-  spacingTokens,
-  typographyTokens,
-} from '@brandspace/ui';
+import Link from 'next/link';
 import { getPrisma, withoutTenantContext } from '@brandspace/database';
 import { SignupService } from '@brandspace/auth';
 import { TenantOnboardingPolicySource } from '@brandspace/onboarding';
@@ -146,51 +138,67 @@ export default async function SecuritySettingsPage({
         <CustomerBanner tone="success">{statusMessage(ok, locale)}</CustomerBanner>
       )}
 
-      <SettingsFrame locale={locale} permissionKeys={workspace.permissionKeys} selected="security">
-        <Card testId="mfa-card">
-          <div style={{ display: 'grid', gap: spacingTokens.md }}>
-            <div>
-              <b>{t('security.mfaHeading')}</b>{' '}
-              <span data-testid="mfa-state">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={workspace.permissionKeys}
+        selected="security"
+      >
+        {/*
+          ROUND 4, GATE 2b — THE PROTOTYPE'S SECURITY SECTION (`Main.dc.html`
+          lines 1465–1472): ONE card of compact rows — two-step sign-in with its
+          state and action, the backup codes, "require it for everyone", other
+          devices, the activity log — and each flow opening as an inset panel
+          under its row (`margin: 0 18px 14px; padding: 14px 16px;
+          border-radius: 16px`). Every form, action, permission and test id is
+          the product's own, unchanged.
+        */}
+        <section className="bsp-card bsp-secu">
+          <div className="bsp-secu-block" data-testid="mfa-card">
+            <div className="bsp-row bsp-secu-row">
+              <span className="bsp-secu-text">
+                <span className="bsp-secu-t">{t('security.mfaHeading')}</span>
+                <span className="bsp-secu-s">{t('security.mfaExplain')}</span>
+              </span>
+              <span
+                className={account.mfaEnabled ? 'bsp-pill bsp-p-ok' : 'bsp-pill bsp-p-neu'}
+                data-testid="mfa-state"
+              >
                 {account.mfaEnabled ? t('security.mfaOn') : t('security.mfaOff')}
               </span>
-              <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
-                {t('security.mfaExplain')}
-              </p>
+              {/* NOT ENROLLED, AND ENROLMENT NOT YET STARTED. */}
+              {mfaAvailable && !account.mfaEnabled && !pending ? (
+                <form action={beginMfaEnrolmentAction}>
+                  <input type="hidden" name="locale" value={locale} />
+                  <button type="submit" data-testid="mfa-begin" className="bsp-btn bsp-sm bsp-pur">
+                    {t('security.enrolStart')}
+                  </button>
+                </form>
+              ) : null}
             </div>
 
-            {!mfaAvailable && (
-              <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
-                {t('security.unavailable')}
-              </p>
-            )}
-
-            {/* NOT ENROLLED, AND ENROLMENT NOT YET STARTED. */}
-            {mfaAvailable && !account.mfaEnabled && !pending && (
-              <form action={beginMfaEnrolmentAction}>
-                <input type="hidden" name="locale" value={locale} />
-                <button type="submit" data-testid="mfa-begin" style={buttonStyle('primary')}>
-                  {t('security.enrolStart')}
-                </button>
-              </form>
-            )}
+            {!mfaAvailable ? (
+              <p className="bsp-secu-panel bsp-secu-note">{t('security.unavailable')}</p>
+            ) : null}
 
             {/* MID-ENROLMENT: a QR code and the typed key, drawn from the server. */}
-            {mfaAvailable && !account.mfaEnabled && pending && (
-              <MfaEnrolmentPanel
-                locale={locale}
-                otpauthUri={pending.otpauthUri}
-                secret={pending.secret}
-                action={confirmMfaEnrolmentAction}
-                from="security"
-                labels={enrolmentLabels}
-              />
-            )}
+            {mfaAvailable && !account.mfaEnabled && pending ? (
+              <div className="bsp-secu-panel bsp-secu-setup">
+                <MfaEnrolmentPanel
+                  locale={locale}
+                  otpauthUri={pending.otpauthUri}
+                  secret={pending.secret}
+                  action={confirmMfaEnrolmentAction}
+                  from="security"
+                  labels={enrolmentLabels}
+                />
+              </div>
+            ) : null}
 
             {/* ENROLLED, A NEW PHONE BEING SET UP: the old one works until this one proves itself. */}
-            {account.mfaEnabled && pending && (
-              <div style={{ display: 'grid', gap: spacingTokens.md }}>
-                <b>{t('security.newPhoneHeading')}</b>
+            {account.mfaEnabled && pending ? (
+              <div className="bsp-secu-panel bsp-secu-setup">
+                <b className="bsp-secu-pt">{t('security.newPhoneHeading')}</b>
                 <MfaEnrolmentPanel
                   locale={locale}
                   otpauthUri={pending.otpauthUri}
@@ -205,48 +213,45 @@ export default async function SecuritySettingsPage({
                   <button
                     type="submit"
                     data-testid="mfa-new-phone-cancel"
-                    style={buttonStyle('ghost')}
+                    className="bsp-btn bsp-sm bsp-ghost"
                   >
                     {t('common.cancel')}
                   </button>
                 </form>
               </div>
-            )}
+            ) : null}
 
             {/* ENROLLED: "New phone" costs a current code. */}
-            {mfaAvailable && account.mfaEnabled && !pending && (
-              <form action={beginNewPhoneAction} style={{ display: 'grid', gap: spacingTokens.md }}>
+            {mfaAvailable && account.mfaEnabled && !pending ? (
+              <form action={beginNewPhoneAction} className="bsp-secu-panel bsp-secu-inline">
                 <input type="hidden" name="locale" value={locale} />
-                <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
-                  {t('security.newPhoneExplain')}
-                </p>
-                <Field label={t('security.code')} htmlFor="new-phone-code">
+                <span className="bsp-secu-s">{t('security.newPhoneExplain')}</span>
+                <span className="bsp-secu-fields">
                   <input
-                    className="bs-control"
+                    className="bs-control bsp-secu-in"
                     id="new-phone-code"
                     name="code"
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     required
+                    placeholder={t('security.code')}
+                    aria-label={t('security.code')}
                     data-testid="mfa-new-phone-code"
-                    style={inputStyle()}
                   />
-                </Field>
-                <div>
                   <button
                     type="submit"
                     data-testid="mfa-new-phone-begin"
-                    style={buttonStyle('neutral')}
+                    className="bsp-btn bsp-sm bsp-sec"
                   >
                     {t('security.newPhone')}
                   </button>
-                </div>
+                </span>
               </form>
-            )}
+            ) : null}
 
             {/* ENROLLED AND REQUIRED: it cannot be turned off, and the page says why. */}
             {account.mfaEnabled && requiredBy ? (
-              <p style={typographyTokens.bodySm} data-testid="mfa-required-note">
+              <p className="bsp-secu-panel bsp-secu-note" data-testid="mfa-required-note">
                 {t('security.requiredCannotDisable').replace(
                   '{workspace}',
                   requiredBy.workspaceName,
@@ -255,102 +260,65 @@ export default async function SecuritySettingsPage({
             ) : null}
 
             {/* ENROLLED: turning it off costs a current code OR the password. */}
-            {account.mfaEnabled && !requiredBy && (
-              <form action={disableMfaAction} style={{ display: 'grid', gap: spacingTokens.md }}>
+            {account.mfaEnabled && !requiredBy ? (
+              <form action={disableMfaAction} className="bsp-secu-panel bsp-secu-off">
                 <input type="hidden" name="locale" value={locale} />
-                <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
-                  {t('security.disableExplain')}
-                </p>
-                <div className="bs-form-row">
-                  <Field label={t('security.code')} htmlFor="disable-code">
-                    <input
-                      className="bs-control"
-                      id="disable-code"
-                      name="code"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      data-testid="mfa-disable-code"
-                      style={inputStyle()}
-                    />
-                  </Field>
-                  <Field label={t('security.orPassword')} htmlFor="disable-password">
-                    <input
-                      className="bs-control"
-                      id="disable-password"
-                      name="password"
-                      type="password"
-                      autoComplete="current-password"
-                      data-testid="mfa-disable-password"
-                      style={inputStyle()}
-                    />
-                  </Field>
-                </div>
-                <div>
-                  <button type="submit" data-testid="mfa-disable" style={buttonStyle('neutral')}>
+                <span className="bsp-secu-s">{t('security.disableExplain')}</span>
+                <span className="bsp-secu-fields">
+                  <input
+                    className="bs-control bsp-secu-in"
+                    id="disable-code"
+                    name="code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder={t('security.code')}
+                    aria-label={t('security.code')}
+                    data-testid="mfa-disable-code"
+                  />
+                  <input
+                    className="bs-control bsp-secu-in"
+                    id="disable-password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder={t('security.orPassword')}
+                    aria-label={t('security.orPassword')}
+                    data-testid="mfa-disable-password"
+                  />
+                  <button
+                    type="submit"
+                    data-testid="mfa-disable"
+                    className="bsp-btn bsp-sm bsp-sec"
+                  >
                     {t('security.disable')}
                   </button>
-                </div>
+                </span>
               </form>
-            )}
+            ) : null}
           </div>
-        </Card>
 
-        {/*
-          G4 / Q23 (D-333) — THE OWNER REQUIRES IT FOR EVERYONE. Offered only
-          with `workspace.security.manage` (the Owner); the action checks it
-          again and refuses to turn it on before the Owner's own is on.
-        */}
-        {mayRequire ? (
-          <Card testId="mfa-requirement-card">
-            <form
-              action={setWorkspaceMfaRequirementAction}
-              style={{ display: 'grid', gap: spacingTokens.md }}
-            >
-              <input type="hidden" name="locale" value={locale} />
-              <b>{t('security.requireHeading')}</b>
-              <CheckboxRow
-                name="requireMfa"
-                label={t('security.requireLabel').replace('{workspace}', workspace.workspaceName)}
-                hint={t('security.requireHint')}
-                checked={workspace.requireMfa === true}
-                testId="mfa-require"
-              />
-              <div>
-                <button type="submit" data-testid="mfa-require-save" style={buttonStyle('primary')}>
-                  {t('common.save')}
-                </button>
+          {/* THE CODES, SHOWN ONCE, and the backup-codes row. */}
+          {account.mfaEnabled || issuedCodes.length > 0 ? (
+            <div className="bsp-secu-block" data-testid="recovery-card">
+              <div className="bsp-row bsp-secu-row">
+                <span className="bsp-secu-text">
+                  <span className="bsp-secu-t bsp-sm">{t('security.recoveryHeading')}</span>
+                  <span className="bsp-secu-s">
+                    {account.mfaEnabled ? (
+                      <span data-testid="recovery-remaining">
+                        {t('security.recoveryRemaining')}: {remainingCodes}
+                      </span>
+                    ) : (
+                      t('security.recoveryExplain')
+                    )}
+                  </span>
+                </span>
               </div>
-            </form>
-          </Card>
-        ) : null}
-
-        {/* THE CODES, SHOWN ONCE. Their own card, because losing them is how
-            optional MFA turns into MFA nobody switches on. */}
-        {(account.mfaEnabled || issuedCodes.length > 0) && (
-          <Card testId="recovery-card">
-            <div style={{ display: 'grid', gap: spacingTokens.md }}>
-              <div>
-                <b>{t('security.recoveryHeading')}</b>
-                <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
-                  {t('security.recoveryExplain')}
-                </p>
-              </div>
-
-              {issuedCodes.length > 0 && (
-                <div
-                  data-testid="recovery-codes"
-                  style={{ display: 'grid', gap: spacingTokens.sm }}
-                >
-                  <p style={typographyTokens.bodySm}>
-                    <b>{t('security.recoveryOnce')}</b>
-                  </p>
-                  <ul
-                    style={{
-                      ...typographyTokens.caption,
-                      margin: 0,
-                      paddingInlineStart: '1.25rem',
-                    }}
-                  >
+              {issuedCodes.length > 0 ? (
+                <div className="bsp-secu-panel bsp-secu-codes" data-testid="recovery-codes">
+                  <b className="bsp-secu-pt">{t('security.recoveryOnce')}</b>
+                  <span className="bsp-secu-s">{t('security.recoveryExplain')}</span>
+                  <ul className="bsp-secu-code-grid">
                     {issuedCodes.map((code) => (
                       <li key={code}>
                         <code>{code}</code>
@@ -362,74 +330,96 @@ export default async function SecuritySettingsPage({
                     <button
                       type="submit"
                       data-testid="recovery-codes-saved"
-                      style={buttonStyle('neutral')}
+                      className="bsp-btn bsp-sm bsp-sec"
                     >
                       {t('security.recoverySaved')}
                     </button>
                   </form>
                 </div>
-              )}
-
-              {account.mfaEnabled && (
-                <>
-                  <p style={typographyTokens.bodySm} data-testid="recovery-remaining">
-                    {t('security.recoveryRemaining')}: {remainingCodes}
-                  </p>
-                  <form
-                    action={regenerateRecoveryCodesAction}
-                    style={{ display: 'grid', gap: spacingTokens.md }}
-                  >
-                    <input type="hidden" name="locale" value={locale} />
-                    <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
-                      {t('security.recoveryRegenerateExplain')}
-                    </p>
-                    <Field label={t('security.code')} htmlFor="regen-code">
-                      <input
-                        className="bs-control"
-                        id="regen-code"
-                        name="code"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        required
-                        data-testid="recovery-regen-code"
-                        style={inputStyle()}
-                      />
-                    </Field>
-                    <div>
-                      <button
-                        type="submit"
-                        data-testid="recovery-regenerate"
-                        style={buttonStyle('neutral')}
-                      >
-                        {t('security.recoveryRegenerate')}
-                      </button>
-                    </div>
-                  </form>
-                </>
-              )}
+              ) : null}
+              {account.mfaEnabled ? (
+                <form
+                  action={regenerateRecoveryCodesAction}
+                  className="bsp-secu-panel bsp-secu-inline"
+                >
+                  <input type="hidden" name="locale" value={locale} />
+                  <span className="bsp-secu-s">{t('security.recoveryRegenerateExplain')}</span>
+                  <span className="bsp-secu-fields">
+                    <input
+                      className="bs-control bsp-secu-in"
+                      id="regen-code"
+                      name="code"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      required
+                      placeholder={t('security.code')}
+                      aria-label={t('security.code')}
+                      data-testid="recovery-regen-code"
+                    />
+                    <button
+                      type="submit"
+                      data-testid="recovery-regenerate"
+                      className="bsp-btn bsp-sm bsp-sec"
+                    >
+                      {t('security.recoveryRegenerate')}
+                    </button>
+                  </span>
+                </form>
+              ) : null}
             </div>
-          </Card>
-        )}
+          ) : null}
 
-        <Card testId="sessions-card">
+          {/*
+            G4 / Q23 (D-333) — THE OWNER REQUIRES IT FOR EVERYONE. Offered only
+            with `workspace.security.manage` (the Owner); the action checks it
+            again and refuses to turn it on before the Owner's own is on.
+          */}
+          {mayRequire ? (
+            <form
+              action={setWorkspaceMfaRequirementAction}
+              className="bsp-secu-block bsp-secu-req"
+              data-testid="mfa-requirement-card"
+            >
+              <input type="hidden" name="locale" value={locale} />
+              <CheckboxRow
+                name="requireMfa"
+                label={t('security.requireLabel').replace('{workspace}', workspace.workspaceName)}
+                hint={t('security.requireHint')}
+                checked={workspace.requireMfa === true}
+                testId="mfa-require"
+              />
+              <button
+                type="submit"
+                data-testid="mfa-require-save"
+                className="bsp-btn bsp-sm bsp-sec bsp-secu-req-save"
+              >
+                {t('common.save')}
+              </button>
+            </form>
+          ) : null}
+
           <form
             action={signOutOtherSessionsAction}
-            style={{ display: 'grid', gap: spacingTokens.md }}
+            className="bsp-row bsp-secu-row"
+            data-testid="sessions-card"
           >
             <input type="hidden" name="locale" value={locale} />
-            <div>
-              <b>{t('security.sessionsHeading')}</b>
-              <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted }}>
-                {t('security.sessionsExplain')}
-              </p>
-            </div>
-            <div>
-              <button type="submit" data-testid="sessions-revoke" style={buttonStyle('neutral')}>
-                {t('security.signOutOthers')}
-              </button>
-            </div>
+            <span className="bsp-secu-text">
+              <span className="bsp-secu-t">{t('security.sessionsHeading')}</span>
+              <span className="bsp-secu-s">{t('security.sessionsExplain')}</span>
+            </span>
+            <button type="submit" data-testid="sessions-revoke" className="bsp-btn bsp-sm bsp-sec">
+              {t('security.signOutOthers')}
+            </button>
           </form>
-        </Card>
+
+          <div className="bsp-row bsp-secu-row" data-testid="security-activity">
+            <span className="bsp-secu-t bsp-secu-grow">{t('security.activityLog')}</span>
+            <Link href={`/${locale}/activity`} className="bsp-btn bsp-sm bsp-ghost">
+              {t('data.open')}
+            </Link>
+          </div>
+        </section>
       </SettingsFrame>
     </WorkspaceShell>
   );

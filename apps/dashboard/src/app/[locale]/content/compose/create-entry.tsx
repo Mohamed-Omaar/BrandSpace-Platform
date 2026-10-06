@@ -4,7 +4,6 @@ import {
   StateMessage,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   radiusTokens,
@@ -57,8 +56,8 @@ export function IdeaPicker({
               </span>
               <Link
                 href={idea.href}
-                className={buttonClass('brand')}
-                style={buttonStyle('brand', 'sm')}
+                className={buttonClass('brand', 'sm')}
+
                 data-testid={`create-idea-use-${idea.key}`}
               >
                 {t('create.idea.use')}
@@ -69,8 +68,8 @@ export function IdeaPicker({
       )}
       <Link
         href={`/${locale}/content/compose`}
-        className={buttonClass('ghost')}
-        style={{ ...buttonStyle('ghost', 'sm'), marginBlockStart: spacingTokens.sm }}
+        className={buttonClass('ghost', 'sm')}
+        style={{ marginBlockStart: spacingTokens.sm }}
       >
         {t('create.back')}
       </Link>
@@ -134,11 +133,7 @@ export function RepurposePicker({
           className="bs-control"
           style={inputStyle({ size: 'sm' })}
         />
-        <button
-          type="submit"
-          className={buttonClass('neutral')}
-          style={buttonStyle('neutral', 'sm')}
-        >
+        <button type="submit" className={buttonClass('neutral', 'sm')}>
           {t('content.filter.apply')}
         </button>
       </form>
@@ -165,8 +160,8 @@ export function RepurposePicker({
               />
               <Link
                 href={use(option.id)}
-                className={buttonClass('brand')}
-                style={buttonStyle('brand', 'sm')}
+                className={buttonClass('brand', 'sm')}
+
                 data-testid={`create-source-use-${option.id}`}
               >
                 {t('create.repurpose.use')}
@@ -177,8 +172,8 @@ export function RepurposePicker({
       )}
       <Link
         href={`/${locale}/content/compose`}
-        className={buttonClass('ghost')}
-        style={{ ...buttonStyle('ghost', 'sm'), marginBlockStart: spacingTokens.sm }}
+        className={buttonClass('ghost', 'sm')}
+        style={{ marginBlockStart: spacingTokens.sm }}
       >
         {t('create.back')}
       </Link>

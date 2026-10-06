@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
+  AbstractMedia,
+  AssetMedia,
   AssetThumb,
   Card,
   LinkTabs,
@@ -8,11 +10,12 @@ import {
   SectionHeader,
   StateMessage,
   StatusBadge,
-  buttonStyle,
   colorTokens,
   spacingTokens,
   statusTone,
   typographyTokens,
+  buttonClass,
+  type MediaSeed,
 } from '@brandspace/ui';
 import { isAppError, systemClock } from '@brandspace/shared';
 import { campaignResultsPeriod, daysUntilCampaignEnds } from '@brandspace/content';
@@ -29,6 +32,8 @@ import { inAnalytics } from '../../../../server/analytics-context';
 import { optionalMessage, statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { NotesPanel } from '../../../../components/notes-panel';
+import { MoreDisclosure } from '../../../../components/more-disclosure';
+import { shortCount } from '../../../../server/performance-view';
 import { archiveCampaignAction, startCampaignNowAction, updateCampaignAction } from '../actions';
 import { formatRateMilli } from '../../../../server/best-campaign';
 import { CampaignFormView } from '../campaign-form-view';
@@ -228,7 +233,7 @@ export default async function CampaignDetailPage({
     userId: customer.userId,
     permissionKeys: workspace.permissionKeys,
     brandScope: workspace.brandScope,
-    assetIds: tab === 'assets' || tab === 'content' ? usedAssetIds : [],
+    assetIds: tab === 'assets' || tab === 'content' || tab === 'overview' ? usedAssetIds : [],
   });
 
   /*
@@ -253,38 +258,69 @@ export default async function CampaignDetailPage({
             start: new Date(now.getTime() - CHANGE_WINDOW_DAYS * 86_400_000),
             end: now,
           };
-          const [summary, top, changes] = await Promise.all([
-            resultsPeriod
-              ? queries.summary({
-                  scope,
-                  period: resultsPeriod,
-                  brandScope: workspace.brandScope,
-                  metricKeys: HEADLINE_METRICS,
-                })
-              : Promise.resolve(null),
-            tab === 'performance' && resultsPeriod
+          /*
+           * Gate 2b — THE POST RESULTS TABLE (`x.room.posts`): each post's
+           * reach, engagement rate and clicks over the campaign's own dates,
+           * read through the same `topPosts` query the Performance view
+           * uses, one metric at a time. A post with no observation reads "—".
+           */
+          const perPost = (metricKey: string) =>
+            tab === 'overview' && resultsPeriod
               ? queries.topPosts({
                   scope,
                   period: resultsPeriod,
-                  metricKey: 'engagements',
-                  limit: 5,
+                  metricKey,
+                  limit: 50,
                   brandScope: workspace.brandScope,
                 })
-              : Promise.resolve([]),
-            tab === 'performance'
-              ? queries.summary({
-                  scope,
-                  period: changeWindow,
-                  comparison: {
-                    start: new Date(now.getTime() - 2 * CHANGE_WINDOW_DAYS * 86_400_000),
-                    end: changeWindow.start,
-                  },
-                  brandScope: workspace.brandScope,
-                  metricKeys: HEADLINE_METRICS,
-                })
-              : Promise.resolve(null),
-          ]);
-          return { summary, top, changes };
+              : Promise.resolve([]);
+          const [summary, top, changes, reach, engagements, impressions, clicks] =
+            await Promise.all([
+              tab === 'performance' && resultsPeriod
+                ? queries.summary({
+                    scope,
+                    period: resultsPeriod,
+                    brandScope: workspace.brandScope,
+                    metricKeys: HEADLINE_METRICS,
+                  })
+                : Promise.resolve(null),
+              tab === 'performance' && resultsPeriod
+                ? queries.topPosts({
+                    scope,
+                    period: resultsPeriod,
+                    metricKey: 'engagements',
+                    limit: 5,
+                    brandScope: workspace.brandScope,
+                  })
+                : Promise.resolve([]),
+              tab === 'performance'
+                ? queries.summary({
+                    scope,
+                    period: changeWindow,
+                    comparison: {
+                      start: new Date(now.getTime() - 2 * CHANGE_WINDOW_DAYS * 86_400_000),
+                      end: changeWindow.start,
+                    },
+                    brandScope: workspace.brandScope,
+                    metricKeys: HEADLINE_METRICS,
+                  })
+                : Promise.resolve(null),
+              perPost('reach'),
+              perPost('engagements'),
+              perPost('impressions'),
+              perPost('clicks'),
+            ]);
+          return {
+            summary,
+            top,
+            changes,
+            posts: {
+              reach: sumByPost(reach),
+              engagements: sumByPost(engagements),
+              impressions: sumByPost(impressions),
+              clicks: sumByPost(clicks),
+            },
+          };
         } catch {
           return null;
         }
@@ -293,29 +329,38 @@ export default async function CampaignDetailPage({
 
   /* D-298 — the shared contextual timeline: the campaign and its posts. */
   const activity =
-    tab === 'activity' || tab === 'overview'
+    tab === 'activity'
       ? await activityTimeline({
           locale,
           workspace,
           userId: customer.userId,
           resourceIds: [campaign.id, ...itemIds],
-          take: tab === 'activity' ? 50 : 5,
+          take: 50,
         })
       : [];
 
   const brief = briefFrom(campaign.brief);
   const dictionary = dictionaryFor(messageLocale) as Readonly<Record<string, string | undefined>>;
-  const numberFormat = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+  const numberFormat = new Intl.NumberFormat('en-US', {
     numberingSystem: 'latn',
   });
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const dateFormat = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const dateFormat = {
+    format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()),
+  };
   const byStatus = (status: string) => items.filter((item) => item.status === status).length;
   const published = byStatus('PUBLISHED') + byStatus('PARTIALLY_PUBLISHED');
-  const waiting = byStatus('IN_REVIEW');
-  const nextSlot = room.slots.find(
-    (slot) => slot.scheduledAtUtc.getTime() > now.getTime() && slot.status !== 'PUBLISHED',
-  );
+  /* The post results' order: by the post's date on the calendar, undated last. */
+  const postRows = items
+    .map((item) => ({
+      item,
+      slot: room.slots.find((slot) => slot.contentItemId === item.id) ?? null,
+    }))
+    .sort(
+      (a, b) =>
+        (a.slot?.scheduledAtUtc.getTime() ?? Number.POSITIVE_INFINITY) -
+        (b.slot?.scheduledAtUtc.getTime() ?? Number.POSITIVE_INFINITY),
+    );
   const titleOf = (itemId: string) => items.find((item) => item.id === itemId)?.title ?? '—';
   const pick = (value: unknown) => {
     const text = value as { en?: string; ar?: string } | null;
@@ -401,7 +446,7 @@ export default async function CampaignDetailPage({
   const writePost = (
     <Link
       href={`/${locale}/content/compose?campaign=${campaign.id}`}
-      style={buttonStyle('brand')}
+      className={buttonClass('brand')}
       data-testid="campaign-write-post"
     >
       {t('campaigns.contentEmptyAction')}
@@ -414,8 +459,10 @@ export default async function CampaignDetailPage({
       brandContext={brandContext}
       locale={locale}
       eyebrow={t('nav.group.plan')}
-      heading={campaign.name}
-      description={objectiveLabel(t, campaign.objective)}
+      // Gate 2b — the room sits under the Campaigns screen's own head, as the
+      // prototype's (`x.campRoom` is inside the campaigns screen); the name is the room's head.
+      heading={t('campaigns.title')}
+      description={t('campaigns.subtitle')}
       activePath="/campaigns"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -538,9 +585,53 @@ export default async function CampaignDetailPage({
                 {t('content.create')}
               </Link>
             ) : null}
+            {/*
+              Gate 2b — the room's other views, behind "⋯": the prototype draws
+              the room as one page, and these are the product's.
+            */}
+            <MoreDisclosure
+              label={t('campaigns.room.tabs')}
+              testId="campaign-more"
+              align="end"
+              closeOnPick
+            >
+              <nav className="bsp-room-menu" aria-label={t('campaigns.room.tabs')}>
+                {(['content', 'calendar', 'assets', 'performance', 'activity'] as const).map(
+                  (id) => (
+                    <Link
+                      key={id}
+                      href={tabHref(id)}
+                      className="bsp-btn bsp-sm bsp-ghost"
+                      data-testid={
+                        id === 'activity' ? 'campaign-all-activity' : `campaign-view-${id}`
+                      }
+                    >
+                      {t(`campaigns.room.tab.${id}` as MessageKey)}
+                      {id === 'content' ? (
+                        <span className="bsp-ltr"> · {numberFormat.format(items.length)}</span>
+                      ) : null}
+                    </Link>
+                  ),
+                )}
+                {/*
+                  Gate 2b review (4f) — the room's notes, one press away under
+                  "⋯" rather than a chip on the page; a link to one thread
+                  (`?thread=`) still opens them directly.
+                */}
+                {workspace.permissionKeys.includes(NOTE_PERMISSION) ? (
+                  <Link
+                    href={`/${locale}/campaigns/${campaign.id}?notes=1#campaign-notes`}
+                    className="bsp-btn bsp-sm bsp-ghost"
+                    data-testid="campaign-view-notes"
+                  >
+                    {t('notes.title')}
+                  </Link>
+                ) : null}
+              </nav>
+            </MoreDisclosure>
           </div>
         </section>
-        {brief.en !== '' || brief.ar !== '' ? (
+        {tab === 'overview' && (brief.en !== '' || brief.ar !== '') ? (
           /* The prototype's notes block (`x.room.notes`): the campaign's brief. */
           <div className="bsp-room-notes">
             <span className="bsp-room-notes-l">{t('campaigns.brief')}</span>
@@ -554,133 +645,163 @@ export default async function CampaignDetailPage({
           </div>
         ) : null}
 
-        <LinkTabs
-          label={t('campaigns.room.tabs')}
-          testId="campaign-tabs"
-          currentId={tab}
-          tabs={TABS.filter(
-            // ACTIVITY IS A FOOTNOTE, NOT A DESTINATION (D-306 §24): its latest
-            // entries sit in the Overview, and the full trail stays one link
-            // away at `?tab=activity` — a tab only while it is the one open.
-            (id) => id !== 'activity' || tab === 'activity',
-          ).map((id) => ({
-            id,
-            href: tabHref(id),
-            label: t(`campaigns.room.tab.${id}` as MessageKey),
-            ...(id === 'content' ? { badge: numberFormat.format(items.length) } : {}),
-          }))}
-        />
+        {/*
+          Gate 2b — THE ROOM IS ONE PAGE (`Main.dc.html` lines 1207–1235). The
+          product's other views of the campaign (its content by status, its
+          calendar, its files, its performance and its activity) are behind the
+          head's "⋯"; once one is open, this strip moves between them and back.
+        */}
+        {tab !== 'overview' ? (
+          <LinkTabs
+            label={t('campaigns.room.tabs')}
+            testId="campaign-tabs"
+            currentId={tab}
+            tabs={TABS.filter(
+              // ACTIVITY IS A FOOTNOTE, NOT A DESTINATION (D-306 §24): a tab
+              // only while it is the one open.
+              (id) => id !== 'activity' || tab === 'activity',
+            ).map((id) => ({
+              id,
+              href: tabHref(id),
+              label: t(`campaigns.room.tab.${id}` as MessageKey),
+              ...(id === 'content' ? { badge: numberFormat.format(items.length) } : {}),
+            }))}
+          />
+        ) : null}
 
         {/* ------------------------------------------------- overview --- */}
         {tab === 'overview' ? (
           <>
-            <div
-              style={{
-                display: 'grid',
-                gap: spacingTokens.md,
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(15rem, 100%), 1fr))',
-              }}
-            >
-              <Card title={t('campaigns.room.progress')} testId="campaign-progress">
-                <p style={{ margin: 0, ...typographyTokens.body }}>
-                  {t('campaigns.room.publishedOf')
-                    .replace('{published}', numberFormat.format(published))
-                    .replace('{total}', numberFormat.format(items.length))}
-                </p>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: spacingTokens['3xs'],
-                    marginBlockStart: spacingTokens.xs,
-                  }}
+            {/*
+              "Linked to" (`x.room.kL.linked`): the objective, and the strategy
+              it came from when it came from one. The prototype's goal card
+              beside it (a KPI with a target and the expected pace) is left
+              out: a campaign stores no target. Its pillar and Brand Brain
+              facts are left out too: a campaign stores neither.
+            */}
+            <section className="bsp-xcard bsp-room-linked" data-testid="campaign-linked">
+              <span className="bsp-room-k">{t('campaigns.room.linked')}</span>
+              {campaign.strategyInsightId && workspace.permissionKeys.includes('strategy.read') ? (
+                <Link
+                  href={`/${locale}/strategy`}
+                  className="bsp-room-obj"
+                  data-testid="campaign-linked-strategy"
                 >
-                  {(['DRAFT', 'IN_REVIEW', 'APPROVED', 'SCHEDULED'] as const)
-                    .filter((status) => byStatus(status) > 0)
-                    .map((status) => (
-                      <StatusBadge
-                        key={status}
-                        tone={statusTone(status)}
-                        label={`${contentStatusLabel(t, status)} · ${numberFormat.format(byStatus(status))}`}
-                      />
-                    ))}
+                  <span className="bsp-room-obj-l">{t('campaigns.room.strategyObjective')}</span>
+                  <span className="bsp-room-obj-t">{objectiveLabel(t, campaign.objective)}</span>
+                </Link>
+              ) : (
+                <div className="bsp-room-obj">
+                  <span className="bsp-room-obj-l">{t('campaigns.room.objective')}</span>
+                  <span className="bsp-room-obj-t">{objectiveLabel(t, campaign.objective)}</span>
                 </div>
-              </Card>
-              <Card title={t('campaigns.room.waiting')} testId="campaign-waiting">
-                <p style={{ margin: 0, ...typographyTokens.body }}>
-                  {waiting === 0
-                    ? t('campaigns.room.waitingNone')
-                    : t('campaigns.room.waitingSome').replace(
-                        '{count}',
-                        numberFormat.format(waiting),
-                      )}
-                </p>
-                {waiting > 0 ? (
-                  <Link
-                    href={tabHref('content', { status: 'IN_REVIEW' })}
-                    style={{ ...typographyTokens.label, color: colorTokens.brandPurple }}
-                  >
-                    {t('campaigns.room.open')}
-                  </Link>
-                ) : null}
-              </Card>
-              <Card title={t('campaigns.room.next')} testId="campaign-next">
-                {nextSlot ? (
-                  <p style={{ margin: 0, ...typographyTokens.body }}>
-                    <Link
-                      href={`/${locale}/content/compose?item=${nextSlot.contentItemId}`}
-                      style={{ color: colorTokens.brandPurple, fontWeight: 600 }}
-                    >
-                      {titleOf(nextSlot.contentItemId)}
-                    </Link>{' '}
-                    · {dateFormat.format(nextSlot.scheduledAtUtc)} UTC
-                  </p>
-                ) : (
-                  <p
-                    style={{
-                      margin: 0,
-                      ...typographyTokens.body,
-                      color: colorTokens.textSecondary,
-                    }}
-                  >
-                    {t('campaigns.room.nextNone')}
-                  </p>
-                )}
-              </Card>
-            </div>
-
-            <section>
-              <SectionHeader title={t('campaigns.performance')} />
-              {metricsBlock}
+              )}
             </section>
 
-            {items.length === 0 ? (
-              <StateMessage
-                kind="empty"
-                title={t('campaigns.contentTitle')}
-                description={t('campaigns.contentEmpty')}
-                testId="campaign-content-empty"
-                action={writePost}
-              />
+            {campaign.status === 'PAUSED' ? (
+              /*
+               * The paused banner (`t.heldBanner`), saying what pausing does
+               * HERE: nothing holds a paused campaign's posts, so the line is
+               * the product's own, not the prototype's "won't publish".
+               */
+              <div className="bsp-room-held" data-testid="campaign-paused-banner">
+                {t('automations.pauseNote')}
+              </div>
             ) : null}
 
-            {activity.length > 0 ? (
-              <Card
-                title={t('campaigns.room.recentActivity')}
-                testId="campaign-recent-activity"
-                actions={
-                  <Link
-                    href={tabHref('activity')}
-                    data-testid="campaign-all-activity"
-                    style={{ ...typographyTokens.caption, color: colorTokens.brandPurplePressed }}
-                  >
-                    {t('campaigns.room.allActivity')}
-                  </Link>
-                }
-              >
-                <ActivityTimeline entries={activity} />
-              </Card>
-            ) : null}
+            {/*
+              Post results (`x.room.posts`): every post filed under the
+              campaign, by date, with its reach, engagement rate and clicks
+              over the campaign's dates, and its status.
+            */}
+            <section className="bsp-xcard bsp-room-posts" data-testid="campaign-posts">
+              <div className="bsp-room-row bsp-room-phead">
+                <span className="bsp-room-grow">{t('campaigns.room.postResults')}</span>
+                <span className="bsp-room-n bsp-room-n-r">{t('campaigns.metric.reach')}</span>
+                <span className="bsp-room-n bsp-room-n-e">{t('campaigns.room.colEng')}</span>
+                <span className="bsp-room-n bsp-room-n-c">{t('campaigns.metric.clicks')}</span>
+                <span className="bsp-room-st" />
+              </div>
+              {postRows.length === 0 ? (
+                <div className="bsp-room-row bsp-room-none" data-testid="campaign-content-empty">
+                  {t('campaigns.room.noPosts')}
+                </div>
+              ) : (
+                postRows.map(({ item, slot }) => {
+                  const picture = media.get(item.variants[0]?.assetIds[0] ?? '');
+                  const figures = performance?.posts;
+                  const reach = figures?.reach.get(item.id);
+                  const engaged = figures?.engagements.get(item.id);
+                  const seen = figures?.impressions.get(item.id);
+                  const clicked = figures?.clicks.get(item.id);
+                  return (
+                    <Link
+                      key={item.id}
+                      href={`/${locale}/content/compose?item=${item.id}`}
+                      className="bsp-room-row"
+                      data-testid={`campaign-post-${item.id}`}
+                    >
+                      <span className="bsp-room-art" aria-hidden="true">
+                        {picture?.previewToken && picture.kind !== 'VIDEO' ? (
+                          <AssetMedia
+                            src={`/${locale}/assets/file/${picture.previewToken}`}
+                            alt=""
+                          />
+                        ) : (
+                          <AbstractMedia seed={(item.id.charCodeAt(0) % 6) as MediaSeed} alt="" />
+                        )}
+                      </span>
+                      <span className="bsp-room-grow bsp-room-pt">
+                        <span className="bsp-room-pt-t" dir="auto">
+                          {item.title}
+                        </span>
+                        <span className="bsp-room-pt-m">
+                          {[
+                            [...new Set(item.variants.map((variant) => variant.platformKey))]
+                              .map(
+                                (key) =>
+                                  optionalMessage(
+                                    messageLocale,
+                                    `content.platform.${key.toLowerCase()}`,
+                                  ) ?? key,
+                              )
+                              .join(' · '),
+                            slot ? dateFormat.format(slot.scheduledAtUtc) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </span>
+                      <span
+                        className="bsp-ltr bsp-room-n bsp-room-n-r"
+                        title={t('campaigns.metric.reach')}
+                      >
+                        {reach === undefined ? '—' : shortCount(reach)}
+                      </span>
+                      <span
+                        className="bsp-ltr bsp-room-n bsp-room-n-e"
+                        title={t('campaigns.room.colEng')}
+                      >
+                        {engaged === undefined || !seen
+                          ? '—'
+                          : formatRateMilli(BigInt(Math.round((engaged * 1000) / seen)), locale)}
+                      </span>
+                      <span
+                        className="bsp-ltr bsp-room-n bsp-room-n-c"
+                        title={t('campaigns.metric.clicks')}
+                      >
+                        {clicked === undefined ? '—' : numberFormat.format(clicked)}
+                      </span>
+                      <span
+                        className={`bsp-pill bsp-room-st ${POST_PILL[item.status] ?? 'bsp-p-neu'}`}
+                      >
+                        {contentStatusLabel(t, item.status)}
+                      </span>
+                    </Link>
+                  );
+                })
+              )}
+            </section>
 
             {/*
               THE CONVERSATION LIVES IN THE ROOM (P6-05) — contextual, never a
@@ -690,10 +811,12 @@ export default async function CampaignDetailPage({
               a compact disclosure, as on Brand Brain; a link to one thread
               (`?thread=`) opens it.
             */}
-            {workspace.permissionKeys.includes(NOTE_PERMISSION) ? (
+            {workspace.permissionKeys.includes(NOTE_PERMISSION) &&
+            (query['notes'] === '1' || typeof query['thread'] === 'string') ? (
               <details
+                id="campaign-notes"
                 className="bsp-bb-notes"
-                open={typeof query['thread'] === 'string'}
+                open
                 data-testid="campaign-notes"
               >
                 <summary className="bsp-chip bsp-fdis-chip">{t('notes.title')}</summary>
@@ -761,7 +884,7 @@ export default async function CampaignDetailPage({
                       </p>
                       <button
                         type="submit"
-                        style={buttonStyle('neutral')}
+                        className={buttonClass('neutral')}
                         data-testid="campaign-archive"
                       >
                         {t('campaigns.archive')}
@@ -921,7 +1044,8 @@ export default async function CampaignDetailPage({
             )}
             <Link
               href={`/${locale}/calendar?campaign=${campaign.id}`}
-              style={{ ...buttonStyle('neutral'), marginBlockStart: spacingTokens.sm }}
+              className={buttonClass('neutral')}
+              style={{ marginBlockStart: spacingTokens.sm }}
               data-testid="campaign-open-calendar"
             >
               {t('campaigns.room.openCalendar')}
@@ -1162,6 +1286,30 @@ const ROOM_PILL: Readonly<Record<string, string>> = {
   ARCHIVED: 'bsp-p-neu',
 };
 
+/** A post's status pill: the prototype's scheduled / draft / review / published / failed. */
+const POST_PILL: Readonly<Record<string, string>> = {
+  DRAFT: 'bsp-p-neu',
+  IN_REVIEW: 'bsp-p-warn',
+  CHANGES_REQUESTED: 'bsp-p-warn',
+  APPROVED: 'bsp-p-info',
+  SCHEDULED: 'bsp-p-info',
+  PUBLISHING: 'bsp-p-info',
+  PUBLISHED: 'bsp-p-ok',
+  PARTIALLY_PUBLISHED: 'bsp-p-warn',
+  FAILED: 'bsp-p-bad',
+};
+
+/** One post's figure across the channels it went to. */
+function sumByPost(
+  rows: readonly { readonly contentItemId: string; readonly value: bigint }[],
+): ReadonlyMap<string, number> {
+  const sums = new Map<string, number>();
+  for (const row of rows) {
+    sums.set(row.contentItemId, (sums.get(row.contentItemId) ?? 0) + Number(row.value));
+  }
+  return sums;
+}
+
 function endsInLabel(days: number, locale: string, t: (key: MessageKey) => string): string {
   if (days === 0) return t('campaigns.endsToday');
   const category = new Intl.PluralRules(locale === 'ar' ? 'ar' : 'en').select(days);
@@ -1172,6 +1320,6 @@ function endsInLabel(days: number, locale: string, t: (key: MessageKey) => strin
   ) as MessageKey;
   return t(key).replace(
     '{count}',
-    new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', { numberingSystem: 'latn' }).format(days),
+    new Intl.NumberFormat('en-US', { numberingSystem: 'latn' }).format(days),
   );
 }

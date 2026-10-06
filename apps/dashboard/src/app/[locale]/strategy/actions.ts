@@ -45,10 +45,11 @@ export async function generateStrategyAction(formData: FormData): Promise<void> 
   });
 
   if (!response.ok) {
-    redirect(`/${locale}/strategy?brand=${brandId}&error=${codeFrom(response.payload)}`);
+    redirect(`/${locale}/strategy?brand=${brandId}&view=next&error=${codeFrom(response.payload)}`);
   }
   revalidatePath(`/${locale}/strategy`);
-  redirect(`/${locale}/strategy?brand=${brandId}&ok=STRATEGY_PROPOSED`);
+  // Gate 2b — back to "Next strategy", where the new draft is.
+  redirect(`/${locale}/strategy?brand=${brandId}&view=next&ok=STRATEGY_PROPOSED`);
 }
 
 export async function reviewInsightAction(formData: FormData): Promise<void> {
@@ -59,11 +60,14 @@ export async function reviewInsightAction(formData: FormData): Promise<void> {
 
   const response = await callPhase7Api('/v1/insights/review', { insightId, decision });
   if (!response.ok) {
-    redirect(`/${locale}/strategy?error=${codeFrom(response.payload)}`);
+    redirect(`/${locale}/strategy?view=next&error=${codeFrom(response.payload)}`);
   }
   revalidatePath(`/${locale}/strategy`);
+  // An accepted draft is this strategy now; a dismissed one leaves the others.
   redirect(
-    `/${locale}/strategy?ok=${decision === 'accept' ? 'INSIGHT_ACCEPTED' : 'INSIGHT_DISMISSED'}`,
+    decision === 'accept'
+      ? `/${locale}/strategy?ok=INSIGHT_ACCEPTED`
+      : `/${locale}/strategy?view=next&ok=INSIGHT_DISMISSED`,
   );
 }
 
@@ -82,10 +86,10 @@ export async function proposeLearningsAction(formData: FormData): Promise<void> 
 
   const response = await callPhase7Api('/v1/insights/learnings', { insightId });
   if (!response.ok) {
-    redirect(`/${locale}/strategy?error=${codeFrom(response.payload)}`);
+    redirect(`/${locale}/strategy?view=next&error=${codeFrom(response.payload)}`);
   }
   revalidatePath(`/${locale}/strategy`);
-  redirect(`/${locale}/strategy?ok=LEARNINGS_PROPOSED`);
+  redirect(`/${locale}/strategy?view=next&ok=LEARNINGS_PROPOSED`);
 }
 
 /**

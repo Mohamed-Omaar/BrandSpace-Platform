@@ -6,7 +6,6 @@ import { localizedFrom } from '@brandspace/brand-brain';
 import { brandIdQueryFilter, mayReadCreditBalance, systemClock } from '@brandspace/shared';
 import { dayLabel } from '../../../server/prototype-dates';
 import { countPublishedPosts, detectAnomalies } from '@brandspace/analytics';
-import { MILLI_PER_CREDIT } from '@brandspace/entitlements';
 import { inWorkspace, requireWorkspace } from '../../../server/customer-context';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
@@ -30,6 +29,8 @@ import {
 import {
   compactCount,
   deltaText,
+  comparableChange,
+  homeCreditGrant,
   homeKindFor,
   setupChecklistFacts,
   sparkPath,
@@ -251,7 +252,7 @@ export default async function OverviewPage({
         })
       : { noticedPreferences: [], noticedWorkflows: [] };
   const weekdayName = (day: number) =>
-    new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+    new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
       weekday: 'long',
       timeZone: 'UTC',
     }).format(new Date(Date.UTC(2023, 0, 1 + day)));
@@ -354,11 +355,15 @@ export default async function OverviewPage({
   const reach = maySeeAnalytics
     ? await inAnalytics(workspace.workspaceId, async (services) => {
         const queries = await services.queries();
-        const [summary, series] = await Promise.all([
+        const previous28 = {
+          start: new Date(last28.start.getTime() - 28 * DAY),
+          end: last28.start,
+        };
+        const [summary, series, previousSeries] = await Promise.all([
           queries.summary({
             scope: brandId ? { brandId } : {},
             period: last28,
-            comparison: { start: new Date(last28.start.getTime() - 28 * DAY), end: last28.start },
+            comparison: previous28,
             brandScope: workspace.brandScope,
             metricKeys: ['reach'],
           }),
@@ -368,32 +373,78 @@ export default async function OverviewPage({
             metricKey: 'reach',
             brandScope: workspace.brandScope,
           }),
+          queries.series({
+            scope: brandId ? { brandId } : {},
+            period: previous28,
+            metricKey: 'reach',
+            brandScope: workspace.brandScope,
+          }),
         ]);
         const metric = summary.metrics.find((entry) => entry.metricKey === 'reach');
         return {
           value:
             metric?.value === null || metric?.value === undefined ? null : Number(metric.value),
-          changeMilli: metric?.changeMilli ?? null,
+          // Round 4 (4.5): "—" unless the previous 28 days were measured from their first day.
+          changeMilli: comparableChange(
+            metric?.changeMilli ?? null,
+            previousSeries.points.map((point) =>
+              point.value === null ? null : Number(point.value),
+            ),
+          ),
           points: series.points.map((point) => (point.value === null ? null : Number(point.value))),
         };
       }).catch(() => null)
     : null;
 
   /* ---------------------------------------------------------------- AI credits */
+  /*
+   * ROUND 4 (4.6) — "n · of N · resets D", AND THE BAR, THE SAME FIGURE AS
+   * BILLING. The balance is the ledger service's own `wallet()` — the call
+   * Billing's balance reads — so the two can never disagree; N is the monthly
+   * grant the subscription is PINNED to (`pinnedMonthlyCredits`, what the
+   * period reset grants), else the plan catalogue's; D is the wallet's next
+   * reset, else the subscription's renewal (or trial end), the date Billing
+   * states as "Renews". Nothing is computed that the accounting does not
+   * already hold. Review of 2a: the catalogue lookup alone missed a plan the
+   * catalogue does not list, and the card lost "of N" and its bar.
+   *
+   * A workspace with no subscription has no monthly grant: the card shows
+   * the balance and "No plan", with no bar (there is no N to measure against).
+   */
   const credits = mayReadCredits
-    ? await inWorkspace(workspace.workspaceId, async ({ db, entitlements }) => {
-        const wallet = await db.creditWallet.findUnique({
-          where: { workspaceId: workspace.workspaceId },
-          select: { balanceMilliCredits: true, nextResetAt: true },
-        });
+    ? await inWorkspace(workspace.workspaceId, async ({ db, entitlements, credits: ledger }) => {
+        const [wallet, row, subscription] = await Promise.all([
+          ledger.wallet(workspace.workspaceId),
+          db.creditWallet.findUnique({
+            where: { workspaceId: workspace.workspaceId },
+            select: { nextResetAt: true },
+          }),
+          db.workspaceSubscription.findUnique({
+            where: { workspaceId: workspace.workspaceId },
+            select: {
+              status: true,
+              currentPeriodEnd: true,
+              trialEndsAt: true,
+              pinnedMonthlyCredits: true,
+            },
+          }),
+        ]);
         const context = await entitlements.contextFor(workspace.workspaceId).catch(() => null);
         const plan = context?.planKey
-          ? (await entitlements.plans().catch(() => [])).find((row) => row.key === context.planKey)
+          ? (await entitlements.plans().catch(() => [])).find(
+              (entry) => entry.key === context.planKey,
+            )
           : undefined;
+        const renews = subscription
+          ? subscription.status === 'TRIALING'
+            ? subscription.trialEndsAt
+            : subscription.currentPeriodEnd
+          : null;
         return {
-          balance: wallet ? Number(wallet.balanceMilliCredits / MILLI_PER_CREDIT) : 0,
-          monthly: plan && plan.monthlyCredits > 0 ? plan.monthlyCredits : null,
-          resetsAt: wallet?.nextResetAt ?? null,
+          balance: wallet.balanceCredits,
+          monthly: homeCreditGrant(subscription, plan?.monthlyCredits),
+          planned: subscription !== null,
+          resetsAt: row?.nextResetAt ?? renews ?? null,
         };
       }).catch(() => null)
     : null;
@@ -952,11 +1003,13 @@ export default async function OverviewPage({
                       })
                     : credits.monthly !== null
                       ? fill('home.p.kCredSubTotal', { total: integer(credits.monthly) })
-                      : credits.resetsAt
-                        ? fill('home.p.kCredSubReset', {
-                            date: dayLabel(credits.resetsAt, locale, timeZone, now),
-                          })
-                        : ''
+                      : !credits.planned
+                        ? t('ws.noPlan')
+                        : credits.resetsAt
+                          ? fill('home.p.kCredSubReset', {
+                              date: dayLabel(credits.resetsAt, locale, timeZone, now),
+                            })
+                          : ''
                 }
                 bar={
                   credits.monthly !== null

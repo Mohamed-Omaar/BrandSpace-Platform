@@ -189,9 +189,27 @@ async function ensureBrandWithKnowledge(page: Page, locale = 'en'): Promise<void
  */
 async function compose(page: Page, brief: string): Promise<void> {
   await page.getByTestId('content-brief').fill(brief);
-  await page.getByTestId('content-caption').fill(brief);
   const channel = page.getByTestId('content-channel').first();
   if ((await channel.getAttribute('aria-pressed')) !== 'true') await channel.click();
+}
+
+/**
+ * ROUND 4 (3.1) — THE WORDS MAKE THE DRAFT. The Studio saves as the person
+ * types: a pause after the caption creates the draft and the composer reopens
+ * on it (`?item=`). So the caption is written LAST, after every answer the
+ * draft should carry, and only by the tests that mean to make a draft — a
+ * generation test writes the brief and leaves the caption to the model.
+ */
+async function writeCaption(page: Page, body: string): Promise<void> {
+  await page.getByTestId('content-caption').fill(body);
+}
+
+/** Wait for the autosave to create the draft, returning its id. */
+async function awaitDraft(page: Page): Promise<string> {
+  await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+  const itemId = new URL(page.url()).searchParams.get('item') ?? '';
+  expect(itemId).not.toBe('');
+  return itemId;
 }
 
 test.describe('the content library', () => {
@@ -465,11 +483,11 @@ test.describe('writing a post by hand', () => {
     await openComposer(page);
     const body = `A post a person wrote, at ${new Date().toISOString()}.`;
     await compose(page, body);
+    await writeCaption(page, body);
 
-    await page.getByTestId('content-write-manual').click();
-
-    // The composer reopens ON the new draft, which is what `?item=` means.
-    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+    // No button: the pause after the words saves them (Round 4, 3.1). The
+    // composer reopens ON the new draft, which is what `?item=` means.
+    await awaitDraft(page);
     await expect(page.getByTestId('content-results')).toContainText(body);
   });
 
@@ -514,9 +532,10 @@ test.describe('writing a post by hand', () => {
      * selector happens to exist" — which is a test that passes when the feature
      * is missing. It has its own suite below, with its own fixtures, where the
      * selector is REQUIRED rather than tolerated.
+     *
+     * Round 4 (3.1): the caption above is what makes the draft, after a pause.
      */
-    await page.getByTestId('content-write-manual').click();
-    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+    await awaitDraft(page);
 
     // ONE VARIANT PER CHANNEL, and the words on both.
     const variants = page.getByTestId('content-variant');
@@ -583,19 +602,10 @@ test.describe('writing a post by hand', () => {
       await openComposer(page);
       const body = `Written by hand, decorated afterwards, at ${new Date().toISOString()}.`;
       await compose(page, body);
-      await page.getByTestId('content-write-manual').click();
-      await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+      await writeCaption(page, body);
+      await awaitDraft(page);
 
-      /*
-       * REOPEN THE DRAFT ON A CLEAN URL BEFORE EDITING IT.
-       *
-       * `createManualDraftAction` redirects to `?item=…&ok=SAVED`, and so does
-       * `saveVariantAction` — the same marker. So a wait for `ok=SAVED` after
-       * the edit matches the URL the CREATE already left behind and returns
-       * before the edit has run, which is how this test came to read the row
-       * before anything had been written to it. Dropping the marker first makes
-       * the later wait mean what it says.
-       */
+      // REOPEN THE DRAFT ON A CLEAN URL BEFORE EDITING IT — from the server.
       const draftId = new URL(page.url()).searchParams.get('item') ?? '';
       expect(draftId).not.toBe('');
       await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${draftId}`);
@@ -617,18 +627,17 @@ test.describe('writing a post by hand', () => {
       // The field still holds what was typed at the moment of submission.
       await expect(hashtags).toHaveValue('#launch #autumn');
       await expect(variant.locator('input[name="hashtags"]')).toHaveValue('#launch #autumn');
+      // Round 4 (3.1): a tag still being typed waits for "Add" — then it saves.
+      await page.getByTestId(`content-hashtags-add-${platformKey}`).click();
 
       /*
-       * WAIT FOR THE SAVE, NOT FOR THE URL TO STILL HAVE `item` IN IT. The
-       * composer is already on `?item=…`, so a predicate that only checks for
-       * that matches the CURRENT page and returns before the action has run —
-       * which is how the first version of this test read the row back before
-       * anything had been written to it. `ok=SAVED` is what the action redirects
-       * to, so it is the thing that says the save finished.
+       * WAIT FOR THE SAVE. Round 4 (3.1): the edit saves itself after a pause,
+       * and the bar says so — "Saved just now" is the line the save writes
+       * when it has finished, so it is the thing that says the row is written.
        */
-      await openStudioMore(page);
-      await page.getByTestId(`editor-save-${platformKey}`).click();
-      await page.waitForURL((url) => url.searchParams.get('ok') === 'SAVED', { timeout: 60_000 });
+      await expect(page.getByTestId(`editor-saved-${platformKey}`)).toHaveText('Saved just now', {
+        timeout: 60_000,
+      });
 
       // THE ROW FIRST — if the save did not happen, say so here rather than
       // three assertions later in a sentence about rendering.
@@ -659,28 +668,48 @@ test.describe('writing a post by hand', () => {
     }
   });
 
-  test('A SECOND PRESS RETURNS THE SAME DRAFT rather than making another', async ({ page }) => {
+  /**
+   * ROUND 4 (3.1) — ONE VISIT IS ONE DRAFT.
+   *
+   * There is no button to press twice any more: the words save themselves, and
+   * so do Design, When and a hashtag. Every one of those in a single visit is
+   * the SAME logical action — its idempotency key is the visit's — so a pause
+   * and a click racing each other still make ONE item. A NEW visit is a new
+   * post, even with the same words: the person opened the Studio again.
+   */
+  test('ONE VISIT MAKES ONE DRAFT, however many things ask for it', async ({ page }) => {
+    const creds = credentials();
+    const itemsWith = async (body: string): Promise<string[]> =>
+      withPlatformPrisma(async (prisma) => {
+        const rows = await prisma.contentVariant.findMany({
+          where: { workspaceId: creds.customer.workspaceId, body },
+          select: { contentItemId: true },
+          distinct: ['contentItemId'],
+        });
+        return rows.map((row) => row.contentItemId);
+      });
+
     await openComposer(page);
-    const body = `Written once, submitted twice, at ${new Date().toISOString()}.`;
+    const body = `Written once, asked for twice, at ${new Date().toISOString()}.`;
     await compose(page, body);
+    await writeCaption(page, body);
+    // The When chip asks for the draft too, racing the pause after the words.
+    await page.getByTestId('composer-bar-when').click();
+    const first = await awaitDraft(page);
+    expect(await itemsWith(body)).toStrictEqual([first]);
 
-    await page.getByTestId('content-write-manual').click();
-    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
-    const first = new URL(page.url()).searchParams.get('item');
-
-    /*
-     * BACK, THEN PRESS AGAIN. The idempotency key is derived from the brand,
-     * the words, the channels and the language — not from the click — so the
-     * second press is the SAME logical action and must return the first draft.
-     * A key minted per click would make this a second item, and a customer who
-     * double-submitted would find two copies of one post in their library.
-     */
+    // OPENING AND LEAVING MAKES NOTHING: a visit with no words is no draft.
     await openComposer(page);
     await compose(page, body);
-    await page.getByTestId('content-write-manual').click();
-    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
+    await page.waitForTimeout(2_000);
+    expect(new URL(page.url()).searchParams.has('item')).toBe(false);
+    expect(await itemsWith(body)).toStrictEqual([first]);
 
-    expect(new URL(page.url()).searchParams.get('item')).toBe(first);
+    // A NEW VISIT WITH THE SAME WORDS IS ITS OWN POST.
+    await writeCaption(page, body);
+    const second = await awaitDraft(page);
+    expect(second).not.toBe(first);
+    expect((await itemsWith(body)).sort()).toStrictEqual([first, second].sort());
   });
 });
 
@@ -762,13 +791,14 @@ test.describe('filing a manual post under a campaign', () => {
     });
   }
 
-  /** Fill the composer and press the no-AI button, returning the new item id. */
-  async function writeManualPost(page: Page, body: string): Promise<string> {
-    await page.getByTestId('content-write-manual').click();
-    await page.waitForURL((url) => url.searchParams.has('item'), { timeout: 60_000 });
-    const itemId = new URL(page.url()).searchParams.get('item') ?? '';
-    expect(itemId, body).not.toBe('');
-    return itemId;
+  /**
+   * Write the caption LAST and wait for the draft it makes (Round 4, 3.1),
+   * returning the new item id. Every other answer — brand, channel, campaign —
+   * is chosen before this, because the pause after the words is the save.
+   */
+  async function writeManualPost(page: Page, label: string): Promise<string> {
+    await writeCaption(page, `${label}, at ${new Date().toISOString()}.`);
+    return awaitDraft(page);
   }
 
   test('A — with a brand on the rail, the selector is there and the choice is stored', async ({
@@ -825,11 +855,17 @@ test.describe('filing a manual post under a campaign', () => {
     // NOTHING DOWNSTREAM OF A BRAND IS OFFERED YET.
     await expect(page.getByTestId('content-manual-campaign')).toHaveCount(0);
 
-    // AND NOTHING THAT NEEDS A BRAND CAN BE PRESSED, even with words written.
+    // AND NOTHING THAT NEEDS A BRAND CAN BE PRESSED, even with words written —
+    // and the words do not make a draft (Round 4, 3.1) until there is a brand.
     await compose(page, `Written before a brand was chosen, at ${new Date().toISOString()}.`);
-    await expect(page.getByTestId('content-write-manual')).toBeDisabled();
+    await writeCaption(page, `Written before a brand was chosen, at ${new Date().toISOString()}.`);
+    await expect(page.getByTestId('composer-bar-when')).toBeDisabled();
     await expect(page.getByTestId('content-generate')).toBeDisabled();
     await expect(page.getByTestId('content-estimate')).toBeDisabled();
+    await page.waitForTimeout(2_000);
+    expect(new URL(page.url()).searchParams.has('item')).toBe(false);
+    // Cleared, so choosing the brand below does not save before the campaign.
+    await writeCaption(page, '');
 
     // NOW CHOOSE THE FIRST BRAND — the one a silent guess would have taken.
     await brandSelect.selectOption(primaryBrandId);
@@ -839,7 +875,7 @@ test.describe('filing a manual post under a campaign', () => {
     const selector = page.getByTestId('content-manual-campaign');
     await expect(selector).toBeVisible();
     await expect(selector.locator('option', { hasText: PRIMARY_CAMPAIGN })).toHaveCount(1);
-    await expect(page.getByTestId('content-write-manual')).toBeEnabled();
+    await expect(page.getByTestId('composer-bar-when')).toBeEnabled();
 
     await selector.selectOption({ label: PRIMARY_CAMPAIGN });
     const itemId = await writeManualPost(page, 'first brand');
@@ -908,8 +944,13 @@ test.describe('filing a manual post under a campaign', () => {
      * generation endpoint never receives.
      */
     expect(await generateButton.getAttribute('data-generation-key')).toBe(generationBefore);
-    // … while the MANUAL key did move, because for that ask it is a real change.
-    expect(await manualKey.inputValue()).not.toBe(manualBefore);
+    /*
+     * … and the MANUAL key is the VISIT's (Round 4, 3.1): the draft is made
+     * once per visit by the words themselves, so nothing exists yet that a
+     * changed campaign could replay — the campaign travels in the same form.
+     */
+    expect(await manualKey.inputValue()).toBe(manualBefore);
+    expect(manualBefore).toMatch(/^ui-manual:visit:/);
 
     // AND TOUCHING THE SELECTOR SPENT NOTHING. No request, no credit.
     expect(await countRequests()).toBe(requestsBefore);
@@ -1026,20 +1067,23 @@ test.describe('filing a manual post under a campaign', () => {
       option.value = id;
       option.textContent = 'crafted';
       select.appendChild(option);
-      select.value = id;
     }, campaignId);
+    // Chosen through the control's own change event, so the composer holds it.
+    await page.getByTestId('content-manual-campaign').selectOption(campaignId);
 
     const before = await withPlatformPrisma(async (prisma) =>
       prisma.contentItem.count({ where: { workspaceId: creds.customer.workspaceId } }),
     );
-    await page.getByTestId('content-write-manual').click();
+    await writeCaption(page, `Crafted, at ${new Date().toISOString()}.`);
     /*
      * REFUSED, AND NAMED AS A MISS. `NOT_FOUND` is the code a campaign in
      * another brand gets, so the refusal does not confirm that a campaign by
-     * that id exists.
+     * that id exists. Round 4 (3.1): the save is in place, so the refusal is
+     * the composer's failure line rather than an `?error=` redirect.
      */
-    await page.waitForURL((url) => url.searchParams.has('error'), { timeout: 60_000 });
-    expect(new URL(page.url()).searchParams.get('error')).toBe('NOT_FOUND');
+    await expect(page.getByTestId('content-failure')).toHaveAttribute('data-code', 'NOT_FOUND', {
+      timeout: 60_000,
+    });
     expect(new URL(page.url()).searchParams.has('item')).toBe(false);
     const after = await withPlatformPrisma(async (prisma) =>
       prisma.contentItem.count({ where: { workspaceId: creds.customer.workspaceId } }),
@@ -1048,20 +1092,28 @@ test.describe('filing a manual post under a campaign', () => {
     expect(after).toBe(before);
   });
 
-  test('E — the same post filed the same way twice is one draft', async ({ page }) => {
+  test('E — a post filed in one visit is one draft, however many things save it', async ({
+    page,
+  }) => {
+    const creds = credentials();
     await signIn(page);
     await openComposer(page);
-    const body = `Filed once, submitted twice, at ${new Date().toISOString()}.`;
+    const body = `Filed once, saved twice, at ${new Date().toISOString()}.`;
     await compose(page, body);
     await page.getByTestId('content-manual-campaign').selectOption({ label: PRIMARY_CAMPAIGN });
-    const first = await writeManualPost(page, 'first');
+    await writeCaption(page, body);
+    // The When chip saves too, racing the pause after the words: one visit, one key.
+    await page.getByTestId('composer-bar-when').click();
+    const first = await awaitDraft(page);
 
-    await openComposer(page);
-    await compose(page, body);
-    await page.getByTestId('content-manual-campaign').selectOption({ label: PRIMARY_CAMPAIGN });
-    const second = await writeManualPost(page, 'second');
-
-    expect(second).toBe(first);
+    const items = await withPlatformPrisma(async (prisma) =>
+      prisma.contentVariant.findMany({
+        where: { workspaceId: creds.customer.workspaceId, body },
+        select: { contentItemId: true },
+        distinct: ['contentItemId'],
+      }),
+    );
+    expect(items.map((row) => row.contentItemId)).toStrictEqual([first]);
     expect(await storedCampaignName(first)).toBe(PRIMARY_CAMPAIGN);
   });
 
@@ -1226,6 +1278,8 @@ test.describe('the retention control (D-117)', () => {
     // Review of #67 — retention is Settings → Data, as the prototype states it.
     await page.goto(`${DASHBOARD_BASE_URL}/en/settings/data`);
     await page.waitForLoadState('domcontentloaded');
+    // Gate 2b review (4c) — the retention control is behind Data's "More".
+    await page.getByTestId('data-more').locator('summary').click();
 
     const field = page.getByTestId('retention-days');
     await expect(field).toBeVisible();

@@ -98,7 +98,7 @@ test.beforeAll(async () => {
 test.describe('D-293 · analytics tells the story first', () => {
   test('What changed, Why and What we can try follow the metrics', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?range=90`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?range=90&view=insights`);
 
     const changed = page.getByTestId('analytics-what-changed');
     await expect(changed).toContainText(CHANGE);
@@ -111,31 +111,23 @@ test.describe('D-293 · analytics tells the story first', () => {
     await expect(attempt).toContainText('evidence 1');
     await expect(attempt).not.toContainText('e1');
 
-    // Review of #67 — the numbers come first, as the prototype's Numbers tab
-    // opens on the KPI cards, and the story follows them; the export sits in
-    // the head row (D-468).
-    const order = await page.evaluate(() => {
-      const at = (id: string) => document.querySelector(`[data-testid="${id}"]`);
-      const story = at('analytics-what-changed');
-      const metric = document.querySelector('[data-testid^="analytics-metric-"]');
-      const exported = at('analytics-export');
-      const head = at('analytics-filters');
-      const before = (a: Element | null, b: Element | null) =>
-        !!a && !!b && !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-      return {
-        metricsFirst: before(metric, story),
-        exportInHead: exported ? !!head && head.contains(exported) : true,
-      };
-    });
-    expect(order.metricsFirst).toBe(true);
-    expect(order.exportInHead).toBe(true);
+    // Round 4 (5.6) — the prototype's Numbers tab draws only the numbers: the
+    // story is on the Insights tab beside it, and the export stays in the head row.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?range=90`);
+    await expect(page.locator('[data-testid^="analytics-metric-"]').first()).toBeVisible();
+    await expect(page.getByTestId('analytics-what-changed')).toHaveCount(0);
+    if ((await page.getByTestId('analytics-export').count()) > 0) {
+      await expect(
+        page.getByTestId('analytics-filters').getByTestId('analytics-export'),
+      ).toHaveCount(1);
+    }
   });
 
   test('View evidence opens the one finding, with its period, scope and the loop', async ({
     page,
   }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?range=90`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/analytics?range=90&view=insights`);
     await page.getByTestId('analytics-try-0').getByRole('link').click();
     await page.waitForURL(new RegExp(`/en/intelligence\\?insight=${insightId}`));
     const card = page.getByTestId(`intelligence-${insightId}`);
@@ -150,7 +142,7 @@ test.describe('D-293 · analytics tells the story first', () => {
 
   test('is clean under axe in Arabic', async ({ page }) => {
     await signIn(page, 'ar');
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/analytics?range=90`);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/analytics?range=90&view=insights`);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     await expect(page.getByTestId('analytics-what-changed')).toBeVisible();
     const results = await new AxeBuilder({ page })

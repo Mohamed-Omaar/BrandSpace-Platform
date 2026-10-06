@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { buttonStyle, inputStyle, tdStyle, thStyle, typographyTokens } from '@brandspace/ui';
+import { inputStyle, tdStyle, thStyle, typographyTokens } from '@brandspace/ui';
 
 /**
  * The customer surfaces' shared style constants.
@@ -25,8 +25,6 @@ export const customerTableStyle = (): CSSProperties => ({
 });
 export const customerThStyle = thStyle;
 export const customerTdStyle = tdStyle;
-export const customerButtonStyle = (): CSSProperties => buttonStyle('primary');
-export const customerSecondaryButtonStyle = (): CSSProperties => buttonStyle('neutral');
 export const customerInputStyle = (): CSSProperties => ({
   ...inputStyle(),
   maxInlineSize: '24rem',

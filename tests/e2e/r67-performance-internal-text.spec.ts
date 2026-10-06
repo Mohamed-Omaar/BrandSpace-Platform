@@ -66,7 +66,9 @@ test.describe('review of #67 · Performance shows prose, never the evidence reco
       await enter(page, own.slug, locale);
 
       // Performance: the real sentence is there; the record is not, anywhere.
-      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/analytics?brand=${own.brandId}&range=90`);
+      await page.goto(
+        `${DASHBOARD_BASE_URL}/${locale}/analytics?brand=${own.brandId}&range=90&view=insights`,
+      );
       await expect(page.getByTestId('analytics-why')).toContainText(SENTENCE);
       const performance = await page.locator('main').innerText();
       expect(performance).not.toContain('unit=');

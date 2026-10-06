@@ -29,6 +29,10 @@ export function InlineSchedule({
   disabled,
   action,
   t,
+  initial = null,
+  hidden = {},
+  submitLabel,
+  testId = 'editor-schedule-inline',
 }: {
   readonly locale: string;
   readonly itemId: string;
@@ -42,16 +46,30 @@ export function InlineSchedule({
   readonly disabled: boolean;
   readonly action: (formData: FormData) => Promise<void>;
   readonly t: Record<string, string>;
+  /** Round 4 (3.3) — a post already on the calendar starts from its own time. */
+  readonly initial?: { readonly date: string; readonly time: string } | null;
+  /** Fields the action needs beyond the post (a reschedule's slot and return). */
+  readonly hidden?: Readonly<Record<string, string>>;
+  readonly submitLabel?: string | undefined;
+  /** A reschedule is its own form: `editor-reschedule-inline`. */
+  readonly testId?: string;
 }) {
   const id = useId();
-  const firstDate = plannedDate && plannedDate >= today ? plannedDate : tomorrow;
+  const firstDate = initial
+    ? initial.date
+    : plannedDate && plannedDate >= today
+      ? plannedDate
+      : tomorrow;
   const [date, setDate] = useState(firstDate);
-  const [time, setTime] = useState(firstDate === today ? '' : defaultTime);
+  const [time, setTime] = useState(initial ? initial.time : firstDate === today ? '' : defaultTime);
 
   return (
-    <form action={action} className="bsp-st-when-form" data-testid="editor-schedule-inline">
+    <form action={action} className="bsp-st-when-form" data-testid={testId}>
       <input type="hidden" name="locale" value={locale} />
       <input type="hidden" name="contentItemId" value={itemId} />
+      {Object.entries(hidden).map(([name, value]) => (
+        <input key={name} type="hidden" name={name} value={value} />
+      ))}
       <div className="bsp-st-when-grid">
         <label className="bsp-st-when-field" htmlFor={`${id}-date`}>
           <span>{t['editor.schedule.date']}</span>
@@ -107,7 +125,7 @@ export function InlineSchedule({
           disabled={disabled}
           data-testid="editor-schedule-submit"
         >
-          {t['editor.schedule.submit']}
+          {submitLabel ?? t['editor.schedule.submit']}
         </button>
       </div>
     </form>

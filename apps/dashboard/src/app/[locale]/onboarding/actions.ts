@@ -258,3 +258,49 @@ export async function reviewSetupCandidateAction(formData: FormData): Promise<vo
   revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);
 }
+
+/**
+ * ROUND 4 (4.3) — "ACCEPT ALL", THE PROTOTYPE'S BUTTON OVER THE FACTS.
+ *
+ * Not a new acceptance model: it is the per-fact "Accept" above, applied to
+ * each fact on screen in turn — the same permission (`brand_brain.review`),
+ * the same `applyCandidateReview`, the same setup rule and the same audit,
+ * one review per fact. Each is its own transaction, so a fact somebody else
+ * already decided stops the run with that fact's own refusal and leaves the
+ * ones before it accepted, exactly as pressing them one by one would.
+ */
+export async function acceptAllSetupCandidatesAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand_brain.review');
+    const ids = [...new Set(formData.getAll('candidateId').map(String))].slice(0, 100);
+    const actor = {
+      userId: session.customer.userId,
+      permissionKeys: session.workspace.permissionKeys,
+      brandScope: session.workspace.brandScope,
+    };
+    for (const candidateId of ids) {
+      const one = new FormData();
+      one.set('candidateId', candidateId);
+      one.set('decision', 'accept');
+      const parsed = reviewCandidateInputFrom(one);
+      await inBrandBrain(session.workspace.workspaceId, async ({ db, knowledge, policy }) =>
+        applyCandidateReview(
+          knowledge,
+          parsed,
+          actor,
+          (await policy()).staleness,
+          await setupReviewInProgress(db, parsed.candidateId, actor.brandScope),
+        ),
+      );
+    }
+    destination = pageUrl(locale, 'review', { ok: 'CANDIDATE_ACCEPTED' });
+  } catch (error: unknown) {
+    unstable_rethrow(error);
+    destination = failure(locale, 'review', error, 'review-candidate');
+  }
+  revalidatePath(`/${locale}/onboarding`);
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}

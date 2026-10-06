@@ -65,9 +65,8 @@ async function signUpVerifyAndSignIn(page: Page): Promise<string> {
   await page.fill('#name', 'Security Settings');
   await page.fill('#email', email);
   await page.fill('#password', PASSWORD);
-  await page.fill('#password-confirm', PASSWORD);
-  await page.fill('#timezone', 'Europe/London');
-  await page.press('#timezone', 'Enter');
+  // Round 4 (4.1): no zone question — the browser's zone is posted.
+  await expect(page.getByTestId('signup-timezone')).not.toHaveValue('');
   await page.check('[data-testid="accept-terms-of-service"] input[type="checkbox"]');
   await page.click('[data-testid="signup-submit"]');
   await expect(page.locator('[data-testid="signup-sent"]')).toBeVisible();

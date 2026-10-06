@@ -34,6 +34,22 @@ function failed(locale: string, error: unknown, what: string): string {
   return `/${locale}${PAGE}?error=${actionErrorCode(error)}&ref=${correlationId}`;
 }
 
+/*
+ * Gate 2b review (4d) — the templates are their own view of the page
+ * (`?templates=1`, behind the section's "⋯"): a template action returns there.
+ */
+function inTemplates(destination: string): string {
+  return `${destination}&templates=1`;
+}
+
+function chosenPostTime(formData: FormData): string {
+  const choice = formData.get('defaultPostTimeChoice');
+  if (choice === null || String(choice) === 'other') {
+    return String(formData.get('defaultPostTime') ?? '');
+  }
+  return String(choice);
+}
+
 export async function savePublishingDefaultsAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
@@ -52,7 +68,12 @@ export async function savePublishingDefaultsAction(formData: FormData): Promise<
         {
           brandId: String(formData.get('brandId') ?? ''),
           platformKeys: formData.getAll('platformKeys').map((value) => String(value)),
-          defaultPostTime: String(formData.get('defaultPostTime') ?? ''),
+          /*
+           * Round 4, Gate 2b — the prototype's time choices: a suggested time
+           * chosen as a radio, or "Other" and the time field. The same one
+           * value reaches the same service; an empty one is "no default".
+           */
+          defaultPostTime: chosenPostTime(formData),
           hashtagsInFirstComment: formData.get('hashtagsInFirstComment') === 'on',
         },
       );
@@ -97,9 +118,9 @@ export async function saveTemplateAction(formData: FormData): Promise<void> {
         });
       }
     });
-    destination = done(locale, 'TEMPLATE_SAVED');
+    destination = inTemplates(done(locale, 'TEMPLATE_SAVED'));
   } catch (error: unknown) {
-    destination = failed(locale, error, 'template save');
+    destination = inTemplates(failed(locale, error, 'template save'));
   }
   revalidatePath(`/${locale}${PAGE}`);
   redirect(destination);
@@ -120,9 +141,9 @@ export async function deleteTemplateAction(formData: FormData): Promise<void> {
         },
       }),
     );
-    destination = done(locale, 'TEMPLATE_DELETED');
+    destination = inTemplates(done(locale, 'TEMPLATE_DELETED'));
   } catch (error: unknown) {
-    destination = failed(locale, error, 'template delete');
+    destination = inTemplates(failed(locale, error, 'template delete'));
   }
   revalidatePath(`/${locale}${PAGE}`);
   redirect(destination);
@@ -146,9 +167,9 @@ export async function setDefaultTemplateAction(formData: FormData): Promise<void
         },
       }),
     );
-    destination = done(locale, 'TEMPLATE_DEFAULT_CHANGED');
+    destination = inTemplates(done(locale, 'TEMPLATE_DEFAULT_CHANGED'));
   } catch (error: unknown) {
-    destination = failed(locale, error, 'template default');
+    destination = inTemplates(failed(locale, error, 'template default'));
   }
   revalidatePath(`/${locale}${PAGE}`);
   redirect(destination);

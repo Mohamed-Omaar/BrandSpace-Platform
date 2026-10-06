@@ -127,7 +127,8 @@ describe('B-9 · disconnecting an account takes two deliberate steps', () => {
   const actions = read('apps/dashboard/src/app/[locale]/integrations/actions.ts');
 
   it('the first click only opens the explanation; the second, separate button submits', () => {
-    const block = view.slice(view.indexOf('{mayManage ? (\n                    <details'));
+    // Gate 2b — the Accounts row's disconnect disclosure (the prototype's rows).
+    const block = view.slice(view.indexOf('<details className="bsp-acc-disc">'));
     expect(block).toContain('<summary');
     expect(block).toContain('data-testid={`disconnect-${row.id}`}');
     // The submit lives INSIDE the disclosure, after the explanation.
@@ -137,7 +138,8 @@ describe('B-9 · disconnecting an account takes two deliberate steps', () => {
     expect(block.indexOf("t('integrations.disconnectConfirmBody')")).toBeGreaterThan(form);
     expect(block).toContain('name="intent" value="DISCONNECT"');
     expect(block).toContain('data-testid={`disconnect-confirm-${row.id}`}');
-    expect(block).toContain("buttonStyle('danger')");
+    // The confirm is the prototype's solid red destructive button.
+    expect(block).toContain('bsp-acc-danger');
   });
 
   it('the server refuses a disconnect that did not come through the confirmation', () => {
@@ -174,7 +176,7 @@ describe('B-10 · buying credits is confirmed in the app, with credits and price
 
   it('states the credits and the price the server resolved', () => {
     expect(page).toMatch(
-      /fill\('billing\.packConfirmBody', \{\s*credits: String\(offer\.pack\.credits\),\s*price: show\(offer\.price\),/,
+      /fill\('billing\.packConfirmBody', \{\s*credits: String\(offer\.pack\.credits\),\s*price: price\(offer\.price\),/,
     );
     for (const key of [
       'billing.packConfirmTitle',

@@ -1,7 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { AssetThumb, MediaChip, colorTokens, radiusTokens, spacingTokens } from '@brandspace/ui';
+import {
+  AssetThumb,
+  MediaChip,
+  buttonClass,
+  colorTokens,
+  radiusTokens,
+  spacingTokens,
+} from '@brandspace/ui';
 import { aspectLabel, durationLabel, fill, moveItem } from '../../../../server/composer-editor';
 import type { MediaOptionView } from './media-picker';
 
@@ -264,7 +271,7 @@ export function MediaSlides({
       {disabled ? null : (
         <button
           type="button"
-          className="cs-ghost-button cs-compact"
+          className={buttonClass('neutral', 'sm')}
           disabled={atLimit}
           data-testid={`${testId}-add`}
           onClick={() => onOpenDrawer(null)}

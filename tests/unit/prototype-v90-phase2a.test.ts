@@ -356,9 +356,11 @@ describe('E3 + Q18 · spending credits needs copilot.use as well as the feature 
     expect(composer).toMatch(
       /\{can\.generate \? \(\s*<MoreDisclosure[\s\S]*?data-testid="content-estimate"/,
     );
-    // Writing it yourself spends nothing and stays available.
+    // Writing it yourself spends nothing and stays available. Round 4 (3.1):
+    // the words make the draft themselves, gated on the same facts and never
+    // on a credit permission.
     expect(composer).toContain(
-      "const canWrite = ready && caption.trim() !== '' && !captionTooLong && draft === null;",
+      'const mayCreate = ready && !captionTooLong && draft === null && can.create;',
     );
     const pages: Array<[string, RegExp]> = [
       [
@@ -901,7 +903,9 @@ describe('B8 · the Posts "…" menu, and Q21 · who may file a post under a cam
       expect(source).toContain("formData.get('returnTo') === '/content'");
       // Only ever compared with a literal — never followed as a URL.
       const uses = source.match(/formData\.get\('returnTo'\)[^\n]*/g) ?? [];
-      for (const use of uses) expect(use, file).toMatch(/^formData\.get\('returnTo'\) === '\/\w+'/);
+      // Round 4 (3.3): '/content/compose' (the Studio's own reschedule) is one more literal.
+      for (const use of uses)
+        expect(use, file).toMatch(/^formData\.get\('returnTo'\) === '\/\w+(\/\w+)?'/);
     }
   });
 

@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import type { AutosaveResult } from '../actions';
+import { STUDIO_CARRY_KEY } from './studio-carry';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { SegmentPill, visuallyHiddenStyle } from '@brandspace/ui';
 import { ChannelMark } from '../../calendar/prototype-calendar';
-import { generationKeyFor, manualKeyFor } from './idempotency';
+import { generationKeyFor, visitKeyFor } from './idempotency';
 import type { MediaOptionView } from './media-picker';
 import { CalendarGlyph, DraftEditor, SparkGlyph, type StudioNotes } from './draft-editor';
 import { VariantPreview, previewLabels } from './variant-preview';
@@ -166,6 +168,8 @@ export interface ComposerViewProps {
     defaultLocale?: 'AR' | 'EN';
     /** A10 (Phase 2B-2) — the channels a new post for this brand starts with. */
     defaultPlatformKeys?: readonly string[];
+    /** Review of 2a (6) — scheduling waits for approval: a carried day cannot be kept. */
+    approvalFirst?: boolean;
   }[];
   /**
    * The globally selected brand, or null when the rail is on "All brands".
@@ -191,6 +195,8 @@ export interface ComposerViewProps {
    * checked by the server. Offered on the draft's slides, unsaved.
    */
   readonly carriedMedia?: MediaOptionView | null;
+  /** Round 4 (3.1) — what the Studio opens on: `visual` (Design) or `when`. */
+  readonly openOn?: string | null;
   /** G6 (D-329): the day a ★ holiday chip opened the Studio for, `YYYY-MM-DD`. */
   readonly plannedDate?: string | null;
   /** Q9 (D-332): a channel whose account has expired — "Expired", and what it means. */
@@ -244,6 +250,16 @@ export interface ComposerViewProps {
   /** Item 9 (Phase 2B-2) — a FAILED post: what the Publishing screen would say about it. */
   readonly failed?: { readonly message: string } | null;
   /** B9 / F2 (Phase 2B-2) — today, tomorrow and the default time, for inline scheduling. */
+  /**
+   * Round 4 (3.3) — the publish time as a time: the slot's own wall clock
+   * ("Oct 16 · 09:00") or the ★ day proposed; null when none is set.
+   */
+  readonly publishTime?: {
+    readonly label: string;
+    readonly slotId: string | null;
+    readonly date: string;
+    readonly time: string | null;
+  } | null;
   readonly scheduling?: {
     readonly today: string;
     readonly tomorrow: string;
@@ -308,7 +324,7 @@ export interface ComposerViewProps {
   /** E4 / B2 — a template the reader arrived with (`?template=`), already checked. */
   readonly initialTemplateId?: string;
   readonly actions: {
-    save(formData: FormData): Promise<void>;
+    save(formData: FormData): Promise<void | AutosaveResult>;
     transition(formData: FormData): Promise<void>;
     submitForReview(formData: FormData): Promise<void>;
     cancelReview(formData: FormData): Promise<void>;
@@ -320,6 +336,8 @@ export interface ComposerViewProps {
     duplicate?(formData: FormData): Promise<void>;
     /** B9 (Phase 2B-2) — schedule from the Studio, inline. */
     scheduleFromStudio?(formData: FormData): Promise<void>;
+    /** Round 4 (3.3) — the calendar's own reschedule, for a post already on it. */
+    reschedule?(formData: FormData): Promise<void>;
     /** E4 (Phase 2B-2) — save the open post as a template. */
     saveAsTemplate?(formData: FormData): Promise<void>;
     /** D10 (Phase 2C-3) — "Keep as is" on one changed Brand Brain fact. */
@@ -334,7 +352,7 @@ export interface ComposerViewProps {
      * does not already have, so it goes straight to `ContentLibraryService` —
      * the class that has no gateway and therefore cannot charge a credit.
      */
-    createManualDraft(formData: FormData): Promise<void>;
+    createManualDraft(formData: FormData): Promise<void | AutosaveResult>;
     /**
      * The campaigns a new post could be filed under, for ONE brand.
      *
@@ -390,12 +408,14 @@ export function ComposerView({
   now = 0,
   creativeFormats = [],
   carriedMedia = null,
+  openOn = null,
   plannedDate = null,
   expiredChannels = {},
   notes = null,
   plannedFor = null,
   review = null,
   scheduling = null,
+  publishTime = null,
   failed = null,
 }: ComposerViewProps) {
   const router = useRouter();
@@ -631,10 +651,14 @@ export function ComposerView({
     [ask, generationBrief, draft?.id],
   );
   // The MANUAL ask is the caption, saved word for word.
-  const manualIdempotencyKey = useMemo(
-    () => manualKeyFor({ ...ask, brief: caption }, campaignId),
-    [ask, caption, campaignId],
-  );
+  /*
+   * Round 4 (3.1) — one draft per visit, however many triggers make it.
+   * Minted after mount, so the server's render and the browser's agree; no
+   * draft can be made before then.
+   */
+  const [visitId, setVisitId] = useState('');
+  useEffect(() => setVisitId(crypto.randomUUID()), []);
+  const manualIdempotencyKey = visitId === '' ? '' : visitKeyFor(visitId);
 
   const post = useCallback(
     async (path: string, body: unknown): Promise<Record<string, unknown> | null> => {
@@ -804,8 +828,106 @@ export function ComposerView({
    * second item out of the brief field at that point would be a surprise.
    */
   const captionTooLong = caption.length > maxBriefChars;
-  const canWrite = ready && caption.trim() !== '' && !captionTooLong && draft === null;
   const manualFormId = `${fieldId}-manual`;
+
+  /*
+   * ROUND 4 (3.1, 3.2) — THE DRAFT CREATES ITSELF. The owner's decision:
+   * the first meaningful input — words, a hashtag, opening Design, choosing a
+   * publish time — makes the draft, through the same `createManualDraftAction`
+   * this form posts (the same permission, idempotency key and audit), asked
+   * for an answer instead of a redirect. Opening the Studio and leaving
+   * without input creates nothing. The Studio then opens ON the draft, on
+   * what was asked for, and what was typed while it was being made is
+   * carried across (`STUDIO_CARRY_KEY`) and saved there as the person types.
+   */
+  // A template's own hashtags are applied by the server when none are typed.
+  const [tags, setTags] = useState<readonly string[]>([]);
+  const [tagDraft, setTagDraft] = useState('');
+  const [creating, setCreating] = useState<'idle' | 'saving' | 'failed'>('idle');
+  const [failureCode, setFailureCode] = useState<string | null>(null);
+  const creatingRef = useRef(false);
+  const latestRef = useRef({ caption, tags });
+  latestRef.current = { caption, tags };
+  const mayCreate = ready && !captionTooLong && draft === null && can.create;
+  const createDraft = useCallback(
+    (open: 'words' | 'visual' | 'when' | 'tags') => {
+      if (creatingRef.current || !mayCreate || manualIdempotencyKey === '') return;
+      const form = document.getElementById(manualFormId);
+      if (!(form instanceof HTMLFormElement)) return;
+      const data = new FormData(form);
+      data.set('autosave', '1');
+      creatingRef.current = true;
+      setCreating('saving');
+      setFailure(null);
+      setFailureCode(null);
+      void actions
+        .createManualDraft(data)
+        .then((result) => {
+          if (result && result.ok) {
+            try {
+              window.sessionStorage.setItem(
+                STUDIO_CARRY_KEY,
+                JSON.stringify({ itemId: result.itemId, ...latestRef.current }),
+              );
+            } catch {
+              // Storage refused: what was saved is on the draft already.
+            }
+            const params = new URLSearchParams({ item: result.itemId });
+            if (open !== 'words') params.set('open', open);
+            if (carriedMedia) params.set('attach', carriedMedia.id);
+            if (plannedDate) params.set('date', plannedDate);
+            router.replace(`/${locale}/content/compose?${params.toString()}`);
+            return;
+          }
+          creatingRef.current = false;
+          setCreating('failed');
+          if (result && !result.ok) {
+            setFailureCode(result.code);
+            const key = FAILURE_KEYS[result.code] ?? 'content.error.generic';
+            setFailure(t[key] ?? t['content.error.generic'] ?? '');
+          }
+        })
+        .catch(() => {
+          creatingRef.current = false;
+          setCreating('failed');
+        });
+    },
+    [
+      mayCreate,
+      manualIdempotencyKey,
+      manualFormId,
+      actions,
+      carriedMedia,
+      plannedDate,
+      router,
+      locale,
+      t,
+    ],
+  );
+  /*
+   * Words or a hashtag THE PERSON WROTE: after a pause, so a draft is not made
+   * per keystroke. A template's words are already in the caption when the
+   * page opens, and opening the Studio must create nothing — so the pause
+   * only counts once the person has typed or added a tag themselves.
+   */
+  const [wrote, setWrote] = useState(false);
+  const meaningful = wrote && (caption.trim() !== '' || tags.length > 0);
+  useEffect(() => {
+    if (!meaningful || !mayCreate || creatingRef.current) return undefined;
+    const timer = window.setTimeout(() => createDraft('words'), 900);
+    return () => window.clearTimeout(timer);
+  }, [meaningful, mayCreate, caption, tags, campaignId, createDraft]);
+  const addTag = () => {
+    const added = tagDraft
+      .split(/[\s,]+/)
+      .map((tag) => tag.replace(/^#/, '').trim())
+      .filter((tag) => tag.length > 0 && !tags.includes(tag));
+    if (added.length > 0) {
+      setWrote(true);
+      setTags((current) => [...current, ...added]);
+    }
+    setTagDraft('');
+  };
 
   const chooseFormat = (next: string) => {
     setContentType(next);
@@ -825,7 +947,13 @@ export function ComposerView({
   return (
     <div className="bsp-st-root" data-testid="content-composer">
       {failure ? (
-        <div className="bsp-st-ep" data-tone="failed" role="alert" data-testid="content-failure">
+        <div
+          className="bsp-st-ep"
+          data-tone="failed"
+          role="alert"
+          data-testid="content-failure"
+          data-code={failureCode ?? undefined}
+        >
           <span className="bsp-st-ep-copy">
             <span className="bsp-st-ep-title">{failure}</span>
           </span>
@@ -881,6 +1009,11 @@ export function ComposerView({
                 ?.replace('{name}', plannedFor ?? '')
                 .replace('{date}', plannedDate)}
             </b>
+            {brands.find((brand) => brand.id === brandId)?.approvalFirst ? (
+              <span className="bsp-st-ep-note" data-testid="composer-planned-approval-first">
+                {t['create.plannedNeedsApproval']}
+              </span>
+            ) : null}
           </span>
         </div>
       ) : null}
@@ -901,6 +1034,7 @@ export function ComposerView({
         <DraftEditor
           locale={locale}
           t={t}
+          openOn={openOn}
           draft={draft}
           platforms={platforms}
           campaigns={campaigns}
@@ -918,6 +1052,7 @@ export function ComposerView({
           notes={notes}
           review={review}
           scheduling={scheduling}
+          publishTime={publishTime}
           failed={failed}
           {...(startFrom ? { startFrom } : {})}
           canGenerateMedia={can.generateMedia ?? false}
@@ -992,19 +1127,39 @@ export function ComposerView({
                 data-value={contentType}
               >
                 <SegmentPill selector='[aria-pressed="true"]' />
-                {MAIN_FORMATS.filter((type) => offeredTypes.includes(type)).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    className="bsp-seg-item"
-                    aria-pressed={type === contentType}
-                    data-value={type}
-                    onClick={() => chooseFormat(type)}
-                  >
-                    {t[`content.type.${type}`] ?? type}
-                  </button>
-                ))}
+                {/*
+                  Round 4 (3.4) — ALL FOUR FORMATS, ALWAYS. One no channel of
+                  this brand can publish (the capability registry declares no
+                  post kind for it) is dimmed and says why, never hidden.
+                */}
+                {MAIN_FORMATS.map((type) => {
+                  const able = offeredTypes.includes(type);
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      className="bsp-seg-item"
+                      aria-pressed={type === contentType}
+                      disabled={!able}
+                      data-unavailable={able ? undefined : 'true'}
+                      title={able ? undefined : t['studio.formatUnavailableOne']}
+                      data-value={type}
+                      onClick={() => chooseFormat(type)}
+                    >
+                      {t[`content.type.${type}`] ?? type}
+                    </button>
+                  );
+                })}
               </div>
+              {MAIN_FORMATS.some((type) => !offeredTypes.includes(type)) ? (
+                <span className="bsp-st-hint" data-testid="content-format-unavailable">
+                  {fill(t['studio.formatUnavailable'] ?? '{formats}', {
+                    formats: MAIN_FORMATS.filter((type) => !offeredTypes.includes(type))
+                      .map((type) => t[`content.type.${type}`] ?? type)
+                      .join(t['common.listSeparator'] ?? ', '),
+                  })}
+                </span>
+              ) : null}
               {/* D-300 (§23) — what Generate does differently for a carousel. */}
               {contentType === 'CAROUSEL' ? (
                 <span className="bsp-st-hint" data-testid="carousel-outline-hint">
@@ -1202,22 +1357,26 @@ export function ComposerView({
             */}
             <div className="bsp-st-f bsp-st-f6">
               <span className="bsp-lbl">{t['studio.when']}</span>
-              <span
-                className="bsp-chip bsp-st-wide bsp-st-static"
+              {/* Round 4 (3.2) — choosing a time makes the draft and opens its time. */}
+              <button
+                type="button"
+                className="bsp-chip bsp-st-wide"
                 data-testid="composer-when"
-                title={t['studio.whenAfterSave']}
+                disabled={!mayCreate}
+                title={mayCreate ? undefined : t['content.composer.channelsHint']}
+                onClick={() => createDraft('when')}
               >
                 <span className="bsp-st-when-label">
                   <CalendarGlyph />
                   <span>
-                    {plannedDate ? (
-                      <span className="bsp-ltr">{plannedDate}</span>
+                    {publishTime ? (
+                      <span className="bsp-ltr">{publishTime.label}</span>
                     ) : (
                       t['studio.whenUnset']
                     )}
                   </span>
                 </span>
-              </span>
+              </button>
             </div>
 
             {/*
@@ -1274,7 +1433,11 @@ export function ComposerView({
                   className="bsp-seg-item"
                   aria-selected={editorTab === 'visual'}
                   data-testid="studio-tab-visual"
-                  onClick={() => setEditorTab('visual')}
+                  onClick={() => {
+                    setEditorTab('visual');
+                    // Opening Design makes the draft (3.1): a design belongs to it.
+                    createDraft('visual');
+                  }}
                 >
                   {t['studio.tabVisual']}
                 </button>
@@ -1401,7 +1564,10 @@ export function ComposerView({
                     maxLength={maxBriefChars}
                     placeholder={t['studio.capPlaceholder']}
                     data-testid="content-caption"
-                    onChange={(event) => setCaption(event.target.value)}
+                    onChange={(event) => {
+                      setWrote(true);
+                      setCaption(event.target.value);
+                    }}
                   />
                   <span className="bsp-st-count" data-over={captionTooLong ? 'true' : undefined}>
                     <span className="bsp-ltr">
@@ -1448,23 +1614,89 @@ export function ComposerView({
                     <label className="bsp-st-label" htmlFor={`${fieldId}-tags`}>
                       {t['content.composer.hashtags']}
                     </label>
-                    <span className="bsp-st-tags-count bsp-ltr">0</span>
+                    <span className="bsp-st-tags-count bsp-ltr">{tags.length}</span>
                   </div>
+                  {tags.length > 0 ? (
+                    <div className="bsp-st-chips" data-testid="composer-tag-list">
+                      {tags.map((tag) => (
+                        <span key={tag} className="bsp-chip bsp-st-tag bsp-ltr">
+                          #{tag}
+                          <button
+                            type="button"
+                            className="bsp-st-tag-x"
+                            aria-label={fill(t['studio.tagRemove'] ?? '{tag}', { tag: `#${tag}` })}
+                            onClick={() =>
+                              setTags((current) => current.filter((other) => other !== tag))
+                            }
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {/* Round 4 (3.2) — hashtags on a new post: an added tag makes the draft. */}
                   <div className="bsp-st-tag-add">
                     <input
                       id={`${fieldId}-tags`}
                       className="bsp-st-tag-input"
+                      dir="auto"
+                      value={tagDraft}
                       placeholder={t['studio.tagPlaceholder']}
-                      disabled
-                      aria-describedby={`${fieldId}-tags-hint`}
+                      disabled={!can.create}
+                      data-testid="composer-tag-input"
+                      onChange={(event) => setTagDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          addTag();
+                        }
+                      }}
                     />
-                    <button type="button" className="bsp-btn bsp-sm bsp-sec" disabled>
+                    <button
+                      type="button"
+                      className="bsp-btn bsp-sm bsp-sec"
+                      disabled={tagDraft.trim() === ''}
+                      data-testid="composer-tag-add"
+                      onClick={addTag}
+                    >
                       {t['studio.tagAdd']}
                     </button>
                   </div>
-                  <span className="bsp-st-hint" id={`${fieldId}-tags-hint`}>
-                    {t['studio.tagsAfterSave']}
-                  </span>
+                  {/*
+                    The prototype's hashtag groups: "From Brand Brain" is the
+                    product's hashtag edit, which writes from the brand's
+                    approved facts on a version of the post — choosing it makes
+                    the draft and offers it there. "Trending near you" has no
+                    source in the product and is left out.
+                  */}
+                  {inlineActionsFor(tools).some((action) => action.key === 'hashtags') ? (
+                    <div className="bsp-st-tag-group" data-testid="composer-tags-brain">
+                      <span className="bsp-st-tag-glabel">
+                        {t['studio.tagsFromBrain']}
+                        <span className="bsp-xstatus bsp-ai">AI</span>
+                      </span>
+                      <div className="bsp-st-chips">
+                        <button
+                          type="button"
+                          className="bsp-chip bsp-st-sm"
+                          disabled={!mayCreate}
+                          onClick={() => createDraft('tags')}
+                        >
+                          {t['editor.ai.hashtags']}
+                        </button>
+                      </div>
+                      {/*
+                        Review of 2a (3): the hashtag edit is a paid AI call on a
+                        saved version, so its price can only be quoted once the
+                        draft exists. This button makes the draft (no credit) and
+                        opens it on the hashtags, where the button states its cost.
+                      */}
+                      <span className="bsp-st-hint" data-testid="composer-tags-brain-cost">
+                        {t['studio.tagsCostOnDraft']}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -1484,7 +1716,8 @@ export function ComposerView({
               */}
               <form
                 id={manualFormId}
-                action={actions.createManualDraft}
+                // A post is answered with a redirect; only the autosave reads a result.
+                action={actions.createManualDraft as (formData: FormData) => Promise<void>}
                 data-testid="content-manual-form"
               >
                 <input type="hidden" name="locale" value={locale} />
@@ -1492,6 +1725,13 @@ export function ComposerView({
                 <input type="hidden" name="contentLocale" value={contentLocale} />
                 <input type="hidden" name="contentType" value={contentType} />
                 <input type="hidden" name="body" value={caption} />
+                {tags.length > 0 ? (
+                  <input
+                    type="hidden"
+                    name="hashtags"
+                    value={tags.map((tag) => `#${tag}`).join(' ')}
+                  />
+                ) : null}
                 <input type="hidden" name="idempotencyKey" value={manualIdempotencyKey} />
                 {chosenTemplateId ? (
                   <input type="hidden" name="templateId" value={chosenTemplateId} />
@@ -1568,7 +1808,10 @@ export function ComposerView({
                           type="button"
                           className="bsp-st-adddesign"
                           data-testid="composer-add-design"
-                          onClick={() => setEditorTab('visual')}
+                          onClick={() => {
+                            setEditorTab('visual');
+                            createDraft('visual');
+                          }}
                         >
                           {t['studio.addDesign']}
                         </button>
@@ -1672,7 +1915,14 @@ export function ComposerView({
             <span className="bsp-pill bsp-p-neu" data-testid="composer-status">
               {t['content.status.DRAFT']}
             </span>
-            <span className="bsp-st-saved">{t['studio.notSaved']}</span>
+            {/* Round 4 (3.1) — the prototype's "Saves as you type". */}
+            <span className="bsp-st-saved" data-testid="composer-saved">
+              {creating === 'saving'
+                ? t['studio.saving']
+                : creating === 'failed'
+                  ? t['studio.saveFailed']
+                  : t['studio.autosave']}
+            </span>
             <span className="bsp-st-note">
               {caption.trim() === ''
                 ? t['studio.captionFirst']
@@ -1688,35 +1938,36 @@ export function ComposerView({
               <span className="bsp-st-rev-label">{t['studio.reviewer']}</span>
               <span>{t['studio.reviewerAuto']}</span>
             </span>
-            <span
-              className="bsp-chip bsp-st-static"
-              title={t['studio.whenAfterSave']}
+            <button
+              type="button"
+              className="bsp-chip"
+              disabled={!mayCreate}
+              title={mayCreate ? undefined : t['content.composer.channelsHint']}
               data-testid="composer-bar-when"
+              onClick={() => createDraft('when')}
             >
               <CalendarGlyph />
               <span>
-                {plannedDate ? (
-                  <span className="bsp-ltr">{plannedDate}</span>
+                {publishTime ? (
+                  <span className="bsp-ltr">{publishTime.label}</span>
                 ) : (
                   t['studio.whenUnset']
                 )}
               </span>
-            </span>
+            </button>
             {/*
-              Round 3 — the bar's one primary, where the prototype has "Send
-              for review": a post that does not exist yet cannot be sent, and
-              the product does not save as you type (every save is audited),
-              so the primary here is the save that creates it.
+              Round 4 (3.1) — "Save draft" is gone: the draft saves itself. The
+              bar's one primary is the prototype's "Send for review", disabled
+              until the draft exists (it opens on the draft, where it is live).
             */}
             <button
-              type="submit"
-              form={manualFormId}
-              className="bsp-btn bsp-pur"
-              disabled={!canWrite || busy !== null}
+              type="button"
+              className="bsp-btn"
+              disabled
               title={t['studio.sendAfterSave']}
-              data-testid="content-write-manual"
+              data-testid="composer-send"
             >
-              {t['studio.saveDraft']}
+              {t['content.composer.submit']}
             </button>
             <StudioCopilotButton label={t['topbar.copilot'] ?? ''} />
           </div>

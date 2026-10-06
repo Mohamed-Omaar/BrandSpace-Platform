@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { brandScopeFilter } from '@brandspace/shared';
+import { brandScopeFilter, systemClock } from '@brandspace/shared';
 import {
   SOCIAL_PROVIDERS,
   retryableAfterReconnect as failedOnItsAccount,
@@ -17,6 +17,7 @@ import {
   type MessageKey,
 } from '../../../i18n/messages';
 import { SettingsFrame } from '../../../components/settings-frame';
+import { MoreDisclosure } from '../../../components/more-disclosure';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   IntegrationsView,
@@ -66,6 +67,8 @@ export default async function IntegrationsPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
+  // Gate 2b review (4f) — the publishing history is its own view, behind "⋯".
+  const showHistory = query['history'] === '1';
   const access = await requireWorkspacePage(locale, '/integrations');
   const { messageLocale } = access.session;
   const t = translator(messageLocale);
@@ -147,7 +150,7 @@ export default async function IntegrationsPage({
       : 0;
 
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
-  const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC') };
+  const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()) };
   const stamp = (value: Date | null): string | null => (value ? formatter.format(value) : null);
 
   /*
@@ -374,7 +377,30 @@ export default async function IntegrationsPage({
       customerName={session.customer.name ?? session.customer.email}
       permissionKeys={permissions}
     >
-      <SettingsFrame locale={locale} permissionKeys={permissions} selected="connections">
+      <SettingsFrame
+        brandSource={workspace}
+        locale={locale}
+        permissionKeys={permissions}
+        selected="connections"
+        more={
+          showHistory ? null : (
+            <MoreDisclosure
+              label={t('publishing.title')}
+              testId="integrations-more"
+              align="end"
+              closeOnPick
+            >
+              <Link
+                href={`/${locale}/integrations?history=1`}
+                className="bsp-btn bsp-sm bsp-ghost"
+                data-testid="integrations-more-history"
+              >
+                {t('publishing.title')}
+              </Link>
+            </MoreDisclosure>
+          )
+        }
+      >
         {successText ? <CustomerBanner tone="success">{successText}</CustomerBanner> : null}
         {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
         {retryableAfterReconnect > 0 ? (
@@ -398,6 +424,7 @@ export default async function IntegrationsPage({
         ) : null}
         <IntegrationsView
           locale={locale}
+          showHistory={showHistory}
           t={t}
           connections={connectionRows}
           connectable={connectableProviders}

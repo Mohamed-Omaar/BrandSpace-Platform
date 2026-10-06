@@ -103,9 +103,9 @@ describe('MO4 — segmented pills', () => {
     expect(read('packages/ui/src/composer.tsx')).toContain(
       `<SegmentPill selector='[aria-pressed="true"]' />`,
     );
-    expect(read('apps/dashboard/src/components/notifications-bell.tsx')).toContain(
-      `<SegmentPill selector='[aria-selected="true"]' />`,
-    );
+    // Gate 2b review (4f) — the notification kinds moved from the bell's
+    // popover to the Notifications page, as its `LinkTabs` (the pill above).
+    expect(read('apps/dashboard/src/app/[locale]/notifications/page.tsx')).toContain('<LinkTabs');
   });
 
   it('slides with clip-path only — the width/height exception is MO2’s alone', () => {

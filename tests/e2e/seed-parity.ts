@@ -21,13 +21,17 @@
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { WorkspaceAdminService, hashPassword } from '@brandspace/auth';
-import { CreditLedgerService } from '@brandspace/entitlements';
+import {
+  CreditLedgerService,
+  gigabytesFor,
+  measureStorageBreakdown,
+} from '@brandspace/entitlements';
 import { ConfigurationService } from '@brandspace/config';
 import { withWorkspace } from '@brandspace/database';
 import { createObjectStore } from '@brandspace/storage';
@@ -383,7 +387,13 @@ async function build(
 ): Promise<E2eParityWorkspace> {
   const words = WORDS[lang];
   const slug = `e2e-parity-${lang}-${run}`;
-  const ownerEmail = `e2e-parity-${lang}-${run}@brandspace.test`;
+  /*
+   * Gate 2b review (4i) — initials are Latin in both languages: an Arabic name
+   * has none, so they come from the address, which carries the person's Latin
+   * name as a real address would ("RE", "SN", "OK", as the prototype draws).
+   */
+  const LATIN = { reem: 'reem.essam', sara: 'sara.nabil', omar: 'omar.khaled' } as const;
+  const ownerEmail = `${LATIN.reem}.${lang}-${run}@parity.brandspace.test`;
 
   const platformOwner = await platform.platformUser.findFirstOrThrow({
     where: { deletedAt: null },
@@ -465,7 +475,7 @@ async function build(
   ] as const) {
     const user = await platform.user.create({
       data: {
-        email: `e2e-parity-${lang}-${run}-${key}@brandspace.test`,
+        email: `${LATIN[key]}.${lang}-${run}@parity.brandspace.test`,
         name: words.people[key],
         status: 'ACTIVE',
         emailVerifiedAt: new Date(),
@@ -514,6 +524,11 @@ async function build(
           defaultLocale: lang === 'ar' ? 'AR' : 'EN',
           supportedLocales: ['AR', 'EN'],
           colorPalette: ['#111114', '#FFD60A', '#F3E9D7'],
+          // Gate 2b review — the prototype's publishing defaults (`pc.chans:
+          // ['instagram', 'facebook'], time: '09:00'`), so the pair shows chosen
+          // chips the way the prototype does.
+          defaultPlatformKeys: ['instagram', 'facebook'],
+          defaultPostTime: '09:00',
         },
       });
 
@@ -567,19 +582,25 @@ async function build(
          * reach and impressions with a gentle weekly rhythm, engagements at
          * the channel's rate, and new followers a day. Relative to the seed's
          * own day, so the Performance screen's default period is always full.
+         *
+         * ROUND 4 (4.5) — 56 DAYS, so the previous 28 are complete and Home's
+         * change compares two whole periods. The last 28 days are the same
+         * figures as before (the same formula over the same days). This file
+         * only — the parity fixture, never a customer workspace.
          */
         const [base, rate, followers] = CHANNEL_FIGURES[provider] ?? [300, 3, 2];
         const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
-        for (let back = 28; back >= 1; back -= 1) {
+        for (let back = 56; back >= 1; back -= 1) {
           const periodStart = new Date(today.getTime() - back * DAY);
           const periodEnd = new Date(periodStart.getTime() + DAY);
-          const wave = 1 + 0.18 * Math.sin((28 - back) / 2.2) + (28 - back) * 0.006;
+          const step = 28 - back;
+          const wave = 1 + 0.18 * Math.sin(step / 2.2) + step * 0.006;
           const reach = Math.round(base * wave);
           const readings: ReadonlyArray<readonly [string, number]> = [
             ['reach', reach],
             ['impressions', Math.round(reach * 1.4)],
             ['engagements', Math.round((reach * rate) / 100)],
-            ['follower_change', followers + ((28 - back) % 4)],
+            ['follower_change', followers + (((step % 4) + 4) % 4)],
           ];
           for (const [metricKey, value] of readings) {
             await db.metricObservation.create({
@@ -662,7 +683,76 @@ async function build(
             uploadedByUserId: owner.id,
           },
         });
+        // The version row every upload writes: the storage meter counts the
+        // object through it (B-1), so a picture without one stores nothing.
+        await db.assetVersion.create({
+          data: {
+            workspaceId: workspace.id,
+            brandId: brand.id,
+            assetId: asset.id,
+            versionNumber: 1,
+            storageKey,
+            checksumSha256: createHash('sha256').update(bytes).digest('hex'),
+            mimeType: 'image/png',
+            sizeBytes: bytes.length,
+            width: 720,
+            height: 720,
+            scanStatus: 'CLEAN',
+            createdByUserId: owner.id,
+          },
+        });
         pictures[key] = asset.id;
+      }
+
+      /*
+       * Gate 2b review (4a) — THE BRAND'S LOGO, so Look & voice can be judged:
+       * the prototype's mark (a yellow "R" on ink, `Main.dc.html` line 871) as
+       * one real image, stored the way an upload is and set as the brand's
+       * primary logo (D-193).
+       */
+      {
+        const bytes = readFileSync(new URL('./parity-logo.png', import.meta.url));
+        const storageKey = `parity/${workspace.id}/logo.png`;
+        const checksum = createHash('sha256').update(bytes).digest('hex');
+        await store.put(storageKey, bytes, 'image/png');
+        const logo = await db.asset.create({
+          data: {
+            workspaceId: workspace.id,
+            brandId: brand.id,
+            name: 'reema-logo.png',
+            kind: 'IMAGE',
+            mimeType: 'image/png',
+            sizeBytes: bytes.length,
+            width: 256,
+            height: 256,
+            storageKey,
+            checksumSha256: checksum,
+            status: 'READY',
+            scanStatus: 'CLEAN',
+            scannedAt: new Date(),
+            uploadedByUserId: owner.id,
+          },
+        });
+        await db.assetVersion.create({
+          data: {
+            workspaceId: workspace.id,
+            brandId: brand.id,
+            assetId: logo.id,
+            versionNumber: 1,
+            storageKey,
+            checksumSha256: checksum,
+            mimeType: 'image/png',
+            sizeBytes: bytes.length,
+            width: 256,
+            height: 256,
+            scanStatus: 'CLEAN',
+            createdByUserId: owner.id,
+          },
+        });
+        await db.brand.update({
+          where: { id: brand.id },
+          data: { primaryLogoAssetId: logo.id },
+        });
       }
 
       const postIds: Record<string, string> = {};
@@ -689,6 +779,8 @@ async function build(
         });
         postIds[post.key] = item.id;
         const picture = pictures[post.art];
+        // Gate 2b — the prototype's cover headlines (`c.overlay`), on the first slide.
+        const overlay = OVERLAY[post.key]?.[lang === 'ar' ? 1 : 0];
         const variantIds: Record<string, string> = {};
         for (const platformKey of post.channels) {
           const variant = await db.contentVariant.create({
@@ -712,6 +804,7 @@ async function build(
                         .slice(0, 2),
                     ]
                   : [picture],
+              ...(picture && overlay ? { slides: [{ assetId: picture, headline: overlay }] } : {}),
             },
           });
           variantIds[platformKey] = variant.id;
@@ -736,6 +829,45 @@ async function build(
            * engagements, saves, clicks) a day after it went out — what the
            * Performance screen's posts table, pillars and best time read.
            */
+          /*
+           * Gate 2b review (4h) — THE PUBLISHING LOG READS JOBS. A scheduled
+           * post waits as a pending job per channel and a failed post holds the
+           * failed job the worker recorded, as the product writes them, so the
+           * log's Queue and Failed tabs count what the rail's badge counts.
+           */
+          if (post.status === 'SCHEDULED' || post.status === 'FAILED') {
+            for (const platformKey of post.channels) {
+              const provider = platformKey.toUpperCase() as 'INSTAGRAM' | 'FACEBOOK' | 'TIKTOK';
+              const connection = connectionIds[provider];
+              const variantId = variantIds[platformKey];
+              if (!connection || !variantId) continue;
+              const failed = post.status === 'FAILED';
+              await db.publishJob.create({
+                data: {
+                  workspaceId: workspace.id,
+                  brandId: brand.id,
+                  calendarSlotId: slot.id,
+                  contentItemId: item.id,
+                  contentVariantId: variantId,
+                  socialConnectionId: connection,
+                  provider,
+                  status: failed ? 'FAILED' : 'PENDING',
+                  idempotencyKey: `parity-${lang}-${run}-${post.key}-${platformKey}`,
+                  scheduledAtUtc: when.utc,
+                  maxAttempts: 3,
+                  attemptCount: failed ? 3 : 0,
+                  ...(failed
+                    ? {
+                        completedAt: when.utc,
+                        failureClass: 'MEDIA_INVALID' as const,
+                        failureCode: 'media_invalid',
+                      }
+                    : {}),
+                  createdByUserId: people[post.author],
+                },
+              });
+            }
+          }
           if (post.status === 'PUBLISHED') {
             for (const platformKey of post.channels) {
               const provider = platformKey.toUpperCase() as 'INSTAGRAM' | 'FACEBOOK' | 'TIKTOK';
@@ -924,6 +1056,24 @@ async function build(
           'درجة الرسمية',
           'Warm and casual, never stiff.',
           'ودود وبسيط، من غير تكلّف.',
+        ],
+        // Gate 2b review (4a) — the voice words and one rule, as the
+        // prototype's Voice card draws them.
+        [
+          'TONE_OF_VOICE',
+          'voice.words',
+          'Voice words',
+          'كلمات الأسلوب',
+          'Warm, Simple, Friendly, No exaggeration',
+          'دافئ، بسيط، ودود، بلا مبالغة',
+        ],
+        [
+          'DO_DONT',
+          'do.price',
+          'Say the price',
+          'اذكر السعر',
+          'Say the price whenever a post is about an offer.',
+          'اذكر السعر في كل منشور عن عرض.',
         ],
         [
           'OFFERS',
@@ -1237,14 +1387,25 @@ async function build(
       },
     });
   }
+  /*
+   * The storage counter holds what is actually stored, as the product keeps it
+   * (every upload, delete and purge, and B-1's recompute): the SAME rows the
+   * Media card's categories group. Review of 2a: a counter of 3.1 GB with a few
+   * kilobytes behind it is a state the product cannot reach, and the card's
+   * categories could not add up to it.
+   */
+  const stored = (await measureStorageBreakdown(platform, workspace.id)).reduce(
+    (sum, row) => sum + row.bytes,
+    0n,
+  );
   await platform.usageCounter.create({
     data: {
       workspaceId: workspace.id,
       featureKey: 'limit.storage_gb',
       periodStart: new Date('2000-01-01T00:00:00Z'),
       periodEnd: new Date('2100-01-01T00:00:00Z'),
-      usedValue: 3,
-      usedBytes: BigInt(3_100_000_000),
+      usedValue: gigabytesFor(stored),
+      usedBytes: stored,
     },
   });
 
@@ -1254,8 +1415,91 @@ async function build(
     data: { brandScope: [brandId] },
   });
 
+  /*
+   * GATE 2b — the prototype's strategy (`Main.dc.html` lines 1001–1060), as the
+   * brand's ACCEPTED strategy: the objective, three pillars, the channel mix and
+   * four weeks. Test data for the parity pair only, in this run's own workspace.
+   */
+  const both = (en: string, ar: string) => ({ en, ar });
+  const why = (en: string, ar: string) => ({ evidenceRefs: [], text: both(en, ar) });
+  await platform.insight.create({
+    data: {
+      workspaceId: workspace.id,
+      brandId,
+      type: 'STRATEGY',
+      status: 'ACCEPTED',
+      basis: 'BRAND_CONTEXT',
+      title: both('Strategy', 'الاستراتيجية'),
+      body: {
+        summary: both('More weekday morning visits', 'زيارات صباحية أكثر في أيام الأسبوع'),
+        pillars: [
+          {
+            name: both('Morning coffee', 'قهوة الصباح'),
+            sharePercent: 40,
+            rationale: why(
+              'From Offers · Latte, flat white, cortado',
+              'من العروض · لاتيه وفلات وايت وكورتادو',
+            ),
+          },
+          {
+            name: both('Seasonal offers', 'العروض الموسمية'),
+            sharePercent: 35,
+            rationale: why('From Offers · the autumn menu', 'من العروض · قائمة الخريف'),
+          },
+          {
+            name: both('Behind the bar', 'خلف البار'),
+            sharePercent: 25,
+            rationale: why('From Story · the team and the beans', 'من القصة · الفريق والبن'),
+          },
+        ],
+        channelMix: [
+          {
+            platformKey: 'instagram',
+            sharePercent: 60,
+            rationale: why('Most visits start here.', 'تبدأ معظم الزيارات من هنا.'),
+          },
+          {
+            platformKey: 'tiktok',
+            sharePercent: 25,
+            rationale: why(
+              'Short videos reach new people.',
+              'الفيديوهات القصيرة تصل إلى أشخاص جدد.',
+            ),
+          },
+          {
+            platformKey: 'facebook',
+            sharePercent: 15,
+            rationale: why('Regulars and families.', 'الزبائن الدائمون والعائلات.'),
+          },
+        ],
+        monthlyPlan: [1, 2, 3, 4].map((week) => ({
+          weekNumber: week,
+          theme: [
+            both('Autumn menu launch', 'إطلاق قائمة الخريف'),
+            both('Morning rituals', 'طقوس الصباح'),
+            both('Meet the team', 'تعرّف على الفريق'),
+            both('Weekend brunch', 'برانش نهاية الأسبوع'),
+          ][week - 1],
+          postsPlanned: 3,
+          rationale: why('Built on this month’s goal.', 'مبنية على هدف هذا الشهر.'),
+        })),
+      },
+      periodStart: new Date('2026-10-05T00:00:00Z'),
+      periodEnd: new Date('2027-01-02T00:00:00Z'),
+      reviewedAt: new Date('2026-10-05T08:00:00Z'),
+      idempotencyKey: `e2e-parity-strategy-${lang}-${run}`,
+    },
+  });
+
   return { email: ownerEmail, password, workspaceId: workspace.id, workspaceSlug: slug, brandId };
 }
+
+/** The prototype's cover headlines (`Main.dc.html` line 2502), by post. */
+const OVERLAY: Readonly<Record<string, readonly [string, string]>> = {
+  teaser: ['Autumn offer', 'عرض الخريف'],
+  brunch: ['Brunch is back', 'عودة البرانش'],
+  menuboard: ['Autumn menu', 'قائمة الخريف'],
+};
 
 /** The café industry the parity brands are filed under (round 3, D). */
 const PARITY_INDUSTRY = 'e2e-parity-cafe';
@@ -1329,6 +1573,12 @@ async function seedParityCalendar(platform: PrismaClient): Promise<void> {
           date: `${month}-16`,
           name: { en: 'World Food Day', ar: 'يوم الغذاء العالمي' },
         },
+      ],
+      // Gate 2b review (4d) — the prototype's publish-time chips (09:00, 13:00,
+      // 18:00) are the times the calendar suggests for the workspace's country.
+      suggestedTimes: [
+        ...(content.calendar.suggestedTimes ?? []).filter((row) => row.country !== 'EG'),
+        { country: 'EG', times: ['09:00', '13:00', '18:00'] },
       ],
     },
   });

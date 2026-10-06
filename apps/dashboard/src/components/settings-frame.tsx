@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { settingsNavItems, type SettingsNavKey } from '../server/settings-nav';
 import { translator, type MessageKey } from '../i18n/messages';
 import { requestMessageLocale } from '../server/message-locale';
+import { listAccessibleBrands } from '../server/brand-context';
+import type { BrandContextSource } from '../server/brand-selection';
 
 /**
  * SETTINGS AS ONE PLACE (Phase 6 final, D-277 §3/§44).
@@ -74,23 +76,52 @@ const RELATED: Partial<
   activity: { key: 'security', labelKey: 'security.title' },
 };
 
-export function SettingsFrame({
+export async function SettingsFrame({
   locale,
   permissionKeys,
+  brandSource,
   selected,
+  more,
   children,
 }: {
   readonly locale: string;
   readonly permissionKeys: readonly string[];
+  /** The session's workspace, so the frame can count the brands it may see. */
+  readonly brandSource: BrandContextSource;
   readonly selected: SettingsNavKey;
+  /**
+   * Gate 2b review — a section's "⋯" at the end of its head: where a product
+   * control the prototype does not draw is kept (D-471), e.g. Post templates.
+   */
+  readonly more?: ReactNode;
   readonly children: ReactNode;
 }) {
   const t = translator(requestMessageLocale(locale));
-  const items = settingsNavItems({ locale, permissionKeys, selected });
+  /*
+   * ROUND 4 (4.2) — "BRANDS" ONLY WHEN THERE IS MORE THAN ONE. The owner's
+   * decision: a workspace with exactly one brand has no Brands row. The
+   * capability stays — the route, its permission, and a "Brand profile →"
+   * link on General, the section a one-brand workspace edits it from. Counted
+   * as the member may see them (the same list the brand switcher reads), so
+   * nothing about brands they cannot see is inferred from the menu.
+   */
+  const oneBrand = (await listAccessibleBrands(brandSource).catch(() => [])).length === 1;
+  const items = settingsNavItems({ locale, permissionKeys, selected }).filter(
+    (item) => !(oneBrand && item.key === 'brand' && selected !== 'brand'),
+  );
+  const brandItem = oneBrand
+    ? settingsNavItems({ locale, permissionKeys, selected }).find((item) => item.key === 'brand')
+    : undefined;
   const row = ROW_OF[selected] ?? selected;
   const section = SECTION[selected];
-  const related = RELATED[selected];
-  const relatedItem = related ? items.find((item) => item.key === related.key) : undefined;
+  const related =
+    selected === 'settings' && brandItem
+      ? { key: 'brand' as const, labelKey: 'brand.profile' as MessageKey }
+      : RELATED[selected];
+  const relatedItem = related
+    ? (items.find((item) => item.key === related.key) ??
+      (related.key === 'brand' ? brandItem : undefined))
+    : undefined;
   return (
     <div className="bs-settings-split bsp-sg" data-testid="settings-split">
       <nav aria-label={t('settings.navLabel')} className="bsp-sg-nav" data-testid="settings-nav">
@@ -135,6 +166,7 @@ export function SettingsFrame({
               {t(related.labelKey)} →
             </Link>
           ) : null}
+          {more}
         </div>
         {children}
       </div>

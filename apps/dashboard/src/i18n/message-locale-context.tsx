@@ -4,13 +4,13 @@ import { createContext, useContext, type ReactNode } from 'react';
 import type { MessageLocale } from './messages';
 
 /**
- * THE WORDS OF THIS SCREEN, for client components (D-470).
+ * THE WORDS OF THIS SCREEN, for client components.
  *
- * The workspace shell provides the message locale its request resolved — `ar-EG`
- * for an Arabic reader in an Egyptian workspace — and a client component that
- * translates for itself reads it here. A component outside the shell (sign-in,
- * an error boundary) finds no provider and reads the route locale: formal
- * Arabic, as D-470 asks of every screen before a workspace.
+ * The workspace shell provides the message locale its request resolved, and a
+ * client component that translates for itself reads it here. A component
+ * outside the shell (sign-in, an error boundary) finds no provider and reads
+ * the route locale. Since round 4, Step 6, the two are always the same: one
+ * formal Arabic for every country.
  */
 const MessageLocaleContext = createContext<MessageLocale | null>(null);
 

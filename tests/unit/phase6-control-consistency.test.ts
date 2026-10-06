@@ -216,13 +216,15 @@ describe('P6-02 · the select chevron is the element rule, not a class', () => {
     ).toEqual([]);
   });
 
-  it('withdraws the chevron where the browser draws its own picker icon', () => {
+  it('draws ONE marker where the browser supports a customizable select', () => {
     // THE "TWO DOWN ARROWS" REGRESSION. `appearance: base-select` and
     // `appearance: none` are the same specificity, so the later one wins: the
     // browser drew `::picker-icon` AND the chevron image was still painted
-    // underneath. Inside the @supports block the product's marker stands down.
+    // underneath. Round 4: the prototype's thin chevron is the only marker —
+    // inside the @supports block the browser's `::picker-icon` stands down.
     const block = tokens.slice(tokens.indexOf('@supports (appearance: base-select)'));
-    expect(block).toMatch(/select \{[^}]*background-image: none;/);
+    expect(block).toMatch(/select::picker-icon \{[^}]*display: none;/);
+    expect(block).not.toMatch(/select \{[^}]*background-image: none;/);
   });
 });
 

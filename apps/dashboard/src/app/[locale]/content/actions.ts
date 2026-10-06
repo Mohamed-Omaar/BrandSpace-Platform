@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { notFound, redirect } from 'next/navigation';
+import { notFound, redirect, unstable_rethrow } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
 import { AppError, createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
@@ -16,6 +16,7 @@ import { NOTE_MANAGE_PERMISSION } from '@brandspace/collaboration';
 import { keepFactChange } from '@brandspace/brand-brain';
 import { systemClock } from '@brandspace/shared';
 import { parseContentType } from './content-types';
+import { AUTOSAVE_STATUSES } from './compose/autosave-statuses';
 import {
   requireWorkspace,
   type WorkspaceSession,
@@ -71,6 +72,32 @@ function failure(
   // in the record (docs/SECURITY.md §11).
   log.warn('content action failed', { correlationId, action, ...internalErrorFields(error) });
   return pageUrl(locale, path, { ...extra, error: actionErrorCode(error), ref: correlationId });
+}
+
+/**
+ * ROUND 4 (3.1) — WHAT AN AUTOSAVE HEARS BACK.
+ *
+ * The Studio saves as the person types, through the SAME actions its forms
+ * post: the same permission, the same service call, the same audit event.
+ * Only the answer differs: a form post is redirected (and re-renders the
+ * page); an autosave (`autosave=1`) gets this, so the field being typed in is
+ * never reloaded under the cursor. No new path, no new authority.
+ */
+export type AutosaveResult =
+  | { readonly ok: true; readonly itemId: string; readonly version?: string }
+  | { readonly ok: false; readonly code: string; readonly ref: string };
+
+function isAutosave(formData: FormData): boolean {
+  return formData.get('autosave') === '1';
+}
+
+/** The autosave's failure: logged like `failure()`, answered with the code. */
+function autosaveFailure(error: unknown, action: string): AutosaveResult {
+  // A sign-in or workspace redirect is not a failure to report: let it happen.
+  unstable_rethrow(error);
+  const ref = randomUUID();
+  log.warn('content action failed', { correlationId: ref, action, ...internalErrorFields(error) });
+  return { ok: false, code: actionErrorCode(error), ref };
 }
 
 function actorOf(session: WorkspaceSession) {
@@ -174,7 +201,7 @@ export async function listCampaignOptionsAction(
  * existing one are different authorities; a member who may revise a caption is
  * not thereby a member who may add to the brand's library.
  */
-export async function createManualDraftAction(formData: FormData): Promise<void> {
+export async function createManualDraftAction(formData: FormData): Promise<void | AutosaveResult> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;
   try {
@@ -250,6 +277,10 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
       return created.item.id;
     });
 
+    if (isAutosave(formData)) {
+      revalidatePath(`/${locale}/content`);
+      return { ok: true, itemId };
+    }
     destination = pageUrl(locale, '/compose', {
       item: itemId,
       ok: 'SAVED',
@@ -257,6 +288,7 @@ export async function createManualDraftAction(formData: FormData): Promise<void>
       ...plannedDateParam(formData),
     });
   } catch (error: unknown) {
+    if (isAutosave(formData)) return autosaveFailure(error, 'createManualDraft');
     destination = failure(locale, error, 'createManualDraft', '/compose');
   }
   revalidatePath(`/${locale}/content`);
@@ -286,7 +318,7 @@ function plannedDateParam(formData: FormData): { date?: string } {
 }
 
 /** Save a person's own edit to a caption. No gateway, no credits. */
-export async function saveVariantAction(formData: FormData): Promise<void> {
+export async function saveVariantAction(formData: FormData): Promise<void | AutosaveResult> {
   const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('itemId') ?? '');
   let destination: string;
@@ -340,8 +372,18 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
           }))
         : undefined;
 
-    await inContentStudio(session.workspace.workspaceId, async ({ library }) =>
-      (await library()).editVariant({
+    const saved = await inContentStudio(session.workspace.workspaceId, async ({ library, db }) => {
+      if (isAutosave(formData)) {
+        // Round 4 (3.1): only a post a save changes nothing about saves itself.
+        const row = await db.contentVariant.findFirst({
+          where: { id: variantId },
+          select: { item: { select: { status: true } } },
+        });
+        if (!row || !AUTOSAVE_STATUSES.includes(row.item.status)) {
+          throw new AppError('CONFLICT', 'Only a draft saves as it is typed.');
+        }
+      }
+      return (await library()).editVariant({
         variantId,
         body,
         hashtags,
@@ -353,10 +395,16 @@ export async function saveVariantAction(formData: FormData): Promise<void> {
         ...actorOf(session),
         // Q8 — taken from the session, never the form.
         actorPermissionKeys: session.workspace.permissionKeys,
-      }),
-    );
+      });
+    });
+    if (isAutosave(formData)) {
+      revalidatePath(`/${locale}/content`);
+      // The saved version, so the Studio keeps what was typed since.
+      return { ok: true, itemId, version: saved.updatedAt.toISOString() };
+    }
     destination = pageUrl(locale, '/compose', { item: itemId, ok: 'SAVED' });
   } catch (error: unknown) {
+    if (isAutosave(formData)) return autosaveFailure(error, 'saveVariant');
     destination = failure(locale, error, 'saveVariant', '/compose', { item: itemId });
   }
   revalidatePath(`/${locale}/content`);
@@ -514,10 +562,18 @@ export async function uploadComposerMediaAction(formData: FormData): Promise<voi
       folderId: null,
     });
 
-    destination = pageUrl(locale, '/compose', { item: itemId, ok: 'ASSET_UPLOADED' });
+    // Step 7 (7.2): back on Design, where the upload was made.
+    destination = pageUrl(locale, '/compose', {
+      item: itemId,
+      open: 'visual',
+      ok: 'ASSET_UPLOADED',
+    });
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
-    destination = failure(locale, error, 'uploadComposerMedia', '/compose', { item: itemId });
+    destination = failure(locale, error, 'uploadComposerMedia', '/compose', {
+      item: itemId,
+      open: 'visual',
+    });
   }
   revalidatePath(`/${locale}/content`);
   redirect(destination);

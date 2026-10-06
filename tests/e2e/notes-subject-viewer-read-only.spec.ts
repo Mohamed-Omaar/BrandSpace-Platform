@@ -187,7 +187,12 @@ test.describe('F3 · D-409 — the Viewer sees threads about content only', () =
         .analyze();
       expect(results.violations).toEqual([]);
 
-      // Keyboard only: focus the thread's Open link and follow it to the post.
+      // Keyboard only: choose the thread in the list (Gate 2b — the prototype's
+      // two panes), then focus its Open link and follow it to the post.
+      const row = page.getByTestId(`notes-thread-${threads.content}`);
+      await row.focus();
+      await page.keyboard.press('Enter');
+      await page.waitForURL((url) => url.searchParams.get('thread') === threads.content);
       const open = page.getByTestId(`notes-open-${threads.content}`);
       await open.focus();
       await expect(open).toBeFocused();

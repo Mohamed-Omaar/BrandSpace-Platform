@@ -2,15 +2,9 @@
 
 import Link from 'next/link';
 import { useCallback, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import {
-  SegmentPill,
-  useDismissOnOutsidePointer,
-  useOverlayBehaviour,
-  usePresence,
-} from '@brandspace/ui';
-import type { FeedItem, FeedKind } from '../app/[locale]/notifications/feed';
+import { useDismissOnOutsidePointer, useOverlayBehaviour, usePresence } from '@brandspace/ui';
+import type { FeedItem } from '../app/[locale]/notifications/feed';
 import { markAllNotificationsReadAction } from '../app/[locale]/notifications/actions';
-import { MoreDisclosure } from './more-disclosure';
 
 /**
  * THE BELL OPENS A FEED, NOT A PAGE (Phase 6 final, D-277 §40, D-297) — in the
@@ -23,12 +17,12 @@ import { MoreDisclosure } from './more-disclosure';
  * popover over the current screen and reads the feed then — not on every page
  * render. A modified click, or no script, follows the link.
  *
- * Three tabs (D-297), because volume justifies them: All, Mentions (the Notes
- * that name you), Approvals (reviews waiting on you and outcomes of yours). Each
- * row's title is the link to the exact place, and the whole row answers it.
+ * Gate 2b review (4f) — the whole feed, as the prototype draws it; the title
+ * opens the full Notifications page, where the kinds (D-297: All, Approvals,
+ * and Mentions in Notes) are its tabs. Each row's title is the link to the
+ * exact place, and the whole row answers it.
  * Unread is a word and the purple dot, never colour alone.
  */
-type Tab = 'all' | 'mention' | 'approval';
 
 export function NotificationsBell({
   locale,
@@ -44,12 +38,9 @@ export function NotificationsBell({
   readonly strings: {
     readonly title: string;
     readonly close: string;
-    /** Review of #67 — the prototype's footer and the "⋯" holding the filters. */
+    /** Review of #67 — the prototype's footer. */
     readonly markAll: string;
-    readonly more: string;
-    readonly all: string;
-    readonly mentions: string;
-    readonly approvals: string;
+    /** Gate 2b review (4f) — the title opens the full page: its tooltip. */
     readonly seeAll: string;
     readonly open: string;
     readonly unread: string;
@@ -60,7 +51,6 @@ export function NotificationsBell({
   };
 }) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<Tab>('all');
   const [items, setItems] = useState<readonly FeedItem[] | null>(null);
   const [failed, setFailed] = useState(false);
   const wrapRef = useRef<HTMLSpanElement | null>(null);
@@ -92,12 +82,12 @@ export function NotificationsBell({
     [load, locale, open],
   );
 
-  const shown = (items ?? []).filter((item) => tab === 'all' || item.kind === (tab as FeedKind));
-  const tabs: readonly { key: Tab; label: string }[] = [
-    { key: 'all', label: strings.all },
-    { key: 'mention', label: strings.mentions },
-    { key: 'approval', label: strings.approvals },
-  ];
+  /*
+   * Gate 2b review (4f) — the whole feed, as the prototype draws it. Its kind
+   * filters are on the full Notifications page (its "Approvals" view, and
+   * mentions in Notes), one press away through the popover's title.
+   */
+  const shown = items ?? [];
 
   return (
     <span className="bsp-ntf-wrap" ref={wrapRef}>
@@ -125,40 +115,16 @@ export function NotificationsBell({
             under the "⋯" between them.
           */}
           <div className="bsp-ntf-head">
-            <span>{strings.title}</span>
+            <Link
+              href={href}
+              className="bsp-ntf-title"
+              title={strings.seeAll}
+              data-testid="notifications-see-all"
+              onClick={close}
+            >
+              {strings.title}
+            </Link>
             <span className="bsp-ntf-headacts">
-              <MoreDisclosure
-                label={strings.more}
-                testId="notifications-more"
-                align="end"
-                closeOnPick
-              >
-                <div className="bsp-seg bsp-ntf-tabs" role="tablist" aria-label={strings.title}>
-                  {/* MO4: the chosen tab's pill slides between tabs. */}
-                  <SegmentPill selector='[aria-selected="true"]' />
-                  {tabs.map((entry) => (
-                    <button
-                      key={entry.key}
-                      type="button"
-                      role="tab"
-                      className="bsp-seg-item"
-                      aria-selected={tab === entry.key}
-                      data-testid={`notifications-tab-${entry.key}`}
-                      onClick={() => setTab(entry.key)}
-                    >
-                      {entry.label}
-                    </button>
-                  ))}
-                </div>
-                <Link
-                  href={href}
-                  className="bsp-ntf-seeall"
-                  data-testid="notifications-see-all"
-                  onClick={close}
-                >
-                  {strings.seeAll}
-                </Link>
-              </MoreDisclosure>
               <button type="button" className="bsp-btn bsp-sm bsp-ghost" onClick={close}>
                 {strings.close}
               </button>

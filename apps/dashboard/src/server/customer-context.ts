@@ -248,8 +248,8 @@ export interface WorkspaceSession {
   /** The session token, so a caller can re-derive scope without re-reading. */
   readonly token: string;
   /**
-   * D-470: the words this member reads — the route locale, except that Arabic
-   * follows the workspace's country (`ar-EG` for Egypt). Pass it to
+   * The words this member reads: the route locale's (one Arabic for every
+   * country since round 4, Step 6, which retired D-470's `ar-EG`). Pass it to
    * `translator` / `optionalMessage`; keep the route locale for links, `dir`
    * and number and date formatting.
    */
@@ -312,7 +312,7 @@ export async function requireWorkspace(
   if (workspace.requireMfa && !customer.mfaEnabled) redirect(`/${locale}/mfa-setup`);
 
   if (!holdsEvery(workspace, permissionKey)) notFound();
-  const messageLocale = messageLocaleFor(locale, workspace.country);
+  const messageLocale = messageLocaleFor(locale);
   recordMessageLocale(messageLocale);
   return { customer, workspace, token, messageLocale };
 }

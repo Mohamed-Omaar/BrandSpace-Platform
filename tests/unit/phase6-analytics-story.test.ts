@@ -60,14 +60,18 @@ describe('D-293 · the screens', () => {
    * cards, and its layout wins over D-293's order — the story now follows the
    * figures. Export stays in the head row.
    */
-  it('Analytics puts the metrics before the story, and Export in the head row', () => {
+  it('Analytics draws the story on the Insights tab, and Export in the head row', () => {
+    // Round 4 (5.6): the Numbers tab draws only the numbers; the story leads
+    // the Insights tab (and stays under the numbers for a member who cannot
+    // read insights).
     const story = analytics.indexOf('analytics-what-changed');
     const metrics = analytics.indexOf('analytics-metric-');
     const head = analytics.indexOf('data-testid="analytics-filters"');
     const exported = analytics.lastIndexOf('data-testid="analytics-export"');
     expect(story).toBeGreaterThan(0);
     expect(metrics).toBeGreaterThan(0);
-    expect(metrics).toBeLessThan(story);
+    expect(analytics).toContain('{mayReadInsights ? null : story}');
+    expect(analytics).toMatch(/<>\s*\{story\}/);
     expect(exported).toBeGreaterThan(head);
     expect(exported).toBeLessThan(metrics);
   });

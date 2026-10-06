@@ -1,6 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { takeStudioCarry } from './studio-carry';
+import type { AutosaveResult } from '../actions';
+import { AUTOSAVE_STATUSES } from './autosave-statuses';
 import {
   useEffect,
   useId,
@@ -51,11 +54,14 @@ import type {
  * actions, friendly validation with the fix beside it, the media slides and
  * drawer, review, scheduling inline, templates and archive.
  *
- * NOTHING HERE WRITES WITHOUT A PERSON PRESSING SAVE. There is no background
- * autosave, deliberately: every save is audited, and a save of an APPROVED post
- * revokes its approval — something that must never happen because somebody
- * paused mid-sentence. What the editor does instead is say whether the words on
- * screen are saved, and stop a navigation that would lose them.
+ * ROUND 4 (3.1) — A DRAFT SAVES AS YOU TYPE; NOTHING FURTHER ALONG DOES.
+ * The owner's decision is the prototype's "Saves as you type". It covers the
+ * statuses a save changes nothing about — DRAFT, CHANGES_REQUESTED and FAILED
+ * (`AUTOSAVE_STATUSES`). An APPROVED, IN_REVIEW or SCHEDULED post still waits
+ * for a person pressing Save: a save there revokes an approval, withdraws a
+ * review or unschedules (`revokeApprovalOnEdit`), which must never happen
+ * because somebody paused mid-sentence. Either way the editor says whether the
+ * words on screen are saved, and stops a navigation that would lose them.
  */
 
 /**
@@ -118,6 +124,16 @@ export interface DraftEditorProps {
     readonly tomorrow: string;
     readonly defaultTime: string;
   } | null;
+  /**
+   * Round 4 (3.3) — the publish time as a time: the slot's own wall clock
+   * ("Oct 16 · 09:00") or the ★ day proposed; null when none is set.
+   */
+  readonly publishTime?: {
+    readonly label: string;
+    readonly slotId: string | null;
+    readonly date: string;
+    readonly time: string | null;
+  } | null;
   /** Item 9 — a FAILED post: what the Publishing screen would say about it. */
   readonly failed?: { readonly message: string } | null;
   /** D-288 — the approval policy and a changes request, when there is one. */
@@ -139,13 +155,15 @@ export interface DraftEditorProps {
   readonly canGenerateMedia: boolean;
   /** An image carried from the Creative Studio: on the slides, unsaved. */
   readonly attach?: MediaOptionView | null;
+  /** Round 4 (3.1) — the new-post Studio's ask: open on Design, or on the time. */
+  readonly openOn?: string | null;
   /** G6 (D-329): the ★ day the Studio was opened for; its Schedule link opens there. */
   readonly plannedDate?: string | null;
   readonly onTool: (variantId: string, tool: string, argument?: string) => void;
   /** Review of #67, round 2 — the Studio's "Or start from:" chips, kept on an open post. */
   readonly startFrom?: { readonly idea: string; readonly repurpose: string };
   readonly actions: {
-    save(formData: FormData): Promise<void>;
+    save(formData: FormData): Promise<void | AutosaveResult>;
     transition(formData: FormData): Promise<void>;
     submitForReview(formData: FormData): Promise<void>;
     cancelReview(formData: FormData): Promise<void>;
@@ -155,6 +173,8 @@ export interface DraftEditorProps {
     duplicate?(formData: FormData): Promise<void>;
     /** B9 (Phase 2B-2) — schedule from here, inline. */
     scheduleFromStudio?(formData: FormData): Promise<void>;
+    /** Round 4 (3.3) — the calendar's own reschedule, for a post already on it. */
+    reschedule?(formData: FormData): Promise<void>;
     /** E4 (Phase 2B-2) — save this post as a template. */
     saveAsTemplate?(formData: FormData): Promise<void>;
     /** D10 (Phase 2C-3) — "Keep as is" on one changed fact. */
@@ -164,6 +184,12 @@ export interface DraftEditorProps {
 
 interface LiveVariant {
   readonly version: string;
+  /**
+   * Round 4 (3.1) — the version an autosave started from. Until the page is
+   * re-read the row is still that version, and the words typed since must
+   * stay on screen rather than flick back to the saved row.
+   */
+  readonly basedOn?: string;
   readonly body: string;
   readonly hashtagText: string;
   readonly firstComment: string;
@@ -193,7 +219,9 @@ function liveOf(
   variant: ComposerVariant,
 ): LiveVariant {
   const edit = edits[variant.id];
-  if (edit && edit.version === variant.updatedAt) return edit;
+  if (edit && (edit.version === variant.updatedAt || edit.basedOn === variant.updatedAt)) {
+    return edit;
+  }
   return {
     version: variant.updatedAt,
     body: variant.body,
@@ -222,10 +250,12 @@ export function DraftEditor({
   creativeFormats,
   canGenerateMedia,
   attach = null,
+  openOn = null,
   plannedDate = null,
   expiredChannels = {},
   review = null,
   scheduling = null,
+  publishTime = null,
   failed = null,
   startFrom,
   onTool,
@@ -239,8 +269,10 @@ export function DraftEditor({
   const [compare, setCompare] = useState(false);
   const [toneArgument, setToneArgument] = useState('');
   // The prototype's Words / Design tabs; an image carried in opens on Design.
-  const [tab, setTab] = useState<'words' | 'visual'>(attach ? 'visual' : 'words');
-  const [whenOpen, setWhenOpen] = useState(false);
+  const [tab, setTab] = useState<'words' | 'visual'>(
+    attach || openOn === 'visual' ? 'visual' : 'words',
+  );
+  const [whenOpen, setWhenOpen] = useState(openOn === 'when');
   /*
    * WHICH "WHEN" OPENED THE PUBLISH-TIME PANEL — the settings card's chip or
    * the bar's (review of #67, round 2). One panel, drawn under the chip that
@@ -251,6 +283,25 @@ export function DraftEditor({
     setWhenOpen((open) => (whenAt === at ? !open : true));
     setWhenAt(at);
   };
+  /*
+   * Step 7 (7.2) — THE PANEL IS A DIALOG, SO ESCAPE CLOSES IT, and focus goes
+   * back to the "When" that opened it (WCAG 2.1.2). It stayed open over the
+   * Words / Design tabs.
+   */
+  useEffect(() => {
+    if (!whenOpen) return undefined;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setWhenOpen(false);
+      document
+        .querySelector<HTMLElement>(
+          `[data-testid="${whenAt === 'bar' ? 'editor-bar-when' : 'editor-when'}"]`,
+        )
+        ?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [whenOpen, whenAt]);
 
   /*
    * WHAT IS ON SCREEN, PER VARIANT. Keyed by the variant's `updatedAt`, so a
@@ -274,6 +325,34 @@ export function DraftEditor({
   });
   const live = (variant: ComposerVariant): LiveVariant => liveOf(edits, variant);
   /*
+   * ROUND 4 (3.1) — WHAT WAS TYPED WHILE THIS DRAFT WAS BEING MADE, from the
+   * new-post Studio, once: it becomes the on-screen words and saves itself.
+   */
+  useEffect(() => {
+    if (!can.edit) return;
+    const carry = takeStudioCarry(draft.id);
+    if (!carry) return;
+    setEdits((current) => {
+      const next = { ...current };
+      for (const variant of draft.variants) {
+        const base = liveOf(current, variant);
+        const hashtagText =
+          carry.tags.length > 0
+            ? [...new Set([...parseHashtags(base.hashtagText), ...carry.tags])]
+                .map((tag) => `#${tag}`)
+                .join(' ')
+            : base.hashtagText;
+        // Only words that are there: an empty carry never clears a template's.
+        const body = carry.caption.trim() !== '' ? carry.caption : base.body;
+        if (body !== base.body || hashtagText !== base.hashtagText) {
+          next[variant.id] = { ...base, body, hashtagText };
+        }
+      }
+      return next;
+    });
+    // Once, for the draft this editor opened on.
+  }, [draft.id]);
+  /*
    * ROUND 3 — THE PROTOTYPE'S HASHTAG FIELD: one tag typed, then "Add". What
    * is typed and not yet added still counts — it is saved with the version and
    * shown in the preview — so nothing typed is lost to a missed click.
@@ -295,18 +374,28 @@ export function DraftEditor({
   };
   const change = (variant: ComposerVariant, patch: Partial<LiveVariant>) =>
     setEdits((current) => ({ ...current, [variant.id]: { ...live(variant), ...patch } }));
-  const isDirty = (variant: ComposerVariant): boolean => {
-    const value = live(variant);
-    return (
-      value.body !== variant.body ||
-      tagTextOf(variant) !== hashtagTextOf(variant) ||
-      value.firstComment !== (variant.firstComment ?? '') ||
-      value.assetIds.join(',') !== variant.assetIds.join(',') ||
-      value.cover !== (variant.coverAssetId ?? null) ||
-      headlineKey(value.headlines, value.assetIds) !==
-        headlineKey(headlinesOf(variant), variant.assetIds)
-    );
+  /*
+   * ROUND 4 (3.1) — WHAT THE LAST AUTOSAVE SENT, per version, until the page
+   * re-reads the row that holds it. Compared against instead of the row while
+   * the row is older, so a save is "saved" the moment it answers — not after
+   * a re-read that the next keystroke's save may cancel.
+   */
+  const [savedAs, setSavedAs] = useState<
+    Readonly<Record<string, { readonly version: string; readonly value: LiveVariant }>>
+  >({});
+  const baselineOf = (variant: ComposerVariant): LiveVariant => {
+    const saved = savedAs[variant.id];
+    return saved && saved.version > variant.updatedAt ? saved.value : liveOf({}, variant);
   };
+  const differs = (value: LiveVariant, base: LiveVariant, tagText: string): boolean =>
+    value.body !== base.body ||
+    tagText !== base.hashtagText ||
+    value.firstComment !== base.firstComment ||
+    value.assetIds.join(',') !== base.assetIds.join(',') ||
+    value.cover !== base.cover ||
+    headlineKey(value.headlines, value.assetIds) !== headlineKey(base.headlines, base.assetIds);
+  const isDirty = (variant: ComposerVariant): boolean =>
+    differs(live(variant), baselineOf(variant), tagTextOf(variant));
   const anyDirty = draft.variants.some(isDirty);
 
   /*
@@ -326,6 +415,75 @@ export function DraftEditor({
     window.addEventListener('beforeunload', guard);
     return () => window.removeEventListener('beforeunload', guard);
   }, []);
+
+  /*
+   * ROUND 4 (3.1) — SAVES AS YOU TYPE. The owner's decision: once the draft
+   * exists, every change saves itself — through the version's own form and
+   * the SAME `saveVariantAction` its post uses (same permission, same audit),
+   * asked for an answer instead of a redirect. One save at a time; a pause
+   * of 0.9 s after the last change; a tag still being typed waits for "Add".
+   * The local copy is re-keyed to the saved version, so nothing typed during
+   * the save is lost, and the page is re-read for the rest (checks, preview).
+   */
+  const [autosave, setAutosave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const savingRef = useRef(false);
+  /*
+   * "Save edit" pressed: its post is the save, so a pause that ends while it
+   * is on its way does not send the same words a second time. The page's next
+   * answer (a new `draft`) releases it, whether the post saved or was refused.
+   */
+  const submittedRef = useRef(false);
+  useEffect(() => {
+    submittedRef.current = false;
+  }, [draft]);
+  // A tag still being typed waits for "Add".
+  const unsavedForAutosave = (variant: ComposerVariant): boolean =>
+    differs(live(variant), baselineOf(variant), live(variant).hashtagText);
+  const autosaves = AUTOSAVE_STATUSES.includes(draft.status);
+  const pendingAutosave =
+    autosaves && can.edit && !draft.readOnly ? draft.variants.find(unsavedForAutosave) : undefined;
+  useEffect(() => {
+    if (!pendingAutosave || savingRef.current) return undefined;
+    const variant = pendingAutosave;
+    const timer = window.setTimeout(() => {
+      if (submittedRef.current) return;
+      const form = document.getElementById(panelId(variant));
+      if (!(form instanceof HTMLFormElement)) return;
+      const data = new FormData(form);
+      data.set('autosave', '1');
+      // What was added, not a tag still being typed.
+      const sent = live(variant);
+      data.set('hashtags', sent.hashtagText);
+      savingRef.current = true;
+      setAutosave('saving');
+      void actions
+        .save(data)
+        .then((result) => {
+          savingRef.current = false;
+          if (result && result.ok && result.version) {
+            const version = result.version;
+            setSavedAs((current) => ({ ...current, [variant.id]: { version, value: sent } }));
+            setEdits((current) => {
+              const edit = current[variant.id] ?? liveOf(current, variant);
+              return {
+                ...current,
+                [variant.id]: { ...edit, version, basedOn: variant.updatedAt },
+              };
+            });
+            setAutosave('saved');
+            router.refresh();
+          } else {
+            setAutosave('failed');
+          }
+        })
+        .catch(() => {
+          savingRef.current = false;
+          setAutosave('failed');
+        });
+    }, 900);
+    return () => window.clearTimeout(timer);
+    // The pending version's words are the dependency: each change restarts the pause.
+  }, [pendingAutosave?.id, pendingAutosave ? JSON.stringify(live(pendingAutosave)) : '']);
 
   /*
    * THE MEDIA DRAWER — for which variant, and whether it replaces a slide.
@@ -409,7 +567,10 @@ export function DraftEditor({
         format={format}
         body={value.body}
         hashtags={parseHashtags(tagTextOf(variant))}
-        media={mediaFor(value.assetIds)}
+        media={mediaFor(value.assetIds).map((item) => ({
+          ...item,
+          headline: value.headlines[item.id] ?? '',
+        }))}
         cover={value.cover ? (mediaFor([value.cover])[0] ?? null) : null}
         accountName={brandName}
         accountHandle={brandHandle}
@@ -700,10 +861,38 @@ export function DraftEditor({
             action={actions.scheduleFromStudio}
             t={t}
           />
+        ) : scheduling &&
+          actions.reschedule &&
+          can.schedule &&
+          publishTime?.slotId &&
+          publishTime.time ? (
+          /*
+            Round 4 (3.3) — A POST ON THE CALENDAR: its time, editable right
+            here, through the calendar's own reschedule (same permission, same
+            rules: approval, lead time, the day's room, the audit).
+          */
+          <InlineSchedule
+            locale={locale}
+            itemId={draft.id}
+            today={scheduling.today}
+            tomorrow={scheduling.tomorrow}
+            defaultTime={scheduling.defaultTime}
+            plannedDate={null}
+            initial={{ date: publishTime.date, time: publishTime.time }}
+            hidden={{ slotId: publishTime.slotId, returnTo: '/content/compose', item: draft.id }}
+            disabled={anyDirty}
+            action={actions.reschedule}
+            submitLabel={t['editor.schedule.move']}
+            testId="editor-reschedule-inline"
+            t={t}
+          />
         ) : (
           <span className="bsp-st-when-note">
             {review?.requiresApproval && draft.status === 'DRAFT'
-              ? t['editor.next.needsApproval']
+              ? plannedDate
+                ? /* Review of 2a (6): the carried day cannot be kept before approval. */
+                  t['create.plannedNeedsApproval']
+                : t['editor.next.needsApproval']
               : statusLabel}
           </span>
         )}
@@ -963,12 +1152,18 @@ export function DraftEditor({
                 className="bsp-seg-item"
                 aria-pressed={type === draft.contentType}
                 disabled={type !== draft.contentType}
+                data-locked={type === draft.contentType ? undefined : 'true'}
+                title={type === draft.contentType ? undefined : t['studio.formatLocked']}
                 data-value={type}
               >
                 {t[`content.type.${type}`] ?? type}
               </button>
             ))}
           </div>
+          {/* Round 4 (3.4) — locked after the post was made, and said so. */}
+          <span className="bsp-st-hint" data-testid="editor-format-locked">
+            {t['studio.formatLocked']}
+          </span>
           {draft.arabicDialect ? (
             <span className="bsp-st-hint" data-testid="content-dialect">
               {t['content.composer.dialect']} ·{' '}
@@ -1058,10 +1253,11 @@ export function DraftEditor({
               <span className="bsp-st-when-label">
                 <CalendarGlyph />
                 <span>
-                  {plannedDate ? (
-                    <span className="bsp-ltr">{plannedDate}</span>
-                  ) : draft.status === 'SCHEDULED' ? (
-                    statusLabel
+                  {/* Round 4 (3.3) — the time itself, never "Scheduled". */}
+                  {publishTime ? (
+                    <span className="bsp-ltr" data-testid="editor-when-label">
+                      {publishTime.label}
+                    </span>
                   ) : (
                     t['studio.whenUnset']
                   )}
@@ -1209,7 +1405,9 @@ export function DraftEditor({
               const hashtagAction = actionsFor.find((action) => action.key === 'hashtags');
               const { characters, limit } = checkOf(variant);
               const dirty = isDirty(variant);
-              const toolButton = (action: (typeof actionsFor)[number]) => (
+              // Review of 2a (3): a paid edit offered on its own (the hashtags)
+              // states its cost on the button, as "Write caption with AI · N" does.
+              const toolButton = (action: (typeof actionsFor)[number], withCost = false) => (
                 <button
                   key={action.key}
                   type="button"
@@ -1234,6 +1432,15 @@ export function DraftEditor({
                             t[`content.language.${variant.locale === 'AR' ? 'EN' : 'AR'}`] ?? '',
                         })
                       : t[`editor.ai.${action.key}`]}
+                  {withCost && selected && !dirty && estimate !== undefined ? (
+                    <span
+                      className="bsp-st-aiw-cost bsp-ltr"
+                      data-testid={`editor-tool-cost-${action.key}`}
+                    >
+                      {' '}
+                      · {formatCredits(estimate)}
+                    </span>
+                  ) : null}
                 </button>
               );
               return (
@@ -1243,12 +1450,14 @@ export function DraftEditor({
                   role="tabpanel"
                   aria-labelledby={`${fieldId}-tab-${variant.id}`}
                   hidden={!selected}
-                  action={actions.save}
+                  // A post is answered with a redirect; only the autosave reads a result.
+                  action={actions.save as (formData: FormData) => Promise<void>}
                   className="bsp-st-panel"
                   data-testid="content-variant"
                   data-platform={variant.platformKey}
                   onSubmit={() => {
                     dirtyRef.current = false;
+                    submittedRef.current = true;
                   }}
                 >
                   <input type="hidden" name="locale" value={locale} />
@@ -1319,7 +1528,7 @@ export function DraftEditor({
                           */}
                           {actionsFor
                             .filter((action) => MAIN_TOOLS.includes(action.key))
-                            .map(toolButton)}
+                            .map((action) => toolButton(action))}
                           {actionsFor.some(
                             (action) =>
                               !MAIN_TOOLS.includes(action.key) && action.key !== 'hashtags',
@@ -1334,7 +1543,7 @@ export function DraftEditor({
                                     (action) =>
                                       !MAIN_TOOLS.includes(action.key) && action.key !== 'hashtags',
                                   )
-                                  .map(toolButton)}
+                                  .map((action) => toolButton(action))}
                               </div>
                             </MoreDisclosure>
                           ) : null}
@@ -1451,7 +1660,7 @@ export function DraftEditor({
                             {t['studio.tagsFromBrain']}
                             <span className="bsp-xstatus bsp-ai">AI</span>
                           </span>
-                          <div className="bsp-st-chips">{toolButton(hashtagAction)}</div>
+                          <div className="bsp-st-chips">{toolButton(hashtagAction, true)}</div>
                         </div>
                       ) : null}
                       {/*
@@ -1850,11 +2059,20 @@ export function DraftEditor({
         </span>
         {activeVariant && can.edit ? (
           <span className="bsp-st-saved" data-testid={`editor-saved-${activeVariant.platformKey}`}>
-            {activeDirty
-              ? t['editor.unsaved']
-              : fill(t['editor.saved'] ?? '{when}', {
-                  when: relativeLabel(activeVariant.updatedAt, now, t),
-                })}
+            {/* Round 4 (3.1) — the prototype's line: "Saves as you type", then "Saved just now". */}
+            {!autosaves
+              ? activeDirty
+                ? t['editor.unsaved']
+                : fill(t['editor.saved'] ?? '{when}', {
+                    when: relativeLabel(activeVariant.updatedAt, now, t),
+                  })
+              : autosave === 'failed'
+                ? t['studio.saveFailed']
+                : autosave === 'saving' || pendingAutosave
+                  ? t['studio.saving']
+                  : fill(t['editor.saved'] ?? '{when}', {
+                      when: relativeLabel(activeVariant.updatedAt, now, t),
+                    })}
           </span>
         ) : null}
         <span className="bsp-st-note">
@@ -1886,10 +2104,8 @@ export function DraftEditor({
             >
               <CalendarGlyph />
               <span>
-                {plannedDate ? (
-                  <span className="bsp-ltr">{plannedDate}</span>
-                ) : draft.status === 'SCHEDULED' ? (
-                  statusLabel
+                {publishTime ? (
+                  <span className="bsp-ltr">{publishTime.label}</span>
                 ) : (
                   t['studio.whenUnset']
                 )}

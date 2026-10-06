@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { formatCredits } from '../../../server/composer-editor';
 import { useEffect, useState } from 'react';
 import {
   Banner,
   Button,
   buttonClass,
-  buttonStyle,
   Card,
   CopilotBody,
   SectionHeader,
@@ -21,6 +21,7 @@ import {
   type CopilotToolRun,
 } from '@brandspace/ui';
 import { messages as catalogue, statusMessage, type MessageKey } from '../../../i18n/messages';
+import { type DateFormatterLike, whenFormatter } from '../../../server/prototype-dates';
 
 /**
  * THE COPILOT, WIRED TO A REAL PROVIDER FOR THE FIRST TIME.
@@ -125,6 +126,7 @@ const TRANSLATED_PREVIEW: Readonly<Record<string, string>> = {
 
 export function CopilotView({
   locale,
+  now: serverNow,
   brand,
   surface,
   labels,
@@ -135,6 +137,12 @@ export function CopilotView({
   panel = null,
 }: {
   readonly locale: string;
+  /**
+   * The server's `systemClock.now()`, as ISO: what this client view reads
+   * its dates against (a date in another year shows its year). It never reads
+   * the real clock for a label.
+   */
+  readonly now: string;
   /**
    * THE FLOATING PANEL'S EXTRAS (`Main.dc.html` lines 1494–1523, review of #67
    * round 3): the greeting bubble the conversation opens with and the three
@@ -212,13 +220,10 @@ export function CopilotView({
       .replace('{area}', areaLabel(missing.area));
   };
 
-  const number = new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+  const number = new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 2,
   });
-  const time = new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+  const time = whenFormatter(locale, 'UTC', new Date(serverNow));
 
   /*
    * ONE CONVERSATION PER VISIT (P6-12). Every submit used to open a NEW
@@ -523,8 +528,8 @@ export function CopilotView({
                     ...(plan.saveFact.title ? { title: plan.saveFact.title } : {}),
                     ...(plan.saveFact.body ? { body: plan.saveFact.body } : {}),
                   }).toString()}`}
-                  className={buttonClass('neutral')}
-                  style={{ ...buttonStyle('neutral', 'sm'), justifySelf: 'start' }}
+                  className={buttonClass('neutral', 'sm')}
+                  style={{ justifySelf: 'start' }}
                   data-testid="copilot-save-handoff-link"
                 >
                   {t('copilot.saveFact.open')}
@@ -548,7 +553,7 @@ export function CopilotView({
             title={t('copilot.plan')}
             description={
               costMilli > 0
-                ? `${t('copilot.estimatedCost')}: ${number.format(costMilli / 1_000)} ${t(
+                ? `${t('copilot.estimatedCost')}: ${formatCredits(plan?.estimatedCreditsMilli ?? '0')} ${t(
                     'copilot.credits',
                   )}`
                 : t('copilot.noCost')
@@ -825,7 +830,7 @@ function InspectionResults({
   stepTitle: (toolKey: string) => string;
   t: (key: string, fallback: string) => string;
   number: Intl.NumberFormat;
-  time: Intl.DateTimeFormat;
+  time: DateFormatterLike;
   rateMetricKeys: readonly string[];
   locale: string;
 }) {
@@ -861,14 +866,14 @@ function InspectionLines({
   number,
   time,
   rateMetricKeys,
-  locale,
+  locale: _locale,
 }: {
   call: InspectionCall;
   rateMetricKeys: readonly string[];
   locale: string;
   t: (key: string, fallback: string) => string;
   number: Intl.NumberFormat;
-  time: Intl.DateTimeFormat;
+  time: DateFormatterLike;
 }) {
   const result = (call.result ?? {}) as Record<string, unknown>;
   const lines: string[] = [];
@@ -884,7 +889,7 @@ function InspectionLines({
         // A rate is parts per mille (47 is 4.7%) — never shown raw.
         const isRate = metric['unit'] === 'RATIO_MILLI' || rateMetricKeys.includes(key);
         const shown = isRate
-          ? `${new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
+          ? `${new Intl.NumberFormat('en-US', {
               maximumFractionDigits: 1,
               numberingSystem: 'latn',
             }).format(Number(value) / 10)}%`

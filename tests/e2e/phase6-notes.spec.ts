@@ -128,7 +128,9 @@ test.describe('D-281 · notes as conversations', () => {
     await expect(page.getByTestId(`note-due-${threadId}`)).toContainText('2030');
 
     // --- The Notes inbox links to THIS thread, and it opens highlighted.
-    await page.goto(`${DASHBOARD_BASE_URL}/en/notes`);
+    // Round 4, Gate 2b: the prototype's two panes — the chosen thread's pane
+    // carries "Open subject", so the thread is chosen first.
+    await page.goto(`${DASHBOARD_BASE_URL}/en/notes?thread=${threadId}`);
     const open = page.getByTestId(`notes-open-${threadId}`);
     await expect(open).toHaveAttribute(
       'href',

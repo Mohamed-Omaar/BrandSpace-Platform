@@ -98,6 +98,13 @@ describe('errors that are deliberately meaningful to an operator', () => {
     expect(toPublicErrorCode(conflict)).toBe('CONCURRENT_EDIT');
   });
 
+  it('names a file uploaded again, so the person knows it is already in the library', () => {
+    const duplicate = new AppError('CONFLICT', 'This file is already in the library.', {
+      reason: 'duplicate',
+    });
+    expect(toPublicErrorCode(duplicate)).toBe('ALREADY_IN_LIBRARY');
+  });
+
   it('keeps an ordinary conflict distinct from a concurrent edit', () => {
     expect(toPublicErrorCode(new AppError('CONFLICT', 'already exists'))).toBe('CONFLICT');
   });

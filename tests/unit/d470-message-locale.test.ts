@@ -1,107 +1,55 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { arEgOverrides } from '../../apps/dashboard/src/i18n/ar-eg';
 import {
   dictionaryFor,
-  evidenceRefs,
   messageLocaleFor,
   messages,
-  optionalMessage,
   translator,
   type MessageKey,
 } from '../../apps/dashboard/src/i18n/messages';
 
 /**
- * D-470 — THE INTERFACE ARABIC FOLLOWS THE WORKSPACE'S COUNTRY.
+ * ROUND 4, STEP 6 — ONE ARABIC FOR EVERY COUNTRY (replaces D-470).
  *
- * An Arabic reader in an Egyptian workspace reads `ar-EG`: the Egyptian layer
- * laid over formal Arabic key by key. Every other Arabic reader, and every
- * screen before a workspace exists, reads formal Arabic. English is untouched.
+ * An Arabic reader reads the product's formal Arabic whatever the workspace's
+ * country, Egypt included; the Egyptian layer and the country switch are gone.
+ * English is untouched.
  */
 
-const overrides = arEgOverrides as Readonly<Record<string, string>>;
-const overridden = Object.keys(overrides) as MessageKey[];
-const notOverridden = (Object.keys(messages.ar) as MessageKey[]).filter(
-  (key) => !(key in overrides),
-);
-
-describe('messageLocaleFor: the words follow the route language and the workspace country', () => {
-  it('Egypt reads Egyptian Arabic on the Arabic route', () => {
-    expect(messageLocaleFor('ar', 'EG')).toBe('ar-EG');
-    expect(messageLocaleFor('ar', 'eg')).toBe('ar-EG');
+describe('messageLocaleFor: the words follow the route language only', () => {
+  it('the Arabic route is formal Arabic', () => {
+    expect(messageLocaleFor('ar')).toBe('ar');
   });
 
-  it('every other country, and no country at all, reads formal Arabic', () => {
-    for (const country of ['SA', 'AE', 'KW', 'US', 'GB', '']) {
-      expect(messageLocaleFor('ar', country), country).toBe('ar');
-    }
-    expect(messageLocaleFor('ar', null)).toBe('ar');
-    expect(messageLocaleFor('ar', undefined)).toBe('ar');
-  });
-
-  it('the English route is English whatever the country', () => {
-    expect(messageLocaleFor('en', 'EG')).toBe('en');
-    expect(messageLocaleFor('en', 'SA')).toBe('en');
-    expect(messageLocaleFor('en', null)).toBe('en');
+  it('every other route is English', () => {
+    expect(messageLocaleFor('en')).toBe('en');
+    expect(messageLocaleFor('ar-EG')).toBe('en');
   });
 });
 
-describe('the Egyptian layer falls back to formal Arabic, key by key', () => {
-  it('a key the layer has reads the Egyptian string', () => {
-    const t = translator('ar-EG');
-    expect(overridden.length).toBeGreaterThan(0);
-    for (const key of overridden) expect(t(key), key).toBe(overrides[key]);
-  });
-
-  it('a key the layer lacks reads the formal string, never English or nothing', () => {
-    const t = translator('ar-EG');
-    expect(notOverridden.length).toBeGreaterThan(0);
-    for (const key of notOverridden) expect(t(key), key).toBe(messages.ar[key]);
-  });
-
-  it('the Egyptian dictionary has exactly the formal key set', () => {
-    expect(Object.keys(dictionaryFor('ar-EG')).sort()).toEqual(Object.keys(messages.ar).sort());
-  });
-
-  it('formal Arabic and English are not touched by the layer', () => {
+describe('there is one Arabic dictionary', () => {
+  it('Arabic and English are the two dictionaries', () => {
     expect(dictionaryFor('ar')).toBe(messages.ar);
     expect(dictionaryFor('en')).toBe(messages.en);
-    for (const key of overridden) {
-      expect(translator('ar')(key), key).toBe(messages.ar[key]);
-      expect(translator('en')(key), key).toBe(messages.en[key]);
-    }
   });
 
-  it('optionalMessage reads the same layer, and still answers null for a missing key', () => {
-    const [key] = overridden;
-    expect(optionalMessage('ar-EG', key as string)).toBe(overrides[key as string]);
-    expect(optionalMessage('ar-EG', 'no.such.key')).toBeNull();
-    expect(optionalMessage('ar-EG', notOverridden[0] as string)).toBe(
-      messages.ar[notOverridden[0] as MessageKey],
-    );
+  it('a retired dialect tag can no longer select a third dictionary', () => {
+    expect(dictionaryFor('ar-EG')).toBe(messages.en);
   });
 
-  it('Arabic punctuation follows the Egyptian reader too', () => {
-    expect(evidenceRefs('ar-EG', [1, 2])).toBe(evidenceRefs('ar', [1, 2]));
-  });
-
-  it('every Egyptian string is Arabic, as P6-14 requires of the formal ones', () => {
-    // The prototype writes its product names in Latin in Arabic too (the
-    // design note's only exception): a value that IS one of them passes.
-    const latinProductNames = new Set(['Brand Brain', 'BrandSpace']);
-    for (const [key, value] of Object.entries(overrides)) {
-      if (latinProductNames.has(value)) continue;
-      expect(/[؀-ۿ]/.test(value), key).toBe(true);
+  it('every Arabic string is read as written', () => {
+    const t = translator('ar');
+    for (const key of Object.keys(messages.ar) as MessageKey[]) {
+      expect(t(key), key).toBe(messages.ar[key]);
     }
   });
 });
 
 describe('workspace pages read their words through the message locale', () => {
   /*
-   * A page that resolves a workspace session and then translates with the
-   * ROUTE locale would show an Egyptian member formal Arabic — the miss this
-   * guard exists to catch as each prototype screen is ported.
+   * Kept after Step 6: a workspace page reads its words through the one
+   * message locale its session resolved, so the words have exactly one path.
    */
   const root = path.resolve(__dirname, '../../apps/dashboard/src/app/[locale]');
   const pages: string[] = [];

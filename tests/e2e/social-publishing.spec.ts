@@ -80,6 +80,8 @@ test.describe('the connected accounts screen', () => {
   test('offers connect and disconnect to a member who may manage accounts', async ({ page }) => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    // Round 4, Gate 2b: the full connect form is behind the Accounts card's "⋯".
+    await page.getByTestId('connect-more').click();
     // The form EXISTS and is not submitted: submitting would redirect to a
     // provider that does not exist in this environment.
     await expect(page.locator('[data-testid="connect-form"]')).toBeVisible();
@@ -97,6 +99,8 @@ test.describe('the connected accounts screen', () => {
      */
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    // Round 4, Gate 2b: the full connect form is behind the Accounts card's "⋯".
+    await page.getByTestId('connect-more').click();
     const capabilities = page.locator('[data-testid="provider-capabilities"]');
     await expect(capabilities).toBeVisible();
     await expect(capabilities).toContainText('max characters');
@@ -108,7 +112,8 @@ test.describe('the publishing history', () => {
     page,
   }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    // Gate 2b review (4f) — the history is its own view, behind the section's "⋯".
+    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations?history=1`);
 
     const history = page.locator('[data-testid="publishing-list"]');
     await expect(history).toBeVisible();
@@ -141,13 +146,14 @@ test.describe('the publishing history', () => {
     );
     expect(refreshed.count, 'the seeded failed post must exist').toBeGreaterThan(0);
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    // Gate 2b review (4f) — the history is its own view, behind the section's "⋯".
+    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations?history=1`);
     await expect(page.locator('[data-testid^="retry-"]').first()).toBeVisible();
   });
 
   test('shows the attempt count against the configured ceiling', async ({ page }) => {
     await signIn(page);
-    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/integrations?history=1`);
     await expect(page.locator('[data-testid="publishing-list"]')).toContainText('Attempts');
   });
 });
@@ -155,7 +161,7 @@ test.describe('the publishing history', () => {
 test.describe('Arabic, right to left', () => {
   test('renders the screen in Arabic with the correct direction', async ({ page }) => {
     await signIn(page, 'ar');
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations?history=1`);
 
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     // `ar-SA`, not `ar`: the shell emits the REGIONAL tag the platform uses, and
@@ -176,7 +182,7 @@ test.describe('Arabic, right to left', () => {
 
   test('the whole page is inside the right-to-left flow', async ({ page }) => {
     await signIn(page, 'ar');
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations?history=1`);
     const direction = await page
       .locator('[data-testid="connected-accounts"]')
       .evaluate((node) => getComputedStyle(node).direction);
@@ -186,7 +192,7 @@ test.describe('Arabic, right to left', () => {
   test('no horizontal overflow at phone width in Arabic', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page, 'ar');
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations`);
+    await page.goto(`${DASHBOARD_BASE_URL}/ar/integrations?history=1`);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
@@ -214,6 +220,8 @@ test.describe('accessibility', () => {
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
 
+    // Round 4, Gate 2b: the full connect form is behind the Accounts card's "⋯".
+    await page.getByTestId('connect-more').click();
     // The two selects and the submit are focusable in order, which is what a
     // person using a keyboard needs before anything else.
     await page.locator('[data-testid="connect-provider"]').focus();
@@ -311,6 +319,8 @@ test.describe('P6-R1 — the OAuth callback a provider would actually reach', ()
     });
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/integrations`);
+    // Round 4, Gate 2b: the full connect form is behind the Accounts card's "⋯".
+    await page.getByTestId('connect-more').click();
     await page.selectOption('[data-testid="connect-provider"]', 'LINKEDIN');
     await page.click('[data-testid="connect-submit"]');
 

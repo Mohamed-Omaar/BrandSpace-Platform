@@ -514,8 +514,14 @@ export class ContentStudioService extends ContentLibraryService {
      */
     const hashtagsOnly = input.tool === 'hashtags';
     const body = hashtagsOnly ? (variant.body ?? '') : produced.body;
+    /*
+     * Step 7 (flow 7.2) — AND IT KEEPS THE PERSON'S TAGS. The tool PROPOSES
+     * tags (D-284): the ones already on the post stay first and the model's
+     * new ones follow, case-insensitively once each, within the ceiling. It
+     * used to replace them, so a model that returned no tags wiped the post's.
+     */
     const hashtags = hashtagsOnly
-      ? produced.hashtags.slice(0, platform.maxHashtags)
+      ? mergeHashtags(variant.hashtags, produced.hashtags).slice(0, platform.maxHashtags)
       : produced.hashtags;
     const validation = validateVariant(platform, { body, hashtags });
 
@@ -961,4 +967,17 @@ function generationFailed(failureMessage: string | null): AppError {
  */
 function brandBrainContext(grounding: Grounding): string[] {
   return grounding.enabled ? [fenceUntrusted('BRAND BRAIN CONTEXT', grounding.contextText)] : [];
+}
+
+/** The post's own tags first, then new ones, each once regardless of case. */
+export function mergeHashtags(existing: readonly string[], proposed: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const tag of [...existing, ...proposed]) {
+    const key = tag.toLocaleLowerCase();
+    if (tag === '' || seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+  }
+  return out;
 }

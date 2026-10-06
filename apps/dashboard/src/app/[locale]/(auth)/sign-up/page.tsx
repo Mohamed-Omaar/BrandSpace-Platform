@@ -5,12 +5,10 @@ import {
   Banner,
   Field,
   PasswordField,
-  SearchableSelect,
   colorTokens,
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { timeZoneOptions } from '@brandspace/shared';
 import { getPrisma, withoutTenantContext } from '@brandspace/database';
 import { TenantOnboardingPolicySource } from '@brandspace/onboarding';
 import {
@@ -22,6 +20,7 @@ import {
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { signUpAction } from '../actions';
+import { BrowserTimeZoneInput } from '../../../../components/browser-time-zone';
 import { trialTerms } from '../../../../server/trial-terms';
 import { SIGNUP_DRAFT_COOKIE, decodeSignupDraft } from '../../../../server/signup-draft';
 
@@ -36,9 +35,13 @@ export const dynamic = 'force-dynamic';
  * A minimum restated as a constant here would be a minimum the owner cannot
  * actually change (CLAUDE.md §2.2).
  *
- * THE TIMEZONE IS ASKED FOR, NEVER ASSUMED (D-194). The searchable control is
- * populated from the runtime's IANA inventory and posts only the canonical zone
- * the customer selected; an empty value is refused rather than defaulted.
+ * THE TIMEZONE IS THE BROWSER'S (Round 4, 4.1 — the owner's decision). It is
+ * no longer a question here: the browser's own zone is posted, onboarding step
+ * 1 shows it and lets the person change it, and an empty value is still
+ * refused rather than defaulted (D-194: the server never invents one).
+ *
+ * ONE PASSWORD FIELD, with Show (4.1): no confirmation box on sign-up. The
+ * reset form keeps its confirmation (D-261).
  */
 export default async function SignUpPage({
   params,
@@ -65,7 +68,6 @@ export default async function SignUpPage({
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
   const required = policy.legalDocuments.filter((document) => document.required);
-  const timezones = timeZoneOptions(locale);
   const trial = await trialTerms().catch(() => null);
   // G8 (D-335): after a refusal, what was typed comes back — never the password.
   const draft = error ? decodeSignupDraft((await cookies()).get(SIGNUP_DRAFT_COOKIE)?.value) : null;
@@ -131,9 +133,9 @@ export default async function SignUpPage({
         {/*
           The shared control (P6-03a). This screen already read the configured
           minimum — it was the only one that did — so what it gains is the
-          reveal toggle, the confirmation and a rules list that keeps answering
-          as the customer types, instead of one hint sentence that states a
-          number and goes quiet.
+          reveal toggle and a rules list that keeps answering as the customer
+          types, instead of one hint sentence that states a number and goes
+          quiet. Round 4 (4.1): no confirmation box — omitting its label omits it.
         */}
         <PasswordField
           id="password"
@@ -141,9 +143,6 @@ export default async function SignUpPage({
             label: t('signUp.password'),
             show: t('password.show'),
             hide: t('password.hide'),
-            confirmLabel: t('password.confirm'),
-            mismatch: t('password.mismatch'),
-            match: t('password.match'),
             rulesLabel: t('password.rulesLabel'),
           }}
           minLength={policy.signup.minPasswordLength}
@@ -159,18 +158,7 @@ export default async function SignUpPage({
           ]}
         />
 
-        <Field label={t('signUp.timezone')} htmlFor="timezone" required>
-          <SearchableSelect
-            id="timezone"
-            name="timezone"
-            options={timezones}
-            defaultValue={draft?.timezone ?? ''}
-            placeholder={t('createWorkspace.choose')}
-            noResultsLabel={t('common.noResults')}
-            required
-            style={authInputStyle()}
-          />
-        </Field>
+        <BrowserTimeZoneInput />
 
         {required.map((document) => (
           <label
