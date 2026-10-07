@@ -242,7 +242,7 @@ export function MetricCard({
         background: colorTokens.metricAlpha,
         boxShadow: shadowTokens.metric,
         // `.metric { min-height: 118px; padding: 20px }`.
-        minBlockSize: '7.375rem',
+        minBlockSize: 'var(--bsp-rem-7-375)',
         padding: layoutTokens.metricPad,
         display: 'flex',
         flexDirection: 'column',
@@ -544,7 +544,7 @@ export function SectionHeader({
  * horizontal overflow.
  */
 export function ContentGrid({
-  min = '16rem',
+  min = 'var(--bsp-rem-16)',
   // `.metric-row { gap: 12px }`.
   gap = spacingTokens.sm,
   children,
@@ -649,7 +649,7 @@ export function SettingsSplit({
           display: 'grid',
           alignContent: 'start',
           gap: spacingTokens['3xs'],
-          padding: '0.875rem',
+          padding: 'var(--bsp-rem-0-875)',
           borderRadius: radiusTokens['2xl'],
           background: colorTokens.surfaceCardAlpha,
           boxShadow: shadowTokens.card,

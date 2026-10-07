@@ -552,18 +552,24 @@ export function CustomerShell({
     return () => query.removeEventListener('change', onChange);
   }, [drawerOpen]);
 
-  // `sbW = s.sbMin ? '76px' : '250px'`.
-  const sidebarWidth = layoutCollapsed ? '76px' : '250px';
+  // `sbW = s.sbMin ? 'var(--bsp-px-76)' : 'var(--bsp-px-250)'`.
+  const sidebarWidth = layoutCollapsed ? 'var(--bsp-px-76)' : 'var(--bsp-px-250)';
   // `sbArrow`: the chevron points to the start edge, and flips when collapsed.
   const arrow = collapsed ? 'scaleX(-1)' : 'none';
 
   const logo = (
     <span
       data-testid="brand"
-      style={{ display: 'flex', alignItems: 'center', gap: '10px', flexGrow: 1, minInlineSize: 0 }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--bsp-px-10)',
+        flexGrow: 1,
+        minInlineSize: 0,
+      }}
     >
       <span className="bsp-sb-logo-mark">
-        <BrandGlyph size="34px" />
+        <BrandGlyph size="var(--bsp-px-34)" />
       </span>
       <span className="bsp-sb-wordmark bsp-nl bs-brand-text bsp-ltr">{wordmark}</span>
     </span>
@@ -708,7 +714,7 @@ export function CustomerShell({
               position: 'absolute',
               insetBlock: 0,
               insetInlineStart: 0,
-              inlineSize: 'min(19rem, 88vw)',
+              inlineSize: 'min(var(--bsp-rem-19), 88vw)',
               background: colorTokens.surface,
               borderStartEndRadius: radiusTokens['2xl'],
               borderEndEndRadius: radiusTokens['2xl'],

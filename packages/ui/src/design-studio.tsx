@@ -103,7 +103,7 @@ const TOOL_ICONS: Record<StudioTool, ReactNode> = {
   photos: <ImageIcon size={20} />,
   elements: <SparkIcon size={20} />,
   text: (
-    <span aria-hidden="true" style={{ fontWeight: 800, fontSize: '1rem' }}>
+    <span aria-hidden="true" style={{ fontWeight: 800, fontSize: 'var(--bsp-fs-16)' }}>
       T
     </span>
   ),
@@ -150,7 +150,7 @@ export function StudioToolRail({
       style={{
         display: 'flex',
         gap: spacingTokens['3xs'],
-        padding: '0.8125rem',
+        padding: 'var(--bsp-rem-0-8125)',
         background: colorTokens.surfaceSoft,
         overflowX: 'auto',
       }}
@@ -179,7 +179,7 @@ export function StudioToolRail({
               gap: spacingTokens['3xs'],
               inlineSize: '100%',
               paddingBlock: spacingTokens.sm,
-              paddingInline: '0.1875rem',
+              paddingInline: 'var(--bsp-rem-0-1875)',
               borderRadius: radiusTokens.md,
               border: '1px solid transparent',
               cursor: 'pointer',
@@ -219,7 +219,7 @@ function SampleArtboard({ labels }: { readonly labels: StudioLabels }) {
       style={{
         position: 'relative',
         aspectRatio: '1 / 1',
-        inlineSize: 'min(100%, 26rem)',
+        inlineSize: 'min(100%, var(--bsp-rem-26))',
         // `cqw` below needs a query container, or it resolves against the
         // viewport and the headline overruns the artboard — which it did.
         containerType: 'inline-size',
@@ -257,14 +257,14 @@ function SampleArtboard({ labels }: { readonly labels: StudioLabels }) {
           <span
             aria-hidden="true"
             style={{
-              inlineSize: '1.25rem',
-              blockSize: '1.25rem',
+              inlineSize: 'var(--bsp-rem-1-25)',
+              blockSize: 'var(--bsp-rem-1-25)',
               borderRadius: radiusTokens.xs,
               background: colorTokens.brandPurple,
               color: colorTokens.brandPurpleInk,
               display: 'inline-grid',
               placeItems: 'center',
-              fontSize: '0.625rem',
+              fontSize: 'var(--bsp-fs-10)',
             }}
           >
             B
@@ -275,7 +275,7 @@ function SampleArtboard({ labels }: { readonly labels: StudioLabels }) {
         <div style={{ display: 'grid', alignContent: 'center', gap: '4%' }}>
           <span
             style={{
-              fontSize: 'clamp(1.125rem, 6.5cqw, 2rem)',
+              fontSize: 'clamp(var(--bsp-rem-1-125), 6.5cqw, var(--bsp-rem-2))',
               lineHeight: 1.1,
               fontWeight: 800,
               letterSpacing: '-0.03em',
@@ -324,7 +324,7 @@ function SampleArtboard({ labels }: { readonly labels: StudioLabels }) {
           inlineSize: '82%',
           blockSize: '30%',
           border: `1.5px solid ${colorTokens.brandPurple}`,
-          borderRadius: '2px',
+          borderRadius: 'var(--bsp-px-2)',
         }}
       >
         {['start start', 'start end', 'end start', 'end end'].map((corner) => {
@@ -334,11 +334,13 @@ function SampleArtboard({ labels }: { readonly labels: StudioLabels }) {
               key={corner}
               style={{
                 position: 'absolute',
-                [block === 'start' ? 'insetBlockStart' : 'insetBlockEnd']: '-4px',
-                [inline === 'start' ? 'insetInlineStart' : 'insetInlineEnd']: '-4px',
-                inlineSize: '7px',
-                blockSize: '7px',
-                borderRadius: '2px',
+                [block === 'start' ? 'insetBlockStart' : 'insetBlockEnd']:
+                  'calc(-1 * var(--bsp-px-4))',
+                [inline === 'start' ? 'insetInlineStart' : 'insetInlineEnd']:
+                  'calc(-1 * var(--bsp-px-4))',
+                inlineSize: 'var(--bsp-px-7)',
+                blockSize: 'var(--bsp-px-7)',
+                borderRadius: 'var(--bsp-px-2)',
                 background: colorTokens.surface,
                 border: `1.5px solid ${colorTokens.brandPurple}`,
               }}
@@ -382,7 +384,7 @@ export function StudioAssets({ labels }: { readonly labels: StudioLabels }) {
         display: 'grid',
         alignContent: 'start',
         gap: spacingTokens.sm,
-        padding: '0.8125rem',
+        padding: 'var(--bsp-rem-0-8125)',
         background: colorTokens.surfaceSoft,
         minInlineSize: 0,
       }}
@@ -450,7 +452,7 @@ export function StudioProperties({ labels }: { readonly labels: StudioLabels }) 
         display: 'grid',
         gap: spacingTokens.md,
         alignContent: 'start',
-        padding: '0.8125rem',
+        padding: 'var(--bsp-rem-0-8125)',
         background: colorTokens.surfaceSoft,
         minInlineSize: 0,
       }}
@@ -470,8 +472,8 @@ export function StudioProperties({ labels }: { readonly labels: StudioLabels }) 
               key={colour}
               aria-hidden="true"
               style={{
-                inlineSize: '1.75rem',
-                blockSize: '1.75rem',
+                inlineSize: 'var(--bsp-rem-1-75)',
+                blockSize: 'var(--bsp-rem-1-75)',
                 borderRadius: radiusTokens.sm,
                 background: colour,
                 boxShadow: `inset 0 0 0 1px ${colorTokens.hairline}`,
@@ -609,7 +611,11 @@ export function DesignStudio({
           className={CONTROL_CLASS}
           data-testid="studio-name"
           defaultValue={documentName}
-          style={{ ...inputStyle({ size: 'sm' }), inlineSize: 'auto', maxInlineSize: '14rem' }}
+          style={{
+            ...inputStyle({ size: 'sm' }),
+            inlineSize: 'auto',
+            maxInlineSize: 'var(--bsp-rem-14)',
+          }}
         />
         <StatusBadge label={labels.saved} tone="success" dot testId="studio-save-status" />
 
@@ -688,7 +694,7 @@ export function DesignStudio({
               justifyItems: 'center',
               gap: spacingTokens.sm,
               /* `.canvas-wrap { background: #18161f; place-items: center; padding: 30px }`. */
-              padding: '1.875rem',
+              padding: 'var(--bsp-rem-1-875)',
               background: colorTokens.surfaceInk,
               containerType: 'inline-size',
               blockSize: '100%',
@@ -713,7 +719,7 @@ export function DesignStudio({
                   aria-pressed={size.id === preset}
                   onClick={() => setPreset(size.id)}
                   style={{
-                    minBlockSize: '2rem',
+                    minBlockSize: 'var(--bsp-rem-2)',
                     paddingInline: spacingTokens.sm,
                     borderRadius: radiusTokens.full,
                     border: '1px solid transparent',

@@ -95,7 +95,7 @@ export function OverviewHero({
             style={{
               // `.label-pill { padding: 7px 10px; font-size: 9px; weight: 800;
               //  background: rgba(255,255,255,.68) }`.
-              padding: '0.4375rem 0.625rem',
+              padding: 'var(--bsp-rem-0-4375) var(--bsp-rem-0-625)',
               borderRadius: radiusTokens.full,
               // Translucent white on the wash, so the pill picks up whatever
               // the gradient is doing behind it rather than fighting it.
@@ -115,9 +115,9 @@ export function OverviewHero({
           style={{
             // 600px in the reference: two confident lines, not three.
             // `.hero-copy h2 { max-width: 620px; margin: 16px 0 10px }`.
-            maxInlineSize: '38.75rem',
+            maxInlineSize: 'var(--bsp-rem-38-75)',
             marginBlockStart: spacingTokens.md,
-            marginBlockEnd: '0.625rem',
+            marginBlockEnd: 'var(--bsp-rem-0-625)',
             ...typographyTokens.display,
             color: colorTokens.textPrimary,
           }}
@@ -132,7 +132,7 @@ export function OverviewHero({
               // `.hero-copy p { max-width: 500px; margin: 0 0 24px }`, 15px/1.6.
               margin: 0,
               marginBlockEnd: spacingTokens.lg,
-              maxInlineSize: '31.25rem',
+              maxInlineSize: 'var(--bsp-rem-31-25)',
               ...typographyTokens.body,
               color: colorTokens.textSecondary,
             }}
@@ -149,7 +149,7 @@ export function OverviewHero({
               alignItems: 'center',
               // `.hero-actions { gap: 12px }` — the copy's own bottom margin
               // provides the space above, so there is no extra top margin.
-              gap: '0.75rem',
+              gap: 'var(--bsp-rem-0-75)',
               marginBlockStart: 0,
             }}
           >
@@ -199,8 +199,8 @@ export function HeroFloatCard({
     <div
       style={{
         position: 'absolute',
-        inlineSize: '13.75rem',
-        padding: '0.9375rem',
+        inlineSize: 'var(--bsp-rem-13-75)',
+        padding: 'var(--bsp-rem-0-9375)',
         borderRadius: radiusTokens.card,
         background: colorTokens.floatCardAlpha,
         backdropFilter: 'blur(14px)',
@@ -214,7 +214,7 @@ export function HeroFloatCard({
       <small
         style={{
           display: 'block',
-          marginBlockStart: '0.3125rem',
+          marginBlockStart: 'var(--bsp-rem-0-3125)',
           ...typographyTokens.caption,
           color: colorTokens.textMuted,
         }}
@@ -238,11 +238,11 @@ export function HeroMiniChart() {
     <div
       aria-hidden="true"
       style={{
-        blockSize: '3.75rem',
-        marginBlockStart: '0.625rem',
+        blockSize: 'var(--bsp-rem-3-75)',
+        marginBlockStart: 'var(--bsp-rem-0-625)',
         display: 'flex',
         alignItems: 'end',
-        gap: '0.3125rem',
+        gap: 'var(--bsp-rem-0-3125)',
       }}
     >
       {bars.map((height, index) => (
@@ -251,7 +251,7 @@ export function HeroMiniChart() {
           style={{
             flex: 1,
             blockSize: height,
-            borderRadius: '6px 6px 2px 2px',
+            borderRadius: 'var(--bsp-px-6) var(--bsp-px-6) var(--bsp-px-2) var(--bsp-px-2)',
             background: index === 3 ? colorTokens.brandPurple : colorTokens.ink,
           }}
         />

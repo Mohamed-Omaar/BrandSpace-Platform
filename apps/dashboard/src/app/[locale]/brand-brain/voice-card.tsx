@@ -381,7 +381,7 @@ function wordsIn(text: string): string[] {
     .filter((word) => word !== '');
 }
 
-const sectionStyle: React.CSSProperties = { display: 'grid', gap: 8, alignContent: 'start' };
+const sectionStyle: React.CSSProperties = { display: 'grid', gap: 'var(--bsp-px-8)', alignContent: 'start' };
 const headingStyle: React.CSSProperties = {
   margin: 0,
   fontSize: typographyTokens.label.fontSize,
@@ -392,4 +392,4 @@ const bodyStyle: React.CSSProperties = {
   fontSize: typographyTokens.bodySm.fontSize,
   lineHeight: 1.6,
 };
-const formStyle: React.CSSProperties = { display: 'grid', gap: 8, alignContent: 'start' };
+const formStyle: React.CSSProperties = { display: 'grid', gap: 'var(--bsp-px-8)', alignContent: 'start' };

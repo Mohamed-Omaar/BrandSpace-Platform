@@ -170,7 +170,7 @@ export function SearchableSelect({
         onKeyDown={onKeyDown}
         style={{
           ...inputStyle({ size: 'lg' }),
-          paddingInlineEnd: '2.75rem',
+          paddingInlineEnd: 'var(--bsp-rem-2-75)',
           ...style,
         }}
       />
@@ -178,7 +178,7 @@ export function SearchableSelect({
         aria-hidden="true"
         style={{
           position: 'absolute',
-          insetInlineEnd: '1rem',
+          insetInlineEnd: 'var(--bsp-rem-1)',
           insetBlockStart: '50%',
           transform: 'translateY(-50%)',
           display: 'inline-flex',
@@ -199,9 +199,9 @@ export function SearchableSelect({
           style={{
             position: 'absolute',
             insetInline: 0,
-            insetBlockStart: 'calc(100% + 0.375rem)',
+            insetBlockStart: 'calc(100% + var(--bsp-rem-0-375))',
             zIndex: zIndexTokens.overlay,
-            maxBlockSize: '18rem',
+            maxBlockSize: 'var(--bsp-rem-18)',
           }}
           onMouseDown={(event) => event.preventDefault()}
         >

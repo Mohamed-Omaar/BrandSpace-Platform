@@ -21,7 +21,7 @@ export default async function NoWorkspacePage({ params }: { params: Promise<{ lo
       <p data-testid="workspace-suspended-hint">{t('ws.suspended')}</p>
       <form action={signOutAction}>
         <input type="hidden" name="locale" value={locale} />
-        <button type="submit" data-testid="sign-out" style={{ minBlockSize: '40px' }}>
+        <button type="submit" data-testid="sign-out" style={{ minBlockSize: 'var(--bsp-px-40)' }}>
           {t('nav.signOut')}
         </button>
       </form>

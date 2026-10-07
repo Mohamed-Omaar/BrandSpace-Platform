@@ -134,7 +134,11 @@ function AccountChip({
         fontWeight: 600,
       }}
     >
-      <Avatar initials={account.initials} seed={account.avatarSeed ?? 0} size="1.5rem" />
+      <Avatar
+        initials={account.initials}
+        seed={account.avatarSeed ?? 0}
+        size="var(--bsp-rem-1-5)"
+      />
       <span style={{ display: 'grid', textAlign: 'start' }}>
         <span>{account.name}</span>
         {/*
@@ -378,7 +382,7 @@ export function PostComposer({
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(6rem, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(var(--bsp-rem-6), 1fr))',
                   gap: spacingTokens.sm,
                 }}
               >
@@ -541,7 +545,7 @@ export function PostComposer({
                     onClick={() => setFormat(option)}
                     style={{
                       minBlockSize: layoutTokens.controlHeightXs,
-                      paddingInline: '0.6875rem',
+                      paddingInline: 'var(--bsp-rem-0-6875)',
                       borderRadius: radiusTokens.md,
                       border: '1px solid transparent',
                       cursor: 'pointer',

@@ -673,14 +673,14 @@ const noticeStyle = {
   overflowWrap: 'anywhere',
 } as const;
 
-const factStyle = { display: 'grid', gap: '2px' } as const;
+const factStyle = { display: 'grid', gap: 'var(--bsp-px-2)' } as const;
 
 const formStyle = { display: 'grid', gap: spacingTokens.xs } as const;
 
 const connectFormStyle = {
   display: 'grid',
   gap: spacingTokens.sm,
-  maxInlineSize: '32rem',
+  maxInlineSize: 'var(--bsp-rem-32)',
 } as const;
 
 // The prototype's form field comes from `.bs-control` (round 4).

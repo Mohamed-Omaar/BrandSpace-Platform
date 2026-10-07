@@ -125,7 +125,7 @@ export function PostDetailDrawer({
           */
           inlineSize: `min(${layoutTokens.drawerWidth}, calc(100vw - ${layoutTokens.shellInset} * 2))`,
           zIndex: zIndexTokens.overlay,
-          padding: '1.375rem',
+          padding: 'var(--bsp-rem-1-375)',
           overflowY: 'auto',
           background: colorTokens.drawerAlpha,
           backdropFilter: 'blur(24px)',

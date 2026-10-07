@@ -41,9 +41,9 @@ export type ControlSize = 'sm' | 'md' | 'lg';
  * button heights the prototype draws, and the only three the product may.
  */
 const CONTROL_HEIGHT: Record<ControlSize, string> = {
-  sm: '32px',
-  md: '40px',
-  lg: '48px',
+  sm: 'var(--bsp-px-32)',
+  md: 'var(--bsp-px-40)',
+  lg: 'var(--bsp-px-48)',
 };
 
 /**
@@ -83,7 +83,7 @@ export function buttonClass(variant: ButtonVariant = 'primary', size: ControlSiz
 const LEGACY_CONTROL_HEIGHT: Record<ControlSize, string> = {
   sm: layoutTokens.controlHeightXs,
   md: layoutTokens.controlHeight,
-  lg: '3rem',
+  lg: 'var(--bsp-rem-3)',
 };
 
 function buttonBase(size: ControlSize): CSSProperties {
@@ -93,11 +93,11 @@ function buttonBase(size: ControlSize): CSSProperties {
     justifyContent: 'center',
     gap: spacingTokens.sm,
     minBlockSize: LEGACY_CONTROL_HEIGHT[size],
-    paddingInline: size === 'sm' ? '0.6875rem' : '0.9375rem',
+    paddingInline: size === 'sm' ? 'var(--bsp-rem-0-6875)' : 'var(--bsp-rem-0-9375)',
     paddingBlock: 0,
     borderRadius: size === 'sm' ? radiusTokens.md : radiusTokens.control,
     fontFamily: 'inherit',
-    fontSize: size === 'sm' ? '0.5625rem' : typographyTokens.button.fontSize,
+    fontSize: size === 'sm' ? 'var(--bsp-rem-0-5625)' : typographyTokens.button.fontSize,
     fontWeight: size === 'sm' ? 750 : typographyTokens.button.fontWeight,
     letterSpacing: 'normal',
     lineHeight: typographyTokens.button.lineHeight,
@@ -202,8 +202,9 @@ export function Spinner({ size = 16 }: { readonly size?: number }) {
       className="bs-spinner"
       style={{
         display: 'inline-block',
-        inlineSize: size,
-        blockSize: size,
+        // D-484: the size token, so the customer app draws it at 0.88.
+        inlineSize: `var(--bsp-px-${size}, ${size}px)`,
+        blockSize: `var(--bsp-px-${size}, ${size}px)`,
         borderRadius: radiusTokens.full,
         border: '2px solid currentColor',
         borderBlockStartColor: 'transparent',
@@ -280,13 +281,13 @@ export function inputStyle(
   return {
     inlineSize: '100%',
     boxSizing: 'border-box',
-    paddingInline: '12px',
-    paddingBlock: '9px',
-    borderRadius: '12px',
+    paddingInline: 'var(--bsp-px-12)',
+    paddingBlock: 'var(--bsp-px-9)',
+    borderRadius: 'var(--bsp-px-12)',
     ...(toneBorder ? { border: `1px solid ${toneBorder}` } : {}),
     color: colorTokens.textPrimary,
     fontFamily: 'inherit',
-    fontSize: '14px',
+    fontSize: 'var(--bsp-fs-14)',
     lineHeight: 'normal',
   };
 }
@@ -297,9 +298,9 @@ export const CONTROL_CLASS = 'bs-control';
 export function textareaStyle(options: { tone?: ControlTone } = {}): CSSProperties {
   return {
     ...inputStyle(options),
-    minBlockSize: '7rem',
+    minBlockSize: 'var(--bsp-rem-7)',
     resize: 'vertical',
-    paddingBlock: '10px',
+    paddingBlock: 'var(--bsp-px-10)',
     lineHeight: 1.5,
   };
 }
@@ -348,7 +349,7 @@ export function Field({
           display: 'flex',
           alignItems: 'baseline',
           gap: spacingTokens['3xs'],
-          marginBlockEnd: '0.4375rem',
+          marginBlockEnd: 'var(--bsp-rem-0-4375)',
           ...typographyTokens.caption,
           fontWeight: 800,
           color: colorTokens.textPrimary,
@@ -534,7 +535,8 @@ export function IconTile({
   readonly tone?: 'brand' | 'accent' | 'neutral' | 'success' | 'warning' | 'danger' | 'info';
   readonly size?: 'sm' | 'md' | 'lg';
 }) {
-  const edge = size === 'sm' ? '2rem' : size === 'lg' ? '3rem' : '2.5rem';
+  const edge =
+    size === 'sm' ? 'var(--bsp-rem-2)' : size === 'lg' ? 'var(--bsp-rem-3)' : 'var(--bsp-rem-2-5)';
   const palette = {
     brand: { background: colorTokens.surfaceLavenderStrong, color: colorTokens.brandPurplePressed },
     accent: { background: colorTokens.brandYellowTint, color: colorTokens.brandYellowText },

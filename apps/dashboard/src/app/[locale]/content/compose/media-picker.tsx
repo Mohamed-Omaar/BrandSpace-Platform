@@ -148,7 +148,7 @@ export function MediaPicker({
                       background: isChosen ? colorTokens.brandPurpleTint : 'transparent',
                       opacity: blocked ? 0.45 : 1,
                       cursor: disabled || blocked ? 'not-allowed' : 'pointer',
-                      maxInlineSize: '6rem',
+                      maxInlineSize: 'var(--bsp-rem-6)',
                     }}
                   >
                     <span style={{ position: 'relative', display: 'inline-block' }}>
@@ -156,7 +156,7 @@ export function MediaPicker({
                         <AssetThumb
                           src={`/${locale}/assets/file/${option.previewToken}`}
                           alt={option.name}
-                          size="4rem"
+                          size="var(--bsp-rem-4)"
                           testId={`${testId}-thumb-${option.id}`}
                         />
                       ) : (
@@ -164,8 +164,8 @@ export function MediaPicker({
                           aria-hidden="true"
                           style={{
                             display: 'inline-block',
-                            inlineSize: '4rem',
-                            blockSize: '4rem',
+                            inlineSize: 'var(--bsp-rem-4)',
+                            blockSize: 'var(--bsp-rem-4)',
                             borderRadius: radiusTokens.sm,
                             background: colorTokens.surfaceMuted,
                           }}

@@ -192,13 +192,17 @@ export default async function CreativeStudioPage({
               {identity.palette.map((colour) => (
                 <li
                   key={colour}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 'var(--bsp-rem-0-25)',
+                  }}
                 >
                   <span
                     aria-hidden="true"
                     style={{
-                      inlineSize: '1.25rem',
-                      blockSize: '1.25rem',
+                      inlineSize: 'var(--bsp-rem-1-25)',
+                      blockSize: 'var(--bsp-rem-1-25)',
                       borderRadius: radiusTokens.full,
                       // The brand's OWN colour, as data — not a design literal.
                       background: colour,
@@ -238,7 +242,7 @@ export default async function CreativeStudioPage({
                       key={`${language}-${role}`}
                       data-testid={`creative-identity-font-${language}-${role}`}
                       data-font-family={slot.cssFamily}
-                      style={{ display: 'grid', gap: '0.125rem' }}
+                      style={{ display: 'grid', gap: 'var(--bsp-rem-0-125)' }}
                     >
                       <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
                         {t(`bb.look.slot.${language}.${role}` as MessageKey)} · {slot.name}

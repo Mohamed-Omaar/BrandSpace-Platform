@@ -27,5 +27,5 @@ export const customerThStyle = thStyle;
 export const customerTdStyle = tdStyle;
 export const customerInputStyle = (): CSSProperties => ({
   ...inputStyle(),
-  maxInlineSize: '24rem',
+  maxInlineSize: 'var(--bsp-rem-24)',
 });

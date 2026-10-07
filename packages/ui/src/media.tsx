@@ -188,7 +188,7 @@ export function AssetMedia({
 export function MediaThumb({
   seed = 0,
   alt,
-  size = '2.5rem',
+  size = 'var(--bsp-rem-2-5)',
   testId,
 }: {
   readonly seed?: MediaSeed;
@@ -220,7 +220,7 @@ export function MediaThumb({
 export function AssetThumb({
   src,
   alt,
-  size = '2.5rem',
+  size = 'var(--bsp-rem-2-5)',
   testId,
 }: {
   readonly src: string;
@@ -253,7 +253,7 @@ export function AssetThumb({
 export function Avatar({
   initials,
   seed = 0,
-  size = '2.25rem',
+  size = 'var(--bsp-rem-2-25)',
   shape = 'circle',
   testId,
 }: {
@@ -403,8 +403,8 @@ export function CarouselDots({
         <span
           key={index}
           style={{
-            inlineSize: '0.3125rem',
-            blockSize: '0.3125rem',
+            inlineSize: 'var(--bsp-rem-0-3125)',
+            blockSize: 'var(--bsp-rem-0-3125)',
             borderRadius: radiusTokens.full,
             background: colorTokens.textInverse,
             opacity: index === active ? 1 : 0.45,

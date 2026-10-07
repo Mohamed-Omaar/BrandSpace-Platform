@@ -133,7 +133,7 @@ export default async function DesignSystemPage({
                     overflow: 'hidden',
                   }}
                 >
-                  <div style={{ blockSize: '3rem', background: swatch.value }} />
+                  <div style={{ blockSize: 'var(--bsp-rem-3)', background: swatch.value }} />
                   <div style={{ padding: spacingTokens.sm }}>
                     <div style={{ ...typographyTokens.label }}>{swatch.token}</div>
                     <div style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
@@ -185,7 +185,7 @@ export default async function DesignSystemPage({
                     style={{
                       ...typographyTokens.caption,
                       color: colorTokens.textSecondary,
-                      minInlineSize: '5rem',
+                      minInlineSize: 'var(--bsp-rem-5)',
                     }}
                   >
                     {token}

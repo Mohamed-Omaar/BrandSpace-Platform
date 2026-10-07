@@ -60,7 +60,11 @@ const accessChoiceStyle = {
   alignItems: 'center',
   minBlockSize: layoutTokens.minTargetSize,
 } as const;
-const accessInputStyle = { inlineSize: '20px', blockSize: '20px', margin: 0 } as const;
+const accessInputStyle = {
+  inlineSize: 'var(--bsp-px-20)',
+  blockSize: 'var(--bsp-px-20)',
+  margin: 0,
+} as const;
 
 /**
  * Team: members and invitations.
@@ -304,7 +308,7 @@ export default async function MembersPage({
           id={`role-${membershipId}`}
           name="roleId"
           defaultValue=""
-          style={{ ...inputStyle(), maxInlineSize: '11rem' }}
+          style={{ ...inputStyle(), maxInlineSize: 'var(--bsp-rem-11)' }}
         >
           <option value="">{t('members.changeRole')}</option>
           {assignableRoles.map((r) => (
@@ -378,7 +382,7 @@ export default async function MembersPage({
   // Round 3 (C2) — the prototype's day style: "Oct 16".
   const joined = { format: (value: Date) => dayLabel(value, locale, 'UTC', systemClock.now()) };
   const memberIdentity = (m: (typeof members)[number]) => (
-    <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
+    <span style={{ display: 'grid', gap: 'var(--bsp-rem-0-125)', minInlineSize: 0 }}>
       {m.name?.trim() ? (
         <strong data-testid={`member-name-${m.email}`} style={typographyTokens.bodySm}>
           {m.name.trim()}

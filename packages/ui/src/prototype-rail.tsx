@@ -44,7 +44,12 @@ const chevron = (
 );
 
 /** `.bmenu`: `top: 64px; inset-inline-start: 0; width: 240px; z-index: 25`. */
-const BMENU = { top: '64px', insetInlineStart: 0, width: '240px', zIndex: 25 } as const;
+const BMENU = {
+  top: 'var(--bsp-px-64)',
+  insetInlineStart: 0,
+  width: 'var(--bsp-px-240)',
+  zIndex: 25,
+} as const;
 
 /** One brand and nothing to choose: the card, a link where the profile may be read. */
 export function PrototypeBrandCard({
@@ -104,8 +109,8 @@ function formRow({
         // `gap: 10px; background: rgba(121,53,254,.08) (current) | transparent;
         //  border-radius: 10px; padding: 7px 8px`.
         style={{
-          gap: '10px',
-          padding: '7px 8px',
+          gap: 'var(--bsp-px-10)',
+          padding: 'var(--bsp-px-7) var(--bsp-px-8)',
           background: current ? 'rgba(121, 53, 254, 0.08)' : 'transparent',
         }}
       >
@@ -113,15 +118,15 @@ function formRow({
           <span
             aria-hidden="true"
             style={{
-              width: '26px',
-              height: '26px',
-              borderRadius: '8px',
+              width: 'var(--bsp-px-26)',
+              height: 'var(--bsp-px-26)',
+              borderRadius: 'var(--bsp-px-8)',
               background: tile.color,
               color: '#fff',
               display: 'grid',
               placeItems: 'center',
               fontWeight: 800,
-              fontSize: '12px',
+              fontSize: 'var(--bsp-fs-12)',
               flexShrink: 0,
             }}
           >
@@ -131,7 +136,7 @@ function formRow({
         <span style={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <span
             style={{
-              fontSize: '13px',
+              fontSize: 'var(--bsp-fs-13)',
               fontWeight: 600,
               overflow: 'hidden',
               whiteSpace: 'nowrap',
@@ -140,7 +145,9 @@ function formRow({
           >
             <bdi>{name}</bdi>
           </span>
-          {caption ? <span style={{ fontSize: '11px', color: '#8a8a92' }}>{caption}</span> : null}
+          {caption ? (
+            <span style={{ fontSize: 'var(--bsp-fs-11)', color: '#8a8a92' }}>{caption}</span>
+          ) : null}
         </span>
         {current ? (
           <span aria-hidden="true" style={{ color: '#5312c4', fontWeight: 800 }}>
@@ -198,7 +205,10 @@ export function PrototypeBusinessSwitcher({
       menuStyle={BMENU}
     >
       {heading ? (
-        <span className="bsp-menu-head" style={{ padding: '4px 8px 2px' }}>
+        <span
+          className="bsp-menu-head"
+          style={{ padding: 'var(--bsp-px-4) var(--bsp-px-8) var(--bsp-px-2)' }}
+        >
           {heading}
         </span>
       ) : null}
@@ -268,7 +278,10 @@ export function PrototypeBrandSwitcher({
       menuStyle={BMENU}
     >
       {heading ? (
-        <span className="bsp-menu-head" style={{ padding: '4px 8px 2px' }}>
+        <span
+          className="bsp-menu-head"
+          style={{ padding: 'var(--bsp-px-4) var(--bsp-px-8) var(--bsp-px-2)' }}
+        >
           {heading}
         </span>
       ) : null}
@@ -306,7 +319,12 @@ export function PrototypeBrandSwitcher({
           role="menuitem"
           data-testid="manage-brand"
           className="bsp-menu-item"
-          style={{ fontSize: '12.5px', fontWeight: 600, color: '#5312c4', padding: '7px 10px' }}
+          style={{
+            fontSize: 'var(--bsp-fs-12-5)',
+            fontWeight: 600,
+            color: '#5312c4',
+            padding: 'var(--bsp-px-7) var(--bsp-px-10)',
+          }}
         >
           {manageLabel}
         </a>
@@ -366,16 +384,27 @@ export function PrototypeUserCard({
         </span>
       }
       menuClassName="bsp-menu bsp-umenu bsp-rise"
-      menuStyle={{ bottom: '64px', insetInlineStart: 0, width: '230px', zIndex: 30 }}
+      menuStyle={{
+        bottom: 'var(--bsp-px-64)',
+        insetInlineStart: 0,
+        width: 'var(--bsp-px-230)',
+        zIndex: 30,
+      }}
     >
-      <span style={{ display: 'flex', flexDirection: 'column', padding: '8px 10px 6px' }}>
-        <b style={{ fontSize: '13px' }}>
+      <span
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 'var(--bsp-px-8) var(--bsp-px-10) var(--bsp-px-6)',
+        }}
+      >
+        <b style={{ fontSize: 'var(--bsp-fs-13)' }}>
           <bdi>{name}</bdi>
         </b>
         {email ? (
           <span
             className="bsp-ltr"
-            style={{ fontSize: '11px', color: '#8a8a92', textAlign: 'start' }}
+            style={{ fontSize: 'var(--bsp-fs-11)', color: '#8a8a92', textAlign: 'start' }}
           >
             {email}
           </span>
@@ -407,7 +436,7 @@ export function PrototypeMenuLink({
       data-testid={testId}
       className="bsp-menu-item"
       {...(hrefLang ? { hrefLang } : {})}
-      style={{ justifyContent: trailing ? 'space-between' : undefined, gap: '8px' }}
+      style={{ justifyContent: trailing ? 'space-between' : undefined, gap: 'var(--bsp-px-8)' }}
     >
       {children}
       {trailing}
@@ -495,7 +524,12 @@ export function PrototypeCreateMenu({
         </>
       }
       menuClassName="bsp-menu bsp-create-menu"
-      menuStyle={{ top: '50px', insetInlineEnd: 0, width: '330px', zIndex: 20 }}
+      menuStyle={{
+        top: 'var(--bsp-px-50)',
+        insetInlineEnd: 0,
+        width: 'var(--bsp-px-330)',
+        zIndex: 20,
+      }}
     >
       {items.map((item) => (
         <PrefetchLink

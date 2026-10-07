@@ -664,10 +664,10 @@ export default async function OverviewPage({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '12px',
+            gap: 'var(--bsp-px-12)',
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--bsp-px-2)' }}>
             <h2 className="bsp-sech">{fill('home.p.setupTitle', { brand: brandName })}</h2>
             <span style={{ fontSize: 'var(--bsp-t-13)', color: 'var(--bs-text-muted)' }}>
               {stepsLeft === 1
@@ -686,14 +686,14 @@ export default async function OverviewPage({
             {stepsDone}/{steps.length}
           </span>
         </div>
-        <div className="bsp-bar" style={{ height: '6px' }}>
+        <div className="bsp-bar" style={{ height: 'var(--bsp-px-6)' }}>
           <span style={{ width: `${Math.round((stepsDone / steps.length) * 100)}%` }} />
         </div>
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '10px',
+            gap: 'var(--bsp-px-10)',
           }}
         >
           {steps.map((step) => (
@@ -705,8 +705,8 @@ export default async function OverviewPage({
               style={{
                 background: step.done ? 'var(--bsp-setup-done)' : 'var(--bsp-setup-todo)',
                 boxShadow: 'none',
-                padding: '18px',
-                minHeight: '150px',
+                padding: 'var(--bsp-px-18)',
+                minHeight: 'var(--bsp-px-150)',
                 // A <div> in the prototype, which has no box-sizing reset.
                 boxSizing: 'content-box',
               }}
@@ -815,7 +815,7 @@ export default async function OverviewPage({
         </p>
       ) : null}
       {kind === 'owner' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--bsp-px-22)' }}>
           {/* ------------------------------------------------------------ the hero */}
           <section className="bsp-hero" data-testid="overview-hero">
             <PrototypeHeroCanvas className="bsp-hero-canvas" />
@@ -911,7 +911,14 @@ export default async function OverviewPage({
                   <img src={thumbFor(schedule.upcoming[0].id) ?? ''} alt="" />
                 ) : null}
               </span>
-              <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+              <span
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 'var(--bsp-px-2)',
+                  minWidth: 0,
+                }}
+              >
                 <span className="bsp-float-title">{t('overview.float.next')}</span>
                 <span className="bsp-float-detail">
                   {schedule?.upcoming[0]
@@ -1100,7 +1107,7 @@ export default async function OverviewPage({
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    gap: '10px',
+                    gap: 'var(--bsp-px-10)',
                   }}
                 >
                   <span
@@ -1120,7 +1127,7 @@ export default async function OverviewPage({
                 <span style={{ fontSize: 'var(--bsp-t-14)', color: 'var(--bsp-sub)' }}>
                   {t('home.p.cpCardTitle')}
                 </span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--bsp-px-8)' }}>
                   {(['home.p.sug1', 'home.p.sug2', 'home.p.sug3'] as const).map((key) => (
                     <CopilotLink
                       key={key}
@@ -1155,7 +1162,12 @@ export default async function OverviewPage({
               data-testid="home-recommended"
               style={{ overflow: 'hidden' }}
             >
-              <div style={{ ...NEEDS_HEAD, padding: '18px 20px 6px' }}>
+              <div
+                style={{
+                  ...NEEDS_HEAD,
+                  padding: 'var(--bsp-px-18) var(--bsp-px-20) var(--bsp-px-6)',
+                }}
+              >
                 <h2 className="bsp-sech">{t('home.p.noticedTitle')}</h2>
                 <span style={{ fontSize: 'var(--bsp-t-12_5)', color: 'var(--bs-text-muted)' }}>
                   {t('home.p.noticedScope')}
@@ -1331,14 +1343,21 @@ export default async function OverviewPage({
         </div>
       ) : (
         /* ---------------------------------------------------------- a role Home */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--bsp-px-22)' }}>
           {setupCard}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--bsp-px-18)' }}>
             <section style={ROLE_HERO} data-testid="home-role-hero">
               <span style={ROLE_AVATAR} aria-hidden="true">
                 {(firstName ?? customer.email).slice(0, 2).toUpperCase()}
               </span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexGrow: 1 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 'var(--bsp-px-6)',
+                  flexGrow: 1,
+                }}
+              >
                 <span className="bsp-role-hi">
                   {firstName ? fill('home.p.hi', { name: firstName }) : greeting}
                 </span>
@@ -1351,7 +1370,7 @@ export default async function OverviewPage({
                 style={{
                   background: 'var(--bs-surface)',
                   color: 'var(--bs-text-primary)',
-                  padding: '6px 12px',
+                  padding: 'var(--bsp-px-6) var(--bsp-px-12)',
                 }}
               >
                 {locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -1500,12 +1519,12 @@ export default async function OverviewPage({
         style={ROLE_CARD}
       >
         <div style={ROLE_CARD_HEAD}>
-          <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 'var(--bsp-px-2)' }}>
             <span
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: 'var(--bsp-px-8)',
                 fontSize: 'var(--bsp-t-15)',
                 fontWeight: 800,
               }}
@@ -1535,7 +1554,11 @@ export default async function OverviewPage({
           <ul style={LIST}>
             {section.rows.slice(0, 4).map((row) => (
               <li key={row.key}>
-                <Link href={row.href} className="bsp-uprow" style={{ ...UPROW, gap: '12px' }}>
+                <Link
+                  href={row.href}
+                  className="bsp-uprow"
+                  style={{ ...UPROW, gap: 'var(--bsp-px-12)' }}
+                >
                   <span style={ART} aria-hidden="true" />
                   <span style={ROW_TEXT}>
                     <span style={ROW_TITLE}>{row.title}</span>
@@ -1589,13 +1612,16 @@ function Figure({
         {sub}
       </span>
       {bar ? (
-        <span className="bsp-bar" style={{ height: '5px', marginTop: '6px' }}>
+        <span
+          className="bsp-bar"
+          style={{ height: 'var(--bsp-px-5)', marginTop: 'var(--bsp-px-6)' }}
+        >
           <span style={{ width: bar }} />
         </span>
       ) : null}
     </>
   );
-  const style: CSSProperties = { minHeight: '176px', animationDelay: delay };
+  const style: CSSProperties = { minHeight: 'var(--bsp-px-176)', animationDelay: delay };
   return href ? (
     <Link href={href} className="bsp-xcard bsp-kpi" data-testid={testId} style={style}>
       {body}
@@ -1658,52 +1684,52 @@ const DECISION_CLASS = { accept: 'bsp-pur', snooze: 'bsp-sec', dismiss: 'bsp-gho
 /* The prototype's inline geometry, transcribed. */
 const LIST: CSSProperties = { listStyle: 'none', margin: 0, padding: 0 };
 const SETUP_CARD: CSSProperties = {
-  padding: '20px 22px',
+  padding: 'var(--bsp-px-20) var(--bsp-px-22)',
   display: 'flex',
   flexDirection: 'column',
-  gap: '14px',
+  gap: 'var(--bsp-px-14)',
 };
 const NEEDS_HEAD: CSSProperties = {
   display: 'flex',
   alignItems: 'baseline',
   justifyContent: 'space-between',
-  padding: '18px 20px 8px',
+  padding: 'var(--bsp-px-18) var(--bsp-px-20) var(--bsp-px-8)',
 };
 const SPLIT: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)',
-  gap: '14px',
+  gap: 'var(--bsp-px-14)',
   alignItems: 'stretch',
 };
 const UPCOMING: CSSProperties = {
-  padding: '20px 22px',
+  padding: 'var(--bsp-px-20) var(--bsp-px-22)',
   display: 'flex',
   flexDirection: 'column',
   gap: 0,
-  borderRadius: '24px',
+  borderRadius: 'var(--bsp-px-24)',
 };
 const UPCOMING_HEAD: CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'baseline',
-  marginBottom: '8px',
+  marginBottom: 'var(--bsp-px-8)',
 };
 const UPROW: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: '14px',
+  gap: 'var(--bsp-px-14)',
   borderTop: '1px solid var(--bsp-rule)',
   background: 'transparent',
-  padding: '10px 6px',
+  padding: 'var(--bsp-px-10) var(--bsp-px-6)',
   textAlign: 'start',
   width: '100%',
-  borderRadius: '12px',
+  borderRadius: 'var(--bsp-px-12)',
   color: 'inherit',
   textDecoration: 'none',
   boxSizing: 'border-box',
 };
 const DAY_COL: CSSProperties = {
-  width: '34px',
+  width: 'var(--bsp-px-34)',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
@@ -1722,9 +1748,9 @@ const DAYNUM: CSSProperties = {
   lineHeight: 1.2,
 };
 const ART: CSSProperties = {
-  width: '36px',
-  height: '36px',
-  borderRadius: '10px',
+  width: 'var(--bsp-px-36)',
+  height: 'var(--bsp-px-36)',
+  borderRadius: 'var(--bsp-px-10)',
   background: 'var(--bsp-art-empty)',
   flexShrink: 0,
   opacity: 0.9,
@@ -1755,19 +1781,19 @@ const ROW_META: CSSProperties = { fontSize: 'var(--bsp-t-12)', color: 'var(--bsp
 const EMPTY_ROW: CSSProperties = {
   fontSize: 'var(--bsp-t-13)',
   color: 'var(--bsp-faint)',
-  padding: '14px 6px',
+  padding: 'var(--bsp-px-14) var(--bsp-px-6)',
   borderTop: '1px solid var(--bsp-rule)',
 };
 const NOTICED_GRID: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: '12px',
-  padding: '8px 20px 20px',
+  gap: 'var(--bsp-px-12)',
+  padding: 'var(--bsp-px-8) var(--bsp-px-20) var(--bsp-px-20)',
 };
 const NOTICED_CARD: CSSProperties = {
   background: 'var(--bsp-noticed)',
   boxShadow: 'none',
-  minHeight: '220px',
+  minHeight: 'var(--bsp-px-220)',
   // A <div> in the prototype, which has no box-sizing reset.
   boxSizing: 'content-box',
 };
@@ -1779,7 +1805,7 @@ const NOTICED_TITLE: CSSProperties = {
 const NOTICED_NONE: CSSProperties = {
   gridColumn: '1 / -1',
   margin: 0,
-  padding: '6px 0',
+  padding: 'var(--bsp-px-6) 0',
   fontSize: 'var(--bsp-t-13)',
   color: 'var(--bsp-faint)',
 };
@@ -1787,17 +1813,17 @@ const NOTICED_FOOT: CSSProperties = { justifyContent: 'flex-start', flexWrap: 'w
 const ROLE_HERO: CSSProperties = {
   position: 'relative',
   overflow: 'hidden',
-  borderRadius: '28px',
-  padding: '30px 36px',
+  borderRadius: 'var(--bsp-px-28)',
+  padding: 'var(--bsp-px-30) var(--bsp-px-36)',
   background: 'var(--bsp-role-hero)',
   display: 'flex',
   alignItems: 'center',
-  gap: '20px',
+  gap: 'var(--bsp-px-20)',
 };
 const ROLE_AVATAR: CSSProperties = {
-  width: '56px',
-  height: '56px',
-  borderRadius: '18px',
+  width: 'var(--bsp-px-56)',
+  height: 'var(--bsp-px-56)',
+  borderRadius: 'var(--bsp-px-18)',
   background: 'var(--bs-brand-purple)',
   color: 'var(--bs-surface)',
   display: 'grid',
@@ -1809,27 +1835,27 @@ const ROLE_AVATAR: CSSProperties = {
 const ROLE_GRID: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: '14px',
+  gap: 'var(--bsp-px-14)',
 };
 const ROLE_CARD: CSSProperties = {
-  padding: '18px 20px',
+  padding: 'var(--bsp-px-18) var(--bsp-px-20)',
   display: 'flex',
   flexDirection: 'column',
   gap: 0,
-  borderRadius: '22px',
+  borderRadius: 'var(--bsp-px-22)',
 };
 const ROLE_CARD_HEAD: CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',
   justifyContent: 'space-between',
-  gap: '10px',
-  marginBottom: '8px',
+  gap: 'var(--bsp-px-10)',
+  marginBottom: 'var(--bsp-px-8)',
 };
 const COUNT_CHIP: CSSProperties = {
   fontSize: 'var(--bsp-t-11)',
   fontWeight: 700,
   color: 'var(--bs-text-muted)',
   background: 'var(--bsp-chip)',
-  borderRadius: '99px',
-  padding: '1px 7px',
+  borderRadius: 'var(--bsp-px-99)',
+  padding: '1px var(--bsp-px-7)',
 };

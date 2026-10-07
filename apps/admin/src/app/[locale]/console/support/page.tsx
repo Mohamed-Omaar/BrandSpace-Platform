@@ -68,7 +68,7 @@ export default async function SupportModePage({
   return (
     <div>
       {/*
-        This page carried the last raw `<h1 style={{ fontSize: '1.35rem' }}>` in
+        This page carried the last raw `<h1 style={{ fontSize: 'var(--bsp-fs-21-6)' }}>` in
         either application, from before the design system existed. Its title now
         comes from the top bar like every other route's.
       */}

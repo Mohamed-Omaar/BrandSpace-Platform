@@ -35,7 +35,7 @@ export function RouteState({
     >
       <div
         style={{
-          maxInlineSize: '32rem',
+          maxInlineSize: 'var(--bsp-rem-32)',
           inlineSize: '100%',
           display: 'grid',
           gap: spacingTokens.sm,

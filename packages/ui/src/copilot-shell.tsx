@@ -199,8 +199,8 @@ function MessageRow({
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            inlineSize: '1.75rem',
-            blockSize: '1.75rem',
+            inlineSize: 'var(--bsp-rem-1-75)',
+            blockSize: 'var(--bsp-rem-1-75)',
             borderRadius: radiusTokens.full,
             background: colorTokens.brandPurple,
             color: colorTokens.brandPurpleInk,
@@ -211,7 +211,7 @@ function MessageRow({
         </span>
       ) : (
         <span aria-hidden="true" className="bs-cpb-av" style={{ gridColumn: 1, flexShrink: 0 }}>
-          <Avatar initials={labels.userName.slice(0, 2)} size="1.75rem" seed={3} />
+          <Avatar initials={labels.userName.slice(0, 2)} size="var(--bsp-rem-1-75)" seed={3} />
         </span>
       )}
       <div style={{ display: 'grid', gap: spacingTokens['3xs'], minInlineSize: 0 }}>
@@ -283,8 +283,8 @@ function ToolCard({ run }: { readonly run: CopilotToolRun }) {
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          inlineSize: '1.75rem',
-          blockSize: '1.75rem',
+          inlineSize: 'var(--bsp-rem-1-75)',
+          blockSize: 'var(--bsp-rem-1-75)',
           borderRadius: radiusTokens.md,
           background: visual.tint,
           color: visual.color,
@@ -880,8 +880,8 @@ export function CopilotHeader({
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          inlineSize: '2.25rem',
-          blockSize: '2.25rem',
+          inlineSize: 'var(--bsp-rem-2-25)',
+          blockSize: 'var(--bsp-rem-2-25)',
           borderRadius: radiusTokens.lg,
           background: colorTokens.brandPurple,
           color: colorTokens.brandPurpleInk,
@@ -1060,7 +1060,9 @@ export function CopilotDrawer({
         }}
       >
         <CopilotHeader labels={labels} onClose={onClose} />
-        <div style={{ minBlockSize: 0, padding: '0 1.375rem 1.375rem' }}>{children}</div>
+        <div style={{ minBlockSize: 0, padding: '0 var(--bsp-rem-1-375) var(--bsp-rem-1-375)' }}>
+          {children}
+        </div>
       </div>
     </div>
   );

@@ -68,8 +68,9 @@ export function PlatformIcon({
         style={{
           display: 'inline-block',
           flexShrink: 0,
-          inlineSize: dot,
-          blockSize: dot,
+          // D-484: the size token, so the customer app draws it at 0.88.
+          inlineSize: `var(--bsp-px-${dot}, ${dot}px)`,
+          blockSize: `var(--bsp-px-${dot}, ${dot}px)`,
           borderRadius: radiusTokens.full,
           background: platformBrandTokens[platform],
           ...style,

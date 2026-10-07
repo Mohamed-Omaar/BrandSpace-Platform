@@ -186,15 +186,15 @@ export function MediaDrawer({
                         <AssetThumb
                           src={`/${locale}/assets/file/${option.previewToken}`}
                           alt=""
-                          size="5rem"
+                          size="var(--bsp-rem-5)"
                         />
                       ) : (
                         <span
                           aria-hidden="true"
                           style={{
                             display: 'inline-block',
-                            inlineSize: '5rem',
-                            blockSize: '5rem',
+                            inlineSize: 'var(--bsp-rem-5)',
+                            blockSize: 'var(--bsp-rem-5)',
                             borderRadius: radiusTokens.sm,
                             background: colorTokens.surfaceMuted,
                           }}

@@ -507,7 +507,8 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                 style={{
                   display: 'grid',
                   gap: spacingTokens.lg,
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(16rem, 100%), 1fr))',
+                  gridTemplateColumns:
+                    'repeat(auto-fit, minmax(min(var(--bsp-rem-16), 100%), 1fr))',
                 }}
               >
                 {(

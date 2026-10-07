@@ -372,7 +372,13 @@ export default async function PublishingDefaultsPage({
                             borderBlockEnd: `1px solid ${colorTokens.border}`,
                           }}
                         >
-                          <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
+                          <span
+                            style={{
+                              display: 'grid',
+                              gap: 'var(--bsp-rem-0-125)',
+                              minInlineSize: 0,
+                            }}
+                          >
                             <span
                               style={{
                                 display: 'flex',
@@ -561,7 +567,7 @@ export default async function PublishingDefaultsPage({
                           dir="auto"
                           defaultValue={editing?.body ?? ''}
                           data-testid={`template-body-${brand.id}`}
-                          style={{ ...inputStyle(), minBlockSize: '6rem' }}
+                          style={{ ...inputStyle(), minBlockSize: 'var(--bsp-rem-6)' }}
                         />
                       </Field>
                       <Field

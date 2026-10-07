@@ -419,7 +419,7 @@ export default async function CampaignDetailPage({
           style={{
             display: 'grid',
             gap: spacingTokens.md,
-            gridTemplateColumns: 'repeat(auto-fit, minmax(11rem, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(var(--bsp-rem-11), 1fr))',
           }}
           data-testid="campaign-metrics"
         >
@@ -951,13 +951,17 @@ export default async function CampaignDetailPage({
                           <AssetThumb
                             src={`/${locale}/assets/file/${first.previewToken}`}
                             alt=""
-                            size="3rem"
+                            size="var(--bsp-rem-3)"
                           />
                         ) : (
                           <span aria-hidden="true" style={thumbPlaceholder} />
                         )}
                         <span
-                          style={{ display: 'grid', gap: spacingTokens['3xs'], flex: '1 1 14rem' }}
+                          style={{
+                            display: 'grid',
+                            gap: spacingTokens['3xs'],
+                            flex: '1 1 var(--bsp-rem-14)',
+                          }}
                         >
                           <Link
                             href={`/${locale}/content/compose?item=${item.id}`}
@@ -1021,13 +1025,17 @@ export default async function CampaignDetailPage({
                   <li key={slot.id} style={rowStyle} data-testid={`campaign-slot-${slot.id}`}>
                     <time
                       dateTime={slot.scheduledAtUtc.toISOString()}
-                      style={{ ...typographyTokens.label, minInlineSize: '10rem' }}
+                      style={{ ...typographyTokens.label, minInlineSize: 'var(--bsp-rem-10)' }}
                     >
                       {dateFormat.format(slot.scheduledAtUtc)} UTC
                     </time>
                     <Link
                       href={`/${locale}/content/compose?item=${slot.contentItemId}`}
-                      style={{ color: colorTokens.brandPurple, fontWeight: 600, flex: '1 1 12rem' }}
+                      style={{
+                        color: colorTokens.brandPurple,
+                        fontWeight: 600,
+                        flex: '1 1 var(--bsp-rem-12)',
+                      }}
                     >
                       {titleOf(slot.contentItemId)}
                     </Link>
@@ -1078,7 +1086,7 @@ export default async function CampaignDetailPage({
               <ul
                 style={{
                   ...listStyle,
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(7rem, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(var(--bsp-rem-7), 1fr))',
                 }}
               >
                 {[...media.values()].map((asset) => (
@@ -1098,7 +1106,7 @@ export default async function CampaignDetailPage({
                         <AssetThumb
                           src={`/${locale}/assets/file/${asset.previewToken}`}
                           alt=""
-                          size="5rem"
+                          size="var(--bsp-rem-5)"
                         />
                       ) : (
                         <span aria-hidden="true" style={thumbPlaceholder} />
@@ -1132,7 +1140,7 @@ export default async function CampaignDetailPage({
                         .filter((metric) => metric.changeMilli !== null)
                         .map((metric) => (
                           <li key={metric.metricKey} style={rowStyle}>
-                            <span style={{ flex: '1 1 12rem' }}>
+                            <span style={{ flex: '1 1 var(--bsp-rem-12)' }}>
                               {dictionary[`campaigns.metric.${metric.metricKey}`] ??
                                 metric.metricKey}
                             </span>
@@ -1162,7 +1170,7 @@ export default async function CampaignDetailPage({
                             style={{
                               color: colorTokens.brandPurple,
                               fontWeight: 600,
-                              flex: '1 1 12rem',
+                              flex: '1 1 var(--bsp-rem-12)',
                             }}
                           >
                             {post.title ?? '—'}
@@ -1198,7 +1206,9 @@ export default async function CampaignDetailPage({
                     <ul style={listStyle}>
                       {room.insights.map((insight) => (
                         <li key={insight.id} style={rowStyle}>
-                          <span style={{ flex: '1 1 12rem' }}>{pick(insight.title)}</span>
+                          <span style={{ flex: '1 1 var(--bsp-rem-12)' }}>
+                            {pick(insight.title)}
+                          </span>
                           <Link
                             href={`/${locale}/intelligence?insight=${insight.id}`}
                             style={{ ...typographyTokens.label, color: colorTokens.brandPurple }}
@@ -1265,9 +1275,9 @@ const rowStyle = {
 
 const thumbPlaceholder = {
   display: 'inline-block',
-  inlineSize: '3rem',
-  blockSize: '3rem',
-  borderRadius: '0.5rem',
+  inlineSize: 'var(--bsp-rem-3)',
+  blockSize: 'var(--bsp-rem-3)',
+  borderRadius: 'var(--bsp-rem-0-5)',
   background: colorTokens.surfaceMuted,
 } as const;
 

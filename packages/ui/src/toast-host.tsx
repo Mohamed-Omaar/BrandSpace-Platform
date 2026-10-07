@@ -161,7 +161,7 @@ function IncomingSlot({
         tone="info"
         announce={false}
         className="bs-toast-in"
-        icon={<Avatar initials={shown.initial} size="1.75rem" />}
+        icon={<Avatar initials={shown.initial} size="var(--bsp-rem-1-75)" />}
         onDismiss={close}
         dismissLabel={dismissLabel}
         action={{
@@ -172,7 +172,7 @@ function IncomingSlot({
         }}
         testId={leaving ? 'incoming-mention-leaving' : 'incoming-mention'}
       >
-        <span style={{ display: 'grid', gap: '0.125rem', minInlineSize: 0 }}>
+        <span style={{ display: 'grid', gap: 'var(--bsp-rem-0-125)', minInlineSize: 0 }}>
           <strong style={{ fontWeight: 600 }}>{shown.title}</strong>
           {shown.context ? (
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -284,7 +284,7 @@ export function ToastHost({
         insetInline: 0,
         // `.toastx { bottom: 26px }` inside the frame, which sits 20px in from
         // the viewport: 46px from the window's foot, measured (round 4).
-        insetBlockEnd: '46px',
+        insetBlockEnd: 'var(--bsp-px-46)',
         zIndex: zIndexTokens.toast,
         display: 'flex',
         flexDirection: 'column',

@@ -243,11 +243,11 @@ async function NoteThread({
       style={{
         border: `1px solid ${highlighted ? colorTokens.brandPurpleBorder : colorTokens.hairline}`,
         background: highlighted ? colorTokens.surfaceLavender : 'transparent',
-        borderRadius: '0.875rem',
+        borderRadius: 'var(--bsp-rem-0-875)',
         padding: spacingTokens.md,
         display: 'grid',
         gap: spacingTokens.sm,
-        scrollMarginBlockStart: '6rem',
+        scrollMarginBlockStart: 'var(--bsp-rem-6)',
       }}
     >
       <div
@@ -500,8 +500,8 @@ async function NoteThread({
 const avatarStyle = {
   display: 'inline-grid',
   placeItems: 'center',
-  inlineSize: '1.75rem',
-  blockSize: '1.75rem',
+  inlineSize: 'var(--bsp-rem-1-75)',
+  blockSize: 'var(--bsp-rem-1-75)',
   borderRadius: '50%',
   background: colorTokens.surfaceLavenderStrong,
   color: colorTokens.brandPurplePressed,
@@ -519,7 +519,7 @@ const optionRowStyle = {
 const optionLabelStyle = {
   ...typographyTokens.caption,
   color: colorTokens.textSecondary,
-  minInlineSize: '6rem',
+  minInlineSize: 'var(--bsp-rem-6)',
 } as const;
 
 /**
