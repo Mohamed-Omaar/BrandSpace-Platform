@@ -1,3 +1,4 @@
+import { systemClock } from './clock';
 /**
  * Geographic constants shared by onboarding surfaces.
  *
@@ -280,8 +281,29 @@ export function countryOptions(locale: string): LocalizedOption[] {
   })).sort((a, b) => collator.compare(a.label, b.label));
 }
 
-/** Searchable IANA time-zone choices. Stored values stay canonical identifiers. */
-export function timeZoneOptions(locale: string): LocalizedOption[] {
+export interface TimeZoneOption extends LocalizedOption {
+  /** The zone's UTC offset now, e.g. `UTC+03:00`: what the row shows at its end. */
+  readonly hint: string;
+}
+
+/** `UTC+03:00` for a zone at an instant; `UTC+00:00` for a zero offset, so every row reads alike. */
+export function utcOffsetLabel(timeZone: string, at: Date = systemClock.now()): string {
+  const part = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' })
+    .formatToParts(at)
+    .find((p) => p.type === 'timeZoneName')?.value;
+  // `GMT+03:00`, or a bare `GMT` at zero in some runtimes.
+  const offset = part?.replace(/^GMT/, '') ?? '';
+  return `UTC${offset === '' ? '+00:00' : offset}`;
+}
+
+/**
+ * Searchable IANA time-zone choices. Stored values stay canonical identifiers.
+ *
+ * BATCH 7 (A5): each row names the zone ONCE — the city, with its current UTC
+ * offset at the end — where it used to print `Riyadh — Asia/Riyadh` and then
+ * `Asia/Riyadh` again. The identifier is still what is searched and stored.
+ */
+export function timeZoneOptions(locale: string, at: Date = systemClock.now()): TimeZoneOption[] {
   const supportedValuesOf = (
     Intl as typeof Intl & { supportedValuesOf?: (key: 'timeZone') => string[] }
   ).supportedValuesOf;
@@ -290,10 +312,11 @@ export function timeZoneOptions(locale: string): LocalizedOption[] {
   const collator = new Intl.Collator(locale, { sensitivity: 'base' });
 
   return zones
-    .map((value) => {
-      const city = value.split('/').at(-1)?.replaceAll('_', ' ') ?? value;
-      return { value, label: city === value ? value : `${city} — ${value}` };
-    })
+    .map((value) => ({
+      value,
+      label: value.split('/').at(-1)?.replaceAll('_', ' ') ?? value,
+      hint: utcOffsetLabel(value, at),
+    }))
     .sort((a, b) => collator.compare(a.label, b.label));
 }
 

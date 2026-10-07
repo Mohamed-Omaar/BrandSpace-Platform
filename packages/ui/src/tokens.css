@@ -467,6 +467,13 @@ h4 {
   position: relative;
   isolation: isolate;
   min-block-size: 100vh;
+  /*
+   * BATCH 7 (A2) — ONE SCROLL ONLY. Without a formatting context of its own,
+   * the shell's 20px top margin collapsed through this host and the body,
+   * pushing the whole page 20px down: every app screen was 20px taller than
+   * the window and the browser showed its own scrollbar beside the panel's.
+   */
+  display: flow-root;
 }
 
 .bs-ambient {

@@ -61,7 +61,7 @@ export const SECRET_CATEGORY_DEFINITIONS: readonly SecretCategoryDefinition[] = 
     labelAr: 'تطبيق OAuth لمنصة تواصل',
     supportsZeroDowntimeRotation: false,
     description:
-      'Client secrets for the BrandSpace application registered with each social platform.',
+      'Client secrets for the Brandspace application registered with each social platform.',
   },
   {
     key: 'observability',

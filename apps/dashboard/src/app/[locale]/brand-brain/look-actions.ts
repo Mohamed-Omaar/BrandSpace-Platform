@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { uploadReasonOf } from '../../../server/upload-rules';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import {
@@ -43,7 +44,13 @@ function lookUrl(locale: string, brandId: string, params: Record<string, string>
 function failure(locale: string, brandId: string, error: unknown, action: string): string {
   const correlationId = randomUUID();
   log.warn('look & voice action failed', { correlationId, action, ...internalErrorFields(error) });
-  return lookUrl(locale, brandId, { error: actionErrorCode(error), ref: correlationId });
+  // Batch 7 (A3): an upload's refusal is said at the upload, in words.
+  const reason = uploadReasonOf(error);
+  return lookUrl(locale, brandId, {
+    error: actionErrorCode(error),
+    ref: correlationId,
+    ...(reason ? { uploadReason: reason, uploadFor: action } : {}),
+  });
 }
 
 async function begin(formData: FormData): Promise<{

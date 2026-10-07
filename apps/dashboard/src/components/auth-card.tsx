@@ -38,7 +38,7 @@ export function AuthCard({
             </span>
             {/* The product's name, in Latin in both languages, as the prototype writes it. */}
             <span className="bsp-auth-word bsp-ltr" lang="en">
-              BrandSpace
+              Brandspace
             </span>
             <nav
               aria-label={locale === 'ar' ? 'التنقل الرئيسي' : 'Main navigation'}

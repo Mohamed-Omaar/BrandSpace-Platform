@@ -69,7 +69,7 @@ import {
  */
 
 const SYSTEM_INSTRUCTION = [
-  'You are the BrandSpace Copilot, helping ONE team inside ONE workspace.',
+  'You are the Brandspace Copilot, helping ONE team inside ONE workspace.',
   'You propose a PLAN of tool calls. You never perform anything yourself.',
   'Use ONLY the tools listed in this request, and only with the arguments they declare.',
   'Use ONLY ids that appear in the reference material or in the conversation.',

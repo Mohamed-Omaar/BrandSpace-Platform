@@ -46,13 +46,13 @@ type LocalisedTemplate = { readonly AR: TemplateCopy; readonly EN: TemplateCopy 
 const TEMPLATES: Readonly<Record<EmailTemplateKey, LocalisedTemplate>> = {
   'auth.email_verification': {
     EN: {
-      subject: 'Confirm your BrandSpace email address',
-      body: 'Confirm this address to finish creating your BrandSpace account. If you did not ask for this, ignore this message.',
+      subject: 'Confirm your Brandspace email address',
+      body: 'Confirm this address to finish creating your Brandspace account. If you did not ask for this, ignore this message.',
       action: 'Confirm my email address',
     },
     AR: {
-      subject: 'أكّد بريدك الإلكتروني في BrandSpace',
-      body: 'أكّد هذا العنوان لإتمام إنشاء حسابك في BrandSpace. إن لم تطلب ذلك، تجاهل هذه الرسالة.',
+      subject: 'أكّد بريدك الإلكتروني في Brandspace',
+      body: 'أكّد هذا العنوان لإتمام إنشاء حسابك في Brandspace. إن لم تطلب ذلك، تجاهل هذه الرسالة.',
       action: 'تأكيد بريدي الإلكتروني',
     },
   },
@@ -65,24 +65,24 @@ const TEMPLATES: Readonly<Record<EmailTemplateKey, LocalisedTemplate>> = {
    */
   'auth.signup.exists': {
     EN: {
-      subject: 'Confirm your BrandSpace email address',
-      body: 'Someone tried to create a BrandSpace account with this address, and one already exists. If that was you, sign in instead. If it was not, no action is needed.',
+      subject: 'Confirm your Brandspace email address',
+      body: 'Someone tried to create a Brandspace account with this address, and one already exists. If that was you, sign in instead. If it was not, no action is needed.',
       action: 'Sign in',
     },
     AR: {
-      subject: 'أكّد بريدك الإلكتروني في BrandSpace',
-      body: 'حاول أحدهم إنشاء حساب في BrandSpace بهذا العنوان، وهناك حساب قائم بالفعل. إن كنت أنت، سجّل الدخول. وإن لم تكن، فلا يلزم أي إجراء.',
+      subject: 'أكّد بريدك الإلكتروني في Brandspace',
+      body: 'حاول أحدهم إنشاء حساب في Brandspace بهذا العنوان، وهناك حساب قائم بالفعل. إن كنت أنت، سجّل الدخول. وإن لم تكن، فلا يلزم أي إجراء.',
       action: 'تسجيل الدخول',
     },
   },
   'auth.password_reset': {
     EN: {
-      subject: 'Reset your BrandSpace password',
+      subject: 'Reset your Brandspace password',
       body: 'Use the link below to choose a new password. It expires shortly, and can be used once. If you did not ask for this, your password has not changed and no action is needed.',
       action: 'Choose a new password',
     },
     AR: {
-      subject: 'إعادة تعيين كلمة مرور BrandSpace',
+      subject: 'إعادة تعيين كلمة مرور Brandspace',
       body: 'استخدم الرابط أدناه لاختيار كلمة مرور جديدة. تنتهي صلاحيته قريبًا ويُستخدم مرة واحدة. إن لم تطلب ذلك، فكلمة مرورك لم تتغيّر ولا يلزم أي إجراء.',
       action: 'اختيار كلمة مرور جديدة',
     },
@@ -103,48 +103,48 @@ const TEMPLATES: Readonly<Record<EmailTemplateKey, LocalisedTemplate>> = {
    */
   'auth.password_reset.unknown': {
     EN: {
-      subject: 'Reset your BrandSpace password',
-      body: 'Someone asked to reset a BrandSpace password for this address, and there is no account here. If that was you, you may have used a different address. If it was not, no action is needed.',
-      action: 'Go to BrandSpace',
+      subject: 'Reset your Brandspace password',
+      body: 'Someone asked to reset a Brandspace password for this address, and there is no account here. If that was you, you may have used a different address. If it was not, no action is needed.',
+      action: 'Go to Brandspace',
     },
     AR: {
-      subject: 'إعادة تعيين كلمة مرور BrandSpace',
-      body: 'طلب أحدهم إعادة تعيين كلمة مرور BrandSpace لهذا العنوان، ولا يوجد حساب هنا. إن كنت أنت، فربما استخدمت عنوانًا آخر. وإن لم تكن، فلا يلزم أي إجراء.',
-      action: 'الانتقال إلى BrandSpace',
+      subject: 'إعادة تعيين كلمة مرور Brandspace',
+      body: 'طلب أحدهم إعادة تعيين كلمة مرور Brandspace لهذا العنوان، ولا يوجد حساب هنا. إن كنت أنت، فربما استخدمت عنوانًا آخر. وإن لم تكن، فلا يلزم أي إجراء.',
+      action: 'الانتقال إلى Brandspace',
     },
   },
   'workspace.invitation': {
     EN: {
-      subject: 'You have been invited to a BrandSpace workspace',
-      body: 'Someone invited you to work with them in BrandSpace. Accept the invitation to join.',
+      subject: 'You have been invited to a Brandspace workspace',
+      body: 'Someone invited you to work with them in Brandspace. Accept the invitation to join.',
       action: 'Accept the invitation',
     },
     AR: {
-      subject: 'دُعيت إلى مساحة عمل في BrandSpace',
-      body: 'دعاك أحدهم للعمل معه في BrandSpace. اقبل الدعوة للانضمام.',
+      subject: 'دُعيت إلى مساحة عمل في Brandspace',
+      body: 'دعاك أحدهم للعمل معه في Brandspace. اقبل الدعوة للانضمام.',
       action: 'قبول الدعوة',
     },
   },
   'workspace.invitation.resent': {
     EN: {
-      subject: 'Your BrandSpace invitation, again',
+      subject: 'Your Brandspace invitation, again',
       body: 'Here is your invitation again. The earlier link no longer works; this one does.',
       action: 'Accept the invitation',
     },
     AR: {
-      subject: 'دعوتك إلى BrandSpace مرة أخرى',
+      subject: 'دعوتك إلى Brandspace مرة أخرى',
       body: 'هذه دعوتك مرة أخرى. الرابط السابق لم يعد يعمل، وهذا الرابط يعمل.',
       action: 'قبول الدعوة',
     },
   },
   'workspace.suspended': {
     EN: {
-      subject: 'Your BrandSpace workspace has been suspended',
-      body: 'A workspace you belong to has been suspended. Its data is unchanged. Contact BrandSpace support to restore access.',
+      subject: 'Your Brandspace workspace has been suspended',
+      body: 'A workspace you belong to has been suspended. Its data is unchanged. Contact Brandspace support to restore access.',
     },
     AR: {
-      subject: 'تم تعليق مساحة عملك في BrandSpace',
-      body: 'تم تعليق مساحة عمل تنتمي إليها. بياناتها لم تتغيّر. تواصل مع دعم BrandSpace لاستعادة الوصول.',
+      subject: 'تم تعليق مساحة عملك في Brandspace',
+      body: 'تم تعليق مساحة عمل تنتمي إليها. بياناتها لم تتغيّر. تواصل مع دعم Brandspace لاستعادة الوصول.',
     },
   },
 };
@@ -174,13 +174,34 @@ const BRAND_MUTED = '#717179';
 const BRAND_SURFACE = '#F3F3F3';
 const BRAND_CARD = '#FFFFFF';
 const BRAND_BADGE = '#F3EFFF';
-const BRAND_LOGO_URL = 'https://www.brandspace.cc/brandspace-logo.svg';
+/**
+ * D-482 — THE MARK IS THE PRODUCT'S OWN STATIC FILE, AS A PNG.
+ *
+ * It was an SVG on the marketing site; Gmail and several other mail programs
+ * do not draw SVG, so those readers saw no mark at all. The icon is now
+ * `apps/dashboard/public/brandspace-icon.png` (168 px, rendered from the
+ * product's own icon, `apps/dashboard/src/app/icon.svg`), served at the dashboard's public
+ * address — the same `PUBLIC_DASHBOARD_BASE_URL` every link in these messages
+ * is built from and checked against. No address configured: no image, and the
+ * name beside it still says who wrote.
+ */
+export const BRAND_LOGO_PATH = '/brandspace-icon.png';
+
+export function brandLogoUrl(env: NodeJS.ProcessEnv = process.env): string | null {
+  const base = env['PUBLIC_DASHBOARD_BASE_URL']?.trim();
+  if (!base) return null;
+  try {
+    return new URL(BRAND_LOGO_PATH, base).toString();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Render the shared BrandSpace transactional shell.
  *
- * THE ONLY REMOTE ASSET IS OUR PUBLIC BRAND MARK. It comes from BrandSpace's
- * own public site, carries no recipient data and is decorative: the BrandSpace
+ * THE ONLY REMOTE ASSET IS OUR PUBLIC BRAND MARK. It comes from the product's
+ * own public address (`brandLogoUrl`), carries no recipient data and is decorative: the BrandSpace
  * name is still present as text beside it, so image blocking never removes the
  * sender identity. There are no tracking pixels or recipient-specific image
  * URLs. The message also remains complete when HTML is stripped because
@@ -188,6 +209,7 @@ const BRAND_LOGO_URL = 'https://www.brandspace.cc/brandspace-logo.svg';
  */
 export function renderEmail(message: EmailMessageInput): RenderedEmail {
   const copy = TEMPLATES[message.templateKey][message.locale];
+  const logoUrl = brandLogoUrl();
   const rtl = message.locale === 'AR';
   const dir = rtl ? 'rtl' : 'ltr';
   const align = rtl ? 'right' : 'left';
@@ -232,11 +254,16 @@ export function renderEmail(message: EmailMessageInput): RenderedEmail {
             <td bgcolor="${BRAND_CARD}" style="background-color:${BRAND_CARD};border-radius:30px;padding-top:40px;padding-right:40px;padding-bottom:34px;padding-left:40px;text-align:${align};box-shadow:0 28px 80px rgba(35,22,66,0.12);">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
                 <tr>
+${
+  logoUrl
+    ? `
                   <td valign="middle" style="padding-right:${rtl ? '0' : '11px'};padding-left:${rtl ? '11px' : '0'};">
-                    <img src="${BRAND_LOGO_URL}" width="42" height="42" border="0" alt="BrandSpace" style="display:block;width:42px;height:42px;border:0;border-radius:12px;">
+                    <img src="${escapeHtml(logoUrl)}" width="42" height="42" border="0" alt="Brandspace" style="display:block;width:42px;height:42px;border:0;border-radius:12px;">
                   </td>
-                  <td valign="middle">
-                    <span style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;font-weight:800;color:${BRAND_INK};letter-spacing:-0.3px;">BrandSpace</span>
+`
+    : ''
+}                  <td valign="middle">
+                    <span style="font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:22px;font-weight:800;color:${BRAND_INK};letter-spacing:-0.3px;">Brandspace</span>
                   </td>
                 </tr>
               </table>
@@ -267,7 +294,7 @@ export function renderEmail(message: EmailMessageInput): RenderedEmail {
                   </td>
                   <td valign="middle">
                     <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:16px;color:#A3A3AA;">
-                      ${rtl ? 'إشعار آمن من BrandSpace' : 'Secure BrandSpace notification'}
+                      ${rtl ? 'إشعار آمن من Brandspace' : 'Secure Brandspace notification'}
                     </span>
                   </td>
                 </tr>

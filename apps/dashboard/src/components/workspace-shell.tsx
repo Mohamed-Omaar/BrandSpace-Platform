@@ -890,7 +890,7 @@ export async function WorkspaceShell({
         contentLang={words !== locale ? words : undefined}
         // The logotype, drawn in Latin in both languages as the prototype and the
         // brand mark's own title do — the brand's name, not copy to translate.
-        wordmark="BrandSpace"
+        wordmark="Brandspace"
         sections={sections}
         labels={{
           primaryNavigation: t('nav.primary'),

@@ -75,9 +75,9 @@ export const INTEGRATION_CATEGORY_DEFINITIONS: readonly IntegrationCategoryDefin
     labelEn: 'Social platforms',
     labelAr: 'منصات التواصل',
     descriptionEn:
-      'The BrandSpace developer application registered with each platform. Customers connect their own accounts separately.',
+      'The Brandspace developer application registered with each platform. Customers connect their own accounts separately.',
     descriptionAr:
-      'تطبيق BrandSpace المسجَّل لدى كل منصة. يربط العملاء حساباتهم الخاصة من مكان آخر.',
+      'تطبيق Brandspace المسجَّل لدى كل منصة. يربط العملاء حساباتهم الخاصة من مكان آخر.',
     configDomain: 'integrations.social-apps',
     /*
      * NOT required. A workspace that never connects an account still gets
@@ -302,8 +302,8 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
         copyable: true,
         generated: true,
         helpEn:
-          'Give this to the provider. BrandSpace only ever believes a signed event sent here.',
-        helpAr: 'أعطِ هذا الرابط للمزود. لا يصدّق BrandSpace إلا حدثًا موقَّعًا يصل إليه.',
+          'Give this to the provider. Brandspace only ever believes a signed event sent here.',
+        helpAr: 'أعطِ هذا الرابط للمزود. لا يصدّق Brandspace إلا حدثًا موقَّعًا يصل إليه.',
       },
     ],
     adapterAvailable: true,

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { UploadRules } from '../../../../components/upload-rules';
 import { takeStudioCarry, type StudioCarry, type StudioHandoff } from './studio-carry';
 import { ChannelAccessLine, type ChannelAccess } from './channel-access-line';
 import { fitOf, formatForChannels, listOf } from './format-fit';
@@ -94,6 +95,10 @@ export interface DraftEditorProps {
   readonly platforms: readonly ComposerPlatform[];
   readonly campaigns: readonly { id: string; name: string }[];
   readonly mediaOptions: readonly MediaOptionView[];
+  /** Batch 7 (A3): what an uploaded picture or video may be; null when uploads are off. */
+  readonly mediaRules?: UploadRules | null;
+  /** Batch 7 (A3): why the last upload was refused, shown in the upload itself. */
+  readonly uploadReason?: string | null;
   readonly brandName: string;
   readonly brandHandle: string;
   readonly tools: readonly string[];
@@ -268,6 +273,8 @@ export function DraftEditor({
   platforms,
   campaigns,
   mediaOptions,
+  mediaRules = null,
+  uploadReason = null,
   brandName,
   brandHandle,
   tools,
@@ -833,7 +840,10 @@ export function DraftEditor({
   /*
    * THE MEDIA DRAWER — for which variant, and whether it replaces a slide.
    */
-  const [drawer, setDrawer] = useState<{ variantId: string; replace: number | null } | null>(null);
+  // Batch 7 (A3): a refused upload comes back with its drawer open on the upload.
+  const [drawer, setDrawer] = useState<{ variantId: string; replace: number | null } | null>(() =>
+    uploadReason && draft.variants[0] ? { variantId: draft.variants[0].id, replace: null } : null,
+  );
   /*
    * AN IMAGE GENERATED FROM THE DRAWER IS ATTACHED THE MOMENT IT IS USABLE.
    * It is an ordinary asset going through the same scan, so it is not in the
@@ -2920,6 +2930,8 @@ export function DraftEditor({
               : (creativeFormats[0]?.key ?? '')
           }
           uploadAction={actions.uploadMedia}
+          rules={mediaRules}
+          uploadResult={uploadReason}
           onPick={(assetId) => {
             const current = live(drawerVariant).assetIds;
             const replace = drawer?.replace ?? null;

@@ -912,6 +912,8 @@ test.describe('the shell reproduces the demo geometry', () => {
     // Locale-independent: the lockup still has a name, and none of it comes
     // from the mark.
     expect(((await brand.textContent()) ?? '').trim().length).toBeGreaterThan(0);
+    // D-482: the name the lockup carries is written "Brandspace".
+    await expect(brand).toHaveText('Brandspace');
   });
 
   test('the navigation rows', async ({ page }) => {

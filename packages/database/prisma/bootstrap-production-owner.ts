@@ -750,7 +750,7 @@ async function main(): Promise<void> {
   assertVaultCanSeal(process.env);
   assertInteractiveDisclosure(process.stdout.isTTY === true, process.stdin.isTTY === true);
 
-  log('BrandSpace — production Platform Owner bootstrap');
+  log('Brandspace — production Platform Owner bootstrap');
   log(`  Owner address: ${ownerEmail}`);
   log('  This creates NO workspace, brand, customer or sample data.');
   log('');

@@ -65,7 +65,7 @@ import type { AnalyticsPeriod, AnalyticsQueryService, AnalyticsScope } from './q
 
 /** The system instruction — the SAFETY CONTRACT, not configuration. */
 const SYSTEM_INSTRUCTION = [
-  'You are BrandSpace explaining ONE brand social-media performance to its own team.',
+  'You are Brandspace explaining ONE brand social-media performance to its own team.',
   'You are given an EVIDENCE TABLE of measurements already taken from this brand accounts.',
   'Explain ONLY what that evidence shows.',
   'Every claim MUST cite the evidence rows it rests on, by their ordinal numbers.',

@@ -56,8 +56,15 @@ export function duplicateAsset(): AppError {
   return new AppError('CONFLICT', 'This file is already in the library.', { reason: 'duplicate' });
 }
 
+/*
+ * BATCH 7 (A3): every refusal of an upload names its reason in `publicDetails`
+ * (safe to show, see below), so the control it came from can say which rule
+ * the file broke instead of "Something went wrong" or nothing at all.
+ */
 export function unsupportedFileType(): AppError {
-  return new AppError('VALIDATION_FAILED', 'This file type is not supported.');
+  return new AppError('VALIDATION_FAILED', 'This file type is not supported.', {
+    reason: 'unsupported_type',
+  });
 }
 
 /**
@@ -72,15 +79,18 @@ export function contentTypeMismatch(): AppError {
   return new AppError(
     'VALIDATION_FAILED',
     "This file's contents do not match its type. It may have been renamed.",
+    { reason: 'content_type_mismatch' },
   );
 }
 
 export function fileTooLarge(): AppError {
-  return new AppError('VALIDATION_FAILED', 'This file is larger than the allowed size.');
+  return new AppError('VALIDATION_FAILED', 'This file is larger than the allowed size.', {
+    reason: 'file_too_large',
+  });
 }
 
 export function emptyFile(): AppError {
-  return new AppError('VALIDATION_FAILED', 'This file is empty.');
+  return new AppError('VALIDATION_FAILED', 'This file is empty.', { reason: 'file_empty' });
 }
 
 /**
@@ -92,23 +102,33 @@ export function emptyFile(): AppError {
  * caller could always under-declare and then send whatever it liked.
  */
 export function declaredSizeMismatch(): AppError {
-  return new AppError('VALIDATION_FAILED', 'The uploaded file does not match what was announced.');
+  return new AppError('VALIDATION_FAILED', 'The uploaded file does not match what was announced.', {
+    reason: 'size_mismatch',
+  });
 }
 
 export function unsafeFileName(): AppError {
-  return new AppError('VALIDATION_FAILED', 'That file name cannot be used.');
+  return new AppError('VALIDATION_FAILED', 'That file name cannot be used.', {
+    reason: 'unsafe_filename',
+  });
 }
 
 export function storageQuotaReached(): AppError {
-  return new AppError('QUOTA_EXCEEDED', 'This workspace has reached its storage limit.');
+  return new AppError('QUOTA_EXCEEDED', 'This workspace has reached its storage limit.', {
+    reason: 'storage_limit',
+  });
 }
 
 export function assetLimitReached(): AppError {
-  return new AppError('QUOTA_EXCEEDED', 'This brand has reached its asset limit.');
+  return new AppError('QUOTA_EXCEEDED', 'This brand has reached its asset limit.', {
+    reason: 'asset_limit',
+  });
 }
 
 export function versionLimitReached(): AppError {
-  return new AppError('QUOTA_EXCEEDED', 'This asset has reached its version limit.');
+  return new AppError('QUOTA_EXCEEDED', 'This asset has reached its version limit.', {
+    reason: 'version_limit',
+  });
 }
 
 /**

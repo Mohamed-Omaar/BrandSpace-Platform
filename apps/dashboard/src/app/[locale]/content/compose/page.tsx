@@ -1,4 +1,6 @@
 import type React from 'react';
+import { inAssetLibrary } from '../../../../server/assets-context';
+import { assetUploadRules } from '../../../../server/upload-rules';
 import { notFound } from 'next/navigation';
 import { dayLabel, localWhenLabel } from '../../../../server/prototype-dates';
 import { rescheduleContentAction } from '../../calendar/actions';
@@ -1050,6 +1052,12 @@ export default async function ComposePage({
     carried && !mediaOptions.some((option) => option.id === carried.id)
       ? [...mediaOptions, carried]
       : mediaOptions;
+  // Batch 7 (A3): what a picture or a video may be, written beside the upload.
+  const mediaRules = workspace.permissionKeys.includes('assets.upload')
+    ? await inAssetLibrary(workspace.workspaceId, async (services) =>
+        assetUploadRules(await services.policy(), ['image', 'video']),
+      ).catch(() => null)
+    : null;
 
   const ok = single('ok') ?? null;
   const error = single('error') ?? null;
@@ -1156,6 +1164,12 @@ export default async function ComposePage({
         draft={composerDraft}
         campaigns={campaigns}
         mediaOptions={allMedia}
+        mediaRules={mediaRules}
+        uploadReason={
+          single('uploadReason')
+            ? (optionalMessage(messageLocale, `assets.reason.${single('uploadReason')}`) ?? null)
+            : null
+        }
         carriedMedia={carried}
         openOn={single('open') ?? null}
         plannedDate={plannedDate?.date ?? null}
@@ -1331,6 +1345,12 @@ const EDITOR_KEYS = [
   'studio.connect.line',
   'studio.connect.link',
   'studio.connect.unavailable',
+  'upload.rules',
+  'upload.refusedType',
+  'upload.refusedSize',
+  'upload.refusedEmpty',
+  'upload.uploading',
+  'upload.connection',
   'studio.when.schedulesNow',
   'studio.when.scheduledEdits',
   'studio.when.scheduledEditsUnschedule',

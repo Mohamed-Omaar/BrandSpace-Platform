@@ -1,4 +1,6 @@
 import 'server-only';
+import { assetUploadRules } from './upload-rules';
+import type { UploadRules } from '../components/upload-rules';
 import { BrandFontService, type AssetActor, type BrandFontStatus } from '@brandspace/assets';
 import type { TenantScopedClient } from '@brandspace/database';
 import {
@@ -187,8 +189,8 @@ export interface LookData {
     readonly status: BrandFontStatus;
   }[];
   readonly maxPerLanguage: number;
-  readonly acceptFonts: string;
-  readonly acceptImages: string;
+  readonly fontRules: UploadRules;
+  readonly imageRules: UploadRules;
   /**
    * @font-face for the LOOK & VOICE TAB ONLY: every offered catalogue family
    * and the brand's readable uploaded fonts, so a picker can preview the choice
@@ -319,8 +321,9 @@ export async function lookDataFor(input: {
         status: font.status,
       })),
       maxPerLanguage: policy.brandFonts.maxUploadedPerLanguage,
-      acceptFonts: '.ttf,.otf,.woff,.woff2,' + policy.upload.allowedMimeTypes.font.join(','),
-      acceptImages: policy.upload.allowedMimeTypes.image.join(','),
+      // Batch 7 (A3): the rules each upload writes beside itself and checks on choosing.
+      fontRules: assetUploadRules(policy, ['font']),
+      imageRules: assetUploadRules(policy, ['image']),
       css: fontFaceCss({ used: previewSlots, readable }),
     };
   });

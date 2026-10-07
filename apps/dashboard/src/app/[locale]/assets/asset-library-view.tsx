@@ -1,6 +1,15 @@
 'use client';
 
 import type React from 'react';
+import type { UploadRules } from '../../../components/upload-rules';
+import { RefreshWhile } from '../../../components/refresh-while';
+import {
+  UploadFileInput,
+  UploadForm,
+  UploadRulesLine,
+  UploadStatus,
+  uploadTexts,
+} from '../../../components/upload-field';
 
 import { useId, useState } from 'react';
 import Link from 'next/link';
@@ -140,6 +149,8 @@ export interface AssetLibraryViewProps {
    * the member may upload; the dialog's action refuses independently.
    */
   readonly openUpload?: boolean;
+  /** Batch 7 (A3): why the last upload was refused, shown in the upload itself. */
+  readonly uploadReason?: string | null;
   readonly eyebrow: string;
   readonly title: string;
   readonly subtitle: string;
@@ -164,6 +175,8 @@ export interface AssetLibraryViewProps {
   readonly planHref?: string | null;
   readonly maxFileBytes: Readonly<Record<string, number>>;
   readonly allowedMimeTypes: readonly string[];
+  /** Batch 7 (A3): what a file may be, written beside the upload and checked on choosing. */
+  readonly uploadRules: UploadRules;
   readonly selected: AssetDetailData | null;
   /**
    * The selected asset's conversation (D-277 §28, D-281) — the server-rendered
@@ -1060,12 +1073,28 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
             folders={props.folders}
             can={can}
             actions={actions}
+            versionRules={{
+              mimeTypes: [props.selected.mimeType],
+              maxBytes:
+                props.maxFileBytes[props.selected.kind.toLowerCase()] ?? props.uploadRules.maxBytes,
+            }}
+            uploadReason={props.uploadReason ?? null}
             onRequestDelete={() => setConfirmDelete(props.selected!.id)}
             t={t}
           />
           {props.notes ?? null}
         </SideSheet>
       ) : null}
+
+      {/* Batch 7 (A3): a file being checked moves on screen until it is ready or refused. */}
+      <RefreshWhile
+        active={props.cards.some(
+          (card) =>
+            card.status === 'UPLOADING' ||
+            card.status === 'PROCESSING' ||
+            card.scanStatus === 'PENDING',
+        )}
+      />
 
       {/* --- Upload ------------------------------------------------------ */}
       <Dialog
@@ -1075,7 +1104,13 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
         closeLabel={t('assets.action.cancel')}
         testId="assets-upload-dialog"
       >
-        <form action={actions.upload} encType="multipart/form-data">
+        <UploadForm
+          action={actions.upload}
+          rules={props.uploadRules}
+          locale={props.locale}
+          texts={uploadTexts(t)}
+          data-testid="assets-upload-form"
+        >
           <input type="hidden" name="locale" value={props.locale} />
           {filters.folder ? <input type="hidden" name="folderId" value={filters.folder} /> : null}
           <Stack gap={spacingTokens.md}>
@@ -1100,26 +1135,30 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               </Field>
             ) : null}
             <Field htmlFor={`${uploadFieldId}-file`} label={t('assets.upload')}>
-              <input
+              {/* The ACCEPTED TYPES COME FROM ACTIVATED CONFIGURATION, so the
+                  picker offers exactly what the server will admit, and the
+                  rules are written beside it (batch 7, A3). It is a courtesy,
+                  not a check: the server refuses anything else, and the file's
+                  own signature has to agree as well. */}
+              <UploadFileInput
                 id={`${uploadFieldId}-file`}
                 name="file"
-                type="file"
                 required
-                // The ACCEPTED TYPES COME FROM ACTIVATED CONFIGURATION, so the
-                // picker offers exactly what the server will admit. It is a
-                // courtesy, not a check: the server refuses anything else, and
-                // the file's own signature has to agree as well.
-                accept={props.allowedMimeTypes.join(',')}
                 className={CONTROL_CLASS}
                 style={inputStyle()}
                 data-testid="assets-file-input"
               />
             </Field>
+            <UploadRulesLine className="bsp-up-rules" />
+            <UploadStatus
+              testId="assets-upload-status"
+              result={props.uploadReason ? { tone: 'error', message: props.uploadReason } : null}
+            />
             <Button type="submit" variant="primary" data-testid="assets-upload-submit">
               {t('assets.upload')}
             </Button>
           </Stack>
-        </form>
+        </UploadForm>
       </Dialog>
 
       {/* --- New folder -------------------------------------------------- */}
@@ -1458,9 +1497,14 @@ function AssetDetail({
   folders,
   can,
   actions,
+  versionRules,
+  uploadReason,
   onRequestDelete,
   t,
 }: {
+  /** Batch 7 (A3): a new version is the same type as the asset, within its kind's size. */
+  readonly versionRules: UploadRules;
+  readonly uploadReason: string | null;
   readonly asset: AssetDetailData;
   readonly locale: string;
   readonly now: string;
@@ -1753,27 +1797,36 @@ function AssetDetail({
         </div>
 
         {can.version ? (
-          <form action={actions.addVersion} encType="multipart/form-data">
+          <UploadForm
+            action={actions.addVersion}
+            rules={versionRules}
+            locale={locale}
+            texts={uploadTexts(t)}
+            data-testid="asset-version-form"
+          >
             <input type="hidden" name="locale" value={locale} />
             <input type="hidden" name="assetId" value={asset.id} />
             <Stack gap={spacingTokens.sm}>
               <Field htmlFor={`${fieldId}-version`} label={t('assets.action.newVersion')}>
-                <input
+                <UploadFileInput
                   id={`${fieldId}-version`}
                   name="file"
-                  type="file"
                   required
-                  accept={asset.mimeType}
                   className={CONTROL_CLASS}
                   style={inputStyle()}
                   data-testid="asset-version-input"
                 />
               </Field>
+              <UploadRulesLine className="bsp-up-rules" />
+              <UploadStatus
+                testId="asset-version-status"
+                result={uploadReason ? { tone: 'error', message: uploadReason } : null}
+              />
               <Button type="submit" variant="neutral">
                 {t('assets.action.newVersion')}
               </Button>
             </Stack>
-          </form>
+          </UploadForm>
         ) : null}
 
         {asset.versions.length > 0 ? (

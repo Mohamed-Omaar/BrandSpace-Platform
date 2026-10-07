@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { UploadRules } from '../../../../components/upload-rules';
 import type { AutosaveResult, ShapeResult } from '../actions';
 import { STUDIO_CARRY_KEY, type StudioHandoff } from './studio-carry';
 import { InlineSchedule } from './inline-schedule';
@@ -193,6 +194,10 @@ export interface ComposerViewProps {
    * offered, and the save path re-resolves every id anyway.
    */
   readonly mediaOptions: readonly MediaOptionView[];
+  /** Batch 7 (A3): what an uploaded picture or video may be; null when uploads are off. */
+  readonly mediaRules?: UploadRules | null;
+  /** Batch 7 (A3): why the last upload was refused, shown in the upload itself. */
+  readonly uploadReason?: string | null;
   /**
    * PHASE 6 FINAL (D-285) — an image brought from the Creative Studio, already
    * checked by the server. Offered on the draft's slides, unsaved.
@@ -395,6 +400,8 @@ export function ComposerView({
   draft,
   campaigns,
   mediaOptions,
+  mediaRules = null,
+  uploadReason = null,
   can,
   tools,
   actions,
@@ -1212,6 +1219,8 @@ export function ComposerView({
           platforms={platforms}
           campaigns={campaigns}
           mediaOptions={mediaOptions}
+          mediaRules={mediaRules}
+          uploadReason={uploadReason}
           brandName={brandName}
           brandHandle={brandHandle}
           tools={tools}

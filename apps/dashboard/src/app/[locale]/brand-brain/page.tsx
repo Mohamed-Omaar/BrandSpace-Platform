@@ -1,4 +1,6 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
+import { sourceFailureText } from '../../../server/source-failure';
+import { sourceUploadRules } from '../../../server/upload-rules';
 import { maySpendCredits, systemClock } from '@brandspace/shared';
 import {
   BRAND_MEMORY_LAYERS,
@@ -29,7 +31,7 @@ import { translator, type MessageKey } from '../../../i18n/messages';
 import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { NotesPanel } from '../../../components/notes-panel';
-import { statusMessage } from '../../../i18n/messages';
+import { optionalMessage, statusMessage } from '../../../i18n/messages';
 import {
   BrandBrainView,
   type AreaCardData,
@@ -81,6 +83,12 @@ export default async function BrandBrainPage({
 
   const permissions = workspace.permissionKeys;
   const can = (key: string) => permissions.includes(key);
+  // Batch 7 (A3): what a source may be, written beside every upload here.
+  const sourceRules = can('brand_brain.upload')
+    ? await inBrandBrain(workspace.workspaceId, async (services) =>
+        sourceUploadRules((await services.policy()).ingestion),
+      ).catch(() => null)
+    : null;
 
   /*
    * THE BRAND THIS SCREEN IS ABOUT, CHOSEN RATHER THAN GUESSED (D-190).
@@ -681,7 +689,7 @@ export default async function BrandBrainPage({
      * has no second line otherwise — a bare "pages · chunks" pair named
      * nothing a reader could use.
      */
-    detail: source.status === 'FAILED' ? failureText(source.failureMessage, t) : '',
+    detail: source.status === 'FAILED' ? sourceFailureText(source.failureMessage, t) : '',
   }));
 
   /*
@@ -863,6 +871,7 @@ export default async function BrandBrainPage({
         <style data-testid="brand-look-fonts" dangerouslySetInnerHTML={{ __html: look.css }} />
       ) : null}
       <BrandBrainView
+        sourceRules={sourceRules}
         notes={typeof query['thread'] === 'string' ? null : brandNotes}
         locale={locale}
         brandId={brand.id}
@@ -877,6 +886,18 @@ export default async function BrandBrainPage({
                 data: look,
                 canManage: can('brand.manage'),
                 canUpload: can('assets.upload'),
+                uploadRefusal:
+                  typeof query['uploadReason'] === 'string' &&
+                  typeof query['uploadFor'] === 'string'
+                    ? {
+                        for: query['uploadFor'],
+                        message:
+                          optionalMessage(
+                            messageLocale,
+                            `assets.reason.${query['uploadReason']}`,
+                          ) ?? t('upload.connection'),
+                      }
+                    : null,
               }
             : null
         }
@@ -942,36 +963,6 @@ export default async function BrandBrainPage({
       ) : null}
     </WorkspaceShell>
   );
-}
-
-/** English sentences older releases stored in `failureMessage`, and their keys. */
-const LEGACY_FAILURE_SENTENCES: Readonly<Record<string, string>> = {
-  'The uploaded file could not be read.': 'object_missing',
-  'Processing took too long and was stopped.': 'stuck_timeout',
-};
-
-/**
- * A stored failure reason, in the reader's language.
- *
- * An unrecognised key falls back to the general message rather than printing
- * the key itself: a reason added on the server before a translation exists must
- * not surface as `archive_unsafe_entry` on a customer's screen.
- */
-function failureText(reason: string | null, t: (key: MessageKey) => string): string {
-  if (!reason) return t('bb.failure.extraction_failed');
-  /*
-   * PHASE 2C-4 — TWO OLDER ROWS STORED ENGLISH SENTENCES, not keys: a missing
-   * object and the stuck-job sweep. Both now store their key; a row written
-   * before that is mapped to the same key here, derived from what it already
-   * holds, so an Arabic reader never sees the English sentence.
-   */
-  const legacy = LEGACY_FAILURE_SENTENCES[reason];
-  const key = `bb.failure.${legacy ?? reason}` as MessageKey;
-  // `translator` returns undefined for a key the catalogue does not have. The
-  // cast above is what makes that possible, so the check is not defensive
-  // noise — it is the guard the cast removed.
-  const translated = t(key) as string | undefined;
-  return translated ?? t('bb.failure.extraction_failed');
 }
 
 /** The source's type in words, from the type it was accepted as (Phase 2C-4). */

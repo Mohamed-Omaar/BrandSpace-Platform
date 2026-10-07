@@ -72,7 +72,7 @@ const en = {
   'area.storage.about': 'Keeps the images and files your customers upload.',
   'area.payment.about': 'Takes subscription payments.',
   'area.social.about':
-    'BrandSpace’s own app registration with each social network, so customers can connect their accounts.',
+    'Brandspace’s own app registration with each social network, so customers can connect their accounts.',
   'area.plans.about': 'What customers can buy.',
   // States.
   'state.ready': 'Connected',
@@ -98,8 +98,8 @@ const en = {
   // Home.
   'home.attention': 'What needs your attention',
   'home.attentionNone': 'Nothing needs your attention right now.',
-  'home.ready': 'Is BrandSpace ready for customers?',
-  'home.readyYes': 'BrandSpace is ready for customers.',
+  'home.ready': 'Is Brandspace ready for customers?',
+  'home.readyYes': 'Brandspace is ready for customers.',
   'home.readyNo': 'Not yet — {count} required item(s) remain.',
   'home.readyUnknown': 'Your role cannot see every item, so this cannot be confirmed.',
   'home.readyEnv': 'Environment: {env}',
@@ -117,7 +117,7 @@ const en = {
   // Attention items.
   'attn.billing': '{count} payment event(s) could not be applied',
   'attn.billing.detail':
-    'A provider reported a payment that BrandSpace could not finish recording. Each needs a decision.',
+    'A provider reported a payment that Brandspace could not finish recording. Each needs a decision.',
   'attn.area': '{area}: {state}',
   'attn.pastDue': '{count} customer(s) are past due',
   'attn.pastDue.detail': 'Their payment failed. They keep access during the grace period.',
@@ -150,19 +150,19 @@ const en = {
   'severity.info': 'For your information',
   // Integrations.
   'int.intro':
-    'Everything BrandSpace connects to, grouped by what it does. Credentials you enter here are stored encrypted and can never be read back — you never need the Secrets screen for normal setup.',
+    'Everything Brandspace connects to, grouped by what it does. Credentials you enter here are stored encrypted and can never be read back — you never need the Secrets screen for normal setup.',
   'int.noPermission':
     'Your role can see configuration but not credential status, so connection states cannot be shown. Ask the platform owner for access.',
   'int.options': '{count} option(s)',
   'int.choose': 'Choose a provider',
   'int.chooseIntro':
-    'Pick the provider you want to use for {area}. Only providers BrandSpace has a working connector for are listed.',
+    'Pick the provider you want to use for {area}. Only providers Brandspace has a working connector for are listed.',
   'int.allIntegrations': '← All integrations',
   'int.provider.active': 'In use',
   'int.provider.notActive': 'Not in use',
   'int.devDouble': 'Development stand-in — never used for real customers',
   'int.socialNote':
-    'This is BrandSpace’s own registration with each social network. Your customers later connect their own accounts from their dashboard through the network’s sign-in page — they never give BrandSpace a password. Networks may require business verification or app review before they allow publishing; BrandSpace cannot skip that.',
+    'This is Brandspace’s own registration with each social network. Your customers later connect their own accounts from their dashboard through the network’s sign-in page — they never give Brandspace a password. Networks may require business verification or app review before they allow publishing; Brandspace cannot skip that.',
   'int.noRealProvider':
     'No real provider is available for this yet. Adding one is an engineering change (a new connector); once it exists it appears here automatically.',
   // Guided setup.
@@ -175,7 +175,7 @@ const en = {
   'setup.needNothing': 'Nothing — this provider needs no settings or credentials.',
   'setup.needCredential': 'secret, stored encrypted',
   'setup.addresses': 'Addresses to give {provider}',
-  'setup.addressesIntro': 'BrandSpace generates these. Copy them into the provider’s settings.',
+  'setup.addressesIntro': 'Brandspace generates these. Copy them into the provider’s settings.',
   'setup.details': 'Settings and credentials',
   'setup.detailsIntro': 'Saving stores these safely. It does not switch anything on.',
   'setup.detailsNone': 'This provider has nothing to fill in.',
@@ -186,7 +186,7 @@ const en = {
   'setup.save': 'Save settings',
   'setup.test': 'Test the connection',
   'setup.testIntro':
-    'BrandSpace makes a minimal real request and records the result. Testing switches nothing on.',
+    'Brandspace makes a minimal real request and records the result. Testing switches nothing on.',
   'setup.testNotPossible': 'This provider cannot be tested from the Control Center.',
   'setup.testRun': 'Test now',
   'setup.testOk': 'Passed {when}.',
@@ -196,7 +196,7 @@ const en = {
   'setup.testRefused': 'The last test was refused: {message}',
   'setup.activate': 'Review and switch on',
   'setup.activateIntro':
-    'Switching on makes {provider} the one BrandSpace uses for {area}. It is recorded with your reason and can be reversed.',
+    'Switching on makes {provider} the one Brandspace uses for {area}. It is recorded with your reason and can be reversed.',
   'setup.activeNow': '{provider} is switched on.',
   'setup.switchOn': 'Switch on {provider}',
   'setup.switchOff': 'Switch off {provider}',
@@ -219,10 +219,10 @@ const en = {
   'ai.changeProfile': 'Change profile',
   'ai.testConnection': 'Test the connection',
   'ai.agnostic':
-    'BrandSpace is not tied to one AI company. Providers can be changed here at any time; customers keep their credits and history.',
+    'Brandspace is not tied to one AI company. Providers can be changed here at any time; customers keep their credits and history.',
   'ai.whatItDoes': 'What AI does for customers right now',
   'ai.whatItDoesIntro':
-    'For each job, the model BrandSpace would use — worked out by the same routing it uses for real requests.',
+    'For each job, the model Brandspace would use — worked out by the same routing it uses for real requests.',
   'ai.served': 'Uses {model}',
   'ai.servedFixed': 'Uses {model} — set by a fixed rule, so profiles do not change it',
   'ai.switched_off': 'Switched off',
@@ -258,7 +258,7 @@ const en = {
   'connect.openSetup': 'Open setup',
   // Profile.
   'profile.intro':
-    'A profile decides how BrandSpace picks among the AI models that are already set up. It never adds a model and never uses one that cannot do the job.',
+    'A profile decides how Brandspace picks among the AI models that are already set up. It never adds a model and never uses one that cannot do the job.',
   'profile.active': 'Active',
   'profile.preview': 'Preview',
   'profile.previewOf': 'If you choose {profile}',
@@ -282,10 +282,10 @@ const en = {
   'sys.connectionIssue': 'Connection issue',
   'sys.notMeasured': 'Not measured here',
   'sys.intro':
-    'The same health checks BrandSpace’s own readiness probe uses, in plain words. Technical detail is one click away.',
+    'The same health checks Brandspace’s own readiness probe uses, in plain words. Technical detail is one click away.',
   'sys.database': 'Database',
   'sys.database.ok': 'Answering.',
-  'sys.database.down': 'Not answering. Customers cannot use BrandSpace.',
+  'sys.database.down': 'Not answering. Customers cannot use Brandspace.',
   'sys.jobs': 'Background jobs',
   'sys.jobs.detail':
     'Publishing, AI and email run in the background. Their queue is not monitored from the Control Center yet.',
@@ -295,9 +295,9 @@ const en = {
   'sys.monitoring': 'Monitoring',
   'sys.monitoring.ok': 'Traces are being exported.',
   'sys.monitoring.off':
-    'Not connected. BrandSpace works without it; problems are harder to investigate.',
+    'Not connected. Brandspace works without it; problems are harder to investigate.',
   // Usage & Billing.
-  'usage.intro': 'Only figures BrandSpace actually records. Nothing here is estimated.',
+  'usage.intro': 'Only figures Brandspace actually records. Nothing here is estimated.',
   'usage.subscriptions': 'Subscriptions',
   'usage.subscriptionsNone': 'No customer has a subscription yet.',
   'usage.byPlan': 'Customers per plan',
@@ -309,7 +309,7 @@ const en = {
   'usage.billingNone': 'Nothing is waiting for a decision.',
   'usage.billingReview': 'Review and replay',
   'usage.notMeasured':
-    'Revenue, MRR, profit and provider cost are not shown: BrandSpace does not yet compute them from a source of truth, and an estimate here would be acted on as fact.',
+    'Revenue, MRR, profit and provider cost are not shown: Brandspace does not yet compute them from a source of truth, and an estimate here would be acted on as fact.',
   'usage.event.UNRESOLVED': 'Could not be matched to a customer',
   'usage.event.DEAD_LETTER': 'Failed after every retry',
   'usage.event.FAILED': 'Failed',
@@ -377,7 +377,7 @@ const en = {
   'cd.issues': 'Needs attention',
   'cd.issuesNone': 'Nothing needs attention for this customer.',
   'cd.issue.pastDue': 'Their last payment failed.',
-  'cd.issue.suspended': 'This customer is suspended and cannot use BrandSpace.',
+  'cd.issue.suspended': 'This customer is suspended and cannot use Brandspace.',
   'cd.issue.trial': 'Their trial ends {when}.',
   'cd.issue.reauth': '{count} social account(s) need reconnecting by the customer.',
   'cd.issue.noCredits': 'They have no AI credits left.',
@@ -402,10 +402,10 @@ const en = {
   'cd.creditsAmount': 'Credits',
   'cd.suspend': 'Suspend customer',
   'cd.suspendHint':
-    'They are signed out and cannot use BrandSpace until reactivated. Their data is kept.',
+    'They are signed out and cannot use Brandspace until reactivated. Their data is kept.',
   'cd.suspendConfirm': 'I understand {name} will lose access immediately.',
   'cd.reactivate': 'Reactivate customer',
-  'cd.reactivateHint': 'They can sign in and use BrandSpace again.',
+  'cd.reactivateHint': 'They can sign in and use Brandspace again.',
   'cd.apply': 'Apply',
   'cd.forbidden': 'Your role cannot make changes to customers.',
   'cd.ok.STATUS_CHANGED': 'Status changed.',
@@ -632,7 +632,7 @@ const ar: Copy = {
   'area.storage.about': 'يحفظ الصور والملفات التي يرفعها عملاؤك.',
   'area.payment.about': 'يستلم مدفوعات الاشتراكات.',
   'area.social.about':
-    'تسجيل تطبيق BrandSpace لدى كل شبكة اجتماعية، ليتمكن العملاء من ربط حساباتهم.',
+    'تسجيل تطبيق Brandspace لدى كل شبكة اجتماعية، ليتمكن العملاء من ربط حساباتهم.',
   'area.plans.about': 'ما يمكن للعملاء شراؤه.',
   'state.ready': 'متصل',
   'state.readyPlans': 'جاهز',
@@ -655,8 +655,8 @@ const ar: Copy = {
   'reason.no_sellable_plan': 'لا توجد بعد خطة مفعّلة وعامة ومسعّرة.',
   'home.attention': 'ما يحتاج انتباهك',
   'home.attentionNone': 'لا شيء يحتاج انتباهك الآن.',
-  'home.ready': 'هل BrandSpace جاهزة للعملاء؟',
-  'home.readyYes': 'BrandSpace جاهزة للعملاء.',
+  'home.ready': 'هل Brandspace جاهزة للعملاء؟',
+  'home.readyYes': 'Brandspace جاهزة للعملاء.',
   'home.readyNo': 'ليس بعد — يتبقى {count} من البنود المطلوبة.',
   'home.readyUnknown': 'دورك لا يرى كل البنود، لذا لا يمكن التأكيد.',
   'home.readyEnv': 'البيئة: {env}',
@@ -673,7 +673,7 @@ const ar: Copy = {
   'home.noProvider': 'لا يوجد مزود مربوط',
   'attn.billing': '{count} من أحداث الدفع تعذّر تطبيقها',
   'attn.billing.detail':
-    'أبلغ مزود عن دفعة لم تتمكن BrandSpace من إكمال تسجيلها. كل حدث يحتاج قرارًا.',
+    'أبلغ مزود عن دفعة لم تتمكن Brandspace من إكمال تسجيلها. كل حدث يحتاج قرارًا.',
   'attn.area': '{area}: {state}',
   'attn.pastDue': '{count} من العملاء متأخرون في الدفع',
   'attn.pastDue.detail': 'فشلت دفعتهم. يحتفظون بالوصول خلال فترة السماح.',
@@ -703,19 +703,19 @@ const ar: Copy = {
   'severity.warning': 'مهم',
   'severity.info': 'للعلم',
   'int.intro':
-    'كل ما ترتبط به BrandSpace، مجمّعًا حسب وظيفته. بيانات الاعتماد التي تُدخلها هنا تُحفظ مشفّرة ولا يمكن قراءتها مجددًا — لا تحتاج شاشة المفاتيح السرية للإعداد المعتاد.',
+    'كل ما ترتبط به Brandspace، مجمّعًا حسب وظيفته. بيانات الاعتماد التي تُدخلها هنا تُحفظ مشفّرة ولا يمكن قراءتها مجددًا — لا تحتاج شاشة المفاتيح السرية للإعداد المعتاد.',
   'int.noPermission':
     'دورك يرى الإعدادات لكن لا يرى حالة بيانات الاعتماد، لذا لا يمكن عرض حالة الاتصال. اطلب الصلاحية من مالك المنصة.',
   'int.options': '{count} من الخيارات',
   'int.choose': 'اختر مزودًا',
   'int.chooseIntro':
-    'اختر المزود الذي تريد استخدامه لـ{area}. تظهر هنا فقط المزودات التي تملك BrandSpace موصّلًا يعمل معها.',
+    'اختر المزود الذي تريد استخدامه لـ{area}. تظهر هنا فقط المزودات التي تملك Brandspace موصّلًا يعمل معها.',
   'int.allIntegrations': '→ كل التكاملات',
   'int.provider.active': 'قيد الاستخدام',
   'int.provider.notActive': 'غير مستخدم',
   'int.devDouble': 'بديل تطويري — لا يُستخدم أبدًا للعملاء الحقيقيين',
   'int.socialNote':
-    'هذا تسجيل BrandSpace الخاص لدى كل شبكة اجتماعية. يربط عملاؤك حساباتهم لاحقًا من لوحة تحكمهم عبر صفحة تسجيل الدخول الخاصة بالشبكة — ولا يعطون BrandSpace كلمة مرور أبدًا. قد تشترط الشبكات توثيق النشاط التجاري أو مراجعة التطبيق قبل السماح بالنشر، ولا تستطيع BrandSpace تجاوز ذلك.',
+    'هذا تسجيل Brandspace الخاص لدى كل شبكة اجتماعية. يربط عملاؤك حساباتهم لاحقًا من لوحة تحكمهم عبر صفحة تسجيل الدخول الخاصة بالشبكة — ولا يعطون Brandspace كلمة مرور أبدًا. قد تشترط الشبكات توثيق النشاط التجاري أو مراجعة التطبيق قبل السماح بالنشر، ولا تستطيع Brandspace تجاوز ذلك.',
   'int.noRealProvider':
     'لا يتوفر مزود حقيقي لهذا بعد. إضافة مزود تغيير هندسي (موصّل جديد)، وبمجرد توفره يظهر هنا تلقائيًا.',
   'setup.step': 'الخطوة {n}',
@@ -727,7 +727,7 @@ const ar: Copy = {
   'setup.needNothing': 'لا شيء — هذا المزود لا يحتاج إعدادات ولا بيانات اعتماد.',
   'setup.needCredential': 'سري، يُحفظ مشفّرًا',
   'setup.addresses': 'عناوين تُعطى لـ{provider}',
-  'setup.addressesIntro': 'تولّدها BrandSpace. انسخها إلى إعدادات المزود.',
+  'setup.addressesIntro': 'تولّدها Brandspace. انسخها إلى إعدادات المزود.',
   'setup.details': 'الإعدادات وبيانات الاعتماد',
   'setup.detailsIntro': 'الحفظ يخزّنها بأمان، ولا يشغّل شيئًا.',
   'setup.detailsNone': 'لا يوجد ما يُملأ لهذا المزود.',
@@ -738,7 +738,7 @@ const ar: Copy = {
   'setup.save': 'حفظ الإعدادات',
   'setup.test': 'اختبار الاتصال',
   'setup.testIntro':
-    'ترسل BrandSpace طلبًا حقيقيًا صغيرًا وتسجّل النتيجة. الاختبار لا يشغّل شيئًا.',
+    'ترسل Brandspace طلبًا حقيقيًا صغيرًا وتسجّل النتيجة. الاختبار لا يشغّل شيئًا.',
   'setup.testNotPossible': 'لا يمكن اختبار هذا المزود من مركز التحكم.',
   'setup.testRun': 'اختبر الآن',
   'setup.testOk': 'نجح {when}.',
@@ -748,7 +748,7 @@ const ar: Copy = {
   'setup.testRefused': 'رُفض آخر اختبار: {message}',
   'setup.activate': 'المراجعة والتشغيل',
   'setup.activateIntro':
-    'التشغيل يجعل {provider} المزود الذي تستخدمه BrandSpace لـ{area}. يُسجَّل مع سببك ويمكن التراجع عنه.',
+    'التشغيل يجعل {provider} المزود الذي تستخدمه Brandspace لـ{area}. يُسجَّل مع سببك ويمكن التراجع عنه.',
   'setup.activeNow': '{provider} قيد التشغيل.',
   'setup.switchOn': 'تشغيل {provider}',
   'setup.switchOff': 'إيقاف {provider}',
@@ -769,10 +769,10 @@ const ar: Copy = {
   'ai.changeProfile': 'تغيير الملف',
   'ai.testConnection': 'اختبار الاتصال',
   'ai.agnostic':
-    'BrandSpace غير مرتبطة بشركة ذكاء اصطناعي واحدة. يمكن تغيير المزود من هنا في أي وقت، ويحتفظ العملاء برصيدهم وسجلهم.',
+    'Brandspace غير مرتبطة بشركة ذكاء اصطناعي واحدة. يمكن تغيير المزود من هنا في أي وقت، ويحتفظ العملاء برصيدهم وسجلهم.',
   'ai.whatItDoes': 'ما يفعله الذكاء الاصطناعي للعملاء الآن',
   'ai.whatItDoesIntro':
-    'لكل مهمة، النموذج الذي ستستخدمه BrandSpace — محسوبًا بالتوجيه نفسه الذي تستخدمه للطلبات الحقيقية.',
+    'لكل مهمة، النموذج الذي ستستخدمه Brandspace — محسوبًا بالتوجيه نفسه الذي تستخدمه للطلبات الحقيقية.',
   'ai.served': 'يستخدم {model}',
   'ai.servedFixed': 'يستخدم {model} — محدد بقاعدة ثابتة، لذا لا تغيّره الملفات',
   'ai.switched_off': 'متوقف',
@@ -807,7 +807,7 @@ const ar: Copy = {
   'connect.profileNow': 'حاليًا: {profile}.',
   'connect.openSetup': 'فتح الإعداد',
   'profile.intro':
-    'الملف يحدد كيف تختار BrandSpace بين نماذج الذكاء الاصطناعي المُعدّة مسبقًا. لا يضيف نموذجًا أبدًا، ولا يستخدم نموذجًا لا يستطيع أداء المهمة.',
+    'الملف يحدد كيف تختار Brandspace بين نماذج الذكاء الاصطناعي المُعدّة مسبقًا. لا يضيف نموذجًا أبدًا، ولا يستخدم نموذجًا لا يستطيع أداء المهمة.',
   'profile.active': 'نشط',
   'profile.preview': 'معاينة',
   'profile.previewOf': 'إذا اخترت {profile}',
@@ -830,10 +830,10 @@ const ar: Copy = {
   'sys.connectionIssue': 'مشكلة في الاتصال',
   'sys.notMeasured': 'غير مقاس هنا',
   'sys.intro':
-    'فحوصات الصحة نفسها التي يستخدمها فحص الجاهزية في BrandSpace، بكلمات واضحة. التفاصيل التقنية على بعد نقرة.',
+    'فحوصات الصحة نفسها التي يستخدمها فحص الجاهزية في Brandspace، بكلمات واضحة. التفاصيل التقنية على بعد نقرة.',
   'sys.database': 'قاعدة البيانات',
   'sys.database.ok': 'تستجيب.',
-  'sys.database.down': 'لا تستجيب. لا يستطيع العملاء استخدام BrandSpace.',
+  'sys.database.down': 'لا تستجيب. لا يستطيع العملاء استخدام Brandspace.',
   'sys.jobs': 'المهام في الخلفية',
   'sys.jobs.detail':
     'النشر والذكاء الاصطناعي والبريد تعمل في الخلفية. قائمة انتظارها غير مراقبة من مركز التحكم بعد.',
@@ -842,8 +842,8 @@ const ar: Copy = {
   'sys.billing.stuck': '{count} من الأحداث تحتاج قرارًا.',
   'sys.monitoring': 'المراقبة',
   'sys.monitoring.ok': 'يتم تصدير التتبع.',
-  'sys.monitoring.off': 'غير مربوطة. تعمل BrandSpace بدونها، لكن التحقيق في المشكلات أصعب.',
-  'usage.intro': 'فقط الأرقام التي تسجّلها BrandSpace فعلًا. لا شيء هنا تقديري.',
+  'sys.monitoring.off': 'غير مربوطة. تعمل Brandspace بدونها، لكن التحقيق في المشكلات أصعب.',
+  'usage.intro': 'فقط الأرقام التي تسجّلها Brandspace فعلًا. لا شيء هنا تقديري.',
   'usage.subscriptions': 'الاشتراكات',
   'usage.subscriptionsNone': 'لا يملك أي عميل اشتراكًا بعد.',
   'usage.byPlan': 'العملاء لكل خطة',
@@ -855,7 +855,7 @@ const ar: Copy = {
   'usage.billingNone': 'لا شيء ينتظر قرارًا.',
   'usage.billingReview': 'مراجعة وإعادة تشغيل',
   'usage.notMeasured':
-    'الإيرادات والإيراد الشهري المتكرر والأرباح وتكلفة المزود غير معروضة: لا تحسبها BrandSpace بعد من مصدر موثوق، وأي تقدير هنا سيُعامل كحقيقة.',
+    'الإيرادات والإيراد الشهري المتكرر والأرباح وتكلفة المزود غير معروضة: لا تحسبها Brandspace بعد من مصدر موثوق، وأي تقدير هنا سيُعامل كحقيقة.',
   'usage.event.UNRESOLVED': 'تعذّر ربطه بعميل',
   'usage.event.DEAD_LETTER': 'فشل بعد كل المحاولات',
   'usage.event.FAILED': 'فشل',
@@ -921,7 +921,7 @@ const ar: Copy = {
   'cd.issues': 'يحتاج انتباهًا',
   'cd.issuesNone': 'لا شيء يحتاج انتباهًا لهذا العميل.',
   'cd.issue.pastDue': 'فشلت دفعته الأخيرة.',
-  'cd.issue.suspended': 'هذا العميل موقوف ولا يستطيع استخدام BrandSpace.',
+  'cd.issue.suspended': 'هذا العميل موقوف ولا يستطيع استخدام Brandspace.',
   'cd.issue.trial': 'تنتهي فترة تجربته {when}.',
   'cd.issue.reauth': '{count} من حسابات التواصل تحتاج أن يعيد العميل ربطها.',
   'cd.issue.noCredits': 'لم يتبقَّ لديه رصيد ذكاء اصطناعي.',
@@ -944,10 +944,10 @@ const ar: Copy = {
   'cd.adjustHint': 'الرقم الموجب يضيف رصيدًا والسالب يخصمه. يُسجَّل في سجل رصيده.',
   'cd.creditsAmount': 'الرصيد',
   'cd.suspend': 'إيقاف العميل',
-  'cd.suspendHint': 'يُسجَّل خروجه ولا يستطيع استخدام BrandSpace حتى إعادة تفعيله. تُحفظ بياناته.',
+  'cd.suspendHint': 'يُسجَّل خروجه ولا يستطيع استخدام Brandspace حتى إعادة تفعيله. تُحفظ بياناته.',
   'cd.suspendConfirm': 'أفهم أن {name} سيفقد الوصول فورًا.',
   'cd.reactivate': 'إعادة تفعيل العميل',
-  'cd.reactivateHint': 'يستطيع تسجيل الدخول واستخدام BrandSpace مجددًا.',
+  'cd.reactivateHint': 'يستطيع تسجيل الدخول واستخدام Brandspace مجددًا.',
   'cd.apply': 'تطبيق',
   'cd.forbidden': 'دورك لا يسمح بإجراء تغييرات على العملاء.',
   'cd.ok.STATUS_CHANGED': 'تغيّرت الحالة.',
