@@ -11,6 +11,7 @@ import { inBrandBrain, assertBrandInScope } from '../../../server/brand-brain-co
 import { createBrandFor } from '../../../server/brand-creation';
 import { rememberBrand } from '../../../server/brand-cookie';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
+import { uploadReasonOf } from '../../../server/upload-rules';
 import { setupBrandFrom } from '../../../server/setup-brand-form';
 import { saveSetupGoal } from '../../../server/setup-goal';
 import {
@@ -61,8 +62,8 @@ function failure(locale: string, step: SetupView, error: unknown, action: string
  * permission, signature check, quota and malware scan as any upload. It
  * becomes the brand's logo only once it is READY and CLEAN: an unscanned file
  * is never the face of a brand. Where scanning runs in the background, the
- * file waits in the Asset Library and the reader is told so, rather than
- * shown a logo that is not there yet.
+ * brand step shows the file being checked and makes it the logo when it
+ * passes (batch 7, A3 — `settleLogo` below).
  */
 export async function createSetupBrandAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
@@ -76,29 +77,23 @@ export async function createSetupBrandAction(formData: FormData): Promise<void> 
     /*
      * THE BRAND EXISTS NOW, WHATEVER HAPPENS TO THE LOGO. A refused file (a
      * type the plan does not allow, a signature that disagrees with its name,
-     * a full storage quota) is reported against the logo alone, and the
-     * reader moves on with the brand they made rather than being sent back to
-     * a form that would create it again.
+     * a full storage quota, a failed scan) is reported against the logo alone,
+     * in its own place on the brand step, and the brand is not created twice.
      */
     const logo = formData.get('logo');
-    let outcome = 'BRAND_CREATED';
+    destination = pageUrl(locale, 'learn', { ok: 'BRAND_CREATED' });
     if (
       logo instanceof File &&
       logo.size > 0 &&
       session.workspace.permissionKeys.includes('assets.upload')
     ) {
-      try {
-        if (!(await attachLogo(session, brandId, logo))) outcome = 'BRAND_CREATED_LOGO_PENDING';
-      } catch (error: unknown) {
-        log.warn('setup wizard logo refused', {
-          action: 'attach-logo',
-          ...internalErrorFields(error),
-        });
-        outcome = 'BRAND_CREATED_LOGO_REFUSED';
-      }
+      const outcome = await uploadLogo(session, brandId, logo);
+      destination = logoDestination(locale, outcome, {
+        attached: 'BRAND_CREATED',
+        checking: 'BRAND_CREATED_LOGO_PENDING',
+        refused: 'BRAND_CREATED_LOGO_REFUSED',
+      });
     }
-
-    destination = pageUrl(locale, 'learn', { ok: outcome });
   } catch (error: unknown) {
     destination = failure(locale, 'brand', error, 'create-brand');
   }
@@ -107,48 +102,128 @@ export async function createSetupBrandAction(formData: FormData): Promise<void> 
   redirect(destination);
 }
 
-/** Upload the logo; true when it is already the brand's logo. */
-async function attachLogo(
+/*
+ * BATCH 7 (A3) — THE LOGO IS NEVER SILENT. Reported: a small PNG chosen as the
+ * logo did nothing at all — no preview, no success, no error, the tile still
+ * the initial. Two causes. The control showed nothing for a chosen file until
+ * Continue. And where scanning runs in the background (staging's worker), the
+ * file was uploaded but checked AFTER the request had looked for it, so it was
+ * never made the logo, and the reader was sent to Brand Profile to do it by
+ * hand. Now the request waits a few seconds for the scan; a file that passes
+ * is the logo at once, one that fails says why on the brand step, and one
+ * still being checked is shown there being checked until it passes and is
+ * attached — by the step itself, never by a trip to another page.
+ */
+const LOGO_WAIT_MS = 6_000;
+const LOGO_POLL_MS = 400;
+
+type LogoOutcome =
+  | { readonly state: 'attached' }
+  | { readonly state: 'checking'; readonly assetId: string }
+  | { readonly state: 'refused'; readonly reason: string };
+
+function logoDestination(
+  locale: string,
+  outcome: LogoOutcome,
+  notes: { readonly attached: string; readonly checking: string; readonly refused: string },
+): string {
+  if (outcome.state === 'attached') {
+    return notes.attached === 'BRAND_CREATED'
+      ? pageUrl(locale, 'learn', { ok: notes.attached })
+      : pageUrl(locale, 'brand', { ok: notes.attached });
+  }
+  if (outcome.state === 'checking') {
+    return pageUrl(locale, 'brand', { ok: notes.checking, logo: outcome.assetId });
+  }
+  return pageUrl(locale, 'brand', { ok: notes.refused, logoReason: outcome.reason });
+}
+
+/** Upload the logo into the library, then settle it. */
+async function uploadLogo(
   session: WorkspaceSession,
   brandId: string,
   file: File,
-): Promise<boolean> {
-  const workspaceId = session.workspace.workspaceId;
-  const { assetId } = await uploadIntoLibrary({
-    workspaceId,
-    actor: {
-      userId: session.customer.userId,
-      permissionKeys: session.workspace.permissionKeys,
-      brandScope: session.workspace.brandScope,
-    },
-    file,
-    bytes: new Uint8Array(await file.arrayBuffer()),
-    brandId,
-    folderId: null,
-  });
-
-  return inBrandBrain(workspaceId, async ({ db }) => {
-    const usable = await db.asset.findFirst({
-      where: {
-        id: assetId,
-        brandId,
-        deletedAt: null,
-        status: 'READY',
-        scanStatus: 'CLEAN',
-        kind: 'IMAGE',
+): Promise<LogoOutcome> {
+  let assetId: string;
+  try {
+    ({ assetId } = await uploadIntoLibrary({
+      workspaceId: session.workspace.workspaceId,
+      actor: {
+        userId: session.customer.userId,
+        permissionKeys: session.workspace.permissionKeys,
+        brandScope: session.workspace.brandScope,
       },
-      select: { id: true },
-    });
-    if (!usable) return false;
+      file,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      brandId,
+      folderId: null,
+    }));
+  } catch (error: unknown) {
+    unstable_rethrow(error);
+    log.warn('setup wizard logo refused', { action: 'attach-logo', ...internalErrorFields(error) });
+    return { state: 'refused', reason: uploadReasonOf(error) ?? 'upload_failed' };
+  }
+  return settleLogo(session, brandId, assetId, LOGO_WAIT_MS);
+}
 
+/**
+ * Wait up to `waitMs` for the file's scan, then: attach it when it is READY
+ * and CLEAN (and the brand has no logo yet — the wizard never replaces one),
+ * report the reason when it failed, or say it is still being checked.
+ */
+async function settleLogo(
+  session: WorkspaceSession,
+  brandId: string,
+  assetId: string,
+  waitMs: number,
+): Promise<LogoOutcome> {
+  const workspaceId = session.workspace.workspaceId;
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const asset = await inBrandBrain(workspaceId, ({ db }) =>
+      db.asset.findFirst({
+        where: { id: assetId, brandId, deletedAt: null },
+        select: { status: true, scanStatus: true, kind: true, failureReason: true },
+      }),
+    );
+    if (!asset) return { state: 'refused', reason: 'object_missing' };
+    if (asset.status === 'READY' && asset.scanStatus === 'CLEAN') {
+      if (asset.kind !== 'IMAGE') return { state: 'refused', reason: 'unsupported_type' };
+      await attachLogo(session, brandId, assetId);
+      return { state: 'attached' };
+    }
+    if (
+      asset.status === 'PROCESSING_FAILED' ||
+      asset.status === 'QUARANTINED' ||
+      asset.scanStatus === 'INFECTED'
+    ) {
+      return {
+        state: 'refused',
+        reason:
+          asset.failureReason ?? (asset.scanStatus === 'INFECTED' ? 'infected' : 'scan_failed'),
+      };
+    }
+    if (Date.now() >= deadline) return { state: 'checking', assetId };
+    await new Promise((resolve) => setTimeout(resolve, LOGO_POLL_MS));
+  }
+}
+
+/** Make a READY, CLEAN image the brand's logo, unless the brand already has one. */
+async function attachLogo(
+  session: WorkspaceSession,
+  brandId: string,
+  assetId: string,
+): Promise<void> {
+  const workspaceId = session.workspace.workspaceId;
+  await inBrandBrain(workspaceId, async ({ db }) => {
     const before = await db.brand.findFirst({
       where: { id: brandId, deletedAt: null },
       select: { primaryLogoAssetId: true },
     });
     // A brand that already has a logo keeps it: the wizard never replaces one.
-    if (!before || before.primaryLogoAssetId !== null) return before !== null;
+    if (!before || before.primaryLogoAssetId !== null) return;
 
-    await db.brand.update({ where: { id: brandId }, data: { primaryLogoAssetId: usable.id } });
+    await db.brand.update({ where: { id: brandId }, data: { primaryLogoAssetId: assetId } });
     await writeAuditEvent(db, workspaceId, {
       action: 'brand.profile.updated',
       actorType: 'USER',
@@ -158,10 +233,56 @@ async function attachLogo(
       brandId,
       severity: 'NOTICE',
       before,
-      after: { primaryLogoAssetId: usable.id },
+      after: { primaryLogoAssetId: assetId },
     });
-    return true;
   });
+}
+
+/** The brand step's own logo upload, once the brand exists (no trip to Brand Profile). */
+export async function uploadSetupLogoAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand.manage');
+    const brandId = String(formData.get('brandId') ?? '');
+    assertBrandInScope(session.workspace.brandScope, brandId);
+    const logo = formData.get('logo');
+    if (!(logo instanceof File) || logo.size === 0) throw new Error('no file');
+    const outcome = session.workspace.permissionKeys.includes('assets.upload')
+      ? await uploadLogo(session, brandId, logo)
+      : ({ state: 'refused', reason: 'upload_failed' } as const);
+    destination = logoDestination(locale, outcome, {
+      attached: 'BRAND_LOGO_SAVED',
+      checking: 'SETUP_LOGO_CHECKING',
+      refused: 'SETUP_LOGO_REFUSED',
+    });
+  } catch (error: unknown) {
+    destination = failure(locale, 'brand', error, 'upload-logo');
+  }
+  revalidatePath(`/${locale}/onboarding`);
+  redirect(destination);
+}
+
+/** A logo that was still being checked has passed: make it the brand's logo now. */
+export async function attachSetupLogoAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand.manage');
+    const brandId = String(formData.get('brandId') ?? '');
+    const assetId = String(formData.get('assetId') ?? '');
+    assertBrandInScope(session.workspace.brandScope, brandId);
+    const outcome = await settleLogo(session, brandId, assetId, 0);
+    destination = logoDestination(locale, outcome, {
+      attached: 'BRAND_LOGO_SAVED',
+      checking: 'SETUP_LOGO_CHECKING',
+      refused: 'SETUP_LOGO_REFUSED',
+    });
+  } catch (error: unknown) {
+    destination = failure(locale, 'brand', error, 'attach-logo');
+  }
+  revalidatePath(`/${locale}/onboarding`);
+  redirect(destination);
 }
 
 /**

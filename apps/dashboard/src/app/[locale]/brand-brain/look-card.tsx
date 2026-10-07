@@ -1,6 +1,14 @@
 'use client';
 
 import { useId, useState } from 'react';
+import type { UploadRules } from '../../../components/upload-rules';
+import {
+  UploadFileInput,
+  UploadForm,
+  UploadRulesLine,
+  UploadStatus,
+  uploadTexts,
+} from '../../../components/upload-field';
 import { Button, CONTROL_CLASS, Dialog, colorTokens, visuallyHiddenStyle } from '@brandspace/ui';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import {
@@ -81,8 +89,9 @@ export interface LookViewData {
     readonly status: 'processing' | 'ready' | 'failed' | 'unavailable';
   }[];
   readonly maxPerLanguage: number;
-  readonly acceptFonts: string;
-  readonly acceptImages: string;
+  /** Batch 7 (A3): what a font or an image may be, from activated configuration. */
+  readonly fontRules: UploadRules;
+  readonly imageRules: UploadRules;
 }
 
 const LANGUAGES: readonly Language[] = ['en', 'ar'];
@@ -119,6 +128,7 @@ export function LookCard({
   look,
   canManage,
   canUpload,
+  uploadRefusal = null,
   children,
 }: {
   locale: string;
@@ -126,6 +136,8 @@ export function LookCard({
   look: LookViewData;
   canManage: boolean;
   canUpload: boolean;
+  /** Batch 7 (A3): why the last upload here was refused (`upload-logo`, `add-font`, `replace-font`). */
+  uploadRefusal?: { readonly for: string; readonly message: string } | null;
   /** The Voice card, which the prototype sets between the colours and the fonts. */
   children?: React.ReactNode;
 }) {
@@ -147,7 +159,8 @@ export function LookCard({
         brandId={brandId}
         logo={look.logo}
         options={look.logoOptions}
-        accept={look.acceptImages}
+        rules={look.imageRules}
+        refusal={uploadRefusal?.for === 'upload-logo' ? uploadRefusal.message : null}
         canManage={canManage}
         canUpload={canManage && canUpload}
       />
@@ -157,6 +170,9 @@ export function LookCard({
         locale={locale}
         brandId={brandId}
         look={look}
+        refusal={
+          uploadRefusal && uploadRefusal.for !== 'upload-logo' ? uploadRefusal.message : null
+        }
         canManage={canManage}
         canUpload={canManage && canUpload}
       />
@@ -180,13 +196,11 @@ function Hidden({ locale, brandId }: { locale: string; brandId: string }) {
  */
 function FileButton({
   label,
-  accept,
   testId,
   ariaLabel,
   onPick,
 }: {
   label: string;
-  accept: string;
   testId: string;
   ariaLabel: string;
   onPick: (name: string | null) => void;
@@ -207,14 +221,12 @@ function FileButton({
         <path d="M12 16V4M7 9l5-5 5 5M4 20h16" />
       </svg>
       {label}
-      <input
-        type="file"
+      <UploadFileInput
         name="file"
-        accept={accept}
         required
         aria-label={ariaLabel}
         data-testid={testId}
-        onChange={(event) => onPick(event.target.files?.[0]?.name ?? null)}
+        onChosen={(file) => onPick(file?.name ?? null)}
       />
     </label>
   );
@@ -355,7 +367,8 @@ function Logo({
   brandId,
   logo,
   options,
-  accept,
+  rules,
+  refusal,
   canManage,
   canUpload,
 }: {
@@ -363,7 +376,8 @@ function Logo({
   brandId: string;
   logo: LookViewData['logo'];
   options: LookViewData['logoOptions'];
-  accept: string;
+  rules: UploadRules;
+  refusal: string | null;
   canManage: boolean;
   canUpload: boolean;
 }) {
@@ -430,11 +444,17 @@ function Logo({
         </p>
       )}
       {canUpload ? (
-        <form action={uploadBrandLogoAction} className="bsp-lk-form" data-testid="look-logo-form">
+        <UploadForm
+          action={uploadBrandLogoAction}
+          rules={rules}
+          locale={locale}
+          texts={uploadTexts(t)}
+          className="bsp-lk-form"
+          data-testid="look-logo-form"
+        >
           <Hidden locale={locale} brandId={brandId} />
           <FileButton
             label={t('bb.look.replace')}
-            accept={accept}
             testId="look-logo-file"
             ariaLabel={t('bb.look.logoUpload')}
             onPick={setPicked}
@@ -451,7 +471,12 @@ function Logo({
               </button>
             </span>
           ) : null}
-        </form>
+          <UploadRulesLine className="bsp-lk-meta" />
+          <UploadStatus
+            testId="look-logo-status"
+            result={refusal ? { tone: 'error', message: refusal } : null}
+          />
+        </UploadForm>
       ) : null}
     </section>
   );
@@ -463,12 +488,15 @@ function Fonts({
   locale,
   brandId,
   look,
+  refusal,
   canManage,
   canUpload,
 }: {
   locale: string;
   brandId: string;
   look: LookViewData;
+  /** Batch 7 (A3): why the last font upload was refused. */
+  refusal: string | null;
   canManage: boolean;
   canUpload: boolean;
 }) {
@@ -503,6 +531,16 @@ function Fonts({
       <h5 id={headingId} className="bsp-lbl bsp-bb-lc-t">
         {t('bb.look.fonts')}
       </h5>
+      {refusal ? (
+        <span
+          role="alert"
+          className="bsp-up-status"
+          data-tone="error"
+          data-testid="look-fonts-refusal"
+        >
+          {refusal}
+        </span>
+      ) : null}
       {canManage ? (
         /*
          * The slots' form is empty and its controls point at it (`form=`), so
@@ -670,8 +708,11 @@ function LanguageFonts({
             {t('bb.look.uploadedFull').replace('{max}', String(look.maxPerLanguage))}
           </span>
         ) : (
-          <form
+          <UploadForm
             action={addBrandFontAction}
+            rules={look.fontRules}
+            locale={locale}
+            texts={uploadTexts(t)}
             className="bsp-lk-form"
             data-testid={`look-font-add-${language}`}
           >
@@ -679,7 +720,6 @@ function LanguageFonts({
             <input type="hidden" name="language" value={language} />
             <FileButton
               label={t('bb.look.fontAdd')}
-              accept={look.acceptFonts}
               testId={`look-font-file-${language}`}
               ariaLabel={`${t('bb.look.fontAdd')} · ${languageName}`}
               onPick={setPicked}
@@ -706,7 +746,9 @@ function LanguageFonts({
                 </button>
               </span>
             ) : null}
-          </form>
+            <UploadRulesLine className="bsp-lk-meta" />
+            <UploadStatus testId={`look-font-status-${language}`} />
+          </UploadForm>
         )
       ) : null}
       {fonts.length === 0 ? (
@@ -723,7 +765,7 @@ function LanguageFonts({
                 locale={locale}
                 brandId={brandId}
                 font={font}
-                accept={look.acceptFonts}
+                rules={look.fontRules}
                 canUpload={canUpload}
               />
             ))}
@@ -738,13 +780,13 @@ function FontRow({
   locale,
   brandId,
   font,
-  accept,
+  rules,
   canUpload,
 }: {
   locale: string;
   brandId: string;
   font: LookViewData['fonts'][number];
-  accept: string;
+  rules: UploadRules;
   canUpload: boolean;
 }) {
   const t = translator(useMessageLocale(locale));
@@ -789,12 +831,17 @@ function FontRow({
       </form>
       <div className="bsp-lk-font-acts">
         {canUpload ? (
-          <form action={replaceBrandFontAction} className="bsp-lk-font-row">
+          <UploadForm
+            action={replaceBrandFontAction}
+            rules={rules}
+            locale={locale}
+            texts={uploadTexts(t)}
+            className="bsp-lk-font-row"
+          >
             <Hidden locale={locale} brandId={brandId} />
             <input type="hidden" name="brandFontId" value={font.id} />
             <FileButton
               label={t('bb.look.fontReplace')}
-              accept={accept}
               testId={`look-font-replace-file-${font.id}`}
               ariaLabel={`${t('bb.look.fontReplace')} · ${font.displayName}`}
               onPick={setPicked}
@@ -811,7 +858,8 @@ function FontRow({
                 </button>
               </>
             ) : null}
-          </form>
+            <UploadStatus testId={`look-font-replace-status-${font.id}`} />
+          </UploadForm>
         ) : null}
         <button
           type="button"

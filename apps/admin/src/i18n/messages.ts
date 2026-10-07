@@ -7,11 +7,11 @@
  */
 export const messages = {
   ar: {
-    'app.title': 'مركز تحكم BrandSpace',
+    'app.title': 'مركز تحكم Brandspace',
     // The rail's wordmark. `app.title` is the document title and does not fit
     // a 250px rail at 16px/800 — it truncated to "BrandSpace …" on every
     // console screen. The full name lives in the top-bar eyebrow instead.
-    'app.mark': 'BrandSpace',
+    'app.mark': 'Brandspace',
     'app.subtitle': 'إدارة المنصة',
     'console.hero.eyebrow': 'مركز تحكم المنصة',
     'console.publishing.textOnly':
@@ -166,8 +166,8 @@ export const messages = {
     'support.noImpersonation': 'أنت تُشاهد كموظف منصة، ولستَ متنكرًا في هوية العميل.',
   },
   en: {
-    'app.title': 'BrandSpace Control Center',
-    'app.mark': 'BrandSpace',
+    'app.title': 'Brandspace Control Center',
+    'app.mark': 'Brandspace',
     'app.subtitle': 'Platform administration',
     'console.hero.eyebrow': 'Platform control center',
     'console.publishing.textOnly':

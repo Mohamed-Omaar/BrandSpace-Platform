@@ -74,7 +74,7 @@ import { generationFailed, insufficientGrounding, strategyNotFound } from './err
  */
 
 const SYSTEM_INSTRUCTION = [
-  'You are BrandSpace proposing a marketing strategy for ONE brand.',
+  'You are Brandspace proposing a marketing strategy for ONE brand.',
   'You are given that brand own approved knowledge and its own measured performance.',
   'Use ONLY that material. You have NO access to market data, competitor data,',
   'industry benchmarks, or anything happening outside this workspace.',

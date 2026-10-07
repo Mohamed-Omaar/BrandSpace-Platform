@@ -276,6 +276,36 @@ async function upload(page: Page, locale: 'en' | 'ar', file: FileSpec): Promise<
   return new URL(page.url()).searchParams;
 }
 
+/**
+ * BATCH 7 (A3, D-483): a type the server does not admit, or a file over the
+ * limit, is now refused in the browser the moment it is chosen and never sent
+ * (`tests/e2e/b7-entry-uploads.spec.ts` proves that). The SERVER's refusal is
+ * what this file is about — a client with no script, or one that skips the
+ * page's check, still reaches it — so such a file is posted the way that client
+ * posts it: put in the field without a change event, then the form's own native
+ * submit, which the page's check never sees.
+ */
+async function uploadPastTheBrowserCheck(
+  page: Page,
+  locale: 'en' | 'ar',
+  file: FileSpec,
+): Promise<URLSearchParams> {
+  await page.goto(sourcesUrl(locale));
+  await page.getByTestId('upload-input').evaluate(
+    (input, spec) => {
+      const bytes = Uint8Array.from(atob(spec.base64), (c) => c.charCodeAt(0));
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], spec.name, { type: spec.mimeType }));
+      const field = input as HTMLInputElement;
+      field.files = transfer.files;
+      field.form!.submit();
+    },
+    { name: file.name, mimeType: file.mimeType, base64: file.buffer.toString('base64') },
+  );
+  await page.waitForURL(/[?&](ok|error)=/, { timeout: 60_000 });
+  return new URL(page.url()).searchParams;
+}
+
 const rowFor = (page: Page, fileName: string) =>
   page.locator('li[data-status]').filter({ hasText: fileName });
 
@@ -438,14 +468,22 @@ test.describe('Item 5 · refused and failed files are FAILED rows, never a 500',
         name: 'renamed.docx',
         mimeType: DOCX_TYPE,
       };
-      const expectations: [FileSpec, RegExp][] = [
-        [unsupported, locale === 'ar' ? /غير مدعوم/ : /not supported/],
-        [legacy, locale === 'ar' ? /غير مدعوم/ : /not supported/],
-        [oversize, locale === 'ar' ? /أكبر من الحجم المسموح/ : /larger than the size allowed/],
-        [spoofed, locale === 'ar' ? /لا يطابق نوعه/ : /match its type/],
+      // The last flag: the browser refuses this file itself (D-483), so it is
+      // posted past that check to reach the server's refusal.
+      const expectations: [FileSpec, RegExp, boolean][] = [
+        [unsupported, locale === 'ar' ? /غير مدعوم/ : /not supported/, true],
+        [legacy, locale === 'ar' ? /غير مدعوم/ : /not supported/, true],
+        [
+          oversize,
+          locale === 'ar' ? /أكبر من الحجم المسموح/ : /larger than the size allowed/,
+          true,
+        ],
+        [spoofed, locale === 'ar' ? /لا يطابق نوعه/ : /match its type/, false],
       ];
-      for (const [file, reason] of expectations) {
-        const query = await upload(page, locale, file);
+      for (const [file, reason, refusedByBrowser] of expectations) {
+        const query = refusedByBrowser
+          ? await uploadPastTheBrowserCheck(page, locale, file)
+          : await upload(page, locale, file);
         expect(query.get('error'), file.name).toBe('SOURCE_REFUSED');
         const id = await sourceIdOf(page, file.name);
         await expect(rowFor(page, file.name)).toHaveAttribute('data-status', 'FAILED');
@@ -455,7 +493,7 @@ test.describe('Item 5 · refused and failed files are FAILED rows, never a 500',
       }
 
       // The same refused bytes again: that row, its reason — never INTERNAL.
-      const again = await upload(page, locale, unsupported);
+      const again = await uploadPastTheBrowserCheck(page, locale, unsupported);
       expect(again.get('error')).toBe('SOURCE_ALREADY_FAILED');
       await expect(
         page.locator('li[data-status]').filter({ hasText: 'installer.exe' }),

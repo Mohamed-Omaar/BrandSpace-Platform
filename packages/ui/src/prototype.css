@@ -10490,6 +10490,28 @@ img.bsp-pf-art {
   padding: 32px;
   box-sizing: border-box;
 }
+/*
+ * BATCH 7 (A2) — ONE SCROLL ONLY: the browser window never scrolls. From the
+ * tablet width the entry screens (sign-in, sign-up, the wizard, the workspace
+ * list) are held to the window; a card taller than the window scrolls inside
+ * itself, and only a window too short for even the capped card lets the stage
+ * around it scroll. The phone layout still scrolls the page (post-launch).
+ */
+@media (min-width: 768px) {
+  .bsp-auth {
+    block-size: 100vh;
+    min-block-size: 0;
+    overflow: hidden;
+  }
+  .bsp-auth-stage {
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+  .bsp-auth-card {
+    max-block-size: calc(100vh - 64px);
+    overflow-y: auto;
+  }
+}
 .bsp-auth-card {
   inline-size: min(540px, 100%);
   box-sizing: border-box;
@@ -11119,6 +11141,95 @@ img.bsp-pf-art {
 .bsp-wz-swatches {
   display: flex;
   gap: 8px;
+}
+/*
+ * BATCH 7 (A3) — THE LOGO, NEVER SILENT: the chosen file in the tile at once,
+ * its name and Change / Remove beside it, the rules under the button, and the
+ * refusal in the same place. The wizard's own hint and error type (12.5px
+ * `#6a6a72`, 13px / 700 `#b83245`); nothing new but the picture in the tile.
+ */
+.bsp-wz-logo img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+  border-radius: inherit;
+  background: #fff;
+}
+.bsp-wz-logo[data-state='checking'] {
+  opacity: 0.6;
+}
+.bsp-wz-logo-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bsp-wz-logo-ctl {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-inline-size: 0;
+  flex: 1 1 0;
+}
+.bsp-wz-logo-acts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bsp-wz-logo-name {
+  font-size: 12.5px;
+  color: #26262b;
+  overflow-wrap: anywhere;
+}
+.bsp-wz-logo-name[data-state='failed'] {
+  font-weight: 700;
+  color: #b83245;
+}
+/* Every upload's status line: a refusal or a lost connection in the error ink. */
+.bsp-up-status[data-tone='error'] {
+  font-size: 13px;
+  font-weight: 700;
+  color: #b83245;
+}
+.bsp-up-status[data-tone='info'] {
+  color: #26262b;
+}
+/* BATCH 7 (A4) — each Teach file on its own row: name, state, and why it failed. */
+.bsp-wz-srcs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bsp-wz-src {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #f4f4f5;
+  font-size: 12.5px;
+}
+.bsp-wz-src-n {
+  font-weight: 700;
+  color: #111114;
+  overflow-wrap: anywhere;
+}
+.bsp-wz-src-s {
+  color: #6a6a72;
+}
+.bsp-wz-src[data-status='FAILED'] .bsp-wz-src-s,
+.bsp-wz-src[data-status='QUARANTINED'] .bsp-wz-src-s,
+.bsp-wz-src-r {
+  font-weight: 700;
+  color: #b83245;
+}
+.bsp-wz-src-r {
+  flex-basis: 100%;
+  font-weight: 400;
 }
 /* `width: 40px; height: 40px; border-radius: 12px; border: 1px solid #ececef`. */
 .bsp-wz-swatch {

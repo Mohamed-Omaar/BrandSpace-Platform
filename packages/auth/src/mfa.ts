@@ -14,7 +14,7 @@ import { Secret, TOTP } from 'otpauth';
  * TOTP is the implementation, not a placeholder for one.
  */
 
-export const TOTP_ISSUER = 'BrandSpace Platform';
+export const TOTP_ISSUER = 'Brandspace Platform';
 const TOTP_DIGITS = 6;
 const TOTP_PERIOD_SECONDS = 30;
 /** ±1 step tolerates clock skew without meaningfully widening the window. */

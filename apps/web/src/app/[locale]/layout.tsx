@@ -9,7 +9,7 @@ import {
 import '@brandspace/ui/tokens.css';
 
 export const metadata = {
-  title: 'BrandSpace',
+  title: 'Brandspace',
   description: 'AI-powered brand and social media operating system',
 };
 

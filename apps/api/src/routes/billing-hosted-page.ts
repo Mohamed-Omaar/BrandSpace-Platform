@@ -255,7 +255,7 @@ function checkoutPage(input: {
     <h1>Development payment provider</h1>
     <p class="note">
       A stand-in for a provider-hosted page. It collects no card details, because
-      the point of hosted checkout is that none ever reach BrandSpace.
+      the point of hosted checkout is that none ever reach Brandspace.
     </p>
     <dl>
       <dt>Buying</dt><dd>${escapeHtml(input.description)}</dd>

@@ -40,9 +40,12 @@ describe('one term per concept (Step 6.4)', () => {
 });
 
 describe('the wordmark and the digits (Steps 6.5, 6.6)', () => {
-  it('the wordmark is BrandSpace, never transliterated', () => {
+  it('the wordmark is Brandspace (D-482), never transliterated', () => {
     expect(values.filter(([, value]) => /براندسبيس/.test(value)).map(([key]) => key)).toEqual([]);
-    expect(messages.ar['app.title']).toBe('BrandSpace');
+    expect(messages.ar['app.title']).toBe('Brandspace');
+    // D-482: the old capitalisation is gone from every message, in both languages.
+    const both = [...values, ...Object.entries(messages.en as Record<string, string>)];
+    expect(both.filter(([, value]) => /BrandSpace/.test(value)).map(([key]) => key)).toEqual([]);
   });
 
   it('no Arabic value writes an Arabic-Indic digit', () => {

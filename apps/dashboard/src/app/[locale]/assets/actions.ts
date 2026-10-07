@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { uploadReasonOf } from '../../../server/upload-rules';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
@@ -117,7 +118,14 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
 
     destination = pageUrl(locale, { ok: 'ASSET_UPLOADED' });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'upload-asset');
+    // Batch 7 (A3): a refusal goes back to the upload itself, with its reason.
+    const reason = uploadReasonOf(error);
+    destination = failure(
+      locale,
+      error,
+      'upload-asset',
+      reason ? { upload: '1', uploadReason: reason } : {},
+    );
   }
   revalidatePath(`/${locale}/assets`);
   redirect(destination);
@@ -353,7 +361,11 @@ export async function addAssetVersionAction(formData: FormData): Promise<void> {
 
     destination = pageUrl(locale, { ok: 'ASSET_VERSION_CREATED', asset: assetId });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'add-version', { asset: assetId });
+    const reason = uploadReasonOf(error);
+    destination = failure(locale, error, 'add-version', {
+      asset: assetId,
+      ...(reason ? { uploadReason: reason } : {}),
+    });
   }
   revalidatePath(`/${locale}/assets`);
   redirect(destination);

@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { uploadReasonOf } from '../../../server/upload-rules';
 import { notFound, redirect, unstable_rethrow } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
@@ -646,9 +647,12 @@ export async function uploadComposerMediaAction(formData: FormData): Promise<voi
     });
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
+    // Batch 7 (A3): a refusal reopens the upload, with its reason there.
+    const reason = uploadReasonOf(error);
     destination = failure(locale, error, 'uploadComposerMedia', '/compose', {
       item: itemId,
       open: 'visual',
+      ...(reason ? { uploadReason: reason } : {}),
     });
   }
   revalidatePath(`/${locale}/content`);

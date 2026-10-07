@@ -12,7 +12,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   return (
     <AppShell
       locale={locale}
-      heading="BrandSpace"
+      heading="Brandspace"
       description={
         isArabic
           ? 'المرحلة الأولى: الأساسات فقط. لا توجد ميزات منتج بعد.'

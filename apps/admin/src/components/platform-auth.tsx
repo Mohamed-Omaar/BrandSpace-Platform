@@ -63,7 +63,7 @@ export function PlatformAuthShell({
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <BrandMark title="BrandSpace" />
+          <BrandMark title="Brandspace" />
         </div>
 
         <div

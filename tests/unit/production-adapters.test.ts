@@ -430,10 +430,24 @@ describe('every declared template renders in both languages', () => {
     expect(rendered.html).toContain('&amp;');
   });
 
-  it('matches the BrandSpace protected-preview shell without tracking pixels', () => {
+  it('D-482: with no public address the mark is left out and the name still shows', () => {
+    vi.stubEnv('PUBLIC_DASHBOARD_BASE_URL', '');
     const rendered = renderEmail(message());
-    expect(rendered.html).toContain('BrandSpace');
-    expect(rendered.html).toContain('https://www.brandspace.cc/brandspace-logo.svg');
+    vi.unstubAllEnvs();
+    expect(rendered.html).not.toContain('<img');
+    expect(rendered.html).toContain('>Brandspace</span>');
+  });
+
+  it('matches the Brandspace protected-preview shell without tracking pixels', () => {
+    vi.stubEnv('PUBLIC_DASHBOARD_BASE_URL', 'https://app.example.com');
+    const rendered = renderEmail(message());
+    vi.unstubAllEnvs();
+    // D-482: the product's name is written "Brandspace".
+    expect(rendered.html).toContain('Brandspace');
+    expect(rendered.html).not.toContain('BrandSpace');
+    // D-482: the mark is the product's own PNG, at its public dashboard address.
+    expect(rendered.html).toContain('src="https://app.example.com/brandspace-icon.png"');
+    expect(rendered.html).not.toContain('.svg');
     expect(rendered.html).toContain('SECURE EMAIL');
     expect(rendered.html).toContain('#7935FE');
     expect(rendered.html).toContain('#FFDD15');

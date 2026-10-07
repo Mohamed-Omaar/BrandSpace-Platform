@@ -875,6 +875,12 @@ Found when the owner tested staging. None of these is code; each is a setting or
       vault). No real connector ships yet, so production stays at `"enabled": false`: customers can
       draft every format the channel carries, and the Studio says "{channel} can't be connected
       yet." On staging, `true` uses the built-in test connector (simulated accounts and publishing).
+5. **The mark in emails (batch 7, D-482).** Nothing to do. Transactional emails show the
+   Brandspace icon as a PNG served by the customer dashboard itself
+   (`apps/dashboard/public/brandspace-icon.png`), at `PUBLIC_DASHBOARD_BASE_URL` — the address
+   every email link is already built from. Before this, the mark was an SVG on the marketing site,
+   which Gmail does not draw. The old `brandspace-logo.svg` on the landing site is no longer used
+   by the product.
 
 ## 13. Incident log
 

@@ -295,7 +295,7 @@ export const WORKSPACE_PERMISSIONS: readonly PermissionDefinition[] = [
    * that can cause an effect, and `client_viewer` gets NOTHING (D-62, D-130).
    */
   def('analytics.read', 'workspace', 'View performance analytics'),
-  def('analytics.export', 'workspace', 'Export analytics data out of BrandSpace'),
+  def('analytics.export', 'workspace', 'Export analytics data out of Brandspace'),
   def(
     'analytics.explain',
     'workspace',

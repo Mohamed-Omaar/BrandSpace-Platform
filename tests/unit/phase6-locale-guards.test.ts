@@ -144,11 +144,11 @@ describe('P6-14 · the customer app lays out logically, never by side', () => {
 
 describe('P6-14 · no accessible name is written in English in a component', () => {
   /**
-   * `BrandMark title="BrandSpace"` is the product's name, the same in both
+   * `BrandMark title="Brandspace"` is the product's name, the same in both
    * languages. The Brand Brain key field's placeholder is an EXAMPLE of the
    * machine key it asks for, which is not translated because the key is not.
    */
-  const ALLOWED = new Set(['title="BrandSpace"', 'placeholder="identity.positioning"']);
+  const ALLOWED = new Set(['title="Brandspace"', 'placeholder="identity.positioning"']);
 
   it('aria-label, title, placeholder and alt come from the dictionary', () => {
     const offenders: string[] = [];

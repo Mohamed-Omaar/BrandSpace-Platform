@@ -77,7 +77,7 @@ export function SetupFrame({
             </span>
             {/* The product's name, in Latin in both languages, as the prototype writes it. */}
             <span className="bsp-auth-word bsp-ltr" lang="en">
-              BrandSpace
+              Brandspace
             </span>
             {stepText ? (
               <span className="bsp-wz-eyebrow" data-testid="setup-progress-text">

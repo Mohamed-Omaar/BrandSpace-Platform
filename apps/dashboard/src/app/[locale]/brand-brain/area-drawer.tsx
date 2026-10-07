@@ -1,6 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import type { UploadRules } from '../../../components/upload-rules';
+import {
+  UploadFileInput,
+  UploadForm,
+  UploadRulesLine,
+  UploadStatus,
+  uploadTexts,
+} from '../../../components/upload-field';
 import { visuallyHiddenStyle } from '@brandspace/ui';
 import { translator } from '../../../i18n/messages';
 import type { AreaCardData, BrandBrainPermissions, CandidateData } from './brand-brain-view';
@@ -45,10 +53,13 @@ export function AreaDrawer({
   candidates,
   focus,
   permissions,
+  sourceRules = null,
   onClose,
   onAskAbout,
   onReview,
 }: {
+  /** Batch 7 (A3): what a source may be, from activated configuration. */
+  sourceRules?: UploadRules | null;
   locale: string;
   brandId: string;
   area: AreaCardData;
@@ -437,18 +448,19 @@ export function AreaDrawer({
           ) : null}
 
           {/* --- Upload into this area ---------------------------------------- */}
-          {permissions.upload ? (
-            <form
+          {permissions.upload && sourceRules ? (
+            <UploadForm
               action={uploadSourceAction}
-              encType="multipart/form-data"
+              rules={sourceRules}
+              locale={locale}
+              texts={uploadTexts(t)}
               className="bsp-bb-aup"
               data-testid="drawer-upload-form"
             >
               <input type="hidden" name="locale" value={locale} />
               <input type="hidden" name="brandId" value={brandId} />
               <input type="hidden" name="area" value={area.area} />
-              <input
-                type="file"
+              <UploadFileInput
                 name="file"
                 required
                 className="bs-control bsp-bb-aup-in"
@@ -462,7 +474,9 @@ export function AreaDrawer({
               >
                 {t('bb.upload')}
               </button>
-            </form>
+              <UploadRulesLine className="bsp-bb-uphint" />
+              <UploadStatus testId="drawer-upload-status" />
+            </UploadForm>
           ) : null}
         </section>
 

@@ -98,7 +98,7 @@ test.describe('D-295 · a noticed preference becomes a default only when chosen'
     await signIn(page);
     const row = page.getByTestId(`home-preference-${habit.key}`);
     await expect(row).toBeVisible();
-    await expect(row).toContainText('after BrandSpace writes them');
+    await expect(row).toContainText('after Brandspace writes them');
     // The audit trail is append-only, so earlier runs' edits may add to the count.
     await expect(row).toContainText(/\d+ edits across \d+ posts/);
 

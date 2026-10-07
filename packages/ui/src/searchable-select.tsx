@@ -1,6 +1,14 @@
 'use client';
 
-import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react';
 import { ChevronDownIcon } from './icons';
 import { colorTokens, spacingTokens, typographyTokens, zIndexTokens } from './tokens';
 import { inputStyle } from './primitives';
@@ -9,6 +17,8 @@ import { useOpening, usePresence } from './motion-hooks';
 export interface SearchableOption {
   readonly value: string;
   readonly label: string;
+  /** What the row shows at its end; the value when absent (a country's code). */
+  readonly hint?: string | undefined;
 }
 
 /**
@@ -49,6 +59,13 @@ export function SearchableSelect({
   const listId = useId();
   const [internalValue, setInternalValue] = useState(defaultValue);
   const [query, setQuery] = useState('');
+  /*
+   * BATCH 7 (A5) — THE LIST OPENS WHOLE. Opening puts the chosen label in the
+   * box, and that text used to filter the list down to the one row already
+   * chosen ("Riyadh" offered only Riyadh). It filters only once the person
+   * types; until then every option is there, the chosen one in view.
+   */
+  const [typed, setTyped] = useState(false);
   const [open, setOpen] = useState(false);
   // MO5: the list enters when it opens and leaves (180 ms) after it closes.
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -58,7 +75,7 @@ export function SearchableSelect({
 
   const value = controlledValue ?? internalValue;
   const selected = options.find((option) => option.value === value) ?? null;
-  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const normalizedQuery = typed ? query.trim().toLocaleLowerCase() : '';
   const filtered = useMemo(
     () =>
       normalizedQuery === ''
@@ -77,9 +94,22 @@ export function SearchableSelect({
   const choose = (option: SearchableOption) => {
     setValue(option.value);
     setQuery(option.label);
+    setTyped(false);
     setOpen(false);
     setActiveIndex(0);
   };
+
+  // The chosen row is the active one, scrolled into view, as the list opens.
+  useEffect(() => {
+    if (!open || typed) return;
+    const index = selected ? options.indexOf(selected) : -1;
+    if (index < 0) return;
+    setActiveIndex(index);
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-index="${index}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+    // Only on opening: later moves through the list are the person's own.
+  }, [open]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
@@ -121,6 +151,7 @@ export function SearchableSelect({
         placeholder={placeholder}
         onFocus={() => {
           setQuery(selected?.label ?? '');
+          setTyped(false);
           setOpen(true);
           setActiveIndex(0);
         }}
@@ -131,6 +162,7 @@ export function SearchableSelect({
         onChange={(event) => {
           const next = event.target.value;
           setQuery(next);
+          setTyped(true);
           setOpen(true);
           setActiveIndex(0);
           if (selected && next !== selected.label) setValue('');
@@ -190,6 +222,7 @@ export function SearchableSelect({
                 key={option.value}
                 type="button"
                 role="option"
+                data-index={index}
                 aria-selected={option.value === value}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => choose(option)}
@@ -211,7 +244,7 @@ export function SearchableSelect({
               >
                 <span>{option.label}</span>
                 <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                  {option.value}
+                  {option.hint ?? option.value}
                 </span>
               </button>
             ))

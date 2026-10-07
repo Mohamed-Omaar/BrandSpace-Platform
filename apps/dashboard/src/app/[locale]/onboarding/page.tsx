@@ -29,12 +29,22 @@ import { uploadSourceAction } from '../brand-brain/actions';
 import { connectAccountAction } from '../integrations/actions';
 import { ChannelMark } from '../calendar/prototype-calendar';
 import {
+  attachSetupLogoAction,
   createSetupBrandAction,
+  uploadSetupLogoAction,
   reviewSetupCandidateAction,
   acceptAllSetupCandidatesAction,
   saveFirstGoalAction,
 } from './actions';
 import { SetupUploadTile } from './upload-tile';
+import { LogoPicker, type LogoNow } from './logo-picker';
+import { LogoAttach } from './logo-attach';
+import { inAssetLibrary } from '../../../server/assets-context';
+import { issuePreviewToken } from '../../../server/media-picker';
+import { assetUploadRules, sourceUploadRules } from '../../../server/upload-rules';
+import { sourceFailureText } from '../../../server/source-failure';
+import { UploadForm, type UploadTexts } from '../../../components/upload-field';
+import { RefreshWhile } from '../../../components/refresh-while';
 import { IndustryField } from '../../../components/industry-field';
 import { SetupBrandLanguages } from '../../../components/setup-brand-languages';
 
@@ -73,9 +83,26 @@ export default async function OnboardingPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
-  const { workspace, messageLocale } = await requireWorkspace(locale);
+  const { customer, workspace, messageLocale } = await requireWorkspace(locale);
   const t = translator(messageLocale);
   const may = (key: string) => workspace.permissionKeys.includes(key);
+  // Batch 7 (A3): the words every upload control here says, before, during and on refusal.
+  const uploadTexts: UploadTexts = {
+    rules: t('upload.rules'),
+    refusedType: t('upload.refusedType'),
+    refusedSize: t('upload.refusedSize'),
+    refusedEmpty: t('upload.refusedEmpty'),
+    uploading: t('upload.uploading'),
+    connection: t('upload.connection'),
+  };
+  const logoTexts = {
+    upload: t('setup.wz.brand.uploadLogo'),
+    change: t('upload.change'),
+    remove: t('upload.remove'),
+    chosen: t('upload.chosen'),
+  };
+  const assetReason = (reason: string) =>
+    optionalMessage(messageLocale, `assets.reason.${reason}`) ?? t('upload.connection');
 
   const brandContext = await brandContextFor(
     workspace,
@@ -228,8 +255,82 @@ export default async function OnboardingPage({
       );
       const palette = paletteFrom(row?.colorPalette).slice(0, 3);
       const languages = (row?.supportedLocales as readonly string[] | undefined) ?? [];
+      /*
+       * BATCH 7 (A3) — THE LOGO'S STATE, IN ITS OWN PLACE: the brand's logo, a
+       * file still being checked (`?logo=`), or the reason one was refused
+       * (`?logoReason=`). A file that has passed since is attached by the step.
+       */
+      const logoRules = await inAssetLibrary(workspace.workspaceId, async (services) =>
+        assetUploadRules(await services.policy(), ['image']),
+      );
+      const pendingLogo = typeof query['logo'] === 'string' ? query['logo'] : null;
+      const refusedLogo = typeof query['logoReason'] === 'string' ? query['logoReason'] : null;
+      let logoNow: LogoNow | null = null;
+      let logoReady: string | null = null;
+      const viewer = {
+        workspaceId: workspace.workspaceId,
+        userId: customer.userId,
+        permissionKeys: workspace.permissionKeys,
+        brandScope: workspace.brandScope,
+      };
+      if (row?.primaryLogoAssetId) {
+        const shown = await issuePreviewToken({ ...viewer, assetId: row.primaryLogoAssetId }).catch(
+          () => null,
+        );
+        logoNow = {
+          name: shown?.name ?? '',
+          src: shown?.previewToken ? `/${locale}/assets/file/${shown.previewToken}` : null,
+          state: 'ready',
+          message: t('setup.wz.brand.logoAdded').replace('{name}', shown?.name ?? ''),
+        };
+      } else if (refusedLogo) {
+        logoNow = {
+          name: '',
+          src: null,
+          state: 'failed',
+          message: t('setup.wz.brand.logoFailed').replace('{reason}', assetReason(refusedLogo)),
+        };
+      } else if (pendingLogo) {
+        const file = await inBrandBrain(workspace.workspaceId, ({ db }) =>
+          db.asset.findFirst({
+            where: { id: pendingLogo, brandId: brand.id, deletedAt: null },
+            select: { name: true, status: true, scanStatus: true, failureReason: true },
+          }),
+        );
+        if (file && file.status === 'READY' && file.scanStatus === 'CLEAN') {
+          logoReady = pendingLogo;
+          logoNow = {
+            name: file.name,
+            src: null,
+            state: 'checking',
+            message: t('upload.checking').replace('{name}', file.name),
+          };
+        } else if (
+          !file ||
+          file.status === 'PROCESSING_FAILED' ||
+          file.status === 'QUARANTINED' ||
+          file.scanStatus === 'INFECTED'
+        ) {
+          logoNow = {
+            name: file?.name ?? '',
+            src: null,
+            state: 'failed',
+            message: t('setup.wz.brand.logoFailed').replace(
+              '{reason}',
+              assetReason(file?.failureReason ?? (file ? 'infected' : 'object_missing')),
+            ),
+          };
+        } else {
+          logoNow = {
+            name: file.name,
+            src: null,
+            state: 'checking',
+            message: t('setup.wz.brand.logoChecking').replace('{name}', file.name),
+          };
+        }
+      }
       body = (
-        <section className="bsp-wz-body" data-testid="setup-brand-ready">
+        <section className="bsp-wz-body bsp-wz-scroll" data-testid="setup-brand-ready">
           <div className="bsp-wz-brandgrid">
             <div className="bsp-wz-col">
               <div>
@@ -277,22 +378,43 @@ export default async function OnboardingPage({
             </div>
             <div className="bsp-wz-look">
               <span className="bsp-wz-lb">{t('setup.wz.brand.logoColours')}</span>
-              <div className="bsp-wz-logo-row">
-                <span className="bsp-wz-logo" aria-hidden="true">
-                  {(row?.name ?? brand.name).trim().charAt(0).toUpperCase()}
-                </span>
-                {may('brand.read') ? (
-                  <Link
-                    href={`/${locale}/settings/brand`}
-                    className="bsp-wz-btn bsp-wz-sec"
-                    data-testid="setup-edit-profile"
-                  >
-                    {row?.primaryLogoAssetId
-                      ? t('setup.wz.brand.changeLogo')
-                      : t('setup.wz.brand.uploadLogo')}
-                  </Link>
-                ) : null}
-              </div>
+              {may('brand.manage') && may('assets.upload') ? (
+                <UploadForm
+                  action={uploadSetupLogoAction}
+                  rules={logoRules}
+                  locale={locale}
+                  texts={uploadTexts}
+                  data-testid="setup-logo-form"
+                >
+                  <input type="hidden" name="locale" value={locale} />
+                  <input type="hidden" name="brandId" value={brand.id} />
+                  <LogoPicker
+                    initial={(row?.name ?? brand.name).trim().charAt(0).toUpperCase()}
+                    now={logoNow}
+                    submitOnChoose
+                    texts={logoTexts}
+                  />
+                </UploadForm>
+              ) : (
+                <div className="bsp-wz-logo-row">
+                  <span className="bsp-wz-logo" aria-hidden="true">
+                    {logoNow?.src ? (
+                      <img src={logoNow.src} alt="" />
+                    ) : (
+                      (row?.name ?? brand.name).trim().charAt(0).toUpperCase()
+                    )}
+                  </span>
+                </div>
+              )}
+              <RefreshWhile active={logoNow?.state === 'checking' && logoReady === null} />
+              {logoReady ? (
+                <LogoAttach
+                  action={attachSetupLogoAction}
+                  locale={locale}
+                  brandId={brand.id}
+                  assetId={logoReady}
+                />
+              ) : null}
               {palette.length > 0 ? (
                 <div className="bsp-wz-swatches">
                   {palette.map((hex) => (
@@ -331,12 +453,17 @@ export default async function OnboardingPage({
         async ({ db }) =>
           (await new TenantOnboardingPolicySource(db, currentEnvironment()).load()).industries,
       );
+      const logoRules = await inAssetLibrary(workspace.workspaceId, async (services) =>
+        assetUploadRules(await services.policy(), ['image']),
+      );
       body = (
-        <section className="bsp-wz-body" data-testid="setup-brand">
-          <form
+        <section className="bsp-wz-body bsp-wz-scroll" data-testid="setup-brand">
+          <UploadForm
             id="setup-brand-form"
             action={createSetupBrandAction}
-            encType="multipart/form-data"
+            rules={logoRules}
+            locale={locale}
+            texts={uploadTexts}
             data-testid="setup-brand-form"
             className="bsp-wz-brandgrid"
           >
@@ -420,22 +547,18 @@ export default async function OnboardingPage({
             {/* "Logo and colours" — the prototype's soft panel (`.bsp-wz-look`). */}
             <div className="bsp-wz-look">
               <span className="bsp-wz-lb">{t('setup.wz.brand.logoColours')}</span>
+              {/*
+                BATCH 7 (A3): the logo's own hint (its formats and size) sits
+                under the logo's button, the colours' under the colours field —
+                they used to stand together under the colours.
+              */}
               {may('assets.upload') ? (
-                <div className="bsp-wz-logo-row">
-                  <span className="bsp-wz-logo" aria-hidden="true">
-                    {workspace.workspaceName.trim().charAt(0).toUpperCase()}
-                  </span>
-                  <label className="bsp-wz-btn bsp-wz-sec bsp-wz-file">
-                    {t('setup.wz.brand.uploadLogo')}
-                    <input
-                      id="setup-brand-logo"
-                      name="logo"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      aria-describedby="setup-brand-logo-hint"
-                    />
-                  </label>
-                </div>
+                <LogoPicker
+                  initial={workspace.workspaceName.trim().charAt(0).toUpperCase()}
+                  now={null}
+                  submitOnChoose={false}
+                  texts={logoTexts}
+                />
               ) : null}
               <div>
                 <label className="bsp-wz-lb" htmlFor="setup-brand-colours">
@@ -449,15 +572,12 @@ export default async function OnboardingPage({
                   className="bs-control"
                   aria-describedby="setup-brand-colours-hint"
                 />
+                <span id="setup-brand-colours-hint" className="bsp-wz-hint">
+                  {t('setup.brand.coloursHint')}
+                </span>
               </div>
-              <span id="setup-brand-colours-hint" className="bsp-wz-hint">
-                {t('setup.brand.coloursHint')}
-              </span>
-              <span id="setup-brand-logo-hint" className="bsp-wz-hint">
-                {t('setup.brand.logoHint')}
-              </span>
             </div>
-          </form>
+          </UploadForm>
         </section>
       );
       footer = (
@@ -485,7 +605,7 @@ export default async function OnboardingPage({
           where: { brandId: brand.id, deletedAt: null },
           orderBy: { createdAt: 'desc' },
           take: 10,
-          select: { id: true, fileName: true, status: true },
+          select: { id: true, fileName: true, status: true, failureMessage: true },
         }),
       ),
       may('brand_brain.review')
@@ -505,7 +625,16 @@ export default async function OnboardingPage({
           )
         : Promise.resolve([]),
     ]);
-    const reading = sources.filter((source) => source.status === 'PROCESSING').length;
+    const reading = sources.filter(
+      (source) => source.status === 'PROCESSING' || source.status === 'UPLOADED',
+    ).length;
+    // Batch 7 (A4): "everything has been reviewed" only once a file was READ.
+    const read = sources.some((source) => source.status === 'READY');
+    const sourceRules = may('brand_brain.upload')
+      ? await inBrandBrain(workspace.workspaceId, async (services) =>
+          sourceUploadRules((await services.policy()).ingestion),
+        )
+      : null;
     head = { title: t('setup.wz.teach.title'), description: t('setup.wz.teach.body') };
     body = (
       <section className="bsp-wz-body bsp-wz-scroll" data-testid="setup-learn">
@@ -515,10 +644,12 @@ export default async function OnboardingPage({
           own upload, back to this step.
         */}
         <div className="bsp-wz-tiles">
-          {may('brand_brain.upload') ? (
-            <form
+          {sourceRules ? (
+            <UploadForm
               action={uploadSourceAction}
-              encType="multipart/form-data"
+              rules={sourceRules}
+              locale={locale}
+              texts={uploadTexts}
               data-testid="setup-upload-form"
               className="bsp-wz-upform"
             >
@@ -529,25 +660,45 @@ export default async function OnboardingPage({
               <input type="hidden" name="step" value="learn" />
               <SetupUploadTile
                 title={t('setup.wz.teach.upload')}
-                kinds={t('setup.wz.teach.kinds')}
                 chooseLabel={t('bb.uploadChoose')}
-                sendingLabel={t('setup.wz.teach.uploading')}
               />
-              {sources.length > 0 ? (
-                <span className="bsp-wz-tile-s" data-testid="setup-sources">
-                  {sources
-                    .map(
-                      (source) =>
-                        `${source.fileName} · ${t(`setup.source.${source.status}` as MessageKey)}`,
-                    )
-                    .join(' · ')}
-                </span>
-              ) : null}
-            </form>
+            </UploadForm>
           ) : (
             note(t('setup.noPermission'), 'setup-no-permission')
           )}
         </div>
+        {/*
+          BATCH 7 (A4) — EACH FILE ON ITS OWN ROW, WITH ITS REASON. A file that
+          could not be read said only "Could not read", run together with the
+          others on one line, while the banner pointed to a Sources list the
+          wizard does not have. The reason is the same words the Brand Brain's
+          Sources use.
+        */}
+        {sources.length > 0 ? (
+          <ul className="bsp-wz-srcs" data-testid="setup-sources">
+            {sources.map((source) => (
+              <li
+                key={source.id}
+                className="bsp-wz-src"
+                data-status={source.status}
+                data-testid={`setup-source-${source.id}`}
+              >
+                <span className="bsp-wz-src-n" dir="auto">
+                  {source.fileName}
+                </span>
+                <span className="bsp-wz-src-s">
+                  {t(`setup.source.${source.status}` as MessageKey)}
+                </span>
+                {source.status === 'FAILED' ? (
+                  <span className="bsp-wz-src-r" data-testid="setup-source-reason">
+                    {sourceFailureText(source.failureMessage, t)}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <RefreshWhile active={reading > 0} />
         {reading > 0 ? note(t('setup.learn.processing'), 'setup-processing') : null}
         {candidates.length > 0 ? (
           /* "We understood n things · review them", one row per fact (lines 156–168). */
@@ -625,11 +776,13 @@ export default async function OnboardingPage({
               );
             })}
           </div>
-        ) : facts.sources.total > 0 && reading === 0 ? (
+        ) : read && reading === 0 ? (
           note(
             t('setup.review.allDone').replace('{count}', String(facts.activeKnowledge)),
             'setup-review-done',
           )
+        ) : sources.length > 0 && reading === 0 ? (
+          note(t('setup.review.noneRead'), 'setup-none-read')
         ) : (
           <div className="bsp-wz-empty">{t('setup.wz.teach.empty')}</div>
         )}
@@ -669,7 +822,7 @@ export default async function OnboardingPage({
 
     head = { title: t('setup.wz.connect.title'), description: t('setup.wz.connect.body') };
     body = (
-      <section className="bsp-wz-body" data-testid="setup-connect">
+      <section className="bsp-wz-body bsp-wz-scroll" data-testid="setup-connect">
         {social.providers.length === 0 && social.connections.length === 0 ? (
           note(t('setup.connect.none'), 'setup-connect-none')
         ) : (
@@ -736,7 +889,7 @@ export default async function OnboardingPage({
     const chosen = facts.goal?.objective ?? null;
     head = { title: t('setup.wz.goal.title'), description: t('setup.wz.goal.body') };
     body = (
-      <section className="bsp-wz-body" data-testid="setup-goal">
+      <section className="bsp-wz-body bsp-wz-scroll" data-testid="setup-goal">
         {may('brand_brain.edit') ? (
           <form id="setup-goal-form" action={saveFirstGoalAction} data-testid="setup-goal-form">
             <input type="hidden" name="locale" value={locale} />
@@ -837,7 +990,7 @@ export default async function OnboardingPage({
       description: t('setup.wz.ready.body'),
     };
     body = (
-      <section className="bsp-wz-body" data-testid="setup-done">
+      <section className="bsp-wz-body bsp-wz-scroll" data-testid="setup-done">
         <div className="bsp-wz-sum">
           <div>
             <b className="bsp-ltr">{facts.activeKnowledge}</b>

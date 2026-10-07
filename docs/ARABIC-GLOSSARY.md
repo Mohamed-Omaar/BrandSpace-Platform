@@ -33,7 +33,7 @@ defect. The prototype's Arabic wording is not ported (an allowed difference); it
 | Team / member / role                      | الفريق / عضو / دور                                                                | Team / Member / Role          |
 | Settings                                  | الإعدادات                                                                         | Settings                      |
 
-**The wordmark** is always `BrandSpace`, in Latin, in both languages — never transliterated.
+**The wordmark** is always `Brandspace` (D-482; earlier `BrandSpace`), in Latin, in both languages — never transliterated.
 Channel and platform names (Instagram, Facebook, TikTok, LinkedIn, X) stay in Latin too.
 
 **Digits** are Latin (0–9) in both languages; every number, date and money formatter sets

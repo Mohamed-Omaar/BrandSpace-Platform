@@ -268,7 +268,7 @@ export function previewVariants(locale: string): readonly {
 export function copilotLabels(locale: string): CopilotLabels {
   const ar = locale === 'ar';
   return {
-    title: ar ? 'مساعد BrandSpace' : 'BrandSpace Copilot',
+    title: ar ? 'مساعد Brandspace' : 'Brandspace Copilot',
     subtitle: ar ? 'معاينة بصرية' : 'Visual preview',
     open: ar ? 'فتح المساعد' : 'Open Copilot',
     close: ar ? 'إغلاق المساعد' : 'Close Copilot',
@@ -961,7 +961,7 @@ export function studioLabels(locale: string): StudioLabels {
     mobileNotice: ar
       ? 'على الشاشات الصغيرة يعرض الاستوديو اللوح والخصائص أسفل بعضهما بدل ثلاثة أعمدة.'
       : 'On a small screen the Studio stacks the artboard and its properties instead of showing three columns.',
-    brandName: ar ? 'BrandSpace' : 'BrandSpace',
+    brandName: ar ? 'Brandspace' : 'Brandspace',
     sampleHeadline: ar
       ? 'خطّط ربعًا كاملًا في جلسة واحدة'
       : 'Plan a whole quarter in one afternoon',

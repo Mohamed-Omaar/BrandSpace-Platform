@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { MoreDisclosure } from '../../../components/more-disclosure';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFormStatus } from 'react-dom';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { BrandOrb, type OrbNode } from './brand-orb';
 import { BrandChat, type ChatStart } from './brand-chat';
@@ -14,6 +13,16 @@ import { LookCard, type LookViewData } from './look-card';
 import { SourceRow, type SourceRowData } from './source-row';
 import { SegmentPill } from '@brandspace/ui';
 import { acceptConfidentCandidatesAction, uploadSourceAction as uploadFormAction } from './actions';
+import type { UploadRules } from '../../../components/upload-rules';
+import { RefreshWhile } from '../../../components/refresh-while';
+import {
+  UploadFileInput,
+  UploadForm,
+  UploadRulesLine,
+  UploadStatus,
+  uploadTexts,
+  useUploadState,
+} from '../../../components/upload-field';
 import { CopilotLink } from '../../../components/copilot-link';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
 
@@ -232,7 +241,10 @@ export function BrandBrainView({
   permissions,
   chatStart = null,
   initialFocus = null,
+  sourceRules = null,
 }: {
+  /** Batch 7 (A3): what a source may be, from activated configuration; null when uploads are off. */
+  sourceRules?: UploadRules | null;
   locale: string;
   brandId: string;
   /** The brand's name — the page's eyebrow says it (the prototype's `T.brandName`). */
@@ -250,6 +262,8 @@ export function BrandBrainView({
    */
   look: {
     readonly data: LookViewData;
+    /** Batch 7 (A3): why the last logo or font upload was refused, and which one. */
+    readonly uploadRefusal?: { readonly for: string; readonly message: string } | null;
     readonly canManage: boolean;
     readonly canUpload: boolean;
   } | null;
@@ -394,7 +408,9 @@ export function BrandBrainView({
     const transfer = new DataTransfer();
     transfer.items.add(pendingDrop.file);
     input.files = transfer.files;
-    setChosenName(pendingDrop.file.name);
+    // Batch 7 (A3): a dropped file is judged like a chosen one — the same
+    // change event, so a type or size the server would refuse says so here.
+    input.dispatchEvent(new Event('change', { bubbles: true }));
     if (dropAreaRef.current) dropAreaRef.current.value = pendingDrop.area ?? '';
     form.scrollIntoView({ behavior: 'smooth', block: 'center' });
     setPendingDrop(null);
@@ -797,6 +813,7 @@ export function BrandBrainView({
                 candidates={candidates.filter((entry) => entry.area === openAreaData.area)}
                 focus={focus}
                 permissions={permissions}
+                sourceRules={sourceRules}
                 onClose={() => {
                   setOpenArea(null);
                   setFocus(null);
@@ -861,6 +878,7 @@ export function BrandBrainView({
                 look={look.data}
                 canManage={look.canManage}
                 canUpload={look.canUpload}
+                uploadRefusal={look.uploadRefusal ?? null}
               >
                 {voiceCard}
               </LookCard>
@@ -873,17 +891,20 @@ export function BrandBrainView({
         {tab === 'sources' ? (
           /* SOURCES — `Main.dc.html` lines 878–897: the upload card, then the list. */
           <section className="bsp-bb-src" id="bb-sources" data-testid="sources-card">
+            {/* Batch 7 (A3): a file being read moves on screen until it is read or refused. */}
+            <RefreshWhile active={sources.some((source) => source.reading)} />
             {/*
               The real upload form, and the target of a dropped or chosen file.
               It is rendered only when the caller may upload: a control that
               looks live and answers 404 is worse than one that is not there.
             */}
-            {permissions.upload ? (
-              <form
-                ref={uploadRef}
-                action="?"
-                method="post"
-                encType="multipart/form-data"
+            {permissions.upload && sourceRules ? (
+              <UploadForm
+                formRef={uploadRef}
+                action={uploadFormAction}
+                rules={sourceRules}
+                locale={locale}
+                texts={uploadTexts(t)}
                 data-testid="upload-form"
                 className="bsp-card bsp-bb-upcard"
               >
@@ -907,15 +928,14 @@ export function BrandBrainView({
                       <path d="M12 16V4M7 9l5-5 5 5M4 20h16" />
                     </svg>
                     {t('bb.uploadFiles')}
-                    <input
-                      ref={fileRef}
-                      type="file"
+                    <UploadFileInput
+                      inputRef={fileRef}
                       name="file"
                       required
                       className="bs-control bsp-bb-file"
                       data-testid="upload-input"
                       aria-label={t('bb.uploadChoose')}
-                      onChange={(event) => setChosenName(event.target.files?.[0]?.name ?? null)}
+                      onChosen={(file) => setChosenName(file?.name ?? null)}
                     />
                   </label>
                   {chosenName ? (
@@ -928,8 +948,10 @@ export function BrandBrainView({
                     <UploadSubmit label={t('bb.upload')} pendingLabel={t('bb.uploading')} />
                   ) : null}
                 </span>
-                <small className="bsp-bb-uphint">{t('bb.uploadHint')}</small>
-              </form>
+                {/* Batch 7 (A3): the configured formats and size, not a fixed sentence. */}
+                <UploadRulesLine className="bsp-bb-uphint" />
+                <UploadStatus testId="upload-status" />
+              </UploadForm>
             ) : null}
 
             <div className="bsp-card bsp-bb-srclist">
@@ -1094,13 +1116,12 @@ function ConfidentCard({
  * button that did nothing, and a second press cannot send it twice.
  */
 function UploadSubmit({ label, pendingLabel }: { label: string; pendingLabel: string }) {
-  const { pending } = useFormStatus();
+  const { pending } = useUploadState();
   return (
     <button
       type="submit"
       className="bsp-btn bsp-sm bsp-sec"
       data-testid="upload-submit"
-      formAction={uploadFormAction}
       disabled={pending}
       aria-busy={pending}
     >

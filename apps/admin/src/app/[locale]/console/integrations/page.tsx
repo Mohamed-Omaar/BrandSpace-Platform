@@ -68,8 +68,8 @@ export default async function IntegrationsPage({
       <PageIntro
         description={
           isArabic
-            ? `كل نظام خارجي يمكن ربط BrandSpace به، في بيئة ${environment}. الأسرار تُعرض مُقنّعة فقط ولا تُسترجع أبدًا بعد الحفظ.`
-            : `Every external system BrandSpace can be connected to, in the ${environment} environment. Secrets are shown masked and are never readable again after they are saved.`
+            ? `كل نظام خارجي يمكن ربط Brandspace به، في بيئة ${environment}. الأسرار تُعرض مُقنّعة فقط ولا تُسترجع أبدًا بعد الحفظ.`
+            : `Every external system Brandspace can be connected to, in the ${environment} environment. Secrets are shown masked and are never readable again after they are saved.`
         }
       />
 

@@ -10,7 +10,7 @@ import {
 import '@brandspace/ui/tokens.css';
 
 export const metadata = {
-  title: 'BrandSpace Control Center',
+  title: 'Brandspace Control Center',
   description: 'Internal platform administration',
   // The Control Center must never be indexed.
   robots: { index: false, follow: false },

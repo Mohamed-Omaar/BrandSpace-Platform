@@ -81,7 +81,7 @@ export default async function DesignSystemPage({
           background: colorTokens.surface,
         }}
       >
-        <BrandMark title="BrandSpace" subtitle={ar ? 'نظام التصميم' : 'Design system'} />
+        <BrandMark title="Brandspace" subtitle={ar ? 'نظام التصميم' : 'Design system'} />
         <LanguageSwitcher
           href={`/${other}/design-system`}
           targetLocale={other}
@@ -100,7 +100,7 @@ export default async function DesignSystemPage({
         }}
       >
         <PageHeader
-          title={ar ? 'نظام تصميم BrandSpace' : 'BrandSpace design system'}
+          title={ar ? 'نظام تصميم Brandspace' : 'Brandspace design system'}
           description={
             ar
               ? 'معرض داخلي للمراجعة البصرية. لا يظهر في التنقل ولا يعمل في بيئة الإنتاج.'
@@ -161,7 +161,7 @@ export default async function DesignSystemPage({
                   ['numeric', ar ? 'رقم' : '1,240'],
                   ['h3', ar ? 'عنوان قسم' : 'Section title'],
                   ['cardTitle', ar ? 'عنوان بطاقة' : 'Card title'],
-                  ['wordmark', ar ? 'الشعار النصي' : 'BrandSpace'],
+                  ['wordmark', ar ? 'الشعار النصي' : 'Brandspace'],
                   ['body', ar ? 'نص أساسي' : 'Body text'],
                   ['label', ar ? 'تسمية' : 'Label'],
                   ['navLabel', ar ? 'عنصر تنقل' : 'Navigation row'],

@@ -1,6 +1,13 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
+import type { UploadRules } from '../../../../components/upload-rules';
+import {
+  UploadFileInput,
+  UploadForm,
+  UploadRulesLine,
+  UploadStatus,
+} from '../../../../components/upload-field';
 import {
   AssetThumb,
   MediaChip,
@@ -54,9 +61,15 @@ export function MediaDrawer({
   defaultPrompt,
   defaultFormat,
   uploadAction,
+  rules = null,
+  uploadResult = null,
   onPick,
   onGenerated,
 }: {
+  /** Batch 7 (A3): what a picture or a video may be, from activated configuration. */
+  readonly rules?: UploadRules | null;
+  /** Why the last upload was refused: the drawer opens on the upload, saying so. */
+  readonly uploadResult?: string | null;
   readonly open: boolean;
   readonly onClose: () => void;
   readonly locale: string;
@@ -78,7 +91,9 @@ export function MediaDrawer({
   readonly onGenerated: (assetId: string) => void;
 }) {
   const fieldId = useId();
-  const [tab, setTab] = useState<'library' | 'upload' | 'generate'>('library');
+  const [tab, setTab] = useState<'library' | 'upload' | 'generate'>(
+    uploadResult ? 'upload' : 'library',
+  );
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [formatKey, setFormatKey] = useState(defaultFormat);
   const [estimate, setEstimate] = useState<string | null>(null);
@@ -212,27 +227,46 @@ export function MediaDrawer({
       ) : null}
 
       {tab === 'upload' ? (
-        <form action={uploadAction} className="cs-field" data-testid="composer-upload-form">
-          <input type="hidden" name="locale" value={locale} />
-          <input type="hidden" name="itemId" value={itemId} />
-          <label htmlFor={`${fieldId}-file`}>{t['content.media.uploadLabel']}</label>
-          <input
-            id={`${fieldId}-file`}
-            type="file"
-            name="file"
-            required
-            accept="image/*,video/*"
-            data-testid="composer-upload-file"
-          />
-          <p className="cs-hint">{t['content.media.uploadNotice']}</p>
-          <button
-            type="submit"
-            className={buttonClass('primary', 'md')}
-            data-testid="composer-upload-submit"
+        rules ? (
+          <UploadForm
+            action={uploadAction}
+            rules={rules}
+            locale={locale}
+            texts={{
+              rules: t['upload.rules'] ?? '',
+              refusedType: t['upload.refusedType'] ?? '',
+              refusedSize: t['upload.refusedSize'] ?? '',
+              refusedEmpty: t['upload.refusedEmpty'] ?? '',
+              uploading: t['upload.uploading'] ?? '',
+              connection: t['upload.connection'] ?? '',
+            }}
+            className="cs-field"
+            data-testid="composer-upload-form"
           >
-            {t['content.media.uploadSubmit']}
-          </button>
-        </form>
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="itemId" value={itemId} />
+            <label htmlFor={`${fieldId}-file`}>{t['content.media.uploadLabel']}</label>
+            <UploadFileInput
+              id={`${fieldId}-file`}
+              name="file"
+              required
+              data-testid="composer-upload-file"
+            />
+            <UploadRulesLine className="cs-hint" />
+            <p className="cs-hint">{t['content.media.uploadNotice']}</p>
+            <UploadStatus
+              testId="composer-upload-status"
+              result={uploadResult ? { tone: 'error', message: uploadResult } : null}
+            />
+            <button
+              type="submit"
+              className={buttonClass('primary', 'md')}
+              data-testid="composer-upload-submit"
+            >
+              {t['content.media.uploadSubmit']}
+            </button>
+          </UploadForm>
+        ) : null
       ) : null}
 
       {tab === 'generate' ? (

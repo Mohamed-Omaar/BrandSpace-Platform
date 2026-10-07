@@ -28,7 +28,7 @@ import '@fontsource/cairo/700.css';
 import '@fontsource/cairo/800.css';
 
 export const metadata = {
-  title: 'BrandSpace Dashboard',
+  title: 'Brandspace Dashboard',
   description: 'Customer workspace',
 };
 

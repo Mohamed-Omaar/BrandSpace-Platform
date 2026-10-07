@@ -1,4 +1,5 @@
 import type { AssetKind, AssetStatus } from '@brandspace/database';
+import { assetUploadRules } from '../../../server/upload-rules';
 import { canPreviewWithoutDerivative, isSelectable } from '@brandspace/assets';
 import { brandScopeFilter, maySpendCredits, systemClock } from '@brandspace/shared';
 import {
@@ -16,7 +17,7 @@ import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inAssetLibrary } from '../../../server/assets-context';
 import { paletteFrom } from '../../../server/brand-profile';
 import { brandKitFontNames } from '../../../server/brand-fonts';
-import { statusMessage, translator } from '../../../i18n/messages';
+import { optionalMessage, statusMessage, translator } from '../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { NotesPanel } from '../../../components/notes-panel';
@@ -368,6 +369,7 @@ export default async function AssetsPage({
           storageLimitGb === null ? null : Math.floor(Math.max(0, storageLimitGb) * BYTES_PER_GB),
         storageCategories,
         maxFileBytes: policy.upload.maxFileBytes,
+        uploadRules: assetUploadRules(policy),
         allowedMimeTypes: Object.values(policy.upload.allowedMimeTypes).flat(),
         selected: selected
           ? {
@@ -480,6 +482,11 @@ export default async function AssetsPage({
         }
         brandKit={brandKit}
         openUpload={query['upload'] === '1'}
+        uploadReason={
+          typeof query['uploadReason'] === 'string'
+            ? (optionalMessage(messageLocale, `assets.reason.${query['uploadReason']}`) ?? null)
+            : null
+        }
         eyebrow={t('assets.eyebrow')}
         title={t('assets.title')}
         subtitle={t('assets.subtitle')}

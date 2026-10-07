@@ -1945,6 +1945,25 @@ language, with nothing new but the dimming.
   height) and the app shell (rail, item, title, Create). Parity pairs are taken at 1920×1080 as well
   as 1440×900 from this round on.
 
+### 6.3.59 Batch 7 (A) — the name Brandspace, one scroll, and uploads that say what happens (D-482, D-483)
+
+Approved design-system extensions; the prototype draws none of these states.
+
+- **The name (D-482).** The lockup is unchanged (the existing icon and the typed name); only the
+  name reads "Brandspace". The owner's new mark was tried and not adopted; the deviation recorded
+  above under "The demo's CSS mark becomes the OFFICIAL BrandSpace logo" stands as written.
+- **One scroll (D-483, A2).** No new treatment: `display: flow-root` on `.bs-ambient-host`, the auth
+  page held to the window with the card scrolling inside itself, and the existing `.bsp-wz-scroll`
+  on every set-up step.
+- **Uploads (D-483, A3/A4).** Built from what ships: the rules line is the tile's own second line
+  (`.bsp-wz-up-s`) or a `.bsp-up-rules` caption; the state line is `.bsp-up-status` in the
+  existing hint style, red for a refusal (`data-tone='error'`). The wizard logo tile keeps its
+  dashed square and shows the image inside it, with the name and two small secondary buttons
+  (Change, Remove) beside it (`.bsp-wz-logo-ctl`). Teach's files are a plain list under the tile
+  (`.bsp-wz-srcs`), one row each: name, state, and the reason on a second line.
+- **Time zones (D-483, A5).** The searchable select's row keeps its two ends: the city where the
+  label was, the UTC offset where the identifier was.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
