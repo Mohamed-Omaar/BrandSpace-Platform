@@ -65,11 +65,12 @@ describe('§18 — formats come from the capability registry', () => {
     expect(result['ARTICLE']).toEqual(['linkedin']);
   });
 
-  it('a disabled or unknown provider can still be drafted for — as a plain post only', () => {
+  it('a disabled provider carries what it declares; an unknown one is drafted as a plain post only', () => {
     const result = platformsByFormat(['POST', 'THREAD'], [...keys, 'pinterest'], providers);
     expect(result['POST']).toEqual(['instagram', 'linkedin', 'x', 'pinterest']);
-    // X declares threads, but X is not enabled: nothing is known about it.
-    expect(result['THREAD']).toBeUndefined();
+    // Round 6 (D-481): X declares threads. Not being connectable (`enabled:
+    // false`) gates connecting and publishing, never the formats it carries.
+    expect(result['THREAD']).toEqual(['x']);
   });
 
   it('a format nothing can carry is absent, so the composer cannot offer it', () => {
@@ -81,9 +82,10 @@ describe('§18 — formats come from the capability registry', () => {
     for (const type of CONTENT_TYPES) expect(FORMAT_POST_KINDS[type], type).toBeDefined();
   });
 
-  it('the composer disables a channel that cannot carry the format, rather than dropping it later', () => {
+  it('the composer dims a channel that cannot carry the format, rather than dropping it later', () => {
     const composer = read('apps/dashboard/src/app/[locale]/content/compose/composer-view.tsx');
-    expect(composer).toContain('disabled={!able}');
+    // Round 6 (D-481): dimmed and still pressable, so its press can say why.
+    expect(composer).toContain('aria-disabled={!able || undefined}');
     expect(composer).toContain("t['create.format.unsupported']");
     expect(composer).toContain('data-testid="content-format"');
   });

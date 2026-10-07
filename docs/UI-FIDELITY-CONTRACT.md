@@ -1919,6 +1919,32 @@ Behaviour, not composition. Two states the prototype does not draw, in its own l
   behind a pill that takes 0.44 s. Counts follow the same rule. `tests/e2e/r5-rail-label.spec.ts`
   reads every frame of four moves, en + ar.
 
+### 6.3.58 Round 6 — formats a new customer can use, and the prototype's size at every screen (D-481)
+
+An approved design-system extension: the prototype draws the format switch and the channel chips
+but never a format or channel that cannot be used, so the refused state is built in its own
+language, with nothing new but the dimming.
+
+- **A refused format or channel is dimmed before the press.** `.bsp-seg` buttons and `.bsp-chip`
+  chips marked `data-unavailable` take the existing disabled look (`opacity: .45`) and stay
+  pressable (`aria-disabled`); the reason is the control's title.
+- **The reason sits beside the control.** One `.bsp-st-hint` line under the switch names the
+  formats the chosen channels cannot all carry. A press on a refused format or channel opens one
+  `.bsp-st-hint.bsp-st-fit` row: the reason, and the fix as the prototype's own small secondary
+  button when there is one. New post (`content-format-*`) and draft editor (`editor-shape-*`) alike.
+- **The accounts line.** Under "Post to", one `.bsp-st-hint` line, full width, wrapping after the
+  chips: which chosen channels still need an account (with the Integrations link, in the purple
+  link ink `#5312c4` the prototype uses for text links), and which cannot be connected yet.
+- **The Control Center warning** is the admin app's existing warning `Banner`, above each page.
+- **The onboarding card is capped at the prototype's height.** A step that scrolls inside its card
+  grows to `min(100vh - 64px, 836px)`: the prototype's 900 px stage less its 32 px padding each
+  side, so at a 1080 px window it no longer reaches 1016 px.
+- **Measured at five screens.** `tests/e2e/r6-viewport-sizes.spec.ts` opens the prototype and the
+  product side by side at 1280×720, 1366×768, 1536×864, 1920×1080 and 2560×1440 and compares the
+  sign-in and sign-up cards, every onboarding step (width, padding, heading, field and button
+  height) and the app shell (rail, item, title, Create). Parity pairs are taken at 1920×1080 as well
+  as 1440×900 from this round on.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.

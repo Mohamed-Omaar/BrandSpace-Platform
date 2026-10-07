@@ -14,6 +14,10 @@ export const messages = {
     'app.mark': 'BrandSpace',
     'app.subtitle': 'إدارة المنصة',
     'console.hero.eyebrow': 'مركز تحكم المنصة',
+    'console.publishing.textOnly':
+      'النشر غير مُهيّأ: لا يستطيع العملاء إنشاء غير المنشورات النصية.',
+    'console.publishing.noneEnabled': 'لا توجد قناة مُفعّلة: لا يستطيع العملاء ربط حساب أو النشر.',
+    'console.publishing.fix': 'هيّئ النشر',
     'console.hero.title': 'رؤية واحدة واضحة للمنصة كلها.',
     'console.hero.body':
       'العملاء والإعدادات وتكاليف الذكاء الاصطناعي وصحة المنصة والعمليات الحساسة — دون الحاجة إلى إصدار جديد من الكود.',
@@ -166,6 +170,11 @@ export const messages = {
     'app.mark': 'BrandSpace',
     'app.subtitle': 'Platform administration',
     'console.hero.eyebrow': 'Platform control center',
+    'console.publishing.textOnly':
+      'Publishing is not configured: customers can only make text posts.',
+    'console.publishing.noneEnabled':
+      'No channel is enabled: customers cannot connect an account or publish.',
+    'console.publishing.fix': 'Configure publishing',
     'console.hero.title': 'One clear view of the whole platform.',
     'console.hero.body':
       'Customers, configuration, AI costs, platform health and sensitive operations — without reaching for a code release.',

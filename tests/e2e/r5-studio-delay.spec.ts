@@ -59,7 +59,9 @@ for (const latency of [600, 2000]) {
     await slow(true);
 
     // 1. Every channel this format carries, toggled on — each one at once.
-    const chips = page.locator('[data-testid="content-channel"]:not([disabled])');
+    const chips = page.locator(
+      '[data-testid="content-channel"]:not([disabled]):not([aria-disabled="true"])',
+    );
     const keys = await chips.evaluateAll((els) =>
       els.map((el) => (el as HTMLElement).dataset['platform'] ?? ''),
     );
@@ -106,7 +108,9 @@ for (const latency of [600, 2000]) {
     //     A format some channels cannot carry is refused in words, at once.
     const format = (type: string) =>
       page.locator(`[data-testid="editor-format"] button[data-value="${type}"]`);
-    await format('REEL').click();
+    // Round 6 (D-481): the format is dimmed BEFORE the press, so the press is forced.
+    await expect(format('REEL')).toHaveAttribute('aria-disabled', 'true');
+    await format('REEL').click({ force: true });
     await expect(page.getByTestId('editor-shape-note')).toContainText('LinkedIn', {
       timeout: 300,
     });
