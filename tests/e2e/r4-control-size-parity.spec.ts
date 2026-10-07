@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import { signIn } from './own-workspace';
 import { PROTOTYPE, serveFonts } from './prototype-runtime';
+import { prototypeSizes, scaled, scaledType } from './scale';
 
 /**
  * REVIEW OF #68, ROUND 4, STEP 1.9 — THE SHARED CONTROLS ARE THE PROTOTYPE'S
@@ -80,9 +81,18 @@ function expectSame(
     if (key === 'fontWeight') {
       expect(product[key], `${label} · ${key}`).toBe(reference[key]);
     } else {
+      // D-484: the product is the prototype at 0.88 (`scale.ts`); `height` is
+      // `offsetHeight`, a whole pixel on both sides, so its scaled value is
+      // rounded the same way.
+      const expected =
+        key === 'fontSize'
+          ? scaledType(reference[key])
+          : key === 'height'
+            ? Math.round(scaled(reference[key]))
+            : scaled(reference[key]);
       expect(
-        Math.abs(product[key] - reference[key]),
-        `${label} · ${key}: product ${product[key]} vs prototype ${reference[key]}`,
+        Math.abs(product[key] - expected),
+        `${label} · ${key}: product ${product[key]} vs prototype ${reference[key]} × 0.88 = ${expected}`,
       ).toBeLessThan(TOLERANCE);
     }
   }
@@ -238,14 +248,15 @@ test.describe('round 4 · shared controls match the prototype, measured', () => 
     // Collapse is a stored preference: put it back for the next test.
     await page.locator('.bsp-sb button[aria-pressed="true"]').first().click();
 
-    expect(Math.abs(product.width - ref.width), 'rail width').toBeLessThan(TOLERANCE);
+    // D-484: the product's rail is the prototype's at 0.88.
+    expect(Math.abs(product.width - scaled(ref.width)), 'rail width').toBeLessThan(TOLERANCE);
     expect(product.rows.length, 'rail rows').toBeGreaterThan(0);
     const square = ref.rows[0]!;
     for (const [index, row] of product.rows.entries()) {
       for (const key of ['x', 'width', 'height'] as const) {
         expect(
-          Math.abs(row[key] - square[key]),
-          `row ${index} · ${key}: product ${row[key]} vs prototype ${square[key]}`,
+          Math.abs(row[key] - scaled(square[key])),
+          `row ${index} · ${key}: product ${row[key]} vs prototype ${square[key]} × 0.88`,
         ).toBeLessThan(TOLERANCE);
       }
     }
@@ -253,8 +264,8 @@ test.describe('round 4 · shared controls match the prototype, measured', () => 
     expect(product.badge, 'a collapsed row with a count').not.toBeNull();
     for (const key of ['x', 'y', 'width', 'height'] as const) {
       expect(
-        Math.abs(product.badge![key] - ref.badge![key]),
-        `badge · ${key}: product ${product.badge![key]} vs prototype ${ref.badge![key]}`,
+        Math.abs(product.badge![key] - scaled(ref.badge![key])),
+        `badge · ${key}: product ${product.badge![key]} vs prototype ${ref.badge![key]} × 0.88`,
       ).toBeLessThan(TOLERANCE);
     }
   });
@@ -264,6 +275,10 @@ test.describe('round 4 · shared controls match the prototype, measured', () => 
     // Every customer screen with controls: the button heights are the
     // prototype's three (`.btn.sm` 32, `.btn` 40, the hero's 48) or a size the
     // prototype itself states inline (Media's `Use` 28, the toast's undo 26).
+    // The prototype's own size tokens; the override below must take hold, or
+    // the legacy-type rule would be reading the scaled page.
+    const sourceSizes = prototypeSizes();
+    expect(sourceSizes['--bsp-fs-12'], 'the 12px type token at its source value').toBe('12px');
     const routes = [
       '/overview',
       '/brand-brain',
@@ -289,7 +304,16 @@ test.describe('round 4 · shared controls match the prototype, measured', () => 
     for (const route of routes) {
       await page.goto(`${DASHBOARD_BASE_URL}/en${route}`);
       await page.waitForLoadState('networkidle').catch(() => undefined);
-      const found = await page.evaluate(() => {
+      // D-484: the button heights are the prototype's at 0.88. The legacy-type
+      // rule is checked on the SOURCE size: on screen the 11px floor draws the
+      // prototype's 12px and anything smaller alike, so the page is measured
+      // with every size token at the prototype's own value (`prototypeSizes`),
+      // the 12px limit exactly as before, and then put back.
+      const limits = {
+        sourceSizes,
+        heights: [26, 28, 32, 40, 48].map((height) => scaled(height)),
+      };
+      const found = await page.evaluate((limits) => {
         const visible = (el: HTMLElement) =>
           el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden';
         const out: string[] = [];
@@ -297,6 +321,13 @@ test.describe('round 4 · shared controls match the prototype, measured', () => 
         // prototype's only filled controls under 12px are the calendar's post
         // chips (`.calchip`, 11px), which are cards, not buttons, and its ★
         // holiday chip (`font-size: 10.5px; background: #fff6d6`).
+        const root = document.documentElement.style;
+        for (const [name, value] of Object.entries(limits.sourceSizes)) {
+          root.setProperty(name, value, 'important');
+        }
+        const twelve = getComputedStyle(document.documentElement).getPropertyValue('--bsp-fs-12');
+        if (twelve.trim() !== '12px')
+          out.push(`source sizes did not apply: --bsp-fs-12 is ${twelve}`);
         for (const el of Array.from(
           document.querySelectorAll<HTMLElement>('.bsp-frame button, .bsp-frame a'),
         )) {
@@ -312,13 +343,15 @@ test.describe('round 4 · shared controls match the prototype, measured', () => 
             cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent';
           if (filled && parseFloat(cs.fontSize) < 12) {
             out.push(
-              `legacy control "${(el.textContent ?? '').trim().slice(0, 30)}" at ${cs.fontSize}`,
+              `legacy control "${(el.textContent ?? '').trim().slice(0, 30)}" at ${cs.fontSize} (source size)`,
             );
           }
         }
-        const heights = new Set([26, 28, 32, 40, 48]);
+        for (const name of Object.keys(limits.sourceSizes)) root.removeProperty(name);
+        // `offsetHeight` is a whole pixel; a scaled height may be a half one.
+        const shared = (height: number) => limits.heights.some((h) => Math.abs(h - height) <= 0.5);
         for (const el of Array.from(document.querySelectorAll<HTMLElement>('.bsp-btn'))) {
-          if (visible(el) && !heights.has(el.offsetHeight)) {
+          if (visible(el) && !shared(el.offsetHeight)) {
             out.push(
               `button "${(el.textContent ?? '').trim().slice(0, 30)}" is ${el.offsetHeight}px`,
             );
@@ -334,7 +367,7 @@ test.describe('round 4 · shared controls match the prototype, measured', () => 
           }
         }
         return out;
-      });
+      }, limits);
       problems.push(...found.map((problem) => `${route}: ${problem}`));
     }
     expect(problems).toEqual([]);

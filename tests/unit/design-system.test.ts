@@ -116,7 +116,11 @@ describe('the token scale is complete and coherent', () => {
 
   it('keeps every pointer target at or above the WCAG 2.2 minimum', () => {
     expect(layoutTokens.minTargetSize).toBe('24px');
-    expect(parseFloat(layoutTokens.controlHeight)).toBeGreaterThanOrEqual(2);
+    // D-484: a design-system length is a token named for its rem value
+    // (`var(--bsp-rem-2-5)` is 2.5rem); the customer app scales it by 0.88.
+    const rem = /^var\(--bsp-rem-([0-9]+)(?:-([0-9]+))?\)$/.exec(layoutTokens.controlHeight);
+    expect(rem).not.toBeNull();
+    expect(parseFloat(`${rem![1]}.${rem![2] ?? '0'}`)).toBeGreaterThanOrEqual(2);
   });
 });
 
