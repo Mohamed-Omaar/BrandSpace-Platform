@@ -383,7 +383,7 @@ function useNavPill(
     // An observer reports once as soon as it starts; nothing has moved then,
     // and answering it would cancel the glide that just began.
     let placed = target;
-    const follow = () => {
+    const observer = new ResizeObserver(() => {
       const now = measure();
       if (!now) return;
       const moved =
@@ -395,22 +395,9 @@ function useNavPill(
       put(now, false);
       placed = now;
       if (scope === 'rail') lastRailPill = now;
-    };
-    const observer = new ResizeObserver(follow);
-    observer.observe(list);
-    // D-484: at 0.88 an item can settle half a pixel off where it first stood
-    // once the web fonts arrive, inside a list whose own size does not change;
-    // the item itself is watched too, and checked again when the fonts are in.
-    const link = list.querySelector<HTMLElement>('a[aria-current="page"]');
-    if (link) observer.observe(link);
-    let live = true;
-    void document.fonts?.ready.then(() => {
-      if (live) follow();
     });
-    return () => {
-      live = false;
-      observer.disconnect();
-    };
+    observer.observe(list);
+    return () => observer.disconnect();
   }, [listRef, pillRef, scope, activeHref]);
 }
 
@@ -688,9 +675,9 @@ export function AppShell({
         style={{
           display: 'grid',
           // `.experience-switcher { margin: 9px 0 12px }`.
-          gap: 'var(--bsp-rem-0-5625)',
+          gap: '0.5625rem',
           flexShrink: 0,
-          marginBlockEnd: 'var(--bsp-rem-0-75)',
+          marginBlockEnd: '0.75rem',
         }}
       >
         <div
@@ -776,7 +763,7 @@ export function AppShell({
           minBlockSize: 0,
           overflowY: 'auto',
           overflowX: 'hidden',
-          paddingBlock: `${spacingTokens['3xs']} var(--bsp-rem-0-625)`,
+          paddingBlock: `${spacingTokens['3xs']} 0.625rem`,
         }}
       >
         <NavList sections={resolvedSections} collapsed={layoutCollapsed} />
@@ -912,7 +899,7 @@ export function AppShell({
               minBlockSize: layoutTokens.headerHeight,
               paddingInline: layoutTokens.panelPadInline,
               paddingBlockStart: spacingTokens.md,
-              paddingBlockEnd: 'var(--bsp-rem-0-75)',
+              paddingBlockEnd: '0.75rem',
             }}
           >
             <div
@@ -921,7 +908,7 @@ export function AppShell({
                 alignItems: 'center',
                 gap: spacingTokens.sm,
                 minInlineSize: 0,
-                flex: '1 1 var(--bsp-rem-16)',
+                flex: '1 1 16rem',
               }}
             >
               <button
@@ -1075,7 +1062,7 @@ export function AppShell({
               position: 'absolute',
               insetBlock: 0,
               insetInlineStart: 0,
-              inlineSize: 'min(var(--bsp-rem-19), 88vw)',
+              inlineSize: 'min(19rem, 88vw)',
               background: colorTokens.surface,
               borderStartEndRadius: radiusTokens['2xl'],
               borderEndEndRadius: radiusTokens['2xl'],
@@ -1106,8 +1093,8 @@ export function AppShell({
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  inlineSize: 'var(--bsp-rem-2-5)',
-                  blockSize: 'var(--bsp-rem-2-5)',
+                  inlineSize: '2.5rem',
+                  blockSize: '2.5rem',
                   borderRadius: radiusTokens.md,
                   color: colorTokens.textPrimary,
                   cursor: 'pointer',
