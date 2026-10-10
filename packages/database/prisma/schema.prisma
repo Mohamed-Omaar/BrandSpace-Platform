@@ -3000,14 +3000,14 @@ model ContentItem {
   /// `CalendarSlot.scheduledLocalTime` stores). A PROPOSAL: nothing publishes
   /// it. A slot is made from it only by an explicit Schedule press or by
   /// "Approve & schedule", through the unchanged `schedule()`. Its shape is a
-  /// CHECK in `20261016090000_content_item_proposed_local_time`.
+  /// CHECK in `20261016090000_content_item_publish_time`.
   proposedLocalTime String?
 
   /// Batch 7 PR C (Option B) — the author's choice in "When should it go out?":
   /// NONE (nothing chosen; an approval never publishes it), PICK (the time in
   /// `proposedLocalTime`), AFTER_APPROVAL (no time; it goes out when approved,
   /// by an approver who may also schedule). A CHECK in
-  /// `20261016091000_content_item_publish_choice` ties a stored time to PICK.
+  /// `20261016090000_content_item_publish_time` ties a stored time to PICK.
   publishChoice PublishChoice @default(NONE)
 
   /// D-65-style provenance, for the same reason Brand Brain carries it: a

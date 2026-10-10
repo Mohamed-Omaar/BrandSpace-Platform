@@ -1225,6 +1225,26 @@ export function DraftEditor({
    * THE PUBLISH-TIME PANEL, under whichever "When" opened it (review of #67,
    * round 2): the settings card's chip, or the bar's.
    */
+  /*
+   * Batch 7 PR C — THE CARD'S POPOVER OPENS UPWARD WHEN THERE IS NO ROOM BELOW,
+   * as the bar's always does. Measured once it is drawn (its height does not
+   * depend on where it sits), against the window: below the chip when it
+   * fits, else above it when there is more room there.
+   */
+  const whenCardRef = useRef<HTMLDivElement | null>(null);
+  const [whenFlip, setWhenFlip] = useState(false);
+  useLayoutEffect(() => {
+    const panel = whenCardRef.current;
+    if (!whenOpen || whenAt !== 'card' || !panel) return;
+    const anchor = panel.parentElement?.getBoundingClientRect();
+    if (!anchor) return;
+    // The popover's own offset from the chip's top (`--bsp-px-42`), whichever
+    // way it is open now, so the answer never depends on the last one.
+    const offset = parseFloat(getComputedStyle(panel).getPropertyValue('--bsp-px-42')) || 0;
+    const need = panel.offsetHeight + offset - anchor.height;
+    const below = window.innerHeight - anchor.bottom;
+    setWhenFlip(need > below && anchor.top > below);
+  }, [whenOpen, whenAt, proposed, choice]);
   const whenPanel = (at: 'card' | 'bar') => (
     <>
       {/*
@@ -1235,9 +1255,11 @@ export function DraftEditor({
       <div
         role="dialog"
         aria-label={t['studio.whenTitle']}
-        className={`bsp-st-when${at === 'bar' ? ' bsp-st-when-up' : ''}`}
+        ref={at === 'card' ? whenCardRef : undefined}
+        className={`bsp-st-when${at === 'bar' ? ' bsp-st-when-up' : whenFlip ? ' bsp-st-when-flip' : ''}`}
         hidden={!whenOpen}
         data-testid="editor-when-panel"
+        data-opens={at === 'bar' || whenFlip ? 'up' : 'down'}
       >
         <span className="bsp-st-when-title">{t['studio.whenTitle']}</span>
         {scheduling &&

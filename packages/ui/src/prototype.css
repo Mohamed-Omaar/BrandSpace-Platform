@@ -3791,6 +3791,13 @@ span.bsp-cal-hol {
   inset-inline-start: auto;
   inset-inline-end: 0;
 }
+/* Batch 7 PR C: the settings card's popover, opened upward when there is no
+   room below it — the bar's offset, from the chip's own start edge. */
+.bsp-st-when.bsp-st-when-flip {
+  top: auto;
+  bottom: var(--bsp-px-42);
+  transform-origin: bottom center;
+}
 /* "+ Add the design" in the preview's empty picture: `border: 1.5px dashed
    #c9c9d1; background: rgba(255,255,255,.7); border-radius: 12px;
    padding: 12px 16px; font-size: 13px; font-weight: 700; color: #4d4c53`. */

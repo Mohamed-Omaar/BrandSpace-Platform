@@ -215,6 +215,41 @@ test.describe('Batch 7 PR C · the Studio keeps a time, and scheduling is its ow
     await expect(page.getByTestId('editor-when-label')).toContainText('Right after approval');
   });
 
+  test('the popover opens upward when there is no room below, and stays in the window', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'desktop geometry');
+    const f = await post({
+      requireApproval: true,
+      status: 'DRAFT',
+      byColleague: false,
+      proposedLocalTime: `${dayFromNow(3)}T10:00`,
+    });
+    await signIn(page, f.brandId);
+    const box = async () =>
+      page.getByTestId('editor-when-panel').evaluate((panel) => {
+        const rect = panel.getBoundingClientRect();
+        return { top: rect.top, bottom: rect.bottom, height: window.innerHeight };
+      });
+
+    // Room below at 1536×864: it opens down, as the prototype draws it.
+    await page.setViewportSize({ width: 1536, height: 864 });
+    await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${f.itemId}`);
+    await page.getByTestId('editor-when').click();
+    const panel = page.getByTestId('editor-when-panel');
+    await expect(panel).toHaveAttribute('data-opens', 'down');
+
+    // A short window: it opens up instead, and none of it is cut off.
+    await page.getByTestId('editor-when-done').click();
+    await page.setViewportSize({ width: 1536, height: 640 });
+    await page.getByTestId('editor-when').click();
+    await expect(panel).toHaveAttribute('data-opens', 'up');
+    const up = await box();
+    expect(up.top).toBeGreaterThanOrEqual(0);
+    expect(up.bottom).toBeLessThanOrEqual(up.height);
+  });
+
   test('a brand without approval offers no "right after approval"', async ({ page }) => {
     const f = await post({ requireApproval: false, status: 'DRAFT', byColleague: false });
     await signIn(page, f.brandId);
