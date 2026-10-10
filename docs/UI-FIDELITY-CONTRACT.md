@@ -1976,6 +1976,40 @@ transcription tests read them back in prototype units, and the browser size chec
 product at prototype × 0.88. Not scaled: breakpoints, hairlines, motion offsets, focus outlines. The
 customer frame fills the window at every width.
 
+### 6.3.61 Batch 7 PR C — the publish-time popover, the entry screens at 0.80, the logo slot
+
+**"When should it go out?" (`Main.dc.html` lines 343–349, `WHV` lines 2310–2321) — PORTED.** The
+glass popover, the title, the choice cards (`border: 1px solid #ececef` on `#fff`, chosen `#7935fe`
+on `#f6f3ff`, radius 12, padding 8/10, label 12.5px/600, line 11px `#6a6a72`), the date and time pair
+(`1fr 110px`), the "When your audience is active" chips (`min-block-size: 28px; padding: 3px 10px;
+font-size: 12px`), the note and "Done", at 0.88 like every customer screen. Recorded uses of D-468:
+
+- **(a) Owner decisions that change the copy.** The footer follows D-488 (a post approved after its
+  time is approved and NOT scheduled; "pick a new time"), not the prototype's "the post goes out as
+  soon as it's approved and you're notified". On a brand without approval it says choosing a time
+  does not schedule (D-487).
+- **(a) "Right after approval" (D-489)** is drawn only where the post still needs approval; the
+  reviewer named is the default reviewer, or "your reviewer". While it is chosen the date and time
+  are hidden, as the prototype's `isPick` hides them.
+- **(c) States the prototype does not draw:** saving / "That time has passed" / locked in review /
+  failed, and "Remove the time" while one is stored — one line in the note's own type
+  (`.bsp-st-when-foot`, `.bsp-st-when-clear`); the Studio's Schedule press inside the popover
+  (B1.2), the existing purple small button.
+- **Left out until real data exists (D-490):** "Best time automatically" and the chips. They are
+  built and render only from enough real provider engagement on every channel of the post; no
+  connector is real yet, so they are hidden everywhere today. Pairs with three choices use fixture
+  data.
+
+**Entry screens at 0.80 (D-491) — a scale-only amendment of §6.3.60.** Sign-in, sign-up, forgot
+password, check your email, verify, MFA, the workspace chooser, invitations and every wizard step
+are the prototype × 0.80 through the same tokens, redefined on `.bsp-auth`; type never under 11px.
+The password hints (`PasswordField`) keep their composition; their invalid negative margin is now
+`calc(-1 * …)` and their line height holds the text (1.5).
+
+**The Look & voice logo slot (D-493) — (c) states the prototype does not draw.** "Checking
+{name}…" while the scan runs, the logo once it passes (attached by the slot), and why a file was
+refused — one line in the slot's muted type (`.bsp-lk-muted`), no new treatment.
+
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 
 Rule 4 says a new component is a last resort carrying a recorded reason. This is that reason.
