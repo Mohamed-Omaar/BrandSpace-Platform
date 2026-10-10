@@ -21,6 +21,23 @@ export function scaledType(px: number): number {
 }
 
 /**
+ * D-484 amended (batch 7 PR C) — THE ENTRY SCREENS ARE THE PROTOTYPE AT 0.80:
+ * sign-in, sign-up, forgot password, check your email, the workspace chooser
+ * and every setup-wizard step. Same rounding, same 11px type floor.
+ */
+export const ENTRY_SCALE = 0.8;
+
+/** A prototype length as an entry screen draws it. */
+export function scaledEntry(px: number): number {
+  return Math.round(px * ENTRY_SCALE * 2) / 2;
+}
+
+/** A prototype font size as an entry screen draws it. */
+export function scaledEntryType(px: number): number {
+  return Math.max(11, scaledEntry(px));
+}
+
+/**
  * Every size token at the PROTOTYPE's own value, read from `tokens.css` (which
  * keeps them unscaled for the Control Center and the public site). Set on the
  * customer page's root, they undo the 0.88 scale and the 11px type floor, so a

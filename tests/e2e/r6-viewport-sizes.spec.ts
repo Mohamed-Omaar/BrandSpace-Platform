@@ -3,7 +3,7 @@ import { DASHBOARD_BASE_URL } from './apps';
 import { createFreshWorkspace, freshSignUp } from './fresh-signup';
 import { signIn } from './own-workspace';
 import { PROTOTYPE, prototypeFile, serveFonts } from './prototype-runtime';
-import { scaled, scaledType } from './scale';
+import { scaled, scaledEntry, scaledEntryType, scaledType } from './scale';
 
 /**
  * ROUND 6 (item 5) — THE ENTRY SCREENS, THE WIZARD AND THE SHELL ARE THE
@@ -30,8 +30,8 @@ const VIEWPORTS = [
   { width: 2560, height: 1440 },
 ] as const;
 const TOLERANCE = 1;
-// D-484: the prototype's 836px card at 0.88.
-const WIZARD_MAX = scaled(836);
+// D-484 amended: the prototype's 836px card at the entry screens' 0.80.
+const WIZARD_MAX = scaledEntry(836);
 
 interface Card {
   readonly width: number;
@@ -90,16 +90,16 @@ function same(product: Card, reference: Card, label: string) {
     expect(Math.abs(a - b), `${label}: ${what} ${a} vs the prototype's ${b}`).toBeLessThanOrEqual(
       TOLERANCE,
     );
-  // D-484: the product is the prototype at 0.88 (`scale.ts`).
-  near(product.width, scaled(reference.width), 'card width');
-  near(product.padTop, scaled(reference.padTop), 'card padding (top)');
-  near(product.padStart, scaled(reference.padStart), 'card padding (start)');
-  expect(product.heading, `${label}: heading size`).toBe(scaledType(reference.heading));
+  // D-484 amended: an entry screen is the prototype at 0.80 (`scale.ts`).
+  near(product.width, scaledEntry(reference.width), 'card width');
+  near(product.padTop, scaledEntry(reference.padTop), 'card padding (top)');
+  near(product.padStart, scaledEntry(reference.padStart), 'card padding (start)');
+  expect(product.heading, `${label}: heading size`).toBe(scaledEntryType(reference.heading));
   if (product.field !== null && reference.field !== null) {
-    near(product.field, scaled(reference.field), 'field height');
+    near(product.field, scaledEntry(reference.field), 'field height');
   }
   if (product.button !== null && reference.button !== null) {
-    near(product.button, scaled(reference.button), 'button height');
+    near(product.button, scaledEntry(reference.button), 'button height');
   }
 }
 
@@ -192,12 +192,16 @@ test.describe('round 6 · the prototype’s size at five viewports', () => {
     // window it used to allow 1016px.
     await page.setViewportSize({ width: 1920, height: 1080 });
     const cap = await page.evaluate(() => {
+      // Inside the entry layout, where the wizard always is (its 0.80 sizes).
+      const host = document.createElement('div');
+      host.className = 'bsp-auth';
       const probe = document.createElement('div');
       probe.className = 'bsp-wz bsp-wz-solo';
       probe.innerHTML = '<div class="bsp-wz-scroll"></div>';
-      document.body.append(probe);
+      host.append(probe);
+      document.body.append(host);
       const value = getComputedStyle(probe).maxHeight;
-      probe.remove();
+      host.remove();
       return value;
     });
     expect(parseFloat(cap)).toBeLessThanOrEqual(WIZARD_MAX);

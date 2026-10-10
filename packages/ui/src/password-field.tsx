@@ -244,7 +244,13 @@ export function PasswordField({
           id={rulesId}
           aria-label={labels.rulesLabel ?? labels.label}
           style={{
-            margin: `-${spacingTokens.sm} 0 ${spacingTokens.md}`,
+            /*
+             * Batch 7 PR C (2b) — `-var(…)` is not CSS: the browser dropped the
+             * whole declaration, so the list kept no space below it and touched
+             * the next control ("Create account", "Confirm password"). A
+             * negative length is `calc(-1 * …)`.
+             */
+            margin: `calc(-1 * ${spacingTokens.sm}) 0 ${spacingTokens.md}`,
             padding: 0,
             listStyle: 'none',
             display: 'grid',
@@ -265,6 +271,13 @@ export function PasswordField({
                   alignItems: 'center',
                   gap: spacingTokens.xs,
                   ...typographyTokens.caption,
+                  /*
+                   * The caption's line (10.5px at 0.88) is shorter than its
+                   * 11px floored text, so each line spilled out of its box —
+                   * further in Arabic, whose glyphs stand taller. A line
+                   * relative to the text holds it in both scripts.
+                   */
+                  lineHeight: 1.5,
                   color: met ? colorTokens.success : colorTokens.textSecondary,
                 }}
                 data-met={checkable ? (met ? 'yes' : 'no') : undefined}
