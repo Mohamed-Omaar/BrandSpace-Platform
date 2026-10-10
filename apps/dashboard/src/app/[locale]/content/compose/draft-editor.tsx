@@ -1227,23 +1227,31 @@ export function DraftEditor({
    */
   /*
    * Batch 7 PR C — THE CARD'S POPOVER OPENS UPWARD WHEN THERE IS NO ROOM BELOW,
-   * as the bar's always does. Measured once it is drawn (its height does not
-   * depend on where it sits), against the window: below the chip when it
-   * fits, else above it when there is more room there.
+   * as the bar's always does, and is never cut off by the window. Measured once
+   * drawn, against the window: below the chip when it fits; otherwise on the
+   * side with more room. When even that side is shorter than the popover, it
+   * takes that side's height and its content scrolls inside it, so Done and
+   * every choice stay reachable.
    */
   const whenCardRef = useRef<HTMLDivElement | null>(null);
-  const [whenFlip, setWhenFlip] = useState(false);
+  const [whenFit, setWhenFit] = useState<{ flip: boolean; max: number | null }>({
+    flip: false,
+    max: null,
+  });
   useLayoutEffect(() => {
     const panel = whenCardRef.current;
     if (!whenOpen || whenAt !== 'card' || !panel) return;
     const anchor = panel.parentElement?.getBoundingClientRect();
     if (!anchor) return;
-    // The popover's own offset from the chip's top (`--bsp-px-42`), whichever
-    // way it is open now, so the answer never depends on the last one.
+    // The popover's offset from the chip (`--bsp-px-42`), and a small margin.
     const offset = parseFloat(getComputedStyle(panel).getPropertyValue('--bsp-px-42')) || 0;
-    const need = panel.offsetHeight + offset - anchor.height;
-    const below = window.innerHeight - anchor.bottom;
-    setWhenFlip(need > below && anchor.top > below);
+    const margin = 8;
+    const need = panel.scrollHeight;
+    const below = window.innerHeight - (anchor.top + offset) - margin;
+    const above = anchor.bottom - offset - margin;
+    const flip = need > below && above > below;
+    const room = Math.floor(flip ? above : below);
+    setWhenFit({ flip, max: need > room ? room : null });
   }, [whenOpen, whenAt, proposed, choice]);
   const whenPanel = (at: 'card' | 'bar') => (
     <>
@@ -1256,10 +1264,15 @@ export function DraftEditor({
         role="dialog"
         aria-label={t['studio.whenTitle']}
         ref={at === 'card' ? whenCardRef : undefined}
-        className={`bsp-st-when${at === 'bar' ? ' bsp-st-when-up' : whenFlip ? ' bsp-st-when-flip' : ''}`}
+        className={`bsp-st-when${at === 'bar' ? ' bsp-st-when-up' : whenFit.flip ? ' bsp-st-when-flip' : ''}`}
+        style={
+          at === 'card' && whenFit.max !== null
+            ? { maxBlockSize: `${whenFit.max}px`, overflowY: 'auto' }
+            : undefined
+        }
         hidden={!whenOpen}
         data-testid="editor-when-panel"
-        data-opens={at === 'bar' || whenFlip ? 'up' : 'down'}
+        data-opens={at === 'bar' || whenFit.flip ? 'up' : 'down'}
       >
         <span className="bsp-st-when-title">{t['studio.whenTitle']}</span>
         {scheduling &&

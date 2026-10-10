@@ -240,7 +240,8 @@ test.describe('Batch 7 PR C · the Studio keeps a time, and scheduling is its ow
     const panel = page.getByTestId('editor-when-panel');
     await expect(panel).toHaveAttribute('data-opens', 'down');
 
-    // A short window: it opens up instead, and none of it is cut off.
+    // A short window: it opens up instead, and none of it is cut off (taller
+    // than the room above, it takes that room and scrolls inside).
     await page.getByTestId('editor-when-done').click();
     await page.setViewportSize({ width: 1536, height: 640 });
     await page.getByTestId('editor-when').click();
@@ -248,6 +249,8 @@ test.describe('Batch 7 PR C · the Studio keeps a time, and scheduling is its ow
     const up = await box();
     expect(up.top).toBeGreaterThanOrEqual(0);
     expect(up.bottom).toBeLessThanOrEqual(up.height);
+    await panel.getByTestId('editor-when-done').scrollIntoViewIfNeeded();
+    await expect(panel.getByTestId('editor-when-done')).toBeInViewport();
   });
 
   test('a brand without approval offers no "right after approval"', async ({ page }) => {
