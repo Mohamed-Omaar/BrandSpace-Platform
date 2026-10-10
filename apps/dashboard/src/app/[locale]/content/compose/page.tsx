@@ -55,7 +55,8 @@ import { activityTimeline } from '../../../../server/activity-timeline';
 import { NotesPanel } from '../../../../components/notes-panel';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { inSocial } from '../../../../server/social-context';
-import { retryableAfterReconnect } from '@brandspace/social-connectors';
+import { providerForPlatformKey, retryableAfterReconnect } from '@brandspace/social-connectors';
+import { bestTimes, readPublishedFigures } from '../../../../server/best-time';
 import { relativeTime } from '../../../../server/home';
 import { plannedDateFrom } from '../../../../server/planned-date';
 import { channelReadinessForBrand } from '../../../../server/publish-readiness';
@@ -75,6 +76,7 @@ import {
   saveDraftAsTemplateAction,
   keepFactChangeAction,
   scheduleFromStudioAction,
+  proposeTimeAction,
   duplicateContentAction,
   listCampaignOptionsAction,
   setContentCampaignAction,
@@ -701,10 +703,13 @@ export default async function ComposePage({
   /*
    * B9 / F2 (Phase 2B-2) — what the Studio's inline date and time start from:
    * the workspace's today and tomorrow, and the brand's default time (A10),
-   * else 09:00. Only for a post that exists and a member who may schedule.
+   * else 09:00. Only for a post that exists and a member who may schedule it
+   * or keep a time on it (Batch 7 PR C, B1.1).
    */
   const scheduling =
-    draft && workspace.permissionKeys.includes('content.schedule')
+    draft &&
+    (workspace.permissionKeys.includes('content.schedule') ||
+      workspace.permissionKeys.includes('content.edit'))
       ? await inWorkspace(workspace.workspaceId, async ({ db }) => {
           const [zone, brand] = await Promise.all([
             db.workspace.findUniqueOrThrow({
@@ -743,6 +748,60 @@ export default async function ComposePage({
         }),
       )
     : null;
+  /*
+   * BATCH 7 PR C (B1.1, popover item 3) — THE POST'S PROPOSED TIME, and the
+   * best hours when the brand's own real engagement supports them on every
+   * channel of the post (`server/best-time.ts`); otherwise no best hours, and
+   * the popover draws neither the best choice nor the chips.
+   */
+  const proposal =
+    draft && scheduling
+      ? await inContentStudio(workspace.workspaceId, async ({ db, policy }) => {
+          const [row, zone, calendarPolicy] = await Promise.all([
+            db.contentItem.findFirst({
+              where: { id: draft.id },
+              select: { proposedLocalTime: true, publishChoice: true },
+            }),
+            db.workspace.findUniqueOrThrow({
+              where: { id: workspace.workspaceId },
+              select: { timezone: true },
+            }),
+            policy().then((value) => value.calendar),
+          ]);
+          const channels = [
+            ...new Set(
+              draft.variants.flatMap((variant) => {
+                const provider = providerForPlatformKey(variant.platformKey);
+                return provider ? [provider] : [];
+              }),
+            ),
+          ];
+          const best = bestTimes({
+            channels,
+            posts: await readPublishedFigures(db, {
+              workspaceId: workspace.workspaceId,
+              brandId: draft.brandId,
+              channels,
+              now,
+            }),
+            timeZone: zone.timezone,
+            now,
+            minLeadMinutes: calendarPolicy.minLeadMinutes,
+            maxDaysAhead: calendarPolicy.maxDaysAhead,
+          });
+          return {
+            value: row?.proposedLocalTime ?? null,
+            choice: row?.publishChoice ?? 'NONE',
+            best: best
+              ? {
+                  slots: best.slots,
+                  bestLocalTime: best.bestLocalTime,
+                  bestLabel: localWhenLabel(best.bestLocalTime, locale, now) ?? best.bestLocalTime,
+                }
+              : null,
+          };
+        })
+      : null;
   const publishTime = liveSlot
     ? {
         label: localWhenLabel(liveSlot.scheduledLocalTime, locale, now) ?? '',
@@ -1253,6 +1312,7 @@ export default async function ComposePage({
         }}
         scheduling={scheduling}
         publishTime={publishTime}
+        proposal={proposal}
         failed={failed}
         creativeFormats={CREATIVE_FORMATS.map((format) => ({
           key: format.key,
@@ -1270,6 +1330,7 @@ export default async function ComposePage({
           uploadMedia: uploadComposerMediaAction,
           createManualDraft: createManualDraftAction,
           scheduleFromStudio: scheduleFromStudioAction,
+          proposeTime: proposeTimeAction,
           reschedule: rescheduleContentAction,
           saveAsTemplate: saveDraftAsTemplateAction,
           keepFactChange: keepFactChangeAction,
@@ -1351,7 +1412,28 @@ const EDITOR_KEYS = [
   'upload.refusedEmpty',
   'upload.uploading',
   'upload.connection',
-  'studio.when.schedulesNow',
+  'studio.when.mode.best',
+  'studio.when.mode.bestSub',
+  'studio.when.mode.pick',
+  'studio.when.mode.pickSub',
+  'studio.when.mode.after',
+  'studio.when.mode.afterSub',
+  'studio.when.reviewerAny',
+  'studio.when.noteAfter',
+  'studio.when.best',
+  'studio.when.goodTimes',
+  'studio.when.part.morning',
+  'studio.when.part.lunch',
+  'studio.when.part.afternoon',
+  'studio.when.part.evening',
+  'studio.when.part.night',
+  'studio.when.mostEngagement',
+  'studio.when.noteApproval',
+  'studio.when.noteSchedule',
+  'studio.when.remove',
+  'studio.when.failedPast',
+  'studio.when.failedLocked',
+  'studio.when.failed',
   'studio.when.scheduledEdits',
   'studio.when.scheduledEditsUnschedule',
   'studio.moreOptions',

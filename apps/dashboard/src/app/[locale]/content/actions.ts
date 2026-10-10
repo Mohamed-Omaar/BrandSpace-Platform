@@ -8,6 +8,7 @@ import { writeAuditEvent } from '@brandspace/database';
 import { AppError, createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
 import {
   CHANNEL_DISCONNECTED_REASON,
+  PROPOSED_TIME_LOCKED_REASON,
   SCHEDULE_IN_PAST_REASON,
   TEMPLATES_MANAGE_PERMISSION,
   readRetentionFacts,
@@ -1045,6 +1046,69 @@ export async function scheduleFromStudioAction(formData: FormData): Promise<void
   revalidatePath(`/${locale}/calendar`);
   revalidatePath(`/${locale}/content`);
   redirect(destination);
+}
+
+export type ProposeTimeResult =
+  | {
+      readonly ok: true;
+      readonly proposedLocalTime: string | null;
+      readonly publishChoice: 'NONE' | 'PICK' | 'AFTER_APPROVAL';
+    }
+  | { readonly ok: false; readonly code: 'SCHEDULE_IN_PAST' | 'LOCKED' | 'INVALID' };
+
+/**
+ * BATCH 7 PR C (B1.1, B1.2, B1.4) — THE PUBLISH TIME THE POPOVER CHOOSES,
+ * STORED ON THE POST. It schedules nothing: the post keeps the time as a
+ * proposal (`ContentItem.proposedLocalTime`), the Studio's Schedule press —
+ * or "Approve & schedule" on a brand that needs approval — turns it into a
+ * calendar slot through the unchanged `schedule()`.
+ *
+ * `content.edit`, like the words it travels with, and only while the post is a
+ * draft, has changes requested, or is approved (`propose()` says so). No
+ * redirect: the popover stays open and keeps what was chosen.
+ */
+export async function proposeTimeAction(formData: FormData): Promise<ProposeTimeResult> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const itemId = String(formData.get('contentItemId') ?? '');
+  const date = String(formData.get('date') ?? '').trim();
+  const time = String(formData.get('time') ?? '').trim();
+  // Option B — "Right after approval" stores no time; clearing stores nothing.
+  const afterApproval = formData.get('afterApproval') !== null;
+  const localTime = formData.get('clear') !== null || afterApproval ? null : `${date}T${time}`;
+  try {
+    const session = await requireWorkspaceAction(locale, 'content.edit');
+    const saved = await inContentStudio(session.workspace.workspaceId, async ({ calendar }) =>
+      (await calendar()).propose({
+        contentItemId: itemId,
+        localTime,
+        afterApproval,
+        ...actorOf(session),
+      }),
+    );
+    revalidatePath(`/${locale}/approvals`);
+    return {
+      ok: true,
+      proposedLocalTime: saved.proposedLocalTime,
+      publishChoice: saved.publishChoice,
+    };
+  } catch (error: unknown) {
+    unstable_rethrow(error);
+    log.warn('content action failed', {
+      correlationId: randomUUID(),
+      action: 'proposeTime',
+      ...internalErrorFields(error),
+    });
+    const reason = isAppError(error) ? error.publicDetails['reason'] : undefined;
+    return {
+      ok: false,
+      code:
+        reason === SCHEDULE_IN_PAST_REASON
+          ? 'SCHEDULE_IN_PAST'
+          : reason === PROPOSED_TIME_LOCKED_REASON
+            ? 'LOCKED'
+            : 'INVALID',
+    };
+  }
 }
 
 /**

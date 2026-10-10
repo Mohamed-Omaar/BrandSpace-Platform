@@ -338,6 +338,276 @@
   --bsp-fs-64: 56.5px;
 }
 
+/*
+ * BATCH 7 PR C (D-484 amended) — THE ENTRY SCREENS ARE THE PROTOTYPE AT 0.80.
+ *
+ * The owner's amendment: sign-in, sign-up, forgot password, check your email,
+ * the workspace chooser and every setup-wizard step use 0.80 instead of 0.88;
+ * every other screen keeps 0.88. The same tokens, redefined on `.bsp-auth` —
+ * the one ancestor every entry screen shares (`AuthCard` and `SetupFrame`) —
+ * at the prototype's value x 0.80, rounded to the nearest 0.5px, type never
+ * under 11px, a hairline still a hairline, the 24px target minimum untouched.
+ * No zoom, no transform. `tests/unit/b7-scale.test.ts` checks this table
+ * against `tokens.css` the way it checks the 0.88 one.
+ */
+.bsp-auth {
+  --bsp-px-1-5: 1px;
+  --bsp-px-2: 1.5px;
+  --bsp-px-3: 2.5px;
+  --bsp-px-4: 3px;
+  --bsp-px-5: 4px;
+  --bsp-px-5-5: 4.5px;
+  --bsp-px-6: 5px;
+  --bsp-px-7: 5.5px;
+  --bsp-px-8: 6.5px;
+  --bsp-px-8-5: 7px;
+  --bsp-px-9: 7px;
+  --bsp-px-10: 8px;
+  --bsp-px-11: 9px;
+  --bsp-px-12: 9.5px;
+  --bsp-px-13: 10.5px;
+  --bsp-px-14: 11px;
+  --bsp-px-15: 12px;
+  --bsp-px-16: 13px;
+  --bsp-px-17: 13.5px;
+  --bsp-px-18: 14.5px;
+  --bsp-px-19: 15px;
+  --bsp-px-20: 16px;
+  --bsp-px-21: 17px;
+  --bsp-px-22: 17.5px;
+  --bsp-px-24: 19px;
+  --bsp-px-25: 20px;
+  --bsp-px-26: 21px;
+  --bsp-px-28: 22.5px;
+  --bsp-px-30: 24px;
+  --bsp-px-32: 25.5px;
+  --bsp-px-34: 27px;
+  --bsp-px-35: 28px;
+  --bsp-px-36: 29px;
+  --bsp-px-38: 30.5px;
+  --bsp-px-40: 32px;
+  --bsp-px-41: 33px;
+  --bsp-px-42: 33.5px;
+  --bsp-px-44: 35px;
+  --bsp-px-46: 37px;
+  --bsp-px-48: 38.5px;
+  --bsp-px-50: 40px;
+  --bsp-px-52: 41.5px;
+  --bsp-px-55: 44px;
+  --bsp-px-56: 45px;
+  --bsp-px-58: 46.5px;
+  --bsp-px-60: 48px;
+  --bsp-px-64: 51px;
+  --bsp-px-70: 56px;
+  --bsp-px-72: 57.5px;
+  --bsp-px-74: 59px;
+  --bsp-px-76: 61px;
+  --bsp-px-80: 64px;
+  --bsp-px-84: 67px;
+  --bsp-px-90: 72px;
+  --bsp-px-92: 73.5px;
+  --bsp-px-96: 77px;
+  --bsp-px-99: 79px;
+  --bsp-px-100: 80px;
+  --bsp-px-104: 83px;
+  --bsp-px-110: 88px;
+  --bsp-px-112: 89.5px;
+  --bsp-px-116: 93px;
+  --bsp-px-120: 96px;
+  --bsp-px-122: 97.5px;
+  --bsp-px-125: 100px;
+  --bsp-px-130: 104px;
+  --bsp-px-140: 112px;
+  --bsp-px-150: 120px;
+  --bsp-px-160: 128px;
+  --bsp-px-168: 134.5px;
+  --bsp-px-170: 136px;
+  --bsp-px-176: 141px;
+  --bsp-px-180: 144px;
+  --bsp-px-200: 160px;
+  --bsp-px-210: 168px;
+  --bsp-px-220: 176px;
+  --bsp-px-230: 184px;
+  --bsp-px-240: 192px;
+  --bsp-px-250: 200px;
+  --bsp-px-260: 208px;
+  --bsp-px-270: 216px;
+  --bsp-px-280: 224px;
+  --bsp-px-290: 232px;
+  --bsp-px-300: 240px;
+  --bsp-px-320: 256px;
+  --bsp-px-330: 264px;
+  --bsp-px-340: 272px;
+  --bsp-px-350: 280px;
+  --bsp-px-360: 288px;
+  --bsp-px-362: 289.5px;
+  --bsp-px-380: 304px;
+  --bsp-px-400: 320px;
+  --bsp-px-420: 336px;
+  --bsp-px-450: 360px;
+  --bsp-px-470: 376px;
+  --bsp-px-520: 416px;
+  --bsp-px-540: 432px;
+  --bsp-px-560: 448px;
+  --bsp-px-570: 456px;
+  --bsp-px-580: 464px;
+  --bsp-px-600: 480px;
+  --bsp-px-620: 496px;
+  --bsp-px-640: 512px;
+  --bsp-px-720: 576px;
+  --bsp-px-760: 608px;
+  --bsp-px-780: 624px;
+  --bsp-px-836: 669px;
+  --bsp-px-900: 720px;
+  --bsp-px-999: 799px;
+  --bsp-px-9999: 7999px;
+  --bsp-px-54: 43px;
+  --bsp-rem-0-0625: 1px;
+  --bsp-rem-0-125: 1.5px;
+  --bsp-rem-0-1875: 2.5px;
+  --bsp-rem-0-25: 3px;
+  --bsp-rem-0-3125: 4px;
+  --bsp-rem-0-375: 5px;
+  --bsp-rem-0-4375: 5.5px;
+  --bsp-rem-0-5: 6.5px;
+  --bsp-rem-0-5625: 7px;
+  --bsp-rem-0-625: 8px;
+  --bsp-rem-0-6875: 9px;
+  --bsp-rem-0-75: 9.5px;
+  --bsp-rem-0-8125: 10.5px;
+  --bsp-rem-0-875: 11px;
+  --bsp-rem-0-9375: 12px;
+  --bsp-rem-1: 13px;
+  --bsp-rem-1-0625: 13.5px;
+  --bsp-rem-1-125: 14.5px;
+  --bsp-rem-1-1875: 15px;
+  --bsp-rem-1-25: 16px;
+  --bsp-rem-1-375: 17.5px;
+  --bsp-rem-1-4: 18px;
+  --bsp-rem-1-5: 19px;
+  --bsp-rem-1-5625: 20px;
+  --bsp-rem-1-75: 22.5px;
+  --bsp-rem-1-875: 24px;
+  --bsp-rem-2: 25.5px;
+  --bsp-rem-2-125: 27px;
+  --bsp-rem-2-25: 29px;
+  --bsp-rem-2-375: 30.5px;
+  --bsp-rem-2-4375: 31px;
+  --bsp-rem-2-5: 32px;
+  --bsp-rem-2-625: 33.5px;
+  --bsp-rem-2-75: 35px;
+  --bsp-rem-3: 38.5px;
+  --bsp-rem-3-25: 41.5px;
+  --bsp-rem-3-375: 43px;
+  --bsp-rem-3-625: 46.5px;
+  --bsp-rem-3-75: 48px;
+  --bsp-rem-4: 51px;
+  --bsp-rem-4-5: 57.5px;
+  --bsp-rem-4-625: 59px;
+  --bsp-rem-4-875: 62.5px;
+  --bsp-rem-5: 64px;
+  --bsp-rem-5-25: 67px;
+  --bsp-rem-5-5: 70.5px;
+  --bsp-rem-5-625: 72px;
+  --bsp-rem-6: 77px;
+  --bsp-rem-7: 89.5px;
+  --bsp-rem-7-375: 94.5px;
+  --bsp-rem-8-25: 105.5px;
+  --bsp-rem-10: 128px;
+  --bsp-rem-11: 141px;
+  --bsp-rem-11-25: 144px;
+  --bsp-rem-11-875: 152px;
+  --bsp-rem-12: 153.5px;
+  --bsp-rem-13: 166.5px;
+  --bsp-rem-13-75: 176px;
+  --bsp-rem-14: 179px;
+  --bsp-rem-14-375: 184px;
+  --bsp-rem-15: 192px;
+  --bsp-rem-15-5: 198.5px;
+  --bsp-rem-16: 205px;
+  --bsp-rem-17: 217.5px;
+  --bsp-rem-18: 230.5px;
+  --bsp-rem-18-75: 240px;
+  --bsp-rem-20-625: 264px;
+  --bsp-rem-21-25: 272px;
+  --bsp-rem-24: 307px;
+  --bsp-rem-26: 333px;
+  --bsp-rem-26-875: 344px;
+  --bsp-rem-28: 358.5px;
+  --bsp-rem-30: 384px;
+  --bsp-rem-31-25: 400px;
+  --bsp-rem-32: 409.5px;
+  --bsp-rem-34: 435px;
+  --bsp-rem-35-625: 456px;
+  --bsp-rem-38-75: 496px;
+  --bsp-rem-40: 512px;
+  --bsp-rem-41-25: 528px;
+  --bsp-rem-96-25: 1232px;
+  --bsp-rem-3-5: 45px;
+  --bsp-rem-19: 243px;
+  --bs-space-3xs: 1.5px;
+  --bs-space-2xs: 2.5px;
+  --bs-space-xs: 3px;
+  --bs-space-sm: 6.5px;
+  --bs-space-md: 13px;
+  --bs-space-lg: 19px;
+  --bs-space-xl: 25.5px;
+  --bs-space-2xl: 38.5px;
+  --bs-space-3xl: 51px;
+  --bs-radius-xs: 4px;
+  --bs-radius-sm: 6.5px;
+  --bs-radius-md: 8px;
+  --bs-radius-lg: 9px;
+  --bs-radius-control: 9.5px;
+  --bs-radius-xl: 10.5px;
+  --bs-radius-rail: 13px;
+  --bs-radius-2xl: 14.5px;
+  --bs-radius-card: 16px;
+  --bs-radius-3xl: 22.5px;
+  --bs-radius-shell: 27px;
+  --bsp-fs-7: 11px;
+  --bsp-fs-8: 11px;
+  --bsp-fs-9: 11px;
+  --bsp-fs-9-5: 11px;
+  --bsp-fs-10: 11px;
+  --bsp-fs-10-5: 11px;
+  --bsp-fs-11: 11px;
+  --bsp-fs-11-5: 11px;
+  --bsp-fs-12: 11px;
+  --bsp-fs-12-5: 11px;
+  --bsp-fs-13: 11px;
+  --bsp-fs-13-5: 11px;
+  --bsp-fs-14: 11px;
+  --bsp-fs-14-5: 11.5px;
+  --bsp-fs-15: 12px;
+  --bsp-fs-15-5: 12.5px;
+  --bsp-fs-16: 13px;
+  --bsp-fs-16-5: 13px;
+  --bsp-fs-17: 13.5px;
+  --bsp-fs-18: 14.5px;
+  --bsp-fs-19: 15px;
+  --bsp-fs-20: 16px;
+  --bsp-fs-21: 17px;
+  --bsp-fs-21-6: 17.5px;
+  --bsp-fs-22: 17.5px;
+  --bsp-fs-24: 19px;
+  --bsp-fs-26: 21px;
+  --bsp-fs-28: 22.5px;
+  --bsp-fs-29: 23px;
+  --bsp-fs-30: 24px;
+  --bsp-fs-32: 25.5px;
+  --bsp-fs-34: 27px;
+  --bsp-fs-40: 32px;
+  --bsp-fs-42: 33.5px;
+  --bsp-fs-48: 38.5px;
+  --bsp-fs-52: 41.5px;
+  --bsp-fs-56: 45px;
+  --bsp-fs-64: 51px;
+  /* `body` takes its size from the 0.88 table; text here that sets none of its
+     own takes the 0.80 one. */
+  font-size: var(--bsp-fs-15);
+}
+
 /* D-484 — ICONS AT 0.88 TOO. An icon's size is its SVG's `width`/`height`
    attribute (`size={18}`), which no length token reaches. These rules give each
    size the prototype uses its scaled token. `:where()` keeps them at zero
@@ -3616,6 +3886,76 @@ span.bsp-cal-hol {
 }
 .bsp-btn.bsp-st-end {
   align-self: flex-end;
+}
+/* Batch 7 PR C — the popover's choices, `Main.dc.html` line 345:
+   `display: flex; flex-direction: column; gap: 2px; text-align: start;
+   border: 1px solid #ececef; background: #fff; border-radius: 12px;
+   padding: 8px 10px`, chosen `#7935fe` on `#f6f3ff`; the label
+   `12.5px / 600`, the line under it `11px #6a6a72`. */
+.bsp-st-when-mode {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-2);
+  text-align: start;
+  border: 1px solid #ececef;
+  background: #fff;
+  border-radius: var(--bsp-px-12);
+  padding: var(--bsp-px-8) var(--bsp-px-10);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.bsp-st-when-mode[aria-pressed='true'] {
+  border-color: #7935fe;
+  background: #f6f3ff;
+}
+.bsp-st-when-mode-label {
+  font-size: var(--bsp-fs-12-5);
+  font-weight: 600;
+}
+.bsp-st-when-mode-sub {
+  font-size: var(--bsp-fs-11);
+  color: #6a6a72;
+}
+/* "When your audience is active", line 347: a column, gap 4px; the chips in
+   a wrapping row, gap 6px, each `min-block-size: 28px; padding: 3px 10px;
+   font-size: 12px`. */
+.bsp-st-when-times {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-4);
+}
+.bsp-st-when-times > span {
+  font-size: var(--bsp-fs-11);
+  color: #6a6a72;
+}
+.bsp-st-when-chips {
+  display: flex;
+  gap: var(--bsp-px-6);
+  flex-wrap: wrap;
+}
+.bsp-chip.bsp-st-when-chip {
+  min-block-size: var(--bsp-px-28);
+  padding: var(--bsp-px-3) var(--bsp-px-10);
+  font-size: var(--bsp-fs-12);
+}
+/* The product's own: what became of the last change, and taking the time
+   off the post — a text button in the note's own type. */
+.bsp-st-when-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bsp-px-8);
+}
+.bsp-st-when-clear {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--bsp-fs-11);
+  color: #6a6a72;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 /* `grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start` */

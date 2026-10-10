@@ -52,7 +52,11 @@ describe('B1.0 — the proposed publish time', () => {
     }
   });
 
-  it('is the last migration the build expects', () => {
-    expect(EXPECTED_MIGRATIONS.at(-1)).toBe(NAME);
+  it('comes after PR 6, and only the publish choice follows it', () => {
+    const at = EXPECTED_MIGRATIONS.indexOf(NAME);
+    expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261015092000_automation_run_execution_due_index');
+    expect(EXPECTED_MIGRATIONS.slice(at + 1)).toEqual([
+      '20261016091000_content_item_publish_choice',
+    ]);
   });
 });

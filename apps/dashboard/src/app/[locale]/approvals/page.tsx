@@ -113,6 +113,7 @@ export default async function ApprovalsPage({
     firstAsset,
     plannedLocal,
     proposedLocal,
+    afterApproval,
     campaignName,
   } = await inContentStudio(workspace.workspaceId, async ({ approvals, db }) => {
     const service = await approvals();
@@ -235,7 +236,11 @@ export default async function ApprovalsPage({
     const subjectItem = subject
       ? await db.contentItem.findFirst({
           where: { id: subject.itemId, workspaceId: workspace.workspaceId },
-          select: { campaign: { select: { name: true } }, proposedLocalTime: true },
+          select: {
+            campaign: { select: { name: true } },
+            proposedLocalTime: true,
+            publishChoice: true,
+          },
         })
       : null;
 
@@ -253,6 +258,7 @@ export default async function ApprovalsPage({
        */
       plannedLocal: slot?.scheduledLocalTime ?? subjectItem?.proposedLocalTime ?? null,
       proposedLocal: subjectItem?.proposedLocalTime ?? null,
+      afterApproval: subjectItem?.publishChoice === 'AFTER_APPROVAL',
       campaignName: subjectItem?.campaign?.name ?? null,
       memberNames: new Map(members.map((m) => [m.userId, m.user.name ?? m.user.email] as const)),
     };
@@ -407,10 +413,19 @@ export default async function ApprovalsPage({
         })(),
         requestedTimeLabel: plannedLocal
           ? (localWhenLabel(plannedLocal, locale, now) ?? undefined)
-          : undefined,
+          : afterApproval
+            ? t('studio.when.mode.after')
+            : undefined,
         campaignLabel: campaignName ?? undefined,
-        approveSchedules:
-          proposedLocal !== null && workspace.permissionKeys.includes('content.schedule'),
+        // Option B: "Approve & publish" for "Right after approval", "Approve &
+        // schedule" for a picked time — each only for an approver who may schedule.
+        approveSchedules: !workspace.permissionKeys.includes('content.schedule')
+          ? undefined
+          : afterApproval
+            ? 'publish'
+            : proposedLocal !== null
+              ? 'schedule'
+              : undefined,
         previews: review.variants.map((v) => (
           <DictionaryVariantPreview
             key={v.id}

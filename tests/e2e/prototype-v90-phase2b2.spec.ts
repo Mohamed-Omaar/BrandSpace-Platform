@@ -253,9 +253,10 @@ test.describe('B9 · the Studio: inline date and time, and "Save as template"', 
     await page.getByTestId('content-caption').fill('Written for the inline schedule.');
     await page.waitForURL(/\/en\/content\/compose\?item=/);
 
-    // D-468: the date and time are in the Studio's publish-time popover.
+    // D-468: the date and time are in the Studio's publish-time popover; since
+    // Batch 7 PR C (B1.1) what is chosen there is kept on the post.
     await page.getByTestId('editor-when').click();
-    const form = page.getByTestId('editor-schedule-inline');
+    const form = page.getByTestId('editor-propose');
     await expect(form).toBeVisible();
     const date = page.getByTestId('editor-schedule-date');
     const time = page.getByTestId('editor-schedule-time');
@@ -268,6 +269,7 @@ test.describe('B9 · the Studio: inline date and time, and "Save as template"', 
     await expect(page.getByTestId('editor-schedule-today')).toBeVisible();
     await date.fill(tomorrow);
     await expect(time).toHaveValue('11:15');
+    await expect(page.getByTestId('editor-when-label')).toContainText('11:15');
 
     // Save as template, from the post — under the bar's "⋯" (review of #67, round 2).
     await openStudioMore(page);
@@ -276,10 +278,11 @@ test.describe('B9 · the Studio: inline date and time, and "Save as template"', 
     await page.getByTestId('save-as-template-submit').click();
     await page.waitForURL(/ok=TEMPLATE_SAVED/);
 
+    // B1.2: scheduling is its own press, beside the time the post keeps.
     await page.getByTestId('editor-when').click();
     await page.getByTestId('editor-schedule-submit').click();
     await page.waitForURL(/ok=CONTENT_SCHEDULED/);
-    await expect(page.getByTestId('editor-schedule-inline')).toHaveCount(0);
+    await expect(page.getByTestId('editor-propose')).toHaveCount(0);
 
     /*
      * Round 4 (3.3) — A SCHEDULED POST SHOWS ITS TIME, NOT "Scheduled", and

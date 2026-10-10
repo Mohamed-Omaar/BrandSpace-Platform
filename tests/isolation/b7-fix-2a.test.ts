@@ -250,13 +250,15 @@ async function errorOf(
   return {};
 }
 
-async function statusOf(id: string): Promise<{ status: string; proposedLocalTime: string | null }> {
+async function statusOf(
+  id: string,
+): Promise<{ status: string; proposedLocalTime: string | null; publishChoice: string }> {
   return withWorkspace(
     fixtures.a.workspaceId,
     async (db) =>
       db.contentItem.findUniqueOrThrow({
         where: { id },
-        select: { status: true, proposedLocalTime: true },
+        select: { status: true, proposedLocalTime: true, publishChoice: true },
       }),
     { prisma: app },
   );
@@ -305,7 +307,11 @@ describe('B1.1 — a proposed publish time is kept on the post, and is only a pr
       { prisma: app },
     );
     expect(events).toHaveLength(1);
-    expect(events[0]?.after).toEqual({ proposedLocalTime: when, timezone: ZONE });
+    expect(events[0]?.after).toEqual({
+      publishChoice: 'PICK',
+      proposedLocalTime: when,
+      timezone: ZONE,
+    });
   });
 
   it('may be set on a draft, a post sent back for changes and an approved post', async () => {
@@ -371,6 +377,51 @@ describe('B1.1 — a proposed publish time is kept on the post, and is only a pr
       ),
     );
     expect(refused.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('Option B — the publish choice travels with the time', () => {
+  it('a time is PICK, clearing is NONE, and "right after approval" stores no time', async () => {
+    const id = await makeDraft('Choices');
+    const when = futureLocal(14);
+    await inA((calendar) => calendar.propose({ contentItemId: id, localTime: when, ...actor() }));
+    expect(await statusOf(id)).toMatchObject({ publishChoice: 'PICK', proposedLocalTime: when });
+
+    await inA((calendar) =>
+      calendar.propose({ contentItemId: id, localTime: null, afterApproval: true, ...actor() }),
+    );
+    expect(await statusOf(id)).toMatchObject({
+      publishChoice: 'AFTER_APPROVAL',
+      proposedLocalTime: null,
+    });
+
+    await inA((calendar) => calendar.propose({ contentItemId: id, localTime: null, ...actor() }));
+    expect(await statusOf(id)).toMatchObject({ publishChoice: 'NONE', proposedLocalTime: null });
+  });
+
+  it('"right after approval" is refused with a time, and on a post already approved', async () => {
+    const id = await makeDraft('After approval refused');
+    expect(
+      await errorOf(() =>
+        inA((calendar) =>
+          calendar.propose({
+            contentItemId: id,
+            localTime: futureLocal(9),
+            afterApproval: true,
+            ...actor(),
+          }),
+        ),
+      ),
+    ).toEqual({ code: 'CONFLICT', reason: PROPOSED_TIME_LOCKED_REASON });
+    await setStatus(id, 'APPROVED');
+    expect(
+      await errorOf(() =>
+        inA((calendar) =>
+          calendar.propose({ contentItemId: id, localTime: null, afterApproval: true, ...actor() }),
+        ),
+      ),
+    ).toEqual({ code: 'CONFLICT', reason: PROPOSED_TIME_LOCKED_REASON });
+    expect((await statusOf(id)).publishChoice).toBe('NONE');
   });
 });
 

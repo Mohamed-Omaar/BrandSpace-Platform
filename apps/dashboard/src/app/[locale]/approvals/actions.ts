@@ -77,6 +77,12 @@ const VERDICTS: Record<string, ApprovalVerdict> = {
    * proposed time and the approver may schedule; both are checked again here.
    */
   APPROVE_SCHEDULE: 'APPROVE',
+  /*
+   * Batch 7 PR C (Option B) — "Approve & publish": the post's choice is
+   * "Right after approval". Offered only to an approver who may schedule; the
+   * choice and the permission are read again here.
+   */
+  APPROVE_PUBLISH: 'APPROVE',
   REQUEST_CHANGES: 'REQUEST_CHANGES',
   REJECT: 'REJECT',
 };
@@ -103,9 +109,28 @@ async function scheduleAfterApproval(
     return await inContentStudio(session.workspace.workspaceId, async ({ calendar, db }) => {
       const item = await db.contentItem.findFirst({
         where: { id: contentItemId },
-        select: { proposedLocalTime: true },
+        select: { proposedLocalTime: true, publishChoice: true },
       });
-      if (!item?.proposedLocalTime) return 'APPROVED_NOT_SCHEDULED';
+      /*
+       * Option B — "RIGHT AFTER APPROVAL" GOES OUT NOW, and only that choice
+       * does: through `publishNow()` (the approval gate, the channels, the
+       * quota; no lead time, because the person asked for "as soon as it is
+       * approved"). A post whose choice is NONE is never published by an
+       * approval.
+       */
+      if (item?.publishChoice === 'AFTER_APPROVAL') {
+        await (
+          await calendar()
+        ).publishNow({
+          contentItemId,
+          actorUserId: session.customer.userId,
+          actorBrandScope: session.workspace.brandScope,
+        });
+        return 'APPROVED_PUBLISHING';
+      }
+      if (item?.publishChoice !== 'PICK' || !item.proposedLocalTime) {
+        return 'APPROVED_NOT_SCHEDULED';
+      }
       await (
         await calendar()
       ).schedule({
@@ -134,7 +159,7 @@ export async function decideApprovalAction(formData: FormData): Promise<void> {
   const approvalId = String(formData.get('approvalId') ?? '');
   const verdictField = String(formData.get('verdict') ?? '');
   const verdict = VERDICTS[verdictField];
-  const andSchedule = verdictField === 'APPROVE_SCHEDULE';
+  const andSchedule = verdictField === 'APPROVE_SCHEDULE' || verdictField === 'APPROVE_PUBLISH';
   const note = String(formData.get('note') ?? '');
 
   let destination: string;

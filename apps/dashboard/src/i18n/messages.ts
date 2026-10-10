@@ -1138,6 +1138,8 @@ export const messages = {
     'bb.look.logo': 'الشعار',
     'bb.look.logoAlt': 'شعار العلامة',
     'bb.look.logoEmpty': 'لا يوجد شعار بعد.',
+    'bb.look.logoChecking': 'جارٍ فحص {name}. يصبح شعار العلامة عندما يجتاز الفحص.',
+    'bb.look.logoRefused': 'لم يُستخدم الملف شعارًا: {reason}',
     'bb.look.logoUpload': 'رفع صورة شعار جديدة',
     'bb.look.logoReplace': 'رفع الشعار',
     'bb.look.logoChoose': 'الشعار',
@@ -1760,7 +1762,31 @@ export const messages = {
     'setup.wz.brand.logoAdded': '{name} هو شعار علامتك.',
     'setup.wz.brand.logoFailed': 'تعذّر استخدام {name}: {reason}',
     'setup.review.noneRead': 'لم تتم قراءة أي ملف بعد.',
-    'studio.when.schedulesNow': 'تحديد الوقت يجدول هذا المنشور الآن.',
+    'studio.when.mode.best': 'أفضل وقت تلقائيًا',
+    'studio.when.mode.bestSub': 'يختاره Brandspace · الآن {label}',
+    'studio.when.mode.pick': 'اختر التاريخ والوقت',
+    'studio.when.mode.pickSub': 'أنت تحدد',
+    'studio.when.mode.after': 'فور الموافقة',
+    'studio.when.mode.afterSub': 'يُنشر فور موافقة {reviewer}',
+    'studio.when.reviewerAny': 'المراجِع',
+    'studio.when.noteAfter':
+      'لا يُحفظ موعد. يُنشر المنشور عند الموافقة عليه، إن كان لدى من يوافق صلاحية الجدولة؛ وإلا تتم الموافقة ويُطلب اختيار موعد.',
+    'studio.when.best': 'أفضل وقت',
+    'studio.when.goodTimes': 'متى يكون جمهورك نشطًا',
+    'studio.when.part.morning': 'صباحًا',
+    'studio.when.part.lunch': 'وقت الغداء',
+    'studio.when.part.afternoon': 'بعد الظهر',
+    'studio.when.part.evening': 'مساءً',
+    'studio.when.part.night': 'ليلًا',
+    'studio.when.mostEngagement': 'الأعلى تفاعلًا',
+    'studio.when.noteApproval':
+      'يُحفظ الموعد في المنشور ويُستخدم عند الموافقة عليه. إن جاءت الموافقة بعد الموعد، تتم الموافقة دون جدولة ويُطلب اختيار موعد جديد.',
+    'studio.when.noteSchedule':
+      'يُحفظ الموعد في المنشور ولا يجدوله. اضغط «جدولة» عندما يصبح جاهزًا.',
+    'studio.when.remove': 'إزالة الموعد',
+    'studio.when.failedPast': 'مضى هذا الموعد. اختر موعدًا لاحقًا.',
+    'studio.when.failedLocked': 'لا يمكن تغيير الموعد والمنشور قيد المراجعة.',
+    'studio.when.failed': 'تعذّر حفظ هذا الموعد. اختر تاريخًا ووقتًا آخرين.',
     'studio.when.scheduledEdits':
       'هذا المنشور مجدول. التعديلات الآن تحتاج إلى «حفظ التعديل»، ويبقى مجدولًا في موعده.',
     'studio.when.scheduledEditsUnschedule':
@@ -1836,7 +1862,7 @@ export const messages = {
     'create.plannedFor': 'لـ {name} · {date}',
     'create.plannedDate': 'مخطط ليوم {date}',
     'create.plannedNeedsApproval':
-      'تحتاج هذه العلامة إلى موافقة قبل جدولة أي منشور، لذلك لا يُحفظ هذا اليوم: اختر الوقت بعد الموافقة على المنشور.',
+      'تحتاج هذه العلامة إلى موافقة قبل جدولة أي منشور. يُحفظ هذا اليوم في «موعد النشر» ويُستخدم عند الموافقة على المنشور.',
     'create.write.label': 'منشورك',
     'create.write.placeholder': 'اكتب المنشور تمامًا كما يجب أن يُقرأ.',
     'create.format.unsupported': 'لا تدعم هذه القناة هذا الشكل.',
@@ -2225,6 +2251,9 @@ export const messages = {
       'الموافقة تجعل المنشور جاهزًا للجدولة، ولا يُنشر شيء قبل جدولته. التعديلات تتطلب ملاحظة.',
     'approvals.approve': 'موافقة',
     'approvals.approveSchedule': 'موافقة وجدولة',
+    'approvals.approvePublish': 'موافقة ونشر',
+    'approvals.approvePublishHint':
+      'اختار الكاتب النشر فور الموافقة: الموافقة تنشر المنشور الآن. التعديلات تتطلب ملاحظة.',
     'approvals.approveScheduleHint':
       'الموافقة تُجدوِل المنشور في الموعد المطلوب. إن كان الموعد قد مضى، تتم الموافقة دون جدولة وتختار موعدًا جديدًا. التعديلات تتطلب ملاحظة.',
     'approvals.requestChanges': 'طلب تعديل',
@@ -3762,8 +3791,11 @@ export const messages = {
     'signUp.submitting': 'جارٍ الإنشاء…',
     'signUp.sentTitle': 'تحقّق من بريدك',
     'signUp.sentBody':
-      'إن كان بالإمكان تسجيل هذا العنوان فستصلك رسالة تأكيد. الرابط صالح لمرة واحدة.',
+      'إن كان بالإمكان استخدام هذا العنوان، فقد أرسلنا إليك رسالة. تحقّق من مجلد الرسائل غير المرغوب فيها أيضًا.',
     'signUp.resend': 'إعادة إرسال الرسالة',
+    'signUp.resendIn': 'يمكنك إعادة الإرسال بعد {time}',
+    'signUp.resending': 'جارٍ الإرسال…',
+    'signUp.resent': 'إن كان بالإمكان استخدام هذا العنوان، فقد أرسلنا رسالة أخرى.',
     'signUp.haveAccount': 'لديك حساب؟ سجّل الدخول',
     'signUp.closed': 'التسجيل بالدعوة فقط حاليًا.',
     'signUp.failed': 'تعذّر إتمام الطلب. راجع البيانات وحاول مجددًا.',
@@ -5030,6 +5062,8 @@ export const messages = {
     'bb.look.logo': 'Logo',
     'bb.look.logoAlt': 'The brand logo',
     'bb.look.logoEmpty': 'No logo yet.',
+    'bb.look.logoChecking': 'Checking {name}. It becomes the brand’s logo once it passes.',
+    'bb.look.logoRefused': 'The file wasn’t used as the logo: {reason}',
     'bb.look.logoUpload': 'Upload a new logo image',
     'bb.look.logoReplace': 'Upload logo',
     'bb.look.logoChoose': 'Logo',
@@ -5674,7 +5708,31 @@ export const messages = {
     'setup.wz.brand.logoAdded': '{name} is your brand’s logo.',
     'setup.wz.brand.logoFailed': '{name} couldn’t be used: {reason}',
     'setup.review.noneRead': 'No file has been read yet.',
-    'studio.when.schedulesNow': 'Setting a time schedules this post now.',
+    'studio.when.mode.best': 'Best time automatically',
+    'studio.when.mode.bestSub': 'Brandspace picks · now {label}',
+    'studio.when.mode.pick': 'Pick a date and time',
+    'studio.when.mode.pickSub': 'You decide',
+    'studio.when.mode.after': 'Right after approval',
+    'studio.when.mode.afterSub': 'Goes out as soon as {reviewer} approves',
+    'studio.when.reviewerAny': 'your reviewer',
+    'studio.when.noteAfter':
+      'No time is stored. The post goes out when it’s approved, if the approver may also schedule; otherwise it’s approved and you’re asked to pick a time.',
+    'studio.when.best': 'Best time',
+    'studio.when.goodTimes': 'When your audience is active',
+    'studio.when.part.morning': 'morning',
+    'studio.when.part.lunch': 'lunch',
+    'studio.when.part.afternoon': 'afternoon',
+    'studio.when.part.evening': 'evening',
+    'studio.when.part.night': 'night',
+    'studio.when.mostEngagement': 'most engagement',
+    'studio.when.noteApproval':
+      'The time is kept on the post and used when it’s approved. If approval comes after the time, the post is approved without being scheduled and you’re asked to pick a new time.',
+    'studio.when.noteSchedule':
+      'The time is kept on the post; it doesn’t schedule it. Press Schedule when it’s ready.',
+    'studio.when.remove': 'Remove the time',
+    'studio.when.failedPast': 'That time has passed. Pick a later one.',
+    'studio.when.failedLocked': 'The time can’t change while the post is in review.',
+    'studio.when.failed': 'That time couldn’t be saved. Pick another date and time.',
     'studio.when.scheduledEdits':
       'This post is scheduled. Edits now need “Save edit”; it stays scheduled at its time.',
     'studio.when.scheduledEditsUnschedule':
@@ -5753,7 +5811,7 @@ export const messages = {
     'create.plannedFor': 'For {name} · {date}',
     'create.plannedDate': 'Planned for {date}',
     'create.plannedNeedsApproval':
-      'This brand needs approval before a post is scheduled, so this day is not kept: choose the time once the post is approved.',
+      'This brand needs approval before a post is scheduled. Keep this day in Publish time and it’s used when the post is approved.',
     'create.write.label': 'Your post',
     'create.write.placeholder': 'Write the post exactly as it should read.',
     'create.format.unsupported': 'This channel cannot carry this format.',
@@ -6159,6 +6217,9 @@ export const messages = {
       'Approving clears the post to be scheduled; nothing publishes until it is. Asking for changes needs a note.',
     'approvals.approve': 'Approve',
     'approvals.approveSchedule': 'Approve & schedule',
+    'approvals.approvePublish': 'Approve & publish',
+    'approvals.approvePublishHint':
+      'The author chose to publish right after approval: approving publishes the post now. Asking for changes needs a note.',
     'approvals.approveScheduleHint':
       'Approving schedules the post at the requested time. If that time has passed, it is approved without being scheduled and you pick a new time. Asking for changes needs a note.',
     'approvals.requestChanges': 'Request changes',
@@ -7749,9 +7810,11 @@ export const messages = {
     'signUp.submit': 'Create account',
     'signUp.submitting': 'Creating…',
     'signUp.sentTitle': 'Check your email',
-    'signUp.sentBody':
-      'If that address can be registered, a confirmation message is on its way. The link works once.',
+    'signUp.sentBody': 'If this address can be used, we have sent you an email. Check spam too.',
     'signUp.resend': 'Send it again',
+    'signUp.resendIn': 'You can send it again in {time}',
+    'signUp.resending': 'Sending…',
+    'signUp.resent': 'If this address can be used, we have sent another email.',
     'signUp.haveAccount': 'Already have an account? Sign in',
     'signUp.closed': 'Signup is currently by invitation only.',
     'signUp.failed': 'That request could not be completed. Check the details and try again.',
@@ -8204,8 +8267,8 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   BRAND_COLOURS_SAVED: { en: 'Brand colours saved.', ar: 'تم حفظ ألوان العلامة.' },
   BRAND_LOGO_SAVED: { en: 'The new logo is in place.', ar: 'تم وضع الشعار الجديد.' },
   BRAND_LOGO_PROCESSING: {
-    en: 'The logo is uploaded and being checked. Once it is ready, choose it as the logo here.',
-    ar: 'تم رفع الشعار وهو قيد الفحص. عندما يصبح جاهزًا، اختره شعارًا من هنا.',
+    en: 'The logo is uploaded and being checked. It becomes the logo once it passes.',
+    ar: 'تم رفع الشعار وهو قيد الفحص. يصبح شعار العلامة عندما يجتاز الفحص.',
   },
   BRAND_FONTS_SAVED: { en: 'Brand fonts saved.', ar: 'تم حفظ خطوط العلامة.' },
   BRAND_FONT_ADDED: {
@@ -8253,6 +8316,10 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   },
   // Batch 7 PR C (B1.3) — "Approve & schedule", and the owner's rule when the
   // proposed time has passed: approved, not scheduled, pick a new time.
+  APPROVED_PUBLISHING: {
+    en: 'Approved. The post is going out now.',
+    ar: 'تمت الموافقة. يُنشر المنشور الآن.',
+  },
   APPROVED_SCHEDULED: {
     en: 'Approved and scheduled at the requested time.',
     ar: 'تمت الموافقة وجُدوِل المنشور في الموعد المطلوب.',

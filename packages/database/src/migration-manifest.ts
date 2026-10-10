@@ -97,4 +97,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261015091000_automation_ai_execution_lease',
   '20261015092000_automation_run_execution_due_index',
   '20261016090000_content_item_proposed_local_time',
+  '20261016091000_content_item_publish_choice',
 ];

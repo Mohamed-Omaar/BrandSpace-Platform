@@ -58,6 +58,9 @@ describe('M4 — the asks-first expiry index', () => {
       '20261015090000_automation_ai_execution_status',
       '20261015091000_automation_ai_execution_lease',
       '20261015092000_automation_run_execution_due_index',
+      // Batch 7 PR C: the proposed publish time, then the publish choice.
+      '20261016090000_content_item_proposed_local_time',
+      '20261016091000_content_item_publish_choice',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261013090000_brand_scope_not_null');
   });

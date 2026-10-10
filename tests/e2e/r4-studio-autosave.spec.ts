@@ -301,9 +301,16 @@ test.describe('Round 4 · 3.1 — the server saves as typed only what a save lea
 });
 
 test.describe('Round 4 · 3.3 (review of 2a, 6) — a day carried to a brand that needs approval', () => {
+  /*
+   * Batch 7 PR C (B1.4) changed what this proves. The post now keeps a
+   * proposed time on a brand that needs approval, so the day IS kept: the
+   * Studio says it is used at approval, and the draft's When offers the date
+   * and time, starting from the carried day. The calendar's Schedule is still
+   * not offered before approval.
+   */
   test.describe.configure({ timeout: 120_000 });
 
-  test('the Studio says the day is not kept, and offers no time it would drop', async ({
+  test('the Studio says the day is used at approval, and offers it as the post’s time', async ({
     page,
   }) => {
     const loaded = credentials();
@@ -348,10 +355,10 @@ test.describe('Round 4 · 3.3 (review of 2a, 6) — a day carried to a brand tha
       await expect(page.getByTestId('composer-planned-date')).toBeVisible();
       // Said where the day is named, before anything is written.
       await expect(page.getByTestId('composer-planned-approval-first')).toContainText(
-        'this day is not kept',
+        'used when the post is approved',
       );
 
-      // The draft's When offers no date or time to choose — only the reason.
+      // The draft's When offers the date and time, from the carried day.
       const channel = page.getByTestId('content-channel').first();
       if ((await channel.getAttribute('aria-pressed')) !== 'true') await channel.click();
       await page.getByTestId('content-caption').fill(`Approval first ${suffix}`);
@@ -359,8 +366,8 @@ test.describe('Round 4 · 3.3 (review of 2a, 6) — a day carried to a brand tha
       await page.getByTestId('editor-when').click();
       const panel = page.getByTestId('editor-when-panel');
       await expect(panel).toBeVisible();
-      await expect(panel).toContainText('this day is not kept');
-      await expect(panel.locator('input[type="date"], input[type="time"]')).toHaveCount(0);
+      await expect(panel.getByTestId('editor-when-note')).toContainText('used when it’s approved');
+      await expect(panel.getByTestId('editor-schedule-date')).toHaveValue(day);
       await expect(page.getByTestId('editor-schedule')).toHaveCount(0);
     } finally {
       // Retired as a deleted brand is, so no later list counts it.

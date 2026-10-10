@@ -787,16 +787,28 @@ export class ContentCalendarService {
    * WHAT IS CHECKED HERE: the wall-clock exists in the workspace's zone, it is
    * not already past, and it is inside the planning horizon. The minimum lead
    * is not: it is a rule about scheduling, applied when the slot is made.
+   *
+   * THE CHOICE TRAVELS WITH IT (owner answer, Option B): a time is PICK,
+   * clearing is NONE, and `afterApproval` is "Right after approval" — no time,
+   * on a post that has not been approved yet. The two columns are written
+   * together, and a CHECK keeps them consistent.
    */
   async propose(input: {
     readonly contentItemId: string;
     /** `YYYY-MM-DDTHH:mm` in the workspace's zone, or null to clear it. */
     readonly localTime: string | null;
+    /** "Right after approval": `localTime` must be null. */
+    readonly afterApproval?: boolean;
     readonly actorUserId: string;
     readonly actorBrandScope: readonly string[];
   }): Promise<ContentItem> {
     const item = await this.#requireItem(input.contentItemId, input.actorBrandScope);
     if (!PROPOSABLE_FROM.includes(item.status)) throw proposedTimeLocked();
+    const afterApproval = input.afterApproval === true;
+    if (afterApproval && (input.localTime !== null || item.status === 'APPROVED')) {
+      throw proposedTimeLocked();
+    }
+    const choice = afterApproval ? 'AFTER_APPROVAL' : input.localTime === null ? 'NONE' : 'PICK';
 
     if (input.localTime !== null) {
       const resolved = resolveZonedTime(input.localTime, this.#timezone);
@@ -806,11 +818,11 @@ export class ContentCalendarService {
       const horizonMs = this.#policy.calendar.maxDaysAhead * 24 * 3_600_000;
       if (resolved.instant.getTime() > now.getTime() + horizonMs) throw scheduleTooFarAhead();
     }
-    if (item.proposedLocalTime === input.localTime) return item;
+    if (item.proposedLocalTime === input.localTime && item.publishChoice === choice) return item;
 
     const updated = await this.#db.contentItem.update({
       where: { id: item.id },
-      data: { proposedLocalTime: input.localTime },
+      data: { proposedLocalTime: input.localTime, publishChoice: choice },
     });
     await writeAuditEvent(this.#db, this.#workspaceId, {
       action: 'content.proposed_time_set',
@@ -819,8 +831,16 @@ export class ContentCalendarService {
       resourceType: 'ContentItem',
       resourceId: item.id,
       brandId: item.brandId,
-      before: { proposedLocalTime: item.proposedLocalTime, timezone: this.#timezone },
-      after: { proposedLocalTime: input.localTime, timezone: this.#timezone },
+      before: {
+        publishChoice: item.publishChoice,
+        proposedLocalTime: item.proposedLocalTime,
+        timezone: this.#timezone,
+      },
+      after: {
+        publishChoice: choice,
+        proposedLocalTime: input.localTime,
+        timezone: this.#timezone,
+      },
     });
     return updated;
   }
