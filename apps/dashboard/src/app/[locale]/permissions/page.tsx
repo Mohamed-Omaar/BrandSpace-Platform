@@ -79,7 +79,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
           description={t('settings.p.subtitle')}
         />
         <div style={{ marginBlockEnd: spacingTokens.md }}>
-          <ContentGrid min="15rem" testId="role-grid">
+          <ContentGrid min="var(--bsp-rem-15)" testId="role-grid">
             {roles.map((role) => {
               const mine = role.key === workspace.roleKey;
               return (
@@ -96,8 +96,8 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    minBlockSize: '11.875rem',
-                    padding: '1.1875rem',
+                    minBlockSize: 'var(--bsp-rem-11-875)',
+                    padding: 'var(--bsp-rem-1-1875)',
                     borderRadius: radiusTokens['2xl'],
                     background: colorTokens.surfaceCardAlpha,
                     boxShadow: shadowTokens.card,
@@ -109,8 +109,8 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
                     style={{
                       display: 'inline-grid',
                       placeItems: 'center',
-                      inlineSize: '2.625rem',
-                      blockSize: '2.625rem',
+                      inlineSize: 'var(--bsp-rem-2-625)',
+                      blockSize: 'var(--bsp-rem-2-625)',
                       borderRadius: radiusTokens.control,
                       background: mine
                         ? colorTokens.surfaceLavenderStrong
@@ -157,7 +157,7 @@ export default async function PermissionsPage({ params }: { params: Promise<{ lo
 
         <div
           data-testid="permissions-card"
-          style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--bsp-px-14)' }}
         >
           <p style={{ margin: 0 }}>
             <strong>{t('perms.yourRole')}:</strong>{' '}

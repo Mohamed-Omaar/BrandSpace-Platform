@@ -599,7 +599,7 @@ export function CalendarView({
   };
 
   const emptyAction = canSchedule ? (
-    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '6px' }}>
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 'var(--bsp-px-6)' }}>
       <button
         type="button"
         className="bsp-btn bsp-sm"
@@ -622,7 +622,12 @@ export function CalendarView({
     <div
       ref={pageRef}
       data-testid="calendar-page"
-      style={{ display: 'flex', flexDirection: 'column', gap: '22px', minInlineSize: 0 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--bsp-px-22)',
+        minInlineSize: 0,
+      }}
     >
       {pastDayNotice ? (
         <Banner tone="warning" testId="calendar-past-day">
@@ -1012,7 +1017,12 @@ export function CalendarView({
                 role="group"
                 aria-label={t['calendar.suggestedTime'] ?? ''}
                 data-testid="schedule-suggested"
-                style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.375rem' }}
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 'var(--bsp-rem-0-375)',
+                }}
               >
                 <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
                   {t['calendar.suggestedTime']}

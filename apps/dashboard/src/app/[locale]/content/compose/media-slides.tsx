@@ -146,15 +146,15 @@ export function MediaSlides({
                     <AssetThumb
                       src={`/${locale}/assets/file/${option.previewToken}`}
                       alt={option.name}
-                      size="3.25rem"
+                      size="var(--bsp-rem-3-25)"
                     />
                   ) : (
                     <span
                       aria-hidden="true"
                       style={{
                         display: 'inline-block',
-                        inlineSize: '3.25rem',
-                        blockSize: '3.25rem',
+                        inlineSize: 'var(--bsp-rem-3-25)',
+                        blockSize: 'var(--bsp-rem-3-25)',
                         borderRadius: radiusTokens.sm,
                         background: colorTokens.surfaceMuted,
                       }}

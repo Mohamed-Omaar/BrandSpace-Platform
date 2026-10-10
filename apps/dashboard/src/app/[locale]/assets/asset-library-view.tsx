@@ -484,7 +484,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                   <form
                     method="get"
                     action={`/${props.locale}/assets`}
-                    style={{ display: 'flex', flex: '1 1 18rem', minInlineSize: 0 }}
+                    style={{ display: 'flex', flex: '1 1 var(--bsp-rem-18)', minInlineSize: 0 }}
                   >
                     <SearchField
                       id="assets-search"
@@ -507,7 +507,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                     <input type="hidden" name="sort" value={filters.sort} />
                   </form>
 
-                  <div style={{ flex: '0 1 auto', minInlineSize: '12rem' }}>
+                  <div style={{ flex: '0 1 auto', minInlineSize: 'var(--bsp-rem-12)' }}>
                     <FilterGroup
                       label={t('assets.sort')}
                       allLabel={t('assets.sort.newest')}
@@ -526,7 +526,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(min(14rem, 100%), 1fr))',
+                    gridTemplateColumns:
+                      'repeat(auto-fit, minmax(min(var(--bsp-rem-14), 100%), 1fr))',
                     gap: spacingTokens.md,
                     alignItems: 'start',
                   }}
@@ -634,8 +635,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                         src={`/${props.locale}/assets/file/${logo.token}`}
                         alt=""
                         style={{
-                          inlineSize: '4rem',
-                          blockSize: '4rem',
+                          inlineSize: 'var(--bsp-rem-4)',
+                          blockSize: 'var(--bsp-rem-4)',
                           objectFit: 'contain',
                           borderRadius: radiusTokens.md,
                           background: colorTokens.surfaceMuted,
@@ -681,8 +682,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                           <span
                             aria-hidden="true"
                             style={{
-                              inlineSize: '2rem',
-                              blockSize: '2rem',
+                              inlineSize: 'var(--bsp-rem-2)',
+                              blockSize: 'var(--bsp-rem-2)',
                               borderRadius: radiusTokens.full,
                               // The brand's OWN colour, as data — not a design literal.
                               background: colour,
@@ -1031,7 +1032,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                     // The same 24px floor as the filter links (WCAG 2.2 AA 2.5.8).
                     display: 'inline-flex',
                     alignItems: 'center',
-                    minBlockSize: '24px',
+                    minBlockSize: 'var(--bsp-px-24)',
                     ...typographyTokens.label,
                     color: colorTokens.brandPurple,
                     textDecoration: 'none',
@@ -1311,8 +1312,8 @@ function FilterGroup({
                  */
                 display: 'inline-flex',
                 alignItems: 'center',
-                minBlockSize: '28px',
-                minInlineSize: '28px',
+                minBlockSize: 'var(--bsp-px-28)',
+                minInlineSize: 'var(--bsp-px-28)',
                 justifyContent: 'center',
                 padding: `${spacingTokens['3xs']} ${spacingTokens.sm}`,
                 borderRadius: radiusTokens.sm,
@@ -1529,7 +1530,7 @@ function AssetDetail({
             data-testid="asset-detail-preview"
             style={{
               inlineSize: '100%',
-              maxBlockSize: '18rem',
+              maxBlockSize: 'var(--bsp-rem-18)',
               objectFit: 'contain',
               borderRadius: radiusTokens.lg,
               background: colorTokens.surfaceMuted,
@@ -1590,7 +1591,7 @@ function AssetDetail({
         <dl
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(12rem, 100%), 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(var(--bsp-rem-12), 100%), 1fr))',
             gap: spacingTokens.sm,
             margin: 0,
           }}
@@ -2040,7 +2041,7 @@ function FolderBrowser({
             margin: 0,
             padding: 0,
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(min(11rem, 100%), 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(var(--bsp-rem-11), 100%), 1fr))',
             gap: spacingTokens.sm,
           }}
         >
@@ -2070,8 +2071,8 @@ function FolderBrowser({
                     style={{
                       display: 'inline-grid',
                       placeItems: 'center',
-                      inlineSize: '2.25rem',
-                      blockSize: '2.25rem',
+                      inlineSize: 'var(--bsp-rem-2-25)',
+                      blockSize: 'var(--bsp-rem-2-25)',
                       flexShrink: 0,
                       borderRadius: radiusTokens.md,
                       background: colorTokens.surfaceLavender,

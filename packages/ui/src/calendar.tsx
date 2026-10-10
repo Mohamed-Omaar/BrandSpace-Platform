@@ -91,9 +91,9 @@ function DayMarkers({
           justifySelf: 'start',
           display: 'inline-flex',
           alignItems: 'center',
-          gap: '0.25rem',
+          gap: 'var(--bsp-rem-0-25)',
           maxInlineSize: '100%',
-          minBlockSize: '1.5rem',
+          minBlockSize: 'var(--bsp-rem-1-5)',
           paddingInline: spacingTokens.xs,
           borderRadius: radiusTokens.full,
           background: colorTokens.brandYellowTint,
@@ -216,7 +216,7 @@ function MonthGrid({
         gap: '1px',
         padding: '1px',
         background: 'rgba(17, 17, 20, 0.06)',
-        borderRadius: '1.375rem',
+        borderRadius: 'var(--bsp-rem-1-375)',
         boxShadow: shadowTokens.card,
         overflow: 'hidden',
       }}
@@ -235,10 +235,10 @@ function MonthGrid({
             role="columnheader"
             style={{
               // `.weekday { padding: 11px; font-size: 8px; font-weight: 850 }`.
-              padding: '0.6875rem',
+              padding: 'var(--bsp-rem-0-6875)',
               background: 'rgba(255, 255, 255, 0.92)',
-              fontSize: '0.5rem',
-              lineHeight: '0.75rem',
+              fontSize: 'var(--bsp-fs-8)',
+              lineHeight: 'var(--bsp-rem-0-75)',
               fontWeight: 850,
               textTransform: 'uppercase',
               letterSpacing: 'normal',
@@ -266,8 +266,8 @@ function MonthGrid({
                 // `.day { min-height: 132px; padding: 10px;
                 //  background: rgba(255,255,255,.92) }` — square-cornered,
                 // because the container's 1px gutter draws the grid.
-                minBlockSize: '8.25rem',
-                padding: '0.625rem',
+                minBlockSize: 'var(--bsp-rem-8-25)',
+                padding: 'var(--bsp-rem-0-625)',
                 borderRadius: 0,
                 // Today is a lavender cell; a day outside the month is quieter.
                 //
@@ -294,8 +294,8 @@ function MonthGrid({
                    * instead — the same device the F-28 lesson settled, and the
                    * only property changed is the colour, not the geometry.
                    */
-                  fontSize: '0.625rem',
-                  lineHeight: '0.875rem',
+                  fontSize: 'var(--bsp-fs-10)',
+                  lineHeight: 'var(--bsp-rem-0-875)',
                   fontWeight: day.isToday ? 800 : 700,
                   color: day.isToday
                     ? colorTokens.brandPurplePressed
@@ -334,7 +334,7 @@ function MonthGrid({
                     onClick={() => onCreateOnDay(day.key)}
                     style={{
                       justifySelf: 'start',
-                      minBlockSize: '1.5rem',
+                      minBlockSize: 'var(--bsp-rem-1-5)',
                       paddingInline: spacingTokens.xs,
                       border: '1px solid transparent',
                       borderRadius: radiusTokens.md,
@@ -422,8 +422,8 @@ function Agenda({
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                minInlineSize: '2.5rem',
-                blockSize: '2.5rem',
+                minInlineSize: 'var(--bsp-rem-2-5)',
+                blockSize: 'var(--bsp-rem-2-5)',
                 borderRadius: radiusTokens.md,
                 background: day.isToday
                   ? colorTokens.brandPurple
@@ -560,7 +560,7 @@ export function ContentCalendar({
       aria-pressed={view === value}
       onClick={() => setView(value)}
       style={{
-        minBlockSize: '2.25rem',
+        minBlockSize: 'var(--bsp-rem-2-25)',
         paddingInline: spacingTokens.md,
         borderRadius: radiusTokens.md,
         border: '1px solid transparent',
@@ -761,7 +761,7 @@ export function CalendarDropStrip({
         display: 'grid',
         gap: spacingTokens.xs,
         padding: spacingTokens.sm,
-        borderRadius: '1.375rem',
+        borderRadius: 'var(--bsp-rem-1-375)',
         boxShadow: shadowTokens.card,
       }}
     >
@@ -774,7 +774,7 @@ export function CalendarDropStrip({
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-          gap: '0.25rem',
+          gap: 'var(--bsp-rem-0-25)',
         }}
       >
         {days.map((day) => (

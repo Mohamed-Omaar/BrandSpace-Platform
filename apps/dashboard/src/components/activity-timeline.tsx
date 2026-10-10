@@ -35,7 +35,9 @@ export function ActivityTimeline({
             alignItems: 'center',
           }}
         >
-          <strong style={{ ...typographyTokens.bodySm, flex: '1 1 14rem' }}>{entry.label}</strong>
+          <strong style={{ ...typographyTokens.bodySm, flex: '1 1 var(--bsp-rem-14)' }}>
+            {entry.label}
+          </strong>
           <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
             {entry.actor} ·{' '}
             <time dateTime={entry.at.toISOString()} title={entry.at.toISOString()}>

@@ -520,7 +520,7 @@ export function ContentLibrary({
             <PrefetchLink
               href={`/${locale}/content/compose`}
               className="bsp-btn bsp-sm bsp-pur"
-              style={{ marginInlineStart: '6px' }}
+              style={{ marginInlineStart: 'var(--bsp-px-6)' }}
               data-testid="content-create"
             >
               {t('content.create')}
@@ -552,7 +552,7 @@ export function ContentLibrary({
           <span className="bsp-xicon" aria-hidden="true">
             ✎
           </span>
-          <span className="bsp-xtitle bsp-sm" style={{ margin: '6px 0 0' }}>
+          <span className="bsp-xtitle bsp-sm" style={{ margin: 'var(--bsp-px-6) 0 0' }}>
             {filtered ? t('content.emptyFilteredTitle') : t('content.emptyTitle')}
           </span>
           <p className="bsp-xdesc">
@@ -613,9 +613,16 @@ export function ContentLibrary({
               >
                 {media(card, true)}
               </Link>
-              <div style={{ display: 'grid', gap: '4px', minInlineSize: 0, flexGrow: 1 }}>
+              <div
+                style={{ display: 'grid', gap: 'var(--bsp-px-4)', minInlineSize: 0, flexGrow: 1 }}
+              >
                 <div
-                  style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}
+                  style={{
+                    display: 'flex',
+                    gap: 'var(--bsp-px-8)',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                  }}
                 >
                   <Link href={studio(card)} dir="auto" className="bsp-post-title">
                     {card.title}

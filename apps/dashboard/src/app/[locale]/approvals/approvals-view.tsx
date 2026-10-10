@@ -534,7 +534,7 @@ export function ApprovalsView({
                                   <AssetThumb
                                     src={`/${locale}/assets/file/${item.previewToken}`}
                                     alt={item.name}
-                                    size="3.5rem"
+                                    size="var(--bsp-rem-3-5)"
                                     testId={`approval-media-thumb-${item.id}`}
                                   />
                                 ) : (

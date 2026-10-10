@@ -339,8 +339,8 @@ const CREATE_ITEM: Readonly<
 const MENU_LINK = {
   display: 'flex',
   justifyContent: 'space-between',
-  borderRadius: '10px',
-  padding: '7px 10px',
+  borderRadius: 'var(--bsp-px-10)',
+  padding: 'var(--bsp-px-7) var(--bsp-px-10)',
   fontSize: 'var(--bsp-t-12_5)',
   fontWeight: 600,
   textDecoration: 'none',
@@ -348,7 +348,7 @@ const MENU_LINK = {
 const MENU_NOTE = {
   margin: 0,
   fontSize: 'var(--bsp-t-11)',
-  padding: '2px 10px 6px',
+  padding: 'var(--bsp-px-2) var(--bsp-px-10) var(--bsp-px-6)',
   lineHeight: 1.45,
 } as const;
 
@@ -860,7 +860,7 @@ export async function WorkspaceShell({
         hrefLang={other}
         testId="account-language"
         trailing={
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--bsp-px-6)' }}>
             <b>{ownName(locale)}</b>
             <span style={{ fontSize: 'var(--bsp-t-11)', color: 'var(--bsp-faint)' }}>
               → {ownName(other)}
@@ -910,7 +910,7 @@ export async function WorkspaceShell({
       >
         {hero ?? null}
         {actions ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>{actions}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--bsp-px-8)' }}>{actions}</div>
         ) : null}
         <div className="bs-section-stack">{children}</div>
         {/* `useSearchParams` in the host needs a boundary on a prerendered route. */}

@@ -110,22 +110,28 @@ function useRailPill(
       const link = pressed ?? nav.querySelector<HTMLElement>('a[aria-current="page"]');
       if (!link) return null;
       /*
-       * `placeNavInd`: offsets inside the nav, plus its own scroll. Summed up
-       * to the nav (round 4, 2.2): collapsed, each link sits in its label's
-       * positioned wrapper, so its own `offsetTop` is 0 — the pill stayed on
-       * the first row and the current item was never scrolled into view.
+       * `placeNavInd`: the link's position inside the nav, plus its own scroll.
+       * Measured against the nav itself (round 4, 2.2): collapsed, each link
+       * sits in its label's positioned wrapper, so its own `offsetTop` is 0 —
+       * the pill stayed on the first row and the current item was never
+       * scrolled into view.
        */
-      let x = 0;
-      let y = 0;
-      for (
-        let node: HTMLElement | null = link;
-        node && node !== nav;
-        node = node.offsetParent as HTMLElement | null
-      ) {
-        x += node.offsetLeft;
-        y += node.offsetTop;
-      }
-      return { x, y, w: link.offsetWidth, h: link.offsetHeight };
+      /*
+       * D-484 — measured in fractional pixels. The `offset*` properties are
+       * whole pixels: at 0.88 an item can sit at 10.5px and be 33.5px tall,
+       * and the pill landed on 11 and 34, half a pixel off on each side, with
+       * nothing to correct it (every later measure rounded the same way). The
+       * same box, read from the rectangles: the link against the nav's padding
+       * edge (its border box less `clientLeft/Top`), plus the nav's scroll.
+       */
+      const box = link.getBoundingClientRect();
+      const navBox = nav.getBoundingClientRect();
+      return {
+        x: box.left - navBox.left - nav.clientLeft + nav.scrollLeft,
+        y: box.top - navBox.top - nav.clientTop + nav.scrollTop,
+        w: box.width,
+        h: box.height,
+      };
     };
     /*
      * Round 5 (F4) — THE LABEL UNDER THE PILL IS WHITE, THE REST INK, ON EVERY
@@ -552,18 +558,24 @@ export function CustomerShell({
     return () => query.removeEventListener('change', onChange);
   }, [drawerOpen]);
 
-  // `sbW = s.sbMin ? '76px' : '250px'`.
-  const sidebarWidth = layoutCollapsed ? '76px' : '250px';
+  // `sbW = s.sbMin ? 'var(--bsp-px-76)' : 'var(--bsp-px-250)'`.
+  const sidebarWidth = layoutCollapsed ? 'var(--bsp-px-76)' : 'var(--bsp-px-250)';
   // `sbArrow`: the chevron points to the start edge, and flips when collapsed.
   const arrow = collapsed ? 'scaleX(-1)' : 'none';
 
   const logo = (
     <span
       data-testid="brand"
-      style={{ display: 'flex', alignItems: 'center', gap: '10px', flexGrow: 1, minInlineSize: 0 }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--bsp-px-10)',
+        flexGrow: 1,
+        minInlineSize: 0,
+      }}
     >
       <span className="bsp-sb-logo-mark">
-        <BrandGlyph size="34px" />
+        <BrandGlyph size="var(--bsp-px-34)" />
       </span>
       <span className="bsp-sb-wordmark bsp-nl bs-brand-text bsp-ltr">{wordmark}</span>
     </span>
@@ -708,7 +720,7 @@ export function CustomerShell({
               position: 'absolute',
               insetBlock: 0,
               insetInlineStart: 0,
-              inlineSize: 'min(19rem, 88vw)',
+              inlineSize: 'min(var(--bsp-rem-19), 88vw)',
               background: colorTokens.surface,
               borderStartEndRadius: radiusTokens['2xl'],
               borderEndEndRadius: radiusTokens['2xl'],

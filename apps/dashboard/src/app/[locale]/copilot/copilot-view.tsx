@@ -587,7 +587,13 @@ export function CopilotView({
             </p>
           )}
 
-          <ol style={{ display: 'grid', gap: spacingTokens.sm, paddingInlineStart: '1.25rem' }}>
+          <ol
+            style={{
+              display: 'grid',
+              gap: spacingTokens.sm,
+              paddingInlineStart: 'var(--bsp-rem-1-25)',
+            }}
+          >
             {steps.map((step) => {
               const call = execution?.toolCalls?.find((entry) => entry.ordinal === step.ordinal);
               return (
@@ -602,7 +608,7 @@ export function CopilotView({
                     {step.undoable ? '' : ` · ${t('copilot.notUndoable')}`})
                   </span>
                   {step.preview.length > 0 ? (
-                    <ul style={{ margin: 0, paddingInlineStart: '1rem' }}>
+                    <ul style={{ margin: 0, paddingInlineStart: 'var(--bsp-rem-1)' }}>
                       {step.preview.map((line) => (
                         <li
                           key={`${step.ordinal}-${line.labelKey}`}
@@ -699,7 +705,11 @@ export function CopilotView({
                */}
               <ul
                 data-testid="copilot-changed"
-                style={{ margin: 0, paddingInlineStart: '1rem', ...typographyTokens.caption }}
+                style={{
+                  margin: 0,
+                  paddingInlineStart: 'var(--bsp-rem-1)',
+                  ...typographyTokens.caption,
+                }}
               >
                 {(execution.toolCalls ?? [])
                   .filter((call) => call.status === 'SUCCEEDED')
@@ -746,7 +756,7 @@ export function CopilotView({
               {(execution.refused?.length ?? 0) > 0 ? (
                 <div data-testid="copilot-undo-refused">
                   <Banner tone="warning">{t('copilot.undoRefused')}</Banner>
-                  <ul style={{ margin: 0, paddingInlineStart: '1rem' }}>
+                  <ul style={{ margin: 0, paddingInlineStart: 'var(--bsp-rem-1)' }}>
                     {execution.refused?.map((entry) => (
                       <li
                         key={`${entry.ordinal}-${entry.reason}`}
@@ -838,7 +848,7 @@ function InspectionResults({
     <section data-testid="copilot-inspection" style={{ display: 'grid', gap: spacingTokens.sm }}>
       <h3 style={{ margin: 0, ...typographyTokens.label }}>{title}</h3>
       {calls.map((call) => (
-        <div key={call.ordinal} style={{ display: 'grid', gap: '0.25rem' }}>
+        <div key={call.ordinal} style={{ display: 'grid', gap: 'var(--bsp-rem-0-25)' }}>
           <strong style={{ ...typographyTokens.bodySm }}>{stepTitle(call.toolKey)}</strong>
           {call.status !== 'SUCCEEDED' ? (
             <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
@@ -959,7 +969,7 @@ function InspectionLines({
     );
   }
   return (
-    <ul style={{ margin: 0, paddingInlineStart: '1rem' }}>
+    <ul style={{ margin: 0, paddingInlineStart: 'var(--bsp-rem-1)' }}>
       {lines.map((line, index) => (
         <li key={index} style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
           {line}

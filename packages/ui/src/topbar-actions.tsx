@@ -96,7 +96,7 @@ export function TopbarLink({
         alignItems: 'center',
         gap: showLabel ? spacingTokens['3xs'] : undefined,
         inlineSize: showLabel ? 'auto' : layoutTokens.iconButton,
-        paddingInline: showLabel ? '0.75rem' : undefined,
+        paddingInline: showLabel ? 'var(--bsp-rem-0-75)' : undefined,
         blockSize: layoutTokens.iconButton,
         flexShrink: 0,
         borderRadius: radiusTokens.control,
@@ -118,10 +118,10 @@ export function TopbarLink({
           data-testid={`${testId}-dot`}
           style={{
             position: 'absolute',
-            insetInlineEnd: '8px',
-            insetBlockStart: '8px',
-            inlineSize: '5px',
-            blockSize: '5px',
+            insetInlineEnd: 'var(--bsp-px-8)',
+            insetBlockStart: 'var(--bsp-px-8)',
+            inlineSize: 'var(--bsp-px-5)',
+            blockSize: 'var(--bsp-px-5)',
             borderRadius: '50%',
             background: colorTokens.brandPurple,
           }}

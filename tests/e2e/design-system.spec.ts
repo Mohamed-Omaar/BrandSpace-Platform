@@ -3,6 +3,7 @@ import { clippedInlineOverflow, expectNothingClippedAway, inlineEndOverhang } fr
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { ADMIN_BASE_URL, DASHBOARD_BASE_URL } from './apps';
+import { prototypeSizes, scaled, scaledType } from './scale';
 import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
 
 /**
@@ -815,18 +816,20 @@ test.describe('the shell reproduces the demo geometry', () => {
     // D-468, prototype-2026-09-27 (measured from Main.dc.html at 1440×900):
     // the frame is 1400px wide, `border-radius: 34px; background:
     // rgba(255,255,255,.93); backdrop-filter: blur(30px)`.
-    await expect(shell).toHaveCSS('border-radius', '34px');
+    // D-484: every length below is the prototype's at 0.88 (`scale.ts`).
+    await expect(shell).toHaveCSS('border-radius', `${scaled(34)}px`);
     await expect(shell).toHaveCSS('background-color', 'rgba(255, 255, 255, 0.93)');
     await expect(shell).toHaveCSS('backdrop-filter', 'blur(30px)');
-    expect((await shell.boundingBox())?.width).toBe(1400);
+    // D-484: the frame fills the window less its two margins.
+    expect((await shell.boundingBox())?.width).toBe(1440 - 2 * scaled(20));
 
     // The rail: `sbW = '250px'`, `background: rgba(248,248,249,.7)`.
     const sidebar = page.locator('.bs-sidebar');
-    expect((await sidebar.boundingBox())?.width).toBe(250);
+    expect((await sidebar.boundingBox())?.width).toBe(scaled(250));
     await expect(sidebar).toHaveCSS('background-color', 'rgba(248, 248, 249, 0.7)');
 
     // `html { background: #f2f2f2 }`, `.ambient { background: #f3f3f3 }`,
-    // `body { font-size: 15px }`.
+    // `body { font-size: 15px }` — at 0.88 (D-484).
     const ground = await page.evaluate(() => ({
       html: getComputedStyle(document.documentElement).backgroundColor,
       ambient: getComputedStyle(document.querySelector('.bs-ambient')!).backgroundColor,
@@ -835,7 +838,7 @@ test.describe('the shell reproduces the demo geometry', () => {
     expect(ground).toEqual({
       html: 'rgb(242, 242, 242)',
       ambient: 'rgb(243, 243, 243)',
-      body: '15px',
+      body: `${scaledType(15)}px`,
     });
   });
 
@@ -864,9 +867,9 @@ test.describe('the shell reproduces the demo geometry', () => {
     // `.brand { gap: 10px }` — the demo's lockup rhythm, which the new mark
     // occupies exactly.
     const box = await mark.boundingBox();
-    expect(box?.width).toBe(34);
-    expect(box?.height).toBe(34);
-    await expect(brand).toHaveCSS('gap', '10px');
+    expect(box?.width).toBe(scaled(34));
+    expect(box?.height).toBe(scaled(34));
+    await expect(brand).toHaveCSS('gap', `${scaled(10)}px`);
 
     /*
      * THE ARTWORK FILLS THE SLOT IT IS GIVEN.
@@ -878,8 +881,8 @@ test.describe('the shell reproduces the demo geometry', () => {
      */
     const logo = mark.locator('svg');
     const logoBox = await logo.boundingBox();
-    expect(logoBox?.width).toBe(34);
-    expect(logoBox?.height).toBe(34);
+    expect(logoBox?.width).toBe(scaled(34));
+    expect(logoBox?.height).toBe(scaled(34));
     await expect(logo).toHaveAttribute('viewBox', '0 0 877.07 877.07');
 
     // IT NEVER SQUASHES. The rail is a flex row and the wordmark beside it
@@ -920,13 +923,16 @@ test.describe('the shell reproduces the demo geometry', () => {
     // D-468: `.nav{gap:12px;border-radius:12px;padding:9px 12px;
     //  font-size:13.5px;font-weight:600;min-block-size:38px}` with an 18px glyph.
     const item = page.locator('.bs-sidebar').getByTestId('nav-overview');
-    expect((await item.boundingBox())?.height).toBe(38);
-    await expect(item).toHaveCSS('border-radius', '12px');
-    await expect(item).toHaveCSS('padding', '9px 12px');
-    await expect(item).toHaveCSS('gap', '12px');
-    await expect(item).toHaveCSS('font-size', '13.5px');
+    // D-484: the prototype's row at 0.88.
+    expect(Math.abs(((await item.boundingBox())?.height ?? 0) - scaled(38))).toBeLessThanOrEqual(
+      0.5,
+    );
+    await expect(item).toHaveCSS('border-radius', `${scaled(12)}px`);
+    await expect(item).toHaveCSS('padding', `${scaled(9)}px ${scaled(12)}px`);
+    await expect(item).toHaveCSS('gap', `${scaled(12)}px`);
+    await expect(item).toHaveCSS('font-size', `${scaledType(13.5)}px`);
     await expect(item).toHaveCSS('font-weight', '600');
-    expect((await item.locator('svg').first().boundingBox())?.width).toBe(18);
+    expect((await item.locator('svg').first().boundingBox())?.width).toBe(scaled(18));
   });
 
   test('the top bar', async ({ page }) => {
@@ -934,18 +940,38 @@ test.describe('the shell reproduces the demo geometry', () => {
     // and description (`padding: 26px 32px 12px; gap: 16px`); `.lbl` is
     // 11px/700 at .07em and the title 28px/800 at -0.02em.
     const bar = page.locator('.bs-topbar');
-    expect((await bar.boundingBox())?.height).toBeCloseTo(116.92, 1);
-    await expect(bar).toHaveCSS('column-gap', '16px');
-    await expect(bar).toHaveCSS('padding-bottom', '12px');
-
     const eyebrow = page.getByTestId('page-eyebrow');
-    await expect(eyebrow).toHaveCSS('font-size', '11px');
+    /*
+     * D-484: the prototype's 116.92px at 0.88 — except that the eyebrow's 11px
+     * is the type floor, not 11 × 0.88 = 9.5px, so its line box is taller by
+     * (1 − 9.5 / 11) of itself. That growth is measured, not guessed.
+     */
+    const eyebrowHeight = (await eyebrow.boundingBox())?.height ?? 0;
+    const floorGrowth = eyebrowHeight * (1 - scaled(11) / scaledType(11));
+    expect(
+      Math.abs(((await bar.boundingBox())?.height ?? 0) - (scaled(116.92) + floorGrowth)),
+    ).toBeLessThanOrEqual(0.5);
+    // And at the SOURCE size — every size token at the prototype's own value —
+    // the bar is the prototype's 116.92px exactly as before D-484.
+    const sourceHeight = await bar.evaluate((el, sizes) => {
+      const root = document.documentElement.style;
+      for (const [name, value] of Object.entries(sizes)) root.setProperty(name, value, 'important');
+      const height = el.getBoundingClientRect().height;
+      for (const name of Object.keys(sizes)) root.removeProperty(name);
+      return height;
+    }, prototypeSizes());
+    expect(sourceHeight).toBeCloseTo(116.92, 1);
+    await expect(bar).toHaveCSS('column-gap', `${scaled(16)}px`);
+    await expect(bar).toHaveCSS('padding-bottom', `${scaled(12)}px`);
+
+    await expect(eyebrow).toHaveCSS('font-size', `${scaledType(11)}px`);
     await expect(eyebrow).toHaveCSS('font-weight', '700');
     await expect(eyebrow).toHaveCSS('letter-spacing', '0.77px');
 
     const heading = page.getByTestId('heading');
-    await expect(heading).toHaveCSS('font-size', '28px');
-    await expect(heading).toHaveCSS('letter-spacing', '-0.56px');
+    await expect(heading).toHaveCSS('font-size', `${scaledType(28)}px`);
+    // -0.02em of the scaled title.
+    await expect(heading).toHaveCSS('letter-spacing', `${-0.02 * scaledType(28)}px`);
   });
 
   test('the top bar controls', async ({ page }) => {
@@ -960,27 +986,27 @@ test.describe('the shell reproduces the demo geometry', () => {
     for (const key of ['notes', 'notifications']) {
       const control = page.getByTestId(`topbar-${key}`);
       const box = await control.boundingBox();
-      expect(box?.width, key).toBe(40);
-      expect(box?.height, key).toBe(40);
-      await expect(control).toHaveCSS('border-radius', '12px');
+      expect(box?.width, key).toBe(scaled(40));
+      expect(box?.height, key).toBe(scaled(40));
+      await expect(control).toHaveCSS('border-radius', `${scaled(12)}px`);
     }
     const copilot = page.getByTestId('topbar-copilot');
     const copilotBox = await copilot.boundingBox();
-    expect(copilotBox?.height).toBe(48);
-    expect(copilotBox?.width ?? 0).toBeGreaterThan(48);
-    await expect(copilot).toHaveCSS('border-radius', '99px');
+    expect(copilotBox?.height).toBe(scaled(48));
+    expect(copilotBox?.width ?? 0).toBeGreaterThan(scaled(48));
+    await expect(copilot).toHaveCSS('border-radius', `${scaled(99)}px`);
     await expect(page.getByTestId('topbar-copilot-label')).toHaveText('Copilot');
     const create = page.getByTestId('topbar-create');
-    expect((await create.boundingBox())?.height).toBe(40);
-    await expect(create).toHaveCSS('border-radius', '12px');
-    await expect(create).toHaveCSS('padding-inline-start', '16px');
-    await expect(create).toHaveCSS('font-size', '13.5px');
+    expect((await create.boundingBox())?.height).toBe(scaled(40));
+    await expect(create).toHaveCSS('border-radius', `${scaled(12)}px`);
+    await expect(create).toHaveCSS('padding-inline-start', `${scaled(16)}px`);
+    await expect(create).toHaveCSS('font-size', `${scaledType(13.5)}px`);
   });
 
   test('the rail cards and the surfaces', async ({ page }) => {
     // `.experience-current` and `.profile-button` — 16px radius, 10px/8px padding.
     for (const testId of ['brand-switcher', 'profile-menu']) {
-      await expect(page.getByTestId(testId)).toHaveCSS('border-radius', '16px');
+      await expect(page.getByTestId(testId)).toHaveCSS('border-radius', `${scaled(16)}px`);
     }
     /*
      * TWO DEMO CLASSES, TWO SETS OF NUMBERS — and this test used to assert one
@@ -1002,8 +1028,8 @@ test.describe('the shell reproduces the demo geometry', () => {
     // D-468: a Home figure is `.xcard` — `border-radius:24px; padding:22px;
     // background:#fff`.
     const metric = page.getByTestId('metric-scheduled');
-    await expect(metric).toHaveCSS('border-radius', '24px');
-    await expect(metric).toHaveCSS('padding', '22px');
+    await expect(metric).toHaveCSS('border-radius', `${scaled(24)}px`);
+    await expect(metric).toHaveCSS('padding', `${scaled(22)}px`);
     await expect(metric).toHaveCSS('background-color', 'rgb(255, 255, 255)');
 
     /*
@@ -1014,7 +1040,7 @@ test.describe('the shell reproduces the demo geometry', () => {
      */
     // D-468: Upcoming is `.card` with `padding: 20px 22px; border-radius: 24px`.
     const surface = page.getByTestId('overview-upcoming');
-    await expect(surface).toHaveCSS('border-radius', '24px');
-    await expect(surface).toHaveCSS('padding', '20px 22px');
+    await expect(surface).toHaveCSS('border-radius', `${scaled(24)}px`);
+    await expect(surface).toHaveCSS('padding', `${scaled(20)}px ${scaled(22)}px`);
   });
 });

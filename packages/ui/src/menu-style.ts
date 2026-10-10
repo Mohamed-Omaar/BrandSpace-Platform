@@ -20,7 +20,7 @@ export function menuItemStyle(): CSSProperties {
     alignItems: 'center',
     gap: spacingTokens.sm,
     inlineSize: '100%',
-    minBlockSize: '2.5rem',
+    minBlockSize: 'var(--bsp-rem-2-5)',
     paddingInline: spacingTokens.md,
     paddingBlock: spacingTokens.sm,
     borderRadius: radiusTokens.control,

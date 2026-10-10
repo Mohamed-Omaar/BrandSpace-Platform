@@ -132,7 +132,7 @@ function ConsoleLinkTabs({
               display: 'inline-flex',
               alignItems: 'center',
               gap: spacingTokens.xs,
-              minBlockSize: '2.25rem',
+              minBlockSize: 'var(--bsp-rem-2-25)',
               paddingInline: spacingTokens.md,
               borderRadius: radiusTokens.md,
               ...typographyTokens.bodySm,

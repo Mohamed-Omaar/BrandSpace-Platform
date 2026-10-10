@@ -73,7 +73,7 @@ export function SetupFrame({
         <div className="bsp-wz bsp-wz-solo" data-testid={testId} data-view={view}>
           <div className="bsp-wz-brand">
             <span className="bsp-auth-logo" data-testid="auth-brand-mark">
-              <BrandGlyph size="40px" />
+              <BrandGlyph size="var(--bsp-px-40)" />
             </span>
             {/* The product's name, in Latin in both languages, as the prototype writes it. */}
             <span className="bsp-auth-word bsp-ltr" lang="en">

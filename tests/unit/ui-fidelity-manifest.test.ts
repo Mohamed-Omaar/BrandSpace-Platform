@@ -195,8 +195,25 @@ describe('the Brand Brain stylesheet is a transcription of the snapshot', () => 
    * zero (`.82` against `0.82`). Neither changes a pixel. Everything else does,
    * and is compared literally.
    */
-  function normalise(text: string): string {
+  /**
+   * D-484: the port names every length by the prototype's own value
+   * (`var(--bsp-px-14)` is the prototype's 14px; `--bsp-fs-*` likewise for type)
+   * and the customer app scales those tokens by 0.88. Reading a token back as
+   * the value it names keeps this comparison exact, in the prototype's units;
+   * the scale itself is checked in the browser (`tests/e2e/r6-viewport-sizes.spec.ts`).
+   */
+  function prototypeUnits(text: string): string {
+    const value = (name: string) => `${name.replace('-', '.')}px`;
     return text
+      .replace(
+        /calc\(\s*-1\s*\*\s*var\(--bsp-(?:px|fs)-([0-9]+(?:-[0-9]+)?)\)\s*\)/g,
+        (_, n: string) => `-${value(n)}`,
+      )
+      .replace(/var\(--bsp-(?:px|fs)-([0-9]+(?:-[0-9]+)?)\)/g, (_, n: string) => value(n));
+  }
+
+  function normalise(text: string): string {
+    return prototypeUnits(text)
       .toLowerCase()
       .replace(/(^|[^0-9])\.(?=[0-9])/g, '$10.')
       .replace(/\s+/g, '');

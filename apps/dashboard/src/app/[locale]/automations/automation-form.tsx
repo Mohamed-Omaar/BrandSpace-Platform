@@ -225,7 +225,7 @@ export interface AutomationFormProps {
   readonly cancelHref?: string | undefined;
 }
 
-const FIELD: React.CSSProperties = { display: 'grid', gap: '0.25rem' };
+const FIELD: React.CSSProperties = { display: 'grid', gap: 'var(--bsp-rem-0-25)' };
 
 export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
   const initial = props.initial;
@@ -514,7 +514,12 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                   {props.labels.weekdays.map((day, index) => (
                     <label
                       key={day}
-                      style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', ...caption }}
+                      style={{
+                        display: 'flex',
+                        gap: 'var(--bsp-rem-0-25)',
+                        alignItems: 'center',
+                        ...caption,
+                      }}
                     >
                       <input
                         type="checkbox"

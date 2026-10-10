@@ -264,12 +264,12 @@ export function Tooltip({
   const position: CSSProperties =
     placement === 'inline-end'
       ? {
-          insetInlineStart: 'calc(100% + 8px)',
+          insetInlineStart: 'calc(100% + var(--bsp-px-8))',
           insetBlockStart: '50%',
           transform: 'translateY(-50%)',
         }
       : {
-          insetBlockStart: 'calc(100% + 8px)',
+          insetBlockStart: 'calc(100% + var(--bsp-px-8))',
           insetInlineStart: '50%',
           transform: 'translateX(-50%)',
         };
@@ -469,7 +469,7 @@ export function DropdownMenu({
                   alignItems: 'center',
                   gap: spacingTokens['3xs'],
                   minBlockSize: layoutTokens.iconButton,
-                  paddingInline: '0.9375rem',
+                  paddingInline: 'var(--bsp-rem-0-9375)',
                   flexShrink: 0,
                   border: 0,
                   borderRadius: radiusTokens.control,
@@ -490,7 +490,7 @@ export function DropdownMenu({
                     // `.workspace-switcher { padding: 10px; radius: 15px;
                     //  box-shadow: 0 4px 18px rgba(0,0,0,.035) }`, 54px tall.
                     padding: layoutTokens.railCardPad,
-                    minBlockSize: '3.625rem',
+                    minBlockSize: 'var(--bsp-rem-3-625)',
                     border: '1px solid transparent',
                     borderRadius: radiusTokens.rail,
                     background: colorTokens.surface,
@@ -518,7 +518,7 @@ export function DropdownMenu({
           <span
             aria-hidden="true"
             className="bs-dropdown-affordance"
-            style={{ color: colorTokens.textMuted, fontSize: '0.6875rem', flexShrink: 0 }}
+            style={{ color: colorTokens.textMuted, fontSize: 'var(--bsp-fs-11)', flexShrink: 0 }}
           >
             {'\u2022\u2022\u2022'}
           </span>
@@ -562,13 +562,15 @@ export function DropdownMenu({
               ? { position: 'absolute', zIndex: zIndexTokens.overlay, ...menuStyle }
               : {
                   position: 'absolute',
-                  insetBlockStart: placement === 'block-end' ? 'calc(100% + 6px)' : undefined,
-                  insetBlockEnd: placement === 'block-start' ? 'calc(100% + 6px)' : undefined,
+                  insetBlockStart:
+                    placement === 'block-end' ? 'calc(100% + var(--bsp-px-6))' : undefined,
+                  insetBlockEnd:
+                    placement === 'block-start' ? 'calc(100% + var(--bsp-px-6))' : undefined,
                   insetInlineEnd: align === 'end' ? 0 : undefined,
                   insetInlineStart: align === 'start' ? 0 : undefined,
                   zIndex: zIndexTokens.overlay,
-                  minInlineSize: '13rem',
-                  maxBlockSize: '18rem',
+                  minInlineSize: 'var(--bsp-rem-13)',
+                  maxBlockSize: 'var(--bsp-rem-18)',
                   display: 'grid',
                   gap: spacingTokens['3xs'],
                 }
@@ -646,7 +648,7 @@ export function Dialog({
         className="bs-dialog-in"
         style={{
           inlineSize: '100%',
-          maxInlineSize: '30rem',
+          maxInlineSize: 'var(--bsp-rem-30)',
           maxBlockSize: '90vh',
           overflowY: 'auto',
           background: colorTokens.surface,
@@ -850,7 +852,7 @@ export function Tabs({
               display: 'inline-flex',
               alignItems: 'center',
               gap: spacingTokens.xs,
-              minBlockSize: '2.25rem',
+              minBlockSize: 'var(--bsp-rem-2-25)',
               paddingInline: spacingTokens.md,
               border: 0,
               borderRadius: radiusTokens.md,

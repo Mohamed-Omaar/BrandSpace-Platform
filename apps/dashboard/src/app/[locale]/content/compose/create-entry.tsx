@@ -48,7 +48,13 @@ export function IdeaPicker({
         <ul style={listStyle}>
           {ideas.map((idea) => (
             <li key={idea.key} data-testid={`create-idea-${idea.key}`} style={rowStyle}>
-              <span style={{ display: 'grid', gap: spacingTokens['3xs'], flex: '1 1 14rem' }}>
+              <span
+                style={{
+                  display: 'grid',
+                  gap: spacingTokens['3xs'],
+                  flex: '1 1 var(--bsp-rem-14)',
+                }}
+              >
                 <strong dir="auto" style={typographyTokens.bodySm}>
                   {idea.title}
                 </strong>
@@ -146,7 +152,13 @@ export function RepurposePicker({
         <ul style={listStyle}>
           {options.map((option) => (
             <li key={option.id} data-testid={`create-source-${option.id}`} style={rowStyle}>
-              <span style={{ display: 'grid', gap: spacingTokens['3xs'], flex: '1 1 14rem' }}>
+              <span
+                style={{
+                  display: 'grid',
+                  gap: spacingTokens['3xs'],
+                  flex: '1 1 var(--bsp-rem-14)',
+                }}
+              >
                 <strong dir="auto" style={typographyTokens.bodySm}>
                   {option.title}
                 </strong>

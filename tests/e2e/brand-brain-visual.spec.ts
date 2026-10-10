@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
+import { scaled } from './scale';
 import { E2E_VISUAL_FILE, type E2eVisualFixture } from './env';
 
 /**
@@ -69,6 +70,10 @@ function fixture(): E2eVisualFixture {
  * 3px white ring; six nodes, ten area cards four across; the chat card 600px.
  * Duplicated here, not imported, so an edit to the stylesheet cannot make this
  * file agree with it.
+ */
+/*
+ * The prototype's own values. D-484: the product draws them at 0.88
+ * (`scaled()` in `scale.ts`), so every comparison below scales them.
  */
 const PROTO = {
   orbColumn: 450,
@@ -175,7 +180,7 @@ test.describe('the orb matches the approved prototype', () => {
     await signIn(page, 'en');
 
     const stage = page.getByTestId('brand-orb');
-    expect((await box(stage)).height).toBeGreaterThanOrEqual(PROTO.stageMinHeight);
+    expect((await box(stage)).height).toBeGreaterThanOrEqual(scaled(PROTO.stageMinHeight));
 
     // THE DEFECT THIS CATCHES: a filled container behind the orb. The stage is
     // TRANSPARENT; the particles are drawn on the hero card's own wash.
@@ -186,8 +191,8 @@ test.describe('the orb matches the approved prototype', () => {
     // transparent circle with nothing written in it — never the brand's name.
     const centre = page.getByTestId('orb-center');
     const centreBox = await box(centre);
-    expect(Math.round(centreBox.width)).toBe(PROTO.centreDiameter);
-    expect(Math.round(centreBox.height)).toBe(PROTO.centreDiameter);
+    expect(Math.abs(centreBox.width - scaled(PROTO.centreDiameter))).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(centreBox.height - scaled(PROTO.centreDiameter))).toBeLessThanOrEqual(0.5);
     expect(await style(centre, 'background-color')).toBe('rgba(0, 0, 0, 0)');
     expect(await style(centre, 'border-radius')).toBe('50%');
     await expect(centre).toHaveText('');
@@ -196,8 +201,8 @@ test.describe('the orb matches the approved prototype', () => {
     // THE DEFECT THIS CATCHES: cards instead of dots. A node is the prototype's
     // 7px dot (11px of colour inside a 3px white ring), round.
     const dot = page.getByTestId('orb-node-IDENTITY').locator('i');
-    expect(await style(dot, 'width')).toBe(`${PROTO.nodeDot}px`);
-    expect(await style(dot, 'height')).toBe(`${PROTO.nodeDot}px`);
+    expect(await style(dot, 'width')).toBe(`${scaled(PROTO.nodeDot)}px`);
+    expect(await style(dot, 'height')).toBe(`${scaled(PROTO.nodeDot)}px`);
     expect(await style(dot, 'border-radius')).toBe('50%');
 
     // `sc = 0.82 + z * 0.22`, so every node sits inside [0.82, 1.04].
@@ -223,12 +228,12 @@ test.describe('the orb matches the approved prototype', () => {
     await signIn(page, 'en');
 
     const column = await box(page.locator('.bsp-bb-orbcol'));
-    expect(Math.round(column.width)).toBe(PROTO.orbColumn);
-    expect(column.height).toBeGreaterThanOrEqual(PROTO.orbColumnMinHeight);
+    expect(Math.abs(column.width - scaled(PROTO.orbColumn))).toBeLessThanOrEqual(0.5);
+    expect(column.height).toBeGreaterThanOrEqual(scaled(PROTO.orbColumnMinHeight));
 
     const hero = page.getByTestId('brand-brain-hero');
-    expect(await style(hero, 'padding-top')).toBe(`${PROTO.heroPadding}px`);
-    expect(await style(hero, 'border-radius')).toBe(`${PROTO.cardRadius}px`);
+    expect(await style(hero, 'padding-top')).toBe(`${scaled(PROTO.heroPadding)}px`);
+    expect(await style(hero, 'border-radius')).toBe(`${scaled(PROTO.cardRadius)}px`);
 
     // Four area cards across.
     const columns = await style(page.getByTestId('area-grid'), 'grid-template-columns');
@@ -240,9 +245,11 @@ test.describe('the orb matches the approved prototype', () => {
     await signIn(page, 'en');
 
     expect((await box(page.getByTestId('brand-orb'))).height).toBeGreaterThanOrEqual(
-      PROTO.stageMinHeight,
+      scaled(PROTO.stageMinHeight),
     );
-    expect(await style(page.getByTestId('orb-center'), 'width')).toBe(`${PROTO.centreDiameter}px`);
+    expect(await style(page.getByTestId('orb-center'), 'width')).toBe(
+      `${scaled(PROTO.centreDiameter)}px`,
+    );
 
     // One column below 1100px: the text sits under the orb, as wide as it.
     const column = await box(page.locator('.bsp-bb-orbcol'));
@@ -268,7 +275,7 @@ test.describe('Arabic renders the same design, mirrored', () => {
 
     // The orb is a circle in a symmetric stage: mirroring must not change it.
     const centre = await box(page.getByTestId('orb-center'));
-    expect(Math.round(centre.width)).toBe(PROTO.centreDiameter);
+    expect(Math.abs(centre.width - scaled(PROTO.centreDiameter))).toBeLessThanOrEqual(0.5);
     await expect(page.locator('.bsp-bb-node')).toHaveCount(PROTO.orbitNodes);
     await expect(page.getByTestId('orb-center')).not.toContainText(fixture().brandName);
 
@@ -309,7 +316,7 @@ test.describe('Talk with the brand is the prototype’s chat card', () => {
     await expect(page.getByTestId('brand-brain-hero')).toHaveCount(0);
     await expect(page.getByTestId('tab-chat')).toHaveAttribute('aria-selected', 'true');
     expect(await style(chat, 'position')).toBe('static');
-    expect(Math.round((await box(chat)).height)).toBe(PROTO.chatHeight);
+    expect(Math.abs((await box(chat)).height - scaled(PROTO.chatHeight))).toBeLessThanOrEqual(0.5);
 
     await shot(page, 'chat-open-desktop-en.png', chat);
   });

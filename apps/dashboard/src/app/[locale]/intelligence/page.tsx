@@ -298,7 +298,7 @@ export default async function IntelligencePage({
                 <form action={analyseContentGapsAction} data-testid="content-gap-form">
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="brandId" value={brand.id} />
-                  <label style={{ display: 'grid', gap: '0.25rem' }}>
+                  <label style={{ display: 'grid', gap: 'var(--bsp-rem-0-25)' }}>
                     <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
                       {t('intelligence.focusLabel')}
                     </span>
@@ -435,7 +435,7 @@ export default async function IntelligencePage({
                         margin: 0,
                         padding: 0,
                         display: 'grid',
-                        gap: '0.25rem',
+                        gap: 'var(--bsp-rem-0-25)',
                       }}
                       data-testid="intelligence-evidence"
                     >
@@ -601,7 +601,12 @@ function NarrativeBlock({
         {title}
       </h3>
       <ul
-        style={{ margin: 0, paddingInlineStart: spacingTokens.lg, display: 'grid', gap: '0.25rem' }}
+        style={{
+          margin: 0,
+          paddingInlineStart: spacingTokens.lg,
+          display: 'grid',
+          gap: 'var(--bsp-rem-0-25)',
+        }}
       >
         {lines.map((line, index) => (
           <li key={index} style={{ ...typographyTokens.bodySm, color: colorTokens.textPrimary }}>
@@ -640,9 +645,9 @@ const loopStepStyle = {
 const loopNumberStyle = {
   display: 'inline-grid',
   placeItems: 'center',
-  inlineSize: '1.25rem',
-  blockSize: '1.25rem',
-  borderRadius: '9999px',
+  inlineSize: 'var(--bsp-rem-1-25)',
+  blockSize: 'var(--bsp-rem-1-25)',
+  borderRadius: 'var(--bsp-px-9999)',
   background: colorTokens.surfaceMuted,
   color: colorTokens.textPrimary,
   fontWeight: 600,

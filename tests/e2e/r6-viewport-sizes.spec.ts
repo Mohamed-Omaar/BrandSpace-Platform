@@ -3,6 +3,7 @@ import { DASHBOARD_BASE_URL } from './apps';
 import { createFreshWorkspace, freshSignUp } from './fresh-signup';
 import { signIn } from './own-workspace';
 import { PROTOTYPE, prototypeFile, serveFonts } from './prototype-runtime';
+import { scaled, scaledType } from './scale';
 
 /**
  * ROUND 6 (item 5) — THE ENTRY SCREENS, THE WIZARD AND THE SHELL ARE THE
@@ -29,7 +30,8 @@ const VIEWPORTS = [
   { width: 2560, height: 1440 },
 ] as const;
 const TOLERANCE = 1;
-const WIZARD_MAX = 836;
+// D-484: the prototype's 836px card at 0.88.
+const WIZARD_MAX = scaled(836);
 
 interface Card {
   readonly width: number;
@@ -88,15 +90,16 @@ function same(product: Card, reference: Card, label: string) {
     expect(Math.abs(a - b), `${label}: ${what} ${a} vs the prototype's ${b}`).toBeLessThanOrEqual(
       TOLERANCE,
     );
-  near(product.width, reference.width, 'card width');
-  near(product.padTop, reference.padTop, 'card padding (top)');
-  near(product.padStart, reference.padStart, 'card padding (start)');
-  expect(product.heading, `${label}: heading size`).toBe(reference.heading);
+  // D-484: the product is the prototype at 0.88 (`scale.ts`).
+  near(product.width, scaled(reference.width), 'card width');
+  near(product.padTop, scaled(reference.padTop), 'card padding (top)');
+  near(product.padStart, scaled(reference.padStart), 'card padding (start)');
+  expect(product.heading, `${label}: heading size`).toBe(scaledType(reference.heading));
   if (product.field !== null && reference.field !== null) {
-    near(product.field, reference.field, 'field height');
+    near(product.field, scaled(reference.field), 'field height');
   }
   if (product.button !== null && reference.button !== null) {
-    near(product.button, reference.button, 'button height');
+    near(product.button, scaled(reference.button), 'button height');
   }
 }
 
@@ -231,15 +234,18 @@ test.describe('round 6 · the prototype’s size at five viewports', () => {
       const reference = await shell(proto, false);
       const measured = await shell(page, true);
       const at = `${viewport.width}×${viewport.height}`;
-      expect(Math.abs(measured.rail - reference.rail), `rail width at ${at}`).toBeLessThanOrEqual(
-        TOLERANCE,
-      );
-      expect(Math.abs(measured.item - reference.item), `rail item at ${at}`).toBeLessThanOrEqual(
-        TOLERANCE,
-      );
-      expect(measured.title, `page title at ${at}`).toBe(reference.title);
+      // D-484: the product is the prototype at 0.88 (`scale.ts`).
       expect(
-        Math.abs(measured.create - reference.create),
+        Math.abs(measured.rail - scaled(reference.rail)),
+        `rail width at ${at}`,
+      ).toBeLessThanOrEqual(TOLERANCE);
+      expect(
+        Math.abs(measured.item - scaled(reference.item)),
+        `rail item at ${at}`,
+      ).toBeLessThanOrEqual(TOLERANCE);
+      expect(measured.title, `page title at ${at}`).toBe(scaledType(reference.title));
+      expect(
+        Math.abs(measured.create - scaled(reference.create)),
         `Create button at ${at}`,
       ).toBeLessThanOrEqual(TOLERANCE);
     }

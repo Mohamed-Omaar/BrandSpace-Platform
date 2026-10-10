@@ -561,7 +561,7 @@ export default async function PublishingPage({
                           <AssetThumb
                             src={`/${locale}/assets/file/${media.previewToken}`}
                             alt=""
-                            size="44px"
+                            size="var(--bsp-px-44)"
                           />
                         </span>
                       ) : (

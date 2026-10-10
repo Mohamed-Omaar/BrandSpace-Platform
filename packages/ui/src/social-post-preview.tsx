@@ -132,11 +132,11 @@ function ActionStrip({
       data-testid="preview-actions"
       style={{
         display: 'flex',
-        gap: variant === 'feed' ? '0.875rem' : spacingTokens.sm,
+        gap: variant === 'feed' ? 'var(--bsp-rem-0-875)' : spacingTokens.sm,
         flexDirection: variant === 'feed' ? 'row' : 'column',
         alignItems: 'center',
         color: variant === 'feed' ? colorTokens.textSecondary : colorTokens.textInverse,
-        fontSize: variant === 'feed' ? '1.0625rem' : '1rem',
+        fontSize: variant === 'feed' ? 'var(--bsp-rem-1-0625)' : 'var(--bsp-rem-1)',
         lineHeight: 1,
       }}
     >
@@ -248,8 +248,8 @@ function MediaFrame({
       : { insetInlineEnd: spacingTokens.xs }),
     transform: 'translateY(-50%)',
     zIndex: 1,
-    inlineSize: '1.75rem',
-    blockSize: '1.75rem',
+    inlineSize: 'var(--bsp-rem-1-75)',
+    blockSize: 'var(--bsp-rem-1-75)',
     borderRadius: radiusTokens.full,
     border: 'none',
     background: 'rgba(255, 255, 255, 0.9)',
@@ -288,14 +288,14 @@ function MediaFrame({
               insetBlockEnd: 0,
               display: 'flex',
               alignItems: 'flex-end',
-              padding: '18px',
+              padding: 'var(--bsp-px-18)',
               pointerEvents: 'none',
             }}
           >
             <span
               dir="auto"
               style={{
-                fontSize: '22px',
+                fontSize: 'var(--bsp-fs-22)',
                 lineHeight: 1.1,
                 fontWeight: 800,
                 color: colorTokens.textInverse,
@@ -316,8 +316,8 @@ function MediaFrame({
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              inlineSize: '3rem',
-              blockSize: '3rem',
+              inlineSize: 'var(--bsp-rem-3)',
+              blockSize: 'var(--bsp-rem-3)',
               borderRadius: radiusTokens.full,
               background: 'rgba(255, 255, 255, 0.9)',
               color: colorTokens.surfaceInk,
@@ -457,7 +457,7 @@ function Caption({
             background: 'transparent',
             border: 0,
             padding: 0,
-            minBlockSize: '24px',
+            minBlockSize: 'var(--bsp-px-24)',
             color: tone === 'onMedia' ? colorTokens.textInverse : colorTokens.brandPurple,
             cursor: 'pointer',
             fontFamily: 'inherit',
@@ -558,8 +558,8 @@ function FeedPreview({
   const caption = (
     <div
       style={{
-        paddingInline: '0.6875rem',
-        paddingBlockEnd: captionLeads ? '0.6875rem' : '0.9375rem',
+        paddingInline: 'var(--bsp-rem-0-6875)',
+        paddingBlockEnd: captionLeads ? 'var(--bsp-rem-0-6875)' : 'var(--bsp-rem-0-9375)',
       }}
     >
       <Caption content={content} labels={labels} expanded={expanded} onToggle={onToggle} />
@@ -586,7 +586,7 @@ function FeedPreview({
         </header>
         {captionLeads ? caption : null}
         <MediaFrame content={content} labels={labels} aspect={aspect} look="prototype" />
-        <div style={{ padding: '0.6875rem' }}>
+        <div style={{ padding: 'var(--bsp-rem-0-6875)' }}>
           <ActionStrip variant="feed" labels={labels} />
         </div>
         {captionLeads ? null : caption}
@@ -654,7 +654,7 @@ function FeedPreview({
       {captionLeads ? caption : null}
       <MediaFrame content={content} labels={labels} aspect={aspect} />
       {/* `.social-actions { padding: 11px }` — the strip's own padding, not a wrapper's. */}
-      <div style={{ padding: '0.6875rem' }}>
+      <div style={{ padding: 'var(--bsp-rem-0-6875)' }}>
         <ActionStrip variant="feed" labels={labels} />
       </div>
       {captionLeads ? null : caption}
@@ -705,7 +705,7 @@ function VerticalPreview({
                 key={index}
                 style={{
                   flex: 1,
-                  blockSize: '2px',
+                  blockSize: 'var(--bsp-px-2)',
                   borderRadius: radiusTokens.full,
                   background: colorTokens.textInverse,
                   opacity: index === 0 ? 1 : 0.4,
@@ -718,7 +718,7 @@ function VerticalPreview({
         <div
           style={{
             position: 'absolute',
-            insetBlockStart: format === 'story' ? '1.75rem' : spacingTokens.sm,
+            insetBlockStart: format === 'story' ? 'var(--bsp-rem-1-75)' : spacingTokens.sm,
             insetInline: spacingTokens.sm,
             display: 'flex',
             alignItems: 'center',
@@ -728,7 +728,7 @@ function VerticalPreview({
           <Avatar
             initials={content.account.initials}
             seed={content.account.avatarSeed ?? 0}
-            size="1.75rem"
+            size="var(--bsp-rem-1-75)"
           />
           <span
             style={{
@@ -775,7 +775,7 @@ function VerticalPreview({
             position: 'absolute',
             insetInline: spacingTokens.sm,
             insetBlockEnd: spacingTokens.sm,
-            paddingInlineEnd: '2.5rem',
+            paddingInlineEnd: 'var(--bsp-rem-2-5)',
             // A scrim so the caption stays legible over any artwork.
             background:
               'linear-gradient(to top, rgba(23, 21, 40, 0.78) 0%, rgba(23, 21, 40, 0) 100%)',
@@ -843,7 +843,7 @@ export function SocialPostPreview({
         gap: spacingTokens.sm,
         justifyItems: 'stretch',
         inlineSize: '100%',
-        maxInlineSize: vertical ? '17rem' : layoutTokens.socialPreviewWidth,
+        maxInlineSize: vertical ? 'var(--bsp-rem-17)' : layoutTokens.socialPreviewWidth,
       }}
     >
       <div
@@ -868,7 +868,7 @@ export function SocialPostPreview({
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: spacingTokens.sm,
-              padding: '0.875rem',
+              padding: 'var(--bsp-rem-0-875)',
               ...typographyTokens.button,
               color: colorTokens.textPrimary,
             }}
@@ -951,7 +951,7 @@ export function SocialPostPreviewer({
     format === 'feed' ? PLATFORM_ASPECTS[platform] : [resolveAspect(platform, format, aspect)];
 
   const chipStyle = (selected: boolean): CSSProperties => ({
-    minBlockSize: '2.25rem',
+    minBlockSize: 'var(--bsp-rem-2-25)',
     paddingInline: spacingTokens.md,
     borderRadius: radiusTokens.full,
     cursor: 'pointer',

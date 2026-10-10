@@ -17,8 +17,8 @@
 > Final UX contract and the banner below** wherever they tell a screen to differ from the prototype's
 > look or composition; the ten rules in §1 apply again, with "the demo" meaning this prototype. The
 > only allowed differences are D-468's three kinds — (a) a recorded owner decision that keeps the
-> repo's behaviour, (b) an item moved to post-launch (View as, the phone layout, website reading, the
-> connection-expiry alert), whose prototype elements are left out, and (c) a state the prototype does
+> repo's behaviour, (b) an item moved to post-launch (the phone layout, website reading, the
+> connection-expiry alert; View as is cancelled outright, D-486), whose prototype elements are left out, and (c) a state the prototype does
 > not draw (errors, permission refusals, admin), built in its visual language — plus any prototype
 > element that needs data or a feature that does not exist, which is left out. Every use is listed in
 > the PR that ports the screen. The earlier sections stay so the decisions they record remain
@@ -234,7 +234,8 @@ named once as `--bsp-*` tokens with its exact values. The prototype has no `box-
 
 **(a) Recorded owner decisions that keep the repo's behaviour.**
 
-- Search (`⌘K`) is not drawn: there is no search feature (Q6, D-276).
+- Search (`⌘K`) is not drawn: there is no search feature (Q6, D-276). Deferred by owner decision
+  D-485 (2026-10-07): not a gap.
 - "Switch business" stays in the account menu for a member with more than one business (D-302).
 - Arabic copy is the product's formal Arabic (owner answer to D-468, 3a). The prototype's Egyptian
   strings are collected in `apps/dashboard/src/i18n/ar-eg.ts`; batch 1 left them unwired, and D-470
@@ -249,7 +250,8 @@ named once as `--bsp-*` tokens with its exact values. The prototype has no `box-
 
 **(b) Moved to post-launch by the owner — prototype elements left out.**
 
-- "View as" (role preview) in the account menu and the role-preview banner.
+- "View as" (role preview) in the account menu and the role-preview banner — **cancelled, out of
+  the plan (D-486, 2026-10-07)**, no longer post-launch.
 - The phone layout: below 768px the product keeps its existing drawer and full-window layout.
   The Copilot is part of it: below 768px it is a control at the end of the header's action row, as
   the product had it, and no floating button covers the page (owner approval, 2026-10-04, after
@@ -797,7 +799,7 @@ brand access in its own card.
   second card in the same rows and fields.
 - A member's line carries their email, their brand access and when they joined (D-277 §45).
 
-**(b) Post-launch — left out.** "View as" (D-468), and the phone layout: below 768px the product's
+**(b) Post-launch — left out.** "View as" (cancelled, D-486), and the phone layout: below 768px the product's
 record lists stay, with their actions in each row.
 
 **(c) States the prototype does not draw.** No invitations, more invitations than shown, an invitation
@@ -1963,6 +1965,16 @@ Approved design-system extensions; the prototype draws none of these states.
   (`.bsp-wz-srcs`), one row each: name, state, and the reason on a second line.
 - **Time zones (D-483, A5).** The searchable select's row keeps its two ends: the city where the
   label was, the UTC offset where the identifier was.
+
+### 6.3.60 Batch 7 (B) — the prototype at 0.88, a scale-only deviation (D-484)
+
+**An authorised deviation of SCALE only.** Every route keeps the prototype's composition, nesting,
+colours, motion and geometry formulas; every length is the prototype's × 0.88, rounded to the
+nearest 0.5px, and type is never below 11px. The tokens carry the prototype's own values in their
+names (`--bsp-px-N`, `--bsp-rem-N`, `--bsp-fs-N`), so a reader can still see the transcription; the
+transcription tests read them back in prototype units, and the browser size checks expect the
+product at prototype × 0.88. Not scaled: breakpoints, hairlines, motion offsets, focus outlines. The
+customer frame fills the window at every width.
 
 ### 6.4 The chart primitives — a new visual treatment, and the reason for it
 

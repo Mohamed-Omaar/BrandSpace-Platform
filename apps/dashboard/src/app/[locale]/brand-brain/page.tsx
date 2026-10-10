@@ -156,7 +156,7 @@ export default async function BrandBrainPage({
           data-testid="brand-brain-no-brand"
           style={{
             padding: spacingTokens.xl,
-            borderRadius: '24px',
+            borderRadius: 'var(--bsp-px-24)',
             background: colorTokens.surfaceCardAlpha,
             display: 'grid',
             gap: spacingTokens.md,
@@ -181,8 +181,8 @@ export default async function BrandBrainPage({
                 placeholder={t('bb.brandName')}
                 data-testid="new-brand-name"
                 style={{
-                  padding: '10px 12px',
-                  borderRadius: 12,
+                  padding: 'var(--bsp-px-10) var(--bsp-px-12)',
+                  borderRadius: 'var(--bsp-px-12)',
                   border: `1px solid ${colorTokens.border}`,
                   font: 'inherit',
                 }}
@@ -192,8 +192,8 @@ export default async function BrandBrainPage({
                 data-testid="create-brand"
                 style={{
                   border: 0,
-                  borderRadius: 12,
-                  padding: '10px 16px',
+                  borderRadius: 'var(--bsp-px-12)',
+                  padding: 'var(--bsp-px-10) var(--bsp-px-16)',
                   background: colorTokens.brandPurple,
                   color: colorTokens.brandPurpleInk,
                   fontWeight: 700,

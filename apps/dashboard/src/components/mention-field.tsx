@@ -182,7 +182,7 @@ export function MentionField({
             insetBlockStart: '100%',
             insetInlineStart: 0,
             zIndex: zIndexTokens.overlay,
-            minInlineSize: '12rem',
+            minInlineSize: 'var(--bsp-rem-12)',
             margin: `${spacingTokens['3xs']} 0 0`,
             padding: spacingTokens['3xs'],
             listStyle: 'none',

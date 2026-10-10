@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
+import { scaledType } from './scale';
 import { enter, ownWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
 
@@ -84,7 +85,10 @@ test.describe('Step 7 · the Studio and the Team', () => {
       .poll(() => chosen.evaluate((el) => getComputedStyle(el).backgroundColor))
       .toBe('rgb(255, 255, 255)');
     expect(await chosen.evaluate((el) => getComputedStyle(el).color)).toBe('rgb(17, 17, 20)');
-    expect(await chosen.evaluate((el) => getComputedStyle(el).fontSize)).toBe('12.5px');
+    // D-484: the prototype's 12.5px at 0.88, never under 11px.
+    expect(await chosen.evaluate((el) => getComputedStyle(el).fontSize)).toBe(
+      `${scaledType(12.5)}px`,
+    );
 
     // An upload from Design comes back to Design.
     await page.getByTestId('media-tab-upload').click();

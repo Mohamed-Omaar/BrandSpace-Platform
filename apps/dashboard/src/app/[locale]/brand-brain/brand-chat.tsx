@@ -659,7 +659,7 @@ export function BrandChat({
                    */
                   <div data-testid="chat-job">
                     <b>{t('bb.chatMode.jobTitle')}</b>
-                    <p style={{ margin: '4px 0 0' }}>{t('bb.chatMode.jobBody')}</p>
+                    <p style={{ margin: 'var(--bsp-px-4) 0 0' }}>{t('bb.chatMode.jobBody')}</p>
                   </div>
                 ) : (
                   <span style={{ whiteSpace: 'pre-wrap' }}>{message.body}</span>

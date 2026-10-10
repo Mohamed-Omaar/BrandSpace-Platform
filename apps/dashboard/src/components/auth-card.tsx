@@ -34,7 +34,7 @@ export function AuthCard({
         <div className="bsp-auth-card" data-testid="auth-form-card">
           <div className="bsp-auth-brand">
             <span data-testid="auth-brand-mark" className="bsp-auth-logo">
-              <BrandGlyph size="46px" />
+              <BrandGlyph size="var(--bsp-px-46)" />
             </span>
             {/* The product's name, in Latin in both languages, as the prototype writes it. */}
             <span className="bsp-auth-word bsp-ltr" lang="en">

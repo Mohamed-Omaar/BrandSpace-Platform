@@ -167,7 +167,7 @@ export default async function SettingsPage({
           }}
           // `.bsp-sg-main`'s own gap, between the card, the note and the bar.
           className="bsp-sg-form"
-          style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--bsp-px-14)' }}
         >
           <input type="hidden" name="locale" value={locale} />
           <Card testId="settings-card">

@@ -242,7 +242,9 @@ export function PostGridCard({
           one line of title, one line of channel and date. Two clamped lines of
           11px caption made every card a different height.
         */}
-        <div style={{ padding: '0.8125rem', display: 'grid', gap: spacingTokens['3xs'] }}>
+        <div
+          style={{ padding: 'var(--bsp-rem-0-8125)', display: 'grid', gap: spacingTokens['3xs'] }}
+        >
           <p
             dir={post.captionDirection}
             style={{
@@ -280,8 +282,8 @@ export function PostGridCard({
           flexWrap: 'wrap',
           alignItems: 'center',
           gap: spacingTokens['3xs'],
-          paddingInline: '0.8125rem',
-          paddingBlockEnd: '0.8125rem',
+          paddingInline: 'var(--bsp-rem-0-8125)',
+          paddingBlockEnd: 'var(--bsp-rem-0-8125)',
         }}
       >
         {/*
@@ -351,7 +353,7 @@ export function PostListRow({
         testId={`open-post-${post.id}`}
         inline
       >
-        <PostThumb post={post} size="3rem" />
+        <PostThumb post={post} size="var(--bsp-rem-3)" />
         <div style={{ minInlineSize: 0, flex: 1, display: 'grid', gap: spacingTokens['3xs'] }}>
           <p
             dir={post.captionDirection}
@@ -439,7 +441,7 @@ export function CalendarPostChip({
     : {};
   const body = (
     <>
-      <PostThumb post={post} size="1.875rem" />
+      <PostThumb post={post} size="var(--bsp-rem-1-875)" />
       {/*
         THE TITLE LEADS. `.calendar-post b { font-size: 8px }` carries the post,
         `.calendar-post small { font-size: 7px; color: var(--muted) }` carries
@@ -492,10 +494,10 @@ export function CalendarPostChip({
      */
     display: 'flex',
     alignItems: 'center',
-    gap: '0.4375rem',
+    gap: 'var(--bsp-rem-0-4375)',
     inlineSize: '100%',
     marginBlockStart: spacingTokens.sm,
-    padding: '0.4375rem',
+    padding: 'var(--bsp-rem-0-4375)',
     borderRadius: radiusTokens.lg,
     background: colorTokens.surfaceMuted,
     border: '1px solid transparent',

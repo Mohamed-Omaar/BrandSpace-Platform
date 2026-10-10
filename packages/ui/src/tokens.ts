@@ -306,15 +306,15 @@ export type ColorToken = keyof typeof colorTokens;
  * approved direction asks for; component padding stays in `sm`…`lg`.
  */
 export const spacingTokens = {
-  '3xs': '0.125rem',
-  '2xs': '0.1875rem',
-  xs: '0.25rem',
-  sm: '0.5rem',
-  md: '1rem',
-  lg: '1.5rem',
-  xl: '2rem',
-  '2xl': '3rem',
-  '3xl': '4rem',
+  '3xs': 'var(--bsp-rem-0-125)',
+  '2xs': 'var(--bsp-rem-0-1875)',
+  xs: 'var(--bsp-rem-0-25)',
+  sm: 'var(--bsp-rem-0-5)',
+  md: 'var(--bsp-rem-1)',
+  lg: 'var(--bsp-rem-1-5)',
+  xl: 'var(--bsp-rem-2)',
+  '2xl': 'var(--bsp-rem-3)',
+  '3xl': 'var(--bsp-rem-4)',
 } as const;
 
 /**
@@ -344,9 +344,19 @@ export const typographyTokens = {
     letterSpacing: '-0.065em',
   },
   /** `.topbar h1` — 24px, weight 700, -.04em. Fixed, not fluid. */
-  h1: { fontSize: '1.5rem', lineHeight: '1.75rem', fontWeight: 700, letterSpacing: '-0.04em' },
+  h1: {
+    fontSize: 'var(--bsp-fs-24)',
+    lineHeight: 'var(--bsp-rem-1-75)',
+    fontWeight: 700,
+    letterSpacing: '-0.04em',
+  },
   /** `.view-toolbar h2` — the in-page view title, 29px / -.035em. */
-  h2: { fontSize: '1.8125rem', lineHeight: '2.125rem', fontWeight: 700, letterSpacing: '-0.035em' },
+  h2: {
+    fontSize: 'var(--bsp-fs-29)',
+    lineHeight: 'var(--bsp-rem-2-125)',
+    fontWeight: 700,
+    letterSpacing: '-0.035em',
+  },
   /**
    * `.auth-card h2` — 34px / -.05em. The entry screens carry a heading a full
    * step above the in-app view title, which is what makes sign-in read as a
@@ -354,34 +364,54 @@ export const typographyTokens = {
    * no other surface uses this size.
    */
   authHeading: {
-    fontSize: '2.125rem',
-    lineHeight: '2.375rem',
+    fontSize: 'var(--bsp-fs-34)',
+    lineHeight: 'var(--bsp-rem-2-375)',
     fontWeight: 700,
     letterSpacing: '-0.05em',
   },
   /** `.section-head h3` — 18px / -.035em, the title inside a surface card. */
-  h3: { fontSize: '1.125rem', lineHeight: '1.4rem', fontWeight: 700, letterSpacing: '-0.035em' },
+  h3: {
+    fontSize: 'var(--bsp-fs-18)',
+    lineHeight: 'var(--bsp-rem-1-4)',
+    fontWeight: 700,
+    letterSpacing: '-0.035em',
+  },
   /**
    * `.feature-card h3` — 15px / 700, `margin: 22px 0 7px`. The title of a card
    * in a GRID of cards, a step under the title of a section: six of them in a
    * row at the section step reads as six sections.
    */
   cardTitle: {
-    fontSize: '0.9375rem',
-    lineHeight: '1.25rem',
+    fontSize: 'var(--bsp-fs-15)',
+    lineHeight: 'var(--bsp-rem-1-25)',
     fontWeight: 700,
     letterSpacing: 'normal',
   },
   /** Body copy. `body { font-size: 15px }`, `.hero-copy p { line-height: 1.6 }`. */
-  body: { fontSize: '0.9375rem', lineHeight: '1.6', fontWeight: 400, letterSpacing: 'normal' },
+  body: {
+    fontSize: 'var(--bsp-fs-15)',
+    lineHeight: '1.6',
+    fontWeight: 400,
+    letterSpacing: 'normal',
+  },
   /** `.item-copy b`, `.nav-item`, `.quick-card b` — the demo's 11px workhorse. */
-  bodySm: { fontSize: '0.6875rem', lineHeight: '1rem', fontWeight: 400, letterSpacing: 'normal' },
+  bodySm: {
+    fontSize: 'var(--bsp-fs-11)',
+    lineHeight: 'var(--bsp-rem-1)',
+    fontWeight: 400,
+    letterSpacing: 'normal',
+  },
   /** `.workspace-copy strong`, `.profile-copy strong` — 12px / 700. */
-  label: { fontSize: '0.75rem', lineHeight: '0.875rem', fontWeight: 700, letterSpacing: 'normal' },
+  label: {
+    fontSize: 'var(--bsp-fs-12)',
+    lineHeight: 'var(--bsp-rem-0-875)',
+    fontWeight: 700,
+    letterSpacing: 'normal',
+  },
   /** `.metric span`, `.item-copy small`, `.quick-card small` — 9px / 400. */
   caption: {
-    fontSize: '0.5625rem',
-    lineHeight: '0.75rem',
+    fontSize: 'var(--bsp-fs-9)',
+    lineHeight: 'var(--bsp-rem-0-75)',
     fontWeight: 400,
     letterSpacing: 'normal',
   },
@@ -391,21 +421,26 @@ export const typographyTokens = {
    * enough that it is only ever used for secondary metadata, and only against
    * a colour that clears AA — `textMuted`, never `textSubtle`.
    */
-  micro: { fontSize: '0.5rem', lineHeight: '0.6875rem', fontWeight: 400, letterSpacing: 'normal' },
+  micro: {
+    fontSize: 'var(--bsp-fs-8)',
+    lineHeight: 'var(--bsp-rem-0-6875)',
+    fontWeight: 400,
+    letterSpacing: 'normal',
+  },
   /**
    * `.eyebrow`, `.section-kicker`, `.nav-group-title` — 9px, weight 800,
    * letter-spacing .08em, uppercase.
    */
   overline: {
-    fontSize: '0.5625rem',
-    lineHeight: '0.625rem',
+    fontSize: 'var(--bsp-fs-9)',
+    lineHeight: 'var(--bsp-rem-0-625)',
     fontWeight: 800,
     letterSpacing: '0.08em',
   },
   /** `.metric strong` — 30px / 700 / -.05em. */
   numeric: {
-    fontSize: '1.875rem',
-    lineHeight: '2.125rem',
+    fontSize: 'var(--bsp-fs-30)',
+    lineHeight: 'var(--bsp-rem-2-125)',
     fontWeight: 700,
     letterSpacing: '-0.05em',
   },
@@ -415,20 +450,25 @@ export const typographyTokens = {
    * what keeps a 40px control from reading as an enterprise form field.
    */
   button: {
-    fontSize: '0.625rem',
-    lineHeight: '0.875rem',
+    fontSize: 'var(--bsp-fs-10)',
+    lineHeight: 'var(--bsp-rem-0-875)',
     fontWeight: 800,
     letterSpacing: 'normal',
   },
   /** `.nav-item` — 11px / 650. */
   navLabel: {
-    fontSize: '0.6875rem',
-    lineHeight: '1rem',
+    fontSize: 'var(--bsp-fs-11)',
+    lineHeight: 'var(--bsp-rem-1)',
     fontWeight: 650,
     letterSpacing: 'normal',
   },
   /** `.brand` — 16px / 850. A wordmark, not a heading. */
-  wordmark: { fontSize: '1rem', lineHeight: '1.125rem', fontWeight: 850, letterSpacing: 'normal' },
+  wordmark: {
+    fontSize: 'var(--bsp-fs-16)',
+    lineHeight: 'var(--bsp-rem-1-125)',
+    fontWeight: 850,
+    letterSpacing: 'normal',
+  },
 } as const;
 
 export type TypographyToken = keyof typeof typographyTokens;
@@ -491,33 +531,33 @@ export const shadowTokens = {
  */
 export const radiusTokens = {
   /** `.search-button kbd`, 5px. */
-  xs: '0.3125rem',
+  xs: 'var(--bsp-rem-0-3125)',
   /** `.nav-item:hover::after` tooltip, 8px. */
-  sm: '0.5rem',
+  sm: 'var(--bsp-rem-0-5)',
   /** Controls: `.filter-row button`, `.segmented button`, 10px. */
-  md: '0.625rem',
+  md: 'var(--bsp-rem-0-625)',
   /** `.search-field`, 11px. */
-  lg: '0.6875rem',
+  lg: 'var(--bsp-rem-0-6875)',
   /**
    * THE DEMO'S DEFAULT CONTROL RADIUS, 12px. `.icon-button`, `.nav-item`,
    * `.primary-button`, `.dark-button`, `.search-button`, `.experience-icon`,
    * `.profile-avatar` — almost everything a finger touches.
    */
-  control: '0.75rem',
+  control: 'var(--bsp-rem-0-75)',
   /** `.segmented`, `.tabs` container, 13px; `.thumb`, 13px. */
-  xl: '0.8125rem',
+  xl: 'var(--bsp-rem-0-8125)',
   /** `.experience-current`, `.profile-button`, `.quick-card`, 16px. */
-  rail: '1rem',
+  rail: 'var(--bsp-rem-1)',
   /** `.surface-card`, 18px. */
-  '2xl': '1.125rem',
+  '2xl': 'var(--bsp-rem-1-125)',
   /** `.float-card`, `.metric`, 20px. */
-  card: '1.25rem',
+  card: 'var(--bsp-rem-1-25)',
   /** `.hero-card`, 28px. */
-  '3xl': '1.75rem',
+  '3xl': 'var(--bsp-rem-1-75)',
   /** `.studio { border-radius: 25px }` — the editor surface, one step under the shell. */
-  studio: '1.5625rem',
+  studio: 'var(--bsp-rem-1-5625)',
   /** `.app-shell`, 34px. */
-  shell: '2.125rem',
+  shell: 'var(--bsp-rem-2-125)',
   /** `.label-pill`, `.status`, `.nav-badge`, 99px. */
   full: '9999px',
 } as const;
@@ -631,74 +671,74 @@ export const layoutTokens = {
   /* ---------------------------------------------------------------------- */
 
   /** `--sidebar: 248px`. */
-  sidebarExpanded: '15.5rem',
+  sidebarExpanded: 'var(--bsp-rem-15-5)',
   /** `.app-shell.sidebar-collapsed { grid-template-columns: 78px … }`. */
-  sidebarCollapsed: '4.875rem',
+  sidebarCollapsed: 'var(--bsp-rem-4-875)',
   /** `.topbar { min-height: 88px }`. */
-  headerHeight: '5.5rem',
+  headerHeight: 'var(--bsp-rem-5-5)',
   /** `.app-shell { margin: 20px auto }`. */
-  shellInset: '1.25rem',
+  shellInset: 'var(--bsp-rem-1-25)',
   /** `.app-shell { width: min(1540px, calc(100% - 40px)) }`. */
-  shellMaxWidth: '96.25rem',
+  shellMaxWidth: 'var(--bsp-rem-96-25)',
   /** `.sidebar { padding: 18px 14px 14px }`. */
-  railPadInline: '0.875rem',
-  railPadBlockStart: '1.125rem',
-  railPadBlockEnd: '0.875rem',
+  railPadInline: 'var(--bsp-rem-0-875)',
+  railPadBlockStart: 'var(--bsp-rem-1-125)',
+  railPadBlockEnd: 'var(--bsp-rem-0-875)',
   /** `.sidebar-top { height: 54px; padding: 0 5px }`. */
-  railTopHeight: '3.375rem',
-  railTopPadInline: '0.3125rem',
+  railTopHeight: 'var(--bsp-rem-3-375)',
+  railTopPadInline: 'var(--bsp-rem-0-3125)',
   /** `.sidebar-collapsed .sidebar-top { height: 90px; gap: 8px }`. */
-  railTopHeightCollapsed: '5.625rem',
+  railTopHeightCollapsed: 'var(--bsp-rem-5-625)',
   /** `.nav-group { margin-bottom: 17px }`. */
-  navGroupGap: '1.0625rem',
+  navGroupGap: 'var(--bsp-rem-1-0625)',
   /** `.nav-group-title { padding: 0 12px 7px }`. */
   navGroupTitlePad: '0 0.75rem 0.4375rem',
   /** `.nav-item { height: 39px; padding: 0 11px; gap: 11px }`. */
-  navItemHeight: '2.4375rem',
-  navItemPadInline: '0.6875rem',
-  navItemGap: '0.6875rem',
+  navItemHeight: 'var(--bsp-rem-2-4375)',
+  navItemPadInline: 'var(--bsp-rem-0-6875)',
+  navItemGap: 'var(--bsp-rem-0-6875)',
   /** `.nav-icon { width: 20px; font-size: 14px }`. */
-  navIconSlot: '1.25rem',
-  navIconGlyph: '0.875rem',
+  navIconSlot: 'var(--bsp-rem-1-25)',
+  navIconGlyph: 'var(--bsp-rem-0-875)',
   /** `.experience-current`, `.profile-button` — 38px identity block. */
-  railAvatar: '2.375rem',
-  railCardPad: '0.625rem',
-  railCardPadTight: '0.5rem',
-  railCardGap: '0.5625rem',
+  railAvatar: 'var(--bsp-rem-2-375)',
+  railCardPad: 'var(--bsp-rem-0-625)',
+  railCardPadTight: 'var(--bsp-rem-0-5)',
+  railCardGap: 'var(--bsp-rem-0-5625)',
   /** `.main-panel { padding: 0 28px 36px }`. */
-  panelPadInline: '1.75rem',
-  panelPadBlockEnd: '2.25rem' /* `.main-panel { padding: 0 28px 36px }`. */,
+  panelPadInline: 'var(--bsp-rem-1-75)',
+  panelPadBlockEnd: 'var(--bsp-rem-2-25)' /* `.main-panel { padding: 0 28px 36px }`. */,
   /** `.topbar { gap: 16px }`, `.topbar-actions { gap: 7px }`. */
-  topbarGap: '1rem',
-  topbarActionGap: '0.4375rem',
+  topbarGap: 'var(--bsp-rem-1)',
+  topbarActionGap: 'var(--bsp-rem-0-4375)',
   /** `.icon-button` — 38px square. */
-  iconButton: '2.375rem',
+  iconButton: 'var(--bsp-rem-2-375)',
   /** `.search-button { width: 230px; height: 38px }`. */
-  searchWidth: '14.375rem',
+  searchWidth: 'var(--bsp-rem-14-375)',
   /** `.social-preview .avatar` — 34px, round. */
-  previewAvatar: '2.125rem',
+  previewAvatar: 'var(--bsp-rem-2-125)',
   /**
    * The composer's preview column — `.composer { grid-template-columns:
    * minmax(350px,1fr) 340px 300px }`. The post preview is drawn at 340px and
    * does not widen, because that is the width its composition was drawn at.
    */
-  socialPreviewWidth: '21.25rem',
+  socialPreviewWidth: 'var(--bsp-rem-21-25)',
   /** `.studio { min-height: 660px }`. */
-  studioMinHeight: '41.25rem',
+  studioMinHeight: 'var(--bsp-rem-41-25)',
   /** `.composer` middle column, the live preview panel. */
-  composerPreviewColumn: '21.25rem',
+  composerPreviewColumn: 'var(--bsp-rem-21-25)',
   /** `.composer` trailing column, the Copilot panel. */
-  composerCopilotColumn: '18.75rem',
+  composerCopilotColumn: 'var(--bsp-rem-18-75)',
   /** `.studio { grid-template-columns: 84px 240px 1fr 230px }`. */
-  studioToolRailWidth: '5.25rem',
-  studioAssetsWidth: '15rem',
-  studioPropsWidth: '14.375rem',
+  studioToolRailWidth: 'var(--bsp-rem-5-25)',
+  studioAssetsWidth: 'var(--bsp-rem-15)',
+  studioPropsWidth: 'var(--bsp-rem-14-375)',
   /** `.settings-grid { grid-template-columns: 220px 1fr }`. */
-  settingsNavWidth: '13.75rem',
+  settingsNavWidth: 'var(--bsp-rem-13-75)',
   /** `.side-drawer { width: min(430px, calc(100vw - 40px)) }`. */
-  drawerWidth: '26.875rem',
+  drawerWidth: 'var(--bsp-rem-26-875)',
   /** `.command-dialog { width: min(570px, calc(100% - 30px)) }`. */
-  commandDialogWidth: '35.625rem',
+  commandDialogWidth: 'var(--bsp-rem-35-625)',
   /**
    * `.brand-mark { width: 34px; height: 34px }` — the slot the official
    * BrandSpace logo fills.
@@ -710,23 +750,23 @@ export const layoutTokens = {
    * no consumer left, which is exactly the kind of leftover that later reads
    * as a contract somebody should restore.
    */
-  brandMark: '2.125rem',
+  brandMark: 'var(--bsp-rem-2-125)',
   /** `.brand { gap: 10px }`. */
-  brandGap: '0.625rem',
+  brandGap: 'var(--bsp-rem-0-625)',
   /** `.hero-card { min-height: 330px }`, `.hero-copy { padding: 48px }`. */
-  heroMinHeight: '20.625rem',
-  heroPad: '3rem',
+  heroMinHeight: 'var(--bsp-rem-20-625)',
+  heroPad: 'var(--bsp-rem-3)',
   /** `.metric { padding: 20px }`, `.metric-row { gap: 10px; margin: 14px 0 }`. */
-  metricPad: '1.25rem',
-  metricGap: '0.625rem',
-  metricRowMargin: '0.875rem',
+  metricPad: 'var(--bsp-rem-1-25)',
+  metricGap: 'var(--bsp-rem-0-625)',
+  metricRowMargin: 'var(--bsp-rem-0-875)',
   /** `.surface-card { padding: 22px }`, `.dashboard-grid { gap: 14px }`. */
-  surfacePad: '1.375rem',
-  sectionGap: '0.875rem',
+  surfacePad: 'var(--bsp-rem-1-375)',
+  sectionGap: 'var(--bsp-rem-0-875)',
   /** `.section-head { margin-bottom: 15px; gap: 15px }`. */
-  sectionHeadGap: '0.9375rem',
+  sectionHeadGap: 'var(--bsp-rem-0-9375)',
   /** `.view-toolbar { min-height: 74px; margin-bottom: 12px }`. */
-  viewToolbarHeight: '4.625rem',
+  viewToolbarHeight: 'var(--bsp-rem-4-625)',
   /** WCAG 2.2 target size (2.5.8) minimum for a pointer target. */
   minTargetSize: '24px',
   /**
@@ -734,12 +774,12 @@ export const layoutTokens = {
    * `.compact { min-height: 38px }`. The demo runs TWO control heights and the
    * difference is deliberate, so both are named rather than averaged.
    */
-  controlHeight: '2.5rem',
-  controlHeightSm: '2.375rem',
+  controlHeight: 'var(--bsp-rem-2-5)',
+  controlHeightSm: 'var(--bsp-rem-2-375)',
   /** `.filter-row button, .segmented button { min-height: 36px }`. */
-  controlHeightXs: '2.25rem',
-  contentMaxWidth: '96.25rem',
-  copilotPanelWidth: '18.75rem',
+  controlHeightXs: 'var(--bsp-rem-2-25)',
+  contentMaxWidth: 'var(--bsp-rem-96-25)',
+  copilotPanelWidth: 'var(--bsp-rem-18-75)',
 } as const;
 
 /**

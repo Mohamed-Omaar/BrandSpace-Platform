@@ -28,7 +28,7 @@ export function DataTable({
   headers,
   caption,
   children,
-  minWidth = '40rem',
+  minWidth = 'var(--bsp-rem-40)',
   testId,
 }: {
   readonly headers: readonly string[];
@@ -265,8 +265,8 @@ export function StatusBadge({
         <span
           aria-hidden="true"
           style={{
-            inlineSize: '0.375rem',
-            blockSize: '0.375rem',
+            inlineSize: 'var(--bsp-rem-0-375)',
+            blockSize: 'var(--bsp-rem-0-375)',
             borderRadius: radiusTokens.full,
             background: palette.color,
             flexShrink: 0,
@@ -370,11 +370,17 @@ export function SearchField({
   return (
     /*
       `.search-field { min-width: 240px; height: 36px; border-radius: 11px }` —
-      a control in a toolbar, not a full-width band. `flex: 1 1 14rem` let it
+      a control in a toolbar, not a full-width band. `flex: 1 1 var(--bsp-rem-14)` let it
       swallow every spare pixel of the calendar's toolbar, which the demo's
       does not.
     */
-    <div style={{ position: 'relative', flex: '0 1 15rem', minInlineSize: '15rem' }}>
+    <div
+      style={{
+        position: 'relative',
+        flex: '0 1 var(--bsp-rem-15)',
+        minInlineSize: 'var(--bsp-rem-15)',
+      }}
+    >
       <label htmlFor={id} style={visuallyHiddenLabel()}>
         {label}
       </label>
@@ -399,7 +405,7 @@ export function SearchField({
         defaultValue={defaultValue}
         placeholder={placeholder}
         className={CONTROL_CLASS}
-        style={{ ...inputStyle(), paddingInlineStart: '2.5rem' }}
+        style={{ ...inputStyle(), paddingInlineStart: 'var(--bsp-rem-2-5)' }}
       />
     </div>
   );
@@ -468,8 +474,8 @@ export function Pagination({
     display: 'inline-flex',
     alignItems: 'center',
     gap: spacingTokens.xs,
-    minBlockSize: '2rem',
-    minInlineSize: '2rem',
+    minBlockSize: 'var(--bsp-rem-2)',
+    minInlineSize: 'var(--bsp-rem-2)',
     paddingInline: spacingTokens.sm,
     justifyContent: 'center',
     borderRadius: radiusTokens.md,

@@ -105,7 +105,7 @@ function RevealToggle({
     transform: 'translateY(-50%)',
     display: 'inline-flex',
     alignItems: 'center',
-    minBlockSize: '1.75rem',
+    minBlockSize: 'var(--bsp-rem-1-75)',
     paddingInline: spacingTokens.sm,
     border: '1px solid transparent',
     borderRadius: radiusTokens.md,
@@ -209,7 +209,7 @@ export function PasswordField({
 
   const wrapper: CSSProperties = { position: 'relative' };
   // Room for the toggle, on the trailing edge, logically.
-  const field: CSSProperties = { ...inputStyle(), paddingInlineEnd: '4.5rem' };
+  const field: CSSProperties = { ...inputStyle(), paddingInlineEnd: 'var(--bsp-rem-4-5)' };
 
   return (
     <>

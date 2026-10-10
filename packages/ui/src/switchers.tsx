@@ -91,7 +91,7 @@ export function WorkspaceSwitcher({
           </span>
           <span
             className="bs-rail-copy"
-            style={{ display: 'grid', minInlineSize: 0, gap: '0.0625rem' }}
+            style={{ display: 'grid', minInlineSize: 0, gap: 'var(--bsp-rem-0-0625)' }}
           >
             <span
               data-testid="active-workspace"
@@ -202,7 +202,7 @@ function brandCardContent(current: { readonly name: string; readonly caption: st
       </span>
       <span
         className="bs-rail-copy"
-        style={{ display: 'grid', minInlineSize: 0, gap: '0.0625rem' }}
+        style={{ display: 'grid', minInlineSize: 0, gap: 'var(--bsp-rem-0-0625)' }}
       >
         <span
           data-testid="active-brand"
@@ -260,7 +260,7 @@ export function BrandCard({
     minInlineSize: 0,
     overflow: 'hidden',
     padding: layoutTokens.railCardPad,
-    minBlockSize: '3.625rem',
+    minBlockSize: 'var(--bsp-rem-3-625)',
     border: '1px solid transparent',
     borderRadius: radiusTokens.rail,
     background: colorTokens.surface,
@@ -691,7 +691,7 @@ export function ProfileCard({
               borderRadius: radiusTokens.control,
               background: `linear-gradient(145deg, ${colorTokens.brandPurple}, #5223B8)`,
               color: colorTokens.brandPurpleInk,
-              fontSize: '0.625rem',
+              fontSize: 'var(--bsp-fs-10)',
               fontWeight: 800,
             }}
           >

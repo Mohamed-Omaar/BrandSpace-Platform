@@ -393,7 +393,7 @@ export function StateMessage({
  */
 export function Skeleton({
   width = '100%',
-  height = '1rem',
+  height = 'var(--bsp-rem-1)',
   radius = radiusTokens.sm,
   style,
 }: {

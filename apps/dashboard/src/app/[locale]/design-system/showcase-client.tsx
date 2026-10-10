@@ -335,7 +335,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
 
       {/* ------------------------------------------------------ Forms --- */}
       <Card title={ar ? 'النماذج' : 'Forms'} testId="showcase-forms">
-        <div style={{ maxInlineSize: '28rem' }}>
+        <div style={{ maxInlineSize: 'var(--bsp-rem-28)' }}>
           <Field label={ar ? 'الاسم' : 'Name'} htmlFor="demo-name" required>
             <input
               id="demo-name"
@@ -450,7 +450,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
             </ContentGrid>
           </TabPanel>
           <TabPanel id="loading" activeId={tab}>
-            <div style={{ maxInlineSize: '30rem' }}>
+            <div style={{ maxInlineSize: 'var(--bsp-rem-30)' }}>
               <SkeletonLines lines={4} />
             </div>
           </TabPanel>
@@ -699,8 +699,8 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
           data-testid="copilot-inline"
           style={{
             marginBlockStart: spacingTokens.md,
-            blockSize: '34rem',
-            maxInlineSize: '26rem',
+            blockSize: 'var(--bsp-rem-34)',
+            maxInlineSize: 'var(--bsp-rem-26)',
             borderRadius: radiusTokens.xl,
             background: colorTokens.surface,
             boxShadow: shadowTokens.raised,
@@ -1070,7 +1070,7 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
               <div
                 data-testid="composer-copilot"
                 style={{
-                  blockSize: '30rem',
+                  blockSize: 'var(--bsp-rem-30)',
                   borderRadius: radiusTokens.xl,
                   background: colorTokens.surface,
                   boxShadow: shadowTokens.card,

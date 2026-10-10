@@ -88,7 +88,7 @@ export function ChartDataTable({
     <DataTable
       caption={labels.tableCaption}
       headers={[labels.periodColumn, labels.valueColumn]}
-      minWidth="16rem"
+      minWidth="var(--bsp-rem-16)"
       testId="chart-data-table"
     >
       {points.map((point) => (
@@ -181,7 +181,7 @@ export function TrendChart({
         aria-labelledby={`${titleId} ${descriptionId}`}
         viewBox={`0 0 ${PLOT_WIDTH} ${PLOT_HEIGHT}`}
         preserveAspectRatio="none"
-        style={{ inlineSize: '100%', blockSize: '11.25rem', display: 'block' }}
+        style={{ inlineSize: '100%', blockSize: 'var(--bsp-rem-11-25)', display: 'block' }}
       >
         <desc id={descriptionId}>{labels.description}</desc>
 
@@ -321,7 +321,7 @@ export function ComparisonChart({
         {points.map((point, index) => {
           const fraction = point.value === null ? 0 : Math.max(0.02, point.value / max);
           return (
-            <li key={point.label} style={{ display: 'grid', gap: '0.125rem' }}>
+            <li key={point.label} style={{ display: 'grid', gap: 'var(--bsp-rem-0-125)' }}>
               <span
                 style={{
                   display: 'flex',
@@ -342,7 +342,7 @@ export function ComparisonChart({
                 aria-hidden="true"
                 style={{
                   display: 'block',
-                  blockSize: '0.5rem',
+                  blockSize: 'var(--bsp-rem-0-5)',
                   background: colorTokens.surfaceSunken,
                   borderRadius: radiusTokens.full,
                   overflow: 'hidden',
@@ -419,7 +419,7 @@ export function ChangeIndicator({
     color: flat ? colorTokens.textMuted : up ? colorTokens.success : colorTokens.danger,
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '0.25rem',
+    gap: 'var(--bsp-rem-0-25)',
   };
   return (
     <span style={style} data-testid="change-indicator">

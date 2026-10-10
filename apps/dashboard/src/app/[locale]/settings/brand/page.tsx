@@ -292,7 +292,11 @@ export default async function BrandProfilePage({
                         value={value}
                         defaultChecked={data.brand.supportedLocales.includes(value)}
                         disabled={!mayManage}
-                        style={{ inlineSize: '20px', blockSize: '20px', margin: 0 }}
+                        style={{
+                          inlineSize: 'var(--bsp-px-20)',
+                          blockSize: 'var(--bsp-px-20)',
+                          margin: 0,
+                        }}
                       />
                       <span style={typographyTokens.bodySm}>
                         {value === 'AR' ? t('brandProfile.localeAr') : t('brandProfile.localeEn')}
@@ -361,8 +365,8 @@ export default async function BrandProfilePage({
                       // is never carrying information alone.
                       title={colour}
                       style={{
-                        inlineSize: '1.5rem',
-                        blockSize: '1.5rem',
+                        inlineSize: 'var(--bsp-rem-1-5)',
+                        blockSize: 'var(--bsp-rem-1-5)',
                         borderRadius: radiusTokens.sm,
                         background: colour,
                         border: `1px solid ${colorTokens.border}`,
