@@ -23,6 +23,7 @@ import {
 import { assetPolicy, inAssetLibrary, type AssetServices } from './assets-context';
 import type { WorkspaceSession } from './customer-context';
 import { paletteFrom } from './brand-profile';
+import { optionalMessage, translator } from '../i18n/messages';
 
 /**
  * PHASE 2C-2 — BRAND FONTS IN THE DASHBOARD.
@@ -173,9 +174,22 @@ export interface LookOption {
   readonly uploaded: boolean;
 }
 
+/**
+ * Batch 7 PR C (2c) — A LOGO JUST UPLOADED THAT IS NOT THE LOGO YET, and why:
+ * still being checked, passed and about to be attached, or refused. Never a
+ * silent success over an empty slot (A3).
+ */
+export interface LookLogoPending {
+  readonly state: 'checking' | 'attach' | 'refused';
+  readonly assetId: string | null;
+  /** What the slot says, in the reader's language. */
+  readonly message: string;
+}
+
 export interface LookData {
   readonly palette: readonly string[];
   readonly logo: { readonly assetId: string; readonly url: string | null } | null;
+  readonly logoPending: LookLogoPending | null;
   /** The images that may be the logo: READY, CLEAN, this brand's or shared (D-193). */
   readonly logoOptions: readonly { readonly id: string; readonly name: string }[];
   readonly slots: Readonly<
@@ -203,6 +217,10 @@ export async function lookDataFor(input: {
   readonly session: WorkspaceSession;
   readonly locale: string;
   readonly brandId: string;
+  /** `?logo=`: the file the last upload left being checked. */
+  readonly pendingLogoId?: string | null;
+  /** `?logoReason=`: why the last upload was refused. */
+  readonly refusedLogoReason?: string | null;
 }): Promise<LookData> {
   const actor = assetActorOf(input.session);
   return inAssetLibrary(input.session.workspace.workspaceId, async (services) => {
@@ -234,6 +252,64 @@ export async function lookDataFor(input: {
         .then((download) => download.grantFor({ assetId: logoId, actor, disposition: 'inline' }))
         .then((issued) => `/${input.locale}/assets/file/${issued.grant.token}`)
         .catch(() => null);
+    }
+
+    /*
+     * Batch 7 PR C (2c) — THE LAST UPLOAD, UNTIL IT IS THE LOGO. The upload
+     * waits a few seconds for the scan; a file that has not passed by then is
+     * named here, the page re-reads itself while it is checked, and a file that
+     * has passed is attached by the card (`attachBrandLogoAction`).
+     */
+    const messages = input.session.messageLocale;
+    const t = translator(messages);
+    const reasonText = (reason: string) =>
+      optionalMessage(messages, `assets.reason.${reason}`) ?? t('upload.connection');
+    let logoPending: LookLogoPending | null = null;
+    if (input.refusedLogoReason) {
+      logoPending = {
+        state: 'refused',
+        assetId: null,
+        message: t('bb.look.logoRefused').replace('{reason}', reasonText(input.refusedLogoReason)),
+      };
+    } else if (input.pendingLogoId && input.pendingLogoId !== logoId) {
+      const file = await services.db.asset.findFirst({
+        where: {
+          id: input.pendingLogoId,
+          deletedAt: null,
+          OR: [{ brandId: input.brandId }, { brandId: null }],
+        },
+        select: { name: true, kind: true, status: true, scanStatus: true, failureReason: true },
+      });
+      if (file && file.status === 'READY' && file.scanStatus === 'CLEAN' && file.kind === 'IMAGE') {
+        logoPending = {
+          state: 'attach',
+          assetId: input.pendingLogoId,
+          message: t('bb.look.logoChecking').replace('{name}', file.name),
+        };
+      } else if (
+        !file ||
+        file.kind !== 'IMAGE' ||
+        file.status === 'PROCESSING_FAILED' ||
+        file.status === 'QUARANTINED' ||
+        file.scanStatus === 'INFECTED'
+      ) {
+        const reason = !file
+          ? 'object_missing'
+          : file.kind !== 'IMAGE'
+            ? 'unsupported_type'
+            : (file.failureReason ?? (file.scanStatus === 'INFECTED' ? 'infected' : 'scan_failed'));
+        logoPending = {
+          state: 'refused',
+          assetId: input.pendingLogoId,
+          message: t('bb.look.logoRefused').replace('{reason}', reasonText(reason)),
+        };
+      } else {
+        logoPending = {
+          state: 'checking',
+          assetId: input.pendingLogoId,
+          message: t('bb.look.logoChecking').replace('{name}', file.name),
+        };
+      }
     }
 
     const slotView = (language: BrandFontLanguage, role: BrandFontRole): LookSlotView => {
@@ -296,6 +372,7 @@ export async function lookDataFor(input: {
     return {
       palette: paletteFrom(brand?.colorPalette),
       logo: logoId ? { assetId: logoId, url: logoUrl } : null,
+      logoPending,
       logoOptions: await services.db.asset.findMany({
         where: {
           deletedAt: null,

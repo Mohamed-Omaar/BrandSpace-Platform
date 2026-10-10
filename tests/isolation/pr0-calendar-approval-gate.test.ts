@@ -10,7 +10,12 @@ import {
 } from '@brandspace/content';
 import { processAutomationJob } from '../../apps/worker/src/processors/automation';
 import { externalActions } from '../../apps/api/src/routes/copilot';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
+} from './fixtures';
 
 /**
  * PR 0 — ONE BRAND APPROVAL GATE FOR EVERY CALENDAR.
@@ -273,6 +278,7 @@ describe('PR 0 — the brand policy wins, and the calendar setting is no second 
       fixtures.a.workspaceId,
       async (db) =>
         new ContentCalendarService({
+          channelGate: OPEN_CHANNEL_GATE,
           db,
           workspaceId: fixtures.a.workspaceId,
           policy: active,

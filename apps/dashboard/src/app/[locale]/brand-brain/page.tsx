@@ -825,7 +825,14 @@ export default async function BrandBrainPage({
 
   // Phase 2C-2 — Look & voice: colours, logo and fonts, for a member who may read the brand.
   const look = can('brand.read')
-    ? await lookDataFor({ session: access.session, locale, brandId: brand.id })
+    ? await lookDataFor({
+        session: access.session,
+        locale,
+        brandId: brand.id,
+        // Batch 7 PR C (2c): the last logo upload, until it is the logo.
+        pendingLogoId: typeof query['logo'] === 'string' ? query['logo'] : null,
+        refusedLogoReason: typeof query['logoReason'] === 'string' ? query['logoReason'] : null,
+      })
     : null;
 
   const brandNotes = (

@@ -200,16 +200,87 @@ test.describe('Item 3 · colours and logo', () => {
       .setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: png });
     await page.getByTestId('look-logo-submit').click();
     await page.waitForURL(/ok=BRAND_LOGO_(SAVED|PROCESSING)/);
-    await waitForReady({ brandId, kind: 'IMAGE' });
-    await look(page, brandId);
-    if (!(await page.getByTestId('look-logo-image').isVisible())) {
-      // Gate 2b — the logo from the library is behind the logo card's "⋯".
-      await page.getByTestId('look-logo-more').click();
-      await page.getByTestId('look-logo-select').selectOption({ label: 'logo.png' });
-      await page.getByTestId('look-logo-choose-save').click();
-      await page.waitForURL(/ok=BRAND_LOGO_SAVED/);
+    /*
+     * Batch 7 PR C (2c) — IT BECOMES THE LOGO BY ITSELF. This test used to
+     * choose the file from the library by hand when the scan had not finished
+     * within the request, which is the defect the owner met: the upload looked
+     * successful, the file was in Media, and the slot stayed empty. Now a file
+     * still being checked is named in the slot, and attached when it passes.
+     */
+    if (/BRAND_LOGO_PROCESSING/.test(page.url())) {
+      await expect(page.getByTestId('look-logo-state')).toHaveAttribute(
+        'data-state',
+        /checking|attach/,
+      );
     }
-    await expect(page.getByTestId('look-logo-image')).toBeVisible();
+    await expect(page.getByTestId('look-logo-image')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId('look-logo-more')).toBeVisible();
+    const stored = await withPlatformPrisma((prisma) =>
+      prisma.brand.findUniqueOrThrow({
+        where: { id: brandId },
+        select: { primaryLogoAssetId: true },
+      }),
+    );
+    expect(stored.primaryLogoAssetId).not.toBeNull();
+  });
+
+  test('the logo slot says a file is being checked, attaches it when it passes, and says why one was refused', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile === true, 'one run creates its own workspace; the desktop run covers it');
+    const { slug, brandId } = await ownWorkspace('logo-states');
+    await enter(page, slug);
+    await look(page, brandId);
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from(`logo-${randomUUID()}`),
+    ]);
+    // A real uploaded image, ready; then held back as "being checked".
+    await page
+      .getByTestId('look-logo-file')
+      .setInputFiles({ name: 'held.png', mimeType: 'image/png', buffer: png });
+    await page.getByTestId('look-logo-submit').click();
+    await page.waitForURL(/ok=BRAND_LOGO_(SAVED|PROCESSING)/);
+    await waitForReady({ brandId, kind: 'IMAGE' });
+    const assetId = await withPlatformPrisma(async (prisma) => {
+      const asset = await prisma.asset.findFirstOrThrow({
+        where: { brandId, kind: 'IMAGE' },
+        select: { id: true },
+      });
+      await prisma.brand.update({ where: { id: brandId }, data: { primaryLogoAssetId: null } });
+      await prisma.asset.update({
+        where: { id: asset.id },
+        data: { status: 'PROCESSING', scanStatus: 'PENDING' },
+      });
+      return asset.id;
+    });
+
+    // Being checked: the slot says so, and no empty "No logo yet".
+    await page.goto(
+      `${DASHBOARD_BASE_URL}/en/brand-brain?brand=${brandId}&tab=look&ok=BRAND_LOGO_PROCESSING&logo=${assetId}`,
+    );
+    const state = page.getByTestId('look-logo-state');
+    await expect(state).toHaveAttribute('data-state', 'checking');
+    await expect(state).toContainText('Checking held.png');
+    await expect(page.getByTestId('look-logo-empty')).toHaveCount(0);
+
+    // It passes: the page re-reads itself and the slot makes it the logo.
+    await withPlatformPrisma((prisma) =>
+      prisma.asset.update({
+        where: { id: assetId },
+        data: { status: 'READY', scanStatus: 'CLEAN' },
+      }),
+    );
+    await expect(page.getByTestId('look-logo-image')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('look-logo-state')).toHaveCount(0);
+
+    // Refused: the slot says why.
+    await page.goto(
+      `${DASHBOARD_BASE_URL}/en/brand-brain?brand=${brandId}&tab=look&logoReason=infected`,
+    );
+    await expect(page.getByTestId('look-logo-state')).toHaveAttribute('data-state', 'refused');
+    await expect(page.getByTestId('look-logo-state')).toContainText('wasn’t used as the logo');
   });
 });
 

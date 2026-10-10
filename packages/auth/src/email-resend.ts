@@ -99,14 +99,38 @@ export function resendTransportOverride(): { readonly baseUrl?: string } {
  */
 const SAFE_PROVIDER_CODE = /^[a-z][a-z0-9_]{0,63}$/;
 
+/**
+ * Batch 7 PR C (2d) — WHICH FIELD WAS REFUSED, AND NOTHING ELSE. A 422 on
+ * staging could not be explained, because the log carried only the status and
+ * `validation_error`. Resend names the field it refused in its message (``The
+ * `to` field…``); the field NAME is taken from it only when it is one of the
+ * fields this adapter sends, so no value — no address, no subject, no link —
+ * can come out through it.
+ */
+const REQUEST_FIELDS = ['from', 'to', 'subject', 'text', 'html', 'reply_to'] as const;
+
+function refusedField(payload: unknown): string | null {
+  const message =
+    typeof payload === 'object' && payload !== null && 'message' in payload
+      ? String((payload as { message: unknown }).message)
+      : '';
+  for (const [, field] of message.matchAll(/`([a-z_]{1,16})`/g)) {
+    const known = REQUEST_FIELDS.find((candidate) => candidate === field);
+    if (known) return known;
+  }
+  return null;
+}
+
 function describeFailure(status: number, payload: unknown): string {
   const name =
     typeof payload === 'object' && payload !== null && 'name' in payload
       ? String((payload as { name: unknown }).name)
       : '';
   const code = SAFE_PROVIDER_CODE.test(name) ? name : '';
-  return code
-    ? `Resend refused the message (HTTP ${status}, ${code}).`
+  const field = refusedField(payload);
+  const detail = [code, field ? `field: ${field}` : ''].filter(Boolean).join(', ');
+  return detail
+    ? `Resend refused the message (HTTP ${status}, ${detail}).`
     : `Resend refused the message (HTTP ${status}).`;
 }
 

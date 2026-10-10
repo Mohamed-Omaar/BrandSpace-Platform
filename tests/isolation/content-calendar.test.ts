@@ -11,7 +11,12 @@ import {
   type ContentPolicy,
   type ScheduleQuota,
 } from '@brandspace/content';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
+} from './fixtures';
 
 /**
  * The Content Calendar against a real PostgreSQL and the REAL usage service —
@@ -151,6 +156,7 @@ function inA<T>(
     async (db) =>
       fn(
         new ContentCalendarService({
+          channelGate: OPEN_CHANNEL_GATE,
           db,
           workspaceId: fixtures.a.workspaceId,
           policy: CONTENT_POLICY,
@@ -422,6 +428,7 @@ describe('AC-14.6 — approval, when the policy requires it', () => {
         async (db) =>
           fn(
             new ContentCalendarService({
+              channelGate: OPEN_CHANNEL_GATE,
               db,
               workspaceId: fixtures.a.workspaceId,
               policy: CONTENT_POLICY,

@@ -15,7 +15,12 @@ import {
   type AutomationActor,
   type AutomationPorts,
 } from '@brandspace/automation';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
+} from './fixtures';
 import { seedStoredRule } from './stored-automation-rule';
 
 /**
@@ -113,6 +118,7 @@ function calendar(
   } = {},
 ): ContentCalendarService {
   return new ContentCalendarService({
+    channelGate: OPEN_CHANNEL_GATE,
     db,
     workspaceId: fixtures.a.workspaceId,
     policy: policy(options.calendar),

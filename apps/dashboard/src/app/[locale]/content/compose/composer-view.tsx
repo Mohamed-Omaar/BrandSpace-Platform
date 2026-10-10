@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import type { UploadRules } from '../../../../components/upload-rules';
-import type { AutosaveResult, ShapeResult } from '../actions';
+import type { AutosaveResult, ProposeTimeResult, ShapeResult } from '../actions';
+import type { PublishChoice, WhenBest } from './when-popover';
 import { STUDIO_CARRY_KEY, type StudioHandoff } from './studio-carry';
-import { InlineSchedule } from './inline-schedule';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { SegmentPill, visuallyHiddenStyle } from '@brandspace/ui';
@@ -273,6 +273,12 @@ export interface ComposerViewProps {
     readonly tomorrow: string;
     readonly defaultTime: string;
   } | null;
+  /** Batch 7 PR C (B1.1) — the post's proposed time and, with real data, its best hours. */
+  readonly proposal?: {
+    readonly value: string | null;
+    readonly choice: PublishChoice;
+    readonly best: WhenBest | null;
+  } | null;
   readonly tools: readonly string[];
   /** PHASE 6 FINAL (D-285) — the Creative Studio's sizes, for the media drawer. */
   readonly creativeFormats?: readonly { key: string; label: string }[];
@@ -348,6 +354,8 @@ export interface ComposerViewProps {
     duplicate?(formData: FormData): Promise<void>;
     /** B9 (Phase 2B-2) — schedule from the Studio, inline. */
     scheduleFromStudio?(formData: FormData): Promise<void>;
+    /** Batch 7 PR C (B1.1) — keep a proposed time on the post. */
+    proposeTime?(formData: FormData): Promise<ProposeTimeResult>;
     /** Round 4 (3.3) — the calendar's own reschedule, for a post already on it. */
     reschedule?(formData: FormData): Promise<void>;
     /** E4 (Phase 2B-2) — save the open post as a template. */
@@ -431,6 +439,7 @@ export function ComposerView({
   review = null,
   scheduling = null,
   publishTime = null,
+  proposal = null,
   failed = null,
 }: ComposerViewProps) {
   const router = useRouter();
@@ -878,13 +887,6 @@ export function ComposerView({
   const [whenOpen, setWhenOpen] = useState(false);
   // Which "When" opened the panel: it is drawn under that one, as the editor's.
   const [whenAt, setWhenAt] = useState<'card' | 'bar'>('card');
-  const [whenValues, setWhenValues] = useState<{ date: string; time: string } | null>(null);
-  const [whenPressed, setWhenPressed] = useState(false);
-  const onWhenValues = useCallback((date: string, time: string) => {
-    setWhenValues((current) =>
-      current && current.date === date && current.time === time ? current : { date, time },
-    );
-  }, []);
   // The draft as it was asked for: what changed after that is said, not lost.
   const sentRef = useRef<{ channels: readonly string[]; format: string } | null>(null);
   const mayCreate = ready && !captionTooLong && draft === null && can.create;
@@ -1005,36 +1007,14 @@ export function ComposerView({
       data-testid="composer-when-panel"
     >
       <span className="bsp-st-when-title">{t['studio.whenTitle']}</span>
-      {brands.find((brand) => brand.id === brandId)?.approvalFirst ? (
-        <span className="bsp-st-when-note">
-          {plannedDate ? t['create.plannedNeedsApproval'] : t['editor.next.needsApproval']}
-        </span>
-      ) : scheduling && can.schedule ? (
-        <>
-          {/* Round 5 (4): what setting the time does, said before it is set. */}
-          <p className="bsp-st-when-note" data-testid="composer-when-schedules">
-            {t['studio.when.schedulesNow']}
-          </p>
-          <InlineSchedule
-            locale={locale}
-            itemId=""
-            today={scheduling.today}
-            tomorrow={scheduling.tomorrow}
-            defaultTime={scheduling.defaultTime}
-            plannedDate={plannedDate}
-            disabled={false}
-            // Never posts from here: the draft's own panel does, once it exists.
-            action={async () => undefined}
-            onValues={onWhenValues}
-            beforeSubmit={async () => {
-              setWhenPressed(true);
-              createDraft('when');
-              return false;
-            }}
-            t={t}
-          />
-        </>
-      ) : null}
+      {/*
+        Batch 7 PR C — the time is kept on the post, so it is chosen once the
+        draft exists: opening this panel makes the draft, and the draft's own
+        popover takes over where this one is.
+      */}
+      <span className="bsp-st-when-note" data-testid="composer-when-after-save">
+        {t['studio.whenAfterSave']}
+      </span>
       <button
         type="button"
         className="bsp-btn bsp-sm bsp-st-end"
@@ -1064,14 +1044,8 @@ export function ComposerView({
       focus,
       caret:
         focus === 'caption' && active instanceof HTMLTextAreaElement ? active.selectionStart : null,
-      when:
-        whenOpen || whenPressed
-          ? {
-              date: whenValues?.date ?? scheduling?.tomorrow ?? '',
-              time: whenValues?.time ?? scheduling?.defaultTime ?? '',
-              submit: whenPressed,
-            }
-          : null,
+      // The draft's popover opens on the same day the new post's would have.
+      when: whenOpen ? { date: '', time: '', submit: false } : null,
       target: { channels: selected, format: contentType },
     };
   };
@@ -1235,6 +1209,7 @@ export function ComposerView({
           review={review}
           scheduling={scheduling}
           publishTime={publishTime}
+          proposal={proposal}
           failed={failed}
           {...(startFrom ? { startFrom } : {})}
           canGenerateMedia={can.generateMedia ?? false}

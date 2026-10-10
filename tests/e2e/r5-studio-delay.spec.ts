@@ -142,17 +142,20 @@ for (const latency of [600, 2000]) {
       timeout: 300,
     });
 
-    // 5. The time: the panel opens on the first press, and "Set" waits for the
-    //    words to be saved instead of being disabled while they are.
+    // 5. The time: the panel opens on the first press, and the time chosen is
+    //    kept on the post (Batch 7 PR C, B1.1). Scheduling is its own press
+    //    (B1.2), and it waits for the words to be saved instead of being
+    //    disabled while they are.
     await page.getByTestId('editor-when').click();
     await expect(page.getByTestId('editor-when-panel')).toBeVisible({ timeout: 300 });
-    const set = page.getByTestId('editor-schedule-submit');
-    await expect(set).toBeEnabled({ timeout: 300 });
     await page.getByTestId('editor-schedule-time').fill('16:40');
-    await set.click();
     await expect(page.getByTestId('editor-when')).toContainText('16:40', {
       timeout: 15 * latency + 10_000,
     });
+    const set = page.getByTestId('editor-schedule-submit');
+    await expect(set).toBeEnabled({ timeout: 300 });
+    await set.click();
+    await page.waitForURL(/ok=CONTENT_SCHEDULED/, { timeout: 15 * latency + 10_000 });
 
     // 6. All of it survives a reload.
     await slow(false);

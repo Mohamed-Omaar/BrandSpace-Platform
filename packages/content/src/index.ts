@@ -155,6 +155,8 @@ export {
   draftLimitReached,
   invalidScheduleTime,
   nothingToSchedule,
+  PROPOSED_TIME_LOCKED_REASON,
+  proposedTimeLocked,
   scheduleQuotaExceeded,
   scheduleTooFarAhead,
   scheduleTooSoon,

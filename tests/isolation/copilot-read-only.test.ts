@@ -16,7 +16,12 @@ import {
 } from '@brandspace/analytics';
 import { CampaignService, ContentCalendarService, parseContentPolicy } from '@brandspace/content';
 import { systemClock } from '@brandspace/shared';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
+} from './fixtures';
 
 /**
  * A READ_ONLY COPILOT TOOL IS READ-ONLY IN FACT, NOT ONLY IN ITS TABLE ROW.
@@ -156,6 +161,7 @@ describe('the confirmation contract rests on READ_ONLY meaning read-only', () =>
           }),
           campaigns: new CampaignService({ db: guarded, workspaceId: fixtures.a.workspaceId }),
           calendar: new ContentCalendarService({
+            channelGate: OPEN_CHANNEL_GATE,
             db: guarded,
             workspaceId: fixtures.a.workspaceId,
             policy: contentPolicy,

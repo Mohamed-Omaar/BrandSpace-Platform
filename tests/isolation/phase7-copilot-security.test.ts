@@ -25,7 +25,12 @@ import {
   createAnalyticsRegistry,
   parseAnalyticsPolicy,
 } from '@brandspace/analytics';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
+} from './fixtures';
 
 /**
  * Phase 7 — the Copilot's SECURITY contract, exercised end to end on real
@@ -153,6 +158,7 @@ function executorContext(
     }),
     campaigns: new CampaignService({ db, workspaceId: fixtures.a.workspaceId }),
     calendar: new ContentCalendarService({
+      channelGate: OPEN_CHANNEL_GATE,
       db,
       workspaceId: fixtures.a.workspaceId,
       policy: contentPolicy,
@@ -737,6 +743,7 @@ describe('undo is a compensation contract, not a reversed command', () => {
         collaborators: {
           campaigns: new CampaignService({ db, workspaceId: fixtures.a.workspaceId }),
           calendar: new ContentCalendarService({
+            channelGate: OPEN_CHANNEL_GATE,
             db,
             workspaceId: fixtures.a.workspaceId,
             policy: parseContentPolicy(defaultPayload('content')),
@@ -778,6 +785,7 @@ describe('undo is a compensation contract, not a reversed command', () => {
           collaborators: {
             campaigns: new CampaignService({ db, workspaceId: fixtures.a.workspaceId }),
             calendar: new ContentCalendarService({
+              channelGate: OPEN_CHANNEL_GATE,
               db,
               workspaceId: fixtures.a.workspaceId,
               policy: parseContentPolicy(defaultPayload('content')),

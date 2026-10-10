@@ -5,7 +5,7 @@ import type { UploadRules } from '../../../../components/upload-rules';
 import { takeStudioCarry, type StudioCarry, type StudioHandoff } from './studio-carry';
 import { ChannelAccessLine, type ChannelAccess } from './channel-access-line';
 import { fitOf, formatForChannels, listOf } from './format-fit';
-import type { AutosaveResult, ShapeResult } from '../actions';
+import type { AutosaveResult, ProposeTimeResult, ShapeResult } from '../actions';
 import { AUTOSAVE_STATUSES } from './autosave-statuses';
 import {
   useEffect,
@@ -34,6 +34,8 @@ import { ChannelMark, PostArt } from '../../calendar/prototype-calendar';
 import type { MediaOptionView } from './media-picker';
 import { MediaSlides } from './media-slides';
 import { InlineSchedule } from './inline-schedule';
+import { WhenPopover, type PublishChoice, type WhenBest } from './when-popover';
+import { localWhenLabel } from '../../../../server/prototype-dates';
 import { MediaDrawer, type CreativeFormatOption } from './media-drawer';
 import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
@@ -143,6 +145,15 @@ export interface DraftEditorProps {
     readonly date: string;
     readonly time: string | null;
   } | null;
+  /**
+   * Batch 7 PR C (B1.1) — the post's proposed publish time, and the best
+   * hours when the brand's real engagement supports them (else null).
+   */
+  readonly proposal?: {
+    readonly value: string | null;
+    readonly choice: PublishChoice;
+    readonly best: WhenBest | null;
+  } | null;
   /** Item 9 — a FAILED post: what the Publishing screen would say about it. */
   readonly failed?: { readonly message: string } | null;
   /** D-288 — the approval policy and a changes request, when there is one. */
@@ -192,6 +203,8 @@ export interface DraftEditorProps {
     scheduleFromStudio?(formData: FormData): Promise<void>;
     /** Round 4 (3.3) — the calendar's own reschedule, for a post already on it. */
     reschedule?(formData: FormData): Promise<void>;
+    /** Batch 7 PR C (B1.1) — store the proposed time; schedules nothing. */
+    proposeTime?(formData: FormData): Promise<ProposeTimeResult>;
     /** E4 (Phase 2B-2) — save this post as a template. */
     saveAsTemplate?(formData: FormData): Promise<void>;
     /** D10 (Phase 2C-3) — "Keep as is" on one changed fact. */
@@ -290,6 +303,7 @@ export function DraftEditor({
   review = null,
   scheduling = null,
   publishTime = null,
+  proposal = null,
   failed = null,
   startFrom,
   handoff = null,
@@ -337,6 +351,26 @@ export function DraftEditor({
     placedRef.current = placed;
     setWhenOpen(false);
   }, [placed]);
+  /*
+   * Batch 7 PR C (B1.1) — THE PROPOSED TIME, as the popover last stored it.
+   * The page's value wins whenever it changes (a reload, another tab's save).
+   */
+  const [proposed, setProposed] = useState<string | null>(proposal?.value ?? null);
+  const [choice, setChoice] = useState<PublishChoice>(proposal?.choice ?? 'NONE');
+  useEffect(() => {
+    setProposed(proposal?.value ?? null);
+    setChoice(proposal?.choice ?? 'NONE');
+  }, [proposal?.value, proposal?.choice]);
+  const whenText = publishTime?.slotId
+    ? publishTime.label
+    : proposed
+      ? (localWhenLabel(proposed, locale, new Date(now)) ?? proposed)
+      : choice === 'AFTER_APPROVAL'
+        ? (t['studio.when.mode.after'] ?? null)
+        : (publishTime?.label ?? null);
+  const whenIsBest = Boolean(
+    !publishTime?.slotId && proposed && proposal?.best?.bestLocalTime === proposed,
+  );
   /*
    * Step 7 (7.2) — THE PANEL IS A DIALOG, SO ESCAPE CLOSES IT, and focus goes
    * back to the "When" that opened it (WCAG 2.1.2). It stayed open over the
@@ -1151,6 +1185,18 @@ export function DraftEditor({
     window.setTimeout(() => document.getElementById(`${fieldId}-${variant.id}-media`)?.focus(), 0);
   };
 
+  /*
+   * Batch 7 PR C (B1.1, B1.4) — who may keep a time on this post: the author's
+   * own permission, while it is a draft, has changes requested or is approved
+   * and not yet on the calendar. `propose()` holds the same rule.
+   */
+  const mayPropose =
+    can.edit &&
+    !draft.readOnly &&
+    !publishTime?.slotId &&
+    (draft.status === 'DRAFT' ||
+      draft.status === 'CHANGES_REQUESTED' ||
+      draft.status === 'APPROVED');
   const mayScheduleHere = Boolean(
     can.schedule &&
     ((draft.status === 'DRAFT' && review && !review.requiresApproval) ||
@@ -1179,6 +1225,34 @@ export function DraftEditor({
    * THE PUBLISH-TIME PANEL, under whichever "When" opened it (review of #67,
    * round 2): the settings card's chip, or the bar's.
    */
+  /*
+   * Batch 7 PR C — THE CARD'S POPOVER OPENS UPWARD WHEN THERE IS NO ROOM BELOW,
+   * as the bar's always does, and is never cut off by the window. Measured once
+   * drawn, against the window: below the chip when it fits; otherwise on the
+   * side with more room. When even that side is shorter than the popover, it
+   * takes that side's height and its content scrolls inside it, so Done and
+   * every choice stay reachable.
+   */
+  const whenCardRef = useRef<HTMLDivElement | null>(null);
+  const [whenFit, setWhenFit] = useState<{ flip: boolean; max: number | null }>({
+    flip: false,
+    max: null,
+  });
+  useLayoutEffect(() => {
+    const panel = whenCardRef.current;
+    if (!whenOpen || whenAt !== 'card' || !panel) return;
+    const anchor = panel.parentElement?.getBoundingClientRect();
+    if (!anchor) return;
+    // The popover's offset from the chip (`--bsp-px-42`), and a small margin.
+    const offset = parseFloat(getComputedStyle(panel).getPropertyValue('--bsp-px-42')) || 0;
+    const margin = 8;
+    const need = panel.scrollHeight;
+    const below = window.innerHeight - (anchor.top + offset) - margin;
+    const above = anchor.bottom - offset - margin;
+    const flip = need > below && above > below;
+    const room = Math.floor(flip ? above : below);
+    setWhenFit({ flip, max: need > room ? room : null });
+  }, [whenOpen, whenAt, proposed, choice]);
   const whenPanel = (at: 'card' | 'bar') => (
     <>
       {/*
@@ -1189,48 +1263,23 @@ export function DraftEditor({
       <div
         role="dialog"
         aria-label={t['studio.whenTitle']}
-        className={`bsp-st-when${at === 'bar' ? ' bsp-st-when-up' : ''}`}
+        ref={at === 'card' ? whenCardRef : undefined}
+        className={`bsp-st-when${at === 'bar' ? ' bsp-st-when-up' : whenFit.flip ? ' bsp-st-when-flip' : ''}`}
+        style={
+          at === 'card' && whenFit.max !== null
+            ? { maxBlockSize: `${whenFit.max}px`, overflowY: 'auto' }
+            : undefined
+        }
         hidden={!whenOpen}
         data-testid="editor-when-panel"
+        data-opens={at === 'bar' || whenFit.flip ? 'up' : 'down'}
       >
         <span className="bsp-st-when-title">{t['studio.whenTitle']}</span>
-        {/*
-                B9 / F2 (Phase 2B-2) — THE DATE AND TIME, INLINE, wherever the
-                Schedule link is offered: the same states, the same
-                permission, the same service call. The link stays for the
-                calendar view.
-              */}
         {scheduling &&
-        actions.scheduleFromStudio &&
+        actions.reschedule &&
         can.schedule &&
-        ((draft.status === 'DRAFT' && review && !review.requiresApproval) ||
-          draft.status === 'APPROVED') ? (
-          <>
-            {/* Round 5 (4): what setting the time does, said before it is set. */}
-            <p className="bsp-st-when-note" data-testid="editor-when-schedules">
-              {t['studio.when.schedulesNow']}
-            </p>
-            <InlineSchedule
-              locale={locale}
-              itemId={draft.id}
-              today={scheduling.today}
-              tomorrow={scheduling.tomorrow}
-              defaultTime={scheduling.defaultTime}
-              plannedDate={plannedDate}
-              // Round 5 (A): a draft's words save first — the press waits, it is not refused.
-              disabled={anyDirty && !autosaves}
-              {...(autosaves ? { beforeSubmit: () => settleAll() } : {})}
-              initial={arrival?.when ? { date: arrival.when.date, time: arrival.when.time } : null}
-              submitOnMount={arrival?.when?.submit === true}
-              action={actions.scheduleFromStudio}
-              t={t}
-            />
-          </>
-        ) : scheduling &&
-          actions.reschedule &&
-          can.schedule &&
-          publishTime?.slotId &&
-          publishTime.time ? (
+        publishTime?.slotId &&
+        publishTime.time ? (
           /*
             Round 4 (3.3) — A POST ON THE CALENDAR: its time, editable right
             here, through the calendar's own reschedule (same permission, same
@@ -1251,37 +1300,70 @@ export function DraftEditor({
             testId="editor-reschedule-inline"
             t={t}
           />
-        ) : (
-          <span className="bsp-st-when-note">
-            {review?.requiresApproval && draft.status === 'DRAFT'
-              ? plannedDate
-                ? /* Review of 2a (6): the carried day cannot be kept before approval. */
-                  t['create.plannedNeedsApproval']
-                : t['editor.next.needsApproval']
-              : statusLabel}
-          </span>
-        )}
-        {/*
-                THE CALENDAR'S SCHEDULE, where the prototype sets the time
-                (review of #67, round 2): the link the bar used to carry.
-              */}
-        {mayScheduleHere ? (
-          <Link
-            className="bsp-st-link"
-            href={`/${locale}/calendar?item=${draft.id}${plannedDate ? `&date=${plannedDate}` : ''}`}
-            aria-disabled={anyDirty}
-            data-testid="editor-schedule"
+        ) : scheduling && actions.proposeTime && mayPropose ? (
+          /*
+            Batch 7 PR C (B1.1, B1.2, B1.4) — "WHEN SHOULD IT GO OUT?": the
+            time chosen here is kept on the post and schedules nothing. The
+            bar's Schedule press, or "Approve & schedule", puts it on the
+            calendar. A brand that needs approval edits it too.
+          */
+          <WhenPopover
+            locale={locale}
+            itemId={draft.id}
+            t={t}
+            today={scheduling.today}
+            tomorrow={scheduling.tomorrow}
+            defaultTime={scheduling.defaultTime}
+            plannedDate={plannedDate}
+            proposed={proposed}
+            choice={choice}
+            best={proposal?.best ?? null}
+            requiresApproval={Boolean(review?.requiresApproval) && draft.status !== 'APPROVED'}
+            reviewerName={review?.reviewers?.[0]?.name ?? null}
+            propose={actions.proposeTime}
+            onProposed={(value, next) => {
+              setProposed(value);
+              setChoice(next);
+            }}
+            onDone={() => setWhenOpen(false)}
+            initial={arrival?.when ? { date: arrival.when.date, time: arrival.when.time } : null}
+            saveOnMount={arrival?.when?.submit === true}
           >
-            {t['editor.next.schedule']} →
-          </Link>
-        ) : null}
-        <button
-          type="button"
-          className="bsp-btn bsp-sm bsp-st-end"
-          onClick={() => setWhenOpen(false)}
-        >
-          {t['studio.whenDone']}
-        </button>
+            {mayScheduleHere && proposed && actions.scheduleFromStudio ? (
+              <button
+                type="submit"
+                form={`${fieldId}-schedule`}
+                className="bsp-btn bsp-sm bsp-pur bsp-st-end"
+                disabled={anyDirty && !autosaves}
+                data-testid="editor-schedule-submit"
+              >
+                {t['editor.next.schedule']}
+              </button>
+            ) : null}
+            {/* The calendar's own Schedule, for choosing on the month (round 2). */}
+            {mayScheduleHere ? (
+              <Link
+                className="bsp-st-link"
+                href={`/${locale}/calendar?item=${draft.id}${plannedDate ? `&date=${plannedDate}` : ''}`}
+                aria-disabled={anyDirty}
+                data-testid="editor-schedule"
+              >
+                {t['editor.next.schedule']} →
+              </Link>
+            ) : null}
+          </WhenPopover>
+        ) : (
+          <>
+            <span className="bsp-st-when-note">{statusLabel}</span>
+            <button
+              type="button"
+              className="bsp-btn bsp-sm bsp-st-end"
+              onClick={() => setWhenOpen(false)}
+            >
+              {t['studio.whenDone']}
+            </button>
+          </>
+        )}
       </div>
     </>
   );
@@ -1834,15 +1916,20 @@ export function DraftEditor({
                 <CalendarGlyph />
                 <span>
                   {/* Round 4 (3.3) — the time itself, never "Scheduled". */}
-                  {publishTime ? (
+                  {whenText ? (
                     <span className="bsp-ltr" data-testid="editor-when-label">
-                      {publishTime.label}
+                      {whenText}
                     </span>
                   ) : (
                     t['studio.whenUnset']
                   )}
                 </span>
               </span>
+              {whenIsBest ? (
+                <span className="bsp-xstatus bsp-ai" data-testid="editor-when-best">
+                  {t['studio.when.best']}
+                </span>
+              ) : null}
             </button>
             {whenAt === 'card' ? whenPanel('card') : null}
           </span>
@@ -2686,6 +2773,25 @@ export function DraftEditor({
             <input type="hidden" name="itemId" value={draft.id} />
           </form>
         ) : null}
+        {mayScheduleHere && proposed && actions.scheduleFromStudio ? (
+          /*
+            Batch 7 PR C (B1.2) — SCHEDULING IS ITS OWN PRESS: the popover's
+            Schedule (and the bar's, where review is not the next step) sends
+            the time the post keeps to the calendar's unchanged `schedule()`
+            (lead, horizon, the day's room, the channels), the words saved first.
+          */
+          <form
+            id={`${fieldId}-schedule`}
+            action={actions.scheduleFromStudio}
+            hidden
+            onSubmit={flushThenSubmit}
+          >
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="contentItemId" value={draft.id} />
+            <input type="hidden" name="date" value={proposed.slice(0, 10)} />
+            <input type="hidden" name="time" value={proposed.slice(11, 16)} />
+          </form>
+        ) : null}
         {mayReview ? reviewerPicker('submit', reviewFormId) : null}
         {!draft.readOnly ? (
           <span className="bsp-st-anchor">
@@ -2699,11 +2805,7 @@ export function DraftEditor({
             >
               <CalendarGlyph />
               <span>
-                {publishTime ? (
-                  <span className="bsp-ltr">{publishTime.label}</span>
-                ) : (
-                  t['studio.whenUnset']
-                )}
+                {whenText ? <span className="bsp-ltr">{whenText}</span> : t['studio.whenUnset']}
               </span>
             </button>
             {whenAt === 'bar' ? whenPanel('bar') : null}
@@ -2719,6 +2821,21 @@ export function DraftEditor({
             data-testid="submit-for-review"
           >
             {t['content.composer.submit']}
+          </button>
+        ) : mayScheduleHere && proposed && actions.scheduleFromStudio ? (
+          /*
+            Batch 7 PR C (B1.2) — SCHEDULING IS ITS OWN PRESS. The time the
+            popover kept goes to the calendar's unchanged `schedule()` (lead,
+            horizon, the day's room, the channels), the words saved first.
+          */
+          <button
+            type="submit"
+            form={`${fieldId}-schedule`}
+            className="bsp-btn bsp-pur"
+            disabled={anyDirty && !autosaves}
+            data-testid="editor-bar-schedule"
+          >
+            {t['editor.next.schedule']}
           </button>
         ) : mayScheduleHere ? (
           <button

@@ -87,12 +87,14 @@ describe('M5b — the executor lease', () => {
 });
 
 describe('M5 — order and schema', () => {
-  it('M5a, then M5b, then its index, are the newest migrations, directly after M4', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-4)).toEqual([
+  it('M5a, then M5b, then its index, directly after M4; only the batch 7 PR C migration follows', () => {
+    const at = EXPECTED_MIGRATIONS.indexOf(M5A);
+    expect(EXPECTED_MIGRATIONS.slice(at - 1)).toEqual([
       '20261014090000_automation_run_awaiting_expiry_index',
       M5A,
       M5B,
       M5B_INDEX,
+      '20261016090000_content_item_publish_time',
     ]);
   });
 

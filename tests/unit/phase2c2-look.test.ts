@@ -126,6 +126,8 @@ describe('the permission gate — brand.manage, before anything is read', () => 
     ].map((match) => match[1]!);
     expect(exported.sort()).toEqual([
       'addBrandFontAction',
+      // Batch 7 PR C (2c): the logo slot attaches a file once its scan passes.
+      'attachBrandLogoAction',
       'chooseBrandLogoAction',
       'removeBrandFontAction',
       'renameBrandFontAction',

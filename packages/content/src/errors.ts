@@ -113,6 +113,20 @@ export function scheduleTooSoon(): AppError {
   });
 }
 
+/**
+ * Batch 7 PR C (B1.1) — a proposed publish time changes only on a post that is
+ * still being prepared: a draft, a post sent back for changes, or an approved
+ * post waiting to be scheduled. In review, the reviewer is deciding on the
+ * time as it stands; once scheduled, the slot's own time is the one to move.
+ */
+export const PROPOSED_TIME_LOCKED_REASON = 'proposed_time_locked';
+
+export function proposedTimeLocked(): AppError {
+  return new AppError('CONFLICT', 'The proposed time cannot change at this stage.', {
+    reason: PROPOSED_TIME_LOCKED_REASON,
+  });
+}
+
 /** Beyond the configured planning horizon. */
 export function scheduleTooFarAhead(): AppError {
   return new AppError('VALIDATION_FAILED', 'That date is too far ahead to plan.');

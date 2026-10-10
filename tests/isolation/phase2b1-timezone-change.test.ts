@@ -13,7 +13,7 @@ import {
   scheduleUsageKey,
   timezoneChangeEffects,
 } from '@brandspace/content';
-import { appRoleClient, platformRoleClient } from './fixtures';
+import { appRoleClient, platformRoleClient, OPEN_CHANNEL_GATE } from './fixtures';
 
 /**
  * PROTOTYPE v94 PHASE 2B-1, ITEM 7 — G5 / Q22: A TIME-ZONE CHANGE KEEPS EVERY
@@ -337,6 +337,7 @@ describe('G5 / Q22 · a post sent back to PLANNED goes out again only by being r
     const localTime = `${new Date().getUTCFullYear() + 1}-03-10T10:00`;
     const view = await inTenant(w.workspaceId, (db) =>
       new ContentCalendarService({
+        channelGate: OPEN_CHANNEL_GATE,
         db,
         workspaceId: w.workspaceId,
         policy: POLICY,
@@ -395,6 +396,7 @@ function calendar(
 ) {
   return (db: TenantScopedClient) =>
     new ContentCalendarService({
+      channelGate: OPEN_CHANNEL_GATE,
       db,
       workspaceId: w.workspaceId,
       policy: POLICY,
@@ -503,6 +505,7 @@ describe('Review item 13 · a refund moves the scheduling key on; a retry never 
     const request = () =>
       inTenant(w.workspaceId, (db) =>
         new ContentCalendarService({
+          channelGate: OPEN_CHANNEL_GATE,
           db,
           workspaceId: w.workspaceId,
           policy: POLICY,
@@ -523,6 +526,7 @@ describe('Review item 13 · a refund moves the scheduling key on; a retry never 
     await expect(
       inTenant(w.workspaceId, async (db) => {
         await new ContentCalendarService({
+          channelGate: OPEN_CHANNEL_GATE,
           db,
           workspaceId: w.workspaceId,
           policy: POLICY,

@@ -24,6 +24,7 @@ import {
   FIXTURE_SOCIAL_KEK,
   platformRoleClient,
   type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
 } from './fixtures';
 
 /**
@@ -105,6 +106,7 @@ function pipeline(db: TenantScopedClient, at: Date): PublishPipelineService {
 
 function calendar(db: TenantScopedClient, consumed: string[], requireApproval = false) {
   return new ContentCalendarService({
+    channelGate: OPEN_CHANNEL_GATE,
     db,
     workspaceId: fixtures.a.workspaceId,
     policy: contentPolicy,
@@ -432,6 +434,7 @@ describe('rescheduling a FAILED post', () => {
         fixtures.b.workspaceId,
         (db) =>
           new ContentCalendarService({
+            channelGate: OPEN_CHANNEL_GATE,
             db,
             workspaceId: fixtures.b.workspaceId,
             policy: contentPolicy,

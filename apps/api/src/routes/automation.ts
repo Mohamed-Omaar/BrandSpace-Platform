@@ -20,7 +20,6 @@ import {
 } from '@brandspace/social-connectors';
 import { getPrisma, withWorkspace, type TenantScopedClient } from '@brandspace/database';
 import { PUBLISH_SOCIAL_POST, enqueue, type PublishSocialPostPayload } from '@brandspace/jobs';
-import { systemClock } from '@brandspace/shared';
 import { route } from '../route-contract';
 import {
   automationDenialSink,
@@ -110,19 +109,6 @@ function publishPort(db: TenantScopedClient): NonNullable<AutomationPorts['publi
       });
       const timezone = workspace?.timezone ?? 'UTC';
 
-      const now = systemClock.now();
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      })
-        .formatToParts(now)
-        .reduce((acc, part) => ({ ...acc, [part.type]: part.value }), {} as Record<string, string>);
-
       const calendar = new ContentCalendarService({
         db,
         workspaceId: input.workspaceId,
@@ -141,9 +127,10 @@ function publishPort(db: TenantScopedClient): NonNullable<AutomationPorts['publi
         }),
       });
 
-      const view = await calendar.schedule({
+      // Batch 7 PR C (B3.1): "now" through `publishNow()`, which keeps every
+      // rule of `schedule()` except the minimum lead that refused it.
+      const view = await calendar.publishNow({
         contentItemId: input.contentItemId,
-        localTime: `${parts['year']}-${parts['month']}-${parts['day']}T${parts['hour']}:${parts['minute']}`,
         actorUserId: input.actorUserId,
         /*
          * THE CONFIRMER'S OWN SCOPE (P7-R3). `[]` here did not "re-check

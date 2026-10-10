@@ -13,6 +13,7 @@ import { Button, CONTROL_CLASS, Dialog, colorTokens, visuallyHiddenStyle } from 
 import { translator, type MessageKey } from '../../../i18n/messages';
 import {
   addBrandFontAction,
+  attachBrandLogoAction,
   chooseBrandLogoAction,
   removeBrandFontAction,
   renameBrandFontAction,
@@ -23,6 +24,8 @@ import {
 } from './look-actions';
 import { useMessageLocale } from '../../../i18n/message-locale-context';
 import { MoreDisclosure } from '../../../components/more-disclosure';
+import { RefreshWhile } from '../../../components/refresh-while';
+import { LogoAttach } from '../onboarding/logo-attach';
 
 /**
  * LOOK & VOICE: COLOURS, LOGO AND FONTS — as the prototype draws them
@@ -54,6 +57,12 @@ type Role = 'heading' | 'body';
 export interface LookViewData {
   readonly palette: readonly string[];
   readonly logo: { readonly assetId: string; readonly url: string | null } | null;
+  /** Batch 7 PR C (2c) — the last upload, until it is the logo (`server/brand-fonts.ts`). */
+  readonly logoPending: {
+    readonly state: 'checking' | 'attach' | 'refused';
+    readonly assetId: string | null;
+    readonly message: string;
+  } | null;
   readonly logoOptions: readonly { readonly id: string; readonly name: string }[];
   readonly slots: Readonly<
     Record<
@@ -158,6 +167,7 @@ export function LookCard({
         locale={locale}
         brandId={brandId}
         logo={look.logo}
+        pending={look.logoPending}
         options={look.logoOptions}
         rules={look.imageRules}
         refusal={uploadRefusal?.for === 'upload-logo' ? uploadRefusal.message : null}
@@ -366,6 +376,7 @@ function Logo({
   locale,
   brandId,
   logo,
+  pending,
   options,
   rules,
   refusal,
@@ -375,6 +386,7 @@ function Logo({
   locale: string;
   brandId: string;
   logo: LookViewData['logo'];
+  pending: LookViewData['logoPending'];
   options: LookViewData['logoOptions'];
   rules: UploadRules;
   refusal: string | null;
@@ -438,11 +450,35 @@ function Logo({
             <img src={logo.url} alt="" />
           </span>
         </div>
-      ) : (
+      ) : pending ? null : (
         <p className="bsp-lk-muted" data-testid="look-logo-empty">
           {t('bb.look.logoEmpty')}
         </p>
       )}
+      {pending ? (
+        /*
+          Batch 7 PR C (2c) — THE SLOT SAYS WHAT BECAME OF THE UPLOAD: being
+          checked (the page re-reads itself), passed (attached at once, by the
+          hidden form), or refused and why. Never a success over an empty slot.
+        */
+        <div
+          className="bsp-lk-muted"
+          role="status"
+          data-testid="look-logo-state"
+          data-state={pending.state}
+        >
+          {pending.message}
+          <RefreshWhile active={pending.state === 'checking'} />
+          {pending.state === 'attach' && pending.assetId && canManage ? (
+            <LogoAttach
+              action={attachBrandLogoAction}
+              locale={locale}
+              brandId={brandId}
+              assetId={pending.assetId}
+            />
+          ) : null}
+        </div>
+      ) : null}
       {canUpload ? (
         <UploadForm
           action={uploadBrandLogoAction}

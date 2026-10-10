@@ -52,6 +52,27 @@ describe('D-484 · the size tables', () => {
   });
 });
 
+describe('D-484 amended · the entry screens are the prototype at 0.80', () => {
+  const css = read('packages/ui/src/prototype.css');
+  const start = css.indexOf('\n.bsp-auth {\n');
+  const entry = table(css.slice(start, css.indexOf('\n}\n', start)));
+  const ENTRY = 0.8;
+
+  it('redefines every scaled token, and only on `.bsp-auth`', () => {
+    expect(start).toBeGreaterThan(0);
+    expect([...entry.keys()].sort()).toEqual([...scaled.keys()].sort());
+  });
+
+  it('each value is the prototype’s × 0.80 to the nearest 0.5px; type never under 11px', () => {
+    for (const [name, value] of entry) {
+      const own = tokenValue(name) * (name.startsWith('--bsp-rem-') ? 16 : 1);
+      const expected = own <= 1 ? own : Math.round(own * ENTRY * 2) / 2;
+      const floor = name.startsWith('--bsp-fs-') ? Math.max(11, expected) : expected;
+      expect(value, name).toBe(`${floor}px`);
+    }
+  });
+});
+
 describe('D-484 · icons are drawn at 0.88 too', () => {
   const css = read('packages/ui/src/prototype.css');
   const files = execFileSync('git', ['ls-files', 'apps/dashboard/src', 'packages/ui/src'], {

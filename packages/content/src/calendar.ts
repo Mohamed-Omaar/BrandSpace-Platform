@@ -21,6 +21,7 @@ import {
   dayIsFull,
   invalidScheduleTime,
   nothingToSchedule,
+  proposedTimeLocked,
   SCHEDULE_QUOTA_EXCEEDED_REASON,
   scheduleQuotaExceeded,
   scheduleTooFarAhead,
@@ -105,10 +106,15 @@ export interface CalendarOptions {
    * all because every account for it was revoked or disabled. Scheduling and
    * rescheduling onto such a channel is refused. An EXPIRED account is not
    * one of them — its channel waits for the reconnection — and a channel with
-   * no account connected keeps today's behaviour. Wired by every production
-   * caller (a unit test pins that); without it, nothing is refused.
+   * no account connected keeps today's behaviour.
+   *
+   * REQUIRED (Batch 7 PR C, B3.8 — the F8 audit finding). It used to be
+   * optional, and a calendar built without it refused nothing: a gate that
+   * fails OPEN when it is forgotten. Like `approvalGate` (PR 0), a calendar
+   * now cannot be built without it; a test that is not about reachability
+   * passes one that names no channel unreachable.
    */
-  readonly channelGate?: ChannelGate;
+  readonly channelGate: ChannelGate;
 }
 
 /** The single question the calendar asks the social connections. */
@@ -175,6 +181,16 @@ export interface CalendarSlotView {
  * `CHANGES_REQUESTED` is likewise absent: a reviewer has actively said the
  * content is not ready, and planning it anyway would make the verdict advisory.
  */
+/**
+ * Batch 7 PR C — where a proposed publish time may be set or cleared: a draft,
+ * a post sent back for changes, and an approved post waiting to be scheduled.
+ */
+const PROPOSABLE_FROM: readonly ContentItem['status'][] = [
+  'DRAFT',
+  'CHANGES_REQUESTED',
+  'APPROVED',
+];
+
 const SCHEDULABLE_FROM: readonly ContentItem['status'][] = ['DRAFT', 'APPROVED', 'SCHEDULED'];
 
 /**
@@ -250,7 +266,7 @@ export class ContentCalendarService {
   readonly #timezone: string;
   readonly #quota: ScheduleQuota;
   readonly #clock: Clock;
-  readonly #channelGate: ChannelGate | undefined;
+  readonly #channelGate: ChannelGate;
   readonly #approvalGate: ApprovalGate;
 
   constructor(options: CalendarOptions) {
@@ -284,6 +300,62 @@ export class ContentCalendarService {
 
   /** AC-14.1 — place a draft on the calendar at a chosen date and time. */
   async schedule(input: ScheduleInput): Promise<CalendarSlotView> {
+    return this.#place(input, null);
+  }
+
+  /**
+   * Batch 7 PR C (B3.1) — PUBLISH NOW: place the post on the calendar at THIS
+   * instant, for the publisher to pick up at once.
+   *
+   * "Publish now" used to build the current minute and call `schedule()`,
+   * which refuses anything sooner than now plus the minimum lead — and even
+   * with a lead of 0 the truncated minute is already past — so it never
+   * succeeded. This path is `schedule()` with every rule kept (the approval
+   * gate, the status rules, the channels, the day's room, the quota, the audit
+   * and the automation event) except the lead and the horizon, which are
+   * rules about choosing a FUTURE time and have no meaning for "now".
+   *
+   * A POST ALREADY SCHEDULED is not refused by that alone: its live slot is
+   * moved to now (the same conditional write `reschedule` uses, so it cannot
+   * race the publisher), keeping the quota it already used.
+   */
+  async publishNow(input: Omit<ScheduleInput, 'localTime'>): Promise<CalendarSlotView> {
+    const now = this.#clock.now();
+    const localTime = formatLocalTime(now, this.#timezone);
+    const item = await this.#requireItem(input.contentItemId, input.actorBrandScope);
+    const live = await this.#liveSlotFor(item.id);
+    if (live && live.status === 'SCHEDULED') {
+      const variants = await this.#db.contentVariant.findMany({
+        where: { contentItemId: item.id },
+        orderBy: { platformKey: 'asc' },
+      });
+      await this.#assertChannelsReachable(
+        item.brandId,
+        variants.map((variant) => variant.platformKey),
+      );
+      const claimed = await this.#db.calendarSlot.updateMany({
+        where: { id: live.id, status: 'SCHEDULED' },
+        data: { scheduledAtUtc: now, scheduledLocalTime: localTime },
+      });
+      if (claimed.count === 0) throw slotNotReschedulable();
+      const moved = await this.#db.calendarSlot.findUniqueOrThrow({ where: { id: live.id } });
+      await this.#audit('content.rescheduled', moved, input.actorUserId, {
+        reason: 'publish_now',
+        fromLocalTime: live.scheduledLocalTime,
+        toLocalTime: moved.scheduledLocalTime,
+        timezone: moved.timezone,
+        toUtc: moved.scheduledAtUtc.toISOString(),
+      });
+      return { slot: moved, item, variants };
+    }
+    return this.#place({ ...input, localTime }, now);
+  }
+
+  /**
+   * `schedule()` and `publishNow()`: `at` is null to resolve `localTime` with
+   * the lead and the horizon, or the instant "now" means.
+   */
+  async #place(input: ScheduleInput, at: Date | null): Promise<CalendarSlotView> {
     const item = await this.#requireItem(input.contentItemId, input.actorBrandScope);
 
     // AC-14.6. The gate, read from the brand's own policy (5B-3). With the
@@ -323,7 +395,7 @@ export class ContentCalendarService {
         })
       : null;
 
-    const instant = this.#resolveInstant(input.localTime);
+    const instant = at ?? this.#resolveInstant(input.localTime);
     await this.#assertDayHasRoom(instant, null);
 
     /*
@@ -456,12 +528,10 @@ export class ContentCalendarService {
       select: { platformKey: true },
     });
     if (variants.length === 0) return refused('not_schedulable');
-    if (this.#channelGate) {
-      const unreachable = await this.#channelGate.unreachableChannels(item.brandId, [
-        ...new Set(variants.map((variant) => variant.platformKey)),
-      ]);
-      if (unreachable.length > 0) return refused('channel_disconnected');
-    }
+    const unreachable = await this.#channelGate.unreachableChannels(item.brandId, [
+      ...new Set(variants.map((variant) => variant.platformKey)),
+    ]);
+    if (unreachable.length > 0) return refused('channel_disconnected');
 
     const time = await this.#defaultPublishingTimeFor(item.brandId);
     const now = this.#clock.now();
@@ -698,11 +768,81 @@ export class ContentCalendarService {
 
   /** Q9 (D-332): refuse a channel that can reach no account at all. */
   async #assertChannelsReachable(brandId: string, platformKeys: readonly string[]): Promise<void> {
-    if (!this.#channelGate) return;
     const unreachable = await this.#channelGate.unreachableChannels(brandId, [
       ...new Set(platformKeys),
     ]);
     if (unreachable.length > 0) throw channelDisconnected(unreachable);
+  }
+
+  /**
+   * Batch 7 PR C (B1.1, B1.4) — keep a proposed publish time on a post, or
+   * clear it.
+   *
+   * A PROPOSAL, NOT A PLAN. Nothing publishes it and nothing on the calendar
+   * counts it: no slot is created, no quota is used, no day's room is taken.
+   * It becomes a slot only through `schedule()` — an explicit Schedule press,
+   * or "Approve & schedule" — which applies the lead, horizon, quota, channel
+   * and approval rules exactly as before.
+   *
+   * WHAT IS CHECKED HERE: the wall-clock exists in the workspace's zone, it is
+   * not already past, and it is inside the planning horizon. The minimum lead
+   * is not: it is a rule about scheduling, applied when the slot is made.
+   *
+   * THE CHOICE TRAVELS WITH IT (owner answer, Option B): a time is PICK,
+   * clearing is NONE, and `afterApproval` is "Right after approval" — no time,
+   * on a post that has not been approved yet. The two columns are written
+   * together, and a CHECK keeps them consistent.
+   */
+  async propose(input: {
+    readonly contentItemId: string;
+    /** `YYYY-MM-DDTHH:mm` in the workspace's zone, or null to clear it. */
+    readonly localTime: string | null;
+    /** "Right after approval": `localTime` must be null. */
+    readonly afterApproval?: boolean;
+    readonly actorUserId: string;
+    readonly actorBrandScope: readonly string[];
+  }): Promise<ContentItem> {
+    const item = await this.#requireItem(input.contentItemId, input.actorBrandScope);
+    if (!PROPOSABLE_FROM.includes(item.status)) throw proposedTimeLocked();
+    const afterApproval = input.afterApproval === true;
+    if (afterApproval && (input.localTime !== null || item.status === 'APPROVED')) {
+      throw proposedTimeLocked();
+    }
+    const choice = afterApproval ? 'AFTER_APPROVAL' : input.localTime === null ? 'NONE' : 'PICK';
+
+    if (input.localTime !== null) {
+      const resolved = resolveZonedTime(input.localTime, this.#timezone);
+      if (!resolved) throw invalidScheduleTime();
+      const now = this.#clock.now();
+      if (resolved.instant.getTime() < now.getTime()) throw scheduleTooSoon();
+      const horizonMs = this.#policy.calendar.maxDaysAhead * 24 * 3_600_000;
+      if (resolved.instant.getTime() > now.getTime() + horizonMs) throw scheduleTooFarAhead();
+    }
+    if (item.proposedLocalTime === input.localTime && item.publishChoice === choice) return item;
+
+    const updated = await this.#db.contentItem.update({
+      where: { id: item.id },
+      data: { proposedLocalTime: input.localTime, publishChoice: choice },
+    });
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'content.proposed_time_set',
+      actorType: 'USER',
+      actorId: input.actorUserId,
+      resourceType: 'ContentItem',
+      resourceId: item.id,
+      brandId: item.brandId,
+      before: {
+        publishChoice: item.publishChoice,
+        proposedLocalTime: item.proposedLocalTime,
+        timezone: this.#timezone,
+      },
+      after: {
+        publishChoice: choice,
+        proposedLocalTime: input.localTime,
+        timezone: this.#timezone,
+      },
+    });
+    return updated;
   }
 
   /** AC-14.8 — take a slot off the calendar, refund its quota, audit it. */

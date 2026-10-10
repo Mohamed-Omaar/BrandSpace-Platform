@@ -2903,6 +2903,13 @@ enum ContentType {
 /// phase writes SCHEDULED or beyond. Approvals (scope item 6) and the Social
 /// Calendar (item 5) own those transitions, and this phase deliberately does
 /// not pre-empt either.
+/// Batch 7 PR C — what the author chose for when a post goes out.
+enum PublishChoice {
+  NONE
+  PICK
+  AFTER_APPROVAL
+}
+
 enum ContentStatus {
   DRAFT
   IN_REVIEW
@@ -2987,6 +2994,21 @@ model ContentItem {
   campaignId String? @db.Uuid
 
   status ContentStatus @default(DRAFT)
+
+  /// Batch 7 PR C (B1.0) — the time the author proposes the post goes out, as
+  /// the wall-clock `YYYY-MM-DDTHH:mm` in the workspace's zone (the form
+  /// `CalendarSlot.scheduledLocalTime` stores). A PROPOSAL: nothing publishes
+  /// it. A slot is made from it only by an explicit Schedule press or by
+  /// "Approve & schedule", through the unchanged `schedule()`. Its shape is a
+  /// CHECK in `20261016090000_content_item_publish_time`.
+  proposedLocalTime String?
+
+  /// Batch 7 PR C (Option B) — the author's choice in "When should it go out?":
+  /// NONE (nothing chosen; an approval never publishes it), PICK (the time in
+  /// `proposedLocalTime`), AFTER_APPROVAL (no time; it goes out when approved,
+  /// by an approver who may also schedule). A CHECK in
+  /// `20261016090000_content_item_publish_time` ties a stored time to PICK.
+  publishChoice PublishChoice @default(NONE)
 
   /// D-65-style provenance, for the same reason Brand Brain carries it: a
   /// customer is entitled to know whether a human or a model wrote the words.

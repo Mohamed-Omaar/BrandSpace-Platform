@@ -28,7 +28,12 @@ import {
   automationRuleCheck,
   copilotAutomationPort,
 } from '../../apps/api/src/routes/copilot-automation';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
+} from './fixtures';
 import { seedStoredRule } from './stored-automation-rule';
 
 /**
@@ -124,6 +129,7 @@ function executorContext(
     }),
     campaigns: new CampaignService({ db, workspaceId: fixtures.a.workspaceId }),
     calendar: new ContentCalendarService({
+      channelGate: OPEN_CHANNEL_GATE,
       db,
       workspaceId: fixtures.a.workspaceId,
       policy: contentPolicy,
@@ -146,6 +152,7 @@ function undoCollaborators(db: TenantScopedClient) {
   return {
     campaigns: new CampaignService({ db, workspaceId: fixtures.a.workspaceId }),
     calendar: new ContentCalendarService({
+      channelGate: OPEN_CHANNEL_GATE,
       db,
       workspaceId: fixtures.a.workspaceId,
       policy: contentPolicy,

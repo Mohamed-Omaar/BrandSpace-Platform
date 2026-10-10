@@ -107,9 +107,83 @@ export async function saveBrandColoursAction(formData: FormData): Promise<void> 
 }
 
 /**
+ * Batch 7 PR C (2c) — HOW LONG THE UPLOAD WAITS FOR THE SCAN. The scan runs in
+ * the worker wherever Redis is set, so a single look straight after the upload
+ * almost never found the file READY: it was uploaded, it showed in Media, and
+ * it was never made the logo — nothing attached it later. Now the request
+ * waits a few seconds, as the setup wizard does; a file still being checked is
+ * named in the logo slot until it passes, and is attached by the slot itself.
+ */
+const LOGO_WAIT_MS = 6_000;
+const LOGO_POLL_MS = 400;
+
+type LogoOutcome =
+  | { readonly state: 'attached' }
+  | { readonly state: 'checking' }
+  | { readonly state: 'refused'; readonly reason: string };
+
+/** Wait up to `waitMs` for the file's scan; make it the logo when it passes. */
+async function settleLogo(
+  session: WorkspaceSession,
+  brandId: string,
+  assetId: string,
+  waitMs: number,
+): Promise<LogoOutcome> {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const asset = await inAssetLibrary(session.workspace.workspaceId, ({ db }) =>
+      db.asset.findFirst({
+        // This brand's file or a shared one, as the logo may be (D-193).
+        where: {
+          id: assetId,
+          deletedAt: null,
+          archivedAt: null,
+          OR: [{ brandId }, { brandId: null }],
+        },
+        select: { kind: true, status: true, scanStatus: true, failureReason: true },
+      }),
+    );
+    if (!asset) return { state: 'refused', reason: 'object_missing' };
+    if (asset.status === 'READY' && asset.scanStatus === 'CLEAN') {
+      if (asset.kind !== 'IMAGE') return { state: 'refused', reason: 'unsupported_type' };
+      // `saveBrandProfile` checks it again (decision D) and audits the change.
+      await saveProfile(session, brandId, { primaryLogoAssetId: assetId });
+      return { state: 'attached' };
+    }
+    if (
+      asset.status === 'PROCESSING_FAILED' ||
+      asset.status === 'QUARANTINED' ||
+      asset.scanStatus === 'INFECTED'
+    ) {
+      return {
+        state: 'refused',
+        reason:
+          asset.failureReason ?? (asset.scanStatus === 'INFECTED' ? 'infected' : 'scan_failed'),
+      };
+    }
+    if (Date.now() >= deadline) return { state: 'checking' };
+    await new Promise((resolve) => setTimeout(resolve, LOGO_POLL_MS));
+  }
+}
+
+function logoDestination(
+  locale: string,
+  brandId: string,
+  assetId: string,
+  outcome: LogoOutcome,
+): string {
+  if (outcome.state === 'attached') return lookUrl(locale, brandId, { ok: 'BRAND_LOGO_SAVED' });
+  if (outcome.state === 'checking') {
+    return lookUrl(locale, brandId, { ok: 'BRAND_LOGO_PROCESSING', logo: assetId });
+  }
+  return lookUrl(locale, brandId, { logoReason: outcome.reason });
+}
+
+/**
  * Logo replace-by-upload. The file becomes an ordinary brand image asset; it is
- * made the logo ONLY once it is READY and CLEAN (`saveBrandProfile` checks), so
- * a file still being scanned is uploaded but not yet the logo.
+ * made the logo once it is READY and CLEAN (`saveBrandProfile` checks): at once
+ * when the scan finishes within a few seconds, otherwise by the logo slot as
+ * soon as it passes (`attachBrandLogoAction`). A refused file says why.
  */
 export async function uploadBrandLogoAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
@@ -127,28 +201,31 @@ export async function uploadBrandLogoAction(formData: FormData): Promise<void> {
       brandId,
       folderId: null,
     });
-    const ready = await inAssetLibrary(session.workspace.workspaceId, async ({ db }) => {
-      const asset = await db.asset.findFirst({
-        where: {
-          id: uploaded.assetId,
-          kind: 'IMAGE',
-          status: 'READY',
-          scanStatus: 'CLEAN',
-          archivedAt: null,
-          deletedAt: null,
-        },
-        select: { id: true },
-      });
-      return asset !== null;
-    });
-    if (ready) {
-      await saveProfile(session, brandId, { primaryLogoAssetId: uploaded.assetId });
-      destination = lookUrl(locale, brandId, { ok: 'BRAND_LOGO_SAVED' });
-    } else {
-      destination = lookUrl(locale, brandId, { ok: 'BRAND_LOGO_PROCESSING' });
-    }
+    const outcome = await settleLogo(session, brandId, uploaded.assetId, LOGO_WAIT_MS);
+    destination = logoDestination(locale, brandId, uploaded.assetId, outcome);
   } catch (error: unknown) {
     destination = failure(locale, brandId, error, 'upload-logo');
+  }
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}
+
+/** A logo that was still being checked has passed: the slot makes it the logo now. */
+export async function attachBrandLogoAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const brandId = String(formData.get('brandId') ?? '');
+  const assetId = String(formData.get('assetId') ?? '');
+  let destination: string;
+  try {
+    const { session } = await begin(formData);
+    destination = logoDestination(
+      locale,
+      brandId,
+      assetId,
+      await settleLogo(session, brandId, assetId, 0),
+    );
+  } catch (error: unknown) {
+    destination = failure(locale, brandId, error, 'attach-logo');
   }
   revalidatePath(`/${locale}/brand-brain`);
   redirect(destination);

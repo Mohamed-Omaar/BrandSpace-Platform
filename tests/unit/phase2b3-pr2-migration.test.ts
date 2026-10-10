@@ -55,6 +55,8 @@ describe('M2 — PREFLIGHT_REFUSED on PublishAttemptOutcome', () => {
       '20261015090000_automation_ai_execution_status',
       '20261015091000_automation_ai_execution_lease',
       '20261015092000_automation_run_execution_due_index',
+      // Batch 7 PR C: when a post goes out (the proposed time and the publish choice).
+      '20261016090000_content_item_publish_time',
     ]);
   });
 

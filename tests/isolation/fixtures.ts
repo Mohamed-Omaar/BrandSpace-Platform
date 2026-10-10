@@ -20,6 +20,16 @@ export const FIXTURE_SOCIAL_KEK = 'isolation-fixture-social-token-kek-000000';
  * by accident (because one side has no comparable row) is not possible.
  */
 
+/**
+ * Batch 7 PR C (B3.8) — the calendar's channel gate is now REQUIRED. A test
+ * that is not about channel reachability passes this one: it names no channel
+ * unreachable, which is exactly what a calendar built without a gate used to
+ * do. Tests about reachability use the real `unreachableChannelGate`.
+ */
+export const OPEN_CHANNEL_GATE = {
+  unreachableChannels: async (): Promise<readonly string[]> => [],
+};
+
 export interface TenantFixture {
   readonly workspaceId: string;
   readonly slug: string;

@@ -7,7 +7,12 @@ import {
   ContentLibraryService,
   type ContentPolicy,
 } from '@brandspace/content';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
+} from './fixtures';
 
 /**
  * BrandScope is a QUERY PREDICATE, not a post-retrieval filter.
@@ -183,6 +188,7 @@ const calendar = <T>(fn: (s: ContentCalendarService) => Promise<T>) =>
     async (db) =>
       fn(
         new ContentCalendarService({
+          channelGate: OPEN_CHANNEL_GATE,
           db,
           workspaceId: fixtures.a.workspaceId,
           policy: CONTENT_POLICY,
@@ -476,6 +482,7 @@ const watchedCalendar = <T>(fn: (s: ContentCalendarService) => Promise<T>) => {
     async (db) =>
       fn(
         new ContentCalendarService({
+          channelGate: OPEN_CHANNEL_GATE,
           db: recordingClient(db as object, reads) as typeof db,
           workspaceId: fixtures.a.workspaceId,
           policy: CONTENT_POLICY,

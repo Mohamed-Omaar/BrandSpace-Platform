@@ -96,6 +96,11 @@ export interface ReviewSubjectView {
   readonly fromLabel?: string | undefined;
   /** The planned time ("Oct 16 · 10:00"), or the words for none. */
   readonly requestedTimeLabel?: string | undefined;
+  /**
+   * Batch 7 PR C (B1.3) — the post carries a proposed time and this reviewer
+   * may also schedule: the approve button reads "Approve & schedule".
+   */
+  readonly approveSchedules?: 'schedule' | 'publish' | undefined;
   /** The campaign's name, or the words for none. */
   readonly campaignLabel?: string | undefined;
   readonly variants: readonly {
@@ -464,6 +469,7 @@ export function ApprovalsView({
                   approvalId={review.approvalId}
                   itemId={review.itemId}
                   tab={tab}
+                  andSchedule={review.approveSchedules ?? null}
                   action={actions.decide}
                 />
               ) : review.blockedAsSelf ? (
@@ -590,6 +596,7 @@ function DecisionForm({
   approvalId,
   itemId,
   tab,
+  andSchedule,
   action,
 }: {
   readonly locale: string;
@@ -597,6 +604,8 @@ function DecisionForm({
   readonly approvalId: string;
   readonly itemId: string;
   readonly tab: 'forMe' | 'sent';
+  /** Batch 7 PR C — what the approval also does: schedule the picked time, or publish now. */
+  readonly andSchedule: 'schedule' | 'publish' | null;
   readonly action: (formData: FormData) => Promise<void>;
 }) {
   /*
@@ -626,12 +635,25 @@ function DecisionForm({
         <button
           type="submit"
           name="verdict"
-          value="APPROVE"
+          value={
+            andSchedule === 'publish'
+              ? 'APPROVE_PUBLISH'
+              : andSchedule === 'schedule'
+                ? 'APPROVE_SCHEDULE'
+                : 'APPROVE'
+          }
           formNoValidate
           className="bsp-btn bsp-pur"
           data-testid={`approve-${itemId}`}
+          data-schedules={andSchedule ?? undefined}
         >
-          {t('approvals.approve')}
+          {t(
+            andSchedule === 'publish'
+              ? 'approvals.approvePublish'
+              : andSchedule === 'schedule'
+                ? 'approvals.approveSchedule'
+                : 'approvals.approve',
+          )}
         </button>
         <button
           type="submit"
@@ -658,7 +680,13 @@ function DecisionForm({
         approving clears the post to be scheduled; it does not schedule it (B5).
       */}
       <span className="bsp-apr-hint" data-testid={`approve-hint-${itemId}`}>
-        {t('approvals.approveHint')}
+        {t(
+          andSchedule === 'publish'
+            ? 'approvals.approvePublishHint'
+            : andSchedule === 'schedule'
+              ? 'approvals.approveScheduleHint'
+              : 'approvals.approveHint',
+        )}
       </span>
     </form>
   );

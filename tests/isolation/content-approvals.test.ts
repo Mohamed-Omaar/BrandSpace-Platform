@@ -17,6 +17,7 @@ import {
   platformRoleClient,
   systemRolePermissionKeys,
   type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
 } from './fixtures';
 
 /**
@@ -785,6 +786,7 @@ describe('AC-14.6 — the calendar gate, now backed by a workflow (D-120 closed)
     gate: ContentApprovalService,
   ) {
     return new ContentCalendarService({
+      channelGate: OPEN_CHANNEL_GATE,
       db,
       workspaceId: fixtures.a.workspaceId,
       policy: CONTENT_POLICY,

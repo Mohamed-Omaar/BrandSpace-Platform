@@ -296,25 +296,14 @@ export function externalActions(db: TenantScopedClient): ExternalActionPort {
 
       /*
        * "NOW" IS A SLOT AT THIS INSTANT, not a bypass of the calendar. The
-       * approval gate, the brand policy and the quota all apply, because they
-       * apply to `schedule()` and this goes through `schedule()`.
+       * approval gate, the brand policy, the channels and the quota all apply.
+       * Batch 7 PR C (B3.1): through `publishNow()`, which keeps every rule of
+       * `schedule()` except the minimum lead. Building the current minute and
+       * calling `schedule()` was refused every time: the lead put "now" too
+       * soon, and the truncated minute was already past.
        */
-      const now = systemClock.now();
-      const localTime = new Intl.DateTimeFormat('en-CA', {
-        timeZone: workspace?.timezone ?? 'UTC',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      })
-        .formatToParts(now)
-        .reduce((acc, part) => ({ ...acc, [part.type]: part.value }), {} as Record<string, string>);
-
-      const view = await calendar.schedule({
+      const view = await calendar.publishNow({
         contentItemId: input.contentItemId,
-        localTime: `${localTime['year']}-${localTime['month']}-${localTime['day']}T${localTime['hour']}:${localTime['minute']}`,
         actorUserId: input.actorUserId,
         /*
          * THE CONFIRMER'S OWN SCOPE. It used to be `[]` with a comment claiming
