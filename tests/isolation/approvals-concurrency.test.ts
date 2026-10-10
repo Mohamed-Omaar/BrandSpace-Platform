@@ -13,6 +13,7 @@ import {
   createIsolationFixtures,
   platformRoleClient,
   type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
 } from './fixtures';
 
 /**
@@ -375,6 +376,7 @@ describe('the calendar and the approval cannot diverge', () => {
           policy: CONTENT_POLICY,
         });
         return new ContentCalendarService({
+          channelGate: OPEN_CHANNEL_GATE,
           db,
           workspaceId: fixtures.a.workspaceId,
           policy: CONTENT_POLICY,

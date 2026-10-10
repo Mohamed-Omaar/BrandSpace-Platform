@@ -16,6 +16,7 @@ import {
   createIsolationFixtures,
   platformRoleClient,
   type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
 } from './fixtures';
 
 /**
@@ -425,6 +426,7 @@ describe('Q8 · editing a SCHEDULED post without content.schedule takes it off t
 
   function calendar(db: TenantScopedClient, quota: ReturnType<typeof recordingQuota>['quota']) {
     return new ContentCalendarService({
+      channelGate: OPEN_CHANNEL_GATE,
       db,
       workspaceId: fixtures.a.workspaceId,
       policy: CONTENT_POLICY,

@@ -78,6 +78,10 @@ describe('PR 0 — ContentCalendarService requires the brand approval gate', () 
       policy: undefined as never,
       timezone: 'UTC',
       quota: undefined as never,
+      // Batch 7 PR C: `channelGate` is required too. It is supplied here so
+      // that `approvalGate` stays the ONLY thing this object lacks, and the
+      // directive above keeps testing exactly that.
+      channelGate: undefined as never,
     };
     expect(missing.workspaceId).toBe('w');
   });

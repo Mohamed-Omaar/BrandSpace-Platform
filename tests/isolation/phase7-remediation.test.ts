@@ -35,7 +35,12 @@ import {
 import { createScheduleQuota } from '@brandspace/entitlements';
 import { StrategyService } from '@brandspace/intelligence';
 import { resolveRecipients } from '@brandspace/notifications';
-import { appRoleClient, createIsolationFixtures, type IsolationFixtures } from './fixtures';
+import {
+  appRoleClient,
+  createIsolationFixtures,
+  type IsolationFixtures,
+  OPEN_CHANNEL_GATE,
+} from './fixtures';
 
 /**
  * PHASE 7 REMEDIATION — the ten blocking defects, on real PostgreSQL.
@@ -840,6 +845,7 @@ describe('P7-R4: an undo refuses when access was removed after the plan ran', ()
         collaborators: {
           campaigns: new CampaignService({ db, workspaceId: fixtures.a.workspaceId }),
           calendar: new ContentCalendarService({
+            channelGate: OPEN_CHANNEL_GATE,
             db,
             workspaceId: fixtures.a.workspaceId,
             policy: contentPolicy(),

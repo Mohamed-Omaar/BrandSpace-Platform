@@ -602,6 +602,8 @@ export class ContentApprovalService {
     });
     if (!approval) throw approvalNotFound();
     if (approval.status !== 'PENDING') throw approvalAlreadyDecided();
+    // B3.8 — the post row too, after the approval (one lock order everywhere).
+    if (approval.contentItemId) await this.#lockItem(approval.contentItemId);
 
     /*
      * D-126 — THE CYCLE IS JUDGED BY THE POLICY IT WAS OPENED UNDER. The
@@ -814,6 +816,8 @@ export class ContentApprovalService {
     });
     if (!approval) throw approvalNotFound();
     if (approval.status !== 'PENDING') throw approvalAlreadyDecided();
+    // B3.8 — the post row too, after the approval (one lock order everywhere).
+    if (approval.contentItemId) await this.#lockItem(approval.contentItemId);
 
     /*
      * WITHDRAWING NEEDS NO POLICY LOOKUP ANY MORE. It once resolved the cycle's
@@ -898,6 +902,8 @@ export class ContentApprovalService {
     `;
     const approvalId = locked[0]?.id;
     if (!approvalId) return null;
+    // B3.8 — the post row too, after the approval (one lock order everywhere).
+    await this.#lockItem(input.itemId);
 
     const withdrawn = await this.#db.approval.updateMany({
       where: { id: approvalId, workspaceId: this.#workspaceId, status: 'PENDING' },
@@ -1390,6 +1396,25 @@ export class ContentApprovalService {
       brandId: input.brandId,
     });
     return eligible.includes(input.userId);
+  }
+
+  /**
+   * Batch 7 PR C (B3.8, the F8 audit finding) — LOCK THE POST WITH ITS REVIEW.
+   *
+   * `decide`, `cancel` and `withdrawForEdit` locked the approval row and then
+   * wrote the post's status from what they had read. An edit, a send for
+   * review or a schedule moving the same post at the same moment could
+   * interleave with that write. Each now locks the post row as well, ALWAYS
+   * after the approval row, so the order is the same on every path and two of
+   * them cannot deadlock each other. Callers run inside `withWorkspace`'s
+   * transaction, so the lock holds until it commits.
+   */
+  async #lockItem(contentItemId: string): Promise<void> {
+    await this.#db.$queryRaw`
+      SELECT "id" FROM "content_item"
+      WHERE "id" = ${contentItemId}::uuid AND "workspaceId" = ${this.#workspaceId}::uuid
+      FOR UPDATE
+    `;
   }
 
   #checkNote(note: string | null | undefined): string | null {
