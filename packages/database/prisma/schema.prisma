@@ -2988,6 +2988,14 @@ model ContentItem {
 
   status ContentStatus @default(DRAFT)
 
+  /// Batch 7 PR C (B1.0) — the time the author proposes the post goes out, as
+  /// the wall-clock `YYYY-MM-DDTHH:mm` in the workspace's zone (the form
+  /// `CalendarSlot.scheduledLocalTime` stores). A PROPOSAL: nothing publishes
+  /// it. A slot is made from it only by an explicit Schedule press or by
+  /// "Approve & schedule", through the unchanged `schedule()`. Its shape is a
+  /// CHECK in `20261016090000_content_item_proposed_local_time`.
+  proposedLocalTime String?
+
   /// D-65-style provenance, for the same reason Brand Brain carries it: a
   /// customer is entitled to know whether a human or a model wrote the words.
   origin          ContentOrigin @default(HUMAN)
