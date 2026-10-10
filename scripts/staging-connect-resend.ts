@@ -51,7 +51,7 @@ async function main(): Promise<void> {
       environment: 'STAGING',
       settings: {
         fromEmail: 'no-reply@staging.brandspace.cc',
-        fromName: 'BrandSpace',
+        fromName: 'Brandspace',
         replyTo: '',
       },
       credentials: { apiKey },

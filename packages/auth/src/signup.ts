@@ -144,7 +144,15 @@ function mintToken(): string {
   return randomBytes(32).toString('base64url');
 }
 
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/**
+ * Batch 7 PR C (2d) — AN ADDRESS THE MAIL PROVIDER WILL TAKE. The old shape
+ * (`x@y.z`) admitted addresses a provider refuses — a doubled or trailing dot,
+ * a label starting with a hyphen, a one-letter top-level domain — so the
+ * refusal came back from the provider, after the account row existed, instead
+ * of at the form. Still deliberately permissive about the local part.
+ */
+const EMAIL_SHAPE =
+  /^(?!\.)(?!.*\.\.)[^\s@"(),:;<>[\\\]]{1,64}(?<!\.)@(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
 
 export class SignupService {
   readonly #prisma: PrismaClient;
@@ -220,8 +228,28 @@ export class SignupService {
 
     const existing = await this.#prisma.user.findUnique({
       where: { email },
-      select: { id: true, locale: true, deletedAt: true },
+      select: { id: true, locale: true, deletedAt: true, emailVerifiedAt: true, status: true },
     });
+
+    /*
+     * Batch 7 PR C (2d) — AN ACCOUNT WHOSE FIRST LINK NEVER ARRIVED. The row is
+     * made before the email is sent, so a failed send left a PENDING account,
+     * and signing up again mailed "you already have an account — sign in" to
+     * someone who could not sign in. Such an address gets its verification
+     * link again, under the same cooldown and hourly ceiling as "Send it
+     * again". The password typed this time is NOT applied: whoever asks cannot
+     * be told apart from the owner. Same page, same acknowledgement either way.
+     */
+    if (
+      existing &&
+      !existing.emailVerifiedAt &&
+      !existing.deletedAt &&
+      existing.status !== 'DELETED'
+    ) {
+      await this.#verificationIfDue(policy, existing, email, input.ip);
+      await this.#audit(existing.id, 'customer.signup.duplicate', input.ip, 'NOTICE');
+      return { acknowledged: true };
+    }
 
     if (existing) {
       // THE ADDRESS IS TOLD, THE CALLER IS NOT. Whoever owns the inbox learns
@@ -384,7 +412,17 @@ export class SignupService {
     if (!user || user.emailVerifiedAt || user.status === 'DELETED') {
       return { acknowledged: true };
     }
+    await this.#verificationIfDue(policy, user, address, context.ip);
+    return { acknowledged: true };
+  }
 
+  /** A new verification link, unless the cooldown or the hourly ceiling says not yet. */
+  async #verificationIfDue(
+    policy: OnboardingPolicy,
+    user: { readonly id: string; readonly locale: 'AR' | 'EN' },
+    address: string,
+    ip: string | undefined,
+  ): Promise<void> {
     const now = this.#clock.now();
     const since = new Date(now.getTime() - 3_600_000);
     const recent = await this.#prisma.emailVerificationToken.findMany({
@@ -392,13 +430,13 @@ export class SignupService {
       orderBy: { createdAt: 'desc' },
       select: { createdAt: true },
     });
-    if (recent.length >= policy.signup.verificationsPerHour) return { acknowledged: true };
+    if (recent.length >= policy.signup.verificationsPerHour) return;
     const last = recent[0]?.createdAt;
     if (
       last &&
       now.getTime() - last.getTime() < policy.signup.verificationResendCooldownSeconds * 1_000
     ) {
-      return { acknowledged: true };
+      return;
     }
 
     const token = mintToken();
@@ -407,7 +445,7 @@ export class SignupService {
         userId: user.id,
         tokenHash: hashToken(token),
         expiresAt: new Date(now.getTime() + policy.signup.verificationTtlMinutes * 60_000),
-        ip: context.ip ?? null,
+        ip: ip ?? null,
       },
     });
     await this.#email.send({
@@ -416,7 +454,6 @@ export class SignupService {
       locale: user.locale,
       link: this.#link(token, user.locale),
     });
-    return { acknowledged: true };
   }
 
   // --- Customer MFA -----------------------------------------------------------

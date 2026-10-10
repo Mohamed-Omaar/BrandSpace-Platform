@@ -699,3 +699,73 @@ describe('links that are read outside the product are absolute', () => {
     expect(() => customerLink('/en/verify?token=abc')).toThrow(/PUBLIC_DASHBOARD_BASE_URL/);
   });
 });
+
+/**
+ * BATCH 7 PR C (2d) — THE SIGN-UP EMAIL.
+ *
+ * Staging logged "Resend refused the message (HTTP 422, validation_error)"
+ * and nothing more, so which field Resend refused could not be told. The
+ * adapter now names the FIELD — only when it is one of the fields it sends —
+ * and still never a value: no address, no subject, no credential.
+ */
+
+const B7_KEY = FAKE_RESEND_KEY;
+
+function refusing(body: unknown) {
+  return async () =>
+    new Response(JSON.stringify(body), {
+      status: 422,
+      headers: { 'content-type': 'application/json' },
+    });
+}
+
+async function failureOf(body: unknown): Promise<string> {
+  const provider = new ResendEmailProvider({
+    apiKey: B7_KEY,
+    fromEmail: 'no-reply@example.com',
+    fromName: 'Brandspace',
+    baseUrl: 'https://resend.example.invalid',
+    fetch: refusing(body) as never,
+  });
+  return provider
+    .send({
+      to: 'person@company.example',
+      templateKey: 'auth.email_verification',
+      locale: 'EN',
+      link: 'https://app.example/verify?token=abc',
+    })
+    .then(
+      () => '',
+      (error: unknown) => String(error),
+    );
+}
+
+describe('2d — a refused email names the refused field, never a value', () => {
+  it('names `to` when Resend says the recipient was invalid', async () => {
+    const text = await failureOf({
+      name: 'validation_error',
+      message:
+        'Invalid `to` field. The email address needs to follow the `email@example.com` or `Name <email@example.com>` format.',
+    });
+    expect(text).toContain('HTTP 422, validation_error, field: to');
+    expect(text).not.toContain('@');
+  });
+
+  it('names `from` for a sender Resend will not take', async () => {
+    const text = await failureOf({
+      name: 'validation_error',
+      message: 'The `from` field must be a valid email, got person@company.example',
+    });
+    expect(text).toContain('field: from');
+    expect(text).not.toContain('person@company.example');
+  });
+
+  it('names nothing it does not send, and nothing when there is no field', async () => {
+    expect(
+      await failureOf({ name: 'validation_error', message: 'Bad `${B7_KEY}` in `secret_value`' }),
+    ).toBe('AppError: Resend refused the message (HTTP 422, validation_error).');
+    expect(await failureOf({ name: 'validation_error', message: 'Domain not verified' })).toBe(
+      'AppError: Resend refused the message (HTTP 422, validation_error).',
+    );
+  });
+});

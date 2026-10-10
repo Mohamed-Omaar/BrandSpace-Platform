@@ -7,6 +7,7 @@ import { CUSTOMER_REALM } from '@brandspace/auth';
 import {
   createLogger,
   internalErrorFields,
+  isAppError,
   systemClock,
   toPublicErrorCode,
 } from '@brandspace/shared';
@@ -18,7 +19,7 @@ import {
   requestOrigin,
 } from '../../../server/customer-context';
 import { getPrisma } from '@brandspace/database';
-import { InvitationService, SignupService } from '@brandspace/auth';
+import { EMAIL_NOT_SENT_REASON, InvitationService, SignupService } from '@brandspace/auth';
 import { TenantOnboardingPolicySource, type OnboardingPolicy } from '@brandspace/onboarding';
 import { withoutTenantContext } from '@brandspace/database';
 import { signupPolicy } from '../../../server/signup-policy';
@@ -444,7 +445,7 @@ export async function signUpAction(formData: FormData): Promise<void> {
       acceptedDocuments: accepted,
     });
     (await cookies()).delete(SIGNUP_DRAFT_COOKIE);
-    destination = `/${locale}/sign-up/sent?email=${encodeURIComponent(email)}`;
+    destination = sentUrl(locale, email, policy);
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();
@@ -459,9 +460,31 @@ export async function signUpAction(formData: FormData): Promise<void> {
       }),
       { httpOnly: true, secure: true, sameSite: 'strict', path: '/', maxAge: 120 },
     );
-    destination = `/${locale}/sign-up?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+    // Batch 7 PR C (2d): an email that did not go says so, never "check your email".
+    const code = emailNotSent(error) ? 'EMAIL_NOT_SENT' : toPublicErrorCode(error);
+    destination = `/${locale}/sign-up?error=${code}&ref=${correlationId}`;
   }
   redirect(destination);
+}
+
+function emailNotSent(error: unknown): boolean {
+  return isAppError(error) && error.publicDetails['reason'] === EMAIL_NOT_SENT_REASON;
+}
+
+/**
+ * "Check your email", with when this page last asked for an email and the
+ * configured cooldown, so "Send it again" can count down (Batch 7 PR C, 2d).
+ * Both describe the press, not the account: nothing here says whether the
+ * address has one.
+ */
+function sentUrl(locale: string, email: string, policy: OnboardingPolicy, again = false): string {
+  const search = new URLSearchParams({
+    email,
+    at: String(Date.now()),
+    wait: String(policy.signup.verificationResendCooldownSeconds),
+    ...(again ? { again: '1' } : {}),
+  });
+  return `/${locale}/sign-up/sent?${search.toString()}`;
 }
 
 /** Ask for another verification link. Rate-limited and silent about the result. */
@@ -473,7 +496,7 @@ export async function resendVerificationAction(formData: FormData): Promise<void
     const policy = await readOnboardingPolicy();
     const origin = await requestOrigin();
     await signupService(locale).resendVerification(policy, email, { ip: origin.ip });
-    destination = `/${locale}/sign-up/sent?email=${encodeURIComponent(email)}`;
+    destination = sentUrl(locale, email, policy, true);
   } catch (error: unknown) {
     /*
      * THE SAME LIE AS THE RESET ACTION, and the same correction. A customer who

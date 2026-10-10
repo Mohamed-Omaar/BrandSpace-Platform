@@ -22,6 +22,7 @@ import { AuthCard, authButtonStyle, authInputStyle } from '../../../../component
 import { signUpAction } from '../actions';
 import { BrowserTimeZoneInput } from '../../../../components/browser-time-zone';
 import { trialTerms } from '../../../../server/trial-terms';
+import { PendingSubmit } from '../../../../components/pending-submit';
 import { SIGNUP_DRAFT_COOKIE, decodeSignupDraft } from '../../../../server/signup-draft';
 
 export const dynamic = 'force-dynamic';
@@ -197,9 +198,13 @@ export default async function SignUpPage({
           </p>
         ) : null}
 
-        <button type="submit" data-testid="signup-submit" style={authButtonStyle()}>
-          {t('signUp.submit')}
-        </button>
+        {/* Batch 7 PR C (2d): one press, one email — disabled while it is sent. */}
+        <PendingSubmit
+          label={t('signUp.submit')}
+          pendingLabel={t('signUp.submitting')}
+          style={authButtonStyle()}
+          testId="signup-submit"
+        />
       </form>
     </AuthCard>
   );

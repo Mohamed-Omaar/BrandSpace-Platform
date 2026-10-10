@@ -1,4 +1,11 @@
 import { AppError, createLogger, internalErrorFields } from '@brandspace/shared';
+
+/**
+ * Batch 7 PR C (2d) — an email that did not go: the screen that asked for it
+ * says so ("We could not send that email…") instead of the generic error, and
+ * never as if it had been sent.
+ */
+export const EMAIL_NOT_SENT_REASON = 'email_not_sent';
 import type { EmailMessageInput, EmailProvider } from './email';
 
 /**
@@ -83,7 +90,9 @@ export class ApiEmailProvider implements EmailProvider {
       });
     } catch (error: unknown) {
       log.error('email delivery could not reach the API', internalErrorFields(error));
-      throw new AppError('INTERNAL', 'Email delivery is unavailable.');
+      throw new AppError('INTERNAL', 'Email delivery is unavailable.', {
+        reason: EMAIL_NOT_SENT_REASON,
+      });
     }
 
     if (!response.ok) {
@@ -93,7 +102,9 @@ export class ApiEmailProvider implements EmailProvider {
         status: response.status,
         templateKey: message.templateKey,
       });
-      throw new AppError('INTERNAL', 'Email delivery was refused.');
+      throw new AppError('INTERNAL', 'Email delivery was refused.', {
+        reason: EMAIL_NOT_SENT_REASON,
+      });
     }
 
     const payload: unknown = await response.json().catch(() => null);
