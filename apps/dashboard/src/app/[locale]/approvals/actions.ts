@@ -3,7 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { DECISION_NOTE_REQUIRED_REASON, type ApprovalVerdict } from '@brandspace/content';
+import {
+  DECISION_NOTE_REQUIRED_REASON,
+  SCHEDULE_IN_PAST_REASON,
+  type ApprovalVerdict,
+} from '@brandspace/content';
 import { createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
 import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
@@ -67,15 +71,70 @@ function actorOf(session: WorkspaceSession) {
 
 const VERDICTS: Record<string, ApprovalVerdict> = {
   APPROVE: 'APPROVE',
+  /*
+   * Batch 7 PR C (B1.3) — "Approve & schedule": the same approval, then the
+   * post's proposed time is scheduled. Offered only when the post carries a
+   * proposed time and the approver may schedule; both are checked again here.
+   */
+  APPROVE_SCHEDULE: 'APPROVE',
   REQUEST_CHANGES: 'REQUEST_CHANGES',
   REJECT: 'REJECT',
 };
+
+/**
+ * B1.3 — after an approval has COMMITTED, schedule the post at its proposed
+ * time, through the unchanged `schedule()` (lead, horizon, day's room, quota,
+ * channels, approval gate). Returns the code the page shows.
+ *
+ * THE APPROVAL IS NEVER UNDONE OR REFUSED BECAUSE OF THE TIME (owner rule,
+ * batch 7): if the proposed time has passed — or is now inside the minimum
+ * notice — the post stays approved, is not scheduled, and the reviewer is told
+ * to pick a new time. Any other refusal also leaves the approval standing and
+ * says the post was not scheduled.
+ */
+async function scheduleAfterApproval(
+  session: WorkspaceSession,
+  contentItemId: string | null,
+): Promise<string> {
+  if (!contentItemId || !session.workspace.permissionKeys.includes('content.schedule')) {
+    return 'APPROVED_NOT_SCHEDULED';
+  }
+  try {
+    return await inContentStudio(session.workspace.workspaceId, async ({ calendar, db }) => {
+      const item = await db.contentItem.findFirst({
+        where: { id: contentItemId },
+        select: { proposedLocalTime: true },
+      });
+      if (!item?.proposedLocalTime) return 'APPROVED_NOT_SCHEDULED';
+      await (
+        await calendar()
+      ).schedule({
+        contentItemId,
+        localTime: item.proposedLocalTime,
+        actorUserId: session.customer.userId,
+        actorBrandScope: session.workspace.brandScope,
+      });
+      return 'APPROVED_SCHEDULED';
+    });
+  } catch (error: unknown) {
+    if (isAppError(error) && error.publicDetails['reason'] === SCHEDULE_IN_PAST_REASON) {
+      return 'APPROVED_PICK_NEW_TIME';
+    }
+    log.warn('approved, but the proposed time could not be scheduled', {
+      contentItemId,
+      ...internalErrorFields(error),
+    });
+    return 'APPROVED_NOT_SCHEDULED';
+  }
+}
 
 /** Approve, request changes, or reject. */
 export async function decideApprovalAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   const approvalId = String(formData.get('approvalId') ?? '');
-  const verdict = VERDICTS[String(formData.get('verdict') ?? '')];
+  const verdictField = String(formData.get('verdict') ?? '');
+  const verdict = VERDICTS[verdictField];
+  const andSchedule = verdictField === 'APPROVE_SCHEDULE';
   const note = String(formData.get('note') ?? '');
 
   let destination: string;
@@ -149,12 +208,16 @@ export async function decideApprovalAction(formData: FormData): Promise<void> {
       });
     }
 
-    destination = approvalsUrl(locale, { ...tabOf(formData), ok: 'SAVED' });
+    const outcome = andSchedule
+      ? await scheduleAfterApproval(session, approval.contentItemId)
+      : 'SAVED';
+    destination = approvalsUrl(locale, { ...tabOf(formData), ok: outcome });
   } catch (error: unknown) {
     destination = failure(locale, error, 'decideApproval', tabOf(formData));
   }
   revalidatePath(`/${locale}/approvals`);
   revalidatePath(`/${locale}/content`);
+  revalidatePath(`/${locale}/calendar`);
   revalidatePath(`/${locale}/overview`);
   redirect(destination);
 }

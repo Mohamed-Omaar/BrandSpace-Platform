@@ -104,146 +104,159 @@ export default async function ApprovalsPage({
     brandScope: workspace.brandScope,
   };
 
-  const { policies, queue, mine, memberNames, review, firstAsset, plannedLocal, campaignName } =
-    await inContentStudio(workspace.workspaceId, async ({ approvals, db }) => {
-      const service = await approvals();
+  const {
+    policies,
+    queue,
+    mine,
+    memberNames,
+    review,
+    firstAsset,
+    plannedLocal,
+    proposedLocal,
+    campaignName,
+  } = await inContentStudio(workspace.workspaceId, async ({ approvals, db }) => {
+    const service = await approvals();
 
-      /*
-       * The brands in this member's scope, and their rules. There is no longer
-       * a per-brand question of WHO may review: `content.approve` answers it
-       * for the whole workspace, so a brand contributes its policy and nothing
-       * else.
-       */
-      const resolved: BrandPolicyRow[] = [];
-      for (const brand of brands) {
-        const policy: ResolvedApprovalPolicy = await service.policyForBrand(brand.id);
-        resolved.push({
-          brandId: brand.id,
-          brandName: brand.name,
-          requireApprovalBeforeScheduling: policy.requireApprovalBeforeScheduling,
-          allowSelfApproval: policy.allowSelfApproval,
-        });
-      }
-
-      /*
-       * THE QUEUE'S SCOPE is simply the member's brand scope, where `undefined`
-       * is the platform's "unrestricted" — the same reading `brandScopeFilter()`
-       * has everywhere else, and NOT an expansion into every brand id, which is
-       * what made an unrestricted member's queue depend on a list the page had
-       * to build first.
-       */
-      const queueScope = workspace.brandScope.length > 0 ? workspace.brandScope : undefined;
-      // Q10 — this reviewer's own assignments first.
-      const pending = await service.queue({
-        brandScope: queueScope,
-        preferUserId: customer.userId,
+    /*
+     * The brands in this member's scope, and their rules. There is no longer
+     * a per-brand question of WHO may review: `content.approve` answers it
+     * for the whole workspace, so a brand contributes its policy and nothing
+     * else.
+     */
+    const resolved: BrandPolicyRow[] = [];
+    for (const brand of brands) {
+      const policy: ResolvedApprovalPolicy = await service.policyForBrand(brand.id);
+      resolved.push({
+        brandId: brand.id,
+        brandName: brand.name,
+        requireApprovalBeforeScheduling: policy.requireApprovalBeforeScheduling,
+        allowSelfApproval: policy.allowSelfApproval,
       });
+    }
 
-      /* "What you sent" is every cycle THIS member opened. */
-      const own = await db.approval.findMany({
-        where: {
-          workspaceId: workspace.workspaceId,
-          requestedByUserId: customer.userId,
-          ...(workspace.brandScope.length > 0
-            ? { brandId: { in: [...workspace.brandScope] } }
-            : {}),
-        },
-        include: { item: { select: { id: true, title: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      });
+    /*
+     * THE QUEUE'S SCOPE is simply the member's brand scope, where `undefined`
+     * is the platform's "unrestricted" — the same reading `brandScopeFilter()`
+     * has everywhere else, and NOT an expansion into every brand id, which is
+     * what made an unrestricted member's queue depend on a list the page had
+     * to build first.
+     */
+    const queueScope = workspace.brandScope.length > 0 ? workspace.brandScope : undefined;
+    // Q10 — this reviewer's own assignments first.
+    const pending = await service.queue({
+      brandScope: queueScope,
+      preferUserId: customer.userId,
+    });
 
-      /*
-       * THE REVIEW SUBJECT, when one is asked for. Authorized inside the
-       * service, which requires `content.read` and the brand scope, so a
-       * request for another brand's review gets the same not-found a
-       * non-existent id would give.
-       */
-      /*
-       * D-468 — A QUEUE OPENS ON ITS FIRST REVIEW, as the prototype's does: with
-       * no review asked for, "Waiting for me" shows the first one it lists.
-       */
-      const subjectId =
-        reviewId ?? (tab === 'forMe' && mayApprove ? (pending[0]?.id ?? null) : null);
-      const subject = subjectId
-        ? await service.reviewSubject({ approvalId: subjectId, actor }).catch(() => null)
-        : null;
+    /* "What you sent" is every cycle THIS member opened. */
+    const own = await db.approval.findMany({
+      where: {
+        workspaceId: workspace.workspaceId,
+        requestedByUserId: customer.userId,
+        ...(workspace.brandScope.length > 0 ? { brandId: { in: [...workspace.brandScope] } } : {}),
+      },
+      include: { item: { select: { id: true, title: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
 
-      const userIds = [
-        ...new Set([
-          ...pending.map((p) => p.requestedByUserId),
-          ...own.map((o) => o.requestedByUserId),
-        ]),
-      ];
-      const members =
-        userIds.length > 0
-          ? await db.membership.findMany({
-              where: { workspaceId: workspace.workspaceId, userId: { in: userIds } },
-              select: { userId: true, user: { select: { email: true, name: true } } },
-            })
-          : [];
+    /*
+     * THE REVIEW SUBJECT, when one is asked for. Authorized inside the
+     * service, which requires `content.read` and the brand scope, so a
+     * request for another brand's review gets the same not-found a
+     * non-existent id would give.
+     */
+    /*
+     * D-468 — A QUEUE OPENS ON ITS FIRST REVIEW, as the prototype's does: with
+     * no review asked for, "Waiting for me" shows the first one it lists.
+     */
+    const subjectId = reviewId ?? (tab === 'forMe' && mayApprove ? (pending[0]?.id ?? null) : null);
+    const subject = subjectId
+      ? await service.reviewSubject({ approvalId: subjectId, actor }).catch(() => null)
+      : null;
 
-      /*
-       * ROUND 3 — WHAT THE PROTOTYPE'S ROWS AND REVIEW SHOW: each post's first
-       * picture, and for the review its planned time and campaign. Read here
-       * through the same tenant-scoped client, under the same brand scope the
-       * rows above were read with.
-       */
-      const itemIds = [
-        ...new Set(
-          [
-            ...pending.map((p) => p.contentItemId),
-            ...own.map((o) => o.contentItemId),
-            subject?.itemId ?? null,
-          ].filter((id): id is string => typeof id === 'string' && id.length > 0),
-        ),
-      ];
-      const variantRows =
-        itemIds.length > 0
-          ? await db.contentVariant.findMany({
-              where: {
-                workspaceId: workspace.workspaceId,
-                contentItemId: { in: itemIds },
-                ...brandScopeFilter(workspace.brandScope),
-              },
-              orderBy: { createdAt: 'asc' },
-              select: { contentItemId: true, assetIds: true },
-            })
-          : [];
-      const firstAsset = new Map<string, string>();
-      for (const variant of variantRows) {
-        const id = variant.assetIds[0];
-        if (id && !firstAsset.has(variant.contentItemId)) firstAsset.set(variant.contentItemId, id);
-      }
-      const slot = subject
-        ? await db.calendarSlot.findFirst({
+    const userIds = [
+      ...new Set([
+        ...pending.map((p) => p.requestedByUserId),
+        ...own.map((o) => o.requestedByUserId),
+      ]),
+    ];
+    const members =
+      userIds.length > 0
+        ? await db.membership.findMany({
+            where: { workspaceId: workspace.workspaceId, userId: { in: userIds } },
+            select: { userId: true, user: { select: { email: true, name: true } } },
+          })
+        : [];
+
+    /*
+     * ROUND 3 — WHAT THE PROTOTYPE'S ROWS AND REVIEW SHOW: each post's first
+     * picture, and for the review its planned time and campaign. Read here
+     * through the same tenant-scoped client, under the same brand scope the
+     * rows above were read with.
+     */
+    const itemIds = [
+      ...new Set(
+        [
+          ...pending.map((p) => p.contentItemId),
+          ...own.map((o) => o.contentItemId),
+          subject?.itemId ?? null,
+        ].filter((id): id is string => typeof id === 'string' && id.length > 0),
+      ),
+    ];
+    const variantRows =
+      itemIds.length > 0
+        ? await db.contentVariant.findMany({
             where: {
               workspaceId: workspace.workspaceId,
-              contentItemId: subject.itemId,
-              status: { in: ['PLANNED', 'SCHEDULED'] },
+              contentItemId: { in: itemIds },
+              ...brandScopeFilter(workspace.brandScope),
             },
-            orderBy: { scheduledAtUtc: 'asc' },
-            select: { scheduledLocalTime: true },
+            orderBy: { createdAt: 'asc' },
+            select: { contentItemId: true, assetIds: true },
           })
-        : null;
-      const subjectItem = subject
-        ? await db.contentItem.findFirst({
-            where: { id: subject.itemId, workspaceId: workspace.workspaceId },
-            select: { campaign: { select: { name: true } } },
-          })
-        : null;
+        : [];
+    const firstAsset = new Map<string, string>();
+    for (const variant of variantRows) {
+      const id = variant.assetIds[0];
+      if (id && !firstAsset.has(variant.contentItemId)) firstAsset.set(variant.contentItemId, id);
+    }
+    const slot = subject
+      ? await db.calendarSlot.findFirst({
+          where: {
+            workspaceId: workspace.workspaceId,
+            contentItemId: subject.itemId,
+            status: { in: ['PLANNED', 'SCHEDULED'] },
+          },
+          orderBy: { scheduledAtUtc: 'asc' },
+          select: { scheduledLocalTime: true },
+        })
+      : null;
+    const subjectItem = subject
+      ? await db.contentItem.findFirst({
+          where: { id: subject.itemId, workspaceId: workspace.workspaceId },
+          select: { campaign: { select: { name: true } }, proposedLocalTime: true },
+        })
+      : null;
 
-      return {
-        policies: resolved,
-        queue: pending,
-        mine: own,
-        review: subject,
-        firstAsset,
-        plannedLocal: slot?.scheduledLocalTime ?? null,
-        campaignName: subjectItem?.campaign?.name ?? null,
-        memberNames: new Map(members.map((m) => [m.userId, m.user.name ?? m.user.email] as const)),
-      };
-    });
+    return {
+      policies: resolved,
+      queue: pending,
+      mine: own,
+      review: subject,
+      firstAsset,
+      /*
+       * Batch 7 PR C (B1.3) — the time the author proposed. A post in review
+       * has no live slot (a slot is made only once it is approved), so
+       * "Requested time" read "Not set" for every post that needed approval.
+       * A live slot, when there is one, still wins.
+       */
+      plannedLocal: slot?.scheduledLocalTime ?? subjectItem?.proposedLocalTime ?? null,
+      proposedLocal: subjectItem?.proposedLocalTime ?? null,
+      campaignName: subjectItem?.campaign?.name ?? null,
+      memberNames: new Map(members.map((m) => [m.userId, m.user.name ?? m.user.email] as const)),
+    };
+  });
 
   /*
    * A member who can neither read content nor review any brand is shown the
@@ -396,6 +409,8 @@ export default async function ApprovalsPage({
           ? (localWhenLabel(plannedLocal, locale, now) ?? undefined)
           : undefined,
         campaignLabel: campaignName ?? undefined,
+        approveSchedules:
+          proposedLocal !== null && workspace.permissionKeys.includes('content.schedule'),
         previews: review.variants.map((v) => (
           <DictionaryVariantPreview
             key={v.id}

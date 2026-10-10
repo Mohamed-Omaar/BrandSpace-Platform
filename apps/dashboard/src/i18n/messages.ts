@@ -2224,6 +2224,9 @@ export const messages = {
     'approvals.approveHint':
       'الموافقة تجعل المنشور جاهزًا للجدولة، ولا يُنشر شيء قبل جدولته. التعديلات تتطلب ملاحظة.',
     'approvals.approve': 'موافقة',
+    'approvals.approveSchedule': 'موافقة وجدولة',
+    'approvals.approveScheduleHint':
+      'الموافقة تُجدوِل المنشور في الموعد المطلوب. إن كان الموعد قد مضى، تتم الموافقة دون جدولة وتختار موعدًا جديدًا. التعديلات تتطلب ملاحظة.',
     'approvals.requestChanges': 'طلب تعديل',
     'approvals.reject': 'رفض',
     'approvals.withdraw': 'سحب الطلب',
@@ -6155,6 +6158,9 @@ export const messages = {
     'approvals.approveHint':
       'Approving clears the post to be scheduled; nothing publishes until it is. Asking for changes needs a note.',
     'approvals.approve': 'Approve',
+    'approvals.approveSchedule': 'Approve & schedule',
+    'approvals.approveScheduleHint':
+      'Approving schedules the post at the requested time. If that time has passed, it is approved without being scheduled and you pick a new time. Asking for changes needs a note.',
     'approvals.requestChanges': 'Request changes',
     'approvals.reject': 'Reject',
     'approvals.withdraw': 'Withdraw',
@@ -8244,6 +8250,29 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   CONTENT_SCHEDULED: {
     en: 'Added to the calendar.',
     ar: 'تمت الإضافة إلى التقويم.',
+  },
+  // Batch 7 PR C (B1.3) — "Approve & schedule", and the owner's rule when the
+  // proposed time has passed: approved, not scheduled, pick a new time.
+  APPROVED_SCHEDULED: {
+    en: 'Approved and scheduled at the requested time.',
+    ar: 'تمت الموافقة وجُدوِل المنشور في الموعد المطلوب.',
+  },
+  APPROVED_PICK_NEW_TIME: {
+    en: 'Approved. The requested time has passed, so it was not scheduled: pick a new time.',
+    ar: 'تمت الموافقة. مضى الموعد المطلوب فلم يُجدوَل المنشور: اختر موعدًا جديدًا.',
+  },
+  APPROVED_NOT_SCHEDULED: {
+    en: 'Approved. It was not scheduled: choose a time on the calendar.',
+    ar: 'تمت الموافقة. لم يُجدوَل المنشور: اختر موعدًا من التقويم.',
+  },
+  // B1.1 — the proposed publish time.
+  PROPOSED_TIME_SAVED: {
+    en: 'The publish time is saved on the post. It is not scheduled yet.',
+    ar: 'حُفظ موعد النشر في المنشور. لم يُجدوَل بعد.',
+  },
+  PROPOSED_TIME_CLEARED: {
+    en: 'The publish time was removed.',
+    ar: 'أُزيل موعد النشر.',
   },
   CONTENT_RESCHEDULED: {
     en: 'Moved to the new time.',
