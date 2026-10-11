@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 import {
+  CustomerFrameHost,
   SUPPORTED_LOCALES,
   directionForLocale,
   htmlLangForLocale,
@@ -81,7 +82,12 @@ export default async function LocaleLayout({
         <a href="#main" className="skip-link" data-testid="skip-link">
           {locale === 'ar' ? 'تخطَّ إلى المحتوى' : 'Skip to content'}
         </a>
-        {children}
+        {/*
+          PR D — the customer rail's host. Every page change happens inside it,
+          so the rail a page's shell publishes stays mounted from page to page
+          and its pill glides, as the Control Center's does from its layout.
+        */}
+        <CustomerFrameHost>{children}</CustomerFrameHost>
       </body>
     </html>
   );

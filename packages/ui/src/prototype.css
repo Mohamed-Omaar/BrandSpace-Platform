@@ -1448,7 +1448,7 @@ button.bsp-xcard:hover {
 
   /* `<div style="display: grid; grid-template-rows: auto minmax(0, 1fr);
      min-width: 0; min-height: 0; position: relative">` */
-  .bs-shell.bsp-frame > .bs-panel.bsp-main {
+  :is(.bs-shell.bsp-frame, .bs-frame-pass) > .bs-panel.bsp-main {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     min-inline-size: 0;
@@ -9117,6 +9117,16 @@ img.bsp-pf-art {
 }
 .bsp-sg-span {
   grid-column: 1 / -1;
+}
+/* PR D — a picker's note on General (`CB_mk`'s note, Main.dc.html line 1344):
+   `gap: 6px` under its field, `font-size: 11.5px; color: #6a6a72;
+   line-height: 1.45`. The shared field drew it 3.5px under the field on a
+   10.5px line, shorter than its 11px floored text, so it sat on the field. */
+.bsp-sg-grid .bs-field-hint {
+  margin-block-start: var(--bsp-px-6) !important;
+  font-size: var(--bsp-fs-11-5) !important;
+  line-height: 1.45 !important;
+  color: #6a6a72 !important;
 }
 .bsp-sg-wkrow {
   display: flex;

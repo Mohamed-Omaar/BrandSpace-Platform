@@ -1,14 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from 'react';
@@ -189,6 +193,11 @@ function useRailPill(
      * styled with its own fill once script runs.
      */
     nav.setAttribute('data-ind', '1');
+    // The pressed item's own "on its way" mark ends when its page is shown.
+    for (const link of Array.from(nav.querySelectorAll('a[aria-current="page"][data-pending]'))) {
+      link.removeAttribute('data-pending');
+      link.removeAttribute('aria-busy');
+    }
     const target = measure();
     if (!target) {
       nav.removeAttribute('data-ind');
@@ -218,7 +227,19 @@ function useRailPill(
     nav.addEventListener('touchstart', stopRevealing, { passive: true });
     nav.addEventListener('keydown', stopRevealing);
     if (revealing) reveal(target);
-    if (!placedOnce.current && lastPill && track) {
+    /*
+     * A rail that takes over from one standing in the same place (the layer's
+     * host after hydration) starts where the old pill stood — the same spot —
+     * and places it; there is nothing to glide.
+     */
+    const samePlace =
+      lastPill !== null &&
+      Math.abs(lastPill.x - target.x) +
+        Math.abs(lastPill.y - target.y) +
+        Math.abs(lastPill.w - target.w) +
+        Math.abs(lastPill.h - target.h) <
+        0.5;
+    if (!placedOnce.current && lastPill && track && !samePlace) {
       put(lastPill, false);
       void pill.offsetWidth;
       put(target, true);
@@ -294,6 +315,7 @@ function RailLink({
 }) {
   const name = item.count ? `${item.label}, ${item.count.label}` : item.label;
   const intent = usePrefetchOnIntent(item.href);
+  const router = useRouter();
   const link = (
     <Link
       href={item.href}
@@ -312,7 +334,27 @@ function RailLink({
           !event.ctrlKey &&
           !event.shiftKey &&
           !event.altKey;
-        if (plain && !item.active) onPress?.(event.currentTarget);
+        if (plain && !item.active && onPress) {
+          /*
+           * PR D — THE GLIDE STARTS BEFORE THE NAVIGATION DOES. A click hands
+           * the router its navigation at once, and that work holds the main
+           * thread for tens of milliseconds (about 75 ms measured), so the
+           * pill moved by the press could not start until it was done — about
+           * 130 ms after the press. The press now moves the pill, lets the
+           * browser start that glide in the next frame (a transform transition
+           * then runs off the main thread), and navigates right after it: a
+           * frame later, and the glide is never held by the page's work. The
+           * link keeps its address for every other way of opening it.
+           */
+          event.preventDefault();
+          const link = event.currentTarget;
+          onPress(link);
+          link.setAttribute('data-pending', '');
+          link.setAttribute('aria-busy', 'true');
+          requestAnimationFrame(() => {
+            window.setTimeout(() => router.push(item.href), 0);
+          });
+        }
         onNavigate?.();
       }}
     >
@@ -394,6 +436,271 @@ function RailNav({
   );
 }
 
+/** What the rail draws: everything in it comes from the page being shown. */
+export interface CustomerRailModel {
+  readonly wordmark: string;
+  readonly sections: readonly CustomerNavSection[];
+  readonly labels: AppShellLabels;
+  readonly brandCard?: ReactNode;
+  readonly profile?: ReactNode;
+  readonly banner?: ReactNode;
+  readonly contentLang?: string | undefined;
+  /**
+   * What floats over the frame — the Copilot button and the phone drawer. It
+   * stands outside the rounded shell: the shell's blur makes it the containing
+   * block and stacking context of anything inside, so a fixed button drawn in
+   * it would sit in the shell's box, under its top bar. Under the host, the
+   * host draws it at its own top level (the page's refs still attach).
+   */
+  readonly floating?: ReactNode;
+}
+
+/*
+ * PR D — ONE RAIL FOR THE WHOLE VISIT. Every customer page renders its own
+ * shell, and a page change replaced the whole of it, rail included: a new
+ * `nav`, a new pill, and the glide restarted from where the old pill stood (or
+ * not at all, when the new page arrived before it began). The Control Center
+ * keeps its rail in a layout, which a page change never replaces, and glides.
+ *
+ * The customer pages keep their shells — each still reads its own rail (the
+ * counts, the brand, the menus' return address) on the server — and the
+ * layout keeps the rail: the page's shell PUBLISHES its rail to this store and
+ * the host, which never unmounts between pages, draws it. Only one shell is on
+ * screen at a time; the owner token stops a page that is leaving from clearing
+ * the rail the arriving page has just published.
+ */
+interface FrameStore {
+  readonly subscribe: (listener: () => void) => () => void;
+  readonly get: () => CustomerRailModel | null;
+  readonly publish: (owner: object, model: CustomerRailModel) => void;
+  readonly retract: (owner: object) => void;
+}
+
+function createFrameStore(): FrameStore {
+  let model: CustomerRailModel | null = null;
+  let current: object | null = null;
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const listener of Array.from(listeners)) listener();
+  };
+  return {
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    get: () => model,
+    publish: (owner, next) => {
+      current = owner;
+      model = next;
+      emit();
+    },
+    retract: (owner) => {
+      if (current !== owner) return;
+      current = null;
+      model = null;
+      emit();
+    },
+  };
+}
+
+const FrameContext = createContext<FrameStore | null>(null);
+
+const subscribeNowhere = () => () => undefined;
+const noRail = () => null;
+
+/** The rail's collapse state and its motion (MO3), one per frame. */
+interface SidebarCollapse {
+  readonly collapsed: boolean;
+  readonly layoutCollapsed: boolean;
+  readonly state: 'collapsing' | 'collapsed' | 'expanded';
+  readonly motion: boolean;
+  readonly toggle: () => void;
+}
+
+function useSidebarCollapse(): SidebarCollapse {
+  const [collapsed, setCollapsed, hydrated] = useCollapsePreference();
+  const [sidebarMotion, setSidebarMotion] = useState(false);
+  const [fadingOut, setFadingOut] = useState(false);
+  const motionTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(motionTimer.current), []);
+  const toggle = useCallback(() => {
+    const next = !collapsed;
+    setCollapsed(next);
+    window.clearTimeout(motionTimer.current);
+    if (prefersReducedMotion()) {
+      setFadingOut(false);
+      setSidebarMotion(false);
+      return;
+    }
+    // `transition: grid-template-columns .38s` — present only after a click.
+    setSidebarMotion(true);
+    const settle = () => {
+      motionTimer.current = window.setTimeout(
+        () => setSidebarMotion(false),
+        Math.max(motionMs.collapse, motionMs.labelInDelay + motionMs.labelIn) + 50,
+      );
+    };
+    if (next) {
+      setFadingOut(true);
+      motionTimer.current = window.setTimeout(() => {
+        setFadingOut(false);
+        settle();
+      }, motionMs.labelOut);
+    } else {
+      setFadingOut(false);
+      settle();
+    }
+  }, [collapsed, setCollapsed]);
+  // The column follows the labels: it narrows only once they have left.
+  const layoutCollapsed = collapsed && !fadingOut;
+  const state = hydrated
+    ? fadingOut
+      ? 'collapsing'
+      : layoutCollapsed
+        ? 'collapsed'
+        : 'expanded'
+    : 'expanded';
+  return { collapsed, layoutCollapsed, state, motion: sidebarMotion, toggle };
+}
+
+function RailLogo({ wordmark }: { readonly wordmark: string }) {
+  return (
+    <span
+      data-testid="brand"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--bsp-px-10)',
+        flexGrow: 1,
+        minInlineSize: 0,
+      }}
+    >
+      <span className="bsp-sb-logo-mark">
+        <BrandGlyph size="var(--bsp-px-34)" />
+      </span>
+      <span className="bsp-sb-wordmark bsp-nl bs-brand-text bsp-ltr">{wordmark}</span>
+    </span>
+  );
+}
+
+function RailAside({
+  rail,
+  collapse,
+}: {
+  readonly rail: CustomerRailModel;
+  readonly collapse: SidebarCollapse;
+}) {
+  const { labels } = rail;
+  // `sbArrow`: the chevron points to the start edge, and flips when collapsed.
+  const arrow = collapse.collapsed ? 'scaleX(-1)' : 'none';
+  return (
+    <aside
+      className={collapse.layoutCollapsed ? 'bs-sidebar bsp-sb bsp-min' : 'bs-sidebar bsp-sb'}
+      data-testid="sidebar"
+    >
+      <div className="bsp-sb-top">
+        <div className="bsp-sb-logo">
+          <RailLogo wordmark={rail.wordmark} />
+          <button
+            type="button"
+            className="bsp-ibtn bsp-sbt"
+            data-testid="toggle-sidebar"
+            aria-label={collapse.collapsed ? labels.expandSidebar : labels.collapseSidebar}
+            title={collapse.collapsed ? labels.expandSidebar : labels.collapseSidebar}
+            aria-pressed={collapse.collapsed}
+            onClick={collapse.toggle}
+          >
+            <PrototypeIcon glyph="chevron" size={16} stroke={2} style={{ transform: arrow }} />
+          </button>
+        </div>
+        {rail.brandCard ? <div style={{ position: 'relative' }}>{rail.brandCard}</div> : null}
+      </div>
+      <RailNav
+        sections={rail.sections}
+        collapsed={collapse.layoutCollapsed}
+        label={labels.primaryNavigation}
+        scope="rail"
+      />
+      <div className="bsp-sb-foot">
+        {rail.profile ? <div style={{ position: 'relative' }}>{rail.profile}</div> : null}
+      </div>
+    </aside>
+  );
+}
+
+/**
+ * The frame: the ambient ground, the rounded shell and its rail. Without a
+ * rail it PASSES THROUGH — its two boxes become `display: contents` — so the
+ * same elements stand in the same places whether the frame is drawn here or
+ * by the layout's host, and nothing inside is ever re-created by the switch.
+ */
+function CustomerFrame({
+  rail,
+  collapse,
+  contentLang,
+  after,
+  children,
+}: {
+  readonly rail: CustomerRailModel | null;
+  readonly collapse: SidebarCollapse;
+  readonly contentLang?: string | undefined;
+  readonly after?: ReactNode;
+  readonly children: ReactNode;
+}) {
+  const on = rail !== null;
+  // `sbW = s.sbMin ? 'var(--bsp-px-76)' : 'var(--bsp-px-250)'`.
+  const sidebarWidth = collapse.layoutCollapsed ? 'var(--bsp-px-76)' : 'var(--bsp-px-250)';
+  return (
+    <div
+      className={on ? 'bs-ambient-host' : 'bs-frame-pass'}
+      style={on ? undefined : { display: 'contents' }}
+      lang={contentLang}
+      {...(on
+        ? {
+            'data-testid': 'app-shell',
+            'data-sidebar-state': collapse.state,
+            ...(collapse.motion ? { 'data-sidebar-motion': '' } : {}),
+          }
+        : {})}
+    >
+      {on ? <AmbientBackground /> : null}
+      {on ? rail.banner : null}
+      <div
+        className={on ? 'bs-shell bsp-frame' : 'bs-frame-pass'}
+        style={
+          on
+            ? ({ '--bs-shell-sidebar-width': sidebarWidth } as CSSProperties)
+            : { display: 'contents' }
+        }
+      >
+        {on ? <RailAside rail={rail} collapse={collapse} /> : null}
+        {children}
+      </div>
+      {on ? rail.floating : null}
+      {after}
+    </div>
+  );
+}
+
+/**
+ * PR D — THE LAYOUT'S HOST FOR THE CUSTOMER RAIL. Placed once around every
+ * page (`app/[locale]/layout.tsx`); it draws nothing of its own until a page's
+ * `CustomerShell` publishes a rail, and then keeps that one rail — its `nav`,
+ * its pill, its scroll and its collapse state — for every page that follows.
+ */
+export function CustomerFrameHost({ children }: { readonly children: ReactNode }) {
+  const [store] = useState(createFrameStore);
+  const rail = useSyncExternalStore(store.subscribe, store.get, noRail);
+  const collapse = useSidebarCollapse();
+  return (
+    <FrameContext.Provider value={store}>
+      <CustomerFrame rail={rail} collapse={collapse} contentLang={rail?.contentLang}>
+        {children}
+      </CustomerFrame>
+    </FrameContext.Provider>
+  );
+}
+
 export function CustomerShell({
   wordmark,
   sections,
@@ -435,58 +742,32 @@ export function CustomerShell({
 }) {
   const pathname = usePathname();
   usePageEnterGate();
-  const [collapsed, setCollapsed, hydrated] = useCollapsePreference();
-  const [sidebarMotion, setSidebarMotion] = useState(false);
   /*
-   * `fadeSbLabels`: collapsing, the labels fade out (110 ms) BEFORE the column
-   * narrows; expanding, the column widens and the labels fade in after it
-   * (220 ms, 150 ms late). The preference and `aria-pressed` flip at once;
-   * only the layout waits for the fade (`collapsing`).
+   * PR D — THE RAIL LIVES IN THE LAYOUT. Under `CustomerFrameHost` this shell
+   * hands its rail to the host, which keeps one rail mounted across every page
+   * change, and draws only its own panel. Until the host has it (the server's
+   * HTML and the hydration pass), and wherever there is no host, the shell
+   * draws the whole frame itself, exactly as before.
    */
-  const [fadingOut, setFadingOut] = useState(false);
-  const motionTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(motionTimer.current), []);
-  const toggle = useCallback(() => {
-    const next = !collapsed;
-    setCollapsed(next);
-    window.clearTimeout(motionTimer.current);
-    if (prefersReducedMotion()) {
-      setFadingOut(false);
-      setSidebarMotion(false);
-      return;
-    }
-    // `transition: grid-template-columns .38s` — present only after a click.
-    setSidebarMotion(true);
-    const settle = () => {
-      motionTimer.current = window.setTimeout(
-        () => setSidebarMotion(false),
-        Math.max(motionMs.collapse, motionMs.labelInDelay + motionMs.labelIn) + 50,
-      );
-    };
-    if (next) {
-      setFadingOut(true);
-      motionTimer.current = window.setTimeout(() => {
-        setFadingOut(false);
-        settle();
-      }, motionMs.labelOut);
-    } else {
-      setFadingOut(false);
-      settle();
-    }
-  }, [collapsed, setCollapsed]);
-  // The column follows the labels: it narrows only once they have left.
-  const layoutCollapsed = collapsed && !fadingOut;
+  const frameStore = useContext(FrameContext);
+  const hosted = useSyncExternalStore(
+    frameStore?.subscribe ?? subscribeNowhere,
+    () => (frameStore?.get() ?? null) !== null,
+    () => false,
+  );
+  const railModel = useMemo<CustomerRailModel>(
+    () => ({ wordmark, sections, labels, brandCard, profile, banner, contentLang }),
+    [wordmark, sections, labels, brandCard, profile, banner, contentLang],
+  );
+  // This shell's own token: a page that is leaving cannot clear the rail the
+  // arriving page has just published.
+  const [owner] = useState(() => ({}));
+  useLayoutEffect(() => {
+    if (!frameStore) return undefined;
+    return () => frameStore.retract(owner);
+  }, [frameStore, owner]);
+  const collapse = useSidebarCollapse();
 
-  /*
-   * THE COPILOT ON A PHONE (D-468 (b): the phone layout is post-launch, so it
-   * stays the product's). From 768px up the Copilot is the prototype's floating
-   * button. Below 768px it is a control in the header's action row, as the
-   * product had it, and nothing floats over the page. The control keeps its one
-   * place in the document (after the header, so the bar's own order and the
-   * tab order are unchanged); an empty slot at the end of the action row holds
-   * its room, and the control is laid onto that slot and scrolls with the
-   * header.
-   */
   const fabHostRef = useRef<HTMLDivElement | null>(null);
   const fabSlotRef = useRef<HTMLSpanElement | null>(null);
   useEffect(() => {
@@ -540,7 +821,7 @@ export function CustomerShell({
       window.removeEventListener('load', schedule);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [fab]);
+  }, [fab, hosted]);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
@@ -558,204 +839,147 @@ export function CustomerShell({
     return () => query.removeEventListener('change', onChange);
   }, [drawerOpen]);
 
-  // `sbW = s.sbMin ? 'var(--bsp-px-76)' : 'var(--bsp-px-250)'`.
-  const sidebarWidth = layoutCollapsed ? 'var(--bsp-px-76)' : 'var(--bsp-px-250)';
-  // `sbArrow`: the chevron points to the start edge, and flips when collapsed.
-  const arrow = collapsed ? 'scaleX(-1)' : 'none';
-
-  const logo = (
-    <span
-      data-testid="brand"
+  const drawerElement = drawer.present ? (
+    <div
+      data-testid="navigation-scrim"
+      {...(drawer.leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) closeDrawer();
+      }}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--bsp-px-10)',
-        flexGrow: 1,
-        minInlineSize: 0,
+        position: 'fixed',
+        inset: 0,
+        zIndex: zIndexTokens.drawer,
+        background: 'rgba(12, 12, 14, 0.25)',
       }}
     >
-      <span className="bsp-sb-logo-mark">
-        <BrandGlyph size="var(--bsp-px-34)" />
-      </span>
-      <span className="bsp-sb-wordmark bsp-nl bs-brand-text bsp-ltr">{wordmark}</span>
-    </span>
-  );
-
-  return (
-    <div
-      className="bs-ambient-host"
-      lang={contentLang}
-      data-testid="app-shell"
-      data-sidebar-state={
-        hydrated
-          ? fadingOut
-            ? 'collapsing'
-            : layoutCollapsed
-              ? 'collapsed'
-              : 'expanded'
-          : 'expanded'
-      }
-      {...(sidebarMotion ? { 'data-sidebar-motion': '' } : {})}
-    >
-      <AmbientBackground />
-      {banner}
       <div
-        className="bs-shell bsp-frame"
-        style={{ '--bs-shell-sidebar-width': sidebarWidth } as CSSProperties}
+        id={drawerId}
+        ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={labels.primaryNavigation}
+        data-testid="navigation-drawer"
+        tabIndex={-1}
+        className="bs-pop bsp-sb"
+        data-origin="start"
+        style={{
+          position: 'absolute',
+          insetBlock: 0,
+          insetInlineStart: 0,
+          inlineSize: 'min(var(--bsp-rem-19), 88vw)',
+          background: colorTokens.surface,
+          borderStartEndRadius: radiusTokens['2xl'],
+          borderEndEndRadius: radiusTokens['2xl'],
+          boxShadow: shadowTokens.overlay,
+          overflowY: 'auto',
+          display: 'grid',
+          alignContent: 'start',
+        }}
       >
-        <aside
-          className={layoutCollapsed ? 'bs-sidebar bsp-sb bsp-min' : 'bs-sidebar bsp-sb'}
-          data-testid="sidebar"
-        >
-          <div className="bsp-sb-top">
-            <div className="bsp-sb-logo">
-              {logo}
-              <button
-                type="button"
-                className="bsp-ibtn bsp-sbt"
-                data-testid="toggle-sidebar"
-                aria-label={collapsed ? labels.expandSidebar : labels.collapseSidebar}
-                title={collapsed ? labels.expandSidebar : labels.collapseSidebar}
-                aria-pressed={collapsed}
-                onClick={toggle}
-              >
-                <PrototypeIcon glyph="chevron" size={16} stroke={2} style={{ transform: arrow }} />
-              </button>
-            </div>
-            {brandCard ? <div style={{ position: 'relative' }}>{brandCard}</div> : null}
-          </div>
-          <RailNav
-            sections={sections}
-            collapsed={layoutCollapsed}
-            label={labels.primaryNavigation}
-            scope="rail"
-          />
-          <div className="bsp-sb-foot">
-            {profile ? <div style={{ position: 'relative' }}>{profile}</div> : null}
-          </div>
-        </aside>
-
-        <div className="bs-panel bsp-main">
-          <header className="bs-topbar bsp-header">
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: spacingTokens.sm,
-                minInlineSize: 0,
-              }}
+        <div className="bsp-sb-top">
+          <div className="bsp-sb-logo">
+            <RailLogo wordmark={wordmark} />
+            <button
+              type="button"
+              className="bsp-ibtn bsp-sbt"
+              aria-label={labels.closeNavigation}
+              data-testid="close-navigation"
+              onClick={closeDrawer}
             >
-              <button
-                type="button"
-                className="bs-drawer-trigger bsp-ibtn"
-                aria-label={labels.openNavigation}
-                aria-expanded={drawerOpen}
-                aria-controls={drawerId}
-                data-testid="open-navigation"
-                onClick={() => setDrawerOpen(true)}
-                style={{ display: 'none' }}
-              >
-                <MenuIcon size={20} />
-              </button>
-              <div className="bsp-header-title">
-                {pageEyebrow ? (
-                  <span className="bsp-lbl" data-testid="page-eyebrow">
-                    {pageEyebrow}
-                  </span>
-                ) : null}
-                <h1 className="bsp-h1" data-testid="heading" style={{ overflowWrap: 'anywhere' }}>
-                  {pageTitle}
-                </h1>
-                {pageDescription ? (
-                  <p className="bsp-sub" data-testid="description">
-                    {pageDescription}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-            <div className="bsp-actions">
-              {pageMeta}
-              {actions}
-              {fab ? <span ref={fabSlotRef} className="bsp-fab-slot" aria-hidden="true" /> : null}
-            </div>
-          </header>
-          <main id="main" className="bsp-scroll">
-            {/* MO1: keyed by the path, so a page change enters and a re-render does not. */}
-            <div key={pathname ?? ''} className="bs-page-flow bsp-page">
-              {children}
-            </div>
-          </main>
+              <CloseIcon size={16} />
+            </button>
+          </div>
+          {brandCard ? <div style={{ position: 'relative' }}>{brandCard}</div> : null}
         </div>
+        <RailNav
+          sections={sections}
+          collapsed={false}
+          label={labels.primaryNavigation}
+          onNavigate={closeDrawer}
+          scope="drawer"
+        />
+        <div className="bsp-sb-foot">{profile}</div>
       </div>
+    </div>
+  ) : null;
 
+  const floating = (
+    <>
       <div ref={fabHostRef} style={{ display: 'contents' }}>
         {fab}
       </div>
+      {drawerElement}
+    </>
+  );
 
-      {drawer.present ? (
-        <div
-          data-testid="navigation-scrim"
-          {...(drawer.leaving ? { 'data-leaving': '', 'aria-hidden': true, inert: true } : {})}
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeDrawer();
-          }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: zIndexTokens.drawer,
-            background: 'rgba(12, 12, 14, 0.25)',
-          }}
-        >
+  /*
+   * Published on every render, so the host always draws this page's rail and
+   * floating parts as they are now (the drawer's state lives here). Rendering
+   * the host does not render this shell again, so this cannot loop.
+   */
+  useLayoutEffect(() => {
+    frameStore?.publish(owner, { ...railModel, floating });
+  });
+
+  return (
+    <CustomerFrame
+      rail={hosted ? null : railModel}
+      collapse={collapse}
+      contentLang={contentLang}
+      after={hosted ? null : floating}
+    >
+      <div className="bs-panel bsp-main">
+        <header className="bs-topbar bsp-header">
           <div
-            id={drawerId}
-            ref={drawerRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label={labels.primaryNavigation}
-            data-testid="navigation-drawer"
-            tabIndex={-1}
-            className="bs-pop bsp-sb"
-            data-origin="start"
             style={{
-              position: 'absolute',
-              insetBlock: 0,
-              insetInlineStart: 0,
-              inlineSize: 'min(var(--bsp-rem-19), 88vw)',
-              background: colorTokens.surface,
-              borderStartEndRadius: radiusTokens['2xl'],
-              borderEndEndRadius: radiusTokens['2xl'],
-              boxShadow: shadowTokens.overlay,
-              overflowY: 'auto',
-              display: 'grid',
-              alignContent: 'start',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: spacingTokens.sm,
+              minInlineSize: 0,
             }}
           >
-            <div className="bsp-sb-top">
-              <div className="bsp-sb-logo">
-                {logo}
-                <button
-                  type="button"
-                  className="bsp-ibtn bsp-sbt"
-                  aria-label={labels.closeNavigation}
-                  data-testid="close-navigation"
-                  onClick={closeDrawer}
-                >
-                  <CloseIcon size={16} />
-                </button>
-              </div>
-              {brandCard ? <div style={{ position: 'relative' }}>{brandCard}</div> : null}
+            <button
+              type="button"
+              className="bs-drawer-trigger bsp-ibtn"
+              aria-label={labels.openNavigation}
+              aria-expanded={drawerOpen}
+              aria-controls={drawerId}
+              data-testid="open-navigation"
+              onClick={() => setDrawerOpen(true)}
+              style={{ display: 'none' }}
+            >
+              <MenuIcon size={20} />
+            </button>
+            <div className="bsp-header-title">
+              {pageEyebrow ? (
+                <span className="bsp-lbl" data-testid="page-eyebrow">
+                  {pageEyebrow}
+                </span>
+              ) : null}
+              <h1 className="bsp-h1" data-testid="heading" style={{ overflowWrap: 'anywhere' }}>
+                {pageTitle}
+              </h1>
+              {pageDescription ? (
+                <p className="bsp-sub" data-testid="description">
+                  {pageDescription}
+                </p>
+              ) : null}
             </div>
-            <RailNav
-              sections={sections}
-              collapsed={false}
-              label={labels.primaryNavigation}
-              onNavigate={closeDrawer}
-              scope="drawer"
-            />
-            <div className="bsp-sb-foot">{profile}</div>
           </div>
-        </div>
-      ) : null}
-    </div>
+          <div className="bsp-actions">
+            {pageMeta}
+            {actions}
+            {fab ? <span ref={fabSlotRef} className="bsp-fab-slot" aria-hidden="true" /> : null}
+          </div>
+        </header>
+        <main id="main" className="bsp-scroll">
+          {/* MO1: keyed by the path, so a page change enters and a re-render does not. */}
+          <div key={pathname ?? ''} className="bs-page-flow bsp-page">
+            {children}
+          </div>
+        </main>
+      </div>
+    </CustomerFrame>
   );
 }
