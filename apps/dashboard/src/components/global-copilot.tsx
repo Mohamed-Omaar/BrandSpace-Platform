@@ -9,6 +9,7 @@ import {
 } from '@brandspace/ui';
 import Link from 'next/link';
 import { CopilotView } from '../app/[locale]/copilot/copilot-view';
+import { useSearchParams } from 'next/navigation';
 import { OPEN_COPILOT_EVENT } from './copilot-link';
 
 /**
@@ -126,6 +127,29 @@ export function GlobalCopilot({
     window.addEventListener(OPEN_COPILOT_EVENT, onRequest);
     return () => window.removeEventListener(OPEN_COPILOT_EVENT, onRequest);
   }, [openHere]);
+
+  /*
+   * PR D (Home 3) — A HAND-OFF ACROSS A NAVIGATION: Home's "Explain" goes to
+   * Performance with `?copilot=open&ask=<request>`, and the drawer opens there
+   * with the request in its box (not sent). The two parameters are taken off
+   * the address at once, so a reload or a shared link does not reopen it.
+   * Keyed to the address, not to mounting: the shell's floating parts are
+   * drawn by the frame host and survive a page change (PR D, the rail).
+   */
+  const search = useSearchParams();
+  const handoff = search.get('copilot') === 'open' ? (search.get('ask') ?? '') : null;
+  useEffect(() => {
+    if (handoff === null) return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('copilot');
+      url.searchParams.delete('ask');
+      window.history.replaceState(window.history.state, '', url);
+    } catch {
+      // A sandboxed frame keeps the address; the drawer still opens.
+    }
+    openHere(handoff.slice(0, 500));
+  }, [handoff, openHere]);
 
   /*
    * THE PROTOTYPE'S COPILOT PANEL (`Main.dc.html` lines 1493–1525, D-468): a

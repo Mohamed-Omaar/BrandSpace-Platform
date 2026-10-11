@@ -1390,6 +1390,28 @@ button.bsp-xcard:hover {
   font-size: var(--bsp-fs-14);
   background: #fff;
 }
+/* PR D (Home 5) — a decided noticed card (Main lines 273-277): the card's
+   own geometry, greyed green (#f7fbf8), its result pill at the foot. */
+.bsp-xcard.bsp-home-decided {
+  background: #f7fbf8;
+  box-shadow: none;
+  min-height: var(--bsp-px-220);
+  box-sizing: content-box;
+}
+.bsp-home-decided-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.bsp-xtitle.bsp-home-decided-t {
+  font-size: var(--bsp-t-15);
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+.bsp-pill.bsp-home-decided-pill {
+  align-self: flex-start;
+  margin-top: auto;
+}
 .bsp-menu-item.bsp-menu-btn[data-muted] {
   padding: var(--bsp-px-7) var(--bsp-px-10);
   font-size: var(--bsp-t-12_5);

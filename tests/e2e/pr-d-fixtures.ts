@@ -122,3 +122,57 @@ export async function publishedPost(
     return item.id;
   });
 }
+
+/**
+ * Daily account engagements for the test's own workspace, oldest first, the
+ * last value for yesterday — enough for the anomaly rule (a 14-day baseline)
+ * to find a recent shift when the last values jump.
+ */
+export async function dailyEngagements(
+  own: OwnWorkspace,
+  values: readonly number[],
+): Promise<void> {
+  await withPlatformPrisma(async (prisma) => {
+    const run = Date.now().toString(36);
+    const connection = await prisma.socialConnection.create({
+      data: {
+        workspaceId: own.workspaceId,
+        brandId: own.brandId,
+        provider: 'INSTAGRAM',
+        externalAccountId: `pr-d-daily-${run}`,
+        displayName: 'pr-d-daily',
+        targetKind: 'MOCK',
+        status: 'ACTIVE',
+        connectedByUserId: own.ownerId,
+        connectedAt: new Date(Date.now() - 60 * DAY),
+      },
+      select: { id: true, externalAccountId: true },
+    });
+    const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+    for (const [index, value] of values.entries()) {
+      const periodStart = new Date(today.getTime() - (values.length - index) * DAY);
+      await prisma.metricObservation.create({
+        data: {
+          workspaceId: own.workspaceId,
+          brandId: own.brandId,
+          socialConnectionId: connection.id,
+          provider: 'INSTAGRAM',
+          subjectType: 'ACCOUNT',
+          subjectExternalId: connection.externalAccountId,
+          metricKey: 'engagements',
+          granularity: 'DAY',
+          periodStart,
+          periodEnd: new Date(periodStart.getTime() + DAY),
+          value: BigInt(value),
+          unit: 'COUNT',
+          observedAt: new Date(periodStart.getTime() + DAY),
+          sourceKind: 'MOCK',
+          sourceVersion: 'e2e-pr-d-1',
+          observationKey: createHash('sha256')
+            .update([own.workspaceId, run, String(index)].join('|'))
+            .digest('hex'),
+        },
+      });
+    }
+  });
+}
