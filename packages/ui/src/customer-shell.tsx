@@ -379,13 +379,19 @@ function RailLink({
           event.preventDefault();
           const href = item.href;
           const pressed = event.currentTarget;
+          // The host's rail opens where this one was scrolled to: the pressed
+          // item stays in view, under the pill.
+          const scrolled = pressed.closest('nav')?.scrollTop ?? 0;
           frame.activate();
           const pressTwin = (retry: boolean) => {
             const twin = Array.from(
               document.querySelectorAll<HTMLAnchorElement>('[data-testid="sidebar"] nav a.bsp-nav'),
             ).find((anchor) => anchor.getAttribute('href') === href && anchor !== pressed);
-            if (twin) twin.click();
-            else if (retry) requestAnimationFrame(() => pressTwin(false));
+            if (twin) {
+              const hostNav = twin.closest('nav');
+              if (hostNav) hostNav.scrollTop = scrolled;
+              twin.click();
+            } else if (retry) requestAnimationFrame(() => pressTwin(false));
             else router.push(href);
           };
           // After React has committed the host's rail (the update is a sync one).
