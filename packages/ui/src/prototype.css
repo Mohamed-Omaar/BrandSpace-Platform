@@ -6813,6 +6813,11 @@ span.bsp-cal-hol {
 textarea.bs-control.bsp-bb-in {
   resize: vertical;
 }
+/* PR D (Brand Brain 2) — the reason box: 8px 12px, 13px (Main line 834). */
+.bs-control.bsp-bb-in.bsp-bb-reason {
+  padding: var(--bsp-px-8) var(--bsp-px-12);
+  font-size: var(--bsp-fs-13);
+}
 .bs-control.bsp-bb-in.bsp-bb-in-big {
   border-color: #d9ccff;
   border-radius: var(--bsp-px-12);
@@ -10219,6 +10224,65 @@ img.bsp-pf-art {
   font-size: var(--bsp-fs-12);
   color: #6a6a72;
 }
+/* PR D (Strategy 5) — the cadence at the header's end: 12px, #6a6a72 (Main line 1070). */
+/* PR D (Strategy 7) — "How it's going" (Main lines 1126-1133): the heading,
+   the 12px note, then a row per pillar — the 8px dot, a 130px name, the 8px
+   track, a 44px figure and "Best". */
+.bsp-xcard.bsp-sp-how {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-10);
+}
+.bsp-sp-how-sub {
+  font-size: var(--bsp-fs-12);
+  line-height: 1.55;
+  color: #6a6a72;
+}
+.bsp-sp-pil.bsp-sp-how-row {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--bsp-px-10);
+}
+.bsp-sp-how-n {
+  inline-size: var(--bsp-px-130);
+  flex-shrink: 0;
+  font-size: var(--bsp-fs-13);
+  font-weight: 500;
+}
+.bsp-sp-how-bar {
+  flex-grow: 1;
+  height: var(--bsp-px-8);
+  border-radius: var(--bsp-px-99);
+  background: #f0f0f2;
+}
+.bsp-sp-how-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--bsp-px-99);
+  background: var(--bsp-pil, #7935fe);
+}
+.bsp-sp-how-v {
+  inline-size: var(--bsp-px-44);
+  text-align: end;
+  font-size: var(--bsp-fs-13);
+  font-weight: 700;
+}
+/* PR D (Strategy 10) — the busy card (Main line 993): centred, 200px tall, 13px #55555c. */
+.bsp-xcard.bsp-sp-busy {
+  align-items: center;
+  justify-content: center;
+  min-height: var(--bsp-px-200);
+  gap: var(--bsp-px-10);
+}
+.bsp-sp-busy-t {
+  font-size: var(--bsp-fs-13);
+  color: #55555c;
+}
+.bsp-sp-cadence {
+  font-size: var(--bsp-fs-12);
+  color: #6a6a72;
+  margin-inline-start: auto;
+}
 .bsp-sp-weeks {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -10591,6 +10655,22 @@ img.bsp-pf-art {
    prototype draws it (`Main.dc.html` line 874): the field and its button in one
    row. The other language's field is behind the row's own chip (a checkbox
    drawn as a chip, pressed while open), shown under the row. */
+/* PR D (Brand Brain 3, 4) — the Tone and Rules heads (Main line 874): the
+   heading grows, "Open area →" at its end; "n waiting for review" a purple chip. */
+.bsp-vc-head {
+  display: flex;
+  align-items: center;
+  gap: var(--bsp-px-6);
+}
+.bsp-vc-head > h5 {
+  flex-grow: 1;
+}
+.bsp-chip.bsp-vc-pending {
+  align-self: flex-start;
+  justify-self: start;
+  font-size: var(--bsp-fs-12);
+  color: #5312c4;
+}
 .bsp-vc-row {
   display: flex;
   align-items: center;

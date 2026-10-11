@@ -147,3 +147,25 @@ export function pillarTotals(
     .map(([pillar, total]) => ({ pillar, total }))
     .sort((a, b) => b.total - a.total || a.pillar.localeCompare(b.pillar));
 }
+
+/**
+ * PR D (Strategy 7) — "How it's going": AVERAGE engagements per post, per
+ * pillar, largest first (Main line 1131, "Average engagement per pillar").
+ * Posts without a pillar are left out; no posts, no rows.
+ */
+export function pillarAverages(
+  posts: readonly { readonly pillar: string | null; readonly value: number }[],
+): readonly { readonly pillar: string; readonly average: number; readonly posts: number }[] {
+  const byPillar = new Map<string, { total: number; count: number }>();
+  for (const post of posts) {
+    const pillar = post.pillar?.trim();
+    if (!pillar) continue;
+    const entry = byPillar.get(pillar) ?? { total: 0, count: 0 };
+    entry.total += post.value;
+    entry.count += 1;
+    byPillar.set(pillar, entry);
+  }
+  return [...byPillar.entries()]
+    .map(([pillar, entry]) => ({ pillar, average: entry.total / entry.count, posts: entry.count }))
+    .sort((a, b) => b.average - a.average || a.pillar.localeCompare(b.pillar));
+}

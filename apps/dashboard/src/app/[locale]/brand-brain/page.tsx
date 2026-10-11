@@ -805,6 +805,15 @@ export default async function BrandBrainPage({
             : null;
         })()
       : null;
+  /*
+   * PR D (Strategy 9) — `?area=<key>` ALONE opens that area, as pressing its
+   * card does: Strategy's "Built on Brand Brain" rows press "Open →" into the
+   * fact's own area. Only a real area of this brand is honoured.
+   */
+  const initialArea =
+    askedArea && !askedQuestion && !chatStart
+      ? (areaCards.find((entry) => entry.area === askedArea)?.area ?? null)
+      : null;
 
   const requestedTab = chatStart ? 'chat' : typeof query['tab'] === 'string' ? query['tab'] : '';
   const initialTab: BrandBrainTab = (['knowledge', 'look', 'sources', 'chat'] as const).includes(
@@ -910,6 +919,7 @@ export default async function BrandBrainPage({
         }
         initialTab={initialTab}
         initialFocus={initialFocus}
+        initialArea={initialArea}
         focusCandidateId={typeof query['candidate'] === 'string' ? query['candidate'] : null}
         // The review card posts and comes back here: it stays open on the way back.
         reviewOpen={status === 'CANDIDATE_ACCEPTED' || status === 'CANDIDATE_REJECTED'}

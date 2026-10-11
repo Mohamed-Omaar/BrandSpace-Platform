@@ -4,7 +4,7 @@ import {
   usableFactsForDisplay,
   writingGoal,
 } from '@brandspace/brand-brain';
-import { maySpendCredits, systemClock } from '@brandspace/shared';
+import { brandScopeFilter, maySpendCredits, systemClock } from '@brandspace/shared';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
   SegmentPill,
@@ -19,6 +19,8 @@ import { requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
+import { pillarAverages } from '../../../server/performance-view';
+import { StartBusy, StartBusyReporter } from './start-busy';
 import { copilotHref } from '../../../server/copilot-surface';
 import {
   GOAL_ITEM_KEY,
@@ -171,6 +173,47 @@ export default async function StrategyPage({
     : null;
 
   const plan = data?.accepted ? parseStrategyBody(data.accepted.body) : null;
+  /*
+   * PR D (Strategy 7) — "HOW IT'S GOING" (`x.st.perf`, line 1131): average
+   * engagements per post, per pillar, over the last 28 days, from the posts'
+   * own readings through the same analytics query Performance uses, for a
+   * member who may read analytics. Real readings only: with none, no card.
+   */
+  const pillarPerformance =
+    brand && plan && may('analytics.read')
+      ? await inAnalytics(workspace.workspaceId, async (services) => {
+          const queries = await services.queries();
+          const now = systemClock.now();
+          const rows = await queries.topPosts({
+            scope: { brandId: brand.id },
+            period: { start: new Date(now.getTime() - 28 * 86_400_000), end: now },
+            metricKey: 'engagements',
+            limit: 200,
+            brandScope: workspace.brandScope,
+          });
+          const perPost = new Map<string, number>();
+          for (const row of rows) {
+            perPost.set(
+              row.contentItemId,
+              (perPost.get(row.contentItemId) ?? 0) + Number(row.value),
+            );
+          }
+          const pillars =
+            perPost.size > 0
+              ? await services.db.contentItem.findMany({
+                  where: {
+                    workspaceId: workspace.workspaceId,
+                    id: { in: [...perPost.keys()] },
+                    ...brandScopeFilter(workspace.brandScope),
+                  },
+                  select: { id: true, pillar: true },
+                })
+              : [];
+          return pillarAverages(
+            pillars.map((item) => ({ pillar: item.pillar, value: perPost.get(item.id) ?? 0 })),
+          );
+        }).catch(() => [])
+      : [];
   const goalTitle =
     data?.goal && typeof data.goal.title === 'object' && data.goal.title !== null
       ? (data.goal.title as Record<string, unknown>)
@@ -464,6 +507,7 @@ export default async function StrategyPage({
                     <BrainRows
                       testId="strategy-audience"
                       area={t('strategy.section.audience')}
+                      emptyArea="AUDIENCE"
                       items={audience}
                       locale={locale}
                       empty={t('strategy.audienceEmpty')}
@@ -474,6 +518,7 @@ export default async function StrategyPage({
                     <BrainRows
                       testId="strategy-messages"
                       area={t('strategy.section.messages')}
+                      emptyArea="OFFERS"
                       items={messagesKnown}
                       locale={locale}
                       empty={t('strategy.messagesEmpty')}
@@ -543,6 +588,27 @@ export default async function StrategyPage({
                   <div className="bsp-sp-month-h">
                     <h2 className="bsp-sech">{t('strategy.monthlyPlan')}</h2>
                     <span className="bsp-sp-month-hint">{t('strategy.monthHint')}</span>
+                    {plan && plan.monthlyPlan.length > 0
+                      ? (() => {
+                          /*
+                           * PR D (Strategy 5) — THE MONTH'S CADENCE (`x.st.cadence`,
+                           * line 1070): the plan's own weeks, posts a week to one
+                           * decimal and the month's total.
+                           */
+                          const total = plan.monthlyPlan.reduce(
+                            (sum, week) => sum + week.postsPlanned,
+                            0,
+                          );
+                          const weekly = Math.round((total / plan.monthlyPlan.length) * 10) / 10;
+                          return (
+                            <span className="bsp-sp-cadence" data-testid="strategy-cadence">
+                              {t('strategy.cadence')
+                                .replace('{week}', number.format(weekly))
+                                .replace('{month}', number.format(total))}
+                            </span>
+                          );
+                        })()
+                      : null}
                   </div>
                   {plan && plan.monthlyPlan.length > 0 ? (
                     <div className="bsp-sp-weeks">
@@ -615,6 +681,54 @@ export default async function StrategyPage({
                   )}
                 </section>
 
+                {pillarPerformance.length > 0 ? (
+                  /*
+                   * PR D (Strategy 7) — the prototype's "How it's going" half
+                   * (line 1126). Its other half, the monthly review, is
+                   * Strategy 8 and not built, so this half spans the card.
+                   */
+                  <section className="bsp-xcard bsp-sp-how" data-testid="strategy-how">
+                    <h2 className="bsp-sech">{t('strategy.howGoing')}</h2>
+                    <span className="bsp-sp-how-sub">{t('strategy.howSub')}</span>
+                    {(() => {
+                      const top = Math.max(1, ...pillarPerformance.map((row) => row.average));
+                      return pillarPerformance.map((row, index) => {
+                        const planned = plan
+                          ? plan.pillars.findIndex(
+                              (pillar) =>
+                                pick(pillar.name, 'en') === row.pillar ||
+                                pick(pillar.name, 'ar') === row.pillar,
+                            )
+                          : -1;
+                        return (
+                          <div
+                            key={row.pillar}
+                            className="bsp-sp-pil bsp-sp-how-row"
+                            data-pil={(planned >= 0 ? planned : index) % 6}
+                            data-testid={`strategy-how-${index}`}
+                          >
+                            <span className="bsp-sp-dot" aria-hidden="true" />
+                            <span className="bsp-sp-how-n" dir="auto">
+                              {row.pillar}
+                            </span>
+                            <span className="bsp-sp-how-bar" aria-hidden="true">
+                              <span style={{ width: `${(row.average / top) * 100}%` }} />
+                            </span>
+                            <span className="bsp-ltr bsp-sp-how-v">
+                              {number.format(Math.round(row.average))}
+                            </span>
+                            {index === 0 && pillarPerformance.length > 1 ? (
+                              <span className="bsp-pill bsp-p-ok" data-testid="strategy-how-best">
+                                {t('strategy.best')}
+                              </span>
+                            ) : null}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </section>
+                ) : null}
+
                 {/*
                   WHAT IT RESTS ON: the stored evidence rows. The prototype draws
                   none, so it is a disclosure at the page's foot, as Brand
@@ -648,41 +762,46 @@ export default async function StrategyPage({
                   <span className="bsp-sp-start-s">{t('strategy.startSub')}</span>
                 </section>
                 {mayGenerate ? (
-                  <div className="bsp-xgrid bsp-sp-opts">
-                    <section className="bsp-sp-opt">
-                      <span className="bsp-xicon" aria-hidden="true">
-                        ✦
-                      </span>
-                      <span className="bsp-xtitle bsp-sp-opt-t">{t('strategy.optAi')}</span>
-                      <span className="bsp-xdesc">{t('strategy.optAiSub')}</span>
-                      <form
-                        action={generateStrategyAction}
-                        data-testid="strategy-form"
-                        className="bsp-sp-form"
-                      >
-                        <input type="hidden" name="locale" value={locale} />
-                        <input type="hidden" name="brandId" value={brand.id} />
-                        <label className="bsp-sp-field">
-                          <span className="bsp-lbl">{t('strategy.objectiveLabel')}</span>
-                          <input
-                            name="objective"
-                            required
-                            maxLength={400}
-                            className="bs-control"
-                            defaultValue={goalText ?? ''}
-                            placeholder={t('strategy.objectivePlaceholder')}
-                            data-testid="strategy-objective-input"
-                          />
-                        </label>
-                        {goalText ? (
-                          <span className="bsp-sp-month-hint">{t('strategy.startsFromGoal')}</span>
-                        ) : null}
-                        <button type="submit" className="bsp-btn bsp-sm bsp-pur">
-                          {t('strategy.generate')}
-                        </button>
-                      </form>
-                    </section>
-                  </div>
+                  <StartBusy label={t('strategy.busy')}>
+                    <div className="bsp-xgrid bsp-sp-opts">
+                      <section className="bsp-sp-opt">
+                        <span className="bsp-xicon" aria-hidden="true">
+                          ✦
+                        </span>
+                        <span className="bsp-xtitle bsp-sp-opt-t">{t('strategy.optAi')}</span>
+                        <span className="bsp-xdesc">{t('strategy.optAiSub')}</span>
+                        <form
+                          action={generateStrategyAction}
+                          data-testid="strategy-form"
+                          className="bsp-sp-form"
+                        >
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="brandId" value={brand.id} />
+                          <label className="bsp-sp-field">
+                            <span className="bsp-lbl">{t('strategy.objectiveLabel')}</span>
+                            <input
+                              name="objective"
+                              required
+                              maxLength={400}
+                              className="bs-control"
+                              defaultValue={goalText ?? ''}
+                              placeholder={t('strategy.objectivePlaceholder')}
+                              data-testid="strategy-objective-input"
+                            />
+                          </label>
+                          {goalText ? (
+                            <span className="bsp-sp-month-hint">
+                              {t('strategy.startsFromGoal')}
+                            </span>
+                          ) : null}
+                          <button type="submit" className="bsp-btn bsp-sm bsp-pur">
+                            {t('strategy.generate')}
+                          </button>
+                          <StartBusyReporter />
+                        </form>
+                      </section>
+                    </div>
+                  </StartBusy>
                 ) : null}
 
                 {/* The drafts (`x.sp.draft`): each proposal, apart from the plan. */}
@@ -828,23 +947,28 @@ function BrainRows({
   openLabel,
   addLabel,
   href,
+  emptyArea,
 }: {
   readonly testId: string;
   readonly area: string;
-  readonly items: readonly { id: string; title: unknown; body: unknown }[];
+  readonly items: readonly { id: string; area: string; title: unknown; body: unknown }[];
   readonly locale: string;
   readonly empty: string;
   readonly openLabel: string;
   readonly addLabel: string;
   readonly href: string;
+  /** PR D (Strategy 9) — the area an empty row adds to. */
+  readonly emptyArea: string;
 }) {
+  // PR D (Strategy 9) — "Open →" opens the fact's own area (`?area=`).
+  const areaHref = (key: string) => `${href}?area=${encodeURIComponent(key)}`;
   return (
     <div className="bsp-sp-links" data-testid={testId}>
       {items.length === 0 ? (
         <div className="bsp-sp-link">
           <span className="bsp-sp-link-a">{area}</span>
           <span className="bsp-sp-link-t bsp-sp-link-none">{empty}</span>
-          <Link href={href} className="bsp-sp-link-o">
+          <Link href={areaHref(emptyArea)} className="bsp-sp-link-o">
             {addLabel} <span className="bsp-sp-arrow">→</span>
           </Link>
         </div>
@@ -858,7 +982,11 @@ function BrainRows({
                 ? ` — ${localized(item.body, locale).slice(0, 160)}`
                 : ''}
             </span>
-            <Link href={href} className="bsp-sp-link-o">
+            <Link
+              href={areaHref(item.area)}
+              className="bsp-sp-link-o"
+              data-testid={`${testId}-open-${item.id}`}
+            >
               {openLabel} <span className="bsp-sp-arrow">→</span>
             </Link>
           </div>

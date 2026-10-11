@@ -241,6 +241,7 @@ export function BrandBrainView({
   permissions,
   chatStart = null,
   initialFocus = null,
+  initialArea = null,
   sourceRules = null,
 }: {
   /** Batch 7 (A3): what a source may be, from activated configuration; null when uploads are off. */
@@ -299,6 +300,8 @@ export function BrandBrainView({
   /** D7/D8/D9 — the chat opens in Add (a handoff) or Edit ("Fix it"), prefilled. */
   chatStart?: ChatStart | null;
   /** D12 (Phase 2C-4) — Home's missing-question link: this area, this question. */
+  /** PR D (Strategy 9) — `?area=<key>` alone: that area, open. */
+  initialArea?: string | null;
   initialFocus?: {
     readonly area: string;
     readonly itemKey: string;
@@ -307,7 +310,9 @@ export function BrandBrainView({
 }) {
   const t = translator(useMessageLocale(locale));
   const [tab, setTabState] = useState<BrandBrainTab>(initialTab);
-  const [openArea, setOpenArea] = useState<string | null>(initialFocus?.area ?? null);
+  const [openArea, setOpenArea] = useState<string | null>(
+    initialFocus?.area ?? initialArea ?? null,
+  );
   const [focus, setFocus] = useState<QuestionFocus | null>(
     initialFocus ? { itemKey: initialFocus.itemKey, prompt: initialFocus.prompt } : null,
   );
@@ -465,6 +470,14 @@ export function BrandBrainView({
       voice={voice}
       canEdit={permissions.edit}
       profileHref={profileHref}
+      pending={{
+        tone: candidates.filter((entry) => entry.area === 'TONE_OF_VOICE').length,
+        rules: candidates.filter((entry) => entry.area === 'DO_DONT').length,
+      }}
+      onOpenArea={(area) => {
+        setTab('knowledge');
+        setOpenArea(area);
+      }}
     />
   );
 
