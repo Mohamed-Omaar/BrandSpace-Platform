@@ -783,7 +783,9 @@ export default async function ComposePage({
           return {
             today,
             tomorrow: nextDayKey(today),
-            defaultTime: plannedTime ?? brand?.defaultPostTime ?? DEFAULT_POST_TIME,
+            defaultTime: brand?.defaultPostTime ?? DEFAULT_POST_TIME,
+            // PR D (Performance 5) — Performance's best hour, when it sent the reader here.
+            ...(plannedTime ? { defaultTime: plannedTime } : {}),
           };
         })
       : null;
@@ -1256,11 +1258,7 @@ export default async function ComposePage({
 
   return (
     <WorkspaceShell
-      flash={
-        successFlash(ok, locale) ??
-        // PR D (S6) — what "Write with AI" cost, on the post it opened.
-        (spentFlash ? { tone: 'success' as const, message: spentFlash } : undefined)
-      }
+      flash={successFlash(ok, locale)}
       brandContext={brandContext}
       locale={locale}
       eyebrow={translate('nav.group.create')}
@@ -1300,6 +1298,7 @@ export default async function ComposePage({
         openOn={single('open') ?? null}
         plannedDate={plannedDate?.date ?? null}
         plannedTime={plannedTime}
+        spentOnArrival={spentFlash}
         plannedFor={plannedFor}
         expiredChannels={expiredChannels}
         notes={

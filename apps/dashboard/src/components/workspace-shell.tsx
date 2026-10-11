@@ -560,7 +560,7 @@ export async function WorkspaceShell({
                 role="menuitem"
                 data-testid="brand-add"
                 className="bsp-menu-item"
-                style={{ ...MENU_LINK, color: '#5312c4' }}
+                style={{ ...MENU_LINK, color: 'var(--bs-brand-purple-pressed)' }}
               >
                 {t('brand.add')}
               </a>

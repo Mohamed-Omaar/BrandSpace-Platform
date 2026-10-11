@@ -212,6 +212,8 @@ export interface ComposerViewProps {
   readonly plannedDate?: string | null;
   /** PR D (Performance 5): the best hour Performance opened the Studio with, `HH:mm`. */
   readonly plannedTime?: string | null;
+  /** PR D (S6) — what "Write with AI" cost, said once on the post it opened. */
+  readonly spentOnArrival?: string | null;
   /** Q9 (D-332): a channel whose account has expired — "Expired", and what it means. */
   readonly expiredChannels?: Readonly<
     Record<string, { readonly label: string; readonly explanation: string }>
@@ -443,6 +445,7 @@ export function ComposerView({
   openOn = null,
   plannedDate = null,
   plannedTime = null,
+  spentOnArrival = null,
   expiredChannels = {},
   notes = null,
   plannedFor = null,
@@ -453,6 +456,13 @@ export function ComposerView({
   failed = null,
 }: ComposerViewProps) {
   const router = useRouter();
+
+  // PR D (S6) — the cost of "Write with AI", said as the toast every paid action uses.
+  useEffect(() => {
+    if (spentOnArrival) {
+      showToast({ tone: 'success', message: spentOnArrival, testId: 'studio-spent-toast' });
+    }
+  }, [spentOnArrival]);
   const fieldId = useId();
 
   /*

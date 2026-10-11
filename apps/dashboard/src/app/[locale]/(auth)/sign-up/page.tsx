@@ -71,9 +71,12 @@ export default async function SignUpPage({
   const required = policy.legalDocuments.filter((document) => document.required);
   const trial = await trialTerms().catch(() => null);
   // G8 (D-335): after a refusal, what was typed comes back — never the password.
-  const draft = error ? decodeSignupDraft((await cookies()).get(SIGNUP_DRAFT_COOKIE)?.value) : null;
-  // PR D (Auth 3) — "Wrong email?" on the sent screen returns here with the address to correct.
+  // PR D (Auth 3) — "Wrong email?" on the sent screen returns here with the address to correct:
+  // the address alone, as a draft with nothing else typed.
   const typedEmail = typeof query['email'] === 'string' ? query['email'].slice(0, 254) : '';
+  const draft =
+    (error ? decodeSignupDraft((await cookies()).get(SIGNUP_DRAFT_COOKIE)?.value) : null) ??
+    (typedEmail ? { name: '', email: typedEmail, timezone: '' } : null);
 
   if (!policy.signup.open) {
     return (
@@ -127,7 +130,7 @@ export default async function SignUpPage({
             name="email"
             type="email"
             required
-            defaultValue={draft?.email ?? typedEmail}
+            defaultValue={draft?.email ?? ''}
             autoComplete="email"
             style={authInputStyle()}
           />

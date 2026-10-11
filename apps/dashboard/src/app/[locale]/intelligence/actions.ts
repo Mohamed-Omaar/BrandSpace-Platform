@@ -70,10 +70,9 @@ export async function analyseContentGapsAction(formData: FormData): Promise<void
  * Intelligence, so a crafted `returnTo` cannot send the browser elsewhere.
  */
 function reviewReturn(formData: FormData): '/overview' | '/intelligence' | '/analytics' {
-  const asked = formData.get('returnTo');
   // PR D (Performance 1) — Performance's "Not useful" comes back to its Insights.
-  if (asked === '/analytics') return '/analytics';
-  return asked === '/overview' ? '/overview' : '/intelligence';
+  if (formData.get('returnTo') === '/analytics') return '/analytics';
+  return formData.get('returnTo') === '/overview' ? '/overview' : '/intelligence';
 }
 
 export async function reviewIntelligenceAction(formData: FormData): Promise<void> {
