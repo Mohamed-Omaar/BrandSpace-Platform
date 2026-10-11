@@ -25,6 +25,14 @@ import { signIn } from './own-workspace';
  * it — so the start time measures the rail, not the container's raster. The
  * glide's CREATION (the press setting its target) is measured as well, and
  * needs no frame at all.
+ *
+ * FROM THE PRESS'S PROCESSING, NOT ITS TIME STAMP (review of #75, owner
+ * approved). A click's time stamp is when the input arrived; on a busy
+ * machine it can wait in the queue behind other work before any script sees
+ * it. The budget is the rail's, so it is measured from the moment the browser
+ * starts processing the click — the first listener to run, a capture listener
+ * on the window — to the glide's creation. The queueing before it is logged,
+ * not budgeted. The 20 ms budget is unchanged.
  */
 
 const START_BUDGET_MS = 20;
@@ -96,16 +104,24 @@ for (const locale of ['en', 'ar'] as const) {
           nav: Element | null;
           pill: Element | null;
           pressedAt: number | null;
+          processingAt: number | null;
           createdAt: number | null;
           glides: Animation[];
         };
       };
       const nav = document.querySelector('[data-testid="sidebar"] nav');
       const pill = nav?.querySelector<HTMLElement>('.bsp-nav-ind') ?? null;
-      w.__rail = { nav: nav ?? null, pill, pressedAt: null, createdAt: null, glides: [] };
+      w.__rail = {
+        nav: nav ?? null,
+        pill,
+        pressedAt: null,
+        processingAt: null,
+        createdAt: null,
+        glides: [],
+      };
       if (pill) {
         const watch = new MutationObserver(() => {
-          if (w.__rail.pressedAt === null || w.__rail.createdAt !== null) return;
+          if (w.__rail.processingAt === null || w.__rail.createdAt !== null) return;
           if (
             pill
               .getAnimations()
@@ -122,6 +138,8 @@ for (const locale of ['en', 'ar'] as const) {
         (event) => {
           if ((event.target as Element | null)?.closest('[data-testid="nav-overview"]')) {
             w.__rail.pressedAt = event.timeStamp;
+            // The browser has started processing the click: the first listener runs now.
+            w.__rail.processingAt = performance.now();
           }
         },
         { capture: true, once: true },
@@ -154,6 +172,7 @@ for (const locale of ['en', 'ar'] as const) {
           nav: Element | null;
           pill: Element | null;
           pressedAt: number | null;
+          processingAt: number | null;
           createdAt: number | null;
           glides: Animation[];
         };
@@ -164,13 +183,17 @@ for (const locale of ['en', 'ar'] as const) {
         sameNav: nav !== null && nav === w.__rail.nav,
         samePill: nav?.querySelector('.bsp-nav-ind') === w.__rail.pill,
         glides: w.__rail.glides.length,
+        queued:
+          w.__rail.processingAt !== null && w.__rail.pressedAt !== null
+            ? w.__rail.processingAt - w.__rail.pressedAt
+            : null,
         createdAfter:
-          w.__rail.createdAt !== null && w.__rail.pressedAt !== null
-            ? w.__rail.createdAt - w.__rail.pressedAt
+          w.__rail.createdAt !== null && w.__rail.processingAt !== null
+            ? w.__rail.createdAt - w.__rail.processingAt
             : null,
         startedAfter:
-          glide && typeof glide.startTime === 'number' && w.__rail.pressedAt !== null
-            ? glide.startTime - w.__rail.pressedAt
+          glide && typeof glide.startTime === 'number' && w.__rail.processingAt !== null
+            ? glide.startTime - w.__rail.processingAt
             : null,
         ran:
           glide?.effect?.getComputedTiming().endTime !== undefined
@@ -183,7 +206,7 @@ for (const locale of ['en', 'ar'] as const) {
     expect(result.samePill, 'the pill is the same element after the move').toBe(true);
     expect(result.glides, 'one glide: the arriving page does not restart it').toBe(1);
     console.log(
-      `rail glide (${locale}): created ${result.createdAfter?.toFixed(1)} ms, started ${result.startedAfter?.toFixed(1)} ms after the press`,
+      `rail glide (${locale}): created ${result.createdAfter?.toFixed(1)} ms, started ${result.startedAfter?.toFixed(1)} ms after the press was processed (queued ${result.queued?.toFixed(1)} ms before it)`,
     );
     expect(result.createdAfter, 'the press creates the glide').not.toBeNull();
     expect(result.createdAfter ?? Infinity).toBeLessThanOrEqual(START_BUDGET_MS);

@@ -84,6 +84,51 @@ for (const locale of ['en', 'ar'] as const) {
     await expect(page.getByTestId('settings-nav')).toBeVisible();
     await expect(page.getByTestId('brand-add-form')).toHaveCount(0);
 
+    // "+ New workspace" sits in the account menu here, only while the plan's
+    // workspace allowance allows another: none without a plan…
+    await page.getByTestId('profile-menu').click();
+    await expect(page.getByTestId('account-new-workspace')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    // …and there once the workspace is on a plan that states no ceiling. Every
+    // test workspace belongs to the shared e2e customer, so the plan comes off
+    // again at once: other suites expect that customer to have no allowance.
+    await withPlatformPrisma(async (prisma) => {
+      const active = await prisma.configurationVersion.findFirstOrThrow({
+        where: { domain: 'plans', status: 'ACTIVE' },
+        orderBy: { activatedAt: 'desc' },
+        select: { payload: true },
+      });
+      const plans = ((active.payload as { plans?: unknown[] }).plans ?? []) as Array<{
+        key?: string;
+        status?: string;
+        quotas?: { workspaces?: number | null };
+      }>;
+      const open = plans.find(
+        (plan) =>
+          plan.key &&
+          plan.status === 'active' &&
+          (plan.quotas?.workspaces === undefined || plan.quotas.workspaces === null),
+      );
+      if (!open?.key) throw new Error('No active plan leaves room for another workspace.');
+      await prisma.workspace.update({
+        where: { id: own.workspaceId },
+        data: { planKey: open.key },
+      });
+    });
+    try {
+      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/overview`);
+      await page.getByTestId('profile-menu').click();
+      await expect(page.getByTestId('account-new-workspace')).toHaveAttribute(
+        'href',
+        `/${locale}/onboarding/workspace`,
+      );
+      await page.keyboard.press('Escape');
+    } finally {
+      await withPlatformPrisma((prisma) =>
+        prisma.workspace.update({ where: { id: own.workspaceId }, data: { planKey: null } }),
+      );
+    }
+
     // The Control Center raises the allowance: no release, the next page has it.
     await override(own, 'limit.brands', 2);
     await page.goto(`${DASHBOARD_BASE_URL}/${locale}/overview`);

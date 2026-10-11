@@ -546,6 +546,22 @@ export async function WorkspaceShell({
   const switcher = activeWorkspaceId
     ? await businessSwitcherModel(locale, activeWorkspaceId)
     : null;
+  /*
+   * Review of #75 — WHERE THE CARD IS NOT THE BUSINESS SWITCHER, "+ New
+   * workspace" moves to the account menu, offered only while the plan's
+   * workspace allowance allows another (the switcher's own foot, the same rule
+   * the server enforces).
+   */
+  const accountFoot =
+    !switcher && brandContext && me?.activeWorkspaceId
+      ? ((await businessSwitcherModel(locale, me.activeWorkspaceId))?.foot ?? null)
+      : null;
+  const accountNewWorkspace =
+    accountFoot?.kind === 'create'
+      ? {
+          usage: accountFoot.allowed === null ? null : `${accountFoot.used}/${accountFoot.allowed}`,
+        }
+      : null;
   const usage =
     switcher && switcher.foot.kind !== 'none' && switcher.foot.kind !== 'unavailable'
       ? switcher.foot.allowed === null
@@ -935,6 +951,24 @@ export async function WorkspaceShell({
       {businessCount > 1 && brandContext && !switcher ? (
         <PrototypeMenuLink href={`/${locale}/workspaces`} testId="switch-workspace">
           {t('ws.switchBusiness')}
+        </PrototypeMenuLink>
+      ) : null}
+      {accountNewWorkspace ? (
+        <PrototypeMenuLink
+          href={`/${locale}/onboarding/workspace`}
+          testId="account-new-workspace"
+          trailing={
+            accountNewWorkspace.usage ? (
+              <span
+                className="bsp-ltr"
+                style={{ fontSize: 'var(--bsp-t-11)', color: 'var(--bsp-faint)' }}
+              >
+                {accountNewWorkspace.usage}
+              </span>
+            ) : undefined
+          }
+        >
+          {t('ws.new')}
         </PrototypeMenuLink>
       ) : null}
       <PrototypeMenuLink

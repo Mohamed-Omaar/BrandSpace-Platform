@@ -1166,8 +1166,11 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 >
                   {/* A workspace-level asset is the DEFAULT, because the shared
                       logo pack and the contract templates are the files most
-                      often uploaded without a brand in mind. */}
-                  <option value="">{t('assets.allFiles')}</option>
+                      often uploaded without a brand in mind. The select files
+                      the upload under one brand, or under none — shared by
+                      every brand (review of #75: "All files" was the library
+                      filter's word, not this choice's). */}
+                  <option value="">{t('assets.uploadShared')}</option>
                   {props.brands.map((brand) => (
                     <option key={brand.id} value={brand.id}>
                       {brand.name}
