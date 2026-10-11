@@ -318,6 +318,8 @@ export function DraftEditor({
   const duplicateToken = `composer:${draft.id}:${draft.variants.map((v) => v.updatedAt).join(',')}`;
   const [active, setActive] = useState(draft.variants[0]?.id ?? '');
   const [compare, setCompare] = useState(false);
+  /* PR D (S38) — the preview's "Safe zones" overlay, on or off (the prototype's `safe`). */
+  const [safeOn, setSafeOn] = useState(false);
   const [toneArgument, setToneArgument] = useState('');
   // The prototype's Words / Design tabs; an image carried in opens on Design.
   // Round 5 (A) — the hand-off for THIS draft, as it stood when the editor opened.
@@ -967,12 +969,19 @@ export function DraftEditor({
         approval={approvalStateOf(draft.status)}
         labels={labels}
         testId={testId}
+        safeZones={safeOn ? safeZonesFor(variant.platformKey) : null}
       />
     );
   };
 
   const activeVariant =
     draft.variants.find((variant) => variant.id === active) ?? draft.variants[0];
+  /* PR D (S38) — the bands for the previewed channel, when its frame is 9:16. */
+  const safeZonesFor = (platformKey: string) =>
+    previewGeometry(draft.contentType, platformKey).endsWith('9:16')
+      ? (platforms.find((platform) => platform.key === platformKey)?.safeZones ?? null)
+      : null;
+  const activeSafeZones = activeVariant ? safeZonesFor(activeVariant.platformKey) : null;
 
   /*
    * §20 — WHAT AN AI EDIT WOULD COST, BEFORE IT RUNS. One quote per saved
@@ -2605,9 +2614,27 @@ export function DraftEditor({
               </div>
             ) : null}
             {!compare && activeVariant ? (
-              <span className="bsp-st-size bsp-ltr">
-                {previewGeometry(draft.contentType, activeVariant.platformKey)}
-              </span>
+              <div className="bsp-st-size-row">
+                <span className="bsp-st-size bsp-ltr">
+                  {previewGeometry(draft.contentType, activeVariant.platformKey)}
+                </span>
+                {/*
+                  PR D (S38) — "Safe zones", only on a 9:16 frame and only for a
+                  platform whose unsafe bands are configured (`Main.dc.html`
+                  line 434, `showSafeBtn`).
+                */}
+                {activeSafeZones ? (
+                  <button
+                    type="button"
+                    className="bsp-chip bsp-st-safe"
+                    aria-pressed={safeOn}
+                    data-testid="preview-safe-toggle"
+                    onClick={() => setSafeOn((value) => !value)}
+                  >
+                    {t['studio.preview.safeZones']}
+                  </button>
+                ) : null}
+              </div>
             ) : null}
             {compare
               ? draft.variants.map((variant) => (

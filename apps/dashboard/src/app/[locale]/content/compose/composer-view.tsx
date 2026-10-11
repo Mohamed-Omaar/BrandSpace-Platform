@@ -55,6 +55,8 @@ export interface ComposerPlatform {
   readonly maxMediaItems: number;
   /** PHASE 6 FINAL — whether the configured platform takes a first comment. */
   readonly allowsFirstComment?: boolean;
+  /** PR D (S38) — the platform's configured unsafe bands on a 9:16 frame, in percent. */
+  readonly safeZones?: { readonly top: number; readonly bottom: number; readonly end: number };
 }
 
 export interface ComposerVariant {
@@ -546,6 +548,8 @@ export function ComposerView({
     mode === 'write' && startingTemplate?.body ? startingTemplate.body : '',
   );
   const [editorTab, setEditorTab] = useState<'words' | 'visual'>('words');
+  /* PR D (S38) — the preview's "Safe zones" overlay, on or off. */
+  const [safeOn, setSafeOn] = useState(false);
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [goal, setGoal] = useState(initialGoal || recommendedGoal || '');
   const [contentLocale, setContentLocale] = useState<ContentLocale>(
@@ -1094,6 +1098,10 @@ export function ComposerView({
   const labels = useMemo(() => previewLabels(t), [t]);
   const shownPreview =
     previewKey !== null && selected.includes(previewKey) ? previewKey : (selected[0] ?? null);
+  const shownSafeZones =
+    shownPreview && previewGeometry(contentType, shownPreview).endsWith('9:16')
+      ? (platforms.find((platform) => platform.key === shownPreview)?.safeZones ?? null)
+      : null;
 
   return (
     <div className="bsp-st-root" data-testid="content-composer">
@@ -2090,6 +2098,7 @@ export function ComposerView({
                         aria-pressed={key === shownPreview}
                         title={channel.name}
                         className="bsp-ltr bsp-st-prev-tab"
+                        data-testid={`composer-preview-tab-${key}`}
                         onClick={() => setPreviewKey(key)}
                       >
                         <ChannelMark channel={channel} size={13} label={false} />
@@ -2101,10 +2110,25 @@ export function ComposerView({
               ) : null}
               {shownPreview ? (
                 <>
-                  <span className="bsp-st-size bsp-ltr">
-                    {previewGeometry(contentType, shownPreview)}
-                  </span>
+                  <div className="bsp-st-size-row">
+                    <span className="bsp-st-size bsp-ltr">
+                      {previewGeometry(contentType, shownPreview)}
+                    </span>
+                    {/* PR D (S38) — on a 9:16 frame, for a platform with configured bands. */}
+                    {shownSafeZones ? (
+                      <button
+                        type="button"
+                        className="bsp-chip bsp-st-safe"
+                        aria-pressed={safeOn}
+                        data-testid="preview-safe-toggle"
+                        onClick={() => setSafeOn((value) => !value)}
+                      >
+                        {t['studio.preview.safeZones']}
+                      </button>
+                    ) : null}
+                  </div>
                   <VariantPreview
+                    safeZones={safeOn ? shownSafeZones : null}
                     locale={locale}
                     platformKey={shownPreview}
                     format={previewFormatFor(contentType)}

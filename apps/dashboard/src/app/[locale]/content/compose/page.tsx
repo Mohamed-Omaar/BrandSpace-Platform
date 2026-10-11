@@ -913,6 +913,7 @@ export default async function ComposePage({
     maxHashtags: platform.maxHashtags,
     maxMediaItems: platform.maxMediaItems,
     allowsFirstComment: platform.allowsFirstComment,
+    ...(platform.safeZones ? { safeZones: platform.safeZones } : {}),
   }));
 
   /*
@@ -1550,6 +1551,7 @@ const EDITOR_KEYS = [
   'editor.saveBeforeReview',
   'editor.preview.title',
   'editor.preview.compare',
+  'studio.preview.safeZones',
   'editor.preview.single',
   'editor.fix.shorten',
   'editor.fix.media',

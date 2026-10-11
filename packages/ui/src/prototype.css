@@ -13459,3 +13459,48 @@ select.bs-select.bsp-chevron {
   content: '×';
   content: '×' / '';
 }
+
+/* PR D (Studio S38) — "Safe zones" over a 9:16 preview (`Main.dc.html` lines
+   462 and 489): the top and bottom bands across the frame and the end-side band
+   between them, `background: rgba(184,50,69,.18)` (the side `.12`) with a
+   `1px dashed #b83245` inner edge. Their sizes are each platform's configured
+   `safeZones`, set inline in percent. Drawn above the post, never taking a press. */
+.bsp-safe {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.bsp-safe > span {
+  position: absolute;
+}
+.bsp-safe-top {
+  inset-inline: 0;
+  inset-block-start: 0;
+  background: rgba(184, 50, 69, 0.18);
+  border-block-end: 1px dashed var(--bs-danger);
+}
+.bsp-safe-bottom {
+  inset-inline: 0;
+  inset-block-end: 0;
+  background: rgba(184, 50, 69, 0.18);
+  border-block-start: 1px dashed var(--bs-danger);
+}
+.bsp-safe-end {
+  inset-inline-end: 0;
+  background: rgba(184, 50, 69, 0.12);
+  border-inline-start: 1px dashed var(--bs-danger);
+}
+/* The chip beside the size label: `min-block-size: 26px; padding: 2px 10px;
+   font-size: 11px; margin-inline-start: auto` (line 434). */
+.bsp-st-size-row {
+  display: flex;
+  align-items: center;
+  gap: var(--bsp-px-8);
+}
+.bsp-chip.bsp-st-safe {
+  margin-inline-start: auto;
+  min-block-size: var(--bsp-px-26);
+  padding: var(--bsp-px-2) var(--bsp-px-10);
+  font-size: var(--bsp-fs-11);
+}

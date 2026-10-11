@@ -802,7 +802,18 @@ export function SocialPostPreview({
   head,
   testId,
   look = 'demo',
+  safeZones = null,
 }: {
+  /**
+   * PR D (Studio S38) — the platform's unsafe bands, in percent of the frame,
+   * drawn over a vertical (9:16) post: `Main.dc.html` lines 462 and 489. Only
+   * a vertical post draws them; null draws nothing.
+   */
+  readonly safeZones?: {
+    readonly top: number;
+    readonly bottom: number;
+    readonly end: number;
+  } | null;
   /**
    * Round 4 (3.5) — `prototype`: the Studio's post as `prototype-2026-09-27`
    * draws it (a bordered white card, one-line identity, the corner DRAFT mark).
@@ -882,7 +893,22 @@ export function SocialPostPreview({
           data-format={format}
           data-aspect={aspect}
           data-status={content.status}
+          style={vertical && safeZones ? { position: 'relative' } : undefined}
         >
+          {vertical && safeZones ? (
+            <span className="bsp-safe" aria-hidden="true" data-testid="preview-safe-zones">
+              <span className="bsp-safe-top" style={{ blockSize: `${safeZones.top}%` }} />
+              <span className="bsp-safe-bottom" style={{ blockSize: `${safeZones.bottom}%` }} />
+              <span
+                className="bsp-safe-end"
+                style={{
+                  insetBlockStart: `${safeZones.top}%`,
+                  insetBlockEnd: `${safeZones.bottom}%`,
+                  inlineSize: `${safeZones.end}%`,
+                }}
+              />
+            </span>
+          ) : null}
           {vertical ? (
             <VerticalPreview
               content={content}

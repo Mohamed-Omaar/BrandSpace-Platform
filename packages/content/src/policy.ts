@@ -29,6 +29,8 @@ export const platformSchema = z.object({
   allowsFirstComment: z.boolean(),
   /** PHASE 8 — media items this platform accepts on one post. Zero is legal. */
   maxMediaItems: z.number().int().min(0),
+  /** PR D (Studio S38) — the unsafe bands on a 9:16 frame, in percent; absent is none known. */
+  safeZones: z.object({ top: z.number(), bottom: z.number(), end: z.number() }).optional(),
 });
 
 export const contentPolicySchema = z.object({
