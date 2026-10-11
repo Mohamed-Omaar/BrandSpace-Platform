@@ -37,6 +37,7 @@ import { shortCount } from '../../../../server/performance-view';
 import { archiveCampaignAction, startCampaignNowAction, updateCampaignAction } from '../actions';
 import { formatRateMilli } from '../../../../server/best-campaign';
 import { CampaignFormView } from '../campaign-form-view';
+import { ArchiveTwoStep, CampaignDialog } from '../campaign-dialog';
 import {
   contentStatusLabel,
   dateInputValue,
@@ -350,6 +351,10 @@ export default async function CampaignDetailPage({
   };
   const byStatus = (status: string) => items.filter((item) => item.status === status).length;
   const published = byStatus('PUBLISHED') + byStatus('PARTIALLY_PUBLISHED');
+  // D-496 (Campaigns 1) — the planned number when one is set, else the posts filed.
+  const plannedTotal = campaign.plannedPostCount ?? items.length;
+  // D-496 (Campaigns 15, 16, 21) — Edit opens the campaign dialog over the room.
+  const editing = mayManage && single('edit') === '1' && campaign.status !== 'ARCHIVED';
   /* The post results' order: by the post's date on the calendar, undated last. */
   const postRows = items
     .map((item) => ({
@@ -469,7 +474,7 @@ export default async function CampaignDetailPage({
       customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      {single('error') && (
+      {single('error') && !editing && (
         <CustomerBanner tone="error">
           {statusMessage(single('error'), locale, single('ref'))}
         </CustomerBanner>
@@ -541,12 +546,12 @@ export default async function CampaignDetailPage({
             <span className="bsp-room-prog-l">
               {t('campaigns.room.publishedOf')
                 .replace('{published}', numberFormat.format(published))
-                .replace('{total}', numberFormat.format(items.length))}
+                .replace('{total}', numberFormat.format(plannedTotal))}
             </span>
             <div className="bsp-room-bar" aria-hidden="true">
               <div
                 style={{
-                  width: `${items.length === 0 ? 0 : Math.round((published / items.length) * 100)}%`,
+                  width: `${plannedTotal === 0 ? 0 : Math.min(100, Math.round((published / plannedTotal) * 100))}%`,
                 }}
               />
             </div>
@@ -554,7 +559,7 @@ export default async function CampaignDetailPage({
           <div className="bsp-room-acts">
             {mayManage ? (
               <Link
-                href={`${tabHref('overview')}#campaign-details`}
+                href={tabHref(tab, { edit: '1' })}
                 className="bsp-btn bsp-sm bsp-ghost"
                 data-testid="campaign-edit"
               >
@@ -826,72 +831,6 @@ export default async function CampaignDetailPage({
                   returnPath={`/${locale}/campaigns/${campaign.id}`}
                   highlightThreadId={typeof query['thread'] === 'string' ? query['thread'] : null}
                 />
-              </details>
-            ) : null}
-
-            {mayManage ? (
-              <details id="campaign-details" data-testid="campaign-details">
-                <summary style={{ ...typographyTokens.label, cursor: 'pointer' }}>
-                  {t('campaigns.detailsTitle')}
-                </summary>
-                <div style={{ marginBlockStart: spacingTokens.md }}>
-                  <CampaignFormView
-                    action={updateCampaignAction}
-                    hidden={{
-                      locale,
-                      campaignId: campaign.id,
-                      version: String(campaign.version),
-                    }}
-                    values={{
-                      name: campaign.name,
-                      objective: campaign.objective,
-                      briefAr: brief.ar,
-                      briefEn: brief.en,
-                      description: campaign.description ?? '',
-                      startDate: dateInputValue(campaign.startDate),
-                      endDate: dateInputValue(campaign.endDate),
-                      channels: campaign.channels,
-                      status: campaign.status === 'ARCHIVED' ? 'DRAFT' : campaign.status,
-                    }}
-                    labels={formLabels(t, t('campaigns.save'))}
-                    platforms={platforms.map((platform) => ({
-                      key: platform.key,
-                      label: platform.key,
-                    }))}
-                    withStatus
-                    testId="campaign-edit-form"
-                  />
-                  {/*
-                    ARCHIVE IS ITS OWN FORM AND ITS OWN ACTION: a soft delete
-                    with its own audit event, not a value in the dropdown.
-                  */}
-                  {campaign.status !== 'ARCHIVED' ? (
-                    <form
-                      action={archiveCampaignAction}
-                      style={{ marginBlockStart: spacingTokens.md }}
-                      data-testid="campaign-archive-form"
-                    >
-                      <input type="hidden" name="locale" value={locale} />
-                      <input type="hidden" name="campaignId" value={campaign.id} />
-                      <p
-                        style={{
-                          ...typographyTokens.bodySm,
-                          color: colorTokens.textMuted,
-                          marginBlockEnd: spacingTokens.xs,
-                        }}
-                      >
-                        {t('campaigns.archiveHint')}
-                      </p>
-                      <button
-                        type="submit"
-                        className={buttonClass('neutral')}
-                        data-testid="campaign-archive"
-                      >
-                        {t('campaigns.archive')}
-                      </button>
-                    </form>
-                  ) : null}
-                </div>
               </details>
             ) : null}
           </>
@@ -1254,6 +1193,62 @@ export default async function CampaignDetailPage({
           </Card>
         ) : null}
       </div>
+
+      {editing ? (
+        <CampaignDialog
+          title={t('campaigns.form.editTitle')}
+          closeHref={tabHref(tab)}
+          closeLabel={t('campaigns.form.cancel')}
+          testId="campaign-edit-dialog"
+        >
+          <CampaignFormView
+            action={updateCampaignAction}
+            formId="campaign-edit"
+            hidden={{
+              locale,
+              campaignId: campaign.id,
+              version: String(campaign.version),
+            }}
+            values={{
+              name: campaign.name,
+              objective: campaign.objective,
+              briefAr: brief.ar,
+              briefEn: brief.en,
+              description: campaign.description ?? '',
+              startDate: dateInputValue(campaign.startDate),
+              endDate: dateInputValue(campaign.endDate),
+              channels: campaign.channels,
+              status: campaign.status,
+              // Unset: what the card already shows, so saving keeps it.
+              plannedPostCount: Math.max(1, plannedTotal),
+            }}
+            labels={formLabels(t, t('campaigns.save'))}
+            platforms={platforms.map((platform) => ({
+              key: platform.key,
+              label:
+                optionalMessage(messageLocale, `content.platform.${platform.key}`) ?? platform.key,
+            }))}
+            withStatus
+            cancelHref={tabHref(tab)}
+            error={single('error') ? statusMessage(single('error'), locale, single('ref')) : null}
+            footerStart={
+              /*
+               * ARCHIVE IS ITS OWN FORM AND ITS OWN ACTION: a soft delete with
+               * its own audit event, not a value in the status list — now the
+               * prototype's two-step button (Q5), labelled for what it does.
+               */
+              <ArchiveTwoStep
+                action={archiveCampaignAction}
+                locale={locale}
+                campaignId={campaign.id}
+                label={t('campaigns.form.archive')}
+                sureLabel={t('campaigns.form.archiveSure')}
+              />
+            }
+            testId="campaign-edit-form"
+          />
+        </CampaignDialog>
+      ) : null}
     </WorkspaceShell>
   );
 }

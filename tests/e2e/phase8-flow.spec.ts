@@ -236,7 +236,8 @@ test('5 · a campaign is created through the form and appears in the list', asyn
   await enter(page, '/campaigns/new');
 
   await page.getByTestId('campaign-name').fill(CAMPAIGN_NAME);
-  await page.getByTestId('campaign-objective').selectOption({ index: 1 });
+  // D-496 — the objective is the dialog's chips; the second one, as before.
+  await page.getByTestId('campaign-objective-ENGAGEMENT').check();
   await page.getByTestId('campaign-start').fill(today());
   await page.getByTestId('campaign-end').fill(today(30));
   await page.getByTestId('campaign-brief-en').fill('Launch the new single-origin.');

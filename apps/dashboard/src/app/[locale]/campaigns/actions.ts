@@ -62,6 +62,9 @@ export async function createCampaignAction(formData: FormData): Promise<void> {
         ...(input.startDate === null ? {} : { startDate: input.startDate }),
         ...(input.endDate === null ? {} : { endDate: input.endDate }),
         channels: input.channels,
+        ...(input.plannedPostCount === undefined
+          ? {}
+          : { plannedPostCount: input.plannedPostCount }),
         actor: {
           userId: session.customer.userId,
           brandScope: session.workspace.brandScope,
@@ -74,7 +77,8 @@ export async function createCampaignAction(formData: FormData): Promise<void> {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();
     log.warn('campaign create failed', { correlationId, ...internalErrorFields(error) });
-    destination = `/${locale}/campaigns/new?error=${actionErrorCode(error)}&ref=${correlationId}`;
+    // D-496 — the dialog opens again over the list, saying why.
+    destination = `/${locale}/campaigns?new=1&error=${actionErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/campaigns`);
   redirect(destination);
@@ -111,6 +115,9 @@ export async function updateCampaignAction(formData: FormData): Promise<void> {
         startDate: input.startDate,
         endDate: input.endDate,
         channels: input.channels,
+        ...(input.plannedPostCount === undefined
+          ? {}
+          : { plannedPostCount: input.plannedPostCount }),
         actor: {
           userId: session.customer.userId,
           brandScope: session.workspace.brandScope,
@@ -123,7 +130,8 @@ export async function updateCampaignAction(formData: FormData): Promise<void> {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();
     log.warn('campaign update failed', { correlationId, ...internalErrorFields(error) });
-    destination = `/${locale}/campaigns/${campaignId}?error=${actionErrorCode(error)}&ref=${correlationId}`;
+    // D-496 — the edit dialog opens again over the campaign, saying why.
+    destination = `/${locale}/campaigns/${campaignId}?edit=1&error=${actionErrorCode(error)}&ref=${correlationId}`;
   }
   revalidatePath(`/${locale}/campaigns`);
   redirect(destination);

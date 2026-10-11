@@ -258,7 +258,9 @@ test.describe('P6-16 · the customer top bar', () => {
 
     await page.getByTestId('topbar-create').click();
     await page.getByTestId('topbar-create-campaign').click();
-    await page.waitForURL(/\/en\/campaigns\/new$/);
+    // D-496 (Shell 7) — Create → Campaign opens the campaign dialog over Campaigns.
+    await page.waitForURL(/\/en\/campaigns\?new=1$/);
+    await expect(page.getByTestId('campaign-new-dialog')).toBeVisible();
   });
 
   test('"Upload to the library" opens the Asset Library’s own upload dialog', async ({ page }) => {

@@ -156,13 +156,15 @@ export function campaignHref(input: {
   readonly channels: readonly string[];
   readonly objective: string | null;
 }): string {
+  // D-496 — the campaign form is the dialog over Campaigns (`?new=1`).
   const params = new URLSearchParams({
+    new: '1',
     name: pick(input.week.theme, input.locale).slice(0, 120),
     brief: pick(input.week.rationale.text, input.locale).slice(0, 1_000),
   });
   if (input.objective) params.set('objective', input.objective);
   for (const channel of input.channels) params.append('channels', channel);
-  return `/${input.locale}/campaigns/new?${params.toString()}`;
+  return `/${input.locale}/campaigns?${params.toString()}`;
 }
 
 export function contentHref(input: {

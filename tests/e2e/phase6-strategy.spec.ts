@@ -188,7 +188,9 @@ test.describe('D-292 · the strategy reads as a plan', () => {
       prisma.campaign.count({ where: { name: THEME } }),
     );
     await page.getByTestId('strategy-week-campaign-1').click();
-    await page.waitForURL(/\/en\/campaigns\/new\?/);
+    // D-496 — the form is the campaign dialog over Campaigns.
+    await page.waitForURL(/\/en\/campaigns\?new=1&/);
+    await expect(page.getByTestId('campaign-new-dialog')).toBeVisible();
     await expect(page.getByTestId('campaign-name')).toHaveValue(THEME);
     await expect(page.getByTestId('campaign-brief-en')).toHaveValue('A season of worry.');
     expect(

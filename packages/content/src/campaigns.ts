@@ -83,6 +83,8 @@ export interface CreateCampaignInput {
   readonly startDate?: Date | undefined;
   readonly endDate?: Date | undefined;
   readonly channels?: readonly string[] | undefined;
+  /** D-496 (Campaigns 1) — how many posts the campaign plans; the card's "n / total". */
+  readonly plannedPostCount?: number | null | undefined;
   /** The accepted strategy this came out of, when it came out of one. */
   readonly strategyInsightId?: string | undefined;
   readonly idempotencyKey?: string | undefined;
@@ -202,6 +204,7 @@ export class CampaignService {
         startDate: input.startDate ?? null,
         endDate: input.endDate ?? null,
         channels: [...(input.channels ?? [])],
+        plannedPostCount: input.plannedPostCount ?? null,
         strategyInsightId: input.strategyInsightId ?? null,
         ownerUserId: input.actor.userId,
         createdByUserId: input.actor.userId,
@@ -246,6 +249,8 @@ export class CampaignService {
     startDate?: Date | null | undefined;
     endDate?: Date | null | undefined;
     channels?: readonly string[] | undefined;
+    /** D-496 (Campaigns 1) — `null` clears it; `undefined` leaves it. */
+    plannedPostCount?: number | null | undefined;
     actor: CampaignActor;
     /** Recorded on the audit event. `undo` distinguishes a compensation. */
     reason?: string | undefined;
@@ -288,6 +293,9 @@ export class CampaignService {
         ...(input.startDate === undefined ? {} : { startDate: input.startDate }),
         ...(input.endDate === undefined ? {} : { endDate: input.endDate }),
         ...(input.channels === undefined ? {} : { channels: [...input.channels] }),
+        ...(input.plannedPostCount === undefined
+          ? {}
+          : { plannedPostCount: input.plannedPostCount }),
         version: { increment: 1 },
       },
     });

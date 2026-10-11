@@ -8789,6 +8789,147 @@ img.bsp-pf-art {
   flex-direction: column;
   gap: var(--bsp-px-14);
 }
+
+/*
+ * D-496 (Shell 7, Campaigns 1, 15, 16, 21) — THE CAMPAIGN DIALOG,
+ * `Main.dc.html` L1572–1593: a 560px white card, radius 28,
+ * `padding: 24px 26px; gap: 16px`, over the same `rgba(17,17,20,.28)` veil as
+ * the rule builder. Its own classes because its size and spacing differ.
+ */
+.bsp-cp-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(17, 17, 20, 0.28);
+  display: grid;
+  place-items: center;
+  padding: var(--bsp-px-16);
+}
+.bsp-cp-dialog {
+  inline-size: min(var(--bsp-px-560), 100%);
+  max-block-size: calc((100vh - var(--bsp-px-40)) * 0.92);
+  overflow: auto;
+  background: #fff;
+  border-radius: var(--bsp-px-28);
+  box-shadow: 0 var(--bsp-px-30) var(--bsp-px-80) rgba(20, 16, 35, 0.25);
+  padding: var(--bsp-px-24) var(--bsp-px-26);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-16);
+  color: #111114;
+  line-height: normal;
+}
+.bsp-cp-dialog:focus {
+  outline: none;
+}
+.bsp-cp-dialog-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.bsp-cp-dialog-h > .bsp-sech {
+  font-size: var(--bsp-fs-20);
+}
+.bsp-cp-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-16);
+}
+/* `<label style="display:flex;flex-direction:column;gap:6px">` */
+.bsp-cp-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-6);
+}
+/* `border: 1px solid #e4e4e8; border-radius: 12px; padding: 10px 12px; font-size: 14px` */
+.bsp-cp-in.bs-control {
+  border: 1px solid #e4e4e8;
+  border-radius: var(--bsp-px-12);
+  padding: var(--bsp-px-10) var(--bsp-px-12);
+  font-size: var(--bsp-fs-14);
+  background: #fff;
+  color: #111114;
+  font-family: inherit;
+}
+/* The dates and the notes: `padding: 9px 12px; font-size: 13.5px` (notes 10px 12px). */
+.bsp-cp-in.bsp-cp-date.bs-control {
+  padding: var(--bsp-px-9) var(--bsp-px-12);
+  font-size: var(--bsp-fs-13-5);
+}
+.bsp-cp-in.bsp-cp-notes.bs-control {
+  font-size: var(--bsp-fs-13-5);
+  resize: vertical;
+}
+.bsp-cp-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--bsp-px-12);
+}
+/* The chip groups: `display:flex;flex-direction:column;gap:8px`, chips `gap:6px; wrap`. */
+.bsp-cp-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-8);
+}
+.bsp-cp-chips {
+  display: flex;
+  gap: var(--bsp-px-6);
+  flex-wrap: wrap;
+}
+.bsp-chip.bsp-lk-chip > input[type='checkbox'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.bsp-cp-chip-mark {
+  display: inline-flex;
+  inline-size: var(--bsp-px-14);
+  block-size: var(--bsp-px-14);
+}
+/* The stepper: label start, `− n +` end; the number `min-width:32px; 16px; 700`. */
+.bsp-cp-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.bsp-cp-step-ctl {
+  display: flex;
+  align-items: center;
+  gap: var(--bsp-px-6);
+}
+.bsp-cp-step-n {
+  min-inline-size: var(--bsp-px-32);
+  text-align: center;
+  font-size: var(--bsp-fs-16);
+  font-weight: 700;
+}
+/* `role=alert; 12.5px; #b83245 on #fdecef; radius 10; padding 8px 12px` */
+.bsp-cp-err {
+  font-size: var(--bsp-fs-12-5);
+  color: #b83245;
+  background: #fdecef;
+  border-radius: var(--bsp-px-10);
+  padding: var(--bsp-px-8) var(--bsp-px-12);
+  margin: 0;
+}
+/* `display:flex; align-items:center; gap:8px; border-top:1px solid #f0f0f2; padding-top:14px` */
+.bsp-cp-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--bsp-px-8);
+  border-block-start: 1px solid #f0f0f2;
+  padding-block-start: var(--bsp-px-14);
+}
+.bsp-cp-foot-grow {
+  flex-grow: 1;
+}
+/* "Delete campaign" (here "Archive", Q5): `btn sm ghost`, `color: #b83245`. */
+.bsp-btn.bsp-cp-archive {
+  color: #b83245;
+}
 .bsp-au-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -12928,6 +13069,10 @@ img.bsp-pf-art {
     grid-template-columns: minmax(0, 1fr);
   }
   .bsp-au-dialog {
+    padding: var(--bsp-px-18) var(--bsp-px-16);
+    border-radius: var(--bsp-px-22);
+  }
+  .bsp-cp-dialog {
     padding: var(--bsp-px-18) var(--bsp-px-16);
     border-radius: var(--bsp-px-22);
   }

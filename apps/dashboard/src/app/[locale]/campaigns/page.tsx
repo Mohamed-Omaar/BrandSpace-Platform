@@ -10,7 +10,7 @@ import { workspaceMonthLabel } from '@brandspace/entitlements';
 import { systemClock } from '@brandspace/shared';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
-import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
+import { brandContextFor, brandFilterFor, requiredBrand } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { mediaForVariants } from '../../../server/media-picker';
 import { optionalMessage, statusMessage, translator, successFlash } from '../../../i18n/messages';
@@ -18,7 +18,11 @@ import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-sh
 import { CAMPAIGN_STATUSES } from '../../../server/campaign-form';
 import { bestCampaign, formatRateMilli } from '../../../server/best-campaign';
 import { ChannelMark } from '../calendar/prototype-calendar';
-import { objectiveLabel, periodLabel, statusLabel } from './labels';
+import { formLabels, objectiveLabel, periodLabel, statusLabel } from './labels';
+import { createCampaignAction } from './actions';
+import { CampaignFormView } from './campaign-form-view';
+import { CampaignDialog } from './campaign-dialog';
+import { CAMPAIGN_OBJECTIVES } from '../../../server/campaign-form';
 
 import { EmptyAction } from '../../../components/empty-action';
 import { whenLabel } from '../../../server/prototype-dates';
@@ -268,6 +272,34 @@ export default async function CampaignsPage({
     format: (value: Date) => whenLabel(value, locale, posts.timezone, systemClock.now()),
   };
 
+  /*
+   * D-496 (Shell 7, Campaigns 1, 15, 16, 21) — "+ New campaign" and Create →
+   * Campaign open the prototype's campaign dialog over this list (`?new=1`).
+   * A refused save comes back here with `?new=1&error=`, the dialog open and
+   * the reason in it. Strategy's "Create campaign" (D-292) arrives the same
+   * way, its week's values in the address; nothing is created until the
+   * person submits.
+   */
+  const creating = mayManage && single('new') === '1' && brandContext.brands.length > 0;
+  const formBrand =
+    requiredBrand(brandContext) ??
+    (brandContext.brands.length === 1 ? (brandContext.brands[0] ?? null) : null);
+  const platforms = creating
+    ? await inContentStudio(workspace.workspaceId, async (services) =>
+        (await services.policy()).platforms.map((platform) => ({
+          key: platform.key,
+          label: optionalMessage(messageLocale, `content.platform.${platform.key}`) ?? platform.key,
+        })),
+      )
+    : [];
+  const requestedChannels = (
+    Array.isArray(query['channels']) ? query['channels'] : [query['channels']]
+  )
+    .filter((value): value is string => typeof value === 'string')
+    .slice(0, 10);
+  const prefillObjective = single('objective') ?? '';
+  const listHref = `/${locale}/campaigns${status ? `?status=${status}` : ''}`;
+
   return (
     <WorkspaceShell
       flash={successFlash(single('ok'), locale)}
@@ -282,7 +314,7 @@ export default async function CampaignsPage({
       customerName={customer.email}
       permissionKeys={workspace.permissionKeys}
     >
-      {single('error') && (
+      {single('error') && !creating && (
         <CustomerBanner tone="error">
           {statusMessage(single('error'), locale, single('ref'))}
         </CustomerBanner>
@@ -296,7 +328,7 @@ export default async function CampaignsPage({
             <div className="bsp-camp-hero-h">{headline}</div>
             {mayManage ? (
               <Link
-                href={`/${locale}/campaigns/new`}
+                href={`/${locale}/campaigns?new=1`}
                 className="bsp-btn bsp-sm bsp-camp-hero-new"
                 data-testid="campaign-new"
               >
@@ -408,7 +440,7 @@ export default async function CampaignsPage({
               <span>{t('campaigns.emptyBody')}</span>
               {mayManage ? (
                 <Link
-                  href={`/${locale}/campaigns/new`}
+                  href={`/${locale}/campaigns?new=1`}
                   className="bsp-btn bsp-sm bsp-pur bsp-camp-start"
                   data-testid="campaigns-empty-create"
                 >
@@ -428,7 +460,9 @@ export default async function CampaignsPage({
               const next = nextOf(campaign.id);
               const covers = [0, 1, 2].map((index) => items[index]);
               const seed = (id: string) => (id.charCodeAt(0) % 6) as MediaSeed;
-              const pct = items.length === 0 ? 0 : Math.round((published / items.length) * 100);
+              // D-496 (Campaigns 1) — the planned number when one is set, else the posts filed.
+              const total = campaign.plannedPostCount ?? items.length;
+              const pct = total === 0 ? 0 : Math.min(100, Math.round((published / total) * 100));
               return (
                 <section
                   key={campaign.id}
@@ -511,8 +545,8 @@ export default async function CampaignsPage({
                         {campaign.status === 'COMPLETED'
                           ? t('campaigns.card.allPublished')
                           : t('campaigns.card.published')}{' '}
-                        <span className="bsp-ltr">
-                          {published} / {items.length}
+                        <span className="bsp-ltr" data-testid={`campaign-ratio-${campaign.id}`}>
+                          {published} / {total}
                         </span>
                       </span>
                     </div>
@@ -551,6 +585,48 @@ export default async function CampaignsPage({
           </div>
         )}
       </div>
+
+      {creating ? (
+        <CampaignDialog
+          title={t('campaigns.new')}
+          closeHref={listHref}
+          closeLabel={t('campaigns.form.cancel')}
+          testId="campaign-new-dialog"
+        >
+          <CampaignFormView
+            action={createCampaignAction}
+            formId="campaign-create"
+            hidden={{ locale, ...(formBrand ? { brandId: formBrand.id } : {}) }}
+            brands={formBrand ? undefined : brandContext.brands}
+            values={{
+              // D-292 — a week of the accepted plan opens this form filled in.
+              name: (single('name') ?? '').slice(0, 120),
+              objective: CAMPAIGN_OBJECTIVES.includes(
+                prefillObjective as (typeof CAMPAIGN_OBJECTIVES)[number],
+              )
+                ? prefillObjective
+                : 'AWARENESS',
+              briefAr: locale === 'ar' ? (single('brief') ?? '').slice(0, 1_000) : '',
+              briefEn: locale === 'ar' ? '' : (single('brief') ?? '').slice(0, 1_000),
+              description: '',
+              startDate: '',
+              endDate: '',
+              channels: requestedChannels.filter((key) =>
+                platforms.some((platform) => platform.key === key),
+              ),
+              status: 'DRAFT',
+              // The prototype's new campaign plans eight (`total: 8`, L3636).
+              plannedPostCount: 8,
+            }}
+            labels={formLabels(t, t('campaigns.create'))}
+            platforms={platforms}
+            withStatus={false}
+            cancelHref={listHref}
+            error={single('error') ? statusMessage(single('error'), locale, single('ref')) : null}
+            testId="campaign-create-form"
+          />
+        </CampaignDialog>
+      ) : null}
     </WorkspaceShell>
   );
 }
