@@ -13590,3 +13590,64 @@ select.bs-select.bsp-chevron {
   padding: 0 var(--bsp-px-4);
   font-weight: 700;
 }
+
+/* PR D (Studio S4 / S5) — the glass listbox a chip opens (`Main.dc.html`
+   lines 352 and 529): `width: 220px; background: rgba(255,255,255,.62);
+   backdrop-filter: blur(22px) saturate(180%); border: 1px solid
+   rgba(255,255,255,.75); border-radius: 16px; box-shadow: 0 22px 55px
+   rgba(40,20,90,.14), 0 0 0 1px rgba(20,16,35,.05); padding: 6px`; its rows
+   `border-radius: 10px; padding: 8px 10px; font-size: 13px`, the current one
+   `#f6f3ff` with `#5312c4` text; `top: 40px` below the chip, or `bottom: 42px`
+   above it in the bar. */
+.bsp-lbx-wrap {
+  position: relative;
+  display: inline-block;
+  min-inline-size: 0;
+}
+.bsp-chip.bsp-lbx-chip {
+  inline-size: 100%;
+  justify-content: space-between;
+  cursor: pointer;
+}
+.bsp-lbx {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: var(--bsp-px-40);
+  z-index: 20;
+  inline-size: var(--bsp-px-220);
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: var(--bsp-px-16);
+  box-shadow:
+    0 var(--bsp-px-22) var(--bsp-px-55) rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.05);
+  padding: var(--bsp-px-6);
+  display: flex;
+  flex-direction: column;
+}
+.bsp-lbx[data-placement='above'] {
+  inset-block-start: auto;
+  inset-block-end: var(--bsp-px-42);
+  z-index: 25;
+}
+.bsp-lbx-opt {
+  border: 0;
+  background: transparent;
+  color: #111114;
+  border-radius: var(--bsp-px-10);
+  padding: var(--bsp-px-8) var(--bsp-px-10);
+  text-align: start;
+  font-size: var(--bsp-fs-13);
+  font-weight: 500;
+  cursor: pointer;
+}
+.bsp-lbx-opt[aria-selected='true'] {
+  background: #f6f3ff;
+  color: #5312c4;
+}
+.bsp-lbx-opt:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: -2px;
+}

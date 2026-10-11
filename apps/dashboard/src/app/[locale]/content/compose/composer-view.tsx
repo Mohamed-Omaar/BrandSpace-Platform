@@ -7,7 +7,7 @@ import type { PublishChoice, WhenBest } from './when-popover';
 import { STUDIO_CARRY_KEY, type StudioHandoff } from './studio-carry';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { SegmentPill, visuallyHiddenStyle } from '@brandspace/ui';
+import { SegmentPill, showToast, visuallyHiddenStyle } from '@brandspace/ui';
 import { ChannelMark } from '../../calendar/prototype-calendar';
 import { generationKeyFor, visitKeyFor } from './idempotency';
 import type { MediaOptionView } from './media-picker';
@@ -23,6 +23,7 @@ import {
   fill,
   formatCredits,
   inlineActionsFor,
+  spentMessage,
   previewFormatFor,
   variantIssues,
 } from '../../../../server/composer-editor';
@@ -256,6 +257,8 @@ export interface ComposerViewProps {
     manageTemplates?: boolean;
     /** D10 (Phase 2C-3) — may rewrite a caption whose fact changed (`content.edit` + `copilot.use`). */
     rewriteFacts?: boolean;
+    /** PR D (S8) — may open Settings → AI (`brand.manage`). */
+    manageBrand?: boolean;
   };
   /** Item 9 (Phase 2B-2) — a FAILED post: what the Publishing screen would say about it. */
   readonly failed?: { readonly message: string } | null;
@@ -360,6 +363,8 @@ export interface ComposerViewProps {
     proposeTime?(formData: FormData): Promise<ProposeTimeResult>;
     /** Round 4 (3.3) — the calendar's own reschedule, for a post already on it. */
     reschedule?(formData: FormData): Promise<void>;
+    /** PR D (S2) — the calendar's own unschedule. */
+    unschedule?(formData: FormData): Promise<void>;
     /** E4 (Phase 2B-2) — save the open post as a template. */
     saveAsTemplate?(formData: FormData): Promise<void>;
     /** D10 (Phase 2C-3) — "Keep as is" on one changed Brand Brain fact. */
@@ -778,6 +783,10 @@ export function ComposerView({
           item: String(payload['itemId']),
           ...(carriedMedia ? { attach: carriedMedia.id } : {}),
           ...(plannedDate ? { date: plannedDate } : {}),
+          // PR D (S6) — what writing cost, said on the post it opens.
+          ...(spentMessage(payload['creditsChargedMilli'], t)
+            ? { spent: String(payload['creditsChargedMilli']) }
+            : {}),
         }).toString()}`,
       );
       router.refresh();
@@ -800,7 +809,12 @@ export function ComposerView({
       }`,
     });
     setBusy(null);
-    if (payload) router.refresh();
+    if (payload) {
+      // PR D (S6) — every paid action names what it cost (`spend()`).
+      const spent = spentMessage(payload['creditsChargedMilli'], t);
+      if (spent) showToast({ tone: 'success', message: spent, testId: 'studio-spent-toast' });
+      router.refresh();
+    }
   };
 
   const briefTooLong = generationBrief.length > maxBriefChars;
