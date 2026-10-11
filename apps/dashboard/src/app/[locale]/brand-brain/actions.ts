@@ -168,6 +168,12 @@ function validUntilField(formData: FormData): { validUntil?: string } {
 
 export async function createBrandAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
+  /*
+   * PR D (Shell 6) — Settings → Brand's add form returns there: the new brand
+   * opened on success, the form again on a refusal. Anything else returns to
+   * Brand Brain as before, so a crafted value cannot send the browser away.
+   */
+  const fromSettings = formData.get('returnTo') === '/settings/brand';
   let destination: string;
   try {
     const session = await requireWorkspaceAction(locale, 'brand.manage');
@@ -182,16 +188,25 @@ export async function createBrandAction(formData: FormData): Promise<void> {
      * interface in right now (D-331, amending D-277) — and it stays that until
      * changed in Settings → AI.
      */
-    await createBrandFor(session, {
+    const created = await createBrandFor(session, {
       name,
       defaultLocale: brandLocaleAtCreation(String(formData.get('defaultLocale') ?? ''), locale),
       supportedLocales: ['EN', 'AR'],
     });
-    destination = pageUrl(locale, { ok: 'BRAND_CREATED' });
+    destination = fromSettings
+      ? pageUrl(
+          locale,
+          { brand: created.brandId, ok: 'BRAND_CREATED' },
+          { path: '/settings/brand' },
+        )
+      : pageUrl(locale, { ok: 'BRAND_CREATED' });
   } catch (error: unknown) {
-    destination = failure(locale, error, 'create-brand');
+    destination = fromSettings
+      ? failure(locale, error, 'create-brand', { add: '1' }, { path: '/settings/brand' })
+      : failure(locale, error, 'create-brand');
   }
   revalidatePath(`/${locale}/brand-brain`);
+  if (fromSettings) revalidatePath(`/${locale}/settings/brand`);
   redirect(destination);
 }
 

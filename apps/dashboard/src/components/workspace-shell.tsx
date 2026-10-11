@@ -10,6 +10,7 @@ import {
   PrototypeCreateMenu,
   PrototypeIcon,
   PrototypeLanguageSwitch,
+  PrototypeMenuButton,
   PrototypeMenuLink,
   PrototypeTopbarLink,
   PrototypeUserCard,
@@ -38,6 +39,7 @@ import { incomingMentions } from '../server/incoming-mentions';
 import { getCustomer, getCustomerAuth, getSessionToken } from '../server/customer-context';
 import { greetingName } from '../server/home';
 import { businessSwitcherModel } from '../server/business-switcher';
+import { brandAllowance, brandUsage, mayAddBrand } from '../server/brand-allowance';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
 import { signOutAction, switchWorkspaceAction } from '../app/[locale]/(auth)/actions';
@@ -532,10 +534,47 @@ export async function WorkspaceShell({
         : `${switcher.foot.used}/${switcher.foot.allowed}`
       : null;
 
+  // PR D (Shell 6) — the brand menu's "Brands · used/allowed" and "+ Add a brand".
+  const brands =
+    me?.activeWorkspaceId && brandContext && brandContext.brands.length >= 2
+      ? await brandAllowance(me.activeWorkspaceId)
+      : null;
   const brandCard = brandContext ? (
     brandContext.brands.length >= 2 ? (
       <PrototypeBrandSwitcher
         label={t('brand.switcherLabel')}
+        {...(brands
+          ? {
+              heading: (
+                <span data-testid="brand-usage">
+                  {t('brand.menuHeading')} · <span className="bsp-ltr">{brandUsage(brands)}</span>
+                </span>
+              ),
+            }
+          : {})}
+        addRow={
+          brands && permissionKeys.includes('brand.manage') ? (
+            mayAddBrand(brands) ? (
+              <a
+                href={`/${locale}/settings/brand?add=1`}
+                role="menuitem"
+                data-testid="brand-add"
+                className="bsp-menu-item"
+                style={{ ...MENU_LINK, color: '#5312c4' }}
+              >
+                {t('brand.add')}
+              </a>
+            ) : (
+              <PrototypeMenuButton
+                testId="brand-add"
+                muted
+                toast={t('brand.limitToast').replace('{allowed}', String(brands.allowed ?? 0))}
+              >
+                {t('brand.add')}
+              </PrototypeMenuButton>
+            )
+          ) : undefined
+        }
         current={brandTrigger(brandContext, t)}
         options={brandContext.brands.map((brand) => ({
           id: brand.id,
@@ -636,24 +675,29 @@ export async function WorkspaceShell({
               </>
             ) : null}
             {switcher.foot.kind === 'limit' ? (
-              <>
-                <p
-                  data-testid="workspace-limit"
-                  style={{ ...MENU_NOTE, color: 'var(--bsp-faint)' }}
-                >
-                  {t('ws.limitReached')}
-                </p>
-                {permissionKeys.includes('billing.read') ? (
-                  <a
-                    href={`/${locale}/plan`}
-                    role="menuitem"
-                    data-testid="workspace-upgrade"
-                    style={{ ...MENU_LINK, color: 'var(--bs-brand-purple-pressed)' }}
-                  >
-                    {t('ws.upgrade')}
-                  </a>
-                ) : null}
-              </>
+              /*
+               * PR D (Shell 5) — AT THE LIMIT, the prototype's greyed row
+               * (`atWsLimit`, line 97): "+ New workspace n/n" that says the
+               * plan's allowance in a toast. No "Upgrade" while payments are
+               * off (Step 0, Group A).
+               */
+              <PrototypeMenuButton
+                testId="workspace-limit"
+                muted
+                toast={t('ws.limitToast').replace(
+                  '{allowed}',
+                  String(switcher.foot.allowed ?? switcher.foot.used),
+                )}
+                trailing={
+                  usage ? (
+                    <span className="bsp-ltr" style={{ fontSize: 'var(--bsp-t-11)' }}>
+                      {usage}
+                    </span>
+                  ) : undefined
+                }
+              >
+                <span>{t('ws.new')}</span>
+              </PrototypeMenuButton>
             ) : null}
             {brandContext.brands[0] && mayReadBrandProfile ? (
               <a
@@ -828,6 +872,12 @@ export async function WorkspaceShell({
    * business while several brands are in view (D-302), because the brand
    * selector then holds brands, not businesses.
    */
+  const creditsPill = (credits: number) => (
+    <span className="bsp-pill bsp-p-ai">
+      <PrototypeIcon glyph="spark" size={12} stroke={0} />
+      <span className="bsp-ltr">{credits.toLocaleString('en-US')}</span>
+    </span>
+  );
   const profile = (
     <PrototypeUserCard
       label={t('nav.account')}
@@ -836,19 +886,32 @@ export async function WorkspaceShell({
       role={customerRoleName(roleName)}
       initials={initialsFrom(latinInitialsFrom ?? identity)}
     >
-      {typeof counts.credits === 'number' && permissionKeys.includes('billing.read') ? (
-        <PrototypeMenuLink
-          href={`/${locale}/billing`}
-          testId="account-credits"
-          trailing={
-            <span className="bsp-pill bsp-p-ai">
-              <PrototypeIcon glyph="spark" size={12} stroke={0} />
-              <span className="bsp-ltr">{counts.credits.toLocaleString('en-US')}</span>
-            </span>
-          }
-        >
-          {t('account.credits')}
-        </PrototypeMenuLink>
+      {typeof counts.credits === 'number' ? (
+        /*
+         * PR D (Shell 4) — "AI credits" for every member who may read the
+         * balance (`credits.read` + `copilot.use`, Q18). With `billing.read`
+         * it opens Billing; without it, it says the balance in a toast.
+         */
+        permissionKeys.includes('billing.read') ? (
+          <PrototypeMenuLink
+            href={`/${locale}/billing`}
+            testId="account-credits"
+            trailing={creditsPill(counts.credits)}
+          >
+            {t('account.credits')}
+          </PrototypeMenuLink>
+        ) : (
+          <PrototypeMenuButton
+            testId="account-credits"
+            toast={t('account.creditsToast').replace(
+              '{credits}',
+              counts.credits.toLocaleString('en-US'),
+            )}
+            trailing={creditsPill(counts.credits)}
+          >
+            {t('account.credits')}
+          </PrototypeMenuButton>
+        )
       ) : null}
       {businessCount > 1 && brandContext && brandContext.brands.length >= 2 ? (
         <PrototypeMenuLink href={`/${locale}/workspaces`} testId="switch-workspace">

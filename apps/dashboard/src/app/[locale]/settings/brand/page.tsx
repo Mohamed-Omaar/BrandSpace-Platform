@@ -20,6 +20,7 @@ import { SettingsFrame } from '../../../../components/settings-frame';
 import { statusMessage, translator } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { saveBrandProfileAction } from './actions';
+import { createBrandAction } from '../../brand-brain/actions';
 
 import { EmptyAction } from '../../../../components/empty-action';
 
@@ -156,6 +157,40 @@ export default async function BrandProfilePage({
         permissionKeys={workspace.permissionKeys}
         selected="brand"
       >
+        {query['add'] === '1' && mayManage ? (
+          /*
+           * PR D (Shell 6) — THE PROTOTYPE'S ADD-A-BRAND CARD (Settings →
+           * Brands, Main line 1354): "Brand name", Discard, Create — through
+           * the one creation path (`createBrandAction` → `createBrandFor`):
+           * idempotent on the name, counted against the plan's brand quota,
+           * audited. A refusal (the plan's limit) comes back here with its words.
+           */
+          <form
+            action={createBrandAction}
+            className="bsp-xcard bsp-sg-bradd"
+            data-testid="brand-add-form"
+          >
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="returnTo" value="/settings/brand" />
+            <label className="bsp-sg-bradd-f">
+              <span className="bsp-lbl">{t('brand.addName')}</span>
+              <input
+                name="name"
+                dir="auto"
+                required
+                maxLength={120}
+                className="bs-control bsp-sg-bradd-in"
+                data-testid="brand-add-name"
+              />
+            </label>
+            <a href={`/${locale}/settings/brand`} className="bsp-btn bsp-sec">
+              {t('brand.addDiscard')}
+            </a>
+            <button type="submit" className="bsp-btn bsp-pur" data-testid="brand-add-create">
+              {t('brand.addCreate')}
+            </button>
+          </form>
+        ) : null}
         {data === null ? (
           /*
            * THE TWO HONEST ABSENCES, told apart (D-191). "Choose one" and

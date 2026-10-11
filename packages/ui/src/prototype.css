@@ -1367,6 +1367,35 @@ button.bsp-xcard:hover {
   inline-size: 100%;
   box-sizing: border-box;
 }
+/* PR D (Shell 5) — the greyed "+ New workspace n/n" at the limit (Main line
+   97, `atWsLimit`): 12.5px, 600, #8a8a92, 7px 10px. */
+/* PR D (Shell 6) — Settings' add-a-brand card (Main line 1354): one row, the
+   name field growing, Discard and Create at its end, aligned to the bottom. */
+.bsp-xcard.bsp-sg-bradd {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: var(--bsp-px-10);
+  margin-bottom: var(--bsp-px-14);
+}
+.bsp-sg-bradd-f {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-6);
+}
+.bs-control.bsp-sg-bradd-in {
+  border: 1px solid #e4e4e8;
+  border-radius: var(--bsp-px-12);
+  padding: var(--bsp-px-9) var(--bsp-px-12);
+  font-size: var(--bsp-fs-14);
+  background: #fff;
+}
+.bsp-menu-item.bsp-menu-btn[data-muted] {
+  padding: var(--bsp-px-7) var(--bsp-px-10);
+  font-size: var(--bsp-t-12_5);
+  font-weight: 600;
+  color: #8a8a92;
+}
 .bsp-menu-item:hover {
   background: rgba(20, 16, 35, 0.04);
 }

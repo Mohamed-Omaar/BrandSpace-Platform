@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { showToast } from './toast-bus';
 import type { ReactNode } from 'react';
 import { DropdownMenu } from './overlays';
 import { PrefetchLink } from './prefetch-link';
@@ -253,6 +254,7 @@ export function PrototypeBrandSwitcher({
   emptyLabel,
   manageHref,
   manageLabel,
+  addRow,
 }: {
   readonly label: string;
   readonly heading?: ReactNode;
@@ -264,6 +266,8 @@ export function PrototypeBrandSwitcher({
   readonly emptyLabel?: string | undefined;
   readonly manageHref?: string | undefined;
   readonly manageLabel?: string | undefined;
+  /** PR D (Shell 6) — "+ Add a brand" under the brands (Main line 97). */
+  readonly addRow?: ReactNode;
 }) {
   return (
     <DropdownMenu
@@ -313,6 +317,7 @@ export function PrototypeBrandSwitcher({
           {emptyLabel}
         </p>
       ) : null}
+      {addRow}
       {manageHref && manageLabel ? (
         <a
           href={manageHref}
@@ -441,6 +446,47 @@ export function PrototypeMenuLink({
       {children}
       {trailing}
     </Link>
+  );
+}
+
+/**
+ * PR D (Shell 4, 5) — A MENU ROW THAT ANSWERS WITH A TOAST instead of going
+ * somewhere: the balance for a member who may not open Billing, or why a
+ * greyed row cannot be used. Same `.bsp-menu-item` row as a link; `muted`
+ * draws it greyed (`aria-disabled`), still pressable so it can say why.
+ */
+export function PrototypeMenuButton({
+  testId,
+  children,
+  trailing,
+  toast,
+  muted = false,
+}: {
+  readonly testId?: string | undefined;
+  readonly children: ReactNode;
+  readonly trailing?: ReactNode;
+  readonly toast: string;
+  readonly muted?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      data-testid={testId}
+      className="bsp-menu-item bsp-menu-btn"
+      {...(muted ? { 'aria-disabled': true, 'data-muted': '' } : {})}
+      style={{ justifyContent: trailing ? 'space-between' : undefined, gap: 'var(--bsp-px-8)' }}
+      onClick={() =>
+        showToast({
+          tone: 'info',
+          message: toast,
+          ...(testId ? { testId: `${testId}-toast` } : {}),
+        })
+      }
+    >
+      {children}
+      {trailing}
+    </button>
   );
 }
 
