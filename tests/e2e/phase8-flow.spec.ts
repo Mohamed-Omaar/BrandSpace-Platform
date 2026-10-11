@@ -362,10 +362,15 @@ test('6 · content is created and filed under the campaign', async ({ page }) =>
   const filed = page
     .waitForResponse((response) => response.request().method() === 'POST', { timeout: 30_000 })
     .catch(() => undefined);
-  await page.getByTestId('content-campaign').selectOption(state.campaignId as string);
+  // PR D (S4): the campaign is the prototype's chip and glass listbox, not a select.
+  await page.getByTestId('content-campaign').click();
+  await page.getByTestId(`content-campaign-option-${state.campaignId as string}`).click();
   await filed;
   await page.waitForLoadState('networkidle');
-  await expect(page.getByTestId('content-campaign')).toHaveValue(state.campaignId as string);
+  await expect(page.getByTestId('content-campaign')).toHaveAttribute(
+    'data-value',
+    state.campaignId as string,
+  );
 });
 
 // ---------------------------------------------------------------------------

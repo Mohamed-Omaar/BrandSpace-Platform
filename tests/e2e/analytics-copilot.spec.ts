@@ -513,11 +513,12 @@ async function chooseHarmlessAction(page: Page): Promise<void> {
 }
 
 test.describe('automations', () => {
-  test('a rule can be created, is listed, and starts DISABLED', async ({ page }) => {
+  test('a rule can be created, is listed, and starts ON', async ({ page }) => {
     /*
      * NO MODEL IS INVOLVED HERE, so this journey runs to completion in a
-     * browser. A new rule is created OFF: an automation that started acting the
-     * moment it was saved would act before its author had read it back.
+     * browser. PR D (Automations 1): a rule made by hand is ON when saved
+     * ("Rule saved and on"), held to the same authority as switching it on; a
+     * rule the Copilot proposes stays off until approved (D-296).
      */
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
@@ -538,6 +539,14 @@ test.describe('automations', () => {
     const rules = page.getByTestId('automation-rules');
     await expect(rules).toBeVisible();
     await expect(rules.getByTitle(name, { exact: true })).toHaveCount(1);
+    // On: the row's switch offers to switch it off.
+    await expect(
+      page
+        .locator('[data-testid="automation-rules"] li')
+        .filter({ has: page.getByTitle(name, { exact: true }) })
+        .first()
+        .getByRole('button', { name: /disable/i }),
+    ).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('AN OLDER SCHEDULED RULE IS STILL EDITABLE, with its hour and days', async ({ page }) => {
@@ -806,16 +815,20 @@ test.describe('automations', () => {
       .locator('[data-testid="automation-rules"] li')
       .filter({ has: page.getByTitle(name, { exact: true }) })
       .first();
-    // Round 4 (5.2): the switch turns in place — no redirect, no toast.
-    await row.getByRole('button', { name: /enable/i }).click();
-    // The row's switch is on, and now offers to switch it off.
-    await expect(
+    // PR D (Automations 1): saved ON. Round 4 (5.2): the switch turns in
+    // place — no redirect, no toast — off, then on again.
+    const switchOf = (label: RegExp) =>
       page
         .locator('[data-testid="automation-rules"] li')
         .filter({ has: page.getByTitle(name, { exact: true }) })
         .first()
-        .getByRole('button', { name: /disable/i }),
-    ).toHaveAttribute('aria-pressed', 'true');
+        .getByRole('button', { name: label });
+    await expect(switchOf(/disable/i)).toHaveAttribute('aria-pressed', 'true');
+    await row.getByRole('button', { name: /disable/i }).click();
+    await expect(switchOf(/enable/i)).toHaveAttribute('aria-pressed', 'false');
+    await row.getByRole('button', { name: /enable/i }).click();
+    // The row's switch is on, and now offers to switch it off.
+    await expect(switchOf(/disable/i)).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('A CLOSED STRING FIELD IS PICKED, NEVER TYPED, AND ITS OPTIONS ARE TRANSLATED', async ({
@@ -896,16 +909,20 @@ test.describe('automations', () => {
       .locator('[data-testid="automation-rules"] li')
       .filter({ has: page.getByTitle(name, { exact: true }) })
       .first();
-    // Round 4 (5.2): the switch turns in place — no redirect, no toast.
-    await row.getByRole('button', { name: /enable/i }).click();
-    // The row's switch is on, and now offers to switch it off.
-    await expect(
+    // PR D (Automations 1): saved ON. Round 4 (5.2): the switch turns in
+    // place — no redirect, no toast — off, then on again.
+    const switchOf = (label: RegExp) =>
       page
         .locator('[data-testid="automation-rules"] li')
         .filter({ has: page.getByTitle(name, { exact: true }) })
         .first()
-        .getByRole('button', { name: /disable/i }),
-    ).toHaveAttribute('aria-pressed', 'true');
+        .getByRole('button', { name: label });
+    await expect(switchOf(/disable/i)).toHaveAttribute('aria-pressed', 'true');
+    await row.getByRole('button', { name: /disable/i }).click();
+    await expect(switchOf(/enable/i)).toHaveAttribute('aria-pressed', 'false');
+    await row.getByRole('button', { name: /enable/i }).click();
+    // The row's switch is on, and now offers to switch it off.
+    await expect(switchOf(/disable/i)).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('CHANGING THE FIELD RESETS AN OPERATOR THAT NO LONGER APPLIES', async ({ page }) => {

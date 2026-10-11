@@ -841,6 +841,21 @@ const contentStudioSchema = z.object({
          * author has written a caption for it.
          */
         maxMediaItems: z.number().int().min(0).max(20).default(10),
+        /**
+         * PR D (Studio S38) — THE PLATFORM'S UNSAFE BANDS ON A 9:16 FRAME, in
+         * percent of the frame: the top and bottom bands across its width and
+         * the end-side band between them, where the platform draws its own
+         * name, caption and buttons over a Story or Reel. An operator's fact
+         * (platforms move their overlays); ABSENT means none is known, and the
+         * Studio then offers no "Safe zones" chip for that platform.
+         */
+        safeZones: z
+          .object({
+            top: z.number().min(0).max(50),
+            bottom: z.number().min(0).max(50),
+            end: z.number().min(0).max(50),
+          })
+          .optional(),
       }),
     )
     .min(1)

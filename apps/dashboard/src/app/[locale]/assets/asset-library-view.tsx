@@ -39,7 +39,7 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { translator, type MessageKey } from '../../../i18n/messages';
+import { optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { ASSET_VIEWS, type RightsState } from '../../../server/asset-views';
 import { formatBytes } from '../../../components/format-bytes';
 import { mediaStorageRemainder, type MediaStorageCategory } from '../../../server/media-storage';
@@ -229,6 +229,8 @@ export interface AssetLibraryViewProps {
   };
   readonly actions: {
     readonly upload: FormAction;
+    /** PR D (Media 1) — one file of several, answering instead of redirecting. */
+    readonly uploadOne?: (formData: FormData) => Promise<{ ok: boolean; reason: string | null }>;
     readonly createFolder: FormAction;
     readonly update: FormAction;
     readonly archive: FormAction;
@@ -288,7 +290,8 @@ function filterHref(
 }
 
 export function AssetLibraryView(props: AssetLibraryViewProps) {
-  const t = translator(useMessageLocale(props.locale));
+  const messageLocale = useMessageLocale(props.locale);
+  const t = translator(messageLocale);
   const { filters, can, actions } = props;
   /** D-305 — the standard business: one brand, so no brand or shelf choice to make. */
   const singleBrand = props.brands.length <= 1;
@@ -303,6 +306,10 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
   const bulkFormId = useId();
   const router = useRouter();
   const canBulk = can.edit || can.archive;
+  // PR D (Media 1) — what a several-file upload refused, said in the dialog.
+  const [multiRefused, setMultiRefused] = useState<string | null>(null);
+  // PR D (review of #75): the files chosen in the upload dialog, by name, before sending.
+  const [chosen, setChosen] = useState<readonly string[]>([]);
 
   const filtered =
     filters.search !== undefined ||
@@ -1100,7 +1107,10 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
       {/* --- Upload ------------------------------------------------------ */}
       <Dialog
         open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
+        onClose={() => {
+          setUploadOpen(false);
+          setChosen([]);
+        }}
         title={t('assets.upload')}
         closeLabel={t('assets.action.cancel')}
         testId="assets-upload-dialog"
@@ -1111,12 +1121,43 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           locale={props.locale}
           texts={uploadTexts(t)}
           data-testid="assets-upload-form"
+          {...(actions.uploadOne
+            ? {
+                each: {
+                  upload: actions.uploadOne,
+                  done: ({ uploaded, refused }) => {
+                    if (refused.length === 0) {
+                      setMultiRefused(null);
+                      setUploadOpen(false);
+                      router.push(`/${props.locale}/assets?ok=ASSET_UPLOADED`);
+                      return;
+                    }
+                    router.refresh();
+                    setMultiRefused(
+                      t('assets.uploadedSome')
+                        .replace('{count}', String(uploaded))
+                        .replace(
+                          '{files}',
+                          refused
+                            .map((one) => {
+                              const why = one.reason
+                                ? optionalMessage(messageLocale, `assets.reason.${one.reason}`)
+                                : null;
+                              return why ? `${one.name} (${why})` : one.name;
+                            })
+                            .join(', '),
+                        ),
+                    );
+                  },
+                },
+              }
+            : {})}
         >
           <input type="hidden" name="locale" value={props.locale} />
           {filters.folder ? <input type="hidden" name="folderId" value={filters.folder} /> : null}
           <Stack gap={spacingTokens.md}>
             {props.brands.length > 0 ? (
-              <Field htmlFor={`${uploadFieldId}-brand`} label={t('assets.filter.all')}>
+              <Field htmlFor={`${uploadFieldId}-brand`} label={t('assets.uploadBrand')}>
                 <select
                   id={`${uploadFieldId}-brand`}
                   name="brandId"
@@ -1125,8 +1166,11 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 >
                   {/* A workspace-level asset is the DEFAULT, because the shared
                       logo pack and the contract templates are the files most
-                      often uploaded without a brand in mind. */}
-                  <option value="">{t('assets.allFiles')}</option>
+                      often uploaded without a brand in mind. The select files
+                      the upload under one brand, or under none — shared by
+                      every brand (review of #75: "All files" was the library
+                      filter's word, not this choice's). */}
+                  <option value="">{t('assets.uploadShared')}</option>
                   {props.brands.map((brand) => (
                     <option key={brand.id} value={brand.id}>
                       {brand.name}
@@ -1135,25 +1179,69 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 </select>
               </Field>
             ) : null}
-            <Field htmlFor={`${uploadFieldId}-file`} label={t('assets.upload')}>
+            <div className="bsp-up-pick">
+              <span className="bsp-lbl" id={`${uploadFieldId}-file-label`}>
+                {t('assets.uploadFiles')}
+              </span>
               {/* The ACCEPTED TYPES COME FROM ACTIVATED CONFIGURATION, so the
                   picker offers exactly what the server will admit, and the
                   rules are written beside it (batch 7, A3). It is a courtesy,
                   not a check: the server refuses anything else, and the file's
-                  own signature has to agree as well. */}
-              <UploadFileInput
-                id={`${uploadFieldId}-file`}
-                name="file"
-                required
-                className={CONTROL_CLASS}
-                style={inputStyle()}
-                data-testid="assets-file-input"
-              />
-            </Field>
+                  own signature has to agree as well.
+                  PR D (review of #75) — the product's own file button (the
+                  Look card's `.bsp-lk-file`: a secondary button over a
+                  transparent input), never the browser's raw control, and the
+                  chosen files listed by name before anything is sent. */}
+              <label className="bsp-btn bsp-sm bsp-sec bsp-lk-file">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 16V4M7 9l5-5 5 5M4 20h16" />
+                </svg>
+                {t('assets.chooseFiles')}
+                <UploadFileInput
+                  id={`${uploadFieldId}-file`}
+                  name="file"
+                  multiple={actions.uploadOne !== undefined}
+                  onChosen={() => setMultiRefused(null)}
+                  onChosenFiles={(files) => setChosen(files.map((file) => file.name))}
+                  required
+                  aria-labelledby={`${uploadFieldId}-file-label`}
+                  data-testid="assets-file-input"
+                />
+              </label>
+              {chosen.length > 0 ? (
+                <ul className="bsp-up-chosen" data-testid="assets-chosen">
+                  {chosen.map((name, index) => (
+                    <li key={`${name}-${index}`} className="bsp-ltr bsp-lk-meta">
+                      <bdi>{name}</bdi>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="bsp-lk-meta" data-testid="assets-chosen-none">
+                  {t('assets.noneChosen')}
+                </span>
+              )}
+            </div>
             <UploadRulesLine className="bsp-up-rules" />
             <UploadStatus
               testId="assets-upload-status"
-              result={props.uploadReason ? { tone: 'error', message: props.uploadReason } : null}
+              result={
+                multiRefused
+                  ? { tone: 'error', message: multiRefused }
+                  : props.uploadReason
+                    ? { tone: 'error', message: props.uploadReason }
+                    : null
+              }
             />
             <Button type="submit" variant="primary" data-testid="assets-upload-submit">
               {t('assets.upload')}

@@ -372,6 +372,7 @@ export function Field({
       {hint && !error ? (
         <p
           id={`${htmlFor}-hint`}
+          className="bs-field-hint"
           style={{
             margin: 0,
             marginBlockStart: spacingTokens.xs,

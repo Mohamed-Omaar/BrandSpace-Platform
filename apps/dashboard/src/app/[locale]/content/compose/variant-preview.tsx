@@ -68,7 +68,14 @@ export function VariantPreview({
   approval,
   labels,
   testId,
+  safeZones = null,
 }: {
+  /** PR D (S38) — the platform's unsafe bands, drawn on a 9:16 post while "Safe zones" is on. */
+  readonly safeZones?: {
+    readonly top: number;
+    readonly bottom: number;
+    readonly end: number;
+  } | null;
   readonly locale: string;
   readonly platformKey: string;
   /**
@@ -140,6 +147,7 @@ export function VariantPreview({
   return (
     <div style={{ display: 'grid', gap: spacingTokens.sm }} data-testid={testId}>
       <SocialPostPreview
+        safeZones={safeZones}
         content={{
           platform,
           ...(format ? { format: drawableFormat(platform, format) } : {}),

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Field, SearchableSelect, type SearchableOption } from '@brandspace/ui';
-import { authInputStyle } from '../../../../components/auth-card';
+import { authInputStyle } from '../../../../components/auth-styles';
 import { timeZoneAfterCountryChange } from '../../../../components/time-zone-suggestion';
 import { detectedTimeZone } from '../../../../components/browser-time-zone';
 import { suggestedWorkspaceAddress } from '../../../../components/workspace-address';

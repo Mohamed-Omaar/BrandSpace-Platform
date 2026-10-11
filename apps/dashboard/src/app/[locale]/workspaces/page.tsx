@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { colorTokens, initialsFrom } from '@brandspace/ui';
 import {
   getCustomerAuth,
@@ -7,6 +8,8 @@ import {
 import { statusMessage, translator } from '../../../i18n/messages';
 import { AuthCard } from '../../../components/auth-card';
 import { switchWorkspaceAction } from '../(auth)/actions';
+import { businessSwitcherModel } from '../../../server/business-switcher';
+import { workspacesFoot } from '../../../server/workspaces-foot';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +36,7 @@ export default async function WorkspacePickerPage({
   // token is present here. It is the SESSION TOKEN that selects the workspaces,
   // never the user id: the question "which workspaces may this request act in"
   // is answered from the credential the request actually carries.
-  await requireCustomer(locale);
+  const customer = await requireCustomer(locale);
   // A8 (D-328): a workspace pending deletion is still listed — marked — so its
   // owner can reach the screen that cancels it. Nothing can be done inside it.
   const workspaces = await getCustomerAuth().listWorkspaces((await getSessionToken()) ?? '', {
@@ -41,6 +44,19 @@ export default async function WorkspacePickerPage({
     // G4 (D-333): one that requires two-step is listed; entering it asks for it.
     includeMfaRequired: true,
   });
+
+  /*
+   * PR D (Auth 6) — "CREATE WORKSPACE · n/limit", OR THE NOTE AT THE LIMIT
+   * (`Auth.dc.html` line 106). The allowance the rail's switcher shows and the
+   * server enforces (D-326): only an owner within it is offered the create
+   * row, which leads to the existing new-workspace form.
+   */
+  const current = customer.activeWorkspaceId ?? workspaces[0]?.workspaceId ?? null;
+  const foot = workspacesFoot(
+    current
+      ? ((await businessSwitcherModel(locale, current).catch(() => null))?.foot ?? null)
+      : null,
+  );
 
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
@@ -106,6 +122,27 @@ export default async function WorkspacePickerPage({
           ))}
         </ul>
       )}
+      {foot?.kind === 'create' ? (
+        <Link
+          href={`/${locale}/onboarding/workspace`}
+          className="bsp-auth-wscreate"
+          data-testid="workspaces-create"
+        >
+          {t('ws.createWorkspace')}
+          {foot.usage ? (
+            <span className="bsp-ltr bsp-auth-wsuse">
+              {' · '}
+              {foot.usage}
+            </span>
+          ) : null}
+        </Link>
+      ) : foot?.kind === 'limit' ? (
+        <p className="bsp-auth-wsfull" data-testid="workspaces-limit">
+          {t('ws.limitNote')
+            .replace('{used}', String(foot.used))
+            .replaceAll('{allowed}', String(foot.allowed))}
+        </p>
+      ) : null}
     </AuthCard>
   );
 }

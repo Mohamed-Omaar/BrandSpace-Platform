@@ -29,6 +29,7 @@ export * from './toast-timing';
 export * from './motion';
 export * from './motion-hooks';
 export * from './segment-pill';
+export * from './chip-listbox';
 export * from './count-up';
 export * from './count-up-format';
 export * from './overview-hero';

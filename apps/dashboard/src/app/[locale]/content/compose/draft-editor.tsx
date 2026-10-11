@@ -29,7 +29,7 @@ import {
   type EditorIssue,
 } from '../../../../server/composer-editor';
 import { useRouter } from 'next/navigation';
-import { SegmentPill, type MediaSeed } from '@brandspace/ui';
+import { ChipListbox, SegmentPill, type MediaSeed } from '@brandspace/ui';
 import { ChannelMark, PostArt } from '../../calendar/prototype-calendar';
 import type { MediaOptionView } from './media-picker';
 import { MediaSlides } from './media-slides';
@@ -125,6 +125,8 @@ export interface DraftEditorProps {
     manageTemplates?: boolean;
     /** D10 (Phase 2C-3) — may rewrite with AI: `content.edit` AND `copilot.use`. */
     rewriteFacts?: boolean;
+    /** PR D (S8) — may open Settings → AI (`brand.manage`). */
+    manageBrand?: boolean;
   };
   /**
    * B9 / F2 (Phase 2B-2) — what the inline date and time start from: the
@@ -163,12 +165,19 @@ export interface DraftEditorProps {
      * Q10 — who may be asked to review, default first (members before the
      * owner, never the author). Empty when the reader may not send for review.
      */
-    readonly reviewers?: readonly { readonly userId: string; readonly name: string }[];
+    readonly reviewers?: readonly {
+      readonly userId: string;
+      readonly name: string;
+      /** PR D (S5) — the member's role, for "Name · Role". */
+      readonly role?: string | undefined;
+    }[];
     readonly changes: {
       readonly note: string | null;
       readonly reviewer: string | null;
       readonly threadIds: readonly string[];
     } | null;
+    /** PR D (S1) — the latest review declined this draft: who, and why. */
+    readonly declined?: { readonly note: string | null; readonly reviewer: string | null } | null;
   } | null;
   /** The Creative Studio's formats, for "Generate with AI" in the media drawer. */
   readonly creativeFormats: readonly CreativeFormatOption[];
@@ -203,6 +212,8 @@ export interface DraftEditorProps {
     scheduleFromStudio?(formData: FormData): Promise<void>;
     /** Round 4 (3.3) — the calendar's own reschedule, for a post already on it. */
     reschedule?(formData: FormData): Promise<void>;
+    /** PR D (S2) — the calendar's own unschedule: back to draft. */
+    unschedule?(formData: FormData): Promise<void>;
     /** Batch 7 PR C (B1.1) — store the proposed time; schedules nothing. */
     proposeTime?(formData: FormData): Promise<ProposeTimeResult>;
     /** E4 (Phase 2B-2) — save this post as a template. */
@@ -318,6 +329,8 @@ export function DraftEditor({
   const duplicateToken = `composer:${draft.id}:${draft.variants.map((v) => v.updatedAt).join(',')}`;
   const [active, setActive] = useState(draft.variants[0]?.id ?? '');
   const [compare, setCompare] = useState(false);
+  /* PR D (S38) — the preview's "Safe zones" overlay, on or off (the prototype's `safe`). */
+  const [safeOn, setSafeOn] = useState(false);
   const [toneArgument, setToneArgument] = useState('');
   // The prototype's Words / Design tabs; an image carried in opens on Design.
   // Round 5 (A) — the hand-off for THIS draft, as it stood when the editor opened.
@@ -965,14 +978,41 @@ export function DraftEditor({
         accountHandle={brandHandle}
         status="DRAFT"
         approval={approvalStateOf(draft.status)}
-        labels={labels}
+        labels={
+          can.edit && !draft.readOnly
+            ? {
+                ...labels,
+                /*
+                 * PR D (S7) — "+ Add a visual" in an empty picture, as on a new
+                 * post: it opens this post's Design tab (lines 438–494).
+                 */
+                missingAction: (
+                  <button
+                    type="button"
+                    className="bsp-st-adddesign"
+                    data-testid="editor-add-design"
+                    onClick={() => setTab('visual')}
+                  >
+                    {t['studio.addDesign']}
+                  </button>
+                ),
+              }
+            : labels
+        }
         testId={testId}
+        safeZones={safeOn ? safeZonesFor(variant.platformKey) : null}
       />
     );
   };
 
   const activeVariant =
     draft.variants.find((variant) => variant.id === active) ?? draft.variants[0];
+  /* PR D (S38) — the bands for the previewed channel, when its frame is 9:16. */
+  const safeZonesFor = (platformKey: string) =>
+    previewGeometry(draft.contentType, platformKey).endsWith('9:16')
+      ? (platforms.find((platform) => platform.key === platformKey)?.safeZones ?? null)
+      : null;
+  const activeSafeZones = activeVariant ? safeZonesFor(activeVariant.platformKey) : null;
 
   /*
    * §20 — WHAT AN AI EDIT WOULD COST, BEFORE IT RUNS. One quote per saved
@@ -1097,29 +1137,46 @@ export function DraftEditor({
    * service picks (the first name below); choosing a name asks that person.
    * Either way anyone who may approve for the brand can decide it.
    */
+  /*
+   * PR D (S5) — "Reviewer · Name ▾" opens the prototype's glass listbox of
+   * "Name · Role" rows (`Main.dc.html` line 529, `x.revw`); the value posts
+   * as `assignedToUserId`, as the select's did. Empty is "Automatic".
+   */
   const reviewerPicker = (id: string, form?: string) =>
     review?.reviewers && review.reviewers.length > 0 ? (
-      <span className="bsp-chip bsp-st-rev">
-        <label className="bsp-st-rev-label" htmlFor={`${fieldId}-${id}`}>
-          {t['editor.reviewer.label']}
-        </label>
-        <select
-          id={`${fieldId}-${id}`}
-          className="bs-control bsp-st-rev-select"
+      <span className="bsp-st-rev">
+        <ChipListbox
+          label={t['editor.reviewer.label'] ?? ''}
           name="assignedToUserId"
           form={form}
-          defaultValue=""
-          data-testid={`${id}-reviewer`}
-        >
-          <option value="">
-            {fill(t['editor.reviewer.auto'] ?? '{name}', { name: review.reviewers[0]?.name ?? '' })}
-          </option>
-          {review.reviewers.map((reviewer) => (
-            <option key={reviewer.userId} value={reviewer.userId}>
-              {reviewer.name}
-            </option>
-          ))}
-        </select>
+          value=""
+          placement={id === 'submit' ? 'above' : 'below'}
+          testId={`${id}-reviewer`}
+          options={[
+            {
+              value: '',
+              label: fill(t['editor.reviewer.auto'] ?? '{name}', {
+                name: review.reviewers[0]?.name ?? '',
+              }),
+            },
+            ...review.reviewers.map((reviewer) => ({
+              value: reviewer.userId,
+              label: reviewer.role ? `${reviewer.name} · ${reviewer.role}` : reviewer.name,
+            })),
+          ]}
+          trigger={(value) => (
+            <>
+              <span className="bsp-st-rev-label">{t['editor.reviewer.label']}</span>{' '}
+              <span data-testid={`${id}-reviewer-value`}>
+                {value === ''
+                  ? fill(t['editor.reviewer.auto'] ?? '{name}', {
+                      name: review.reviewers?.[0]?.name ?? '',
+                    })
+                  : (review.reviewers?.find((reviewer) => reviewer.userId === value)?.name ?? '')}
+              </span>
+            </>
+          )}
+        />
       </span>
     ) : null;
 
@@ -1449,6 +1506,18 @@ export function DraftEditor({
               {statusLabel} · {campaigns.find((campaign) => campaign.id === draft.campaignId)?.name}
             </span>
           ) : null}
+          {draft.status === 'DRAFT' && review?.declined ? (
+            <span className="bsp-st-ep-note" dir="auto" data-testid="editor-declined">
+              {review.declined.note
+                ? fill(t['editor.declined.note'] ?? '{name}: {note}', {
+                    name: review.declined.reviewer ?? t['editor.declined.someone'] ?? '',
+                    note: review.declined.note,
+                  })
+                : fill(t['editor.declined'] ?? '{name}', {
+                    name: review.declined.reviewer ?? t['editor.declined.someone'] ?? '',
+                  })}
+            </span>
+          ) : null}
           {review?.requiresApproval && draft.status === 'DRAFT' ? (
             <span className="bsp-st-ep-note" data-testid="editor-needs-approval">
               {t['editor.next.needsApproval']}
@@ -1464,6 +1533,31 @@ export function DraftEditor({
               {t['content.action.duplicate']}
             </button>
           </form>
+        ) : null}
+        {/* PR D (S2) — "Unschedule" on a scheduled post (`EPV` sched buttons). */}
+        {draft.status === 'SCHEDULED' &&
+        can.schedule &&
+        actions.unschedule &&
+        publishTime?.slotId ? (
+          <form action={actions.unschedule}>
+            <input type="hidden" name="locale" value={locale} />
+            <input type="hidden" name="slotId" value={publishTime.slotId} />
+            <input type="hidden" name="returnTo" value="/content/compose" />
+            <input type="hidden" name="item" value={draft.id} />
+            <button type="submit" className="bsp-btn bsp-sm" data-testid="editor-unschedule">
+              {t['editor.unschedule']}
+            </button>
+          </form>
+        ) : null}
+        {/* PR D (S3) — "Results" on a published post: its Performance. */}
+        {draft.readOnly ? (
+          <Link
+            href={`/${locale}/analytics`}
+            className="bsp-btn bsp-sm bsp-sec"
+            data-testid="editor-results"
+          >
+            {t['editor.results']}
+          </Link>
         ) : null}
         {can.submit && draft.status === 'IN_REVIEW' && draft.openApprovalId ? (
           <form action={actions.cancelReview}>
@@ -1948,27 +2042,29 @@ export function DraftEditor({
             >
               <input type="hidden" name="locale" value={locale} />
               <input type="hidden" name="itemId" value={draft.id} />
-              <select
-                id={`${fieldId}-campaign`}
+              {/*
+                PR D (S4) — the prototype's campaign chip and glass listbox
+                (line 352): None and the campaigns that have not ended. THE
+                CHOICE IS THE SAVE (review of #67, round 2): picking files the
+                post through the same form and action.
+              */}
+              <ChipListbox
+                label={t['campaigns.composerLabel'] ?? ''}
                 name="campaignId"
-                defaultValue={draft.campaignId ?? ''}
-                aria-label={t['campaigns.composerLabel']}
-                className="bs-control bsp-chip bsp-st-select"
-                data-testid="content-campaign"
-                /*
-                  THE CHOICE IS THE SAVE (review of #67, round 2): the prototype
-                  files a post the moment a campaign is picked, so the second
-                  "Save edit" beside it is gone. The same form, the same action.
-                */
-                onChange={(event) => event.currentTarget.form?.requestSubmit()}
-              >
-                <option value="">{t['campaigns.composerNone']}</option>
-                {campaigns.map((campaign) => (
-                  <option key={campaign.id} value={campaign.id}>
-                    {campaign.name}
-                  </option>
-                ))}
-              </select>
+                value={draft.campaignId ?? ''}
+                testId="content-campaign"
+                options={[
+                  { value: '', label: t['campaigns.composerNone'] ?? '' },
+                  ...campaigns.map((campaign) => ({ value: campaign.id, label: campaign.name })),
+                ]}
+                onChoose={(_value, input) => input?.form?.requestSubmit()}
+                trigger={(value) => (
+                  <span className="bsp-lbx-val">
+                    {campaigns.find((campaign) => campaign.id === value)?.name ??
+                      t['campaigns.composerNone']}
+                  </span>
+                )}
+              />
             </form>
           ) : (
             <span className="bsp-st-fixed">
@@ -2484,15 +2580,34 @@ export function DraftEditor({
                     <div className="bsp-st-bb-line">
                       <SparkGlyph />
                       <span data-testid="variant-facts-count">
-                        {(activeVariant.knowledge?.length ?? 0) === 0
-                          ? draft.brandBrainOn === false
-                            ? t['editor.facts.off']
-                            : t['editor.facts.none']
-                          : (activeVariant.knowledge?.length ?? 0) === 1
-                            ? t['editor.facts.usedOne']
-                            : fill(t['editor.facts.used'] ?? '{count}', {
-                                count: String(activeVariant.knowledge?.length ?? 0),
-                              })}
+                        {(activeVariant.knowledge?.length ?? 0) === 0 ? (
+                          draft.brandBrainOn === false ? (
+                            <>
+                              {t['editor.facts.off']}
+                              {/* PR D (S8) — "Turn on →" to Settings → AI. */}
+                              {can.manageBrand ? (
+                                <>
+                                  {' '}
+                                  <Link
+                                    href={`/${locale}/settings/ai`}
+                                    className="bsp-st-bb-on"
+                                    data-testid="variant-facts-turn-on"
+                                  >
+                                    {t['editor.facts.turnOn']}
+                                  </Link>
+                                </>
+                              ) : null}
+                            </>
+                          ) : (
+                            t['editor.facts.none']
+                          )
+                        ) : (activeVariant.knowledge?.length ?? 0) === 1 ? (
+                          t['editor.facts.usedOne']
+                        ) : (
+                          fill(t['editor.facts.used'] ?? '{count}', {
+                            count: String(activeVariant.knowledge?.length ?? 0),
+                          })
+                        )}
                       </span>
                     </div>
                     {(activeVariant.knowledge?.length ?? 0) > 0 ? (
@@ -2605,9 +2720,27 @@ export function DraftEditor({
               </div>
             ) : null}
             {!compare && activeVariant ? (
-              <span className="bsp-st-size bsp-ltr">
-                {previewGeometry(draft.contentType, activeVariant.platformKey)}
-              </span>
+              <div className="bsp-st-size-row">
+                <span className="bsp-st-size bsp-ltr">
+                  {previewGeometry(draft.contentType, activeVariant.platformKey)}
+                </span>
+                {/*
+                  PR D (S38) — "Safe zones", only on a 9:16 frame and only for a
+                  platform whose unsafe bands are configured (`Main.dc.html`
+                  line 434, `showSafeBtn`).
+                */}
+                {activeSafeZones ? (
+                  <button
+                    type="button"
+                    className="bsp-chip bsp-st-safe"
+                    aria-pressed={safeOn}
+                    data-testid="preview-safe-toggle"
+                    onClick={() => setSafeOn((value) => !value)}
+                  >
+                    {t['studio.preview.safeZones']}
+                  </button>
+                ) : null}
+              </div>
             ) : null}
             {compare
               ? draft.variants.map((variant) => (

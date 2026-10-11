@@ -78,8 +78,15 @@ export async function createAutomationAction(formData: FormData): Promise<void> 
         conditions: conditions as never,
         actionType: actionType as AutomationActionType,
         actionConfig,
-        // DISABLED. Enabling is a separate, deliberate act.
-        enabled: false,
+        /*
+         * PR D (Automations 1) — A RULE MADE BY HAND IS ON WHEN SAVED ("Rule
+         * saved and on", the prototype's builder). `createRule` already holds
+         * the creator to everything switching a rule on asks — `automation.manage`,
+         * the action's own permissions, its trigger set up (`triggerAvailable`)
+         * — so saving it on grants nothing enabling would not. A rule the
+         * Copilot proposes stays off until a person approves it (D-296).
+         */
+        enabled: true,
         actor: {
           userId: session.customer.userId,
           roleKey: session.workspace.roleKey,

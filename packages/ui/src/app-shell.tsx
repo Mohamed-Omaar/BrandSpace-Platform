@@ -396,8 +396,39 @@ function useNavPill(
       placed = now;
       if (scope === 'rail') lastRailPill = now;
     });
-    observer.observe(list);
-    return () => observer.disconnect();
+    /*
+     * PR D — each item's own box too, re-read when items come or go: an item
+     * added or removed above the current one moves it inside a list that may
+     * keep its size, and the pill must follow (the customer rail's fault).
+     */
+    const watchItems = () => {
+      observer.disconnect();
+      observer.observe(list);
+      for (const item of Array.from(list.querySelectorAll('a'))) observer.observe(item);
+    };
+    watchItems();
+    const onItems = new MutationObserver(() => {
+      watchItems();
+      const now = measure();
+      if (!now) return;
+      // Only a moved target: a count arriving mid-glide must not cut it short.
+      if (
+        Math.abs(now.x - placed.x) +
+          Math.abs(now.y - placed.y) +
+          Math.abs(now.w - placed.w) +
+          Math.abs(now.h - placed.h) <
+        0.5
+      )
+        return;
+      put(now, false);
+      placed = now;
+      if (scope === 'rail') lastRailPill = now;
+    });
+    onItems.observe(list, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      onItems.disconnect();
+    };
   }, [listRef, pillRef, scope, activeHref]);
 }
 

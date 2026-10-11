@@ -219,6 +219,25 @@ export function lifecycleIndex(status: string): number {
  * Up, so a quoted cost is never shown below what it is. PRESENTATION ONLY:
  * the milli-credit figure, the reservation and the ledger are untouched.
  */
+/**
+ * PR D (Studio S6) — "N credits used" after a paid AI action, from what the
+ * gateway charged (`creditsChargedMilli`, a string of thousandths), in the
+ * same figures the cost line uses. Nothing for a free or replayed request, so
+ * a retry never claims a second charge.
+ */
+export function spentMessage(
+  milli: unknown,
+  t: Readonly<Record<string, string | undefined>>,
+): string | null {
+  const raw = typeof milli === 'number' ? String(Math.trunc(milli)) : milli;
+  if (typeof raw !== 'string' || !/^\d+$/.test(raw) || BigInt(raw) <= 0n) return null;
+  const credits = formatCredits(raw);
+  return (t[credits === '1' ? 'studio.spentOne' : 'studio.spent'] ?? '{count}').replace(
+    '{count}',
+    credits,
+  );
+}
+
 export function formatCredits(milli: string): string {
   const negative = milli.startsWith('-');
   const magnitude = BigInt(

@@ -49,6 +49,12 @@ export default async function SignUpSentPage({
         </p>
       )}
       <p data-testid="signup-sent">{t('signUp.sentBody')}</p>
+      {/* PR D (Auth 2) — the address the link went to, in its box (`Auth.dc.html` line 67). */}
+      {email ? (
+        <div className="bsp-auth-address" data-testid="signup-sent-address">
+          <span className="bsp-ltr">{email}</span>
+        </div>
+      ) : null}
       {again ? (
         <p data-testid="signup-resent" role="status">
           {t('signUp.resent')}
@@ -66,9 +72,23 @@ export default async function SignUpSentPage({
           style={authButtonStyle()}
         />
       </form>
-      <Link href={`/${locale}/sign-in`} style={{ color: colorTokens.brandPurple }}>
-        {t('verify.signIn')}
-      </Link>
+      {/*
+        PR D (Auth 3) — the prototype's row under the button (line 69): its
+        "Send it again" is the button above here; "Wrong email?" goes back to
+        sign-up with the address to correct.
+      */}
+      <div className="bsp-auth-row">
+        <Link href={`/${locale}/sign-in`} style={{ color: colorTokens.brandPurple }}>
+          {t('verify.signIn')}
+        </Link>
+        <Link
+          href={`/${locale}/sign-up${email ? `?email=${encodeURIComponent(email)}` : ''}`}
+          data-testid="signup-wrong-email"
+          style={{ color: colorTokens.brandPurple }}
+        >
+          {t('signUp.wrongEmail')}
+        </Link>
+      </div>
     </AuthCard>
   );
 }

@@ -808,7 +808,8 @@ h4 {
     inset-block-start: var(--bs-shell-inset);
   }
 
-  .bs-shell > .bs-panel {
+  /* PR D: under the layout's rail host the panel sits in the page's pass-through box. */
+  :is(.bs-shell, .bs-frame-pass) > .bs-panel {
     block-size: calc(100vh - var(--bs-shell-inset) * 2);
     overflow: auto;
   }

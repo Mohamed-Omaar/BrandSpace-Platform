@@ -152,15 +152,19 @@ test.describe('customer authentication', () => {
   test('the password reset request never reveals whether the account exists', async ({ page }) => {
     const { customer } = credentials();
 
+    // PR D (Auth 5): every request lands on the same "The link is on its way"
+    // screen, registered address or not.
     await page.goto(`${DASHBOARD_BASE_URL}/en/reset`);
     await page.fill('#email', customer.email);
     await page.click('[data-testid="reset-request-submit"]');
-    const known = await page.getByTestId('signin-status').textContent();
+    await page.waitForURL(/\/en\/reset\/sent$/);
+    const known = await page.getByTestId('reset-sent').textContent();
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/reset`);
     await page.fill('#email', `nobody-${Date.now()}@example.test`);
     await page.click('[data-testid="reset-request-submit"]');
-    const unknown = await page.getByTestId('signin-status').textContent();
+    await page.waitForURL(/\/en\/reset\/sent$/);
+    const unknown = await page.getByTestId('reset-sent').textContent();
 
     // Byte-identical: this response carries no correlation id at all, because
     // there is nothing to correlate — both arms took the same path.

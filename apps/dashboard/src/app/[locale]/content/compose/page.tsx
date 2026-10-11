@@ -3,7 +3,8 @@ import { inAssetLibrary } from '../../../../server/assets-context';
 import { assetUploadRules } from '../../../../server/upload-rules';
 import { notFound } from 'next/navigation';
 import { dayLabel, localWhenLabel } from '../../../../server/prototype-dates';
-import { rescheduleContentAction } from '../../calendar/actions';
+import { cancelScheduleAction, rescheduleContentAction } from '../../calendar/actions';
+import { spentMessage } from '../../../../server/composer-editor';
 import {
   CONTENT_TOOLS,
   DEFAULT_POST_TIME,
@@ -39,6 +40,7 @@ import { brandContextFor, defaultBrandFor } from '../../../../server/brand-conte
 import { inContentStudio } from '../../../../server/content-context';
 import { listMediaOptions, mediaForVariants } from '../../../../server/media-picker';
 import {
+  customerRoleName,
   optionalMessage,
   statusMessage,
   translator,
@@ -167,6 +169,13 @@ export default async function ComposePage({
    * travels with the choice below like a campaign does.
    */
   const plannedDate = await plannedDateFrom(single('date'), workspace.workspaceId, locale);
+  /*
+   * PR D (Performance 5) — `?time=HH:mm` from Performance's best time: the
+   * hour the Studio's When starts on. It only proposes, like `?date=`; the
+   * calendar validates any time chosen.
+   */
+  const requestedTime = single('time') ?? '';
+  const plannedTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(requestedTime) ? requestedTime : null;
   const plannedFor = plannedDate?.label ?? null;
   const carry: Record<string, string> = Object.fromEntries(
     Object.entries({ campaign: single('campaign'), date: plannedDate?.date }).filter(
@@ -355,16 +364,65 @@ export default async function ComposePage({
           reviewerIds.length > 0
             ? await services.db.membership.findMany({
                 where: { userId: { in: reviewerIds } },
-                select: { userId: true, user: { select: { name: true, email: true } } },
+                select: {
+                  userId: true,
+                  user: { select: { name: true, email: true } },
+                  // PR D (S5) — "Name · Role" in the reviewer list.
+                  role: { select: { nameEn: true, nameAr: true } },
+                },
               })
             : [];
         const reviewerName = new Map(
           reviewerRows.map((row) => [row.userId, row.user.name ?? row.user.email] as const),
         );
+        const reviewerRole = new Map(
+          reviewerRows.map(
+            (row) =>
+              [
+                row.userId,
+                row.role
+                  ? customerRoleName(locale === 'ar' ? row.role.nameAr : row.role.nameEn)
+                  : undefined,
+              ] as const,
+          ),
+        );
         const reviewers = reviewerIds.map((userId) => ({
           userId,
           name: reviewerName.get(userId) ?? userId,
+          role: reviewerRole.get(userId),
         }));
+        if (draft.status === 'DRAFT') {
+          /*
+           * PR D (Studio S1) — A DECLINED POST SAYS WHO DECLINED IT AND WHY
+           * (`FB.bannerRej`). A rejection returns the post to DRAFT; only the
+           * LATEST review cycle counts, so a fresh draft is never read as an
+           * old refusal.
+           */
+          const latest = await services.db.approval.findFirst({
+            where: { contentItemId: draft.id },
+            orderBy: { createdAt: 'desc' },
+            select: { status: true, decisionNote: true, decidedByUserId: true },
+          });
+          const decliner =
+            latest?.status === 'REJECTED' && latest.decidedByUserId
+              ? await services.db.membership.findFirst({
+                  where: { userId: latest.decidedByUserId },
+                  select: { user: { select: { name: true, email: true } } },
+                })
+              : null;
+          return {
+            requiresApproval: brandPolicy.requireApprovalBeforeScheduling,
+            reviewers,
+            changes: null,
+            declined:
+              latest?.status === 'REJECTED'
+                ? {
+                    note: latest.decisionNote,
+                    reviewer: decliner ? (decliner.user.name ?? decliner.user.email) : null,
+                  }
+                : null,
+          };
+        }
         if (draft.status !== 'CHANGES_REQUESTED') {
           return {
             requiresApproval: brandPolicy.requireApprovalBeforeScheduling,
@@ -726,6 +784,8 @@ export default async function ComposePage({
             today,
             tomorrow: nextDayKey(today),
             defaultTime: brand?.defaultPostTime ?? DEFAULT_POST_TIME,
+            // PR D (Performance 5) — Performance's best hour, when it sent the reader here.
+            ...(plannedTime ? { defaultTime: plannedTime } : {}),
           };
         })
       : null;
@@ -913,6 +973,7 @@ export default async function ComposePage({
     maxHashtags: platform.maxHashtags,
     maxMediaItems: platform.maxMediaItems,
     allowsFirstComment: platform.allowsFirstComment,
+    ...(platform.safeZones ? { safeZones: platform.safeZones } : {}),
   }));
 
   /*
@@ -1119,6 +1180,10 @@ export default async function ComposePage({
     : null;
 
   const ok = single('ok') ?? null;
+  const spentFlash = spentMessage(single('spent') ?? null, {
+    'studio.spent': translate('studio.spent'),
+    'studio.spentOne': translate('studio.spentOne'),
+  });
   const error = single('error') ?? null;
   const reference = single('ref');
   const errorText = error ? statusMessage(error, locale, reference) : null;
@@ -1232,6 +1297,8 @@ export default async function ComposePage({
         carriedMedia={carried}
         openOn={single('open') ?? null}
         plannedDate={plannedDate?.date ?? null}
+        plannedTime={plannedTime}
+        spentOnArrival={spentFlash}
         plannedFor={plannedFor}
         expiredChannels={expiredChannels}
         notes={
@@ -1309,6 +1376,8 @@ export default async function ComposePage({
           // `copilot.use`, on a post that is not published or publishing.
           rewriteFacts:
             maySpendCredits(workspace.permissionKeys, 'content.edit') && !composerDraft?.readOnly,
+          // PR D (Studio S8) — Settings → AI answers only `brand.manage`.
+          manageBrand: workspace.permissionKeys.includes('brand.manage'),
         }}
         scheduling={scheduling}
         publishTime={publishTime}
@@ -1332,6 +1401,8 @@ export default async function ComposePage({
           scheduleFromStudio: scheduleFromStudioAction,
           proposeTime: proposeTimeAction,
           reschedule: rescheduleContentAction,
+          // PR D (Studio S2) — "Unschedule" from the scheduled post's banner.
+          unschedule: cancelScheduleAction,
           saveAsTemplate: saveDraftAsTemplateAction,
           keepFactChange: keepFactChangeAction,
           listCampaignOptions: listCampaignOptionsAction,
@@ -1506,6 +1577,14 @@ const EDITOR_KEYS = [
   'editor.facts.usedOne',
   'editor.facts.none',
   'editor.facts.off',
+  'editor.facts.turnOn',
+  'studio.spent',
+  'studio.spentOne',
+  'editor.declined',
+  'editor.declined.note',
+  'editor.declined.someone',
+  'editor.unschedule',
+  'editor.results',
   'editor.facts.state.current',
   'editor.facts.state.changed',
   'editor.facts.state.replaced',
@@ -1550,6 +1629,7 @@ const EDITOR_KEYS = [
   'editor.saveBeforeReview',
   'editor.preview.title',
   'editor.preview.compare',
+  'studio.preview.safeZones',
   'editor.preview.single',
   'editor.fix.shorten',
   'editor.fix.media',

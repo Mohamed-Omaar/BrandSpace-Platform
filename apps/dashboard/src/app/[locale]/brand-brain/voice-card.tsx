@@ -32,12 +32,18 @@ export function VoiceCard({
   voice,
   canEdit,
   profileHref,
+  pending = { tone: 0, rules: 0 },
+  onOpenArea,
 }: {
   locale: string;
   brandId: string;
   voice: VoiceData;
   canEdit: boolean;
   profileHref: string | null;
+  /** PR D (Brand Brain 3, 4) — facts waiting for review in Tone and in Rules. */
+  pending?: { readonly tone: number; readonly rules: number };
+  /** PR D (Brand Brain 3, 4) — "Open area →": that area, on the Knowledge tab. */
+  onOpenArea?: (area: 'TONE_OF_VOICE' | 'DO_DONT') => void;
 }) {
   const messageLocale = useMessageLocale(locale);
   const t = translator(messageLocale);
@@ -156,6 +162,9 @@ export function VoiceCard({
           locale={locale}
           brandId={brandId}
           canEdit={canEdit}
+          open={
+            onOpenArea ? { onOpen: () => onOpenArea('TONE_OF_VOICE'), pending: pending.tone } : null
+          }
         />
         <div className="bsp-bb-voice-col">
           <RuleList
@@ -169,6 +178,9 @@ export function VoiceCard({
             locale={locale}
             brandId={brandId}
             canEdit={canEdit}
+            open={
+              onOpenArea ? { onOpen: () => onOpenArea('DO_DONT'), pending: pending.rules } : null
+            }
           />
           <RuleList
             testId="voice-dont"
@@ -224,6 +236,7 @@ function RuleList({
   brandId,
   canEdit,
   note,
+  open = null,
 }: {
   testId: string;
   title: string;
@@ -237,11 +250,28 @@ function RuleList({
   brandId: string;
   canEdit: boolean;
   note?: string;
+  /** "Open area →" beside the heading, and "n waiting for review" (line 874). */
+  open?: { readonly onOpen: () => void; readonly pending: number } | null;
 }) {
-  const t = translator(useMessageLocale(locale));
+  const messageLocale = useMessageLocale(locale);
+  const t = translator(messageLocale);
   return (
     <section data-testid={testId} style={sectionStyle}>
-      <h5 style={headingStyle}>{title}</h5>
+      {open ? (
+        <span className="bsp-vc-head">
+          <h5 style={headingStyle}>{title}</h5>
+          <button
+            type="button"
+            className="bsp-btn bsp-sm bsp-ghost"
+            onClick={open.onOpen}
+            data-testid={`${testId}-open-area`}
+          >
+            {t('bb.voice.openArea')} →
+          </button>
+        </span>
+      ) : (
+        <h5 style={headingStyle}>{title}</h5>
+      )}
       {note ? <p style={{ ...bodyStyle, color: colorTokens.textMuted }}>{note}</p> : null}
       {items.length === 0 ? (
         <p style={{ ...bodyStyle, color: colorTokens.textMuted }}>{empty}</p>
@@ -274,6 +304,21 @@ function RuleList({
           ))}
         </ul>
       )}
+      {open && open.pending > 0 ? (
+        <button
+          type="button"
+          className="bsp-chip bsp-vc-pending"
+          onClick={open.onOpen}
+          data-testid={`${testId}-waiting`}
+        >
+          {t('bb.voice.waiting').replace(
+            '{count}',
+            new Intl.NumberFormat(messageLocale === 'ar' ? 'ar-u-nu-latn' : 'en').format(
+              open.pending,
+            ),
+          )}
+        </button>
+      ) : null}
       {canEdit && prefix ? (
         <form
           action={createKnowledgeAction}

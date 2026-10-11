@@ -335,6 +335,16 @@ export function AreaDrawer({
                       aria-label={t('bb.newItem.bodyAr')}
                       dir="rtl"
                     />
+                    {/* PR D (Brand Brain 2) — the reason rides on the new version (line 834). */}
+                    <input
+                      className="bs-control bsp-bb-in bsp-bb-reason"
+                      name="changeReason"
+                      dir="auto"
+                      maxLength={500}
+                      placeholder={t('bb.changeReason')}
+                      aria-label={t('bb.changeReason')}
+                      data-testid={`change-reason-${item.id}`}
+                    />
                     <ValidUntilField
                       id={`valid-until-${item.id}`}
                       label={t('bb.validUntil')}

@@ -12,6 +12,9 @@ import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inNotes, mentionableMembers } from '../../../server/notes-context';
 import { MentionField } from '../../../components/mention-field';
+import { MentionButton } from '../../../components/mention-button';
+import { MarkReadOnOpen } from '../../../components/mark-read-on-open';
+import { mentionRuns } from '../../../components/mention-match';
 import { MoreDisclosure } from '../../../components/more-disclosure';
 import {
   assignNoteThreadAction,
@@ -223,6 +226,14 @@ export default async function NotesPage({
 
           {chosen && thread && pane ? (
             <section className="bsp-card bsp-nts-th" data-testid={`notes-pane-${thread.id}`}>
+              {requested === chosen.threadId && chosen.unreadMentions > 0 ? (
+                <MarkReadOnOpen
+                  action={markNoteMentionsReadAction}
+                  locale={locale}
+                  threadId={thread.id}
+                  returnPath={returnPath}
+                />
+              ) : null}
               <div className="bsp-nts-head">
                 <span className="bsp-nts-head-t">
                   <span className="bsp-nts-kind">
@@ -240,7 +251,12 @@ export default async function NotesPage({
                   <span className="bsp-pill bsp-p-neu">
                     {t('notes.waitingOn').replace('{name}', nameOf(thread.assignedToUserId))}
                   </span>
-                ) : null}
+                ) : (
+                  /* PR D (Notes 3) — the prototype's "Not assigned" pill. */
+                  <span className="bsp-pill bsp-p-neu" data-testid={`note-unassigned-${thread.id}`}>
+                    {t('notes.notAssigned')}
+                  </span>
+                )}
                 <Link
                   href={subjectHref(chosen)}
                   className="bsp-btn bsp-sm bsp-sec"
@@ -360,7 +376,19 @@ export default async function NotesPage({
                           </span>
                         </span>
                         <div className="bsp-nts-text" dir="auto">
-                          {note.body}
+                          {/* PR D (Notes 4) — the mentions drawn as the prototype draws them. */}
+                          {mentionRuns(
+                            note.body,
+                            (note.mentionedUserIds ?? []).map((userId) => nameOf(userId)),
+                          ).map((run, index) =>
+                            run.mention ? (
+                              <span key={index} className="bsp-nts-mention">
+                                {run.text}
+                              </span>
+                            ) : (
+                              <span key={index}>{run.text}</span>
+                            ),
+                          )}
                         </div>
                       </div>
                     </li>
@@ -386,9 +414,16 @@ export default async function NotesPage({
                       suggestionsLabel={t('notes.mentionSuggestions')}
                       members={pane.candidates}
                       testId={`note-reply-${thread.id}`}
+                      postedLabel={t('notes.posted')}
+                      notifiedLabel={t('notes.postedNotified')}
                     />
                   </form>
                   <div className="bsp-nts-bar">
+                    <MentionButton
+                      fieldId={`reply-${thread.id}`}
+                      label={t('notes.mention')}
+                      testId={`note-mention-${thread.id}`}
+                    />
                     {pane.mayManage ? (
                       <form action={setNoteImportanceAction}>
                         {hidden}

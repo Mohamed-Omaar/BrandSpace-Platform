@@ -88,6 +88,17 @@ async function main(): Promise<void> {
     const content = await configuration.get('content', ENVIRONMENT);
     await activate(configuration, actor, 'content', {
       ...content,
+      /*
+       * PR D (Studio S38) — Instagram's unsafe bands on a 9:16 frame, the
+       * prototype's own (`Main.dc.html` line 462: top 13%, bottom 22%, end
+       * 16%). TikTok is left without, so the suite also proves the chip stays
+       * hidden for a platform with none configured.
+       */
+      platforms: content.platforms.map((platform) =>
+        platform.key === 'instagram'
+          ? { ...platform, safeZones: { top: 13, bottom: 22, end: 16 } }
+          : platform,
+      ),
       calendar: {
         ...content.calendar,
         holidays: [

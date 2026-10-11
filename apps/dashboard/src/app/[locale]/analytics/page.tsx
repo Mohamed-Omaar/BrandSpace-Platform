@@ -7,15 +7,18 @@ import {
   PlatformIcon,
   SegmentPill,
   StateMessage,
+  Tooltip,
   visuallyHiddenStyle,
   type ChartLabels,
   type ChartPoint,
   type SocialPlatform,
 } from '@brandspace/ui';
 import { brandScopeFilter, systemClock, maySpendCredits } from '@brandspace/shared';
+import type { SocialProvider } from '@brandspace/database';
 import {
   countPublishedPosts,
   detectAnomalies,
+  providerSupportsMetric,
   type MetricAbsenceReason,
 } from '@brandspace/analytics';
 import { requireWorkspacePage } from '../../../server/customer-context';
@@ -34,6 +37,7 @@ import { analyticsNextSteps, latestShift } from '../../../server/performance-pat
 import { measuredChanges, parseExplanation, pickText } from '../../../server/analytics-story';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
 import { explainPeriodAction, saveInsightLearningAction } from './actions';
+import { reviewIntelligenceAction } from '../intelligence/actions';
 import { copilotHref } from '../../../server/copilot-surface';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { bestPostingHours, channelChart, pillarTotals } from '../../../server/performance-view';
@@ -272,6 +276,29 @@ export default async function AnalyticsPage({
       metricKey: 'reach',
       brandScope: workspace.brandScope,
     });
+    /*
+     * PR D (Performance 6) — THE OTHER FIGURES' SPARKS (`spark` on each KPI,
+     * line 676): the same account series the reach spark reads, for the
+     * engagement rate and new followers. Real readings only; with none, no line.
+     */
+    const kpiSeries = Object.fromEntries(
+      await Promise.all(
+        (['engagement_rate', 'follower_change'] as const).map(
+          async (metricKey) =>
+            [
+              metricKey,
+              await queries
+                .series({
+                  scope: { brandId: brand.id, subjectType: 'ACCOUNT' },
+                  period,
+                  metricKey,
+                  brandScope: workspace.brandScope,
+                })
+                .catch(() => null),
+            ] as const,
+        ),
+      ),
+    );
     const reachByChannel = await Promise.all(
       reachByProvider.map(async (row) => ({
         provider: row.provider,
@@ -423,6 +450,7 @@ export default async function AnalyticsPage({
       topPosts,
       reachByProvider,
       reachSeries,
+      kpiSeries,
       reachByChannel,
       postEngagements,
       postReach,
@@ -486,6 +514,30 @@ export default async function AnalyticsPage({
     return `/${locale}/analytics?${next.toString()}`;
   };
   const mayRepeat = workspace.permissionKeys.includes('content.create');
+  // PR D (Performance 1) — "Not useful" dismisses through the Intelligence review.
+  const mayDismiss = workspace.permissionKeys.includes('strategy.manage');
+  /*
+   * PR D (Performance 2) — AUTOMATIC SUGGESTIONS OFF (Settings → AI): the
+   * Insights view says so instead of listing them (`insOff`, line 750), as
+   * Home already hides its "BrandSpace noticed" card (D-338).
+   */
+  const suggestionsOn = await inAnalytics(workspace.workspaceId, async (services) =>
+    services.db.brand.findUnique({
+      where: { id: brand.id },
+      select: { aiSuggestionsEnabled: true },
+    }),
+  )
+    .then((row) => row?.aiSuggestionsEnabled !== false)
+    .catch(() => true);
+  /** PR D (Performance 4) — the platforms of a post that do not publish a figure. */
+  const notPublishing = (providers: readonly string[], metricKey: string): string[] =>
+    providers
+      .filter((provider) => !providerSupportsMetric(provider as SocialProvider, metricKey))
+      .map(
+        (provider) =>
+          optionalMessage(messageLocale, `content.platform.${platformOf(provider) ?? ''}`) ??
+          provider,
+      );
 
   /* ROUND 3 (B8) — the prototype's figures, sections and their scales. */
   const metricOf = (key: string) => data.summary.metrics.find((metric) => metric.metricKey === key);
@@ -896,7 +948,21 @@ export default async function AnalyticsPage({
                   metric.metricKey === 'posts_published'
                     ? number.format(data.postsPublished)
                     : formatValue(metric.value, metric.unit);
-                const spark = metric.metricKey === 'reach' ? sparkPath(reachPoints) : null;
+                const spark =
+                  metric.metricKey === 'reach'
+                    ? sparkPath(reachPoints)
+                    : (() => {
+                        const series =
+                          data.kpiSeries[metric.metricKey as keyof typeof data.kpiSeries];
+                        return series
+                          ? sparkPath(
+                              series.points.map((point) => ({
+                                label: '',
+                                value: point.value === null ? null : Number(point.value),
+                              })),
+                            )
+                          : null;
+                      })();
                 return (
                   <section
                     key={metric.metricKey}
@@ -1132,8 +1198,10 @@ export default async function AnalyticsPage({
                   ))
                 )}
                 {best.length > 0 && mayRepeat ? (
+                  /* PR D (Performance 5) — the best hour travels to the Studio's When. */
                   <Link
-                    href={`/${locale}/content/compose`}
+                    href={`/${locale}/content/compose?time=${String(best[0]?.hour ?? 0).padStart(2, '0')}:00`}
+                    data-testid="analytics-best-time-use"
                     className="bsp-btn bsp-sm bsp-sec bsp-pf-use"
                   >
                     {t('analytics.bestTimeUse')} →
@@ -1181,9 +1249,15 @@ export default async function AnalyticsPage({
                           );
                         })()}
                         <span className="bsp-pf-post-t">
-                          <span dir="auto" className="bsp-pf-post-n">
+                          {/* PR D (Performance 3) — the row's post opens. */}
+                          <Link
+                            href={`/${locale}/content/compose?item=${post.contentItemId}`}
+                            dir="auto"
+                            className="bsp-pf-post-n"
+                            data-testid={`analytics-post-open-${post.contentItemId}`}
+                          >
                             {post.title ?? post.contentItemId}
-                          </span>
+                          </Link>
                           <span className="bsp-pf-post-m">
                             {post.publishedAt
                               ? dayLabel(post.publishedAt, locale, data.zone, systemClock.now())
@@ -1213,12 +1287,34 @@ export default async function AnalyticsPage({
                       <span className="bsp-ltr bsp-pf-num">
                         {number.format(Number(post.value))}
                       </span>
-                      <span className="bsp-ltr bsp-pf-num">
-                        {figure(data.postSaves.get(post.contentItemId))}
-                      </span>
-                      <span className="bsp-ltr bsp-pf-num">
-                        {figure(data.postClicks.get(post.contentItemId))}
-                      </span>
+                      {(['saves', 'clicks'] as const).map((metricKey) => {
+                        const row = (metricKey === 'saves' ? data.postSaves : data.postClicks).get(
+                          post.contentItemId,
+                        );
+                        const missing = row ? [] : notPublishing(post.providers, metricKey);
+                        return (
+                          <span key={metricKey} className="bsp-ltr bsp-pf-num">
+                            {row || missing.length === 0 ? (
+                              figure(row)
+                            ) : (
+                              /* PR D (Performance 4) — "—" says which platform does not publish it. */
+                              <Tooltip
+                                label={t('analytics.notPublishedBy').replace(
+                                  '{platforms}',
+                                  missing.join(', '),
+                                )}
+                              >
+                                <span
+                                  tabIndex={0}
+                                  data-testid={`analytics-${metricKey}-absent-${post.contentItemId}`}
+                                >
+                                  —
+                                </span>
+                              </Tooltip>
+                            )}
+                          </span>
+                        );
+                      })}
                       <span className="bsp-pf-rowacts">
                         {mayRepeat ? (
                           <Link
@@ -1315,7 +1411,12 @@ export default async function AnalyticsPage({
               </section>
             ) : null}
             <div className="bsp-pf-ins" data-testid="analytics-insights">
-              {data.insights.map((insight) => (
+              {!suggestionsOn ? (
+                <div className="bsp-card bsp-pf-insnone" data-testid="analytics-insights-off">
+                  {t('analytics.insightsOff')}
+                </div>
+              ) : null}
+              {(suggestionsOn ? data.insights : []).map((insight) => (
                 <section
                   key={insight.id}
                   className="bsp-xcard bsp-pf-insight"
@@ -1359,10 +1460,25 @@ export default async function AnalyticsPage({
                         t={t}
                       />
                     ) : null}
+                    {mayDismiss && insight.status === 'NEW' ? (
+                      <form action={reviewIntelligenceAction}>
+                        <input type="hidden" name="locale" value={locale} />
+                        <input type="hidden" name="insightId" value={insight.id} />
+                        <input type="hidden" name="decision" value="dismiss" />
+                        <input type="hidden" name="returnTo" value="/analytics" />
+                        <button
+                          type="submit"
+                          className="bsp-btn bsp-sm bsp-ghost"
+                          data-testid={`analytics-insight-dismiss-${insight.id}`}
+                        >
+                          {t('analytics.notUseful')}
+                        </button>
+                      </form>
+                    ) : null}
                   </div>
                 </section>
               ))}
-              {data.insights.length === 0 ? (
+              {suggestionsOn && data.insights.length === 0 ? (
                 <div className="bsp-card bsp-pf-insnone">{t('insights.empty')}</div>
               ) : null}
             </div>

@@ -216,7 +216,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     actionType: 'NOTIFY_PERSON',
     actionConfig: { userId: expect.any(String) },
     conditions: [],
-    enabled: false,
+    // PR D (Automations 1) — a rule made by hand is on when saved.
+    enabled: true,
   });
   expect(weekly.armedAt).not.toBeNull();
   await expect(page.getByTestId(`automation-older-${weekly.id}`)).toHaveCount(0);
@@ -234,7 +235,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     triggerType: 'POST_TOP_10_PERCENT',
     actionType: 'MAKE_DRAFT_COPY',
     actionConfig: {},
-    enabled: false,
+    // PR D (Automations 1) — a rule made by hand is on when saved.
+    enabled: true,
   });
   expect(top.armedAt).not.toBeNull();
   const rules = page.getByTestId('automation-rules');

@@ -1367,6 +1367,61 @@ button.bsp-xcard:hover {
   inline-size: 100%;
   box-sizing: border-box;
 }
+/* PR D (Shell 5) — the greyed "+ New workspace n/n" at the limit (Main line
+   97, `atWsLimit`): 12.5px, 600, #8a8a92, 7px 10px. */
+/* PR D (Shell 6) — Settings' add-a-brand card (Main line 1354): one row, the
+   name field growing, Discard and Create at its end, aligned to the bottom. */
+.bsp-xcard.bsp-sg-bradd {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: var(--bsp-px-10);
+  margin-bottom: var(--bsp-px-14);
+}
+.bsp-sg-bradd-f {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-6);
+}
+.bs-control.bsp-sg-bradd-in {
+  border: 1px solid #e4e4e8;
+  border-radius: var(--bsp-px-12);
+  padding: var(--bsp-px-9) var(--bsp-px-12);
+  font-size: var(--bsp-fs-14);
+  background: #fff;
+}
+/* PR D (Home 5) — a decided noticed card (Main lines 273-277): the card's
+   own geometry, greyed green (#f7fbf8), its result pill at the foot. */
+.bsp-xcard.bsp-home-decided {
+  background: #f7fbf8;
+  box-shadow: none;
+  min-height: var(--bsp-px-220);
+  box-sizing: content-box;
+}
+.bsp-home-decided-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.bsp-xtitle.bsp-home-decided-t {
+  font-size: var(--bsp-t-15);
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+.bsp-pill.bsp-home-decided-pill {
+  align-self: flex-start;
+  margin-top: auto;
+}
+/* A decided card is something noticed: "nothing to notice yet" is not said beside it. */
+.bsp-home-noticed:has(.bsp-home-decided) > [data-testid='home-recommended-none'] {
+  display: none;
+}
+.bsp-menu-item.bsp-menu-btn[data-muted] {
+  padding: var(--bsp-px-7) var(--bsp-px-10);
+  font-size: var(--bsp-t-12_5);
+  font-weight: 600;
+  color: #8a8a92;
+}
 .bsp-menu-item:hover {
   background: rgba(20, 16, 35, 0.04);
 }
@@ -1379,6 +1434,31 @@ button.bsp-xcard:hover {
   padding: var(--bsp-px-10);
   font-weight: 600;
   color: #b83245;
+}
+/* PR D (review of #75) — THE BRAND MENU STAYS INSIDE THE FRAME. Its height is
+   capped at what the frame leaves under the card (the card sits about 200px,
+   at the 0.88 scale, below the window's top edge, with the frame's own inset
+   under the menu); the brands scroll inside it, and its heading ("Brands ·
+   used/allowed") and "+ Add a brand" keep their place on one line each. */
+.bsp-menu.bsp-bmenu {
+  max-block-size: calc(100dvh - var(--bsp-px-200));
+}
+.bsp-bmenu > :not(.bsp-bmenu-list) {
+  flex-shrink: 0;
+}
+.bsp-bmenu-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-2);
+  flex: 0 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.bsp-bmenu .bsp-menu-head {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .bsp-menu-head {
   font-size: var(--bsp-fs-10-5);
@@ -1448,7 +1528,7 @@ button.bsp-xcard:hover {
 
   /* `<div style="display: grid; grid-template-rows: auto minmax(0, 1fr);
      min-width: 0; min-height: 0; position: relative">` */
-  .bs-shell.bsp-frame > .bs-panel.bsp-main {
+  :is(.bs-shell.bsp-frame, .bs-frame-pass) > .bs-panel.bsp-main {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     min-inline-size: 0;
@@ -6813,6 +6893,11 @@ span.bsp-cal-hol {
 textarea.bs-control.bsp-bb-in {
   resize: vertical;
 }
+/* PR D (Brand Brain 2) — the reason box: 8px 12px, 13px (Main line 834). */
+.bs-control.bsp-bb-in.bsp-bb-reason {
+  padding: var(--bsp-px-8) var(--bsp-px-12);
+  font-size: var(--bsp-fs-13);
+}
 .bs-control.bsp-bb-in.bsp-bb-in-big {
   border-color: #d9ccff;
   border-radius: var(--bsp-px-12);
@@ -9030,6 +9115,21 @@ img.bsp-pf-art {
   gap: var(--bsp-px-6);
   flex-wrap: wrap;
 }
+/* PR D (Team 1) — the role chips read-only: the same chips, the current one
+   pressed, nothing to press. */
+.bsp-tm-chips.bsp-tm-chips-ro {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bsp-tm-chips-ro .bsp-chip {
+  cursor: default;
+}
+.bsp-tm-chips-ro .bsp-chip[data-current] {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
 .bsp-tm-form {
   display: grid;
   gap: var(--bsp-px-10);
@@ -9117,6 +9217,16 @@ img.bsp-pf-art {
 }
 .bsp-sg-span {
   grid-column: 1 / -1;
+}
+/* PR D — a picker's note on General (`CB_mk`'s note, Main.dc.html line 1344):
+   `gap: 6px` under its field, `font-size: 11.5px; color: #6a6a72;
+   line-height: 1.45`. The shared field drew it 3.5px under the field on a
+   10.5px line, shorter than its 11px floored text, so it sat on the field. */
+.bsp-sg-grid .bs-field-hint {
+  margin-block-start: var(--bsp-px-6) !important;
+  font-size: var(--bsp-fs-11-5) !important;
+  line-height: 1.45 !important;
+  color: #6a6a72 !important;
 }
 .bsp-sg-wkrow {
   display: flex;
@@ -10209,6 +10319,65 @@ img.bsp-pf-art {
   font-size: var(--bsp-fs-12);
   color: #6a6a72;
 }
+/* PR D (Strategy 5) — the cadence at the header's end: 12px, #6a6a72 (Main line 1070). */
+/* PR D (Strategy 7) — "How it's going" (Main lines 1126-1133): the heading,
+   the 12px note, then a row per pillar — the 8px dot, a 130px name, the 8px
+   track, a 44px figure and "Best". */
+.bsp-xcard.bsp-sp-how {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-10);
+}
+.bsp-sp-how-sub {
+  font-size: var(--bsp-fs-12);
+  line-height: 1.55;
+  color: #6a6a72;
+}
+.bsp-sp-pil.bsp-sp-how-row {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--bsp-px-10);
+}
+.bsp-sp-how-n {
+  inline-size: var(--bsp-px-130);
+  flex-shrink: 0;
+  font-size: var(--bsp-fs-13);
+  font-weight: 500;
+}
+.bsp-sp-how-bar {
+  flex-grow: 1;
+  height: var(--bsp-px-8);
+  border-radius: var(--bsp-px-99);
+  background: #f0f0f2;
+}
+.bsp-sp-how-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--bsp-px-99);
+  background: var(--bsp-pil, #7935fe);
+}
+.bsp-sp-how-v {
+  inline-size: var(--bsp-px-44);
+  text-align: end;
+  font-size: var(--bsp-fs-13);
+  font-weight: 700;
+}
+/* PR D (Strategy 10) — the busy card (Main line 993): centred, 200px tall, 13px #55555c. */
+.bsp-xcard.bsp-sp-busy {
+  align-items: center;
+  justify-content: center;
+  min-height: var(--bsp-px-200);
+  gap: var(--bsp-px-10);
+}
+.bsp-sp-busy-t {
+  font-size: var(--bsp-fs-13);
+  color: #55555c;
+}
+.bsp-sp-cadence {
+  font-size: var(--bsp-fs-12);
+  color: #6a6a72;
+  margin-inline-start: auto;
+}
 .bsp-sp-weeks {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -10447,6 +10616,23 @@ img.bsp-pf-art {
   outline: 2px solid #7935fe;
   outline-offset: 2px;
 }
+/* PR D (review of #75) — Media's upload dialog uses the same file button, its
+   label above it and the chosen files listed under it, by name. */
+.bsp-up-pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-8);
+}
+.bsp-up-chosen {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-2);
+  max-block-size: var(--bsp-px-120);
+  overflow-y: auto;
+}
 .bsp-lk-picked {
   display: flex;
   align-items: center;
@@ -10581,6 +10767,22 @@ img.bsp-pf-art {
    prototype draws it (`Main.dc.html` line 874): the field and its button in one
    row. The other language's field is behind the row's own chip (a checkbox
    drawn as a chip, pressed while open), shown under the row. */
+/* PR D (Brand Brain 3, 4) — the Tone and Rules heads (Main line 874): the
+   heading grows, "Open area →" at its end; "n waiting for review" a purple chip. */
+.bsp-vc-head {
+  display: flex;
+  align-items: center;
+  gap: var(--bsp-px-6);
+}
+.bsp-vc-head > h5 {
+  flex-grow: 1;
+}
+.bsp-chip.bsp-vc-pending {
+  align-self: flex-start;
+  justify-self: start;
+  font-size: var(--bsp-fs-12);
+  color: #5312c4;
+}
 .bsp-vc-row {
   display: flex;
   align-items: center;
@@ -11261,6 +11463,34 @@ img.bsp-pf-art {
   .bsp-auth-card {
     max-block-size: calc(100vh - var(--bsp-px-64));
     overflow-y: auto;
+  }
+  /* PR D (review of #75) — CHOOSING A WORKSPACE: the rows scroll inside the
+     card, under its heading, and "Create workspace · n/limit" (or the limit
+     note) stays in view at the card's foot. The card no longer scrolls as a
+     whole, so the create row is never pushed below its edge. */
+  .bsp-auth-card:has(.bsp-auth-wslist) {
+    overflow: hidden;
+  }
+  .bsp-auth-card:has(.bsp-auth-wslist) > * {
+    flex-shrink: 0;
+  }
+  .bsp-auth-card > .bsp-auth-body:has(> .bsp-auth-wslist) {
+    flex: 0 1 auto;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .bsp-auth-body > .bsp-auth-wslist {
+    flex: 0 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Room for a row's lift and focus ring inside the scrolling box. */
+    padding: var(--bsp-px-4);
+    margin: calc(-1 * var(--bsp-px-4));
+  }
+  .bsp-auth-body:has(> .bsp-auth-wslist) > :not(.bsp-auth-wslist) {
+    flex-shrink: 0;
   }
 }
 .bsp-auth-card {
@@ -13448,4 +13678,196 @@ select.bs-select.bsp-chevron {
 .bsp-vc-word-x::before {
   content: '×';
   content: '×' / '';
+}
+
+/* PR D (Studio S38) — "Safe zones" over a 9:16 preview (`Main.dc.html` lines
+   462 and 489): the top and bottom bands across the frame and the end-side band
+   between them, `background: rgba(184,50,69,.18)` (the side `.12`) with a
+   `1px dashed #b83245` inner edge. Their sizes are each platform's configured
+   `safeZones`, set inline in percent. Drawn above the post, never taking a press. */
+.bsp-safe {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.bsp-safe > span {
+  position: absolute;
+}
+.bsp-safe-top {
+  inset-inline: 0;
+  inset-block-start: 0;
+  background: rgba(184, 50, 69, 0.18);
+  border-block-end: 1px dashed var(--bs-danger);
+}
+.bsp-safe-bottom {
+  inset-inline: 0;
+  inset-block-end: 0;
+  background: rgba(184, 50, 69, 0.18);
+  border-block-start: 1px dashed var(--bs-danger);
+}
+.bsp-safe-end {
+  inset-inline-end: 0;
+  background: rgba(184, 50, 69, 0.12);
+  border-inline-start: 1px dashed var(--bs-danger);
+}
+/* The chip beside the size label: `min-block-size: 26px; padding: 2px 10px;
+   font-size: 11px; margin-inline-start: auto` (line 434). */
+.bsp-st-size-row {
+  display: flex;
+  align-items: center;
+  gap: var(--bsp-px-8);
+}
+.bsp-chip.bsp-st-safe {
+  margin-inline-start: auto;
+  min-block-size: var(--bsp-px-26);
+  padding: var(--bsp-px-2) var(--bsp-px-10);
+  font-size: var(--bsp-fs-11);
+}
+
+/* PR D (Auth 2) — the address the link went to: `background: #f3f3f5;
+   border-radius: 14px; padding: 14px; font-size: 14px`, the address at 800
+   (`Auth.dc.html` line 67); entry-screen tokens (0.80, D-491). */
+.bsp-auth-address {
+  background: #f3f3f5;
+  border-radius: var(--bsp-px-14);
+  padding: var(--bsp-px-14);
+  font-size: var(--bsp-fs-14);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+/* PR D (Auth 3) — the links' row under the button: `justify-content:
+   space-between; font-size: 13px` (line 69). */
+.bsp-auth-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--bsp-px-8);
+  font-size: var(--bsp-fs-13);
+}
+/* PR D (Auth 5) — the sent note: `background: #e6f6ee; color: #16794b;
+   border-radius: 14px; padding: 12px 14px; font-size: 13.5px; font-weight: 700`
+   (line 83). */
+.bsp-auth-sent {
+  margin: 0;
+  background: #e6f6ee;
+  color: #16794b;
+  border-radius: var(--bsp-px-14);
+  padding: var(--bsp-px-12) var(--bsp-px-14);
+  font-size: var(--bsp-fs-13-5);
+  font-weight: 700;
+}
+
+/* PR D (Auth 6) — under the workspace rows: the dark `.btn` "Create workspace"
+   with its usage at `opacity: .6`, `margin-top: 6px`; at the limit the note
+   `border: 1px solid #ececef; border-radius: 14px; padding: 12px 14px;
+   font-size: 13px; color: #55555c; line-height: 1.5` (`Auth.dc.html` line 106). */
+.bsp-auth-wscreate {
+  margin-block-start: var(--bsp-px-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--bsp-px-56);
+  border-radius: var(--bsp-px-14);
+  background: #111114;
+  color: #fff !important;
+  font-size: var(--bsp-fs-15);
+  font-weight: 800;
+  text-decoration: none;
+}
+.bsp-auth-wsuse {
+  opacity: 0.6;
+  white-space: pre;
+}
+.bsp-auth-wsfull {
+  margin: var(--bsp-px-6) 0 0;
+  border: 1px solid #ececef;
+  border-radius: var(--bsp-px-14);
+  padding: var(--bsp-px-12) var(--bsp-px-14);
+  font-size: var(--bsp-fs-13);
+  color: #55555c;
+  line-height: 1.5;
+}
+
+/* PR D (Auth 7) — a decided fact's pill in place of its buttons
+   (`Auth.dc.html` lines 159 and 314): Accepted `#e6f6ee` / `#16794b`,
+   Rejected `#f0f0f2` / `#55555c`. */
+.bsp-pill.bsp-wz-decided[data-state='accepted'] {
+  background: #e6f6ee;
+  color: #16794b;
+}
+.bsp-pill.bsp-wz-decided[data-state='rejected'] {
+  background: #f0f0f2;
+  color: #55555c;
+}
+
+/* PR D (Notes 4) — a mention in a message: `background: #efe7ff; color:
+   #5312c4; border-radius: 6px; padding: 0 4px; font-weight: 700`
+   (`Main.dc.html` line 956). */
+.bsp-nts-mention {
+  background: #efe7ff;
+  color: #5312c4;
+  border-radius: var(--bsp-px-6);
+  padding: 0 var(--bsp-px-4);
+  font-weight: 700;
+}
+
+/* PR D (Studio S4 / S5) — the glass listbox a chip opens (`Main.dc.html`
+   lines 352 and 529): `width: 220px; background: rgba(255,255,255,.62);
+   backdrop-filter: blur(22px) saturate(180%); border: 1px solid
+   rgba(255,255,255,.75); border-radius: 16px; box-shadow: 0 22px 55px
+   rgba(40,20,90,.14), 0 0 0 1px rgba(20,16,35,.05); padding: 6px`; its rows
+   `border-radius: 10px; padding: 8px 10px; font-size: 13px`, the current one
+   `#f6f3ff` with `#5312c4` text; `top: 40px` below the chip, or `bottom: 42px`
+   above it in the bar. */
+.bsp-lbx-wrap {
+  position: relative;
+  display: inline-block;
+  min-inline-size: 0;
+}
+.bsp-chip.bsp-lbx-chip {
+  inline-size: 100%;
+  justify-content: space-between;
+  cursor: pointer;
+}
+.bsp-lbx {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: var(--bsp-px-40);
+  z-index: 20;
+  inline-size: var(--bsp-px-220);
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: var(--bsp-px-16);
+  box-shadow:
+    0 var(--bsp-px-22) var(--bsp-px-55) rgba(40, 20, 90, 0.14),
+    0 0 0 1px rgba(20, 16, 35, 0.05);
+  padding: var(--bsp-px-6);
+  display: flex;
+  flex-direction: column;
+}
+.bsp-lbx[data-placement='above'] {
+  inset-block-start: auto;
+  inset-block-end: var(--bsp-px-42);
+  z-index: 25;
+}
+.bsp-lbx-opt {
+  border: 0;
+  background: transparent;
+  color: #111114;
+  border-radius: var(--bsp-px-10);
+  padding: var(--bsp-px-8) var(--bsp-px-10);
+  text-align: start;
+  font-size: var(--bsp-fs-13);
+  font-weight: 500;
+  cursor: pointer;
+}
+.bsp-lbx-opt[aria-selected='true'] {
+  background: #f6f3ff;
+  color: #5312c4;
+}
+.bsp-lbx-opt:focus-visible {
+  outline: 2px solid #7935fe;
+  outline-offset: -2px;
 }

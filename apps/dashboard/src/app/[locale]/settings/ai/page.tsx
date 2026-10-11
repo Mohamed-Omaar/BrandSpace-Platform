@@ -84,8 +84,10 @@ export default async function AiSettingsPage({
           switches as rows. The product's languages are the brand's two content
           languages (`defaultLocale`), so two chips, each a radio posting the
           same field as the select did. Left out, with nothing behind them: the
-          prototype's dialect chips (Egyptian / Modern Standard / mixed), "AI
-          drafts go to review" and the credit alert (owner decision, Gate 2).
+          prototype's dialect chips (one Arabic for every reader, D-474) and the
+          credit alert (no such alert exists; its notification row is Settings 4,
+          deferred, D-497). "AI drafts go to review" is Settings 3, built in PR E
+          (D-496) — no "Gate 2" decision records it.
         */}
         <div className="bsp-ai bsp-sg-grow" data-testid="ai-settings">
           {brands.length === 0 ? (

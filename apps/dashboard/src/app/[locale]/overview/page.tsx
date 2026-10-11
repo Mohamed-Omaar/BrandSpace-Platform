@@ -46,6 +46,7 @@ import {
 import { copilotHref } from '../../../server/copilot-surface';
 import { WorkspaceShell } from '../../../components/workspace-shell';
 import { reviewIntelligenceAction } from '../intelligence/actions';
+import { NoticedDecided, NoticedDecision } from './noticed-result';
 import { setupFactsFor } from '../../../server/setup-wizard';
 import { setupSteps } from '../../../server/setup-wizard-state';
 
@@ -240,17 +241,38 @@ export default async function OverviewPage({
       )
     : [];
 
-  const { noticedPreferences, noticedWorkflows } =
+  const { noticedPreferences, noticedWorkflows, snoozeDays } =
     brandId && may('content.create')
-      ? await inContentStudio(workspace.workspaceId, async ({ suggestions }) => {
+      ? await inContentStudio(workspace.workspaceId, async ({ suggestions, policy }) => {
           const service = await suggestions();
           const scope = { userId: customer.userId, brandId, brandScope: workspace.brandScope };
           return {
             noticedPreferences: (await service.noticedPreferences(scope)).slice(0, 2),
             noticedWorkflows: (await service.noticedWorkflows(scope)).slice(0, 1),
+            // PR D (Home 5) — "We will remind you in n days" says the configured pause.
+            snoozeDays: (await policy()).learning.snoozeDays,
           };
         })
-      : { noticedPreferences: [], noticedWorkflows: [] };
+      : { noticedPreferences: [], noticedWorkflows: [], snoozeDays: null };
+  const preferenceTitle = (preference: (typeof noticedPreferences)[number]): string =>
+    (preference.tool === 'shorten'
+      ? t('home.preference.shorter')
+      : t('home.preference.tone').replace(
+          '{tone}',
+          t(`home.preference.tone.${preference.tone ?? 'professional'}` as MessageKey),
+        )
+    ).replace(
+      '{platform}',
+      optionalMessage(messageLocale, `content.platform.${preference.platformKey}`) ??
+        preference.platformKey,
+    );
+  /** PR D (Home 5) — what a decided noticed card says it did. */
+  const decidedResult = (decision: 'accept' | 'snooze' | 'dismiss'): string =>
+    decision === 'snooze'
+      ? snoozeDays
+        ? t('home.decided.snooze').replace('{days}', String(snoozeDays))
+        : t('home.decided.snoozeLater')
+      : t(`home.decided.${decision}` as MessageKey);
   const weekdayName = (day: number) =>
     new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
       weekday: 'long',
@@ -780,6 +802,28 @@ export default async function OverviewPage({
                     locale,
                   )}
                 </span>
+                {METRIC_DETAIL.has(item.kind) && mayUseCopilot ? (
+                  /*
+                   * PR D (Home 3) — "Explain" (`T.explain`, the prototype's
+                   * shift row): Performance opens with the Copilot and the
+                   * request in its box, not sent. Shown to a member who may use
+                   * the Copilot; PR F adds the AI-availability check (Q9).
+                   */
+                  <Link
+                    href={`/${locale}/analytics?copilot=open&ask=${encodeURIComponent(
+                      `${t('home.explain')}: ${attentionSentence(
+                        t as never,
+                        item,
+                        (value) => dayLabel(value, locale, timeZone, now),
+                        locale,
+                      )}`,
+                    )}`}
+                    className="bsp-btn bsp-sm bsp-sec"
+                    data-testid={`attention-explain-${item.kind}`}
+                  >
+                    {t('home.explain')}
+                  </Link>
+                ) : null}
                 <Link
                   href={`/${locale}${item.href}`}
                   className="bsp-btn bsp-sm bsp-sec"
@@ -1174,6 +1218,7 @@ export default async function OverviewPage({
                 </span>
               </div>
               <div className="bsp-home-noticed" style={NOTICED_GRID}>
+                <NoticedDecided />
                 {noticedPreferences.map((preference) =>
                   brandId ? (
                     <div
@@ -1188,21 +1233,7 @@ export default async function OverviewPage({
                         cls="bsp-xstatus bsp-ai"
                       />
                       <span className="bsp-xtitle" style={NOTICED_TITLE}>
-                        {(preference.tool === 'shorten'
-                          ? t('home.preference.shorter')
-                          : t('home.preference.tone').replace(
-                              '{tone}',
-                              t(
-                                `home.preference.tone.${preference.tone ?? 'professional'}` as MessageKey,
-                              ),
-                            )
-                        ).replace(
-                          '{platform}',
-                          optionalMessage(
-                            messageLocale,
-                            `content.platform.${preference.platformKey}`,
-                          ) ?? preference.platformKey,
-                        )}
+                        {preferenceTitle(preference)}
                       </span>
                       <span className="bsp-xdesc">
                         {t('home.preference.evidence')
@@ -1216,13 +1247,24 @@ export default async function OverviewPage({
                             <input type="hidden" name="brandId" value={brandId} />
                             <input type="hidden" name="key" value={preference.key} />
                             <input type="hidden" name="decision" value={decision} />
-                            <button
-                              type="submit"
+                            <NoticedDecision
                               className={`bsp-btn bsp-sm ${DECISION_CLASS[decision]}`}
-                              data-testid={`home-preference-${decision}-${preference.key}`}
+                              testId={`home-preference-${decision}-${preference.key}`}
+                              snapshot={{
+                                id: preference.key,
+                                glyph: '✎',
+                                tag: t('home.p.tagPreference'),
+                                tagClass: 'bsp-xstatus bsp-ai',
+                                title: preferenceTitle(preference),
+                                evidence: t('home.preference.evidence')
+                                  .replace('{count}', String(preference.observations))
+                                  .replace('{posts}', String(preference.posts)),
+                                result: decidedResult(decision),
+                                ok: `PREFERENCE_${decision.toUpperCase()}`,
+                              }}
                             >
                               {t(`home.preference.${decision}` as MessageKey)}
-                            </button>
+                            </NoticedDecision>
                           </form>
                         ))}
                       </div>
@@ -1263,13 +1305,22 @@ export default async function OverviewPage({
                             <input type="hidden" name="brandId" value={brandId} />
                             <input type="hidden" name="key" value={workflow.key} />
                             <input type="hidden" name="decision" value={decision} />
-                            <button
-                              type="submit"
+                            <NoticedDecision
                               className={`bsp-btn bsp-sm ${DECISION_CLASS[decision]}`}
-                              data-testid={`home-workflow-${decision}-${workflow.key}`}
+                              testId={`home-workflow-${decision}-${workflow.key}`}
+                              snapshot={{
+                                id: workflow.key,
+                                glyph: '↻',
+                                tag: t('home.p.tagPattern'),
+                                tagClass: 'bsp-xstatus bsp-info',
+                                title: workflowText(workflow, 'home.workflow.sentence'),
+                                evidence: t('home.p.patternEvidence'),
+                                result: decidedResult(decision),
+                                ok: `WORKFLOW_${decision.toUpperCase()}`,
+                              }}
                             >
                               {t(`home.preference.${decision}` as MessageKey)}
-                            </button>
+                            </NoticedDecision>
                           </form>
                         ))}
                       </div>
@@ -1315,13 +1366,27 @@ export default async function OverviewPage({
                               <input type="hidden" name="insightId" value={insight.id} />
                               <input type="hidden" name="decision" value="dismiss" />
                               <input type="hidden" name="returnTo" value="/overview" />
-                              <button
-                                type="submit"
+                              <NoticedDecision
                                 className="bsp-btn bsp-sm bsp-ghost"
-                                data-testid={`home-recommendation-dismiss-${insight.id}`}
+                                testId={`home-recommendation-dismiss-${insight.id}`}
+                                snapshot={{
+                                  id: insight.id,
+                                  glyph: '↗',
+                                  tag: t('home.p.tagSuggestion'),
+                                  tagClass: 'bsp-xstatus',
+                                  title: pick(insight.title),
+                                  evidence: t('home.recommended.evidence')
+                                    .replace('{count}', String(insight._count.evidence))
+                                    .replace(
+                                      '{basis}',
+                                      t(`home.basis.${insight.basis}` as MessageKey),
+                                    ),
+                                  result: decidedResult('dismiss'),
+                                  ok: 'INSIGHT_DISMISSED',
+                                }}
                               >
                                 {t('insights.dismiss')}
-                              </button>
+                              </NoticedDecision>
                             </form>
                           ) : null}
                         </div>

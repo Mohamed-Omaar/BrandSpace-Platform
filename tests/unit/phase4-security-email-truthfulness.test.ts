@@ -179,8 +179,9 @@ describe('a password reset that could not be sent does not claim it was', () => 
       requestPasswordResetAction(form({ locale: 'en', email: REGISTERED })),
     );
 
-    // The defect: this used to be `?ok=RESET_REQUESTED`.
-    expect(destination).not.toContain('ok=RESET_REQUESTED');
+    // The defect: this used to be the acknowledgement. PR D (Auth 5): the
+    // acknowledgement is now its own screen, `/reset/sent`, never reached here.
+    expect(destination).not.toContain('/reset/sent');
     expect(destination).toContain('error=EMAIL_NOT_SENT');
   });
 
@@ -194,7 +195,8 @@ describe('a password reset that could not be sent does not claim it was', () => 
       requestPasswordResetAction(form({ locale: 'en', email: 'nobody@example.test' })),
     );
 
-    expect(registered).toContain('ok=RESET_REQUESTED');
+    // PR D (Auth 5): the acknowledgement is "The link is on its way".
+    expect(registered).toBe('/en/reset/sent');
     // AND THE TWO ARE IDENTICAL: the uniform acknowledgement is the property the
     // catch existed to protect, and it is unchanged.
     expect(stranger).toBe(registered);

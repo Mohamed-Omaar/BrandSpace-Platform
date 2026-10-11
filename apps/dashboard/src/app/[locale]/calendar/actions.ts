@@ -251,7 +251,11 @@ export async function cancelScheduleAction(formData: FormData): Promise<void> {
     destination = landing(locale, formData, { ...period, ok: 'CONTENT_UNSCHEDULED' });
   } catch (error: unknown) {
     destination = failure(locale, error, 'cancel', period);
-    if (formData.get('returnTo') === '/content') {
+    // PR D (S2) — a refusal from the Studio's "Unschedule" lands back on the post.
+    if (
+      formData.get('returnTo') === '/content' ||
+      formData.get('returnTo') === '/content/compose'
+    ) {
       const failed = new URL(destination, 'http://x').searchParams;
       destination = landing(locale, formData, {
         error: failed.get('error') ?? '',

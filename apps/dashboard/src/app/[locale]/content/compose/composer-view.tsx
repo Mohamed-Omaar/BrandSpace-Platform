@@ -7,7 +7,7 @@ import type { PublishChoice, WhenBest } from './when-popover';
 import { STUDIO_CARRY_KEY, type StudioHandoff } from './studio-carry';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { SegmentPill, visuallyHiddenStyle } from '@brandspace/ui';
+import { SegmentPill, showToast, visuallyHiddenStyle } from '@brandspace/ui';
 import { ChannelMark } from '../../calendar/prototype-calendar';
 import { generationKeyFor, visitKeyFor } from './idempotency';
 import type { MediaOptionView } from './media-picker';
@@ -23,6 +23,7 @@ import {
   fill,
   formatCredits,
   inlineActionsFor,
+  spentMessage,
   previewFormatFor,
   variantIssues,
 } from '../../../../server/composer-editor';
@@ -55,6 +56,8 @@ export interface ComposerPlatform {
   readonly maxMediaItems: number;
   /** PHASE 6 FINAL — whether the configured platform takes a first comment. */
   readonly allowsFirstComment?: boolean;
+  /** PR D (S38) — the platform's configured unsafe bands on a 9:16 frame, in percent. */
+  readonly safeZones?: { readonly top: number; readonly bottom: number; readonly end: number };
 }
 
 export interface ComposerVariant {
@@ -207,6 +210,10 @@ export interface ComposerViewProps {
   readonly openOn?: string | null;
   /** G6 (D-329): the day a ★ holiday chip opened the Studio for, `YYYY-MM-DD`. */
   readonly plannedDate?: string | null;
+  /** PR D (Performance 5): the best hour Performance opened the Studio with, `HH:mm`. */
+  readonly plannedTime?: string | null;
+  /** PR D (S6) — what "Write with AI" cost, said once on the post it opened. */
+  readonly spentOnArrival?: string | null;
   /** Q9 (D-332): a channel whose account has expired — "Expired", and what it means. */
   readonly expiredChannels?: Readonly<
     Record<string, { readonly label: string; readonly explanation: string }>
@@ -254,6 +261,8 @@ export interface ComposerViewProps {
     manageTemplates?: boolean;
     /** D10 (Phase 2C-3) — may rewrite a caption whose fact changed (`content.edit` + `copilot.use`). */
     rewriteFacts?: boolean;
+    /** PR D (S8) — may open Settings → AI (`brand.manage`). */
+    manageBrand?: boolean;
   };
   /** Item 9 (Phase 2B-2) — a FAILED post: what the Publishing screen would say about it. */
   readonly failed?: { readonly message: string } | null;
@@ -358,6 +367,8 @@ export interface ComposerViewProps {
     proposeTime?(formData: FormData): Promise<ProposeTimeResult>;
     /** Round 4 (3.3) — the calendar's own reschedule, for a post already on it. */
     reschedule?(formData: FormData): Promise<void>;
+    /** PR D (S2) — the calendar's own unschedule. */
+    unschedule?(formData: FormData): Promise<void>;
     /** E4 (Phase 2B-2) — save the open post as a template. */
     saveAsTemplate?(formData: FormData): Promise<void>;
     /** D10 (Phase 2C-3) — "Keep as is" on one changed Brand Brain fact. */
@@ -433,6 +444,8 @@ export function ComposerView({
   carriedMedia = null,
   openOn = null,
   plannedDate = null,
+  plannedTime = null,
+  spentOnArrival = null,
   expiredChannels = {},
   notes = null,
   plannedFor = null,
@@ -443,6 +456,13 @@ export function ComposerView({
   failed = null,
 }: ComposerViewProps) {
   const router = useRouter();
+
+  // PR D (S6) — the cost of "Write with AI", said as the toast every paid action uses.
+  useEffect(() => {
+    if (spentOnArrival) {
+      showToast({ tone: 'success', message: spentOnArrival, testId: 'studio-spent-toast' });
+    }
+  }, [spentOnArrival]);
   const fieldId = useId();
 
   /*
@@ -546,6 +566,8 @@ export function ComposerView({
     mode === 'write' && startingTemplate?.body ? startingTemplate.body : '',
   );
   const [editorTab, setEditorTab] = useState<'words' | 'visual'>('words');
+  /* PR D (S38) — the preview's "Safe zones" overlay, on or off. */
+  const [safeOn, setSafeOn] = useState(false);
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [goal, setGoal] = useState(initialGoal || recommendedGoal || '');
   const [contentLocale, setContentLocale] = useState<ContentLocale>(
@@ -774,6 +796,11 @@ export function ComposerView({
           item: String(payload['itemId']),
           ...(carriedMedia ? { attach: carriedMedia.id } : {}),
           ...(plannedDate ? { date: plannedDate } : {}),
+          ...(plannedTime ? { time: plannedTime } : {}),
+          // PR D (S6) — what writing cost, said on the post it opens.
+          ...(spentMessage(payload['creditsChargedMilli'], t)
+            ? { spent: String(payload['creditsChargedMilli']) }
+            : {}),
         }).toString()}`,
       );
       router.refresh();
@@ -796,7 +823,12 @@ export function ComposerView({
       }`,
     });
     setBusy(null);
-    if (payload) router.refresh();
+    if (payload) {
+      // PR D (S6) — every paid action names what it cost (`spend()`).
+      const spent = spentMessage(payload['creditsChargedMilli'], t);
+      if (spent) showToast({ tone: 'success', message: spent, testId: 'studio-spent-toast' });
+      router.refresh();
+    }
   };
 
   const briefTooLong = generationBrief.length > maxBriefChars;
@@ -923,6 +955,7 @@ export function ComposerView({
             if (intentRef.current !== 'words') params.set('open', intentRef.current);
             if (carriedMedia) params.set('attach', carriedMedia.id);
             if (plannedDate) params.set('date', plannedDate);
+            if (plannedTime) params.set('time', plannedTime);
             router.replace(`/${locale}/content/compose?${params.toString()}`);
             return;
           }
@@ -1094,6 +1127,10 @@ export function ComposerView({
   const labels = useMemo(() => previewLabels(t), [t]);
   const shownPreview =
     previewKey !== null && selected.includes(previewKey) ? previewKey : (selected[0] ?? null);
+  const shownSafeZones =
+    shownPreview && previewGeometry(contentType, shownPreview).endsWith('9:16')
+      ? (platforms.find((platform) => platform.key === shownPreview)?.safeZones ?? null)
+      : null;
 
   return (
     <div className="bsp-st-root" data-testid="content-composer">
@@ -2090,6 +2127,7 @@ export function ComposerView({
                         aria-pressed={key === shownPreview}
                         title={channel.name}
                         className="bsp-ltr bsp-st-prev-tab"
+                        data-testid={`composer-preview-tab-${key}`}
                         onClick={() => setPreviewKey(key)}
                       >
                         <ChannelMark channel={channel} size={13} label={false} />
@@ -2101,10 +2139,25 @@ export function ComposerView({
               ) : null}
               {shownPreview ? (
                 <>
-                  <span className="bsp-st-size bsp-ltr">
-                    {previewGeometry(contentType, shownPreview)}
-                  </span>
+                  <div className="bsp-st-size-row">
+                    <span className="bsp-st-size bsp-ltr">
+                      {previewGeometry(contentType, shownPreview)}
+                    </span>
+                    {/* PR D (S38) — on a 9:16 frame, for a platform with configured bands. */}
+                    {shownSafeZones ? (
+                      <button
+                        type="button"
+                        className="bsp-chip bsp-st-safe"
+                        aria-pressed={safeOn}
+                        data-testid="preview-safe-toggle"
+                        onClick={() => setSafeOn((value) => !value)}
+                      >
+                        {t['studio.preview.safeZones']}
+                      </button>
+                    ) : null}
+                  </div>
                   <VariantPreview
+                    safeZones={safeOn ? shownSafeZones : null}
                     locale={locale}
                     platformKey={shownPreview}
                     format={previewFormatFor(contentType)}

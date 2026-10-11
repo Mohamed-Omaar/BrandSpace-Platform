@@ -31,6 +31,7 @@ import {
   restoreAssetVersionAction,
   updateAssetAction,
   uploadAssetAction,
+  uploadAssetFileAction,
   bulkAssetAction,
 } from './actions';
 
@@ -518,6 +519,7 @@ export default async function AssetsPage({
         }}
         actions={{
           upload: uploadAssetAction,
+          uploadOne: uploadAssetFileAction,
           createFolder: createAssetFolderAction,
           update: updateAssetAction,
           archive: archiveAssetAction,

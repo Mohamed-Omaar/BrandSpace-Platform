@@ -298,7 +298,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     }),
   );
   expect(created.actionType).toBe('ADD_TO_CAMPAIGN');
-  expect(created.enabled).toBe(false);
+  // PR D (Automations 1) — a rule made by hand is on when saved.
+  expect(created.enabled).toBe(true);
   expect(created.actionConfig).toMatchObject({ campaignId: expect.any(String) });
   // A G13 rule carries no caption; a stored retired shape keeps its own.
   await expect(page.getByTestId(`automation-older-${created.id}`)).toHaveCount(0);
