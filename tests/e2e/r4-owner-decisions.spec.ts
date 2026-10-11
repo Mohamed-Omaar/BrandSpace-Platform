@@ -271,8 +271,10 @@ test.describe('Round 4 · 5.5 (review of 2a) — on a 1440 × 900 screen, as the
       };
     });
     expect(box).not.toBeNull();
-    // The prototype's `padding-bottom: 70px` and the bar's `margin-top: 14px`, at least.
-    expect(box?.underNote ?? 0).toBeGreaterThanOrEqual(83);
+    // The prototype's `padding-bottom: 70px` and the bar's `margin-top: 14px`,
+    // at the product's 0.88 scale (`--bsp-px-70` is 61.5px): 73 = 83 × 0.88.
+    // The bar still never covers the note: it stays at least that far below it.
+    expect(box?.underNote ?? 0).toBeGreaterThanOrEqual(73);
     // Whenever the page scrolls, the bar opens on the frame's bottom edge.
     if (box?.scrolls) {
       expect(box.edgeGap).toBeGreaterThanOrEqual(0);

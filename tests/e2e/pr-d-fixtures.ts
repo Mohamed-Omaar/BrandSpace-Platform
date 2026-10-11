@@ -1,4 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import type { Page } from '@playwright/test';
+import { hashPassword } from '@brandspace/auth';
+import { DASHBOARD_BASE_URL } from './apps';
 import type { OwnWorkspace } from './own-workspace';
 import { withPlatformPrisma } from './platform-prisma';
 
@@ -175,4 +178,89 @@ export async function dailyEngagements(
       });
     }
   });
+}
+
+/** PR D (review of #75): how many businesses the many-workspaces person owns. */
+export const WORKSPACE_COUNT = 12;
+
+/** A person owning `WORKSPACE_COUNT` workspaces; the first on an active plan with room for more. */
+export async function manyWorkspaces(label: string): Promise<{ email: string; password: string }> {
+  const suffix = randomUUID().slice(0, 8);
+  const email = `e2e-many-ws-${suffix}@brandspace.test`;
+  const password = `e2e-${randomUUID()}`;
+  await withPlatformPrisma(async (prisma) => {
+    // Whichever plan catalogue is active, one of its plans that states no
+    // workspace ceiling, or one above this person's count.
+    const active = await prisma.configurationVersion.findFirstOrThrow({
+      where: { domain: 'plans', status: 'ACTIVE' },
+      orderBy: { activatedAt: 'desc' },
+      select: { payload: true },
+    });
+    const plans = ((active.payload as { plans?: unknown[] }).plans ?? []) as Array<{
+      key?: string;
+      status?: string;
+      quotas?: { workspaces?: number | null };
+    }>;
+    const plan = plans.find(
+      (candidate) =>
+        candidate.key &&
+        candidate.status === 'active' &&
+        (candidate.quotas?.workspaces === undefined ||
+          candidate.quotas.workspaces === null ||
+          candidate.quotas.workspaces > WORKSPACE_COUNT),
+    );
+    if (!plan?.key) throw new Error('No active plan leaves room for another workspace.');
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name: `Many ${suffix}`,
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        passwordHash: await hashPassword(password),
+        locale: 'EN',
+        timezone: 'UTC',
+      },
+      select: { id: true },
+    });
+    const role = await prisma.role.findFirstOrThrow({
+      where: { key: 'workspace_owner', workspaceId: null },
+      select: { id: true },
+    });
+    for (let index = 1; index <= WORKSPACE_COUNT; index += 1) {
+      const workspaceId = randomUUID();
+      await prisma.workspace.create({
+        data: {
+          id: workspaceId,
+          workspaceId,
+          slug: `e2e-${label}-${suffix}-${index}`,
+          name: `Business ${String(index).padStart(2, '0')} ${suffix}`,
+          ownerUserId: user.id,
+          status: 'ACTIVE',
+          country: 'US',
+          defaultLocale: 'EN',
+          timezone: 'UTC',
+          currency: 'USD',
+          ...(index === 1 ? { planKey: plan.key } : {}),
+        },
+      });
+      await prisma.membership.create({
+        data: {
+          workspaceId,
+          userId: user.id,
+          roleId: role.id,
+          status: 'ACTIVE',
+          acceptedAt: new Date(),
+        },
+      });
+    }
+  });
+  return { email, password };
+}
+
+export async function signInToList(page: Page, email: string, password: string, locale: string) {
+  await page.goto(`${DASHBOARD_BASE_URL}/${locale}/sign-in`);
+  await page.fill('#email', email);
+  await page.fill('#password', password);
+  await page.click('[data-testid="signin-submit"]');
+  await page.waitForURL(new RegExp(`/${locale}/workspaces`));
 }

@@ -2213,7 +2213,8 @@ design-system additions, and why each is new:
 - **The rail host (`CustomerFrameHost`).** The page's `CustomerShell` publishes the rail model; the
   locale layout draws the aside, the ambient background and the floating Copilot once, so the rail
   and its pill survive a page change and the pill glides from where it was (`useRailPill`, MO2).
-  Server rendering is unchanged; the host takes over after hydration.
+  Server rendering is unchanged; the host takes over at the visit's first page change, so a loaded
+  page's rail is never replaced (D-502).
 - **`SegmentPill`** re-measures when a segment is added or removed and when any segment's own box
   changes (the preview channel-tab bug); the rail and the Control Center's nav pill do the same.
 - **The rest compose existing pieces:** the decided noticed card (`.bsp-home-decided`, the card's
@@ -2227,6 +2228,19 @@ Recorded uses of D-468: Strategy's "How it's going" spans its card because the c
 the monthly review — is Strategy 8, deferred (D-497). "Explain" opens Performance with the Copilot
 over it (the prototype opens both in one state change). The set-up key's "Copy" is on Settings →
 Security only; the entry-card set-up page has no toast host.
+
+**Review of #75 — approved design-system extensions (§4.2), from the platform's own pieces:**
+
+- **The brand menu stays inside the frame.** `.bsp-bmenu` is capped at what the frame leaves under the
+  card; its brands scroll in `.bsp-bmenu-list`; its heading ("Brands · used/allowed", the
+  prototype's `L.brands`) and "+ Add a brand" keep one line each. The prototype draws a short list
+  and never a long one.
+- **D-501's plain card** is the existing one-brand `PrototypeBrandCard` — no new visual.
+- **Choosing a workspace with many of them.** The rows scroll inside the entry card and "Create
+  workspace · n/limit" stays at its foot; the window never scrolls (batch 7, A2's one-scroll rule).
+- **Media's upload dialog** uses the Look card's own file button (`.bsp-lk-file`, the prototype's
+  `label.btn.sm.sec` over a transparent input), lists the chosen files by name before sending, and
+  labels the brand select "Brand". No new control.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 

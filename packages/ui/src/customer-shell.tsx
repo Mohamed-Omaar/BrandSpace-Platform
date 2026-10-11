@@ -336,11 +336,14 @@ function RailLink({
   collapsed,
   onNavigate,
   onPress,
+  frame,
 }: {
   readonly item: CustomerNavItem;
   readonly collapsed: boolean;
   readonly onNavigate?: (() => void) | undefined;
   readonly onPress?: ((link: HTMLElement) => void) | undefined;
+  /** The layout's host, for the page's own rail (not the phone drawer's). */
+  readonly frame?: FrameStore | null | undefined;
 }) {
   const name = item.count ? `${item.label}, ${item.count.label}` : item.label;
   const intent = usePrefetchOnIntent(item.href);
@@ -363,6 +366,33 @@ function RailLink({
           !event.ctrlKey &&
           !event.shiftKey &&
           !event.altKey;
+        if (plain && !item.active && onPress && frame && !frame.active()) {
+          /*
+           * PR D (review of #75) — THE HOST TAKES THE RAIL OVER AT THE FIRST
+           * PRESS, not after the page loads. The page's own rail stays the one
+           * in the server's HTML for as long as the page is only being read,
+           * so nothing replaces it after loading. The press hands the rail to
+           * the host — the same rail, drawn in the same place, in the same
+           * commit — and presses the host's copy of this link, which glides
+           * and navigates as every later press does.
+           */
+          event.preventDefault();
+          const href = item.href;
+          const pressed = event.currentTarget;
+          frame.activate();
+          const pressTwin = (retry: boolean) => {
+            const twin = Array.from(
+              document.querySelectorAll<HTMLAnchorElement>('[data-testid="sidebar"] nav a.bsp-nav'),
+            ).find((anchor) => anchor.getAttribute('href') === href && anchor !== pressed);
+            if (twin) twin.click();
+            else if (retry) requestAnimationFrame(() => pressTwin(false));
+            else router.push(href);
+          };
+          // After React has committed the host's rail (the update is a sync one).
+          queueMicrotask(() => pressTwin(true));
+          onNavigate?.();
+          return;
+        }
         if (plain && !item.active && onPress) {
           /*
            * PR D — THE GLIDE STARTS BEFORE THE NAVIGATION DOES. A click hands
@@ -429,6 +459,7 @@ function RailNav({
   const activeHref = sections.flatMap((section) => section.items).find((item) => item.active)?.href;
   const pressRef = useRailPill(navRef, pillRef, activeHref, scope === 'rail');
   const onPress = useCallback((link: HTMLElement) => pressRef.current?.(link), [pressRef]);
+  const frame = useContext(FrameContext);
   const groupId = useId();
   return (
     <nav ref={navRef} aria-label={label} className="bsp-sbnav">
@@ -457,6 +488,7 @@ function RailNav({
               collapsed={collapsed}
               onNavigate={onNavigate}
               onPress={onPress}
+              frame={scope === 'rail' ? frame : null}
             />
           ))}
         </div>
@@ -500,14 +532,20 @@ export interface CustomerRailModel {
  */
 interface FrameStore {
   readonly subscribe: (listener: () => void) => () => void;
+  /** The rail the host draws: none until the host has taken over. */
   readonly get: () => CustomerRailModel | null;
   readonly publish: (owner: object, model: CustomerRailModel) => void;
   readonly retract: (owner: object) => void;
+  /** Whether the host has taken the rail over for this visit. */
+  readonly active: () => boolean;
+  /** The host takes the rail over, at the visit's first page change. */
+  readonly activate: () => void;
 }
 
 function createFrameStore(): FrameStore {
   let model: CustomerRailModel | null = null;
   let current: object | null = null;
+  let taken = false;
   const listeners = new Set<() => void>();
   const emit = () => {
     for (const listener of Array.from(listeners)) listener();
@@ -517,22 +555,30 @@ function createFrameStore(): FrameStore {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    get: () => model,
+    get: () => (taken ? model : null),
     publish: (owner, next) => {
       current = owner;
       model = next;
-      emit();
+      if (taken) emit();
     },
     retract: (owner) => {
       if (current !== owner) return;
       current = null;
       model = null;
+      if (taken) emit();
+    },
+    active: () => taken,
+    activate: () => {
+      if (taken) return;
+      taken = true;
       emit();
     },
   };
 }
 
 const FrameContext = createContext<FrameStore | null>(null);
+/** The host's collapse state, so the page's own rail and the host's are one. */
+const FrameCollapseContext = createContext<SidebarCollapse | null>(null);
 
 const subscribeNowhere = () => () => undefined;
 const noRail = () => null;
@@ -589,7 +635,12 @@ function useSidebarCollapse(): SidebarCollapse {
         ? 'collapsed'
         : 'expanded'
     : 'expanded';
-  return { collapsed, layoutCollapsed, state, motion: sidebarMotion, toggle };
+  // One object while nothing changes: the host hands it down through context,
+  // and a new one on every render would render every page's shell again.
+  return useMemo(
+    () => ({ collapsed, layoutCollapsed, state, motion: sidebarMotion, toggle }),
+    [collapsed, layoutCollapsed, state, sidebarMotion, toggle],
+  );
 }
 
 function RailLogo({ wordmark }: { readonly wordmark: string }) {
@@ -721,11 +772,42 @@ export function CustomerFrameHost({ children }: { readonly children: ReactNode }
   const [store] = useState(createFrameStore);
   const rail = useSyncExternalStore(store.subscribe, store.get, noRail);
   const collapse = useSidebarCollapse();
+  /*
+   * PR D (review of #75) — THE HOST TAKES OVER AT THE VISIT'S FIRST PAGE
+   * CHANGE, never on loading. Until then the page's shell draws its own rail,
+   * the one in the server's HTML, so a loaded page's rail is never replaced.
+   * A rail press hands it over itself (`RailLink`); a link in the page and the
+   * browser's back and forward do here, before the next page renders. Links
+   * inside the rail, its menus and the floating parts are left to the shell:
+   * the hand-over must not take the element being pressed out of the page.
+   */
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (store.active()) return;
+      if (event.button !== 0 || event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target instanceof Element ? event.target : null;
+      const anchor = target?.closest<HTMLAnchorElement>('a[href]');
+      if (!anchor?.closest('.bs-panel')) return;
+      if ((anchor.target && anchor.target !== '_self') || anchor.hasAttribute('download')) return;
+      if (new URL(anchor.href, window.location.href).origin !== window.location.origin) return;
+      store.activate();
+    };
+    const onHistory = () => store.activate();
+    document.addEventListener('click', onClick, true);
+    window.addEventListener('popstate', onHistory);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+      window.removeEventListener('popstate', onHistory);
+    };
+  }, [store]);
   return (
     <FrameContext.Provider value={store}>
-      <CustomerFrame rail={rail} collapse={collapse} contentLang={rail?.contentLang}>
-        {children}
-      </CustomerFrame>
+      <FrameCollapseContext.Provider value={collapse}>
+        <CustomerFrame rail={rail} collapse={collapse} contentLang={rail?.contentLang}>
+          {children}
+        </CustomerFrame>
+      </FrameCollapseContext.Provider>
     </FrameContext.Provider>
   );
 }
@@ -774,9 +856,10 @@ export function CustomerShell({
   /*
    * PR D — THE RAIL LIVES IN THE LAYOUT. Under `CustomerFrameHost` this shell
    * hands its rail to the host, which keeps one rail mounted across every page
-   * change, and draws only its own panel. Until the host has it (the server's
-   * HTML and the hydration pass), and wherever there is no host, the shell
-   * draws the whole frame itself, exactly as before.
+   * change, and draws only its own panel. Until the host has it (the visit's
+   * first page change: the loaded page keeps the rail in the server's HTML),
+   * and wherever there is no host, the shell draws the whole frame itself,
+   * exactly as before.
    */
   const frameStore = useContext(FrameContext);
   const hosted = useSyncExternalStore(
@@ -795,7 +878,10 @@ export function CustomerShell({
     if (!frameStore) return undefined;
     return () => frameStore.retract(owner);
   }, [frameStore, owner]);
-  const collapse = useSidebarCollapse();
+  // One collapse state for the page's rail and the host's: a hand-over never
+  // opens or closes the rail.
+  const ownCollapse = useSidebarCollapse();
+  const collapse = useContext(FrameCollapseContext) ?? ownCollapse;
 
   const fabHostRef = useRef<HTMLDivElement | null>(null);
   const fabSlotRef = useRef<HTMLSpanElement | null>(null);
@@ -854,9 +940,23 @@ export function CustomerShell({
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement | null>(null);
+  /*
+   * Under the layout's rail host the drawer is drawn by the host, a render
+   * after this shell opens it, so the overlay behaviour waits for the drawer
+   * to be in the page: focus moves into it and the trap holds from the start.
+   */
+  const [drawerMounted, setDrawerMounted] = useState(false);
+  const drawerNode = useCallback((node: HTMLDivElement | null) => {
+    drawerRef.current = node;
+    setDrawerMounted(node !== null);
+  }, []);
   const drawerId = useId();
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-  useOverlayBehaviour({ open: drawerOpen, onClose: closeDrawer, containerRef: drawerRef });
+  useOverlayBehaviour({
+    open: drawerOpen && drawerMounted,
+    onClose: closeDrawer,
+    containerRef: drawerRef,
+  });
   const drawer = usePresence(drawerOpen, drawerRef);
   useEffect(() => {
     if (!drawerOpen) return undefined;
@@ -884,7 +984,7 @@ export function CustomerShell({
     >
       <div
         id={drawerId}
-        ref={drawerRef}
+        ref={drawerNode}
         role="dialog"
         aria-modal="true"
         aria-label={labels.primaryNavigation}

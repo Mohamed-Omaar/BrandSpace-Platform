@@ -289,34 +289,38 @@ export function PrototypeBrandSwitcher({
           {heading}
         </span>
       ) : null}
-      {allOption
-        ? formRow({
+      {/* PR D (review of #75) — the brands scroll inside the menu, which never
+          runs past the frame; the heading and "+ Add a brand" stay in view. */}
+      <div className="bsp-bmenu-list" role="none" data-testid="brand-menu-list">
+        {allOption
+          ? formRow({
+              action,
+              hiddenFields,
+              field: 'brandId',
+              value: 'all',
+              testId: 'brand-option-all',
+              current: allOption.current,
+              name: allOption.label,
+            })
+          : null}
+        {options.map((option) =>
+          formRow({
             action,
             hiddenFields,
             field: 'brandId',
-            value: 'all',
-            testId: 'brand-option-all',
-            current: allOption.current,
-            name: allOption.label,
-          })
-        : null}
-      {options.map((option) =>
-        formRow({
-          action,
-          hiddenFields,
-          field: 'brandId',
-          value: option.id,
-          testId: `brand-option-${option.id}`,
-          current: option.current === true,
-          name: option.name,
-          caption: option.caption,
-        }),
-      )}
-      {options.length === 0 && emptyLabel ? (
-        <p className="bsp-menu-item" style={{ margin: 0, cursor: 'default', color: '#6a6a72' }}>
-          {emptyLabel}
-        </p>
-      ) : null}
+            value: option.id,
+            testId: `brand-option-${option.id}`,
+            current: option.current === true,
+            name: option.name,
+            caption: option.caption,
+          }),
+        )}
+        {options.length === 0 && emptyLabel ? (
+          <p className="bsp-menu-item" style={{ margin: 0, cursor: 'default', color: '#6a6a72' }}>
+            {emptyLabel}
+          </p>
+        ) : null}
+      </div>
       {addRow}
       {manageHref && manageLabel ? (
         <a

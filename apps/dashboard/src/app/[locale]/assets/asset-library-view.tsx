@@ -308,6 +308,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
   const canBulk = can.edit || can.archive;
   // PR D (Media 1) — what a several-file upload refused, said in the dialog.
   const [multiRefused, setMultiRefused] = useState<string | null>(null);
+  // PR D (review of #75): the files chosen in the upload dialog, by name, before sending.
+  const [chosen, setChosen] = useState<readonly string[]>([]);
 
   const filtered =
     filters.search !== undefined ||
@@ -1105,7 +1107,10 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
       {/* --- Upload ------------------------------------------------------ */}
       <Dialog
         open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
+        onClose={() => {
+          setUploadOpen(false);
+          setChosen([]);
+        }}
         title={t('assets.upload')}
         closeLabel={t('assets.action.cancel')}
         testId="assets-upload-dialog"
@@ -1152,7 +1157,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           {filters.folder ? <input type="hidden" name="folderId" value={filters.folder} /> : null}
           <Stack gap={spacingTokens.md}>
             {props.brands.length > 0 ? (
-              <Field htmlFor={`${uploadFieldId}-brand`} label={t('assets.filter.all')}>
+              <Field htmlFor={`${uploadFieldId}-brand`} label={t('assets.uploadBrand')}>
                 <select
                   id={`${uploadFieldId}-brand`}
                   name="brandId"
@@ -1171,23 +1176,59 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 </select>
               </Field>
             ) : null}
-            <Field htmlFor={`${uploadFieldId}-file`} label={t('assets.upload')}>
+            <div className="bsp-up-pick">
+              <span className="bsp-lbl" id={`${uploadFieldId}-file-label`}>
+                {t('assets.uploadFiles')}
+              </span>
               {/* The ACCEPTED TYPES COME FROM ACTIVATED CONFIGURATION, so the
                   picker offers exactly what the server will admit, and the
                   rules are written beside it (batch 7, A3). It is a courtesy,
                   not a check: the server refuses anything else, and the file's
-                  own signature has to agree as well. */}
-              <UploadFileInput
-                id={`${uploadFieldId}-file`}
-                name="file"
-                multiple={actions.uploadOne !== undefined}
-                onChosen={() => setMultiRefused(null)}
-                required
-                className={CONTROL_CLASS}
-                style={inputStyle()}
-                data-testid="assets-file-input"
-              />
-            </Field>
+                  own signature has to agree as well.
+                  PR D (review of #75) — the product's own file button (the
+                  Look card's `.bsp-lk-file`: a secondary button over a
+                  transparent input), never the browser's raw control, and the
+                  chosen files listed by name before anything is sent. */}
+              <label className="bsp-btn bsp-sm bsp-sec bsp-lk-file">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 16V4M7 9l5-5 5 5M4 20h16" />
+                </svg>
+                {t('assets.chooseFiles')}
+                <UploadFileInput
+                  id={`${uploadFieldId}-file`}
+                  name="file"
+                  multiple={actions.uploadOne !== undefined}
+                  onChosen={() => setMultiRefused(null)}
+                  onChosenFiles={(files) => setChosen(files.map((file) => file.name))}
+                  required
+                  aria-labelledby={`${uploadFieldId}-file-label`}
+                  data-testid="assets-file-input"
+                />
+              </label>
+              {chosen.length > 0 ? (
+                <ul className="bsp-up-chosen" data-testid="assets-chosen">
+                  {chosen.map((name, index) => (
+                    <li key={`${name}-${index}`} className="bsp-ltr bsp-lk-meta">
+                      <bdi>{name}</bdi>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="bsp-lk-meta" data-testid="assets-chosen-none">
+                  {t('assets.noneChosen')}
+                </span>
+              )}
+            </div>
             <UploadRulesLine className="bsp-up-rules" />
             <UploadStatus
               testId="assets-upload-status"

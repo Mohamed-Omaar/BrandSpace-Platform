@@ -246,11 +246,14 @@ export function UploadForm({
 export function UploadFileInput({
   submitOnChoose = false,
   onChosen,
+  onChosenFiles,
   inputRef,
   ...input
 }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'accept'> & {
   readonly submitOnChoose?: boolean;
   readonly onChosen?: (file: File | null) => void;
+  /** Every admissible file chosen (none when refused), for a picker that lists them. */
+  readonly onChosenFiles?: (files: readonly File[]) => void;
   readonly inputRef?: Ref<HTMLInputElement>;
 }) {
   const { rules, check } = useUpload();
@@ -272,9 +275,11 @@ export function UploadFileInput({
           // A refused file is not left in the control to be sent anyway.
           element.value = '';
           onChosen?.(null);
+          onChosenFiles?.([]);
           return;
         }
         onChosen?.(file);
+        onChosenFiles?.(element.files ? [...element.files] : []);
         if (submitOnChoose) element.form?.requestSubmit();
       }}
     />

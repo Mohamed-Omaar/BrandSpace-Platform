@@ -39,7 +39,13 @@ import { incomingMentions } from '../server/incoming-mentions';
 import { getCustomer, getCustomerAuth, getSessionToken } from '../server/customer-context';
 import { greetingName } from '../server/home';
 import { businessSwitcherModel } from '../server/business-switcher';
-import { brandAllowance, brandUsage, mayAddBrand } from '../server/brand-allowance';
+import {
+  brandAllowance,
+  brandUsage,
+  brandsCanGrow,
+  isSingleBrand,
+  mayAddBrand,
+} from '../server/brand-allowance';
 import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
 import { signOutAction, switchWorkspaceAction } from '../app/[locale]/(auth)/actions';
@@ -522,8 +528,21 @@ export async function WorkspaceShell({
    * card opens the businesses, with the owner's allowance at its head and foot
    * (`.bmenu`: "Workspaces · 1/2", "+ New workspace  1/2", the note).
    */
+  /*
+   * D-501 — WITH ONE BRAND, THE ALLOWANCE DECIDES THE CARD. Allowed one brand
+   * (the beta's trial plan) and holding it: the brand as a plain card, no menu
+   * and nothing offering another. Allowed more, with multi-brand on: the brand
+   * menu, with "+ Add a brand". Otherwise, as before, the business switcher.
+   * All of it is configuration (Control Center → Plans), read per request.
+   */
+  const oneBrand =
+    brandContext !== null && brandContext !== undefined && brandContext.brands.length < 2;
+  const brandRule =
+    brandContext && me?.activeWorkspaceId ? await brandAllowance(me.activeWorkspaceId) : null;
+  const singleBrand = oneBrand && brandRule !== null && isSingleBrand(brandRule);
+  const brandMenuForOne = oneBrand && brandRule !== null && brandsCanGrow(brandRule);
   const activeWorkspaceId =
-    brandContext && brandContext.brands.length < 2 ? (me?.activeWorkspaceId ?? null) : null;
+    oneBrand && !singleBrand && !brandMenuForOne ? (me?.activeWorkspaceId ?? null) : null;
   const switcher = activeWorkspaceId
     ? await businessSwitcherModel(locale, activeWorkspaceId)
     : null;
@@ -536,11 +555,9 @@ export async function WorkspaceShell({
 
   // PR D (Shell 6) — the brand menu's "Brands · used/allowed" and "+ Add a brand".
   const brands =
-    me?.activeWorkspaceId && brandContext && brandContext.brands.length >= 2
-      ? await brandAllowance(me.activeWorkspaceId)
-      : null;
+    brandContext && (brandContext.brands.length >= 2 || brandMenuForOne) ? brandRule : null;
   const brandCard = brandContext ? (
-    brandContext.brands.length >= 2 ? (
+    brandContext.brands.length >= 2 || brandMenuForOne ? (
       <PrototypeBrandSwitcher
         label={t('brand.switcherLabel')}
         {...(brands
@@ -913,7 +930,9 @@ export async function WorkspaceShell({
           </PrototypeMenuButton>
         )
       ) : null}
-      {businessCount > 1 && brandContext && brandContext.brands.length >= 2 ? (
+      {/* Wherever the rail's card is not the business switcher (several brands,
+          the brand menu, or D-501's plain card), the businesses are here. */}
+      {businessCount > 1 && brandContext && !switcher ? (
         <PrototypeMenuLink href={`/${locale}/workspaces`} testId="switch-workspace">
           {t('ws.switchBusiness')}
         </PrototypeMenuLink>

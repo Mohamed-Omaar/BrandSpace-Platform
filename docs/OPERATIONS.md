@@ -881,6 +881,12 @@ Found when the owner tested staging. None of these is code; each is a setting or
    every email link is already built from. Before this, the mark was an SVG on the marketing site,
    which Gmail does not draw. The old `brandspace-logo.svg` on the landing site is no longer used
    by the product.
+6. **One brand per workspace in the beta (D-501).** In Control Center → Plans, the trial plan's
+   `quotas.brands` is **1**. With it, a workspace that holds its brand sees the brand as a plain
+   card: no brand menu, no "+ Add a brand", no add form on Settings → Brands. Raising the quota
+   (or a workspace override of `limit.brands`) brings the brand menu and "+ Add a brand" back on
+   the next page, with no release; adding a second brand also needs the multi-brand feature on
+   (D-327). PR F sets this in the production values and adds a readiness row for it.
 
 ## 13. Incident log
 

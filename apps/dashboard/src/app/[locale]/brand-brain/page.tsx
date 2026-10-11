@@ -808,10 +808,12 @@ export default async function BrandBrainPage({
   /*
    * PR D (Strategy 9) — `?area=<key>` ALONE opens that area, as pressing its
    * card does: Strategy's "Built on Brand Brain" rows press "Open →" into the
-   * fact's own area. Only a real area of this brand is honoured.
+   * fact's own area. Only a real area of this brand is honoured. A save comes
+   * back with `ok` or `error` beside its `area`, and that return is not a
+   * request to open the drawer again.
    */
   const initialArea =
-    askedArea && !askedQuestion && !chatStart
+    askedArea && !askedQuestion && !chatStart && !status && !error
       ? (areaCards.find((entry) => entry.area === askedArea)?.area ?? null)
       : null;
 

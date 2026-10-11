@@ -23,6 +23,7 @@ import { saveBrandProfileAction } from './actions';
 import { createBrandAction } from '../../brand-brain/actions';
 
 import { EmptyAction } from '../../../../components/empty-action';
+import { brandAllowance, isSingleBrand } from '../../../../server/brand-allowance';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +75,9 @@ export default async function BrandProfilePage({
   );
   const selected = requiredBrand(brandContext);
   const mayManage = workspace.permissionKeys.includes('brand.manage');
+  // D-501 — allowed one brand and holding it: no add form here either.
+  const brandRule = query['add'] === '1' ? await brandAllowance(workspace.workspaceId) : null;
+  const offerAdd = mayManage && !(brandRule !== null && isSingleBrand(brandRule));
 
   /*
    * THE PROFILE AND THE ASSETS THAT MAY BE ITS LOGO, IN ONE TRANSACTION.
@@ -157,7 +161,7 @@ export default async function BrandProfilePage({
         permissionKeys={workspace.permissionKeys}
         selected="brand"
       >
-        {query['add'] === '1' && mayManage ? (
+        {query['add'] === '1' && offerAdd ? (
           /*
            * PR D (Shell 6) — THE PROTOTYPE'S ADD-A-BRAND CARD (Settings →
            * Brands, Main line 1354): "Brand name", Discard, Create — through

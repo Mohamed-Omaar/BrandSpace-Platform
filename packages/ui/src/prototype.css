@@ -1435,6 +1435,31 @@ button.bsp-xcard:hover {
   font-weight: 600;
   color: #b83245;
 }
+/* PR D (review of #75) — THE BRAND MENU STAYS INSIDE THE FRAME. Its height is
+   capped at what the frame leaves under the card (the card sits about 200px,
+   at the 0.88 scale, below the window's top edge, with the frame's own inset
+   under the menu); the brands scroll inside it, and its heading ("Brands ·
+   used/allowed") and "+ Add a brand" keep their place on one line each. */
+.bsp-menu.bsp-bmenu {
+  max-block-size: calc(100dvh - var(--bsp-px-200));
+}
+.bsp-bmenu > :not(.bsp-bmenu-list) {
+  flex-shrink: 0;
+}
+.bsp-bmenu-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-2);
+  flex: 0 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.bsp-bmenu .bsp-menu-head {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .bsp-menu-head {
   font-size: var(--bsp-fs-10-5);
   font-weight: 700;
@@ -10591,6 +10616,23 @@ img.bsp-pf-art {
   outline: 2px solid #7935fe;
   outline-offset: 2px;
 }
+/* PR D (review of #75) — Media's upload dialog uses the same file button, its
+   label above it and the chosen files listed under it, by name. */
+.bsp-up-pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-8);
+}
+.bsp-up-chosen {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-2);
+  max-block-size: var(--bsp-px-120);
+  overflow-y: auto;
+}
 .bsp-lk-picked {
   display: flex;
   align-items: center;
@@ -11421,6 +11463,34 @@ img.bsp-pf-art {
   .bsp-auth-card {
     max-block-size: calc(100vh - var(--bsp-px-64));
     overflow-y: auto;
+  }
+  /* PR D (review of #75) — CHOOSING A WORKSPACE: the rows scroll inside the
+     card, under its heading, and "Create workspace · n/limit" (or the limit
+     note) stays in view at the card's foot. The card no longer scrolls as a
+     whole, so the create row is never pushed below its edge. */
+  .bsp-auth-card:has(.bsp-auth-wslist) {
+    overflow: hidden;
+  }
+  .bsp-auth-card:has(.bsp-auth-wslist) > * {
+    flex-shrink: 0;
+  }
+  .bsp-auth-card > .bsp-auth-body:has(> .bsp-auth-wslist) {
+    flex: 0 1 auto;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .bsp-auth-body > .bsp-auth-wslist {
+    flex: 0 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Room for a row's lift and focus ring inside the scrolling box. */
+    padding: var(--bsp-px-4);
+    margin: calc(-1 * var(--bsp-px-4));
+  }
+  .bsp-auth-body:has(> .bsp-auth-wslist) > :not(.bsp-auth-wslist) {
+    flex-shrink: 0;
   }
 }
 .bsp-auth-card {
