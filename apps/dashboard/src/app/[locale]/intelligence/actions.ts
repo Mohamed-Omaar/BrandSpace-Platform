@@ -69,8 +69,11 @@ export async function analyseContentGapsAction(formData: FormData): Promise<void
  * dismisses through this same action (D-277 §7); anything else returns to
  * Intelligence, so a crafted `returnTo` cannot send the browser elsewhere.
  */
-function reviewReturn(formData: FormData): '/overview' | '/intelligence' {
-  return formData.get('returnTo') === '/overview' ? '/overview' : '/intelligence';
+function reviewReturn(formData: FormData): '/overview' | '/intelligence' | '/analytics' {
+  const asked = formData.get('returnTo');
+  // PR D (Performance 1) — Performance's "Not useful" comes back to its Insights.
+  if (asked === '/analytics') return '/analytics';
+  return asked === '/overview' ? '/overview' : '/intelligence';
 }
 
 export async function reviewIntelligenceAction(formData: FormData): Promise<void> {
@@ -81,13 +84,15 @@ export async function reviewIntelligenceAction(formData: FormData): Promise<void
   const back = reviewReturn(formData);
 
   const response = await callPhase7Api('/v1/insights/review', { insightId, decision });
+  const where = back === '/analytics' ? '/analytics?view=insights&' : `${back}?`;
   if (!response.ok) {
-    redirect(`/${locale}${back}?error=${codeFrom(response.payload)}`);
+    redirect(`/${locale}${where}error=${codeFrom(response.payload)}`);
   }
   revalidatePath(`/${locale}/intelligence`);
   revalidatePath(`/${locale}/overview`);
+  revalidatePath(`/${locale}/analytics`);
   redirect(
-    `/${locale}${back}?ok=${decision === 'accept' ? 'INSIGHT_ACCEPTED' : 'INSIGHT_DISMISSED'}`,
+    `/${locale}${where}ok=${decision === 'accept' ? 'INSIGHT_ACCEPTED' : 'INSIGHT_DISMISSED'}`,
   );
 }
 

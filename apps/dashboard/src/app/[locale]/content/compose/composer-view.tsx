@@ -210,6 +210,8 @@ export interface ComposerViewProps {
   readonly openOn?: string | null;
   /** G6 (D-329): the day a ★ holiday chip opened the Studio for, `YYYY-MM-DD`. */
   readonly plannedDate?: string | null;
+  /** PR D (Performance 5): the best hour Performance opened the Studio with, `HH:mm`. */
+  readonly plannedTime?: string | null;
   /** Q9 (D-332): a channel whose account has expired — "Expired", and what it means. */
   readonly expiredChannels?: Readonly<
     Record<string, { readonly label: string; readonly explanation: string }>
@@ -440,6 +442,7 @@ export function ComposerView({
   carriedMedia = null,
   openOn = null,
   plannedDate = null,
+  plannedTime = null,
   expiredChannels = {},
   notes = null,
   plannedFor = null,
@@ -783,6 +786,7 @@ export function ComposerView({
           item: String(payload['itemId']),
           ...(carriedMedia ? { attach: carriedMedia.id } : {}),
           ...(plannedDate ? { date: plannedDate } : {}),
+          ...(plannedTime ? { time: plannedTime } : {}),
           // PR D (S6) — what writing cost, said on the post it opens.
           ...(spentMessage(payload['creditsChargedMilli'], t)
             ? { spent: String(payload['creditsChargedMilli']) }
@@ -941,6 +945,7 @@ export function ComposerView({
             if (intentRef.current !== 'words') params.set('open', intentRef.current);
             if (carriedMedia) params.set('attach', carriedMedia.id);
             if (plannedDate) params.set('date', plannedDate);
+            if (plannedTime) params.set('time', plannedTime);
             router.replace(`/${locale}/content/compose?${params.toString()}`);
             return;
           }

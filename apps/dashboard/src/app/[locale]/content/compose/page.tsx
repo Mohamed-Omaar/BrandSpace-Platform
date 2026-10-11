@@ -169,6 +169,13 @@ export default async function ComposePage({
    * travels with the choice below like a campaign does.
    */
   const plannedDate = await plannedDateFrom(single('date'), workspace.workspaceId, locale);
+  /*
+   * PR D (Performance 5) — `?time=HH:mm` from Performance's best time: the
+   * hour the Studio's When starts on. It only proposes, like `?date=`; the
+   * calendar validates any time chosen.
+   */
+  const requestedTime = single('time') ?? '';
+  const plannedTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(requestedTime) ? requestedTime : null;
   const plannedFor = plannedDate?.label ?? null;
   const carry: Record<string, string> = Object.fromEntries(
     Object.entries({ campaign: single('campaign'), date: plannedDate?.date }).filter(
@@ -776,7 +783,7 @@ export default async function ComposePage({
           return {
             today,
             tomorrow: nextDayKey(today),
-            defaultTime: brand?.defaultPostTime ?? DEFAULT_POST_TIME,
+            defaultTime: plannedTime ?? brand?.defaultPostTime ?? DEFAULT_POST_TIME,
           };
         })
       : null;
@@ -1292,6 +1299,7 @@ export default async function ComposePage({
         carriedMedia={carried}
         openOn={single('open') ?? null}
         plannedDate={plannedDate?.date ?? null}
+        plannedTime={plannedTime}
         plannedFor={plannedFor}
         expiredChannels={expiredChannels}
         notes={
