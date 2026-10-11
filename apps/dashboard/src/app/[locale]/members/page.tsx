@@ -568,6 +568,31 @@ export default async function MembersPage({
                   ))}
                 </form>
               </section>
+            ) : roles.length > 0 ? (
+              /*
+               * PR D (Team 1) — THE SAME CHIPS, READ-ONLY, for a reader who may
+               * not change this member's role (no `member.assign_role`, or
+               * their own): the prototype draws the role card for everyone,
+               * the current role pressed. Nothing here posts.
+               */
+              <section className="bsp-card bsp-tm-box" data-testid="member-role-readonly">
+                <span className="bsp-lbl">{t('members.role')}</span>
+                <ul className="bsp-tm-chips bsp-tm-chips-ro">
+                  {roles.map((r) => (
+                    <li key={r.id}>
+                      <span
+                        className="bsp-chip"
+                        {...(r.key === opened.roleKey
+                          ? { 'data-current': '', 'aria-current': 'true' as const }
+                          : {})}
+                        data-testid={`role-chip-${r.key}`}
+                      >
+                        {customerRoleName(locale === 'ar' ? r.nameAr : r.nameEn)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ) : null}
 
             {/* BRAND ACCESS, the existing all-or-some choice and its save. */}

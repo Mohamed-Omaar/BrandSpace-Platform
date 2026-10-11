@@ -246,7 +246,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     triggerType: 'SCHEDULE_GAP',
     actionType: 'DRAFT_IDEAS',
     actionConfig: {},
-    enabled: false,
+    // PR D (Automations 1) — a rule made by hand is on when saved.
+    enabled: true,
   });
   // The screen with the new rule on it. (The content library opened below is
   // not scanned here: its "Search posts" label is a pre-existing contrast

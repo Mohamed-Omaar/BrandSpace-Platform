@@ -131,6 +131,38 @@ export async function uploadAssetAction(formData: FormData): Promise<void> {
   redirect(destination);
 }
 
+/**
+ * PR D (Media 1) — ONE FILE OF SEVERAL, WITHOUT A REDIRECT. The Upload dialog
+ * sends each chosen file through here in turn, and says what arrived and what
+ * was refused. The same permission, the same one upload path
+ * (`uploadIntoLibrary`: signature, checksum key, quarantine, dispatch, audit)
+ * and the same quota as `uploadAssetAction`; it only answers instead of
+ * navigating, so the next file can follow.
+ */
+export async function uploadAssetFileAction(
+  formData: FormData,
+): Promise<{ ok: boolean; reason: string | null }> {
+  const locale = String(formData.get('locale') ?? 'en');
+  try {
+    const session = await requireWorkspaceAction(locale, 'assets.upload');
+    const file = formData.get('file');
+    if (!(file instanceof File) || file.size === 0) throw new Error('no file');
+    await uploadIntoLibrary({
+      workspaceId: session.workspace.workspaceId,
+      actor: assetActor(session),
+      file,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      brandId: optionalId(formData, 'brandId'),
+      folderId: optionalId(formData, 'folderId'),
+    });
+    revalidatePath(`/${locale}/assets`);
+    return { ok: true, reason: null };
+  } catch (error: unknown) {
+    log.warn('asset upload failed', { action: 'upload-asset-file', ...internalErrorFields(error) });
+    return { ok: false, reason: uploadReasonOf(error) };
+  }
+}
+
 export async function createAssetFolderAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   let destination: string;

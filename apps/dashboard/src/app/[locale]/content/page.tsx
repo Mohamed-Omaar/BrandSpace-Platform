@@ -371,6 +371,28 @@ export default async function ContentPage({
     (campaignsByBrand[row.brandId] ??= []).push({ id: row.id, name: row.name });
   }
 
+  /*
+   * PR D (Posts P1) — "REVIEW" OPENS THAT POST'S OWN REVIEW: the open approval
+   * of each post in review, for a member who may approve. Approvals reads
+   * `?review=` and answers its own authority question (Q10), so a reviewer
+   * outside the post's brand gets the same not-found as a stale link.
+   */
+  const inReview = items.filter((item) => item.status === 'IN_REVIEW').map((item) => item.id);
+  const openReviews = new Map(
+    inReview.length > 0 && may('content.approve')
+      ? (
+          await inWorkspace(workspace.workspaceId, async ({ db }) =>
+            db.approval.findMany({
+              where: { contentItemId: { in: inReview }, status: 'PENDING' },
+              select: { id: true, contentItemId: true },
+              orderBy: { createdAt: 'desc' },
+            }),
+          )
+        )
+          .reverse()
+          .map((row) => [row.contentItemId ?? '', row.id] as const)
+      : [],
+  );
   const campaignNames = new Map(campaigns.map((row) => [row.id, row.name]));
   const cards: LibraryCard[] = items.map((item) => {
     const assetIds = firstAssets.find((entry) => entry.itemId === item.id)?.assetIds ?? [];
@@ -407,6 +429,7 @@ export default async function ContentPage({
       slot: slotByItem.get(item.id) ?? null,
       links: linksByItem.get(item.id) ?? [],
       when: whenByItem.get(item.id) ?? translate('content.p.noDate'),
+      reviewId: openReviews.get(item.id) ?? null,
     };
   });
 

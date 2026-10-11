@@ -115,6 +115,9 @@ export default async function SecuritySettingsPage({
     scan: t('security.enrolScan'),
     qrAlt: t('security.qrAlt'),
     typeKey: t('security.typeKey'),
+    copy: t('security.copyKey'),
+    copied: t('security.keyCopied'),
+    copyFailed: t('security.copyFailed'),
     code: t('security.code'),
     confirm: t('security.confirm'),
   };

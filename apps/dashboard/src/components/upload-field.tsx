@@ -113,10 +113,25 @@ export function UploadForm({
   texts,
   children,
   formRef,
+  each,
   ...form
 }: {
   readonly formRef?: Ref<HTMLFormElement>;
   readonly action: (formData: FormData) => Promise<void>;
+  /**
+   * PR D (Media 1) — SEVERAL FILES IN ONE UPLOAD. With two or more files
+   * chosen, each goes on its own through `each` (a non-redirecting variant of
+   * the same upload path: one request per file, the same checks on each), the
+   * status counting them; `done` gets what arrived and what was refused. One
+   * file keeps the ordinary `action`.
+   */
+  readonly each?: {
+    readonly upload: (formData: FormData) => Promise<{ ok: boolean; reason: string | null }>;
+    readonly done: (outcome: {
+      readonly uploaded: number;
+      readonly refused: readonly { readonly name: string; readonly reason: string | null }[];
+    }) => void;
+  };
   readonly rules: UploadRules;
   readonly locale: string;
   readonly texts: UploadTexts;
@@ -157,9 +172,36 @@ export function UploadForm({
     event.preventDefault();
     const element = event.currentTarget;
     const data = new FormData(element);
-    const file = [...data.values()].find(
+    const files = [...data.values()].filter(
       (value): value is File => value instanceof File && value.size > 0,
     );
+    if (each && files.length > 1) {
+      if (!files.every((one) => check(one))) return;
+      start(async () => {
+        const refused: { name: string; reason: string | null }[] = [];
+        let uploaded = 0;
+        for (const [index, one] of files.entries()) {
+          setStatus({ kind: 'uploading', name: `${index + 1}/${files.length} · ${one.name}` });
+          const single = new FormData();
+          for (const [key, value] of data.entries()) {
+            if (!(value instanceof File)) single.append(key, value);
+          }
+          single.set('file', one);
+          try {
+            const outcome = await each.upload(single);
+            if (outcome.ok) uploaded += 1;
+            else refused.push({ name: one.name, reason: outcome.reason });
+          } catch (error: unknown) {
+            if (isNavigation(error)) throw error;
+            refused.push({ name: one.name, reason: null });
+          }
+        }
+        setStatus({ kind: 'idle' });
+        each.done({ uploaded, refused });
+      });
+      return;
+    }
+    const file = files[0];
     if (file && !check(file)) return;
     setStatus(file ? { kind: 'uploading', name: file.name } : { kind: 'idle' });
     start(async () => {
@@ -221,7 +263,11 @@ export function UploadFileInput({
       onChange={(event) => {
         const element = event.currentTarget;
         const file = element.files?.[0] ?? null;
-        const admissible = check(file);
+        // PR D (Media 1) — with several chosen, every one is judged.
+        const admissible =
+          element.files && element.files.length > 1
+            ? [...element.files].every((one) => check(one))
+            : check(file);
         if (!admissible) {
           // A refused file is not left in the control to be sent anyway.
           element.value = '';

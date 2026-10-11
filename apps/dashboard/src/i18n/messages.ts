@@ -531,6 +531,9 @@ export const messages = {
     'security.code': 'الرمز',
     'security.qrAlt': 'رمز QR لتطبيق المصادقة',
     'security.typeKey': 'لا يمكنك مسحه؟ اكتب هذا المفتاح في التطبيق بدلًا من ذلك:',
+    'security.copyKey': 'نسخ',
+    'security.keyCopied': 'نُسخ المفتاح',
+    'security.copyFailed': 'تعذّر النسخ. انسخ المفتاح يدويًا.',
     'security.newPhoneHeading': 'إعداد هاتفك الجديد',
     'security.newPhoneExplain':
       'تنتقل إلى هاتف جديد؟ أدخل رمزًا حاليًا — من هاتفك القديم أو رمز استرداد — لإعداد الجديد. يظل الهاتف القديم يعمل حتى يتم تأكيد الجديد.',
@@ -1776,6 +1779,7 @@ export const messages = {
     'upload.refusedSize': 'حجم هذا الملف {size}، والحد المسموح {max}.',
     'upload.refusedEmpty': 'هذا الملف فارغ.',
     'upload.uploading': 'جارٍ رفع {name}…',
+    'assets.uploadedSome': 'رُفع {count}. لم يُرفع: {files}',
     'upload.connection': 'لم يصلنا الملف. تحقّق من اتصالك وحاول مرة أخرى.',
     'upload.checking': 'جارٍ فحص {name}…',
     'upload.change': 'تغيير',
@@ -4489,6 +4493,9 @@ export const messages = {
     'security.code': 'Code',
     'security.qrAlt': 'QR code for your authenticator app',
     'security.typeKey': 'Can’t scan it? Type this key into the app instead:',
+    'security.copyKey': 'Copy',
+    'security.keyCopied': 'Key copied',
+    'security.copyFailed': 'Couldn’t copy. Copy the key by hand.',
     'security.newPhoneHeading': 'Set up your new phone',
     'security.newPhoneExplain':
       'Moving to a new phone? Enter a current code — from your old phone, or a recovery code — to set up the new one. The old phone keeps working until the new one is confirmed.',
@@ -5768,6 +5775,7 @@ export const messages = {
     'upload.refusedSize': 'This file is {size}. The limit is {max}.',
     'upload.refusedEmpty': 'This file is empty.',
     'upload.uploading': 'Uploading {name}…',
+    'assets.uploadedSome': '{count} uploaded. Not uploaded: {files}',
     'upload.connection': 'The upload didn’t reach us. Check your connection and try again.',
     'upload.checking': 'Checking {name}…',
     'upload.change': 'Change',
@@ -8626,8 +8634,8 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     ar: 'لديك عدة خطط تنتظر التأكيد. أجب عن إحداها أولًا.',
   },
   AUTOMATION_CREATED: {
-    en: 'Automation created, and disabled until you enable it.',
-    ar: 'تم إنشاء الأتمتة، وهي متوقفة حتى تفعّلها.',
+    en: 'Rule saved and on.',
+    ar: 'حُفظت القاعدة وهي مفعّلة.',
   },
   // B12 (Phase 2B-2b) — editing a rule and skipping a run.
   AUTOMATION_SKIPPED: {

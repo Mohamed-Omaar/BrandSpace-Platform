@@ -83,6 +83,8 @@ export interface LibraryCard {
   readonly links?: readonly { readonly label: string; readonly url: string }[];
   /** The prototype's "Oct 16 · 10:00", "Today · 18:00" or "No date". */
   readonly when?: string;
+  /** PR D (Posts P1) — the open approval a reviewer's "Review" opens. */
+  readonly reviewId?: string | null;
 }
 
 /** B8 — the Posts menu's permissions, options and words, for every card. */
@@ -244,7 +246,14 @@ export function ContentLibrary({
           : open();
       case 'IN_REVIEW':
         return can.approve
-          ? link(`/${locale}/approvals`, t('content.p.review'), true, `content-review-${card.id}`)
+          ? link(
+              card.reviewId
+                ? `/${locale}/approvals?review=${card.reviewId}`
+                : `/${locale}/approvals`,
+              t('content.p.review'),
+              true,
+              `content-review-${card.id}`,
+            )
           : open();
       case 'APPROVED':
         return can.schedule

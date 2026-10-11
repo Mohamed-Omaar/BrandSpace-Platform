@@ -238,7 +238,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     triggerType: 'REVIEW_WAITING_24H',
     actionType: 'REMIND_REVIEWER',
     actionConfig: {},
-    enabled: false,
+    // PR D (Automations 1) — a rule made by hand is on when saved.
+    enabled: true,
   });
   expect(created.armedAt).not.toBeNull();
   await expect(page.getByTestId(`automation-older-${created.id}`)).toHaveCount(0);

@@ -9086,6 +9086,21 @@ img.bsp-pf-art {
   gap: var(--bsp-px-6);
   flex-wrap: wrap;
 }
+/* PR D (Team 1) — the role chips read-only: the same chips, the current one
+   pressed, nothing to press. */
+.bsp-tm-chips.bsp-tm-chips-ro {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bsp-tm-chips-ro .bsp-chip {
+  cursor: default;
+}
+.bsp-tm-chips-ro .bsp-chip[data-current] {
+  background: #111114;
+  border-color: #111114;
+  color: #fff;
+}
 .bsp-tm-form {
   display: grid;
   gap: var(--bsp-px-10);

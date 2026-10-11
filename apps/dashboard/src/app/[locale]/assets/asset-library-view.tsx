@@ -39,7 +39,7 @@ import {
   spacingTokens,
   typographyTokens,
 } from '@brandspace/ui';
-import { translator, type MessageKey } from '../../../i18n/messages';
+import { optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { ASSET_VIEWS, type RightsState } from '../../../server/asset-views';
 import { formatBytes } from '../../../components/format-bytes';
 import { mediaStorageRemainder, type MediaStorageCategory } from '../../../server/media-storage';
@@ -229,6 +229,8 @@ export interface AssetLibraryViewProps {
   };
   readonly actions: {
     readonly upload: FormAction;
+    /** PR D (Media 1) — one file of several, answering instead of redirecting. */
+    readonly uploadOne?: (formData: FormData) => Promise<{ ok: boolean; reason: string | null }>;
     readonly createFolder: FormAction;
     readonly update: FormAction;
     readonly archive: FormAction;
@@ -288,7 +290,8 @@ function filterHref(
 }
 
 export function AssetLibraryView(props: AssetLibraryViewProps) {
-  const t = translator(useMessageLocale(props.locale));
+  const messageLocale = useMessageLocale(props.locale);
+  const t = translator(messageLocale);
   const { filters, can, actions } = props;
   /** D-305 — the standard business: one brand, so no brand or shelf choice to make. */
   const singleBrand = props.brands.length <= 1;
@@ -303,6 +306,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
   const bulkFormId = useId();
   const router = useRouter();
   const canBulk = can.edit || can.archive;
+  // PR D (Media 1) — what a several-file upload refused, said in the dialog.
+  const [multiRefused, setMultiRefused] = useState<string | null>(null);
 
   const filtered =
     filters.search !== undefined ||
@@ -1111,6 +1116,37 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           locale={props.locale}
           texts={uploadTexts(t)}
           data-testid="assets-upload-form"
+          {...(actions.uploadOne
+            ? {
+                each: {
+                  upload: actions.uploadOne,
+                  done: ({ uploaded, refused }) => {
+                    if (refused.length === 0) {
+                      setMultiRefused(null);
+                      setUploadOpen(false);
+                      router.push(`/${props.locale}/assets?ok=ASSET_UPLOADED`);
+                      return;
+                    }
+                    router.refresh();
+                    setMultiRefused(
+                      t('assets.uploadedSome')
+                        .replace('{count}', String(uploaded))
+                        .replace(
+                          '{files}',
+                          refused
+                            .map((one) => {
+                              const why = one.reason
+                                ? optionalMessage(messageLocale, `assets.reason.${one.reason}`)
+                                : null;
+                              return why ? `${one.name} (${why})` : one.name;
+                            })
+                            .join(', '),
+                        ),
+                    );
+                  },
+                },
+              }
+            : {})}
         >
           <input type="hidden" name="locale" value={props.locale} />
           {filters.folder ? <input type="hidden" name="folderId" value={filters.folder} /> : null}
@@ -1144,6 +1180,8 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               <UploadFileInput
                 id={`${uploadFieldId}-file`}
                 name="file"
+                multiple={actions.uploadOne !== undefined}
+                onChosen={() => setMultiRefused(null)}
                 required
                 className={CONTROL_CLASS}
                 style={inputStyle()}
@@ -1153,7 +1191,13 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
             <UploadRulesLine className="bsp-up-rules" />
             <UploadStatus
               testId="assets-upload-status"
-              result={props.uploadReason ? { tone: 'error', message: props.uploadReason } : null}
+              result={
+                multiRefused
+                  ? { tone: 'error', message: multiRefused }
+                  : props.uploadReason
+                    ? { tone: 'error', message: props.uploadReason }
+                    : null
+              }
             />
             <Button type="submit" variant="primary" data-testid="assets-upload-submit">
               {t('assets.upload')}

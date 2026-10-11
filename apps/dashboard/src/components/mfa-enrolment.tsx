@@ -1,4 +1,5 @@
 import QRCode from 'qrcode';
+import { CopyTextButton } from './copy-text-button';
 import {
   Field,
   colorTokens,
@@ -46,6 +47,10 @@ export async function MfaEnrolmentPanel({
     readonly typeKey: string;
     readonly code: string;
     readonly confirm: string;
+    /** PR D (Settings 8) — "Copy" beside the key, and its toast. */
+    readonly copy?: string;
+    readonly copied?: string;
+    readonly copyFailed?: string;
   };
   readonly testId?: string;
 }) {
@@ -73,13 +78,25 @@ export async function MfaEnrolmentPanel({
         <p style={{ ...typographyTokens.bodySm, color: colorTokens.textMuted, margin: 0 }}>
           {labels.typeKey}
         </p>
-        <code
-          data-testid={`${testId}-key`}
-          dir="ltr"
-          style={{ ...typographyTokens.body, letterSpacing: '0.05em', wordBreak: 'break-all' }}
-        >
-          {typedKey}
-        </code>
+        <span style={{ display: 'flex', gap: 'var(--bsp-px-6)', alignItems: 'center' }}>
+          <code
+            data-testid={`${testId}-key`}
+            dir="ltr"
+            style={{ ...typographyTokens.body, letterSpacing: '0.05em', wordBreak: 'break-all' }}
+          >
+            {typedKey}
+          </code>
+          {labels.copy && labels.copied && labels.copyFailed ? (
+            <CopyTextButton
+              value={secret}
+              label={labels.copy}
+              copied={labels.copied}
+              failed={labels.copyFailed}
+              className="bsp-btn bsp-sm bsp-ghost"
+              testId={`${testId}-copy`}
+            />
+          ) : null}
+        </span>
       </div>
       <Field label={labels.code} htmlFor={`${testId}-code`}>
         <input

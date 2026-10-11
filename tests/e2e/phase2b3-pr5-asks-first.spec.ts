@@ -360,7 +360,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     triggerType: 'POST_FAILED',
     actionType: 'PAUSE_CAMPAIGN',
     actionConfig: { campaignId: seeded.planned.id },
-    enabled: false,
+    // PR D (Automations 1) — a rule made by hand is on when saved.
+    enabled: true,
   });
 
   await page.goto(`${DASHBOARD_BASE_URL}/${locale}/automations?new=1`);
@@ -375,7 +376,8 @@ async function journey(page: Page, locale: 'en' | 'ar', seeded: Seeded): Promise
     triggerType: 'POST_FAILED',
     actionType: 'RETRY_PUBLISH',
     actionConfig: {},
-    enabled: false,
+    // PR D (Automations 1) — a rule made by hand is on when saved.
+    enabled: true,
   });
 
   // --- Skip the retry, approve the pause --------------------------------------
