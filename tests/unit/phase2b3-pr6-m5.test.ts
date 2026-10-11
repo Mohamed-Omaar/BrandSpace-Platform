@@ -95,6 +95,8 @@ describe('M5 — order and schema', () => {
       M5B,
       M5B_INDEX,
       '20261016090000_content_item_publish_time',
+      // PR E: the Group B fields (planned posts, AI drafts to review, insight snooze).
+      '20261020090000_group_b_fields',
     ]);
   });
 
