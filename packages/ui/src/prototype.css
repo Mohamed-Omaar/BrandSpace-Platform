@@ -13579,3 +13579,14 @@ select.bs-select.bsp-chevron {
   background: #f0f0f2;
   color: #55555c;
 }
+
+/* PR D (Notes 4) — a mention in a message: `background: #efe7ff; color:
+   #5312c4; border-radius: 6px; padding: 0 4px; font-weight: 700`
+   (`Main.dc.html` line 956). */
+.bsp-nts-mention {
+  background: #efe7ff;
+  color: #5312c4;
+  border-radius: var(--bsp-px-6);
+  padding: 0 var(--bsp-px-4);
+  font-weight: 700;
+}

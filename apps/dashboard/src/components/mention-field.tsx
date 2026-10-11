@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   colorTokens,
+  showToast,
   inputStyle,
   radiusTokens,
   shadowTokens,
@@ -13,7 +14,12 @@ import {
   useOpening,
   usePresence,
 } from '@brandspace/ui';
-import { mentionMatches, mentionQuery, type MentionMember } from './mention-match';
+import {
+  MENTION_OPEN_EVENT,
+  mentionMatches,
+  mentionQuery,
+  type MentionMember,
+} from './mention-match';
 
 /**
  * A NOTE FIELD WITH REAL @-MENTION TYPEAHEAD (D-277 §28): type "@Sa", pick
@@ -40,7 +46,16 @@ export function MentionField({
   suggestionsLabel,
   members,
   testId,
+  postedLabel,
+  notifiedLabel,
 }: {
+  /**
+   * PR D (Notes 2) — "Posted · X will be notified", raised once the post has
+   * gone (React resets the form after its action succeeds). `notifiedLabel`
+   * carries `{names}`; without mentions the toast is `postedLabel` alone.
+   */
+  readonly postedLabel?: string | undefined;
+  readonly notifiedLabel?: string | undefined;
   readonly id: string;
   readonly name: string;
   readonly multiline: boolean;
@@ -57,23 +72,77 @@ export function MentionField({
   const [query, setQuery] = useState<string | null>(null);
   const [active, setActive] = useState(0);
   const [picked, setPicked] = useState<readonly MentionMember[]>([]);
+  const pickedRef = useRef<readonly MentionMember[]>([]);
+  pickedRef.current = picked;
   const field = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
 
   /*
    * CLEARED WITH ITS FORM. React resets a form after its server action
    * succeeds; a controlled field would keep the posted text, so it listens.
    */
+  const notifiedRef = useRef<readonly string[] | null>(null);
   useEffect(() => {
     const form = field.current?.form;
     if (!form) return;
+    // The names posted with this note, kept until the post has gone.
+    const submitted = () => {
+      const node = field.current;
+      const value = node?.value ?? '';
+      notifiedRef.current = pickedRef.current
+        .filter((member) => value.includes(`@${member.name}`))
+        .map((member) => member.name);
+    };
     const clear = () => {
       setText('');
       setPicked([]);
       setQuery(null);
+      const names = notifiedRef.current;
+      notifiedRef.current = null;
+      if (names && postedLabel) {
+        showToast({
+          tone: 'success',
+          testId: 'note-posted-toast',
+          message:
+            names.length > 0 && notifiedLabel
+              ? notifiedLabel.replace('{names}', names.join(', '))
+              : postedLabel,
+        });
+      }
     };
+    form.addEventListener('submit', submitted);
     form.addEventListener('reset', clear);
-    return () => form.removeEventListener('reset', clear);
-  }, []);
+    return () => {
+      form.removeEventListener('submit', submitted);
+      form.removeEventListener('reset', clear);
+    };
+  }, [postedLabel, notifiedLabel]);
+
+  /*
+   * PR D (Notes 1) — THE "@ MENTION" BUTTON (`Main.dc.html` line 969) opens
+   * the people list: it asks this field, by its id, to start a mention at the
+   * caret — an "@" typed for the reader, so the list shows everyone.
+   */
+  useEffect(() => {
+    const open = (event: Event) => {
+      if ((event as CustomEvent<{ id?: string }>).detail?.id !== id) return;
+      const node = field.current;
+      if (!node) return;
+      const caret = node.selectionStart ?? node.value.length;
+      const before = node.value.slice(0, caret);
+      const lead = before === '' || /\s$/u.test(before) ? '@' : ' @';
+      const next = before + lead + node.value.slice(caret);
+      setText(next);
+      setQuery('');
+      setActive(0);
+      requestAnimationFrame(() => {
+        node.focus();
+        const at = before.length + lead.length;
+        node.setSelectionRange(at, at);
+      });
+    };
+    window.addEventListener(MENTION_OPEN_EVENT, open);
+    return () => window.removeEventListener(MENTION_OPEN_EVENT, open);
+  }, [id]);
 
   const matches = useMemo(
     () => (query === null ? [] : mentionMatches(members, query)),
