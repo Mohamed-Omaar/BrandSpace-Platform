@@ -66,7 +66,7 @@ const strategySchema = z.object({
 
 const reviewSchema = z.object({
   insightId: z.string().uuid(),
-  decision: z.enum(['accept', 'dismiss', 'seen']),
+  decision: z.enum(['accept', 'dismiss', 'seen', 'snooze']),
   reason: z.string().max(400).optional(),
 });
 

@@ -348,6 +348,11 @@ export interface ComposerViewProps {
   readonly templates?: readonly ComposerTemplate[];
   /** E4 / B2 — a template the reader arrived with (`?template=`), already checked. */
   readonly initialTemplateId?: string;
+  /**
+   * D-496 (Home 4) — the format a new post starts on, from `?format=` (Home's
+   * "Make a reel"). Used only when this brand offers it.
+   */
+  readonly initialFormat?: string | undefined;
   readonly actions: {
     save(formData: FormData): Promise<void | AutosaveResult>;
     /** Round 5 (B, D-478) — a draft's format and channels. */
@@ -427,6 +432,7 @@ export function ComposerView({
   mode = 'ai',
   startFrom,
   initialBrief = '',
+  initialFormat,
   initialCampaignId = '',
   sourceTitle = null,
   goals = [],
@@ -529,8 +535,10 @@ export function ComposerView({
     return { format, channels };
   };
 
-  const [contentType, setContentType] = useState(
-    () => templateFor(offeredTypes[0] ?? contentTypes[0] ?? 'POST', startingTemplate).format,
+  const [contentType, setContentType] = useState(() =>
+    draft === null && initialFormat && offeredTypes.includes(initialFormat)
+      ? initialFormat
+      : templateFor(offeredTypes[0] ?? contentTypes[0] ?? 'POST', startingTemplate).format,
   );
   /*
    * A10 (Phase 2B-2) — THE BRAND'S DEFAULT CHANNELS, the ones the format can

@@ -408,12 +408,16 @@ test.describe('the Command Center aggregates the modules', () => {
     await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
     await expect(page.getByTestId('overview-upcoming')).toBeVisible({ timeout: 15_000 });
 
-    // Every attention row carries exactly one action, and it is a real link.
+    // Every attention row carries exactly one action: a real link, or — on a
+    // failed post a plain retry can fix — "Retry" in place (D-496, Home 2).
     const rows = page.locator('[data-testid="attention-list"] > li');
     for (let index = 0; index < (await rows.count()); index += 1) {
-      const actions = rows.nth(index).getByRole('link');
-      await expect(actions).toHaveCount(1);
-      await expect(actions).toHaveAttribute('href', /^\/en\//);
+      const links = rows.nth(index).getByRole('link');
+      const retry = rows.nth(index).locator('form button[data-testid^="attention-retry-"]');
+      expect((await links.count()) + (await retry.count())).toBe(1);
+      if ((await links.count()) === 1) {
+        await expect(links).toHaveAttribute('href', /^\/en\//);
+      }
     }
 
     await page.getByTestId('overview-upcoming-calendar').click();

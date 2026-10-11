@@ -57,7 +57,8 @@ function pageUrl(
  * crafted `returnTo` cannot send the browser anywhere else.
  */
 interface ReturnTo {
-  readonly path: '/integrations' | '/publishing' | '/onboarding';
+  /** D-496 (Home 2) — `/overview`: Home's "Retry" in place returns to Home. */
+  readonly path: '/integrations' | '/publishing' | '/onboarding' | '/overview';
   readonly tab?: 'queue' | 'published' | 'failed' | 'accounts' | undefined;
   /** Gate 2b review (4f) — Settings → Accounts' publishing history view (`?history=1`). */
   readonly history?: boolean | undefined;
@@ -68,6 +69,7 @@ const PUBLISHING_TABS = new Set(['queue', 'published', 'failed', 'accounts']);
 function returnToOf(formData: FormData): ReturnTo {
   const requested = String(formData.get('returnTo') ?? '');
   if (requested === '/onboarding') return { path: '/onboarding' };
+  if (requested === '/overview') return { path: '/overview' };
   if (requested === '/integrations?history=1') return { path: '/integrations', history: true };
   if (requested !== '/publishing') return { path: '/integrations' };
   const tab = String(formData.get('tab') ?? '');
@@ -232,6 +234,9 @@ export async function cancelPublishAction(formData: FormData): Promise<void> {
   redirect(destination);
 }
 
+/** The most failed jobs one Retry press may name — a post's channels, never more. */
+const MAX_RETRY_JOBS = 10;
+
 /** Try a failed post again, after a human has fixed whatever was wrong. */
 export async function retryPublishAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
@@ -239,10 +244,18 @@ export async function retryPublishAction(formData: FormData): Promise<void> {
   let destination: string;
   try {
     const session = await requireWorkspaceAction(locale, 'publishing.manage');
-    const jobId = String(formData.get('jobId') ?? '');
-    await inSocial(session.workspace.workspaceId, async ({ pipeline }) =>
-      (await pipeline()).retry({ jobId, ...actorOf(session) }),
-    );
+    /*
+     * D-496 (Home 2) — Home retries a POST, which may have failed on more than
+     * one channel: one `jobId` per failed job. Each goes through the same
+     * pipeline check, in order; the first refusal stops the rest.
+     */
+    const jobIds = formData.getAll('jobId').map(String).slice(0, MAX_RETRY_JOBS);
+    await inSocial(session.workspace.workspaceId, async ({ pipeline }) => {
+      const service = await pipeline();
+      for (const jobId of jobIds.length > 0 ? jobIds : ['']) {
+        await service.retry({ jobId, ...actorOf(session) });
+      }
+    });
     destination = pageUrl(locale, { ok: 'POST_RETRY_QUEUED' }, back);
   } catch (error: unknown) {
     destination = failure(locale, error, 'retry', back);
@@ -250,6 +263,7 @@ export async function retryPublishAction(formData: FormData): Promise<void> {
   revalidatePath(`/${locale}/integrations`);
   revalidatePath(`/${locale}/publishing`);
   revalidatePath(`/${locale}/calendar`);
+  revalidatePath(`/${locale}/overview`);
   redirect(destination);
 }
 

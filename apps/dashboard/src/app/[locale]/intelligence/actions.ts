@@ -90,9 +90,14 @@ export async function reviewIntelligenceAction(formData: FormData): Promise<void
   revalidatePath(`/${locale}/intelligence`);
   revalidatePath(`/${locale}/overview`);
   revalidatePath(`/${locale}/analytics`);
-  redirect(
-    `/${locale}${where}ok=${decision === 'accept' ? 'INSIGHT_ACCEPTED' : 'INSIGHT_DISMISSED'}`,
-  );
+  // D-496 (Home 4): "Not now" has its own answer; it decided nothing.
+  const ok =
+    decision === 'accept'
+      ? 'INSIGHT_ACCEPTED'
+      : decision === 'snooze'
+        ? 'INSIGHT_SNOOZED'
+        : 'INSIGHT_DISMISSED';
+  redirect(`/${locale}${where}ok=${ok}`);
 }
 
 /**

@@ -281,10 +281,13 @@ test.describe('Q12 · Home and the Calendar for the real Viewer (E7)', () => {
           locale === 'ar' ? 'بانتظار الموافقة' : 'Waiting for approval',
         'attention-action-calendar-gap': locale === 'ar' ? 'اعرض التقويم' : 'See the calendar',
       };
-      // The seeded brand always has posts in review, so that card is always here.
-      await expect(page.getByTestId('attention-action-content-in-review')).toHaveText(
-        words['attention-action-content-in-review'],
-      );
+      // The seeded brand always has posts in review, so that card is always
+      // here — one row per post since D-496 (Home 1), each saying the same.
+      const inReview = page.locator('[data-testid^="attention-action-content-in-review-"]');
+      await expect(inReview.first()).toBeVisible();
+      for (const action of await inReview.all()) {
+        await expect(action).toHaveText(words['attention-action-content-in-review']);
+      }
       // A calendar gap depends on the dates; when the card is there, it says this.
       const gap = page.getByTestId('attention-action-calendar-gap');
       if ((await gap.count()) > 0) {

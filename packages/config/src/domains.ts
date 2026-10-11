@@ -2018,6 +2018,13 @@ const analyticsSchema = z.object({
       pruneBatchSize: z.number().int().min(1).max(100_000).default(5_000),
     })
     .default({}),
+
+  /**
+   * How long "Not now" hides a noticed card on Home, in days (D-496, Q4). The
+   * insight keeps its status; it is only left out until `snoozedUntil` passes.
+   * The default is the prototype's "We will remind you in a week".
+   */
+  insightSnoozeDays: z.number().int().min(1).max(90).default(7),
 });
 
 /**

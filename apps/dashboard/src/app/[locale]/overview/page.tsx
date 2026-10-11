@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { CSSProperties, ReactNode } from 'react';
+import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { CopilotLink } from '../../../components/copilot-link';
 import { PrototypeHeroCanvas, PrototypeIcon } from '@brandspace/ui';
 import { localizedFrom } from '@brandspace/brand-brain';
@@ -25,6 +25,7 @@ import {
   greetingPeriod,
   hourIn,
   safeZone,
+  suggestedFormatOf,
 } from '../../../server/home';
 import {
   compactCount,
@@ -44,8 +45,11 @@ import {
   type MessageKey,
 } from '../../../i18n/messages';
 import { copilotHref } from '../../../server/copilot-surface';
-import { WorkspaceShell } from '../../../components/workspace-shell';
+import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { reviewIntelligenceAction } from '../intelligence/actions';
+import { retryPublishAction } from '../integrations/actions';
+import { inSocial } from '../../../server/social-context';
+import { FAILURE_BEHAVIOUR, publishRetryRefusal } from '@brandspace/social-connectors';
 import { NoticedDecided, NoticedDecision } from './noticed-result';
 import { setupFactsFor } from '../../../server/setup-wizard';
 import { setupSteps } from '../../../server/setup-wizard-state';
@@ -136,6 +140,7 @@ export default async function OverviewPage({
   const mayUseCopilot = may('copilot.use');
   const maySeeInsights = may('strategy.read');
   const mayReviewInsights = may('strategy.manage');
+  const mayCreate = may('content.create');
   const mayApprove = may('content.approve');
   const mayReadCredits = mayReadCreditBalance(workspace.permissionKeys);
   const kind: HomeKind = homeKindFor(workspace.permissionKeys);
@@ -188,6 +193,52 @@ export default async function OverviewPage({
     ...(performanceShift ? [performanceShift] : []),
   ]);
 
+  /*
+   * D-496 (Home 2) — "RETRY" IN PLACE, only where a plain retry is the fix:
+   * every failed job of the post is one `retry()` would accept now
+   * (`publishRetryRefusal`: not an unknown outcome, not past its lateness
+   * deadline, not scheduled again, a class a retry can fix) and none needs the
+   * account reconnected first. Anything else keeps the row's link to
+   * Publishing. The pipeline checks again when the button is pressed.
+   */
+  const failedEntries =
+    attention.find((item) => item.kind === 'publishing-failed')?.entries ?? [];
+  const retryHere: ReadonlyMap<string, readonly string[]> =
+    may('publishing.manage') && failedEntries.length > 0
+      ? await inSocial(workspace.workspaceId, async ({ db, policy }) => {
+          const publishing = await policy();
+          // Publishing's own "reconnect first" cases are not a plain retry.
+          const reconnectFirst = (failureClass: string | null) =>
+            failureClass === 'AUTH_EXPIRED' ||
+            (failureClass !== null &&
+              FAILURE_BEHAVIOUR[failureClass as keyof typeof FAILURE_BEHAVIOUR]?.needsReconnect ===
+                true);
+          const ready = new Map<string, readonly string[]>();
+          for (const entry of failedEntries) {
+            const jobs = entry.failedJobs ?? [];
+            if (jobs.length === 0 || jobs.some((job) => reconnectFirst(job.failureClass))) continue;
+            // The same refusal `retry()` makes, asked before the button is drawn.
+            const refusals = await Promise.all(
+              jobs.map((job) =>
+                publishRetryRefusal({
+                  db,
+                  workspaceId: workspace.workspaceId,
+                  policy: publishing,
+                  jobId: job.id,
+                  brandScope: workspace.brandScope,
+                }),
+              ),
+            );
+            if (refusals.every((refusal) => refusal === null)) {
+              ready.set(
+                entry.id,
+                jobs.map((job) => job.id),
+              );
+            }
+          }
+          return ready as ReadonlyMap<string, readonly string[]>;
+        }).catch(() => new Map<string, readonly string[]>())
+      : new Map<string, readonly string[]>();
   /* ------------------------------------------------------- BrandSpace noticed */
   /*
    * D7 (Phase 2B-2) — Settings → AI switches suggestions off per brand; with
@@ -220,11 +271,17 @@ export default async function OverviewPage({
         db.insight.findMany({
           where: {
             workspaceId: workspace.workspaceId,
-            ...brandIdQueryFilter({ brandId, brandScope: workspace.brandScope }),
             ...(suggestionsOff.length > 0 ? { NOT: { brandId: { in: suggestionsOff } } } : {}),
             type: { in: [...RECOMMENDATION_INSIGHT_TYPES] },
             status: { in: ['NEW', 'SEEN'] },
-            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            // One AND, so the brand scope's clauses and these intersect: a
+            // second `AND` key would replace the scope's.
+            AND: [
+              ...brandIdQueryFilter({ brandId, brandScope: workspace.brandScope }).AND,
+              { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+              // D-496 (Home 4) — "Not now" leaves it out until its time passes.
+              { OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }] },
+            ],
           },
           orderBy: [{ confidenceMilli: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
           take: HOME_RECOMMENDATIONS,
@@ -240,6 +297,14 @@ export default async function OverviewPage({
         }),
       )
     : [];
+
+  // D-496 (Home 4) — how long "Not now" hides a suggestion, as configured.
+  const insightSnoozeDays =
+    recommendations.length > 0 && mayReviewInsights
+      ? await inAnalytics(workspace.workspaceId, async (services) =>
+          (await services.policy()).insightSnoozeDays,
+        ).catch(() => null)
+      : null;
 
   const { noticedPreferences, noticedWorkflows, snoozeDays } =
     brandId && may('content.create')
@@ -615,6 +680,15 @@ export default async function OverviewPage({
     ? t(`home.greeting.${period}` as MessageKey).replace('{name}', firstName)
     : t(`home.greeting.${period}.plain` as MessageKey);
   const ok = typeof query['ok'] === 'string' ? statusMessage(query['ok'], locale) : null;
+  // D-496 (Home 2) — a refused "Retry" in place comes back here with its reason.
+  const failed =
+    typeof query['error'] === 'string'
+      ? statusMessage(
+          query['error'],
+          locale,
+          typeof query['ref'] === 'string' ? query['ref'] : undefined,
+        )
+      : null;
 
   /* `UKS`: the upcoming row's pill — scheduled, in review, a draft. */
   const upcomingPill = (slot: { status: string; item: { status: string } | null }) =>
@@ -789,6 +863,86 @@ export default async function OverviewPage({
         <ul data-testid="attention-list" style={LIST}>
           {attention.map((item) => {
             const tag = TAG[item.kind] ?? (item.severity === 'blocked' ? 'failed' : 'change');
+            const verb = t(
+              `home.action.${attentionAction(item.kind, workspace.permissionKeys)}` as MessageKey,
+            );
+            /*
+             * D-496 (Home 1) — a kind about posts names them, one row each
+             * (Main.dc.html L245–255, S2764–2768), up to three, then "and N
+             * more" for the rest, which opens the kind's own screen.
+             */
+            if (item.entries && item.entries.length > 0) {
+              const more = item.count - item.entries.length;
+              return (
+                <Fragment key={item.kind}>
+                  {item.entries.map((entry) => {
+                    const jobs = retryHere.get(entry.id);
+                    return (
+                      <li
+                        key={entry.id}
+                        className="bsp-row"
+                        data-testid={`attention-${item.kind}-${entry.id}`}
+                      >
+                        <span className={`bsp-pill ${TAG_TONE[tag]}`}>
+                          {t(`home.p.tag.${tag}` as MessageKey)}
+                        </span>
+                        <span style={{ flexGrow: 1, fontSize: 'var(--bsp-t-14)', fontWeight: 600 }}>
+                          {fill(
+                            `attention.entry.${item.kind}${
+                              item.kind === 'publishing-failed' && entry.platformKeys.length === 0
+                                ? '.bare'
+                                : ''
+                            }` as MessageKey,
+                            {
+                              title: entry.title,
+                              channels: channelNames(entry.platformKeys),
+                            },
+                          )}
+                        </span>
+                        {jobs ? (
+                          <form action={retryPublishAction}>
+                            <input type="hidden" name="locale" value={locale} />
+                            <input type="hidden" name="returnTo" value="/overview" />
+                            {jobs.map((jobId) => (
+                              <input key={jobId} type="hidden" name="jobId" value={jobId} />
+                            ))}
+                            <button
+                              type="submit"
+                              className="bsp-btn bsp-sm bsp-sec"
+                              data-testid={`attention-retry-${entry.id}`}
+                            >
+                              {t('publishing.retry')}
+                            </button>
+                          </form>
+                        ) : (
+                          <Link
+                            href={`/${locale}${item.href}`}
+                            className="bsp-btn bsp-sm bsp-sec"
+                            data-testid={`attention-action-${item.kind}-${entry.id}`}
+                          >
+                            {verb}
+                          </Link>
+                        )}
+                      </li>
+                    );
+                  })}
+                  {more > 0 ? (
+                    <li className="bsp-row" data-testid={`attention-${item.kind}-more`}>
+                      <span style={{ flexGrow: 1, fontSize: 'var(--bsp-t-14)', fontWeight: 600 }}>
+                        {fill('attention.more', { count: String(more) })}
+                      </span>
+                      <Link
+                        href={`/${locale}${item.href}`}
+                        className="bsp-btn bsp-sm bsp-sec"
+                        data-testid={`attention-action-${item.kind}-more`}
+                      >
+                        {verb}
+                      </Link>
+                    </li>
+                  ) : null}
+                </Fragment>
+              );
+            }
             return (
               <li key={item.kind} className="bsp-row" data-testid={`attention-${item.kind}`}>
                 <span className={`bsp-pill ${TAG_TONE[tag]}`}>
@@ -829,9 +983,7 @@ export default async function OverviewPage({
                   className="bsp-btn bsp-sm bsp-sec"
                   data-testid={`attention-action-${item.kind}`}
                 >
-                  {t(
-                    `home.action.${attentionAction(item.kind, workspace.permissionKeys)}` as MessageKey,
-                  )}
+                  {verb}
                 </Link>
               </li>
             );
@@ -858,6 +1010,7 @@ export default async function OverviewPage({
           {ok}
         </p>
       ) : null}
+      {failed ? <CustomerBanner tone="error">{failed}</CustomerBanner> : null}
       {kind === 'owner' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--bsp-px-22)' }}>
           {/* ------------------------------------------------------------ the hero */}
@@ -1344,31 +1497,38 @@ export default async function OverviewPage({
                             .replace('{count}', String(insight._count.evidence))
                             .replace('{basis}', t(`home.basis.${insight.basis}` as MessageKey))}
                         </span>
+                        {/*
+                         * D-496 (Home 4, Q4) — the prototype's two buttons: the
+                         * direct action, which opens the Studio on the format
+                         * the suggestion names ("Make a post" when it names
+                         * none) with its title as the brief, and "Not now",
+                         * which hides the card for `analytics.insightSnoozeDays`.
+                         */}
                         <div className="bsp-xfoot" style={NOTICED_FOOT}>
-                          <Link
-                            href={`/${locale}/intelligence?insight=${insight.id}`}
-                            className="bsp-btn bsp-sm bsp-pur"
-                            data-testid={`home-recommendation-evidence-${insight.id}`}
-                          >
-                            {t('home.recommended.viewEvidence')}
-                          </Link>
-                          {mayUseCopilot ? (
-                            <CopilotLink
-                              href={copilotHref(locale, 'intelligence')}
-                              className="bsp-btn bsp-sm bsp-sec"
+                          {mayCreate ? (
+                            <Link
+                              href={`/${locale}/content/compose?${new URLSearchParams({
+                                mode: 'ai',
+                                format: suggestedFormatOf(insight.body) ?? 'POST',
+                                brief: pick(insight.title),
+                              }).toString()}`}
+                              className="bsp-btn bsp-sm bsp-pur"
+                              data-testid={`home-recommendation-make-${insight.id}`}
                             >
-                              {t('home.recommended.giveToCopilot')}
-                            </CopilotLink>
+                              {t(
+                                `home.recommended.make.${suggestedFormatOf(insight.body) ?? 'POST'}` as MessageKey,
+                              )}
+                            </Link>
                           ) : null}
                           {mayReviewInsights ? (
                             <form action={reviewIntelligenceAction}>
                               <input type="hidden" name="locale" value={locale} />
                               <input type="hidden" name="insightId" value={insight.id} />
-                              <input type="hidden" name="decision" value="dismiss" />
+                              <input type="hidden" name="decision" value="snooze" />
                               <input type="hidden" name="returnTo" value="/overview" />
                               <NoticedDecision
-                                className="bsp-btn bsp-sm bsp-ghost"
-                                testId={`home-recommendation-dismiss-${insight.id}`}
+                                className="bsp-btn bsp-sm bsp-sec"
+                                testId={`home-recommendation-snooze-${insight.id}`}
                                 snapshot={{
                                   id: insight.id,
                                   glyph: '↗',
@@ -1381,11 +1541,16 @@ export default async function OverviewPage({
                                       '{basis}',
                                       t(`home.basis.${insight.basis}` as MessageKey),
                                     ),
-                                  result: decidedResult('dismiss'),
-                                  ok: 'INSIGHT_DISMISSED',
+                                  result: insightSnoozeDays
+                                    ? t('home.decided.snooze').replace(
+                                        '{days}',
+                                        String(insightSnoozeDays),
+                                      )
+                                    : t('home.decided.snoozeLater'),
+                                  ok: 'INSIGHT_SNOOZED',
                                 }}
                               >
-                                {t('insights.dismiss')}
+                                {t('home.preference.snooze')}
                               </NoticedDecision>
                             </form>
                           ) : null}
