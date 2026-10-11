@@ -51,8 +51,9 @@ export function formLabels(t: Translate, submit: string): CampaignFormLabels {
     briefAr: t('campaigns.briefAr'),
     briefEn: t('campaigns.briefEn'),
     description: t('campaigns.description'),
-    startDate: t('campaigns.startDate'),
-    endDate: t('campaigns.endDate'),
+    // D-496 — the dialog's own words (Main.dc.html L3580: 'Starts', 'Ends').
+    startDate: t('campaigns.form.starts'),
+    endDate: t('campaigns.form.ends'),
     channels: t('campaigns.channels'),
     plannedPosts: t('campaigns.form.plannedPosts'),
     fewer: t('campaigns.form.fewer'),

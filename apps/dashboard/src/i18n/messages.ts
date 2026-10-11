@@ -3338,6 +3338,8 @@ export const messages = {
     // D-496 — the campaign dialog (Main.dc.html L1574–1593).
     'campaigns.form.editTitle': 'تعديل الحملة',
     'campaigns.form.namePh': 'مثلًا: قائمة الشتاء',
+    'campaigns.form.starts': 'يبدأ',
+    'campaigns.form.ends': 'ينتهي',
     'campaigns.form.brand': 'العلامة التجارية',
     'campaigns.form.plannedPosts': 'المنشورات المخطّطة',
     'campaigns.form.fewer': 'منشور أقل',
@@ -7453,6 +7455,8 @@ export const messages = {
     // D-496 — the campaign dialog (Main.dc.html L1574–1593).
     'campaigns.form.editTitle': 'Edit campaign',
     'campaigns.form.namePh': 'e.g. Winter menu',
+    'campaigns.form.starts': 'Starts',
+    'campaigns.form.ends': 'Ends',
     'campaigns.form.brand': 'Brand',
     'campaigns.form.plannedPosts': 'Planned posts',
     'campaigns.form.fewer': 'One post fewer',
