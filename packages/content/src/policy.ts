@@ -31,6 +31,8 @@ export const platformSchema = z.object({
   maxMediaItems: z.number().int().min(0),
   /** PR D (Studio S38) — the unsafe bands on a 9:16 frame, in percent; absent is none known. */
   safeZones: z.object({ top: z.number(), bottom: z.number(), end: z.number() }).optional(),
+  /** D-496 (Studio S9) — the recommended hashtag range; absent is none known. */
+  recommendedHashtags: z.object({ min: z.number(), max: z.number() }).optional(),
 });
 
 export const contentPolicySchema = z.object({

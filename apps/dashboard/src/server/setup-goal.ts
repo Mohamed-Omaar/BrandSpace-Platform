@@ -9,6 +9,7 @@ import {
   GOAL_ITEM_KEY,
   SETUP_GOAL_CHANGE_KIND,
   goalKnowledge,
+  ownGoalKnowledge,
   type SetupGoal,
 } from './setup-wizard-state';
 
@@ -33,12 +34,19 @@ export async function saveSetupGoal(
   input: {
     readonly workspaceId: string;
     readonly brandId: string;
-    readonly goal: SetupGoal;
+    /**
+     * One of ours, or — D-496 (Auth 8) — the person's own words, stored as the
+     * same STRATEGY item with no goal key on the brand (a typed goal is not
+     * one of the keys, so the brand carries none).
+     */
+    readonly goal: SetupGoal | { readonly own: string };
     readonly actor: KnowledgeActor;
     readonly staleness: StalenessPolicy;
   },
 ): Promise<void> {
-  const { workspaceId, brandId, goal, actor } = input;
+  const { workspaceId, brandId, actor } = input;
+  // The key the brand carries: the chosen goal's, or none for a typed one.
+  const goal = typeof input.goal === 'string' ? input.goal : null;
   // BEFORE any read (docs/SECURITY.md §4.2). Out of scope is a 404.
   assertBrandInScope(actor.brandScope, brandId);
 
@@ -50,7 +58,8 @@ export async function saveSetupGoal(
   // are the same answer.
   if (!brand) throw new AppError('NOT_FOUND', 'Brand not found.');
 
-  const { title, body } = goalKnowledge(goal);
+  const { title, body } =
+    typeof input.goal === 'string' ? goalKnowledge(input.goal) : ownGoalKnowledge(input.goal.own);
   const existing = await db.brandKnowledgeItem.findFirst({
     where: {
       brandId,

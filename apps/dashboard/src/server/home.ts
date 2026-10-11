@@ -7,10 +7,7 @@
  * reads data, so none of it can invent any.
  */
 
-import {
-  parseContentType,
-  type ComposerContentType,
-} from '../app/[locale]/content/content-types';
+import { parseContentType, type ComposerContentType } from '../app/[locale]/content/content-types';
 
 /** Morning before noon, afternoon before six, evening otherwise. */
 export type GreetingPeriod = 'morning' | 'afternoon' | 'evening';

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { FirstVisitHint } from '../../../components/first-visit-hint';
 import {
   brandBrainChangedSince,
   usableFactsForDisplay,
@@ -19,6 +20,7 @@ import { requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inAnalytics } from '../../../server/analytics-context';
+import { inContentStudio } from '../../../server/content-context';
 import { pillarAverages } from '../../../server/performance-view';
 import { StartBusy, StartBusyReporter } from './start-busy';
 import { copilotHref } from '../../../server/copilot-surface';
@@ -30,6 +32,7 @@ import {
 } from '../../../server/setup-wizard-state';
 import {
   campaignHref,
+  campaignTimeline,
   contentHref,
   leadingChannels,
   parseStrategyBody,
@@ -53,7 +56,7 @@ import {
 } from './actions';
 
 import { EmptyAction } from '../../../components/empty-action';
-import { type DateFormatterLike, dayFormatter } from '../../../server/prototype-dates';
+import { type DateFormatterLike, dayFormatter, rangeLabel } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -173,6 +176,31 @@ export default async function StrategyPage({
     : null;
 
   const plan = data?.accepted ? parseStrategyBody(data.accepted.body) : null;
+  /*
+   * D-496 (Strategy 6) — the brand's campaigns for the three-month timeline,
+   * read like Campaigns reads them (scope in the WHERE), for a member who may
+   * open Campaigns.
+   */
+  const timeline =
+    brand && may('campaigns.read')
+      ? campaignTimeline(
+          await inContentStudio(workspace.workspaceId, async (services) =>
+            services.campaigns().list({
+              brandId: brand.id,
+              brandScope: workspace.brandScope,
+              take: 200,
+            }),
+          ),
+          systemClock.now(),
+        )
+      : null;
+  const monthLabel = (value: Date) => {
+    const label = new Intl.DateTimeFormat(locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
+      month: 'short',
+      timeZone: 'UTC',
+    }).format(value);
+    return locale === 'ar' ? label : label.toUpperCase();
+  };
   /*
    * PR D (Strategy 7) — "HOW IT'S GOING" (`x.st.perf`, line 1131): average
    * engagements per post, per pillar, over the last 28 days, from the posts'
@@ -298,6 +326,13 @@ export default async function StrategyPage({
               the history, the planned-vs-actual figure, "Start from the
               current strategy" and "Start empty".
             */}
+            {/* D-496 (Strategy 1) — the first-visit hint, Main.dc.html L977. */}
+            <FirstVisitHint
+              storageKey="brandspace.hint.strategy"
+              text={t('hint.strategy')}
+              closeLabel={t('hint.close')}
+              testId="hint-strategy"
+            />
             <nav
               className="bsp-seg bsp-sp-seg"
               aria-label={t('strategy.view.label')}
@@ -680,6 +715,64 @@ export default async function StrategyPage({
                     <span className="bsp-sp-month-hint">{t('strategy.monthEmpty')}</span>
                   )}
                 </section>
+
+                {timeline ? (
+                  /*
+                   * D-496 (Strategy 6) — "Campaigns in this period"
+                   * (`Main.dc.html` L1116–1125): three months, one bar per
+                   * campaign by status; a name opens that campaign.
+                   */
+                  <section className="bsp-xcard bsp-sp-tl" data-testid="strategy-timeline">
+                    <div className="bsp-sp-tl-h">
+                      <h2 className="bsp-sech">{t('strategy.timeline.title')}</h2>
+                      <Link
+                        href={`/${locale}/campaigns`}
+                        className="bsp-btn bsp-sm bsp-ghost"
+                        data-testid="strategy-timeline-all"
+                      >
+                        {t('strategy.timeline.viewAll')} →
+                      </Link>
+                    </div>
+                    <div className="bsp-sp-tl-months" aria-hidden="true">
+                      <span />
+                      {timeline.months.map((month) => (
+                        <span key={month.toISOString()} className="bsp-sp-tl-month">
+                          {monthLabel(month)}
+                        </span>
+                      ))}
+                    </div>
+                    {timeline.rows.length === 0 ? (
+                      <span className="bsp-sp-month-hint" data-testid="strategy-timeline-none">
+                        {t('strategy.timeline.none')}
+                      </span>
+                    ) : (
+                      timeline.rows.map((row) => (
+                        <div
+                          key={row.id}
+                          className="bsp-sp-tl-row"
+                          data-testid={`strategy-timeline-${row.id}`}
+                        >
+                          <Link
+                            href={`/${locale}/campaigns/${row.id}`}
+                            className="bsp-sp-tl-name"
+                            dir="auto"
+                          >
+                            {row.name}
+                          </Link>
+                          <div className="bsp-sp-tl-track">
+                            <span
+                              className="bsp-sp-tl-bar bsp-ltr"
+                              data-kind={row.kind}
+                              style={{ insetInlineStart: `${row.left}%`, width: `${row.width}%` }}
+                            >
+                              {rangeLabel(row.start, row.end, locale, 'UTC')}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </section>
+                ) : null}
 
                 {pillarPerformance.length > 0 ? (
                   /*

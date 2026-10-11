@@ -2242,6 +2242,38 @@ Security only; the entry-card set-up page has no toast host.
   `label.btn.sm.sec` over a transparent input), lists the chosen files by name before sending, and
   labels the brand select "Brand". No new control.
 
+### 6.3.63 PR E — Group B of the interaction parity audit (D-496, D-503)
+
+Fifteen audit rows plus Home 2, each from the prototype's own markup at 0.88 (row by row in D-503):
+
+- **The campaign dialog** (Shell 7, Campaigns 1, 15, 16, 21; `Main.dc.html` L1571–1593): a 560px
+  card, radius 28, `padding: 24px 26px; gap: 16px`, over the rule builder's veil — its own classes
+  (`.bsp-cp-*`) because its size and spacing differ from the 640px rule builder; the same
+  address-driven behaviour (`?new=1` over Campaigns, `?edit=1` over the campaign). The objective and
+  channel chips are the Look card's no-script chip (`.bsp-chip.bsp-lk-chip`, now also for
+  checkboxes); "Planned posts" − n + and the two-step "Archive" are the only new client pieces.
+- **Home 1, 2, 4**: one `.bsp-row` per named post (pill, sentence, action), "and N more" as a last
+  row; "Retry" is the Publishing log's own form posted in place; the noticed card's footer is the
+  prototype's two buttons.
+- **The Notes popover** (Shell 1, 2; L152–161) is the bell's card (`.bsp-ntf`, D-297): the same 340px
+  glass, head, rows and foot — the prototype draws the two the same.
+- **Strategy 6** (L1116–1125): the 150px name column, three month columns and 28px tracks, bars by
+  kind (`.bsp-sp-tl-*`); the month labels take `#6a6a72` as D-470 darkens `#8a8a92`.
+- **The first-visit hint** (Brand Brain 1, Strategy 1; L759, L977): `.bsp-hint-card`, transcribed.
+- **Auth 8** (Auth L183–185): the wizard's own chip, dashed for "+ Add your own", and the field row
+  across the grid with "Add" at 80px.
+- **Settings 3** is one more `CheckboxRow`; **Studio S9** is the existing count with the configured
+  range.
+
+Recorded uses of D-468: the campaign dialog keeps the product's brief (both languages, D-292's
+prefill) and, when editing, the status — the prototype's dialog draws neither; a brand choice
+appears only on "All brands" with several brands (D-191). Left out, for want of a feature: the
+dialog's goal metric and KPI target (D-473), pillar and Brand Brain fact chips, and "End campaign".
+"Archive" is offered for any live campaign, as before, not only a planned one (Q5). The noticed
+card's View evidence, Give to Copilot and Dismiss leave Home (they remain on Intelligence and
+Performance). A post in review is named without channels: a post has no channels until it is
+scheduled.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The

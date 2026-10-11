@@ -19,7 +19,7 @@ import {
   reviewCandidateInputFrom,
   setupReviewInProgress,
 } from '../../../server/candidate-review';
-import { setupGoalFrom, type SetupView } from '../../../server/setup-wizard-state';
+import { OWN_GOAL_MAX, setupGoalFrom, type SetupView } from '../../../server/setup-wizard-state';
 
 const log = createLogger({ context: { component: 'dashboard.setup-wizard' } });
 
@@ -305,7 +305,19 @@ export async function saveFirstGoalAction(formData: FormData): Promise<void> {
   let destination: string;
   try {
     const session = await requireWorkspaceAction(locale, 'brand_brain.edit');
-    const goal = setupGoalFrom(formData.get('goal'));
+    /*
+     * D-496 (Auth 8) — "+ Add your own": `goal=own` with the typed words in
+     * `ownGoal`, trimmed and bounded here as in the field. Empty is refused.
+     */
+    const ownWords = String(formData.get('ownGoal') ?? '')
+      .trim()
+      .slice(0, OWN_GOAL_MAX);
+    const goal =
+      formData.get('goal') === 'own'
+        ? ownWords === ''
+          ? null
+          : { own: ownWords }
+        : setupGoalFrom(formData.get('goal'));
     if (goal === null) throw new Error('unknown goal');
 
     if (goal !== 'unsure') {

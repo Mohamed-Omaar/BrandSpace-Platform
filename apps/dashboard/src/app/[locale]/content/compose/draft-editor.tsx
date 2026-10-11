@@ -2341,8 +2341,22 @@ export function DraftEditor({
                         <label className="bsp-st-label" htmlFor={`${fieldId}-${variant.id}-tags`}>
                           {t['content.composer.hashtags']}
                         </label>
-                        <span className="bsp-st-tags-count bsp-ltr">
-                          {parseHashtags(tagTextOf(variant)).length} / {platform?.maxHashtags ?? 0}
+                        {/*
+                          D-496 (Studio S9) — the prototype's "N · Recommended
+                          3–5" (`SX.rec`, L2378) where the platform's range is
+                          configured; "N / max" where it is not.
+                        */}
+                        <span
+                          className="bsp-st-tags-count bsp-ltr"
+                          data-testid={`studio-tags-count-${variant.id}`}
+                        >
+                          {platform?.recommendedHashtags
+                            ? `${parseHashtags(tagTextOf(variant)).length} · ${(
+                                t['studio.tags.recommended'] ?? ''
+                              )
+                                .replace('{min}', String(platform.recommendedHashtags.min))
+                                .replace('{max}', String(platform.recommendedHashtags.max))}`
+                            : `${parseHashtags(tagTextOf(variant)).length} / ${platform?.maxHashtags ?? 0}`}
                         </span>
                       </div>
                       <div className="bsp-st-tag-row">

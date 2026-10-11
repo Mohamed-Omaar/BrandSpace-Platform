@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { OwnGoal } from './own-goal';
 import type { ReactNode } from 'react';
 import { localizedFrom, areaDefinition } from '@brandspace/brand-brain';
 import { TenantOnboardingPolicySource } from '@brandspace/onboarding';
@@ -949,6 +950,13 @@ export default async function OnboardingPage({
                   {t(`setup.goal.${goal}` as MessageKey)}
                 </label>
               ))}
+              {/* D-496 (Auth 8) — "+ Add your own" (Auth.dc.html L183–185). */}
+              <OwnGoal
+                openLabel={t('setup.wz.goal.addOwn')}
+                placeholder={t('setup.wz.goal.ownPh')}
+                addLabel={t('setup.wz.goal.add')}
+                initial={facts.goal?.own ?? null}
+              />
             </fieldset>
           </form>
         ) : (
@@ -980,7 +988,8 @@ export default async function OnboardingPage({
     const recommended = recommendedFirstAction(facts);
     const goalLabel = facts.goal?.objective
       ? t(`setup.goal.${facts.goal.objective}` as MessageKey)
-      : null;
+      : // D-496 (Auth 8) — a typed goal reads in the person's own words.
+        (facts.goal?.own ?? null);
     /*
      * THE FIRST IDEAS (line 189): the product's own next steps, not invented
      * posts — writing for the goal just chosen, a first post, and a plan with

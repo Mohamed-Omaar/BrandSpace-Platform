@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation';
+import { requireWorkspacePage } from '../../../../server/customer-context';
+import { NoAccessPage } from '../../../../components/no-access-page';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,9 +9,9 @@ export const dynamic = 'force-dynamic';
  * Campaigns (`/campaigns?new=1`). This address stays, so a link or bookmark to
  * it — or to Strategy's prefilled form (D-292) — still opens the form: every
  * value it carried goes along, and the list page reads them exactly as this
- * page did (the objective and the channels from closed sets only). The list's
- * own gate (`campaigns.read`) and the dialog's (`campaigns.manage`) decide who
- * sees it.
+ * page did (the objective and the channels from closed sets only). Its own
+ * gate stays (`campaigns.manage`, the known-route table): a member without it
+ * gets "No access to this page", as before, rather than a list with no form.
  */
 export default async function NewCampaignPage({
   params,
@@ -20,6 +22,8 @@ export default async function NewCampaignPage({
 }) {
   const { locale } = await params;
   const query = await searchParams;
+  const access = await requireWorkspacePage(locale, '/campaigns/new');
+  if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const carried = new URLSearchParams({ new: '1' });
   for (const [key, value] of Object.entries(query)) {
     if (key === 'new') continue;
@@ -27,5 +31,5 @@ export default async function NewCampaignPage({
       if (typeof entry === 'string') carried.append(key, entry);
     }
   }
-  redirect(`/${locale === 'ar' ? 'ar' : 'en'}/campaigns?${carried.toString()}`);
+  redirect(`/${locale}/campaigns?${carried.toString()}`);
 }

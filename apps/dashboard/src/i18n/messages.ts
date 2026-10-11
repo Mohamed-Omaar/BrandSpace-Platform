@@ -135,6 +135,10 @@ export const messages = {
     'attention.performance-below': 'انخفض مؤشر {detail} في {date} دون خط أساسه المعتاد.',
     /* P6-05 — the notes panel. */
     'notes.title': 'الملاحظات',
+    // D-496 (Shell 1, 2) — the Notes popover, Main.dc.html L152–161.
+    'notes.pop.all': 'كل الملاحظات',
+    'notes.pop.on': 'على «{subject}»',
+    'notes.pop.empty': 'لا توجد ملاحظات بعد.',
     'notes.emptyTitle': 'لا توجد ملاحظات بعد',
     'notes.emptyBody': 'اكتب ملاحظة ليراها زملاؤك بجانب هذا العمل.',
     'notes.newLabel': 'ملاحظة جديدة',
@@ -711,6 +715,10 @@ export const messages = {
     'aiSettings.suggestions': 'اقتراحات الذكاء الاصطناعي في الصفحة الرئيسية',
     'aiSettings.suggestionsHint':
       'تعرض بطاقة «توصيات Brandspace» في الصفحة الرئيسية لهذه العلامة. عند الإيقاف تختفي البطاقة وحدها.',
+    // D-496 (Settings 3) — Main.dc.html S4008.
+    'aiSettings.draftsToReview': 'إرسال مسودات الذكاء الاصطناعي للمراجعة',
+    'aiSettings.draftsToReviewHint':
+      'يُرسَل كل منشور يكتبه الذكاء الاصطناعي إلى المراجِع قبل أن تمكن جدولته.',
     'aiSettings.useBrandBrain': 'استخدام عقل العلامة في الكتابة',
     'aiSettings.useBrandBrainHint':
       'عند الإيقاف لا تصل أي حقيقة من عقل العلامة إلى النصوص وأدوات الاستوديو والتصاميم والاستراتيجية والمساعد، وتُكتب دون الاستناد إليها. يظل «تحدّث مع العلامة» في عقل العلامة يعمل.',
@@ -1101,6 +1109,12 @@ export const messages = {
     'bb.tab.look': 'المظهر والأسلوب',
     'bb.tab.sources': 'المصادر',
     'bb.tab.chat': 'تحدّث مع العلامة',
+    // D-496 (Brand Brain 1, Strategy 1) — the first-visit hints, Main.dc.html L759 / L977.
+    'hint.close': 'إغلاق',
+    'hint.brain':
+      'عقل العلامة هو ما يعرف نشاطك. ابدأ بالأسئلة الناقصة أدناه، أو ارفع ملفًا مثل قائمة الطعام أو ملف الشركة، أو علّمه بنفسك في «تحدّث مع العلامة». كل مسودة تُكتب من الحقائق المعتمدة هنا فقط.',
+    'hint.strategy':
+      'تحوّل الاستراتيجية هدفك إلى خطة: محاور المحتوى، وموضوعات كل أسبوع، ورقم واحد تتابعه. يقترح Brandspace، وأنت تقبل أو تعدّل.',
     'bb.missingTitle': 'ما الذي ينقص',
     'bb.questionAnswered': 'تمت الإجابة',
     'bb.questionOpen': 'لم تتم الإجابة بعد',
@@ -1843,6 +1857,8 @@ export const messages = {
     'editor.preview.title': 'معاينة مباشرة',
     'editor.preview.compare': 'قارن المعاينات',
     'studio.preview.safeZones': 'المناطق الآمنة',
+    // D-496 (Studio S9) — `SX.rec`, Main.dc.html L2324/L2331.
+    'studio.tags.recommended': 'المقترح {min}–{max}',
     'editor.preview.single': 'اعرض معاينة واحدة',
     'editor.fix.shorten': 'اختصر بالذكاء الاصطناعي',
     'editor.fix.media': 'اختر وسائط',
@@ -2809,6 +2825,10 @@ export const messages = {
     'strategy.monthHint': 'كل أسبوع يفتح حملة أو منشورًا بالموضوع معبّأً. لا يُنشأ شيء حتى تحفظه.',
     'strategy.cadence': '≈ {week} منشورات في الأسبوع · {month} في الشهر',
     'strategy.howGoing': 'كيف يسير الأداء',
+    // D-496 (Strategy 6) — Main.dc.html L1117 (`stCampaigns`, `viewAll`).
+    'strategy.timeline.title': 'الحملات في هذه الفترة',
+    'strategy.timeline.viewAll': 'عرض الكل',
+    'strategy.timeline.none': 'لا توجد حملة بتاريخين في هذه الأشهر الثلاثة.',
     'strategy.howSub': 'متوسط التفاعل لكل محور · آخر 28 يومًا',
     'strategy.best': 'الأفضل',
     'strategy.busy': 'يقرأ Brandspace نتائجك ومعلومات عقل العلامة…',
@@ -3727,6 +3747,10 @@ export const messages = {
     'setup.wz.connect.connect': 'اربط',
     'setup.wz.connect.notConnected': 'غير مرتبط',
     'setup.wz.goal.title': 'ما الذي تريده أولًا؟',
+    // D-496 (Auth 8) — Auth.dc.html L274 (`addGoal`, `goalPh`, `add`).
+    'setup.wz.goal.addOwn': '+ أضف هدفك',
+    'setup.wz.goal.ownPh': 'اكتب هدفك',
+    'setup.wz.goal.add': 'إضافة',
     'setup.wz.goal.body': 'تُبنى عليه استراتيجيتك وأولى أفكارك.',
     'setup.wz.ready.title': '{brand} جاهزة',
     'setup.wz.ready.body': 'ابدأ بواحدة من هذه، أو اذهب إلى الرئيسية.',
@@ -4119,6 +4143,10 @@ export const messages = {
     'attention.performance-above': '{detail} on {date} rose above its usual baseline.',
     'attention.performance-below': '{detail} on {date} fell below its usual baseline.',
     'notes.title': 'Notes',
+    // D-496 (Shell 1, 2) — the Notes popover, Main.dc.html L152–161.
+    'notes.pop.all': 'All notes',
+    'notes.pop.on': 'On “{subject}”',
+    'notes.pop.empty': 'No notes yet.',
     'notes.emptyTitle': 'No notes yet',
     'notes.emptyBody': 'Leave a note for your colleagues, beside the work it is about.',
     'notes.newLabel': 'New note',
@@ -4710,6 +4738,10 @@ export const messages = {
     'aiSettings.suggestions': 'AI suggestions on Home',
     'aiSettings.suggestionsHint':
       'Shows the “Recommended by Brandspace” card on Home for this brand. Turning it off hides that card only.',
+    // D-496 (Settings 3) — Main.dc.html S4008.
+    'aiSettings.draftsToReview': 'AI drafts go to review',
+    'aiSettings.draftsToReviewHint':
+      'Any post the AI writes is sent to the reviewer before it can be scheduled.',
     'aiSettings.useBrandBrain': 'Use Brand Brain',
     'aiSettings.useBrandBrainHint':
       'When off, no Brand Brain fact reaches captions, Studio tools, Creative, Strategy or the Copilot, and they write without it. Brand Brain’s own “Talk with the brand” keeps working.',
@@ -5103,6 +5135,12 @@ export const messages = {
     'bb.tab.look': 'Look & voice',
     'bb.tab.sources': 'Sources',
     'bb.tab.chat': 'Talk with the brand',
+    // D-496 (Brand Brain 1, Strategy 1) — the first-visit hints, Main.dc.html L759 / L977.
+    'hint.close': 'Close',
+    'hint.brain':
+      'Brand Brain is what knows your business. Start with the missing questions below, upload a file like your menu or company profile, or teach it yourself in “Talk with the brand”. Every draft is written only from the approved facts here.',
+    'hint.strategy':
+      'Strategy turns your goal into a plan: content pillars, weekly topics and one number to track. Brandspace suggests; you accept or change.',
     'bb.missingTitle': "What's missing",
     'bb.questionAnswered': 'answered',
     'bb.questionOpen': 'not answered yet',
@@ -5868,6 +5906,8 @@ export const messages = {
     'editor.preview.title': 'Live preview',
     'editor.preview.compare': 'Compare previews',
     'studio.preview.safeZones': 'Safe zones',
+    // D-496 (Studio S9) — `SX.rec`, Main.dc.html L2324/L2331.
+    'studio.tags.recommended': 'Recommended {min}–{max}',
     'editor.preview.single': 'Show one preview',
     'editor.fix.shorten': 'Shorten with AI',
     'editor.fix.media': 'Choose media',
@@ -6877,6 +6917,10 @@ export const messages = {
       'Each week opens a campaign or a post with the theme filled in. Nothing is created until you save it.',
     'strategy.cadence': '≈ {week} posts a week · {month} a month',
     'strategy.howGoing': 'How it’s going',
+    // D-496 (Strategy 6) — Main.dc.html L1117 (`stCampaigns`, `viewAll`).
+    'strategy.timeline.title': 'Campaigns in this period',
+    'strategy.timeline.viewAll': 'View all',
+    'strategy.timeline.none': 'No campaign with both dates falls in these three months.',
     'strategy.howSub': 'Average engagement per pillar · last 28 days',
     'strategy.best': 'Best',
     'strategy.busy': 'Brandspace is reading your results and brand knowledge…',
@@ -7831,6 +7875,10 @@ export const messages = {
     'setup.wz.connect.connect': 'Connect',
     'setup.wz.connect.notConnected': 'Not connected',
     'setup.wz.goal.title': 'What do you want first?',
+    // D-496 (Auth 8) — Auth.dc.html L275 (`addGoal`, `goalPh`, `add`).
+    'setup.wz.goal.addOwn': '+ Add your own',
+    'setup.wz.goal.ownPh': 'Type your goal',
+    'setup.wz.goal.add': 'Add',
     'setup.wz.goal.body': 'Your strategy and first ideas are built on it.',
     'setup.wz.ready.title': '{brand} is ready',
     'setup.wz.ready.body': 'Start with one of these, or go to Home.',

@@ -1151,6 +1151,36 @@ select.bsp-chip {
   color: #5312c4;
 }
 
+/*
+ * D-496 (Brand Brain 1, Strategy 1) — the first-visit hint card,
+ * `Main.dc.html` L759 / L977: `display:flex; align-items:center; gap:10px;
+ * background:#f6f3ff; border:1px solid #ece4ff; border-radius:14px;
+ * padding:10px 14px; font-size:13px; color:#3d2a74; margin-bottom:12px`.
+ */
+.bsp-hint-card {
+  display: flex;
+  align-items: center;
+  gap: var(--bsp-px-10);
+  background: #f6f3ff;
+  border: 1px solid #ece4ff;
+  border-radius: var(--bsp-px-14);
+  padding: var(--bsp-px-10) var(--bsp-px-14);
+  font-size: var(--bsp-fs-13);
+  color: #3d2a74;
+  margin-block-end: var(--bsp-px-12);
+}
+.bsp-hint-card-t {
+  flex-grow: 1;
+  line-height: 1.5;
+}
+.bsp-hint-card-x {
+  border: 0;
+  background: transparent;
+  font-size: var(--bsp-fs-16);
+  color: #6a5a9a;
+  cursor: pointer;
+}
+
 /* `.lbl` */
 .bsp-lbl {
   font-size: var(--bsp-fs-11);
@@ -10443,6 +10473,92 @@ img.bsp-pf-art {
   font-size: var(--bsp-fs-11);
   color: #6a6a72;
 }
+/*
+ * D-496 (Strategy 6) — "Campaigns in this period", `Main.dc.html` L1116–1125:
+ * a 150px name column and three month columns; each track 28px tall with the
+ * month lines `#f0f0f2`; bars `top/bottom 4px`, radius 99, `padding: 0 10px`,
+ * 11px/800, by kind (run, paused, always, plan).
+ */
+.bsp-xcard.bsp-sp-tl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-12);
+}
+.bsp-sp-tl-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.bsp-sp-tl-months {
+  display: grid;
+  grid-template-columns: var(--bsp-px-150) repeat(3, minmax(0, 1fr));
+  font-size: var(--bsp-fs-11);
+  font-weight: 700;
+  color: #6a6a72; /* prototype #8a8a92, darkened for contrast as D-470 does */
+  letter-spacing: 0.04em;
+}
+.bsp-sp-tl-month {
+  border-inline-start: 1px solid #f0f0f2;
+  padding-inline-start: var(--bsp-px-8);
+}
+.bsp-sp-tl-row {
+  display: grid;
+  grid-template-columns: var(--bsp-px-150) minmax(0, 1fr);
+  align-items: center;
+}
+.bsp-sp-tl-name {
+  font-size: var(--bsp-fs-13);
+  font-weight: 500;
+  color: #111114;
+  text-decoration: none;
+  text-align: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-inline-end: var(--bsp-px-8);
+}
+.bsp-sp-tl-track {
+  position: relative;
+  block-size: var(--bsp-px-28);
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent calc(33.33% - 1px),
+    #f0f0f2 calc(33.33% - 1px),
+    #f0f0f2 33.33%
+  );
+}
+.bsp-sp-tl-bar {
+  position: absolute;
+  inset-block: var(--bsp-px-4);
+  border-radius: 99px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--bsp-px-10);
+  font-size: var(--bsp-fs-11);
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 0;
+}
+.bsp-sp-tl-bar[data-kind='run'] {
+  background: linear-gradient(90deg, #7935fe, #9b6bff);
+  color: #fff;
+}
+.bsp-sp-tl-bar[data-kind='paused'] {
+  background: #e4e4e8;
+  color: #55555c;
+}
+.bsp-sp-tl-bar[data-kind='always'] {
+  background: #f6f3ff;
+  color: #5312c4;
+}
+.bsp-sp-tl-bar[data-kind='plan'] {
+  background: #fff;
+  color: #5312c4;
+  border: 1.5px dashed #b8a4ff;
+}
 /* The month: a `.sech` and two week cards across (`gap: 14px`). */
 .bsp-sp-month,
 .bsp-sp-drafts {
@@ -12060,6 +12176,24 @@ img.bsp-pf-art {
   cursor: pointer;
 }
 /* The goal step's `.chip`s: three columns; chosen `#7935fe` edge on `#f6f3ff` with a 3px `#efe7ff` ring. */
+/* D-496 (Auth 8) — "+ Add your own" (`Auth.dc.html` L184–185): the dashed
+   chip in `#5312c4`, and the field row across the grid with "Add" at 80px. */
+.bsp-wz-chip.bsp-wz-own-open {
+  border-style: dashed;
+  color: #5312c4;
+}
+.bsp-wz-own {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--bsp-px-8);
+}
+.bsp-wz input.bs-control.bsp-wz-own-in {
+  flex-grow: 1;
+}
+.bsp-wz-chip.bsp-wz-own-add {
+  justify-content: center;
+  min-inline-size: var(--bsp-px-80);
+}
 .bsp-wz-goals {
   border: 0;
   margin: 0;

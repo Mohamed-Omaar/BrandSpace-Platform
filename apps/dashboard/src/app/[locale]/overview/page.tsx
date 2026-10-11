@@ -201,8 +201,7 @@ export default async function OverviewPage({
    * account reconnected first. Anything else keeps the row's link to
    * Publishing. The pipeline checks again when the button is pressed.
    */
-  const failedEntries =
-    attention.find((item) => item.kind === 'publishing-failed')?.entries ?? [];
+  const failedEntries = attention.find((item) => item.kind === 'publishing-failed')?.entries ?? [];
   const retryHere: ReadonlyMap<string, readonly string[]> =
     may('publishing.manage') && failedEntries.length > 0
       ? await inSocial(workspace.workspaceId, async ({ db, policy }) => {
@@ -301,8 +300,9 @@ export default async function OverviewPage({
   // D-496 (Home 4) — how long "Not now" hides a suggestion, as configured.
   const insightSnoozeDays =
     recommendations.length > 0 && mayReviewInsights
-      ? await inAnalytics(workspace.workspaceId, async (services) =>
-          (await services.policy()).insightSnoozeDays,
+      ? await inAnalytics(
+          workspace.workspaceId,
+          async (services) => (await services.policy()).insightSnoozeDays,
         ).catch(() => null)
       : null;
 

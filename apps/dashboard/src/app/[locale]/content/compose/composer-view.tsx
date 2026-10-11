@@ -58,6 +58,8 @@ export interface ComposerPlatform {
   readonly allowsFirstComment?: boolean;
   /** PR D (S38) — the platform's configured unsafe bands on a 9:16 frame, in percent. */
   readonly safeZones?: { readonly top: number; readonly bottom: number; readonly end: number };
+  /** D-496 (S9) — the configured recommended hashtag range; absent is none known. */
+  readonly recommendedHashtags?: { readonly min: number; readonly max: number };
 }
 
 export interface ComposerVariant {

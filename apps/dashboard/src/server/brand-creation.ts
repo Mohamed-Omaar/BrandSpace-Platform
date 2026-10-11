@@ -82,6 +82,10 @@ export async function createBrandFor(
         supportedLocales: [...supported],
         industry: input.industry ?? null,
         websiteUrl: input.websiteUrl ?? null,
+        // D-496 (Settings 3, Q3) — a brand made from now on sends its AI drafts
+        // to review, as the prototype draws the switch; brands that existed
+        // before keep the column's default, off.
+        aiDraftsToReview: true,
         ...(input.colorPalette && input.colorPalette.length > 0
           ? { colorPalette: [...input.colorPalette] }
           : {}),
@@ -101,6 +105,7 @@ export async function createBrandFor(
         name,
         defaultLocale: input.defaultLocale,
         supportedLocales: [...supported],
+        aiDraftsToReview: true,
       },
     });
 

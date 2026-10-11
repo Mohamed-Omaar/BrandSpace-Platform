@@ -161,3 +161,41 @@ export async function saveBrandUseBrandBrain(
     after: { useBrandBrain: input.enabled },
   });
 }
+
+/**
+ * D-496 (Settings 3) — "AI DRAFTS GO TO REVIEW": a post the AI writes for this
+ * brand is sent for review as it is created (`server/ai-drafts-review.ts`).
+ * Existing brands start off, brands created after PR E on (Q3). The same scope
+ * check and audit shape as the switches above.
+ */
+export async function saveBrandAiDraftsToReview(
+  db: TenantScopedClient,
+  context: {
+    readonly workspaceId: string;
+    readonly actorUserId: string;
+    readonly brandScope: readonly string[];
+  },
+  input: { readonly brandId: string; readonly enabled: boolean },
+): Promise<void> {
+  assertBrandInScope(context.brandScope, input.brandId);
+  const before = await db.brand.findFirst({
+    where: { id: input.brandId, workspaceId: context.workspaceId, deletedAt: null },
+    select: { aiDraftsToReview: true },
+  });
+  if (!before) throw new AppError('NOT_FOUND', 'Brand not found.');
+  if (before.aiDraftsToReview === input.enabled) return;
+  await db.brand.update({
+    where: { id: input.brandId },
+    data: { aiDraftsToReview: input.enabled },
+  });
+  await writeAuditEvent(db, context.workspaceId, {
+    action: 'brand.ai_drafts_to_review.changed',
+    actorType: 'USER',
+    actorId: context.actorUserId,
+    resourceType: 'brand',
+    resourceId: input.brandId,
+    brandId: input.brandId,
+    before,
+    after: { aiDraftsToReview: input.enabled },
+  });
+}

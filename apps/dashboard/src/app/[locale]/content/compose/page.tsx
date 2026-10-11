@@ -974,6 +974,7 @@ export default async function ComposePage({
     maxMediaItems: platform.maxMediaItems,
     allowsFirstComment: platform.allowsFirstComment,
     ...(platform.safeZones ? { safeZones: platform.safeZones } : {}),
+    ...(platform.recommendedHashtags ? { recommendedHashtags: platform.recommendedHashtags } : {}),
   }));
 
   /*
@@ -1631,6 +1632,7 @@ const EDITOR_KEYS = [
   'editor.preview.title',
   'editor.preview.compare',
   'studio.preview.safeZones',
+  'studio.tags.recommended',
   'editor.preview.single',
   'editor.fix.shorten',
   'editor.fix.media',

@@ -1,4 +1,5 @@
 import { colorTokens, spacingTokens, typographyTokens, CONTROL_CLASS } from '@brandspace/ui';
+import { FirstVisitHint } from '../../../components/first-visit-hint';
 import { sourceFailureText } from '../../../server/source-failure';
 import { sourceUploadRules } from '../../../server/upload-rules';
 import { maySpendCredits, systemClock } from '@brandspace/shared';
@@ -888,6 +889,13 @@ export default async function BrandBrainPage({
          */
         <style data-testid="brand-look-fonts" dangerouslySetInnerHTML={{ __html: look.css }} />
       ) : null}
+      {/* D-496 (Brand Brain 1) — the first-visit hint, Main.dc.html L759. */}
+      <FirstVisitHint
+        storageKey="brandspace.hint.brain"
+        text={t('hint.brain')}
+        closeLabel={t('hint.close')}
+        testId="hint-brain"
+      />
       <BrandBrainView
         sourceRules={sourceRules}
         notes={typeof query['thread'] === 'string' ? null : brandNotes}

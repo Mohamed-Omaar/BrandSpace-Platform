@@ -8,6 +8,7 @@ import { inWorkspace, requireWorkspaceAction } from '../../../../server/customer
 import { actionErrorCode } from '../../../../server/denial';
 import { saveBrandAiLanguage } from '../../../../server/brand-ai-language';
 import {
+  saveBrandAiDraftsToReview,
   saveBrandAiSuggestions,
   saveBrandUseBrandBrain,
 } from '../../../../server/publishing-defaults';
@@ -45,6 +46,11 @@ export async function saveAiLanguageAction(formData: FormData): Promise<void> {
       await saveBrandUseBrandBrain(db, context, {
         brandId,
         enabled: formData.get('useBrandBrain') === 'on',
+      });
+      // D-496 (Settings 3) — "AI drafts go to review", in the same save.
+      await saveBrandAiDraftsToReview(db, context, {
+        brandId,
+        enabled: formData.get('aiDraftsToReview') === 'on',
       });
     });
     destination = `/${locale}/settings/ai?ok=SETTINGS_SAVED`;
