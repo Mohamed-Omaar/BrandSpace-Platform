@@ -611,11 +611,21 @@ export default async function OnboardingPage({
       may('brand_brain.review')
         ? inBrandBrain(workspace.workspaceId, ({ db }) =>
             db.brandKnowledgeCandidate.findMany({
-              where: { brandId: brand.id, status: 'PENDING', sourceKind: 'DOCUMENT' },
+              /*
+               * PR D (Auth 7) — A DECIDED FACT STAYS, with "Accepted" or
+               * "Rejected" in place of its buttons (`Auth.dc.html` line 159).
+               * The list was pending-only, so a fact vanished on the press.
+               */
+              where: {
+                brandId: brand.id,
+                sourceKind: 'DOCUMENT',
+                status: { in: ['PENDING', 'ACCEPTED', 'EDITED_ACCEPTED', 'REJECTED'] },
+              },
               orderBy: { createdAt: 'asc' },
               take: 50,
               select: {
                 id: true,
+                status: true,
                 area: true,
                 extractedTitle: true,
                 extractedBody: true,
@@ -625,6 +635,7 @@ export default async function OnboardingPage({
           )
         : Promise.resolve([]),
     ]);
+    const pending = candidates.filter((candidate) => candidate.status === 'PENDING');
     const reading = sources.filter(
       (source) => source.status === 'PROCESSING' || source.status === 'UPLOADED',
     ).length;
@@ -700,6 +711,12 @@ export default async function OnboardingPage({
         ) : null}
         <RefreshWhile active={reading > 0} />
         {reading > 0 ? note(t('setup.learn.processing'), 'setup-processing') : null}
+        {candidates.length > 0 && pending.length === 0 && read && reading === 0
+          ? note(
+              t('setup.review.allDone').replace('{count}', String(facts.activeKnowledge)),
+              'setup-review-done',
+            )
+          : null}
         {candidates.length > 0 ? (
           /* "We understood n things · review them", one row per fact (lines 156–168). */
           <div className="bsp-wz-facts" data-testid="setup-review-summary">
@@ -710,19 +727,26 @@ export default async function OnboardingPage({
                   : t('setup.wz.teach.understood').replace('{count}', String(candidates.length))}
               </span>
               {/* Round 4 (4.3) — the prototype's "Accept all": each fact's own Accept, in turn. */}
-              <form action={acceptAllSetupCandidatesAction}>
-                <input type="hidden" name="locale" value={locale} />
-                {candidates.map((candidate) => (
-                  <input key={candidate.id} type="hidden" name="candidateId" value={candidate.id} />
-                ))}
-                <button
-                  type="submit"
-                  className="bsp-wz-btn bsp-wz-pur bsp-wz-all"
-                  data-testid="setup-accept-all"
-                >
-                  {t('setup.wz.teach.acceptAll')}
-                </button>
-              </form>
+              {pending.length > 0 ? (
+                <form action={acceptAllSetupCandidatesAction}>
+                  <input type="hidden" name="locale" value={locale} />
+                  {pending.map((candidate) => (
+                    <input
+                      key={candidate.id}
+                      type="hidden"
+                      name="candidateId"
+                      value={candidate.id}
+                    />
+                  ))}
+                  <button
+                    type="submit"
+                    className="bsp-wz-btn bsp-wz-pur bsp-wz-all"
+                    data-testid="setup-accept-all"
+                  >
+                    {t('setup.wz.teach.acceptAll')}
+                  </button>
+                </form>
+              ) : null}
             </div>
             {candidates.map((candidate) => {
               const hidden = (decision: string) => (
@@ -752,26 +776,40 @@ export default async function OnboardingPage({
                   <span className="bsp-wz-fact-c bsp-ltr">
                     {Math.round(candidate.confidenceMilli / 10)}%
                   </span>
-                  <form action={reviewSetupCandidateAction}>
-                    {hidden('accept')}
-                    <button
-                      type="submit"
-                      className="bsp-wz-btn bsp-wz-sec bsp-wz-xs"
-                      data-testid={`setup-accept-${candidate.id}`}
+                  {candidate.status !== 'PENDING' ? (
+                    <span
+                      className="bsp-pill bsp-wz-decided"
+                      data-state={candidate.status === 'REJECTED' ? 'rejected' : 'accepted'}
+                      data-testid={`setup-decided-${candidate.id}`}
                     >
-                      {t('setup.wz.teach.accept')}
-                    </button>
-                  </form>
-                  <form action={reviewSetupCandidateAction}>
-                    {hidden('reject')}
-                    <button
-                      type="submit"
-                      className="bsp-wz-btn bsp-wz-ghost bsp-wz-xs"
-                      data-testid={`setup-reject-${candidate.id}`}
-                    >
-                      {t('setup.wz.teach.reject')}
-                    </button>
-                  </form>
+                      {candidate.status === 'REJECTED'
+                        ? t('setup.wz.teach.rejected')
+                        : t('setup.wz.teach.accepted')}
+                    </span>
+                  ) : (
+                    <>
+                      <form action={reviewSetupCandidateAction}>
+                        {hidden('accept')}
+                        <button
+                          type="submit"
+                          className="bsp-wz-btn bsp-wz-sec bsp-wz-xs"
+                          data-testid={`setup-accept-${candidate.id}`}
+                        >
+                          {t('setup.wz.teach.accept')}
+                        </button>
+                      </form>
+                      <form action={reviewSetupCandidateAction}>
+                        {hidden('reject')}
+                        <button
+                          type="submit"
+                          className="bsp-wz-btn bsp-wz-ghost bsp-wz-xs"
+                          data-testid={`setup-reject-${candidate.id}`}
+                        >
+                          {t('setup.wz.teach.reject')}
+                        </button>
+                      </form>
+                    </>
+                  )}
                 </div>
               );
             })}

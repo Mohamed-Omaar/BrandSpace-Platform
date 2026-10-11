@@ -13504,3 +13504,78 @@ select.bs-select.bsp-chevron {
   padding: var(--bsp-px-2) var(--bsp-px-10);
   font-size: var(--bsp-fs-11);
 }
+
+/* PR D (Auth 2) — the address the link went to: `background: #f3f3f5;
+   border-radius: 14px; padding: 14px; font-size: 14px`, the address at 800
+   (`Auth.dc.html` line 67); entry-screen tokens (0.80, D-491). */
+.bsp-auth-address {
+  background: #f3f3f5;
+  border-radius: var(--bsp-px-14);
+  padding: var(--bsp-px-14);
+  font-size: var(--bsp-fs-14);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+/* PR D (Auth 3) — the links' row under the button: `justify-content:
+   space-between; font-size: 13px` (line 69). */
+.bsp-auth-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--bsp-px-8);
+  font-size: var(--bsp-fs-13);
+}
+/* PR D (Auth 5) — the sent note: `background: #e6f6ee; color: #16794b;
+   border-radius: 14px; padding: 12px 14px; font-size: 13.5px; font-weight: 700`
+   (line 83). */
+.bsp-auth-sent {
+  margin: 0;
+  background: #e6f6ee;
+  color: #16794b;
+  border-radius: var(--bsp-px-14);
+  padding: var(--bsp-px-12) var(--bsp-px-14);
+  font-size: var(--bsp-fs-13-5);
+  font-weight: 700;
+}
+
+/* PR D (Auth 6) — under the workspace rows: the dark `.btn` "Create workspace"
+   with its usage at `opacity: .6`, `margin-top: 6px`; at the limit the note
+   `border: 1px solid #ececef; border-radius: 14px; padding: 12px 14px;
+   font-size: 13px; color: #55555c; line-height: 1.5` (`Auth.dc.html` line 106). */
+.bsp-auth-wscreate {
+  margin-block-start: var(--bsp-px-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--bsp-px-56);
+  border-radius: var(--bsp-px-14);
+  background: #111114;
+  color: #fff !important;
+  font-size: var(--bsp-fs-15);
+  font-weight: 800;
+  text-decoration: none;
+}
+.bsp-auth-wsuse {
+  opacity: 0.6;
+  white-space: pre;
+}
+.bsp-auth-wsfull {
+  margin: var(--bsp-px-6) 0 0;
+  border: 1px solid #ececef;
+  border-radius: var(--bsp-px-14);
+  padding: var(--bsp-px-12) var(--bsp-px-14);
+  font-size: var(--bsp-fs-13);
+  color: #55555c;
+  line-height: 1.5;
+}
+
+/* PR D (Auth 7) — a decided fact's pill in place of its buttons
+   (`Auth.dc.html` lines 159 and 314): Accepted `#e6f6ee` / `#16794b`,
+   Rejected `#f0f0f2` / `#55555c`. */
+.bsp-pill.bsp-wz-decided[data-state='accepted'] {
+  background: #e6f6ee;
+  color: #16794b;
+}
+.bsp-pill.bsp-wz-decided[data-state='rejected'] {
+  background: #f0f0f2;
+  color: #55555c;
+}

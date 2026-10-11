@@ -1,8 +1,10 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { headers } from 'next/headers';
 import { BrandGlyph, LanguageSwitcher } from '@brandspace/ui';
 import { translator } from '../i18n/messages';
+import { switchLocalePath } from '../i18n/locale-path';
 
-export function AuthCard({
+export async function AuthCard({
   locale,
   heading,
   eyebrow,
@@ -20,6 +22,18 @@ export function AuthCard({
 }) {
   const t = translator(locale);
   const other = locale === 'ar' ? 'en' : 'ar';
+  /*
+   * PR D (Auth 1) — THE LANGUAGE BUTTON KEEPS THE SCREEN, as the prototype's
+   * does (`Auth.dc.html`: the language flips in place). It linked to sign-in
+   * from every card, so sign-up, reset, verify and the workspace list lost
+   * their screen. The middleware puts the real path and query on the request;
+   * sign-in is the fallback.
+   */
+  const languageHref = switchLocalePath(
+    (await headers()).get('x-brandspace-path'),
+    other,
+    `/${other}/sign-in`,
+  );
   /*
    * D-468 — THE PROTOTYPE'S AUTH CARD, `Auth.dc.html` lines 39–117: one 540px
    * card (`rgba(255,255,255,.96)`, radius 36, `padding: 42px 44px 34px`,
@@ -45,7 +59,7 @@ export function AuthCard({
               className="bsp-auth-lang"
             >
               <LanguageSwitcher
-                href={`/${other}/sign-in`}
+                href={languageHref}
                 targetLocale={other}
                 targetLabel={other === 'ar' ? 'ع' : 'EN'}
                 ariaLabel={locale === 'ar' ? 'تغيير اللغة' : 'Change language'}
@@ -72,16 +86,4 @@ export function AuthCard({
   );
 }
 
-/**
- * The auth form's input and button. D-468: the prototype's `.in` (a 58px
- * `#f4f4f5` field, radius 14, 15.5px) and `.btn` (56px, radius 14, 15px /
- * 800) are drawn by `prototype.css` (§3-AUTH) on the card; these keep only the
- * full width, so the page's forms need not change.
- */
-export function authInputStyle(): CSSProperties {
-  return { inlineSize: '100%' };
-}
-
-export function authButtonStyle(): CSSProperties {
-  return { inlineSize: '100%' };
-}
+export { authButtonStyle, authInputStyle } from './auth-styles';

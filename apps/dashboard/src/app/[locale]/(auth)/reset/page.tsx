@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { spacingTokens, typographyTokens } from '@brandspace/ui';
 import { translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
@@ -21,7 +22,17 @@ export default async function ResetRequestPage({
   const t = translator(locale);
 
   return (
-    <AuthCard locale={locale} eyebrow={t('auth.eyebrow.password')} heading={t('reset.title')}>
+    <AuthCard
+      locale={locale}
+      eyebrow={t('auth.eyebrow.password')}
+      heading={t('reset.title')}
+      footer={
+        /* PR D (Auth 4) — "← Back to sign in" (`Auth.dc.html` line 77). */
+        <Link href={`/${locale}/sign-in`} data-testid="reset-back">
+          <span aria-hidden="true">{locale === 'ar' ? '→' : '←'}</span> {t('reset.backToSignIn')}
+        </Link>
+      }
+    >
       <form action={requestPasswordResetAction}>
         <input type="hidden" name="locale" value={locale} />
         <label htmlFor="email" style={{ display: 'block', ...typographyTokens.label }}>

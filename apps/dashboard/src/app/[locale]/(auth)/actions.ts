@@ -190,7 +190,8 @@ export async function requestPasswordResetAction(formData: FormData): Promise<vo
       // persisted, not even in the outbox row.
       ...(issued ? { link: customerLink(`/${locale}/reset/${issued.token}`) } : {}),
     });
-    destination = signInUrl(locale, { ok: 'RESET_REQUESTED' });
+    // PR D (Auth 5) — "The link is on its way", the same screen for every address.
+    destination = `/${locale}/reset/sent`;
   } catch (error: unknown) {
     /*
      * A FAILED SEND IS NOT A SENT MAIL — Phase 4 §4.
