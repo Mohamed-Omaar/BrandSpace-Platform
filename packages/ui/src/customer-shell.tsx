@@ -285,15 +285,44 @@ function useRailPill(
      * The rows themselves: the nav's children are the pill and the groups,
      * and a group is `display: contents`, which has no box to observe.
      */
-    observer.observe(nav);
-    for (const row of Array.from(nav.querySelectorAll('.bsp-nav, .bsp-grp'))) {
-      observer.observe(row);
-    }
+    const watchRows = () => {
+      observer.disconnect();
+      observer.observe(nav);
+      for (const row of Array.from(nav.querySelectorAll('.bsp-nav, .bsp-grp'))) {
+        observer.observe(row);
+      }
+    };
+    watchRows();
+    /*
+     * PR D — ROWS THAT COME OR GO. The rail now stays mounted from page to
+     * page, and a page can bring a different set of rows (a brand switched, a
+     * permission changed) while the current item stays the same: the rows are
+     * re-read and the pill re-measured, so it never keeps a row's old place.
+     */
+    const onRows = new MutationObserver(() => {
+      watchRows();
+      const now = measure();
+      if (!now) return;
+      // Only a moved target: a count arriving mid-glide must not cut it short.
+      if (
+        Math.abs(now.x - placed.x) +
+          Math.abs(now.y - placed.y) +
+          Math.abs(now.w - placed.w) +
+          Math.abs(now.h - placed.h) <
+        0.5
+      )
+        return;
+      put(now, false);
+      placed = now;
+      if (track) lastPill = now;
+    });
+    onRows.observe(nav, { childList: true, subtree: true });
     return () => {
       cancelAnimationFrame(frame);
       pill.removeEventListener('transitionend', light);
       pressRef.current = null;
       observer.disconnect();
+      onRows.disconnect();
       nav.removeEventListener('wheel', stopRevealing);
       nav.removeEventListener('touchstart', stopRevealing);
       nav.removeEventListener('keydown', stopRevealing);

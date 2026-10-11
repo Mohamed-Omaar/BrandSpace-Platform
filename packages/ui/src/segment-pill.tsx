@@ -77,10 +77,31 @@ export function SegmentPill({ selector }: { readonly selector: string }) {
       attributes: true,
       attributeFilter: ['aria-current', 'aria-pressed', 'aria-selected', 'aria-checked'],
     });
+    /*
+     * PR D — EVERY SEGMENT'S OWN BOX, NOT ONLY THE CONTROL'S. A segment added
+     * or removed (the Studio preview's channel tabs) resizes its siblings
+     * inside a control that keeps its width, with no selection attribute
+     * changing: watching the control's box alone, the pill kept the old
+     * segment's size — half the bar for the one tab left. Each segment is
+     * observed, and the list is re-read whenever segments come or go.
+     */
     const onResize = new ResizeObserver(() => place(false));
-    onResize.observe(box);
+    const watchSegments = () => {
+      onResize.disconnect();
+      onResize.observe(box);
+      for (const child of Array.from(box.children)) {
+        if (child !== wrap) onResize.observe(child);
+      }
+    };
+    watchSegments();
+    const onSegments = new MutationObserver(() => {
+      watchSegments();
+      place(true);
+    });
+    onSegments.observe(box, { childList: true });
     return () => {
       onSelection.disconnect();
+      onSegments.disconnect();
       onResize.disconnect();
     };
   }, [selector]);
