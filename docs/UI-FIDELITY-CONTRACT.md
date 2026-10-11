@@ -480,12 +480,13 @@ The Words / Design switch is a group of pressed buttons rather than the prototyp
 
 **Left out — no data or feature.** The brief's "Or start from" ideas and "Write caption with AI" on a
 written post (AI edits are the chips; a new post is written from the brief), the content pillar
-("auto-picked"), the hashtag suggestion groups and "Other ideas", the size and safe-zone line, the
-post's notes count in the preview card (the notes stay below the Studio), "After publishing,
-BrandSpace opens the live post and checks…" (no such check exists), the bar's second "When" chip,
-"Open approvals", and the Copilot button. The product's own lifecycle path ("Where this post
-stands") and "Back to the library" link are not drawn: the prototype states the status as the bar's
-pill and leaves navigation to the rail.
+("auto-picked"), the hashtag suggestion groups and "Other ideas", "After publishing, BrandSpace opens
+the live post and checks…" (no such check exists), and "Open approvals". The product's own lifecycle
+path ("Where this post stands") and "Back to the library" link are not drawn: the prototype states
+the status as the bar's pill and leaves navigation to the rail. Built since this list was first
+written, and no longer left out (corrected in PR D): the size label and the notes count in the
+preview card, the bar's second "When" chip, the Copilot button, and "Safe zones" on a 9:16 preview
+(S38, D-500 — drawn only where configuration gives the platform's bands).
 
 ### Approvals (`Main.dc.html` lines 567–598)
 
@@ -515,9 +516,9 @@ empty "Sent by me" with the way to the drafts, who a review is assigned to, who 
 and why, and "Open in Studio". Below 1280px the review's two columns stack; below 1024px the list
 and the review do.
 
-**Left out — no data or feature.** The requested time and the campaign rows of the review's facts
-(a review carries neither), and the rows' real pictures (a queue row carries no media; the product's
-abstract art stands in, as on the calendar).
+**Left out — no data or feature.** The rows' real pictures (a queue row carries no media; the
+product's abstract art stands in, as on the calendar). The requested time and the campaign rows of the
+review's facts are built (batch 7 PR C) and no longer left out (corrected in PR D).
 
 ### Campaigns (`Main.dc.html` lines 1159–1236)
 
@@ -1753,7 +1754,8 @@ connect form is behind the card's "⋯".
 **Notes.** Two panes: "For you" and "Other open" on the left, the chosen thread
 (`?thread=`, else the first) on the right with its subject, Open, Resolve / Reopen, the
 assignment, due date and Mark read under "⋯", the messages and the composer
-(Mention, Important, Post).
+(Mention, Important, Post). PR D (Notes 1, D-495): the composer's "@ Mention" button exists and
+opens the people list; until then the @ list inside the text field did that job alone.
 
 **The campaign room.** One page: the head (name, status, the facts line, published of
 total, Edit · Start now · + New post · "⋯"), "Linked to" (the objective, a link to
@@ -2194,6 +2196,37 @@ Simple list is a `ContentGrid` of cards that reflows to one column.
 **Proven** by `tests/e2e/owner-simple-mode.spec.ts` — every Simple screen in English and Arabic, `dir`
 asserted, axe (WCAG 2.2 AA tags) clean, and no inline-end overflow at 390px — and by
 `tests/unit/owner-simple-mode.test.ts`.
+
+### 6.3.62 PR D — Group A of the interaction parity audit (D-495 to D-500)
+
+Forty-three audit rows, each from the prototype's own markup at 0.88 (row by row in D-495). The
+design-system additions, and why each is new:
+
+- **`ChipListbox` (`packages/ui/src/chip-listbox.tsx`) — a component addition.** The prototype's
+  chip that opens a 220px glass list of `role="option"` rows (Studio S4 campaign, S5 reviewer;
+  `Main.dc.html` lines 352 and 529). `DropdownMenu` is a menu of actions and `SearchableSelect` a
+  typed combobox; neither is a single choice that keeps a value, so this is new. Its value travels in
+  a hidden input, so the forms post what the old selects did. Keyboard: the WAI-ARIA listbox pattern.
+- **`PrototypeMenuButton` (`packages/ui/src/prototype-rail.tsx`).** A menu row that answers with a
+  toast (Shell 4's balance, Shell 5 and 6 at a limit): the same `.bsp-menu-item` row, `muted` greys
+  it (12.5px/600, `#8a8a92`, as `atWsLimit` draws it) and keeps it pressable so it can say why.
+- **The rail host (`CustomerFrameHost`).** The page's `CustomerShell` publishes the rail model; the
+  locale layout draws the aside, the ambient background and the floating Copilot once, so the rail
+  and its pill survive a page change and the pill glides from where it was (`useRailPill`, MO2).
+  Server rendering is unchanged; the host takes over after hydration.
+- **`SegmentPill`** re-measures when a segment is added or removed and when any segment's own box
+  changes (the preview channel-tab bug); the rail and the Control Center's nav pill do the same.
+- **The rest compose existing pieces:** the decided noticed card (`.bsp-home-decided`, the card's
+  own geometry on `#f7fbf8` with its `p-ok` pill, `Main.dc.html` 273–277), Strategy's "How it's
+  going" (line 1126–1133: the 8px dot, 130px name, 8px track, 44px figure, "Best"), its busy card
+  (line 993), the cadence (line 1070), the Voice card's "Open area →" and purple "n waiting" chip
+  (line 874), the reason box (line 834), Settings' add-a-brand card (line 1354), and the safe-zone
+  bands on a 9:16 preview (D-500).
+
+Recorded uses of D-468: Strategy's "How it's going" spans its card because the card's other half —
+the monthly review — is Strategy 8, deferred (D-497). "Explain" opens Performance with the Copilot
+over it (the prototype opens both in one state change). The set-up key's "Copy" is on Settings →
+Security only; the entry-card set-up page has no toast host.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
