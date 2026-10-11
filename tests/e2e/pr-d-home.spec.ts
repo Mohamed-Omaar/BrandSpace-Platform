@@ -68,6 +68,8 @@ for (const locale of ['en', 'ar'] as const) {
     const decided = page.getByTestId(`home-decided-${key}`);
     await expect(decided).toBeVisible();
     await expect(decided.locator('.bsp-p-ok')).toBeVisible();
+    // Something noticed is on the card: "nothing to notice yet" is not said beside it.
+    await expect(page.getByTestId('home-recommended-none')).toBeHidden();
     // Once: a reload does not draw it again.
     await page.reload();
     await expect(page.getByTestId(`home-decided-${key}`)).toHaveCount(0);

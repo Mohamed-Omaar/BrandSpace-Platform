@@ -1412,6 +1412,10 @@ button.bsp-xcard:hover {
   align-self: flex-start;
   margin-top: auto;
 }
+/* A decided card is something noticed: "nothing to notice yet" is not said beside it. */
+.bsp-home-noticed:has(.bsp-home-decided) > [data-testid='home-recommended-none'] {
+  display: none;
+}
 .bsp-menu-item.bsp-menu-btn[data-muted] {
   padding: var(--bsp-px-7) var(--bsp-px-10);
   font-size: var(--bsp-t-12_5);
