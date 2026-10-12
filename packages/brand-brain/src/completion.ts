@@ -43,6 +43,8 @@ export interface KeyQuestion {
   /** The key of the one fact that answers it, in its area. */
   readonly itemKey: string;
   readonly prompt: LocalizedText;
+  /** Fix PR 2c — the chip's short wording, when the configuration gives one. */
+  readonly short?: LocalizedText | undefined;
 }
 
 /** The questions each area asks, already resolved for one brand's industry. */

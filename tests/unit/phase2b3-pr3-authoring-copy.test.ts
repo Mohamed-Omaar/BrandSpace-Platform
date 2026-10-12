@@ -34,8 +34,8 @@ const APPROVED: Record<string, readonly [string, string]> = {
     'لا يزال منشور بانتظار مراجعتك',
   ],
   'automations.failure.occurrence_stale': [
-    'Skipped — what started this automation had changed by the time it ran.',
-    'تم التخطي — تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
+    'What started this automation had changed by the time it ran.',
+    'تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
   ],
   'automations.failure.no_eligible_reviewer': [
     'Not sent — no one who can review this post is available right now.',

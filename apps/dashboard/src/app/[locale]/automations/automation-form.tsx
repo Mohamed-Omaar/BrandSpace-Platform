@@ -221,6 +221,8 @@ export interface AutomationFormProps {
   readonly action: (formData: FormData) => void | Promise<void>;
   /** B12 — edit an existing rule instead of creating one. */
   readonly initial?: AutomationFormInitial | undefined;
+  /** Fix PR 2c — Duplicate: a rule's values as the NEW rule's defaults. */
+  readonly template?: AutomationFormInitial | undefined;
   /** Where Cancel leads, in edit mode. */
   readonly cancelHref?: string | undefined;
 }
@@ -228,8 +230,16 @@ export interface AutomationFormProps {
 const FIELD: React.CSSProperties = { display: 'grid', gap: 'var(--bsp-rem-0-25)' };
 
 export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
-  const initial = props.initial;
-  const editing = initial !== undefined;
+  const edited = props.initial;
+  const editing = edited !== undefined;
+  /*
+   * FIX PR 2c (B.4, r3 #17) — WHERE THE DEFAULTS COME FROM. Editing, the rule
+   * itself; duplicating, the rule being copied (`template`), in the NEW-rule
+   * builder: the same choosable triggers and actions, the same checks, and
+   * saving it is `createAutomationAction` — a hand-made rule, on when saved
+   * (D-499). Everything that makes the form an edit stays keyed on `edited`.
+   */
+  const initial = edited ?? props.template;
   /*
    * NOTHING IS PRESELECTED ON A NEW RULE (Phase 2B-3 PR 2). The trigger and the
    * action start empty, behind "Choose …", and the form will not post until a
@@ -245,7 +255,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
   /** Round 3 — the name a person typed; until then it follows the rule's sentence. */
   const [typedName, setName] = useState<string | null>(initial?.name ?? null);
   const moreRef = useRef<HTMLDetailsElement | null>(null);
-  const keepConditions = (initial?.extraConditions ?? 0) > 0;
+  const keepConditions = (edited?.extraConditions ?? 0) > 0;
 
   const trigger = useMemo(
     () => props.triggers.find((option) => option.type === triggerType),
@@ -416,10 +426,10 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
       */}
       <div className="bsp-au-body">
         <input type="hidden" name="locale" value={props.locale} />
-        {initial ? (
+        {edited ? (
           <>
-            <input type="hidden" name="ruleId" value={initial.ruleId} />
-            <input type="hidden" name="version" value={initial.version} />
+            <input type="hidden" name="ruleId" value={edited.ruleId} />
+            <input type="hidden" name="version" value={edited.version} />
             {keepConditions ? <input type="hidden" name="conditionsMode" value="keep" /> : null}
           </>
         ) : null}
@@ -427,11 +437,11 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
         <span className="bsp-lbl" id={`${formId}-when`}>
           1 · {props.labels.when}
         </span>
-        {initial ? (
+        {edited ? (
           <div className="bsp-au-tiles">
             <span className="bsp-au-tile" data-on="true">
               <span className="bsp-au-tile-l">
-                {trigger?.tileLabel ?? trigger?.label ?? initial.triggerType}
+                {trigger?.tileLabel ?? trigger?.label ?? edited.triggerType}
               </span>
             </span>
           </div>
@@ -611,7 +621,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
             <p style={caption} data-testid="automation-conditions-kept">
               {(props.labels.conditionsKept ?? '').replace(
                 '{count}',
-                String((initial?.extraConditions ?? 0) + 1),
+                String((edited?.extraConditions ?? 0) + 1),
               )}
             </p>
           ) : (
@@ -769,11 +779,11 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
         <span className="bsp-lbl" id={`${formId}-then`}>
           3 · {props.labels.then}
         </span>
-        {initial ? (
+        {edited ? (
           <div className="bsp-au-tiles">
             <span className="bsp-au-tile bsp-au-act" data-on="true">
               {actionLabel}
-              {pills(initial.actionType)}
+              {pills(edited.actionType)}
             </span>
           </div>
         ) : (
@@ -932,7 +942,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
             </label>
           ) : null}
 
-          {initial && initial.offsetHours !== null ? (
+          {edited && edited.offsetHours !== null ? (
             <label style={FIELD}>
               <span style={caption}>{props.labels.offsetHours}</span>
               <input
@@ -942,7 +952,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                 max={720}
                 step={1}
                 required
-                defaultValue={initial.offsetHours}
+                defaultValue={edited.offsetHours}
                 className="bs-control"
                 style={inputStyle()}
                 data-testid="automation-offset-hours"
@@ -1003,7 +1013,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                 onChange={(event) => setName(event.target.value)}
               />
             </label>
-            {initial ? (
+            {edited ? (
               /*
                * FIXED ON AN EXISTING RULE: the brand, the trigger and the action are
                * named, not offered. Nothing is posted for them; the server uses the
@@ -1011,7 +1021,7 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
                */
               <div className="bsp-au-field">
                 <span className="bsp-lbl">{props.labels.brand}</span>
-                <span className="bsp-au-fixed">{initial.brandName}</span>
+                <span className="bsp-au-fixed">{edited.brandName}</span>
               </div>
             ) : (
               <label className="bsp-au-field">
@@ -1034,14 +1044,14 @@ export function AutomationForm(props: AutomationFormProps): React.JSX.Element {
           </div>
         </details>
 
-        {initial ? (
+        {edited ? (
           <label className="bsp-au-field">
             <span className="bsp-lbl">{props.labels.description}</span>
             <textarea
               name="description"
               maxLength={500}
               rows={2}
-              defaultValue={initial.description}
+              defaultValue={edited.description}
               className="bs-control bsp-au-input"
               data-testid="automation-description"
             />

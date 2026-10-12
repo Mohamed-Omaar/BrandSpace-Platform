@@ -113,7 +113,7 @@ const COPY = {
     notify: 'Notify a chosen person',
     copy: 'Make a draft copy',
     skipped: 'Skipped',
-    stale: 'Skipped — what started this automation had changed by the time it ran.',
+    stale: 'What started this automation had changed by the time it ran.',
   },
   ar: {
     weekly: 'عند انخفاض التفاعل الأسبوعي 20%',
@@ -124,7 +124,7 @@ const COPY = {
     notify: 'تنبيه شخص محدد',
     copy: 'إنشاء نسخة مسودة',
     skipped: 'تم التخطي',
-    stale: 'تم التخطي — تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
+    stale: 'تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
   },
 } as const;
 

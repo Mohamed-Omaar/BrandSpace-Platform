@@ -64,6 +64,7 @@ import {
   type CopilotSurface,
   type PostRecord,
   type SocialPlatform,
+  prefersReducedMotion,
 } from '@brandspace/ui';
 import {
   calendarDays,
@@ -264,7 +265,9 @@ export function ShowcaseInteractive({ locale }: { readonly locale: string }) {
     // `requestAnimationFrame` rather than a timeout: the target may only exist
     // after the state change above renders, and a fixed delay is a guess.
     requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      document
+        .getElementById(id)
+        ?.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
     });
   };
 

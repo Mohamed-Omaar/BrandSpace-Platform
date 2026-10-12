@@ -148,7 +148,7 @@ const COPY = {
     chooseAction: 'Choose an action',
     older: '(older automation)',
     skipped: 'Skipped',
-    inReview: "Skipped — this post is waiting for review, so it wasn't changed.",
+    inReview: "This post is waiting for review, so it wasn't changed.",
     recipient:
       'Not sent — the person this automation notifies is no longer an active member with access to this brand. Edit the rule to choose someone else.',
     lostPermission:
@@ -164,7 +164,7 @@ const COPY = {
     chooseAction: 'اختر إجراءً',
     older: '(أتمتة أقدم)',
     skipped: 'تم التخطي',
-    inReview: 'تم التخطي — هذا المنشور بانتظار المراجعة، لذلك لم يُعدَّل.',
+    inReview: 'هذا المنشور بانتظار المراجعة، لذلك لم يُعدَّل.',
     recipient:
       'لم يُرسل — الشخص الذي تنبّهه هذه الأتمتة لم يعد عضوًا نشطًا له صلاحية على هذه العلامة التجارية. عدّل القاعدة واختر شخصًا آخر.',
     lostPermission: 'لم تُشغَّل — منشئ هذه الأتمتة لم تعد لديه صلاحية هذا الإجراء.',

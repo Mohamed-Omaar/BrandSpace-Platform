@@ -7,6 +7,7 @@ import {
 } from '../../../server/customer-context';
 import { statusMessage, translator } from '../../../i18n/messages';
 import { AuthCard } from '../../../components/auth-card';
+import { WholeRowList } from '../../../components/whole-row-list';
 import { switchWorkspaceAction } from '../(auth)/actions';
 import { businessSwitcherModel } from '../../../server/business-switcher';
 import { workspacesFoot } from '../../../server/workspaces-foot';
@@ -73,7 +74,7 @@ export default async function WorkspacePickerPage({
         <p data-testid="no-workspace">{t('ws.none')}</p>
       ) : (
         /* D-468 — the prototype's workspace rows (`Auth.dc.html` lines 97–110). */
-        <ul className="bsp-auth-wslist">
+        <WholeRowList className="bsp-auth-wslist">
           {workspaces.map((w) => (
             <li key={w.workspaceId}>
               <form action={switchWorkspaceAction}>
@@ -120,7 +121,7 @@ export default async function WorkspacePickerPage({
               </form>
             </li>
           ))}
-        </ul>
+        </WholeRowList>
       )}
       {foot?.kind === 'create' ? (
         <Link

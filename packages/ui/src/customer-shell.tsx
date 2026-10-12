@@ -356,6 +356,7 @@ function RailLink({
       aria-label={name}
       aria-current={item.active ? 'page' : undefined}
       {...(collapsed ? {} : { title: item.label })}
+      prefetch={intent.prefetch}
       onPointerEnter={intent.onPointerEnter}
       onFocus={intent.onFocus}
       onClick={(event) => {
@@ -906,6 +907,7 @@ export function CustomerShell({
         slot.removeAttribute('data-on');
         slot.style.removeProperty('inline-size');
         control.style.removeProperty('--bsp-fab-x');
+        control.style.removeProperty('--bsp-fab-left');
         control.style.removeProperty('--bsp-fab-y');
         return;
       }
@@ -914,6 +916,15 @@ export function CustomerShell({
       const at = slot.getBoundingClientRect();
       const origin = anchor.getBoundingClientRect();
       control.style.setProperty('--bsp-fab-x', `${at.left - origin.left}px`);
+      /*
+       * Fix PR 2c — held inside the frame whatever its width: between a
+       * resize and the next placement an old offset must never push the
+       * page sideways.
+       */
+      control.style.setProperty(
+        '--bsp-fab-left',
+        `clamp(0px, ${at.left - origin.left}px, calc(100% - ${control.offsetWidth}px))`,
+      );
       control.style.setProperty('--bsp-fab-y', `${at.top - origin.top}px`);
     };
     const schedule = () => {

@@ -21,11 +21,14 @@ type Code = 'EN' | 'AR';
  */
 export function SetupBrandLanguages({
   initialDefault,
+  initialPosting = ['EN', 'AR'],
   labels,
   hintId,
   moreLabel,
 }: {
   readonly initialDefault: Code;
+  /** Fix PR 2c — the brand's own languages when its finished step is edited. */
+  readonly initialPosting?: readonly Code[];
   readonly labels: {
     readonly defaultLanguage: string;
     readonly defaultLanguageHint: string;
@@ -39,7 +42,7 @@ export function SetupBrandLanguages({
   /** The "More" disclosure's face; the AI language is drawn inline without it. */
   readonly moreLabel?: string;
 }) {
-  const [posting, setPosting] = useState<readonly Code[]>(['EN', 'AR']);
+  const [posting, setPosting] = useState<readonly Code[]>(initialPosting);
   const [defaultLocale, setDefaultLocale] = useState<Code>(initialDefault);
   const first = useRef<HTMLInputElement>(null);
 

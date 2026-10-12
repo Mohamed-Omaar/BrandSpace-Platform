@@ -157,7 +157,7 @@ const COPY = {
     failed: 'Failed',
     drafted: 'Drafted 3 ideas in your content library.',
     capReason:
-      "Skipped: this month's limit for AI automation actions is reached. It resets at the start of next month. Nothing was charged.",
+      "This month's limit for AI automation actions is reached. It resets at the start of next month. Nothing was charged.",
     unusable:
       "The AI reply couldn't be used, so no ideas were saved. Credits for this attempt were used.",
   },
@@ -170,7 +170,7 @@ const COPY = {
     failed: 'فشلت',
     drafted: 'تمت صياغة 3 أفكار في مكتبة المحتوى.',
     capReason:
-      'تم التخطي: بلغت إجراءات الأتمتة بالذكاء الاصطناعي حدّها لهذا الشهر، ويُعاد ضبطه مع بداية الشهر القادم. لم يُخصم أي رصيد.',
+      'بلغت إجراءات الأتمتة بالذكاء الاصطناعي حدّها لهذا الشهر، ويُعاد ضبطه مع بداية الشهر القادم. لم يُخصم أي رصيد.',
     unusable: 'تعذّر استخدام ردّ الذكاء الاصطناعي، فلم تُحفظ أي أفكار. استُخدم رصيد هذه المحاولة.',
   },
 } as const;

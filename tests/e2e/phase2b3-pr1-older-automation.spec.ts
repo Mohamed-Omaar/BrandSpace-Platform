@@ -80,9 +80,9 @@ async function seedValueUnavailableRun(ws: OwnWorkspace, ruleId: string): Promis
 }
 
 const STALE_EN =
-  "Skipped — something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.";
+  "Something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.";
 const STALE_AR =
-  'تم التخطي — شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.';
+  'شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.';
 
 test.describe('Phase 2B-3 PR 1 · older automations', () => {
   test('the caption, the trigger name and a stale-value skip, in English and in Arabic (RTL)', async ({

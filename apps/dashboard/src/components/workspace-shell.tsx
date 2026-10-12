@@ -811,7 +811,8 @@ export async function WorkspaceShell({
           load={loadNotesPopover}
           strings={{
             title: t('notes.title'),
-            close: t('notifications.dismiss'),
+            // Fix PR 2c — the button only closes the card, so it says so.
+            close: t('common.close'),
             all: t('notes.pop.all'),
             unread: t('notifications.unread'),
             loading: t('notifications.feed.loading'),
@@ -832,7 +833,8 @@ export async function WorkspaceShell({
           load={loadNotificationFeed}
           strings={{
             title: t('notifications.title'),
-            close: t('notifications.dismiss'),
+            // Fix PR 2c (review of #78) — it only closes the feed: "Close", as on Notes.
+            close: t('common.close'),
             markAll: t('notifications.markAllRead'),
             seeAll: t('notifications.feed.seeAll'),
             open: t('notifications.view'),

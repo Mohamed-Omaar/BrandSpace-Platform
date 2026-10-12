@@ -154,9 +154,8 @@ export default async function InvitationPage({
                 label: t('invite.password'),
                 show: t('password.show'),
                 hide: t('password.hide'),
-                confirmLabel: t('password.confirm'),
-                mismatch: t('password.mismatch'),
-                match: t('password.match'),
+                // Fix PR 2c — no confirmation box, as on sign-up (round 4, 4.1):
+                // omitting its label omits it.
                 rulesLabel: t('password.rulesLabel'),
               }}
               minLength={minPasswordLength}

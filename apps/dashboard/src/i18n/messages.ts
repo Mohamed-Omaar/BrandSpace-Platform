@@ -783,6 +783,14 @@ export const messages = {
     'plan.features': 'الميزات الفعّالة',
     'plan.limit': 'الحد',
     'plan.unlimited': 'بلا حد',
+    // Fix PR 2c — Plan & billing names, units and headers.
+    'plan.quotaItem': 'الحصة',
+    'plan.featureAvailability': 'التوفّر',
+    'plan.limitNotApplicable': 'لا ينطبق',
+    'plan.limitSeats': 'أعضاء الفريق',
+    'plan.limitAnalyticsRetention': 'مدة سجل الأداء (بالأيام)',
+    'plan.limitAutomationAiActions': 'إجراءات الذكاء الاصطناعي في الأتمتة (شهريًا)',
+    'plan.unitGb': '{n} غيغابايت',
     'plan.credits': 'رصيد الذكاء الاصطناعي',
     'plan.usageTitle': 'الاستخدام في هذه الدورة',
     'plan.usageScheduled': 'المنشورات المجدولة',
@@ -1602,6 +1610,7 @@ export const messages = {
     'campaigns.card.allPublished': 'نُشر كله',
     'campaigns.card.next': 'التالي',
     'campaigns.card.open': 'افتح',
+    'campaigns.card.pause': 'إيقاف مؤقت',
     'campaigns.room.edit': 'تعديل',
     'campaigns.room.linked': 'مرتبطة بـ',
     'campaigns.room.strategyObjective': 'هدف الاستراتيجية',
@@ -2292,7 +2301,8 @@ export const messages = {
     'approvals.tabs.sent': 'ما أرسلتُه',
     'approvals.channels': 'القنوات',
     'approvals.decidedBy': 'قرّرها {name}',
-    'approvals.decisionNote': 'ملاحظة (اختيارية)',
+    // Fix PR 2c (B.4, r3 #2): the prototype's "Reason", and when it is needed.
+    'approvals.decisionNote': 'السبب (مطلوب لطلب تعديلات)',
     'approvals.requestedTime': 'الموعد المطلوب',
     'approvals.campaign': 'الحملة',
     'approvals.noTime': 'لم يُحدَّد',
@@ -2549,7 +2559,6 @@ export const messages = {
     'notifications.unread': 'غير مقروء',
     'notifications.markRead': 'تعليم كمقروء',
     'notifications.markAllRead': 'تعليم الكل كمقروء',
-    'notifications.dismiss': 'إغلاق',
     'notifications.emptyTitle': 'لا توجد إشعارات',
     'notifications.emptyBody':
       'سنخبرك هنا عندما يحتاج محتوى إلى مراجعتك أو يصدر قرار بشأن ما أرسلته.',
@@ -3093,6 +3102,9 @@ export const messages = {
     'automations.field.content.authorUserId': 'كاتب المنشور',
     'automations.valueUnavailable': 'لم يعد متاحًا',
     'automations.edit': 'تعديل',
+    // Fix PR 2c (B.4, r3 #17).
+    'automations.duplicate': 'تكرار',
+    'automations.copyName': '{name} (نسخة)',
     'automations.editTitle': 'تعديل القاعدة',
     'automations.save': 'حفظ التغييرات',
     'automations.cancelEdit': 'إلغاء',
@@ -3233,11 +3245,10 @@ export const messages = {
     'automations.deleteConfirmBody': 'ستتوقف هذه القاعدة ولن تعمل مجددًا. يبقى سجل تشغيلها.',
     'automations.deleteConfirmSubmit': 'احذف هذه القاعدة',
     'automations.failure.condition_value_unavailable':
-      'تم التخطي — شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.',
+      'شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.',
     'automations.failure.notify_template_not_allowed':
       'لم يُرسل — تذكر هذه الأتمتة إشعارًا لا يمكن للأتمتة إرساله. احذفها وأنشئها من جديد.',
-    'automations.failure.already_has_time':
-      'تم التخطي — لهذا المنشور موعد محدد بالفعل، لذلك لم يُنقل.',
+    'automations.failure.already_has_time': 'لهذا المنشور موعد محدد بالفعل، لذلك لم يُنقل.',
     'automations.failure.no_free_day': 'لم تتم الجدولة — لم يُعثر على يوم متاح ضمن نافذة الجدولة.',
     'automations.failure.approval_required':
       'لم تتم الجدولة — تتطلب هذه العلامة التجارية الموافقة قبل الجدولة، ولم تتم الموافقة على المنشور.',
@@ -3251,18 +3262,16 @@ export const messages = {
     'automations.failure.campaign_unavailable':
       'لم تتم الإضافة — الحملة التي تضيف إليها هذه الأتمتة المنشورات لم تعد موجودة أو ليست ضمن هذه العلامة التجارية. عدّل القاعدة واختر حملة حالية.',
     'automations.failure.already_in_campaign':
-      'تم التخطي — هذا المنشور ضمن حملة بالفعل. تضيف الأتمتة فقط المنشورات التي ليست ضمن أي حملة.',
-    'automations.failure.content_in_review':
-      'تم التخطي — هذا المنشور بانتظار المراجعة، لذلك لم يُعدَّل.',
+      'هذا المنشور ضمن حملة بالفعل. تضيف الأتمتة فقط المنشورات التي ليست ضمن أي حملة.',
+    'automations.failure.content_in_review': 'هذا المنشور بانتظار المراجعة، لذلك لم يُعدَّل.',
     'automations.failure.content_not_editable':
-      'تم التخطي — هذا المنشور قيد النشر أو منشور بالفعل ولا يمكن تعديله.',
-    'automations.failure.content_unavailable':
-      'تم التخطي — المنشور المعني بهذا الحدث لم يعد متاحًا.',
+      'هذا المنشور قيد النشر أو منشور بالفعل ولا يمكن تعديله.',
+    'automations.failure.content_unavailable': 'المنشور المعني بهذا الحدث لم يعد متاحًا.',
     'automations.failure.source_campaign_unavailable':
       'لم تُنشأ نسخة — حملة المنشور الأصلي لم تعد موجودة.',
     'automations.failure.draft_limit_reached':
       'لم تُنشأ نسخة — بلغت هذه العلامة التجارية الحد الأقصى للمسودات.',
-    'automations.failure.occurrence_stale': 'تم التخطي — تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
+    'automations.failure.occurrence_stale': 'تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
     'automations.failure.no_eligible_reviewer':
       'لم يُرسل — لا يوجد حاليًا من يمكنه مراجعة هذا المنشور.',
     'automations.failure.failure_superseded':
@@ -3287,12 +3296,12 @@ export const messages = {
     'automations.failure.daily_ceiling_reached':
       'لم تُشغَّل — بلغت هذه الأتمتة حدها اليومي من مرات التشغيل.',
     'automations.failure.monthly_ai_cap_reached':
-      'تم التخطي: بلغت إجراءات الأتمتة بالذكاء الاصطناعي حدّها لهذا الشهر، ويُعاد ضبطه مع بداية الشهر القادم. لم يُخصم أي رصيد.',
+      'بلغت إجراءات الأتمتة بالذكاء الاصطناعي حدّها لهذا الشهر، ويُعاد ضبطه مع بداية الشهر القادم. لم يُخصم أي رصيد.',
     'automations.failure.ai_credits_insufficient':
-      'تم التخطي: رصيد الذكاء الاصطناعي غير كافٍ. لم يُخصم أي رصيد.',
+      'رصيد الذكاء الاصطناعي غير كافٍ. لم يُخصم أي رصيد.',
     'automations.failure.no_reviewed_facts':
-      'تم التخطي: لا توجد حقائق معتمدة متاحة للعلامة لاستلهام الأفكار منها.',
-    'automations.failure.brand_not_active': 'تم التخطي: العلامة مؤرشفة.',
+      'لا توجد حقائق معتمدة متاحة للعلامة لاستلهام الأفكار منها.',
+    'automations.failure.brand_not_active': 'العلامة مؤرشفة.',
     'automations.failure.ai_unavailable':
       'تعذّر على خدمة الذكاء الاصطناعي صياغة الأفكار هذه المرة. لم يُخصم أي رصيد.',
     'automations.failure.ai_output_unusable':
@@ -4809,6 +4818,14 @@ export const messages = {
     'plan.features': 'Effective features',
     'plan.limit': 'Limit',
     'plan.unlimited': 'Unlimited',
+    // Fix PR 2c — Plan & billing names, units and headers.
+    'plan.quotaItem': 'Allowance',
+    'plan.featureAvailability': 'Availability',
+    'plan.limitNotApplicable': 'Not applicable',
+    'plan.limitSeats': 'Team members',
+    'plan.limitAnalyticsRetention': 'Performance history (days)',
+    'plan.limitAutomationAiActions': 'AI actions in automations (per month)',
+    'plan.unitGb': '{n} GB',
     'plan.credits': 'AI credits',
     'plan.usageTitle': 'Usage this cycle',
     'plan.usageScheduled': 'Scheduled posts',
@@ -5644,6 +5661,7 @@ export const messages = {
     'campaigns.card.allPublished': 'All published',
     'campaigns.card.next': 'Next up',
     'campaigns.card.open': 'Open',
+    'campaigns.card.pause': 'Pause',
     'campaigns.room.edit': 'Edit',
     'campaigns.room.linked': 'Linked to',
     'campaigns.room.strategyObjective': 'Strategy objective',
@@ -6365,7 +6383,8 @@ export const messages = {
     'approvals.tabs.sent': 'Sent by me',
     'approvals.channels': 'Channels',
     'approvals.decidedBy': 'Decided by {name}',
-    'approvals.decisionNote': 'Note (optional)',
+    // Fix PR 2c (B.4, r3 #2): the prototype's "Reason", and when it is needed.
+    'approvals.decisionNote': 'Reason (needed to request changes)',
     'approvals.requestedTime': 'Requested time',
     'approvals.campaign': 'Campaign',
     'approvals.noTime': 'Not set',
@@ -6626,7 +6645,6 @@ export const messages = {
     'notifications.unread': 'Unread',
     'notifications.markRead': 'Mark as read',
     'notifications.markAllRead': 'Mark all as read',
-    'notifications.dismiss': 'Dismiss',
     'notifications.emptyTitle': 'No notifications',
     'notifications.emptyBody':
       'We will tell you here when content needs your review, or when something you sent is decided.',
@@ -7199,6 +7217,9 @@ export const messages = {
     'automations.field.content.authorUserId': 'Post author',
     'automations.valueUnavailable': 'No longer available',
     'automations.edit': 'Edit',
+    // Fix PR 2c (B.4, r3 #17).
+    'automations.duplicate': 'Duplicate',
+    'automations.copyName': '{name} (copy)',
     'automations.editTitle': 'Edit rule',
     'automations.save': 'Save changes',
     'automations.cancelEdit': 'Cancel',
@@ -7338,11 +7359,11 @@ export const messages = {
       'This rule stops and will not run again. Its run history is kept.',
     'automations.deleteConfirmSubmit': 'Delete this rule',
     'automations.failure.condition_value_unavailable':
-      "Skipped — something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.",
+      "Something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.",
     'automations.failure.notify_template_not_allowed':
       "Not sent — this automation names a notification that automations can't send. Delete it and create it again.",
     'automations.failure.already_has_time':
-      "Skipped — this post already has a date and time, so it wasn't moved.",
+      "This post already has a date and time, so it wasn't moved.",
     'automations.failure.no_free_day':
       'Not scheduled — no free day was found within the scheduling window.',
     'automations.failure.approval_required':
@@ -7358,19 +7379,19 @@ export const messages = {
     'automations.failure.campaign_unavailable':
       "Not added — the campaign this automation adds posts to no longer exists or isn't in this brand. Edit the rule to choose a current one.",
     'automations.failure.already_in_campaign':
-      'Skipped — this post is already in a campaign. Automations only add posts that have none.',
+      'This post is already in a campaign. Automations only add posts that have none.',
     'automations.failure.content_in_review':
-      "Skipped — this post is waiting for review, so it wasn't changed.",
+      "This post is waiting for review, so it wasn't changed.",
     'automations.failure.content_not_editable':
-      "Skipped — this post is publishing or already published and can't be changed.",
+      "This post is publishing or already published and can't be changed.",
     'automations.failure.content_unavailable':
-      'Skipped — the post this event is about is no longer available.',
+      'The post this event is about is no longer available.',
     'automations.failure.source_campaign_unavailable':
       "No copy made — the original post's campaign no longer exists.",
     'automations.failure.draft_limit_reached':
       'No copy made — this brand has reached its limit of drafts.',
     'automations.failure.occurrence_stale':
-      'Skipped — what started this automation had changed by the time it ran.',
+      'What started this automation had changed by the time it ran.',
     'automations.failure.no_eligible_reviewer':
       'Not sent — no one who can review this post is available right now.',
     'automations.failure.failure_superseded':
@@ -7397,12 +7418,11 @@ export const messages = {
     'automations.failure.daily_ceiling_reached':
       'Not run — this automation reached its daily limit of runs.',
     'automations.failure.monthly_ai_cap_reached':
-      "Skipped: this month's limit for AI automation actions is reached. It resets at the start of next month. Nothing was charged.",
-    'automations.failure.ai_credits_insufficient':
-      'Skipped: not enough AI credits. Nothing was charged.',
+      "This month's limit for AI automation actions is reached. It resets at the start of next month. Nothing was charged.",
+    'automations.failure.ai_credits_insufficient': 'Not enough AI credits. Nothing was charged.',
     'automations.failure.no_reviewed_facts':
-      'Skipped: no approved brand facts are available to draw ideas from.',
-    'automations.failure.brand_not_active': 'Skipped: the brand is archived.',
+      'No approved brand facts are available to draw ideas from.',
+    'automations.failure.brand_not_active': 'The brand is archived.',
     'automations.failure.ai_unavailable':
       "The AI service couldn't draft ideas this time. Nothing was charged.",
     'automations.failure.ai_output_unusable':
@@ -8346,6 +8366,15 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     en: 'The campaign was archived. Nothing was deleted.',
     ar: 'تمت أرشفة الحملة. لم يُحذف أي شيء.',
   },
+  // Fix PR 2c — Pause on the campaign card.
+  CAMPAIGN_PAUSED: {
+    en: 'The campaign is paused.',
+    ar: 'أُوقفت الحملة مؤقتًا.',
+  },
+  CAMPAIGN_NOT_PAUSABLE: {
+    en: 'Only a planned or running campaign can be paused.',
+    ar: 'لا يمكن إيقاف الحملة مؤقتًا إلا إذا كانت مخططة أو جارية.',
+  },
   // B11 (Phase 2B-2b) — "Start now".
   CAMPAIGN_STARTED: {
     en: 'The campaign has started. Its start date is today.',
@@ -8566,6 +8595,16 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   DUPLICATED: {
     en: 'A copy was made as a new draft. The original is unchanged.',
     ar: 'أُنشئت نسخة كمسودة جديدة. الأصل لم يتغيّر.',
+  },
+  // Fix PR 2c (B.4, r3 #22) — a finished brand step, edited and saved.
+  SETUP_BRAND_SAVED: {
+    en: 'Brand details saved.',
+    ar: 'حُفظت تفاصيل العلامة.',
+  },
+  // Fix PR 2c (B2.3).
+  DUPLICATED_LICENCE_ENDED: {
+    en: 'A copy was made as a new draft. Media whose licence has ended was left out.',
+    ar: 'أُنشئت نسخة كمسودة جديدة. استُبعدت الوسائط التي انتهى ترخيصها.',
   },
   BRAND_CREATED_LOGO_PENDING: {
     en: 'Brand created. Your logo is being checked; it appears below as soon as it passes.',

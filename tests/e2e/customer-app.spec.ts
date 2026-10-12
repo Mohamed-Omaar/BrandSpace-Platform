@@ -302,11 +302,8 @@ test.describe('invitation acceptance', () => {
     await expect(page.getByTestId('invitation-name')).toHaveAttribute('required', '');
     await page.fill('[data-testid="invitation-name"]', 'Nadia Newcomer');
     await page.fill('[data-testid="invitation-password"]', password);
-    // P6-03a: the confirmation field. It is the customer's own check against a
-    // typo and is deliberately NOT submitted — the server validates the
-    // password itself — but it is required, so the form will not submit
-    // without it.
-    await page.fill('#invite-password-confirm', password);
+    // Fix PR 2c: no confirmation field, as on sign-up (round 4, 4.1).
+    await expect(page.locator('#invite-password-confirm')).toHaveCount(0);
     await page.click('[data-testid="invitation-setup-submit"]');
 
     // Signed in, in the workspace, in one step.

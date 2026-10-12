@@ -6,7 +6,7 @@ import {
   type ContentVariant,
   type TenantScopedClient,
 } from '@brandspace/database';
-import { AppError, brandIdQueryFilter } from '@brandspace/shared';
+import { AppError, brandIdQueryFilter, systemClock } from '@brandspace/shared';
 import {
   contentItemNotFound,
   contentNotEditable,
@@ -682,8 +682,40 @@ export class ContentLibraryService {
     readonly actorPermissionKeys: readonly string[];
     readonly expiresAt: Date | null;
     readonly idempotencyKey: string;
-  }): Promise<{ item: ContentItem; variants: ContentVariant[]; replayed: boolean }> {
+  }): Promise<{
+    item: ContentItem;
+    variants: ContentVariant[];
+    replayed: boolean;
+    /** Fix PR 2c (B2.3): the source's files left out because their licence ended. */
+    mediaLeftOut: string[];
+  }> {
     const source = await this.getItem(input.sourceItemId, input.actorBrandScope);
+    /*
+     * FIX PR 2c (B2.3) — A FILE WHOSE LICENCE HAS ENDED IS LEFT OUT, NOT A
+     * FAILED COPY. The copy re-checks its media through the ordinary create
+     * path, which refuses a file past its `rightsExpiryAt` (D-286) with the
+     * same "Asset not found." a missing file gets — so one lapsed licence used
+     * to fail the whole duplicate. Those files are now dropped from the copy
+     * before it is made, and named in `mediaLeftOut` so the screen says so,
+     * as a change of format already reports the media it drops. Any OTHER
+     * reason a file cannot be used is still the create path's refusal.
+     */
+    const sourceAssetIds = [...new Set(source.variants.flatMap((variant) => variant.assetIds))];
+    const lapsed =
+      sourceAssetIds.length === 0
+        ? new Set<string>()
+        : new Set(
+            (
+              await this.db.asset.findMany({
+                where: {
+                  id: { in: sourceAssetIds },
+                  workspaceId: this.workspaceId,
+                  rightsExpiryAt: { lte: systemClock.now() },
+                },
+                select: { id: true },
+              })
+            ).map((asset) => asset.id),
+          );
     const mayFile =
       input.actorPermissionKeys.includes('content.create') ||
       input.actorPermissionKeys.includes('campaigns.manage');
@@ -695,7 +727,7 @@ export class ContentLibraryService {
       });
       if (!live) throw sourceCampaignUnavailable();
     }
-    return this.createManualItem({
+    const created = await this.createManualItem({
       brandId: source.brandId,
       title: input.titleFor ? input.titleFor(source.title) : source.title,
       contentType: source.contentType,
@@ -711,8 +743,9 @@ export class ContentLibraryService {
             ? variant.firstComment
             : null,
           linkUrl: variant.linkUrl,
-          assetIds: variant.assetIds,
-          // B9 — the slide headlines travel with their images.
+          assetIds: variant.assetIds.filter((assetId) => !lapsed.has(assetId)),
+          // B9 — the slide headlines travel with their images (a left-out
+          // file's headline goes with it: slides follow the media list).
           slides: readSlides(variant.slides),
         })),
       campaignId,
@@ -723,6 +756,7 @@ export class ContentLibraryService {
       actorUserId: input.actorUserId,
       actorBrandScope: input.actorBrandScope,
     });
+    return { ...created, mediaLeftOut: [...lapsed] };
   }
 
   /**

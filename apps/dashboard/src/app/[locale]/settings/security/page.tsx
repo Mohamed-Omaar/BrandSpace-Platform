@@ -224,34 +224,6 @@ export default async function SecuritySettingsPage({
               </div>
             ) : null}
 
-            {/* ENROLLED: "New phone" costs a current code. */}
-            {mfaAvailable && account.mfaEnabled && !pending ? (
-              <form action={beginNewPhoneAction} className="bsp-secu-panel bsp-secu-inline">
-                <input type="hidden" name="locale" value={locale} />
-                <span className="bsp-secu-s">{t('security.newPhoneExplain')}</span>
-                <span className="bsp-secu-fields">
-                  <input
-                    className="bs-control bsp-secu-in"
-                    id="new-phone-code"
-                    name="code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    required
-                    placeholder={t('security.code')}
-                    aria-label={t('security.code')}
-                    data-testid="mfa-new-phone-code"
-                  />
-                  <button
-                    type="submit"
-                    data-testid="mfa-new-phone-begin"
-                    className="bsp-btn bsp-sm bsp-sec"
-                  >
-                    {t('security.newPhone')}
-                  </button>
-                </span>
-              </form>
-            ) : null}
-
             {/* ENROLLED AND REQUIRED: it cannot be turned off, and the page says why. */}
             {account.mfaEnabled && requiredBy ? (
               <p className="bsp-secu-panel bsp-secu-note" data-testid="mfa-required-note">
@@ -299,6 +271,44 @@ export default async function SecuritySettingsPage({
               </form>
             ) : null}
           </div>
+
+          {/*
+            ENROLLED: "New phone" costs a current code. FIX PR 2c (B.4): its own
+            row, as the recovery codes have, instead of a panel inside the
+            two-step row — the title, its line, and the code with the button at
+            the row's end.
+          */}
+          {mfaAvailable && account.mfaEnabled && !pending ? (
+            <div className="bsp-secu-block" data-testid="mfa-new-phone-row">
+              <form action={beginNewPhoneAction} className="bsp-row bsp-secu-row">
+                <input type="hidden" name="locale" value={locale} />
+                <span className="bsp-secu-text">
+                  <span className="bsp-secu-t bsp-sm">{t('security.newPhone')}</span>
+                  <span className="bsp-secu-s">{t('security.newPhoneExplain')}</span>
+                </span>
+                <span className="bsp-secu-fields">
+                  <input
+                    className="bs-control bsp-secu-in"
+                    id="new-phone-code"
+                    name="code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    required
+                    placeholder={t('security.code')}
+                    aria-label={t('security.code')}
+                    data-testid="mfa-new-phone-code"
+                  />
+                  <button
+                    type="submit"
+                    data-testid="mfa-new-phone-begin"
+                    className="bsp-btn bsp-sm bsp-sec"
+                  >
+                    {t('security.newPhone')}
+                  </button>
+                </span>
+              </form>
+            </div>
+          ) : null}
 
           {/* THE CODES, SHOWN ONCE, and the backup-codes row. */}
           {account.mfaEnabled || issuedCodes.length > 0 ? (

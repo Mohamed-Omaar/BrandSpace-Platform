@@ -2274,6 +2274,30 @@ card's View evidence, Give to Copilot and Dismiss leave Home (they remain on Int
 Performance). A post in review is named without channels: a post has no channels until it is
 scheduled.
 
+### 6.3.64 Fix PR 2c — the screen fixes (D-506)
+
+- **The Copilot button stays FLOATING, as the prototype draws it (Q2, owner's answer (c)).** Its
+  place and size are unchanged (`Main.dc.html` L1483: 48px high, fully round, 24px from the frame's
+  corner). One recorded DEVIATION, for this answer: the page's end padding is raised from the
+  prototype's 40px to 88px (the button's 24px offset and 48px height, plus 16px), so the last row
+  of every page can be scrolled fully clear of it. Rows passing under it while scrolling is
+  accepted. It also steps aside while a modal dialog or drawer is open, as it already did for the
+  Copilot panel. Measured in `tests/e2e/fix-2c-screens.spec.ts` on the longest table (Performance →
+  Posts), en and ar, at 1280, 1536 and 1920: the last row ends above the button.
+- **Pause on the campaign card (a PORT).** The prototype's card toggle (`toggleLabel` / `toggle`,
+  L3673): `.bsp-camp-toggle`, a 6px gap, `padding: 6px 4px`, 12px / 600, `#55555c`, the pause glyph,
+  before "Open", on an active card for a person who may manage campaigns. "Resume" is left out: a
+  paused campaign is resumed through Edit, as before.
+- **The workspace list rests on whole rows (a state the prototype does not draw, D-468 (c)).** The
+  prototype's list never scrolls; the product's does (PR D). Its rows now snap to the list's top edge,
+  and a list that overflows is held to a whole number of rows, so no row is cut to an empty bar.
+- **"New phone" as its own row** in Security, as the recovery codes have: the title, its line, and
+  the code with the button at the row's end — the page's `.bsp-secu-block` / `.bsp-secu-row`.
+- **Plan & billing** keeps its tables; only their words change ("Allowance", "Availability", plain
+  quota names, GB) and a limit is shown only where one applies.
+- **Onboarding**: the Business step's industry chips are the wizard's own `.bsp-wz-chip`; the
+  finished brand step's form is the new-brand step's fields, filled in.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The

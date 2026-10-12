@@ -121,7 +121,7 @@ const COPY = {
     campaignField: 'Campaign',
     skipped: 'Skipped',
     blocked: 'Stopped by policy',
-    stale: 'Skipped — what started this automation had changed by the time it ran.',
+    stale: 'What started this automation had changed by the time it ran.',
     nobody: 'Not sent — no one who can review this post is available right now.',
   },
   ar: {
@@ -136,7 +136,7 @@ const COPY = {
     campaignField: 'الحملة',
     skipped: 'تم التخطي',
     blocked: 'أوقفتها السياسة',
-    stale: 'تم التخطي — تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
+    stale: 'تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
     nobody: 'لم يُرسل — لا يوجد حاليًا من يمكنه مراجعة هذا المنشور.',
   },
 } as const;

@@ -514,9 +514,9 @@ describe('older-automation classification', () => {
 
 describe('run history: a condition_value_unavailable skip has its own label and reason', () => {
   const EN =
-    "Skipped — something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.";
+    "Something this rule's conditions name is no longer available (a campaign, person or brand). Edit the rule to choose a current one.";
   const AR =
-    'تم التخطي — شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.';
+    'شيء تذكره شروط هذه القاعدة لم يعد متاحًا (حملة أو شخص أو علامة تجارية). عدّل القاعدة واختر قيمة حالية.';
 
   it('maps the skip to a distinct badge and the localized reason, never the raw code', () => {
     const shown = runPresentation({

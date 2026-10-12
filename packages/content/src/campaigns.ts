@@ -387,6 +387,11 @@ export class CampaignService {
     campaignId: string;
     brandId: string;
     actor: CampaignActor;
+    /**
+     * Fix PR 2c — WHY, for the audit event. The automation's own pause keeps
+     * `automation_pause`; a person pressing Pause on the card is `manual_pause`.
+     */
+    reason?: 'automation_pause' | 'manual_pause';
   }): Promise<
     { kind: 'paused'; campaign: Campaign } | { kind: 'refused'; reason: CampaignPauseRefusal }
   > {
@@ -422,7 +427,7 @@ export class CampaignService {
         resourceType: 'Campaign',
         resourceId: updated.id,
         brandId: updated.brandId,
-        reason: 'automation_pause',
+        reason: input.reason ?? 'automation_pause',
         before: { version: existing.version, status: existing.status },
         after: { version: updated.version, status: updated.status },
       });

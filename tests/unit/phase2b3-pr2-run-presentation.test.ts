@@ -19,24 +19,24 @@ import { actionConfigFrom } from '../../apps/dashboard/src/server/automation-for
 /** code → [English, Arabic], exactly as approved. */
 const COPY: Record<string, readonly [string, string]> = {
   already_has_time: [
-    "Skipped — this post already has a date and time, so it wasn't moved.",
-    'تم التخطي — لهذا المنشور موعد محدد بالفعل، لذلك لم يُنقل.',
+    "This post already has a date and time, so it wasn't moved.",
+    'لهذا المنشور موعد محدد بالفعل، لذلك لم يُنقل.',
   ],
   already_in_campaign: [
-    'Skipped — this post is already in a campaign. Automations only add posts that have none.',
-    'تم التخطي — هذا المنشور ضمن حملة بالفعل. تضيف الأتمتة فقط المنشورات التي ليست ضمن أي حملة.',
+    'This post is already in a campaign. Automations only add posts that have none.',
+    'هذا المنشور ضمن حملة بالفعل. تضيف الأتمتة فقط المنشورات التي ليست ضمن أي حملة.',
   ],
   content_in_review: [
-    "Skipped — this post is waiting for review, so it wasn't changed.",
-    'تم التخطي — هذا المنشور بانتظار المراجعة، لذلك لم يُعدَّل.',
+    "This post is waiting for review, so it wasn't changed.",
+    'هذا المنشور بانتظار المراجعة، لذلك لم يُعدَّل.',
   ],
   content_not_editable: [
-    "Skipped — this post is publishing or already published and can't be changed.",
-    'تم التخطي — هذا المنشور قيد النشر أو منشور بالفعل ولا يمكن تعديله.',
+    "This post is publishing or already published and can't be changed.",
+    'هذا المنشور قيد النشر أو منشور بالفعل ولا يمكن تعديله.',
   ],
   content_unavailable: [
-    'Skipped — the post this event is about is no longer available.',
-    'تم التخطي — المنشور المعني بهذا الحدث لم يعد متاحًا.',
+    'The post this event is about is no longer available.',
+    'المنشور المعني بهذا الحدث لم يعد متاحًا.',
   ],
   no_free_day: [
     'Not scheduled — no free day was found within the scheduling window.',
@@ -76,8 +76,8 @@ const COPY: Record<string, readonly [string, string]> = {
   ],
   // Phase 2B-3 PR 3 — approved as written (owner decision D).
   occurrence_stale: [
-    'Skipped — what started this automation had changed by the time it ran.',
-    'تم التخطي — تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
+    'What started this automation had changed by the time it ran.',
+    'تغيّر ما أطلق هذه الأتمتة قبل تشغيلها.',
   ],
   no_eligible_reviewer: [
     'Not sent — no one who can review this post is available right now.',
@@ -131,18 +131,18 @@ const COPY: Record<string, readonly [string, string]> = {
   ],
   // Phase 2B-3 PR 6 — DRAFT_IDEAS (approved copy, owner decisions 7 and 9).
   monthly_ai_cap_reached: [
-    "Skipped: this month's limit for AI automation actions is reached. It resets at the start of next month. Nothing was charged.",
-    'تم التخطي: بلغت إجراءات الأتمتة بالذكاء الاصطناعي حدّها لهذا الشهر، ويُعاد ضبطه مع بداية الشهر القادم. لم يُخصم أي رصيد.',
+    "This month's limit for AI automation actions is reached. It resets at the start of next month. Nothing was charged.",
+    'بلغت إجراءات الأتمتة بالذكاء الاصطناعي حدّها لهذا الشهر، ويُعاد ضبطه مع بداية الشهر القادم. لم يُخصم أي رصيد.',
   ],
   ai_credits_insufficient: [
-    'Skipped: not enough AI credits. Nothing was charged.',
-    'تم التخطي: رصيد الذكاء الاصطناعي غير كافٍ. لم يُخصم أي رصيد.',
+    'Not enough AI credits. Nothing was charged.',
+    'رصيد الذكاء الاصطناعي غير كافٍ. لم يُخصم أي رصيد.',
   ],
   no_reviewed_facts: [
-    'Skipped: no approved brand facts are available to draw ideas from.',
-    'تم التخطي: لا توجد حقائق معتمدة متاحة للعلامة لاستلهام الأفكار منها.',
+    'No approved brand facts are available to draw ideas from.',
+    'لا توجد حقائق معتمدة متاحة للعلامة لاستلهام الأفكار منها.',
   ],
-  brand_not_active: ['Skipped: the brand is archived.', 'تم التخطي: العلامة مؤرشفة.'],
+  brand_not_active: ['The brand is archived.', 'العلامة مؤرشفة.'],
   ai_unavailable: [
     "The AI service couldn't draft ideas this time. Nothing was charged.",
     'تعذّر على خدمة الذكاء الاصطناعي صياغة الأفكار هذه المرة. لم يُخصم أي رصيد.',

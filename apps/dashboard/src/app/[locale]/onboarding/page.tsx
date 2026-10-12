@@ -32,6 +32,7 @@ import { ChannelMark } from '../calendar/prototype-calendar';
 import {
   attachSetupLogoAction,
   createSetupBrandAction,
+  saveSetupBrandAction,
   uploadSetupLogoAction,
   reviewSetupCandidateAction,
   acceptAllSetupCandidatesAction,
@@ -126,6 +127,9 @@ export default async function OnboardingPage({
   const errorText = error ? (statusMessage(error, locale, reference) ?? t('setup.error')) : null;
 
   const href = (target: WizardView) => `/${locale}/onboarding?step=${target}`;
+  // Fix PR 2c — the industry chosen on the Business step, carried to the brand step.
+  const carriedIndustry =
+    typeof query['industry'] === 'string' ? query['industry'].slice(0, 120) : null;
   const stepLabel = (key: string) => t(`setup.step.${key}` as MessageKey);
   const pickText = (value: unknown) => {
     const text = localizedFrom(value as never);
@@ -207,24 +211,64 @@ export default async function OnboardingPage({
               readOnly
             />
           </div>
-          {/* The industry is the brand's; shown here, as the prototype asks it here. */}
-          <div className="bsp-wz-full">
-            <span className="bsp-wz-lb" id="setup-business-industry">
-              {t('setup.wz.business.industry')}
-            </span>
-            <div className="bsp-wz-chips" role="group" aria-labelledby="setup-business-industry">
-              {industries.map((industry) => (
-                <span
-                  key={industry.key}
-                  className="bsp-wz-chip bsp-wz-chip-sm"
-                  aria-pressed={brandRow?.industry === industry.key}
-                  aria-disabled="true"
+          {/*
+            The industry is the brand's; shown here, as the prototype asks it
+            here. FIX PR 2c (B.4, r3 #25): only when industries are configured
+            (an empty group asked nothing), and CHOSEN here by whoever may manage
+            the brand — a real radio group whose choice Continue carries to the
+            brand step (`?industry=`), which saves it with the brand. Nothing is
+            written from this step.
+          */}
+          {industries.length > 0 ? (
+            <div className="bsp-wz-full" data-testid="setup-business-industry">
+              {may('brand.manage') ? (
+                <fieldset
+                  className="bsp-wz-chips"
+                  style={{ border: 0, margin: 0, padding: 0, minInlineSize: 0 }}
                 >
-                  {locale === 'ar' ? industry.name.ar : industry.name.en}
-                </span>
-              ))}
+                  <legend className="bsp-wz-lb" style={{ padding: 0 }}>
+                    {t('setup.wz.business.industry')}
+                  </legend>
+                  {industries.map((industry) => (
+                    <label key={industry.key} className="bsp-wz-chip bsp-wz-chip-sm">
+                      <input
+                        type="radio"
+                        name="industry"
+                        value={industry.key}
+                        form="setup-business-form"
+                        defaultChecked={brandRow?.industry === industry.key}
+                        className="bsp-wz-radio"
+                        data-testid={`setup-business-industry-${industry.key}`}
+                      />
+                      {locale === 'ar' ? industry.name.ar : industry.name.en}
+                    </label>
+                  ))}
+                </fieldset>
+              ) : (
+                <>
+                  <span className="bsp-wz-lb" id="setup-business-industry">
+                    {t('setup.wz.business.industry')}
+                  </span>
+                  <div
+                    className="bsp-wz-chips"
+                    role="group"
+                    aria-labelledby="setup-business-industry"
+                  >
+                    {industries.map((industry) => (
+                      <span
+                        key={industry.key}
+                        className="bsp-wz-chip bsp-wz-chip-sm"
+                        aria-pressed={brandRow?.industry === industry.key}
+                        aria-disabled="true"
+                      >
+                        {locale === 'ar' ? industry.name.ar : industry.name.en}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-          </div>
+          ) : null}
           <span className="bsp-wz-full bsp-wz-hint" data-testid="setup-business-zone">
             {t('setup.wz.business.zone').replace('{zone}', row.timezone)}{' '}
             {may('workspace.update') ? (
@@ -236,7 +280,27 @@ export default async function OnboardingPage({
         </div>
       </section>
     );
-    footer = <SetupFooter note={savedNote} next={continueLink('brand')} />;
+    footer =
+      industries.length > 0 && may('brand.manage') ? (
+        <SetupFooter
+          note={savedNote}
+          next={
+            <form
+              id="setup-business-form"
+              method="get"
+              action={`/${locale}/onboarding`}
+              style={{ display: 'contents' }}
+            >
+              <input type="hidden" name="step" value="brand" />
+              <button type="submit" className="bsp-wz-btn bsp-wz-pur" data-testid="setup-continue">
+                {t('setup.continue')}
+              </button>
+            </form>
+          }
+        />
+      ) : (
+        <SetupFooter note={savedNote} next={continueLink('brand')} />
+      );
   } else if (view === 'brand') {
     /* ---------------------------------------------------------------- brand */
     head = { title: t('setup.brand.title'), description: t('setup.wz.brand.body') };
@@ -251,11 +315,25 @@ export default async function OnboardingPage({
             supportedLocales: true,
             colorPalette: true,
             primaryLogoAssetId: true,
+            industry: true,
+            defaultLocale: true,
           },
         }),
       );
+      // Fix PR 2c — the finished step is a form again for whoever may manage the brand.
+      const editable = may('brand.manage');
+      const brandIndustries = editable
+        ? await inBrandBrain(
+            workspace.workspaceId,
+            async ({ db }) =>
+              (await new TenantOnboardingPolicySource(db, currentEnvironment()).load()).industries,
+          )
+        : [];
       const palette = paletteFrom(row?.colorPalette).slice(0, 3);
       const languages = (row?.supportedLocales as readonly string[] | undefined) ?? [];
+      const postingNow = languages.filter(
+        (code): code is 'AR' | 'EN' => code === 'AR' || code === 'EN',
+      );
       /*
        * BATCH 7 (A3) — THE LOGO'S STATE, IN ITS OWN PLACE: the brand's logo, a
        * file still being checked (`?logo=`), or the reason one was refused
@@ -333,50 +411,134 @@ export default async function OnboardingPage({
       body = (
         <section className="bsp-wz-body bsp-wz-scroll" data-testid="setup-brand-ready">
           <div className="bsp-wz-brandgrid">
-            <div className="bsp-wz-col">
-              <div>
-                <label className="bsp-wz-lb" htmlFor="setup-brand-name">
-                  {t('setup.brand.name')}
-                </label>
-                <input
-                  id="setup-brand-name"
-                  className="bs-control"
-                  value={row?.name ?? brand.name}
-                  readOnly
-                  dir="auto"
-                  data-testid="setup-brand-name"
+            {editable ? (
+              <form
+                id="setup-brand-edit"
+                action={saveSetupBrandAction}
+                className="bsp-wz-col"
+                data-testid="setup-brand-edit"
+              >
+                <input type="hidden" name="locale" value={locale} />
+                <input type="hidden" name="brandId" value={brand.id} />
+                <div>
+                  <label className="bsp-wz-lb" htmlFor="setup-brand-name">
+                    {t('setup.brand.name')}
+                  </label>
+                  <input
+                    id="setup-brand-name"
+                    name="name"
+                    defaultValue={row?.name ?? brand.name}
+                    required
+                    minLength={2}
+                    maxLength={120}
+                    className="bs-control"
+                    dir="auto"
+                    data-testid="setup-brand-name"
+                  />
+                </div>
+                <div>
+                  <label className="bsp-wz-lb" htmlFor="setup-brand-website">
+                    {t('setup.wz.brand.website')}
+                  </label>
+                  <input
+                    id="setup-brand-website"
+                    name="websiteUrl"
+                    type="url"
+                    inputMode="url"
+                    maxLength={2048}
+                    defaultValue={row?.websiteUrl ?? ''}
+                    placeholder={t('setup.brand.websitePlaceholder')}
+                    dir="ltr"
+                    className="bs-control"
+                    data-testid="setup-brand-website"
+                  />
+                </div>
+                <SetupBrandLanguages
+                  initialDefault={row?.defaultLocale === 'AR' ? 'AR' : 'EN'}
+                  initialPosting={postingNow.length > 0 ? postingNow : ['EN', 'AR']}
+                  moreLabel={t('setup.wz.more')}
+                  labels={{
+                    defaultLanguage: t('setup.brand.defaultLanguage'),
+                    defaultLanguageHint: t('setup.brand.defaultLanguageHint'),
+                    languages: t('setup.wz.brand.languages'),
+                    localeEn: t('brandProfile.localeEn'),
+                    localeAr: t('brandProfile.localeAr'),
+                    atLeastOne: t('setup.brand.languagesRequired'),
+                  }}
                 />
-              </div>
-              <div>
-                <label className="bsp-wz-lb" htmlFor="setup-brand-website">
-                  {t('setup.wz.brand.website')}
-                </label>
-                <input
-                  id="setup-brand-website"
-                  className="bs-control bsp-ltr"
-                  value={row?.websiteUrl ?? ''}
-                  readOnly
-                  dir="ltr"
-                />
-              </div>
-              <div>
-                <span className="bsp-wz-lb" id="setup-brand-langs">
-                  {t('setup.wz.brand.languages')}
-                </span>
-                <div className="bsp-wz-chips" role="group" aria-labelledby="setup-brand-langs">
-                  {(['AR', 'EN'] as const).map((code) => (
-                    <span
-                      key={code}
-                      className="bsp-wz-chip bsp-wz-chip-sm"
-                      aria-pressed={languages.includes(code)}
-                      aria-disabled="true"
-                    >
-                      {t(code === 'AR' ? 'brandProfile.localeAr' : 'brandProfile.localeEn')}
-                    </span>
-                  ))}
+                {/*
+                  Fix PR 2c (review of #78) — a plain field, like the name and
+                  website above it: one "Industry", the field's own label.
+                */}
+                <div data-testid="setup-brand-industry-more">
+                  <IndustryField
+                    industries={brandIndustries.map((industry) => ({
+                      value: industry.key,
+                      label: locale === 'ar' ? industry.name.ar : industry.name.en,
+                    }))}
+                    saved={
+                      brandIndustries.some((i) => i.key === carriedIndustry)
+                        ? carriedIndustry
+                        : (row?.industry ?? null)
+                    }
+                    labels={{
+                      industry: t('setup.brand.industry'),
+                      industryHint: t('setup.optional'),
+                      industryNone: t('settings.industryNone'),
+                      industryOther: t('settings.industryOther'),
+                      industryOtherLabel: t('settings.industryOtherLabel'),
+                    }}
+                    idPrefix="setup-brand-"
+                    testIdPrefix="setup-brand"
+                  />
+                </div>
+              </form>
+            ) : (
+              <div className="bsp-wz-col">
+                <div>
+                  <label className="bsp-wz-lb" htmlFor="setup-brand-name">
+                    {t('setup.brand.name')}
+                  </label>
+                  <input
+                    id="setup-brand-name"
+                    className="bs-control"
+                    value={row?.name ?? brand.name}
+                    readOnly
+                    dir="auto"
+                    data-testid="setup-brand-name"
+                  />
+                </div>
+                <div>
+                  <label className="bsp-wz-lb" htmlFor="setup-brand-website">
+                    {t('setup.wz.brand.website')}
+                  </label>
+                  <input
+                    id="setup-brand-website"
+                    className="bs-control bsp-ltr"
+                    value={row?.websiteUrl ?? ''}
+                    readOnly
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <span className="bsp-wz-lb" id="setup-brand-langs">
+                    {t('setup.wz.brand.languages')}
+                  </span>
+                  <div className="bsp-wz-chips" role="group" aria-labelledby="setup-brand-langs">
+                    {(['AR', 'EN'] as const).map((code) => (
+                      <span
+                        key={code}
+                        className="bsp-wz-chip bsp-wz-chip-sm"
+                        aria-pressed={languages.includes(code)}
+                        aria-disabled="true"
+                      >
+                        {t(code === 'AR' ? 'brandProfile.localeAr' : 'brandProfile.localeEn')}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
             <div className="bsp-wz-look">
               <span className="bsp-wz-lb">{t('setup.wz.brand.logoColours')}</span>
               {may('brand.manage') && may('assets.upload') ? (
@@ -435,7 +597,24 @@ export default async function OnboardingPage({
         </section>
       );
       footer = (
-        <SetupFooter note={savedNote} back={backLink('business')} next={continueLink('learn')} />
+        <SetupFooter
+          note={savedNote}
+          back={backLink('business')}
+          next={
+            editable ? (
+              <button
+                type="submit"
+                form="setup-brand-edit"
+                className="bsp-wz-btn bsp-wz-pur"
+                data-testid="setup-continue"
+              >
+                {t('setup.continue')}
+              </button>
+            ) : (
+              continueLink('learn')
+            )
+          }
+        />
       );
     } else if (unselected) {
       head = { title: t('brand.chooseTitle'), description: t('brand.chooseBody') };
@@ -525,25 +704,55 @@ export default async function OnboardingPage({
                 prototype asks it with the business; a workspace does not store
                 it, so it stays with the brand, behind its own disclosure.
               */}
-              <details className="bsp-wz-more" data-testid="setup-brand-industry-more">
-                <summary>{t('setup.brand.industry')}</summary>
-                <IndustryField
-                  industries={industries.map((industry) => ({
-                    value: industry.key,
-                    label: locale === 'ar' ? industry.name.ar : industry.name.en,
-                  }))}
-                  saved={null}
-                  labels={{
-                    industry: t('setup.brand.industry'),
-                    industryHint: t('setup.optional'),
-                    industryNone: t('settings.industryNone'),
-                    industryOther: t('settings.industryOther'),
-                    industryOtherLabel: t('settings.industryOtherLabel'),
-                  }}
-                  idPrefix="setup-brand-"
-                  testIdPrefix="setup-brand"
-                />
-              </details>
+              {/*
+                Fix PR 2c (review of #78) — an industry carried from the Business
+                step is shown as the plain field (one "Industry"); otherwise it
+                stays behind its own disclosure, as before.
+              */}
+              {carriedIndustry !== null ? (
+                <div data-testid="setup-brand-industry-more">
+                  <IndustryField
+                    industries={industries.map((industry) => ({
+                      value: industry.key,
+                      label: locale === 'ar' ? industry.name.ar : industry.name.en,
+                    }))}
+                    saved={
+                      industries.some((i) => i.key === carriedIndustry) ? carriedIndustry : null
+                    }
+                    labels={{
+                      industry: t('setup.brand.industry'),
+                      industryHint: t('setup.optional'),
+                      industryNone: t('settings.industryNone'),
+                      industryOther: t('settings.industryOther'),
+                      industryOtherLabel: t('settings.industryOtherLabel'),
+                    }}
+                    idPrefix="setup-brand-"
+                    testIdPrefix="setup-brand"
+                  />
+                </div>
+              ) : (
+                <details className="bsp-wz-more" data-testid="setup-brand-industry-more">
+                  <summary>{t('setup.brand.industry')}</summary>
+                  <IndustryField
+                    industries={industries.map((industry) => ({
+                      value: industry.key,
+                      label: locale === 'ar' ? industry.name.ar : industry.name.en,
+                    }))}
+                    saved={
+                      industries.some((i) => i.key === carriedIndustry) ? carriedIndustry : null
+                    }
+                    labels={{
+                      industry: t('setup.brand.industry'),
+                      industryHint: t('setup.optional'),
+                      industryNone: t('settings.industryNone'),
+                      industryOther: t('settings.industryOther'),
+                      industryOtherLabel: t('settings.industryOtherLabel'),
+                    }}
+                    idPrefix="setup-brand-"
+                    testIdPrefix="setup-brand"
+                  />
+                </details>
+              )}
             </div>
             {/* "Logo and colours" — the prototype's soft panel (`.bsp-wz-look`). */}
             <div className="bsp-wz-look">

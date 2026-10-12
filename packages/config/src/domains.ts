@@ -1144,6 +1144,15 @@ const keyQuestion = z.object({
   key: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
   itemKey: z.string().regex(/^[a-z][a-z0-9_.-]{0,79}$/),
   prompt: z.object({ en: z.string().min(1).max(160), ar: z.string().min(1).max(160) }),
+  /*
+   * FIX PR 2c (B.4, r3 #21) — THE CHIP'S SHORT WORDING, optional. "What's
+   * missing" draws each question as a one-row chip (area · label +), and the
+   * full question did not fit. Where this is set the chip reads it and the
+   * full question stays on hover; where it is not, the chip reads the question
+   * as before. No default: the questions' wording is the owner's (D-357), so
+   * the short one is too.
+   */
+  short: z.object({ en: z.string().min(1).max(40), ar: z.string().min(1).max(40) }).optional(),
 });
 
 const keyQuestionList = z

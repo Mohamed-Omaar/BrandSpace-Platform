@@ -8,7 +8,7 @@ import type { NotesPopoverItem } from '../app/[locale]/notes/popover-feed';
 /**
  * D-496 (Shell 1, 2) — THE NOTES SQUARE OPENS A POPOVER, NOT A PAGE
  * (`Main.dc.html` L152–161): the prototype's 340px glass card under the
- * square — "Notes" and Dismiss, the two latest notes (a dot, who said what,
+ * square — "Notes" and Close (the prototype's "Dismiss", Fix PR 2c), the two latest notes (a dot, who said what,
  * where), and "All notes" across the foot, which opens the Notes screen.
  *
  * THE BELL'S OWN PATTERN (`notifications-bell.tsx`, D-297) and classes, which
