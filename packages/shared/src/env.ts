@@ -56,6 +56,13 @@ const baseEnvSchema = z.object({
   STORAGE_ACCESS_KEY_ID: z.string().optional(),
   STORAGE_SECRET_ACCESS_KEY: z.string().optional(),
   /**
+   * PR F (g) — Scanii's API key and secret, read by the WORKER only and only
+   * when `assets.scanning.provider` is `scanii`. Env, like the storage keys:
+   * the worker holds no platform secret vault key by design.
+   */
+  SCANII_API_KEY: z.string().optional(),
+  SCANII_API_SECRET: z.string().optional(),
+  /**
    * Path-style addressing instead of virtual-host style.
    *
    * The one genuinely provider-dependent switch: R2 and AWS serve virtual-host

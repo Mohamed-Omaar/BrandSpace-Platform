@@ -239,6 +239,8 @@ export function MediaDrawer({
               refusedEmpty: t['upload.refusedEmpty'] ?? '',
               uploading: t['upload.uploading'] ?? '',
               connection: t['upload.connection'] ?? '',
+              notScanned: t['upload.notScanned'] ?? '',
+              notScannedLink: t['upload.notScannedLink'] ?? '',
             }}
             className="cs-field"
             data-testid="composer-upload-form"

@@ -33,6 +33,12 @@ export interface ScanResult {
    * signature name tells an attacker which engine to test against.
    */
   readonly reason?: string;
+  /**
+   * PR F (g), Q13 — set only by the `none` scanner: the file was let through
+   * WITHOUT being looked at, and the asset records that (`not_scanned`) rather
+   * than claiming it was checked.
+   */
+  readonly notScanned?: true;
 }
 
 export interface VirusScanner {
@@ -112,6 +118,86 @@ export class MockVirusScanner implements VirusScanner {
 }
 
 /**
+ * PR F (g), Q13 — NO SCANNER, by the owner's decision for the beta.
+ *
+ * The beta runs with file scanning OFF and accepts the risk: users may upload
+ * the file types the product already allows, and each upload becomes usable
+ * without a scan. Selected only by configuration (`assets.scanning.provider:
+ * none` with `required: false`), so it is a recorded choice rather than a
+ * missing scanner, and every asset it passes is marked `not_scanned`. What
+ * stays: every file is served as a download, never rendered as a page, and the
+ * size and type limits are unchanged.
+ */
+export class NoVirusScanner implements VirusScanner {
+  readonly key = 'none';
+
+  async scan(): Promise<ScanResult> {
+    return { verdict: 'clean', notScanned: true };
+  }
+}
+
+/**
+ * PR F (g), Q13 — THE HOSTED SCANII API, built and switched off.
+ *
+ * One synchronous request per file: `POST <endpoint>` with the file as
+ * multipart field `file` and HTTP Basic credentials (the API key and secret).
+ * The answer's `findings` list is empty for a clean file; any finding is a
+ * detection. The URL is configuration (`assets.scanning.scanii.endpoint`),
+ * copied from Scanii's documentation for the chosen region, never assumed.
+ *
+ * WHAT IT NEVER DOES: put a credential, a finding name or a Scanii message
+ * where a customer or a log can read it. A refusal, a timeout or an
+ * unreadable answer throws a plain error, which the pipeline treats as "the
+ * scanner could not answer" — retryable, and the file stays quarantined.
+ */
+export class ScaniiVirusScanner implements VirusScanner {
+  readonly key = 'scanii';
+  readonly #endpoint: string;
+  readonly #authorization: string;
+  readonly #fetch: typeof fetch;
+
+  constructor(options: {
+    readonly endpoint: string;
+    readonly apiKey: string;
+    readonly apiSecret: string;
+    readonly fetch?: typeof fetch;
+  }) {
+    this.#endpoint = options.endpoint;
+    this.#authorization = `Basic ${Buffer.from(`${options.apiKey}:${options.apiSecret}`).toString('base64')}`;
+    this.#fetch = options.fetch ?? fetch;
+  }
+
+  async scan(input: {
+    readonly bytes: Uint8Array;
+    readonly declaredMimeType: string;
+    readonly timeoutMs: number;
+  }): Promise<ScanResult> {
+    const form = new FormData();
+    form.append(
+      'file',
+      new Blob([input.bytes as Uint8Array<ArrayBuffer>], { type: input.declaredMimeType }),
+      'upload',
+    );
+    const response = await this.#fetch(this.#endpoint, {
+      method: 'POST',
+      headers: { authorization: this.#authorization },
+      body: form,
+      signal: AbortSignal.timeout(input.timeoutMs),
+    });
+    if (!response.ok) {
+      throw new Error(`The scanner answered ${response.status}.`);
+    }
+    const body = (await response.json().catch(() => null)) as { findings?: unknown } | null;
+    if (!body || !Array.isArray(body.findings)) {
+      return { verdict: 'failed', reason: 'scan_failed' };
+    }
+    return body.findings.length > 0
+      ? { verdict: 'infected', reason: 'infected' }
+      : { verdict: 'clean' };
+  }
+}
+
+/**
  * Resolve the scanner for an environment.
  *
  * THE GATE IS THE DEPLOYMENT ENVIRONMENT, NOT THE BUILD MODE — `APP_ENV`, never
@@ -125,10 +211,31 @@ export class MockVirusScanner implements VirusScanner {
  */
 export function createVirusScanner(options: {
   readonly appEnv: string;
-  readonly policy: Pick<ScanningPolicy, 'provider'>;
+  readonly policy: Pick<ScanningPolicy, 'provider'> &
+    Partial<Pick<ScanningPolicy, 'scaniiEndpoint'>>;
   readonly scanner?: VirusScanner;
+  /** Scanii's API key and secret — the worker's own variables, never configuration. */
+  readonly scaniiCredentials?: { readonly apiKey: string; readonly apiSecret: string } | null;
+  readonly fetch?: typeof fetch;
 }): VirusScanner {
   if (options.scanner) return options.scanner;
+  if (options.policy.provider === 'none') return new NoVirusScanner();
+  if (options.policy.provider === 'scanii') {
+    const endpoint = options.policy.scaniiEndpoint ?? null;
+    const credentials = options.scaniiCredentials ?? null;
+    if (!endpoint || !credentials?.apiKey || !credentials.apiSecret) {
+      throw new Error(
+        'Scanii is selected but not configured: it needs assets.scanning.scanii.endpoint and the ' +
+          'SCANII_API_KEY and SCANII_API_SECRET variables.',
+      );
+    }
+    return new ScaniiVirusScanner({
+      endpoint,
+      apiKey: credentials.apiKey,
+      apiSecret: credentials.apiSecret,
+      ...(options.fetch ? { fetch: options.fetch } : {}),
+    });
+  }
   if (options.policy.provider === 'mock' && options.appEnv === 'production') {
     throw new Error(
       'No malware scanner is configured. Configure a real scanner before enabling uploads.',

@@ -1485,6 +1485,8 @@ const EDITOR_KEYS = [
   'upload.refusedEmpty',
   'upload.uploading',
   'upload.connection',
+  'upload.notScanned',
+  'upload.notScannedLink',
   'studio.when.mode.best',
   'studio.when.mode.bestSub',
   'studio.when.mode.pick',

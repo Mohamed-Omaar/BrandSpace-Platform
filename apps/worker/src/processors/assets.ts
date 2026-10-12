@@ -51,6 +51,12 @@ export async function processAssetJob(payload: ProcessAssetPayload): Promise<voi
       scanner: createVirusScanner({
         appEnv: process.env['APP_ENV'] ?? 'development',
         policy: policy.scanning,
+        // PR F (g): Scanii's credentials are the worker's own variables, like
+        // the storage keys — the worker holds no platform secret vault key.
+        scaniiCredentials: {
+          apiKey: process.env['SCANII_API_KEY'] ?? '',
+          apiSecret: process.env['SCANII_API_SECRET'] ?? '',
+        },
       }),
     });
 

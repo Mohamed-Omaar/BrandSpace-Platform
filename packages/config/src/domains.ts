@@ -1601,13 +1601,32 @@ const assetsSchema = z.object({
       /**
        * Which scanner the platform uses.
        *
-       * `mock` is the only implementation that exists, it is deterministic,
-       * and it is what development and tests run against. No production
-       * scanner has been approved, so naming one here would be inventing a
-       * vendor decision — `resolveScanner` refuses `mock` in production, which
-       * is the fail-closed behaviour CLAUDE.md §2.2 asks for.
+       * - `mock` — deterministic, for development and tests. REFUSED in
+       *   production (`createVirusScanner`), the fail-closed default.
+       * - `none` — PR F (g), Q13, owner decision: the beta runs with file
+       *   scanning OFF and accepts the risk. Uploads become usable without a
+       *   scan and each one is recorded as `not_scanned`. Allowed only with
+       *   `required: false`, so turning scanning off is said twice, on purpose.
+       * - `scanii` — the hosted Scanii API, built and switched off. It needs
+       *   `scanii.endpoint` here and the worker's `SCANII_API_KEY` /
+       *   `SCANII_API_SECRET`; turning it on is configuration only.
        */
-      provider: z.enum(['mock']).default('mock'),
+      provider: z.enum(['mock', 'none', 'scanii']).default('mock'),
+      /**
+       * Scanii's synchronous scan URL (e.g. its regional `/v2.2/files`). NO
+       * DEFAULT: the region is the owner's choice and the URL is copied from
+       * Scanii's own documentation, never assumed here.
+       */
+      scanii: z
+        .object({
+          endpoint: z
+            .string()
+            .url()
+            .refine((value) => value.startsWith('https://'), 'Must be an https:// URL.')
+            .nullable()
+            .default(null),
+        })
+        .default({}),
       /** Wall-clock ceiling on scanning one asset. */
       timeoutMs: z
         .number()

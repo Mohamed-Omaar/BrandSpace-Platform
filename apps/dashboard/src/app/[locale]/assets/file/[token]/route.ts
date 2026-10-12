@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
-import { DownloadGrantIssuer, contentDispositionHeader } from '@brandspace/storage';
+import { DownloadGrantIssuer } from '@brandspace/storage';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { requireWorkspace } from '../../../../../server/customer-context';
 import { downloadSigningKey, objectStore } from '../../../../../server/assets-context';
+import { servedUploadDisposition } from '../../../../../server/served-upload';
 
 const log = createLogger({ context: { component: 'dashboard.assets.download' } });
 
@@ -71,8 +72,8 @@ export async function GET(
          * name at all, so the last path segment of the key is used: an
          * identifier, not customer input.
          */
-        'content-disposition': contentDispositionHeader(
-          claims.disposition,
+        // PR F (g): always a download, whatever the grant asked for.
+        'content-disposition': servedUploadDisposition(
           claims.storageKey.split('/').at(-1) ?? 'file',
         ),
         // A browser must not re-interpret these bytes as something else.

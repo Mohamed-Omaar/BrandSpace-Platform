@@ -937,6 +937,8 @@ export const messages = {
     // --- The functional states a file passes through ---
     'assets.state.processing': 'قيد المعالجة',
     'assets.state.processingHint': 'يجري فحص الملف. سيصبح متاحًا بعد انتهاء الفحص.',
+    'assets.state.processingHintNoScan': 'يجري تجهيز الملف. سيصبح متاحًا خلال لحظات.',
+    'assets.state.securityCheck': 'بانتظار الفحص الأمني',
     'assets.state.ready': 'جاهز',
     'assets.state.quarantined': 'محجوز',
     'assets.state.quarantinedHint': 'لم يجتز هذا الملف الفحص الأمني، ولا يمكن استخدامه أو تنزيله.',
@@ -1812,6 +1814,9 @@ export const messages = {
     'upload.uploading': 'جارٍ رفع {name}…',
     'assets.uploadedSome': 'رُفع {count}. لم يُرفع: {files}',
     'upload.connection': 'لم يصلنا الملف. تحقّق من اتصالك وحاول مرة أخرى.',
+    'upload.notScanned':
+      'لا تُفحص الملفات بحثًا عن البرمجيات الضارة خلال الفترة التجريبية. ترفعها وتفتحها على مسؤوليتك.',
+    'upload.notScannedLink': 'اقرأ الشروط',
     'upload.checking': 'جارٍ فحص {name}…',
     'upload.change': 'تغيير',
     'upload.remove': 'إزالة',
@@ -4980,6 +4985,9 @@ export const messages = {
     'assets.state.processing': 'Processing',
     'assets.state.processingHint':
       'This file is being scanned. It becomes available once the scan finishes.',
+    'assets.state.processingHintNoScan':
+      'This file is being prepared. It becomes available in a moment.',
+    'assets.state.securityCheck': 'Waiting for a security check',
     'assets.state.ready': 'Ready',
     'assets.state.quarantined': 'Quarantined',
     'assets.state.quarantinedHint':
@@ -5879,6 +5887,9 @@ export const messages = {
     'upload.uploading': 'Uploading {name}…',
     'assets.uploadedSome': '{count} uploaded. Not uploaded: {files}',
     'upload.connection': 'The upload didn’t reach us. Check your connection and try again.',
+    'upload.notScanned':
+      'Files aren’t scanned for malware during the beta. You upload and open them at your own risk.',
+    'upload.notScannedLink': 'Read the terms',
     'upload.checking': 'Checking {name}…',
     'upload.change': 'Change',
     'upload.remove': 'Remove',

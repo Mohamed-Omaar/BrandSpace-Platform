@@ -96,6 +96,8 @@ export default async function OnboardingPage({
     refusedEmpty: t('upload.refusedEmpty'),
     uploading: t('upload.uploading'),
     connection: t('upload.connection'),
+    notScanned: t('upload.notScanned'),
+    notScannedLink: t('upload.notScannedLink'),
   };
   const logoTexts = {
     upload: t('setup.wz.brand.uploadLogo'),

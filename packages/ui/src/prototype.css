@@ -12488,6 +12488,24 @@ img.bsp-pf-art {
 .bsp-up-status[data-tone='info'] {
   color: #26262b;
 }
+/*
+ * PR F (g), Q13 — the one line under every upload control while files are not
+ * scanned for malware. A design-system extension: the rules line's own caption
+ * size and faint ink (`--bsp-faint`), on a line of its own; the link keeps the
+ * product's link treatment.
+ */
+.bsp-up-noscan {
+  display: block;
+  margin-block-start: var(--bsp-px-4);
+  font-size: var(--bsp-fs-12);
+  line-height: 1.45;
+  color: var(--bsp-faint);
+}
+.bsp-up-noscan a {
+  color: var(--bs-brand-purple-pressed);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 /* BATCH 7 (A4) — each Teach file on its own row: name, state, and why it failed. */
 .bsp-wz-srcs {
   list-style: none;
