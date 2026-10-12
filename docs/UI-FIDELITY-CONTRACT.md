@@ -2298,6 +2298,29 @@ scheduled.
 - **Onboarding**: the Business step's industry chips are the wizard's own `.bsp-wz-chip`; the
   finished brand step's form is the new-brand step's fields, filled in.
 
+### 6.3.65 PR F — the closed beta's surfaces (D-507 to D-514)
+
+States the prototype does not draw (D-468 (c)), built in its visual language; no new colour, font,
+shadow or interaction model.
+
+- **The legal pages (`/terms`, `/privacy`, `/data-deletion`) — an APPROVED DESIGN-SYSTEM EXTENSION
+  (§4.2).** The prototype has no legal page. Composed from `Auth.dc.html`'s wash and brand row, the
+  segmented control as the three documents' tabs, the `xcard` surface, the eyebrow and section
+  heading type, and an 836px reading column (`--bsp-px-836`, an existing token). The draft notice is
+  the prototype's yellow tints (`#fff9d7` on `#fff1c2`) with ink text; a `[PLACEHOLDER]` is ink on
+  `#fff1c2`, never yellow text. Every colour is one the prototype already uses.
+- **"Files aren't scanned for malware during the beta…" (`.bsp-up-noscan`)** — one line under every
+  upload control while scanning is off, in the upload hint's own size (12px) and the `--bsp-faint`
+  colour, its link in the pressed purple. An extension: the prototype's upload has no such line.
+- **"AI isn't available yet." (`.bsp-ai-off`, `AiUnavailableLine`)** — the same treatment, as one
+  block line, where a surface's AI controls would be while none can run. `/copilot` and `/creative`,
+  opened directly, show it as the page's empty state (`StateMessage`). An extension.
+- **Billing while payments are off** keeps the Plan card's composition and leaves out the price, the
+  purchase and change controls, packs and invoices; the tab reads "Plan". Removal only.
+- **Connect controls while no platform can be connected** — the integrations card reads "Connecting
+  social accounts isn't available yet." in the card's existing muted line; Schedule and Publish now
+  are absent (D-510). Removal and one line only.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The

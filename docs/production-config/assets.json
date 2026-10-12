@@ -1,0 +1,81 @@
+{
+  "upload": {
+    "allowedMimeTypes": {
+      "image": ["image/png", "image/jpeg", "image/webp"],
+      "video": ["video/mp4", "video/webm"],
+      "audio": ["audio/mpeg", "audio/wav"],
+      "document": [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "text/plain",
+        "text/csv",
+        "text/markdown"
+      ],
+      "font": ["font/woff2", "font/woff", "font/ttf", "font/otf"]
+    },
+    "maxFileBytes": {
+      "image": 26214400,
+      "video": 524288000,
+      "audio": 104857600,
+      "document": 52428800,
+      "font": 5242880
+    },
+    "maxAssetsPerBrand": 5000,
+    "sessionTtlSeconds": 900,
+    "maxFileNameLength": 180,
+    "maxTagsPerAsset": 20,
+    "maxTagLength": 48,
+    "maxFolderDepth": 6
+  },
+  "versions": {
+    "maxVersionsPerAsset": 10
+  },
+  "derivatives": {
+    "thumbnailEnabled": true,
+    "thumbnailMaxEdgePx": 320,
+    "previewEnabled": true,
+    "previewMaxEdgePx": 1280,
+    "maxPerAsset": 2,
+    "timeoutMs": 60000
+  },
+  "scanning": {
+    "required": false,
+    "provider": "none",
+    "scanii": {
+      "endpoint": null
+    },
+    "timeoutMs": 30000
+  },
+  "processing": {
+    "maxAttempts": 3,
+    "retryBackoffSeconds": 60,
+    "stuckAfterSeconds": 900
+  },
+  "download": {
+    "grantTtlSeconds": 300
+  },
+  "retention": {
+    "purgeDeletedAfterDays": 30,
+    "purgeExpiredSessionsAfterHours": 24
+  },
+  "brandFonts": {
+    "catalogue": [
+      "inter",
+      "poppins",
+      "montserrat",
+      "playfair-display",
+      "lora",
+      "cairo",
+      "tajawal",
+      "ibm-plex-sans-arabic",
+      "almarai",
+      "amiri"
+    ],
+    "defaults": {
+      "en": "inter",
+      "ar": "cairo"
+    },
+    "maxUploadedPerLanguage": 4
+  }
+}

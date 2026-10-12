@@ -1,0 +1,188 @@
+{
+  "signup": {
+    "open": true,
+    "minPasswordLength": 12,
+    "verificationTtlMinutes": 1440,
+    "verificationResendCooldownSeconds": 120,
+    "verificationsPerHour": 5
+  },
+  "legalDocuments": [
+    {
+      "key": "terms-of-service",
+      "title": {
+        "en": "Terms of Service",
+        "ar": "شروط الخدمة"
+      },
+      "version": "2026-10 beta draft",
+      "url": {
+        "en": "/en/terms",
+        "ar": "/ar/terms"
+      },
+      "required": true,
+      "reviewed": false
+    },
+    {
+      "key": "privacy-policy",
+      "title": {
+        "en": "Privacy Policy",
+        "ar": "سياسة الخصوصية"
+      },
+      "version": "2026-10 beta draft",
+      "url": {
+        "en": "/en/privacy",
+        "ar": "/ar/privacy"
+      },
+      "required": true,
+      "reviewed": false
+    }
+  ],
+  "abuse": {
+    "windowSeconds": 300,
+    "signInPerIp": 30,
+    "signInPerAccount": 15,
+    "signUpPerIp": 10,
+    "passwordResetPerIp": 10,
+    "passwordResetPerAccount": 5,
+    "verificationResendPerIp": 10,
+    "mfaPerIp": 20,
+    "mfaPerAccount": 10
+  },
+  "mfa": {
+    "customerEnrolmentEnabled": true,
+    "requiredForCustomers": false,
+    "recoveryCodeCount": 10
+  },
+  "workspaceDeletion": {
+    "graceDays": 30
+  },
+  "industries": [
+    {
+      "key": "food-restaurants",
+      "name": {
+        "en": "Food & restaurants",
+        "ar": "الأطعمة والمطاعم"
+      },
+      "offersQuestionSet": "food"
+    },
+    {
+      "key": "cafes-bakeries",
+      "name": {
+        "en": "Cafés & bakeries",
+        "ar": "المقاهي والمخابز"
+      },
+      "offersQuestionSet": "food"
+    },
+    {
+      "key": "fashion-apparel",
+      "name": {
+        "en": "Fashion & apparel",
+        "ar": "الأزياء والملابس"
+      },
+      "offersQuestionSet": "fashion"
+    },
+    {
+      "key": "beauty-personal-care",
+      "name": {
+        "en": "Beauty & personal care",
+        "ar": "التجميل والعناية الشخصية"
+      },
+      "offersQuestionSet": "beauty"
+    },
+    {
+      "key": "health-fitness",
+      "name": {
+        "en": "Health & fitness",
+        "ar": "الصحة واللياقة البدنية"
+      },
+      "offersQuestionSet": "services"
+    },
+    {
+      "key": "education-training",
+      "name": {
+        "en": "Education & training",
+        "ar": "التعليم والتدريب"
+      },
+      "offersQuestionSet": "services"
+    },
+    {
+      "key": "real-estate",
+      "name": {
+        "en": "Real estate",
+        "ar": "العقارات"
+      },
+      "offersQuestionSet": "services"
+    },
+    {
+      "key": "retail-ecommerce",
+      "name": {
+        "en": "Retail & e-commerce",
+        "ar": "التجزئة والتجارة الإلكترونية"
+      },
+      "offersQuestionSet": "fashion"
+    },
+    {
+      "key": "professional-services",
+      "name": {
+        "en": "Professional services",
+        "ar": "الخدمات المهنية"
+      },
+      "offersQuestionSet": "services"
+    },
+    {
+      "key": "travel-hospitality",
+      "name": {
+        "en": "Travel & hospitality",
+        "ar": "السفر والضيافة"
+      },
+      "offersQuestionSet": "services"
+    },
+    {
+      "key": "technology-software",
+      "name": {
+        "en": "Technology & software",
+        "ar": "التقنية والبرمجيات"
+      },
+      "offersQuestionSet": "services"
+    },
+    {
+      "key": "home-furniture",
+      "name": {
+        "en": "Home & furniture",
+        "ar": "المنزل والأثاث"
+      },
+      "offersQuestionSet": "fashion"
+    }
+  ],
+  "steps": [
+    {
+      "key": "workspace",
+      "required": true,
+      "sortOrder": 0
+    },
+    {
+      "key": "brand",
+      "required": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "brand_profile",
+      "required": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "social",
+      "required": false,
+      "sortOrder": 3
+    },
+    {
+      "key": "team",
+      "required": false,
+      "sortOrder": 4
+    },
+    {
+      "key": "plan",
+      "required": false,
+      "sortOrder": 5
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "providers": {
+    "facebook": {
+      "enabled": false,
+      "postKinds": ["text", "image", "carousel", "video", "reel", "story"],
+      "maxBodyCharacters": 2200,
+      "maxHashtags": 30,
+      "maxMediaItems": 10,
+      "supportsFirstComment": false,
+      "supportsDelete": false,
+      "supportsNativeScheduling": false,
+      "supportsPostLookup": false,
+      "scopes": [],
+      "targetKind": "profile"
+    },
+    "instagram": {
+      "enabled": false,
+      "postKinds": ["text", "image", "carousel", "video", "reel", "story"],
+      "maxBodyCharacters": 2200,
+      "maxHashtags": 30,
+      "maxMediaItems": 10,
+      "supportsFirstComment": false,
+      "supportsDelete": false,
+      "supportsNativeScheduling": false,
+      "supportsPostLookup": false,
+      "scopes": [],
+      "targetKind": "profile"
+    },
+    "tiktok": {
+      "enabled": false,
+      "postKinds": ["text", "image", "video", "reel"],
+      "maxBodyCharacters": 2200,
+      "maxHashtags": 30,
+      "maxMediaItems": 10,
+      "supportsFirstComment": false,
+      "supportsDelete": false,
+      "supportsNativeScheduling": false,
+      "supportsPostLookup": false,
+      "scopes": [],
+      "targetKind": "profile"
+    },
+    "linkedin": {
+      "enabled": false,
+      "postKinds": ["text", "image", "carousel", "video", "article"],
+      "maxBodyCharacters": 2200,
+      "maxHashtags": 30,
+      "maxMediaItems": 10,
+      "supportsFirstComment": false,
+      "supportsDelete": false,
+      "supportsNativeScheduling": false,
+      "supportsPostLookup": false,
+      "scopes": [],
+      "targetKind": "profile"
+    },
+    "x": {
+      "enabled": false,
+      "postKinds": ["text", "image", "video", "thread"],
+      "maxBodyCharacters": 2200,
+      "maxHashtags": 30,
+      "maxMediaItems": 10,
+      "supportsFirstComment": false,
+      "supportsDelete": false,
+      "supportsNativeScheduling": false,
+      "supportsPostLookup": false,
+      "scopes": [],
+      "targetKind": "profile"
+    }
+  },
+  "oauth": {
+    "stateTtlSeconds": 600,
+    "maxConnectionsPerWorkspace": 25
+  },
+  "retry": {
+    "maxAttempts": 5,
+    "initialBackoffSeconds": 30,
+    "backoffMultiplier": 2,
+    "maxBackoffSeconds": 1800,
+    "jitterRatio": 0.2
+  },
+  "dispatch": {
+    "latenessToleranceMinutes": 120,
+    "sweepBatchSize": 50,
+    "tokenRefreshAtLifetimeRatio": 0.75,
+    "claimLeaseSeconds": 900,
+    "staleClaimBatchSize": 50,
+    "reconnectRecheckSeconds": 60
+  }
+}

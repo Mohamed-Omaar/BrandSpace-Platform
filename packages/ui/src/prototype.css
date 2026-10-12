@@ -11905,8 +11905,8 @@ img.bsp-pf-art {
   margin: 0;
   padding: var(--bsp-px-12) var(--bsp-px-16);
   border-radius: var(--bsp-px-14);
-  background: #fffbe8;
-  border: 1px solid rgba(255, 214, 10, 0.6);
+  background: #fff9d7;
+  border: 1px solid #fff1c2;
   color: #26262b;
   font-size: var(--bsp-fs-14);
   font-weight: 700;
@@ -11950,7 +11950,7 @@ img.bsp-pf-art {
   margin-block-start: var(--bsp-px-6);
 }
 .bsp-legal-ph {
-  background: #fff3b0;
+  background: #fff1c2;
   color: #111114;
   border-radius: var(--bsp-px-4);
   padding: 0 var(--bsp-px-3);

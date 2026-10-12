@@ -1,0 +1,18 @@
+{
+  "activeProviderKey": "resend",
+  "providers": [
+    {
+      "key": "resend",
+      "name": "Resend",
+      "status": "active",
+      "settings": {
+        "fromEmail": "noreply@brandspace.cc",
+        "fromName": "Brandspace",
+        "replyTo": "support@brandspace.cc"
+      },
+      "secretRefs": {
+        "apiKey": "integration/email/resend/production/apiKey"
+      }
+    }
+  ]
+}
