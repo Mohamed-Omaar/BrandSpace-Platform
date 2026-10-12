@@ -29,6 +29,8 @@ export interface LegalDocumentRequirement {
   readonly version: string;
   readonly url: LocalizedText | null;
   readonly required: boolean;
+  /** PR F, Q11: a lawyer has reviewed this version (the owner's mark). */
+  readonly reviewed: boolean;
 }
 
 export interface IndustryDefinition {

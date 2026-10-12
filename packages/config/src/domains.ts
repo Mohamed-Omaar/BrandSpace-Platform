@@ -2491,6 +2491,13 @@ const onboardingSchema = z.object({
         version: z.string().min(1).max(32),
         url: localizedText.nullable().default(null),
         required: z.boolean().default(true),
+        /**
+         * PR F, Q11 — the owner's mark that a lawyer has reviewed this
+         * version. Until it is set, the Control Center's readiness check reads
+         * "draft, legal review pending" (it does not block the closed beta).
+         * Publishing a new version means setting it again.
+         */
+        reviewed: z.boolean().default(false),
       }),
     )
     .default([]),

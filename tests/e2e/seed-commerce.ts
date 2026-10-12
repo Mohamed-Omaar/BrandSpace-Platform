@@ -56,7 +56,8 @@ const ONBOARDING_FIXTURE = {
       key: 'terms-of-service',
       title: { ar: 'شروط الخدمة', en: 'Terms of service' },
       version: 'fixture-2026-09-01',
-      url: null,
+      // PR F (Q11): sign-up links the document's name to its page.
+      url: { ar: '/ar/terms', en: '/en/terms' },
       required: true,
     },
   ],

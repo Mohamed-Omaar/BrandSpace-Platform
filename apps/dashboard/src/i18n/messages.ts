@@ -1817,6 +1817,16 @@ export const messages = {
     'upload.notScanned':
       'لا تُفحص الملفات بحثًا عن البرمجيات الضارة خلال الفترة التجريبية. ترفعها وتفتحها على مسؤوليتك.',
     'upload.notScannedLink': 'اقرأ الشروط',
+    // PR F, Q11 — the public legal pages.
+    'legal.eyebrow': 'المستندات القانونية',
+    'legal.version': 'الإصدار:',
+    'legal.draftNotice':
+      'مسودة للفترة التجريبية المغلقة. لم يراجع محامٍ هذا النص بعد، وسيُستبدل قبل الإطلاق العام.',
+    'legal.contents': 'المحتويات',
+    'legal.documentsNav': 'المستندات القانونية',
+    'legal.languageNav': 'اللغة',
+    'legal.changeLanguage': 'تغيير اللغة',
+    'legal.signIn': 'العودة إلى تسجيل الدخول',
     'upload.checking': 'جارٍ فحص {name}…',
     'upload.change': 'تغيير',
     'upload.remove': 'إزالة',
@@ -5890,6 +5900,16 @@ export const messages = {
     'upload.notScanned':
       'Files aren’t scanned for malware during the beta. You upload and open them at your own risk.',
     'upload.notScannedLink': 'Read the terms',
+    // PR F, Q11 — the public legal pages.
+    'legal.eyebrow': 'Legal',
+    'legal.version': 'Version:',
+    'legal.draftNotice':
+      'Draft for the closed beta. A lawyer has not yet reviewed this text, and it will be replaced before the public launch.',
+    'legal.contents': 'Contents',
+    'legal.documentsNav': 'Legal documents',
+    'legal.languageNav': 'Language',
+    'legal.changeLanguage': 'Change language',
+    'legal.signIn': 'Back to sign in',
     'upload.checking': 'Checking {name}…',
     'upload.change': 'Change',
     'upload.remove': 'Remove',

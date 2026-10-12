@@ -11832,6 +11832,146 @@ img.bsp-pf-art {
 .bsp-auth-lang [data-testid='locale-switch'] svg {
   display: none;
 }
+/*
+ * PR F, Q11 — THE PUBLIC LEGAL PAGES (/terms, /privacy, /data-deletion). An
+ * approved design-system extension (UI-FIDELITY-CONTRACT §6.3.65): the entry
+ * screens' wash, brand row, eyebrow and heading on a wider card; the WINDOW
+ * scrolls (a document is read top to bottom), unlike the held entry screens.
+ */
+.bsp-legal {
+  min-block-size: 100vh;
+  background:
+    radial-gradient(
+      var(--bsp-px-720) var(--bsp-px-540) at 12% 8%,
+      rgba(121, 53, 254, 0.26),
+      transparent 70%
+    ),
+    radial-gradient(
+      var(--bsp-px-640) var(--bsp-px-520) at 88% 10%,
+      rgba(255, 120, 170, 0.14),
+      transparent 70%
+    ),
+    radial-gradient(
+      var(--bsp-px-780) var(--bsp-px-580) at 94% 100%,
+      rgba(255, 214, 10, 0.34),
+      transparent 70%
+    ),
+    #f3f3f3;
+  background-attachment: fixed;
+  color: #111114;
+}
+.bsp-legal-stage {
+  display: flex;
+  justify-content: center;
+  padding: var(--bsp-px-32);
+  box-sizing: border-box;
+}
+.bsp-legal-card {
+  inline-size: min(var(--bsp-px-836), 100%);
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: var(--bsp-px-36);
+  padding: var(--bsp-px-42) var(--bsp-px-44) var(--bsp-px-34);
+  box-shadow: 0 var(--bsp-px-40) var(--bsp-px-100) rgba(20, 16, 35, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-20);
+  line-height: 1.6;
+}
+.bsp-legal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bsp-px-8);
+}
+.bsp-legal-tabs a {
+  border-radius: var(--bsp-px-99);
+  padding: var(--bsp-px-8) var(--bsp-px-14);
+  background: #f4f4f5;
+  color: #26262b;
+  font-size: var(--bsp-fs-13);
+  font-weight: 700;
+  text-decoration: none;
+}
+.bsp-legal-tabs a[aria-current='page'] {
+  background: #111114;
+  color: #ffffff;
+}
+.bsp-legal-version {
+  margin: 0;
+  font-size: var(--bsp-fs-13);
+  color: #55555c;
+}
+.bsp-legal-draft {
+  margin: 0;
+  padding: var(--bsp-px-12) var(--bsp-px-16);
+  border-radius: var(--bsp-px-14);
+  background: #fffbe8;
+  border: 1px solid rgba(255, 214, 10, 0.6);
+  color: #26262b;
+  font-size: var(--bsp-fs-14);
+  font-weight: 700;
+}
+.bsp-legal-toc ol {
+  margin: 0;
+  padding-inline-start: var(--bsp-px-20);
+  columns: 2;
+  column-gap: var(--bsp-px-32);
+  font-size: var(--bsp-fs-14);
+}
+.bsp-legal-toc a {
+  color: #5312c4;
+  text-decoration: none;
+}
+.bsp-legal-toc a:hover,
+.bsp-legal-toc a:focus-visible {
+  text-decoration: underline;
+}
+.bsp-legal-section {
+  scroll-margin-block-start: var(--bsp-px-24);
+  border-block-start: 1px solid #f2f2f4;
+  padding-block-start: var(--bsp-px-16);
+}
+.bsp-legal-section h2 {
+  margin: 0 0 var(--bsp-px-8);
+  font-size: var(--bsp-fs-20);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.bsp-legal-section p,
+.bsp-legal-section ul {
+  margin: 0 0 var(--bsp-px-10);
+  font-size: var(--bsp-fs-15);
+  color: #26262b;
+}
+.bsp-legal-section ul {
+  padding-inline-start: var(--bsp-px-20);
+}
+.bsp-legal-section li + li {
+  margin-block-start: var(--bsp-px-6);
+}
+.bsp-legal-ph {
+  background: #fff3b0;
+  color: #111114;
+  border-radius: var(--bsp-px-4);
+  padding: 0 var(--bsp-px-3);
+  font-weight: 700;
+}
+.bsp-legal-foot {
+  margin: 0;
+  font-size: var(--bsp-fs-14);
+}
+@media (max-width: 767px) {
+  .bsp-legal-stage {
+    padding: var(--bsp-px-16);
+  }
+  .bsp-legal-card {
+    padding: var(--bsp-px-24) var(--bsp-px-20);
+    border-radius: var(--bsp-px-24);
+  }
+  .bsp-legal-toc ol {
+    columns: 1;
+  }
+}
 /* `.eyebrow`: `#f0e9ff` / `#5312c4`, `padding: 6px 12px`, 11.5px / 800, a 7px dot. */
 .bsp-auth-eyebrow {
   display: inline-flex;
