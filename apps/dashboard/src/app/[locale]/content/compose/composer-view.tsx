@@ -16,6 +16,7 @@ import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
 import { StudioCopilotButton } from './studio-copilot';
+import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 import { ChannelAccessLine, type ChannelAccess } from './channel-access-line';
 import { fitOf, formatForChannels, listOf } from './format-fit';
 import {
@@ -291,6 +292,12 @@ export interface ComposerViewProps {
     readonly best: WhenBest | null;
   } | null;
   readonly tools: readonly string[];
+  /**
+   * PR F (b), Q9 — "AI isn't available yet.", set when the member could use
+   * the Studio's AI but no caption model can run; the AI controls are then
+   * absent (`can.generate`, `tools`) and this one line stands under the caption.
+   */
+  readonly aiOff?: string | null;
   /** PHASE 6 FINAL (D-285) — the Creative Studio's sizes, for the media drawer. */
   readonly creativeFormats?: readonly { key: string; label: string }[];
   /**
@@ -430,6 +437,7 @@ export function ComposerView({
   uploadReason = null,
   can,
   tools,
+  aiOff = null,
   actions,
   mode = 'ai',
   startFrom,
@@ -1245,6 +1253,7 @@ export function ComposerView({
           brandName={brandName}
           brandHandle={brandHandle}
           tools={tools}
+          aiOff={aiOff}
           busy={busy}
           now={now}
           can={can}
@@ -1936,6 +1945,7 @@ export function ComposerView({
                       {caption.length} / {maxBriefChars}
                     </span>
                   </span>
+                  {aiOff ? <AiUnavailableLine text={aiOff} /> : null}
                   {/*
                     THE AI EDITS, as the prototype lays them under the caption.
                     They change a saved version, so before the draft exists

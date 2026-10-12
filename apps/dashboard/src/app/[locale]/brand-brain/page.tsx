@@ -50,6 +50,7 @@ import type { ChatStart } from './brand-chat';
  */
 import '@brandspace/ui/brand-brain.css';
 import { createBrandAction } from './actions';
+import { aiAvailableFor } from '../../../server/ai-availability';
 import { dayFormatter } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
@@ -81,6 +82,8 @@ export default async function BrandBrainPage({
   const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
+  // PR F (b), Q9 — the brand chat's answers are a `copilot.chat` call.
+  const aiChat = await aiAvailableFor('copilot.chat');
 
   const permissions = workspace.permissionKeys;
   const can = (key: string) => permissions.includes(key);
@@ -943,7 +946,7 @@ export default async function BrandBrainPage({
           areaLabel: cardLabel.get(entry.area) ?? entry.area,
           confidencePercent: Math.round(entry.confidenceMilli / 10),
         }))}
-        copilotHref={can('copilot.use') ? copilotHref(locale, 'brand_brain') : null}
+        copilotHref={can('copilot.use') && aiChat ? copilotHref(locale, 'brand_brain') : null}
         profileHref={can('brand.read') ? `/${locale}/settings/brand?brand=${brand.id}` : null}
         answered={completion.areas.reduce((sum, area) => sum + area.answered, 0)}
         totalQuestions={completion.areas.reduce((sum, area) => sum + area.total, 0)}
@@ -962,7 +965,9 @@ export default async function BrandBrainPage({
           // E3 — archiving a fact needs `brand_brain.edit`, the same as the action.
           remove: can('brand_brain.edit'),
           // Q18 — a Brand Brain answer spends credits.
-          chat: maySpendCredits(workspace.permissionKeys, 'brand_brain.chat'),
+          // PR F (b), Q9 — and a model that can answer (D-507).
+          chat: maySpendCredits(workspace.permissionKeys, 'brand_brain.chat') && aiChat,
+          chatOff: maySpendCredits(workspace.permissionKeys, 'brand_brain.chat') && !aiChat,
         }}
       />
 

@@ -12646,6 +12646,13 @@ img.bsp-pf-art {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* PR F (b), Q9 — "AI isn't available yet.": the upload line's treatment, as a block line. */
+.bsp-ai-off {
+  margin: 0;
+  font-size: var(--bsp-fs-12);
+  line-height: 1.45;
+  color: var(--bsp-faint);
+}
 /* BATCH 7 (A4) — each Teach file on its own row: name, state, and why it failed. */
 .bsp-wz-srcs {
   list-style: none;

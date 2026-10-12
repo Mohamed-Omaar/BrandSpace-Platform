@@ -39,6 +39,8 @@ import { FiltersDisclosure } from '../../../components/filters-disclosure';
 import { explainPeriodAction, saveInsightLearningAction } from './actions';
 import { reviewIntelligenceAction } from '../intelligence/actions';
 import { copilotHref } from '../../../server/copilot-surface';
+import { aiAvailableFor } from '../../../server/ai-availability';
+import { AiUnavailableLine } from '../../../components/ai-unavailable';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import { bestPostingHours, channelChart, pillarTotals } from '../../../server/performance-view';
 import { dayFormatter, dayLabel, whenFormatter } from '../../../server/prototype-dates';
@@ -108,6 +110,10 @@ export default async function AnalyticsPage({
   const mayExport = workspace.permissionKeys.includes('analytics.export');
   // Q18 — explaining a period spends credits, so it also needs `copilot.use`.
   const mayExplain = maySpendCredits(workspace.permissionKeys, 'analytics.explain');
+  // PR F (b), Q9: "Explain" and "Ask Copilot" exist only while their AI can run.
+  const aiExplain = await aiAvailableFor('analytics.explain');
+  const mayAskCopilot =
+    workspace.permissionKeys.includes('copilot.use') && (await aiAvailableFor('copilot.chat'));
   // D11 (Phase 2C-4) — saving an insight as a learning proposes a fact.
   const mayLearn = workspace.permissionKeys.includes('brand_brain.edit');
   // Findings are read only by a member who may read insights (F-10).
@@ -720,7 +726,8 @@ export default async function AnalyticsPage({
         ) : (
           <>
             <p className="bsp-pf-muted">{t('analytics.story.noExplanation')}</p>
-            {mayExplain ? (
+            {mayExplain && !aiExplain ? <AiUnavailableLine text={t('ai.unavailable')} /> : null}
+            {mayExplain && aiExplain ? (
               <span className="bsp-pf-acts">
                 <ExplainForm
                   locale={locale}
@@ -740,7 +747,7 @@ export default async function AnalyticsPage({
       <section className="bsp-xcard bsp-pf-card" data-testid="analytics-next">
         <span className="bsp-pf-cardh">
           <h2 className="bsp-sech">{t('analytics.story.try')}</h2>
-          {workspace.permissionKeys.includes('copilot.use') ? (
+          {mayAskCopilot ? (
             <CopilotLink
               href={copilotHref(locale, 'analytics')}
               className="bsp-btn bsp-sm bsp-ghost bsp-pf-link"
@@ -1394,7 +1401,7 @@ export default async function AnalyticsPage({
            */
           <>
             {story}
-            {mayExplain ? (
+            {mayExplain && aiExplain ? (
               <section className="bsp-card bsp-pf-explain">
                 <span className="bsp-pf-muted">
                   {t('insights.noExternalData')} {t('analytics.explainHint')}

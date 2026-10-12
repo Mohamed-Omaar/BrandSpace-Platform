@@ -14,6 +14,7 @@ import {
 } from './budgets';
 import {
   AiProviderError,
+  AI_NOT_AVAILABLE_MESSAGE,
   customerMessageFor,
   isFallbackEligible,
   isRetryable,
@@ -663,7 +664,7 @@ export class AiGateway {
         attempted.push(modelKey);
         lastError = new AiProviderError(
           'MODEL_UNAVAILABLE',
-          customerMessageFor('MODEL_UNAVAILABLE'),
+          AI_NOT_AVAILABLE_MESSAGE,
           `No adapter or provider configuration for model "${modelKey}".`,
         );
         continue;

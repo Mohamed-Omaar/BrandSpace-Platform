@@ -125,8 +125,16 @@ export function topbarModel(input: {
   /** `x-brandspace-path`: the real route and query the reader is on. */
   readonly requestPath: string | null | undefined;
   readonly counts: TopbarCounts;
+  /**
+   * PR F (b), Q9 — whether the Copilot and image generation can run now
+   * (`aiAvailableFor`). Unavailable, the Copilot entry (and with it the
+   * floating button) and Create → AI image are not offered. Absent means
+   * available, as before.
+   */
+  readonly ai?: { readonly copilot: boolean; readonly image: boolean };
 }): TopbarModel {
   const { locale, permissionKeys, counts } = input;
+  const ai = input.ai ?? { copilot: true, image: true };
   const may = (key: string) => permissionKeys.includes(key);
   const route = routeOf(input.requestPath);
 
@@ -160,7 +168,7 @@ export function topbarModel(input: {
     countKey: 'topbar.notificationsCount',
     current: onRoute(route, '/notifications'),
   });
-  if (may(TOPBAR_PERMISSIONS.copilot)) {
+  if (may(TOPBAR_PERMISSIONS.copilot) && ai.copilot) {
     links.push({
       key: 'copilot',
       // The screen the reader is on travels with them (P6-12's `?from=`).
@@ -172,7 +180,9 @@ export function topbarModel(input: {
     });
   }
 
-  const create = TOPBAR_CREATE_FLOWS.filter((flow) => flow.requires.every(may)).map((flow) => ({
+  const create = TOPBAR_CREATE_FLOWS.filter(
+    (flow) => flow.requires.every(may) && (flow.key !== 'creative' || ai.image),
+  ).map((flow) => ({
     key: flow.key,
     href: `/${locale}${flow.path}`,
     labelKey: flow.labelKey,

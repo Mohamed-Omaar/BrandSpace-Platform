@@ -27,6 +27,7 @@ import {
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { copilotHref } from '../../../server/copilot-surface';
+import { aiAvailableFor } from '../../../server/ai-availability';
 import {
   aiCapReached,
   ideasLine,
@@ -563,10 +564,18 @@ export default async function AutomationsPage({
    * action the plan includes, at most one condition, and a brand in the form.
    */
   const formBrandIds = new Set(formBrands.map((brand) => brand.id));
+  /*
+   * PR F (b), Q9 — "Draft 3 ideas with AI" is not offered for a new rule (or a
+   * copy) while no model can draft ideas (D-507). A rule that already has it
+   * keeps it on its own edit form, and its runs say why they did not draft.
+   */
+  const aiIdeas = await aiAvailableFor('ideas.generate');
+  const offersAction = (actionType: Parameters<typeof entitledActions.has>[0]): boolean =>
+    entitledActions.has(actionType) && (actionType !== 'DRAFT_IDEAS' || aiIdeas);
   const duplicable = (rule: (typeof rules)[number]): boolean =>
     isAuthorablePair(rule.triggerType, rule.actionType) &&
     triggerAvailable(automationPolicy, rule.triggerType) &&
-    entitledActions.has(rule.actionType) &&
+    offersAction(rule.actionType) &&
     (Array.isArray(rule.conditions) ? rule.conditions.length : 0) <= 1 &&
     formBrandIds.has(rule.brandId);
   const fromId = typeof query['from'] === 'string' ? query['from'] : null;
@@ -657,7 +666,8 @@ export default async function AutomationsPage({
   const asksFirst = (actionType: string): boolean => findAction(actionType)?.asksFirst ?? false;
   const spendsCredits = (actionType: string): boolean =>
     findAction(actionType)?.spendsCredits ?? false;
-  const mayCopilot = workspace.permissionKeys.includes('copilot.use');
+  const mayCopilot =
+    workspace.permissionKeys.includes('copilot.use') && (await aiAvailableFor('copilot.chat'));
 
   return (
     <WorkspaceShell
@@ -1158,7 +1168,9 @@ export default async function AutomationsPage({
               ),
               actionTypes: AUTOMATION_ACTIONS.filter(
                 (action) =>
-                  isAuthorablePair(trigger.type, action.type) && entitledActions.has(action.type),
+                  isAuthorablePair(trigger.type, action.type) &&
+                  (offersAction(action.type) ||
+                    (editing?.actionType === action.type && entitledActions.has(action.type))),
               ).map((action) => action.type),
               /*
                 Phase 2B-3 PR 2 — a NEW rule is offered its trigger's G13

@@ -41,6 +41,7 @@ import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
 import { StudioCopilotButton } from './studio-copilot';
+import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 import type {
   ComposerDraft,
   ComposerPlatform,
@@ -104,6 +105,8 @@ export interface DraftEditorProps {
   readonly brandName: string;
   readonly brandHandle: string;
   readonly tools: readonly string[];
+  /** PR F (b), Q9 — "AI isn't available yet." in place of the AI edits. */
+  readonly aiOff?: string | null;
   readonly busy: string | null;
   readonly now: number;
   readonly can: {
@@ -302,6 +305,7 @@ export function DraftEditor({
   brandName,
   brandHandle,
   tools,
+  aiOff = null,
   busy,
   now,
   can,
@@ -2287,6 +2291,7 @@ export function DraftEditor({
                             : t[`content.validation.${variant.validationState}`]}
                         </span>
                       </span>
+                      {can.edit && aiOff ? <AiUnavailableLine text={aiOff} /> : null}
                       {/* §20 — small changes where the text is; no Copilot needed. */}
                       {can.edit && actionsFor.length > 0 ? (
                         <div

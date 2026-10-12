@@ -1818,6 +1818,9 @@ export const messages = {
       'لا تُفحص الملفات بحثًا عن البرمجيات الضارة خلال الفترة التجريبية. ترفعها وتفتحها على مسؤوليتك.',
     'upload.notScannedLink': 'اقرأ الشروط',
     // PR F, Q11 — the public legal pages.
+    // PR F (b), Q9 — the one line every AI surface shows while AI cannot run.
+    'ai.unavailable': 'الذكاء الاصطناعي غير متاح بعد.',
+    'aiSettings.appliesLater': 'الذكاء الاصطناعي غير متاح بعد. تُطبَّق هذه الإعدادات عند إتاحته.',
     'legal.eyebrow': 'المستندات القانونية',
     'legal.version': 'الإصدار:',
     'legal.draftNotice':
@@ -5902,6 +5905,9 @@ export const messages = {
       'Files aren’t scanned for malware during the beta. You upload and open them at your own risk.',
     'upload.notScannedLink': 'Read the terms',
     // PR F, Q11 — the public legal pages.
+    // PR F (b), Q9 — the one line every AI surface shows while AI cannot run.
+    'ai.unavailable': 'AI isn’t available yet.',
+    'aiSettings.appliesLater': 'AI isn’t available yet. These settings apply once it is.',
     'legal.eyebrow': 'Legal',
     'legal.version': 'Version:',
     'legal.draftNotice':

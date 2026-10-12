@@ -916,13 +916,16 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                   >
                     {t('assets.upload')}
                   </button>
-                  <Link
-                    href={`/${props.locale}/creative`}
-                    className="bsp-btn bsp-sm bsp-sec"
-                    data-testid="assets-empty-generate"
-                  >
-                    {t('assets.emptyGenerate')}
-                  </Link>
+                  {/* PR F (b), Q9: generating is offered only where it can run. */}
+                  {can.generate ? (
+                    <Link
+                      href={`/${props.locale}/creative`}
+                      className="bsp-btn bsp-sm bsp-sec"
+                      data-testid="assets-empty-generate"
+                    >
+                      {t('assets.emptyGenerate')}
+                    </Link>
+                  ) : null}
                 </span>
               ) : null}
             </div>

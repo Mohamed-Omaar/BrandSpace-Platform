@@ -15,6 +15,7 @@ import { registerSocialRoutes } from './routes/social';
 import { registerAnalyticsRoutes } from './routes/analytics';
 import { registerAutomationRoutes } from './routes/automation';
 import { registerCommerceRoutes } from './routes/commerce';
+import { registerAiAvailabilityRoutes } from './routes/ai-availability';
 import { registerBillingWebhookRoutes } from './routes/billing-webhook';
 import { registerBillingHostedPageRoutes } from './routes/billing-hosted-page';
 import { registerAccountRoutes } from './routes/account';
@@ -95,6 +96,8 @@ export async function buildServer() {
   registerAccountRoutes(app);
   registerOnboardingRoutes(app);
   registerCommerceRoutes(app);
+  // PR F (b), D-507: which AI tasks can run, per task true/false only.
+  registerAiAvailabilityRoutes(app);
   await registerBillingWebhookRoutes(app);
   await registerBillingHostedPageRoutes(app);
 

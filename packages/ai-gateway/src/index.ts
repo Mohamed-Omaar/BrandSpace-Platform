@@ -7,6 +7,7 @@
  */
 export {
   AI_FAILURE_CLASSES,
+  AI_NOT_AVAILABLE_MESSAGE,
   AiProviderError,
   customerMessageFor,
   gatewayError,
@@ -144,6 +145,7 @@ export type {
 } from './budgets';
 
 export { ConfigurationAiSource } from './config-source';
+export { aiAvailability, aiAvailableFor } from './availability';
 
 export {
   AI_PAGE_SIZES,

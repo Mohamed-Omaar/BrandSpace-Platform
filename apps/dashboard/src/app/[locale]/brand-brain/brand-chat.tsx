@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { CONTROL_CLASS, SegmentPill } from '@brandspace/ui';
 import { MiniOrb } from './brand-orb';
 import { translator, type MessageKey } from '../../../i18n/messages';
+import { AiUnavailableLine } from '../../../components/ai-unavailable';
 import { CopilotLink } from '../../../components/copilot-link';
 import {
   chatAddFactAction,
@@ -140,6 +141,7 @@ export function BrandChat({
   labels,
   initialMessages,
   canChat,
+  aiOff = false,
   canUpload,
   modes,
   copilotHref,
@@ -158,6 +160,12 @@ export function BrandChat({
   labels: ChatLabels;
   initialMessages: readonly ChatMessage[];
   canChat: boolean;
+  /**
+   * PR F (b), Q9 — asking is offered but no model can answer now: Ask shows
+   * "AI isn't available yet." in place of its suggestions and box. Add, Edit
+   * and Remove are not AI and stay.
+   */
+  aiOff?: boolean;
   canUpload: boolean;
   /** D7 — `brand_brain.edit` (Add, Edit, Remove) and `brand_brain.review` (Add & approve). */
   modes: { readonly edit: boolean; readonly review: boolean };
@@ -923,7 +931,9 @@ export function BrandChat({
       </div>
 
       <div className="bsp-bb-chat-foot">
-        {mode === 'ask' ? (
+        {mode === 'ask' && aiOff ? (
+          <AiUnavailableLine text={t('ai.unavailable')} />
+        ) : mode === 'ask' ? (
           <div className="bsp-bb-chat-sugg">
             {labels.suggestions.map((suggestion) => (
               <button
@@ -977,7 +987,7 @@ export function BrandChat({
           </div>
         ) : null}
 
-        {mode === 'add' ? null : (
+        {mode === 'add' || (mode === 'ask' && aiOff) ? null : (
           <form
             className="bsp-bb-chat-compose"
             onSubmit={(event) => {

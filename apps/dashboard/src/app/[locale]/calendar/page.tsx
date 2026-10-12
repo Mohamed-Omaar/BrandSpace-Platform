@@ -31,6 +31,7 @@ import { isBlocking, needsAttention, publishReadiness } from '../../../server/pu
 import { mediaForVariants } from '../../../server/media-picker';
 import { GAP_WEEKS, emptyWeekdays, gapWindow, weekdayName } from '../../../server/calendar-gaps';
 import { copilotHref } from '../../../server/copilot-surface';
+import { aiAvailableFor } from '../../../server/ai-availability';
 import {
   optionalMessage,
   statusMessage,
@@ -793,7 +794,9 @@ export default async function CalendarPage({
             .replace('{weeks}', String(GAP_WEEKS)),
         )}
         copilotHref={
-          workspace.permissionKeys.includes('copilot.use') ? copilotHref(locale, 'calendar') : null
+          workspace.permissionKeys.includes('copilot.use') && (await aiAvailableFor('copilot.chat'))
+            ? copilotHref(locale, 'calendar')
+            : null
         }
         filters={{
           brand: filterBrand ?? '',

@@ -24,6 +24,8 @@ import { inContentStudio } from '../../../server/content-context';
 import { pillarAverages } from '../../../server/performance-view';
 import { StartBusy, StartBusyReporter } from './start-busy';
 import { copilotHref } from '../../../server/copilot-surface';
+import { aiAvailableFor } from '../../../server/ai-availability';
+import { AiUnavailableLine } from '../../../components/ai-unavailable';
 import {
   GOAL_ITEM_KEY,
   campaignObjectiveFor,
@@ -108,7 +110,12 @@ export default async function StrategyPage({
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const mayManage = may('strategy.manage');
   // Q18 — proposing a strategy spends credits; reviewing one does not.
-  const mayGenerate = maySpendCredits(workspace.permissionKeys, 'strategy.manage');
+  // PR F (b), Q9: proposing one also needs its AI to be able to run; while it
+  // cannot, the member who could propose sees "AI isn't available yet." instead.
+  const mayPropose = maySpendCredits(workspace.permissionKeys, 'strategy.manage');
+  const aiStrategy = await aiAvailableFor('strategy.generate');
+  const mayGenerate = mayPropose && aiStrategy;
+  const aiOff = mayPropose && !aiStrategy;
   const mayReview = may('brand_brain.review');
 
   const brandContext = await brandContextFor(
@@ -264,7 +271,10 @@ export default async function StrategyPage({
     rationale.evidenceRefs.length > 0
       ? ` · ${t('strategy.rests')} ${evidenceRefs(locale, rationale.evidenceRefs)}`
       : '';
-  const copilot = may('copilot.use') ? copilotHref(locale, 'strategy') : null;
+  const copilot =
+    may('copilot.use') && (await aiAvailableFor('copilot.chat'))
+      ? copilotHref(locale, 'strategy')
+      : null;
   const brainHref = `/${locale}/brand-brain`;
   const view: 'current' | 'next' = query['view'] === 'next' ? 'next' : 'current';
   const brandParam = typeof query['brand'] === 'string' ? query['brand'] : null;
@@ -465,6 +475,7 @@ export default async function StrategyPage({
                         {t('strategy.objectiveFrom').replace('{goal}', goalText)}
                       </span>
                     ) : null}
+                    {aiOff ? <AiUnavailableLine text={t('ai.unavailable')} /> : null}
                     <div className="bsp-sp-acts">
                       {mayGenerate ? (
                         <Link
@@ -854,6 +865,7 @@ export default async function StrategyPage({
                   <span className="bsp-sp-start-t">{t('strategy.startTitle')}</span>
                   <span className="bsp-sp-start-s">{t('strategy.startSub')}</span>
                 </section>
+                {aiOff ? <AiUnavailableLine text={t('ai.unavailable')} /> : null}
                 {mayGenerate ? (
                   <StartBusy label={t('strategy.busy')}>
                     <div className="bsp-xgrid bsp-sp-opts">

@@ -8,6 +8,8 @@ import { saveBarLabels } from '../../../../server/save-bar-labels';
 import { statusMessage, translator, successFlash } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
 import { saveAiLanguageAction } from './actions';
+import { aiAvailability } from '../../../../server/ai-availability';
+import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +61,7 @@ export default async function AiSettingsPage({
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;
   const brandContext = await brandContextFor(workspace, '/settings');
+  const aiOff = !Object.values(await aiAvailability()).some(Boolean);
 
   return (
     <WorkspaceShell
@@ -91,6 +94,8 @@ export default async function AiSettingsPage({
           prototype's third switch (S4008).
         */}
         <div className="bsp-ai bsp-sg-grow" data-testid="ai-settings">
+          {/* PR F (b), Q9 — the settings stay editable; they take effect once AI can run. */}
+          {aiOff ? <AiUnavailableLine text={t('aiSettings.appliesLater')} /> : null}
           {brands.length === 0 ? (
             <section className="bsp-xcard">
               <p className="bsp-ai-empty">{t('aiSettings.noBrand')}</p>
