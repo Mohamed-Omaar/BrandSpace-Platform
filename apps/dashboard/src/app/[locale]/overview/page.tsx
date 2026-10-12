@@ -500,7 +500,7 @@ export default async function OverviewPage({
    */
   const credits = mayReadCredits
     ? await inWorkspace(workspace.workspaceId, async ({ db, entitlements, credits: ledger }) => {
-        const [wallet, row, subscription] = await Promise.all([
+        const [wallet, row, subscription, trialGrant] = await Promise.all([
           ledger.wallet(workspace.workspaceId),
           db.creditWallet.findUnique({
             where: { workspaceId: workspace.workspaceId },
@@ -515,21 +515,25 @@ export default async function OverviewPage({
               pinnedMonthlyCredits: true,
             },
           }),
+          // PR F (f): what the trial actually granted — the trial's "of N".
+          db.creditGrant.aggregate({
+            where: { workspaceId: workspace.workspaceId, source: 'TRIAL_GRANT' },
+            _sum: { amountMilliCredits: true },
+          }),
         ]);
+        const trialGrantCredits = Number((trialGrant._sum.amountMilliCredits ?? 0n) / 1000n);
         const context = await entitlements.contextFor(workspace.workspaceId).catch(() => null);
         const plan = context?.planKey
           ? (await entitlements.plans().catch(() => [])).find(
               (entry) => entry.key === context.planKey,
             )
           : undefined;
-        const renews = subscription
-          ? subscription.status === 'TRIALING'
-            ? subscription.trialEndsAt
-            : subscription.currentPeriodEnd
-          : null;
+        // A trial's credits do not reset when it ends, so its end is no reset date.
+        const renews =
+          subscription && subscription.status !== 'TRIALING' ? subscription.currentPeriodEnd : null;
         return {
           balance: wallet.balanceCredits,
-          monthly: homeCreditGrant(subscription, plan?.monthlyCredits),
+          monthly: homeCreditGrant(subscription, plan?.monthlyCredits, trialGrantCredits),
           planned: subscription !== null,
           resetsAt: row?.nextResetAt ?? renews ?? null,
         };

@@ -15,13 +15,23 @@ import {
   type IntegrationView,
 } from '@brandspace/integrations';
 import { evaluateHealth, tracingStatus, type HealthReport } from '@brandspace/observability';
-import { systemClock, type Clock } from '@brandspace/shared';
+import { DEFAULT_BILLING_CURRENCY, systemClock, type Clock } from '@brandspace/shared';
 import {
   WITHHELD,
   areaHref,
+  industriesAreaState,
   integrationAreaState,
+  legalAreaState,
+  passwordAreaState,
+  paymentsOffArea,
   plansAreaState,
+  postKindsAreaState,
   readinessVerdict,
+  scannerAreaState,
+  senderAreaState,
+  trialAreaState,
+  withCustomerEffect,
+  type LegalDocumentInput,
   type ReadinessArea,
   type ReadinessAreaKey,
 } from './owner-readiness';
@@ -86,25 +96,105 @@ export async function loadReadiness(actor: Actor): Promise<OwnerReadiness> {
     ? await getIntegrationsService().list(serviceActor(actor), environment)
     : null;
 
+  const mayReadConfiguration = may(actor, 'platform.configuration.read');
+  const beta = mayReadConfiguration ? await loadBetaConfiguration(environment) : null;
+
   const areas: ReadinessArea[] = AREA_CATEGORIES.map(({ key, category }) => {
     const definition = INTEGRATION_CATEGORY_DEFINITIONS.find((c) => c.key === category);
-    const derived = views
+    let derived: Omit<ReadinessArea, 'key' | 'required' | 'href'> = views
       ? integrationAreaState(views.filter((view) => view.category === category))
       : WITHHELD;
-    return {
-      key,
-      required: definition?.requiredInProduction ?? false,
-      href: areaHref(key),
-      ...derived,
-    };
+    let required = definition?.requiredInProduction ?? false;
+    // PR F (e): AI and social say what their absence means to a customer.
+    if (views && (key === 'ai' || key === 'social')) derived = withCustomerEffect(key, derived);
+    // PR F (e), Q6: payments off for the beta is a decision, not a gap.
+    if (key === 'payment' && beta && !beta.paymentsEnabled) {
+      derived = paymentsOffArea();
+      required = false;
+    }
+    return { key, required, href: areaHref(key), ...derived };
   });
 
-  const plans = may(actor, 'platform.configuration.read')
-    ? plansAreaState((await getPlanCatalogue()).plans)
-    : WITHHELD;
-  areas.push({ key: 'plans', required: true, href: areaHref('plans'), ...plans });
+  const catalogue = mayReadConfiguration ? (await getPlanCatalogue()).plans : null;
+  const plans = catalogue ? plansAreaState(catalogue) : WITHHELD;
+  // While payments are off nothing is sold, so "a plan on sale" is not required.
+  areas.push({
+    key: 'plans',
+    required: beta ? beta.paymentsEnabled : true,
+    href: areaHref('plans'),
+    ...plans,
+  });
+
+  /*
+   * PR F (e) — THE CLOSED BETA'S OWN ROWS, from the activated configuration.
+   * Required: the trial, the legal documents, the password floor and the
+   * sender's name. Shown but not required: the scanner (off for the beta by
+   * the owner's decision), the post kinds and the industries.
+   */
+  const push = (
+    key: ReadinessAreaKey,
+    required: boolean,
+    derived: Omit<ReadinessArea, 'key' | 'required' | 'href'>,
+  ) => areas.push({ key, required, href: areaHref(key), ...derived });
+  push(
+    'scanner',
+    false,
+    beta
+      ? scannerAreaState({
+          provider: beta.scannerProvider,
+          scaniiEndpoint: beta.scaniiEndpoint,
+          production: environment === 'PRODUCTION',
+        })
+      : WITHHELD,
+  );
+  push('trial', true, catalogue ? trialAreaState(catalogue, DEFAULT_BILLING_CURRENCY) : WITHHELD);
+  push('legal', true, beta ? legalAreaState(beta.legalDocuments) : WITHHELD);
+  push('password', true, beta ? passwordAreaState(beta.minPasswordLength) : WITHHELD);
+  push('sender', true, beta ? senderAreaState(beta.senderName) : WITHHELD);
+  push(
+    'postKinds',
+    false,
+    beta ? postKindsAreaState(beta.publishingConfigured, beta.postKinds) : WITHHELD,
+  );
+  push('industries', false, beta ? industriesAreaState(beta.industries) : WITHHELD);
 
   return { areas, verdict: readinessVerdict(areas), views };
+}
+
+/** The activated settings the beta rows read — values only, never a credential. */
+async function loadBetaConfiguration(environment: ReturnType<typeof currentEnvironment>) {
+  const configuration = getConfigService();
+  const [assets, onboarding, publishing, publishingVersion, commerce, email] = await Promise.all([
+    configuration.get('assets', environment),
+    configuration.get('onboarding', environment),
+    configuration.get('publishing', environment),
+    configuration.activeVersionId('publishing', environment),
+    configuration.get('commerce', environment),
+    configuration.get('integrations.email', environment),
+  ]);
+  const scanning = (
+    assets as { scanning?: { provider?: string; scanii?: { endpoint?: string | null } } }
+  ).scanning;
+  const signup = (onboarding as { signup?: { minPasswordLength?: number } }).signup;
+  const emailDoc = email as {
+    activeProviderKey?: string | null;
+    providers?: { key: string; settings?: Record<string, unknown> }[];
+  };
+  const activeEmail = emailDoc.providers?.find((p) => p.key === emailDoc.activeProviderKey);
+  const fromName = activeEmail?.settings?.['fromName'];
+  return {
+    paymentsEnabled: (commerce as { payments?: { enabled?: boolean } }).payments?.enabled === true,
+    scannerProvider: scanning?.provider ?? 'mock',
+    scaniiEndpoint: scanning?.scanii?.endpoint ?? null,
+    legalDocuments: ((onboarding as { legalDocuments?: LegalDocumentInput[] }).legalDocuments ??
+      []) as readonly LegalDocumentInput[],
+    minPasswordLength: signup?.minPasswordLength ?? 0,
+    senderName: typeof fromName === 'string' ? fromName : null,
+    publishingConfigured: publishingVersion !== null,
+    postKinds: ((publishing as { providers?: Record<string, { postKinds: string[] }> }).providers ??
+      {}) as Readonly<Record<string, { readonly postKinds: readonly string[] }>>,
+    industries: ((onboarding as { industries?: unknown[] }).industries ?? []).length,
+  };
 }
 
 /* ------------------------------------------------------------------------ */

@@ -32,6 +32,7 @@ const STATE_TONE: Record<AreaState, BadgeTone> = {
   setup_required: 'neutral',
   disabled: 'neutral',
   withheld: 'neutral',
+  beta_only: 'warning',
 };
 
 export function stateLabel(locale: string, state: AreaState, plans = false): string {
@@ -40,10 +41,14 @@ export function stateLabel(locale: string, state: AreaState, plans = false): str
   return copy(`state.${state}` as SimpleKey);
 }
 
-export function reasonText(locale: string, area: Pick<ReadinessArea, 'reason' | 'key'>): string {
+export function reasonText(
+  locale: string,
+  area: Pick<ReadinessArea, 'reason' | 'key' | 'detail'>,
+): string {
   const copy = simpleCopy(locale);
   if (area.reason === 'ok') return copy(area.key === 'plans' ? 'reason.okPlans' : 'reason.ok');
-  return copy(`reason.${area.reason}` as SimpleKey);
+  // PR F (e): the facts behind a reason (days, quotas, a sender's name) fill its sentence.
+  return fill(copy(`reason.${area.reason}` as SimpleKey), area.detail ?? {});
 }
 
 export function AreaBadge({

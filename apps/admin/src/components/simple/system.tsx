@@ -11,7 +11,7 @@ import {
 } from '@brandspace/ui';
 import { fill, simpleCopy, type SimpleKey } from '../../i18n/simple';
 import { loadBillingIssues, loadReadiness, loadSystemState } from '../../server/owner-overview';
-import type { ReadinessArea } from '../../server/owner-readiness';
+import { INTEGRATION_AREA_KEYS, type ReadinessArea } from '../../server/owner-readiness';
 import { AdvancedLink } from '../mode-switch';
 import { ActionLink, formatCount, reasonText } from '../simple-ui';
 
@@ -51,6 +51,8 @@ function wordFor(area: ReadinessArea): SystemWord {
       return 'setup';
     case 'withheld':
       return 'withheld';
+    case 'beta_only':
+      return 'setup';
   }
 }
 
@@ -95,8 +97,9 @@ export function systemView(
       detail: copy('sys.jobs.detail'),
       href: null,
     },
+    // The services only: the beta's settings rows live on the readiness card.
     ...readiness.areas
-      .filter((area) => area.key !== 'plans')
+      .filter((area) => INTEGRATION_AREA_KEYS.has(area.key))
       .map((area) => ({
         key: area.key,
         title: copy(`area.${area.key}` as SimpleKey),

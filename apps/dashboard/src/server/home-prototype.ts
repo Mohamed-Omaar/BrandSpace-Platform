@@ -61,10 +61,22 @@ export function compactCount(value: number): string {
  * and the bar for a plan the catalogue does not list. No subscription, no N.
  */
 export function homeCreditGrant(
-  subscription: { readonly pinnedMonthlyCredits: number } | null,
+  subscription: { readonly pinnedMonthlyCredits: number; readonly status?: string } | null,
   catalogueMonthlyCredits: number | undefined,
+  /**
+   * PR F (f) — DURING THE TRIAL, N IS THE TRIAL GRANT: the credits the trial
+   * actually granted (its TRIAL_GRANT entries). The monthly grant is what a
+   * PAID period resets to, so "200 of 500" during a 200-credit trial measured
+   * the balance against an allowance the workspace never had. No grant, no N.
+   */
+  trialGrantCredits?: number | null,
 ): number | null {
   if (!subscription) return null;
+  if (subscription.status === 'TRIALING') {
+    return trialGrantCredits !== undefined && trialGrantCredits !== null && trialGrantCredits > 0
+      ? trialGrantCredits
+      : null;
+  }
   if (subscription.pinnedMonthlyCredits > 0) return subscription.pinnedMonthlyCredits;
   return catalogueMonthlyCredits !== undefined && catalogueMonthlyCredits > 0
     ? catalogueMonthlyCredits
