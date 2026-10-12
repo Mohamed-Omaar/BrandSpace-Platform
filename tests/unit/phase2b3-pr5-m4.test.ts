@@ -60,6 +60,8 @@ describe('M4 — the asks-first expiry index', () => {
       '20261015092000_automation_run_execution_due_index',
       // Batch 7 PR C: when a post goes out (the proposed time and the publish choice).
       '20261016090000_content_item_publish_time',
+      // PR E: the Group B fields (planned posts, AI drafts to review, insight snooze).
+      '20261020090000_group_b_fields',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261013090000_brand_scope_not_null');
   });

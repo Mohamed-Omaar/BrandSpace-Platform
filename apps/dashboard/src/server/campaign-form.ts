@@ -44,6 +44,8 @@ export type CampaignStatusKey = (typeof CAMPAIGN_STATUSES)[number];
 const NAME_MAX = 160;
 const BRIEF_MAX = 4000;
 const DESCRIPTION_MAX = 2000;
+/** D-496 (Campaigns 1) — the stepper's ceiling; the database refuses below 1. */
+export const PLANNED_POSTS_MAX = 999;
 
 export interface CampaignFormInput {
   readonly name: string;
@@ -54,6 +56,13 @@ export interface CampaignFormInput {
   readonly endDate: Date | null;
   readonly channels: readonly string[];
   readonly status: CampaignStatusKey | undefined;
+  /**
+   * D-496 (Campaigns 1) — the planned number of posts: a whole number from 1
+   * to PLANNED_POSTS_MAX, `null` when the field is blank. ABSENT IS
+   * `undefined` — "leave it as it is" — rather than a refusal: the field is
+   * new, and a form or a caller that predates it must not start failing.
+   */
+  readonly plannedPostCount: number | null | undefined;
 }
 
 function refuse(field: string): AppError {
@@ -150,6 +159,22 @@ export function campaignFormFrom(
     status = raw as CampaignStatusKey;
   }
 
+  let plannedPostCount: number | null | undefined;
+  const plannedRaw = form.get('plannedPostCount');
+  if (plannedRaw !== null) {
+    const trimmed = String(plannedRaw).trim();
+    if (trimmed === '') {
+      plannedPostCount = null;
+    } else if (!/^\d{1,3}$/.test(trimmed) || Number(trimmed) < 1) {
+      throw new AppError(
+        'VALIDATION_FAILED',
+        'The number of posts is not one a campaign can plan.',
+      );
+    } else {
+      plannedPostCount = Math.min(Number(trimmed), PLANNED_POSTS_MAX);
+    }
+  }
+
   return {
     name,
     objective: objective as CampaignObjectiveKey,
@@ -159,6 +184,7 @@ export function campaignFormFrom(
     endDate,
     channels: uniqueChannels,
     status,
+    plannedPostCount,
   };
 }
 

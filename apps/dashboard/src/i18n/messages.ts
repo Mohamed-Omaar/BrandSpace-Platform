@@ -135,6 +135,10 @@ export const messages = {
     'attention.performance-below': 'انخفض مؤشر {detail} في {date} دون خط أساسه المعتاد.',
     /* P6-05 — the notes panel. */
     'notes.title': 'الملاحظات',
+    // D-496 (Shell 1, 2) — the Notes popover, Main.dc.html L152–161.
+    'notes.pop.all': 'كل الملاحظات',
+    'notes.pop.on': 'على «{subject}»',
+    'notes.pop.empty': 'لا توجد ملاحظات بعد.',
     'notes.emptyTitle': 'لا توجد ملاحظات بعد',
     'notes.emptyBody': 'اكتب ملاحظة ليراها زملاؤك بجانب هذا العمل.',
     'notes.newLabel': 'ملاحظة جديدة',
@@ -711,6 +715,10 @@ export const messages = {
     'aiSettings.suggestions': 'اقتراحات الذكاء الاصطناعي في الصفحة الرئيسية',
     'aiSettings.suggestionsHint':
       'تعرض بطاقة «توصيات Brandspace» في الصفحة الرئيسية لهذه العلامة. عند الإيقاف تختفي البطاقة وحدها.',
+    // D-496 (Settings 3) — Main.dc.html S4008.
+    'aiSettings.draftsToReview': 'إرسال مسودات الذكاء الاصطناعي للمراجعة',
+    'aiSettings.draftsToReviewHint':
+      'يُرسَل كل منشور يكتبه الذكاء الاصطناعي إلى المراجِع قبل أن تمكن جدولته.',
     'aiSettings.useBrandBrain': 'استخدام عقل العلامة في الكتابة',
     'aiSettings.useBrandBrainHint':
       'عند الإيقاف لا تصل أي حقيقة من عقل العلامة إلى النصوص وأدوات الاستوديو والتصاميم والاستراتيجية والمساعد، وتُكتب دون الاستناد إليها. يظل «تحدّث مع العلامة» في عقل العلامة يعمل.',
@@ -1101,6 +1109,12 @@ export const messages = {
     'bb.tab.look': 'المظهر والأسلوب',
     'bb.tab.sources': 'المصادر',
     'bb.tab.chat': 'تحدّث مع العلامة',
+    // D-496 (Brand Brain 1, Strategy 1) — the first-visit hints, Main.dc.html L759 / L977.
+    'hint.close': 'إغلاق',
+    'hint.brain':
+      'عقل العلامة هو ما يعرف نشاطك. ابدأ بالأسئلة الناقصة أدناه، أو ارفع ملفًا مثل قائمة الطعام أو ملف الشركة، أو علّمه بنفسك في «تحدّث مع العلامة». كل مسودة تُكتب من الحقائق المعتمدة هنا فقط.',
+    'hint.strategy':
+      'تحوّل الاستراتيجية هدفك إلى خطة: محاور المحتوى، وموضوعات كل أسبوع، ورقم واحد تتابعه. يقترح Brandspace، وأنت تقبل أو تعدّل.',
     'bb.missingTitle': 'ما الذي ينقص',
     'bb.questionAnswered': 'تمت الإجابة',
     'bb.questionOpen': 'لم تتم الإجابة بعد',
@@ -1843,6 +1857,8 @@ export const messages = {
     'editor.preview.title': 'معاينة مباشرة',
     'editor.preview.compare': 'قارن المعاينات',
     'studio.preview.safeZones': 'المناطق الآمنة',
+    // D-496 (Studio S9) — `SX.rec`, Main.dc.html L2324/L2331.
+    'studio.tags.recommended': 'المقترح {min}–{max}',
     'editor.preview.single': 'اعرض معاينة واحدة',
     'editor.fix.shorten': 'اختصر بالذكاء الاصطناعي',
     'editor.fix.media': 'اختر وسائط',
@@ -2419,6 +2435,7 @@ export const messages = {
     'activity.action.analytics.explain_rejected': 'رُفض شرح',
     'activity.action.insight.accepted': 'قُبلت نتيجة',
     'activity.action.insight.dismissed': 'استُبعدت نتيجة',
+    'activity.action.insight.snoozed': 'أُجّلت نتيجة',
     'activity.action.intelligence.content_gap_generated': 'أُعدّ تحليل فجوات المحتوى',
     'activity.action.strategy.refused': 'رُفض طلب استراتيجية',
     'activity.action.strategy.rejected': 'رُفضت استراتيجية',
@@ -2808,6 +2825,10 @@ export const messages = {
     'strategy.monthHint': 'كل أسبوع يفتح حملة أو منشورًا بالموضوع معبّأً. لا يُنشأ شيء حتى تحفظه.',
     'strategy.cadence': '≈ {week} منشورات في الأسبوع · {month} في الشهر',
     'strategy.howGoing': 'كيف يسير الأداء',
+    // D-496 (Strategy 6) — Main.dc.html L1117 (`stCampaigns`, `viewAll`).
+    'strategy.timeline.title': 'الحملات في هذه الفترة',
+    'strategy.timeline.viewAll': 'عرض الكل',
+    'strategy.timeline.none': 'لا توجد حملة بتاريخين في هذه الأشهر الثلاثة.',
     'strategy.howSub': 'متوسط التفاعل لكل محور · آخر 28 يومًا',
     'strategy.best': 'الأفضل',
     'strategy.busy': 'يقرأ Brandspace نتائجك ومعلومات عقل العلامة…',
@@ -3314,6 +3335,18 @@ export const messages = {
     'campaigns.create': 'إنشاء الحملة',
     'campaigns.save': 'حفظ التغييرات',
     'campaigns.archive': 'أرشفة الحملة',
+    // D-496 — the campaign dialog (Main.dc.html L1574–1593).
+    'campaigns.form.editTitle': 'تعديل الحملة',
+    'campaigns.form.namePh': 'مثلًا: قائمة الشتاء',
+    'campaigns.form.starts': 'يبدأ',
+    'campaigns.form.ends': 'ينتهي',
+    'campaigns.form.brand': 'العلامة التجارية',
+    'campaigns.form.plannedPosts': 'المنشورات المخطّطة',
+    'campaigns.form.fewer': 'منشور أقل',
+    'campaigns.form.more': 'منشور أكثر',
+    'campaigns.form.cancel': 'إلغاء',
+    'campaigns.form.archive': 'أرشفة',
+    'campaigns.form.archiveSure': 'متأكد؟ أرشفة',
     'campaigns.archiveHint': 'تختفي الحملة من القوائم النشطة. لا يُحذف أي محتوى.',
     'campaigns.back': 'كل الحملات',
     'campaigns.contentCount': 'المنشورات',
@@ -3565,6 +3598,12 @@ export const messages = {
       'عرّف Brandspace بعلامتك، أو اربط حسابًا، أو اختر هدفًا أول — كل خطوة تجعل الاقتراح التالي أفضل.',
     'home.setup.open': 'متابعة الإعداد',
     'home.action.fix': 'أصلحه',
+    // D-496 (Home 1) — "Needs you" names each post.
+    'attention.entry.publishing-failed': 'تعذّر نشر «{title}» على {channels}',
+    'attention.entry.publishing-failed.bare': 'تعذّر نشر «{title}»',
+    'attention.entry.schedule-overdue': 'فات موعد «{title}» ولم يُنشر',
+    'attention.entry.content-in-review': '«{title}» بانتظار الموافقة',
+    'attention.more': 'و{count} أخرى',
     'home.action.rewrite': 'أعد الكتابة أو أبقه',
     'home.action.reconnect': 'أعد الربط',
     'home.action.review': 'راجع',
@@ -3601,6 +3640,14 @@ export const messages = {
     'home.recommended.evidence': '{count} من الأدلة · مبنية على {basis}',
     'home.recommended.viewEvidence': 'عرض الأدلة',
     'home.recommended.giveToCopilot': 'أعطها للمساعد',
+    // D-496 (Home 4) — the noticed card's direct action names the format.
+    'home.recommended.make.POST': 'أنشئ منشورًا',
+    'home.recommended.make.CAROUSEL': 'أنشئ كاروسيل',
+    'home.recommended.make.STORY': 'أنشئ ستوري',
+    'home.recommended.make.REEL': 'أنشئ ريل',
+    'home.recommended.make.VIDEO': 'أنشئ فيديو',
+    'home.recommended.make.ARTICLE': 'اكتب مقالًا',
+    'home.recommended.make.THREAD': 'اكتب سلسلة',
     'home.basis.OWN_PERFORMANCE': 'أدائك',
     'home.basis.BRAND_CONTEXT': 'معرفة علامتك',
     'home.basis.CONTENT_HISTORY': 'ما نشرته سابقًا',
@@ -3702,6 +3749,10 @@ export const messages = {
     'setup.wz.connect.connect': 'اربط',
     'setup.wz.connect.notConnected': 'غير مرتبط',
     'setup.wz.goal.title': 'ما الذي تريده أولًا؟',
+    // D-496 (Auth 8) — Auth.dc.html L274 (`addGoal`, `goalPh`, `add`).
+    'setup.wz.goal.addOwn': '+ أضف هدفك',
+    'setup.wz.goal.ownPh': 'اكتب هدفك',
+    'setup.wz.goal.add': 'إضافة',
     'setup.wz.goal.body': 'تُبنى عليه استراتيجيتك وأولى أفكارك.',
     'setup.wz.ready.title': '{brand} جاهزة',
     'setup.wz.ready.body': 'ابدأ بواحدة من هذه، أو اذهب إلى الرئيسية.',
@@ -4094,6 +4145,10 @@ export const messages = {
     'attention.performance-above': '{detail} on {date} rose above its usual baseline.',
     'attention.performance-below': '{detail} on {date} fell below its usual baseline.',
     'notes.title': 'Notes',
+    // D-496 (Shell 1, 2) — the Notes popover, Main.dc.html L152–161.
+    'notes.pop.all': 'All notes',
+    'notes.pop.on': 'On “{subject}”',
+    'notes.pop.empty': 'No notes yet.',
     'notes.emptyTitle': 'No notes yet',
     'notes.emptyBody': 'Leave a note for your colleagues, beside the work it is about.',
     'notes.newLabel': 'New note',
@@ -4685,6 +4740,10 @@ export const messages = {
     'aiSettings.suggestions': 'AI suggestions on Home',
     'aiSettings.suggestionsHint':
       'Shows the “Recommended by Brandspace” card on Home for this brand. Turning it off hides that card only.',
+    // D-496 (Settings 3) — Main.dc.html S4008.
+    'aiSettings.draftsToReview': 'AI drafts go to review',
+    'aiSettings.draftsToReviewHint':
+      'Any post the AI writes is sent to the reviewer before it can be scheduled.',
     'aiSettings.useBrandBrain': 'Use Brand Brain',
     'aiSettings.useBrandBrainHint':
       'When off, no Brand Brain fact reaches captions, Studio tools, Creative, Strategy or the Copilot, and they write without it. Brand Brain’s own “Talk with the brand” keeps working.',
@@ -5078,6 +5137,12 @@ export const messages = {
     'bb.tab.look': 'Look & voice',
     'bb.tab.sources': 'Sources',
     'bb.tab.chat': 'Talk with the brand',
+    // D-496 (Brand Brain 1, Strategy 1) — the first-visit hints, Main.dc.html L759 / L977.
+    'hint.close': 'Close',
+    'hint.brain':
+      'Brand Brain is what knows your business. Start with the missing questions below, upload a file like your menu or company profile, or teach it yourself in “Talk with the brand”. Every draft is written only from the approved facts here.',
+    'hint.strategy':
+      'Strategy turns your goal into a plan: content pillars, weekly topics and one number to track. Brandspace suggests; you accept or change.',
     'bb.missingTitle': "What's missing",
     'bb.questionAnswered': 'answered',
     'bb.questionOpen': 'not answered yet',
@@ -5843,6 +5908,8 @@ export const messages = {
     'editor.preview.title': 'Live preview',
     'editor.preview.compare': 'Compare previews',
     'studio.preview.safeZones': 'Safe zones',
+    // D-496 (Studio S9) — `SX.rec`, Main.dc.html L2324/L2331.
+    'studio.tags.recommended': 'Recommended {min}–{max}',
     'editor.preview.single': 'Show one preview',
     'editor.fix.shorten': 'Shorten with AI',
     'editor.fix.media': 'Choose media',
@@ -6442,6 +6509,7 @@ export const messages = {
     'activity.action.analytics.explain_rejected': 'An explanation was rejected',
     'activity.action.insight.accepted': 'A finding was accepted',
     'activity.action.insight.dismissed': 'A finding was dismissed',
+    'activity.action.insight.snoozed': 'A finding was put off for now',
     'activity.action.intelligence.content_gap_generated': 'A content-gap analysis was produced',
     'activity.action.strategy.refused': 'A strategy request was refused',
     'activity.action.strategy.rejected': 'A strategy was rejected',
@@ -6851,6 +6919,10 @@ export const messages = {
       'Each week opens a campaign or a post with the theme filled in. Nothing is created until you save it.',
     'strategy.cadence': '≈ {week} posts a week · {month} a month',
     'strategy.howGoing': 'How it’s going',
+    // D-496 (Strategy 6) — Main.dc.html L1117 (`stCampaigns`, `viewAll`).
+    'strategy.timeline.title': 'Campaigns in this period',
+    'strategy.timeline.viewAll': 'View all',
+    'strategy.timeline.none': 'No campaign with both dates falls in these three months.',
     'strategy.howSub': 'Average engagement per pillar · last 28 days',
     'strategy.best': 'Best',
     'strategy.busy': 'Brandspace is reading your results and brand knowledge…',
@@ -7380,6 +7452,18 @@ export const messages = {
     'campaigns.create': 'Create campaign',
     'campaigns.save': 'Save changes',
     'campaigns.archive': 'Archive campaign',
+    // D-496 — the campaign dialog (Main.dc.html L1574–1593).
+    'campaigns.form.editTitle': 'Edit campaign',
+    'campaigns.form.namePh': 'e.g. Winter menu',
+    'campaigns.form.starts': 'Starts',
+    'campaigns.form.ends': 'Ends',
+    'campaigns.form.brand': 'Brand',
+    'campaigns.form.plannedPosts': 'Planned posts',
+    'campaigns.form.fewer': 'One post fewer',
+    'campaigns.form.more': 'One post more',
+    'campaigns.form.cancel': 'Cancel',
+    'campaigns.form.archive': 'Archive',
+    'campaigns.form.archiveSure': 'Sure? Archive',
     'campaigns.archiveHint': 'The campaign leaves the active lists. No content is deleted.',
     'campaigns.back': 'All campaigns',
     'campaigns.contentCount': 'Posts',
@@ -7638,6 +7722,12 @@ export const messages = {
       'Teach Brandspace about your brand, connect an account or choose a first goal — each makes the next suggestion better.',
     'home.setup.open': 'Continue setup',
     'home.action.fix': 'Fix it',
+    // D-496 (Home 1) — "Needs you" names each post.
+    'attention.entry.publishing-failed': '“{title}” failed to publish on {channels}',
+    'attention.entry.publishing-failed.bare': '“{title}” failed to publish',
+    'attention.entry.schedule-overdue': '“{title}” is past its time and did not go out',
+    'attention.entry.content-in-review': '“{title}” is waiting for approval',
+    'attention.more': 'and {count} more',
     'home.action.rewrite': 'Rewrite or keep',
     'home.action.reconnect': 'Reconnect',
     'home.action.review': 'Review',
@@ -7677,6 +7767,14 @@ export const messages = {
     'home.recommended.evidence': '{count} pieces of evidence · based on {basis}',
     'home.recommended.viewEvidence': 'View evidence',
     'home.recommended.giveToCopilot': 'Give to Copilot',
+    // D-496 (Home 4) — the noticed card's direct action names the format.
+    'home.recommended.make.POST': 'Make a post',
+    'home.recommended.make.CAROUSEL': 'Make a carousel',
+    'home.recommended.make.STORY': 'Make a story',
+    'home.recommended.make.REEL': 'Make a reel',
+    'home.recommended.make.VIDEO': 'Make a video',
+    'home.recommended.make.ARTICLE': 'Write an article',
+    'home.recommended.make.THREAD': 'Write a thread',
     'home.basis.OWN_PERFORMANCE': 'your performance',
     'home.basis.BRAND_CONTEXT': 'your brand knowledge',
     'home.basis.CONTENT_HISTORY': 'what you have published',
@@ -7781,6 +7879,10 @@ export const messages = {
     'setup.wz.connect.connect': 'Connect',
     'setup.wz.connect.notConnected': 'Not connected',
     'setup.wz.goal.title': 'What do you want first?',
+    // D-496 (Auth 8) — Auth.dc.html L275 (`addGoal`, `goalPh`, `add`).
+    'setup.wz.goal.addOwn': '+ Add your own',
+    'setup.wz.goal.ownPh': 'Type your goal',
+    'setup.wz.goal.add': 'Add',
     'setup.wz.goal.body': 'Your strategy and first ideas are built on it.',
     'setup.wz.ready.title': '{brand} is ready',
     'setup.wz.ready.body': 'Start with one of these, or go to Home.',
@@ -8578,6 +8680,7 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   },
   INSIGHT_ACCEPTED: { en: 'Accepted.', ar: 'تم الاعتماد.' },
   INSIGHT_DISMISSED: { en: 'Dismissed.', ar: 'تم الاستبعاد.' },
+  INSIGHT_SNOOZED: { en: 'Put off for now.', ar: 'تم التأجيل.' },
   /* Phase 8 — Marketing Intelligence. */
   GAPS_ANALYSED: {
     en: 'Analysis ready. It rests on what this brand declared and what it has published.',

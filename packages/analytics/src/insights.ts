@@ -456,10 +456,14 @@ export class AnalyticsInsightService {
    * A GENERATED STRATEGY IS A PROPOSAL UNTIL A PERMITTED HUMAN ACCEPTS IT. This
    * is the only path to `ACCEPTED`, it records who and when, and nothing else in
    * the platform acts on an insight that has not been through it.
+   *
+   * "NOT NOW" (`snooze`, D-496) is not a decision about the proposal. The status
+   * is kept; the insight is only left out of Home until `snoozedUntil`, which is
+   * now plus the configured `insightSnoozeDays`.
    */
   async review(input: {
     insightId: string;
-    decision: 'accept' | 'dismiss' | 'seen';
+    decision: 'accept' | 'dismiss' | 'seen' | 'snooze';
     reason?: string | undefined;
     actorUserId: string;
     brandScope: readonly string[];
@@ -472,6 +476,27 @@ export class AnalyticsInsightService {
       },
     });
     if (!existing) throw insightNotFound();
+
+    if (input.decision === 'snooze') {
+      const snoozedUntil = new Date(
+        this.#clock.now().getTime() + this.#policy.insightSnoozeDays * 86_400_000,
+      );
+      const snoozed = await this.#db.insight.update({
+        where: { id: existing.id },
+        data: { snoozedUntil },
+      });
+      await writeAuditEvent(this.#db, this.#workspaceId, {
+        action: 'insight.snoozed',
+        actorType: 'USER',
+        actorId: input.actorUserId,
+        resourceType: 'Insight',
+        resourceId: existing.id,
+        brandId: existing.brandId,
+        before: { snoozedUntil: existing.snoozedUntil?.toISOString() ?? null },
+        after: { snoozedUntil: snoozedUntil.toISOString(), days: this.#policy.insightSnoozeDays },
+      });
+      return snoozed;
+    }
 
     const status =
       input.decision === 'accept'

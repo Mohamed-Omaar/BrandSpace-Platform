@@ -33,6 +33,8 @@ import { copilotDrawerSubject } from '../server/copilot-context';
 import { GlobalCopilot } from './global-copilot';
 import { NotificationsBell } from './notifications-bell';
 import { loadNotificationFeed } from '../app/[locale]/notifications/feed';
+import { NotesPopover } from './notes-popover';
+import { loadNotesPopover } from '../app/[locale]/notes/popover-feed';
 import { SETTINGS_PATHS, settingsLandingPath } from '../server/settings-nav';
 import { topbarCounts } from '../server/topbar-counts';
 import { incomingMentions } from '../server/incoming-mentions';
@@ -779,24 +781,46 @@ export async function WorkspaceShell({
       testId="topbar-notifications"
     />
   ) : null;
+  const notesSquare = notesLink ? (
+    <PrototypeTopbarLink
+      href={notesLink.href}
+      label={t(notesLink.labelKey)}
+      glyph="notes"
+      count={notesLink.count}
+      countLabel={
+        notesLink.countKey && notesLink.count
+          ? t(notesLink.countKey).replace('{count}', String(notesLink.count))
+          : undefined
+      }
+      current={notesLink.current}
+      testId="topbar-notes"
+      // The prototype draws the unread notes on the rail, not on this square.
+      showCount={false}
+    />
+  ) : null;
   const headerActions = (
     <>
-      {focus || !notesLink ? null : (
-        <PrototypeTopbarLink
+      {focus || !notesLink ? null : notesLink.current ? (
+        notesSquare
+      ) : (
+        // D-496 (Shell 1, 2) — the square opens the two latest notes over the
+        // screen (still a link without script), "All notes" at the foot.
+        <NotesPopover
+          locale={locale}
           href={notesLink.href}
-          label={t(notesLink.labelKey)}
-          glyph="notes"
-          count={notesLink.count}
-          countLabel={
-            notesLink.countKey && notesLink.count
-              ? t(notesLink.countKey).replace('{count}', String(notesLink.count))
-              : undefined
-          }
-          current={notesLink.current}
-          testId="topbar-notes"
-          // The prototype draws the unread notes on the rail, not on this square.
-          showCount={false}
-        />
+          load={loadNotesPopover}
+          strings={{
+            title: t('notes.title'),
+            close: t('notifications.dismiss'),
+            all: t('notes.pop.all'),
+            unread: t('notifications.unread'),
+            loading: t('notifications.feed.loading'),
+            empty: t('notes.pop.empty'),
+            error: t('notifications.feed.error'),
+          }}
+        >
+          {notesSquare}
+        </NotesPopover>
       )}
       {focus || !bellLink ? null : bellLink.current ? (
         bell

@@ -50,10 +50,12 @@ export const TOPBAR_CREATE_FLOWS: readonly {
     requires: ['content.read', 'content.create'],
     labelKey: 'topbar.createContent',
   },
+  // D-496 (Shell 7) — `?new=1` opens the campaign dialog over Campaigns, which
+  // opens for `campaigns.read`; creating needs `campaigns.manage`.
   {
     key: 'campaign',
-    path: '/campaigns/new',
-    requires: ['campaigns.manage'],
+    path: '/campaigns?new=1',
+    requires: ['campaigns.read', 'campaigns.manage'],
     labelKey: 'topbar.createCampaign',
   },
   {

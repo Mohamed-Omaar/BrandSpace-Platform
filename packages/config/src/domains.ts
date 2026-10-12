@@ -817,46 +817,69 @@ const contentStudioSchema = z.object({
    */
   platforms: z
     .array(
-      z.object({
-        key: z
-          .string()
-          .min(1)
-          .regex(/^[a-z0-9-]+$/, 'A platform key is lowercase letters, digits and hyphens.'),
-        labelKey: z.string().min(1),
-        maxBodyChars: z.number().int().positive(),
-        maxHashtags: z.number().int().min(0),
-        allowsFirstComment: z.boolean().default(false),
-        /**
-         * PHASE 8 — how many media items this platform accepts on one post.
-         *
-         * AN OPERATOR'S FACT, like every other number beside it (CLAUDE.md
-         * §2.2): platforms change their carousel limits and a product that
-         * hard-coded ten would be wrong the week one of them changed. ZERO is a
-         * legal value and means "this platform takes no media from us", which
-         * the composer reads as "do not offer a picker here".
-         *
-         * THE PUBLISHING POLICY HAS ITS OWN `maxMediaItems`, and that is the one
-         * the publish preflight enforces against the provider. This one governs
-         * AUTHORING, so a composer can refuse an eleventh image before the
-         * author has written a caption for it.
-         */
-        maxMediaItems: z.number().int().min(0).max(20).default(10),
-        /**
-         * PR D (Studio S38) — THE PLATFORM'S UNSAFE BANDS ON A 9:16 FRAME, in
-         * percent of the frame: the top and bottom bands across its width and
-         * the end-side band between them, where the platform draws its own
-         * name, caption and buttons over a Story or Reel. An operator's fact
-         * (platforms move their overlays); ABSENT means none is known, and the
-         * Studio then offers no "Safe zones" chip for that platform.
-         */
-        safeZones: z
-          .object({
-            top: z.number().min(0).max(50),
-            bottom: z.number().min(0).max(50),
-            end: z.number().min(0).max(50),
-          })
-          .optional(),
-      }),
+      z
+        .object({
+          key: z
+            .string()
+            .min(1)
+            .regex(/^[a-z0-9-]+$/, 'A platform key is lowercase letters, digits and hyphens.'),
+          labelKey: z.string().min(1),
+          maxBodyChars: z.number().int().positive(),
+          maxHashtags: z.number().int().min(0),
+          allowsFirstComment: z.boolean().default(false),
+          /**
+           * PHASE 8 — how many media items this platform accepts on one post.
+           *
+           * AN OPERATOR'S FACT, like every other number beside it (CLAUDE.md
+           * §2.2): platforms change their carousel limits and a product that
+           * hard-coded ten would be wrong the week one of them changed. ZERO is a
+           * legal value and means "this platform takes no media from us", which
+           * the composer reads as "do not offer a picker here".
+           *
+           * THE PUBLISHING POLICY HAS ITS OWN `maxMediaItems`, and that is the one
+           * the publish preflight enforces against the provider. This one governs
+           * AUTHORING, so a composer can refuse an eleventh image before the
+           * author has written a caption for it.
+           */
+          maxMediaItems: z.number().int().min(0).max(20).default(10),
+          /**
+           * PR D (Studio S38) — THE PLATFORM'S UNSAFE BANDS ON A 9:16 FRAME, in
+           * percent of the frame: the top and bottom bands across its width and
+           * the end-side band between them, where the platform draws its own
+           * name, caption and buttons over a Story or Reel. An operator's fact
+           * (platforms move their overlays); ABSENT means none is known, and the
+           * Studio then offers no "Safe zones" chip for that platform.
+           */
+          safeZones: z
+            .object({
+              top: z.number().min(0).max(50),
+              bottom: z.number().min(0).max(50),
+              end: z.number().min(0).max(50),
+            })
+            .optional(),
+          /**
+           * D-496 (Studio S9) — HOW MANY HASHTAGS THIS PLATFORM DOES BEST WITH,
+           * the range the Studio's count reads as "N · Recommended min–max". An
+           * operator's fact like the ceiling beside it; ABSENT means none is
+           * known, and the count shows "N / max" as before. Never above the
+           * ceiling, and the lower end never above the upper.
+           */
+          recommendedHashtags: z
+            .object({
+              min: z.number().int().min(0).max(100),
+              max: z.number().int().min(0).max(100),
+            })
+            .refine((range) => range.min <= range.max, {
+              message: 'The recommended range must not end before it starts.',
+            })
+            .optional(),
+        })
+        .refine(
+          (platform) =>
+            !platform.recommendedHashtags ||
+            platform.recommendedHashtags.max <= platform.maxHashtags,
+          { message: 'The recommended hashtags cannot exceed the platform maximum.' },
+        ),
     )
     .min(1)
     .default([
@@ -2018,6 +2041,13 @@ const analyticsSchema = z.object({
       pruneBatchSize: z.number().int().min(1).max(100_000).default(5_000),
     })
     .default({}),
+
+  /**
+   * How long "Not now" hides a noticed card on Home, in days (D-496, Q4). The
+   * insight keeps its status; it is only left out until `snoozedUntil` passes.
+   * The default is the prototype's "We will remind you in a week".
+   */
+  insightSnoozeDays: z.number().int().min(1).max(90).default(7),
 });
 
 /**

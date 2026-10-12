@@ -71,6 +71,8 @@ export interface AnalyticsPolicy {
     readonly insightRetentionDays: number;
     readonly pruneBatchSize: number;
   };
+  /** How long "Not now" hides a noticed card, in days (D-496). */
+  readonly insightSnoozeDays: number;
 }
 
 export function parseAnalyticsPolicy(payload: unknown): AnalyticsPolicy {

@@ -156,13 +156,15 @@ export function campaignHref(input: {
   readonly channels: readonly string[];
   readonly objective: string | null;
 }): string {
+  // D-496 — the campaign form is the dialog over Campaigns (`?new=1`).
   const params = new URLSearchParams({
+    new: '1',
     name: pick(input.week.theme, input.locale).slice(0, 120),
     brief: pick(input.week.rationale.text, input.locale).slice(0, 1_000),
   });
   if (input.objective) params.set('objective', input.objective);
   for (const channel of input.channels) params.append('channels', channel);
-  return `/${input.locale}/campaigns/new?${params.toString()}`;
+  return `/${input.locale}/campaigns?${params.toString()}`;
 }
 
 export function contentHref(input: {
@@ -173,4 +175,80 @@ export function contentHref(input: {
   const why = pick(input.week.rationale.text, input.locale);
   const brief = [theme, why].filter(Boolean).join(' — ').slice(0, 1_000);
   return `/${input.locale}/content/compose?${new URLSearchParams({ mode: 'ai', brief }).toString()}`;
+}
+
+/**
+ * D-496 (Strategy 6) — "CAMPAIGNS IN THIS PERIOD": the prototype's three-month
+ * timeline (`Main.dc.html` L1116–1125, logic L3396–3401), from the brand's own
+ * campaigns.
+ *
+ * THE PROTOTYPE'S GEOMETRY, KEPT: the window is the first day of this month to
+ * the last day of the month after next; each bar is clamped to it,
+ * `left = days(window start → bar start) / span`, `width = max(3%, (days(bar
+ * start → bar end) + 1) / span)`, in whole percent. A campaign outside the
+ * window, or without both dates, is not drawn — a bar needs both ends.
+ *
+ * THE KIND, from the product's statuses: running is ACTIVE, paused is PAUSED,
+ * planned is PLANNED or DRAFT (the dashed outline), and an ended campaign
+ * takes the prototype's remaining style.
+ */
+export type TimelineKind = 'run' | 'paused' | 'plan' | 'always';
+
+export interface TimelineRow {
+  readonly id: string;
+  readonly name: string;
+  readonly start: Date;
+  readonly end: Date;
+  readonly left: number;
+  readonly width: number;
+  readonly kind: TimelineKind;
+}
+
+const DAY_MS = 86_400_000;
+
+export function campaignTimeline(
+  campaigns: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly status: string;
+    readonly startDate: Date | null;
+    readonly endDate: Date | null;
+    readonly deletedAt?: Date | null;
+  }[],
+  now: Date,
+): { readonly months: readonly Date[]; readonly rows: readonly TimelineRow[] } {
+  const from = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const to = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 3, 0);
+  const span = Math.round((to - from) / DAY_MS) + 1;
+  const months = [0, 1, 2].map(
+    (offset) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1)),
+  );
+  const day = (value: Date) =>
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+  const rows: TimelineRow[] = [];
+  for (const campaign of campaigns) {
+    if (campaign.deletedAt || campaign.status === 'ARCHIVED') continue;
+    if (!campaign.startDate || !campaign.endDate) continue;
+    const a = Math.max(day(campaign.startDate), from);
+    const b = Math.min(day(campaign.endDate), to);
+    if (a > to || b < from || b < a) continue;
+    rows.push({
+      id: campaign.id,
+      name: campaign.name,
+      start: campaign.startDate,
+      end: campaign.endDate,
+      left: Math.round(((a - from) / DAY_MS / span) * 100),
+      width: Math.max(3, Math.round(((Math.round((b - a) / DAY_MS) + 1) / span) * 100)),
+      kind:
+        campaign.status === 'ACTIVE'
+          ? 'run'
+          : campaign.status === 'PAUSED'
+            ? 'paused'
+            : campaign.status === 'PLANNED' || campaign.status === 'DRAFT'
+              ? 'plan'
+              : 'always',
+    });
+  }
+  rows.sort((x, y) => x.start.getTime() - y.start.getTime() || x.name.localeCompare(y.name));
+  return { months, rows };
 }

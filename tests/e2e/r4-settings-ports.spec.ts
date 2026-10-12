@@ -77,7 +77,12 @@ test.describe('Round 4 · Gate 2b — the Settings pages', () => {
     await expect(bar).toHaveAttribute('data-state', 'dirty');
     // Nothing that has no setting behind it is drawn.
     await expect(page.getByText('Alert me when credits reach')).toHaveCount(0);
-    await expect(page.getByText('AI drafts go to review')).toHaveCount(0);
+    // D-496 (Settings 3) — "AI drafts go to review" now has its setting
+    // (`brand.aiDraftsToReview`), so it is drawn: one switch per brand form.
+    await expect(page.locator('[data-testid^="ai-drafts-review-"]')).toHaveCount(
+      await page.locator('[data-testid^="ai-form-"]').count(),
+    );
+    await expect(page.getByText('AI drafts go to review').first()).toBeVisible();
   });
 
   test('Data: rows, the retention card and the danger card with its inline confirmation', async ({

@@ -43,6 +43,7 @@ const ALL = [
   'assets.read',
   'content.create',
   'content.approve',
+  'campaigns.read',
   'campaigns.manage',
   'assets.upload',
   'copilot.use',
@@ -71,7 +72,7 @@ describe('P6-16 · what the top bar offers, and to whom', () => {
     ]);
     expect(model.create.map((item) => item.href)).toEqual([
       '/en/content/compose',
-      '/en/campaigns/new',
+      '/en/campaigns?new=1',
       '/en/creative',
       '/en/assets?upload=1',
     ]);
@@ -99,7 +100,9 @@ describe('P6-16 · what the top bar offers, and to whom', () => {
     expect(only(['content.read'])).toEqual([]); // opening the composer is not creating
     expect(only(['content.read', 'content.create'])).toEqual(['content']);
     expect(only(['content.create'])).toEqual([]); // the composer would answer 404
-    expect(only(['campaigns.manage'])).toEqual(['campaign']);
+    // D-496 — the campaign dialog opens over Campaigns, which needs `campaigns.read`.
+    expect(only(['campaigns.manage'])).toEqual([]); // Campaigns would answer 404
+    expect(only(['campaigns.read', 'campaigns.manage'])).toEqual(['campaign']);
     // Q18 — the Creative Studio spends credits, so it also needs `copilot.use`.
     expect(only(['assets.upload'])).toEqual([]);
     expect(only(['assets.upload', 'copilot.use'])).toEqual(['creative']);

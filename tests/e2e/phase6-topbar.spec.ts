@@ -103,7 +103,11 @@ test.describe('P6-16 · the customer top bar', () => {
       'page',
     );
 
+    // D-496 (Shell 1, 2) — the Notes square opens its popover; "All notes" is the screen.
+    await expect(page.getByTestId('topbar-notes')).toHaveAttribute('href', '/en/notes');
     await page.getByTestId('topbar-notes').click();
+    await expect(page.getByTestId('notes-popover')).toBeVisible();
+    await page.getByTestId('notes-popover-all').click();
     await page.waitForURL(/\/en\/notes$/);
     await expect(page.getByTestId('notes-for-you')).toBeVisible();
     await expect(page.getByTestId('notes-open')).toBeVisible();
@@ -258,7 +262,9 @@ test.describe('P6-16 · the customer top bar', () => {
 
     await page.getByTestId('topbar-create').click();
     await page.getByTestId('topbar-create-campaign').click();
-    await page.waitForURL(/\/en\/campaigns\/new$/);
+    // D-496 (Shell 7) — Create → Campaign opens the campaign dialog over Campaigns.
+    await page.waitForURL(/\/en\/campaigns\?new=1$/);
+    await expect(page.getByTestId('campaign-new-dialog')).toBeVisible();
   });
 
   test('"Upload to the library" opens the Asset Library’s own upload dialog', async ({ page }) => {

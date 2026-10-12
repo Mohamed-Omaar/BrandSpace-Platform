@@ -71,7 +71,7 @@ import {
 } from '../../../../server/create-post';
 import { GOAL_ITEM_KEY, storedGoal } from '../../../../server/setup-wizard-state';
 import { IdeaPicker, RepurposePicker, type IdeaOption } from './create-entry';
-import { CONTENT_TYPES } from '../content-types';
+import { CONTENT_TYPES, parseContentType } from '../content-types';
 import {
   cancelReviewAction,
   createManualDraftAction,
@@ -974,6 +974,7 @@ export default async function ComposePage({
     maxMediaItems: platform.maxMediaItems,
     allowsFirstComment: platform.allowsFirstComment,
     ...(platform.safeZones ? { safeZones: platform.safeZones } : {}),
+    ...(platform.recommendedHashtags ? { recommendedHashtags: platform.recommendedHashtags } : {}),
   }));
 
   /*
@@ -1326,6 +1327,7 @@ export default async function ComposePage({
         mode={mode === 'write' ? 'write' : 'ai'}
         startFrom={startFrom}
         initialBrief={initialBrief}
+        initialFormat={itemId ? undefined : parseContentType(single('format'))}
         initialCampaignId={initialCampaignId}
         sourceTitle={source?.title ?? null}
         goals={POST_GOALS.map((key) => ({
@@ -1630,6 +1632,7 @@ const EDITOR_KEYS = [
   'editor.preview.title',
   'editor.preview.compare',
   'studio.preview.safeZones',
+  'studio.tags.recommended',
   'editor.preview.single',
   'editor.fix.shorten',
   'editor.fix.media',

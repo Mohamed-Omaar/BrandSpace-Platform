@@ -78,7 +78,9 @@ describe('D-292 · a week of the plan opens work, it does not create it', () => 
       campaignHref({ locale: 'en', week, channels: leadingChannels(plan), objective: 'AWARENESS' }),
       'http://x',
     );
-    expect(href.pathname).toBe('/en/campaigns/new');
+    // D-496 — the form is the dialog over Campaigns.
+    expect(href.pathname).toBe('/en/campaigns');
+    expect(href.searchParams.get('new')).toBe('1');
     expect(href.searchParams.get('name')).toBe('Signs your cat is unwell');
     expect(href.searchParams.get('objective')).toBe('AWARENESS');
     expect(href.searchParams.getAll('channels')).toEqual(['instagram', 'linkedin']);
@@ -92,7 +94,8 @@ describe('D-292 · a week of the plan opens work, it does not create it', () => 
   });
 
   it('the campaign form only accepts the prefill from closed sets', () => {
-    const form = read('apps/dashboard/src/app/[locale]/campaigns/new/page.tsx');
+    // D-496 — the prefill is read where the dialog is drawn.
+    const form = read('apps/dashboard/src/app/[locale]/campaigns/page.tsx');
     expect(form).toContain('CAMPAIGN_OBJECTIVES.includes');
     expect(form).toMatch(/platforms\.some\(\(platform\) => platform\.key === key\)/);
   });

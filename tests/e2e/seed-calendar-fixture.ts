@@ -96,7 +96,12 @@ async function main(): Promise<void> {
        */
       platforms: content.platforms.map((platform) =>
         platform.key === 'instagram'
-          ? { ...platform, safeZones: { top: 13, bottom: 22, end: 16 } }
+          ? {
+              ...platform,
+              safeZones: { top: 13, bottom: 22, end: 16 },
+              // D-496 (Studio S9) — the prototype's Instagram range (`TAGLIM`).
+              recommendedHashtags: { min: 3, max: 5 },
+            }
           : platform,
       ),
       calendar: {

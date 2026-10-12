@@ -59,10 +59,11 @@ describe('B1.0 + Option B — when a post goes out', () => {
     }
   });
 
-  it('is the last migration the build expects, directly after PR 6', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-2)).toEqual([
+  it('comes directly after PR 6, and directly before PR E', () => {
+    expect(EXPECTED_MIGRATIONS.slice(-3)).toEqual([
       '20261015092000_automation_run_execution_due_index',
       NAME,
+      '20261020090000_group_b_fields',
     ]);
   });
 });

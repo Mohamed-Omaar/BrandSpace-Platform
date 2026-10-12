@@ -50,6 +50,7 @@ export default async function AiSettingsPage({
         defaultLocale: true,
         aiSuggestionsEnabled: true,
         useBrandBrain: true,
+        aiDraftsToReview: true,
       },
     }),
   );
@@ -86,8 +87,8 @@ export default async function AiSettingsPage({
           same field as the select did. Left out, with nothing behind them: the
           prototype's dialect chips (one Arabic for every reader, D-474) and the
           credit alert (no such alert exists; its notification row is Settings 4,
-          deferred, D-497). "AI drafts go to review" is Settings 3, built in PR E
-          (D-496) — no "Gate 2" decision records it.
+          deferred, D-497). "AI drafts go to review" is Settings 3 (D-496), the
+          prototype's third switch (S4008).
         */}
         <div className="bsp-ai bsp-sg-grow" data-testid="ai-settings">
           {brands.length === 0 ? (
@@ -97,7 +98,7 @@ export default async function AiSettingsPage({
           ) : (
             brands.map((brand, index) => (
               <DraftForm
-                key={`${brand.id}:${brand.defaultLocale}:${String(brand.aiSuggestionsEnabled)}:${String(brand.useBrandBrain)}`}
+                key={`${brand.id}:${brand.defaultLocale}:${String(brand.aiSuggestionsEnabled)}:${String(brand.useBrandBrain)}:${String(brand.aiDraftsToReview)}`}
                 action={saveAiLanguageAction}
                 // Gate 2b review (4b): the last form's bar on the frame's bottom edge.
                 className={index === brands.length - 1 ? 'bsp-ai-form bsp-sg-form' : 'bsp-ai-form'}
@@ -159,6 +160,17 @@ export default async function AiSettingsPage({
                     hint={t('aiSettings.suggestionsHint')}
                     checked={brand.aiSuggestionsEnabled}
                     testId={`ai-suggestions-${brand.id}`}
+                  />
+                  {/*
+                    D-496 (Settings 3) — a post the AI writes for this brand is
+                    sent for review as it is created, through "Send for review".
+                  */}
+                  <CheckboxRow
+                    name="aiDraftsToReview"
+                    label={t('aiSettings.draftsToReview')}
+                    hint={t('aiSettings.draftsToReviewHint')}
+                    checked={brand.aiDraftsToReview}
+                    testId={`ai-drafts-review-${brand.id}`}
                   />
                 </section>
               </DraftForm>

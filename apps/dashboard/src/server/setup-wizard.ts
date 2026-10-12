@@ -1,6 +1,12 @@
 import 'server-only';
 import { inBrandBrain } from './brand-brain-context';
-import { GOAL_ITEM_KEY, GOAL_ITEM_SELECT, storedGoal, type SetupFacts } from './setup-wizard-state';
+import {
+  GOAL_ITEM_KEY,
+  GOAL_ITEM_SELECT,
+  ownGoalText,
+  storedGoal,
+  type SetupFacts,
+} from './setup-wizard-state';
 
 /**
  * THE FACTS THE WIZARD'S STEPS ARE COMPUTED FROM — read, never stored.
@@ -72,6 +78,8 @@ export async function setupFactsFor(
         ? {
             itemId: goal.id,
             objective: storedGoal(goal),
+            // D-496 (Auth 8) — a goal typed in setup, in the person's words.
+            own: ownGoalText(goal, storedGoal(goal)),
           }
         : null,
     };

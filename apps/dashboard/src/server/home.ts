@@ -7,6 +7,8 @@
  * reads data, so none of it can invent any.
  */
 
+import { parseContentType, type ComposerContentType } from '../app/[locale]/content/content-types';
+
 /** Morning before noon, afternoon before six, evening otherwise. */
 export type GreetingPeriod = 'morning' | 'afternoon' | 'evening';
 
@@ -126,6 +128,17 @@ export const RECOMMENDATION_INSIGHT_TYPES = [
   'OPPORTUNITY',
   'CONTENT_GAP',
 ] as const;
+
+/**
+ * D-496 (Home 4, Q4) — THE FORMAT A NOTICED SUGGESTION NAMES, when its body
+ * names one the Studio offers (`suggestedFormat`). Nothing else is read from
+ * the body; a suggestion that names none, or names one the composer does not
+ * know, gets the plain "Make a post".
+ */
+export function suggestedFormatOf(body: unknown): ComposerContentType | null {
+  if (typeof body !== 'object' || body === null) return null;
+  return parseContentType((body as { suggestedFormat?: unknown }).suggestedFormat) ?? null;
+}
 
 /**
  * Group dated rows by the calendar day they fall on in the workspace's zone,

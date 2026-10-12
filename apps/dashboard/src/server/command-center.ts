@@ -106,6 +106,33 @@ export interface AttentionItem {
    */
   readonly localizedDetail?:
     { readonly en?: string | undefined; readonly ar?: string | undefined } | undefined;
+  /**
+   * D-496 (Home 1, 2) — THE POSTS THIS ITEM IS ABOUT, by name: the first
+   * `ATTENTION_NAMED` of them, newest first. Home draws one row per entry and
+   * "and N more" for the rest (`count` minus the entries). Absent on kinds
+   * that are not about posts.
+   */
+  readonly entries?: readonly AttentionEntry[] | undefined;
+}
+
+/** How many posts a "Needs you" kind names before "and N more" (D-496). */
+export const ATTENTION_NAMED = 3;
+
+/** One post named in "Needs you" (D-496). */
+export interface AttentionEntry {
+  /** The slot (failed, overdue) or the post (in review). */
+  readonly id: string;
+  readonly title: string;
+  /** The channels it was going out on. */
+  readonly platformKeys: readonly string[];
+  /** Failed only — the slot's failed publish jobs, for "Retry" in place (Home 2). */
+  readonly failedJobs?:
+    | readonly {
+        readonly id: string;
+        readonly failureClass: string | null;
+        readonly scheduledAtUtc: Date;
+      }[]
+    | undefined;
 }
 
 const SEVERITY_ORDER: Record<AttentionSeverity, number> = {
@@ -126,16 +153,42 @@ async function publishingFailures(
   db: TenantScopedClient,
   session: CustomerWorkspaceContext,
 ): Promise<AttentionItem | null> {
-  const count = await db.calendarSlot.count({
-    where: {
-      workspaceId: session.workspaceId,
-      status: { in: ['FAILED', 'PARTIALLY_PUBLISHED'] },
-      ...brandIdScopeFilter(session.brandScope),
-    },
-  });
+  const where = {
+    workspaceId: session.workspaceId,
+    status: { in: ['FAILED' as const, 'PARTIALLY_PUBLISHED' as const] },
+    ...brandIdScopeFilter(session.brandScope),
+  };
+  const [count, named] = await Promise.all([
+    db.calendarSlot.count({ where }),
+    db.calendarSlot.findMany({
+      where,
+      orderBy: [{ scheduledAtUtc: 'desc' }, { id: 'asc' }],
+      take: ATTENTION_NAMED,
+      select: {
+        id: true,
+        platformKeys: true,
+        item: { select: { title: true } },
+        publishJobs: {
+          where: { status: 'FAILED' },
+          select: { id: true, failureClass: true, scheduledAtUtc: true },
+        },
+      },
+    }),
+  ]);
   return count === 0
     ? null
-    : { kind: 'publishing-failed', severity: 'blocked', count, href: '/publishing?tab=failed' };
+    : {
+        kind: 'publishing-failed',
+        severity: 'blocked',
+        count,
+        href: '/publishing?tab=failed',
+        entries: named.map((slot) => ({
+          id: slot.id,
+          title: slot.item.title,
+          platformKeys: slot.platformKeys,
+          failedJobs: slot.publishJobs,
+        })),
+      };
 }
 
 /**
@@ -177,17 +230,30 @@ async function contentInReview(
   db: TenantScopedClient,
   session: CustomerWorkspaceContext,
 ): Promise<AttentionItem | null> {
-  const count = await db.contentItem.count({
-    where: {
-      workspaceId: session.workspaceId,
-      deletedAt: null,
-      status: 'IN_REVIEW',
-      ...brandIdScopeFilter(session.brandScope),
-    },
-  });
+  const where = {
+    workspaceId: session.workspaceId,
+    deletedAt: null,
+    status: 'IN_REVIEW' as const,
+    ...brandIdScopeFilter(session.brandScope),
+  };
+  const [count, named] = await Promise.all([
+    db.contentItem.count({ where }),
+    db.contentItem.findMany({
+      where,
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+      take: ATTENTION_NAMED,
+      select: { id: true, title: true },
+    }),
+  ]);
   return count === 0
     ? null
-    : { kind: 'content-in-review', severity: 'waiting', count, href: '/approvals' };
+    : {
+        kind: 'content-in-review',
+        severity: 'waiting',
+        count,
+        href: '/approvals',
+        entries: named.map((item) => ({ id: item.id, title: item.title, platformKeys: [] })),
+      };
 }
 
 /**
@@ -202,17 +268,34 @@ async function overdueSchedules(
   db: TenantScopedClient,
   session: CustomerWorkspaceContext,
 ): Promise<AttentionItem | null> {
-  const count = await db.calendarSlot.count({
-    where: {
-      workspaceId: session.workspaceId,
-      status: 'SCHEDULED',
-      scheduledAtUtc: { lt: systemClock.now() },
-      ...brandIdScopeFilter(session.brandScope),
-    },
-  });
+  const where = {
+    workspaceId: session.workspaceId,
+    status: 'SCHEDULED' as const,
+    scheduledAtUtc: { lt: systemClock.now() },
+    ...brandIdScopeFilter(session.brandScope),
+  };
+  const [count, named] = await Promise.all([
+    db.calendarSlot.count({ where }),
+    db.calendarSlot.findMany({
+      where,
+      orderBy: [{ scheduledAtUtc: 'desc' }, { id: 'asc' }],
+      take: ATTENTION_NAMED,
+      select: { id: true, platformKeys: true, item: { select: { title: true } } },
+    }),
+  ]);
   return count === 0
     ? null
-    : { kind: 'schedule-overdue', severity: 'blocked', count, href: '/calendar' };
+    : {
+        kind: 'schedule-overdue',
+        severity: 'blocked',
+        count,
+        href: '/calendar',
+        entries: named.map((slot) => ({
+          id: slot.id,
+          title: slot.item.title,
+          platformKeys: slot.platformKeys,
+        })),
+      };
 }
 
 /**
@@ -415,7 +498,11 @@ async function insightsUnreviewed(
       workspaceId: session.workspaceId,
       status: 'NEW',
       type: { in: [...INTELLIGENCE_INSIGHT_TYPES] },
-      OR: [{ expiresAt: null }, { expiresAt: { gt: systemClock.now() } }],
+      AND: [
+        { OR: [{ expiresAt: null }, { expiresAt: { gt: systemClock.now() } }] },
+        // D-496 (Home 4) — a snoozed finding is not counted until its time passes.
+        { OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: systemClock.now() } }] },
+      ],
       ...brandIdScopeFilter(session.brandScope),
     },
   });

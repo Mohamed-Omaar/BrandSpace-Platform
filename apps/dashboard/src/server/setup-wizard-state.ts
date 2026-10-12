@@ -49,7 +49,12 @@ export interface SetupFacts {
    * The brand's goal item, when there is one, and the objective it names —
    * null when the item was retitled by hand into something else.
    */
-  readonly goal: { readonly itemId: string; readonly objective: SetupGoal | null } | null;
+  readonly goal: {
+    readonly itemId: string;
+    readonly objective: SetupGoal | null;
+    /** D-496 (Auth 8) — a typed goal's words; null when it is one of ours. */
+    readonly own?: string | null;
+  } | null;
 }
 
 export interface SetupStepState {
@@ -279,4 +284,38 @@ export function goalKnowledge(goal: SetupGoal): {
       label,
     );
   return { title: { en, ar }, body: { en: sentence('en', en), ar: sentence('ar', ar) } };
+}
+
+/** D-496 (Auth 8) — the longest goal a person may type in setup. */
+export const OWN_GOAL_MAX = 120;
+
+/**
+ * D-496 (Auth 8) — A GOAL THE PERSON TYPED, as knowledge: their own words as
+ * the title in both languages (they wrote it once, in their language), and the
+ * same sentence around it the chosen goals get.
+ */
+export function ownGoalKnowledge(text: string): {
+  readonly title: { readonly en: string; readonly ar: string };
+  readonly body: { readonly en: string; readonly ar: string };
+} {
+  const sentence = (locale: 'en' | 'ar') =>
+    ((messages[locale] as Record<string, string>)['setup.goal.knowledgeBody'] ?? '{goal}').replace(
+      '{goal}',
+      text,
+    );
+  return { title: { en: text, ar: text }, body: { en: sentence('en'), ar: sentence('ar') } };
+}
+
+/** D-496 (Auth 8) — the typed goal's words, when the stored goal is not one of ours. */
+export function ownGoalText(
+  item: { readonly title: unknown } | null,
+  objective: SetupGoal | null,
+): string | null {
+  if (!item || objective !== null) return null;
+  const title = item.title as { readonly en?: unknown; readonly ar?: unknown } | null;
+  const text =
+    (typeof title?.en === 'string' && title.en.trim()) ||
+    (typeof title?.ar === 'string' && title.ar.trim()) ||
+    '';
+  return text === '' ? null : text;
 }

@@ -1884,6 +1884,11 @@ model Brand {
   /// Copilot (its turn context, its tools and the drafts it writes). Brand
   /// Brain's own "Talk with the brand" is not affected (owner, 2026-09-28).
   useBrandBrain          Boolean  @default(true)
+  /// PR E (Settings 3) — "AI drafts go to review": a post AI writes for this
+  /// brand is sent for review when it is created, through the existing submit
+  /// path. Existing brands are off (this default); brand creation writes it ON
+  /// for every new brand (owner, Q3).
+  aiDraftsToReview       Boolean  @default(false)
 
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
@@ -4639,6 +4644,11 @@ model Campaign {
   /// because the set of platforms is an operator's fact (CLAUDE.md §2.2).
   channels String[] @default([])
 
+  /// PR E (Campaigns 1) — the form's "Number of posts": the card's
+  /// "Published n / total" total. Null: not set, the total is the posts filed.
+  /// CHECK `campaign_planned_post_count_positive`: null or above zero.
+  plannedPostCount Int?
+
   /// The accepted strategy proposal this campaign came out of, when it came out
   /// of one. Null for a campaign a person simply created.
   strategyInsightId String? @db.Uuid
@@ -4714,6 +4724,10 @@ model Insight {
   type   InsightType
   status InsightStatus @default(NEW)
   basis  InsightBasis
+
+  /// PR E (Home 4) — "Not now" on a noticed insight hides it until then
+  /// (`analytics.insightSnoozeDays` from now). The status is unchanged.
+  snoozedUntil DateTime? @db.Timestamptz(3)
 
   /// Localized `{ ar, en }`.
   title Json
