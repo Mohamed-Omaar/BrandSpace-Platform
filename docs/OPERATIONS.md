@@ -837,7 +837,7 @@ Found when the owner tested staging. None of these is code; each is a setting or
 
 1. **Trial credits.** ~~A new workspace's credits card reads "200 of 500"~~ — fixed in PR F
    (D-514): during a trial, Home reads "n of" the trial grant and shows no reset date. The trial
-   grant (200) and the monthly figure (500, proposed) are set in Control Center → Plans.
+   grant (200) and the monthly figure (500, confirmed by the owner) are set in Control Center → Plans.
 2. **Industries.** Only two industries are configured on staging. PR F's
    `docs/production-config/onboarding.json` carries twelve, for the owner to confirm and activate.
 3. **Open question for the owner — the server region.** Staging runs in Amsterdam and the owner

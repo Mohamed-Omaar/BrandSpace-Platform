@@ -89,6 +89,37 @@ describe('docs/production-config', () => {
   }
 });
 
+describe('the values the owner confirmed on the #79 review', () => {
+  it('500 monthly credits and one workspace on the trial plan', () => {
+    const starter = parseConfigPayload('plans', read('plans.json')).plans[0]!;
+    expect(starter.monthlyCredits).toBe(500);
+    expect(starter.quotas.workspaces).toBe(1);
+  });
+
+  it('the twelve industries', () => {
+    expect(parseConfigPayload('onboarding', read('onboarding.json')).industries).toHaveLength(12);
+  });
+
+  it('the hashtag ranges, and 10:00 / 16:00 / 21:00 for EG, SA and AE', () => {
+    const content = parseConfigPayload('content', read('content.json'));
+    const ranges = Object.fromEntries(
+      content.platforms.map((platform) => [platform.key, platform.recommendedHashtags ?? null]),
+    );
+    expect(ranges).toEqual({
+      instagram: { min: 3, max: 5 },
+      tiktok: { min: 3, max: 5 },
+      linkedin: { min: 1, max: 3 },
+      x: { min: 1, max: 2 },
+    });
+    const times = Object.fromEntries(
+      (content.calendar.suggestedTimes ?? []).map((entry) => [entry.country, entry.times]),
+    );
+    for (const country of ['EG', 'SA', 'AE']) {
+      expect(times[country], country).toEqual(['10:00', '16:00', '21:00']);
+    }
+  });
+});
+
 describe('the owner-decided values', () => {
   it('onboarding: password floor, legal drafts, twelve industries, no Teach step', () => {
     const onboarding = parseConfigPayload('onboarding', read('onboarding.json'));
