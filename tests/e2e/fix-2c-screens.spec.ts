@@ -17,8 +17,10 @@ import { withPlatformPrisma } from './platform-prisma';
  *   - Campaigns: Pause on an active card, audited as a person's pause.
  *   - Onboarding: the industry chosen on the Business step reaches the brand
  *     step, where a finished brand can be edited and saved.
- *   - The Copilot button sits in the header's slot on every width and covers
- *     no header control, before and after the page scrolls.
+ *   - The Copilot button stays FLOATING (Q2, owner's answer (c)): the last
+ *     row of the longest table scrolls fully clear of it; it steps aside
+ *     while a modal dialog is open; narrowing the window never pushes the
+ *     page sideways.
  *   - The workspace list rests on whole rows: no row is cut to an empty bar.
  *   - Home: no "0 pieces of evidence" line; the Notes card's button says Close.
  */
@@ -206,6 +208,8 @@ test('Onboarding: the industry chosen on the Business step is saved with the bra
   const form = page.getByTestId('setup-brand-edit');
   await expect(form).toBeVisible();
   await expect(page.getByTestId('setup-brand-industry')).toHaveValue(FIXTURE_INDUSTRY);
+  // One "Industry" on the step: the field's own label, no second line above it.
+  await expect(form.getByText('Industry', { exact: true })).toHaveCount(1);
   const renamed = `Renamed brand ${Date.now().toString(36)}`;
   await page.getByTestId('setup-brand-name').fill(renamed);
   await page.getByTestId('setup-continue').click();
@@ -224,60 +228,89 @@ test('Onboarding: the industry chosen on the Business step is saved with the bra
   expect(brand).toEqual({ name: renamed, industry: FIXTURE_INDUSTRY });
 });
 
-/** Where the Copilot button is, against its header slot and the header's controls. */
-async function fabPlacement(page: Page) {
+/**
+ * How far the last row of the longest table — Settings → Team & roles → "All
+ * permissions", one row per workspace permission — ends above the floating
+ * Copilot button, with the page scrolled to its end — and the page's last
+ * line under it too.
+ */
+async function lastRowClearance(page: Page) {
   return page.evaluate(() => {
     const fab = document.querySelector('.bsp-fab');
-    const slot = document.querySelector('.bsp-fab-slot');
-    const header = slot?.closest('header');
-    if (!fab || !slot || !header) return null;
-    const f = fab.getBoundingClientRect();
-    const s = slot.getBoundingClientRect();
-    const covered = [...header.querySelectorAll('a, button')]
-      .filter((el) => !fab.contains(el))
-      .map((el) => el.getBoundingClientRect())
-      .filter((r) => r.width > 0)
-      .filter(
-        (r) =>
-          r.left < f.right - 1 &&
-          r.right > f.left + 1 &&
-          r.top < f.bottom - 1 &&
-          r.bottom > f.top + 1,
-      ).length;
+    const rows = document.querySelectorAll('[data-testid="permissions-table"] tbody tr');
+    const last = rows[rows.length - 1];
+    if (!fab || !last) return null;
+    const top = fab.getBoundingClientRect().top;
+    // The page's own last line, under the table: nothing may end under the button.
+    const end = document.querySelector('[data-testid="permissions-logged"]');
     return {
-      dx: Math.abs(f.left - s.left),
-      dy: Math.abs(f.top - s.top),
-      covered,
-      inside: f.left >= 0 && f.right <= window.innerWidth,
+      rows: rows.length,
+      gap: Math.min(
+        top - last.getBoundingClientRect().bottom,
+        end ? top - end.getBoundingClientRect().bottom : Infinity,
+      ),
     };
   });
 }
 
 for (const locale of LOCALES) {
-  test(`the Copilot button sits in the header on every width, covering nothing (${locale})`, async ({
+  test(`the last row of the longest table scrolls fully clear of the floating Copilot (${locale})`, async ({
     page,
     isMobile,
   }) => {
-    test.skip(isMobile === true, 'the phone layout docked it already (D-468 (b))');
-    test.setTimeout(150_000);
-    const own = await ownWorkspace(`fix2c-fab-${locale}`);
+    test.skip(isMobile === true, 'the phone layout docks the button in the header (D-468 (b))');
+    test.setTimeout(120_000);
+    const own = await ownWorkspace(`fix2c-table-${locale}`);
     await enter(page, own.slug, locale);
-    for (const width of [1280, 1536, 1920]) {
-      await page.setViewportSize({ width, height: width === 1920 ? 1080 : 864 });
-      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/analytics`);
-      await expect(page.locator('.bsp-fab-slot[data-on]')).toHaveCount(1);
-      await expect.poll(() => fabPlacement(page).then((p) => p?.dx ?? 99)).toBeLessThan(1);
-      const top = await fabPlacement(page);
-      expect(top).toMatchObject({ covered: 0, inside: true });
-      expect(top?.dy ?? 99).toBeLessThan(1);
-      // Scrolled: it moved with the header, not over the page.
-      await page.mouse.move(width / 2, 500);
-      await page.mouse.wheel(0, 600);
-      await expect.poll(() => fabPlacement(page).then((p) => p?.dy ?? 99)).toBeLessThan(1);
-      expect((await fabPlacement(page))?.covered).toBe(0);
+    for (const size of [
+      { width: 1280, height: 800 },
+      { width: 1536, height: 864 },
+      { width: 1920, height: 1080 },
+    ]) {
+      await page.setViewportSize(size);
+      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/permissions`);
+      await page.getByTestId('permissions-all').click();
+      const rows = page.locator('[data-testid="permissions-table"] tbody tr');
+      await expect(rows.last()).toBeVisible();
+      expect(await rows.count()).toBeGreaterThan(20);
+      // Floating, as the prototype draws it.
+      const fab = page.locator('.bsp-fab');
+      await expect(fab).toHaveCSS('position', 'fixed');
+      await page.locator('main.bsp-scroll').evaluate((main) => {
+        main.scrollTop = main.scrollHeight;
+      });
+      await expect
+        .poll(async () => (await lastRowClearance(page))?.gap ?? -1, {
+          message: `${size.width}px: the last row ends above the button`,
+        })
+        .toBeGreaterThanOrEqual(8);
     }
   });
 }
+
+test('the floating Copilot steps aside under a modal dialog, and narrowing never scrolls sideways', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile === true, 'one workspace per run; the desktop run covers it');
+  const own = await ownWorkspace('fix2c-fab');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await enter(page, own.slug, 'en');
+  await page.goto(`${DASHBOARD_BASE_URL}/en/automations`);
+  await expect(page.locator('.bsp-fab')).toBeVisible();
+  await page.goto(`${DASHBOARD_BASE_URL}/en/automations?new=1`);
+  await expect(page.getByTestId('automation-new-dialog')).toBeVisible();
+  await expect(page.locator('.bsp-fab')).toBeHidden();
+
+  await page.goto(`${DASHBOARD_BASE_URL}/en/analytics`);
+  for (const width of [1440, 860, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, `${width}px scrolls sideways`).toBeLessThanOrEqual(1);
+  }
+});
 
 for (const locale of LOCALES) {
   test(`the workspace list rests on whole rows, top and end (${locale})`, async ({
@@ -360,4 +393,11 @@ test('Home: no evidence line for a suggestion with none; the Notes card says Clo
   await expect(popover).not.toContainText('Dismiss');
   await popover.getByRole('button', { name: 'Close' }).click();
   await expect(popover).toHaveCount(0);
+
+  // The bell's feed says Close too (it only ever closed the feed).
+  await page.getByTestId('topbar-notifications').click();
+  const feed = page.getByTestId('notifications-feed');
+  await expect(feed).toBeVisible();
+  await expect(feed.getByRole('button', { name: 'Close' })).toBeVisible();
+  await expect(feed).not.toContainText('Dismiss');
 });

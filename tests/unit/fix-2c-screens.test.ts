@@ -107,10 +107,16 @@ describe('copy', () => {
     }
   });
 
-  it('the Notes card button says what it does: Close', () => {
+  it('the Notes card and the notifications bell say what their button does: Close', () => {
     const shell = read('apps/dashboard/src/components/workspace-shell.tsx');
     const notes = shell.slice(shell.indexOf('<NotesPopover'), shell.indexOf('</NotesPopover>'));
     expect(notes).toContain("close: t('common.close')");
+    const bell = shell.slice(
+      shell.indexOf('<NotificationsBell'),
+      shell.indexOf('</NotificationsBell>'),
+    );
+    expect(bell).toContain("close: t('common.close')");
+    expect(shell).not.toContain('notifications.dismiss');
     expect(messages.en['common.close']).toBe('Close');
     expect(messages.ar['common.close']).toBe('إغلاق');
   });

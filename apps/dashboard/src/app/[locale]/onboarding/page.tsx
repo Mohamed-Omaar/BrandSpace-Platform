@@ -466,12 +466,11 @@ export default async function OnboardingPage({
                     atLeastOne: t('setup.brand.languagesRequired'),
                   }}
                 />
-                <details
-                  className="bsp-wz-more"
-                  data-testid="setup-brand-industry-more"
-                  open={carriedIndustry !== null || Boolean(row?.industry)}
-                >
-                  <summary>{t('setup.brand.industry')}</summary>
+                {/*
+                  Fix PR 2c (review of #78) — a plain field, like the name and
+                  website above it: one "Industry", the field's own label.
+                */}
+                <div data-testid="setup-brand-industry-more">
                   <IndustryField
                     industries={brandIndustries.map((industry) => ({
                       value: industry.key,
@@ -492,7 +491,7 @@ export default async function OnboardingPage({
                     idPrefix="setup-brand-"
                     testIdPrefix="setup-brand"
                   />
-                </details>
+                </div>
               </form>
             ) : (
               <div className="bsp-wz-col">
@@ -705,29 +704,55 @@ export default async function OnboardingPage({
                 prototype asks it with the business; a workspace does not store
                 it, so it stays with the brand, behind its own disclosure.
               */}
-              <details
-                className="bsp-wz-more"
-                data-testid="setup-brand-industry-more"
-                open={carriedIndustry !== null}
-              >
-                <summary>{t('setup.brand.industry')}</summary>
-                <IndustryField
-                  industries={industries.map((industry) => ({
-                    value: industry.key,
-                    label: locale === 'ar' ? industry.name.ar : industry.name.en,
-                  }))}
-                  saved={industries.some((i) => i.key === carriedIndustry) ? carriedIndustry : null}
-                  labels={{
-                    industry: t('setup.brand.industry'),
-                    industryHint: t('setup.optional'),
-                    industryNone: t('settings.industryNone'),
-                    industryOther: t('settings.industryOther'),
-                    industryOtherLabel: t('settings.industryOtherLabel'),
-                  }}
-                  idPrefix="setup-brand-"
-                  testIdPrefix="setup-brand"
-                />
-              </details>
+              {/*
+                Fix PR 2c (review of #78) — an industry carried from the Business
+                step is shown as the plain field (one "Industry"); otherwise it
+                stays behind its own disclosure, as before.
+              */}
+              {carriedIndustry !== null ? (
+                <div data-testid="setup-brand-industry-more">
+                  <IndustryField
+                    industries={industries.map((industry) => ({
+                      value: industry.key,
+                      label: locale === 'ar' ? industry.name.ar : industry.name.en,
+                    }))}
+                    saved={
+                      industries.some((i) => i.key === carriedIndustry) ? carriedIndustry : null
+                    }
+                    labels={{
+                      industry: t('setup.brand.industry'),
+                      industryHint: t('setup.optional'),
+                      industryNone: t('settings.industryNone'),
+                      industryOther: t('settings.industryOther'),
+                      industryOtherLabel: t('settings.industryOtherLabel'),
+                    }}
+                    idPrefix="setup-brand-"
+                    testIdPrefix="setup-brand"
+                  />
+                </div>
+              ) : (
+                <details className="bsp-wz-more" data-testid="setup-brand-industry-more">
+                  <summary>{t('setup.brand.industry')}</summary>
+                  <IndustryField
+                    industries={industries.map((industry) => ({
+                      value: industry.key,
+                      label: locale === 'ar' ? industry.name.ar : industry.name.en,
+                    }))}
+                    saved={
+                      industries.some((i) => i.key === carriedIndustry) ? carriedIndustry : null
+                    }
+                    labels={{
+                      industry: t('setup.brand.industry'),
+                      industryHint: t('setup.optional'),
+                      industryNone: t('settings.industryNone'),
+                      industryOther: t('settings.industryOther'),
+                      industryOtherLabel: t('settings.industryOtherLabel'),
+                    }}
+                    idPrefix="setup-brand-"
+                    testIdPrefix="setup-brand"
+                  />
+                </details>
+              )}
             </div>
             {/* "Logo and colours" — the prototype's soft panel (`.bsp-wz-look`). */}
             <div className="bsp-wz-look">

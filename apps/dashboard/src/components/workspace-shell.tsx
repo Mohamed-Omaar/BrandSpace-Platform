@@ -833,7 +833,8 @@ export async function WorkspaceShell({
           load={loadNotificationFeed}
           strings={{
             title: t('notifications.title'),
-            close: t('notifications.dismiss'),
+            // Fix PR 2c (review of #78) — it only closes the feed: "Close", as on Notes.
+            close: t('common.close'),
             markAll: t('notifications.markAllRead'),
             seeAll: t('notifications.feed.seeAll'),
             open: t('notifications.view'),

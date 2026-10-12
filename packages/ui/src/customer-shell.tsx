@@ -896,12 +896,6 @@ export function CustomerShell({
     const host = fabHostRef.current;
     const slot = fabSlotRef.current;
     if (!host || !slot) return undefined;
-    /*
-     * FIX PR 2c (Q2, D-506) — DOCKED ON EVERY WIDTH, NOT ONLY ON A PHONE. A
-     * floating button over the page's scroll area covered whatever row passed
-     * under it; the owner chose the header's end, where it covers nothing.
-     * The phone layout's own mechanism, now always on.
-     */
     const phone = window.matchMedia('(max-width: 767.98px)');
     let frame = 0;
     const place = () => {
@@ -909,15 +903,23 @@ export function CustomerShell({
       const control = host.querySelector<HTMLElement>('.bsp-fab');
       const anchor = host.closest<HTMLElement>('.bs-ambient-host');
       if (!control || !anchor) return;
+      if (!phone.matches) {
+        slot.removeAttribute('data-on');
+        slot.style.removeProperty('inline-size');
+        control.style.removeProperty('--bsp-fab-x');
+        control.style.removeProperty('--bsp-fab-left');
+        control.style.removeProperty('--bsp-fab-y');
+        return;
+      }
       slot.setAttribute('data-on', '');
       slot.style.setProperty('inline-size', `${control.offsetWidth}px`);
       const at = slot.getBoundingClientRect();
       const origin = anchor.getBoundingClientRect();
       control.style.setProperty('--bsp-fab-x', `${at.left - origin.left}px`);
       /*
-       * Held inside the frame whatever its width: between a resize and the
-       * next placement the old offset must not push the page sideways (a
-       * 1440px offset on a window just narrowed to 390px did).
+       * Fix PR 2c — held inside the frame whatever its width: between a
+       * resize and the next placement an old offset must never push the
+       * page sideways.
        */
       control.style.setProperty(
         '--bsp-fab-left',

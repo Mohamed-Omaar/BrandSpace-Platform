@@ -2559,7 +2559,6 @@ export const messages = {
     'notifications.unread': 'غير مقروء',
     'notifications.markRead': 'تعليم كمقروء',
     'notifications.markAllRead': 'تعليم الكل كمقروء',
-    'notifications.dismiss': 'إغلاق',
     'notifications.emptyTitle': 'لا توجد إشعارات',
     'notifications.emptyBody':
       'سنخبرك هنا عندما يحتاج محتوى إلى مراجعتك أو يصدر قرار بشأن ما أرسلته.',
@@ -6646,7 +6645,6 @@ export const messages = {
     'notifications.unread': 'Unread',
     'notifications.markRead': 'Mark as read',
     'notifications.markAllRead': 'Mark all as read',
-    'notifications.dismiss': 'Dismiss',
     'notifications.emptyTitle': 'No notifications',
     'notifications.emptyBody':
       'We will tell you here when content needs your review, or when something you sent is decided.',

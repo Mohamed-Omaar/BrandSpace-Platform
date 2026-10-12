@@ -2276,14 +2276,14 @@ scheduled.
 
 ### 6.3.64 Fix PR 2c — the screen fixes (D-506)
 
-- **The Copilot button, docked (Q2, a recorded DEVIATION).** The prototype's `.fab` floats at the
-  frame's bottom corner (`Main.dc.html` L1483) and covered whatever row scrolled under it. On every
-  width it now sits in the empty slot at the end of the header's action row — the mechanism the
-  phone layout already used (D-468 (b)) — drawn as the header's own controls: 40px high, radius 12,
-  the `.ibtn` grey `#f2f2f4`, a 32px mark, no blur and no shadow. It scrolls with the header, and an
-  open header menu stays above it; it steps aside while a modal dialog or drawer is open, as it did
-  for the Copilot panel. Measured in `tests/e2e/fix-2c-screens.spec.ts` at 1280, 1536 and
-  1920, en and ar: in its slot to the pixel, before and after scrolling, covering no header control.
+- **The Copilot button stays FLOATING, as the prototype draws it (Q2, owner's answer (c)).** Its
+  place and size are unchanged (`Main.dc.html` L1483: 48px high, fully round, 24px from the frame's
+  corner). One recorded DEVIATION, for this answer: the page's end padding is raised from the
+  prototype's 40px to 88px (the button's 24px offset and 48px height, plus 16px), so the last row
+  of every page can be scrolled fully clear of it. Rows passing under it while scrolling is
+  accepted. It also steps aside while a modal dialog or drawer is open, as it already did for the
+  Copilot panel. Measured in `tests/e2e/fix-2c-screens.spec.ts` on the longest table (Performance →
+  Posts), en and ar, at 1280, 1536 and 1920: the last row ends above the button.
 - **Pause on the campaign card (a PORT).** The prototype's card toggle (`toggleLabel` / `toggle`,
   L3673): `.bsp-camp-toggle`, a 6px gap, `padding: 6px 4px`, 12px / 600, `#55555c`, the pause glyph,
   before "Open", on an active card for a person who may manage campaigns. "Resume" is left out: a
