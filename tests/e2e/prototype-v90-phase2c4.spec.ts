@@ -752,8 +752,11 @@ async function seedPerformance(target: World): Promise<string> {
         status: 'ACTIVE',
       },
     });
-    const start = new Date('2026-07-01T00:00:00.000Z');
     const days = 25;
+    // Fix PR 2b: the 25 days that end at the start of the run's UTC day, not a
+    // calendar date — Performance reads a rolling range from the server clock.
+    const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
+    const start = new Date(today.getTime() - days * 86_400_000);
     const values: Record<string, (day: number) => number> = {
       impressions: (day) => (day < 21 ? 1_200 + (day % 3) * 10 : 4_800),
       engagements: (day) => (day < 21 ? 60 + (day % 3) : 260),

@@ -11,10 +11,20 @@
  * PostgreSQL in `tests/isolation/phase7-analytics-service.test.ts`, where they
  * can be.
  *
- * EVERY FIGURE IS FIXED, NOT RANDOM, and every window is an absolute date. A
- * chart seeded from `Math.random()` or from "today" renders differently on
- * every run, which turns a visual assertion into a coin toss and a numeric one
- * into a test nobody trusts.
+ * EVERY FIGURE IS FIXED, NOT RANDOM. A chart seeded from `Math.random()`
+ * renders differently on every run, which turns a visual assertion into a coin
+ * toss and a numeric one into a test nobody trusts.
+ *
+ * THE WINDOW IS ANCHORED TO THE RUN'S UTC DAY, NOT TO A CALENDAR DATE (Fix PR
+ * 2b, 2026-10-12). It used to start on 2026-09-01. Performance reads a ROLLING
+ * range from the server's own clock (`systemClock.now()` minus 7, 28 or 90
+ * days), so an absolute window slid out of the default 28-day range on
+ * 2026-10-12 and the trend line vanished, turning every PR's CI red; it would
+ * have left the 90-day range at the end of November. A fixed clock in the spec
+ * cannot help, because Playwright's clock moves the browser and the window is
+ * computed on the server. So the same fourteen fixed values are written for
+ * the fourteen days that end at the start of the run's UTC day: every run
+ * draws the same series inside every range; only the date labels move.
  *
  * THE SOURCE IS MARKED `MOCK`, DELIBERATELY. The dashboard reads `sourceKind`
  * and shows the "this is sample data" banner, and asserting that banner is part
@@ -37,9 +47,13 @@ import { E2E_CREDENTIALS_FILE, loadE2eEnv, type E2eAdminCredentials } from './en
 
 loadE2eEnv();
 
-/** The window the analytics screen opens on in the suite. Absolute, on purpose. */
-const WINDOW_START = new Date('2026-09-01T00:00:00.000Z');
 const DAYS = 14;
+/**
+ * The fourteen days that end at the start of the run's UTC day — whole days,
+ * so a run at midnight writes the same rows as one at noon.
+ */
+const TODAY_UTC = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`);
+const WINDOW_START = new Date(TODAY_UTC.getTime() - DAYS * 86_400_000);
 
 /** Marks every row this seed owns, so re-running replaces rather than appends. */
 const SOURCE_VERSION = 'e2e-analytics-fixture-1';
