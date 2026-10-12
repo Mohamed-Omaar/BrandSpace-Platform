@@ -30,9 +30,8 @@ let app: PrismaClient;
 let platform: PrismaClient;
 let fixtures: IsolationFixtures;
 let providers: ActivatedConfig;
+let models: ActivatedConfig;
 let routing: ActivatedConfig;
-let originalProviders: Record<string, unknown>;
-let originalRouting: { rules: Record<string, unknown>[] } & Record<string, unknown>;
 let tokenA: string;
 let tokenB: string;
 
@@ -76,30 +75,90 @@ async function ask(
   return { status: response.statusCode, body, cache: response.headers['cache-control'] };
 }
 
-async function activeActive(domain: string): Promise<Record<string, unknown>> {
-  const row = await platform.configurationVersion.findFirstOrThrow({
-    where: { domain, environment: 'DEVELOPMENT', status: 'ACTIVE' },
-    select: { payload: true },
-  });
-  return row.payload as Record<string, unknown>;
+/*
+ * THIS SUITE'S OWN AI CONFIGURATION: the development mock provider, one text
+ * model and a route per task the assertions name. Written and put back by the
+ * suite itself, so the answer never depends on what another suite or a seed
+ * left active.
+ */
+const MOCK = 'mock';
+const MODEL = 'mock-fast';
+
+function providersWith(status: 'active' | 'disabled'): Record<string, unknown> {
+  return {
+    providers: [
+      {
+        key: MOCK,
+        name: 'Mock provider (development only)',
+        baseUrl: 'https://mock.invalid',
+        apiKeySecretRef: 'ai-provider/mock/development/api-key',
+        status,
+        timeoutMs: 30_000,
+        maxConcurrency: 8,
+        noTrainingGuarantee: true,
+        dataRetentionPolicy: 'zero_retention',
+        privacyReviewRef: 'in-process mock adapter; no data leaves the process',
+      },
+    ],
+  };
 }
 
-function withProviderStatus(status: string): Record<string, unknown> {
-  const list = (originalProviders['providers'] as Record<string, unknown>[]).map((provider) => ({
-    ...provider,
-    status,
-  }));
-  return { ...originalProviders, providers: list };
+const MODELS = {
+  models: [
+    {
+      key: MODEL,
+      providerKey: MOCK,
+      displayName: 'Mock fast (development only)',
+      modality: 'text',
+      qualityTier: 'fast',
+      status: 'beta',
+      disableSwitch: false,
+      inputCostPerUnitMicroMinor: 15_000,
+      outputCostPerUnitMicroMinor: 60_000,
+      costUnit: '1k_tokens',
+      costCurrency: 'USD',
+      qualityBenchmarkRef: null,
+    },
+  ],
+};
+
+function rule(taskKey: string, scope: { workspaceId: string } | null = null) {
+  return {
+    taskKey,
+    scope: scope ? 'workspace' : 'global',
+    planKey: null,
+    workspaceId: scope?.workspaceId ?? null,
+    primaryModelKey: MODEL,
+    fallbackModelKeys: [],
+    timeoutMs: 10_000,
+    maxCostPerRequestMinor: null,
+    priority: 0,
+    parameters: {
+      temperature: 0.3,
+      maxOutputTokens: 400,
+      promptTemplateVersion: 1,
+      persistOutput: false,
+      outputRetentionDays: null,
+    },
+    retryPolicy: { maxAttempts: 1, backoff: 'none', initialDelayMs: 0, jitter: false },
+    moderateInput: false,
+    moderationModelKey: null,
+  };
 }
+
+/** Copilot and captions routed globally — the suite's baseline. */
+const ROUTING = { rules: [rule('copilot.chat'), rule('caption.generate')] };
 
 beforeAll(async () => {
   app = appRoleClient();
   platform = platformRoleClient();
   fixtures = await createIsolationFixtures(app);
-  originalProviders = await activeActive('ai.providers');
-  originalRouting = (await activeActive('ai.routing')) as typeof originalRouting;
   providers = await captureConfig(platform, 'ai.providers', { projected: false });
+  models = await captureConfig(platform, 'ai.models', { projected: false });
   routing = await captureConfig(platform, 'ai.routing', { projected: false });
+  await providers.activate(providersWith('active'));
+  await models.activate(MODELS);
+  await routing.activate(ROUTING);
   tokenA = await sessionFor(fixtures.a.userId, fixtures.a.workspaceId);
   tokenB = await sessionFor(fixtures.b.userId, fixtures.b.workspaceId);
   vi.resetModules();
@@ -111,6 +170,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await server?.close();
   await routing?.restore();
+  await models?.restore();
   await providers?.restore();
   await app?.$disconnect();
   await platform?.$disconnect();
@@ -132,7 +192,7 @@ describe('PR F (b) · who may ask', () => {
 
 describe('PR F (b) · what the answer carries', () => {
   it('per task, true or false, and nothing else; never cached', async () => {
-    await providers.activate(withProviderStatus('active'));
+    await providers.activate(providersWith('active'));
     const answer = await ask(tokenA);
     expect(answer.status).toBe(200);
     expect(Object.keys(answer.body ?? {})).toEqual(['tasks']);
@@ -150,15 +210,13 @@ describe('PR F (b) · what the answer carries', () => {
 
 describe('PR F (b) · the session’s own workspace only', () => {
   it('a rule for Workspace B is invisible to Workspace A, however A asks', async () => {
-    await providers.activate(withProviderStatus('active'));
+    await providers.activate(providersWith('active'));
     // Copilot routed ONLY for Workspace B; every other task as before.
     await routing.activate({
-      ...originalRouting,
-      rules: originalRouting.rules.map((rule) =>
-        rule['taskKey'] === 'copilot.chat'
-          ? { ...rule, scope: 'workspace', workspaceId: fixtures.b.workspaceId }
-          : rule,
-      ),
+      rules: [
+        rule('copilot.chat', { workspaceId: fixtures.b.workspaceId }),
+        rule('caption.generate'),
+      ],
     });
     const b = await ask(tokenB);
     expect((b.body?.['tasks'] as Record<string, boolean>)['copilot.chat']).toBe(true);
@@ -174,24 +232,24 @@ describe('PR F (b) · the session’s own workspace only', () => {
       // The rest are unchanged for A: the difference is the workspace rule alone.
       expect((a.body?.['tasks'] as Record<string, boolean>)['caption.generate']).toBe(true);
     }
-    await routing.activate(originalRouting);
+    await routing.activate(ROUTING);
   });
 });
 
 describe('PR F (b) · switching AI in the Control Center flips the answer, with no release', () => {
   it('off, on and off again on the same running server', async () => {
-    await routing.activate(originalRouting);
+    await routing.activate(ROUTING);
 
-    await providers.activate(withProviderStatus('disabled'));
+    await providers.activate(providersWith('disabled'));
     const off = (await ask(tokenA)).body?.['tasks'] as Record<string, boolean>;
     expect(Object.values(off).every((value) => value === false)).toBe(true);
 
-    await providers.activate(withProviderStatus('active'));
+    await providers.activate(providersWith('active'));
     const on = (await ask(tokenA)).body?.['tasks'] as Record<string, boolean>;
     expect(on['copilot.chat']).toBe(true);
     expect(on['caption.generate']).toBe(true);
 
-    await providers.activate(withProviderStatus('disabled'));
+    await providers.activate(providersWith('disabled'));
     const offAgain = (await ask(tokenA)).body?.['tasks'] as Record<string, boolean>;
     expect(offAgain['copilot.chat']).toBe(false);
   });

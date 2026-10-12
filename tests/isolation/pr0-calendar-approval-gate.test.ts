@@ -15,7 +15,9 @@ import {
   createIsolationFixtures,
   type IsolationFixtures,
   OPEN_CHANNEL_GATE,
+  platformRoleClient,
 } from './fixtures';
+import { captureConfig, type ActivatedConfig } from './config-activation';
 
 /**
  * PR 0 — ONE BRAND APPROVAL GATE FOR EVERY CALENDAR.
@@ -35,19 +37,31 @@ import {
  */
 
 let app: PrismaClient;
+let platform: PrismaClient;
 let fixtures: IsolationFixtures;
+let publishing: ActivatedConfig;
 
 /** Far enough ahead that no sweep another suite runs will visit the rule. */
 const FUTURE = new Date(Date.UTC(2100, 0, 1));
 
 beforeAll(async () => {
   app = appRoleClient();
+  platform = platformRoleClient();
   fixtures = await createIsolationFixtures(app);
+  /*
+   * PR F (Q8, D-510): a post is scheduled only while one of its channels can be
+   * connected. This suite is about the approval gate, so the post's platform
+   * (instagram) is switched on for its run, and the document put back after.
+   */
+  publishing = await captureConfig(platform, 'publishing', { projected: true });
+  await publishing.activate({ providers: { instagram: { enabled: true } } });
 }, 60_000);
 
 afterAll(async () => {
+  await publishing?.restore();
   await closeQueues();
   await app?.$disconnect();
+  await platform?.$disconnect();
 });
 
 async function makePost(input: {
