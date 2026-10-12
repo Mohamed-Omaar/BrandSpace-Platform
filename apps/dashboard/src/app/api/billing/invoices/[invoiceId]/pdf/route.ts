@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { DeterministicPdfRenderer, renderRefusal, type DocumentLocale } from '@brandspace/billing';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { resolveApiWorkspace } from '../../../../../../server/customer-context';
+import { paymentsSwitchedOn } from '../../../../../../server/payments-switch';
 import { invoiceDocumentFor } from '../../../../../../server/commerce-context';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,8 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ invoiceId: string }> },
 ): Promise<NextResponse> {
+  // PR F (a): with payments off this is an unknown path — the same bare 404.
+  if (!(await paymentsSwitchedOn())) return new NextResponse(null, { status: 404 });
   const { invoiceId } = await context.params;
   const url = new URL(request.url);
   const locale: DocumentLocale = url.searchParams.get('locale') === 'ar' ? 'ar' : 'en';

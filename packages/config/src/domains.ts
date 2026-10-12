@@ -2329,6 +2329,23 @@ const commerceCreditPackSchema = z.object({
 });
 
 const commerceSchema = z.object({
+  /*
+   * PR F (a), Q6 — WHETHER ANY PAYMENT SURFACE EXISTS AT ALL.
+   *
+   * Off by default and off for the beta: no payment provider is chosen
+   * (D-204), so a "Buy" button could only ever fail. While it is off the
+   * customer sees no price, plan picker, credit pack, invoice, accounting
+   * export, cancel or resume, no "Upgrade" or "Top up" wording, and every
+   * checkout and subscription route answers the same 404 an unknown path
+   * does. The trial, its limits and its usage stay visible. The prices
+   * themselves stay configured (Q6): a trial still needs one in the
+   * workspace's currency, and turning this on later is configuration only.
+   */
+  payments: z
+    .object({
+      enabled: z.boolean().default(false),
+    })
+    .default({}),
   currencies: z.array(commerceCurrencySchema).default([]),
   markets: z.array(commerceMarketSchema).default([]),
   taxPolicies: z.array(commerceTaxPolicySchema).default([]),

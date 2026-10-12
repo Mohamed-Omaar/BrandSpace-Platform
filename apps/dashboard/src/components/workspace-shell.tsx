@@ -52,6 +52,7 @@ import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 
 import { signOutAction, switchWorkspaceAction } from '../app/[locale]/(auth)/actions';
 import { requestMessageLocale } from '../server/message-locale';
+import { paymentsSwitchedOn } from '../server/payments-switch';
 import { MessageLocaleProvider } from '../i18n/message-locale-context';
 
 /**
@@ -434,6 +435,8 @@ export async function WorkspaceShell({
   // The words this member reads (one Arabic for every country, round 4 Step 6).
   const words = requestMessageLocale(locale);
   const t = translator(words);
+  // PR F (a): payments decide whether "Upgrade" may be said anywhere in the frame.
+  const payments = await paymentsSwitchedOn();
   const other = locale === 'ar' ? 'en' : 'ar';
   /*
    * Each language by its own name and its code, the same in either interface
@@ -690,7 +693,8 @@ export async function WorkspaceShell({
                 >
                   {t('ws.unavailable')}
                 </p>
-                {permissionKeys.includes('billing.read') ? (
+                {/* PR F (a): no "Upgrade" while payments are off. */}
+                {!payments ? null : permissionKeys.includes('billing.read') ? (
                   <a
                     href={`/${locale}/plan`}
                     role="menuitem"

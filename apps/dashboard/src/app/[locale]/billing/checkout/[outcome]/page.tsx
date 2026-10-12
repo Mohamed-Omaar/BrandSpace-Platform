@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Money, formatMoneyDisplay } from '@brandspace/shared';
 import { requireWorkspace } from '../../../../../server/customer-context';
+import { paymentsSwitchedOn } from '../../../../../server/payments-switch';
 import { checkoutStateFor } from '../../../../../server/commerce-context';
 import { brandContextFor } from '../../../../../server/brand-context';
 import { translator } from '../../../../../i18n/messages';
@@ -31,6 +32,8 @@ export default async function CheckoutReturnPage({
   params: Promise<{ locale: string; outcome: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // PR F (a): with payments off this page does not exist.
+  if (!(await paymentsSwitchedOn())) notFound();
   const { locale, outcome } = await params;
   if (outcome !== 'success' && outcome !== 'cancelled') notFound();
 

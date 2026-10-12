@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { accountingCsv, accountingJson } from '@brandspace/billing';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { resolveApiWorkspace } from '../../../../server/customer-context';
+import { paymentsSwitchedOn } from '../../../../server/payments-switch';
 import { accountingExportFor } from '../../../../server/commerce-context';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,8 @@ const MAX_PERIOD_DAYS = 400;
  * record is a query nobody bounded and a report nobody asked for.
  */
 export async function GET(request: Request): Promise<NextResponse> {
+  // PR F (a): with payments off this is an unknown path — the same bare 404.
+  if (!(await paymentsSwitchedOn())) return new NextResponse(null, { status: 404 });
   const url = new URL(request.url);
   const format = url.searchParams.get('format') === 'json' ? 'json' : 'csv';
 

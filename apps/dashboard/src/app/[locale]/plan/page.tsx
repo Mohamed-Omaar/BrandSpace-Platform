@@ -22,6 +22,7 @@ import { brandContextFor } from '../../../server/brand-context';
 import { optionalMessage, translator, type MessageKey } from '../../../i18n/messages';
 import { ceilingFor, featureDisplayName, planDisplayName } from '../../../server/plan-usage';
 import { commerceSnapshotFor } from '../../../server/commerce-context';
+import { paymentsSwitchedOn } from '../../../server/payments-switch';
 import { SettingsFrame } from '../../../components/settings-frame';
 import { BillingTabs } from '../../../components/billing-tabs';
 import {
@@ -161,6 +162,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
    * key. The catalogue is configuration an owner activated; a key with no entry
    * is shown as the key, never as a name made up here.
    */
+  const payments = await paymentsSwitchedOn();
   const catalogue = await commerceSnapshotFor(workspace.workspaceId)
     .then((snapshot) => snapshot.plans)
     .catch(() => []);
@@ -688,11 +690,18 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
         out is a configuration leak (CLAUDE.md §2.3). The route to a change is a
         conversation, not a number rendered from the plan catalogue.
       */}
+        {/* PR F (a): with payments off the card names what the plan leaves
+          out and nothing about changing it — no "upgrade" while nothing can be bought. */}
         {unavailable.length > 0 ? (
-          <CustomerCard title={t('plan.upgradeTitle')} testId="upgrade-card">
-            <p style={{ marginBlockStart: 0, ...typographyTokens.bodySm }}>
-              {t('plan.upgradeBody')}
-            </p>
+          <CustomerCard
+            title={t(payments ? 'plan.upgradeTitle' : 'plan.notIncludedTitle')}
+            testId="upgrade-card"
+          >
+            {payments ? (
+              <p style={{ marginBlockStart: 0, ...typographyTokens.bodySm }}>
+                {t('plan.upgradeBody')}
+              </p>
+            ) : null}
             <ul
               data-testid="upgrade-list"
               style={{ margin: 0, paddingInlineStart: spacingTokens.lg }}

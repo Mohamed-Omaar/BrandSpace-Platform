@@ -15,6 +15,7 @@ import { translator } from '../../../../i18n/messages';
 import { businessSwitcherModel } from '../../../../server/business-switcher';
 import { SetupFrame } from '../../../../components/setup-frame';
 import { trialTerms } from '../../../../server/trial-terms';
+import { paymentsSwitchedOn } from '../../../../server/payments-switch';
 import { CreateWorkspaceForm } from './form';
 
 export const dynamic = 'force-dynamic';
@@ -127,7 +128,10 @@ export default async function CreateWorkspacePage({
             noResults: t('common.noResults'),
             conflict: t('createWorkspace.conflict'),
             forbidden: t('createWorkspace.forbidden'),
-            limitReached: t('ws.limitReached'),
+            // PR F (a): no "Upgrade" while payments are off.
+            limitReached: t(
+              (await paymentsSwitchedOn()) ? 'ws.limitReached' : 'ws.limitReachedPlain',
+            ),
             localeAr: t('brandProfile.localeAr'),
             localeEn: t('brandProfile.localeEn'),
             city: t('settings.city'),

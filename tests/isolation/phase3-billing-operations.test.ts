@@ -19,6 +19,8 @@ import {
 } from '@brandspace/entitlements';
 import { MaintenanceScheduler } from '../../apps/api/src/scheduler';
 import { ensurePlatformRole, platformRoleClient } from './fixtures';
+import { captureConfig, type ActivatedConfig } from './config-activation';
+import { CATALOGUE } from '../support/commerce-fixture';
 
 /**
  * CURRENT EXECUTION PHASE 3 — the financial operations, against a real
@@ -113,6 +115,7 @@ function actor() {
 }
 
 let created: string[] = [];
+let commerce: ActivatedConfig;
 
 /** A workspace of this suite's own, with a wallet and nothing else. */
 async function freshWorkspace(planKey: string | null): Promise<string> {
@@ -233,10 +236,18 @@ beforeAll(async () => {
     data: { currentPeriodEnd: new Date('2099-01-01T00:00:00.000Z') },
   });
 
+  /*
+   * PR F (a), Q7: a trial is ended at its date only while payments are on —
+   * the world this suite was written for. The off case is its own test below.
+   */
+  commerce = await captureConfig(platform, 'commerce', { projected: true });
+  await commerce.activate(CATALOGUE as unknown as Record<string, unknown>);
+
   scheduler = new MaintenanceScheduler({ environment: ENV, clock });
 }, 60_000);
 
 afterAll(async () => {
+  await commerce?.restore();
   // The workspaces this suite made, and nothing else. Cascades take the wallet,
   // the ledger, the grants and the subscription with them.
   if (created.length > 0) {
@@ -341,6 +352,29 @@ describe('the cycle boundary is crossed by the scheduler, exactly once', () => {
 
     expect((await subscription(workspaceId)).status).toBe('EXPIRED');
     expect((await wallet(workspaceId)).balanceMilliCredits).toBe(0n);
+  });
+
+  it('PR F (Q7): WITH PAYMENTS OFF, a trial past its end keeps running — nothing locks', async () => {
+    const workspaceId = await freshWorkspace(FIXTURE_PLAN.key);
+    await dueSubscription(workspaceId, {
+      status: 'TRIALING',
+      trialStartedAt: new Date(now.getTime() - 30 * 86_400_000),
+      trialEndsAt: new Date(now.getTime() - 86_400_000),
+    });
+    const { payments: _payments, ...withoutPayments } = CATALOGUE;
+    await commerce.activate(withoutPayments as unknown as Record<string, unknown>);
+    try {
+      await scheduler.advanceBillingCycles(200);
+      const kept = await subscription(workspaceId);
+      expect(kept.status).toBe('TRIALING');
+      // Its plan and its end date are kept: the card still says when it ended.
+      expect(kept.planKey).toBe(FIXTURE_PLAN.key);
+    } finally {
+      await commerce.activate(CATALOGUE as unknown as Record<string, unknown>);
+    }
+    // Payments on again: the same trial now ends, exactly as before PR F.
+    await scheduler.advanceBillingCycles(200);
+    expect((await subscription(workspaceId)).status).toBe('EXPIRED');
   });
 
   it('applies a scheduled downgrade at the boundary, and pins its price', async () => {

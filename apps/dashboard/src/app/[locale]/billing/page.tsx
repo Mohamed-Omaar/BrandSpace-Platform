@@ -27,6 +27,7 @@ import {
 import { NoAccessPage } from '../../../components/no-access-page';
 import { PermissionNotice } from '../../../components/permission-notice';
 import { billingOverviewFor, commerceSnapshotFor } from '../../../server/commerce-context';
+import { paymentsSwitchedOn } from '../../../server/payments-switch';
 import { brandContextFor } from '../../../server/brand-context';
 import { translator, type MessageKey } from '../../../i18n/messages';
 import { SettingsFrame } from '../../../components/settings-frame';
@@ -70,6 +71,12 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
   // Q18 — the balance is shown to the people who spend it (`credits.read` + `copilot.use`).
   const mayReadCredits = mayReadCreditBalance(workspace.permissionKeys);
 
+  /*
+   * PR F (a), Q6 — with payments off this page keeps the plan's status and
+   * trial date, its usage and the credit balance, and leaves out every price,
+   * plan picker, pack, invoice, export, cancel and resume.
+   */
+  const payments = await paymentsSwitchedOn();
   const snapshot = await commerceSnapshotFor(workspace.workspaceId);
   const overview = await billingOverviewFor(workspace.workspaceId, snapshot.currencyScale);
   const wallet = mayReadCredits
@@ -311,7 +318,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
       >
         {/* A5/E6 — changing the plan or payment method is owner-only; say so
           once, where the buttons would be, instead of leaving them missing. */}
-        {mayManage ? null : (
+        {mayManage || !payments ? null : (
           <PermissionNotice
             locale={locale}
             permissionKey="billing.manage"
@@ -321,18 +328,18 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
         )}
         {/* The three states dunning can put a workspace in, each said plainly and
           each stating what is NOT happening: nothing is being deleted. */}
-        {subscription?.status === 'SUSPENDED' ? (
+        {payments && subscription?.status === 'SUSPENDED' ? (
           <CustomerBanner tone="error">
             <strong>{t('billing.suspendedTitle')}</strong> {t('billing.suspendedBody')}
           </CustomerBanner>
         ) : null}
-        {subscription?.status === 'PAST_DUE' ? (
+        {payments && subscription?.status === 'PAST_DUE' ? (
           <CustomerBanner tone="warning">
             <strong>{t('billing.pastDue')}</strong>{' '}
             {fill('billing.pastDueBody', { date: day(subscription.graceEndsAt) })}
           </CustomerBanner>
         ) : null}
-        {subscription?.cancelAtPeriodEnd ? (
+        {payments && subscription?.cancelAtPeriodEnd ? (
           <CustomerBanner tone="warning">
             {fill('billing.cancelScheduled', { date: day(subscription.currentPeriodEnd) })}{' '}
             {mayManage ? (
@@ -364,7 +371,7 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                   <span className="bsp-bl-pname" data-testid="billing-plan">
                     {planDisplayName(subscription.planKey, snapshot.plans, locale) ?? ''}
                   </span>
-                  {currentPrice ? (
+                  {payments && currentPrice ? (
                     <span className="bsp-ltr bsp-bl-price">
                       {price(currentPrice)} /{' '}
                       {t(
@@ -382,7 +389,9 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                   {' · '}
                   {subscription.status === 'TRIALING'
                     ? t('billing.trialEnds')
-                    : t('billing.renews')}{' '}
+                    : RENEWING_STATUSES.has(subscription.status)
+                      ? t('billing.renews')
+                      : t('billing.ended')}{' '}
                   <span data-testid="billing-period">
                     {day(
                       subscription.status === 'TRIALING'
@@ -397,11 +406,11 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                 <p data-testid="no-subscription" className="bsp-bl-pname">
                   {t('billing.noSubscription')}
                 </p>
-                <p className="bsp-bl-sub">{t('billing.noSubscriptionBody')}</p>
+                {payments ? <p className="bsp-bl-sub">{t('billing.noSubscriptionBody')}</p> : null}
               </>
             )}
 
-            {subscription?.pendingPlanKey ? (
+            {payments && subscription?.pendingPlanKey ? (
               <div className="bsp-bl-pending" data-testid="pending-change">
                 <span className="bsp-xstatus bsp-info">{t('billing.pendingChange')}</span>
                 <p className="bsp-bl-sub">
@@ -450,106 +459,108 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                 (line 1452); "Usage & limits" (the detail page), the export and
                 cancelling, which the prototype does not draw, are under "⋯".
               */}
-              <details className="bsp-bl-change">
-                <summary className="bsp-btn bsp-sm bsp-sec" data-testid="billing-change-plan">
-                  {mayManage ? t('billing.changePlan') : t('billing.plans')}
-                </summary>
-                <div className="bsp-bl-plans" data-testid="plans-card">
-                  <p style={mutedStyle}>
-                    {fill('billing.plansIn', { currency: snapshot.currency })}
-                  </p>
-                  <p style={mutedStyle}>{t('billing.downgradeNotice')}</p>
-                  <div className="bsp-bl-tiles">
-                    {snapshot.plans.map((plan) => {
-                      const availability = snapshot.availability.find(
-                        (a) => a.planKey === plan.key,
-                      );
-                      /*
-                       * "CURRENT" MEANS PAID FOR, not merely assigned.
-                       *
-                       * A trial runs ON a plan, so treating that as current left a
-                       * trialing customer looking at "Your current plan" with no way to
-                       * pay for it — the conversion the whole trial exists to produce.
-                       * Found by the end-to-end journey, which could not buy anything.
-                       */
-                      const isCurrent =
-                        subscription?.planKey === plan.key && subscription.status !== 'TRIALING';
-                      const isDowngrade = plan.tier < currentTier;
-                      return (
-                        <section
-                          key={plan.key}
-                          data-testid={`plan-${plan.key}`}
-                          className="bsp-bl-tile"
-                          data-current={isCurrent ? 'true' : undefined}
-                        >
-                          <h3 className="bsp-bl-tname">
-                            {locale === 'ar' ? plan.nameAr : plan.nameEn}
-                          </h3>
-                          <p style={mutedStyle}>
-                            {locale === 'ar' ? plan.descriptionAr : plan.descriptionEn}
-                          </p>
+              {payments ? (
+                <details className="bsp-bl-change">
+                  <summary className="bsp-btn bsp-sm bsp-sec" data-testid="billing-change-plan">
+                    {mayManage ? t('billing.changePlan') : t('billing.plans')}
+                  </summary>
+                  <div className="bsp-bl-plans" data-testid="plans-card">
+                    <p style={mutedStyle}>
+                      {fill('billing.plansIn', { currency: snapshot.currency })}
+                    </p>
+                    <p style={mutedStyle}>{t('billing.downgradeNotice')}</p>
+                    <div className="bsp-bl-tiles">
+                      {snapshot.plans.map((plan) => {
+                        const availability = snapshot.availability.find(
+                          (a) => a.planKey === plan.key,
+                        );
+                        /*
+                         * "CURRENT" MEANS PAID FOR, not merely assigned.
+                         *
+                         * A trial runs ON a plan, so treating that as current left a
+                         * trialing customer looking at "Your current plan" with no way to
+                         * pay for it — the conversion the whole trial exists to produce.
+                         * Found by the end-to-end journey, which could not buy anything.
+                         */
+                        const isCurrent =
+                          subscription?.planKey === plan.key && subscription.status !== 'TRIALING';
+                        const isDowngrade = plan.tier < currentTier;
+                        return (
+                          <section
+                            key={plan.key}
+                            data-testid={`plan-${plan.key}`}
+                            className="bsp-bl-tile"
+                            data-current={isCurrent ? 'true' : undefined}
+                          >
+                            <h3 className="bsp-bl-tname">
+                              {locale === 'ar' ? plan.nameAr : plan.nameEn}
+                            </h3>
+                            <p style={mutedStyle}>
+                              {locale === 'ar' ? plan.descriptionAr : plan.descriptionEn}
+                            </p>
 
-                          {availability?.available && availability.monthly ? (
-                            <p
-                              data-testid={`plan-price-${plan.key}`}
-                              className="bsp-ltr bsp-bl-tprice"
-                            >
-                              {price(availability.monthly)}{' '}
-                              <span
-                                style={{
-                                  ...typographyTokens.caption,
-                                  color: colorTokens.textMuted,
-                                }}
+                            {availability?.available && availability.monthly ? (
+                              <p
+                                data-testid={`plan-price-${plan.key}`}
+                                className="bsp-ltr bsp-bl-tprice"
                               >
-                                / {t('billing.perMonth')}
-                              </span>
-                            </p>
-                          ) : (
-                            /* THE REASON, NOT AN OMISSION. A plan with no price in this
-                             currency says so — nothing is converted to fill the gap. */
-                            <p data-testid={`plan-unavailable-${plan.key}`} style={mutedStyle}>
-                              {fill(
-                                `billing.unavailable.${availability?.reason ?? 'not_active'}` as MessageKey,
-                                { currency: snapshot.currency },
-                              )}
-                            </p>
-                          )}
-
-                          {isCurrent ? (
-                            <span
-                              data-testid={`plan-current-${plan.key}`}
-                              className="bsp-xstatus bsp-ai bsp-bl-start"
-                            >
-                              {t('billing.currentPlan')}
-                            </span>
-                          ) : mayManage && availability?.available ? (
-                            isDowngrade ? (
-                              <ScheduleDowngradeButton
-                                failedLabel={t('billing.actionFailed')}
-                                planKey={plan.key}
-                                label={t('billing.downgradeSchedule')}
-                                busyLabel={t('billing.checkoutOpening')}
-                                testId={`plan-downgrade-${plan.key}`}
-                              />
+                                {price(availability.monthly)}{' '}
+                                <span
+                                  style={{
+                                    ...typographyTokens.caption,
+                                    color: colorTokens.textMuted,
+                                  }}
+                                >
+                                  / {t('billing.perMonth')}
+                                </span>
+                              </p>
                             ) : (
-                              <BuyPlanButton
-                                locale={locale}
-                                planKey={plan.key}
-                                billingInterval="MONTH"
-                                label={t('billing.choosePlan')}
-                                busyLabel={t('billing.checkoutOpening')}
-                                failedLabel={t('billing.checkoutFailed')}
-                                redirectNotice={t('billing.checkoutRedirect')}
-                                testId={`plan-buy-${plan.key}`}
-                              />
-                            )
-                          ) : null}
-                        </section>
-                      );
-                    })}
+                              /* THE REASON, NOT AN OMISSION. A plan with no price in this
+                             currency says so — nothing is converted to fill the gap. */
+                              <p data-testid={`plan-unavailable-${plan.key}`} style={mutedStyle}>
+                                {fill(
+                                  `billing.unavailable.${availability?.reason ?? 'not_active'}` as MessageKey,
+                                  { currency: snapshot.currency },
+                                )}
+                              </p>
+                            )}
+
+                            {isCurrent ? (
+                              <span
+                                data-testid={`plan-current-${plan.key}`}
+                                className="bsp-xstatus bsp-ai bsp-bl-start"
+                              >
+                                {t('billing.currentPlan')}
+                              </span>
+                            ) : mayManage && availability?.available ? (
+                              isDowngrade ? (
+                                <ScheduleDowngradeButton
+                                  failedLabel={t('billing.actionFailed')}
+                                  planKey={plan.key}
+                                  label={t('billing.downgradeSchedule')}
+                                  busyLabel={t('billing.checkoutOpening')}
+                                  testId={`plan-downgrade-${plan.key}`}
+                                />
+                              ) : (
+                                <BuyPlanButton
+                                  locale={locale}
+                                  planKey={plan.key}
+                                  billingInterval="MONTH"
+                                  label={t('billing.choosePlan')}
+                                  busyLabel={t('billing.checkoutOpening')}
+                                  failedLabel={t('billing.checkoutFailed')}
+                                  redirectNotice={t('billing.checkoutRedirect')}
+                                  testId={`plan-buy-${plan.key}`}
+                                />
+                              )
+                            ) : null}
+                          </section>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              </details>
+                </details>
+              ) : null}
               {/* Gate 2b — "Usage & limits", which the prototype does not draw, is under "⋯" (D-471). */}
               <MoreDisclosure label={t('billing.more')} testId="billing-more" align="start">
                 <Link
@@ -559,9 +570,13 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                 >
                   {t('billing.usageLink')} →
                 </Link>
-                {exportForm}
-                {cancelForm}
-                <p style={mutedStyle}>{t('billing.creditNoteNotice')}</p>
+                {payments ? (
+                  <>
+                    {exportForm}
+                    {cancelForm}
+                    <p style={mutedStyle}>{t('billing.creditNoteNotice')}</p>
+                  </>
+                ) : null}
               </MoreDisclosure>
             </div>
           </section>
@@ -581,14 +596,14 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
                   policy page: prepaid, hard stop, no debt. */}
                 <p className="bsp-bl-sub">
                   {wallet.balanceCredits === 0
-                    ? t('billing.creditsZero')
+                    ? t(payments ? 'billing.creditsZero' : 'billing.creditsNone')
                     : t('billing.creditsPrepaid')}
                 </p>
               </>
             ) : (
               <p className="bsp-bl-sub">{t('billing.creditsPrepaid')}</p>
             )}
-            {snapshot.packs.length > 0 ? (
+            {payments && snapshot.packs.length > 0 ? (
               <details className="bsp-bl-change">
                 <summary className="bsp-btn bsp-sm bsp-pur" data-testid="billing-buy-credits">
                   {buyCreditsLabel}
@@ -648,40 +663,45 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
         </div>
 
         {/* The invoices, as the prototype's card of rows (line 1462), no heading. */}
-        <section className="bsp-card bsp-bl-invcard" data-testid="invoices-card">
-          {overview.invoices.length === 0 ? (
-            <p className="bsp-bl-none">{t('billing.invoicesEmpty')}</p>
-          ) : (
-            <ul
-              className="bsp-bl-inv"
-              aria-label={t('billing.invoices')}
-              data-testid="invoices-table"
-            >
-              {overview.invoices.map((invoice) => (
-                <li key={invoice.id} className="bsp-row" data-testid={`invoice-${invoice.id}`}>
-                  <span className="bsp-ltr bsp-bl-ino">{invoice.number ?? '—'}</span>
-                  <span className="bsp-bl-idate">{day(invoice.issuedAt)}</span>
-                  <span className="bsp-ltr bsp-bl-iamt">{show(invoice.total)}</span>
-                  <span
-                    className={`bsp-pill ${invoice.status === 'PAID' ? 'bsp-p-ok' : 'bsp-p-neu'}`}
-                  >
-                    {t(`billing.invoiceStatus.${invoice.status}` as MessageKey)}
-                  </span>
-                  <Link
-                    href={`/${locale}/billing/invoices/${invoice.id}`}
-                    className="bsp-btn bsp-sm bsp-ghost"
-                  >
-                    {t('billing.invoiceView')}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {payments ? (
+          <section className="bsp-card bsp-bl-invcard" data-testid="invoices-card">
+            {overview.invoices.length === 0 ? (
+              <p className="bsp-bl-none">{t('billing.invoicesEmpty')}</p>
+            ) : (
+              <ul
+                className="bsp-bl-inv"
+                aria-label={t('billing.invoices')}
+                data-testid="invoices-table"
+              >
+                {overview.invoices.map((invoice) => (
+                  <li key={invoice.id} className="bsp-row" data-testid={`invoice-${invoice.id}`}>
+                    <span className="bsp-ltr bsp-bl-ino">{invoice.number ?? '—'}</span>
+                    <span className="bsp-bl-idate">{day(invoice.issuedAt)}</span>
+                    <span className="bsp-ltr bsp-bl-iamt">{show(invoice.total)}</span>
+                    <span
+                      className={`bsp-pill ${invoice.status === 'PAID' ? 'bsp-p-ok' : 'bsp-p-neu'}`}
+                    >
+                      {t(`billing.invoiceStatus.${invoice.status}` as MessageKey)}
+                    </span>
+                    <Link
+                      href={`/${locale}/billing/invoices/${invoice.id}`}
+                      className="bsp-btn bsp-sm bsp-ghost"
+                    >
+                      {t('billing.invoiceView')}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
       </SettingsFrame>
     </WorkspaceShell>
   );
 }
+
+/** A subscription that bills again at its period end; any other non-trial status has ended. */
+const RENEWING_STATUSES: ReadonlySet<string> = new Set(['ACTIVE', 'PAST_DUE', 'SUSPENDED']);
 
 const mutedStyle = {
   margin: 0,

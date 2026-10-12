@@ -9,6 +9,7 @@ import {
   SubscriptionLifecycleService,
   commercePolicyFrom,
   creditLedgerPort,
+  paymentsEnabled,
   type CommercePolicy,
   type PaymentProviderAdapter,
   type ProviderRegistry,
@@ -89,6 +90,17 @@ function configuration(): ConfigurationService {
 export async function commercePolicy(): Promise<CommercePolicy> {
   const document = await configuration().get('commerce', currentEnvironment());
   return commercePolicyFrom(document as Record<string, unknown>);
+}
+
+/**
+ * PR F (a), Q6 — while `commerce.payments.enabled` is off, every checkout and
+ * subscription route answers exactly as an unknown path does (`callNotFound`),
+ * before any session is read: the switch is not a permission, so it must not
+ * be told apart from "there is no such thing here". Read per request, like the
+ * catalogue, so turning payments on needs no release.
+ */
+export async function paymentsSwitchedOff(): Promise<boolean> {
+  return !paymentsEnabled(await commercePolicy());
 }
 
 export async function onboardingPolicy(): Promise<OnboardingPolicy> {

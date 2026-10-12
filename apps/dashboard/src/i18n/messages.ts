@@ -241,6 +241,7 @@ export const messages = {
     'ws.usageUnlimited': 'مساحات العمل: {used}',
     'ws.new': '+ مساحة عمل جديدة',
     'ws.limitReached': 'وصلت إلى عدد مساحات العمل في باقتك. رقِّ الباقة لإضافة مساحة أخرى.',
+    'ws.limitReachedPlain': 'وصلت إلى عدد مساحات العمل في باقتك.',
     'ws.limitToast': 'تتضمن باقتك {allowed} من مساحات العمل، وقد استخدمتها كلها.',
     'ws.createWorkspace': 'إنشاء مساحة عمل',
     'ws.limitNote': 'تشمل باقتك {allowed} من مساحات العمل، وتستخدمها كلها ({used}/{allowed}).',
@@ -848,6 +849,7 @@ export const messages = {
     'plan.ledgerType.TRIAL_GRANT': 'رصيد التجربة',
     'plan.historyNone': 'لا توجد حركات بعد.',
     'plan.upgradeTitle': 'ما الذي تفتحه الترقية',
+    'plan.notIncludedTitle': 'غير مشمول في خطتك',
     'plan.upgradeBody': 'هذه الإمكانات غير متاحة في خطتك الحالية. تواصل معنا لترقية الخطة.',
     'plan.hardStop':
       'عند نفاد الرصيد تتوقف إجراءات الذكاء الاصطناعي برسالة واضحة. لا توجد رسوم تجاوز ولا مبالغ مفاجئة على الفاتورة.',
@@ -3447,6 +3449,7 @@ export const messages = {
     'nav.billing': 'الفوترة والاستخدام',
     'billing.tabPayments': 'الخطة والمدفوعات',
     'billing.tabUsage': 'الاستخدام والحدود',
+    'billing.tabPlan': 'الخطة',
     'billing.title': 'الفوترة والاستخدام',
     'billing.subtitle': 'خطتك، رصيدك، فواتيرك ومشترياتك.',
     'billing.currencyNotice': 'كل المبالغ بالعملة التي اخترتها عند إنشاء حسابك.',
@@ -3463,6 +3466,7 @@ export const messages = {
     'billing.status.PAUSED': 'متوقّف مؤقتًا',
     'billing.status.CHECKOUT_PENDING': 'بانتظار تأكيد الدفع',
     'billing.renews': 'يتجدّد في',
+    'billing.ended': 'انتهت في',
     'billing.trialEnds': 'تنتهي الفترة التجريبية في',
     'billing.noSubscription': 'لا يوجد اشتراك بعد',
     'billing.noSubscriptionBody':
@@ -3497,6 +3501,7 @@ export const messages = {
     'billing.creditsPrepaid':
       'الرصيد مدفوع مسبقًا. عند الوصول إلى صفر تتوقف عمليات الذكاء الاصطناعي، ولا يوجد رصيد مكشوف ولا دين لاحق.',
     'billing.creditsZero': 'لا يوجد رصيد. أضف حزمة أو غيّر خطتك للمتابعة.',
+    'billing.creditsNone': 'لا يوجد رصيد متبقٍ.',
     'billing.packs': 'حزم الرصيد',
     'billing.buyCredits': 'شراء {credits} رصيد',
     'billing.usageLink': 'الاستخدام والحدود',
@@ -4264,6 +4269,7 @@ export const messages = {
     'ws.usageUnlimited': 'Workspaces: {used}',
     'ws.new': '+ New workspace',
     'ws.limitReached': 'You have reached your plan’s workspace limit. Upgrade to add another.',
+    'ws.limitReachedPlain': 'You have reached your plan’s workspace limit.',
     'ws.limitToast': 'Your plan includes {allowed} workspaces, and all of them are in use.',
     'ws.createWorkspace': 'Create workspace',
     'ws.limitNote':
@@ -4883,6 +4889,7 @@ export const messages = {
     'plan.ledgerType.TRIAL_GRANT': 'Trial credits',
     'plan.historyNone': 'No credit movements yet.',
     'plan.upgradeTitle': 'What an upgrade unlocks',
+    'plan.notIncludedTitle': 'Not included in your plan',
     'plan.upgradeBody':
       'These capabilities are not part of your current plan. Get in touch to change plan.',
     'plan.hardStop':
@@ -7579,6 +7586,7 @@ export const messages = {
     'nav.billing': 'Billing & usage',
     'billing.tabPayments': 'Plan & payments',
     'billing.tabUsage': 'Usage & limits',
+    'billing.tabPlan': 'Plan',
     'billing.title': 'Billing & usage',
     'billing.subtitle': 'Your plan, your balance, your invoices and your purchases.',
     'billing.currencyNotice':
@@ -7596,6 +7604,7 @@ export const messages = {
     'billing.status.PAUSED': 'Paused',
     'billing.status.CHECKOUT_PENDING': 'Waiting for payment confirmation',
     'billing.renews': 'Renews on',
+    'billing.ended': 'Ended on',
     'billing.trialEnds': 'Trial ends on',
     'billing.noSubscription': 'No subscription yet',
     'billing.noSubscriptionBody':
@@ -7631,6 +7640,7 @@ export const messages = {
     'billing.creditsPrepaid':
       'Credits are prepaid. At zero, AI operations stop — there is no overdraft and no later bill.',
     'billing.creditsZero': 'No credits left. Add a pack or change your plan to continue.',
+    'billing.creditsNone': 'No credits left.',
     'billing.packs': 'Credit packs',
     'billing.buyCredits': 'Buy {credits} credits',
     'billing.usageLink': 'Usage & limits',
@@ -8476,16 +8486,16 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
    * kind of wall and the fact that it is clearable.
    */
   QUOTA_EXCEEDED: {
-    en: 'Your account has reached a limit on its plan. Free some space or ask an admin to change the plan.',
-    ar: 'وصل حسابك إلى أحد حدود خطته. أفرِغ بعض المساحة أو اطلب من المسؤول تغيير الخطة.',
+    en: 'Your account has reached a limit on its plan. Free some space to continue.',
+    ar: 'وصل حسابك إلى أحد حدود خطته. أفرِغ بعض المساحة للمتابعة.',
   },
   ENTITLEMENT_REQUIRED: {
-    en: 'Your plan does not include that. An admin can change the plan.',
-    ar: 'خطتك لا تشمل هذا. يمكن للمسؤول تغيير الخطة.',
+    en: 'Your plan does not include that.',
+    ar: 'خطتك لا تشمل هذا.',
   },
   INSUFFICIENT_CREDITS: {
-    en: 'There are not enough AI credits for that. Top up or wait for the next allowance.',
-    ar: 'لا يوجد رصيد ذكاء اصطناعي كافٍ. أضف رصيدًا أو انتظر المخصّص التالي.',
+    en: 'There are not enough AI credits for that.',
+    ar: 'لا يوجد رصيد ذكاء اصطناعي كافٍ لهذا.',
   },
   MEMBER_INVITED: { en: 'Invitation sent.', ar: 'تم إرسال الدعوة.' },
   MEMBER_REMOVED: { en: 'Member removed.', ar: 'تمت إزالة العضو.' },

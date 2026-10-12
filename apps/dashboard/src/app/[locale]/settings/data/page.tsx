@@ -7,6 +7,7 @@ import {
 } from '../../../../server/customer-context';
 import { NoAccessPage } from '../../../../components/no-access-page';
 import { brandContextFor } from '../../../../server/brand-context';
+import { paymentsSwitchedOn } from '../../../../server/payments-switch';
 import { SettingsFrame } from '../../../../components/settings-frame';
 import { statusMessage, translator, type MessageKey } from '../../../../i18n/messages';
 import { CustomerBanner, WorkspaceShell } from '../../../../components/workspace-shell';
@@ -87,7 +88,8 @@ export default async function DataControlsPage({
     ...(may('analytics.export')
       ? [{ key: 'analyticsExport', available: true, href: '/analytics' }]
       : []),
-    ...(may('billing.read')
+    // PR F (a): the accounting export lives with the payments, off for the beta.
+    ...(may('billing.read') && (await paymentsSwitchedOn())
       ? [{ key: 'accountingExport', available: true, href: '/billing' }]
       : []),
     ...(may('brand_brain.read')
