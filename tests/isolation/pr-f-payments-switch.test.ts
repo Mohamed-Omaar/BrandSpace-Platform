@@ -42,7 +42,12 @@ const PAYMENT_ROUTES = [
 let platform: PrismaClient;
 let commerce: ActivatedConfig;
 
-type Server = { inject: Function; close(): Promise<unknown>; ready(): Promise<unknown> };
+type Injected = { statusCode: number; body: string };
+type Server = {
+  inject(options: Record<string, unknown>): Promise<Injected>;
+  close(): Promise<unknown>;
+  ready(): Promise<unknown>;
+};
 
 /** A fresh API process: new modules, so no configuration cache carries over. */
 async function freshServer(): Promise<Server> {

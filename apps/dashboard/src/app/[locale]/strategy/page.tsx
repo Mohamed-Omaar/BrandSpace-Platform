@@ -112,10 +112,9 @@ export default async function StrategyPage({
   // Q18 — proposing a strategy spends credits; reviewing one does not.
   // PR F (b), Q9: proposing one also needs its AI to be able to run; while it
   // cannot, the member who could propose sees "AI isn't available yet." instead.
-  const mayPropose = maySpendCredits(workspace.permissionKeys, 'strategy.manage');
   const aiStrategy = await aiAvailableFor('strategy.generate');
-  const mayGenerate = mayPropose && aiStrategy;
-  const aiOff = mayPropose && !aiStrategy;
+  const mayGenerate = maySpendCredits(workspace.permissionKeys, 'strategy.manage') && aiStrategy;
+  const aiOff = maySpendCredits(workspace.permissionKeys, 'strategy.manage') && !aiStrategy;
   const mayReview = may('brand_brain.review');
 
   const brandContext = await brandContextFor(

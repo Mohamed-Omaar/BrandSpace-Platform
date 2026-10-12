@@ -250,11 +250,26 @@ describe('P6-03a · Platform Admin is untouched', () => {
     // The brief is explicit that Platform Admin MFA and security rules do not
     // weaken. The customer floor lives in the `onboarding` domain, which the
     // admin application has no reason to read.
+    //
+    // PR F (e, D-513) — ONE READ-ONLY EXCEPTION: the owner's readiness page
+    // REPORTS the customer minimum (the closed beta wants 12). It reads the
+    // value to show it; no platform sign-in, password or MFA path is involved,
+    // and the two files are named here so a new reader cannot slip in.
+    const READINESS_REPORT = [
+      'apps/admin/src/server/owner-overview.ts',
+      'apps/admin/src/server/owner-readiness.ts',
+    ];
     const offenders: string[] = [];
     for (const file of sourceFiles('apps/admin/src', ['.ts', '.tsx'])) {
       const source = readFileSync(file, 'utf8');
-      if (source.includes('minPasswordLength')) offenders.push(file);
+      if (source.includes('minPasswordLength') && !READINESS_REPORT.some((r) => file.endsWith(r))) {
+        offenders.push(file);
+      }
     }
     expect(offenders).toEqual([]);
+    // The readiness report never sits on an auth path: neither file imports auth.
+    for (const file of READINESS_REPORT) {
+      expect(readFileSync(file, 'utf8'), file).not.toMatch(/from '@brandspace\/auth'/);
+    }
   });
 });

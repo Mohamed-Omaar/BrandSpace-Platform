@@ -839,6 +839,13 @@ describe('the design showcase cannot reach production', () => {
        * application chrome on an accounting document. Phase 10 §23, D-216.
        */
       'apps/dashboard/src/app/[locale]/billing/invoices/[invoiceId]/document/page.tsx',
+      /*
+       * PR F (Q11, D-512) — THE PUBLIC LEGAL PAGES' FRAME. Terms, Privacy and
+       * Data deletion open for anyone, signed in or not, so they have no
+       * WorkspaceShell; like the auth card, the frame is the page's shell and the
+       * document's title is its one <h1>.
+       */
+      'apps/dashboard/src/components/legal-page.tsx',
     ];
     const offenders = [
       ...collectSourceFiles('apps/dashboard/src'),
