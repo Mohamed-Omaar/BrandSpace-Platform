@@ -979,8 +979,10 @@ test.describe('the shell reproduces the demo geometry', () => {
      * D-468: the prototype's bar is Notes · Notifications · language · Create
      * (`.ibtn{inline-size:40px;block-size:40px;border-radius:12px}` and
      * `.btn.pur`: min-block-size 40px, padding 9px 16px, 13.5px/700); Review is
-     * the rail's Approvals and the Copilot is the floating button (48px high,
-     * `border-radius: 99px`, its name on screen). Search stays GONE (D-276).
+     * the rail's Approvals. The Copilot was the floating button (48px high,
+     * `border-radius: 99px`); Fix PR 2c (Q2, D-506) docks it in this bar on
+     * every width, as one of the bar's controls: 40px high, radius 12, its
+     * name on screen. Search stays GONE (D-276).
      */
     await expect(page.getByTestId('topbar-search')).toHaveCount(0);
     for (const key of ['notes', 'notifications']) {
@@ -992,9 +994,9 @@ test.describe('the shell reproduces the demo geometry', () => {
     }
     const copilot = page.getByTestId('topbar-copilot');
     const copilotBox = await copilot.boundingBox();
-    expect(copilotBox?.height).toBe(scaled(48));
+    expect(copilotBox?.height).toBe(scaled(40));
     expect(copilotBox?.width ?? 0).toBeGreaterThan(scaled(48));
-    await expect(copilot).toHaveCSS('border-radius', `${scaled(99)}px`);
+    await expect(copilot).toHaveCSS('border-radius', `${scaled(12)}px`);
     await expect(page.getByTestId('topbar-copilot-label')).toHaveText('Copilot');
     const create = page.getByTestId('topbar-create');
     expect((await create.boundingBox())?.height).toBe(scaled(40));

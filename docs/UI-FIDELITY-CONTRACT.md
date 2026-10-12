@@ -2281,7 +2281,8 @@ scheduled.
   width it now sits in the empty slot at the end of the header's action row — the mechanism the
   phone layout already used (D-468 (b)) — drawn as the header's own controls: 40px high, radius 12,
   the `.ibtn` grey `#f2f2f4`, a 32px mark, no blur and no shadow. It scrolls with the header, and an
-  open header menu stays above it. Measured in `tests/e2e/fix-2c-screens.spec.ts` at 1280, 1536 and
+  open header menu stays above it; it steps aside while a modal dialog or drawer is open, as it did
+  for the Copilot panel. Measured in `tests/e2e/fix-2c-screens.spec.ts` at 1280, 1536 and
   1920, en and ar: in its slot to the pixel, before and after scrolling, covering no header control.
 - **Pause on the campaign card (a PORT).** The prototype's card toggle (`toggleLabel` / `toggle`,
   L3673): `.bsp-camp-toggle`, a 6px gap, `padding: 6px 4px`, 12px / 600, `#55555c`, the pause glyph,

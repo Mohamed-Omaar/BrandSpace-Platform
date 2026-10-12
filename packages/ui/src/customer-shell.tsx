@@ -914,6 +914,15 @@ export function CustomerShell({
       const at = slot.getBoundingClientRect();
       const origin = anchor.getBoundingClientRect();
       control.style.setProperty('--bsp-fab-x', `${at.left - origin.left}px`);
+      /*
+       * Held inside the frame whatever its width: between a resize and the
+       * next placement the old offset must not push the page sideways (a
+       * 1440px offset on a window just narrowed to 390px did).
+       */
+      control.style.setProperty(
+        '--bsp-fab-left',
+        `clamp(0px, ${at.left - origin.left}px, calc(100% - ${control.offsetWidth}px))`,
+      );
       control.style.setProperty('--bsp-fab-y', `${at.top - origin.top}px`);
     };
     const schedule = () => {
