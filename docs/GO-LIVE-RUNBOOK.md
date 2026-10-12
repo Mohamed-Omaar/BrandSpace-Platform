@@ -25,9 +25,9 @@ Facts about the live Railway project come from the owner and are marked **(owner
   `EXPECTED_MIGRATIONS` in `packages/database/src/migration-manifest.ts`) before any of the four
   services reports ready. At `590717e` there were 41.
 - Expected end state: every service healthy; configuration activated from
-  `docs/production-config/`; Resend active; the Control Center readiness verdict **"not ready"**
-  for known reasons (AI is off, and email and storage can never read "tested", §4 step 10), with
-  the scanner and legal rows on "Beta only".
+  `docs/production-config/`; Resend active and Tested; storage Tested; the Control Center
+  readiness verdict **"not ready"** for one known reason (AI is off, §4 step 10), with the scanner
+  and legal rows on "Beta only".
 
 ## 2. Why the last deploy probably failed
 
@@ -173,8 +173,12 @@ APP_ENV=staging` and its verdict will be "not ready" for that reason alone. Igno
 6. **Configuration.** Sign in to the Control Center with MFA and activate the documents in
    `docs/production-config/` in the order its README gives (`plans` first, then `commerce`, …).
 7. **Secrets and providers.**
-   - Storage: the `STORAGE_*` variables on dashboard, api and worker (step 4). Optionally press
-     Activate on Integrations → Storage → Cloudflare R2 so the readiness row names it.
+   - Storage: the `STORAGE_*` variables on dashboard, api and worker (step 4). Then Integrations →
+     Storage → Cloudflare R2: press **Activate** so the readiness row names it, and press **Test
+     connection**. The Control Center asks the API to write, read back and delete one small file
+     with the API's own bucket key (`POST /v1/internal/storage/self-test`, service token); the
+     screen shows only whether each step worked. It needs `BRANDSPACE_API_URL` and
+     `INTERNAL_SERVICE_TOKEN` on admin (§5).
    - Scanner: off. `assets.json` already says so. Do not set `SCANII_*`.
    - Email: after step 8, so links use the final domain (below).
 8. **Domains.** Dashboard, api and admin on `brandspace.cc` subdomains of your choice; `landing`
@@ -184,18 +188,19 @@ APP_ENV=staging` and its verdict will be "not ready" for that reason alone. Igno
    switching, update those two variables and redeploy the services that carry them. Every email
    link and OAuth callback is built from them.
 9. **Email.** Verify `brandspace.cc` in Resend (`docs/production-config/EMAIL-DNS.md`), then
-   Integrations → Email → Resend: key, From, Save, Activate (`docs/production-config/README.md`
-   §3.1). Confirm with one real signup.
+   Integrations → Email → Resend: key, From, Save, **Test connection**, Activate
+   (`docs/production-config/README.md` §3.1). The Test sends one message to the signed-in
+   owner's own address and to nobody else; check that inbox. Then confirm with one real signup.
 10. **Readiness check** (Control Center home). Expected rows:
     - Ready: trial (`starter`, 90 days, priced in USD, every quota set), password (12), sender
       (Brandspace), post kinds, industries.
     - Beta only (counted as passing): scanner (off), legal (draft, review pending).
     - Not required while payments are off: payment, plans.
-    - **Not ready, knowingly:** AI (required in production, and off for the beta); email and
-      storage read "Switched on, but the connection has not been tested yet": both providers are
-      `testable: false` and the row only reads Ready after a passing test
-      (`apps/admin/src/server/owner-readiness.ts:155`). That is a code gap, not a configuration
-      step. The verdict therefore reads "not ready"; record that as accepted for the closed beta.
+    - Ready after a passing Test (steps 7 and 9): email (Resend) and storage (Cloudflare R2).
+      If either still reads "Switched on, but the connection has not been tested yet", press its
+      Test; a failed Test names the step that failed and never shows a key or a bucket.
+    - **Not ready, knowingly:** AI (required in production, and off for the beta). The verdict
+      therefore reads "not ready"; record that as accepted for the closed beta.
 
 ## 5. Every variable each production service needs (names only)
 
@@ -330,8 +335,8 @@ Listed only; those files were not edited.
 6. §1.3 says the dashboard and worker hold `CUSTOMER_MFA_VAULT_KEK` / `SOCIAL_TOKEN_VAULT_KEK`; in
    production what they must hold is the matching KMS ARN.
 7. No mention of `SCANII_API_KEY` / `SCANII_API_SECRET` or of scanning being off for the beta.
-8. §20 step 21 says each integration is "verified with Test Connection before activation"; Resend
-   and Cloudflare R2 have no Test Connection by design.
+8. ~~§20 step 21: Resend and Cloudflare R2 have no Test Connection~~ — both have one since the #79
+   review (D-516); step 21 is accurate again.
 
 **`docs/RAILWAY-ENVIRONMENT-MATRIX.md`**
 

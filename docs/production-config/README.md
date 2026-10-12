@@ -82,9 +82,13 @@ document together:
 3. Press **Save**. The key is stored under the reference
    `integration/email/resend/production/apiKey`. That is the reference in
    `integrations-email.json` (`integrationSecretRef` in `packages/integrations/src/registry.ts`).
-4. Press **Activate**. This creates and activates the same document as `integrations-email.json`.
-5. There is no Test button for Resend, by design. Confirm delivery with one real signup to an
-   address you control (`docs/RAILWAY-SMOKE-TEST.md` §7.2).
+4. Press **Test connection**. It sends one short message to your own signed-in address and to
+   nobody else, using the saved key and From address; check that inbox. The result reads "Sent a
+   test message to your address" or names why it failed, never the key. The readiness row turns
+   Ready once this passes (D-516).
+5. Press **Activate**. This creates and activates the same document as `integrations-email.json`.
+6. Confirm delivery once more with one real signup to an address you control
+   (`docs/RAILWAY-SMOKE-TEST.md` §7.2).
 
 If you paste `integrations-email.json` instead, save the key on the Integrations screen **first**.
 The document only holds the reference. Without a stored secret under that reference, every email
@@ -109,7 +113,10 @@ file bytes. Production and staging must use different buckets and different keys
 
 The readiness row for storage reads the `integrations.storage` document. To make the row show
 Cloudflare R2, press **Activate** on Integrations → Storage → Cloudflare R2. That writes only the
-record; the processes still read the environment.
+record; the processes still read the environment. Then press **Test connection**: the Control
+Center asks the API to write, read back and delete one small file with the API's own bucket key,
+and shows only whether each step worked (no bucket, endpoint or key). The row reads Ready once
+the Test passes (D-516).
 
 ### 3.3 Malware scanner
 
