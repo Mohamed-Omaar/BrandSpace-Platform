@@ -1433,6 +1433,13 @@ leave `USING` untouched, so what they permit to be written can never be read bac
 inside a workspace a NULL-workspace write is still refused, so a tenant cannot detach a record from their
 own history.
 
+**The role is not read under the session scope (Fix PR 2b, B3.2, D-504).** `role`'s policy shows a
+context-less read only the system roles, so a membership holding a workspace's own custom role used to
+join to null and break the whole list. `CustomerAuthService` now reads the memberships under the session
+scope and then each role inside THAT membership's workspace (`app.workspace_id` set to a workspace the
+session scope has just shown the person belongs to), under the unchanged `role` policy. No policy was
+widened for it; a role that does not resolve there grants nothing and its membership is left out.
+
 **A trap worth naming.** PostgreSQL applies `USING` to `INSERT … RETURNING`, and reports the refusal as
 `new row violates row-level security policy` — a _write_ error for a write the policy allows. Any table
 whose `WITH CHECK` is wider than its `USING` will do this, so both the audit path and the outbox generate

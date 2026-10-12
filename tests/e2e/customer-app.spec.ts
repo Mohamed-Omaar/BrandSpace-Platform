@@ -4,6 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL, ADMIN_BASE_URL, LOCALES } from './apps';
 import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
 import { expectNoHorizontalOverflow } from './overflow';
+import { withPlatformPrisma } from './platform-prisma';
 
 /**
  * The customer application, end to end, in a real browser.
@@ -297,6 +298,9 @@ test.describe('invitation acceptance', () => {
       .evaluate((el) => (el as HTMLInputElement).validity.valid);
     expect(shortIsValid).toBe(false);
 
+    // Fix PR 2b (B2.2): the invitee gives their own name, required.
+    await expect(page.getByTestId('invitation-name')).toHaveAttribute('required', '');
+    await page.fill('[data-testid="invitation-name"]', 'Nadia Newcomer');
     await page.fill('[data-testid="invitation-password"]', password);
     // P6-03a: the confirmation field. It is the customer's own check against a
     // typo and is deliberately NOT submitted — the server validates the
@@ -308,6 +312,14 @@ test.describe('invitation acceptance', () => {
     // Signed in, in the workspace, in one step.
     await page.waitForURL(/\/en\/overview/);
     await expect(page.getByTestId('heading')).toBeVisible();
+    // B2.2: the name they typed is the account's name, not their email.
+    const named = await withPlatformPrisma((prisma) =>
+      prisma.user.findUniqueOrThrow({
+        where: { email: customer.newcomerEmail },
+        select: { name: true },
+      }),
+    );
+    expect(named.name).toBe('Nadia Newcomer');
 
     // And the identity now works like any other. Cookies cleared first: the
     // onboarding already signed them in, and a sign-in form is not served to

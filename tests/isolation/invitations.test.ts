@@ -771,6 +771,8 @@ describe('invitations cannot escalate privileges', () => {
  */
 describe('onboarding a brand-new invitee', () => {
   const NEW_PASSWORD = 'a-strong-local-only-test-password-7731';
+  // Fix PR 2b (B2.2): the set-up form now asks the invitee's name.
+  const NEW_NAME = 'Newcomer Name';
 
   async function inviteFreshAddress(): Promise<{ token: string; email: string }> {
     const email = uniqueEmail('newcomer');
@@ -783,7 +785,7 @@ describe('onboarding a brand-new invitee', () => {
   it('creates a verified identity and the membership in one step', async () => {
     const { token, email } = await inviteFreshAddress();
 
-    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD, NEW_NAME);
 
     expect(onboarded.workspaceId).toBe(fixtures.a.workspaceId);
     expect(onboarded.roleKey).toBe('analyst');
@@ -806,9 +808,48 @@ describe('onboarding a brand-new invitee', () => {
     expect(membership.userId).toBe(user.id);
   });
 
+  /*
+   * FIX PR 2b (B2.2) — THE INVITEE GIVES THEIR NAME ON THEIR OWN FORM, and it
+   * is written to `User.name`, so a new member no longer shows as their email.
+   */
+  it("writes the invitee's own name, trimmed, to User.name", async () => {
+    const { token, email } = await inviteFreshAddress();
+    await invitations.acceptAsNewUser(token, NEW_PASSWORD, `  ${NEW_NAME}  `);
+    const user = await platform.user.findUniqueOrThrow({ where: { email } });
+    expect(user.name).toBe(NEW_NAME);
+  });
+
+  it('caps the name at 120 characters, as sign-up does', async () => {
+    const { token, email } = await inviteFreshAddress();
+    await invitations.acceptAsNewUser(token, NEW_PASSWORD, 'n'.repeat(300));
+    const user = await platform.user.findUniqueOrThrow({ where: { email } });
+    expect(user.name).toBe('n'.repeat(120));
+  });
+
+  it('refuses a blank name without creating the account or consuming the invitation', async () => {
+    const { token, email } = await inviteFreshAddress();
+    await expect(invitations.acceptAsNewUser(token, NEW_PASSWORD, '   ')).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+    expect(await platform.user.findUnique({ where: { email } })).toBeNull();
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD, NEW_NAME);
+    expect(onboarded.userId).toBeDefined();
+  });
+
+  it('names an invited account that has no password yet, too', async () => {
+    const email = uniqueEmail('passwordless');
+    const existing = await platform.user.create({
+      data: { timezone: 'UTC', email, status: 'PENDING' },
+    });
+    const issued = await issueTo(email);
+    await invitations.acceptAsNewUser(issued.token, NEW_PASSWORD, NEW_NAME);
+    const after = await platform.user.findUniqueOrThrow({ where: { id: existing.id } });
+    expect(after.name).toBe(NEW_NAME);
+  });
+
   it('the new identity can then sign in normally', async () => {
     const { token, email } = await inviteFreshAddress();
-    await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+    await invitations.acceptAsNewUser(token, NEW_PASSWORD, NEW_NAME);
 
     const auth = new CustomerAuthService({ prisma: app });
     const session = await auth.signIn({ email, password: NEW_PASSWORD });
@@ -822,9 +863,9 @@ describe('onboarding a brand-new invitee', () => {
     const { token, email } = await inviteFreshAddress();
 
     const results = await Promise.allSettled([
-      invitations.acceptAsNewUser(token, NEW_PASSWORD),
-      invitations.acceptAsNewUser(token, NEW_PASSWORD),
-      invitations.acceptAsNewUser(token, NEW_PASSWORD),
+      invitations.acceptAsNewUser(token, NEW_PASSWORD, NEW_NAME),
+      invitations.acceptAsNewUser(token, NEW_PASSWORD, NEW_NAME),
+      invitations.acceptAsNewUser(token, NEW_PASSWORD, NEW_NAME),
     ]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
 
@@ -854,7 +895,7 @@ describe('onboarding a brand-new invitee', () => {
     });
     const issued = await issueTo(email);
 
-    await expect(invitations.acceptAsNewUser(issued.token, NEW_PASSWORD)).rejects.toThrow(
+    await expect(invitations.acceptAsNewUser(issued.token, NEW_PASSWORD, NEW_NAME)).rejects.toThrow(
       'This invitation link is not valid.',
     );
 
@@ -880,7 +921,7 @@ describe('onboarding a brand-new invitee', () => {
     );
 
     for (const token of [revoked.token, 'not-a-real-token-at-all']) {
-      await expect(invitations.acceptAsNewUser(token, NEW_PASSWORD)).rejects.toThrow(
+      await expect(invitations.acceptAsNewUser(token, NEW_PASSWORD, NEW_NAME)).rejects.toThrow(
         'This invitation link is not valid.',
       );
     }
@@ -889,11 +930,11 @@ describe('onboarding a brand-new invitee', () => {
   it('does not consume the invitation when the password is rejected', async () => {
     const { token, email } = await inviteFreshAddress();
 
-    await expect(invitations.acceptAsNewUser(token, 'short')).rejects.toThrow();
+    await expect(invitations.acceptAsNewUser(token, 'short', NEW_NAME)).rejects.toThrow();
 
     // No account created, and the link still works.
     expect(await platform.user.findUnique({ where: { email } })).toBeNull();
-    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD, NEW_NAME);
     expect(onboarded.userId).toBeDefined();
   });
 
@@ -910,7 +951,7 @@ describe('onboarding a brand-new invitee', () => {
     // Tenant isolation: a brand-new identity must not become visible in, or a
     // member of, any workspace but the one that invited them.
     const { token } = await inviteFreshAddress();
-    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD, NEW_NAME);
 
     const memberships = await platform.membership.findMany({
       where: { userId: onboarded.userId },
@@ -922,7 +963,7 @@ describe('onboarding a brand-new invitee', () => {
 
   it('writes the acceptance audit event in the inviting workspace', async () => {
     const { token } = await inviteFreshAddress();
-    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD);
+    const onboarded = await invitations.acceptAsNewUser(token, NEW_PASSWORD, NEW_NAME);
 
     const events = await platform.auditEvent.findMany({
       where: {

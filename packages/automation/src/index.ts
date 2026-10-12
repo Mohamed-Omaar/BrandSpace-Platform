@@ -195,9 +195,11 @@ export type {
 } from './ports';
 
 export {
+  AUTOMATION_BRAND_ARCHIVED_REASON,
   AUTOMATION_RULE_NAME_TAKEN_REASON,
   AUTOMATION_RULE_VERSION_CONFLICT_REASON,
   actionConfigInvalid,
+  automationBrandArchived,
   automationConfirmationRejected,
   automationRuleNameTaken,
   automationRuleNotFound,
