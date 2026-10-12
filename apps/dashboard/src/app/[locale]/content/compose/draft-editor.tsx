@@ -1254,7 +1254,18 @@ export function DraftEditor({
     (draft.status === 'DRAFT' ||
       draft.status === 'CHANGES_REQUESTED' ||
       draft.status === 'APPROVED');
+  /*
+   * PR F (b), Q8 — WHILE NONE OF THIS POST'S CHANNELS CAN BE CONNECTED, nothing
+   * offers to schedule or publish it: the proposed time is still kept (the
+   * When panel stays), the calendar still shows it on its day, and Approve
+   * still works. The line beside "Post to" says why. The server refuses the
+   * same thing on its own (`CHANNELS_NOT_CONNECTABLE`).
+   */
+  const canGoOut =
+    !channelAccess ||
+    draft.variants.some((variant) => channelAccess.connectable.includes(variant.platformKey));
   const mayScheduleHere = Boolean(
+    canGoOut &&
     can.schedule &&
     ((draft.status === 'DRAFT' && review && !review.requiresApproval) ||
       draft.status === 'APPROVED'),

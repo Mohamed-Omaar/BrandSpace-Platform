@@ -8,6 +8,7 @@ import { inWorkspace, requireWorkspacePage } from '../../../server/customer-cont
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
+import { canGoOut, connectableChannels } from '../../../server/connectable-channels';
 import { mediaForVariants } from '../../../server/media-picker';
 import { firstPictures } from '../../../server/first-pictures';
 import { relativeTime } from '../../../server/home';
@@ -67,6 +68,8 @@ export default async function ApprovalsPage({
   const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
+  // PR F (b), Q8: the channels an account can be connected for at all.
+  const connectable = await connectableChannels();
 
   const ok = typeof query.ok === 'string' ? query.ok : null;
   const error = typeof query.error === 'string' ? query.error : null;
@@ -419,13 +422,19 @@ export default async function ApprovalsPage({
         campaignLabel: campaignName ?? undefined,
         // Option B: "Approve & publish" for "Right after approval", "Approve &
         // schedule" for a picked time — each only for an approver who may schedule.
-        approveSchedules: !workspace.permissionKeys.includes('content.schedule')
-          ? undefined
-          : afterApproval
-            ? 'publish'
-            : proposedLocal !== null
-              ? 'schedule'
-              : undefined,
+        // PR F (b), Q8: plain Approve while none of the post's channels can connect.
+        approveSchedules:
+          !workspace.permissionKeys.includes('content.schedule') ||
+          !canGoOut(
+            review.variants.map((v) => v.platformKey),
+            connectable,
+          )
+            ? undefined
+            : afterApproval
+              ? 'publish'
+              : proposedLocal !== null
+                ? 'schedule'
+                : undefined,
         previews: review.variants.map((v) => (
           <DictionaryVariantPreview
             key={v.id}

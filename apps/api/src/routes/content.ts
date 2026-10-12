@@ -258,7 +258,7 @@ async function studioFor(caller: Caller, db: Parameters<Parameters<typeof withWo
       timezone: workspace.timezone,
       quota: scheduleQuota(db, caller.workspaceId),
       // Q9 (D-332): a channel whose every account was revoked is refused.
-      channelGate: unreachableChannelGate(db, caller.workspaceId),
+      channelGate: unreachableChannelGate(db, caller.workspaceId, currentEnvironment()),
       // PR 0: the one brand approval policy, required on every calendar.
       approvalGate: new ContentApprovalService({ db, workspaceId: caller.workspaceId, policy }),
     }),

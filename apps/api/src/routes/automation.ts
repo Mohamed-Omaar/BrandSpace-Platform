@@ -115,7 +115,7 @@ function publishPort(db: TenantScopedClient): NonNullable<AutomationPorts['publi
         policy: contentPolicy,
         timezone,
         // Q9 (D-332): a channel whose every account was revoked is refused.
-        channelGate: unreachableChannelGate(db, input.workspaceId),
+        channelGate: unreachableChannelGate(db, input.workspaceId, currentEnvironment()),
         // A no-op quota is NOT acceptable here: the plan ceiling applies to an
         // automation exactly as it does to a person, so the caller supplies the
         // real one through the shared helper below.

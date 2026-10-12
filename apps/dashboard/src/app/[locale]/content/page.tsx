@@ -5,6 +5,7 @@ import { inWorkspace, requireWorkspacePage } from '../../../server/customer-cont
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
+import { connectableChannels } from '../../../server/connectable-channels';
 import { firstPictures } from '../../../server/first-pictures';
 import { relativeTime } from '../../../server/home';
 import { optionalMessage, statusMessage, translator } from '../../../i18n/messages';
@@ -578,6 +579,7 @@ export default async function ContentPage({
         ideas={ideas}
         duplicateToken={randomUUID()}
         paging={{ page: pageNumber, hasMore }}
+        connectable={await connectableChannels().catch(() => null)}
         menu={{
           can: {
             schedule: may('content.schedule'),

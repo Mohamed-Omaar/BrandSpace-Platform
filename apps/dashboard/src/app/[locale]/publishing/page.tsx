@@ -20,6 +20,7 @@ import { requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor } from '../../../server/brand-context';
 import { inSocial } from '../../../server/social-context';
+import { connectableChannels } from '../../../server/connectable-channels';
 import { mediaForVariants } from '../../../server/media-picker';
 import {
   optionalMessage,
@@ -118,6 +119,8 @@ export default async function PublishingPage({
   const t = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const session = access.session;
+  // PR F (b), §d: the channels an account can be connected for at all.
+  const connectable = await connectableChannels();
   const { workspace } = session;
   const may = (key: string) => workspace.permissionKeys.includes(key);
 
@@ -731,9 +734,12 @@ export default async function PublishingPage({
           {data.connections.length === 0 ? (
             <StateMessage
               title={t('integrations.emptyTitle')}
-              description={t('integrations.emptyBody')}
+              // PR F (b), §d: with no platform connectable, say so — no "Connect".
+              description={t(
+                connectable.length > 0 ? 'integrations.emptyBody' : 'integrations.notAvailableYet',
+              )}
               action={
-                may('integrations.manage') ? (
+                may('integrations.manage') && connectable.length > 0 ? (
                   <EmptyAction
                     href={`/${locale}/integrations`}
                     label={t('publishingHub.connectAction')}

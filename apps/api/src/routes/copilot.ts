@@ -200,7 +200,7 @@ async function executionContextFor(input: {
       timezone: workspace?.timezone ?? 'UTC',
       quota: scheduleQuota(db, workspaceId),
       // Q9 (D-332): a channel whose every account was revoked is refused.
-      channelGate: unreachableChannelGate(db, workspaceId),
+      channelGate: unreachableChannelGate(db, workspaceId, currentEnvironment()),
       /*
        * AC-14.6 — the calendar asks the APPROVALS MODULE whether this brand
        * requires approval, rather than reading one workspace-wide default. The
@@ -282,7 +282,7 @@ export function externalActions(db: TenantScopedClient): ExternalActionPort {
         // that could exceed it would be a way to buy headroom by asking nicely.
         quota: scheduleQuota(db, input.workspaceId),
         // Q9 (D-332): a channel whose every account was revoked is refused.
-        channelGate: unreachableChannelGate(db, input.workspaceId),
+        channelGate: unreachableChannelGate(db, input.workspaceId, currentEnvironment()),
         // PR 0: THE BRAND'S OWN APPROVAL POLICY. This calendar was built without
         // it, so publish-now fell back to a workspace-wide setting and could
         // put an unapproved post of a brand that requires approval on the
@@ -801,7 +801,7 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
                   policy: contentPolicy,
                   timezone: workspace?.timezone ?? 'UTC',
                   quota: scheduleQuota(db, caller.workspaceId),
-                  channelGate: unreachableChannelGate(db, caller.workspaceId),
+                  channelGate: unreachableChannelGate(db, caller.workspaceId, currentEnvironment()),
                   // PR 0: required on every calendar. Undo only cancels.
                   approvalGate: new ContentApprovalService({
                     db,

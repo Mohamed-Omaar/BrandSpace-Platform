@@ -16,6 +16,7 @@ import {
   approvalRequiredBeforeScheduling,
   calendarSlotNotFound,
   channelDisconnected,
+  channelsNotConnectable,
   contentItemNotFound,
   DAY_IS_FULL_REASON,
   dayIsFull,
@@ -121,6 +122,12 @@ export interface CalendarOptions {
 export interface ChannelGate {
   /** Of these platform keys, the ones whose every account for the brand is revoked or disabled. */
   unreachableChannels(brandId: string, platformKeys: readonly string[]): Promise<readonly string[]>;
+  /**
+   * PR F (b), Q8 — of these platform keys, the ones that cannot be connected
+   * at all (the operator has not enabled the platform). Optional: a gate that
+   * does not answer it changes nothing.
+   */
+  notConnectable?(platformKeys: readonly string[]): Promise<readonly string[]>;
 }
 
 /** The single question the calendar asks the Approvals module. */
@@ -528,6 +535,10 @@ export class ContentCalendarService {
       select: { platformKey: true },
     });
     if (variants.length === 0) return refused('not_schedulable');
+    // PR F (b), Q8: no channel can be connected, so there is nothing to schedule for.
+    if (await this.#noneConnectable([...new Set(variants.map((variant) => variant.platformKey))])) {
+      return refused('not_schedulable');
+    }
     const unreachable = await this.#channelGate.unreachableChannels(item.brandId, [
       ...new Set(variants.map((variant) => variant.platformKey)),
     ]);
@@ -768,10 +779,17 @@ export class ContentCalendarService {
 
   /** Q9 (D-332): refuse a channel that can reach no account at all. */
   async #assertChannelsReachable(brandId: string, platformKeys: readonly string[]): Promise<void> {
-    const unreachable = await this.#channelGate.unreachableChannels(brandId, [
-      ...new Set(platformKeys),
-    ]);
+    const keys = [...new Set(platformKeys)];
+    // PR F (b), Q8: a post none of whose channels can be connected never queues.
+    if (keys.length > 0 && (await this.#noneConnectable(keys))) throw channelsNotConnectable(keys);
+    const unreachable = await this.#channelGate.unreachableChannels(brandId, keys);
     if (unreachable.length > 0) throw channelDisconnected(unreachable);
+  }
+
+  async #noneConnectable(platformKeys: readonly string[]): Promise<boolean> {
+    if (!this.#channelGate.notConnectable) return false;
+    const notConnectable = await this.#channelGate.notConnectable(platformKeys);
+    return notConnectable.length === platformKeys.length;
   }
 
   /**

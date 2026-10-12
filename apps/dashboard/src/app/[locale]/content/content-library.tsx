@@ -128,7 +128,14 @@ export function ContentLibrary({
   duplicateToken,
   paging,
   menu,
+  connectable,
 }: {
+  /**
+   * PR F (b), Q8 — the channels an account can be connected for at all. A
+   * post none of whose channels is among them offers no Schedule. `null`
+   * (not known) changes nothing.
+   */
+  readonly connectable?: readonly string[] | null;
   readonly locale: string;
   readonly t: (key: string) => string;
   readonly cards: readonly LibraryCard[];
@@ -168,6 +175,8 @@ export function ContentLibrary({
   readonly paging?: { readonly page: number; readonly hasMore: boolean } | undefined;
   readonly menu?: LibraryMenu | undefined;
 }) {
+  const goesOut = (card: LibraryCard): boolean =>
+    !connectable || card.platforms.some((platform) => connectable.includes(platform));
   const pageHref = (page: number) => {
     const params = new URLSearchParams({ ...filters, ...(page > 1 ? { page: String(page) } : {}) });
     const search = params.toString();
@@ -256,7 +265,7 @@ export function ContentLibrary({
             )
           : open();
       case 'APPROVED':
-        return can.schedule
+        return can.schedule && goesOut(card)
           ? link(
               `/${locale}/calendar?item=${card.id}`,
               t('content.action.schedule'),
@@ -314,7 +323,7 @@ export function ContentLibrary({
         today={menu.today}
         open={{ href: studio(card), label: openLabel(card) }}
         duplicateToken={can.create ? duplicateToken : null}
-        can={{ ...menu.can, submit: can.submit }}
+        can={{ ...menu.can, submit: can.submit, schedule: menu.can.schedule && goesOut(card) }}
         labels={menu.labels}
         actions={{
           reschedule: rescheduleContentAction,

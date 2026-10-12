@@ -2181,6 +2181,7 @@ export const messages = {
     'integrations.accountsBody': 'الحسابات التي تستطيع Brandspace النشر إليها نيابةً عنك.',
     'integrations.emptyTitle': 'لا توجد حسابات متصلة بعد',
     'integrations.emptyBody': 'اربط حسابًا لتتمكن من نشر المحتوى المجدول تلقائيًا.',
+    'integrations.notAvailableYet': 'ربط حسابات التواصل الاجتماعي غير متاح بعد.',
     'integrations.connectEyebrow': 'ربط',
     'integrations.selectTargetTitle': 'اختر الصفحة التي سننشر عليها',
     'integrations.selectTargetBody':
@@ -6275,6 +6276,7 @@ export const messages = {
     'integrations.accountsBody': 'The accounts Brandspace can publish to on your behalf.',
     'integrations.emptyTitle': 'No accounts connected yet',
     'integrations.emptyBody': 'Connect an account so scheduled content can publish automatically.',
+    'integrations.notAvailableYet': 'Connecting social accounts isn’t available yet.',
     'integrations.connectEyebrow': 'Connect',
     'integrations.selectTargetTitle': 'Choose the page to publish to',
     'integrations.selectTargetBody':
@@ -8359,6 +8361,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   PUBLISH_JOB_SUPERSEDED: {
     en: 'This post was scheduled again, so this attempt is not retried.',
     ar: 'جُدول هذا المنشور مرة أخرى، لذا لا تُعاد هذه المحاولة.',
+  },
+  // PR F (b), Q8 — none of the post's channels can be connected yet.
+  CHANNELS_NOT_CONNECTABLE: {
+    en: 'None of this post’s channels can be connected yet, so it can’t be scheduled or published. Its proposed time is kept.',
+    ar: 'لا يمكن ربط أيٍّ من قنوات هذا المنشور بعد، لذا لا يمكن جدولته أو نشره. ووقته المقترح محفوظ.',
   },
   // Q9 (D-332) — every account for one of the post's channels was revoked.
   CHANNEL_DISCONNECTED: {

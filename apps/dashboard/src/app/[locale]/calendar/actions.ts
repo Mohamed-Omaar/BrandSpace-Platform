@@ -5,6 +5,7 @@ import { redirect, unstable_rethrow } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import {
   CHANNEL_DISCONNECTED_REASON,
+  CHANNELS_NOT_CONNECTABLE_REASON,
   SCHEDULE_IN_PAST_REASON,
   SLOT_MOVED_SINCE_REASON,
 } from '@brandspace/content';
@@ -92,6 +93,10 @@ function calendarErrorCode(error: unknown): string {
   // Q9 (D-332): every account for one of the post's channels was revoked.
   if (isAppError(error) && error.publicDetails['reason'] === CHANNEL_DISCONNECTED_REASON) {
     return CHANNEL_DISCONNECTED_REASON;
+  }
+  // PR F (b), Q8: none of the post's channels can be connected yet.
+  if (isAppError(error) && error.publicDetails['reason'] === CHANNELS_NOT_CONNECTABLE_REASON) {
+    return CHANNELS_NOT_CONNECTABLE_REASON;
   }
   // §8.2: an Undo found the post somewhere else, so it changed nothing.
   if (isAppError(error) && error.publicDetails['reason'] === SLOT_MOVED_SINCE_REASON) {
