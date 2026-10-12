@@ -487,6 +487,10 @@ export default defineRailway((ctx, project) => {
        * arguably resolve the provider itself — it already holds the vault key —
        * but two processes resolving "which provider is live" is how a platform
        * ends up sending through one nobody activated. One answer, in the API.
+       *
+       * The same token asks the API to run the Integrations Hub's storage Test
+       * (`/v1/internal/storage/self-test`, PR F), so the Control Center can
+       * prove the bucket works without ever holding its credential.
        */
       INTERNAL_SERVICE_TOKEN: internalServiceToken,
       /*

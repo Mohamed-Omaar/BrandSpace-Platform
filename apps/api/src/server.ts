@@ -11,6 +11,7 @@ import { registerContentRoutes } from './routes/content';
 import { registerCreativeRoutes } from './routes/creative';
 import { registerHealthRoutes } from './routes/health';
 import { registerInternalEmailRoutes } from './routes/internal-email';
+import { registerInternalStorageRoutes } from './routes/internal-storage';
 import { registerSocialRoutes } from './routes/social';
 import { registerAnalyticsRoutes } from './routes/analytics';
 import { registerAutomationRoutes } from './routes/automation';
@@ -66,6 +67,8 @@ export async function buildServer() {
 
   registerHealthRoutes(app);
   registerInternalEmailRoutes(app);
+  // PR F — the Control Center's storage Test runs here, where the bucket credential is.
+  registerInternalStorageRoutes(app);
   // Phase 5. The customer-initiated AI surface lives here rather than in the
   // dashboard: the gateway needs the platform identity, and F-07 keeps that out
   // of tenant-facing apps. See routes/brand-brain.ts for the full reasoning.

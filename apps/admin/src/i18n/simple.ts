@@ -231,6 +231,10 @@ const en = {
   'setup.test': 'Test the connection',
   'setup.testIntro':
     'Brandspace makes a minimal real request and records the result. Testing switches nothing on.',
+  'setup.testIntroEmail':
+    'Brandspace sends one test message to your own address — the one you signed in with — and records the result. It sends to nobody else, and testing switches nothing on.',
+  'setup.testIntroStorage':
+    'Brandspace asks its server to write, read back and delete one small test file, and records the result. No storage detail is shown, and testing switches nothing on.',
   'setup.testNotPossible': 'This provider cannot be tested from the Control Center.',
   'setup.testRun': 'Test now',
   'setup.testOk': 'Passed {when}.',
@@ -828,6 +832,10 @@ const ar: Copy = {
   'setup.test': 'اختبار الاتصال',
   'setup.testIntro':
     'ترسل Brandspace طلبًا حقيقيًا صغيرًا وتسجّل النتيجة. الاختبار لا يشغّل شيئًا.',
+  'setup.testIntroEmail':
+    'ترسل Brandspace رسالة اختبار واحدة إلى عنوانك أنت — العنوان الذي سجّلت الدخول به — وتسجّل النتيجة. لا تُرسل إلى أي شخص آخر، والاختبار لا يشغّل شيئًا.',
+  'setup.testIntroStorage':
+    'تطلب Brandspace من خادمها كتابة ملف اختبار صغير ثم قراءته ثم حذفه، وتسجّل النتيجة. لا تُعرض أي تفاصيل عن التخزين، والاختبار لا يشغّل شيئًا.',
   'setup.testNotPossible': 'لا يمكن اختبار هذا المزود من مركز التحكم.',
   'setup.testRun': 'اختبر الآن',
   'setup.testOk': 'نجح {when}.',

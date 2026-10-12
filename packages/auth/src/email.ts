@@ -58,9 +58,31 @@ export const EMAIL_TEMPLATE_KEYS = [
   'auth.email_verification',
   'auth.signup.exists',
   'workspace.suspended',
+  /*
+   * PR F — THE CONTROL CENTER'S EMAIL TEST. Sent by the Integrations Hub's Test
+   * button for Resend, once, to the SIGNED-IN platform user's own address and
+   * nobody else's. It carries no link and no variable: it says only that it is
+   * a test, so receiving it proves the saved key and sending domain work.
+   *
+   * NOT DELIVERABLE THROUGH THE API'S INTERNAL ROUTE — see
+   * `CONTROL_CENTER_ONLY_TEMPLATE_KEYS` below.
+   */
+  'integration.test_message',
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
+
+/**
+ * Templates only the Control Center sends, by constructing the provider itself.
+ *
+ * THE INTERNAL DELIVERY ROUTE REFUSES THESE. That route's closed template set
+ * is what stops a holder of `INTERNAL_SERVICE_TOKEN` composing a message the
+ * product would not send to an address of its choosing. Adding a template to
+ * the catalogue must not quietly add a message that token can send: the test
+ * message exists for a signed-in owner to send to themselves, and a service
+ * token is not a signed-in owner.
+ */
+export const CONTROL_CENTER_ONLY_TEMPLATE_KEYS = ['integration.test_message'] as const;
 
 export interface EmailMessageInput {
   readonly to: string;

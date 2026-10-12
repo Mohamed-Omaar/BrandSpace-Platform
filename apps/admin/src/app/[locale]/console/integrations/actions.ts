@@ -164,7 +164,14 @@ export async function testIntegrationAction(formData: FormData): Promise<void> {
           category,
           providerKey,
           environment,
-          tester: integrationTester(),
+          /*
+           * THE SESSION'S OWN ADDRESS, NEVER THE FORM'S. The email Test sends
+           * one message to whoever pressed the button; no input on the page
+           * can name another recipient.
+           */
+          tester: integrationTester({
+            requester: { email: actor.email, locale: locale === 'en' ? 'en' : 'ar' },
+          }),
           requestedByPlatformUserId: actor.platformUserId,
         }),
     );

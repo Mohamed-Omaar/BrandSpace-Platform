@@ -147,6 +147,21 @@ const TEMPLATES: Readonly<Record<EmailTemplateKey, LocalisedTemplate>> = {
       body: 'تم تعليق مساحة عمل تنتمي إليها. بياناتها لم تتغيّر. تواصل مع دعم Brandspace لاستعادة الوصول.',
     },
   },
+  /*
+   * PR F — the Control Center's email Test. No link, no variable, no account
+   * detail: the message says what it is and what receiving it proves. It goes
+   * only to the signed-in platform user who pressed the button.
+   */
+  'integration.test_message': {
+    EN: {
+      subject: 'Brandspace test message',
+      body: 'This is a test message from the Brandspace Control Center. If you received it, email sending works.',
+    },
+    AR: {
+      subject: 'رسالة اختبار من Brandspace',
+      body: 'هذه رسالة اختبار من مركز تحكم Brandspace. إن وصلتك، فإرسال البريد يعمل.',
+    },
+  },
 };
 
 /** Escape for an HTML text node or a double-quoted attribute. */

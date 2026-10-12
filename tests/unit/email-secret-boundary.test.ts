@@ -136,16 +136,20 @@ describe('the one place that resolves the active email provider', () => {
 
   it('is the only file in the repository that constructs ResendEmailProvider for delivery', () => {
     /*
-     * ONE PROCESS, ONE CONSTRUCTOR, and the list got shorter rather than
-     * longer. The Control Center used to construct one as well, for a Test
-     * Connection button; that button is gone, because the credential the
-     * platform asks for is a Resend Sending-access key restricted to the
-     * verified domain and Resend refuses it every read-only check. Anything
-     * outside this list is a second answer to "which provider sends", which is
-     * the failure this asserts against.
+     * ONE PROCESS RESOLVES WHICH PROVIDER SENDS, and only one other file may
+     * construct the adapter at all. Anything outside this list is a second
+     * answer to "which provider sends", which is the failure this asserts
+     * against.
+     *
+     * THE CONTROL CENTER'S TEST IS THE ONE EXCEPTION, by the owner's PR F
+     * decision. It does not resolve the active provider: it builds the adapter
+     * for the provider being TESTED, from that provider's saved key, and sends
+     * one fixed template (`integration.test_message`) to the signed-in owner.
+     * It sends no customer mail and cannot be asked to.
      */
     const ALLOWED = [
       'apps/api/src/email-provider.ts',
+      'apps/admin/src/server/integration-tester.ts',
       // The adapter's own tests. `packages/auth/src/email-resend.ts` is
       // deliberately absent: it DEFINES the class and never constructs one.
       'tests/unit/production-adapters.test.ts',

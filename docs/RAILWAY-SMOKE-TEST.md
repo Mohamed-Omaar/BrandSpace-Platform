@@ -176,9 +176,14 @@ this document expected them all to be blocked.
     container the next restart discards.
 - ☐ ✅ No service is writing to a local path under `/tmp` for customer assets
 - ☐ ✅ The Integrations Hub lists `Cloudflare R2 (S3-compatible)` with **no
-  configuration form and no Test connection button** — it is configured by the
-  deployment, and a second configuration screen would be one nothing reads
-  (deployment doc §6.5)
+  configuration form** — it is configured by the deployment, and a second
+  configuration screen would be one nothing reads (deployment doc §6.5)
+- ☐ ✅ **Test connection** on that screen reports "Wrote, read back and deleted
+  a small test file." The Control Center asks the API
+  (`POST /v1/internal/storage/self-test`, service token) to write, read back and
+  delete one 32-byte object under `_brandspace/self-test/`; the screen shows no
+  bucket, endpoint or key. The storage row on the readiness page then reads
+  **Connected**.
 
 ---
 
@@ -202,25 +207,27 @@ Run this section once before activation and again after — deployment doc §16.
 - ☐ ✅ Re-open the page: the key shows as **masked metadata only**
   (`re-…`, a fingerprint, a last-rotated time). There is no way to read it back,
   and the input is empty rather than pre-filled.
-- ☐ ✅ **There is no Test connection button on this screen**, and the note says
-  why. The key is a Sending-access key restricted to the verified domain — the
-  least privilege that can send — and Resend refuses it every read-only check,
-  so a button could only report a working key as broken, demand a wider key, or
-  send an unsolicited probe message. Deployment doc §16.2.
+- ☐ ✅ **Test connection sends one test message to your own address** — the
+  address you signed in to the Control Center with — and to nobody else. The key
+  is a Sending-access key restricted to the verified domain, which Resend
+  refuses every read-only check, so the Test sends instead. Check your inbox for
+  "Brandspace test message"; the screen says "Sent a test message to your
+  address." and the email row on the readiness page reads **Connected**.
+  Deployment doc §16.2.
   - **Do not create a Full Access key to make a tick go green.** Nothing in the
     product asks for one.
-  - The proof is §7.2 below: the controlled smoke email, which is the same
-    operation the credential exists to perform.
+  - §7.2 below still proves the path a customer's signup takes.
 - ☐ ✅ **Activate**, with a change reason. The activation appears in the change
   history with its author, its reason and a rollback.
 
 ### 7.2 After activation
 
-- ☐ ✅ **The controlled smoke email — the one test of the send-only key.** Sign
-  up with a real address **you control**, once. The verification email is
-  delivered by Resend and the link verifies the account. A 401 here means the
-  key is genuinely wrong; a rejected domain means it is not verified in Resend.
-  This is the step §7.1 defers to, so do not skip it.
+- ☐ ✅ **The controlled smoke email — the customer path.** Sign up with a real
+  address **you control**, once. The verification email is delivered by Resend
+  and the link verifies the account. A 401 here means the key is genuinely
+  wrong; a rejected domain means it is not verified in Resend. The §7.1 Test
+  proves the key from the Control Center; this proves the API's delivery path,
+  so do not skip it.
 - ☐ ✅ **Resend verification** sends a second link.
 - ☐ ✅ **Password reset** sends, and the link works.
 - ☐ ✅ **Workspace invitation** sends, and **invitation resend** sends again.

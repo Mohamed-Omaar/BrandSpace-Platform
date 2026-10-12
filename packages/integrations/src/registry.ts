@@ -387,44 +387,33 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
     ],
     adapterAvailable: true,
     /*
-     * NOT TESTABLE FROM THIS SCREEN, AND THAT IS A CHOICE ABOUT THE CREDENTIAL
-     * RATHER THAN A GAP IN THE ADAPTER.
+     * TESTED BY SENDING ONE MESSAGE TO THE PERSON WHO PRESSED THE BUTTON (PR F).
      *
      * The key BrandSpace asks for is the least-privileged one that can do the
      * job: Resend **Sending access**, restricted to the verified sending
      * domain. Such a key can send and can do nothing else — it cannot list
-     * domains, read the account, or manage anything.
+     * domains, read the account, or manage anything. Every non-destructive
+     * check Resend offers is a READ, and a Sending-access key is refused all
+     * of them, so a read-based test could only report a working key as broken
+     * or pressure somebody into widening it. Neither happens here.
      *
-     * Every non-destructive check Resend offers is a READ, and a
-     * Sending-access key is refused all of them. So a Test Connection button
-     * here had exactly three possible behaviours, and all three are worse than
-     * no button:
+     * THE TEST DOES THE KEY'S ONE JOB INSTEAD. The Control Center builds the
+     * adapter from the SAVED key and settings and sends one fixed message
+     * (`integration.test_message`) to the SIGNED-IN platform user's own
+     * address — never an address from the form, so the button cannot mail
+     * anybody else. Receiving it proves the key, the From address and the
+     * verified domain together; the recorded result is what readiness reads.
      *
-     *   1. Call `GET /domains` and report 401 — telling an owner their
-     *      correctly-scoped production key is broken. A red tick on a working
-     *      credential trains people to ignore ticks.
-     *   2. Ask for a Full Access key so the read succeeds — widening a
-     *      production credential's scope to light up a UI element. The key
-     *      would then be able to manage the account, and it would live in the
-     *      vault forever at that scope.
-     *   3. Send a probe message — an unsolicited email, to somebody's real
-     *      inbox, every time an operator presses a button.
-     *
-     * WHAT PROVES THE KEY INSTEAD. The controlled production smoke email after
-     * activation (docs/RAILWAY-SMOKE-TEST.md §7.2): a real signup the owner
-     * performs, to an address the owner controls, once. That is the same
-     * operation the credential exists to perform, which makes it the only
-     * honest test of a send-only key.
-     *
-     * Save and Activate remain separate operations. Removing the middle step
-     * does not merge them.
+     * The controlled smoke email after activation (docs/RAILWAY-SMOKE-TEST.md
+     * §7.2) still proves the delivery path a customer's signup takes. Save,
+     * Test and Activate remain separate operations.
      */
-    testable: false,
+    testable: true,
     developmentOnly: false,
     noteEn:
-      'Sends real mail. Use a Resend key with Sending access, restricted to your verified sending domain — the least privilege that can send. There is deliberately no Test connection button: every read-only check Resend offers is refused to a send-only key, so the alternatives would be a red tick on a working credential, a wider key than the platform needs, or an unsolicited probe email. Verify the sending domain in Resend before activating, then confirm delivery with the controlled smoke email after activation.',
+      'Sends real mail. Use a Resend key with Sending access, restricted to your verified sending domain — the least privilege that can send. Verify the sending domain in Resend before activating. Test sends one short test message to your own address — the signed-in owner’s — and to nobody else; a send-only key cannot answer a read-only check, so sending is the honest test.',
     noteAr:
-      'يرسل بريدًا حقيقيًا. استخدم مفتاح Resend بصلاحية الإرسال فقط، مقيّدًا بنطاق الإرسال الموثّق — وهي أقل صلاحية كافية للإرسال. لا يوجد زر اختبار اتصال عمدًا: كل فحص للقراءة توفّره Resend مرفوض لمفتاح الإرسال فقط، والبدائل إما إظهار فشل لمفتاح سليم، أو طلب مفتاح أوسع مما تحتاج المنصة، أو إرسال رسالة اختبار غير مطلوبة. تحقّق من نطاق الإرسال في Resend قبل التفعيل، ثم أكّد التسليم برسالة التحقق المضبوطة بعد التفعيل.',
+      'يرسل بريدًا حقيقيًا. استخدم مفتاح Resend بصلاحية الإرسال فقط، مقيّدًا بنطاق الإرسال الموثّق — وهي أقل صلاحية كافية للإرسال. تحقّق من نطاق الإرسال في Resend قبل التفعيل. زر الاختبار يرسل رسالة اختبار قصيرة واحدة إلى عنوانك أنت — عنوان المالك المسجّل دخوله — ولا يرسل إلى أي عنوان آخر؛ فمفتاح الإرسال فقط لا يجيب عن فحوص القراءة، والإرسال هو الاختبار الصادق.',
   },
   {
     providerKey: 'filesystem',
@@ -479,19 +468,28 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
     settingFields: [],
     adapterAvailable: true,
     /*
-     * NOT TESTABLE FROM HERE. A reachability check needs the bucket credential,
-     * and the Control Center deliberately does not hold it: an object-store key
-     * is given only to the processes that move bytes (docs/SECURITY.md §2.4).
-     * The API reports whether storage is configured on `/health/ready`, and the
-     * end-to-end proof that bytes survive a redeploy is the owner-run step in
-     * docs/RAILWAY-SMOKE-TEST.md rather than a green tick on this screen.
+     * TESTED BY THE API, ASKED BY THE CONTROL CENTER (PR F).
+     *
+     * A real check needs the bucket credential, and the Control Center
+     * deliberately does not hold it: an object-store key is given only to the
+     * processes that move bytes (docs/SECURITY.md §2.4). So the Test asks the
+     * API — over the private network, with the shared service token — to run
+     * `POST /v1/internal/storage/self-test` against its OWN store: write 32
+     * random bytes under a reserved key, read them back, compare, delete, and
+     * confirm they are gone. The answer is a boolean, a latency and the step
+     * that failed; no endpoint, bucket, key id or error text crosses back.
+     *
+     * `/health/ready` still reports only whether `STORAGE_*` is complete (it is
+     * probed continuously and must not cost a request to the bucket), and the
+     * proof that bytes survive a redeploy is still the owner-run step in
+     * docs/RAILWAY-SMOKE-TEST.md.
      */
-    testable: false,
+    testable: true,
     developmentOnly: false,
     noteEn:
-      'Holds every customer file. Bytes live at Cloudflare rather than on Railway, so a redeploy cannot lose an upload. The adapter speaks S3 and works against any S3-compatible endpoint. Configured by the STORAGE_* deployment variables, not on this screen — production and staging must use different buckets and different credentials.',
+      'Holds every customer file. Bytes live at Cloudflare rather than on Railway, so a redeploy cannot lose an upload. The adapter speaks S3 and works against any S3-compatible endpoint. Configured by the STORAGE_* deployment variables, not on this screen — production and staging must use different buckets and different credentials. Test asks the API, which holds the bucket credential, to write, read back and delete one small test file; no bucket detail is shown here.',
     noteAr:
-      'يحتفظ بكل ملفات العملاء. تبقى البايتات لدى Cloudflare لا على Railway، فلا تُفقد أي ملفات عند إعادة النشر. يتحدث المحوّل بروتوكول S3 ويعمل مع أي نقطة نهاية متوافقة. يُضبط عبر متغيرات النشر STORAGE_* وليس من هذه الشاشة — ويجب أن يستخدم الإنتاج والتجريب حاويتين مختلفتين وبيانات اعتماد مختلفة.',
+      'يحتفظ بكل ملفات العملاء. تبقى البايتات لدى Cloudflare لا على Railway، فلا تُفقد أي ملفات عند إعادة النشر. يتحدث المحوّل بروتوكول S3 ويعمل مع أي نقطة نهاية متوافقة. يُضبط عبر متغيرات النشر STORAGE_* وليس من هذه الشاشة — ويجب أن يستخدم الإنتاج والتجريب حاويتين مختلفتين وبيانات اعتماد مختلفة. زر الاختبار يطلب من خادم الواجهة، وهو الذي يحمل بيانات اعتماد الحاوية، كتابة ملف اختبار صغير ثم قراءته ثم حذفه؛ ولا تُعرض هنا أي تفاصيل عن الحاوية.',
   },
   {
     providerKey: 'mock',

@@ -487,6 +487,26 @@ export default async function IntegrationDetailPage({
               : 'Testing activates nothing. Activating is a full configuration change, with a reason, an audit trail and a rollback.'
           }
         />
+        {view.testable && category === 'email' && providerKey === 'resend' ? (
+          <p
+            style={{ ...typographyTokens.bodySm, marginBlockEnd: spacingTokens.md }}
+            data-testid="test-explanation"
+          >
+            {isArabic
+              ? 'اختبار الاتصال يرسل رسالة اختبار واحدة إلى عنوانك أنت — العنوان الذي سجّلت الدخول به — ولا يرسل إلى أي شخص آخر.'
+              : 'Test connection sends one test message to your own address — the one you signed in with — and to nobody else.'}
+          </p>
+        ) : null}
+        {view.testable && category === 'storage' && providerKey === 'cloudflare-r2' ? (
+          <p
+            style={{ ...typographyTokens.bodySm, marginBlockEnd: spacingTokens.md }}
+            data-testid="test-explanation"
+          >
+            {isArabic
+              ? 'اختبار الاتصال يطلب من خادم الواجهة كتابة ملف اختبار صغير ثم قراءته ثم حذفه. لا تُعرض أي تفاصيل عن الحاوية.'
+              : 'Test connection asks the API to write, read back and delete one small test file. No bucket detail is shown.'}
+          </p>
+        ) : null}
         <div style={{ display: 'flex', gap: spacingTokens.md, flexWrap: 'wrap' }}>
           {view.testable ? (
             <form action={testIntegrationAction}>

@@ -407,6 +407,7 @@ describe('every declared template renders in both languages', () => {
     'workspace.invitation',
     'workspace.invitation.resent',
     'workspace.suspended',
+    'integration.test_message',
   ] as const;
 
   it('produces a subject and a body for each, in AR and EN', () => {
@@ -555,21 +556,24 @@ describe('the registry describes the two real providers honestly', () => {
     expect(resend?.settingFields.every((f) => !f.secret)).toBe(true);
 
     /*
-     * NOT TESTABLE FROM THE HUB, and the registry is where that is decided.
+     * TESTABLE FROM THE HUB BY SENDING, and the registry is where that is
+     * decided (PR F).
      *
      * The recommended production credential is a Sending-access key restricted
      * to the verified domain. Every non-destructive check Resend offers is a
-     * read, and a send-only key is refused all of them — so a Test Connection
-     * button could only report a working key as broken, demand a wider key, or
-     * send an unsolicited probe message. The note has to SAY so, or an owner
-     * meets a missing button with no explanation.
+     * read, and a send-only key is refused all of them — so the Test does the
+     * key's one job instead: one message, to the signed-in owner's own
+     * address. The note has to SAY who receives it, or an owner presses a
+     * button that sends mail without knowing to whom.
      */
-    expect(resend?.testable).toBe(false);
+    expect(resend?.testable).toBe(true);
     expect(resend?.adapterAvailable).toBe(true);
     expect(resend?.credentialFields[0]?.helpEn).toContain('SENDING ACCESS ONLY');
-    expect(resend?.noteEn).toContain('no Test connection button');
+    expect(resend?.noteEn).toContain('one short test message to your own address');
+    expect(resend?.noteEn).toContain('to nobody else');
     expect(resend?.noteEn).toContain('Sending access');
     expect(resend?.noteAr).toContain('Resend');
+    expect(resend?.noteAr).toContain('رسالة اختبار');
   });
 
   it('registers Cloudflare R2 for production with NO second configuration store', () => {
@@ -590,8 +594,11 @@ describe('the registry describes the two real providers honestly', () => {
     expect(r2?.adapterAvailable).toBe(true);
     expect(r2?.credentialFields).toEqual([]);
     expect(r2?.settingFields).toEqual([]);
-    // And no green tick from a surface that does not hold a bucket credential.
-    expect(r2?.testable).toBe(false);
+    // PR F: testable, and the Test runs in the API, which holds the bucket
+    // credential — the Control Center still holds none (no fields above).
+    expect(r2?.testable).toBe(true);
+    expect(r2?.noteEn).toContain('Test asks the API');
+    expect(r2?.noteEn).toContain('no bucket detail is shown');
     // The note has to SAY where it is configured, or the empty screen is a bug.
     expect(r2?.noteEn).toContain('STORAGE_*');
     expect(r2?.noteAr).toContain('STORAGE_*');
