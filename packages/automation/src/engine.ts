@@ -16,6 +16,7 @@ import {
   type Clock,
 } from '@brandspace/shared';
 import {
+  automationBrandArchived,
   automationConfirmationRejected,
   conditionFieldNotProduced,
   conditionOperatorNotAllowed,
@@ -554,6 +555,8 @@ export class AutomationEngine {
     if (!satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)) {
       throw creatorLacksAuthority();
     }
+    // Fix PR 2b (B3.7) — never for an archived brand.
+    await this.#requireLiveBrand(input.brandId);
 
     const conditions = conditionsSchema.parse(input.conditions);
     if (conditions.length > this.#policy.limits.maxConditionsPerRule) {
@@ -656,13 +659,25 @@ export class AutomationEngine {
      * ENABLING IS THE HEAVY HALF. A person who may not perform the action may not
      * switch on a rule that performs it either — otherwise "enable" would be a way
      * to exercise somebody else's authority through a rule they wrote.
+     *
+     * FIX PR 2b (B3.7) — NOR CHANGE ONE. A new name, new conditions or a new
+     * daily cap all change what a rule that runs on its creator's authority
+     * does, so every change asks for the action's permission too. Switching a
+     * rule OFF is the one change that does not: stopping a rule takes nobody's
+     * authority, and a person with `automation.manage` must always be able to.
      */
+    const edits =
+      input.name !== undefined ||
+      input.conditions !== undefined ||
+      input.maxRunsPerDay !== undefined;
     if (
-      input.enabled === true &&
+      (input.enabled === true || edits) &&
       !satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)
     ) {
       throw creatorLacksAuthority();
     }
+    // Fix PR 2b (B3.7) — and never switched on for an archived brand.
+    if (input.enabled === true) await this.#requireLiveBrand(existing.brandId);
 
     const conditions =
       input.conditions === undefined ? undefined : conditionsSchema.parse(input.conditions);
@@ -749,10 +764,11 @@ export class AutomationEngine {
    * schemas, exactly as `createRule` parses them. A field left `undefined` is
    * left as it is.
    *
-   * THE ACTION'S OWN PERMISSION IS RE-CHECKED WHENEVER ITS SETTINGS CHANGE. The
-   * settings are part of what the rule does on its creator's authority; holding
-   * `automation.manage` is not a way to change what a `content.schedule` action
-   * does without holding `content.schedule`.
+   * THE ACTION'S OWN PERMISSION IS RE-CHECKED ON EVERY CHANGE (Fix PR 2b,
+   * B3.7; it used to be only when the action's settings changed). Every field
+   * is part of what the rule does on its creator's authority; holding
+   * `automation.manage` is not a way to change what a `content.schedule` rule
+   * does, or when it does it, without holding `content.schedule`.
    *
    * FAIL CLOSED ON A STALE EDIT. The caller names the version it read; the write
    * is conditional on that version, so an edit racing another edit (or a
@@ -808,34 +824,10 @@ export class AutomationEngine {
       triggerConfig !== undefined && !sameJson(triggerConfig, existing.triggerConfig);
     const actionConfigChanged =
       actionConfig !== undefined && !sameJson(actionConfig, existing.actionConfig);
-    if (
-      actionConfigChanged &&
-      !satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)
-    ) {
-      throw creatorLacksAuthority();
-    }
-    // PHASE 2B-3 PR 2 — a new person or campaign is validated like a new rule's.
-    if (actionConfigChanged && actionConfig !== undefined) {
-      await this.#requireActionTargets(action.type, actionConfig, existing.brandId);
-    }
 
     const name = input.name === undefined ? undefined : input.name.trim().slice(0, 120);
     if (name !== undefined && name.length === 0) {
       throw new AppError('VALIDATION_FAILED', 'A rule needs a name.');
-    }
-    if (name !== undefined && name !== existing.name) {
-      // Checked here rather than left to the unique index: a violated index
-      // aborts the caller's transaction, and the person deserves the reason.
-      const clash = await this.#db.automationRule.findFirst({
-        where: {
-          workspaceId: this.#workspaceId,
-          brandId: existing.brandId,
-          name,
-          id: { not: existing.id },
-        },
-        select: { id: true },
-      });
-      if (clash) throw automationRuleNameTaken();
     }
     const description =
       input.description === undefined
@@ -853,6 +845,39 @@ export class AutomationEngine {
       ...(triggerConfigChanged ? ['triggerConfig'] : []),
       ...(actionConfigChanged ? ['actionConfig'] : []),
     ];
+    /*
+     * FIX PR 2b (B3.7) — THE ACTION'S PERMISSION ON EVERY CHANGE, not only when
+     * the action's own settings change. A new trigger setting or new conditions
+     * decide WHEN the action runs on its creator's authority, which is as much
+     * a part of what the rule does as the action's settings are. Asked before
+     * anything is looked up, so a person who may not change the rule learns
+     * nothing about the people or campaigns it names.
+     */
+    if (
+      changed.length > 0 &&
+      !satisfiesActionPermissions(input.actor.permissionKeys, action.permissions)
+    ) {
+      throw creatorLacksAuthority();
+    }
+    // PHASE 2B-3 PR 2 — a new person or campaign is validated like a new rule's.
+    if (actionConfigChanged && actionConfig !== undefined) {
+      await this.#requireActionTargets(action.type, actionConfig, existing.brandId);
+    }
+
+    if (name !== undefined && name !== existing.name) {
+      // Checked here rather than left to the unique index: a violated index
+      // aborts the caller's transaction, and the person deserves the reason.
+      const clash = await this.#db.automationRule.findFirst({
+        where: {
+          workspaceId: this.#workspaceId,
+          brandId: existing.brandId,
+          name,
+          id: { not: existing.id },
+        },
+        select: { id: true },
+      });
+      if (clash) throw automationRuleNameTaken();
+    }
 
     const now = this.#clock.now();
     const written = await this.#db.automationRule.updateMany({
@@ -2512,6 +2537,20 @@ export class AutomationEngine {
       });
       if (refusal) throw automationTargetNotFound();
     }
+  }
+
+  /**
+   * Fix PR 2b (B3.7) — the rule's brand, live and not archived. A brand that
+   * is not in this workspace, or is deleted, is the ordinary miss (D-132); an
+   * archived one is refused with its own reason, so the screen can say why.
+   */
+  async #requireLiveBrand(brandId: string): Promise<void> {
+    const brand = await this.#db.brand.findFirst({
+      where: { id: brandId, workspaceId: this.#workspaceId, deletedAt: null },
+      select: { status: true },
+    });
+    if (!brand) throw automationRuleNotFound();
+    if (brand.status === 'ARCHIVED') throw automationBrandArchived();
   }
 
   async #requireRule(ruleId: string, brandScope: readonly string[]): Promise<AutomationRule> {

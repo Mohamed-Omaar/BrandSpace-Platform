@@ -370,7 +370,8 @@ export const messages = {
     'invite.invalid': 'رابط الدعوة غير صالح أو انتهت صلاحيته.',
     'invite.signInFirst': 'سجّل الدخول بالبريد المدعو لقبول الدعوة.',
     'invite.setUpTitle': 'ليس لديك حساب بعد؟',
-    'invite.setUpHint': 'أنشئ كلمة مرور لقبول الدعوة والدخول مباشرة.',
+    'invite.setUpHint': 'اكتب اسمك وكلمة مرور لقبول الدعوة والدخول.',
+    'invite.name': 'اسمك',
     'invite.password': 'كلمة المرور الجديدة',
     'invite.passwordHint': 'لا تقل عن {min} حرفًا.',
     'invite.setUpSubmit': 'إنشاء الحساب وقبول الدعوة',
@@ -4387,7 +4388,8 @@ export const messages = {
     'invite.invalid': 'This invitation link is not valid.',
     'invite.signInFirst': 'Sign in with the invited address to accept.',
     'invite.setUpTitle': 'No account yet?',
-    'invite.setUpHint': 'Choose a password to accept the invitation and sign in.',
+    'invite.setUpHint': 'Add your name and a password to accept and sign in.',
+    'invite.name': 'Your name',
     'invite.password': 'New password',
     'invite.passwordHint': 'At least {min} characters.',
     'invite.setUpSubmit': 'Create account and accept',
@@ -8762,6 +8764,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   AUTOMATION_RULE_NAME_TAKEN: {
     en: 'This brand already has a rule with that name. Choose another name.',
     ar: 'لهذه العلامة قاعدة بهذا الاسم. اختر اسمًا آخر.',
+  },
+  // Fix PR 2b (B3.7).
+  AUTOMATION_BRAND_ARCHIVED: {
+    en: 'This brand is archived, so a rule can’t be made or switched on for it.',
+    ar: 'هذه العلامة مؤرشفة، لذا لا يمكن إنشاء قاعدة لها أو تفعيلها.',
   },
   AUTOMATION_UPDATED: { en: 'Automation updated.', ar: 'تم تحديث الأتمتة.' },
   AUTOMATION_DELETED: { en: 'Automation deleted.', ar: 'تم حذف الأتمتة.' },

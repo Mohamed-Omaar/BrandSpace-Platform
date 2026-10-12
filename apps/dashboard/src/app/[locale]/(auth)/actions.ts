@@ -337,9 +337,11 @@ export async function onboardInvitationAction(formData: FormData): Promise<void>
       throw Object.assign(new Error('too short'), { code: 'VALIDATION_FAILED' });
     }
 
+    // Fix PR 2b (B2.2) — the invitee's own name; the service refuses a blank one.
     const onboarded = await new InvitationService({ prisma: getPrisma() }).acceptAsNewUser(
       token,
       password,
+      String(formData.get('name') ?? ''),
     );
 
     // Straight into a session. The password was just set by this same request,

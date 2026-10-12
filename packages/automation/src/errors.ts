@@ -199,3 +199,19 @@ export const AUTOMATION_RULE_NAME_TAKEN_REASON = 'automation_rule_name_taken';
 export function automationTargetNotFound(): AppError {
   return new AppError('NOT_FOUND', 'That person or campaign was not found.');
 }
+
+/**
+ * FIX PR 2b (B3.7) — NO RULE IS MADE OR SWITCHED ON FOR AN ARCHIVED BRAND.
+ *
+ * An archived brand publishes nothing and is offered nowhere; a rule written or
+ * enabled for it would sit enabled and never be able to do its job. Refused
+ * where a person is looking at the screen, with its own reason so the screen
+ * can say so. Only for a brand in the caller's scope and workspace: anything
+ * else is still the ordinary "not found" (D-132).
+ */
+export function automationBrandArchived(): AppError {
+  return new AppError('CONFLICT', 'This brand is archived.', {
+    reason: AUTOMATION_BRAND_ARCHIVED_REASON,
+  });
+}
+export const AUTOMATION_BRAND_ARCHIVED_REASON = 'automation_brand_archived';

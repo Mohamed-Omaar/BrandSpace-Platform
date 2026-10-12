@@ -159,6 +159,34 @@ export interface CustomerBusiness {
   readonly roleNameAr: string;
 }
 
+/** A membership's role as `#rolesFor` resolves it. */
+interface ResolvedRole {
+  /** Null for a system role; otherwise the one workspace it belongs to. */
+  readonly workspaceId: string | null;
+  readonly key: string;
+  readonly nameEn: string;
+  readonly nameAr: string;
+  readonly permissionKeys: readonly string[];
+}
+
+/**
+ * The role `#rolesFor` resolved for this membership — and only if it is a
+ * system role or THIS membership's workspace's own. Keyed by role id alone, a
+ * role read in one workspace's context could otherwise be handed to a
+ * membership elsewhere; D-131's trigger already makes that row impossible, and
+ * this keeps the read from depending on it.
+ */
+function roleOfMembership(
+  roles: ReadonlyMap<string, ResolvedRole>,
+  membership: { readonly workspaceId: string; readonly roleId: string },
+): ResolvedRole | undefined {
+  const role = roles.get(membership.roleId);
+  if (!role) return undefined;
+  return role.workspaceId === null || role.workspaceId === membership.workspaceId
+    ? role
+    : undefined;
+}
+
 /** The statuses a customer may act in — the same list `listWorkspaces` uses. */
 const OPERABLE_STATUSES: ReadonlySet<string> = new Set(['TRIALING', 'ACTIVE', 'PAST_DUE']);
 
@@ -564,32 +592,38 @@ export class CustomerAuthService {
             ...(options.includePendingDeletion ? {} : { deletionScheduledFor: null }),
           },
         },
-        include: {
-          workspace: true,
-          role: { include: { permissions: { include: { permission: true } } } },
-        },
+        // The role is NOT joined here: see `#rolesFor` (B3.2).
+        include: { workspace: true },
         orderBy: { createdAt: 'asc' },
       }),
     );
 
-    return memberships
-      .filter((m) => options.includeMfaRequired === true || hasMfa || !m.workspace.requireMfa)
-      .map((m) => ({
-        workspaceId: m.workspaceId,
-        workspaceName: m.workspace.name,
-        workspaceSlug: m.workspace.slug,
-        workspaceStatus: m.workspace.status,
-        roleKey: m.role.key,
-        roleNameEn: m.role.nameEn,
-        roleNameAr: m.role.nameAr,
-        // Recomputed from the stored role on every call, so a role change lands
-        // at the next request rather than at the next sign-in.
-        permissionKeys: m.role.permissions.map((rp) => rp.permission.key),
-        brandScope: m.brandScope,
-        deletionScheduledFor: m.workspace.deletionScheduledFor,
-        requireMfa: m.workspace.requireMfa,
-        country: m.workspace.country,
-      }));
+    const roles = await this.#rolesFor(memberships);
+    return memberships.flatMap((m) => {
+      const role = roleOfMembership(roles, m);
+      // A membership whose role does not resolve in its own workspace grants
+      // nothing, so it is left out rather than failing the whole list.
+      if (!role) return [];
+      if (!(options.includeMfaRequired === true || hasMfa || !m.workspace.requireMfa)) return [];
+      return [
+        {
+          workspaceId: m.workspaceId,
+          workspaceName: m.workspace.name,
+          workspaceSlug: m.workspace.slug,
+          workspaceStatus: m.workspace.status,
+          roleKey: role.key,
+          roleNameEn: role.nameEn,
+          roleNameAr: role.nameAr,
+          // Recomputed from the stored role on every call, so a role change lands
+          // at the next request rather than at the next sign-in.
+          permissionKeys: role.permissionKeys,
+          brandScope: m.brandScope,
+          deletionScheduledFor: m.workspace.deletionScheduledFor,
+          requireMfa: m.workspace.requireMfa,
+          country: m.workspace.country,
+        },
+      ];
+    });
   }
 
   /**
@@ -632,23 +666,29 @@ export class CustomerAuthService {
           workspace: {
             select: { id: true, name: true, status: true, ownerUserId: true, planKey: true },
           },
-          role: { select: { key: true, nameEn: true, nameAr: true } },
         },
         orderBy: { createdAt: 'asc' },
       }),
     );
 
-    return memberships.map((m) => ({
-      workspaceId: m.workspace.id,
-      workspaceName: m.workspace.name,
-      workspaceStatus: m.workspace.status,
-      operable: OPERABLE_STATUSES.has(m.workspace.status),
-      isOwner: m.workspace.ownerUserId === live.userId,
-      planKey: m.workspace.planKey,
-      roleKey: m.role.key,
-      roleNameEn: m.role.nameEn,
-      roleNameAr: m.role.nameAr,
-    }));
+    const roles = await this.#rolesFor(memberships);
+    return memberships.flatMap((m) => {
+      const role = roleOfMembership(roles, m);
+      if (!role) return [];
+      return [
+        {
+          workspaceId: m.workspace.id,
+          workspaceName: m.workspace.name,
+          workspaceStatus: m.workspace.status,
+          operable: OPERABLE_STATUSES.has(m.workspace.status),
+          isOwner: m.workspace.ownerUserId === live.userId,
+          planKey: m.workspace.planKey,
+          roleKey: role.key,
+          roleNameEn: role.nameEn,
+          roleNameAr: role.nameAr,
+        },
+      ];
+    });
   }
 
   /**
@@ -939,6 +979,81 @@ export class CustomerAuthService {
     const maybe = this.#prisma as unknown as { $transaction?: unknown };
     if (typeof maybe.$transaction !== 'function') return fn(this.#prisma);
     return this.#prisma.$transaction(async (tx) => fn(tx as unknown as PrismaClient));
+  }
+
+  /**
+   * Each membership's role, read INSIDE THAT MEMBERSHIP'S WORKSPACE (B3.2).
+   *
+   * The session scope above runs with no workspace context, and `role`'s
+   * policy shows a context-less read only the SYSTEM roles (`workspaceId IS
+   * NULL`). A workspace's own custom role came back null there, the join
+   * threw, and the chooser, the switcher and the API context all failed for
+   * every workspace the person belongs to.
+   *
+   * So the roles are resolved in two passes in one transaction: first with no
+   * context, which finds every system role; then, for each membership whose
+   * role is still missing, with `app.workspace_id` set to THAT membership's
+   * workspace — one the session scope has already shown this person belongs
+   * to — under the unchanged policy. No policy is widened: a custom role is
+   * read only in its own workspace's context, exactly as a member acting there
+   * reads it.
+   *
+   * Only WORKSPACE-realm roles resolve (D-131's trigger already refuses a
+   * membership naming a platform role; this is the read-side twin). A role
+   * that does not resolve is absent from the map, and the caller leaves that
+   * membership out: it grants nothing.
+   */
+  async #rolesFor(
+    memberships: readonly { readonly workspaceId: string; readonly roleId: string }[],
+  ): Promise<Map<string, ResolvedRole>> {
+    const found = new Map<string, ResolvedRole>();
+    const ids = [...new Set(memberships.map((m) => m.roleId))];
+    if (ids.length === 0) return found;
+    const read = async (db: PrismaClient, roleIds: readonly string[]) => {
+      const rows = await db.role.findMany({
+        where: { id: { in: [...roleIds] }, realm: 'WORKSPACE' },
+        select: {
+          id: true,
+          workspaceId: true,
+          key: true,
+          nameEn: true,
+          nameAr: true,
+          permissions: { select: { permission: { select: { key: true } } } },
+        },
+      });
+      for (const row of rows) {
+        found.set(row.id, {
+          workspaceId: row.workspaceId,
+          key: row.key,
+          nameEn: row.nameEn,
+          nameAr: row.nameAr,
+          permissionKeys: row.permissions.map((rp) => rp.permission.key),
+        });
+      }
+    };
+
+    const maybe = this.#prisma as unknown as { $transaction?: unknown };
+    if (typeof maybe.$transaction !== 'function') {
+      await read(this.#prisma, ids);
+      return found;
+    }
+    await this.#prisma.$transaction(async (tx) => {
+      const db = tx as unknown as PrismaClient;
+      await tx.$executeRaw`SELECT set_config('app.workspace_id', '', true)`;
+      await read(db, ids);
+      const missing = new Map<string, Set<string>>();
+      for (const m of memberships) {
+        if (found.has(m.roleId)) continue;
+        const roleIds = missing.get(m.workspaceId) ?? new Set<string>();
+        roleIds.add(m.roleId);
+        missing.set(m.workspaceId, roleIds);
+      }
+      for (const [workspaceId, roleIds] of missing) {
+        await tx.$executeRaw`SELECT set_config('app.workspace_id', ${workspaceId}, true)`;
+        await read(db, [...roleIds]);
+      }
+    });
+    return found;
   }
 
   /**

@@ -117,6 +117,9 @@ export const INVITATION_TTL_DAYS = 7;
  */
 export const INVITATION_LIST_CAP = 200;
 
+/** Fix PR 2b (B2.2) — the invitee's name, capped as sign-up caps it (`maxLength={120}`). */
+const INVITEE_NAME_MAX = 120;
+
 export function hashInvitationToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -798,9 +801,22 @@ export class InvitationService {
    *     audit writes happen under the workspace scope, as ordinary tenant
    *     writes. Acceptance never runs under the widened token scope.
    */
-  async acceptAsNewUser(token: string, password: string): Promise<OnboardedInvitation> {
+  async acceptAsNewUser(
+    token: string,
+    password: string,
+    name: string,
+  ): Promise<OnboardedInvitation> {
     const tokenHash = hashInvitationToken(token);
     const now = this.#clock.now();
+    /*
+     * FIX PR 2b (B2.2) — THE INVITEE'S OWN NAME, written to `User.name`.
+     * Required, trimmed and capped exactly as sign-up's is, and checked before
+     * the transaction for the same reason the password is: a refusal must not
+     * have consumed the invitation. It is the one thing here the person types
+     * about themselves; the address still comes only from the invitation.
+     */
+    const displayName = name.trim().slice(0, INVITEE_NAME_MAX);
+    if (!displayName) throw new AppError('VALIDATION_FAILED', 'A name is required.');
 
     /*
      * Hashed BEFORE the transaction, for the reason the password-reset path
@@ -839,6 +855,7 @@ export class InvitationService {
             where: { id: existing.id },
             data: {
               passwordHash,
+              name: displayName,
               status: 'ACTIVE',
               emailVerifiedAt: existing.emailVerifiedAt ?? now,
               failedLoginCount: 0,
@@ -849,6 +866,7 @@ export class InvitationService {
             data: {
               // From the INVITATION, never from user input.
               email,
+              name: displayName,
               passwordHash,
               status: 'ACTIVE',
               emailVerifiedAt: now,

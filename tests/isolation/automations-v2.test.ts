@@ -270,20 +270,32 @@ describe('updateEditableRule', () => {
       ),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     // The same settings, unchanged, are not a change — no permission is needed.
-    const renamed = await inA((db) =>
+    const resent = await inA((db) =>
       engine(db).updateEditableRule({
         ruleId: created.id,
         expectedVersion: created.version,
-        name: `Renamed ${randomUUID().slice(0, 4)}`,
         actionConfig: { offsetHours: 24 },
         actor: withoutSchedule,
       }),
     );
-    expect(renamed.actionConfig).toEqual({ offsetHours: 24 });
+    expect(resent.actionConfig).toEqual({ offsetHours: 24 });
+    // Fix PR 2b (B3.7): ANY change asks for the action's permission — a new
+    // name too, not only new action settings.
+    await expect(
+      inA((db) =>
+        engine(db).updateEditableRule({
+          ruleId: created.id,
+          expectedVersion: resent.version,
+          name: `Renamed ${randomUUID().slice(0, 4)}`,
+          actionConfig: { offsetHours: 24 },
+          actor: withoutSchedule,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     const moved = await inA((db) =>
       engine(db).updateEditableRule({
         ruleId: created.id,
-        expectedVersion: renamed.version,
+        expectedVersion: resent.version,
         actionConfig: { offsetHours: 48 },
         actor: actor(),
       }),

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { AppError, isAppError } from '@brandspace/shared';
 import {
+  AUTOMATION_BRAND_ARCHIVED_REASON,
   AUTOMATION_RULE_NAME_TAKEN_REASON,
   AUTOMATION_RULE_VERSION_CONFLICT_REASON,
 } from '@brandspace/automation';
@@ -43,6 +44,10 @@ function codeFrom(error: unknown): string {
   }
   if (isAppError(error) && error.publicDetails['reason'] === AUTOMATION_RULE_NAME_TAKEN_REASON) {
     return 'AUTOMATION_RULE_NAME_TAKEN';
+  }
+  // Fix PR 2b (B3.7) — a rule made or switched on for an archived brand.
+  if (isAppError(error) && error.publicDetails['reason'] === AUTOMATION_BRAND_ARCHIVED_REASON) {
+    return 'AUTOMATION_BRAND_ARCHIVED';
   }
   return isAppError(error) ? error.code : 'INTERNAL';
 }

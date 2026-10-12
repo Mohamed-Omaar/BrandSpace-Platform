@@ -1,9 +1,9 @@
-import { PasswordField, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import { Field, PasswordField, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { InvitationService } from '@brandspace/auth';
 import { getPrisma } from '@brandspace/database';
 import { getCustomer } from '../../../../server/customer-context';
 import { statusMessage, translator } from '../../../../i18n/messages';
-import { AuthCard, authButtonStyle } from '../../../../components/auth-card';
+import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
 import { acceptInvitationAction, onboardInvitationAction } from '../../(auth)/actions';
 import { signupPolicy } from '../../../../server/signup-policy';
 
@@ -123,6 +123,24 @@ export default async function InvitationPage({
               invitation row; letting the form supply one would make this a way
               to create an account for somebody else's address.
             */}
+            {/*
+              FIX PR 2b (B2.2) — THEIR OWN NAME, from them. Without it a new
+              member showed as their email address everywhere. It is the same
+              field sign-up asks, written to `User.name`; the address still comes
+              only from the invitation.
+            */}
+            <Field label={t('invite.name')} htmlFor="invite-name" required>
+              <input
+                className="bs-control"
+                id="invite-name"
+                name="name"
+                required
+                maxLength={120}
+                autoComplete="name"
+                data-testid="invitation-name"
+                style={authInputStyle()}
+              />
+            </Field>
             {/*
               The shared control and the CONFIGURED minimum (P6-03a). The hint
               paragraph is gone because the rules list below the field says the
