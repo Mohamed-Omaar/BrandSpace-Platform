@@ -19,7 +19,7 @@ import { CAMPAIGN_STATUSES } from '../../../server/campaign-form';
 import { bestCampaign, formatRateMilli } from '../../../server/best-campaign';
 import { ChannelMark } from '../calendar/prototype-calendar';
 import { formLabels, objectiveLabel, periodLabel, statusLabel } from './labels';
-import { createCampaignAction } from './actions';
+import { createCampaignAction, pauseCampaignAction } from './actions';
 import { CampaignFormView } from './campaign-form-view';
 import { CampaignDialog } from './campaign-dialog';
 import { CAMPAIGN_OBJECTIVES } from '../../../server/campaign-form';
@@ -569,6 +569,35 @@ export default async function CampaignsPage({
                       </div>
                     ) : null}
                     <div className="bsp-camp-foot">
+                      {/*
+                        Fix PR 2c (B.4) — the prototype's Pause on a running card
+                        (Main.dc.html L1198): the pause glyph and the word, plain.
+                      */}
+                      {mayManage && campaign.status === 'ACTIVE' ? (
+                        <form action={pauseCampaignAction}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="campaignId" value={campaign.id} />
+                          <input type="hidden" name="brandId" value={campaign.brandId} />
+                          <button
+                            type="submit"
+                            className="bsp-camp-toggle"
+                            data-testid={`campaign-pause-${campaign.id}`}
+                            aria-label={`${t('campaigns.card.pause')} — ${campaign.name}`}
+                          >
+                            <svg
+                              width="13"
+                              height="13"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              aria-hidden="true"
+                            >
+                              <rect x="6" y="5" width="4" height="14" rx="1" />
+                              <rect x="14" y="5" width="4" height="14" rx="1" />
+                            </svg>
+                            {t('campaigns.card.pause')}
+                          </button>
+                        </form>
+                      ) : null}
                       <Link
                         href={`/${locale}/campaigns/${campaign.id}`}
                         className="bsp-camp-open"

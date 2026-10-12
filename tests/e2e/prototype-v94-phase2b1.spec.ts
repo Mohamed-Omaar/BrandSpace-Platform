@@ -800,7 +800,11 @@ test.describe('G4 / Q23 · two-step verification: QR, new phone, and the workspa
     await expect(page.getByTestId('mfa-required-note')).toBeVisible();
     await expect(page.getByTestId('mfa-disable')).toHaveCount(0);
 
-    // 3. "New phone": a current code, then the new phone's own code.
+    // 3. "New phone": a current code, then the new phone's own code. Fix PR 2c:
+    // it is its own row on the page, holding the code field and its button.
+    await expect(
+      page.getByTestId('mfa-new-phone-row').getByTestId('mfa-new-phone-begin'),
+    ).toBeVisible();
     await page.getByTestId('mfa-new-phone-code').fill(codeFromKey(firstKey));
     await page.getByTestId('mfa-new-phone-begin').click();
     await expect(page.getByTestId('mfa-new-phone-qr')).toBeVisible();

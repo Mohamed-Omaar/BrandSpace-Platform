@@ -181,6 +181,49 @@ export async function startCampaignNowAction(formData: FormData): Promise<void> 
   redirect(destination);
 }
 
+/**
+ * FIX PR 2c (B.4) — PAUSE ON THE CAMPAIGN CARD, as the prototype's running
+ * card offers it. The one pause the product has (`CampaignService.pause`, the
+ * automation's): a PLANNED or ACTIVE campaign of a brand in the member's scope
+ * becomes PAUSED, under a version check, with one `campaign.updated` audit
+ * event — here with reason `manual_pause`. Anything else is refused with its
+ * own words, and a campaign outside the scope is the ordinary miss.
+ */
+export async function pauseCampaignAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const campaignId = String(formData.get('campaignId') ?? '');
+  const brandId = String(formData.get('brandId') ?? '');
+  let destination: string;
+
+  try {
+    const session = await requireWorkspaceAction(locale, 'campaigns.manage');
+    const outcome = await inContentStudio(session.workspace.workspaceId, async (services) =>
+      services.campaigns().pause({
+        campaignId,
+        brandId,
+        reason: 'manual_pause',
+        actor: {
+          userId: session.customer.userId,
+          brandScope: session.workspace.brandScope,
+        },
+      }),
+    );
+    destination =
+      outcome.kind === 'paused'
+        ? `/${locale}/campaigns?status=PAUSED&ok=CAMPAIGN_PAUSED`
+        : `/${locale}/campaigns?error=${
+            outcome.reason === 'campaign_not_pausable' ? 'CAMPAIGN_NOT_PAUSABLE' : 'NOT_FOUND'
+          }`;
+  } catch (error: unknown) {
+    if (isRedirectError(error)) throw error;
+    const correlationId = randomUUID();
+    log.warn('campaign pause failed', { correlationId, ...internalErrorFields(error) });
+    destination = `/${locale}/campaigns?error=${actionErrorCode(error)}&ref=${correlationId}`;
+  }
+  revalidatePath(`/${locale}/campaigns`);
+  redirect(destination);
+}
+
 /** "Start now" refusals get their own words; the reason is machine-readable. */
 function startNowErrorCode(error: unknown): string {
   if (isAppError(error) && error.publicDetails['reason'] === CAMPAIGN_ALREADY_ENDED_REASON) {

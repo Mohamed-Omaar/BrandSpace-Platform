@@ -2274,6 +2274,29 @@ card's View evidence, Give to Copilot and Dismiss leave Home (they remain on Int
 Performance). A post in review is named without channels: a post has no channels until it is
 scheduled.
 
+### 6.3.64 Fix PR 2c — the screen fixes (D-506)
+
+- **The Copilot button, docked (Q2, a recorded DEVIATION).** The prototype's `.fab` floats at the
+  frame's bottom corner (`Main.dc.html` L1483) and covered whatever row scrolled under it. On every
+  width it now sits in the empty slot at the end of the header's action row — the mechanism the
+  phone layout already used (D-468 (b)) — drawn as the header's own controls: 40px high, radius 12,
+  the `.ibtn` grey `#f2f2f4`, a 32px mark, no blur and no shadow. It scrolls with the header, and an
+  open header menu stays above it. Measured in `tests/e2e/fix-2c-screens.spec.ts` at 1280, 1536 and
+  1920, en and ar: in its slot to the pixel, before and after scrolling, covering no header control.
+- **Pause on the campaign card (a PORT).** The prototype's card toggle (`toggleLabel` / `toggle`,
+  L3673): `.bsp-camp-toggle`, a 6px gap, `padding: 6px 4px`, 12px / 600, `#55555c`, the pause glyph,
+  before "Open", on an active card for a person who may manage campaigns. "Resume" is left out: a
+  paused campaign is resumed through Edit, as before.
+- **The workspace list rests on whole rows (a state the prototype does not draw, D-468 (c)).** The
+  prototype's list never scrolls; the product's does (PR D). Its rows now snap to the list's top edge,
+  and a list that overflows is held to a whole number of rows, so no row is cut to an empty bar.
+- **"New phone" as its own row** in Security, as the recovery codes have: the title, its line, and
+  the code with the button at the row's end — the page's `.bsp-secu-block` / `.bsp-secu-row`.
+- **Plan & billing** keeps its tables; only their words change ("Allowance", "Availability", plain
+  quota names, GB) and a limit is shown only where one applies.
+- **Onboarding**: the Business step's industry chips are the wizard's own `.bsp-wz-chip`; the
+  finished brand step's form is the new-brand step's fields, filled in.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The

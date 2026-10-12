@@ -992,9 +992,13 @@ export async function duplicateContentAction(formData: FormData): Promise<void> 
         expiresAt: resolveContentExpiry(policy, facts, systemClock),
         ...actorOf(session),
       });
-      return created.item.id;
+      return { id: created.item.id, leftOut: created.mediaLeftOut.length };
     });
-    destination = pageUrl(locale, '/compose', { item: copyId, ok: 'DUPLICATED' });
+    // Fix PR 2c (B2.3): a file whose licence ended was left out, and the page says so.
+    destination = pageUrl(locale, '/compose', {
+      item: copyId.id,
+      ok: copyId.leftOut > 0 ? 'DUPLICATED_LICENCE_ENDED' : 'DUPLICATED',
+    });
   } catch (error: unknown) {
     destination = failure(locale, error, 'duplicate', '');
   }

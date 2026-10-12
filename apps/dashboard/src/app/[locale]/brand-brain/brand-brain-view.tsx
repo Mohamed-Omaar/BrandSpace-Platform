@@ -11,7 +11,7 @@ import { ReviewInbox, type ConfidentPreviewEntry } from './review-inbox';
 import { VoiceCard } from './voice-card';
 import { LookCard, type LookViewData } from './look-card';
 import { SourceRow, type SourceRowData } from './source-row';
-import { SegmentPill } from '@brandspace/ui';
+import { SegmentPill, prefersReducedMotion } from '@brandspace/ui';
 import { acceptConfidentCandidatesAction, uploadSourceAction as uploadFormAction } from './actions';
 import type { UploadRules } from '../../../components/upload-rules';
 import { RefreshWhile } from '../../../components/refresh-while';
@@ -102,6 +102,8 @@ export interface MissingQuestionData {
   readonly areaLabel: string;
   readonly itemKey: string;
   readonly prompt: string;
+  /** Fix PR 2c — what the chip reads: the short wording, or the question. */
+  readonly chip?: string;
 }
 
 /** D-294 — one of the four memories, counted. */
@@ -417,7 +419,7 @@ export function BrandBrainView({
     // change event, so a type or size the server would refuse says so here.
     input.dispatchEvent(new Event('change', { bubbles: true }));
     if (dropAreaRef.current) dropAreaRef.current.value = pendingDrop.area ?? '';
-    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    form.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' });
     setPendingDrop(null);
   }, [tab, pendingDrop]);
 
@@ -439,7 +441,10 @@ export function BrandBrainView({
     setInboxArea(area);
     setRvOpen(true);
     window.requestAnimationFrame(() =>
-      inboxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      inboxRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'start',
+      }),
     );
   }, []);
 
@@ -725,7 +730,7 @@ export function BrandBrainView({
                         to the chip, and read in full on hover (round 2).
                       */}
                       <span className="bsp-bb-miss-a">{entry.areaLabel} ·</span>{' '}
-                      <span className="bsp-bb-miss-p">{entry.prompt}</span>{' '}
+                      <span className="bsp-bb-miss-p">{entry.chip ?? entry.prompt}</span>{' '}
                       <span className="bsp-bb-miss-plus" aria-hidden="true">
                         +
                       </span>

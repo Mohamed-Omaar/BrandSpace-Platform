@@ -4,9 +4,11 @@ import {
   scrollContainerStyle,
   spacingTokens,
   typographyTokens,
+  visuallyHiddenStyle,
 } from '@brandspace/ui';
 import { mayReadCreditBalance, systemClock } from '@brandspace/shared';
 import {
+  AUTOMATION_AI_ACTIONS_FEATURE,
   MULTI_BRAND_FEATURE,
   QUOTA_FEATURES,
   TOTAL_RESOURCE_DIMENSIONS,
@@ -164,12 +166,42 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
     .catch(() => []);
   const planName = planDisplayName(effective.planKey, catalogue, locale);
 
+  /*
+   * FIX PR 2c — WHAT A QUOTA IS CALLED AND MEASURED IN. A `limit.*` key is the
+   * registry's identifier, never a name: where the feature catalogue gives no
+   * name, the plain one comes from here, in both languages. Storage is counted
+   * in GB, and every figure for it says so.
+   */
+  const LIMIT_NAMES: Readonly<Record<string, MessageKey>> = {
+    [QUOTA_FEATURES.seats]: 'plan.limitSeats',
+    [QUOTA_FEATURES.brands]: 'plan.usageBrands',
+    [QUOTA_FEATURES.socialAccounts]: 'plan.usageSocialAccounts',
+    [QUOTA_FEATURES.scheduledPostsPerMonth]: 'plan.usageScheduled',
+    [QUOTA_FEATURES.storageGb]: 'plan.usageStorage',
+    [QUOTA_FEATURES.analyticsRetentionDays]: 'plan.limitAnalyticsRetention',
+    [AUTOMATION_AI_ACTIONS_FEATURE]: 'plan.limitAutomationAiActions',
+  };
+  const featureName = (featureKey: string): string => {
+    const named = featureDisplayName(featureKey, features, locale);
+    if (named !== featureKey) return named;
+    const plain = LIMIT_NAMES[featureKey];
+    return plain ? t(plain) : featureKey;
+  };
+  const amount = (featureKey: string, value: string | number): string =>
+    featureKey === QUOTA_FEATURES.storageGb
+      ? t('plan.unitGb').replace('{n}', String(value))
+      : String(value);
+  const valueTypeOf = (featureKey: string): string | undefined =>
+    features.find((entry) => entry.key === featureKey)?.valueType;
+
   /** "12 of 50", "12 · no ceiling stated" — the ceiling is the resolved decision. */
   const againstCeiling = (used: string, featureKey: string): string => {
     const ceiling = ceilingFor(effective.decisions, featureKey);
     return ceiling.kind === 'limited'
-      ? t('plan.usageOf').replace('{used}', used).replace('{limit}', String(ceiling.limit))
-      : t('plan.usageUnstated').replace('{used}', used);
+      ? t('plan.usageOf')
+          .replace('{used}', amount(featureKey, used))
+          .replace('{limit}', amount(featureKey, ceiling.limit))
+      : t('plan.usageUnstated').replace('{used}', amount(featureKey, used));
   };
 
   /*
@@ -462,7 +494,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
               <table style={customerTableStyle()} data-testid="quota-table">
                 <thead>
                   <tr>
-                    <th style={customerThStyle()}>{t('plan.features')}</th>
+                    <th style={customerThStyle()}>{t('plan.quotaItem')}</th>
                     <th style={customerThStyle()}>{t('plan.quotaUsed')}</th>
                     <th style={customerThStyle()}>{t('plan.limit')}</th>
                   </tr>
@@ -474,10 +506,14 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                     );
                     return (
                       <tr key={counter.featureKey} data-testid={`quota-${counter.featureKey}`}>
-                        <td style={customerTdStyle()}>{counter.featureKey}</td>
-                        <td style={customerTdStyle()}>{counter.used}</td>
+                        <td style={customerTdStyle()}>{featureName(counter.featureKey)}</td>
                         <td style={customerTdStyle()}>
-                          {decision?.limitValue ?? t('plan.unlimited')}
+                          {amount(counter.featureKey, counter.used)}
+                        </td>
+                        <td style={customerTdStyle()}>
+                          {decision?.limitValue === null || decision?.limitValue === undefined
+                            ? t('plan.unlimited')
+                            : amount(counter.featureKey, decision.limitValue)}
                         </td>
                       </tr>
                     );
@@ -602,20 +638,39 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                 <thead>
                   <tr>
                     <th style={customerThStyle()}>{t('plan.features')}</th>
-                    <th style={customerThStyle()}>{t('members.status')}</th>
+                    <th style={customerThStyle()}>{t('plan.featureAvailability')}</th>
                     <th style={customerThStyle()}>{t('plan.limit')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {effective.decisions.map((d) => (
                     <tr key={d.featureKey} data-testid={`feature-${d.featureKey}`}>
-                      <td style={customerTdStyle()}>
-                        {featureDisplayName(d.featureKey, features, locale)}
-                      </td>
+                      <td style={customerTdStyle()}>{featureName(d.featureKey)}</td>
                       <td style={customerTdStyle()}>
                         {d.enabled ? t('common.enabled') : t('common.disabled')}
                       </td>
-                      <td style={customerTdStyle()}>{d.limitValue ?? t('plan.unlimited')}</td>
+                      {/*
+                        A LIMIT ONLY WHERE THERE IS ONE (Fix PR 2c). A feature that
+                        is off has nothing to limit, and a yes/no feature never had
+                        a limit: both read "—", said as "Not applicable", instead
+                        of an "Unlimited" that promised what was not there.
+                      */}
+                      <td style={customerTdStyle()} data-testid={`feature-limit-${d.featureKey}`}>
+                        {!d.enabled || valueTypeOf(d.featureKey) === 'boolean' ? (
+                          <>
+                            <span aria-hidden="true">—</span>
+                            <span style={visuallyHiddenStyle()}>
+                              {t('plan.limitNotApplicable')}
+                            </span>
+                          </>
+                        ) : valueTypeOf(d.featureKey) === 'enum' ? (
+                          (d.enumValue ?? '—')
+                        ) : d.limitValue === null ? (
+                          t('plan.unlimited')
+                        ) : (
+                          amount(d.featureKey, d.limitValue)
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -648,7 +703,7 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                   data-testid={`upgrade-${decision.featureKey}`}
                   style={{ ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
                 >
-                  {featureDisplayName(decision.featureKey, features, locale)}
+                  {featureName(decision.featureKey)}
                 </li>
               ))}
             </ul>

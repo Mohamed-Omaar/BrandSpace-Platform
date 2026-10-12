@@ -722,6 +722,10 @@ export default async function BrandBrainPage({
     areaLabel: cardLabel.get(entry.area) ?? entry.area,
     itemKey: entry.question.itemKey,
     prompt: pick(entry.question.prompt, locale),
+    // Fix PR 2c — the configured short wording for the chip, or the question.
+    chip: entry.question.short
+      ? pick(entry.question.short, locale)
+      : pick(entry.question.prompt, locale),
   }));
 
   /*

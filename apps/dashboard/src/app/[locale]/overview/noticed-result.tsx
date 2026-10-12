@@ -92,7 +92,7 @@ export function NoticedDecided() {
         <span className={card.tagClass}>{card.tag}</span>
       </span>
       <span className="bsp-xtitle bsp-home-decided-t">{card.title}</span>
-      <span className="bsp-xdesc">{card.evidence}</span>
+      {card.evidence ? <span className="bsp-xdesc">{card.evidence}</span> : null}
       <span className="bsp-pill bsp-p-ok bsp-home-decided-pill" role="status">
         {card.result}
       </span>

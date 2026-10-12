@@ -504,54 +504,81 @@ export default async function AutomationsPage({
           catalogueBrandIds.map((brandId) => [brandId, conditionChoices(field, brandId)]),
         )
       : undefined;
-  const editInitial: AutomationFormInitial | null = editing
-    ? (() => {
-        const trigger = (editing.triggerConfig ?? {}) as Record<string, unknown>;
-        const action = (editing.actionConfig ?? {}) as Record<string, unknown>;
-        const conditions = Array.isArray(editing.conditions)
-          ? (editing.conditions as {
-              field: string;
-              operator: string;
-              value?: string | number | boolean | string[];
-            }[])
-          : [];
-        const first = conditions[0];
-        const number = (value: unknown): number | null =>
-          typeof value === 'number' && Number.isFinite(value) ? value : null;
-        return {
-          ruleId: editing.id,
-          version: editing.version,
-          name: editing.name,
-          description: editing.description ?? '',
-          brandName: brandNames.get(editing.brandId) ?? '',
-          triggerType: editing.triggerType,
-          actionType: editing.actionType,
-          hourLocal: number(trigger['hourLocal']),
-          daysOfWeek: Array.isArray(trigger['daysOfWeek'])
-            ? (trigger['daysOfWeek'] as unknown[]).filter(
-                (day): day is number => typeof day === 'number',
-              )
-            : [],
-          metricKey: typeof trigger['metricKey'] === 'string' ? trigger['metricKey'] : null,
-          direction:
-            trigger['direction'] === 'above' || trigger['direction'] === 'below'
-              ? trigger['direction']
-              : null,
-          threshold: number(trigger['threshold']),
-          windowDays: number(trigger['windowDays']),
-          offsetHours:
-            editing.actionType === 'PLACE_ON_CALENDAR'
-              ? (number(action['offsetHours']) ?? 24)
-              : null,
-          brandId: editing.brandId,
-          actionUserId: typeof action['userId'] === 'string' ? action['userId'] : null,
-          actionCampaignId: typeof action['campaignId'] === 'string' ? action['campaignId'] : null,
-          condition: first
-            ? { field: first.field, operator: first.operator, value: first.value ?? null }
+  /** A stored rule as the builder's values — to edit it, or to copy it. */
+  const formInitialOf = (editing: (typeof rules)[number]): AutomationFormInitial =>
+    (() => {
+      const trigger = (editing.triggerConfig ?? {}) as Record<string, unknown>;
+      const action = (editing.actionConfig ?? {}) as Record<string, unknown>;
+      const conditions = Array.isArray(editing.conditions)
+        ? (editing.conditions as {
+            field: string;
+            operator: string;
+            value?: string | number | boolean | string[];
+          }[])
+        : [];
+      const first = conditions[0];
+      const number = (value: unknown): number | null =>
+        typeof value === 'number' && Number.isFinite(value) ? value : null;
+      return {
+        ruleId: editing.id,
+        version: editing.version,
+        name: editing.name,
+        description: editing.description ?? '',
+        brandName: brandNames.get(editing.brandId) ?? '',
+        triggerType: editing.triggerType,
+        actionType: editing.actionType,
+        hourLocal: number(trigger['hourLocal']),
+        daysOfWeek: Array.isArray(trigger['daysOfWeek'])
+          ? (trigger['daysOfWeek'] as unknown[]).filter(
+              (day): day is number => typeof day === 'number',
+            )
+          : [],
+        metricKey: typeof trigger['metricKey'] === 'string' ? trigger['metricKey'] : null,
+        direction:
+          trigger['direction'] === 'above' || trigger['direction'] === 'below'
+            ? trigger['direction']
             : null,
-          extraConditions: Math.max(0, conditions.length - 1),
-        };
-      })()
+        threshold: number(trigger['threshold']),
+        windowDays: number(trigger['windowDays']),
+        offsetHours:
+          editing.actionType === 'PLACE_ON_CALENDAR' ? (number(action['offsetHours']) ?? 24) : null,
+        brandId: editing.brandId,
+        actionUserId: typeof action['userId'] === 'string' ? action['userId'] : null,
+        actionCampaignId: typeof action['campaignId'] === 'string' ? action['campaignId'] : null,
+        condition: first
+          ? { field: first.field, operator: first.operator, value: first.value ?? null }
+          : null,
+        extraConditions: Math.max(0, conditions.length - 1),
+      };
+    })();
+  const editInitial: AutomationFormInitial | null = editing ? formInitialOf(editing) : null;
+
+  /*
+   * FIX PR 2c (B.4, r3 #17) — DUPLICATE A RULE. "Duplicate" in a rule's ⋯ opens
+   * the NEW-rule builder (`?new=1&from=<rule>`) with that rule's trigger,
+   * settings, condition and action filled in and its name as "(copy)"; saving
+   * is the ordinary create, so the copy is a hand-made rule, on when saved
+   * (D-499), checked like any new one. Offered only where the builder can hold
+   * the whole rule: a pair a new rule may use, an event that is set up, an
+   * action the plan includes, at most one condition, and a brand in the form.
+   */
+  const formBrandIds = new Set(formBrands.map((brand) => brand.id));
+  const duplicable = (rule: (typeof rules)[number]): boolean =>
+    isAuthorablePair(rule.triggerType, rule.actionType) &&
+    triggerAvailable(automationPolicy, rule.triggerType) &&
+    entitledActions.has(rule.actionType) &&
+    (Array.isArray(rule.conditions) ? rule.conditions.length : 0) <= 1 &&
+    formBrandIds.has(rule.brandId);
+  const fromId = typeof query['from'] === 'string' ? query['from'] : null;
+  const copied =
+    mayManage && editing === null && query['new'] === '1' && fromId
+      ? (rules.find((rule) => rule.id === fromId && duplicable(rule)) ?? null)
+      : null;
+  const template: AutomationFormInitial | null = copied
+    ? {
+        ...formInitialOf(copied),
+        name: t('automations.copyName').replace('{name}', copied.name).slice(0, 120),
+      }
     : null;
 
   // Round 3 (C2) — the prototype's one style: "Oct 16 · 10:00", 24-hour.
@@ -688,7 +715,8 @@ export default async function AutomationsPage({
               {t('automations.brandFilter').replace('{brand}', selectedBrand.name)}
             </span>
           ) : null}
-          {mayManage && formBrands.length > 0 ? (
+          {/* Fix PR 2c — no "New rule" under the archived-brand refusal: it would be refused too. */}
+          {mayManage && formBrands.length > 0 && error !== 'AUTOMATION_BRAND_ARCHIVED' ? (
             <Link
               href={hrefWith({ new: '1' })}
               className="bsp-btn bsp-sm bsp-pur bsp-au-new"
@@ -883,6 +911,15 @@ export default async function AutomationsPage({
                               >
                                 {t('automations.edit')}
                               </Link>
+                              {duplicable(rule) ? (
+                                <Link
+                                  href={hrefWith({ new: '1', from: rule.id })}
+                                  className="bsp-au-mi"
+                                  data-testid={`automation-duplicate-${rule.id}`}
+                                >
+                                  {t('automations.duplicate')}
+                                </Link>
+                              ) : null}
                               <details data-testid={`automation-delete-${rule.id}`}>
                                 <summary className="bsp-au-mi bsp-au-mi-bad">
                                   {t('automations.deleteConfirm')}
@@ -1089,10 +1126,11 @@ export default async function AutomationsPage({
             client component is what took the Copilot screen down at render.
           */}
           <AutomationForm
-            key={editInitial?.ruleId ?? 'create'}
+            key={editInitial?.ruleId ?? (copied ? `copy-${copied.id}` : 'create')}
             locale={locale}
             action={editInitial ? updateAutomationAction : createAutomationAction}
             initial={editInitial ?? undefined}
+            template={template ?? undefined}
             cancelHref={listHref}
             brands={formBrands.map((brand) => ({ id: brand.id, name: brand.name }))}
             /*

@@ -9,7 +9,7 @@ import {
   UploadStatus,
   uploadTexts,
 } from '../../../components/upload-field';
-import { visuallyHiddenStyle } from '@brandspace/ui';
+import { prefersReducedMotion, visuallyHiddenStyle } from '@brandspace/ui';
 import { translator } from '../../../i18n/messages';
 import type { AreaCardData, BrandBrainPermissions, CandidateData } from './brand-brain-view';
 import {
@@ -89,7 +89,10 @@ export function AreaDrawer({
   const choose = (question: QuestionFocus) => {
     setChosen(question);
     window.requestAnimationFrame(() => {
-      addRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      addRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'center',
+      });
       addRef.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus();
     });
   };

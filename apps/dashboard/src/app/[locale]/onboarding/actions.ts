@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect, unstable_rethrow } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
-import { writeAuditEvent } from '@brandspace/database';
+import { getPrisma, withWorkspace, writeAuditEvent } from '@brandspace/database';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
 import { type WorkspaceSession, requireWorkspaceAction } from '../../../server/customer-context';
 import { actionErrorCode } from '../../../server/denial';
@@ -13,6 +13,7 @@ import { rememberBrand } from '../../../server/brand-cookie';
 import { uploadIntoLibrary } from '../../../server/asset-upload';
 import { uploadReasonOf } from '../../../server/upload-rules';
 import { setupBrandFrom } from '../../../server/setup-brand-form';
+import { saveBrandProfile } from '../../../server/brand-profile-save';
 import { saveSetupGoal } from '../../../server/setup-goal';
 import {
   applyCandidateReview,
@@ -96,6 +97,56 @@ export async function createSetupBrandAction(formData: FormData): Promise<void> 
     }
   } catch (error: unknown) {
     destination = failure(locale, 'brand', error, 'create-brand');
+  }
+  revalidatePath(`/${locale}/onboarding`);
+  revalidatePath(`/${locale}/brand-brain`);
+  redirect(destination);
+}
+
+/**
+ * FIX PR 2c (B.4, r3 #22) — A FINISHED BRAND STEP CAN BE EDITED.
+ *
+ * Going back to the brand step after the brand exists used to show its answers
+ * read-only. They are now the step's form again: the name, the website, the
+ * languages and the industry, saved through the one brand-profile write
+ * (`saveBrandProfile`, the `brand.profile.updated` audit event) that Settings →
+ * Brand uses — only the fields this step asks, so the colours, logo and
+ * typography are left exactly as they are. `brand.manage` and the member's
+ * BrandScope, before anything is read; a brand that is not there is the same
+ * answer as one outside the scope.
+ */
+export async function saveSetupBrandAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const brandId = String(formData.get('brandId') ?? '');
+  let destination: string;
+  try {
+    const session = await requireWorkspaceAction(locale, 'brand.manage');
+    assertBrandInScope(session.workspace.brandScope, brandId);
+    const input = setupBrandFrom(formData);
+    const saved = await withWorkspace(
+      session.workspace.workspaceId,
+      (db) =>
+        saveBrandProfile(db, {
+          workspaceId: session.workspace.workspaceId,
+          actorUserId: session.customer.userId,
+          brandId,
+          patch: {
+            name: input.name,
+            industry: input.industry ?? null,
+            websiteUrl: input.websiteUrl ?? null,
+            defaultLocale: input.defaultLocale,
+            supportedLocales: input.supportedLocales,
+          },
+        }),
+      { prisma: getPrisma() },
+    );
+    destination =
+      saved === 'saved'
+        ? pageUrl(locale, 'learn', { ok: 'SETUP_BRAND_SAVED' })
+        : pageUrl(locale, 'brand', { error: 'NOT_FOUND' });
+  } catch (error: unknown) {
+    unstable_rethrow(error);
+    destination = failure(locale, 'brand', error, 'save-brand');
   }
   revalidatePath(`/${locale}/onboarding`);
   revalidatePath(`/${locale}/brand-brain`);

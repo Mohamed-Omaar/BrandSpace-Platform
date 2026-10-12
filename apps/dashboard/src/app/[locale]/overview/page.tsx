@@ -673,6 +673,13 @@ export default async function OverviewPage({
     const text = localizedFrom(value as never);
     return (locale === 'ar' ? (text.ar ?? text.en) : (text.en ?? text.ar)) ?? '';
   };
+  const recommendationEvidence = (insight: {
+    readonly _count: { readonly evidence: number };
+    readonly basis: string;
+  }) =>
+    t('home.recommended.evidence')
+      .replace('{count}', String(insight._count.evidence))
+      .replace('{basis}', t(`home.basis.${insight.basis}` as MessageKey));
 
   const period = greetingPeriod(hourIn(now, timeZone));
   const firstName = greetingName(customer.name);
@@ -1492,11 +1499,15 @@ export default async function OverviewPage({
                         <span className="bsp-xtitle" style={NOTICED_TITLE}>
                           {pick(insight.title)}
                         </span>
-                        <span className="bsp-xdesc">
-                          {t('home.recommended.evidence')
-                            .replace('{count}', String(insight._count.evidence))
-                            .replace('{basis}', t(`home.basis.${insight.basis}` as MessageKey))}
-                        </span>
+                        {/* Fix PR 2c — no "0 pieces of evidence" line. */}
+                        {insight._count.evidence > 0 ? (
+                          <span
+                            className="bsp-xdesc"
+                            data-testid={`home-recommendation-evidence-${insight.id}`}
+                          >
+                            {recommendationEvidence(insight)}
+                          </span>
+                        ) : null}
                         {/*
                          * D-496 (Home 4, Q4) — the prototype's two buttons: the
                          * direct action, which opens the Studio on the format
@@ -1535,12 +1546,10 @@ export default async function OverviewPage({
                                   tag: t('home.p.tagSuggestion'),
                                   tagClass: 'bsp-xstatus',
                                   title: pick(insight.title),
-                                  evidence: t('home.recommended.evidence')
-                                    .replace('{count}', String(insight._count.evidence))
-                                    .replace(
-                                      '{basis}',
-                                      t(`home.basis.${insight.basis}` as MessageKey),
-                                    ),
+                                  evidence:
+                                    insight._count.evidence > 0
+                                      ? recommendationEvidence(insight)
+                                      : '',
                                   result: insightSnoozeDays
                                     ? t('home.decided.snooze').replace(
                                         '{days}',
