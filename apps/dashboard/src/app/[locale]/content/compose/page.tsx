@@ -1333,6 +1333,7 @@ export default async function ComposePage({
             ? CONTENT_TOOLS
             : []
         }
+        aiWriting={aiCaption}
         aiOff={
           !aiCaption &&
           (maySpendCredits(workspace.permissionKeys, 'content.create') ||
@@ -1693,6 +1694,7 @@ const COMPOSER_KEYS = [
   'studio.briefHint',
   'studio.aiWrite',
   'studio.capPlaceholder',
+  'studio.capPlaceholderManual',
   'studio.toolsAfterSave',
   'studio.designAfterSave',
   'studio.saveDraft',
