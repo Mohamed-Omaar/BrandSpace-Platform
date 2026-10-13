@@ -887,6 +887,8 @@ through search results quoting them.
 | Post status (`status/fetch`, `fail_reason`)                   | developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status |
 | Webhook signature, `authorization.removed`, `post.publish.*`  | developers.tiktok.com/docs/en/webhooks-verification, …/doc/webhooks-events   |
 | Posting screen requirements (O4)                              | developers.tiktok.com/docs/en/content-sharing-guidelines                     |
+| Consent link: Music Usage Confirmation (D-537)                | www.tiktok.com/legal/page/global/music-usage-confirmation/en                 |
+| Consent link: Branded Content Policy (D-537)                  | www.tiktok.com/legal/page/global/bc-policy/en                                |
 
 ### 19.3 Owner steps (staging first, in TikTok's sandbox)
 

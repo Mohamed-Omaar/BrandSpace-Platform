@@ -2343,7 +2343,9 @@ than `CheckboxRow` because these switches are controlled and can be locked) and 
 (`bsp-st-hint`). It shows the creator's TikTok nickname, "Who can see this post" with no default and
 only the audiences the accounts offer, Comment / Duet / Stitch (Duet and Stitch for video only; locked
 off where the creator turned them off), disclosure with "Your brand" and "Branded content", the first
-problem in one line, and the consent line. No new colour, font, shadow or interaction model; ar and en.
+problem in one line, and the consent line, whose two TikTok page names are links opening in a new tab
+(D-537) in the hint line's existing link colour (`.bsp-st-connect a`). No new colour, font, shadow or
+interaction model; ar and en.
 `tests/e2e/c-tiktok-options.spec.ts` covers both languages.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported

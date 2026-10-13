@@ -22,6 +22,19 @@
  *     content), or both — at least one. Branded content cannot be "Only me".
  */
 
+/**
+ * The two TikTok pages the consent line names (content-sharing guidelines:
+ * "By posting, you agree to TikTok's Music Usage Confirmation", and with
+ * branded content "…Branded Content Policy and Music Usage Confirmation").
+ * TikTok's own legal pages, cited in SOCIAL-INTEGRATIONS §19.2; they are
+ * TikTok's addresses, not a setting of ours, so they live here and not in
+ * configuration. TikTok publishes them in English.
+ */
+export const TIKTOK_CONSENT_LINKS = {
+  musicUsageConfirmation: 'https://www.tiktok.com/legal/page/global/music-usage-confirmation/en',
+  brandedContentPolicy: 'https://www.tiktok.com/legal/page/global/bc-policy/en',
+} as const;
+
 /** TikTok's privacy levels (`privacy_level_options`), in the order the panel lists them. */
 export const TIKTOK_PRIVACY_LEVELS = [
   'PUBLIC_TO_EVERYONE',

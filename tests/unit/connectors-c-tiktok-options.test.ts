@@ -4,6 +4,7 @@ import {
   interactionFlags,
   offeredPrivacyLevels,
   readTikTokOptions,
+  TIKTOK_CONSENT_LINKS,
   tiktokOptionsFromForm,
   tiktokOptionsProblems,
 } from '@brandspace/social-connectors/tiktok-options';
@@ -156,5 +157,15 @@ describe('the Studio form', () => {
 
   it('an unknown audience is not chosen', () => {
     expect(tiktokOptionsFromForm(form({ tiktokPrivacyLevel: 'EVERYONE' })).privacyLevel).toBeNull();
+  });
+});
+
+describe('connectors C · the consent line links TikTok’s own pages (D-537)', () => {
+  it('Music Usage Confirmation and Branded Content Policy are TikTok legal pages, over https', () => {
+    expect(TIKTOK_CONSENT_LINKS).toEqual({
+      musicUsageConfirmation:
+        'https://www.tiktok.com/legal/page/global/music-usage-confirmation/en',
+      brandedContentPolicy: 'https://www.tiktok.com/legal/page/global/bc-policy/en',
+    });
   });
 });

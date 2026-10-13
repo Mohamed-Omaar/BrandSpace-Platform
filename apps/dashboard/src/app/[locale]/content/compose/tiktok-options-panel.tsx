@@ -2,6 +2,7 @@
 
 import {
   offeredPrivacyLevels,
+  TIKTOK_CONSENT_LINKS,
   tiktokOptionsProblems,
   type TikTokPostOptions,
   type TikTokPrivacyLevel,
@@ -64,6 +65,43 @@ const HINT = 'bsp-st-hint bsp-st-connect';
 
 const fill = (text: string, values: Readonly<Record<string, string>>) =>
   text.replace(/\{(\w+)\}/g, (match, key: string) => values[key] ?? match);
+
+/**
+ * The consent line, with TikTok's two pages as links that open in a new tab
+ * (owner, #82). The sentence is one span: the hint line is a flex row, and
+ * a bare text-and-link mix would be laid out as separate items. The link
+ * colour is the hint line's own (`.bsp-st-connect a`).
+ */
+function ConsentLine({
+  template,
+  links,
+  testId,
+}: {
+  readonly template: string;
+  readonly links: Readonly<Record<'music' | 'branded', { label: string; href: string }>>;
+  readonly testId: string;
+}) {
+  const parts = template.split(/\{(music|branded)\}/);
+  return (
+    <span>
+      {parts.map((part, index) => {
+        if (index % 2 === 0) return part;
+        const link = links[part as 'music' | 'branded'];
+        return (
+          <a
+            key={part}
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid={`${testId}-consent-${part}`}
+          >
+            {link.label}
+          </a>
+        );
+      })}
+    </span>
+  );
+}
 
 export function TikTokOptionsPanel({
   t,
@@ -287,7 +325,20 @@ export function TikTokOptionsPanel({
       ) : null}
 
       <p className={HINT} data-testid={`${testId}-consent`}>
-        {word(branded ? 'studio.tiktok.consentBranded' : 'studio.tiktok.consent')}
+        <ConsentLine
+          template={word(branded ? 'studio.tiktok.consentBranded' : 'studio.tiktok.consent')}
+          links={{
+            music: {
+              label: word('studio.tiktok.musicUsage'),
+              href: TIKTOK_CONSENT_LINKS.musicUsageConfirmation,
+            },
+            branded: {
+              label: word('studio.tiktok.brandedPolicy'),
+              href: TIKTOK_CONSENT_LINKS.brandedContentPolicy,
+            },
+          }}
+          testId={testId}
+        />
       </p>
     </section>
   );

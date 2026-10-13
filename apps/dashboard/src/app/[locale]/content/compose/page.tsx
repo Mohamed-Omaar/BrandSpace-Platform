@@ -1551,6 +1551,8 @@ const EDITOR_KEYS = [
   'studio.tiktok.maxVideo',
   'studio.tiktok.consent',
   'studio.tiktok.consentBranded',
+  'studio.tiktok.musicUsage',
+  'studio.tiktok.brandedPolicy',
   'studio.tiktok.problem.privacy_level_missing',
   'studio.tiktok.problem.privacy_level_not_offered',
   'studio.tiktok.problem.disclosure_incomplete',

@@ -128,6 +128,18 @@ for (const locale of ['en', 'ar'] as const) {
     await expect(page.getByTestId('tiktok-options-tiktok-consent')).toContainText(
       locale === 'ar' ? 'تأكيد استخدام الموسيقى' : 'Music Usage Confirmation',
     );
+    // The name is a link to TikTok's own page, opened in a new tab (#82).
+    const music = page.getByTestId('tiktok-options-tiktok-consent-music');
+    await expect(music).toHaveText(
+      locale === 'ar' ? 'تأكيد استخدام الموسيقى' : 'Music Usage Confirmation',
+    );
+    await expect(music).toHaveAttribute(
+      'href',
+      'https://www.tiktok.com/legal/page/global/music-usage-confirmation/en',
+    );
+    await expect(music).toHaveAttribute('target', '_blank');
+    await expect(music).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(page.getByTestId('tiktok-options-tiktok-consent-branded')).toHaveCount(0);
 
     // Choose, turn Comment on, disclose as one's own brand: the autosave keeps it.
     await privacy.selectOption('MUTUAL_FOLLOW_FRIENDS');
@@ -156,6 +168,21 @@ for (const locale of ['en', 'ar'] as const) {
 
     // "Only me" clears branded content, which can never be private.
     await page.getByTestId('tiktok-options-tiktok-branded').check();
+    // Branded content adds TikTok's Branded Content Policy, also a link.
+    const policy = page.getByTestId('tiktok-options-tiktok-consent-branded');
+    await expect(policy).toHaveText(
+      locale === 'ar' ? 'سياسة المحتوى الممول' : 'Branded Content Policy',
+    );
+    await expect(policy).toHaveAttribute(
+      'href',
+      'https://www.tiktok.com/legal/page/global/bc-policy/en',
+    );
+    await expect(policy).toHaveAttribute('target', '_blank');
+    await expect(page.getByTestId('tiktok-options-tiktok-consent')).toHaveText(
+      locale === 'ar'
+        ? 'بالنشر، فإنك توافق على سياسة المحتوى الممول وتأكيد استخدام الموسيقى لدى TikTok.'
+        : 'By posting, you agree to TikTok’s Branded Content Policy and Music Usage Confirmation.',
+    );
     await privacy.selectOption('SELF_ONLY');
     await expect(page.getByTestId('tiktok-options-tiktok-branded')).not.toBeChecked();
     await expect(page.getByTestId('tiktok-options-tiktok-branded')).toBeDisabled();

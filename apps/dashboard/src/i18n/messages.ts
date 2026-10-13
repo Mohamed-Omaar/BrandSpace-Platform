@@ -1836,9 +1836,10 @@ export const messages = {
       'تروّج لعلامة تجارية أو جهة أخرى. ستضع TikTok على المنشور وسم «شراكة مدفوعة».',
     'studio.tiktok.brandedPrivate': 'لا يمكن أن يظهر المحتوى الممول لصاحب الحساب وحده.',
     'studio.tiktok.maxVideo': 'يمكن أن تصل مدة الفيديو على هذا الحساب إلى {minutes} دقيقة.',
-    'studio.tiktok.consent': 'بالنشر، فإنك توافق على تأكيد استخدام الموسيقى لدى TikTok.',
-    'studio.tiktok.consentBranded':
-      'بالنشر، فإنك توافق على سياسة المحتوى الممول وتأكيد استخدام الموسيقى لدى TikTok.',
+    'studio.tiktok.consent': 'بالنشر، فإنك توافق على {music} لدى TikTok.',
+    'studio.tiktok.consentBranded': 'بالنشر، فإنك توافق على {branded} و{music} لدى TikTok.',
+    'studio.tiktok.musicUsage': 'تأكيد استخدام الموسيقى',
+    'studio.tiktok.brandedPolicy': 'سياسة المحتوى الممول',
     'studio.tiktok.problem.privacy_level_missing': 'اختر من يمكنه رؤية هذا المنشور قبل نشره.',
     'studio.tiktok.problem.privacy_level_not_offered':
       'هذا الحساب لا يتيح هذا الجمهور الآن. اختر مجددًا.',
@@ -5989,9 +5990,10 @@ export const messages = {
       'You’re promoting another brand or a third party. TikTok will label the post “Paid partnership”.',
     'studio.tiktok.brandedPrivate': 'Branded content can’t be visible only to the account owner.',
     'studio.tiktok.maxVideo': 'Videos on this account can be up to {minutes} min long.',
-    'studio.tiktok.consent': 'By posting, you agree to TikTok’s Music Usage Confirmation.',
-    'studio.tiktok.consentBranded':
-      'By posting, you agree to TikTok’s Branded Content Policy and Music Usage Confirmation.',
+    'studio.tiktok.consent': 'By posting, you agree to TikTok’s {music}.',
+    'studio.tiktok.consentBranded': 'By posting, you agree to TikTok’s {branded} and {music}.',
+    'studio.tiktok.musicUsage': 'Music Usage Confirmation',
+    'studio.tiktok.brandedPolicy': 'Branded Content Policy',
     'studio.tiktok.problem.privacy_level_missing':
       'Choose who can see this post before it goes out.',
     'studio.tiktok.problem.privacy_level_not_offered':
