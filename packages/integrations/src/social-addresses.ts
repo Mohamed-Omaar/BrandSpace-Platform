@@ -38,9 +38,25 @@ export type SocialAddressKey = 'redirectUri' | 'webhookUrl' | 'deauthorizeUrl' |
 export interface SocialAddress {
   readonly key: SocialAddressKey;
   readonly url: string;
-  /** False while the route behind it is not built yet (step B). */
+  /**
+   * Whether the route behind it exists in this build. A platform CHECKS a
+   * webhook, deauthorize or data-deletion URL when it is registered, so one
+   * whose route is not built must not be registered yet.
+   */
   readonly live: boolean;
 }
+
+/**
+ * THE INBOUND SOCIAL ROUTES THIS BUILD SERVES, by address kind. The OAuth
+ * callback always exists. The others are added here IN THE SAME CHANGE that
+ * registers their route in the API — the API's route registration reads this
+ * list too — so the Control Center's "Register after step B" note disappears
+ * by itself the moment a route ships, and can never claim a route that is not
+ * there.
+ */
+export const LIVE_SOCIAL_ADDRESS_KEYS: ReadonlySet<SocialAddressKey> = new Set<SocialAddressKey>([
+  'redirectUri',
+]);
 
 export interface SocialPlatformAddresses {
   readonly providerKey: 'facebook' | 'instagram' | 'tiktok' | 'x';
@@ -57,29 +73,65 @@ export function socialPlatformAddresses(apiBaseUrl: string): readonly SocialPlat
       providerKey: 'facebook',
       sharesAppWith: null,
       addresses: [
-        { key: 'redirectUri', url: at('callback/facebook'), live: true },
-        { key: 'webhookUrl', url: at('webhooks/facebook'), live: false },
-        { key: 'deauthorizeUrl', url: at('deauthorize/facebook'), live: false },
-        { key: 'dataDeletionUrl', url: at('data-deletion/facebook'), live: false },
+        {
+          key: 'redirectUri',
+          url: at('callback/facebook'),
+          live: LIVE_SOCIAL_ADDRESS_KEYS.has('redirectUri'),
+        },
+        {
+          key: 'webhookUrl',
+          url: at('webhooks/facebook'),
+          live: LIVE_SOCIAL_ADDRESS_KEYS.has('webhookUrl'),
+        },
+        {
+          key: 'deauthorizeUrl',
+          url: at('deauthorize/facebook'),
+          live: LIVE_SOCIAL_ADDRESS_KEYS.has('deauthorizeUrl'),
+        },
+        {
+          key: 'dataDeletionUrl',
+          url: at('data-deletion/facebook'),
+          live: LIVE_SOCIAL_ADDRESS_KEYS.has('dataDeletionUrl'),
+        },
       ],
     },
     {
       providerKey: 'instagram',
       sharesAppWith: 'facebook',
-      addresses: [{ key: 'redirectUri', url: at('callback/instagram'), live: true }],
+      addresses: [
+        {
+          key: 'redirectUri',
+          url: at('callback/instagram'),
+          live: LIVE_SOCIAL_ADDRESS_KEYS.has('redirectUri'),
+        },
+      ],
     },
     {
       providerKey: 'tiktok',
       sharesAppWith: null,
       addresses: [
-        { key: 'redirectUri', url: at('callback/tiktok'), live: true },
-        { key: 'webhookUrl', url: at('webhooks/tiktok'), live: false },
+        {
+          key: 'redirectUri',
+          url: at('callback/tiktok'),
+          live: LIVE_SOCIAL_ADDRESS_KEYS.has('redirectUri'),
+        },
+        {
+          key: 'webhookUrl',
+          url: at('webhooks/tiktok'),
+          live: LIVE_SOCIAL_ADDRESS_KEYS.has('webhookUrl'),
+        },
       ],
     },
     {
       providerKey: 'x',
       sharesAppWith: null,
-      addresses: [{ key: 'redirectUri', url: at('callback/x'), live: true }],
+      addresses: [
+        {
+          key: 'redirectUri',
+          url: at('callback/x'),
+          live: LIVE_SOCIAL_ADDRESS_KEYS.has('redirectUri'),
+        },
+      ],
     },
   ];
 }

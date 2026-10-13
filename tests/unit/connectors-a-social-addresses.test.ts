@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   INTEGRATION_DEFINITIONS,
+  LIVE_SOCIAL_ADDRESS_KEYS,
   publicApiBaseUrlFrom,
   socialPlatformAddresses,
 } from '@brandspace/integrations';
@@ -47,11 +48,13 @@ describe('socialPlatformAddresses', () => {
     });
   });
 
-  it('only the callback is live in step A; the inbound routes arrive in step B', () => {
+  it('an address is live exactly when its route is in this build (LIVE_SOCIAL_ADDRESS_KEYS)', () => {
+    // Before step B's routes, only the OAuth callback exists.
+    expect([...LIVE_SOCIAL_ADDRESS_KEYS]).toEqual(['redirectUri']);
     for (const platform of staging) {
       for (const address of platform.addresses) {
         expect(address.live, `${platform.providerKey}.${address.key}`).toBe(
-          address.key === 'redirectUri',
+          LIVE_SOCIAL_ADDRESS_KEYS.has(address.key),
         );
       }
     }

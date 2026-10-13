@@ -48,6 +48,7 @@ export type {
   IntegrationView,
 } from './service';
 export {
+  LIVE_SOCIAL_ADDRESS_KEYS,
   publicApiBaseUrlFrom,
   socialPlatformAddresses,
   type SocialAddress,

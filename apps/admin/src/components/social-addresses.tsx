@@ -15,9 +15,10 @@ import { CopyValue } from './copy-value';
  * read-only with a Copy button — never typed, so it cannot be mistyped or
  * pointed somewhere else. Built from the console's existing table and section
  * header (CLAUDE.md §4.2: an approved design-system extension, recorded in
- * docs/UI-FIDELITY-CONTRACT.md §6). Addresses whose route arrives in step B are
- * marked so, because registering them early is fine and calling them live
- * would not be.
+ * docs/UI-FIDELITY-CONTRACT.md §6). An address whose route is not in this build
+ * says "Register after step B": the platform checks the URL when it is
+ * registered. The note disappears by itself once the route ships
+ * (`LIVE_SOCIAL_ADDRESS_KEYS`).
  */
 
 const PLATFORM_NAMES: Readonly<Record<SocialPlatformAddresses['providerKey'], [string, string]>> = {
@@ -96,9 +97,7 @@ export function SocialAddresses({
                 <div>{pick(ADDRESS_NAMES[address.key])}</div>
                 {address.live ? null : (
                   <div style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                    {isArabic
-                      ? 'يُبنى في الخطوة B — يمكن تسجيله الآن.'
-                      : 'Built in step B — safe to register now.'}
+                    {isArabic ? 'سجّله بعد الخطوة B.' : 'Register after step B.'}
                   </div>
                 )}
               </Cell>
