@@ -5,9 +5,12 @@ import { ContentApprovalService, TenantContentPolicySource } from '@brandspace/c
 import type { PublishSocialPostPayload, VerifySocialPostPayload } from '@brandspace/jobs';
 import {
   createConnectorRegistry,
+  executePublishJob,
   PublishPipelineService,
+  recoverStalePublishJob,
   SocialTokenVault,
   TenantPublishingPolicySource,
+  type PipelineTransactions,
 } from '@brandspace/social-connectors';
 import { createLogger, currentEnvironment } from '@brandspace/shared';
 import { publishNotifier } from './publish-notifier';
@@ -35,9 +38,16 @@ import { publishNotifier } from './publish-notifier';
  * the provider's own response.
  *
  * IDEMPOTENT BY CONSTRUCTION. The database row is the state: a duplicate
- * delivery re-enters `execute()`, fails to claim a job that is no longer
- * QUEUED, and returns what already happened. That is why at-least-once delivery
- * is safe here.
+ * delivery re-enters the claim, fails to claim a job that is no longer QUEUED,
+ * and returns what already happened. That is why at-least-once delivery is
+ * safe here.
+ *
+ * NO PROVIDER CALL RUNS INSIDE A TRANSACTION (W1, connectors A). Each database
+ * step — the claim and preflight, then the outcome — runs in a transaction of
+ * its own, and the provider is called between them. The claim is committed
+ * before the request leaves, so a provider slower than the transaction timeout
+ * can no longer roll the job back to QUEUED and have the redelivery send it
+ * again.
  */
 
 const log = createLogger({ context: { component: 'worker.social.publishing' } });
@@ -56,9 +66,10 @@ const log = createLogger({ context: { component: 'worker.social.publishing' } })
  */
 
 /**
- * Build the pipeline for one workspace. Shared by both processors so the
- * publish path and the verification path cannot end up with different
- * configuration, a different registry or a different notifier.
+ * Build the pipeline for one workspace, in ONE transaction, for ONE step.
+ * Shared by both processors so the publish path and the verification path
+ * cannot end up with different configuration, a different registry or a
+ * different notifier.
  */
 async function withPipeline<T>(
   workspaceId: string,
@@ -114,9 +125,10 @@ async function withPipeline<T>(
       },
       /*
        * THE INBOX ENTRY IS WRITTEN IN THE SAME TRANSACTION as the state change
-       * it describes, because this whole processor runs inside one
-       * `withWorkspace` transaction. A post that is recorded as published and a
-       * notification that never arrived would be two answers to one question.
+       * it describes: the step that records the outcome runs inside one
+       * `withWorkspace` transaction, and the notifier is bound to it. A post
+       * that is recorded as published and a notification that never arrived
+       * would be two answers to one question.
        */
       notifier: publishNotifier({
         db,
@@ -140,9 +152,15 @@ async function withPipeline<T>(
   });
 }
 
+/** A fresh tenant transaction, and a pipeline bound to it, for every step. */
+function transactionsFor(workspaceId: string): PipelineTransactions {
+  return { run: (step) => withPipeline(workspaceId, step) };
+}
+
 export async function processPublishJob(payload: PublishSocialPostPayload): Promise<void> {
-  const result = await withPipeline(payload.workspaceId, (pipeline) =>
-    pipeline.execute(payload.publishJobId),
+  const result = await executePublishJob(
+    transactionsFor(payload.workspaceId),
+    payload.publishJobId,
   );
 
   log.info('publish job finished', {
@@ -159,10 +177,10 @@ export async function processPublishJob(payload: PublishSocialPostPayload): Prom
 /**
  * Recover a job whose worker died mid-flight — by asking, never by re-sending.
  *
- * THIS FUNCTION CALLS `recoverStaleClaim()` AND NOTHING ELSE, and that is the
- * safety property rather than a stylistic preference (D-143). There is no
- * branch here that reaches `execute()`, so a `social.verify-post` message has
- * no route to `adapter.publish()` at all — a duplicate delivery of one, a
+ * THIS FUNCTION CALLS `recoverStalePublishJob()` AND NOTHING ELSE, and that is
+ * the safety property rather than a stylistic preference (D-143). There is no
+ * branch here that reaches `executePublishJob()`, so a `social.verify-post`
+ * message has no route to `adapter.publish()` at all — a duplicate delivery of one, a
  * malformed one, or one whose job has since finished all do the same harmless
  * thing.
  *
@@ -171,8 +189,9 @@ export async function processPublishJob(payload: PublishSocialPostPayload): Prom
  * else's infrastructure belongs in a worker, exactly as publishing does.
  */
 export async function processVerifyJob(payload: VerifySocialPostPayload): Promise<void> {
-  const result = await withPipeline(payload.workspaceId, (pipeline) =>
-    pipeline.recoverStaleClaim(payload.publishJobId),
+  const result = await recoverStalePublishJob(
+    transactionsFor(payload.workspaceId),
+    payload.publishJobId,
   );
 
   log.info('publish job verification finished', {

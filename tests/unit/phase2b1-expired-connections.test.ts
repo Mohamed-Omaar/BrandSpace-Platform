@@ -55,8 +55,9 @@ describe('Q9 · the hold is real', () => {
   });
 
   it('holds before the deadline and fails with the reconnect reason after it', () => {
+    // W1 (connectors A): the claim step returns a settled answer, so the hold is wrapped.
     expect(pipeline).toContain(
-      'if (preflight === AWAITING_RECONNECT) return this.#holdForReconnect(job);',
+      'if (preflight === AWAITING_RECONNECT) return settled(await this.#holdForReconnect(job));',
     );
     expect(pipeline).toMatch(
       /preflight === RECONNECT_TOO_LATE\)[\s\S]{0,80}'NOT_CONNECTED', RECONNECT_REQUIRED_CODE/,
