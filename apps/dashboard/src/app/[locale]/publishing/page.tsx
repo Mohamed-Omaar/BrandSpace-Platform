@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { randomUUID } from 'node:crypto';
 import { systemClock } from '@brandspace/shared';
-import { retryableAfterReconnect } from '@brandspace/social-connectors';
+import { retryableAfterReconnect, TIKTOK_OPTIONS_HELD_CODE } from '@brandspace/social-connectors';
 import {
   AssetThumb,
   Card,
@@ -281,9 +281,17 @@ export default async function PublishingPage({
   const formatter = { format: (value: Date) => whenLabel(value, locale, 'UTC', systemClock.now()) };
   const providerLabel = (provider: string): string =>
     optionalMessage(messageLocale, `integrations.provider.${provider.toLowerCase()}`) ?? provider;
+  /*
+   * D-538 (owner, #82) — A TIKTOK POST HELD FOR ITS OPTIONS is not a failure
+   * (no failure class) but still says why it waits, on its row in the queue
+   * and wherever its job is shown: "Choose who can see this post". Its Open
+   * goes to the Studio, where the panel is.
+   */
   const failureText = (failureClass: string | null, failureCode: string | null): string | null =>
     failureClass === null
-      ? null
+      ? failureCode === TIKTOK_OPTIONS_HELD_CODE
+        ? t('publishing.code.held.tiktok_options_missing')
+        : null
       : ((failureCode ? optionalMessage(messageLocale, `publishing.code.${failureCode}`) : null) ??
         optionalMessage(messageLocale, `publishing.failure.${failureClass.toLowerCase()}`) ??
         t('publishing.failure.unknown'));

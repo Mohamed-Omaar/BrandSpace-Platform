@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { brandScopeFilter, systemClock } from '@brandspace/shared';
 import {
   SOCIAL_PROVIDERS,
+  TIKTOK_OPTIONS_HELD_CODE,
   retryableAfterReconnect as failedOnItsAccount,
 } from '@brandspace/social-connectors';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
@@ -310,7 +311,12 @@ export default async function IntegrationsPage({
     failureClass: string | null,
     failureCode: string | null,
   ): string | null => {
-    if (!failureClass) return null;
+    // D-538: a TikTok post held for its options is no failure, but says why it waits.
+    if (!failureClass) {
+      return failureCode === TIKTOK_OPTIONS_HELD_CODE
+        ? t('publishing.code.held.tiktok_options_missing')
+        : null;
+    }
 
     /*
      * PHASE 8 — OUR OWN CODE FIRST, when there is a sentence for it.

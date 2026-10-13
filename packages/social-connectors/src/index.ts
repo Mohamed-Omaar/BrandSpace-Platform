@@ -107,6 +107,7 @@ export type { ConnectionServiceOptions, ConnectionView } from './connections';
 export {
   AWAITING_RECONNECT_CODE,
   PLATFORM_SWITCHED_OFF_CODE,
+  TIKTOK_OPTIONS_HELD_CODE,
   executePublishJob,
   lookupPost,
   PublishPipelineService,

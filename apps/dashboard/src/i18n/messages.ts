@@ -2326,6 +2326,7 @@ export const messages = {
     'publishing.failure.unknown': 'ردّ غير متوقع من المنصة.',
     /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
     'publishing.code.preflight.not_connected': 'الحساب لم يعد متصلًا. أعد ربطه ثم أعد المحاولة.',
+    'publishing.code.held.tiktok_options_missing': 'اختر من يمكنه رؤية المنشور',
     'publishing.code.preflight.awaiting_reconnect':
       'بانتظار إعادة ربط الحساب. أعد ربطه ليُنشر المنشور؛ وإن لم يُعد ربطه في الوقت المناسب فلن يُرسل إلى هذا الحساب.',
     'publishing.code.preflight.reconnect_required':
@@ -6499,6 +6500,7 @@ export const messages = {
     /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
     'publishing.code.preflight.not_connected':
       'The account is no longer connected. Reconnect it and try again.',
+    'publishing.code.held.tiktok_options_missing': 'Choose who can see this post',
     'publishing.code.preflight.awaiting_reconnect':
       'Waiting for the account to be reconnected. Reconnect it and this post goes out; if it is not reconnected in time, it is not sent to this account.',
     'publishing.code.preflight.reconnect_required':
