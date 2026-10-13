@@ -2060,6 +2060,25 @@ const publishingSchema = z.object({
       fetchUrlTtlSeconds: z.number().int().min(60).max(3_600).default(900),
     })
     .default({}),
+
+  /**
+   * CONNECTORS B — VERIFIED DELIVERIES FROM A PLATFORM (webhooks, deauthorize
+   * and data-deletion callbacks), kept in `social_inbound_event`.
+   */
+  inbound: z
+    .object({
+      /**
+       * How long a FINISHED delivery (processed, ignored or failed) is kept
+       * before the maintenance sweep deletes it. Long enough to answer "did
+       * Meta tell us?" in a support case; short because it serves nothing
+       * after that. A delivery still waiting or being processed is never
+       * purged. A data-deletion request outlives its delivery.
+       */
+      retentionDays: z.number().int().min(1).max(365).default(30),
+      /** Deliveries deleted per purge pass. */
+      purgeBatchSize: z.number().int().positive().max(10_000).default(500),
+    })
+    .default({}),
 });
 
 // --- Phase 7: Analytics, Copilot and Automations ----------------------------

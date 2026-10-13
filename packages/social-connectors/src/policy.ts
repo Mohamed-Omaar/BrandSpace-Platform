@@ -107,6 +107,11 @@ export interface PublishingPolicy {
   readonly media: {
     readonly fetchUrlTtlSeconds: number;
   };
+  /** Connectors B: verified platform deliveries (`social_inbound_event`). */
+  readonly inbound: {
+    readonly retentionDays: number;
+    readonly purgeBatchSize: number;
+  };
 }
 
 export function parsePublishingPolicy(payload: unknown): PublishingPolicy {

@@ -246,6 +246,8 @@ export interface MaintenanceResult {
   readonly publishJobsDispatched: number;
   /** Jobs whose worker died mid-flight, handed to verification (D-143). */
   readonly publishJobsRecovered: number;
+  /** Connectors B — finished inbound deliveries past `publishing.inbound.retentionDays`. */
+  readonly inboundEventsPurged: number;
   /** Phase 7 — the analytics sweeps. */
   readonly analyticsCursorsDispatched: number;
   readonly analyticsBackfillsDispatched: number;
@@ -1187,6 +1189,47 @@ export class MaintenanceScheduler {
   }
 
   /** The dispatch half of the publishing policy, read once per pass. */
+  /**
+   * CONNECTORS B — DELETE FINISHED INBOUND DELIVERIES PAST THEIR RETENTION.
+   *
+   * A delivery that was processed, ignored or failed more than
+   * `publishing.inbound.retentionDays` ago serves nothing but a support
+   * question, and it is a record of what a platform said about a person, so it
+   * is not kept. One delivery still RECEIVED or PROCESSING is never touched,
+   * whatever its age. A data-deletion request outlives its delivery (the
+   * foreign key is ON DELETE SET NULL). Bounded per pass
+   * (`publishing.inbound.purgeBatchSize`), oldest first; a rerun deletes
+   * nothing twice.
+   *
+   * The table is platform-owned, so this runs on the platform connection.
+   */
+  async purgeInboundEvents(): Promise<number> {
+    const platform = getPlatformClient();
+    const policy = await this.#resolvePublishing();
+    const before = new Date(
+      this.#clock.now().getTime() - policy.inbound.retentionDays * 86_400_000,
+    );
+    const due = await platform.socialInboundEvent.findMany({
+      where: {
+        status: { in: ['PROCESSED', 'IGNORED', 'FAILED'] },
+        processedAt: { lt: before },
+      },
+      select: { id: true },
+      orderBy: { processedAt: 'asc' },
+      take: policy.inbound.purgeBatchSize,
+    });
+    if (due.length === 0) return 0;
+    const deleted = await platform.socialInboundEvent.deleteMany({
+      where: {
+        id: { in: due.map((row) => row.id) },
+        // Re-asserted at delete time: a row reprocessed in between is kept.
+        status: { in: ['PROCESSED', 'IGNORED', 'FAILED'] },
+        processedAt: { lt: before },
+      },
+    });
+    return deleted.count;
+  }
+
   async #publishingPolicy(): Promise<{ claimLeaseSeconds: number; staleClaimBatchSize: number }> {
     const policy = await this.#resolvePublishing();
     return {
@@ -2324,6 +2367,7 @@ export class MaintenanceScheduler {
     const purged = await this.purgeRetention(cadence.retentionPurgeBatch);
     const assets = await this.sweepAssets(cadence.retentionPurgeBatch);
     const publishing = await this.sweepPublishing(cadence.ingestionReconcileBatch);
+    const inboundEventsPurged = await this.purgeInboundEvents();
     const analytics = await this.sweepAnalytics(cadence.ingestionReconcileBatch);
     const analyticsRowsPruned = await this.pruneAnalyticsRetention(cadence.retentionPurgeBatch);
     const automations = await this.sweepAutomations(cadence.ingestionReconcileBatch);
@@ -2341,6 +2385,7 @@ export class MaintenanceScheduler {
       publishJobsCreated: publishing.created,
       publishJobsDispatched: publishing.dispatched,
       publishJobsRecovered: publishing.recovered,
+      inboundEventsPurged,
       analyticsCursorsDispatched: analytics.dispatched,
       analyticsBackfillsDispatched: analytics.backfills,
       analyticsRowsPruned,
@@ -2458,6 +2503,9 @@ export class MaintenanceScheduler {
     });
     every(cadence.retentionPurgeSeconds, 'analytics-retention', () =>
       this.pruneAnalyticsRetention(cadence.retentionPurgeBatch),
+    );
+    every(cadence.retentionPurgeSeconds, 'inbound-event-retention', () =>
+      this.purgeInboundEvents(),
     );
     /*
      * THE AUTOMATION SWEEP (A1) — the timer the whole feature was missing.
