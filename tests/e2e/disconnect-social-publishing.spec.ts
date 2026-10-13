@@ -43,7 +43,7 @@ async function signIn(page: Page, locale: 'en' | 'ar'): Promise<void> {
 }
 
 /** A connected account in the seeded workspace's primary brand, for this test alone. */
-async function ownAccount(): Promise<string> {
+async function ownAccount(provider: 'LINKEDIN' | 'INSTAGRAM' = 'LINKEDIN'): Promise<string> {
   const loaded = credentials();
   return withPlatformPrisma(async (prisma) => {
     const owner = await prisma.user.findFirstOrThrow({
@@ -55,7 +55,7 @@ async function ownAccount(): Promise<string> {
       data: {
         workspaceId: loaded.customer.workspaceId,
         brandId: brandFixtures(loaded).primaryBrandId,
-        provider: 'LINKEDIN',
+        provider,
         externalAccountId: `f4-e2e-${suffix}`,
         displayName: `F4 disconnect ${suffix}`,
         targetKind: 'organization',
@@ -107,6 +107,30 @@ test.describe('F4 · disconnecting an account takes two deliberate steps, and th
       await page.keyboard.press('Enter');
       await page.waitForURL(/\/integrations/);
       await expect.poll(() => statusOf(id)).toBe('REVOKED');
+    });
+  }
+});
+
+test.describe('D-534 · disconnecting a Meta account says where to remove its access fully', () => {
+  for (const locale of ['en', 'ar'] as const) {
+    test(`one line on an Instagram account, none on LinkedIn (${locale})`, async ({ page }) => {
+      const instagram = await ownAccount('INSTAGRAM');
+      const linkedin = await ownAccount('LINKEDIN');
+      await signIn(page, locale);
+      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/integrations`);
+
+      await page.locator(`[data-testid="disconnect-${instagram}"]`).click();
+      const note = page.locator(`[data-testid="disconnect-meta-note-${instagram}"]`);
+      await expect(note).toBeVisible();
+      await expect(note).toContainText(
+        locale === 'en' ? 'Business integrations' : 'عمليات تكامل الأعمال',
+      );
+      // Opening the confirmation disconnects nothing.
+      expect(await statusOf(instagram)).toBe('ACTIVE');
+
+      await page.locator(`[data-testid="disconnect-${linkedin}"]`).click();
+      await expect(page.locator(`[data-testid="disconnect-confirm-${linkedin}"]`)).toBeVisible();
+      await expect(page.locator(`[data-testid="disconnect-meta-note-${linkedin}"]`)).toHaveCount(0);
     });
   }
 });
