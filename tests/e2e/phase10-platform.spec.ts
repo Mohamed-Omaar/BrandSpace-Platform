@@ -79,6 +79,30 @@ test.describe('the Integrations Hub', () => {
     await expect(page.getByTestId('integration-social-facebook')).toHaveCount(0);
   });
 
+  for (const locale of ['en', 'ar'] as const) {
+    test(`CONNECTORS B — the page title sits on a covered bar, clear of the content (${locale})`, async ({
+      page,
+    }) => {
+      await signIn(page, locale, { mode: 'simple' });
+      await page.goto(`${ADMIN_BASE_URL}/${locale}/console/integrations?category=social`);
+      await expect(page.getByTestId('social-addresses')).toBeVisible();
+
+      const header = page.locator('header.bs-topbar');
+      // The whole bar is covered: no transparent band inside its own box.
+      await expect(header).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+      await expect(header).toHaveCSS('background-image', 'none');
+
+      // The fade is drawn below the bar, and the page starts below the fade.
+      const fade = await header.evaluate((el) =>
+        Number.parseFloat(getComputedStyle(el, '::after').height),
+      );
+      expect(fade).toBeGreaterThan(0);
+      const bar = (await header.boundingBox())!;
+      const back = (await page.getByTestId('integrations-back').boundingBox())!;
+      expect(back.y).toBeGreaterThanOrEqual(bar.y + bar.height + fade);
+    });
+  }
+
   test('shows a development double for what it is', async ({ page }) => {
     await signIn(page, 'en');
     await page.goto(`${ADMIN_BASE_URL}/en/console/integrations/ai/mock`);
