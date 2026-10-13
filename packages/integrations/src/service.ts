@@ -712,7 +712,7 @@ export class IntegrationsService {
             record: {
               key: app.providerKey,
               status: app.status,
-              settings: { appId: app.appId, redirectUri: app.redirectUri },
+              settings: { ...app.settings, appId: app.appId, redirectUri: app.redirectUri },
               secretRefs: {
                 ...(app.clientSecretRef ? { clientSecret: app.clientSecretRef } : {}),
                 ...(app.webhookSecretRef ? { webhookSecret: app.webhookSecretRef } : {}),

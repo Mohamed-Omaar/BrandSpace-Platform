@@ -126,16 +126,44 @@ function applySocialApplication(next: Record<string, unknown>, input: ProviderRe
     (application) => application['providerKey'] === input.definition.providerKey,
   );
 
-  const appId = input.settings['appId'];
+  /*
+   * CONNECTORS B (D-505 O3) — AN ENTRY THAT SHARES ANOTHER'S APP takes that
+   * entry's app id, and says so in `sharesCredentialWith`; the configuration
+   * schema refuses the pair if the ids ever differ. It needs the holder saved
+   * first, and says so rather than recording an app with no id.
+   */
+  const shared = input.definition.sharesCredentialWith ?? null;
+  const holder = shared
+    ? applications.find((application) => application['providerKey'] === shared)
+    : undefined;
+  if (shared && !holder) {
+    throw new AppError(
+      'VALIDATION_FAILED',
+      `Save the ${shared} entry first: this platform uses the same app.`,
+    );
+  }
+  const appId =
+    holder && typeof holder['appId'] === 'string' ? holder['appId'] : input.settings['appId'];
   const redirectUri = input.settings['redirectUri'];
   const clientSecretRef = input.secretRefs['clientSecret'] ?? null;
   const webhookSecretRef = input.secretRefs['webhookSecret'] ?? null;
+  /** The adapter's own named settings (`loginConfigId`), never a secret. */
+  const extra = Object.fromEntries(
+    Object.entries(input.settings).filter(([key]) => key !== 'appId' && key !== 'redirectUri'),
+  );
 
   if (existing) {
     if (appId !== undefined) existing['appId'] = appId;
     if (redirectUri !== undefined) existing['redirectUri'] = redirectUri;
     if (clientSecretRef !== null) existing['clientSecretRef'] = clientSecretRef;
     if (webhookSecretRef !== null) existing['webhookSecretRef'] = webhookSecretRef;
+    if (Object.keys(extra).length > 0) {
+      existing['settings'] = {
+        ...((existing['settings'] as Record<string, unknown> | undefined) ?? {}),
+        ...extra,
+      };
+    }
+    if (shared) existing['sharesCredentialWith'] = shared;
     return;
   }
 
@@ -154,6 +182,8 @@ function applySocialApplication(next: Record<string, unknown>, input: ProviderRe
     clientSecretRef,
     webhookSecretRef,
     status: 'draft',
+    settings: extra,
+    sharesCredentialWith: shared,
   });
   next['applications'] = applications;
 }

@@ -121,6 +121,10 @@ export function generatedSettingsFor(
   if (definition.category === 'payment') {
     return { webhookUrl: `${apiBaseUrl}/v1/billing/webhook/${definition.providerKey}` };
   }
+  // Connectors B: a social app's OAuth redirect is our own callback route.
+  if (definition.category === 'social' && definition.providerKey !== 'mock') {
+    return { redirectUri: `${apiBaseUrl}/v1/social/callback/${definition.providerKey}` };
+  }
   return {};
 }
 
