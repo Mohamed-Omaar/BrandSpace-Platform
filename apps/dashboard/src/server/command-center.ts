@@ -7,7 +7,11 @@ import {
 import type { TenantScopedClient } from '@brandspace/database';
 import type { CustomerWorkspaceContext } from '@brandspace/auth';
 import { NOTE_PERMISSION, readableNoteSubjectTypes } from '@brandspace/collaboration';
-import { expiringSoonMs, TenantPublishingPolicySource } from '@brandspace/social-connectors';
+import {
+  expiringSoonMs,
+  SOCIAL_PROVIDERS,
+  TenantPublishingPolicySource,
+} from '@brandspace/social-connectors';
 import { AUTOMATION_ACTIONS, satisfiesActionPermissions } from '@brandspace/automation';
 import {
   BrandKnowledgeService,
@@ -527,12 +531,16 @@ async function connectionsExpiring(
   session: CustomerWorkspaceContext,
 ): Promise<AttentionItem | null> {
   const policy = await new TenantPublishingPolicySource(db, currentEnvironment()).load();
-  const horizon = new Date(systemClock.now().getTime() + expiringSoonMs(policy));
+  // Per platform (owner, #81): Instagram is warned about days ahead.
+  const now = systemClock.now().getTime();
   const count = await db.socialConnection.count({
     where: {
       workspaceId: session.workspaceId,
       status: 'ACTIVE',
-      tokenExpiresAt: { not: null, lt: horizon },
+      OR: SOCIAL_PROVIDERS.map((provider) => ({
+        provider,
+        tokenExpiresAt: { not: null, lt: new Date(now + expiringSoonMs(policy, provider)) },
+      })),
       ...brandIdScopeFilter(session.brandScope),
     },
   });

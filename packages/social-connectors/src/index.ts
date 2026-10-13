@@ -81,6 +81,7 @@ export type {
 
 export {
   expiringSoonMs,
+  expiringWindow,
   refreshIsDue,
   SocialConnectionService,
   toConnectionView,

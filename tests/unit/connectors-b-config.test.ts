@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { parseConfigPayload } from '@brandspace/config';
+import {
+  expiringSoonMs,
+  expiringWindow,
+  parsePublishingPolicy as publishingPolicyOf,
+} from '@brandspace/social-connectors';
 
 /**
  * CONNECTORS B — the configuration step B adds. Shapes and bounds only; the
@@ -49,5 +54,28 @@ describe('connectors B · publishing.inbound — how long verified deliveries ar
   it('bounds the batch', () => {
     expect(() => publishing({ inbound: { purgeBatchSize: 0 } })).toThrow();
     expect(() => publishing({ inbound: { purgeBatchSize: 10_001 } })).toThrow();
+  });
+});
+
+describe('connectors B · per-platform expiring-soon window (owner, #81)', () => {
+  it('a platform may set its own window; null keeps the dispatch one', () => {
+    const policy = publishingPolicyOf({
+      providers: { instagram: { expiringSoonHours: 168 } },
+      dispatch: { expiringSoonHours: 24 },
+    });
+    expect(expiringSoonMs(policy, 'INSTAGRAM')).toBe(168 * 3_600_000);
+    expect(expiringSoonMs(policy, 'FACEBOOK')).toBe(24 * 3_600_000);
+    expect(expiringSoonMs(policy)).toBe(24 * 3_600_000);
+    expect(expiringWindow(policy)('INSTAGRAM')).toBe(168 * 3_600_000);
+  });
+
+  it('is bounded like the dispatch window (1 hour to 90 days)', () => {
+    expect(() =>
+      publishingPolicyOf({ providers: { instagram: { expiringSoonHours: 0 } } }),
+    ).toThrow();
+    expect(() =>
+      publishingPolicyOf({ providers: { instagram: { expiringSoonHours: 2_161 } } }),
+    ).toThrow();
+    expect(publishingPolicyOf({}).providers.instagram.expiringSoonHours).toBeNull();
   });
 });

@@ -82,6 +82,8 @@ export interface ProviderCapabilities {
   readonly apiVersion: string | null;
   /** Connectors B: posts per account per rolling 24 hours, or null (unchecked). */
   readonly dailyPublishCap: number | null;
+  /** Connectors B: this platform's expiring-soon window in hours, or null (the dispatch one). */
+  readonly expiringSoonHours: number | null;
 }
 
 export interface PublishingPolicy {

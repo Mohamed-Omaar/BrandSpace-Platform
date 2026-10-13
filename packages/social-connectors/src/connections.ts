@@ -7,7 +7,7 @@ import {
 import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
 import { socialConnectionNotFound } from './errors';
 import { markNeedsReauth, type ReauthNotifier } from './reauth';
-import { parsePublishingPolicy, type PublishingPolicy } from './policy';
+import { parsePublishingPolicy, PROVIDER_CONFIG_KEYS, type PublishingPolicy } from './policy';
 import type { ConnectorRegistry } from './registry';
 import type { ApplicationResolver, ConnectionQuota } from './oauth';
 import type { SocialTokenVault } from './token-vault';
@@ -49,8 +49,8 @@ export interface ConnectionView {
 }
 
 export interface ConnectionServiceOptions {
-  /** Connectors A (W14): the expiring-soon window, from `expiringSoonMs(policy)`. */
-  readonly expiringWindowMs?: number | undefined;
+  /** Connectors A (W14) / B: the expiring-soon window, from `expiringWindow(policy)` (per platform). */
+  readonly expiringWindowMs?: number | ((provider: SocialProvider) => number) | undefined;
   /** Connectors A (R3): who is told when a health check finds the account needs reconnecting. */
   readonly reauthNotifier?: ReauthNotifier | undefined;
   readonly db: TenantScopedClient;
@@ -117,8 +117,28 @@ export interface ConnectionServiceOptions {
  * second copy of the window would let Home say "fine" about an account the
  * integrations screen calls expiring.
  */
-export function expiringSoonMs(policy: Pick<PublishingPolicy, 'dispatch'>): number {
-  return policy.dispatch.expiringSoonHours * 60 * 60 * 1_000;
+export function expiringSoonMs(
+  policy: Pick<PublishingPolicy, 'dispatch'> & Partial<Pick<PublishingPolicy, 'providers'>>,
+  provider?: SocialProvider,
+): number {
+  /*
+   * CONNECTORS B (owner, #81) — PER PLATFORM WHEN THE PLATFORM SAYS SO
+   * (`publishing.providers.<key>.expiringSoonHours`): Instagram's tokens last
+   * about 60 days, so it is warned about days ahead; every other platform keeps
+   * the dispatch window.
+   */
+  const own =
+    provider && policy.providers
+      ? (policy.providers[PROVIDER_CONFIG_KEYS[provider]]?.expiringSoonHours ?? null)
+      : null;
+  return (own ?? policy.dispatch.expiringSoonHours) * 60 * 60 * 1_000;
+}
+
+/** The expiring-soon window for each platform, from one policy. */
+export function expiringWindow(
+  policy: Pick<PublishingPolicy, 'dispatch' | 'providers'>,
+): (provider: SocialProvider) => number {
+  return (provider) => expiringSoonMs(policy, provider);
 }
 
 /**
@@ -152,9 +172,11 @@ export function refreshIsDue(input: {
 export function toConnectionView(
   connection: SocialConnection,
   now: Date,
-  /** From `expiringSoonMs(policy)`. */
-  expiringWindowMs: number = defaultExpiringWindowMs(),
+  /** From `expiringWindow(policy)` (per platform) or `expiringSoonMs(policy)`. */
+  expiringWindowMs: number | ((provider: SocialProvider) => number) = defaultExpiringWindowMs(),
 ): ConnectionView {
+  const windowMs =
+    typeof expiringWindowMs === 'function' ? expiringWindowMs(connection.provider) : expiringWindowMs;
   return {
     id: connection.id,
     brandId: connection.brandId,
@@ -176,7 +198,7 @@ export function toConnectionView(
     expiringSoon:
       connection.status === 'ACTIVE' &&
       connection.tokenExpiresAt !== null &&
-      connection.tokenExpiresAt.getTime() - now.getTime() < expiringWindowMs,
+      connection.tokenExpiresAt.getTime() - now.getTime() < windowMs,
   };
 }
 
@@ -188,7 +210,7 @@ export class SocialConnectionService {
   readonly #applications: ApplicationResolver | undefined;
   readonly #quota: ConnectionQuota | undefined;
   readonly #reauthNotifier: ReauthNotifier | undefined;
-  readonly #expiringWindowMs: number;
+  readonly #expiringWindowMs: number | ((provider: SocialProvider) => number);
   readonly #clock: Clock;
 
   constructor(options: ConnectionServiceOptions) {

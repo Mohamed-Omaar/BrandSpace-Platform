@@ -14,7 +14,7 @@ import { SecretService } from '@brandspace/secrets';
 import {
   createConnectorRegistry,
   resolvePublishingPolicy,
-  expiringSoonMs,
+  expiringWindow,
   subjectHash,
   type SubjectHasher,
   SocialConnectionService,
@@ -415,7 +415,7 @@ async function connectionServiceFor<T>(
         db,
         workspaceId,
         registry: createConnectorRegistry({ policy, environment }),
-        expiringWindowMs: expiringSoonMs(policy),
+        expiringWindowMs: expiringWindow(policy),
         vault: new SocialTokenVault(),
         // THE RESOLVER IS PRESENT HERE and absent in the dashboard. That is the
         // whole reason disconnection lives on this surface.

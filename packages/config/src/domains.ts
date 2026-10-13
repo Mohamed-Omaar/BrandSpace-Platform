@@ -1975,6 +1975,14 @@ const publishingCapabilitySchema = z.object({
    * lower one, wins (D-533).
    */
   dailyPublishCap: z.number().int().min(1).max(1_000).nullable().default(null),
+  /**
+   * CONNECTORS B (owner, #81) — HOW LONG BEFORE THIS PLATFORM'S TOKEN EXPIRES
+   * the account is shown as expiring, with the existing notice (the
+   * integrations screen, publish readiness and Home's "needs you"). A platform
+   * whose tokens last weeks wants days of warning: Instagram's long-lived
+   * token lasts about 60 days. Null: `dispatch.expiringSoonHours`.
+   */
+  expiringSoonHours: z.number().int().min(1).max(2_160).nullable().default(null),
 });
 
 const publishingSchema = z.object({
