@@ -199,7 +199,9 @@ export default async function IntegrationsPage({
               </DataTable>
             )}
             {category.key === 'social' ? (
-              <SocialAddresses isArabic={isArabic} apiBaseUrl={publicApiBaseUrl()} />
+              <div style={{ marginBlockStart: spacingTokens.xl }}>
+                <SocialAddresses isArabic={isArabic} apiBaseUrl={publicApiBaseUrl()} />
+              </div>
             ) : null}
           </section>
         );

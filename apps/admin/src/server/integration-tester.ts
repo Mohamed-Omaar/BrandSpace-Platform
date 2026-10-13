@@ -14,7 +14,7 @@ import {
 import { getPlatformClient } from '@brandspace/database/platform';
 import { AppError, isProduction, systemClock } from '@brandspace/shared';
 import { findIntegration, type IntegrationTester } from '@brandspace/integrations';
-import { currentEnvironment, getSecretService } from './platform-context';
+import { currentEnvironment, getConfigService, getSecretService } from './platform-context';
 
 /**
  * WHAT ACTUALLY TALKS TO A PROVIDER — Phase 10 §10.
@@ -234,6 +234,9 @@ export function integrationTester(options: IntegrationTesterOptions = {}): Integ
             latencyMs: Date.now() - startedAt,
             message: 'Filesystem store is available on this host. Files live on local disk only.',
           };
+
+        case 'social:facebook':
+          return testMetaApp(input, credentials, startedAt);
 
         case 'social:mock':
           return {
@@ -471,5 +474,105 @@ async function askApiForStorageSelfTest(startedAt: number): Promise<TestResult> 
     ok: false,
     latencyMs: reply.latencyMs,
     message: STEP_MESSAGES[reply.step ?? 'write'],
+  };
+}
+
+/* ------------------------------------------------------------------------ */
+/* Meta — an app token for the saved app, confirmed by Meta                  */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * CONNECTORS B (D-533) — DOES META ACCEPT THIS APP ID AND APP SECRET?
+ *
+ * Two documented calls and nothing else: Meta issues an APP token for the
+ * client-credentials grant (`GET /oauth/access_token?grant_type=
+ * client_credentials`, developers.facebook.com/docs/facebook-login/guides/
+ * access-tokens#apptokens), and `GET /debug_token` confirms that token is valid
+ * and belongs to this app id. No customer account, Page or post is touched,
+ * and nothing Meta returns is shown: the result is a sentence we wrote, with
+ * Meta's numeric error code when there is one. The Graph API version is the
+ * one publishing is configured with (`publishing.providers.facebook.apiVersion`).
+ */
+async function testMetaApp(
+  input: Parameters<IntegrationTester['test']>[0],
+  credentials: Readonly<Record<string, string>>,
+  startedAt: number,
+): Promise<TestResult> {
+  const elapsed = () => Date.now() - startedAt;
+  const appId = input.settings['appId'];
+  const appSecret = credentials['clientSecret'];
+  if (!appId || !appSecret) {
+    return { ok: false, latencyMs: elapsed(), message: 'Save the app ID and app secret first.' };
+  }
+  const publishing = (await getConfigService().get('publishing', currentEnvironment())) as {
+    providers?: { facebook?: { apiVersion?: string | null } };
+  };
+  const version = publishing.providers?.facebook?.apiVersion ?? null;
+  if (!version) {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message:
+        'Set the Graph API version first (Publishing configuration: providers.facebook.apiVersion).',
+    };
+  }
+  const graph = `https://graph.facebook.com/${version}`;
+  const call = async (url: URL, token?: string): Promise<Record<string, unknown> | number> => {
+    try {
+      const response = await fetch(url, {
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+        signal: AbortSignal.timeout(10_000),
+      });
+      const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!response.ok || body === null || body['error']) {
+        const error = body?.['error'] as { code?: unknown } | undefined;
+        return typeof error?.code === 'number' ? error.code : response.status;
+      }
+      return body;
+    } catch {
+      return 0;
+    }
+  };
+  const tokenUrl = new URL(`${graph}/oauth/access_token`);
+  tokenUrl.searchParams.set('client_id', appId);
+  tokenUrl.searchParams.set('client_secret', appSecret);
+  tokenUrl.searchParams.set('grant_type', 'client_credentials');
+  const issued = await call(tokenUrl);
+  if (typeof issued === 'number') {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message:
+        issued === 0
+          ? 'Meta did not answer. Try again in a moment.'
+          : `Meta refused this app ID and secret (code ${issued}). Check both in the Meta app’s Settings > Basic.`,
+    };
+  }
+  const appToken = typeof issued['access_token'] === 'string' ? issued['access_token'] : null;
+  if (!appToken) {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message: 'Meta’s answer did not include an app token.',
+    };
+  }
+  const debugUrl = new URL(`${graph}/debug_token`);
+  debugUrl.searchParams.set('input_token', appToken);
+  const checked = await call(debugUrl, appToken);
+  const data =
+    typeof checked === 'object' && checked['data'] !== null && typeof checked['data'] === 'object'
+      ? (checked['data'] as Record<string, unknown>)
+      : null;
+  if (!data || data['is_valid'] !== true || String(data['app_id']) !== appId) {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message: 'Meta issued a token but did not confirm it belongs to this app ID.',
+    };
+  }
+  return {
+    ok: true,
+    latencyMs: elapsed(),
+    message: `Meta accepted this app ID and secret (Graph API ${version}).`,
   };
 }

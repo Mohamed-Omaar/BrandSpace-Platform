@@ -54,6 +54,8 @@ import { FAILURE_BEHAVIOUR, publishRetryRefusal } from '@brandspace/social-conne
 import { NoticedDecided, NoticedDecision } from './noticed-result';
 import { setupFactsFor } from '../../../server/setup-wizard';
 import { setupSteps } from '../../../server/setup-wizard-state';
+import { connectableChannels } from '../../../server/connectable-channels';
+import { heldSlot } from '../calendar/slot-moves';
 
 export const dynamic = 'force-dynamic';
 
@@ -126,6 +128,8 @@ export default async function OverviewPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { locale } = await params;
+  // D-531: a post none of whose channels can be connected is labelled Held.
+  const connectable = await connectableChannels();
   const query = await searchParams;
   const { customer, workspace, messageLocale } = await requireWorkspace(locale);
   const t = translator(messageLocale);
@@ -705,12 +709,19 @@ export default async function OverviewPage({
       : null;
 
   /* `UKS`: the upcoming row's pill — scheduled, in review, a draft. */
-  const upcomingPill = (slot: { status: string; item: { status: string } | null }) =>
-    slot.status === 'SCHEDULED' || slot.status === 'PUBLISHING'
-      ? { cls: 'bsp-pill bsp-p-info', label: t('home.p.upScheduled') }
-      : slot.item?.status === 'IN_REVIEW'
-        ? { cls: 'bsp-pill bsp-p-warn', label: t('home.p.upInReview') }
-        : { cls: 'bsp-pill bsp-p-neu', label: t('home.p.upDraft') };
+  const upcomingPill = (slot: {
+    status: string;
+    platformKeys: readonly string[];
+    item: { status: string } | null;
+  }) =>
+    // D-531 — held: none of its channels can be connected, so it cannot go out.
+    slot.status !== 'PUBLISHING' && heldSlot(slot.platformKeys, connectable)
+      ? { cls: 'bsp-pill bsp-p-warn', label: t('home.p.upHeld') }
+      : slot.status === 'SCHEDULED' || slot.status === 'PUBLISHING'
+        ? { cls: 'bsp-pill bsp-p-info', label: t('home.p.upScheduled') }
+        : slot.item?.status === 'IN_REVIEW'
+          ? { cls: 'bsp-pill bsp-p-warn', label: t('home.p.upInReview') }
+          : { cls: 'bsp-pill bsp-p-neu', label: t('home.p.upDraft') };
 
   /* ------------------------------------------------------- the setup checklist */
   const GLYPH: Record<string, string> = {
@@ -1635,8 +1646,9 @@ export default async function OverviewPage({
   /* The role Home's sections (`VA_secs`), each a card of up to four rows. */
   function roleSectionsFor(homeKind: HomeKind, rows: NonNullable<typeof roleRows>): ReactNode {
     const slotRow = (slot: (typeof rows.coming)[number], href: string) => {
-      const pill =
-        slot.status === 'SCHEDULED'
+      const pill = heldSlot(slot.platformKeys, connectable)
+        ? { cls: 'bsp-xstatus bsp-warn', label: t('home.p.upHeld') }
+        : slot.status === 'SCHEDULED'
           ? { cls: 'bsp-xstatus bsp-info', label: t('home.p.upScheduled') }
           : slot.item?.status === 'IN_REVIEW'
             ? { cls: 'bsp-xstatus bsp-warn', label: t('home.p.upInReview') }

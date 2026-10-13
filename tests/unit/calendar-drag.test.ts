@@ -253,9 +253,10 @@ describe('who can drag what', () => {
   const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
 
   it('only a scheduler, and only a post that has not started going out (published cannot)', () => {
-    expect(view).toContain('if (!canSchedule) return undefined;');
-    expect(view).toContain(
-      'return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;',
+    // D-531: the rule moved to one place (`slot-moves.ts`), which a held post also fails.
+    expect(view).toContain('return slot && movable(slot) ? `slot:${post.id}` : undefined;');
+    expect(read('apps/dashboard/src/app/[locale]/calendar/slot-moves.ts')).toContain(
+      'input.canSchedule && input.reschedulable !== false && input.held !== true',
     );
     // Drop targets exist only for a scheduler (D-468: the ported calendar's prop).
     expect(view).toContain('dropTargets={canSchedule}');

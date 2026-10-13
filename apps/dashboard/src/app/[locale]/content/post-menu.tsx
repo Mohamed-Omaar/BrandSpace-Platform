@@ -51,6 +51,12 @@ export interface PostMenuProps {
   readonly duplicateToken: string | null;
   readonly can: {
     readonly schedule: boolean;
+    /**
+     * B-pre 2 — take a plan off the calendar. Only the permission: Q8 (D-510)
+     * refuses new and moved plans while no channel can be connected, but taking
+     * one off publishes nothing, so it is never hidden for that.
+     */
+    readonly unschedule?: boolean;
     readonly archive: boolean;
     /** Q21 — attach a campaign to a post that has none. */
     readonly attachCampaign: boolean;
@@ -84,6 +90,7 @@ export function PostMenu(props: PostMenuProps) {
   const l = (key: string) => labels[key] ?? '';
 
   const mayMove = can.schedule && slot !== null;
+  const mayUnschedule = (can.unschedule ?? can.schedule) && slot !== null;
   const mayArchive = can.archive && ARCHIVABLE.has(status);
   const mayRestore = can.archive && status === 'ARCHIVED';
   const mayCampaign =
@@ -143,6 +150,7 @@ export function PostMenu(props: PostMenuProps) {
     !maySubmit &&
     !maySchedule &&
     !mayMove &&
+    !mayUnschedule &&
     !mayCampaign &&
     !mayArchive &&
     !mayRestore;
@@ -312,7 +320,7 @@ export function PostMenu(props: PostMenuProps) {
                     : l('content.menu.changeCampaign')}
                 </button>
               ) : null}
-              {mayMove && slot ? (
+              {mayUnschedule && slot ? (
                 <form action={actions.cancel}>
                   {hidden}
                   <input type="hidden" name="slotId" value={slot.id} />

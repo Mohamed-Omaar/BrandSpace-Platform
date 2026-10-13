@@ -1045,6 +1045,8 @@ export function AppShell({
               flex: '1 1 auto',
               minInlineSize: 0,
               paddingInline: layoutTokens.panelPadInline,
+              // Clears the top bar's fade, which is drawn below the bar.
+              paddingBlockStart: spacingTokens.md,
               paddingBlockEnd: layoutTokens.panelPadBlockEnd,
             }}
           >

@@ -26,6 +26,7 @@ import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, defaultBrandFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inSocial } from '../../../server/social-context';
+import { heldSlot } from './slot-moves';
 import { canGoOut, connectableChannels } from '../../../server/connectable-channels';
 import { isBlocking, needsAttention, publishReadiness } from '../../../server/publish-readiness';
 import { mediaForVariants } from '../../../server/media-picker';
@@ -523,7 +524,12 @@ export default async function CalendarPage({
   for (const view of visible) {
     const local = formatLocalTime(view.slot.scheduledAtUtc, timezone);
     const day = local.slice(0, 10);
-    const channels = view.slot.platformKeys;
+    /*
+     * B-pre review (item 3) — ONLY CONFIGURED CHANNELS ARE SHOWN. Writes already
+     * refuse a platform the `content` document does not list; a channel the
+     * owner has since removed from it is not named on the calendar either.
+     */
+    const channels = view.slot.platformKeys.filter((key) => platformKeys.includes(key));
     const mediaIds = [...new Set(view.variants.flatMap((variant) => variant.assetIds))];
     const coverId = coverOf.get(view.slot.id);
     const cover = coverId ? coverMedia.get(coverId) : undefined;
@@ -536,6 +542,14 @@ export default async function CalendarPage({
       : 'NOT_REQUIRED';
     const status = SLOT_STATUS[view.slot.status] ?? 'SCHEDULED';
     const slotReadiness = readiness.get(view.slot.id) ?? null;
+    /*
+     * B-pre 2 — HELD: a plan none of whose channels (its variants as they are
+     * now) can be connected. It cannot go out, and it is said so, on the chip
+     * and in the drawer, for as long as it is true.
+     */
+    const variantKeys = [...new Set(view.variants.map((variant) => variant.platformKey))];
+    const held =
+      RESCHEDULABLE_SLOT_STATUSES.includes(view.slot.status) && heldSlot(variantKeys, connectable);
 
     const record: PostRecord = {
       id: view.slot.id,
@@ -567,7 +581,10 @@ export default async function CalendarPage({
       time: local.slice(11, 16),
       channels,
       campaignName,
-      statusLabel: translate(`content.status.${status}` as MessageKey),
+      statusLabel: held
+        ? translate('calendar.held')
+        : translate(`content.status.${status}` as MessageKey),
+      held,
       // Null when there is no approval row at all — "not required" is the
       // absence of a review, not a state to display beside one.
       approvalLabel: approvalRow
@@ -836,7 +853,9 @@ export default async function CalendarPage({
           .map((item): SchedulableDraft => ({
             id: item.id,
             title: item.title,
-            channels: [...new Set(item.variants.map((variant) => variant.platformKey))],
+            channels: [...new Set(item.variants.map((variant) => variant.platformKey))].filter(
+              (key) => platformKeys.includes(key),
+            ),
             status: item.status,
             campaignName: item.campaignId ? (campaignNames.get(item.campaignId) ?? null) : null,
           }))
@@ -847,6 +866,8 @@ export default async function CalendarPage({
         canSchedule={
           workspace.permissionKeys.includes('content.schedule') && connectable.length > 0
         }
+        // B-pre 2 — taking a plan off publishes nothing: Q8 never hides it.
+        canUnschedule={workspace.permissionKeys.includes('content.schedule')}
         canSubmit={workspace.permissionKeys.includes('content.submit')}
         canCreate={workspace.permissionKeys.includes('content.create')}
         weekdays={protoWeekdays}
@@ -954,6 +975,9 @@ const CALENDAR_KEYS = [
   'calendar.readiness.REVOKED',
   'calendar.readiness.NOT_CONNECTED',
   'calendar.readiness.UNSUPPORTED',
+  'calendar.held',
+  'calendar.heldExplanation',
+  'calendar.heldTime',
   'calendar.channels',
   'calendar.campaign',
   'calendar.publishState',

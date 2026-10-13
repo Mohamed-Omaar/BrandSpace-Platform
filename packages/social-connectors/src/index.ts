@@ -27,6 +27,26 @@ export type {
 
 export { MockSocialConnectorAdapter } from './mock-adapters';
 export { createConnectorRegistry } from './registry';
+export { FacebookPageAdapter } from './meta/facebook';
+export { InstagramAccountAdapter } from './meta/instagram';
+export type { MetaAdapterOptions } from './meta/base';
+export {
+  classifyMetaError,
+  graphRequest,
+  MetaGraphError,
+  MetaShapeError,
+  MetaTransportError,
+  META_GRAPH_HOST,
+  type GraphFetch,
+} from './meta/graph';
+export {
+  dataDeletionConfirmationCode,
+  inboundDedupeKey,
+  metaSubscriptionChallenge,
+  metaWebhookSignatureValid,
+  parseMetaSignedRequest,
+  type MetaSignedRequest,
+} from './meta/inbound';
 export type { ConnectorRegistry, ConnectorRegistryOptions } from './registry';
 
 export {
@@ -61,6 +81,7 @@ export type {
 
 export {
   expiringSoonMs,
+  expiringWindow,
   refreshIsDue,
   SocialConnectionService,
   toConnectionView,
@@ -69,6 +90,7 @@ export type { ConnectionServiceOptions, ConnectionView } from './connections';
 
 export {
   AWAITING_RECONNECT_CODE,
+  PLATFORM_SWITCHED_OFF_CODE,
   executePublishJob,
   lookupPost,
   PublishPipelineService,

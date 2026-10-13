@@ -2165,6 +2165,11 @@ export const messages = {
       'أعد ربط الحساب. حتى ذلك الحين تنتظر هذه القناة؛ وإن لم يُعد ربطه خلال {minutes} دقيقة من الموعد المجدول فلن يُنشر عليها. تُنشر القنوات الأخرى في موعدها.',
     'calendar.readiness.NOT_CONNECTED': 'لا يوجد حساب مرتبط',
     'calendar.readiness.UNSUPPORTED': 'القناة غير متاحة للنشر',
+    // B-pre 2 — a post held because none of its channels can be connected yet.
+    'calendar.held': 'محجوز',
+    'calendar.heldTime': 'وقته المحفوظ',
+    'calendar.heldExplanation':
+      'لا يمكن ربط أيٍّ من قنوات هذا المنشور بعد، لذا يبقى في يومه دون أن يُنشر. ويمكنك إزالته من التقويم؛ ووقته محفوظ.',
     'calendar.readinessBlocked': 'منشورات مجدولة لن تُنشر بحالتها الحالية',
     'calendar.readinessFix': 'إدارة الحسابات المرتبطة',
     'calendar.channels': 'القنوات',
@@ -2201,6 +2206,8 @@ export const messages = {
     'integrations.disconnectConfirmBody':
       'لن تُنشر المنشورات المجدولة لهذا الحساب ما دام مفصولًا. هل تريد فصله؟',
     'integrations.disconnectConfirmSubmit': 'نعم، افصل الحساب',
+    'integrations.disconnectMetaNote':
+      'يبقى إذن فيسبوك قائمًا بعد الفصل. لإزالة وصول Brandspace بالكامل، افتح في فيسبوك: الإعدادات والخصوصية ← الإعدادات ← عمليات تكامل الأعمال، ثم أزل Brandspace.',
     'integrations.check': 'فحص الاتصال',
     'integrations.provider': 'المنصة',
     'integrations.brand': 'العلامة التجارية',
@@ -2424,6 +2431,8 @@ export const messages = {
     'activity.action.social.connection.authorization_started': 'بدأ ربط حساب',
     'activity.action.social.connection.connected': 'رُبط حساب',
     'activity.action.social.connection.disconnected': 'فُصل حساب',
+    'activity.action.social.connection.removed_at_platform': 'أُلغي وصولنا إلى حساب من لدى المنصة',
+    'activity.action.social.connection.data_deleted': 'حُذفت بيانات حساب بطلب من المنصة',
     'activity.action.social.connection.selection_required': 'ربط حساب يحتاج اختيار صفحة',
     'activity.action.copilot.plan_created': 'اقترح المساعد خطة',
     'activity.action.copilot.plan_confirmed': 'أُكّدت خطة المساعد',
@@ -4032,6 +4041,7 @@ export const messages = {
     'home.p.upScheduled': 'مجدول',
     'home.p.upInReview': 'قيد المراجعة',
     'home.p.upDraft': 'مسودة',
+    'home.p.upHeld': 'محجوز',
     'home.p.upEmpty': 'لا شيء قادم في الأيام المقبلة.',
     'home.p.copilot': 'المساعد',
     'home.p.aiSuggestion': 'اقتراح ذكي',
@@ -6264,6 +6274,11 @@ export const messages = {
       'Reconnect the account. Until then this channel waits; if it is not reconnected within {minutes} minutes of the scheduled time, it is not posted there. The other channels go out on time.',
     'calendar.readiness.NOT_CONNECTED': 'No connected account',
     'calendar.readiness.UNSUPPORTED': 'Channel unavailable for publishing',
+    // B-pre 2 — a post held because none of its channels can be connected yet.
+    'calendar.held': 'Held',
+    'calendar.heldTime': 'Its kept time',
+    'calendar.heldExplanation':
+      'None of this post’s channels can be connected yet, so it stays on its day and is not published. You can take it off the calendar; its time is kept.',
     'calendar.readinessBlocked': 'scheduled posts will not go out as they stand',
     'calendar.readinessFix': 'Manage connected accounts',
     'calendar.channels': 'Channels',
@@ -6301,6 +6316,8 @@ export const messages = {
     'integrations.disconnectConfirmBody':
       'Posts scheduled for this account will not be published while it is disconnected. Disconnect it?',
     'integrations.disconnectConfirmSubmit': 'Yes, disconnect',
+    'integrations.disconnectMetaNote':
+      'Your Facebook permission stays after you disconnect. To remove Brandspace’s access fully, open Facebook: Settings & privacy › Settings › Business integrations, and remove Brandspace.',
     'integrations.check': 'Check connection',
     'integrations.provider': 'Platform',
     'integrations.brand': 'Brand',
@@ -6532,6 +6549,10 @@ export const messages = {
     'activity.action.social.connection.authorization_started': 'An account connection was started',
     'activity.action.social.connection.connected': 'An account was connected',
     'activity.action.social.connection.disconnected': 'An account was disconnected',
+    'activity.action.social.connection.removed_at_platform':
+      'Access to an account was removed at the platform',
+    'activity.action.social.connection.data_deleted':
+      'An account’s platform data was deleted at the platform’s request',
     'activity.action.social.connection.selection_required':
       'An account connection needs a page chosen',
     'activity.action.copilot.plan_created': 'The Copilot proposed a plan',
@@ -8198,6 +8219,7 @@ export const messages = {
     'home.p.upScheduled': 'Scheduled',
     'home.p.upInReview': 'In review',
     'home.p.upDraft': 'Draft',
+    'home.p.upHeld': 'Held',
     'home.p.upEmpty': 'Nothing coming up in the next days.',
     'home.p.copilot': 'Copilot',
     'home.p.aiSuggestion': 'AI suggestion',

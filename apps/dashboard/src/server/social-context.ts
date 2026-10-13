@@ -3,7 +3,7 @@ import {
   createConnectorRegistry,
   PublishHistoryService,
   PublishPipelineService,
-  expiringSoonMs,
+  expiringWindow,
   SocialConnectionService,
   SocialTokenVault,
   TenantPublishingPolicySource,
@@ -97,7 +97,7 @@ export async function inSocial<T>(
           db: scoped.db,
           workspaceId,
           registry: await registry(),
-          expiringWindowMs: expiringSoonMs(await policy()),
+          expiringWindowMs: expiringWindow(await policy()),
           // NO `vault` AND NO `applications`, and both absences are load-bearing.
           //
           // Reading a connection never decrypts anything, so this app needs no

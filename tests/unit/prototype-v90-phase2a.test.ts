@@ -796,8 +796,10 @@ describe('B5 · Approvals per person, and a reason for "request changes"', () =>
 describe('B7 · calendar: drag a post, a new post on a day, no unscheduling once it goes out', () => {
   it('a planned post is draggable for a scheduler, and a drop keeps its time', () => {
     const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
-    expect(view).toContain(
-      'return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;',
+    // D-531: the rule moved to one place (`slot-moves.ts`), which a held post also fails.
+    expect(view).toContain('return slot && movable(slot) ? `slot:${post.id}` : undefined;');
+    expect(read('apps/dashboard/src/app/[locale]/calendar/slot-moves.ts')).toContain(
+      'input.canSchedule && input.reschedulable !== false && input.held !== true',
     );
     // REPLACED (Phase 2B-2b item 10, §8.2, D-353): these read the native
     // drag — `form.set('time', slot.time)` into the reschedule form, the
@@ -824,9 +826,11 @@ describe('B7 · calendar: drag a post, a new post on a day, no unscheduling once
 
   it('Unschedule is offered, and accepted, only for a plan that has not started', () => {
     const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    // B-pre 2 (D-531): on the permission alone (`canUnschedule`), not Q8's `canSchedule`.
     expect(view).toContain(
-      '{canSchedule && openSlot.reschedulable !== false ? (\n                <form action={actions.cancel}>',
+      '{canUnschedule && openSlot.reschedulable !== false ? (\n                <form action={actions.cancel}>',
     );
+    expect(view).toContain('canUnschedule = canSchedule,');
     const calendar = read('packages/content/src/calendar.ts');
     const cancel = calendar.slice(calendar.indexOf('  async cancel('));
     expect(cancel.slice(0, cancel.indexOf('\n  async '))).toContain(

@@ -265,6 +265,11 @@ export const PLATFORM_OWNED_MODELS = [
   // this platform own operational state: one workspace being able to count
   // our provider failures would be a disclosure in itself.
   'IntegrationHealthCheck',
+  // Connectors B (D-532). What a social platform told us, and a deletion
+  // request about a person. Platform-owned: a delivery belongs to no workspace
+  // until it is matched, and a request concerns a person across every one.
+  'SocialInboundEvent',
+  'SocialDataDeletionRequest',
 ] as const;
 
 /**
@@ -394,6 +399,8 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   BillingEvent: 'billing_event',
   InvoiceNumberSequence: 'invoice_number_sequence',
   IntegrationHealthCheck: 'integration_health_check',
+  SocialInboundEvent: 'social_inbound_event',
+  SocialDataDeletionRequest: 'social_data_deletion_request',
   EmailVerificationToken: 'email_verification_token',
   UserLegalAcceptance: 'user_legal_acceptance',
   UserMfaRecoveryCode: 'user_mfa_recovery_code',

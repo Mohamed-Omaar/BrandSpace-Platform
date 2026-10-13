@@ -99,4 +99,7 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261016090000_content_item_publish_time',
   '20261020090000_group_b_fields',
   '20261021090000_connectors_a_handles_and_subjects',
+  '20261022090000_connectors_b_inbound_tables',
+  '20261022091000_social_connection_subject_lookup_index',
+  '20261022092000_publish_job_handle_lookup_index',
 ];

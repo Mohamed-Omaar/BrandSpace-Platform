@@ -76,7 +76,11 @@ describe('B-4 · the calendar only offers to move a plan that can move', () => {
 
   it('marks each slot and hides the reschedule form for the rest', () => {
     expect(page).toContain('reschedulable: RESCHEDULABLE_SLOT_STATUSES.includes(view.slot.status)');
-    expect(view).toContain('canSchedule && openSlot.reschedulable !== false ? (');
+    // D-531: one rule (`slot-moves.ts`) — scheduling offered, not started, not held.
+    expect(view).toContain('{movable(openSlot) ? (');
+    expect(read('apps/dashboard/src/app/[locale]/calendar/slot-moves.ts')).toContain(
+      'input.canSchedule && input.reschedulable !== false && input.held !== true',
+    );
   });
 });
 
@@ -105,9 +109,9 @@ describe('B-6 · the library offers Schedule only to members who may schedule', 
       "const maySchedule = can.schedule && (status === 'APPROVED' || status === 'DRAFT');",
     );
     // PR F (Q8, D-510): and only while one of the post's channels can be connected.
-    expect(library).toContain(
-      'can={{ ...menu.can, submit: can.submit, schedule: menu.can.schedule && goesOut(card) }}',
-    );
+    expect(library).toContain('schedule: menu.can.schedule && goesOut(card),');
+    // B-pre 2 (D-531): Unschedule is the permission alone — taking a plan off publishes nothing.
+    expect(library).toContain('unschedule: menu.can.schedule,');
     expect(page).toContain("schedule: may('content.schedule')");
     // The server half the link leads to, so the two cannot drift apart.
     expect(calendarActions).toContain("requireWorkspaceAction(locale, 'content.schedule')");

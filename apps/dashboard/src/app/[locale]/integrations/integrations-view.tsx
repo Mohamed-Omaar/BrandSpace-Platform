@@ -352,6 +352,17 @@ export function IntegrationsView({
                     <input type="hidden" name="connectionId" value={row.id} />
                     <input type="hidden" name="intent" value="DISCONNECT" />
                     <span className="bsp-acc-sub">{t('integrations.disconnectConfirmBody')}</span>
+                    {/*
+                      D-533 (owner, #81) — ONE META GRANT COVERS EVERY PAGE AND
+                      INSTAGRAM ACCOUNT the person connected, so disconnecting
+                      one keeps the grant at Meta. One line says where to remove
+                      it fully.
+                    */}
+                    {keepsPlatformGrant(row.provider) ? (
+                      <span className="bsp-acc-sub" data-testid={`disconnect-meta-note-${row.id}`}>
+                        {t('integrations.disconnectMetaNote')}
+                      </span>
+                    ) : null}
                     <button
                       type="submit"
                       className="bsp-btn bsp-sm bsp-acc-danger"
@@ -704,3 +715,12 @@ const linkStyle = {
   fontWeight: 600,
   color: colorTokens.textPrimary,
 } as const;
+
+/**
+ * D-533 — the providers whose disconnect keeps the platform grant: one Meta
+ * grant serves Facebook and Instagram alike, so it is never revoked for one
+ * account (`MetaAdapterBase.revoke`).
+ */
+export function keepsPlatformGrant(provider: string): boolean {
+  return provider === 'FACEBOOK' || provider === 'INSTAGRAM';
+}

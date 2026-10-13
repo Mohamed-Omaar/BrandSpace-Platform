@@ -827,6 +827,26 @@ h4 {
 }
 
 /*
+ * The Control Center's bar holds the page title, so its whole box is covered:
+ * with the fade inside the box, a scrolled page's intro showed through under
+ * the title. The fade is drawn BELOW the box instead, where it only softens
+ * the content passing under the edge. The customer header (`.bsp-header`) is
+ * the prototype's own and is not sticky; it is untouched.
+ */
+.bs-topbar:not(.bsp-header) {
+  background: rgb(255, 255, 255);
+}
+.bs-topbar:not(.bsp-header)::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 100%;
+  block-size: var(--bsp-rem-0-75);
+  background: linear-gradient(to bottom, rgb(255, 255, 255), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+/*
  * ---------------------------------------------------------------------------
  * Application shell responsiveness.
  *

@@ -2,6 +2,7 @@ import { withWorkspace } from '@brandspace/database';
 import { PublishMediaResolver } from '@brandspace/assets';
 import { objectStore } from './assets';
 import { ContentApprovalService, TenantContentPolicySource } from '@brandspace/content';
+import { createScheduleQuota } from '@brandspace/entitlements';
 import type { PublishSocialPostPayload, VerifySocialPostPayload } from '@brandspace/jobs';
 import {
   createConnectorRegistry,
@@ -99,6 +100,8 @@ async function withPipeline<T>(
       registry: createConnectorRegistry({ policy, environment }),
       vault: new SocialTokenVault(),
       rateLimiter,
+      // D-531: a post held because its platforms were switched off gets its quota back.
+      scheduleQuota: createScheduleQuota({ db, workspaceId, environment }),
       /*
        * THE APPROVAL GATE IS RE-CONSULTED HERE, immediately before the external
        * call. The calendar checked it when the slot was scheduled; approval can

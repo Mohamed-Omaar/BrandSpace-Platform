@@ -2,7 +2,7 @@
   "providers": {
     "facebook": {
       "enabled": false,
-      "postKinds": ["text", "image", "carousel", "video", "reel", "story"],
+      "postKinds": ["text", "image", "carousel"],
       "maxBodyCharacters": 2200,
       "maxHashtags": 30,
       "maxMediaItems": 10,
@@ -10,12 +10,16 @@
       "supportsDelete": false,
       "supportsNativeScheduling": false,
       "supportsPostLookup": false,
-      "scopes": [],
-      "targetKind": "profile"
+      "scopes": ["pages_show_list", "pages_read_engagement", "pages_manage_posts"],
+      "targetKind": "page",
+      "mediaByUrl": true,
+      "apiVersion": "v26.0",
+      "dailyPublishCap": null,
+      "expiringSoonHours": null
     },
     "instagram": {
       "enabled": false,
-      "postKinds": ["text", "image", "carousel", "video", "reel", "story"],
+      "postKinds": ["image", "carousel", "reel"],
       "maxBodyCharacters": 2200,
       "maxHashtags": 30,
       "maxMediaItems": 10,
@@ -23,8 +27,17 @@
       "supportsDelete": false,
       "supportsNativeScheduling": false,
       "supportsPostLookup": false,
-      "scopes": [],
-      "targetKind": "profile"
+      "scopes": [
+        "instagram_basic",
+        "instagram_content_publish",
+        "pages_show_list",
+        "pages_read_engagement"
+      ],
+      "targetKind": "business_account",
+      "mediaByUrl": true,
+      "apiVersion": "v26.0",
+      "dailyPublishCap": 25,
+      "expiringSoonHours": 168
     },
     "tiktok": {
       "enabled": false,

@@ -203,6 +203,13 @@ export interface IntegrationDefinition {
   /** One sentence the Control Center shows. Honest about what this is. */
   readonly noteEn: string;
   readonly noteAr: string;
+  /**
+   * CONNECTORS B (D-505 O3) — THIS ENTRY USES ANOTHER ENTRY'S APP AND SECRET.
+   * Instagram is the same Meta app as Facebook: it declares no credential of
+   * its own, its app id is copied from Facebook's, and its configuration names
+   * Facebook in `sharesCredentialWith`, so the one secret rotates once.
+   */
+  readonly sharesCredentialWith?: string;
 }
 
 const DEVELOPMENT_AND_TEST: readonly IntegrationEnvironment[] = ['DEVELOPMENT', 'STAGING'];
@@ -216,8 +223,9 @@ const DEVELOPMENT_AND_TEST: readonly IntegrationEnvironment[] = ['DEVELOPMENT', 
  * cashed: two rows below, two adapters, no change to the Hub, the
  * configuration service, the Secret Service or any screen.
  *
- * AI, SOCIAL AND PAYMENTS REMAIN DOUBLES. No vendor has been chosen for any of
- * the three, and none is named anywhere in this file.
+ * AI AND PAYMENTS REMAIN DOUBLES. No vendor has been chosen for either. SOCIAL
+ * has Meta (Facebook Pages and Instagram) since connectors step B (D-533),
+ * beside the development double; TikTok follows in step C.
  */
 export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
   {
@@ -492,6 +500,124 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
       'Holds every customer file. Bytes live at Cloudflare rather than on Railway, so a redeploy cannot lose an upload. The adapter speaks S3 and works against any S3-compatible endpoint. Configured by the STORAGE_* deployment variables, not on this screen — production and staging must use different buckets and different credentials. Test asks the API, which holds the bucket credential, to write, read back and delete one small test file; no bucket detail is shown here.',
     noteAr:
       'يحتفظ بكل ملفات العملاء. تبقى البايتات لدى Cloudflare لا على Railway، فلا تُفقد أي ملفات عند إعادة النشر. يتحدث المحوّل بروتوكول S3 ويعمل مع أي نقطة نهاية متوافقة. يُضبط عبر متغيرات النشر STORAGE_* وليس من هذه الشاشة — ويجب أن يستخدم الإنتاج والتجريب حاويتين مختلفتين وبيانات اعتماد مختلفة. زر الاختبار يطلب من خادم الواجهة، وهو الذي يحمل بيانات اعتماد الحاوية، كتابة ملف اختبار صغير ثم قراءته ثم حذفه؛ ولا تُعرض هنا أي تفاصيل عن الحاوية.',
+  },
+  /*
+   * CONNECTORS B — META (D-505, D-533). One Meta app serves both entries; the
+   * Facebook entry holds its app id, app secret and webhook verify token, and
+   * Instagram shares them. The Graph API version and what each platform may
+   * publish are in the publishing configuration, not here.
+   */
+  {
+    providerKey: 'facebook',
+    displayNameEn: 'Facebook Pages (Meta app)',
+    displayNameAr: 'صفحات فيسبوك (تطبيق Meta)',
+    category: 'social',
+    supportedEnvironments: ['DEVELOPMENT', 'STAGING', 'PRODUCTION'],
+    capabilities: {
+      oauth: true,
+      publish: true,
+      media: true,
+      analytics: false,
+      tokenRefresh: false,
+      webhooks: true,
+    },
+    credentialFields: [
+      {
+        key: 'clientSecret',
+        labelEn: 'App secret',
+        labelAr: 'المفتاح السري للتطبيق',
+        secret: true,
+        required: true,
+        helpEn: 'From the Meta app’s Settings > Basic. Also checks every delivery from Meta.',
+        helpAr:
+          'من صفحة الإعدادات > الأساسية في تطبيق Meta. ويُستخدم أيضًا للتحقق من كل ما يصل من Meta.',
+      },
+      {
+        key: 'webhookSecret',
+        labelEn: 'Webhook verify token',
+        labelAr: 'رمز التحقق من الويب هوك',
+        secret: true,
+        required: false,
+        helpEn:
+          'A value you choose and type in both places: here and in the Meta app’s Webhooks setup.',
+        helpAr: 'قيمة تختارها وتكتبها في الموضعين: هنا وفي إعداد الويب هوك في تطبيق Meta.',
+      },
+    ],
+    settingFields: [
+      {
+        key: 'appId',
+        labelEn: 'App ID',
+        labelAr: 'معرّف التطبيق',
+        secret: false,
+        required: true,
+      },
+      {
+        key: 'loginConfigId',
+        labelEn: 'Facebook Login for Business configuration ID',
+        labelAr: 'معرّف إعداد تسجيل الدخول بفيسبوك للأعمال',
+        secret: false,
+        required: false,
+        helpEn: 'Optional. When set, the configuration decides the permissions asked for.',
+        helpAr: 'اختياري. عند ضبطه، يحدد الإعداد الأذونات المطلوبة.',
+      },
+      {
+        key: 'redirectUri',
+        labelEn: 'OAuth redirect URL',
+        labelAr: 'رابط إعادة التوجيه (OAuth)',
+        secret: false,
+        required: false,
+        copyable: true,
+        generated: true,
+        kind: 'url',
+        helpEn: 'Add this to the Meta app’s Valid OAuth Redirect URIs.',
+        helpAr: 'أضف هذا الرابط إلى روابط إعادة التوجيه المسموح بها في تطبيق Meta.',
+      },
+    ],
+    adapterAvailable: true,
+    testable: true,
+    developmentOnly: false,
+    noteEn:
+      'Publishes to Facebook Pages through the Meta Graph API. Test asks Meta for an app token with this app id and secret and checks Meta confirms it; no customer account is touched.',
+    noteAr:
+      'ينشر على صفحات فيسبوك عبر واجهة Meta Graph. زر الاختبار يطلب من Meta رمز تطبيق بهذا المعرّف والمفتاح السري ويتحقق من تأكيد Meta له، دون لمس أي حساب لعميل.',
+  },
+  {
+    providerKey: 'instagram',
+    displayNameEn: 'Instagram (the same Meta app)',
+    displayNameAr: 'إنستغرام (تطبيق Meta نفسه)',
+    category: 'social',
+    supportedEnvironments: ['DEVELOPMENT', 'STAGING', 'PRODUCTION'],
+    capabilities: {
+      oauth: true,
+      publish: true,
+      media: true,
+      analytics: false,
+      tokenRefresh: false,
+      webhooks: false,
+    },
+    credentialFields: [],
+    settingFields: [
+      {
+        key: 'redirectUri',
+        labelEn: 'OAuth redirect URL',
+        labelAr: 'رابط إعادة التوجيه (OAuth)',
+        secret: false,
+        required: false,
+        copyable: true,
+        generated: true,
+        kind: 'url',
+        helpEn: 'Add this to the same Meta app’s Valid OAuth Redirect URIs.',
+        helpAr: 'أضف هذا الرابط إلى روابط إعادة التوجيه في تطبيق Meta نفسه.',
+      },
+    ],
+    adapterAvailable: true,
+    testable: false,
+    developmentOnly: false,
+    sharesCredentialWith: 'facebook',
+    noteEn:
+      'Publishes to Instagram professional accounts linked to a Facebook Page. Uses the Facebook entry’s app id and secret, so save Facebook first; Test runs on the Facebook entry.',
+    noteAr:
+      'ينشر على حسابات إنستغرام الاحترافية المرتبطة بصفحة فيسبوك. يستخدم معرّف تطبيق فيسبوك ومفتاحه السري، لذا احفظ فيسبوك أولًا؛ ويجري الاختبار من إدخال فيسبوك.',
   },
   {
     providerKey: 'mock',

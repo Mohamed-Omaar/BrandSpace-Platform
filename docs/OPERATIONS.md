@@ -722,6 +722,32 @@ neither selects nor writes these columns.
   (`publishing.dispatch.claimLeaseSeconds`) and is then verified, never resent. Keep the lease longer
   than the slowest realistic provider call.
 
+### 6.15 Connectors B: the inbound tables, two concurrent indexes, and inbound retention (D-532)
+
+`20261022090000_connectors_b_inbound_tables` is one short transaction that creates two new,
+platform-only tables; nothing existing is touched, so the previous release runs unchanged against it.
+`20261022091000_…` and `20261022092000_…` are one `CREATE INDEX CONCURRENTLY IF NOT EXISTS` each;
+an interrupted build can leave an INVALID index, found and rebuilt as in §6.10.
+
+**What purges old inbound deliveries.** The API's maintenance scheduler, on the retention cadence
+(`retentionPurgeSeconds`) and in every `runOnce`, deletes `social_inbound_event` rows that finished
+(`PROCESSED`, `IGNORED`, `FAILED`) more than `publishing.inbound.retentionDays` ago — **default 30 days**,
+settable from 1 to 365 in the Control Center's `publishing` document — at most
+`publishing.inbound.purgeBatchSize` rows a pass, oldest first. A delivery still `RECEIVED` or
+`PROCESSING` is never purged. A data-deletion request is never purged by this sweep; its link to the
+delivery becomes NULL.
+
+**What acts on them (D-533).** The same scheduler's `inbound-events` sweep, on the reconcile cadence,
+claims RECEIVED deliveries (and PROCESSING ones whose claim is older than
+`publishing.dispatch.claimLeaseSeconds`), at most `publishing.inbound.processBatchSize` (50) a pass.
+A deauthorize revokes the connections it names, each in its own workspace; a data deletion also
+erases Meta's data about them and completes its request; a webhook is set aside (IGNORED). A
+delivery whose work throws goes back to RECEIVED and is retried; after
+`publishing.inbound.maxAttempts` (10) it is FAILED with `inbound.processing_failed` and stays listed
+until the retention purge. To look: `SELECT kind, status, attempts, "failureCode", "receivedAt" FROM
+social_inbound_event WHERE status IN ('RECEIVED','PROCESSING','FAILED') ORDER BY "receivedAt";` on
+the platform connection — rows hold hashes and connection ids, never a Meta user id or token.
+
 ## 7. Secret rotation
 
 **Platform capability.** Every provider credential is a REFERENCE in configuration and a row in the

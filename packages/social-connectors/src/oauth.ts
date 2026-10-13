@@ -762,10 +762,11 @@ export class SocialOAuthService {
     providerSubjectHash: string | null;
   }): Promise<SocialConnection> {
     const capabilities = capabilitiesFor(this.#policy, input.record.provider);
+    const bundle = await this.#bindTarget(input.record.provider, input.target, input.bundle);
     const expiresAt =
-      input.bundle.expiresInSeconds === null
+      bundle.expiresInSeconds === null
         ? null
-        : new Date(input.now.getTime() + input.bundle.expiresInSeconds * 1_000);
+        : new Date(input.now.getTime() + bundle.expiresInSeconds * 1_000);
 
     /*
      * THE PLAN'S SLOT IS TAKEN AS THE CONNECTION IS CREATED, not before.
@@ -830,7 +831,7 @@ export class SocialOAuthService {
       await this.#storeCredential({
         connectionId: existing.id,
         version: (latest?.version ?? 0) + 1,
-        bundle: input.bundle,
+        bundle: bundle,
         expiresAt,
       });
       const renewed = await this.#db.socialConnection.update({
@@ -839,7 +840,7 @@ export class SocialOAuthService {
           displayName: input.target.displayName,
           avatarUrl: input.target.avatarUrl,
           status: input.missingScopes.length > 0 ? 'NEEDS_REAUTH' : 'ACTIVE',
-          grantedScopes: [...input.bundle.grantedScopes],
+          grantedScopes: [...bundle.grantedScopes],
           connectedByUserId: input.record.startedByUserId,
           connectedAt: input.now,
           tokenExpiresAt: expiresAt,
@@ -881,7 +882,7 @@ export class SocialOAuthService {
         avatarUrl: input.target.avatarUrl,
         targetKind: input.target.targetKind || capabilities.targetKind,
         status: input.missingScopes.length > 0 ? 'NEEDS_REAUTH' : 'ACTIVE',
-        grantedScopes: [...input.bundle.grantedScopes],
+        grantedScopes: [...bundle.grantedScopes],
         connectedByUserId: input.record.startedByUserId,
         connectedAt: input.now,
         tokenExpiresAt: expiresAt,
@@ -897,7 +898,7 @@ export class SocialOAuthService {
     await this.#storeCredential({
       connectionId: connection.id,
       version: 1,
-      bundle: input.bundle,
+      bundle: bundle,
       expiresAt,
     });
 
@@ -919,6 +920,33 @@ export class SocialOAuthService {
     });
 
     return connection;
+  }
+
+  /**
+   * CONNECTORS B — THE CHOSEN TARGET'S OWN TOKEN, when the platform has one
+   * (a Facebook Page). Asked once, here, with the person's grant; the bundle
+   * that comes back is what is stored, keeping what the person granted. A
+   * platform without `bindTarget` stores the grant's own token, unchanged.
+   */
+  async #bindTarget(
+    provider: SocialProvider,
+    target: PublishTarget,
+    bundle: TokenBundle,
+  ): Promise<TokenBundle> {
+    const adapter = this.#registry.get(provider);
+    if (!adapter.bindTarget) return bundle;
+    const bound = await adapter.bindTarget({
+      credentials: { accessToken: bundle.accessToken, refreshToken: bundle.refreshToken },
+      externalAccountId: target.externalAccountId,
+      application: await this.#applications.resolve(provider),
+    });
+    return {
+      ...bundle,
+      accessToken: bound.accessToken,
+      // A target token is not refreshed with the person's refresh token.
+      refreshToken: null,
+      expiresInSeconds: bound.expiresInSeconds,
+    };
   }
 
   /**

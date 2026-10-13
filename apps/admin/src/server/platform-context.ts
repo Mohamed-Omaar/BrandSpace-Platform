@@ -37,7 +37,11 @@ import {
 } from '@brandspace/billing';
 import { AiUsageExplorer } from '@brandspace/ai-gateway';
 import { SecretService } from '@brandspace/secrets';
-import { IntegrationsService, type IntegrationDefinition } from '@brandspace/integrations';
+import {
+  IntegrationsService,
+  publicApiBaseUrlFrom,
+  type IntegrationDefinition,
+} from '@brandspace/integrations';
 import { currentEnvironment, isProduction } from '@brandspace/shared';
 
 /**
@@ -96,17 +100,30 @@ export function getIntegrationsService(): IntegrationsService {
  * map by the registry's `generated` flag so a caller cannot smuggle an ordinary
  * setting through it.
  */
-/** The API's public base URL for this environment — where every generated address points. */
-export function publicApiBaseUrl(): string {
-  return (process.env['PUBLIC_API_BASE_URL'] ?? 'http://localhost:3003').replace(/\/+$/, '');
+/**
+ * The API's public base URL for this environment — where every generated
+ * address points. READ FROM THE RUNNING ENVIRONMENT, never written down: on
+ * staging and production it is whatever `PUBLIC_API_BASE_URL` holds (a custom
+ * domain or the host's generated address), and the boot check already refuses
+ * to start this app there without it. The local fallback exists only in
+ * development; anywhere else a missing value is `null`, and the screens say
+ * so instead of showing an address that would not work.
+ */
+export function publicApiBaseUrl(): string | null {
+  return publicApiBaseUrlFrom(process.env);
 }
 
 export function generatedSettingsFor(
   definition: IntegrationDefinition,
 ): Readonly<Record<string, string>> {
   const apiBaseUrl = publicApiBaseUrl();
+  if (apiBaseUrl === null) return {};
   if (definition.category === 'payment') {
     return { webhookUrl: `${apiBaseUrl}/v1/billing/webhook/${definition.providerKey}` };
+  }
+  // Connectors B: a social app's OAuth redirect is our own callback route.
+  if (definition.category === 'social' && definition.providerKey !== 'mock') {
+    return { redirectUri: `${apiBaseUrl}/v1/social/callback/${definition.providerKey}` };
   }
   return {};
 }

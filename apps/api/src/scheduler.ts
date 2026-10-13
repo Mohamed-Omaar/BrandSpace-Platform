@@ -1,3 +1,4 @@
+import { processSocialInboundEvents } from './social-inbound';
 import {
   AssetMaintenanceService,
   TenantAssetPolicySource,
@@ -73,7 +74,9 @@ import {
   type VerifySocialPostPayload,
 } from '@brandspace/jobs';
 import {
+  capabilitiesFor,
   createConnectorRegistry,
+  providerForPlatformKey,
   PublishPipelineService,
   refreshIsDue,
   resolvePublishingPolicy,
@@ -85,6 +88,7 @@ import {
 import {
   ContentApprovalService,
   TenantContentPolicySource,
+  holdPostWithoutChannel,
   instantForIntent,
   resolveContentPolicy,
 } from '@brandspace/content';
@@ -92,6 +96,7 @@ import {
   CreditLedgerService,
   SubscriptionService,
   UsageService,
+  createScheduleQuota,
   createTotalResourceQuota,
   creditPolicyFrom,
   findPlan,
@@ -242,6 +247,10 @@ export interface MaintenanceResult {
   readonly publishJobsDispatched: number;
   /** Jobs whose worker died mid-flight, handed to verification (D-143). */
   readonly publishJobsRecovered: number;
+  /** Connectors B — finished inbound deliveries past `publishing.inbound.retentionDays`. */
+  readonly inboundEventsPurged: number;
+  /** Connectors B — Meta deliveries acted on (deauthorize, data deletion) or set aside. */
+  readonly inboundEventsProcessed: number;
   /** Phase 7 — the analytics sweeps. */
   readonly analyticsCursorsDispatched: number;
   readonly analyticsBackfillsDispatched: number;
@@ -667,10 +676,26 @@ export class MaintenanceScheduler {
               workspaceId,
               policy: contentPolicy,
             }),
+            scheduleQuota: createScheduleQuota({ db, workspaceId, environment }),
             clock: this.#clock,
           });
+          /*
+           * B-pre 2 — a post none of whose channels can be connected is HELD
+           * (back to PLANNED on its day, quota refunded, its time kept as its
+           * proposal), never failed and never left SCHEDULED to be re-read by
+           * every pass. The same activated policy the pipeline publishes under.
+           */
+          const notConnectable = async (keys: readonly string[]) =>
+            keys.filter((key) => {
+              const provider = providerForPlatformKey(key);
+              return !provider || !capabilitiesFor(policy, provider).enabled;
+            });
+          const quota = createScheduleQuota({ db, workspaceId, environment });
           let made = 0;
           for (const slotId of slotIds) {
+            if (await holdPostWithoutChannel(db, { workspaceId, slotId, notConnectable, quota })) {
+              continue;
+            }
             const result = await pipeline.materialiseSlot(slotId);
             made += result.created;
           }
@@ -1168,6 +1193,67 @@ export class MaintenanceScheduler {
   }
 
   /** The dispatch half of the publishing policy, read once per pass. */
+  /**
+   * CONNECTORS B — DELETE FINISHED INBOUND DELIVERIES PAST THEIR RETENTION.
+   *
+   * A delivery that was processed, ignored or failed more than
+   * `publishing.inbound.retentionDays` ago serves nothing but a support
+   * question, and it is a record of what a platform said about a person, so it
+   * is not kept. One delivery still RECEIVED or PROCESSING is never touched,
+   * whatever its age. A data-deletion request outlives its delivery (the
+   * foreign key is ON DELETE SET NULL). Bounded per pass
+   * (`publishing.inbound.purgeBatchSize`), oldest first; a rerun deletes
+   * nothing twice.
+   *
+   * The table is platform-owned, so this runs on the platform connection.
+   */
+  async purgeInboundEvents(): Promise<number> {
+    const platform = getPlatformClient();
+    const policy = await this.#resolvePublishing();
+    const before = new Date(
+      this.#clock.now().getTime() - policy.inbound.retentionDays * 86_400_000,
+    );
+    const due = await platform.socialInboundEvent.findMany({
+      where: {
+        status: { in: ['PROCESSED', 'IGNORED', 'FAILED'] },
+        processedAt: { lt: before },
+      },
+      select: { id: true },
+      orderBy: { processedAt: 'asc' },
+      take: policy.inbound.purgeBatchSize,
+    });
+    if (due.length === 0) return 0;
+    const deleted = await platform.socialInboundEvent.deleteMany({
+      where: {
+        id: { in: due.map((row) => row.id) },
+        // Re-asserted at delete time: a row reprocessed in between is kept.
+        status: { in: ['PROCESSED', 'IGNORED', 'FAILED'] },
+        processedAt: { lt: before },
+      },
+    });
+    return deleted.count;
+  }
+
+  /**
+   * CONNECTORS B — ACT ON WHAT META TOLD US (social-inbound.ts): a deauthorize
+   * revokes the connections it names, a data-deletion request also erases
+   * Meta's data about them, each inside its own workspace; a webhook is set
+   * aside. Claimed with a lease (`dispatch.claimLeaseSeconds`), bounded per
+   * pass (`inbound.processBatchSize`), tried `inbound.maxAttempts` times.
+   */
+  async processInboundEvents(): Promise<number> {
+    const policy = await this.#resolvePublishing();
+    return processSocialInboundEvents({
+      platform: getPlatformClient(),
+      inWorkspace: (workspaceId, fn) => withWorkspace(workspaceId, fn),
+      environment: this.#environment,
+      now: this.#clock.now(),
+      batchSize: policy.inbound.processBatchSize,
+      maxAttempts: policy.inbound.maxAttempts,
+      leaseSeconds: policy.dispatch.claimLeaseSeconds,
+    });
+  }
+
   async #publishingPolicy(): Promise<{ claimLeaseSeconds: number; staleClaimBatchSize: number }> {
     const policy = await this.#resolvePublishing();
     return {
@@ -2305,6 +2391,8 @@ export class MaintenanceScheduler {
     const purged = await this.purgeRetention(cadence.retentionPurgeBatch);
     const assets = await this.sweepAssets(cadence.retentionPurgeBatch);
     const publishing = await this.sweepPublishing(cadence.ingestionReconcileBatch);
+    const inboundEventsProcessed = await this.processInboundEvents();
+    const inboundEventsPurged = await this.purgeInboundEvents();
     const analytics = await this.sweepAnalytics(cadence.ingestionReconcileBatch);
     const analyticsRowsPruned = await this.pruneAnalyticsRetention(cadence.retentionPurgeBatch);
     const automations = await this.sweepAutomations(cadence.ingestionReconcileBatch);
@@ -2322,6 +2410,8 @@ export class MaintenanceScheduler {
       publishJobsCreated: publishing.created,
       publishJobsDispatched: publishing.dispatched,
       publishJobsRecovered: publishing.recovered,
+      inboundEventsPurged,
+      inboundEventsProcessed,
       analyticsCursorsDispatched: analytics.dispatched,
       analyticsBackfillsDispatched: analytics.backfills,
       analyticsRowsPruned,
@@ -2439,6 +2529,11 @@ export class MaintenanceScheduler {
     });
     every(cadence.retentionPurgeSeconds, 'analytics-retention', () =>
       this.pruneAnalyticsRetention(cadence.retentionPurgeBatch),
+    );
+    // A deauthorize is acted on within the reconcile cadence (a minute).
+    every(cadence.ingestionReconcileSeconds, 'inbound-events', () => this.processInboundEvents());
+    every(cadence.retentionPurgeSeconds, 'inbound-event-retention', () =>
+      this.purgeInboundEvents(),
     );
     /*
      * THE AUTOMATION SWEEP (A1) — the timer the whole feature was missing.

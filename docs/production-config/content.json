@@ -35,7 +35,20 @@
       "recommendedHashtags": {
         "min": 3,
         "max": 5
+      },
+      "safeZones": {
+        "top": 13,
+        "bottom": 22,
+        "end": 16
       }
+    },
+    {
+      "key": "facebook",
+      "labelKey": "content.platform.facebook",
+      "maxBodyChars": 2200,
+      "maxHashtags": 30,
+      "allowsFirstComment": false,
+      "maxMediaItems": 10
     },
     {
       "key": "linkedin",
@@ -71,6 +84,11 @@
       "recommendedHashtags": {
         "min": 3,
         "max": 5
+      },
+      "safeZones": {
+        "top": 13,
+        "bottom": 22,
+        "end": 16
       }
     }
   ],

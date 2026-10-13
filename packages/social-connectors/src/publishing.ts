@@ -205,6 +205,13 @@ export interface PublishPipelineOptions {
    * forget every reservation with the transaction.
    */
   readonly rateLimiter?: ProviderRateLimiter | undefined;
+  /**
+   * D-531 — the plan's monthly scheduling quota, to refund a post that is held
+   * because every platform it was queued for was switched off. The worker and
+   * the API pass `createScheduleQuota`; without it the hold still happens and
+   * nothing is refunded.
+   */
+  readonly scheduleQuota?: { refund(idempotencyKey: string): Promise<void> } | undefined;
   readonly clock?: Clock;
 }
 
@@ -325,6 +332,13 @@ export function publishIdempotencyKey(input: {
  */
 const AWAITING_RECONNECT = 'AWAITING_RECONNECT' as const;
 const RECONNECT_TOO_LATE = 'RECONNECT_TOO_LATE' as const;
+/**
+ * D-531 (owner, step B) — THE JOB'S PLATFORM WAS SWITCHED OFF AFTER IT WAS
+ * QUEUED. Not a failure of the post: it is held, never FAILED, never noticed.
+ */
+const PLATFORM_SWITCHED_OFF = 'PLATFORM_SWITCHED_OFF' as const;
+/** The code a job held for a switched-off platform is cancelled with. */
+export const PLATFORM_SWITCHED_OFF_CODE = 'held.platform_switched_off';
 /** On a held job, while it waits. */
 export const AWAITING_RECONNECT_CODE = 'preflight.awaiting_reconnect';
 /** On the job that waited until its deadline and the account never came back. */
@@ -335,7 +349,11 @@ export const AWAITING_BUDGET_CODE = 'preflight.awaiting_budget';
 export const PUBLISH_IN_PROGRESS_CODE = 'adapter.publish_in_progress';
 
 type PreflightOutcome =
-  PublishFailureClass | typeof AWAITING_RECONNECT | typeof RECONNECT_TOO_LATE | null;
+  | PublishFailureClass
+  | typeof AWAITING_RECONNECT
+  | typeof RECONNECT_TOO_LATE
+  | typeof PLATFORM_SWITCHED_OFF
+  | null;
 
 /**
  * PHASE 2B-3 PR 2 — which attempt a transition to FAILED concludes with (see
@@ -367,6 +385,7 @@ export class PublishPipelineService {
   readonly #media: PublishMediaPort | undefined;
   readonly #notifier: PublishNotifier | undefined;
   readonly #rateLimiter: ProviderRateLimiter | undefined;
+  readonly #scheduleQuota: { refund(idempotencyKey: string): Promise<void> } | undefined;
   readonly #clock: Clock;
 
   constructor(options: PublishPipelineOptions) {
@@ -379,6 +398,7 @@ export class PublishPipelineService {
     this.#media = options.media;
     this.#notifier = options.notifier;
     this.#rateLimiter = options.rateLimiter;
+    this.#scheduleQuota = options.scheduleQuota;
     this.#clock = options.clock ?? systemClock;
   }
 
@@ -678,6 +698,7 @@ export class PublishPipelineService {
 
     const preflight = await this.#preflight(job);
     if (preflight === AWAITING_RECONNECT) return settled(await this.#holdForReconnect(job));
+    if (preflight === PLATFORM_SWITCHED_OFF) return settled(await this.#holdSwitchedOff(job));
     if (preflight === RECONNECT_TOO_LATE) {
       return settled(
         await this.#fail(job, 'NOT_CONNECTED', RECONNECT_REQUIRED_CODE, null, PREFLIGHT),
@@ -2032,6 +2053,142 @@ export class PublishPipelineService {
    * waits past the moment it must fail. The code says why it is waiting, and
    * the publishing log shows it.
    */
+  /**
+   * D-531 (owner, step B) — A JOB WHOSE PLATFORM WAS SWITCHED OFF AFTER IT WAS
+   * QUEUED IS HELD, NOT FAILED.
+   *
+   * This job (just claimed by us) and every sibling still waiting for a
+   * switched-off platform are CANCELLED with `held.platform_switched_off` — no
+   * attempt is recorded, nothing is FAILED, no notice is sent. Each is audited
+   * as SYSTEM.
+   *
+   * If nothing of the post is left to send, the POST is held exactly as the
+   * sweep holds one at its time (`holdPostWithoutChannel`): the slot goes back
+   * to PLANNED on its day, its scheduling quota is refunded once, and the
+   * item returns to APPROVED (DRAFT with no approval) with its time kept as its
+   * proposal. If another channel is still on, that one goes out as usual and
+   * the post's state follows its jobs.
+   */
+  async #holdSwitchedOff(job: PublishJob): Promise<ExecuteResult> {
+    const now = this.#clock.now();
+    const cancelled = {
+      status: 'CANCELLED' as const,
+      cancelledAt: now,
+      completedAt: now,
+      nextAttemptAt: null,
+      failureCode: PLATFORM_SWITCHED_OFF_CODE,
+    };
+    const mine = await this.#db.publishJob.updateMany({
+      where: {
+        id: job.id,
+        workspaceId: this.#workspaceId,
+        status: 'PUBLISHING',
+        claimedAt: job.claimedAt,
+      },
+      data: cancelled,
+    });
+    if (mine.count !== 1) {
+      const current = await this.#db.publishJob.findFirst({
+        where: { id: job.id, workspaceId: this.#workspaceId },
+      });
+      return {
+        jobId: job.id,
+        status: current?.status ?? job.status,
+        failureClass: current?.failureClass ?? null,
+        externalPostId: current?.externalPostId ?? null,
+      };
+    }
+
+    const waiting = await this.#db.publishJob.findMany({
+      where: {
+        workspaceId: this.#workspaceId,
+        calendarSlotId: job.calendarSlotId,
+        status: { in: ['PENDING', 'QUEUED'] },
+      },
+      select: { id: true, provider: true, status: true },
+    });
+    const switchedOff = waiting.filter(
+      (candidate) => !capabilitiesFor(this.#policy, candidate.provider).enabled,
+    );
+    if (switchedOff.length > 0) {
+      await this.#db.publishJob.updateMany({
+        where: {
+          id: { in: switchedOff.map((candidate) => candidate.id) },
+          workspaceId: this.#workspaceId,
+          status: { in: ['PENDING', 'QUEUED'] },
+        },
+        data: cancelled,
+      });
+    }
+    for (const held of [{ id: job.id, provider: job.provider }, ...switchedOff]) {
+      await writeAuditEvent(this.#db, this.#workspaceId, {
+        action: 'social.post.cancelled',
+        actorType: 'SYSTEM',
+        resourceType: 'PublishJob',
+        resourceId: held.id,
+        brandId: job.brandId,
+        after: { status: 'CANCELLED', reason: 'platform_switched_off', provider: held.provider },
+      });
+    }
+
+    const jobs = await this.#db.publishJob.findMany({
+      where: { workspaceId: this.#workspaceId, calendarSlotId: job.calendarSlotId },
+      select: { status: true },
+    });
+    if (jobs.every((candidate) => candidate.status === 'CANCELLED')) {
+      await this.#holdPost(job);
+    } else {
+      await this.#syncLifecycle(job);
+    }
+    return { jobId: job.id, status: 'CANCELLED', failureClass: null, externalPostId: null };
+  }
+
+  /** D-531 — the D-334 path for a post none of whose jobs can go out any more. */
+  async #holdPost(job: PublishJob): Promise<void> {
+    const slot = await this.#db.calendarSlot.findFirst({
+      where: { id: job.calendarSlotId, workspaceId: this.#workspaceId },
+    });
+    if (!slot || slot.status !== 'PUBLISHING') return;
+    const held = await this.#db.calendarSlot.updateMany({
+      where: {
+        id: slot.id,
+        workspaceId: this.#workspaceId,
+        status: 'PUBLISHING',
+        rescheduleAttempt: slot.rescheduleAttempt,
+      },
+      data: { status: 'PLANNED', rescheduleAttempt: { increment: 1 } },
+    });
+    if (held.count === 0) return;
+    if (slot.usageIdempotencyKey && this.#scheduleQuota) {
+      await this.#scheduleQuota.refund(`${slot.usageIdempotencyKey}:refund`);
+    }
+    const approval = await this.#approvals.latestForItem(job.contentItemId);
+    const itemStatus = approval?.status === 'APPROVED' ? 'APPROVED' : 'DRAFT';
+    await this.#db.contentItem.updateMany({
+      where: { id: job.contentItemId, workspaceId: this.#workspaceId, status: 'PUBLISHING' },
+      data: {
+        status: itemStatus,
+        proposedLocalTime: slot.scheduledLocalTime,
+        publishChoice: 'PICK',
+      },
+    });
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'content.rescheduled',
+      actorType: 'SYSTEM',
+      resourceType: 'CalendarSlot',
+      resourceId: slot.id,
+      brandId: slot.brandId,
+      after: {
+        reason: 'no_connectable_channel',
+        fromStatus: 'PUBLISHING',
+        toStatus: 'PLANNED',
+        localTime: slot.scheduledLocalTime,
+        timezone: slot.timezone,
+        itemStatus,
+      },
+    });
+  }
+
   async #holdForReconnect(job: PublishJob): Promise<ExecuteResult> {
     const now = this.#clock.now().getTime();
     const deadline = job.scheduledAtUtc.getTime() + this.#lateness();
@@ -2150,6 +2307,13 @@ export class PublishPipelineService {
       }
     }
 
+    /*
+     * D-531 (owner, step B): A PLATFORM SWITCHED OFF AFTER THE JOB WAS QUEUED
+     * holds the post — before the account is looked at, so an account that
+     * also expired meanwhile cannot turn a hold into a failure.
+     */
+    if (!capabilitiesFor(this.#policy, job.provider).enabled) return PLATFORM_SWITCHED_OFF;
+
     const lateByMs = this.#clock.now().getTime() - job.scheduledAtUtc.getTime();
     const tooLate = lateByMs > this.#lateness();
 
@@ -2181,9 +2345,6 @@ export class PublishPipelineService {
       return tooLate ? RECONNECT_TOO_LATE : AWAITING_RECONNECT;
     if (!connection || connection.status !== 'ACTIVE') return 'NOT_CONNECTED';
     if (tooLate && job.failureCode === AWAITING_RECONNECT_CODE) return RECONNECT_TOO_LATE;
-
-    const capabilities = capabilitiesFor(this.#policy, job.provider);
-    if (!capabilities.enabled) return 'UNSUPPORTED';
 
     /*
      * TOO LATE TO BE WORTH SENDING. A time-sensitive post six hours late is

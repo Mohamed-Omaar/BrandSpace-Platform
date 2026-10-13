@@ -29,6 +29,7 @@ import {
 } from '@brandspace/ui';
 import type { MoveSlotResult } from './actions';
 import { pendingMoves, withMoves } from './optimistic-moves';
+import { dragHintShown, heldPreviewLabels, slotMovable } from './slot-moves';
 import { VariantPreview, previewLabels } from '../content/compose/variant-preview';
 import { CopilotLink } from '../../../components/copilot-link';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
@@ -99,6 +100,8 @@ export interface SlotDetail {
   readonly itemStatus?: string;
   /** B-4 — whether this plan can still move (PLANNED or SCHEDULED only). */
   readonly reschedulable?: boolean;
+  /** B-pre 2 — none of its channels can be connected yet: it cannot go out. */
+  readonly held?: boolean;
   readonly previewPlatform?: string | null;
   readonly previewBody?: string;
   readonly previewMedia?: readonly {
@@ -176,6 +179,12 @@ export interface CalendarViewProps {
   readonly quotaUsed: number;
   readonly quotaLimit: number | null;
   readonly canSchedule: boolean;
+  /**
+   * B-pre 2 — may take a plan off the calendar (`content.schedule`). Not tied
+   * to Q8 as `canSchedule` is: unscheduling publishes nothing. Defaults to
+   * `canSchedule`.
+   */
+  readonly canUnschedule?: boolean;
   /** D-468 — may start a post (`content.create`): "+ New post on this day", Duplicate. */
   readonly canCreate?: boolean;
   /** The seven weekday heads, from the configured week start (the prototype's `weekdays`). */
@@ -241,6 +250,7 @@ export function CalendarView({
   quotaUsed,
   quotaLimit,
   canSchedule,
+  canUnschedule = canSchedule,
   canCreate = false,
   weekdays = [],
   canSubmit = false,
@@ -440,7 +450,7 @@ export function CalendarView({
     }
     const slotId = payload.startsWith('slot:') ? payload.slice('slot:'.length) : '';
     const slot = slots.find((candidate) => candidate.slotId === slotId);
-    if (!slot || !canSchedule || slot.reschedulable === false || !actions.move) return 'ignored';
+    if (!slot || !movable(slot) || !actions.move) return 'ignored';
     if (today !== '' && day < today) {
       setPastDayNotice(true);
       return 'ignored';
@@ -468,10 +478,13 @@ export function CalendarView({
   });
 
   /** B7 — only a post that can still move can be dragged, and only by a scheduler. */
+  // Q8, B-4 and D-531 in one rule (`slot-moves.ts`): the drag, the drop, the chip and the drawer.
+  const movable = (slot: SlotDetail): boolean =>
+    slotMovable({ canSchedule, reschedulable: slot.reschedulable, held: slot.held });
+
   const postDragData = (post: PostRecord): string | undefined => {
-    if (!canSchedule) return undefined;
     const slot = slots.find((candidate) => candidate.slotId === post.id);
-    return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;
+    return slot && movable(slot) ? `slot:${post.id}` : undefined;
   };
 
   // §8.2 — the phone's strip: the next 14 days from today, in the workspace's zone.
@@ -576,7 +589,7 @@ export function CalendarView({
         title: post.caption,
         titleDir: post.captionDirection,
         kind: kindOf(post),
-        statusLabel: statusLabelOf(post),
+        statusLabel: slot?.held ? (t['calendar.held'] ?? '') : statusLabelOf(post),
         hhmm: slot?.time ?? post.whenLabel,
         channels,
         art: { src: post.mediaSrc ?? null, seed: post.mediaSeed },
@@ -584,7 +597,7 @@ export function CalendarView({
           .filter(Boolean)
           .join(' · '),
         caption: slot?.previewBody ?? '',
-        canMove: canSchedule && slot?.reschedulable !== false && actions.move !== undefined,
+        canMove: slot !== undefined && movable(slot) && actions.move !== undefined,
         dragData: postDragData(post),
       };
     }),
@@ -654,7 +667,7 @@ export function CalendarView({
           details: t['calendar.pop.details'] ?? '',
           cancel: t['calendar.cancelMove'] ?? '',
           pickDay: t['calendar.pickDay'] ?? '{title}',
-          hint: canSchedule ? (t['calendar.hint'] ?? '') : '',
+          hint: dragHintShown(canSchedule) ? (t['calendar.hint'] ?? '') : '',
           legend: (
             [
               ['sched', 'SCHEDULED'],
@@ -827,7 +840,7 @@ export function CalendarView({
       />
 
       {/* §8.2 — the hint under the phone's list: a long-press lifts a post. */}
-      {canSchedule ? (
+      {dragHintShown(canSchedule) ? (
         <p className="bs-narrow-only" data-testid="calendar-move-note" style={{ margin: 0 }}>
           <span className="bsp-cal-note">{t['calendar.moveFromPost']}</span>
         </p>
@@ -1063,7 +1076,8 @@ export function CalendarView({
         open={openSlot !== null}
         onClose={() => setOpenSlotId(null)}
         title={openSlot?.title ?? ''}
-        description={t['calendar.slotDialogHint'] ?? ''}
+        // B-pre 2 — a held post does not go out at its time; the drawer says why instead.
+        description={openSlot?.held ? '' : (t['calendar.slotDialogHint'] ?? '')}
         closeLabel={t['common.close'] ?? 'Close'}
         testId="calendar-slot-dialog"
       >
@@ -1080,12 +1094,17 @@ export function CalendarView({
                 accountHandle=""
                 status="SCHEDULED"
                 approval="NOT_REQUIRED"
-                labels={previewLabels(t)}
+                labels={
+                  openSlot.held
+                    ? heldPreviewLabels(previewLabels(t), t['calendar.held'] ?? '')
+                    : previewLabels(t)
+                }
                 testId="calendar-drawer-preview"
               />
             ) : null}
             <p data-testid="calendar-slot-when" style={{ margin: 0, ...typographyTokens.label }}>
-              {t['calendar.scheduledFor']}: {openSlot.date} {openSlot.time} · {timezone}
+              {openSlot.held ? t['calendar.heldTime'] : t['calendar.scheduledFor']}: {openSlot.date}{' '}
+              {openSlot.time} · {timezone}
             </p>
             {/*
               WHAT THE POST ACTUALLY IS, before what can be done to it.
@@ -1099,7 +1118,11 @@ export function CalendarView({
               data-testid="calendar-slot-facts"
               style={{ margin: 0, display: 'grid', gap: spacingTokens['2xs'] }}
             >
-              <SlotFact term={t['calendar.channels'] ?? ''} value={openSlot.channels.join(' · ')} />
+              <SlotFact
+                term={t['calendar.channels'] ?? ''}
+                value={openSlot.channels.map(channelName).join(' · ')}
+                testId="calendar-slot-channels"
+              />
               {openSlot.campaignName ? (
                 <SlotFact
                   term={t['calendar.campaign'] ?? ''}
@@ -1155,6 +1178,11 @@ export function CalendarView({
               server sent one, which it does only for a reader holding
               `integrations.read`.
             */}
+            {openSlot.held ? (
+              <Banner tone="warning" testId="calendar-slot-held">
+                {t['calendar.heldExplanation']}
+              </Banner>
+            ) : null}
             {openSlot.readiness && openSlot.readiness.channels.length > 0 ? (
               <Banner tone="warning" testId="calendar-slot-readiness-detail">
                 <ul style={{ margin: 0, paddingInlineStart: spacingTokens.md }}>
@@ -1172,7 +1200,7 @@ export function CalendarView({
               </Banner>
             ) : null}
 
-            {canSchedule && openSlot.reschedulable !== false ? (
+            {movable(openSlot) ? (
               <form action={actions.reschedule} style={{ display: 'grid', gap: spacingTokens.md }}>
                 <input type="hidden" name="locale" value={locale} />
                 <input type="hidden" name="month" value={month} />
@@ -1246,7 +1274,7 @@ export function CalendarView({
                 </form>
               ) : null}
               {/* B7 — only a plan that has not started publishing can be taken off. */}
-              {canSchedule && openSlot.reschedulable !== false ? (
+              {canUnschedule && openSlot.reschedulable !== false ? (
                 <form action={actions.cancel}>
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="month" value={month} />

@@ -3754,8 +3754,8 @@ model SocialConnection {
 
   /// When the access token stops working. Mirrored from the credential so the
   /// UI can warn without the token table being read at all.
-  tokenExpiresAt  DateTime? @db.Timestamptz(6)
-  lastRefreshedAt DateTime? @db.Timestamptz(6)
+  tokenExpiresAt      DateTime? @db.Timestamptz(6)
+  lastRefreshedAt     DateTime? @db.Timestamptz(6)
   /// Connectors A (W10): "v<n>:" + hex HMAC-SHA256 of the provider user id under key version n.
   /// Never the raw id. CHECK: ^v[0-9]{1,4}:[0-9a-f]{64}$.
   providerSubjectHash String?
@@ -3802,6 +3802,11 @@ model SocialConnection {
   @@index([workspaceId, provider, status])
   @@index([status, tokenExpiresAt])
   @@index([status, analyticsCursorsEnsuredAt])
+  /// Connectors step B — also a PARTIAL index Prisma cannot declare:
+  /// `social_connection_provider_subject_hash_idx` on (provider,
+  /// providerSubjectHash) WHERE providerSubjectHash IS NOT NULL, in migration
+  /// 20261022091000_social_connection_subject_lookup_index (the deauthorize and
+  /// data-deletion lookup, across workspaces, by the platform role).
   @@map("social_connection")
 }
 
@@ -3921,7 +3926,7 @@ model SocialOAuthState {
 
   /// What the provider ACTUALLY granted, carried across the selection step so
   /// the connection records the same scopes it would have recorded directly.
-  grantedScopes String[] @default([])
+  grantedScopes      String[] @default([])
   /// Connectors A (W10): the subject hash carried through the page-selection pause (D-142).
   pendingSubjectHash String?
 
@@ -4022,7 +4027,94 @@ model PublishJob {
   /// `publish_job_published_population_idx` on (workspaceId, brandId,
   /// publishedAt) WHERE status = 'PUBLISHED', in migration
   /// 20261012092000_publish_job_published_population_index.
+  /// Connectors step B — `publish_job_provider_handle_idx` on (provider,
+  /// providerHandle) WHERE providerHandle IS NOT NULL, in migration
+  /// 20261022092000_publish_job_handle_lookup_index (a webhook finds its job).
   @@map("publish_job")
+}
+
+/// Connectors step B — what kind of verified platform delivery an inbound event is.
+enum SocialInboundEventKind {
+  WEBHOOK
+  DEAUTHORIZE
+  DATA_DELETION
+}
+
+/// How far a verified inbound delivery has got (the billing_event claim pattern, D-221).
+enum SocialInboundEventStatus {
+  RECEIVED
+  /// Claimed by a processor right now: `claimToken` and `claimedAt` are set together.
+  PROCESSING
+  PROCESSED
+  /// Verified but about nothing this platform holds (an unknown page, a user with no connection).
+  IGNORED
+  FAILED
+}
+
+/// Where a platform's data-deletion request stands, as its status page reports it.
+enum SocialDataDeletionStatus {
+  RECEIVED
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// PLATFORM-OWNED (connectors step B, migration 20261022090000). Every VERIFIED
+/// delivery from a platform: a webhook (X-Hub-Signature-256 over the raw body),
+/// a deauthorize callback or a data-deletion callback (signed_request). A row
+/// exists only after the signature was verified.
+///
+/// NO workspaceId: the callback arrives with no tenant, and one delivery can
+/// concern several workspaces. RLS forced with a platform_only policy; the
+/// tenant role holds no privilege. `payload` is the NORMALISED event — never a
+/// token, a secret or the raw platform user id; the granting user is kept only
+/// as W10's versioned keyed hash. Purged after `publishing.inbound.retentionDays`.
+model SocialInboundEvent {
+  id          String                   @id @default(uuid()) @db.Uuid
+  provider    SocialProvider
+  kind        SocialInboundEventKind
+  /// sha256 (hex) of the raw body: a redelivery collides and changes nothing.
+  dedupeKey   String
+  subjectHash String?
+  payload     Json
+  occurredAt  DateTime?                @db.Timestamptz(6)
+  status      SocialInboundEventStatus @default(RECEIVED)
+  attempts    Int                      @default(0)
+  claimToken  String?                  @db.Uuid
+  claimedAt   DateTime?                @db.Timestamptz(6)
+  /// A machine code only, never provider text.
+  failureCode String?
+  receivedAt  DateTime                 @default(now()) @db.Timestamptz(6)
+  processedAt DateTime?                @db.Timestamptz(6)
+
+  deletionRequest SocialDataDeletionRequest?
+
+  @@unique([provider, kind, dedupeKey])
+  @@index([status, receivedAt])
+  @@index([status, claimedAt])
+  @@map("social_inbound_event")
+}
+
+/// PLATFORM-OWNED (connectors step B). What a platform's data-deletion callback
+/// must answer with — a confirmation code and a status URL — and how far the
+/// deletion has got. Keeps the versioned subject HASH only. Survives the
+/// inbound event's retention purge (`inboundEventId` is set to NULL).
+model SocialDataDeletionRequest {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  provider           SocialProvider
+  confirmationCode   String                   @unique
+  subjectHash        String
+  inboundEventId     String?                  @unique @db.Uuid
+  status             SocialDataDeletionStatus @default(RECEIVED)
+  connectionsFound   Int                      @default(0)
+  connectionsDeleted Int                      @default(0)
+  requestedAt        DateTime                 @default(now()) @db.Timestamptz(6)
+  completedAt        DateTime?                @db.Timestamptz(6)
+
+  inboundEvent SocialInboundEvent? @relation(fields: [inboundEventId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "social_data_deletion_request_inbound_event_fkey")
+
+  @@index([provider, subjectHash])
+  @@index([status, requestedAt])
+  @@map("social_data_deletion_request")
 }
 
 /// The evidence trail for one attempt at one job.

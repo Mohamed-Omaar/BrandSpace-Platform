@@ -1954,6 +1954,35 @@ const publishingCapabilitySchema = z.object({
    * adapter never sees a storage key.
    */
   mediaByUrl: z.boolean().default(false),
+  /**
+   * CONNECTORS B — THE PLATFORM API VERSION every call for this provider is
+   * pinned to (Meta: the Graph API version, `v26.0`). The owner moves it when
+   * the platform deprecates one; it is never written in an adapter. Null: an
+   * adapter that needs a version is not registered, so the provider cannot be
+   * connected (D-533).
+   */
+  apiVersion: z
+    .string()
+    .regex(/^v[0-9]{1,3}(\.[0-9]{1,2})?$/)
+    .nullable()
+    .default(null),
+  /**
+   * CONNECTORS B — POSTS PER CONNECTED ACCOUNT PER ROLLING 24 HOURS that we
+   * allow ourselves (Instagram's content-publishing limit). Checked against
+   * the platform's own count immediately before a post is made public; a post
+   * over it waits and retries rather than being refused by the platform.
+   * Null: not checked by us. The platform's own figure, when it reports a
+   * lower one, wins (D-533).
+   */
+  dailyPublishCap: z.number().int().min(1).max(1_000).nullable().default(null),
+  /**
+   * CONNECTORS B (owner, #81) — HOW LONG BEFORE THIS PLATFORM'S TOKEN EXPIRES
+   * the account is shown as expiring, with the existing notice (the
+   * integrations screen, publish readiness and Home's "needs you"). A platform
+   * whose tokens last weeks wants days of warning: Instagram's long-lived
+   * token lasts about 60 days. Null: `dispatch.expiringSoonHours`.
+   */
+  expiringSoonHours: z.number().int().min(1).max(2_160).nullable().default(null),
 });
 
 const publishingSchema = z.object({
@@ -2058,6 +2087,37 @@ const publishingSchema = z.object({
        * for the platform to fetch, short enough that a leaked URL is soon dead.
        */
       fetchUrlTtlSeconds: z.number().int().min(60).max(3_600).default(900),
+    })
+    .default({}),
+
+  /**
+   * CONNECTORS B — VERIFIED DELIVERIES FROM A PLATFORM (webhooks, deauthorize
+   * and data-deletion callbacks), kept in `social_inbound_event`.
+   */
+  inbound: z
+    .object({
+      /**
+       * How long a FINISHED delivery (processed, ignored or failed) is kept
+       * before the maintenance sweep deletes it. Long enough to answer "did
+       * Meta tell us?" in a support case; short because it serves nothing
+       * after that. A delivery still waiting or being processed is never
+       * purged. A data-deletion request outlives its delivery.
+       */
+      retentionDays: z.number().int().min(1).max(365).default(30),
+      /** Deliveries deleted per purge pass. */
+      purgeBatchSize: z.number().int().positive().max(10_000).default(500),
+      /**
+       * CONNECTORS B — deliveries the maintenance sweep claims and acts on per
+       * pass (a deauthorize or data-deletion request disables or erases the
+       * connections it names).
+       */
+      processBatchSize: z.number().int().positive().max(1_000).default(50),
+      /**
+       * How many times one delivery is tried before it is left FAILED for a
+       * person (a failed delivery is never silently dropped: it stays listed
+       * until the retention purge).
+       */
+      maxAttempts: z.number().int().min(1).max(100).default(10),
     })
     .default({}),
 });

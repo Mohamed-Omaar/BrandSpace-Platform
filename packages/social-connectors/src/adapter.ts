@@ -259,6 +259,19 @@ export interface SocialConnectorAdapter {
     readonly credentials: AdapterCredentials;
   }): Promise<readonly PublishTarget[]>;
 
+  /**
+   * CONNECTORS B — THE TOKEN FOR THE CHOSEN TARGET, when it is not the
+   * person's own. A Facebook Page publishes with the Page's token, which the
+   * person's grant can obtain; that token is what is stored, and the person's
+   * token is not. OPTIONAL: without it the grant's own token is stored.
+   * Called once, as the connection is made, after the target is chosen.
+   */
+  bindTarget?(input: {
+    readonly credentials: AdapterCredentials;
+    readonly externalAccountId: string;
+    readonly application: AdapterApplication;
+  }): Promise<{ readonly accessToken: string; readonly expiresInSeconds: number | null }>;
+
   checkHealth(input: { readonly credentials: AdapterCredentials }): Promise<ConnectionHealth>;
 
   publish(input: {

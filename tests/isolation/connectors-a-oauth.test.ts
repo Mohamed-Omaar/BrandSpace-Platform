@@ -42,7 +42,7 @@ let policy: PublishingPolicy;
 const vault = new SocialTokenVault({
   env: { SOCIAL_TOKEN_VAULT_KEK: FIXTURE_SOCIAL_KEK } as NodeJS.ProcessEnv,
 });
-const REDIRECT = 'https://api-staging.brandspace.cc/v1/social/callback/tiktok';
+const REDIRECT = 'https://api.example.test/v1/social/callback/tiktok';
 const applications: ApplicationResolver = {
   async resolve() {
     return {
