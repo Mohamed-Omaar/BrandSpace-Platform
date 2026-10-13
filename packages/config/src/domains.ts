@@ -1954,6 +1954,27 @@ const publishingCapabilitySchema = z.object({
    * adapter never sees a storage key.
    */
   mediaByUrl: z.boolean().default(false),
+  /**
+   * CONNECTORS B — THE PLATFORM API VERSION every call for this provider is
+   * pinned to (Meta: the Graph API version, `v26.0`). The owner moves it when
+   * the platform deprecates one; it is never written in an adapter. Null: an
+   * adapter that needs a version is not registered, so the provider cannot be
+   * connected (D-533).
+   */
+  apiVersion: z
+    .string()
+    .regex(/^v[0-9]{1,3}(\.[0-9]{1,2})?$/)
+    .nullable()
+    .default(null),
+  /**
+   * CONNECTORS B — POSTS PER CONNECTED ACCOUNT PER ROLLING 24 HOURS that we
+   * allow ourselves (Instagram's content-publishing limit). Checked against
+   * the platform's own count immediately before a post is made public; a post
+   * over it waits and retries rather than being refused by the platform.
+   * Null: not checked by us. The platform's own figure, when it reports a
+   * lower one, wins (D-533).
+   */
+  dailyPublishCap: z.number().int().min(1).max(1_000).nullable().default(null),
 });
 
 const publishingSchema = z.object({
@@ -2077,6 +2098,18 @@ const publishingSchema = z.object({
       retentionDays: z.number().int().min(1).max(365).default(30),
       /** Deliveries deleted per purge pass. */
       purgeBatchSize: z.number().int().positive().max(10_000).default(500),
+      /**
+       * CONNECTORS B — deliveries the maintenance sweep claims and acts on per
+       * pass (a deauthorize or data-deletion request disables or erases the
+       * connections it names).
+       */
+      processBatchSize: z.number().int().positive().max(1_000).default(50),
+      /**
+       * How many times one delivery is tried before it is left FAILED for a
+       * person (a failed delivery is never silently dropped: it stays listed
+       * until the retention purge).
+       */
+      maxAttempts: z.number().int().min(1).max(100).default(10),
     })
     .default({}),
 });

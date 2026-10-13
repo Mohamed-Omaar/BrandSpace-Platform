@@ -78,6 +78,10 @@ export interface ProviderCapabilities {
   readonly rateLimit: { readonly requestsPerWindow: number; readonly windowSeconds: number } | null;
   /** D-505 O1: the platform fetches media from a pre-signed URL. */
   readonly mediaByUrl: boolean;
+  /** Connectors B: the platform API version calls are pinned to, or null. */
+  readonly apiVersion: string | null;
+  /** Connectors B: posts per account per rolling 24 hours, or null (unchecked). */
+  readonly dailyPublishCap: number | null;
 }
 
 export interface PublishingPolicy {
@@ -111,6 +115,8 @@ export interface PublishingPolicy {
   readonly inbound: {
     readonly retentionDays: number;
     readonly purgeBatchSize: number;
+    readonly processBatchSize: number;
+    readonly maxAttempts: number;
   };
 }
 

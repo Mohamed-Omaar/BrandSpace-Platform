@@ -7,14 +7,35 @@ import { parseConfigPayload } from '@brandspace/config';
  */
 
 type Publishing = {
-  inbound: { retentionDays: number; purgeBatchSize: number };
+  inbound: {
+    retentionDays: number;
+    purgeBatchSize: number;
+    processBatchSize: number;
+    maxAttempts: number;
+  };
 };
 
 const publishing = (payload: unknown) => parseConfigPayload('publishing', payload) as Publishing;
 
 describe('connectors B · publishing.inbound — how long verified deliveries are kept', () => {
-  it('defaults to 30 days, 500 rows a pass', () => {
-    expect(publishing({}).inbound).toEqual({ retentionDays: 30, purgeBatchSize: 500 });
+  it('defaults to 30 days, 500 rows a pass; 50 deliveries acted on per pass, 10 tries each', () => {
+    expect(publishing({}).inbound).toEqual({
+      retentionDays: 30,
+      purgeBatchSize: 500,
+      processBatchSize: 50,
+      maxAttempts: 10,
+    });
+  });
+
+  it('bounds how many deliveries are acted on per pass, and how often one is tried', () => {
+    expect(publishing({ inbound: { processBatchSize: 1_000 } }).inbound.processBatchSize).toBe(
+      1_000,
+    );
+    expect(() => publishing({ inbound: { processBatchSize: 0 } })).toThrow();
+    expect(() => publishing({ inbound: { processBatchSize: 1_001 } })).toThrow();
+    expect(publishing({ inbound: { maxAttempts: 1 } }).inbound.maxAttempts).toBe(1);
+    expect(() => publishing({ inbound: { maxAttempts: 0 } })).toThrow();
+    expect(() => publishing({ inbound: { maxAttempts: 101 } })).toThrow();
   });
 
   it('takes the owner’s period within 1–365 days', () => {
