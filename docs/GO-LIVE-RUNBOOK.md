@@ -191,6 +191,10 @@ APP_ENV=staging` and its verdict will be "not ready" for that reason alone. Igno
      `INTERNAL_SERVICE_TOKEN` on admin (§5).
    - Scanner: off. `assets.json` already says so. Do not set `SCANII_*`.
    - Email: after step 8, so links use the final domain (below).
+   - Social (Meta): **not part of go-live.** Every platform stays `enabled: false`. Facebook and
+     Instagram are set up on staging first, in the order of `docs/SOCIAL-INTEGRATIONS.md` §18.3
+     (Meta app, Control Center entry and Test, subject-hash key, `publishing` values, `content`
+     platform), and only then repeated here.
 8. **Domains.** Dashboard, api and admin on `brandspace.cc` subdomains of your choice; `landing`
    stays on `www`. The first boot already needs https origins (`PUBLIC_DASHBOARD_BASE_URL` on
    dashboard and api, `PUBLIC_API_BASE_URL` on admin and api), so either attach the custom domains

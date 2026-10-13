@@ -780,16 +780,71 @@ request is recorded on the attempt and audited as `social.post.result_mismatch`,
 Control Center → Integrations → Social platforms → **Addresses to register**, generated from
 `PUBLIC_API_BASE_URL` **of the running environment** (on staging, the API service's Railway-generated public address unless a custom domain is attached), each with a Copy button. No domain is written down anywhere: copy the values from the Control Center. The paths are:
 
-| Platform app               | Field in the platform's console             | Address                                                 |
-| -------------------------- | ------------------------------------------- | ------------------------------------------------------- |
-| Meta (Facebook)            | Valid OAuth Redirect URIs                   | `<API public address>/v1/social/callback/facebook`      |
-| Meta (Instagram, same app) | Valid OAuth Redirect URIs                   | `<API public address>/v1/social/callback/instagram`     |
-| Meta                       | Deauthorize callback URL (route in step B)  | `<API public address>/v1/social/deauthorize/facebook`   |
-| Meta                       | Data deletion request URL (route in step B) | `<API public address>/v1/social/data-deletion/facebook` |
-| Meta                       | Webhooks callback URL (route in step B)     | `<API public address>/v1/social/webhooks/facebook`      |
-| TikTok                     | Redirect URI                                | `<API public address>/v1/social/callback/tiktok`        |
-| TikTok                     | Webhook callback URL (route in step B/C)    | `<API public address>/v1/social/webhooks/tiktok`        |
-| X                          | Callback URI / Redirect URL                 | `<API public address>/v1/social/callback/x`             |
+| Platform app               | Field in the platform's console          | Address                                                 |
+| -------------------------- | ---------------------------------------- | ------------------------------------------------------- |
+| Meta (Facebook)            | Valid OAuth Redirect URIs                | `<API public address>/v1/social/callback/facebook`      |
+| Meta (Instagram, same app) | Valid OAuth Redirect URIs                | `<API public address>/v1/social/callback/instagram`     |
+| Meta                       | Deauthorize callback URL (live, step B)  | `<API public address>/v1/social/deauthorize/facebook`   |
+| Meta                       | Data deletion request URL (live, step B) | `<API public address>/v1/social/data-deletion/facebook` |
+| Meta                       | Webhooks callback URL (live, step B)     | `<API public address>/v1/social/webhooks/facebook`      |
+| TikTok                     | Redirect URI                             | `<API public address>/v1/social/callback/tiktok`        |
+| TikTok                     | Webhook callback URL (route in step C)   | `<API public address>/v1/social/webhooks/tiktok`        |
+| X                          | Callback URI / Redirect URL              | `<API public address>/v1/social/callback/x`             |
 
 X is not built (D-505); its address is listed so the app can be prepared. The Hub gains no vendor
 entry until its adapter exists.
+
+## 18. Connectors step B — Meta, as built (D-532, D-533)
+
+### 18.1 What a customer can do
+
+Connect a **Facebook Page** or an **Instagram professional account** (linked to a Page) through
+one Meta app, and publish to it: Facebook text (with a link), one photo or several photos on one
+post; Instagram image, carousel (images) and reel. Nothing else is offered unless the publishing
+configuration lists it, and step B's adapters refuse the rest before any call.
+
+### 18.2 The official pages every value comes from (D-505)
+
+| What                                                    | Meta's page                                                                                                      |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Login dialog, code exchange, PKCE                       | developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow, …/advanced/oidc-token                   |
+| Long-lived user token; Page tokens                      | developers.facebook.com/docs/facebook-login/guides/access-tokens/get-long-lived                                  |
+| Pages: list, feed, photos                               | developers.facebook.com/docs/pages-api/getting-started, …/pages-api/posts, graph-api/reference/page/photos       |
+| Instagram containers, `status_code`, `media_publish`    | developers.facebook.com/docs/instagram-platform/instagram-graph-api/content-publishing, …/reference/ig-container |
+| Instagram publishing limit                              | …/instagram-graph-api/reference/ig-user/content_publishing_limit (50; the guide says 100)                        |
+| Webhooks: verify token, `X-Hub-Signature-256`           | developers.facebook.com/docs/graph-api/webhooks/getting-started                                                  |
+| Deauthorize and data deletion: `signed_request`, answer | developers.facebook.com/docs/development/create-an-app/app-dashboard/data-deletion-callback                      |
+| App token (`client_credentials`), `debug_token`         | developers.facebook.com/docs/facebook-login/guides/access-tokens#apptokens                                       |
+| Error codes                                             | developers.facebook.com/docs/graph-api/guides/error-handling                                                     |
+
+### 18.3 Owner steps (staging first)
+
+1. **Meta app** (Facebook Login for Business): add the two redirect URIs and the three addresses
+   from §17.6 (copy them from the Control Center).
+2. **Control Center → Integrations → Facebook Pages (Meta app):** app ID, app secret, a webhook
+   verify token of your choice (type the same value into the Meta app's Webhooks setup), optional
+   login configuration id. Press **Test** — Meta must issue an app token for this app and confirm it.
+3. **Instagram (the same Meta app):** save it after Facebook; it takes Facebook's app id and secret.
+4. **`integrations.social-apps`:** a subject-hash key (`subjectHashKeys` + `subjectHashVersion`).
+   Without one the deauthorize and data-deletion addresses answer 503 and write nothing, because no
+   connection could be found.
+5. **`publishing`:** for facebook and instagram, `apiVersion` (`v26.0`), the scopes, post kinds,
+   `targetKind`, `mediaByUrl: true`, and Instagram's `dailyPublishCap` — see
+   `docs/production-config/README.md` §5.1c — then `enabled: true` when ready.
+6. **`content`:** add a `facebook` platform before customers can write Facebook posts.
+7. Leave **Require App Secret** off in the Meta app: the adapters do not send `appsecret_proof` yet.
+
+### 18.4 What happens when Meta calls
+
+| Delivery            | Proof                                   | Recorded                                 | Then (maintenance sweep)                                                                |
+| ------------------- | --------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------- |
+| Webhook check (GET) | verify token                            | nothing                                  | —                                                                                       |
+| Webhook (POST)      | `X-Hub-Signature-256` over the raw body | one row per distinct body                | set aside (IGNORED): no field is subscribed in step B                                   |
+| Deauthorize         | `signed_request` (app secret)           | the current-version hash + matched ids   | each connection revoked in its own workspace (tokens destroyed, slot returned, REVOKED) |
+| Data deletion       | `signed_request` (app secret)           | as above + a request with a 24-char code | as deauthorize, then Meta's data about the account erased; request COMPLETED            |
+
+The person's Meta id is hashed under every listed key version at receipt and never stored. A
+redelivery is the same row and gets the same confirmation code. A delivery the sweep cannot finish
+is retried `publishing.inbound.maxAttempts` times and then left FAILED for a person; finished
+deliveries are purged after `publishing.inbound.retentionDays` (30). A deletion keeps the
+customer's own posts, drafts and media.

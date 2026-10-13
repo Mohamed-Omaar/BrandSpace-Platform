@@ -737,6 +737,17 @@ settable from 1 to 365 in the Control Center's `publishing` document — at most
 `PROCESSING` is never purged. A data-deletion request is never purged by this sweep; its link to the
 delivery becomes NULL.
 
+**What acts on them (D-533).** The same scheduler's `inbound-events` sweep, on the reconcile cadence,
+claims RECEIVED deliveries (and PROCESSING ones whose claim is older than
+`publishing.dispatch.claimLeaseSeconds`), at most `publishing.inbound.processBatchSize` (50) a pass.
+A deauthorize revokes the connections it names, each in its own workspace; a data deletion also
+erases Meta's data about them and completes its request; a webhook is set aside (IGNORED). A
+delivery whose work throws goes back to RECEIVED and is retried; after
+`publishing.inbound.maxAttempts` (10) it is FAILED with `inbound.processing_failed` and stays listed
+until the retention purge. To look: `SELECT kind, status, attempts, "failureCode", "receivedAt" FROM
+social_inbound_event WHERE status IN ('RECEIVED','PROCESSING','FAILED') ORDER BY "receivedAt";` on
+the platform connection — rows hold hashes and connection ids, never a Meta user id or token.
+
 ## 7. Secret rotation
 
 **Platform capability.** Every provider credential is a REFERENCE in configuration and a row in the
