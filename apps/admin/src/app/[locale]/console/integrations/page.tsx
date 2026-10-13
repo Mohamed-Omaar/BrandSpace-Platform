@@ -10,6 +10,11 @@ import { SimpleIntegrations } from '../../../../components/simple/integrations';
 import { getConsoleMode } from '../../../../server/console-mode-cookie';
 import { SocialAddresses } from '../../../../components/social-addresses';
 import {
+  CONNECTION_WORDS,
+  connectionWord,
+  environmentWord,
+} from '../../../../components/integration-words';
+import {
   currentEnvironment,
   getIntegrationsService,
   publicApiBaseUrl,
@@ -70,8 +75,8 @@ export default async function IntegrationsPage({
       <PageIntro
         description={
           isArabic
-            ? `كل نظام خارجي يمكن ربط Brandspace به، في بيئة ${environment}. الأسرار تُعرض مُقنّعة فقط ولا تُسترجع أبدًا بعد الحفظ.`
-            : `Every external system Brandspace can be connected to, in the ${environment} environment. Secrets are shown masked and are never readable again after they are saved.`
+            ? `كل نظام خارجي يمكن ربط Brandspace به، في بيئة ${environmentWord(environment, true)}. الأسرار تُعرض مُقنّعة فقط ولا تُسترجع أبدًا بعد الحفظ.`
+            : `Every external system Brandspace can be connected to, in the ${environmentWord(environment, false)} environment. Secrets are shown masked and are never readable again after they are saved.`
         }
       />
 
@@ -242,18 +247,7 @@ function StateWord({
 }
 
 function ConnectionWord({ state, isArabic }: { state: ConnectionState; isArabic: boolean }) {
-  const labels: Record<
-    ConnectionState,
-    { ar: string; en: string; tone: 'ok' | 'warn' | 'off' | 'bad' }
-  > = {
-    ok: { ar: 'يعمل', en: 'Working', tone: 'ok' },
-    failed: { ar: 'فشل', en: 'Failed', tone: 'bad' },
-    never_tested: { ar: 'لم يُختبر', en: 'Never tested', tone: 'off' },
-    not_configured: { ar: 'غير مُهيّأ', en: 'Not configured', tone: 'warn' },
-    refused: { ar: 'مرفوض', en: 'Refused', tone: 'warn' },
-  };
-  const label = labels[state];
-  return <StateWord tone={label.tone} text={isArabic ? label.ar : label.en} />;
+  return <StateWord tone={CONNECTION_WORDS[state].tone} text={connectionWord(state, isArabic)} />;
 }
 
 /** Re-exported for the detail page, which renders the same vocabulary. */

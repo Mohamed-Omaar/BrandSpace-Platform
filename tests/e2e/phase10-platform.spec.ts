@@ -136,7 +136,7 @@ test.describe('the Integrations Hub', () => {
       /repeatable output offline|without a vendor/i,
     );
     // And the environments row is the machine-readable half of the same fact.
-    await expect(page.getByTestId('detail-environments')).not.toContainText('PRODUCTION');
+    await expect(page.getByTestId('detail-environments')).not.toContainText('Production');
   });
 
   test('tests a connection, records the result, and activates nothing', async ({ page }) => {
@@ -152,7 +152,10 @@ test.describe('the Integrations Hub', () => {
     // The outcome is now in the history, which is the point: a test whose
     // result nobody kept reassures the person who pressed it and tells the
     // next operator nothing.
-    await expect(page.getByTestId('detail-connection')).not.toHaveText('never_tested');
+    await expect(page.getByTestId('detail-connection')).not.toHaveAttribute(
+      'data-state',
+      'never_tested',
+    );
     await expect(page.locator('[data-testid^="history-"]').first()).toBeVisible();
 
     // AND NOTHING WAS ACTIVATED. Testing is an observation; activation is a
@@ -462,7 +465,8 @@ test.describe('the owner configures a provider from the Integrations Hub alone',
     const enabledBeforeTest = (await page.getByTestId('detail-enabled').innerText()).trim();
     await page.getByTestId('test-connection').click();
     await expect(page.getByTestId('integration-notice')).toBeVisible();
-    await expect(page.getByTestId('detail-connection')).toHaveText('ok');
+    await expect(page.getByTestId('detail-connection')).toHaveAttribute('data-state', 'ok');
+    await expect(page.getByTestId('detail-connection')).toHaveText('Working');
     await expect(page.locator('[data-testid^="history-"]').first()).toContainText(
       /saved webhook secret/i,
     );

@@ -19,6 +19,11 @@ import {
   inputStyle,
 } from '../../../../../../components/console-ui';
 import { SimpleIntegrationSetup } from '../../../../../../components/simple/integrations';
+import {
+  checkOutcomeWord,
+  connectionWord,
+  environmentWord,
+} from '../../../../../../components/integration-words';
 import { getConsoleMode } from '../../../../../../server/console-mode-cookie';
 import {
   currentEnvironment,
@@ -107,8 +112,8 @@ export default async function IntegrationDetailPage({
       <PageIntro
         description={
           isArabic
-            ? `${view.displayNameAr} — بيئة ${environment}. ${view.noteAr}`
-            : `${view.displayNameEn} — ${environment} environment. ${view.noteEn}`
+            ? `${view.displayNameAr} — بيئة ${environmentWord(environment, true)}. ${view.noteAr}`
+            : `${view.displayNameEn} — ${environmentWord(environment, false)} environment. ${view.noteEn}`
         }
       />
 
@@ -189,7 +194,9 @@ export default async function IntegrationDetailPage({
         <tr>
           <Cell>{isArabic ? 'حالة الاتصال' : 'Connection'}</Cell>
           <Cell>
-            <span data-testid="detail-connection">{view.connection}</span>
+            <span data-testid="detail-connection" data-state={view.connection}>
+              {connectionWord(view.connection, isArabic)}
+            </span>
           </Cell>
         </tr>
         <tr data-testid="detail-last-success">
@@ -203,7 +210,11 @@ export default async function IntegrationDetailPage({
         <tr>
           <Cell>{isArabic ? 'البيئات المدعومة' : 'Supported environments'}</Cell>
           <Cell>
-            <span data-testid="detail-environments">{view.supportedEnvironments.join(', ')}</span>
+            <span data-testid="detail-environments">
+              {view.supportedEnvironments
+                .map((env) => environmentWord(env, isArabic))
+                .join(isArabic ? '، ' : ', ')}
+            </span>
           </Cell>
         </tr>
       </DataTable>
@@ -585,7 +596,11 @@ export default async function IntegrationDetailPage({
           >
             {history.map((row) => (
               <tr key={row.id} data-testid={`history-${row.id}`}>
-                <Cell>{row.outcome}</Cell>
+                <Cell>
+                  <span data-testid={`history-outcome-${row.id}`} data-outcome={row.outcome}>
+                    {checkOutcomeWord(row.outcome, isArabic)}
+                  </span>
+                </Cell>
                 <Cell>{row.latencyMs === null ? '—' : `${row.latencyMs} ms`}</Cell>
                 <Cell>{row.message}</Cell>
                 <Cell>
