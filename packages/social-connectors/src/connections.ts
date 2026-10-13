@@ -11,6 +11,7 @@ import { parsePublishingPolicy, PROVIDER_CONFIG_KEYS, type PublishingPolicy } fr
 import type { ConnectorRegistry } from './registry';
 import type { ApplicationResolver, ConnectionQuota } from './oauth';
 import type { SocialTokenVault } from './token-vault';
+import type { CreatorPostingInfo } from './tiktok/options';
 
 /**
  * Reading and managing connected accounts.
@@ -393,6 +394,47 @@ export class SocialConnectionService {
    * needs the customer. Counting is what lets the UI say which of the two it is
    * looking at.
    */
+  /**
+   * CONNECTORS C — WHAT THIS ACCOUNT MAY POST RIGHT NOW (TikTok's
+   * `creator_info`), asked fresh each time, as TikTok's guidelines require.
+   * Brand-scoped like every read here: an account outside the caller's brands
+   * is the same refusal as one that does not exist. Null when the platform has
+   * no such question. Writes nothing; the token is opened, used and dropped.
+   */
+  async postingOptions(input: {
+    connectionId: string;
+    brandScope: readonly string[];
+  }): Promise<CreatorPostingInfo | null> {
+    const connection = await this.#db.socialConnection.findFirst({
+      where: {
+        id: input.connectionId,
+        status: 'ACTIVE',
+        ...brandIdQueryFilter({ brandScope: input.brandScope }),
+      },
+    });
+    if (!connection) throw socialConnectionNotFound();
+    const adapter = this.#registry.get(connection.provider);
+    if (!adapter.postingOptions) return null;
+    const live = await this.#db.socialCredential.findFirst({
+      where: { workspaceId: this.#workspaceId, socialConnectionId: connection.id, retiredAt: null },
+      orderBy: { version: 'desc' },
+    });
+    if (!live || !this.#vault) throw socialConnectionNotFound();
+    const material = await this.#vault.open({
+      ciphertext: live.ciphertext,
+      iv: live.iv,
+      authTag: live.authTag,
+      wrappedDataKey: live.wrappedDataKey,
+      keyProvider: live.keyProvider,
+      keyId: live.keyId,
+      algorithm: 'AES-256-GCM',
+      encryptionContext: live.encryptionContext,
+      maskedHint: live.maskedHint,
+      fingerprint: live.fingerprint,
+    });
+    return adapter.postingOptions({ credentials: material });
+  }
+
   async checkHealth(input: {
     connectionId: string;
     brandScope: readonly string[];

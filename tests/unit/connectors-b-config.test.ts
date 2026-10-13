@@ -17,6 +17,7 @@ type Publishing = {
     purgeBatchSize: number;
     processBatchSize: number;
     maxAttempts: number;
+    signatureToleranceSeconds: number;
   };
 };
 

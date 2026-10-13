@@ -62,6 +62,8 @@ const log = createLogger({ context: { component: 'api.social' } });
 
 const CONNECT_PERMISSION = 'integrations.manage';
 const READ_PERMISSION = 'integrations.read';
+/** Connectors C: the Studio asks what a TikTok account may post with the editor's permission. */
+const EDIT_CONTENT_PERMISSION = 'content.edit';
 
 const startSchema = z.object({
   provider: z.enum(SOCIAL_PROVIDERS),
@@ -860,6 +862,38 @@ export function registerSocialRoutes(app: FastifyInstance): void {
         });
       } catch (error: unknown) {
         await sendFailure(reply, error, 'check');
+        return;
+      }
+    },
+  );
+
+  /**
+   * CONNECTORS C — WHAT AN ACCOUNT MAY POST RIGHT NOW, for the Studio's TikTok
+   * options (TikTok's `creator_info`: the creator's nickname, the audiences
+   * the account offers, the interactions it has turned off). Asked fresh each
+   * time the options are shown, as TikTok's guidelines require; it needs the
+   * account's token, so it runs here and not in the dashboard. The permission
+   * is the one that edits a post; nothing is written.
+   */
+  route(
+    app,
+    'POST',
+    '/v1/social/connections/:connectionId/posting-options',
+    { scope: 'workspace', permission: EDIT_CONTENT_PERMISSION, idempotent: true },
+    async (req, reply) => {
+      const caller = await resolveCaller(req, reply, EDIT_CONTENT_PERMISSION);
+      if (!caller) return;
+      const { connectionId } = req.params as { connectionId?: string };
+      if (!connectionId) return reply.code(422).send({ error: { code: 'VALIDATION_FAILED' } });
+      try {
+        const options = await connectionServiceFor(caller.workspaceId, (service) =>
+          service.postingOptions({ connectionId, brandScope: caller.brandScope }),
+        );
+        reply.header('cache-control', 'no-store');
+        // The creator's picture is not passed on: the Studio shows the name.
+        return reply.send({ postingOptions: options ? { ...options, avatarUrl: null } : null });
+      } catch (error: unknown) {
+        await sendFailure(reply, error, 'posting-options');
         return;
       }
     },

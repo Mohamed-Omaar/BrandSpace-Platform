@@ -964,6 +964,13 @@ export class ContentLibraryService {
      * the variant's images (`normaliseSlides`).
      */
     slides?: readonly { assetId: string; headline: string }[] | undefined;
+    /**
+     * CONNECTORS C — THE PLATFORM'S OWN CHOICES FOR THIS VARIANT (TikTok's
+     * audience, interactions and disclosure, D-505 O4), already read by the
+     * caller with the platform's rules. Undefined leaves them; an object
+     * replaces them. The adapter enforces them again before anything is sent.
+     */
+    platformOptions?: Readonly<Record<string, unknown>> | undefined;
     actorUserId: string;
     actorBrandScope: readonly string[];
     /** Q8 — whether this editor may schedule decides what an edit does to a scheduled post. */
@@ -1059,6 +1066,9 @@ export class ContentLibraryService {
         ...(cover === undefined ? {} : { coverAssetId: cover }),
         ...(media === undefined ? {} : { assetIds: media.map((asset) => asset.id) }),
         ...(input.hashtags ? { hashtags: [...input.hashtags] } : {}),
+        ...(input.platformOptions === undefined
+          ? {}
+          : { platformOptions: { ...input.platformOptions } as Prisma.InputJsonValue }),
         firstComment,
         origin: variant.origin === 'HUMAN' ? 'HUMAN' : 'AI_ASSISTED',
         characterCount: validation.characterCount,
@@ -1083,6 +1093,7 @@ export class ContentLibraryService {
         ...(media === undefined ? {} : { mediaCount: media.length }),
         ...(slides === undefined ? {} : { slideHeadlines: slides?.length ?? 0 }),
         ...(cover === undefined ? {} : { cover: cover === null ? 'cleared' : 'set' }),
+        ...(input.platformOptions === undefined ? {} : { platformOptions: 'set' }),
       },
     });
 
