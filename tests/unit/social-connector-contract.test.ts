@@ -134,12 +134,15 @@ describe('publishing is deterministic and honours declared capabilities', () => 
       hashtags: [],
       firstComment: null,
       media: [],
+      postKind: 'text' as const,
+      linkUrl: null,
+      options: {},
       idempotencyKey: 'stable-key',
     };
     const first = await adapter.publish({ request, credentials });
     const second = await adapter.publish({ request, credentials });
     expect(first.ok && second.ok).toBe(true);
-    if (first.ok && second.ok) {
+    if (first.ok === true && second.ok === true) {
       expect(first.externalPostId).toBe(second.externalPostId);
     }
   });
@@ -152,6 +155,9 @@ describe('publishing is deterministic and honours declared capabilities', () => 
       hashtags: [],
       firstComment: null,
       media: [],
+      postKind: 'text' as const,
+      linkUrl: null,
+      options: {},
     };
     const a = await adapter.publish({
       request: { ...base, idempotencyKey: 'key-a' },
@@ -161,7 +167,7 @@ describe('publishing is deterministic and honours declared capabilities', () => 
       request: { ...base, idempotencyKey: 'key-b' },
       credentials,
     });
-    if (a.ok && b.ok) expect(a.externalPostId).not.toBe(b.externalPostId);
+    if (a.ok === true && b.ok === true) expect(a.externalPostId).not.toBe(b.externalPostId);
   });
 
   it('A CAPTION OVER THE DECLARED CEILING IS REJECTED, not silently truncated', async () => {
@@ -173,6 +179,9 @@ describe('publishing is deterministic and honours declared capabilities', () => 
         hashtags: [],
         firstComment: null,
         media: [],
+        postKind: 'text' as const,
+        linkUrl: null,
+        options: {},
         idempotencyKey: 'too-long',
       },
       credentials,
@@ -196,6 +205,9 @@ describe('publishing is deterministic and honours declared capabilities', () => 
         hashtags: [],
         firstComment: 'a first comment',
         media: [],
+        postKind: 'text' as const,
+        linkUrl: null,
+        options: {},
         idempotencyKey: 'first-comment',
       },
       credentials,
@@ -213,6 +225,9 @@ describe('publishing is deterministic and honours declared capabilities', () => 
         hashtags: [],
         firstComment: null,
         media: [],
+        postKind: 'text' as const,
+        linkUrl: null,
+        options: {},
         idempotencyKey: 'reject-content',
       },
       credentials,
@@ -235,6 +250,9 @@ describe('publishing is deterministic and honours declared capabilities', () => 
           hashtags: [],
           firstComment: null,
           media: [],
+          postKind: 'text' as const,
+          linkUrl: null,
+          options: {},
           idempotencyKey: 'rate-limit',
         },
         credentials,
@@ -346,6 +364,9 @@ describe('a directly constructed adapter behaves like a registered one', () => {
         hashtags: [],
         firstComment: 'now supported',
         media: [],
+        postKind: 'text' as const,
+        linkUrl: null,
+        options: {},
         idempotencyKey: 'first-comment-allowed',
       },
       credentials: { accessToken: 'mock', refreshToken: null },

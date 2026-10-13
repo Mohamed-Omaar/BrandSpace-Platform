@@ -16,6 +16,7 @@ import {
 } from './errors';
 import { capabilitiesFor, type PublishingPolicy } from './policy';
 import type { ConnectorRegistry } from './registry';
+import { markNeedsReauth, type ReauthNotifier } from './reauth';
 import type { SocialTokenVault } from './token-vault';
 
 /**
@@ -82,6 +83,8 @@ export interface SocialOAuthOptions {
   /** Resolves the platform app's own credentials. Platform surfaces only. */
   readonly applications: ApplicationResolver;
   readonly quota: ConnectionQuota;
+  /** Connectors A (R3): who is told when a refresh is refused and the account needs reconnecting. */
+  readonly reauthNotifier?: ReauthNotifier | undefined;
   readonly clock?: Clock;
 }
 
@@ -183,6 +186,7 @@ export class SocialOAuthService {
   readonly #registry: ConnectorRegistry;
   readonly #vault: SocialTokenVault;
   readonly #applications: ApplicationResolver;
+  readonly #reauthNotifier: ReauthNotifier | undefined;
   readonly #clock: Clock;
   readonly #quota: ConnectionQuota;
 
@@ -194,6 +198,7 @@ export class SocialOAuthService {
     this.#registry = options.registry;
     this.#vault = options.vault;
     this.#applications = options.applications;
+    this.#reauthNotifier = options.reauthNotifier;
     this.#clock = options.clock ?? systemClock;
   }
 
@@ -945,14 +950,17 @@ export class SocialOAuthService {
     connectionId: string,
     failureClass: 'AUTH_EXPIRED' | 'AUTH_REVOKED',
   ): Promise<SocialConnection> {
-    return this.#db.socialConnection.update({
-      where: { id: connectionId },
-      data: {
-        status: 'NEEDS_REAUTH',
-        lastFailureClass: failureClass,
-        lastCheckedAt: this.#clock.now(),
-        consecutiveFailureCount: { increment: 1 },
-      },
+    // R3 (connectors A): the same write as before, and the owner is told once.
+    await markNeedsReauth({
+      db: this.#db,
+      workspaceId: this.#workspaceId,
+      connectionId,
+      failureClass,
+      now: this.#clock.now(),
+      notifier: this.#reauthNotifier,
+    });
+    return this.#db.socialConnection.findFirstOrThrow({
+      where: { id: connectionId, workspaceId: this.#workspaceId },
     });
   }
 

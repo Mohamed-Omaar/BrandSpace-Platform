@@ -10,8 +10,11 @@
  * provider a settings change rather than a release.
  *
  * WHAT STAYS TRUE ACROSS THE SWAP. `ObjectStore` is three methods and a
- * caller-supplied key. This class adds no capability to that interface: no
- * presigned URLs, no listing, no versioning, and no reachability probe. Product
+ * caller-supplied key. This class adds one optional capability to that
+ * interface and no other: `presignGet`, a short-lived read-only URL for one
+ * object, which the owner approved for platforms that fetch media themselves
+ * (D-505 O1, amending D-200). No listing, no versioning, and no reachability
+ * probe. Product
  * code that works against `FilesystemObjectStore` in development works against
  * this in production because there is nothing extra to reach for — and the one
  * extra method that briefly existed here, a `HeadBucket` for the Control
@@ -33,6 +36,7 @@ import {
   type ObjectStore,
   type StoredObject,
 } from './object-store';
+import { presignGetUrl, type PresignInput } from './presign';
 
 export interface S3ObjectStoreOptions {
   /** Full origin of the S3-compatible API. R2: `https://<account>.r2.cloudflarestorage.com`. */
@@ -81,9 +85,19 @@ function isNotFound(error: unknown): boolean {
 export class S3ObjectStore implements ObjectStore {
   readonly #client: S3Client;
   readonly #bucket: string;
+  /** Kept for `presignGet`, which signs locally and makes no request. */
+  readonly #signing: Omit<PresignInput, 'key' | 'expiresInSeconds' | 'now'>;
 
   constructor(options: S3ObjectStoreOptions) {
     this.#bucket = options.bucket;
+    this.#signing = {
+      endpoint: options.endpoint,
+      region: options.region,
+      bucket: options.bucket,
+      accessKeyId: options.accessKeyId,
+      secretAccessKey: options.secretAccessKey,
+      forcePathStyle: options.forcePathStyle ?? false,
+    };
     if (options.client) {
       this.#client = options.client;
       return;
@@ -156,6 +170,19 @@ export class S3ObjectStore implements ObjectStore {
        */
       throw error;
     }
+  }
+
+  /**
+   * D-505 O1 — a pre-signed GET URL for one object, for a platform that
+   * fetches media itself. Signed here, locally: no request is made, and the
+   * key goes through the same safety boundary as every other method.
+   */
+  async presignGet(
+    storageKey: string,
+    input: { readonly expiresInSeconds: number; readonly now: Date },
+  ): Promise<string> {
+    safeStorageKeySegments(storageKey);
+    return presignGetUrl({ ...this.#signing, key: storageKey, ...input });
   }
 
   /**

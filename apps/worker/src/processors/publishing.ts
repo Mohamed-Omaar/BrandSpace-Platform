@@ -6,13 +6,14 @@ import type { PublishSocialPostPayload, VerifySocialPostPayload } from '@brandsp
 import {
   createConnectorRegistry,
   executePublishJob,
+  ProviderRateLimiter,
   PublishPipelineService,
   recoverStalePublishJob,
   SocialTokenVault,
   TenantPublishingPolicySource,
   type PipelineTransactions,
 } from '@brandspace/social-connectors';
-import { createLogger, currentEnvironment } from '@brandspace/shared';
+import { createLogger, currentEnvironment, systemClock } from '@brandspace/shared';
 import { publishNotifier } from './publish-notifier';
 
 /**
@@ -52,6 +53,14 @@ import { publishNotifier } from './publish-notifier';
 
 const log = createLogger({ context: { component: 'worker.social.publishing' } });
 
+/**
+ * CONNECTORS A (W12) — ONE REQUEST BUDGET PER PROCESS, shared by every job it
+ * runs. Built per pipeline it would forget each reservation with the
+ * transaction. In-process by design (see `rate-limits.ts`): a politeness
+ * mechanism, the platform's own `RATE_LIMITED` stays the authority.
+ */
+const rateLimiter = new ProviderRateLimiter({ clock: systemClock });
+
 /*
  * NO APPLICATION RESOLVER IS BUILT HERE, AND THAT IS THE POINT.
  *
@@ -89,6 +98,7 @@ async function withPipeline<T>(
       policy,
       registry: createConnectorRegistry({ policy, environment }),
       vault: new SocialTokenVault(),
+      rateLimiter,
       /*
        * THE APPROVAL GATE IS RE-CONSULTED HERE, immediately before the external
        * call. The calendar checked it when the slot was scheduled; approval can
@@ -116,11 +126,12 @@ async function withPipeline<T>(
        * which is the boundary that matters at this point.
        */
       media: {
-        resolve: async ({ brandId, assetIds }) =>
+        resolve: async ({ brandId, assetIds, fetchUrlTtlSeconds }) =>
           new PublishMediaResolver({ db, workspaceId, store: objectStore() }).resolve({
             brandId,
             assetIds,
             brandScope: [],
+            ...(fetchUrlTtlSeconds === undefined ? {} : { fetchUrlTtlSeconds }),
           }),
       },
       /*

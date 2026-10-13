@@ -4,6 +4,8 @@
  * PURE, AND NOT `server-only`: the unit suite imports it directly.
  */
 
+import { FORMAT_POST_KINDS } from '@brandspace/social-connectors';
+
 /** How a person starts (§17). */
 export const CREATE_MODES = ['ai', 'write', 'idea', 'repurpose'] as const;
 export type CreateMode = (typeof CREATE_MODES)[number];
@@ -32,15 +34,9 @@ export function createModeFrom(value: unknown): CreateMode | null {
  * drafted in. A brand-new workspace drafts a Reel the moment the operator has
  * declared that Instagram carries reels.
  */
-export const FORMAT_POST_KINDS: Readonly<Record<string, readonly string[]>> = {
-  POST: ['text', 'image'],
-  CAROUSEL: ['carousel'],
-  REEL: ['reel'],
-  STORY: ['story'],
-  VIDEO: ['video'],
-  ARTICLE: ['article'],
-  THREAD: ['thread'],
-};
+// CONNECTORS A (W2): ONE MAP, shared with the publishing pipeline, so what the
+// composer offers and what the pipeline sends cannot disagree.
+export { FORMAT_POST_KINDS };
 
 /** The social-first formats shown first; the rest sit under "More formats". */
 export const PRIMARY_FORMATS = ['POST', 'CAROUSEL', 'REEL', 'STORY', 'VIDEO'] as const;

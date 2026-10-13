@@ -59,7 +59,12 @@ export type {
   StartConnectionResult,
 } from './oauth';
 
-export { EXPIRING_SOON_MS, SocialConnectionService, toConnectionView } from './connections';
+export {
+  expiringSoonMs,
+  refreshIsDue,
+  SocialConnectionService,
+  toConnectionView,
+} from './connections';
 export type { ConnectionServiceOptions, ConnectionView } from './connections';
 
 export {
@@ -72,6 +77,8 @@ export {
   publishIdempotencyKey,
   publishRetryRefusal,
   recoverStalePublishJob,
+  mediaRuleViolation,
+  observationMismatches,
   retryableAfterReconnect,
   sendPrepared,
   unreachableChannelGate,
@@ -124,4 +131,6 @@ export type { FailureBehaviour } from './errors';
  * so a backfill cannot spend the allowance a scheduled post needs.
  */
 export { ProviderRateLimiter } from './rate-limits';
+export { FORMAT_POST_KINDS, postKindFor } from './post-kinds';
+export { markNeedsReauth, type ReauthNotifier } from './reauth';
 export type { ProviderBudget, RateLimitDecision, RateLimitPriority } from './rate-limits';

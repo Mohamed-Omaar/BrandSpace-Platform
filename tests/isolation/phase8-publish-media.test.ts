@@ -65,7 +65,9 @@ const vault = new SocialTokenVault({
 function mediaPolicy(maxMediaItems = 4): PublishingPolicy {
   const capability = {
     enabled: true,
-    postKinds: ['text'],
+    // Connectors A (W2): a post with pictures is an `image` post, and the
+    // pipeline now refuses a kind the provider does not declare.
+    postKinds: ['text', 'image'],
     maxBodyCharacters: 2_200,
     maxHashtags: 30,
     maxMediaItems,

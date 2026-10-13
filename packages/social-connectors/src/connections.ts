@@ -6,6 +6,8 @@ import {
 } from '@brandspace/database';
 import { brandIdQueryFilter, systemClock, type Clock } from '@brandspace/shared';
 import { socialConnectionNotFound } from './errors';
+import { markNeedsReauth, type ReauthNotifier } from './reauth';
+import { parsePublishingPolicy, type PublishingPolicy } from './policy';
 import type { ConnectorRegistry } from './registry';
 import type { ApplicationResolver, ConnectionQuota } from './oauth';
 import type { SocialTokenVault } from './token-vault';
@@ -47,6 +49,10 @@ export interface ConnectionView {
 }
 
 export interface ConnectionServiceOptions {
+  /** Connectors A (W14): the expiring-soon window, from `expiringSoonMs(policy)`. */
+  readonly expiringWindowMs?: number | undefined;
+  /** Connectors A (R3): who is told when a health check finds the account needs reconnecting. */
+  readonly reauthNotifier?: ReauthNotifier | undefined;
   readonly db: TenantScopedClient;
   readonly workspaceId: string;
   readonly registry: ConnectorRegistry;
@@ -101,16 +107,54 @@ export interface ConnectionServiceOptions {
 }
 
 /**
- * A token inside this window is treated as expiring. Mirrors the refresh cue.
+ * A token inside this window is treated as expiring.
  *
- * Exported (P6-11) so the Command Center's Pulse asks the SAME question the
- * integrations screen and publish readiness ask. A second copy of the window
- * would let Home say "fine" about an account the integrations screen calls
- * expiring.
+ * CONNECTORS A (W14) — CONFIGURATION, NOT A CONSTANT
+ * (`publishing.dispatch.expiringSoonHours`, 24 unless the owner changes it): a
+ * platform whose tokens last weeks wants the warning days ahead. Exported
+ * (P6-11) so the Command Center's Pulse asks the SAME question the
+ * integrations screen and publish readiness ask, from the same policy. A
+ * second copy of the window would let Home say "fine" about an account the
+ * integrations screen calls expiring.
  */
-export const EXPIRING_SOON_MS = 24 * 60 * 60 * 1_000;
+export function expiringSoonMs(policy: Pick<PublishingPolicy, 'dispatch'>): number {
+  return policy.dispatch.expiringSoonHours * 60 * 60 * 1_000;
+}
 
-export function toConnectionView(connection: SocialConnection, now: Date): ConnectionView {
+/**
+ * The window when no activated policy is at hand: the SCHEMA's default, read
+ * from the schema rather than restated here, so there is still one place a
+ * default lives (CLAUDE.md §2.2).
+ */
+function defaultExpiringWindowMs(): number {
+  return expiringSoonMs(parsePublishingPolicy({}));
+}
+
+/**
+ * CONNECTORS A (W6) — is this token due for a proactive refresh? True once
+ * `ratio` of its life (from `issuedAt` to `expiresAt`) has passed. A token with
+ * no expiry is never due; one already expired is due (the expired-token path
+ * handles it too). Pure, so the rule is unit-tested.
+ */
+export function refreshIsDue(input: {
+  readonly issuedAt: Date;
+  readonly expiresAt: Date | null;
+  readonly ratio: number;
+  readonly now: Date;
+}): boolean {
+  if (input.expiresAt === null) return false;
+  const issued = input.issuedAt.getTime();
+  const life = input.expiresAt.getTime() - issued;
+  if (life <= 0) return true;
+  return input.now.getTime() >= issued + life * input.ratio;
+}
+
+export function toConnectionView(
+  connection: SocialConnection,
+  now: Date,
+  /** From `expiringSoonMs(policy)`. */
+  expiringWindowMs: number = defaultExpiringWindowMs(),
+): ConnectionView {
   return {
     id: connection.id,
     brandId: connection.brandId,
@@ -132,7 +176,7 @@ export function toConnectionView(connection: SocialConnection, now: Date): Conne
     expiringSoon:
       connection.status === 'ACTIVE' &&
       connection.tokenExpiresAt !== null &&
-      connection.tokenExpiresAt.getTime() - now.getTime() < EXPIRING_SOON_MS,
+      connection.tokenExpiresAt.getTime() - now.getTime() < expiringWindowMs,
   };
 }
 
@@ -143,6 +187,8 @@ export class SocialConnectionService {
   readonly #vault: SocialTokenVault | undefined;
   readonly #applications: ApplicationResolver | undefined;
   readonly #quota: ConnectionQuota | undefined;
+  readonly #reauthNotifier: ReauthNotifier | undefined;
+  readonly #expiringWindowMs: number;
   readonly #clock: Clock;
 
   constructor(options: ConnectionServiceOptions) {
@@ -152,6 +198,8 @@ export class SocialConnectionService {
     this.#vault = options.vault;
     this.#applications = options.applications;
     this.#quota = options.quota;
+    this.#reauthNotifier = options.reauthNotifier;
+    this.#expiringWindowMs = options.expiringWindowMs ?? defaultExpiringWindowMs();
     this.#clock = options.clock ?? systemClock;
   }
 
@@ -172,7 +220,7 @@ export class SocialConnectionService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
     const now = this.#clock.now();
-    return rows.map((row) => toConnectionView(row, now));
+    return rows.map((row) => toConnectionView(row, now, this.#expiringWindowMs));
   }
 
   /** One connection, scoped. Out-of-scope reads the same as never existed. */
@@ -181,7 +229,7 @@ export class SocialConnectionService {
       where: { id: connectionId, ...brandIdQueryFilter({ brandScope }) },
     });
     if (!row) throw socialConnectionNotFound();
-    return toConnectionView(row, this.#clock.now());
+    return toConnectionView(row, this.#clock.now(), this.#expiringWindowMs);
   }
 
   /** The connections a brand can actually publish through right now. */
@@ -310,7 +358,7 @@ export class SocialConnectionService {
       after: { status: 'REVOKED', revokedAtProvider: revokedRemotely },
     });
 
-    return toConnectionView(updated, now);
+    return toConnectionView(updated, now, this.#expiringWindowMs);
   }
 
   /**
@@ -340,16 +388,16 @@ export class SocialConnectionService {
     });
     const now = this.#clock.now();
     if (!live) {
-      const updated = await this.#db.socialConnection.update({
-        where: { id: connection.id },
-        data: {
-          status: 'NEEDS_REAUTH',
-          lastFailureClass: 'NOT_CONNECTED',
-          lastCheckedAt: now,
-          consecutiveFailureCount: { increment: 1 },
-        },
+      // R3 (connectors A): the same write as before, and the owner is told once.
+      await markNeedsReauth({
+        db: this.#db,
+        workspaceId: this.#workspaceId,
+        connectionId: connection.id,
+        failureClass: 'NOT_CONNECTED',
+        now,
+        notifier: this.#reauthNotifier,
       });
-      return toConnectionView(updated, now);
+      return this.#viewOf(connection.id, now);
     }
 
     if (!this.#vault) {
@@ -377,23 +425,35 @@ export class SocialConnectionService {
       credentials: material,
     });
 
+    if (!health.healthy) {
+      // R3 (connectors A): the same write as before, and the owner is told once.
+      await markNeedsReauth({
+        db: this.#db,
+        workspaceId: this.#workspaceId,
+        connectionId: connection.id,
+        failureClass: health.failureClass ?? 'UNKNOWN',
+        now,
+        notifier: this.#reauthNotifier,
+      });
+      return this.#viewOf(connection.id, now);
+    }
     const updated = await this.#db.socialConnection.update({
       where: { id: connection.id },
-      data: health.healthy
-        ? {
-            status: connection.status === 'NEEDS_REAUTH' ? 'NEEDS_REAUTH' : 'ACTIVE',
-            lastCheckedAt: now,
-            lastSyncedAt: now,
-            consecutiveFailureCount: 0,
-            lastFailureClass: null,
-          }
-        : {
-            status: 'NEEDS_REAUTH',
-            lastCheckedAt: now,
-            consecutiveFailureCount: { increment: 1 },
-            lastFailureClass: health.failureClass ?? 'UNKNOWN',
-          },
+      data: {
+        status: connection.status === 'NEEDS_REAUTH' ? 'NEEDS_REAUTH' : 'ACTIVE',
+        lastCheckedAt: now,
+        lastSyncedAt: now,
+        consecutiveFailureCount: 0,
+        lastFailureClass: null,
+      },
     });
-    return toConnectionView(updated, now);
+    return toConnectionView(updated, now, this.#expiringWindowMs);
+  }
+
+  async #viewOf(connectionId: string, now: Date): Promise<ConnectionView> {
+    const row = await this.#db.socialConnection.findFirstOrThrow({
+      where: { id: connectionId, workspaceId: this.#workspaceId },
+    });
+    return toConnectionView(row, now, this.#expiringWindowMs);
   }
 }

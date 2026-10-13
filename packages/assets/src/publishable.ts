@@ -85,6 +85,11 @@ export interface ResolvedPublishMedia {
   readonly width: number | null;
   readonly height: number | null;
   readonly bytes: Uint8Array;
+  /** Connectors A (W3): a video's length, when the library knows it. */
+  readonly durationMs: number | null;
+  /** D-505 O1: present only when asked for and the store can pre-sign. */
+  readonly fetchUrl?: string;
+  readonly fetchUrlExpiresAt?: Date;
 }
 
 export interface PublishMediaResolverOptions {
@@ -121,6 +126,13 @@ export class PublishMediaResolver {
     readonly brandId: string;
     readonly assetIds: readonly string[];
     readonly brandScope: readonly string[];
+    /**
+     * D-505 O1 — for a platform that fetches media itself: mint a pre-signed
+     * GET URL per file, living this long. Minted HERE, after the same tenant
+     * checks as the bytes, for exactly these files. A store that cannot
+     * pre-sign mints nothing and the pipeline refuses the post.
+     */
+    readonly fetchUrlTtlSeconds?: number;
   }): Promise<readonly ResolvedPublishMedia[]> {
     if (input.assetIds.length === 0) return [];
 
@@ -139,6 +151,7 @@ export class PublishMediaResolver {
         sizeBytes: true,
         width: true,
         height: true,
+        durationMs: true,
         storageKey: true,
       },
     });
@@ -155,6 +168,12 @@ export class PublishMediaResolver {
        */
       const bytes = await this.#store.get(row.storageKey);
       if (!bytes || bytes.byteLength === 0) throw publishableMediaNotFound();
+      const now = this.#clock.now();
+      const ttl = input.fetchUrlTtlSeconds;
+      const fetchUrl =
+        ttl !== undefined && this.#store.presignGet
+          ? await this.#store.presignGet(row.storageKey, { expiresInSeconds: ttl, now })
+          : undefined;
       resolved.push({
         assetId: row.id,
         fileName: row.name,
@@ -162,7 +181,11 @@ export class PublishMediaResolver {
         sizeBytes: row.sizeBytes,
         width: row.width,
         height: row.height,
+        durationMs: row.durationMs,
         bytes,
+        ...(fetchUrl && ttl !== undefined
+          ? { fetchUrl, fetchUrlExpiresAt: new Date(now.getTime() + ttl * 1_000) }
+          : {}),
       });
     }
     return resolved;

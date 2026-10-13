@@ -187,6 +187,10 @@ export class MockSocialConnectorAdapter implements SocialConnectorAdapter {
         : deterministicId('mock-refresh', this.provider, input.code),
       expiresInSeconds: 3_600,
       grantedScopes: granted,
+      // W10: the granting USER, as a real platform reports it. Never stored raw.
+      subjectId: input.code.includes('no-subject')
+        ? null
+        : deterministicId('mock-subject', this.provider, input.code),
     };
   }
 
@@ -250,6 +254,27 @@ export class MockSocialConnectorAdapter implements SocialConnectorAdapter {
     request: PublishRequest;
     credentials: AdapterCredentials;
   }): Promise<PublishOutcome> {
+    /*
+     * CONNECTORS A (W5) — A PLATFORM THAT PUBLISHES ASYNCHRONOUSLY. A key
+     * marked `async-done`, `async-fail` or `async-wait` is ACCEPTED with a
+     * handle, and `checkPublish` later answers published, failed or still
+     * working. The handle carries the answer, so the mock stays stateless.
+     */
+    const asyncState = (['done', 'fail', 'wait'] as const).find((state) =>
+      input.request.idempotencyKey.includes(`async-${state}`),
+    );
+    if (asyncState) {
+      return {
+        ok: 'pending',
+        providerHandle: `${asyncState}.${deterministicId(
+          'mock-handle',
+          this.provider,
+          input.request.externalAccountId,
+          input.request.idempotencyKey,
+        )}`,
+        providerStatusCode: 202,
+      };
+    }
     const forced = behaviourFor(input.request.idempotencyKey);
     if (forced) {
       return {
@@ -341,11 +366,55 @@ export class MockSocialConnectorAdapter implements SocialConnectorAdapter {
      * media" would be a claim nothing could check (AC-29.5).
      */
     this.lastPublishedMediaCount = input.request.media.length;
+    /*
+     * R8 — THE POST AS THE PLATFORM HOLDS IT, read back. A key marked
+     * `observe-mismatch` comes back with its caption cut short, so the
+     * pipeline's comparison is exercised.
+     */
+    const mismatch = input.request.idempotencyKey.includes('observe-mismatch');
     return {
       ok: true,
       externalPostId,
       externalPostUrl: `${this.#baseUrl}/p/${externalPostId}`,
       providerStatusCode: 201,
+      observed: {
+        postKind: input.request.postKind,
+        mediaCount: input.request.media.length,
+        caption: mismatch ? input.request.body.slice(0, 1) : input.request.body,
+      },
+    };
+  }
+
+  /** W5 — the answer the handle carries: published, failed, or still working. */
+  async checkPublish(input: {
+    providerHandle: string;
+    externalAccountId: string;
+    credentials: AdapterCredentials;
+  }): Promise<PublishOutcome> {
+    if (input.providerHandle.startsWith('wait.')) {
+      return { ok: 'pending', providerHandle: input.providerHandle, providerStatusCode: 202 };
+    }
+    if (input.providerHandle.startsWith('fail.')) {
+      return {
+        ok: false,
+        failureClass: 'MEDIA_INVALID',
+        failureCode: 'mock.async_media_invalid',
+        providerStatusCode: 400,
+        providerErrorCode: 'MOCK_ASYNC_FAILED',
+        safeSummary: SAFE_SUMMARIES.MEDIA_INVALID,
+      };
+    }
+    const externalPostId = deterministicId(
+      'mock-post',
+      this.provider,
+      input.externalAccountId,
+      input.providerHandle,
+    );
+    return {
+      ok: true,
+      externalPostId,
+      externalPostUrl: `${this.#baseUrl}/p/${externalPostId}`,
+      providerStatusCode: 200,
     };
   }
 

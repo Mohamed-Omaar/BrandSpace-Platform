@@ -1,5 +1,5 @@
 import type { TenantScopedClient } from '@brandspace/database';
-import { NotificationService } from '@brandspace/notifications';
+import { connectionReauthNotifier, NotificationService } from '@brandspace/notifications';
 import type { PublishNotifier } from '@brandspace/social-connectors';
 
 /**
@@ -74,5 +74,8 @@ export function publishNotifier(input: {
         idempotencyKey: `publishing.failed:${event.jobId}:${event.failureClass}`,
       });
     },
+
+    // CONNECTORS A (R3): the one shared implementation, also used by the API.
+    connectionNeedsReauth: connectionReauthNotifier(input).connectionNeedsReauth,
   };
 }

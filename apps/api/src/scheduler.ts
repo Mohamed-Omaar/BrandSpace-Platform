@@ -75,6 +75,7 @@ import {
 import {
   createConnectorRegistry,
   PublishPipelineService,
+  refreshIsDue,
   resolvePublishingPolicy,
   SocialOAuthService,
   SocialTokenVault,
@@ -110,6 +111,7 @@ import {
   type RotationState,
 } from '@brandspace/billing';
 import { createObjectStore } from '@brandspace/storage';
+import { connectionReauthNotifier } from '@brandspace/notifications';
 import { applicationResolver } from './routes/social';
 import { gateway as aiGateway } from './routes/phase7-context';
 import { AutomationAiExecutor, type RoutingRuleView } from './automation-ai-executor';
@@ -609,9 +611,13 @@ export class MaintenanceScheduler {
    * BullMQ job id collision. A pass that runs while the previous one is still
    * finishing is therefore safe rather than merely unlikely.
    */
-  async sweepPublishing(
-    batch: number,
-  ): Promise<{ created: number; dispatched: number; recovered: number }> {
+  async sweepPublishing(batch: number): Promise<{
+    created: number;
+    dispatched: number;
+    recovered: number;
+    polled: number;
+    refreshedAhead: number;
+  }> {
     const platform = getPlatformClient();
     const now = this.#clock.now();
 
@@ -764,7 +770,139 @@ export class MaintenanceScheduler {
       if (result.dispatched) recovered += 1;
     }
 
-    return { created, dispatched, recovered };
+    /*
+     * CONNECTORS A (W5) — PUBLISHES THE PLATFORM ACCEPTED AND HAS NOT FINISHED.
+     *
+     * Such a job is VERIFICATION_PENDING with the platform's handle, and its
+     * `nextAttemptAt` is when it should be asked about again (the pipeline
+     * stops setting it after `publishPollMaxMinutes`, and a person decides).
+     * It goes out as the same `social.verify-post`, which can only ASK — the
+     * queue id carries the poll's instant, so each poll is its own message and
+     * a racing sweep adds nothing.
+     */
+    const pending = await platform.publishJob.findMany({
+      where: {
+        status: 'VERIFICATION_PENDING',
+        providerHandle: { not: null },
+        nextAttemptAt: { lte: now },
+        workspace: { deletionScheduledFor: null },
+      },
+      select: { id: true, workspaceId: true, idempotencyKey: true, nextAttemptAt: true },
+      orderBy: { nextAttemptAt: 'asc' },
+      take: lease.staleClaimBatchSize,
+    });
+    let polled = 0;
+    for (const job of pending) {
+      if (!job.nextAttemptAt) continue;
+      const result = await enqueue('publish-jobs', VERIFY_SOCIAL_POST, {
+        kind: VERIFY_SOCIAL_POST,
+        workspaceId: job.workspaceId,
+        idempotencyKey: verifySocialPostJobKey(`poll-${job.idempotencyKey}`, job.nextAttemptAt),
+        publishJobId: job.id,
+      } satisfies VerifySocialPostPayload);
+      if (result.dispatched) polled += 1;
+    }
+
+    const refreshedAhead = await this.#refreshAhead(now, batch);
+
+    return { created, dispatched, recovered, polled, refreshedAhead };
+  }
+
+  /**
+   * CONNECTORS A (W6) — TOKENS ARE RENEWED BEFORE THEY EXPIRE, not only when a
+   * post is waiting on an expired one.
+   *
+   * A connection with nothing scheduled used to drift to expired, and its
+   * health checks and analytics then failed; a platform whose access tokens
+   * last a day makes that every connection. `tokenRefreshAtLifetimeRatio`
+   * (configuration, 0.75 by default) says when: three quarters of the way from
+   * when the token was issued to when it expires.
+   *
+   * ONLY CONNECTIONS THAT CAN BE REFRESHED. One whose live credential has no
+   * refresh token is left alone until it expires — renewing it is a
+   * reconnection, and marking a still-working account "reconnect" early would
+   * be wrong. A refusal of a real refresh token means the grant is gone, and
+   * the existing refresh path marks it NEEDS_REAUTH and tells the owner (R3).
+   *
+   * Same surface and same code as the Refresh button and the expired-token
+   * refresh (F-07): one tenant transaction per connection, a failure logged and
+   * left for the next pass.
+   */
+  async #refreshAhead(now: Date, batch: number): Promise<number> {
+    const policy = await this.#resolvePublishing();
+    const candidates = await getPlatformClient().socialConnection.findMany({
+      where: {
+        status: 'ACTIVE',
+        tokenExpiresAt: { not: null, gt: now },
+        credentials: { some: { retiredAt: null, hasRefreshToken: true } },
+        workspace: { deletionScheduledFor: null },
+      },
+      select: {
+        id: true,
+        workspaceId: true,
+        tokenExpiresAt: true,
+        lastRefreshedAt: true,
+        connectedAt: true,
+        createdAt: true,
+      },
+      orderBy: { tokenExpiresAt: 'asc' },
+      take: batch,
+    });
+    const due = candidates.filter((connection) =>
+      refreshIsDue({
+        issuedAt: connection.lastRefreshedAt ?? connection.connectedAt ?? connection.createdAt,
+        expiresAt: connection.tokenExpiresAt,
+        ratio: policy.dispatch.tokenRefreshAtLifetimeRatio,
+        now,
+      }),
+    );
+    let refreshed = 0;
+    for (const connection of due) {
+      if (await this.#refreshConnection(connection, 'social token could not be refreshed ahead'))
+        refreshed += 1;
+    }
+    return refreshed;
+  }
+
+  /** One refresh, in the connection's own tenant transaction. True when it ran. */
+  async #refreshConnection(
+    connection: { readonly id: string; readonly workspaceId: string },
+    failureMessage: string,
+  ): Promise<boolean> {
+    try {
+      await withWorkspace(
+        connection.workspaceId,
+        async (db) => {
+          const policy = await this.#resolvePublishing();
+          await new SocialOAuthService({
+            db,
+            workspaceId: connection.workspaceId,
+            policy,
+            registry: createConnectorRegistry({ policy, environment: this.#environment }),
+            vault: new SocialTokenVault(),
+            applications: this.#socialApplications,
+            quota: createTotalResourceQuota({
+              db,
+              workspaceId: connection.workspaceId,
+              environment: this.#environment,
+              dimension: 'socialAccounts',
+            }),
+            // R3: a refusal turns the account NEEDS_REAUTH and its owner is told.
+            reauthNotifier: connectionReauthNotifier({ db, workspaceId: connection.workspaceId }),
+            clock: this.#clock,
+          }).refresh({ connectionId: connection.id, brandScope: [] });
+        },
+        { prisma: getPrisma() },
+      );
+      return true;
+    } catch (error: unknown) {
+      log.warn(failureMessage, {
+        workspaceId: connection.workspaceId,
+        socialConnectionId: connection.id,
+        ...internalErrorFields(error),
+      });
+      return false;
+    }
   }
 
   /**
@@ -799,36 +937,7 @@ export class MaintenanceScheduler {
       select: { id: true, workspaceId: true },
     });
     for (const connection of expired) {
-      try {
-        await withWorkspace(
-          connection.workspaceId,
-          async (db) => {
-            const policy = await this.#resolvePublishing();
-            await new SocialOAuthService({
-              db,
-              workspaceId: connection.workspaceId,
-              policy,
-              registry: createConnectorRegistry({ policy, environment: this.#environment }),
-              vault: new SocialTokenVault(),
-              applications: this.#socialApplications,
-              quota: createTotalResourceQuota({
-                db,
-                workspaceId: connection.workspaceId,
-                environment: this.#environment,
-                dimension: 'socialAccounts',
-              }),
-              clock: this.#clock,
-            }).refresh({ connectionId: connection.id, brandScope: [] });
-          },
-          { prisma: getPrisma() },
-        );
-      } catch (error: unknown) {
-        log.warn('expired social token could not be refreshed', {
-          workspaceId: connection.workspaceId,
-          socialConnectionId: connection.id,
-          ...internalErrorFields(error),
-        });
-      }
+      await this.#refreshConnection(connection, 'expired social token could not be refreshed');
     }
   }
 
@@ -2320,7 +2429,9 @@ export class MaintenanceScheduler {
      */
     every(cadence.ingestionReconcileSeconds, 'publishing-sweep', async () => {
       const swept = await this.sweepPublishing(cadence.ingestionReconcileBatch);
-      return swept.created + swept.dispatched + swept.recovered;
+      return (
+        swept.created + swept.dispatched + swept.recovered + swept.polled + swept.refreshedAhead
+      );
     });
     every(cadence.ingestionReconcileSeconds, 'analytics-sweep', async () => {
       const swept = await this.sweepAnalytics(cadence.ingestionReconcileBatch);

@@ -14,6 +14,7 @@ import { SecretService } from '@brandspace/secrets';
 import {
   createConnectorRegistry,
   resolvePublishingPolicy,
+  expiringSoonMs,
   SocialConnectionService,
   SocialOAuthService,
   SocialTokenVault,
@@ -23,6 +24,7 @@ import {
   type ConnectionQuota,
 } from '@brandspace/social-connectors';
 import { createTotalResourceQuota } from '@brandspace/entitlements';
+import { connectionReauthNotifier } from '@brandspace/notifications';
 import {
   createLogger,
   currentEnvironment,
@@ -164,37 +166,63 @@ export function applicationResolver(): ApplicationResolver {
       const document = (await configurationService().get(
         'integrations.social-apps',
         environment,
-      )) as {
-        applications?: readonly {
-          providerKey: string;
-          appId: string;
-          clientSecretRef: string | null;
-          status: string;
-        }[];
-      };
-      const key = provider.toLowerCase();
-      const application = document.applications?.find(
-        (candidate) => candidate.providerKey === key && candidate.status === 'active',
-      );
-      if (!application) {
-        throw new Error(`No active social application is configured for ${key}.`);
-      }
-      if (!application.clientSecretRef) {
-        throw new Error(`The social application for ${key} has no client secret configured.`);
-      }
-      const clientSecret = await secretService().resolveSecret(
-        application.clientSecretRef,
-        environment,
-      );
+      )) as SocialAppsDocument;
+      const { application, clientSecretRef } = socialApplicationFor(document, provider);
+      const clientSecret = await secretService().resolveSecret(clientSecretRef, environment);
       return {
         appId: application.appId,
         clientSecret,
         // THE REDIRECT COMES FROM THE ENVIRONMENT, not from the document, so a
         // single activated configuration is correct in every environment.
         redirectUri: callbackUriFor(provider),
+        settings: application.settings ?? {},
       };
     },
   };
+}
+
+/** The slice of `integrations.social-apps` the resolver reads. */
+export interface SocialAppsDocument {
+  readonly applications?: readonly {
+    readonly providerKey: string;
+    readonly appId: string;
+    readonly clientSecretRef: string | null;
+    readonly status: string;
+    readonly settings?: Readonly<Record<string, string>>;
+    readonly sharesCredentialWith?: string | null;
+  }[];
+}
+
+/**
+ * The active application for a provider, and the secret reference it uses.
+ *
+ * D-505 O3 — ONE META APP, TWO PROVIDER KEYS. An entry that
+ * `sharesCredentialWith` another uses THAT entry's client secret, so the one
+ * secret is entered once and rotates once. Pure, so the rule is unit-tested.
+ */
+export function socialApplicationFor(
+  document: SocialAppsDocument,
+  provider: SocialProvider,
+): {
+  application: NonNullable<SocialAppsDocument['applications']>[number];
+  clientSecretRef: string;
+} {
+  const key = provider.toLowerCase();
+  const application = document.applications?.find(
+    (candidate) => candidate.providerKey === key && candidate.status === 'active',
+  );
+  if (!application) {
+    throw new Error(`No active social application is configured for ${key}.`);
+  }
+  const holder = application.sharesCredentialWith
+    ? document.applications?.find(
+        (candidate) => candidate.providerKey === application.sharesCredentialWith,
+      )
+    : application;
+  if (!holder?.clientSecretRef) {
+    throw new Error(`The social application for ${key} has no client secret configured.`);
+  }
+  return { application, clientSecretRef: holder.clientSecretRef };
 }
 
 function sessionTokenFrom(req: FastifyRequest): string | null {
@@ -288,6 +316,8 @@ async function oauthServiceFor<T>(
         // inside the connector package, which has no business knowing about
         // configuration environments — the same seam the calendar uses.
         quota: connectionQuota(db, workspaceId, environment),
+        // R3 (connectors A): a refused refresh tells the account's owner.
+        reauthNotifier: connectionReauthNotifier({ db, workspaceId }),
       }),
     ),
   );
@@ -305,6 +335,7 @@ async function connectionServiceFor<T>(
         db,
         workspaceId,
         registry: createConnectorRegistry({ policy, environment }),
+        expiringWindowMs: expiringSoonMs(policy),
         vault: new SocialTokenVault(),
         // THE RESOLVER IS PRESENT HERE and absent in the dashboard. That is the
         // whole reason disconnection lives on this surface.
@@ -312,6 +343,8 @@ async function connectionServiceFor<T>(
         // And so is the quota, for the same reason: this is the surface that
         // disconnects, and a disconnection must return the plan's slot.
         quota: connectionQuota(db, workspaceId, environment),
+        // R3 (connectors A): a failed health check tells the account's owner.
+        reauthNotifier: connectionReauthNotifier({ db, workspaceId }),
       }),
     ),
   );

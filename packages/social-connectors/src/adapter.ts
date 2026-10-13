@@ -36,6 +36,13 @@ export interface AdapterApplication {
   readonly appId: string;
   readonly clientSecret: string;
   readonly redirectUri: string;
+  /**
+   * CONNECTORS A — the owner's named settings for this app
+   * (`integrations.social-apps.applications[].settings`): an API version, a
+   * login configuration id. Each adapter parses the keys it knows; none is a
+   * secret. Absent means none were configured.
+   */
+  readonly settings?: Readonly<Record<string, string>>;
 }
 
 export interface AuthorizationRequest {
@@ -53,6 +60,13 @@ export interface TokenBundle {
   readonly expiresInSeconds: number | null;
   /** What the provider ACTUALLY granted, which may be less than we asked for. */
   readonly grantedScopes: readonly string[];
+  /**
+   * CONNECTORS A (W10) — the platform's id for the USER who granted this, when
+   * it has one (Meta's app-scoped user id; TikTok's open id). The caller keeps
+   * only a keyed hash of it, never the id, so a platform's "this user removed
+   * your app" can find the connections without the id being stored.
+   */
+  readonly subjectId?: string | null;
 }
 
 export interface PublishTarget {
@@ -89,7 +103,26 @@ export interface PublishMedia {
   /** The file name to present to the provider. Never a path. */
   readonly fileName: string;
   readonly bytes: Uint8Array;
+  /** CONNECTORS A (W3) — a video's length, when the library knows it. */
+  readonly durationMs?: number | null;
+  /**
+   * D-505 O1 — A SHORT-LIVED, PRE-SIGNED GET URL FOR THIS ONE FILE, for a
+   * platform that fetches media itself. MINTED BY THE PIPELINE, after every
+   * tenant check above, and only when the provider is configured to fetch by
+   * URL (`mediaByUrl`); it expires at `fetchUrlExpiresAt`. It is still not a
+   * storage key: it reaches this one object, read-only, for minutes. An
+   * adapter never logs it.
+   */
+  readonly fetchUrl?: string;
+  readonly fetchUrlExpiresAt?: Date;
 }
+
+/**
+ * CONNECTORS A (W2) — the shape of a post, from the closed list the publishing
+ * configuration declares per provider (`publishing.providers.<key>.postKinds`).
+ */
+export type PublishPostKind =
+  'text' | 'image' | 'carousel' | 'video' | 'reel' | 'story' | 'article' | 'thread';
 
 export interface PublishRequest {
   readonly externalAccountId: string;
@@ -111,12 +144,56 @@ export interface PublishRequest {
    * ours.
    */
   readonly idempotencyKey: string;
+  /**
+   * CONNECTORS A (W2) — WHAT KIND OF POST THIS IS, decided by the pipeline from
+   * the post's format and its media, and already checked against the kinds the
+   * provider declares. A platform that publishes a feed post, a reel and a
+   * story through different calls needs to be told which.
+   */
+  readonly postKind: PublishPostKind;
+  /** The link the author attached, if any. */
+  readonly linkUrl: string | null;
+  /**
+   * The per-platform choices the author made for this variant (for example a
+   * privacy level), as stored. The ADAPTER validates the keys it knows and
+   * refuses what it cannot honour; the pipeline does not interpret them.
+   */
+  readonly options: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * CONNECTORS A (R8) — WHAT THE PLATFORM SAYS IT PUBLISHED, read back by the
+ * adapter after a success, so the pipeline can compare it with what the author
+ * previewed. Every field is optional: an adapter reports what it could read.
+ */
+export interface PublishObservation {
+  readonly postKind?: PublishPostKind;
+  readonly mediaCount?: number;
+  /** The caption as the platform holds it. Compared, never stored. */
+  readonly caption?: string | null;
 }
 
 export interface PublishSuccess {
   readonly ok: true;
   readonly externalPostId: string;
   readonly externalPostUrl: string | null;
+  readonly providerStatusCode: number;
+  /** R8 — the post as the platform reports it, when the adapter read it back. */
+  readonly observed?: PublishObservation;
+}
+
+/**
+ * CONNECTORS A (W5) — THE PLATFORM ACCEPTED THE POST AND HAS NOT FINISHED IT.
+ *
+ * Some platforms publish asynchronously: they return a handle at once and the
+ * post exists only later. That is NOT a success and NOT a failure, and it is
+ * never a reason to send again: the pipeline stores the handle, the job waits
+ * in VERIFICATION_PENDING, and `checkPublish` is asked until it answers.
+ */
+export interface PublishPending {
+  readonly ok: 'pending';
+  /** The platform's own id for the unfinished publish. Opaque to us. */
+  readonly providerHandle: string;
   readonly providerStatusCode: number;
 }
 
@@ -133,7 +210,7 @@ export interface PublishFailure {
   readonly retryAfterSeconds?: number;
 }
 
-export type PublishOutcome = PublishSuccess | PublishFailure;
+export type PublishOutcome = PublishSuccess | PublishFailure | PublishPending;
 
 /**
  * What an adapter can say about a connection.
@@ -201,6 +278,18 @@ export interface SocialConnectorAdapter {
     readonly idempotencyKey: string;
     readonly credentials: AdapterCredentials;
   }): Promise<{ externalPostId: string; externalPostUrl: string | null } | null>;
+
+  /**
+   * CONNECTORS A (W5) — "has the publish behind this handle finished?" Asked
+   * only about a handle a `pending` answer gave. Answers success, failure, or
+   * `pending` again. OPTIONAL: an adapter that never answers `pending` does not
+   * need it, and one that does without it leaves its posts for a person.
+   */
+  checkPublish?(input: {
+    readonly providerHandle: string;
+    readonly externalAccountId: string;
+    readonly credentials: AdapterCredentials;
+  }): Promise<PublishOutcome>;
 
   /** Turn whatever went wrong into a class the pipeline can act on. */
   classifyError(error: unknown): PublishFailureClass;

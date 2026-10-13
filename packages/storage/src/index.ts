@@ -10,6 +10,8 @@ export {
 
 export { S3ObjectStore, type S3ObjectStoreOptions } from './s3-object-store';
 
+export { presignGetUrl, type PresignInput } from './presign';
+
 export { createObjectStore, readS3Configuration, type S3EnvironmentConfiguration } from './factory';
 
 export {
