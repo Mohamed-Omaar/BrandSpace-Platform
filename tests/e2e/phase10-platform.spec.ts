@@ -56,7 +56,7 @@ test.describe('the Integrations Hub', () => {
     await expect(block).toBeVisible();
     // Generated from the API's public base URL — never typed by hand.
     const redirect = block.getByTestId('social-address-facebook-redirectUri');
-    await expect(redirect).toContainText(/\/v1\/social\/callback\/facebook$/);
+    await expect(redirect.locator('code')).toHaveText(/\/v1\/social\/callback\/facebook$/);
     for (const row of [
       'social-address-facebook-webhookUrl',
       'social-address-facebook-deauthorizeUrl',
