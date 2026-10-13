@@ -16,6 +16,23 @@
  * with their adapters (steps B and C).
  */
 
+/**
+ * The API's public base URL as the RUNNING ENVIRONMENT states it
+ * (`PUBLIC_API_BASE_URL`), or null. Never a written-down domain: on staging it
+ * is the API service's own address (a custom domain if one is attached, the
+ * host's generated one otherwise). The local fallback is for development only
+ * (`APP_ENV` unset or `development`); anywhere else a missing value is null,
+ * so a screen says so instead of showing an address that would not work.
+ */
+export function publicApiBaseUrlFrom(
+  source: Readonly<Record<string, string | undefined>>,
+): string | null {
+  const configured = source['PUBLIC_API_BASE_URL']?.trim();
+  if (configured) return configured.replace(/\/+$/, '');
+  const appEnv = source['APP_ENV'] ?? 'development';
+  return appEnv === 'development' ? 'http://localhost:3003' : null;
+}
+
 export type SocialAddressKey = 'redirectUri' | 'webhookUrl' | 'deauthorizeUrl' | 'dataDeletionUrl';
 
 export interface SocialAddress {

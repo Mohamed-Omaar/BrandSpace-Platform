@@ -3,7 +3,7 @@ import {
   type SocialAddressKey,
   type SocialPlatformAddresses,
 } from '@brandspace/integrations';
-import { SectionHeader, colorTokens, fontTokens, typographyTokens } from '@brandspace/ui';
+import { Banner, SectionHeader, colorTokens, fontTokens, typographyTokens } from '@brandspace/ui';
 import { Cell, DataTable } from './admin-shell';
 import { CopyValue } from './copy-value';
 
@@ -39,9 +39,21 @@ export function SocialAddresses({
   apiBaseUrl,
 }: {
   readonly isArabic: boolean;
-  readonly apiBaseUrl: string;
+  /** Null when this environment has no `PUBLIC_API_BASE_URL`: nothing is guessed. */
+  readonly apiBaseUrl: string | null;
 }) {
   const pick = ([en, ar]: [string, string]) => (isArabic ? ar : en);
+  if (apiBaseUrl === null) {
+    return (
+      <div data-testid="social-addresses">
+        <Banner tone="warning" testId="social-addresses-unavailable">
+          {isArabic
+            ? 'لا يمكن عرض العناوين: متغيّر PUBLIC_API_BASE_URL غير مضبوط لمركز التحكم في هذه البيئة. اضبطه على العنوان العام لخادم الواجهة (API) نفسه المضبوط لدى خادم الواجهة.'
+            : 'The addresses cannot be shown: PUBLIC_API_BASE_URL is not set for the Control Center in this environment. Set it to the same public API address the API service uses.'}
+        </Banner>
+      </div>
+    );
+  }
   return (
     <div data-testid="social-addresses">
       <SectionHeader

@@ -769,18 +769,18 @@ request is recorded on the attempt and audited as `social.post.result_mismatch`,
 ### 17.6 The addresses to register (D-530)
 
 Control Center → Integrations → Social platforms → **Addresses to register**, generated from
-`PUBLIC_API_BASE_URL`, each with a Copy button. For staging (`https://api-staging.brandspace.cc`):
+`PUBLIC_API_BASE_URL` **of the running environment** (on staging, the API service's Railway-generated public address unless a custom domain is attached), each with a Copy button. No domain is written down anywhere: copy the values from the Control Center. The paths are:
 
-| Platform app               | Field in the platform's console             | Address                                                              |
-| -------------------------- | ------------------------------------------- | -------------------------------------------------------------------- |
-| Meta (Facebook)            | Valid OAuth Redirect URIs                   | `https://api-staging.brandspace.cc/v1/social/callback/facebook`      |
-| Meta (Instagram, same app) | Valid OAuth Redirect URIs                   | `https://api-staging.brandspace.cc/v1/social/callback/instagram`     |
-| Meta                       | Deauthorize callback URL (route in step B)  | `https://api-staging.brandspace.cc/v1/social/deauthorize/facebook`   |
-| Meta                       | Data deletion request URL (route in step B) | `https://api-staging.brandspace.cc/v1/social/data-deletion/facebook` |
-| Meta                       | Webhooks callback URL (route in step B)     | `https://api-staging.brandspace.cc/v1/social/webhooks/facebook`      |
-| TikTok                     | Redirect URI                                | `https://api-staging.brandspace.cc/v1/social/callback/tiktok`        |
-| TikTok                     | Webhook callback URL (route in step B/C)    | `https://api-staging.brandspace.cc/v1/social/webhooks/tiktok`        |
-| X                          | Callback URI / Redirect URL                 | `https://api-staging.brandspace.cc/v1/social/callback/x`             |
+| Platform app               | Field in the platform's console             | Address                                                 |
+| -------------------------- | ------------------------------------------- | ------------------------------------------------------- |
+| Meta (Facebook)            | Valid OAuth Redirect URIs                   | `<API public address>/v1/social/callback/facebook`      |
+| Meta (Instagram, same app) | Valid OAuth Redirect URIs                   | `<API public address>/v1/social/callback/instagram`     |
+| Meta                       | Deauthorize callback URL (route in step B)  | `<API public address>/v1/social/deauthorize/facebook`   |
+| Meta                       | Data deletion request URL (route in step B) | `<API public address>/v1/social/data-deletion/facebook` |
+| Meta                       | Webhooks callback URL (route in step B)     | `<API public address>/v1/social/webhooks/facebook`      |
+| TikTok                     | Redirect URI                                | `<API public address>/v1/social/callback/tiktok`        |
+| TikTok                     | Webhook callback URL (route in step B/C)    | `<API public address>/v1/social/webhooks/tiktok`        |
+| X                          | Callback URI / Redirect URL                 | `<API public address>/v1/social/callback/x`             |
 
 X is not built (D-505); its address is listed so the app can be prepared. The Hub gains no vendor
 entry until its adapter exists.
