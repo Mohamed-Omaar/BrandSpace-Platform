@@ -192,6 +192,8 @@ export interface BrandBrainPermissions {
   readonly review: boolean;
   readonly remove: boolean;
   readonly chat: boolean;
+  /** PR F (b), Q9 — the member may ask, but no model can answer now. */
+  readonly chatOff?: boolean;
 }
 
 /**
@@ -1004,6 +1006,7 @@ export function BrandBrainView({
             area={chatArea}
             areaLabel={chatAreaLabel}
             canChat={permissions.chat}
+            aiOff={permissions.chatOff === true}
             canUpload={permissions.upload}
             initialMessages={[]}
             onClose={() => setTab('knowledge')}

@@ -1,0 +1,49 @@
+{
+  "payments": {
+    "enabled": false
+  },
+  "currencies": [
+    {
+      "code": "USD",
+      "name": {
+        "en": "US dollar",
+        "ar": "دولار أمريكي"
+      },
+      "minorUnitDigits": 2,
+      "status": "active",
+      "sortOrder": 0
+    },
+    {
+      "code": "SAR",
+      "name": {
+        "en": "Saudi riyal",
+        "ar": "ريال سعودي"
+      },
+      "minorUnitDigits": 2,
+      "status": "active",
+      "sortOrder": 1
+    }
+  ],
+  "markets": [],
+  "taxPolicies": [],
+  "creditPacks": [],
+  "providerRouting": [],
+  "checkout": {
+    "sessionTtlMinutes": 60,
+    "trustBrowserRedirect": false
+  },
+  "dunning": {
+    "retryOffsetDays": [1, 3, 5, 7],
+    "graceDays": 7,
+    "cancelAfterSuspendedDays": 30
+  },
+  "invoice": {
+    "numberPrefix": "BS",
+    "creditNotePrefix": "BSCN",
+    "numberPadding": 6,
+    "legalName": null,
+    "address": null,
+    "taxRegistrationNumber": null,
+    "footerNote": null
+  }
+}

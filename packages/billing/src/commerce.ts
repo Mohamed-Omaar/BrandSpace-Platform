@@ -100,6 +100,8 @@ export interface ProviderRoute {
 }
 
 export interface CommercePolicy {
+  /** PR F (a): every payment surface and route exists only while this is on. */
+  readonly payments: { readonly enabled: boolean };
   readonly currencies: readonly CurrencyDetail[];
   readonly markets: readonly MarketDetail[];
   readonly taxPolicies: readonly TaxPolicyDetail[];
@@ -114,6 +116,14 @@ export interface CommercePolicy {
 export function commercePolicyFrom(payload: Record<string, unknown>): CommercePolicy {
   const doc = parseConfigPayload(COMMERCE_CONFIG_DOMAIN, payload) as unknown as CommercePolicy;
   return doc;
+}
+
+/**
+ * PR F (a), Q6 — whether payments are switched on. The ONE question every
+ * payment surface and route asks, so a screen cannot disagree with a route.
+ */
+export function paymentsEnabled(policy: Pick<CommercePolicy, 'payments'>): boolean {
+  return policy.payments?.enabled === true;
 }
 
 // --- Currency ----------------------------------------------------------------

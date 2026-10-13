@@ -10,6 +10,7 @@ import { WorkspaceShell } from '../../../components/workspace-shell';
 import { CopilotView } from './copilot-view';
 
 import { EmptyAction } from '../../../components/empty-action';
+import { aiAvailableFor } from '../../../server/ai-availability';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,7 +92,10 @@ export default async function CopilotPage({
       permissionKeys={workspace.permissionKeys}
     >
       <Stack gap={spacingTokens.lg}>
-        {!brand ? (
+        {/* PR F (b), Q9: opened directly while AI cannot run, the page says so — nothing else. */}
+        {!(await aiAvailableFor('copilot.chat')) ? (
+          <StateMessage kind="empty" title={t('ai.unavailable')} testId="ai-unavailable" />
+        ) : !brand ? (
           <StateMessage
             kind="empty"
             title={

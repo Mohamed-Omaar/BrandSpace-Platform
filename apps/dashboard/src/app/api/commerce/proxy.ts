@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { CUSTOMER_REALM } from '@brandspace/auth';
 import { createLogger, internalErrorFields } from '@brandspace/shared';
+import { paymentsSwitchedOn } from '../../../server/payments-switch';
 
 const log = createLogger({ context: { component: 'dashboard.commerce.proxy' } });
 
@@ -30,6 +31,13 @@ export async function proxyCommerce(
   upstreamPath: string,
   method: 'GET' | 'POST' = 'POST',
 ): Promise<NextResponse> {
+  // PR F (a): with payments off, a payment route is an unknown path — the same
+  // bare 404, before the session is read. Onboarding shares this proxy and is
+  // not a payment route.
+  if (upstreamPath.startsWith('/v1/commerce/') && !(await paymentsSwitchedOn())) {
+    return new NextResponse(null, { status: 404 });
+  }
+
   const base = process.env['BRANDSPACE_API_URL'];
   if (!base) {
     log.warn('BRANDSPACE_API_URL is not configured; commerce actions are unavailable');

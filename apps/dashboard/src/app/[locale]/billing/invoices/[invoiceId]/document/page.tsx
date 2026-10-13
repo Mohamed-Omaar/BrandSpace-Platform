@@ -3,6 +3,7 @@ import { colorTokens } from '@brandspace/ui';
 import { formatMoney, type Money } from '@brandspace/shared';
 import type { DocumentLocale, InvoiceDocument } from '@brandspace/billing';
 import { requireWorkspace } from '../../../../../../server/customer-context';
+import { paymentsSwitchedOn } from '../../../../../../server/payments-switch';
 import { invoiceDocumentFor } from '../../../../../../server/commerce-context';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,8 @@ export default async function InvoiceDocumentPage({
 }: {
   params: Promise<{ locale: string; invoiceId: string }>;
 }) {
+  // PR F (a): with payments off this page does not exist.
+  if (!(await paymentsSwitchedOn())) notFound();
   const { locale, invoiceId } = await params;
   const { workspace } = await requireWorkspace(locale, 'billing.read');
   const document = await invoiceDocumentFor(workspace.workspaceId, invoiceId);

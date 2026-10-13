@@ -89,6 +89,7 @@ import {
   resubmitAfterChangesAction,
   transitionItemAction,
 } from '../actions';
+import { aiAvailableFor } from '../../../../server/ai-availability';
 import {
   ComposerView,
   type ComposerDraft,
@@ -128,6 +129,11 @@ export default async function ComposePage({
   const translate = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
+  // PR F (b), Q9 — the Studio's AI follows what can run now, per task (D-507).
+  const [aiCaption, aiImage] = await Promise.all([
+    aiAvailableFor('caption.generate'),
+    aiAvailableFor('image.generate'),
+  ]);
 
   const single = (key: string): string | undefined => {
     const value = query[key];
@@ -1321,7 +1327,20 @@ export default async function ComposePage({
             : null
         }
         // Q18 — the AI edits spend credits, so without `copilot.use` none is offered.
-        tools={maySpendCredits(workspace.permissionKeys, 'content.edit') ? CONTENT_TOOLS : []}
+        // PR F (b), Q9 — nor while no caption model can run.
+        tools={
+          maySpendCredits(workspace.permissionKeys, 'content.edit') && aiCaption
+            ? CONTENT_TOOLS
+            : []
+        }
+        aiWriting={aiCaption}
+        aiOff={
+          !aiCaption &&
+          (maySpendCredits(workspace.permissionKeys, 'content.create') ||
+            maySpendCredits(workspace.permissionKeys, 'content.edit'))
+            ? translate('ai.unavailable')
+            : null
+        }
         now={now.getTime()}
         review={reviewFacts}
         mode={mode === 'write' ? 'write' : 'ai'}
@@ -1369,15 +1388,18 @@ export default async function ComposePage({
           generateMedia:
             maySpendCredits(workspace.permissionKeys, 'assets.upload') &&
             workspace.permissionKeys.includes('content.edit') &&
-            !composerDraft?.readOnly,
+            !composerDraft?.readOnly &&
+            aiImage,
           // Q18 — spending credits also needs `copilot.use`.
-          generate: maySpendCredits(workspace.permissionKeys, 'content.create'),
+          generate: maySpendCredits(workspace.permissionKeys, 'content.create') && aiCaption,
           // E4 (Phase 2B-2) — "Save as template".
           manageTemplates: workspace.permissionKeys.includes('templates.manage'),
           // D10 (Phase 2C-3) — the rewrite spends credits: `content.edit` AND
           // `copilot.use`, on a post that is not published or publishing.
           rewriteFacts:
-            maySpendCredits(workspace.permissionKeys, 'content.edit') && !composerDraft?.readOnly,
+            maySpendCredits(workspace.permissionKeys, 'content.edit') &&
+            !composerDraft?.readOnly &&
+            aiCaption,
           // PR D (Studio S8) — Settings → AI answers only `brand.manage`.
           manageBrand: workspace.permissionKeys.includes('brand.manage'),
         }}
@@ -1485,6 +1507,8 @@ const EDITOR_KEYS = [
   'upload.refusedEmpty',
   'upload.uploading',
   'upload.connection',
+  'upload.notScanned',
+  'upload.notScannedLink',
   'studio.when.mode.best',
   'studio.when.mode.bestSub',
   'studio.when.mode.pick',
@@ -1670,6 +1694,7 @@ const COMPOSER_KEYS = [
   'studio.briefHint',
   'studio.aiWrite',
   'studio.capPlaceholder',
+  'studio.capPlaceholderManual',
   'studio.toolsAfterSave',
   'studio.designAfterSave',
   'studio.saveDraft',

@@ -3,6 +3,7 @@ import { DownloadGrantIssuer } from '@brandspace/storage';
 import { brandInScope, createLogger, internalErrorFields } from '@brandspace/shared';
 import { requireWorkspace, inWorkspace } from '../../../../../server/customer-context';
 import { downloadSigningKey, objectStore } from '../../../../../server/assets-context';
+import { servedUploadDisposition } from '../../../../../server/served-upload';
 
 const log = createLogger({ context: { component: 'dashboard.assets.font' } });
 
@@ -70,6 +71,10 @@ export async function GET(
         // The type the file's own SIGNATURE proved at upload, pinned into the grant.
         'content-type': claims.contentType,
         'content-length': String(bytes.byteLength),
+        // PR F (g): a font file is a download too; `@font-face` still loads it.
+        'content-disposition': servedUploadDisposition(
+          claims.storageKey.split('/').at(-1) ?? 'font',
+        ),
         'x-content-type-options': 'nosniff',
         // Nothing served here may execute (docs/SECURITY.md §11.6).
         'content-security-policy':

@@ -17,6 +17,12 @@ export interface UploadRules {
   readonly maxBytes: number;
   /** A type's own ceiling where it differs (a video may be larger than an image). */
   readonly maxBytesByType?: Readonly<Record<string, number>>;
+  /**
+   * PR F (g), Q13 — the file will NOT be scanned for malware (the beta runs
+   * with scanning off). The control then says so in one line, linking to the
+   * Terms clause.
+   */
+  readonly notScanned?: boolean;
 }
 
 /** The ceiling for one admitted type. */

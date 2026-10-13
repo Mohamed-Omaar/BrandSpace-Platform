@@ -26,10 +26,12 @@ import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, defaultBrandFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inSocial } from '../../../server/social-context';
+import { canGoOut, connectableChannels } from '../../../server/connectable-channels';
 import { isBlocking, needsAttention, publishReadiness } from '../../../server/publish-readiness';
 import { mediaForVariants } from '../../../server/media-picker';
 import { GAP_WEEKS, emptyWeekdays, gapWindow, weekdayName } from '../../../server/calendar-gaps';
 import { copilotHref } from '../../../server/copilot-surface';
+import { aiAvailableFor } from '../../../server/ai-availability';
 import {
   optionalMessage,
   statusMessage,
@@ -156,6 +158,8 @@ export default async function CalendarPage({
   const translate = translator(messageLocale);
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
+  // PR F (b), Q8: the channels an account can be connected for at all.
+  const connectable = await connectableChannels();
 
   const single = (key: string): string | undefined => {
     const value = query[key];
@@ -790,7 +794,9 @@ export default async function CalendarPage({
             .replace('{weeks}', String(GAP_WEEKS)),
         )}
         copilotHref={
-          workspace.permissionKeys.includes('copilot.use') ? copilotHref(locale, 'calendar') : null
+          workspace.permissionKeys.includes('copilot.use') && (await aiAvailableFor('copilot.chat'))
+            ? copilotHref(locale, 'calendar')
+            : null
         }
         filters={{
           brand: filterBrand ?? '',
@@ -820,17 +826,27 @@ export default async function CalendarPage({
         currentMonth={todayKey.slice(0, 7)}
         days={days}
         slots={slotDetails}
-        drafts={schedulable.map((item): SchedulableDraft => ({
-          id: item.id,
-          title: item.title,
-          channels: [...new Set(item.variants.map((variant) => variant.platformKey))],
-          status: item.status,
-          campaignName: item.campaignId ? (campaignNames.get(item.campaignId) ?? null) : null,
-        }))}
+        /*
+          PR F (b), Q8 — only a post one of whose channels can be connected is
+          offered for scheduling; with no channel connectable at all, the
+          calendar offers no scheduling (no tray, dialog, opener or drag). The
+          posts and their proposed times are still drawn on their days.
+        */
+        drafts={schedulable
+          .map((item): SchedulableDraft => ({
+            id: item.id,
+            title: item.title,
+            channels: [...new Set(item.variants.map((variant) => variant.platformKey))],
+            status: item.status,
+            campaignName: item.campaignId ? (campaignNames.get(item.campaignId) ?? null) : null,
+          }))
+          .filter((draft) => canGoOut(draft.channels, connectable))}
         timezone={timezone}
         quotaUsed={quotaUsed}
         quotaLimit={quotaLimit}
-        canSchedule={workspace.permissionKeys.includes('content.schedule')}
+        canSchedule={
+          workspace.permissionKeys.includes('content.schedule') && connectable.length > 0
+        }
         canSubmit={workspace.permissionKeys.includes('content.submit')}
         canCreate={workspace.permissionKeys.includes('content.create')}
         weekdays={protoWeekdays}

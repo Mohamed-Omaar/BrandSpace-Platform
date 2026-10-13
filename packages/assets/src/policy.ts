@@ -62,8 +62,10 @@ export interface DerivativePolicy {
 
 export interface ScanningPolicy {
   readonly required: boolean;
-  readonly provider: 'mock';
+  readonly provider: 'mock' | 'none' | 'scanii';
   readonly timeoutMs: number;
+  /** Scanii's scan URL; set only when the provider is `scanii`. */
+  readonly scaniiEndpoint: string | null;
 }
 
 export interface ProcessingPolicy {
@@ -120,6 +122,7 @@ export function assetPolicyFrom(document: AssetsConfig): AssetPolicy {
       required: document.scanning.required,
       provider: document.scanning.provider,
       timeoutMs: document.scanning.timeoutMs,
+      scaniiEndpoint: document.scanning.scanii.endpoint,
     },
     processing: {
       maxAttempts: document.processing.maxAttempts,

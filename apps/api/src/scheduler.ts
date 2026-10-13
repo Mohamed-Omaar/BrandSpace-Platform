@@ -105,6 +105,7 @@ import {
   SubscriptionLifecycleService,
   commercePolicyFrom,
   foldRotation,
+  paymentsEnabled,
   type CommercePolicy,
   type RotationState,
 } from '@brandspace/billing';
@@ -1838,10 +1839,11 @@ export class MaintenanceScheduler {
   async advanceBillingCycles(limit: number): Promise<{ advanced: number; granted: number }> {
     const platform = getPlatformClient();
     const subscriptions = new SubscriptionService({ prisma: platform, clock: this.#clock });
-    const due = await subscriptions.dueForCycle(limit);
+    const { policy, plans, planVersionId, commerce } = await this.#commercial();
+    // PR F (a), Q7: while payments are off, a trial is not ended at its date.
+    const due = await subscriptions.dueForCycle(limit, { trialsEnd: paymentsEnabled(commerce) });
     if (due.length === 0) return { advanced: 0, granted: 0 };
 
-    const { policy, plans, planVersionId } = await this.#commercial();
     const ledger = new CreditLedgerService({ prisma: platform, clock: this.#clock, policy });
 
     let advanced = 0;

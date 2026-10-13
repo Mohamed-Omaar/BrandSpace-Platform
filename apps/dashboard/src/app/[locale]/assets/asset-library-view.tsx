@@ -252,6 +252,15 @@ const STATE_LABEL: Readonly<Record<AssetStatus, MessageKey>> = {
   ARCHIVED: 'assets.state.archived',
 };
 
+/**
+ * PR F (g) — "Processing" said honestly: while a scanner is configured a file
+ * in progress is waiting for its security check, and says so; with scanning
+ * off (the beta) it is only being prepared, and never claims a scan.
+ */
+function stateLabelKey(status: AssetStatus, scanning: boolean): MessageKey {
+  return status === 'PROCESSING' && scanning ? 'assets.state.securityCheck' : STATE_LABEL[status];
+}
+
 const KIND_LABEL: Readonly<Record<AssetKind, MessageKey>> = {
   IMAGE: 'assets.kind.IMAGE',
   VIDEO: 'assets.kind.VIDEO',
@@ -907,13 +916,16 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                   >
                     {t('assets.upload')}
                   </button>
-                  <Link
-                    href={`/${props.locale}/creative`}
-                    className="bsp-btn bsp-sm bsp-sec"
-                    data-testid="assets-empty-generate"
-                  >
-                    {t('assets.emptyGenerate')}
-                  </Link>
+                  {/* PR F (b), Q9: generating is offered only where it can run. */}
+                  {can.generate ? (
+                    <Link
+                      href={`/${props.locale}/creative`}
+                      className="bsp-btn bsp-sm bsp-sec"
+                      data-testid="assets-empty-generate"
+                    >
+                      {t('assets.emptyGenerate')}
+                    </Link>
+                  ) : null}
                 </span>
               ) : null}
             </div>
@@ -1000,6 +1012,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                     bulkFormId={canBulk ? bulkFormId : null}
                     showShared={!singleBrand}
                     mayUse={can.use}
+                    scanning={!props.uploadRules.notScanned}
                     t={t}
                   />
                 ))}
@@ -1434,6 +1447,7 @@ function AssetTile({
   bulkFormId,
   showShared,
   mayUse,
+  scanning,
   t,
 }: {
   readonly asset: AssetCardData;
@@ -1445,9 +1459,11 @@ function AssetTile({
   readonly showShared: boolean;
   /** The prototype's "Use" — opens a new post with this file, as the detail does. */
   readonly mayUse: boolean;
+  /** PR F (g): a scanner is configured, so a file in progress awaits its check. */
+  readonly scanning: boolean;
   readonly t: (key: MessageKey) => string;
 }) {
-  const stateLabel = t(STATE_LABEL[asset.status]);
+  const stateLabel = t(stateLabelKey(asset.status, scanning));
   return (
     <div className="bsp-card bsp-med-tile" data-testid={`asset-tile-${asset.id}`}>
       <a
@@ -1775,12 +1791,16 @@ function AssetDetail({
         {!asset.selectable ? (
           <StateMessage
             kind={asset.status === 'QUARANTINED' ? 'error' : 'empty'}
-            title={t(STATE_LABEL[asset.status])}
+            title={t(stateLabelKey(asset.status, !versionRules.notScanned))}
             description={
               asset.status === 'QUARANTINED'
                 ? t('assets.state.quarantinedHint')
                 : asset.status === 'PROCESSING'
-                  ? t('assets.state.processingHint')
+                  ? t(
+                      versionRules.notScanned
+                        ? 'assets.state.processingHintNoScan'
+                        : 'assets.state.processingHint',
+                    )
                   : asset.failureReason
                     ? t(`assets.reason.${asset.failureReason}` as MessageKey)
                     : undefined

@@ -96,6 +96,13 @@ export class AiProviderError extends Error {
   }
 }
 
+/**
+ * PR F (b), Q9 — what a customer reads when no model in the chain has a
+ * provider and an adapter here: AI is simply not switched on yet. Not "busy",
+ * which would ask them to retry something that cannot work (D-507).
+ */
+export const AI_NOT_AVAILABLE_MESSAGE = 'AI isn’t available yet.';
+
 /** The customer-facing message for a class. Deliberately actionable, never raw. */
 export function customerMessageFor(failureClass: AiFailureClass): string {
   switch (failureClass) {

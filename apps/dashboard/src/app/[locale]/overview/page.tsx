@@ -37,6 +37,7 @@ import {
   sparkPath,
   type HomeKind,
 } from '../../../server/home-prototype';
+import { aiAvailableFor } from '../../../server/ai-availability';
 import { mediaForVariants } from '../../../server/media-picker';
 import {
   optionalMessage,
@@ -137,7 +138,9 @@ export default async function OverviewPage({
 
   const maySeeContent = may('content.read');
   const maySeeAnalytics = may('analytics.read');
-  const mayUseCopilot = may('copilot.use');
+  // PR F (b), Q9: every Copilot entry on Home ("Ask Copilot", the card, "Explain")
+  // exists only while the Copilot can run.
+  const mayUseCopilot = may('copilot.use') && (await aiAvailableFor('copilot.chat'));
   const maySeeInsights = may('strategy.read');
   const mayReviewInsights = may('strategy.manage');
   const mayCreate = may('content.create');
@@ -500,7 +503,7 @@ export default async function OverviewPage({
    */
   const credits = mayReadCredits
     ? await inWorkspace(workspace.workspaceId, async ({ db, entitlements, credits: ledger }) => {
-        const [wallet, row, subscription] = await Promise.all([
+        const [wallet, row, subscription, trialGrant] = await Promise.all([
           ledger.wallet(workspace.workspaceId),
           db.creditWallet.findUnique({
             where: { workspaceId: workspace.workspaceId },
@@ -515,21 +518,25 @@ export default async function OverviewPage({
               pinnedMonthlyCredits: true,
             },
           }),
+          // PR F (f): what the trial actually granted — the trial's "of N".
+          db.creditGrant.aggregate({
+            where: { workspaceId: workspace.workspaceId, source: 'TRIAL_GRANT' },
+            _sum: { amountMilliCredits: true },
+          }),
         ]);
+        const trialGrantCredits = Number((trialGrant._sum.amountMilliCredits ?? 0n) / 1000n);
         const context = await entitlements.contextFor(workspace.workspaceId).catch(() => null);
         const plan = context?.planKey
           ? (await entitlements.plans().catch(() => [])).find(
               (entry) => entry.key === context.planKey,
             )
           : undefined;
-        const renews = subscription
-          ? subscription.status === 'TRIALING'
-            ? subscription.trialEndsAt
-            : subscription.currentPeriodEnd
-          : null;
+        // A trial's credits do not reset when it ends, so its end is no reset date.
+        const renews =
+          subscription && subscription.status !== 'TRIALING' ? subscription.currentPeriodEnd : null;
         return {
           balance: wallet.balanceCredits,
-          monthly: homeCreditGrant(subscription, plan?.monthlyCredits),
+          monthly: homeCreditGrant(subscription, plan?.monthlyCredits, trialGrantCredits),
           planned: subscription !== null,
           resetsAt: row?.nextResetAt ?? renews ?? null,
         };
@@ -968,7 +975,7 @@ export default async function OverviewPage({
                    * PR D (Home 3) — "Explain" (`T.explain`, the prototype's
                    * shift row): Performance opens with the Copilot and the
                    * request in its box, not sent. Shown to a member who may use
-                   * the Copilot; PR F adds the AI-availability check (Q9).
+                   * the Copilot, while the Copilot can run (PR F, Q9).
                    */
                   <Link
                     href={`/${locale}/analytics?copilot=open&ask=${encodeURIComponent(

@@ -166,17 +166,20 @@ test.describe('the owner connects Resend, and a customer signup uses it', () => 
     // an attribute is still a value that reached the browser.
     expect(await page.content()).not.toContain(FIXTURE_KEY);
 
-    // ---- 5. THERE IS NO TEST CONNECTION BUTTON, and the screen says why ---
+    // ---- 5. THE TEST BUTTON IS THERE, and the screen says who it mails ----
     /*
      * The credential BrandSpace asks for is a Resend Sending-access key
      * restricted to the verified domain — the least privilege that can send.
      * Every non-destructive check Resend offers is a read, and such a key is
-     * refused all of them. A button here could only report a working key as
-     * broken, demand a wider key, or send an unsolicited probe message.
+     * refused all of them, so the Test (PR F) sends one message to the
+     * signed-in owner's own address and to nobody else. It is not pressed
+     * here: the assertion below is that configuring sends nothing.
      */
-    await expect(page.getByTestId('test-connection')).toHaveCount(0);
-    await expect(page.getByTestId('integration-note')).toContainText('no Test connection button');
-    await expect(page.getByTestId('integration-note')).toContainText('smoke email');
+    await expect(page.getByTestId('test-connection')).toHaveCount(1);
+    await expect(page.getByTestId('integration-note')).toContainText(
+      'one short test message to your own address',
+    );
+    await expect(page.getByTestId('test-explanation')).toContainText('to nobody else');
 
     // NOTHING WAS SENT while the owner configured the provider. A screen that
     // probed the vendor on load would put mail in an inbox nobody asked about.
@@ -423,9 +426,13 @@ test.describe('the Resend screen in both directions', () => {
      * an owner rotating a key there would believe they had rotated it. The
      * object store reads `STORAGE_*` from the deployment and reads nothing
      * else, so the page describes and offers nothing to fill in.
+     *
+     * PR F: it does offer a Test, which asks the API (the process holding the
+     * bucket credential) to write, read back and delete one small file.
      */
     await expect(page.getByTestId('integration-config')).toHaveCount(0);
-    await expect(page.getByTestId('test-connection')).toHaveCount(0);
+    await expect(page.getByTestId('test-connection')).toHaveCount(1);
+    await expect(page.getByTestId('test-explanation')).toContainText('No bucket detail is shown');
     // And it SAYS where it is configured, or the empty screen is just a bug.
     await expect(page.getByTestId('integration-note')).toContainText('STORAGE_*');
   });

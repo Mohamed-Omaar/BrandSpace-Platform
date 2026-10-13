@@ -250,11 +250,12 @@ export class IntegrationsService {
      * and record a "no connection test is implemented" failure against a
      * perfectly healthy integration.
      *
-     * TWO PROVIDERS ARE IN THIS POSITION TODAY, both because the credential
-     * that does the job cannot answer a read: Cloudflare R2 (the Control Center
-     * holds no bucket credential) and Resend (a Sending-access key is refused
-     * every read the vendor offers). In both cases the honest answer is that
-     * this screen cannot tell, which is what gets recorded.
+     * NO REGISTERED PROVIDER IS IN THIS POSITION TODAY. Cloudflare R2 and
+     * Resend were, until PR F gave each a Test that does the credential's own
+     * job instead of a read it cannot answer (a storage round trip run by the
+     * API; one message to the signed-in owner). The guard stays for the next
+     * provider that declares itself untestable: for it, the honest answer is
+     * that this screen cannot tell, which is what gets recorded.
      */
     if (!definition.testable) {
       const message =

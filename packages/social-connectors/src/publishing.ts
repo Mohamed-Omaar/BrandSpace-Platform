@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { Environment } from '@brandspace/config';
 import {
   recordAutomationEvent,
   writeAuditEvent,
@@ -24,7 +25,12 @@ import {
   publishJobPastDeadline,
   publishJobSuperseded,
 } from './errors';
-import { capabilitiesFor, PROVIDER_CONFIG_KEYS, type PublishingPolicy } from './policy';
+import {
+  capabilitiesFor,
+  PROVIDER_CONFIG_KEYS,
+  TenantPublishingPolicySource,
+  type PublishingPolicy,
+} from './policy';
 
 /**
  * The failures an ACCOUNT caused, which a reconnection of that account fixes
@@ -224,10 +230,25 @@ export function providerForPlatformKey(platformKey: string): SocialProvider | nu
 export function unreachableChannelGate(
   db: TenantScopedClient,
   workspaceId: string,
+  /**
+   * PR F (b), Q8 — with the environment, the gate also answers which channels
+   * cannot be connected at all (the activated publishing policy has their
+   * platform switched off), read per call from the tenant-readable catalogue.
+   */
+  environment?: Environment,
 ): {
   unreachableChannels(brandId: string, platformKeys: readonly string[]): Promise<readonly string[]>;
+  notConnectable(platformKeys: readonly string[]): Promise<readonly string[]>;
 } {
   return {
+    async notConnectable(platformKeys) {
+      if (!environment || platformKeys.length === 0) return [];
+      const policy = await new TenantPublishingPolicySource(db as never, environment).load();
+      return platformKeys.filter((platformKey) => {
+        const provider = providerForPlatformKey(platformKey);
+        return !provider || !capabilitiesFor(policy, provider).enabled;
+      });
+    },
     async unreachableChannels(brandId, platformKeys) {
       if (platformKeys.length === 0) return [];
       const accounts = await db.socialConnection.findMany({

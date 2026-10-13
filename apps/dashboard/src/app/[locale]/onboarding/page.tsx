@@ -9,6 +9,7 @@ import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { inBrandBrain } from '../../../server/brand-brain-context';
 import { inSocial } from '../../../server/social-context';
 import { copilotHref } from '../../../server/copilot-surface';
+import { aiAvailableFor } from '../../../server/ai-availability';
 import { setupFactsFor } from '../../../server/setup-wizard';
 import { paletteFrom } from '../../../server/brand-profile';
 import {
@@ -96,6 +97,8 @@ export default async function OnboardingPage({
     refusedEmpty: t('upload.refusedEmpty'),
     uploading: t('upload.uploading'),
     connection: t('upload.connection'),
+    notScanned: t('upload.notScanned'),
+    notScannedLink: t('upload.notScannedLink'),
   };
   const logoTexts = {
     upload: t('setup.wz.brand.uploadLogo'),
@@ -1226,7 +1229,8 @@ export default async function OnboardingPage({
             testId: 'setup-create-post',
           }
         : null,
-      may('copilot.use')
+      // PR F (b), Q9 — offered only while the Copilot can run.
+      may('copilot.use') && (await aiAvailableFor('copilot.chat'))
         ? {
             key: 'plan',
             title: t('setup.done.plan'),

@@ -27,6 +27,8 @@ import {
 import { insightNarrative, type NarrativeLine } from '../../../server/insight-narrative';
 import { INTELLIGENCE_INSIGHT_TYPES } from '../../../server/command-center';
 import { copilotHref } from '../../../server/copilot-surface';
+import { aiAvailableFor } from '../../../server/ai-availability';
+import { AiUnavailableLine } from '../../../components/ai-unavailable';
 import { CustomerBanner, WorkspaceShell } from '../../../components/workspace-shell';
 import {
   analyseContentGapsAction,
@@ -98,6 +100,10 @@ export default async function IntelligencePage({
   const mayManage = workspace.permissionKeys.includes('strategy.manage');
   // Q18 — a content-gap analysis spends credits; accepting a finding does not.
   const mayAnalyse = maySpendCredits(workspace.permissionKeys, 'strategy.manage');
+  // PR F (b), Q9: the analysis and every Copilot link exist only while their AI can run.
+  const aiAnalyse = await aiAvailableFor('strategy.generate');
+  const mayAskCopilot =
+    workspace.permissionKeys.includes('copilot.use') && (await aiAvailableFor('copilot.chat'));
   const mayReview = workspace.permissionKeys.includes('brand_brain.review');
   const mayReadBrain = workspace.permissionKeys.includes('brand_brain.read');
   /*
@@ -262,7 +268,7 @@ export default async function IntelligencePage({
           )}
         </ol>
 
-        {brand && workspace.permissionKeys.includes('copilot.use') ? (
+        {brand && mayAskCopilot ? (
           <div>
             <CopilotLink
               href={copilotHref(locale, 'intelligence')}
@@ -293,7 +299,8 @@ export default async function IntelligencePage({
           />
         ) : (
           <>
-            {mayAnalyse ? (
+            {mayAnalyse && !aiAnalyse ? <AiUnavailableLine text={t('ai.unavailable')} /> : null}
+            {mayAnalyse && aiAnalyse ? (
               <Card title={t('intelligence.analyse')}>
                 <form action={analyseContentGapsAction} data-testid="content-gap-form">
                   <input type="hidden" name="locale" value={locale} />
@@ -482,7 +489,7 @@ export default async function IntelligencePage({
                       </div>
                     ) : null}
 
-                    {workspace.permissionKeys.includes('copilot.use') ? (
+                    {mayAskCopilot ? (
                       <div>
                         <CopilotLink
                           href={copilotHref(locale, 'intelligence')}

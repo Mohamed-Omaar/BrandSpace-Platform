@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMAIL_TEMPLATE_KEYS } from '@brandspace/auth';
+import { CONTROL_CENTER_ONLY_TEMPLATE_KEYS, EMAIL_TEMPLATE_KEYS } from '@brandspace/auth';
 import { deliverySchema } from '../../apps/api/src/routes/internal-email';
 
 /**
@@ -30,13 +30,21 @@ import { deliverySchema } from '../../apps/api/src/routes/internal-email';
  */
 
 describe('every template the product declares is deliverable through the API', () => {
-  it('accepts each declared key', () => {
+  it('accepts each declared key except the Control Center’s own test message', () => {
+    /*
+     * PR F: `integration.test_message` is sent only by the Control Center's
+     * email Test, to the signed-in owner, by constructing the provider itself.
+     * The route must NOT accept it — the service token is not a signed-in
+     * owner. The exception is named here literally, so widening it to any
+     * other key needs a change to this test.
+     */
     const refused = EMAIL_TEMPLATE_KEYS.filter(
       (templateKey) =>
         !deliverySchema.safeParse({ to: 'someone@example.test', templateKey, locale: 'EN' })
           .success,
     );
-    expect(refused).toEqual([]);
+    expect(refused).toEqual(['integration.test_message']);
+    expect([...CONTROL_CENTER_ONLY_TEMPLATE_KEYS]).toEqual(['integration.test_message']);
   });
 
   it('still refuses a key the product does not declare', () => {

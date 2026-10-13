@@ -387,11 +387,24 @@ export class SubscriptionService {
    * re-offered — the starvation D-182 records for the analytics queue, in the
    * one sweep where the cost of never being reached is a month of credits.
    */
-  async dueForCycle(limit = 200): Promise<ReadonlyArray<{ workspaceId: string; planKey: string }>> {
+  async dueForCycle(
+    limit = 200,
+    options: { readonly trialsEnd?: boolean } = {},
+  ): Promise<ReadonlyArray<{ workspaceId: string; planKey: string }>> {
+    /*
+     * PR F (a), Q7 — `trialsEnd: false` leaves a trial that has passed its end
+     * where it is. While payments are off there is no way to continue a trial,
+     * so ending it would only take the workspace's limits away; the trial keeps
+     * its plan and its end date until payments exist. Left out of the
+     * selection rather than skipped after it, so a batch can never fill with
+     * trials and starve the subscriptions that are due.
+     */
+    const statuses: ('TRIALING' | 'ACTIVE' | 'PAST_DUE')[] =
+      options.trialsEnd === false ? ['ACTIVE', 'PAST_DUE'] : ['TRIALING', 'ACTIVE', 'PAST_DUE'];
     const rows = await this.#prisma.workspaceSubscription.findMany({
       where: {
         currentPeriodEnd: { lte: this.#clock.now() },
-        status: { in: ['TRIALING', 'ACTIVE', 'PAST_DUE'] },
+        status: { in: statuses },
       },
       select: { workspaceId: true, planKey: true },
       orderBy: [{ currentPeriodEnd: 'asc' }, { workspaceId: 'asc' }],

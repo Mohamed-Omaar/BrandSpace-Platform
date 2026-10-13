@@ -19,6 +19,7 @@ import {
   AttentionList,
   ReadinessCard,
   SimpleSection,
+  reasonText,
   stateLabel,
   type AttentionItem,
 } from '../simple-ui';
@@ -96,7 +97,14 @@ export async function SimpleHome({
     });
   }
   for (const area of readiness.areas) {
-    if (!area.required || area.state === 'ready' || area.state === 'withheld') continue;
+    if (
+      !area.required ||
+      area.state === 'ready' ||
+      area.state === 'withheld' ||
+      area.state === 'beta_only'
+    ) {
+      continue;
+    }
     attention.push({
       id: `area-${area.key}`,
       severity: 'warning',
@@ -104,7 +112,7 @@ export async function SimpleHome({
         area: copy(`area.${area.key}` as SimpleKey),
         state: stateLabel(locale, area.state, area.key === 'plans'),
       }),
-      detail: copy(`reason.${area.reason}` as SimpleKey),
+      detail: reasonText(locale, area),
       href: `${base}${area.href}`,
       actionLabel: area.state === 'setup_required' ? copy('common.setUp') : copy('common.fix'),
     });

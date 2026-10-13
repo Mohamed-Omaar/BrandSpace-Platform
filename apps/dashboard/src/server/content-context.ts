@@ -177,7 +177,7 @@ export async function inContentStudio<T>(
          */
         approvalGate: await approvals(),
         // Q9 (D-332): a channel whose every account was revoked is refused.
-        channelGate: unreachableChannelGate(scoped.db, workspaceId),
+        channelGate: unreachableChannelGate(scoped.db, workspaceId, currentEnvironment()),
       });
     };
 

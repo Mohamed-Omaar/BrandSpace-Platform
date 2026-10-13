@@ -9,6 +9,8 @@ import {
   platformRoleClient,
   type IsolationFixtures,
 } from './fixtures';
+import { captureConfig, type ActivatedConfig } from './config-activation';
+import { CATALOGUE } from '../support/commerce-fixture';
 
 /**
  * FIX PR 1 · F4 (D-411) — A HIGH-IMPACT ROUTE HOLDS ITS CONFIRMATION ON THE
@@ -27,6 +29,7 @@ let platform: PrismaClient;
 let fixtures: IsolationFixtures;
 let server: Awaited<ReturnType<typeof buildServer>>;
 let token: string;
+let commerce: ActivatedConfig;
 
 async function managerToken(): Promise<string> {
   const run = randomUUID().slice(0, 8);
@@ -128,12 +131,20 @@ beforeAll(async () => {
   platform = platformRoleClient();
   fixtures = await createIsolationFixtures(app);
   token = await managerToken();
+  /*
+   * PR F (a): with payments off (the default) a checkout route is an unknown
+   * path and answers 404 before its body is read. This suite proves the
+   * confirmation rule of a checkout that exists, so payments are on here.
+   */
+  commerce = await captureConfig(platform, 'commerce', { projected: true });
+  await commerce.activate(CATALOGUE as unknown as Record<string, unknown>);
   server = await buildServer();
   await server.ready();
 });
 
 afterAll(async () => {
   await server?.close();
+  await commerce?.restore();
   await app?.$disconnect();
   await platform?.$disconnect();
 });

@@ -23,7 +23,9 @@ import { renderEmail } from './email-templates';
  * that can do the job — and such a key is refused every read Resend offers. A
  * check it cannot pass would have reported a correctly-scoped production key as
  * broken; keeping it would have pressured somebody into widening the key to
- * make a tick go green. The adapter's surface now matches the credential's.
+ * make a tick go green. The adapter's surface now matches the credential's,
+ * and the Control Center's Test (PR F) therefore SENDS: one fixed message, to
+ * the signed-in owner's own address, through `send` like any other.
  *
  * THE CREDENTIAL ARRIVES AS AN ARGUMENT AND IS NEVER READ FROM THE ENVIRONMENT.
  * It lives in the Secret Service, is resolved server-side by a surface that is

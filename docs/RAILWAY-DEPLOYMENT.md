@@ -600,8 +600,10 @@ is a customer file deleted. Two buckets, two API tokens, and
 
 The Integrations Hub lists `Cloudflare R2 (S3-compatible)` under Object storage
 so the owner can see what the platform is connected to — with **no form**. It
-declares no credential fields and no setting fields, and it is not testable from
-that screen.
+declares no credential fields and no setting fields. It does have a **Test
+connection** (PR F), which the Control Center runs by asking the API — the
+process that holds the bucket credential — to write, read back and delete one
+small object (§6.6); the Control Center itself still holds no `STORAGE_*`.
 
 That is deliberate. The object store is constructed synchronously inside worker
 processors and request handlers, long before any configuration read could be
@@ -619,6 +621,14 @@ and decrypt a credential.
   variables. It deliberately makes **no request to the bucket** — Railway probes
   readiness continuously, and a `HeadBucket` per probe is a paid request several
   times a minute to re-answer a question whose answer never changes.
+- **Test connection** in the Integrations Hub (PR F) is the live check on
+  demand. The Control Center calls `POST /v1/internal/storage/self-test` on the
+  API with `INTERNAL_SERVICE_TOKEN` (an untrusted caller gets a plain 404). The
+  API writes 32 random bytes under `_brandspace/self-test/<uuid>.bin` with its
+  own store, reads them back, compares, deletes them (always, once written) and
+  checks they are gone, then answers `{ ok, latencyMs, step? }` (plus
+  `notConfigured` when it has no store) — never a bucket, endpoint, key or error
+  text. A pass is recorded and makes the storage readiness row **Connected**.
 - The real proof is the round trip: upload a file in the dashboard, confirm the
   worker processed it, redeploy, confirm it is still there.
   `docs/RAILWAY-SMOKE-TEST.md` §6 is that procedure.
@@ -960,16 +970,13 @@ process that can read the platform database and decrypt a credential. The owner
 workflow is:
 
 > Control Center → Integrations → Transactional email → Resend → enter the API
-> key and From address → **Save** → **Activate**.
+> key and From address → **Save** → **Test connection** → **Activate**.
 
-**Save ≠ Activate.** Two deliberate acts. Saving writes the key to the Secret
-Service and the settings to the Configuration Service and activates nothing.
-Activating is a full configuration change with an author, a reason, an audit
-trail and a rollback.
-
-**There is no Test connection step, and §16.2 explains why.** The proof that
-the credential works is the controlled smoke email after activation, which is
-the same operation the credential exists to perform.
+**Save ≠ Test ≠ Activate.** Three deliberate acts. Saving writes the key to the
+Secret Service and the settings to the Configuration Service and activates
+nothing. Testing sends one message to the signed-in owner and records the
+result (§16.2). Activating is a full configuration change with an author, a
+reason, an audit trail and a rollback.
 
 ### 16.2 Settings, and the one credential
 
@@ -989,28 +996,23 @@ Use a Resend API key with **Sending access**, restricted to the verified sending
 domain. That is the least privilege that can do the job: it can send, and it can
 do nothing else — it cannot list domains, read the account or manage anything.
 
-**Which is why there is no Test connection button.** Every non-destructive check
-Resend offers is a READ, and a send-only key is refused all of them. A button
-here had exactly three possible behaviours, and all three are worse than no
-button:
+**Which is why the Test SENDS rather than reads.** Every non-destructive check
+Resend offers is a READ, and a send-only key is refused all of them, so a
+read-based test could only report a correctly-scoped production key as broken
+or push somebody to widen it. The Test does the key's one job instead (PR F):
 
-1. Call `GET /domains` and report 401 — telling an owner their correctly-scoped
-   production key is broken. A red tick on a working credential trains people to
-   ignore ticks.
-2. Ask for a **Full Access** key so the read succeeds — widening a production
-   credential's scope to light up a UI element, and then keeping it at that
-   scope in the vault forever.
-3. Send a probe message — an unsolicited email, to a real inbox, every time an
-   operator presses a button.
+- The Control Center builds the adapter from the **saved** key and settings and
+  sends one fixed message (`integration.test_message`, "Brandspace test
+  message", in the page's language) to the **signed-in platform user's own
+  address**. No form field can name another recipient.
+- The result is recorded like every other Test ("Sent a test message to your
+  address. Check your inbox." or a short refusal naming only the HTTP status
+  and Resend's error code), and readiness reads it.
+- The API's internal delivery route **refuses** that template (422), so the
+  service token cannot send it.
 
-The registry marks Resend `testable: false`, the Hub omits the button, and
-`IntegrationsService.testConnection` **refuses the request at the service** as
-well — a hidden control is presentation, not authorisation.
-
-**What proves the key instead:** the controlled smoke email after activation
-(`docs/RAILWAY-SMOKE-TEST.md` §7.2). One real signup, to an address the owner
-controls. It is the same operation the credential exists to perform, which makes
-it the only honest test of a send-only key.
+The controlled smoke email after activation (`docs/RAILWAY-SMOKE-TEST.md` §7.2)
+still proves the API's delivery path a customer's signup takes.
 
 **Do not widen the key to get a green tick.** Nothing in the product asks for a
 Full Access key, and nothing should.

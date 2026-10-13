@@ -13,6 +13,13 @@
  */
 
 export const CATALOGUE = {
+  /*
+   * PR F (a): payments are OFF by default (`commerce.payments.enabled`). The
+   * fixture world is the one where they are on, so the checkout, subscription
+   * and invoice suites keep exercising what they were written for; the off
+   * state is proven by `tests/isolation/pr-f-payments-switch.test.ts`.
+   */
+  payments: { enabled: true },
   currencies: [
     {
       code: 'SAR',

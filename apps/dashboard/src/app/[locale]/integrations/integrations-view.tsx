@@ -254,10 +254,15 @@ export function IntegrationsView({
       */}
       <section className="bsp-card bsp-acc" data-testid="connected-accounts">
         {connections.length === 0 && connectable.length === 0 ? (
-          <div className="bsp-row">
+          /*
+            PR F (b), §d — NO PLATFORM CAN BE CONNECTED (the operator has
+            enabled none): one plain line instead of a "Connect" that could
+            only refuse.
+          */
+          <div className="bsp-row" data-testid="connect-unavailable">
             <span className="bsp-acc-text">
               <span className="bsp-acc-name">{t('integrations.emptyTitle')}</span>
-              <span className="bsp-acc-sub">{t('integrations.emptyBody')}</span>
+              <span className="bsp-acc-sub">{t('integrations.notAvailableYet')}</span>
             </span>
           </div>
         ) : null}
@@ -412,7 +417,7 @@ export function IntegrationsView({
           a second account. ABSENT WITHOUT THE PERMISSION, and the action
           refuses independently (D-62/D-130).
         */}
-        {mayManage ? (
+        {mayManage && connectable.length > 0 ? (
           <div className="bsp-row bsp-acc-more">
             <MoreDisclosure
               label={t('integrations.connectTitle')}

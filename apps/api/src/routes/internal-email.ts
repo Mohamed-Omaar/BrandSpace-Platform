@@ -1,11 +1,16 @@
-import { timingSafeEqual } from 'node:crypto';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { getPrisma, withWorkspace, type PrismaClient } from '@brandspace/database';
-import { EMAIL_TEMPLATE_KEYS, OutboxEmailProvider, type EmailMessageInput } from '@brandspace/auth';
+import {
+  CONTROL_CENTER_ONLY_TEMPLATE_KEYS,
+  EMAIL_TEMPLATE_KEYS,
+  OutboxEmailProvider,
+  type EmailMessageInput,
+} from '@brandspace/auth';
 import { createLogger, internalErrorFields, isProduction } from '@brandspace/shared';
 import { getEmailProvider } from '../email-provider';
 import { route } from '../route-contract';
+import { callerIsTrusted } from './internal-caller';
 
 /**
  * The trusted email delivery surface — F-07 made operational.
@@ -64,10 +69,15 @@ const log = createLogger({ context: { component: 'api.internal.email' } });
  * it, and every reset request for an unregistered address failed wherever
  * delivery is delegated to this route. Deriving it keeps the refusal and removes
  * the copy.
+ *
+ * MINUS THE CONTROL CENTER'S OWN TEMPLATES (PR F). The Integrations Hub's email
+ * Test sends `integration.test_message` to the signed-in owner by constructing
+ * the provider itself; it never comes through here. Excluding it keeps a
+ * catalogue addition from becoming a new message the service token can send.
  */
 export const deliverySchema = z.object({
   to: z.string().min(3).max(320),
-  templateKey: z.enum(EMAIL_TEMPLATE_KEYS),
+  templateKey: z.enum(EMAIL_TEMPLATE_KEYS).exclude(CONTROL_CENTER_ONLY_TEMPLATE_KEYS),
   locale: z.enum(['AR', 'EN']),
   workspaceId: z.string().uuid().optional(),
   variables: z.record(z.string(), z.unknown()).optional(),
@@ -130,26 +140,6 @@ function linkIsOurs(link: string): boolean {
   if (target.origin !== expected.origin) return false;
   if (isProduction() && target.protocol !== 'https:') return false;
   return true;
-}
-
-/**
- * Is the caller the service we think it is?
- *
- * CONSTANT TIME, because a naive `===` on a secret leaks its prefix to anybody
- * who can measure a few thousand requests. Length is compared first because
- * `timingSafeEqual` throws on a mismatch, and that throw would itself be the
- * timing signal.
- */
-function callerIsTrusted(req: FastifyRequest): boolean {
-  const expected = process.env['INTERNAL_SERVICE_TOKEN'];
-  if (!expected) return false;
-
-  const header = req.headers['x-brandspace-service-token'];
-  const presented = typeof header === 'string' ? header : '';
-  const a = Buffer.from(presented, 'utf8');
-  const b = Buffer.from(expected, 'utf8');
-  if (a.byteLength !== b.byteLength) return false;
-  return timingSafeEqual(a, b);
 }
 
 /**

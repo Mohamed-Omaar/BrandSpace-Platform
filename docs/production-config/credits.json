@@ -1,0 +1,9 @@
+{
+  "hardStopAtZero": true,
+  "purchasedPackExpiryMonths": 12,
+  "promotionalExpiryMonths": 3,
+  "planGrantExpiryMonths": 0,
+  "consumptionOrder": "fifo_by_expiry",
+  "lowBalanceThresholdPercents": [20, 5],
+  "reservationTimeoutSeconds": 900
+}

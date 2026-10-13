@@ -179,17 +179,17 @@ export default async function SignUpPage({
             }}
           >
             <input type="checkbox" name={`accept:${document.key}`} required />
-            <span>
-              {t('signUp.accept').replace(
-                '{document}',
-                locale === 'ar' ? document.title.ar : document.title.en,
-              )}
-            </span>
-            {/* THE VERSION IS PART OF THE ACCEPTANCE. Publishing a new one makes
-                an old acceptance stale by construction. */}
-            <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-              {document.version}
-            </span>
+            {/*
+              PR F, Q11 — THE DOCUMENT'S NAME IS A LINK TO THE DOCUMENT, opened
+              beside the form so nothing typed is lost. The version is still
+              what is accepted (it travels with the form and is recorded), but
+              its raw label is no longer printed here: the page names it.
+            */}
+            <AcceptLabel
+              template={t('signUp.accept')}
+              title={locale === 'ar' ? document.title.ar : document.title.en}
+              href={document.url ? (locale === 'ar' ? document.url.ar : document.url.en) : null}
+            />
           </label>
         ))}
 
@@ -212,5 +212,31 @@ export default async function SignUpPage({
         />
       </form>
     </AuthCard>
+  );
+}
+
+/** "I accept the {document}", with the document's name as a link when it has an address. */
+function AcceptLabel({
+  template,
+  title,
+  href,
+}: {
+  readonly template: string;
+  readonly title: string;
+  readonly href: string | null;
+}) {
+  const [before = '', after = ''] = template.split('{document}');
+  return (
+    <span>
+      {before}
+      {href ? (
+        <a href={href} target="_blank" rel="noopener" className="bsp-lnk">
+          {title}
+        </a>
+      ) : (
+        title
+      )}
+      {after}
+    </span>
   );
 }

@@ -95,6 +95,50 @@ const en = {
   'reason.switched_off': 'It was set up and is switched off.',
   'reason.no_permission': 'Ask the platform owner for access.',
   'reason.no_sellable_plan': 'No plan is active, public and priced yet.',
+  // PR F (e) — the closed beta's own rows.
+  'area.scanner': 'File scanning',
+  'area.scanner.about': 'Checks every uploaded file for malware before it can be used.',
+  'area.trial': 'Trial plan',
+  'area.trial.about': 'What every new workspace gets: trial days, credits and limits.',
+  'area.legal': 'Legal documents',
+  'area.legal.about': 'The terms and privacy policy accepted at sign-up.',
+  'area.password': 'Password minimum',
+  'area.password.about': 'The shortest password sign-up accepts.',
+  'area.sender': 'Email sender name',
+  'area.sender.about': 'The name every email from Brandspace is sent under.',
+  'area.postKinds': 'Post kinds per channel',
+  'area.postKinds.about': 'What each social channel will accept once it can be connected.',
+  'area.industries': 'Industries',
+  'area.industries.about': 'The industries offered during sign-up and setup.',
+  'state.beta_only': 'Beta only',
+  'reason.ai_hidden': 'Not configured. AI controls are hidden from customers.',
+  'reason.social_hidden': 'Not configured. Scheduling is hidden from customers.',
+  'reason.payments_off': 'Off for the beta. Not counted as required while off.',
+  'reason.scanning_off':
+    'Off (beta). Uploads are not scanned; customers are told so under every upload. Not ready for a public launch.',
+  'reason.scanner_mock':
+    'The development scanner is selected and refused here, so uploads would never finish. Choose "none" or a real scanner.',
+  'reason.scanner_scanii':
+    'Scanii is selected. Its key and secret are the worker’s SCANII_API_KEY and SCANII_API_SECRET.',
+  'reason.trial_missing': 'No active plan offers a trial, so new workspaces get none.',
+  'reason.trial_no_price':
+    '{plan} has no price in {currency}, so new workspaces are created without its trial.',
+  'reason.trial_quota_unset':
+    '{plan}: {days} days, {credits} credits. These limits are unset (shown as Unlimited): {quotas}.',
+  'reason.trial_ok': '{plan}: {days} days, {credits} credits, every limit set.',
+  'reason.legal_missing': 'Sign-up asks for no legal document.',
+  'reason.legal_fixture': 'Sign-up asks for a test document ({versions}). Use the real version.',
+  'reason.legal_draft': 'Draft, legal review pending ({versions}). Fine for the closed beta.',
+  'reason.legal_reviewed': 'Reviewed ({versions}).',
+  'reason.password_short': 'Sign-up accepts {length} characters. The beta uses {wanted}.',
+  'reason.password_ok': 'At least {length} characters.',
+  'reason.sender_missing': 'The active email provider has no sender name.',
+  'reason.sender_ok': 'Emails are sent as “{name}”.',
+  'reason.post_kinds_default':
+    'Publishing has never been configured, so every channel is on the default kind.',
+  'reason.post_kinds_ok': '{kinds}',
+  'reason.industries_missing': 'No industries are configured, so sign-up does not offer any.',
+  'reason.industries_ok': '{count} industries.',
   // Home.
   'home.attention': 'What needs your attention',
   'home.attentionNone': 'Nothing needs your attention right now.',
@@ -187,6 +231,10 @@ const en = {
   'setup.test': 'Test the connection',
   'setup.testIntro':
     'Brandspace makes a minimal real request and records the result. Testing switches nothing on.',
+  'setup.testIntroEmail':
+    'Brandspace sends one test message to your own address — the one you signed in with — and records the result. It sends to nobody else, and testing switches nothing on.',
+  'setup.testIntroStorage':
+    'Brandspace asks its server to write, read back and delete one small test file, and records the result. No storage detail is shown, and testing switches nothing on.',
   'setup.testNotPossible': 'This provider cannot be tested from the Control Center.',
   'setup.testRun': 'Test now',
   'setup.testOk': 'Passed {when}.',
@@ -653,6 +701,51 @@ const ar: Copy = {
   'reason.switched_off': 'سبق إعداده وهو الآن معطّل.',
   'reason.no_permission': 'اطلب الصلاحية من مالك المنصة.',
   'reason.no_sellable_plan': 'لا توجد بعد خطة مفعّلة وعامة ومسعّرة.',
+  // PR F (e)
+  'area.scanner': 'فحص الملفات',
+  'area.scanner.about': 'يفحص كل ملف مرفوع بحثًا عن البرمجيات الضارة قبل استخدامه.',
+  'area.trial': 'خطة التجربة',
+  'area.trial.about': 'ما تحصل عليه كل مساحة عمل جديدة: أيام التجربة والرصيد والحدود.',
+  'area.legal': 'المستندات القانونية',
+  'area.legal.about': 'الشروط وسياسة الخصوصية التي يُوافَق عليها عند التسجيل.',
+  'area.password': 'الحد الأدنى لكلمة المرور',
+  'area.password.about': 'أقصر كلمة مرور يقبلها التسجيل.',
+  'area.sender': 'اسم مُرسِل البريد',
+  'area.sender.about': 'الاسم الذي تُرسل به كل رسالة من Brandspace.',
+  'area.postKinds': 'أنواع المنشورات لكل قناة',
+  'area.postKinds.about': 'ما ستقبله كل قناة تواصل اجتماعي عند إتاحة ربطها.',
+  'area.industries': 'المجالات',
+  'area.industries.about': 'المجالات المعروضة أثناء التسجيل والإعداد.',
+  'state.beta_only': 'للفترة التجريبية فقط',
+  'reason.ai_hidden': 'غير مُعدّ. أدوات الذكاء الاصطناعي مخفية عن العملاء.',
+  'reason.social_hidden': 'غير مُعدّ. الجدولة مخفية عن العملاء.',
+  'reason.payments_off': 'متوقفة خلال الفترة التجريبية، ولا تُحسب مطلوبة ما دامت متوقفة.',
+  'reason.scanning_off':
+    'متوقف (الفترة التجريبية). لا تُفحص الملفات المرفوعة، ويُبلَّغ العملاء بذلك تحت كل أداة رفع. غير جاهز للإطلاق العام.',
+  'reason.scanner_mock':
+    'الفاحص التجريبي محدَّد وهو مرفوض هنا، فلن تكتمل عمليات الرفع. اختر «none» أو فاحصًا حقيقيًا.',
+  'reason.scanner_scanii':
+    'Scanii محدَّد. مفتاحه وسرّه هما المتغيّران SCANII_API_KEY وSCANII_API_SECRET في خدمة العامل.',
+  'reason.trial_missing':
+    'لا توجد خطة مفعّلة تقدّم تجربة، فلا تحصل مساحات العمل الجديدة على تجربة.',
+  'reason.trial_no_price':
+    'لا سعر للخطة {plan} بعملة {currency}، فتُنشأ مساحات العمل الجديدة دون تجربتها.',
+  'reason.trial_quota_unset':
+    '{plan}: {days} يومًا، {credits} من الرصيد. هذه الحدود غير محدّدة (تظهر «غير محدود»): {quotas}.',
+  'reason.trial_ok': '{plan}: {days} يومًا، {credits} من الرصيد، وكل الحدود محدّدة.',
+  'reason.legal_missing': 'لا يطلب التسجيل أي مستند قانوني.',
+  'reason.legal_fixture': 'يطلب التسجيل مستندًا تجريبيًا ({versions}). استخدم الإصدار الحقيقي.',
+  'reason.legal_draft':
+    'مسودة، بانتظار المراجعة القانونية ({versions}). مقبولة للفترة التجريبية المغلقة.',
+  'reason.legal_reviewed': 'تمت مراجعتها ({versions}).',
+  'reason.password_short': 'يقبل التسجيل {length} أحرف، والفترة التجريبية تستخدم {wanted}.',
+  'reason.password_ok': '{length} أحرف على الأقل.',
+  'reason.sender_missing': 'لا يوجد اسم مُرسِل لدى مزوّد البريد المفعّل.',
+  'reason.sender_ok': 'تُرسل الرسائل باسم «{name}».',
+  'reason.post_kinds_default': 'لم يُعدّ النشر قط، فكل قناة على النوع الافتراضي.',
+  'reason.post_kinds_ok': '{kinds}',
+  'reason.industries_missing': 'لا توجد مجالات مُعدّة، فلا يعرض التسجيل أيًّا منها.',
+  'reason.industries_ok': '{count} مجالًا.',
   'home.attention': 'ما يحتاج انتباهك',
   'home.attentionNone': 'لا شيء يحتاج انتباهك الآن.',
   'home.ready': 'هل Brandspace جاهزة للعملاء؟',
@@ -739,6 +832,10 @@ const ar: Copy = {
   'setup.test': 'اختبار الاتصال',
   'setup.testIntro':
     'ترسل Brandspace طلبًا حقيقيًا صغيرًا وتسجّل النتيجة. الاختبار لا يشغّل شيئًا.',
+  'setup.testIntroEmail':
+    'ترسل Brandspace رسالة اختبار واحدة إلى عنوانك أنت — العنوان الذي سجّلت الدخول به — وتسجّل النتيجة. لا تُرسل إلى أي شخص آخر، والاختبار لا يشغّل شيئًا.',
+  'setup.testIntroStorage':
+    'تطلب Brandspace من خادمها كتابة ملف اختبار صغير ثم قراءته ثم حذفه، وتسجّل النتيجة. لا تُعرض أي تفاصيل عن التخزين، والاختبار لا يشغّل شيئًا.',
   'setup.testNotPossible': 'لا يمكن اختبار هذا المزود من مركز التحكم.',
   'setup.testRun': 'اختبر الآن',
   'setup.testOk': 'نجح {when}.',

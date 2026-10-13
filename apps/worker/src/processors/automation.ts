@@ -96,7 +96,7 @@ function portsFor(
       workspaceId,
       policy,
       // Q9 (D-332): a channel whose every account was revoked is refused.
-      channelGate: unreachableChannelGate(db, workspaceId),
+      channelGate: unreachableChannelGate(db, workspaceId, currentEnvironment()),
       timezone: workspace?.timezone ?? 'UTC',
       /*
        * THE QUOTA IS REAL (P7-R6), and an automation is subject to it

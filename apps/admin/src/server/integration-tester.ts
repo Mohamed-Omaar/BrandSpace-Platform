@@ -6,9 +6,13 @@ import {
   DevelopmentPaymentProvider,
 } from '@brandspace/billing';
 import { MockProviderAdapter } from '@brandspace/ai-gateway';
-import { OutboxEmailProvider } from '@brandspace/auth';
+import {
+  OutboxEmailProvider,
+  ResendEmailProvider,
+  resendTransportOverride,
+} from '@brandspace/auth';
 import { getPlatformClient } from '@brandspace/database/platform';
-import { isProduction, systemClock } from '@brandspace/shared';
+import { AppError, isProduction, systemClock } from '@brandspace/shared';
 import { findIntegration, type IntegrationTester } from '@brandspace/integrations';
 import { currentEnvironment, getSecretService } from './platform-context';
 
@@ -49,7 +53,23 @@ import { currentEnvironment, getSecretService } from './platform-context';
  * redesigning that is not this correction's business. What changed is that the
  * Hub no longer borrows it and calls it a test of the Hub's own configuration.
  */
-export function integrationTester(): IntegrationTester {
+export interface IntegrationTesterOptions {
+  /**
+   * The SIGNED-IN platform user who pressed Test, and the language of the page
+   * they pressed it on.
+   *
+   * THE EMAIL TEST'S ONLY POSSIBLE RECIPIENT. The integrations action passes
+   * the session's own address here; nothing a form submits can reach it. A
+   * Test button that took an address would be a way to send mail from the
+   * platform's verified domain to anybody, which is the open relay the internal
+   * email route was built not to be.
+   */
+  readonly requester?: { readonly email: string; readonly locale: 'en' | 'ar' };
+}
+
+type TestResult = Awaited<ReturnType<IntegrationTester['test']>>;
+
+export function integrationTester(options: IntegrationTesterOptions = {}): IntegrationTester {
   /**
    * Exchange the saved references for values, here and nowhere else.
    *
@@ -89,19 +109,18 @@ export function integrationTester(): IntegrationTester {
        * Connection on a production deployment is exactly when an owner most
        * needs a truthful answer about a real credential.
        *
-       * TWO CATEGORIES HAVE NO CASE BELOW, both marked `testable: false` in the
-       * registry, and for the same underlying reason: the credential that does
-       * the job is not a credential that can answer a read.
+       * THE TWO REAL VENDORS ARE TESTED BY DOING THEIR ONE JOB, because the
+       * credential that does the job cannot answer a read (PR F):
        *
-       *   - OBJECT STORAGE is configured by the deployment, and the Control
-       *     Center is deliberately not given a bucket credential to test with.
        *   - RESEND asks for a Sending-access key restricted to the verified
-       *     domain. Every non-destructive check Resend offers is a read, and a
-       *     send-only key is refused all of them. A button here could only
-       *     report a working key as broken, demand a wider key, or send an
-       *     unsolicited probe message.
-       *
-       * Both say where the real proof lives instead.
+       *     domain, which Resend refuses every read. So the test SENDS — one
+       *     message, to the signed-in owner's own address and nobody else's.
+       *     That is not an unsolicited probe: the person who pressed the
+       *     button is the person who receives it.
+       *   - OBJECT STORAGE is configured by the deployment, and the Control
+       *     Center deliberately holds no bucket credential. So the test asks
+       *     the API, which does hold it, to write, read back and delete one
+       *     small object, and reports only whether each step worked.
        *
        * So the registry decides, as it does everywhere else: `developmentOnly`
        * is the property, and the refusal follows it rather than the
@@ -203,6 +222,12 @@ export function integrationTester(): IntegrationTester {
           };
         }
 
+        case 'email:resend':
+          return sendTestMessage(input, credentials, options.requester, startedAt);
+
+        case 'storage:cloudflare-r2':
+          return askApiForStorageSelfTest(startedAt);
+
         case 'storage:filesystem':
           return {
             ok: true,
@@ -233,5 +258,218 @@ export function integrationTester(): IntegrationTester {
           };
       }
     },
+  };
+}
+
+/* ------------------------------------------------------------------------ */
+/* Resend — one message, to the signed-in owner                              */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Send the Control Center's test message with the SAVED key and settings.
+ *
+ * THE KEY IS THE ONE THE OWNER SAVED, resolved from the vault one line before
+ * the constructor; the From, name and Reply-To are the saved settings — the
+ * same shape `apps/api/src/email-provider.ts` builds for real delivery, with
+ * the same non-production transport seam (`resendTransportOverride`), so a test
+ * can point it at a fake and production cannot.
+ *
+ * THE RESULT IS A SENTENCE WE WROTE. A refusal says the HTTP status and
+ * Resend's machine code, which the adapter has already reduced to a shape that
+ * cannot carry an address or a request echo; anything else is a fixed
+ * sentence. The recipient address is not in the message either: the
+ * health-check row is read by other operators.
+ */
+async function sendTestMessage(
+  input: Parameters<IntegrationTester['test']>[0],
+  credentials: Readonly<Record<string, string>>,
+  requester: IntegrationTesterOptions['requester'],
+  startedAt: number,
+): Promise<TestResult> {
+  const elapsed = () => Date.now() - startedAt;
+  const to = requester?.email.trim() ?? '';
+  if (!requester || !to) {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message: 'There is no signed-in address to send the test message to, so nothing was sent.',
+    };
+  }
+
+  const apiKey = credentials['apiKey'];
+  const fromEmail = input.settings['fromEmail'];
+  if (!apiKey || !fromEmail) {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message:
+        'The saved configuration is missing the API key or the From address, so nothing was sent.',
+    };
+  }
+
+  let provider: ResendEmailProvider;
+  try {
+    provider = new ResendEmailProvider({
+      apiKey,
+      fromEmail,
+      fromName: input.settings['fromName'],
+      replyTo: input.settings['replyTo'],
+      ...resendTransportOverride(),
+    });
+  } catch {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message: 'The saved API key or From address is empty, so nothing was sent.',
+    };
+  }
+
+  try {
+    await provider.send({
+      to,
+      templateKey: 'integration.test_message',
+      locale: requester.locale === 'ar' ? 'AR' : 'EN',
+    });
+    return {
+      ok: true,
+      latencyMs: elapsed(),
+      message: 'Sent a test message to your address. Check your inbox.',
+    };
+  } catch (error: unknown) {
+    return { ok: false, latencyMs: elapsed(), message: resendFailure(error) };
+  }
+}
+
+/**
+ * The adapter's own refusal sentence, when it is exactly that shape.
+ *
+ * `ResendEmailProvider` reduces a refusal to `Resend refused the message (HTTP
+ * <status>[, <code>][, field: <name>]).` — a status, a lowercase machine code
+ * and one of the field names it sent, never a value. Anything that does not
+ * match that shape exactly is replaced by a fixed sentence rather than trusted.
+ */
+const RESEND_REFUSAL =
+  /^Resend refused the message \(HTTP (\d{3})(, [a-z][a-z0-9_]{0,63})?(, field: [a-z_]{1,16})?\)\.$/;
+
+function resendFailure(error: unknown): string {
+  if (error instanceof AppError) {
+    const refusal = RESEND_REFUSAL.exec(error.message);
+    if (refusal) {
+      return `Resend refused the test message (HTTP ${refusal[1]}${refusal[2] ?? ''}${refusal[3] ?? ''}).`;
+    }
+    if (error.message === 'Resend could not be reached.') {
+      return 'Resend could not be reached, so the test message was not sent.';
+    }
+  }
+  return 'The test message could not be sent.';
+}
+
+/* ------------------------------------------------------------------------ */
+/* Object storage — asked of the API, which holds the bucket credential      */
+/* ------------------------------------------------------------------------ */
+
+const SELF_TEST_PATH = '/v1/internal/storage/self-test';
+const SELF_TEST_TIMEOUT_MS = 10_000;
+const UNREACHABLE = 'The Control Center cannot reach the API to run the storage test.';
+
+const STEP_MESSAGES = {
+  write: 'The test file could not be written.',
+  read: 'The test file could not be read back.',
+  compare: 'The test file read back did not match what was written.',
+  delete: 'The test file could not be deleted.',
+} as const;
+
+type SelfTestStep = keyof typeof STEP_MESSAGES;
+
+interface SelfTestReply {
+  readonly ok: boolean;
+  readonly latencyMs: number;
+  readonly step?: SelfTestStep;
+  readonly notConfigured?: boolean;
+}
+
+/** Parse the API's answer by hand: four known fields, everything else ignored. */
+function parseSelfTestReply(payload: unknown): SelfTestReply | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const record = payload as Record<string, unknown>;
+  if (typeof record['ok'] !== 'boolean') return null;
+  const latencyMs = typeof record['latencyMs'] === 'number' ? record['latencyMs'] : 0;
+  const rawStep = record['step'];
+  const step = (Object.keys(STEP_MESSAGES) as SelfTestStep[]).find((known) => known === rawStep);
+  return {
+    ok: record['ok'],
+    latencyMs,
+    ...(step ? { step } : {}),
+    ...(record['notConfigured'] === true ? { notConfigured: true } : {}),
+  };
+}
+
+/**
+ * Ask the API to write, read back and delete one small object.
+ *
+ * THE SAME CHANNEL AS DELEGATED EMAIL: `BRANDSPACE_API_URL` over the private
+ * network and the shared service token in `x-brandspace-service-token`. The
+ * token goes in that header and nowhere else — not in a message, not in a log.
+ * The API answers with a boolean, a latency and the step that failed; there is
+ * nothing in its answer that could name a bucket, and nothing from a raw error
+ * is passed on.
+ */
+async function askApiForStorageSelfTest(startedAt: number): Promise<TestResult> {
+  const elapsed = () => Date.now() - startedAt;
+  const base = process.env['BRANDSPACE_API_URL']?.trim();
+  const token = process.env['INTERNAL_SERVICE_TOKEN'];
+  if (!base || !token?.trim()) {
+    return { ok: false, latencyMs: elapsed(), message: UNREACHABLE };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${base.replace(/\/+$/, '')}${SELF_TEST_PATH}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-brandspace-service-token': token,
+      },
+      body: '{}',
+      signal: AbortSignal.timeout(SELF_TEST_TIMEOUT_MS),
+    });
+  } catch {
+    return { ok: false, latencyMs: elapsed(), message: UNREACHABLE };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message: `The API did not run the storage test (HTTP ${response.status}).`,
+    };
+  }
+
+  const reply = parseSelfTestReply(await response.json().catch(() => null));
+  if (!reply) {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message: 'The API answered the storage test with something unexpected.',
+    };
+  }
+  if (reply.ok) {
+    return {
+      ok: true,
+      latencyMs: reply.latencyMs,
+      message: 'Wrote, read back and deleted a small test file.',
+    };
+  }
+  if (reply.notConfigured) {
+    return {
+      ok: false,
+      latencyMs: reply.latencyMs,
+      message: 'File storage is not configured on the API, so no test file could be written.',
+    };
+  }
+  return {
+    ok: false,
+    latencyMs: reply.latencyMs,
+    message: STEP_MESSAGES[reply.step ?? 'write'],
   };
 }

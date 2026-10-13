@@ -8,6 +8,7 @@ import { writeAuditEvent } from '@brandspace/database';
 import { AppError, createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
 import {
   CHANNEL_DISCONNECTED_REASON,
+  CHANNELS_NOT_CONNECTABLE_REASON,
   PROPOSED_TIME_LOCKED_REASON,
   SCHEDULE_IN_PAST_REASON,
   TEMPLATES_MANAGE_PERMISSION,
@@ -1044,7 +1045,9 @@ export async function scheduleFromStudioAction(formData: FormData): Promise<void
         ? 'SCHEDULE_IN_PAST'
         : isAppError(error) && error.publicDetails['reason'] === CHANNEL_DISCONNECTED_REASON
           ? CHANNEL_DISCONNECTED_REASON
-          : actionErrorCode(error);
+          : isAppError(error) && error.publicDetails['reason'] === CHANNELS_NOT_CONNECTABLE_REASON
+            ? CHANNELS_NOT_CONNECTABLE_REASON
+            : actionErrorCode(error);
     destination = pageUrl(locale, '/compose', { item: itemId, error: code, ref: correlationId });
   }
   revalidatePath(`/${locale}/calendar`);

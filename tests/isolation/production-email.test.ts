@@ -288,28 +288,28 @@ describe('the owner saves the Resend credential from the Hub', () => {
   });
 });
 
-describe('Resend is not testable from the Hub, and that is deliberate', () => {
+describe('Resend is tested by sending one message to the signed-in owner (PR F)', () => {
   /*
-   * THE LEAST-PRIVILEGE CREDENTIAL DECIDES THE SURFACE.
+   * THE LEAST-PRIVILEGE CREDENTIAL STILL DECIDES THE SURFACE.
    *
    * BrandSpace asks for a Resend SENDING-ACCESS key restricted to the verified
    * sending domain. It can send and do nothing else — every non-destructive
    * check Resend offers is a read, and a send-only key is refused all of them.
    *
-   * A Test Connection button therefore had three possible behaviours: report a
-   * correctly-scoped production key as broken, demand a Full Access key to make
-   * the tick go green, or send an unsolicited probe message to a real inbox.
-   * The registry marks the provider `testable: false` instead, and the proof
-   * the key works is the controlled smoke email the owner performs after
-   * activation.
+   * So the Test does the key's one job: the Control Center sends ONE fixed
+   * message to the signed-in owner's own address (`integration.test_message`),
+   * with the key and settings the owner saved. The tester itself is unit-tested
+   * against a fake transport (tests/unit/pr-f-integration-tests.test.ts); what
+   * this suite proves against real PostgreSQL is the service's half — the
+   * tester is now reached, it is handed REFERENCES rather than the value, and
+   * the recorded result never carries the key.
    *
-   * SAVE AND ACTIVATE REMAIN SEPARATE. Removing the middle step does not merge
-   * the other two, which the surrounding suites assert.
+   * SAVE, TEST AND ACTIVATE REMAIN SEPARATE, which the surrounding suites
+   * assert.
    */
-  it('declares itself untestable rather than failing an honest key', () => {
+  it('declares itself testable, and is still a real adapter', () => {
     const definition = findIntegration(CATEGORY, PROVIDER);
-    expect(definition?.testable).toBe(false);
-    // Still a real, usable adapter — untestable is not unavailable.
+    expect(definition?.testable).toBe(true);
     expect(definition?.adapterAvailable).toBe(true);
     expect(definition?.developmentOnly).toBe(false);
   });
@@ -321,24 +321,17 @@ describe('Resend is not testable from the Hub, and that is deliberate', () => {
     expect(apiKey?.helpEn).toContain('Do not use a Full Access key');
   });
 
-  it('explains the missing button on the screen, in both languages', () => {
+  it('says on the screen who receives the test message, in both languages', () => {
     const definition = findIntegration(CATEGORY, PROVIDER);
-    expect(definition?.noteEn).toContain('no Test connection button');
-    expect(definition?.noteEn).toContain('smoke email');
+    expect(definition?.noteEn).toContain('one short test message to your own address');
+    expect(definition?.noteEn).toContain('to nobody else');
+    expect(definition?.noteAr).toContain('رسالة اختبار');
     expect(definition?.noteAr).not.toBe(definition?.noteEn);
     expect(definition?.noteAr.length).toBeGreaterThan(40);
   });
 
-  it('REFUSES a test request at the service, not merely by hiding a button', async () => {
-    /*
-     * THE SCREEN HIDES THE BUTTON; THIS IS WHAT ENFORCES IT. A server action is
-     * reachable by anybody who can reach the action, so an omitted control is
-     * presentation rather than authorisation. Without the guard the request
-     * would fall through to the tester, find no case for Resend, and record a
-     * "no connection test is implemented" failure against a healthy
-     * integration — a red mark an owner would act on.
-     */
-    let testerRan = false;
+  it('reaches the tester with REFERENCES only, records the pass, and keeps the key out of it', async () => {
+    let seen: { credentialRefs: unknown; settings: Readonly<Record<string, string>> } | null = null;
 
     const view = await integrations.testConnection({
       actor: owner(),
@@ -346,29 +339,53 @@ describe('Resend is not testable from the Hub, and that is deliberate', () => {
       providerKey: PROVIDER,
       environment: ENV,
       tester: {
-        async test() {
-          testerRan = true;
-          return { ok: true, latencyMs: 1, message: 'This must never run.' };
+        async test(input) {
+          seen = { credentialRefs: input.credentialRefs, settings: input.settings };
+          return {
+            ok: true,
+            latencyMs: 3,
+            message: 'Sent a test message to your address. Check your inbox.',
+          };
         },
       },
       requestedByPlatformUserId: ownerId,
     });
 
-    expect(testerRan, 'no adapter may be reached for an untestable provider').toBe(false);
-    expect(view.connection).not.toBe('ok');
+    expect(seen, 'a testable provider must reach its tester').not.toBeNull();
+    const handed = seen as unknown as {
+      credentialRefs: Record<string, string>;
+      settings: Record<string, string>;
+    };
+    // A pointer the tester exchanges in the vault, never the value itself.
+    expect(handed.credentialRefs['apiKey']).toMatch(/^integration\/email\/resend\//);
+    expect(handed.settings['fromEmail']).toBe(FROM_EMAIL);
+    expect(JSON.stringify(handed)).not.toContain(FAKE_RESEND_KEY);
 
-    // The refusal is RECORDED, and says why rather than reporting a failure.
+    // The pass is what readiness reads as "ready".
+    expect(view.connection).toBe('ok');
     const [latest] = await platform.integrationHealthCheck.findMany({
       where: { category: CATEGORY, providerKey: PROVIDER, environment: ENV },
       orderBy: { checkedAt: 'desc' },
       take: 1,
     });
-    expect(latest?.outcome).toBe('REFUSED');
-    expect(latest?.message).toContain('cannot be tested from here');
+    expect(latest?.outcome).toBe('OK');
+    expect(latest?.message).toContain('Sent a test message');
     expect(JSON.stringify(latest)).not.toContain(FAKE_RESEND_KEY);
+
+    // Requested and result are both audited, without the key.
+    const audits = await platform.auditEvent.findMany({
+      where: {
+        actorId: ownerId,
+        action: { in: ['integration.test.requested', 'integration.test.result'] },
+      },
+    });
+    expect(new Set(audits.map((event) => event.action))).toEqual(
+      new Set(['integration.test.requested', 'integration.test.result']),
+    );
+    expect(JSON.stringify(audits)).not.toContain(FAKE_RESEND_KEY);
   });
 
-  it('is still inactive: nothing about removing the test activated it', async () => {
+  it('is still inactive: testing activated nothing', async () => {
     const view = await integrations.get(owner(), CATEGORY, PROVIDER, ENV);
     expect(view.enabled).toBe(false);
 

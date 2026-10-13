@@ -34,6 +34,8 @@ export {
   createVirusScanner,
   EICAR_TEST_STRING,
   MockVirusScanner,
+  NoVirusScanner,
+  ScaniiVirusScanner,
   SCAN_FAILURE_PROBE,
   type ScanResult,
   type ScanVerdict,

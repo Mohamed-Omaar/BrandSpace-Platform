@@ -41,6 +41,7 @@ import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
 import { StudioCopilotButton } from './studio-copilot';
+import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 import type {
   ComposerDraft,
   ComposerPlatform,
@@ -104,6 +105,8 @@ export interface DraftEditorProps {
   readonly brandName: string;
   readonly brandHandle: string;
   readonly tools: readonly string[];
+  /** PR F (b), Q9 — "AI isn't available yet." in place of the AI edits. */
+  readonly aiOff?: string | null;
   readonly busy: string | null;
   readonly now: number;
   readonly can: {
@@ -302,6 +305,7 @@ export function DraftEditor({
   brandName,
   brandHandle,
   tools,
+  aiOff = null,
   busy,
   now,
   can,
@@ -1254,7 +1258,18 @@ export function DraftEditor({
     (draft.status === 'DRAFT' ||
       draft.status === 'CHANGES_REQUESTED' ||
       draft.status === 'APPROVED');
+  /*
+   * PR F (b), Q8 — WHILE NONE OF THIS POST'S CHANNELS CAN BE CONNECTED, nothing
+   * offers to schedule or publish it: the proposed time is still kept (the
+   * When panel stays), the calendar still shows it on its day, and Approve
+   * still works. The line beside "Post to" says why. The server refuses the
+   * same thing on its own (`CHANNELS_NOT_CONNECTABLE`).
+   */
+  const canGoOut =
+    !channelAccess ||
+    draft.variants.some((variant) => channelAccess.connectable.includes(variant.platformKey));
   const mayScheduleHere = Boolean(
+    canGoOut &&
     can.schedule &&
     ((draft.status === 'DRAFT' && review && !review.requiresApproval) ||
       draft.status === 'APPROVED'),
@@ -2276,6 +2291,7 @@ export function DraftEditor({
                             : t[`content.validation.${variant.validationState}`]}
                         </span>
                       </span>
+                      {can.edit && aiOff ? <AiUnavailableLine text={aiOff} /> : null}
                       {/* §20 — small changes where the text is; no Copilot needed. */}
                       {can.edit && actionsFor.length > 0 ? (
                         <div

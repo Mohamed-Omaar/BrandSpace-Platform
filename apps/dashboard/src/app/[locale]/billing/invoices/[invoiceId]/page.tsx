@@ -1,7 +1,9 @@
+import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { formatMoneyDisplay, type Money, systemClock } from '@brandspace/shared';
 import { colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
 import { requireWorkspace } from '../../../../../server/customer-context';
+import { paymentsSwitchedOn } from '../../../../../server/payments-switch';
 import { commerceSnapshotFor, invoiceDetailFor } from '../../../../../server/commerce-context';
 import { brandContextFor } from '../../../../../server/brand-context';
 import { translator, type MessageKey } from '../../../../../i18n/messages';
@@ -36,6 +38,8 @@ export default async function InvoicePage({
 }: {
   params: Promise<{ locale: string; invoiceId: string }>;
 }) {
+  // PR F (a): with payments off this page does not exist.
+  if (!(await paymentsSwitchedOn())) notFound();
   const { locale, invoiceId } = await params;
   const { customer, workspace, messageLocale } = await requireWorkspace(locale, 'billing.read');
   const t = translator(messageLocale);

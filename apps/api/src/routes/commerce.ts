@@ -21,6 +21,7 @@ import {
   commercePolicy,
   creditNoteService,
   invoiceService,
+  paymentsSwitchedOff,
   planCatalogue,
   providerFor,
   subscriptionLifecycle,
@@ -248,6 +249,7 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
       idempotent: true,
     },
     async (req, reply) => {
+      if (await paymentsSwitchedOff()) return reply.callNotFound();
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
       const parsed = openSubscriptionSchema.safeParse(req.body);
@@ -295,6 +297,7 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
       idempotent: true,
     },
     async (req, reply) => {
+      if (await paymentsSwitchedOff()) return reply.callNotFound();
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
       const parsed = openPackSchema.safeParse(req.body);
@@ -338,6 +341,7 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
     '/v1/commerce/checkout/:id',
     { scope: 'workspace', permission: READ },
     async (req, reply) => {
+      if (await paymentsSwitchedOff()) return reply.callNotFound();
       const caller = await resolveCaller(req, reply, READ);
       if (!caller) return;
       const params = idParamSchema.safeParse(req.params);
@@ -463,6 +467,7 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
     '/v1/commerce/subscription',
     { scope: 'workspace', permission: READ },
     async (req, reply) => {
+      if (await paymentsSwitchedOff()) return reply.callNotFound();
       const caller = await resolveCaller(req, reply, READ);
       if (!caller) return;
       try {
@@ -515,6 +520,7 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
     '/v1/commerce/subscription/preview',
     { scope: 'workspace', permission: MANAGE, idempotent: true },
     async (req, reply) => {
+      if (await paymentsSwitchedOff()) return reply.callNotFound();
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
       const parsed = planChangeSchema.safeParse(req.body);
@@ -582,6 +588,7 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
       idempotent: true,
     },
     async (req, reply) => {
+      if (await paymentsSwitchedOff()) return reply.callNotFound();
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
       const parsed = planChangeSchema.safeParse(req.body);
@@ -615,6 +622,7 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
     '/v1/commerce/subscription/downgrade/cancel',
     { scope: 'workspace', permission: MANAGE, idempotent: true },
     async (req, reply) => {
+      if (await paymentsSwitchedOff()) return reply.callNotFound();
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
       try {
@@ -650,6 +658,7 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
       idempotent: true,
     },
     async (req, reply) => {
+      if (await paymentsSwitchedOff()) return reply.callNotFound();
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
       const parsed = cancelSchema.safeParse(req.body);
@@ -679,6 +688,7 @@ export function registerCommerceRoutes(app: FastifyInstance): void {
     '/v1/commerce/subscription/resume',
     { scope: 'workspace', permission: MANAGE, idempotent: true },
     async (req, reply) => {
+      if (await paymentsSwitchedOff()) return reply.callNotFound();
       const caller = await resolveCaller(req, reply, MANAGE);
       if (!caller) return;
       try {

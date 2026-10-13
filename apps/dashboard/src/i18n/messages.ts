@@ -241,6 +241,7 @@ export const messages = {
     'ws.usageUnlimited': 'مساحات العمل: {used}',
     'ws.new': '+ مساحة عمل جديدة',
     'ws.limitReached': 'وصلت إلى عدد مساحات العمل في باقتك. رقِّ الباقة لإضافة مساحة أخرى.',
+    'ws.limitReachedPlain': 'وصلت إلى عدد مساحات العمل في باقتك.',
     'ws.limitToast': 'تتضمن باقتك {allowed} من مساحات العمل، وقد استخدمتها كلها.',
     'ws.createWorkspace': 'إنشاء مساحة عمل',
     'ws.limitNote': 'تشمل باقتك {allowed} من مساحات العمل، وتستخدمها كلها ({used}/{allowed}).',
@@ -848,6 +849,7 @@ export const messages = {
     'plan.ledgerType.TRIAL_GRANT': 'رصيد التجربة',
     'plan.historyNone': 'لا توجد حركات بعد.',
     'plan.upgradeTitle': 'ما الذي تفتحه الترقية',
+    'plan.notIncludedTitle': 'غير مشمول في خطتك',
     'plan.upgradeBody': 'هذه الإمكانات غير متاحة في خطتك الحالية. تواصل معنا لترقية الخطة.',
     'plan.hardStop':
       'عند نفاد الرصيد تتوقف إجراءات الذكاء الاصطناعي برسالة واضحة. لا توجد رسوم تجاوز ولا مبالغ مفاجئة على الفاتورة.',
@@ -935,6 +937,8 @@ export const messages = {
     // --- The functional states a file passes through ---
     'assets.state.processing': 'قيد المعالجة',
     'assets.state.processingHint': 'يجري فحص الملف. سيصبح متاحًا بعد انتهاء الفحص.',
+    'assets.state.processingHintNoScan': 'يجري تجهيز الملف. سيصبح متاحًا خلال لحظات.',
+    'assets.state.securityCheck': 'بانتظار الفحص الأمني',
     'assets.state.ready': 'جاهز',
     'assets.state.quarantined': 'محجوز',
     'assets.state.quarantinedHint': 'لم يجتز هذا الملف الفحص الأمني، ولا يمكن استخدامه أو تنزيله.',
@@ -1810,6 +1814,22 @@ export const messages = {
     'upload.uploading': 'جارٍ رفع {name}…',
     'assets.uploadedSome': 'رُفع {count}. لم يُرفع: {files}',
     'upload.connection': 'لم يصلنا الملف. تحقّق من اتصالك وحاول مرة أخرى.',
+    'upload.notScanned':
+      'لا تُفحص الملفات بحثًا عن البرمجيات الضارة خلال الفترة التجريبية. ترفعها وتفتحها على مسؤوليتك.',
+    'upload.notScannedLink': 'اقرأ الشروط',
+    // PR F, Q11 — the public legal pages.
+    // PR F (b), Q9 — the one line every AI surface shows while AI cannot run.
+    'ai.unavailable': 'الذكاء الاصطناعي غير متاح بعد.',
+    'aiSettings.appliesLater': 'الذكاء الاصطناعي غير متاح بعد. تُطبَّق هذه الإعدادات عند إتاحته.',
+    'legal.eyebrow': 'المستندات القانونية',
+    'legal.version': 'الإصدار:',
+    'legal.draftNotice':
+      'مسودة للفترة التجريبية المغلقة. لم يراجع محامٍ هذا النص بعد، وسيُستبدل قبل الإطلاق العام.',
+    'legal.contents': 'المحتويات',
+    'legal.documentsNav': 'المستندات القانونية',
+    'legal.languageNav': 'اللغة',
+    'legal.changeLanguage': 'تغيير اللغة',
+    'legal.signIn': 'العودة إلى تسجيل الدخول',
     'upload.checking': 'جارٍ فحص {name}…',
     'upload.change': 'تغيير',
     'upload.remove': 'إزالة',
@@ -2076,6 +2096,7 @@ export const messages = {
     'studio.briefHint': 'يكتب الذكاء الاصطناعي النص أدناه انطلاقًا من هذه الفكرة.',
     'studio.aiWrite': 'اكتب النص بالذكاء الاصطناعي',
     'studio.capPlaceholder': 'اكتبه بنفسك، أو دع الذكاء الاصطناعي يكتبه من الموضوع أعلاه.',
+    'studio.capPlaceholderManual': 'اكتب نص المنشور.',
     'studio.toolsAfterSave': 'تعمل تعديلات الذكاء الاصطناعي على المسودة المحفوظة.',
     'studio.designAfterSave': 'تُضاف الصور والفيديو إلى المسودة بعد حفظها.',
     'studio.saveDraft': 'حفظ المسودة',
@@ -2164,6 +2185,7 @@ export const messages = {
     'integrations.accountsBody': 'الحسابات التي تستطيع Brandspace النشر إليها نيابةً عنك.',
     'integrations.emptyTitle': 'لا توجد حسابات متصلة بعد',
     'integrations.emptyBody': 'اربط حسابًا لتتمكن من نشر المحتوى المجدول تلقائيًا.',
+    'integrations.notAvailableYet': 'ربط حسابات التواصل الاجتماعي غير متاح بعد.',
     'integrations.connectEyebrow': 'ربط',
     'integrations.selectTargetTitle': 'اختر الصفحة التي سننشر عليها',
     'integrations.selectTargetBody':
@@ -3447,6 +3469,7 @@ export const messages = {
     'nav.billing': 'الفوترة والاستخدام',
     'billing.tabPayments': 'الخطة والمدفوعات',
     'billing.tabUsage': 'الاستخدام والحدود',
+    'billing.tabPlan': 'الخطة',
     'billing.title': 'الفوترة والاستخدام',
     'billing.subtitle': 'خطتك، رصيدك، فواتيرك ومشترياتك.',
     'billing.currencyNotice': 'كل المبالغ بالعملة التي اخترتها عند إنشاء حسابك.',
@@ -3463,6 +3486,7 @@ export const messages = {
     'billing.status.PAUSED': 'متوقّف مؤقتًا',
     'billing.status.CHECKOUT_PENDING': 'بانتظار تأكيد الدفع',
     'billing.renews': 'يتجدّد في',
+    'billing.ended': 'انتهت في',
     'billing.trialEnds': 'تنتهي الفترة التجريبية في',
     'billing.noSubscription': 'لا يوجد اشتراك بعد',
     'billing.noSubscriptionBody':
@@ -3497,6 +3521,7 @@ export const messages = {
     'billing.creditsPrepaid':
       'الرصيد مدفوع مسبقًا. عند الوصول إلى صفر تتوقف عمليات الذكاء الاصطناعي، ولا يوجد رصيد مكشوف ولا دين لاحق.',
     'billing.creditsZero': 'لا يوجد رصيد. أضف حزمة أو غيّر خطتك للمتابعة.',
+    'billing.creditsNone': 'لا يوجد رصيد متبقٍ.',
     'billing.packs': 'حزم الرصيد',
     'billing.buyCredits': 'شراء {credits} رصيد',
     'billing.usageLink': 'الاستخدام والحدود',
@@ -4264,6 +4289,7 @@ export const messages = {
     'ws.usageUnlimited': 'Workspaces: {used}',
     'ws.new': '+ New workspace',
     'ws.limitReached': 'You have reached your plan’s workspace limit. Upgrade to add another.',
+    'ws.limitReachedPlain': 'You have reached your plan’s workspace limit.',
     'ws.limitToast': 'Your plan includes {allowed} workspaces, and all of them are in use.',
     'ws.createWorkspace': 'Create workspace',
     'ws.limitNote':
@@ -4883,6 +4909,7 @@ export const messages = {
     'plan.ledgerType.TRIAL_GRANT': 'Trial credits',
     'plan.historyNone': 'No credit movements yet.',
     'plan.upgradeTitle': 'What an upgrade unlocks',
+    'plan.notIncludedTitle': 'Not included in your plan',
     'plan.upgradeBody':
       'These capabilities are not part of your current plan. Get in touch to change plan.',
     'plan.hardStop':
@@ -4973,6 +5000,9 @@ export const messages = {
     'assets.state.processing': 'Processing',
     'assets.state.processingHint':
       'This file is being scanned. It becomes available once the scan finishes.',
+    'assets.state.processingHintNoScan':
+      'This file is being prepared. It becomes available in a moment.',
+    'assets.state.securityCheck': 'Waiting for a security check',
     'assets.state.ready': 'Ready',
     'assets.state.quarantined': 'Quarantined',
     'assets.state.quarantinedHint':
@@ -5872,6 +5902,22 @@ export const messages = {
     'upload.uploading': 'Uploading {name}…',
     'assets.uploadedSome': '{count} uploaded. Not uploaded: {files}',
     'upload.connection': 'The upload didn’t reach us. Check your connection and try again.',
+    'upload.notScanned':
+      'Files aren’t scanned for malware during the beta. You upload and open them at your own risk.',
+    'upload.notScannedLink': 'Read the terms',
+    // PR F, Q11 — the public legal pages.
+    // PR F (b), Q9 — the one line every AI surface shows while AI cannot run.
+    'ai.unavailable': 'AI isn’t available yet.',
+    'aiSettings.appliesLater': 'AI isn’t available yet. These settings apply once it is.',
+    'legal.eyebrow': 'Legal',
+    'legal.version': 'Version:',
+    'legal.draftNotice':
+      'Draft for the closed beta. A lawyer has not yet reviewed this text, and it will be replaced before the public launch.',
+    'legal.contents': 'Contents',
+    'legal.documentsNav': 'Legal documents',
+    'legal.languageNav': 'Language',
+    'legal.changeLanguage': 'Change language',
+    'legal.signIn': 'Back to sign in',
     'upload.checking': 'Checking {name}…',
     'upload.change': 'Change',
     'upload.remove': 'Remove',
@@ -6144,6 +6190,7 @@ export const messages = {
     'studio.briefHint': 'AI writes the caption below from this idea.',
     'studio.aiWrite': 'Write caption with AI',
     'studio.capPlaceholder': 'Write it yourself, or let AI write it from the topic above.',
+    'studio.capPlaceholderManual': 'Write the caption.',
     'studio.toolsAfterSave': 'AI edits work on the saved draft.',
     'studio.designAfterSave': 'Pictures and video are added to the draft once it is saved.',
     'studio.saveDraft': 'Save draft',
@@ -6237,6 +6284,7 @@ export const messages = {
     'integrations.accountsBody': 'The accounts Brandspace can publish to on your behalf.',
     'integrations.emptyTitle': 'No accounts connected yet',
     'integrations.emptyBody': 'Connect an account so scheduled content can publish automatically.',
+    'integrations.notAvailableYet': 'Connecting social accounts isn’t available yet.',
     'integrations.connectEyebrow': 'Connect',
     'integrations.selectTargetTitle': 'Choose the page to publish to',
     'integrations.selectTargetBody':
@@ -7579,6 +7627,7 @@ export const messages = {
     'nav.billing': 'Billing & usage',
     'billing.tabPayments': 'Plan & payments',
     'billing.tabUsage': 'Usage & limits',
+    'billing.tabPlan': 'Plan',
     'billing.title': 'Billing & usage',
     'billing.subtitle': 'Your plan, your balance, your invoices and your purchases.',
     'billing.currencyNotice':
@@ -7596,6 +7645,7 @@ export const messages = {
     'billing.status.PAUSED': 'Paused',
     'billing.status.CHECKOUT_PENDING': 'Waiting for payment confirmation',
     'billing.renews': 'Renews on',
+    'billing.ended': 'Ended on',
     'billing.trialEnds': 'Trial ends on',
     'billing.noSubscription': 'No subscription yet',
     'billing.noSubscriptionBody':
@@ -7631,6 +7681,7 @@ export const messages = {
     'billing.creditsPrepaid':
       'Credits are prepaid. At zero, AI operations stop — there is no overdraft and no later bill.',
     'billing.creditsZero': 'No credits left. Add a pack or change your plan to continue.',
+    'billing.creditsNone': 'No credits left.',
     'billing.packs': 'Credit packs',
     'billing.buyCredits': 'Buy {credits} credits',
     'billing.usageLink': 'Usage & limits',
@@ -8319,6 +8370,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     en: 'This post was scheduled again, so this attempt is not retried.',
     ar: 'جُدول هذا المنشور مرة أخرى، لذا لا تُعاد هذه المحاولة.',
   },
+  // PR F (b), Q8 — none of the post's channels can be connected yet.
+  CHANNELS_NOT_CONNECTABLE: {
+    en: 'None of this post’s channels can be connected yet, so it can’t be scheduled or published. Its proposed time is kept.',
+    ar: 'لا يمكن ربط أيٍّ من قنوات هذا المنشور بعد، لذا لا يمكن جدولته أو نشره. ووقته المقترح محفوظ.',
+  },
   // Q9 (D-332) — every account for one of the post's channels was revoked.
   CHANNEL_DISCONNECTED: {
     en: 'An account for one of this post’s channels was disconnected, so nothing could be sent there. Connect it again, or remove that channel.',
@@ -8476,16 +8532,16 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
    * kind of wall and the fact that it is clearable.
    */
   QUOTA_EXCEEDED: {
-    en: 'Your account has reached a limit on its plan. Free some space or ask an admin to change the plan.',
-    ar: 'وصل حسابك إلى أحد حدود خطته. أفرِغ بعض المساحة أو اطلب من المسؤول تغيير الخطة.',
+    en: 'Your account has reached a limit on its plan. Free some space to continue.',
+    ar: 'وصل حسابك إلى أحد حدود خطته. أفرِغ بعض المساحة للمتابعة.',
   },
   ENTITLEMENT_REQUIRED: {
-    en: 'Your plan does not include that. An admin can change the plan.',
-    ar: 'خطتك لا تشمل هذا. يمكن للمسؤول تغيير الخطة.',
+    en: 'Your plan does not include that.',
+    ar: 'خطتك لا تشمل هذا.',
   },
   INSUFFICIENT_CREDITS: {
-    en: 'There are not enough AI credits for that. Top up or wait for the next allowance.',
-    ar: 'لا يوجد رصيد ذكاء اصطناعي كافٍ. أضف رصيدًا أو انتظر المخصّص التالي.',
+    en: 'There are not enough AI credits for that.',
+    ar: 'لا يوجد رصيد ذكاء اصطناعي كافٍ لهذا.',
   },
   MEMBER_INVITED: { en: 'Invitation sent.', ar: 'تم إرسال الدعوة.' },
   MEMBER_REMOVED: { en: 'Member removed.', ar: 'تمت إزالة العضو.' },

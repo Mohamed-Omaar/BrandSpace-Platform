@@ -649,7 +649,15 @@ export async function SimpleIntegrationSetup({
           locale={locale}
           n={next()}
           title={copy('setup.test')}
-          description={view.testable ? copy('setup.testIntro') : undefined}
+          description={
+            !view.testable
+              ? undefined
+              : view.category === 'email' && view.providerKey === 'resend'
+                ? copy('setup.testIntroEmail')
+                : view.category === 'storage' && view.providerKey === 'cloudflare-r2'
+                  ? copy('setup.testIntroStorage')
+                  : copy('setup.testIntro')
+          }
           status={!view.testable ? 'blocked' : view.connection === 'ok' ? 'done' : 'todo'}
           testId="step-test"
         >

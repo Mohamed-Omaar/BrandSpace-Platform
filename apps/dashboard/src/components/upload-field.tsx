@@ -53,6 +53,10 @@ export interface UploadTexts {
   readonly uploading: string;
   /** `The upload didn’t reach us. Check your connection and try again.` */
   readonly connection: string;
+  /** PR F (g): `Files aren’t scanned for malware during the beta. Upload and open them at your own risk.` */
+  readonly notScanned: string;
+  /** PR F (g): the link to the Terms clause, `See the terms`. */
+  readonly notScannedLink: string;
 }
 
 /** The upload words from a translator, for client components that translate themselves. */
@@ -64,6 +68,8 @@ export function uploadTexts(t: (key: MessageKey) => string): UploadTexts {
     refusedEmpty: t('upload.refusedEmpty'),
     uploading: t('upload.uploading'),
     connection: t('upload.connection'),
+    notScanned: t('upload.notScanned'),
+    notScannedLink: t('upload.notScannedLink'),
   };
 }
 
@@ -233,6 +239,7 @@ export function UploadForm({
         aria-busy={pending || undefined}
       >
         {children}
+        {rules.notScanned ? <UploadNotScannedLine /> : null}
       </form>
     </UploadContext.Provider>
   );
@@ -283,6 +290,23 @@ export function UploadFileInput({
         if (submitOnChoose) element.form?.requestSubmit();
       }}
     />
+  );
+}
+
+/**
+ * PR F (g), Q13 — ONE SHORT LINE UNDER EVERY UPLOAD CONTROL while files are not
+ * scanned for malware, linking to the Terms clause that says what that means.
+ * Drawn by `UploadForm` itself, so no control can be left without it.
+ */
+function UploadNotScannedLine() {
+  const { locale, texts } = useUpload();
+  return (
+    <span className="bsp-up-rules bsp-up-noscan" data-testid="upload-not-scanned">
+      {texts.notScanned}{' '}
+      <a href={`/${locale}/terms#uploads`} target="_blank" rel="noopener">
+        {texts.notScannedLink}
+      </a>
+    </span>
   );
 }
 

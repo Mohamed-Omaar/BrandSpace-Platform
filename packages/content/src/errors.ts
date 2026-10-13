@@ -208,6 +208,23 @@ export function channelDisconnected(platformKeys: readonly string[]): AppError {
   );
 }
 
+/**
+ * PR F (b), Q8 — NONE OF THE POST'S CHANNELS CAN BE CONNECTED YET
+ * (`publishing.providers.<x>.enabled` is off for every one of them), so the
+ * post can neither be scheduled nor published: nothing reaches the publishing
+ * queue. The controls are hidden; this is the server's own answer to a stale
+ * form. A proposed time is still kept, and Approve still works.
+ */
+export const CHANNELS_NOT_CONNECTABLE_REASON = 'CHANNELS_NOT_CONNECTABLE';
+
+export function channelsNotConnectable(platformKeys: readonly string[]): AppError {
+  return new AppError(
+    'CONFLICT',
+    "None of this post's channels can be connected yet, so it cannot be scheduled or published.",
+    { reason: CHANNELS_NOT_CONNECTABLE_REASON, channels: platformKeys.join(',') },
+  );
+}
+
 /** The item already has a live slot. Reschedule it rather than adding a second. */
 export function alreadyScheduled(): AppError {
   return new AppError('CONFLICT', 'This content is already on the calendar.');

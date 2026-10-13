@@ -835,15 +835,16 @@ workers, sharding, reporter and test selection did not change.
 
 Found when the owner tested staging. None of these is code; each is a setting or a decision.
 
-1. **Trial credits.** A new workspace's credits card reads "200 of 500": the trial subscription
-   carries the plan's monthly credit figure (500) while the trial grant is 200. The owner sets the
-   trial grant in Control Center → Plans (the trial values), so the two figures agree before launch.
-2. **Industries.** Only two industries are configured. The rest are added in the Control Center;
-   nothing seeds them.
+1. **Trial credits.** ~~A new workspace's credits card reads "200 of 500"~~ — fixed in PR F
+   (D-514): during a trial, Home reads "n of" the trial grant and shows no reset date. The trial
+   grant (200) and the monthly figure (500, confirmed by the owner) are set in Control Center → Plans.
+2. **Industries.** Only two industries are configured on staging. PR F's
+   `docs/production-config/onboarding.json` carries twelve, for the owner to confirm and activate.
 3. **Open question for the owner — the server region.** Staging runs in Amsterdam and the owner
    tested from Egypt; every request pays that distance before any work is done (the server's own
    times were healthy: p50 18 ms). Moving the region closer to the customers, or adding one, is an
-   owner decision on hosting, not a code change, and is not made here.
+   owner decision on hosting, not a code change, and is not made here. PR F still leaves it open:
+   the legal text carries it as the `[HOSTING REGION]` placeholder.
 4. **Channel post kinds (round 6, D-481).** A new environment ships every channel disabled and
    text-only, so a customer can make only a text Post, and the Control Center shows the warning
    "Publishing is not configured: customers can only make text posts." until this is set. Formats
@@ -887,6 +888,21 @@ Found when the owner tested staging. None of these is code; each is a setting or
    (or a workspace override of `limit.brands`) brings the brand menu and "+ Add a brand" back on
    the next page, with no release; adding a second brand also needs the multi-brand feature on
    (D-327). PR F sets this in the production values and adds a readiness row for it.
+7. **The closed beta's switches (PR F, D-507 to D-513).** Every value is in
+   `docs/production-config/` with the Control Center steps in its README, and the release order in
+   `docs/GO-LIVE-RUNBOOK.md`:
+   - **Payments off** (`commerce.payments.enabled: false`): no price, purchase, invoice or pack is
+     shown, the payment routes answer 404, and a trial does not end (D-508, D-509).
+   - **AI off** until a provider, model and route are active: every AI control is hidden and
+     "AI isn't available yet." stands in its place; activating them in Configuration turns the
+     controls on with no release (D-507).
+   - **No channel connectable** (`publishing.providers.*.enabled: false`): Schedule and Publish now
+     are hidden and refused (D-510).
+   - **Scanning off** (`assets.scanning.provider: "none"`): uploads say they are not scanned and are
+     served as attachments; Scanii is the production scanner, keyed on the worker (D-511).
+   - **Legal pages are drafts** until a lawyer reviews them and `reviewed: true` is set (D-512).
+   - The Control Center's readiness page shows each as a row; "Beta only" passes the closed beta
+     and never a public launch (D-513).
 
 ## 13. Incident log
 

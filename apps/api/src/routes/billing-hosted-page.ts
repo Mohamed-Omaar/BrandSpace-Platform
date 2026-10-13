@@ -11,7 +11,7 @@ import { getPlatformClient } from '@brandspace/database/platform';
 import { Money, createLogger, internalErrorFields, systemClock } from '@brandspace/shared';
 import { route } from '../route-contract';
 import { currentEnvironment } from './phase7-context';
-import { providerFor } from './phase9-context';
+import { paymentsSwitchedOff, providerFor } from './phase9-context';
 
 /**
  * The DEVELOPMENT provider's hosted page — a stand-in for somebody else's site.
@@ -73,6 +73,7 @@ export async function registerBillingHostedPageRoutes(app: FastifyInstance): Pro
       '/billing/checkout/:providerSessionId',
       { scope: 'public' },
       async (req, reply) => {
+        if (await paymentsSwitchedOff()) return reply.callNotFound();
         const params = sessionParamSchema.safeParse(req.params);
         if (!params.success) return reply.code(404).send();
         const session = await loadSession(params.data.providerSessionId);
@@ -117,6 +118,7 @@ export async function registerBillingHostedPageRoutes(app: FastifyInstance): Pro
       '/billing/checkout/:providerSessionId/pay',
       { scope: 'public', idempotent: true },
       async (req, reply) => {
+        if (await paymentsSwitchedOff()) return reply.callNotFound();
         const params = sessionParamSchema.safeParse(req.params);
         if (!params.success) return reply.code(404).send();
         const session = await loadSession(params.data.providerSessionId);
@@ -167,6 +169,7 @@ export async function registerBillingHostedPageRoutes(app: FastifyInstance): Pro
       '/billing/checkout/:providerSessionId/cancel',
       { scope: 'public', idempotent: true },
       async (req, reply) => {
+        if (await paymentsSwitchedOff()) return reply.callNotFound();
         const params = sessionParamSchema.safeParse(req.params);
         if (!params.success) return reply.code(404).send();
         const session = await loadSession(params.data.providerSessionId);

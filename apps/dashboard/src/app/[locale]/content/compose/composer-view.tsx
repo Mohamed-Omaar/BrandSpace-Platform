@@ -16,6 +16,7 @@ import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
 import { StudioCopilotButton } from './studio-copilot';
+import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 import { ChannelAccessLine, type ChannelAccess } from './channel-access-line';
 import { fitOf, formatForChannels, listOf } from './format-fit';
 import {
@@ -291,6 +292,19 @@ export interface ComposerViewProps {
     readonly best: WhenBest | null;
   } | null;
   readonly tools: readonly string[];
+  /**
+   * PR F (b), Q9 — "AI isn't available yet.", set when the member could use
+   * the Studio's AI but no caption model can run; the AI controls are then
+   * absent (`can.generate`, `tools`) and this one line stands under the caption.
+   */
+  readonly aiOff?: string | null;
+  /**
+   * PR F review (2) — whether a caption model can run now. While it cannot, the
+   * AI brief ("What is the post about?", "Or start from: an idea / repurpose",
+   * "AI writes the caption below…") is absent for everyone; writing the caption
+   * by hand stays.
+   */
+  readonly aiWriting?: boolean;
   /** PHASE 6 FINAL (D-285) — the Creative Studio's sizes, for the media drawer. */
   readonly creativeFormats?: readonly { key: string; label: string }[];
   /**
@@ -430,6 +444,8 @@ export function ComposerView({
   uploadReason = null,
   can,
   tools,
+  aiOff = null,
+  aiWriting = true,
   actions,
   mode = 'ai',
   startFrom,
@@ -1245,6 +1261,7 @@ export function ComposerView({
           brandName={brandName}
           brandHandle={brandHandle}
           tools={tools}
+          aiOff={aiOff}
           busy={busy}
           now={now}
           can={can}
@@ -1806,87 +1823,90 @@ export function ComposerView({
               </div>
 
               <div className="bsp-st-words" hidden={editorTab !== 'words'}>
-                <div className="bsp-st-field">
-                  <label className="bsp-st-label" htmlFor={`${fieldId}-brief`}>
-                    {t['studio.briefLabel']}
-                  </label>
-                  <input
-                    id={`${fieldId}-brief`}
-                    className="bsp-st-brief"
-                    value={brief}
-                    dir="auto"
-                    maxLength={maxBriefChars}
-                    placeholder={t['content.composer.briefPlaceholder']}
-                    data-testid="content-brief"
-                    onChange={(event) => {
-                      setBrief(event.target.value);
-                      setQuote(null);
-                    }}
-                  />
-                  {startFrom ? (
-                    <div className="bsp-st-start">
-                      <span>{t['studio.orStart']}</span>
-                      <Link
-                        href={startFrom.idea}
-                        className="bsp-chip bsp-st-sm"
-                        data-testid="create-mode-idea"
-                      >
-                        {t['create.mode.idea']}
-                      </Link>
-                      <Link
-                        href={startFrom.repurpose}
-                        className="bsp-chip bsp-st-sm"
-                        data-testid="create-mode-repurpose"
-                      >
-                        {t['create.mode.repurpose']}
-                      </Link>
-                    </div>
-                  ) : null}
-                  <div className="bsp-st-hintrow">
-                    <span className="bsp-st-hint bsp-st-start-hint">
-                      {t['studio.briefHint']}
-                      {briefTooLong ? (
-                        <span className="bsp-st-count" data-over="true">
-                          {' '}
-                          <span className="bsp-ltr">
-                            {generationBrief.length} / {maxBriefChars}
+                {/* PR F review (2): the AI brief exists only while a caption model can run. */}
+                {aiWriting ? (
+                  <div className="bsp-st-field">
+                    <label className="bsp-st-label" htmlFor={`${fieldId}-brief`}>
+                      {t['studio.briefLabel']}
+                    </label>
+                    <input
+                      id={`${fieldId}-brief`}
+                      className="bsp-st-brief"
+                      value={brief}
+                      dir="auto"
+                      maxLength={maxBriefChars}
+                      placeholder={t['content.composer.briefPlaceholder']}
+                      data-testid="content-brief"
+                      onChange={(event) => {
+                        setBrief(event.target.value);
+                        setQuote(null);
+                      }}
+                    />
+                    {startFrom ? (
+                      <div className="bsp-st-start">
+                        <span>{t['studio.orStart']}</span>
+                        <Link
+                          href={startFrom.idea}
+                          className="bsp-chip bsp-st-sm"
+                          data-testid="create-mode-idea"
+                        >
+                          {t['create.mode.idea']}
+                        </Link>
+                        <Link
+                          href={startFrom.repurpose}
+                          className="bsp-chip bsp-st-sm"
+                          data-testid="create-mode-repurpose"
+                        >
+                          {t['create.mode.repurpose']}
+                        </Link>
+                      </div>
+                    ) : null}
+                    <div className="bsp-st-hintrow">
+                      <span className="bsp-st-hint bsp-st-start-hint">
+                        {t['studio.briefHint']}
+                        {briefTooLong ? (
+                          <span className="bsp-st-count" data-over="true">
+                            {' '}
+                            <span className="bsp-ltr">
+                              {generationBrief.length} / {maxBriefChars}
+                            </span>
                           </span>
-                        </span>
-                      ) : null}
-                    </span>
-                    {/*
+                        ) : null}
+                      </span>
+                      {/*
                     Round 3 — the prototype has no estimate box above the
                     caption: its cost is on the AI button. The product's
                     estimate and what it means are kept under "⋯".
                   */}
-                    {can.generate ? (
-                      <MoreDisclosure
-                        label={t['studio.moreOptions'] ?? ''}
-                        testId="composer-estimate-more"
-                        align="end"
-                      >
-                        <button
-                          type="button"
-                          className="bsp-chip bsp-st-sm"
-                          disabled={!canGenerate || busy !== null}
-                          data-testid="content-estimate"
-                          onClick={runQuote}
+                      {can.generate ? (
+                        <MoreDisclosure
+                          label={t['studio.moreOptions'] ?? ''}
+                          testId="composer-estimate-more"
+                          align="end"
                         >
-                          {t['content.composer.estimate']}
-                        </button>
-                        {quote !== null && busy === null ? (
-                          <div className="bsp-st-quote" role="status" data-testid="content-quote">
-                            <b>
-                              {t['content.composer.quoteLabel']}: {formatCredits(quote)}{' '}
-                              {t['content.composer.quoteUnit']}
-                            </b>
-                            <span>{t['content.composer.quoteHint']}</span>
-                          </div>
-                        ) : null}
-                      </MoreDisclosure>
-                    ) : null}
+                          <button
+                            type="button"
+                            className="bsp-chip bsp-st-sm"
+                            disabled={!canGenerate || busy !== null}
+                            data-testid="content-estimate"
+                            onClick={runQuote}
+                          >
+                            {t['content.composer.estimate']}
+                          </button>
+                          {quote !== null && busy === null ? (
+                            <div className="bsp-st-quote" role="status" data-testid="content-quote">
+                              <b>
+                                {t['content.composer.quoteLabel']}: {formatCredits(quote)}{' '}
+                                {t['content.composer.quoteUnit']}
+                              </b>
+                              <span>{t['content.composer.quoteHint']}</span>
+                            </div>
+                          ) : null}
+                        </MoreDisclosure>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
+                ) : null}
 
                 <div className="bsp-st-field">
                   <div className="bsp-st-caphead">
@@ -1924,7 +1944,9 @@ export function ComposerView({
                     value={caption}
                     dir="auto"
                     maxLength={maxBriefChars}
-                    placeholder={t['studio.capPlaceholder']}
+                    placeholder={
+                      aiWriting ? t['studio.capPlaceholder'] : t['studio.capPlaceholderManual']
+                    }
                     data-testid="content-caption"
                     onChange={(event) => {
                       setWrote(true);
@@ -1936,6 +1958,7 @@ export function ComposerView({
                       {caption.length} / {maxBriefChars}
                     </span>
                   </span>
+                  {aiOff ? <AiUnavailableLine text={aiOff} /> : null}
                   {/*
                     THE AI EDITS, as the prototype lays them under the caption.
                     They change a saved version, so before the draft exists

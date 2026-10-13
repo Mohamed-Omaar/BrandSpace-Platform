@@ -195,7 +195,8 @@ describe('A5 + E6 · a refusal names the permission and who can change it', () =
     const members = read('apps/dashboard/src/app/[locale]/members/page.tsx');
     expect(members).toMatch(/!may\('member\.invite'\) && \(\s*<PermissionNotice/);
     const billing = read('apps/dashboard/src/app/[locale]/billing/page.tsx');
-    expect(billing).toMatch(/mayManage \? null : \(\s*<PermissionNotice/);
+    // PR F (Q6, D-508): while payments are off there is no control to explain.
+    expect(billing).toMatch(/mayManage \|\| !payments \? null : \(\s*<PermissionNotice/);
     const permissions = read('apps/dashboard/src/app/[locale]/permissions/page.tsx');
     expect(permissions).toContain("t('perms.fromRole')");
   });
@@ -340,8 +341,9 @@ describe('E3 + Q18 · spending credits needs copilot.use as well as the feature 
     expect(compose).toContain(
       "generate: maySpendCredits(workspace.permissionKeys, 'content.create')",
     );
+    // PR F (Q9, D-507): and only while a caption model can run.
     expect(compose).toMatch(
-      /tools=\{maySpendCredits\(workspace\.permissionKeys, 'content\.edit'\) \? CONTENT_TOOLS : \[\]\}/,
+      /tools=\{\s*maySpendCredits\(workspace\.permissionKeys, 'content\.edit'\) && aiCaption\s*\? CONTENT_TOOLS\s*: \[\]\s*\}/,
     );
     expect(compose).toMatch(
       /generateMedia:\s*maySpendCredits\(workspace\.permissionKeys, 'assets\.upload'\)/,

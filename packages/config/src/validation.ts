@@ -771,6 +771,38 @@ function semantic(
     }
   }
 
+  if (domain === 'assets') {
+    // PR F (g), Q13 — turning scanning off is said twice, on purpose.
+    const scanning = (doc['scanning'] ?? {}) as {
+      required?: boolean;
+      provider?: string;
+      scanii?: { endpoint?: string | null };
+    };
+    if (scanning.provider === 'none' && scanning.required !== false) {
+      issues.push({
+        severity: 'error',
+        path: 'scanning.required',
+        message:
+          'Scanning provider "none" means uploads are not scanned. Set scanning.required to false to say so.',
+      });
+    }
+    if (scanning.provider !== 'none' && scanning.required === false) {
+      issues.push({
+        severity: 'error',
+        path: 'scanning.provider',
+        message:
+          'scanning.required is false, so the provider must be "none": a configured scanner is always used.',
+      });
+    }
+    if (scanning.provider === 'scanii' && !scanning.scanii?.endpoint) {
+      issues.push({
+        severity: 'error',
+        path: 'scanning.scanii.endpoint',
+        message: "The Scanii provider needs its scan URL, copied from Scanii's documentation.",
+      });
+    }
+  }
+
   if (domain === 'credits') {
     // D-11 was approved and nothing implements postpaid overage. Letting this
     // be switched off would silently produce a wallet that goes negative with

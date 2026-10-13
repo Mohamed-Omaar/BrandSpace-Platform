@@ -1601,13 +1601,32 @@ const assetsSchema = z.object({
       /**
        * Which scanner the platform uses.
        *
-       * `mock` is the only implementation that exists, it is deterministic,
-       * and it is what development and tests run against. No production
-       * scanner has been approved, so naming one here would be inventing a
-       * vendor decision — `resolveScanner` refuses `mock` in production, which
-       * is the fail-closed behaviour CLAUDE.md §2.2 asks for.
+       * - `mock` — deterministic, for development and tests. REFUSED in
+       *   production (`createVirusScanner`), the fail-closed default.
+       * - `none` — PR F (g), Q13, owner decision: the beta runs with file
+       *   scanning OFF and accepts the risk. Uploads become usable without a
+       *   scan and each one is recorded as `not_scanned`. Allowed only with
+       *   `required: false`, so turning scanning off is said twice, on purpose.
+       * - `scanii` — the hosted Scanii API, built and switched off. It needs
+       *   `scanii.endpoint` here and the worker's `SCANII_API_KEY` /
+       *   `SCANII_API_SECRET`; turning it on is configuration only.
        */
-      provider: z.enum(['mock']).default('mock'),
+      provider: z.enum(['mock', 'none', 'scanii']).default('mock'),
+      /**
+       * Scanii's synchronous scan URL (e.g. its regional `/v2.2/files`). NO
+       * DEFAULT: the region is the owner's choice and the URL is copied from
+       * Scanii's own documentation, never assumed here.
+       */
+      scanii: z
+        .object({
+          endpoint: z
+            .string()
+            .url()
+            .refine((value) => value.startsWith('https://'), 'Must be an https:// URL.')
+            .nullable()
+            .default(null),
+        })
+        .default({}),
       /** Wall-clock ceiling on scanning one asset. */
       timeoutMs: z
         .number()
@@ -2329,6 +2348,23 @@ const commerceCreditPackSchema = z.object({
 });
 
 const commerceSchema = z.object({
+  /*
+   * PR F (a), Q6 — WHETHER ANY PAYMENT SURFACE EXISTS AT ALL.
+   *
+   * Off by default and off for the beta: no payment provider is chosen
+   * (D-204), so a "Buy" button could only ever fail. While it is off the
+   * customer sees no price, plan picker, credit pack, invoice, accounting
+   * export, cancel or resume, no "Upgrade" or "Top up" wording, and every
+   * checkout and subscription route answers the same 404 an unknown path
+   * does. The trial, its limits and its usage stay visible. The prices
+   * themselves stay configured (Q6): a trial still needs one in the
+   * workspace's currency, and turning this on later is configuration only.
+   */
+  payments: z
+    .object({
+      enabled: z.boolean().default(false),
+    })
+    .default({}),
   currencies: z.array(commerceCurrencySchema).default([]),
   markets: z.array(commerceMarketSchema).default([]),
   taxPolicies: z.array(commerceTaxPolicySchema).default([]),
@@ -2455,6 +2491,13 @@ const onboardingSchema = z.object({
         version: z.string().min(1).max(32),
         url: localizedText.nullable().default(null),
         required: z.boolean().default(true),
+        /**
+         * PR F, Q11 — the owner's mark that a lawyer has reviewed this
+         * version. Until it is set, the Control Center's readiness check reads
+         * "draft, legal review pending" (it does not block the closed beta).
+         * Publishing a new version means setting it again.
+         */
+        reviewed: z.boolean().default(false),
       }),
     )
     .default([]),

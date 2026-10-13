@@ -169,7 +169,13 @@ export class AssetProcessingService {
 
     await this.#db.asset.update({
       where: { id: asset.id },
-      data: { scanStatus: 'CLEAN', scanReason: null, scannedAt: this.#clock.now() },
+      data: {
+        scanStatus: 'CLEAN',
+        // PR F (g): a file the `none` scanner let through says so, rather than
+        // claiming a check that never happened.
+        scanReason: verdict.notScanned ? 'not_scanned' : null,
+        scannedAt: this.#clock.now(),
+      },
     });
     await this.#db.assetVersion.updateMany({
       where: { assetId: asset.id, versionNumber: asset.currentVersion },

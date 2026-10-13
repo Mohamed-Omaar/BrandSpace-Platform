@@ -19,6 +19,7 @@ import {
 import '@brandspace/ui/content-studio.css';
 import { inWorkspace, requireWorkspacePage } from '../../../server/customer-context';
 import { NoAccessPage } from '../../../components/no-access-page';
+import { aiAvailableFor } from '../../../server/ai-availability';
 import { brandContextFor, requiredBrand } from '../../../server/brand-context';
 import { brandTypographyFor } from '../../../server/brand-fonts';
 import { translator, type MessageKey } from '../../../i18n/messages';
@@ -339,7 +340,10 @@ export default async function CreativeStudioPage({
           </span>
         ) : null}
       </div>
-      {brand === null ? (
+      {/* PR F (b), Q9: opened directly while no image model can run — the one line. */}
+      {!(await aiAvailableFor('image.generate')) ? (
+        <StateMessage kind="empty" title={t('ai.unavailable')} testId="ai-unavailable" />
+      ) : brand === null ? (
         <StateMessage
           kind="empty"
           title={

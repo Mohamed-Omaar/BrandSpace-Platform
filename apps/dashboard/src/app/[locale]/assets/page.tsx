@@ -1,5 +1,6 @@
 import type { AssetKind, AssetStatus } from '@brandspace/database';
 import { assetUploadRules } from '../../../server/upload-rules';
+import { aiAvailableFor } from '../../../server/ai-availability';
 import { canPreviewWithoutDerivative, isSelectable } from '@brandspace/assets';
 import { brandScopeFilter, maySpendCredits, systemClock } from '@brandspace/shared';
 import {
@@ -507,7 +508,10 @@ export default async function AssetsPage({
         planHref={can('billing.read') ? `/${locale}/billing` : null}
         can={{
           // D-468 — the Generate tab is the Creative Studio, behind its own gate.
-          generate: maySpendCredits(permissions, 'assets.upload'),
+          // PR F (b), Q9 — and only while an image model can run (D-507).
+          generate:
+            maySpendCredits(permissions, 'assets.upload') &&
+            (await aiAvailableFor('image.generate')),
           upload: can('assets.upload'),
           edit: can('assets.edit'),
           manageTaxonomy: can('assets.manage_taxonomy'),

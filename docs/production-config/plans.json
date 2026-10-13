@@ -1,0 +1,66 @@
+{
+  "plans": [
+    {
+      "key": "starter",
+      "name": {
+        "en": "Starter",
+        "ar": "Starter"
+      },
+      "description": {
+        "en": "For a business running one brand on social media.",
+        "ar": "لنشاط تجاري يدير علامة تجارية واحدة على وسائل التواصل."
+      },
+      "tier": 1,
+      "badge": null,
+      "visibility": "public",
+      "status": "active",
+      "prices": [
+        {
+          "currency": "USD",
+          "monthlyMinor": 2900,
+          "annualMinor": 29000
+        },
+        {
+          "currency": "SAR",
+          "monthlyMinor": 10900,
+          "annualMinor": 109000
+        }
+      ],
+      "taxBehavior": "exclusive",
+      "trialDays": 90,
+      "trialRequiresCard": false,
+      "trialCredits": 200,
+      "monthlyCredits": 500,
+      "creditRollover": {
+        "policy": "capped",
+        "capMultiplier": 1
+      },
+      "quotas": {
+        "seats": 2,
+        "brands": 1,
+        "socialAccounts": 3,
+        "scheduledPostsPerMonth": 100,
+        "storageGb": 5,
+        "analyticsRetentionDays": 90,
+        "workspaces": 1
+      },
+      "addOns": [],
+      "overagePolicy": {
+        "mode": "block",
+        "pricePerCreditMinor": 0,
+        "capCredits": null
+      },
+      "upgradeBehavior": {
+        "timing": "immediate",
+        "prorate": true,
+        "creditGrant": "prorated"
+      },
+      "downgradeBehavior": {
+        "timing": "period_end",
+        "excessResources": "read_only",
+        "excessCredits": "retain_until_expiry"
+      },
+      "sortOrder": 0
+    }
+  ]
+}
