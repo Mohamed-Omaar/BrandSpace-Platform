@@ -139,6 +139,21 @@ export function TikTokOptionsPanel({
   const setDisclosure = (patch: Partial<TikTokPostOptions['disclosure']>) =>
     onChange({ ...value, disclosure: { ...value.disclosure, ...patch } });
   const branded = value.disclosure.enabled && value.disclosure.brandedContent;
+  /*
+   * D-539 (owner, #82) — A CONTROL THAT CANNOT BE USED STILL CARRIES WHAT IS
+   * STORED. A browser never submits a disabled field, and the save reads an
+   * absent field as "not chosen": with no TikTok account (nothing offered) a
+   * save — typed, autosaved, or posted before the scripts load — wiped the
+   * stored audience, and a switch the creator locked in TikTok wiped a stored
+   * "on". So a disabled control's value travels in a hidden field instead,
+   * and a stored audience the accounts do not offer now stays selected (the
+   * problem line says it is not offered) rather than being cleared.
+   */
+  const privacyLocked = disabled || offered.length === 0;
+  const storedNotOffered =
+    value.privacyLevel !== null && !offered.includes(value.privacyLevel)
+      ? value.privacyLevel
+      : null;
 
   const toggle = (input: {
     name: string;
@@ -154,9 +169,12 @@ export function TikTokOptionsPanel({
         <span className="bsp-tg-l">{input.label}</span>
         {input.hint ? <span className="bsp-tg-s">{input.hint}</span> : null}
       </span>
+      {(disabled || input.locked) && input.checked ? (
+        <input type="hidden" name={input.name} value="on" />
+      ) : null}
       <input
         type="checkbox"
-        name={input.name}
+        name={disabled || input.locked ? undefined : input.name}
         className="bsp-tgl-in"
         checked={input.checked && !input.locked}
         disabled={disabled || input.locked}
@@ -211,11 +229,14 @@ export function TikTokOptionsPanel({
 
       <label className="bsp-fdis-field">
         <span className="bsp-fdis-label">{word('studio.tiktok.privacy')}</span>
+        {privacyLocked ? (
+          <input type="hidden" name="tiktokPrivacyLevel" value={value.privacyLevel ?? ''} />
+        ) : null}
         <select
           className="bs-control bsp-fdis-control"
-          name="tiktokPrivacyLevel"
+          name={privacyLocked ? undefined : 'tiktokPrivacyLevel'}
           value={value.privacyLevel ?? ''}
-          disabled={disabled || offered.length === 0}
+          disabled={privacyLocked}
           onChange={(event) =>
             set({
               privacyLevel: (event.target.value || null) as TikTokPrivacyLevel | null,
@@ -230,6 +251,11 @@ export function TikTokOptionsPanel({
           <option value="" disabled>
             {word('studio.tiktok.privacyChoose')}
           </option>
+          {storedNotOffered ? (
+            <option value={storedNotOffered} hidden>
+              {word(`studio.tiktok.privacy.${storedNotOffered}`)}
+            </option>
+          ) : null}
           {offered.map((level) => (
             <option key={level} value={level}>
               {word(`studio.tiktok.privacy.${level}`)}

@@ -105,6 +105,14 @@ export type AutosaveResult =
   | { readonly ok: true; readonly itemId: string; readonly version?: string }
   | { readonly ok: false; readonly code: string; readonly ref: string };
 
+/** The hashtags a form field holds: split on spaces and commas, without "#". */
+function tagsOf(value: FormDataEntryValue | null): string[] {
+  return String(value ?? '')
+    .split(/[\s,]+/)
+    .map((tag) => tag.replace(/^#/, '').trim())
+    .filter((tag) => tag.length > 0);
+}
+
 function isAutosave(formData: FormData): boolean {
   return formData.get('autosave') === '1';
 }
@@ -416,10 +424,19 @@ export async function saveVariantAction(formData: FormData): Promise<void | Auto
     const session = await requireWorkspaceAction(locale, 'content.edit');
     const variantId = String(formData.get('variantId') ?? '');
     const body = String(formData.get('body') ?? '');
-    const hashtags = String(formData.get('hashtags') ?? '')
-      .split(/[\s,]+/)
-      .map((tag) => tag.replace(/^#/, '').trim())
-      .filter((tag) => tag.length > 0);
+    const listed = tagsOf(formData.get('hashtags'));
+    /*
+     * D-539 (owner, #82) — A TAG TYPED BEFORE THE PAGE'S SCRIPTS LOADED. Enter
+     * in the hashtag field then makes the browser post this form itself, and
+     * `hashtags` carries only what was stored. The field's own text arrives as
+     * `hashtagsTyped`; what it adds is kept. Once the page is running, the
+     * typed text is already in `hashtags` (it counts before "Add"), so nothing
+     * is added twice.
+     */
+    const hashtags = [
+      ...listed,
+      ...tagsOf(formData.get('hashtagsTyped')).filter((tag) => !listed.includes(tag)),
+    ];
 
     /*
      * PHASE 8 — MEDIA, AND THE DIFFERENCE BETWEEN "leave it" AND "remove it".

@@ -2419,6 +2419,14 @@ export function DraftEditor({
                           <input
                             id={`${fieldId}-${variant.id}-tags`}
                             className="bsp-st-tag-input"
+                            /*
+                             * D-539 (owner, #82): named, so a tag typed and
+                             * entered BEFORE the page's scripts load — the
+                             * browser's own form post — reaches the server too.
+                             * Hydrated, the same text is already in `hashtags`
+                             * above and the server adds nothing twice.
+                             */
+                            name="hashtagsTyped"
                             dir="auto"
                             value={tagDrafts[variant.id] ?? ''}
                             placeholder={t['studio.tagPlaceholder']}
