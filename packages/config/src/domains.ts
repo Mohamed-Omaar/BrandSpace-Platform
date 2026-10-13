@@ -1983,6 +1983,15 @@ const publishingCapabilitySchema = z.object({
    * token lasts about 60 days. Null: `dispatch.expiringSoonHours`.
    */
   expiringSoonHours: z.number().int().min(1).max(2_160).nullable().default(null),
+  /**
+   * CONNECTORS C — EVERY POST GOES OUT TO THIS AUDIENCE, whatever the author
+   * chose. `'private'` while TikTok has not audited the app: TikTok makes an
+   * unaudited client's posts "Only me" (developers.tiktok.com/docs/en/
+   * content-sharing-guidelines), so the post is sent that way and the Studio
+   * offers only that. Going live after the audit is setting this to null —
+   * configuration, not code (D-505).
+   */
+  forcedAudience: z.enum(['private']).nullable().default(null),
 });
 
 const publishingSchema = z.object({

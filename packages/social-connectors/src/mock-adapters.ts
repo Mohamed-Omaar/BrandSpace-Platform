@@ -11,6 +11,7 @@ import type {
   SocialConnectorAdapter,
   TokenBundle,
 } from './adapter';
+import type { CreatorPostingInfo } from './tiktok/options';
 import { assertNotProduction } from '@brandspace/shared';
 import type { ProviderCapabilities } from './policy';
 
@@ -239,6 +240,43 @@ export class MockSocialConnectorAdapter implements SocialConnectorAdapter {
   async checkHealth(input: { credentials: AdapterCredentials }): Promise<ConnectionHealth> {
     const unhealthy = input.credentials.accessToken.includes('unhealthy');
     return { healthy: !unhealthy, failureClass: unhealthy ? 'AUTH_EXPIRED' : null };
+  }
+
+  /**
+   * CONNECTORS C — WHAT A TIKTOK CREATOR MAY POST, DETERMINISTICALLY. A token
+   * marked `cannot-post` answers "not now", `private-account` answers a
+   * private account's audiences, `no-duet` has Duet turned off by the creator.
+   * The nickname is fixed, so a screenshot is the same on every run.
+   */
+  async postingOptions(input: { credentials: AdapterCredentials }): Promise<CreatorPostingInfo> {
+    const token = input.credentials.accessToken;
+    if (token.includes('cannot-post')) {
+      return {
+        nickname: '',
+        username: null,
+        avatarUrl: null,
+        privacyLevels: [],
+        commentDisabled: true,
+        duetDisabled: true,
+        stitchDisabled: true,
+        maxVideoSeconds: null,
+        cannotPostReason: 'spam_risk_too_many_posts',
+      };
+    }
+    const privateAccount = token.includes('private-account');
+    return {
+      nickname: `${TARGET_LABEL[this.provider]} (development)`,
+      username: 'creator.development',
+      avatarUrl: null,
+      privacyLevels: privateAccount
+        ? ['FOLLOWER_OF_CREATOR', 'MUTUAL_FOLLOW_FRIENDS', 'SELF_ONLY']
+        : ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'SELF_ONLY'],
+      commentDisabled: false,
+      duetDisabled: token.includes('no-duet'),
+      stitchDisabled: false,
+      maxVideoSeconds: 600,
+      cannotPostReason: null,
+    };
   }
 
   /**

@@ -47,6 +47,22 @@ export {
   parseMetaSignedRequest,
   type MetaSignedRequest,
 } from './meta/inbound';
+export { chunkPlan, TikTokAccountAdapter, TIKTOK_MAX_CHUNK_BYTES } from './tiktok/adapter';
+export type { ChunkPlan, TikTokAdapterOptions } from './tiktok/adapter';
+export {
+  classifyTikTokError,
+  TikTokApiError,
+  TikTokShapeError,
+  TikTokTransportError,
+  TIKTOK_API_HOST,
+  type TikTokFetch,
+} from './tiktok/api';
+export {
+  parseTikTokWebhook,
+  tiktokWebhookSignatureValid,
+  type TikTokInboundEvent,
+} from './tiktok/inbound';
+export * from './tiktok/options';
 export type { ConnectorRegistry, ConnectorRegistryOptions } from './registry';
 
 export {

@@ -1,5 +1,6 @@
 import type { PublishFailureClass, SocialProvider } from '@brandspace/database';
 import type { ProviderCapabilities } from './policy';
+import type { CreatorPostingInfo } from './tiktok/options';
 
 /**
  * The connector contract — docs/SOCIAL-INTEGRATIONS.md §2.1.
@@ -303,6 +304,15 @@ export interface SocialConnectorAdapter {
     readonly externalAccountId: string;
     readonly credentials: AdapterCredentials;
   }): Promise<PublishOutcome>;
+
+  /**
+   * CONNECTORS C — WHAT THE ACCOUNT MAY POST RIGHT NOW: the creator's name,
+   * the audiences it may choose, the interactions it has turned off and the
+   * longest video it may post (TikTok's `creator_info`). The Studio asks it
+   * each time a post's options are shown, as TikTok's guidelines require.
+   * OPTIONAL: a platform without such a question does not implement it.
+   */
+  postingOptions?(input: { readonly credentials: AdapterCredentials }): Promise<CreatorPostingInfo>;
 
   /** Turn whatever went wrong into a class the pipeline can act on. */
   classifyError(error: unknown): PublishFailureClass;
