@@ -43,6 +43,42 @@ test.describe('the Integrations Hub', () => {
     await expect(page.getByText('Required in production').first()).toBeVisible();
   });
 
+  test('CONNECTORS A — shows the addresses to register with each platform, each one copyable', async ({
+    page,
+  }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+      origin: ADMIN_BASE_URL,
+    });
+    await signIn(page, 'en');
+    await page.goto(`${ADMIN_BASE_URL}/en/console/integrations`);
+
+    const block = page.getByTestId('social-addresses');
+    await expect(block).toBeVisible();
+    // Generated from the API's public base URL — never typed by hand.
+    const redirect = block.getByTestId('social-address-facebook-redirectUri');
+    await expect(redirect).toContainText(/\/v1\/social\/callback\/facebook$/);
+    for (const row of [
+      'social-address-facebook-webhookUrl',
+      'social-address-facebook-deauthorizeUrl',
+      'social-address-facebook-dataDeletionUrl',
+      'social-address-instagram-redirectUri',
+      'social-address-tiktok-redirectUri',
+      'social-address-tiktok-webhookUrl',
+      'social-address-x-redirectUri',
+    ]) {
+      await expect(block.getByTestId(row)).toBeVisible();
+    }
+
+    // Copy puts exactly the shown address on the clipboard, and says so.
+    const shown = (await redirect.locator('code').textContent())?.trim();
+    await block.getByTestId('copy-facebook-redirectUri').click();
+    await expect(block.getByTestId('copy-facebook-redirectUri')).toHaveText('Copied');
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(shown);
+
+    // No vendor entry appeared: the Hub lists a provider only with an adapter.
+    await expect(page.getByTestId('integration-social-facebook')).toHaveCount(0);
+  });
+
   test('shows a development double for what it is', async ({ page }) => {
     await signIn(page, 'en');
     await page.goto(`${ADMIN_BASE_URL}/en/console/integrations/ai/mock`);
