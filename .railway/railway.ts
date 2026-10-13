@@ -35,6 +35,23 @@ import { defineRailway, github, postgres, redis, ref, service } from 'railway/ia
  *      if one was already created.
  */
 
+/**
+ * THE PRE-DEPLOY WAIT (docs/RAILWAY-DEPLOYMENT.md §4.5). Dashboard, admin, api
+ * and worker deploy at the same moment as the migration job; the readiness gate
+ * (§4.4) holds each new release back until its migrations exist, but Railway
+ * starts the healthcheck clock when the container starts, so a migration job
+ * that is still building or migrating made the release FAIL (admin, on the #80
+ * deploy). The pre-deploy command runs after the build and before the release
+ * starts, so the wait happens there. It only READS `_prisma_migrations` with the
+ * service's own runtime `DATABASE_URL`; it never migrates. Bounded by
+ * `WAIT_FOR_MIGRATIONS_TIMEOUT_SECONDS` (default 1800).
+ *
+ * VERIFY THE FIELD NAME with `railway config plan` before the first apply: it is
+ * `deploy.preDeployCommand` in Railway's config-as-code, and this DSL was not
+ * read from a live project.
+ */
+const WAIT_FOR_MIGRATIONS = ['pnpm --filter @brandspace/database wait-for-migrations'];
+
 /** The GitHub source every service builds from. One repository, five processes. */
 const REPO = 'Mohamed-Omaar/BrandSpace-Platform';
 
@@ -385,6 +402,7 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/dashboard start',
+      preDeployCommand: WAIT_FOR_MIGRATIONS,
       /*
        * THE MIGRATION GATE (docs/RAILWAY-DEPLOYMENT.md §4.4): 200 only once the
        * database answers and holds every migration this build needs. It was
@@ -452,6 +470,7 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/admin start',
+      preDeployCommand: WAIT_FOR_MIGRATIONS,
       // The migration gate, as for the dashboard (§4.4). It was `/en/login`.
       healthcheckPath: '/api/health/ready',
       healthcheckTimeout: 300,
@@ -526,6 +545,7 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/api start',
+      preDeployCommand: WAIT_FOR_MIGRATIONS,
       /*
        * READINESS, NOT LIVENESS, for the routing probe. `/health/ready` reports
        * `down` when the tenant database does not answer and Railway should stop
@@ -601,6 +621,7 @@ export default defineRailway((ctx, project) => {
     },
     deploy: {
       startCommand: 'pnpm --filter @brandspace/worker start',
+      preDeployCommand: WAIT_FOR_MIGRATIONS,
       // Any path: the worker's health server answers 503 until its queue
       // consumers start, which is after the migration gate (§4.4).
       healthcheckPath: '/',

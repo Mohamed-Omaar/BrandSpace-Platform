@@ -148,16 +148,26 @@ rather than assume it.
 3. **Migration job.** Redeploy `migration` from the new `main`. Wait until it exits 0. Confirm with
    `prisma migrate status` against `DATABASE_MIGRATION_URL`: nothing pending, 91 applied.
 4. **Services: dashboard, api, admin, worker.** For each: set the build and start commands, `PORT`
-   (and `WORKER_PORT`), the healthcheck path and the variables in §5, then deploy. Before deploying,
-   run the startup contract locally on your own machine against a copy of each service's
-   variables:
-   `pnpm staging:preflight --env-dir <dir>` (files `<dir>/dashboard.env`, `api.env`, `admin.env`,
-   `worker.env`), or `--env-file <file> --service <name>`. It prints names and statuses, never
-   values. **It is written for staging:** its first line will say `APP_ENV … staging must set
+   (and `WORKER_PORT`), the healthcheck path, the **pre-deploy command** below and the variables in §5,
+   then deploy.
+   - **Pre-deploy command** (Settings → Deploy → Pre-deploy Command), the same on all four:
+     `pnpm --filter @brandspace/database wait-for-migrations`. It waits, before the release starts,
+     until the database holds every migration that release needs, so the healthcheck clock never runs
+     out on a migration that is merely slower than the deploy (the #80 race, where admin was marked
+     FAILED; `docs/RAILWAY-DEPLOYMENT.md` §4.5). It reads `_prisma_migrations` with the service's own
+     `DATABASE_URL` and never migrates. Optional: `WAIT_FOR_MIGRATIONS_TIMEOUT_SECONDS` (default 1800).
+     If it gives up, the deployment stops and the previous release keeps serving: let `migration`
+     finish, then redeploy.
+   - **Staging too:** set the same pre-deploy command on staging's four services before the next merge. Before deploying,
+     run the startup contract locally on your own machine against a copy of each service's
+     variables:
+     `pnpm staging:preflight --env-dir <dir>` (files `<dir>/dashboard.env`, `api.env`, `admin.env`,
+     `worker.env`), or `--env-file <file> --service <name>`. It prints names and statuses, never
+     values. **It is written for staging:** its first line will say `APP_ENV … staging must set
 APP_ENV=staging` and its verdict will be "not ready" for that reason alone. Ignore that line;
-   read the `startup contract` lines, which run the real production rules
-   (`scripts/staging-preflight.ts:162-171`, `:194-200`). Each service then reaches 2xx only after
-   step 3.
+     read the `startup contract` lines, which run the real production rules
+     (`scripts/staging-preflight.ts:162-171`, `:194-200`). Each service then reaches 2xx only after
+     step 3.
 5. **The first owner account.** Before any configuration: the Control Center needs a platform
    account to sign in. From your machine: `railway link` (production), `railway ssh --service api`,
    then `BOOTSTRAP_PLATFORM_OWNER_EMAIL='<your address>' pnpm bootstrap:production-owner` at a real

@@ -477,6 +477,40 @@ schema, but check the deployment list and redeploy the failed ones. For a migrat
 longer (a large backfill), raise the timeout first: the service setting, or the
 `RAILWAY_HEALTHCHECK_TIMEOUT_SEC` service variable.
 
+### 4.5 The pre-deploy wait closes the race (connectors step B)
+
+**What went wrong.** On the #80 deploy to staging, `admin` was marked FAILED: its new release started
+at the same moment as `migration-staging`, answered 503 (`schema: down`) while the job was still
+building and migrating, and ran out of its 300 s healthcheck before the migration landed. §4.4's
+gate did its job — no traffic reached code ahead of its schema — but the release had to be redeployed
+by hand, and services that happened to start later went live, so staging briefly ran a mix.
+
+**The fix.** Each application service waits for its migrations in its **pre-deploy command**, which
+Railway runs after the build and before the new deployment starts — so the healthcheck clock starts
+only once the schema is there:
+
+```
+pnpm --filter @brandspace/database wait-for-migrations
+```
+
+(`packages/database/prisma/wait-for-migrations.ts`). It polls `_prisma_migrations` every 5 s with the
+service's OWN runtime `DATABASE_URL` (SELECT only, migration `20261005090000`) and applies the same rule
+as the readiness gate (`schemaReadinessFrom`). It never migrates: the migrator credential stays on the
+migration job (§4.1's reasons are unchanged). It logs migration names only. It exits 0 when ready, and 1
+after `WAIT_FOR_MIGRATIONS_TIMEOUT_SECONDS` (default 1800); a failed pre-deploy stops the deployment and
+the previous release keeps serving — redeploy once the migration job has finished. The readiness gate
+(§4.4) stays exactly as it is: the wait is the first line, the gate the second.
+
+| Service     | Pre-deploy command                                       | Variable it reads |
+| ----------- | -------------------------------------------------------- | ----------------- |
+| `dashboard` | `pnpm --filter @brandspace/database wait-for-migrations` | `DATABASE_URL`    |
+| `admin`     | `pnpm --filter @brandspace/database wait-for-migrations` | `DATABASE_URL`    |
+| `api`       | `pnpm --filter @brandspace/database wait-for-migrations` | `DATABASE_URL`    |
+| `worker`    | `pnpm --filter @brandspace/database wait-for-migrations` | `DATABASE_URL`    |
+
+`.railway/railway.ts` declares it (`WAIT_FOR_MIGRATIONS`); on an existing project it is an owner action
+(GO-LIVE-RUNBOOK §4, step 4). Tests: `tests/unit/wait-for-migrations.test.ts`.
+
 ---
 
 ---

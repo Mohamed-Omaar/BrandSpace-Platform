@@ -20,7 +20,8 @@
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit",
     "build": "tsc --emitDeclarationOnly --declarationDir dist",
-    "bootstrap:production-owner": "tsx prisma/bootstrap-production-owner.ts"
+    "bootstrap:production-owner": "tsx prisma/bootstrap-production-owner.ts",
+    "wait-for-migrations": "tsx prisma/wait-for-migrations.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
