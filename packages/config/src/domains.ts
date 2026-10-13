@@ -2127,6 +2127,13 @@ const publishingSchema = z.object({
        * until the retention purge).
        */
       maxAttempts: z.number().int().min(1).max(100).default(10),
+      /**
+       * CONNECTORS C — how far a signed delivery's own timestamp may be from
+       * our clock (TikTok's `TikTok-Signature: t=…`). Older or newer is refused
+       * even with a good signature, so a captured delivery cannot be replayed
+       * later. TikTok names no window; five minutes is ours.
+       */
+      signatureToleranceSeconds: z.number().int().min(30).max(3_600).default(300),
     })
     .default({}),
 });

@@ -124,6 +124,8 @@ export interface PublishingPolicy {
     readonly purgeBatchSize: number;
     readonly processBatchSize: number;
     readonly maxAttempts: number;
+    /** Connectors C: a signed delivery's timestamp tolerance, in seconds. */
+    readonly signatureToleranceSeconds: number;
   };
 }
 

@@ -75,18 +75,16 @@ test.describe('the Integrations Hub', () => {
     await expect(block.getByTestId('copy-facebook-redirectUri')).toHaveText('Copied');
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(shown);
 
-    // Step B: Meta's addresses are live (no "register later" note); TikTok's
-    // webhook still waits for its route (step C).
+    // Step B made Meta's addresses live and step C TikTok's webhook: none
+    // carries a "register later" note.
     for (const live of [
       'social-address-facebook-webhookUrl',
       'social-address-facebook-deauthorizeUrl',
       'social-address-facebook-dataDeletionUrl',
+      'social-address-tiktok-webhookUrl',
     ]) {
       await expect(block.getByTestId(live)).not.toContainText('Register after');
     }
-    await expect(block.getByTestId('social-address-tiktok-webhookUrl')).toContainText(
-      'Register after step C.',
-    );
 
     // The Hub lists a provider only with an adapter: Meta's arrived in step B.
     await expect(page.getByTestId('integration-social-facebook')).toBeVisible();

@@ -53,7 +53,7 @@ describe('socialPlatformAddresses', () => {
 
   it('an address is live exactly when its route is in this build (LIVE_SOCIAL_ADDRESS_KEYS)', () => {
     // Step B registered Meta's webhook, deauthorize and data-deletion routes;
-    // TikTok's webhook arrives with step C.
+    // step C registered TikTok's webhook.
     expect(
       Object.fromEntries(
         Object.entries(LIVE_SOCIAL_ADDRESS_KEYS).map(([key, live]) => [key, [...live]]),
@@ -61,7 +61,7 @@ describe('socialPlatformAddresses', () => {
     ).toEqual({
       facebook: ['redirectUri', 'webhookUrl', 'deauthorizeUrl', 'dataDeletionUrl'],
       instagram: ['redirectUri'],
-      tiktok: ['redirectUri'],
+      tiktok: ['redirectUri', 'webhookUrl'],
       x: ['redirectUri'],
     });
     for (const platform of staging) {
@@ -74,7 +74,7 @@ describe('socialPlatformAddresses', () => {
     const tiktokWebhook = staging
       .find((platform) => platform.providerKey === 'tiktok')!
       .addresses.find((address) => address.key === 'webhookUrl');
-    expect(tiktokWebhook?.live).toBe(false);
+    expect(tiktokWebhook?.live).toBe(true);
   });
 
   it('every live inbound address is a route the API registers', () => {
