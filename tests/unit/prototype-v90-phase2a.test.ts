@@ -824,9 +824,11 @@ describe('B7 · calendar: drag a post, a new post on a day, no unscheduling once
 
   it('Unschedule is offered, and accepted, only for a plan that has not started', () => {
     const view = read('apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx');
+    // B-pre 2 (D-531): on the permission alone (`canUnschedule`), not Q8's `canSchedule`.
     expect(view).toContain(
-      '{canSchedule && openSlot.reschedulable !== false ? (\n                <form action={actions.cancel}>',
+      '{canUnschedule && openSlot.reschedulable !== false ? (\n                <form action={actions.cancel}>',
     );
+    expect(view).toContain('canUnschedule = canSchedule,');
     const calendar = read('packages/content/src/calendar.ts');
     const cancel = calendar.slice(calendar.indexOf('  async cancel('));
     expect(cancel.slice(0, cancel.indexOf('\n  async '))).toContain(

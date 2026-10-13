@@ -536,6 +536,16 @@ export default async function CalendarPage({
       : 'NOT_REQUIRED';
     const status = SLOT_STATUS[view.slot.status] ?? 'SCHEDULED';
     const slotReadiness = readiness.get(view.slot.id) ?? null;
+    /*
+     * B-pre 2 — HELD: a plan none of whose channels (its variants as they are
+     * now) can be connected. It cannot go out, and it is said so, on the chip
+     * and in the drawer, for as long as it is true.
+     */
+    const variantKeys = [...new Set(view.variants.map((variant) => variant.platformKey))];
+    const held =
+      RESCHEDULABLE_SLOT_STATUSES.includes(view.slot.status) &&
+      variantKeys.length > 0 &&
+      !canGoOut(variantKeys, connectable);
 
     const record: PostRecord = {
       id: view.slot.id,
@@ -567,7 +577,10 @@ export default async function CalendarPage({
       time: local.slice(11, 16),
       channels,
       campaignName,
-      statusLabel: translate(`content.status.${status}` as MessageKey),
+      statusLabel: held
+        ? translate('calendar.held')
+        : translate(`content.status.${status}` as MessageKey),
+      held,
       // Null when there is no approval row at all — "not required" is the
       // absence of a review, not a state to display beside one.
       approvalLabel: approvalRow
@@ -847,6 +860,8 @@ export default async function CalendarPage({
         canSchedule={
           workspace.permissionKeys.includes('content.schedule') && connectable.length > 0
         }
+        // B-pre 2 — taking a plan off publishes nothing: Q8 never hides it.
+        canUnschedule={workspace.permissionKeys.includes('content.schedule')}
         canSubmit={workspace.permissionKeys.includes('content.submit')}
         canCreate={workspace.permissionKeys.includes('content.create')}
         weekdays={protoWeekdays}
@@ -954,6 +969,8 @@ const CALENDAR_KEYS = [
   'calendar.readiness.REVOKED',
   'calendar.readiness.NOT_CONNECTED',
   'calendar.readiness.UNSUPPORTED',
+  'calendar.held',
+  'calendar.heldExplanation',
   'calendar.channels',
   'calendar.campaign',
   'calendar.publishState',

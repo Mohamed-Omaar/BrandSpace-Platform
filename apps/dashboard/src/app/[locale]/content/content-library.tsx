@@ -323,7 +323,12 @@ export function ContentLibrary({
         today={menu.today}
         open={{ href: studio(card), label: openLabel(card) }}
         duplicateToken={can.create ? duplicateToken : null}
-        can={{ ...menu.can, submit: can.submit, schedule: menu.can.schedule && goesOut(card) }}
+        can={{
+          ...menu.can,
+          submit: can.submit,
+          schedule: menu.can.schedule && goesOut(card),
+          unschedule: menu.can.schedule,
+        }}
         labels={menu.labels}
         actions={{
           reschedule: rescheduleContentAction,

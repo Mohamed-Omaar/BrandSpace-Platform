@@ -252,6 +252,13 @@ flowchart LR
 | Analytics        | Post exists and the platform's metric delay has elapsed | `MetricSnapshot`                   |
 | Insight          | Enough data accumulated                                 | `Insight`                          |
 
+**A due post none of whose channels can be connected is held, not failed (D-531).** Before
+materialising, the sweep checks the post's channels (its variants now) against the activated
+publishing policy. When none can be connected, the slot goes back to `PLANNED` on its day, its
+scheduling quota is refunded, the post returns to `APPROVED` (or `DRAFT` with no approval) with its
+time kept as its proposal, and the calendar says "Can't publish yet — no connected channel". No job,
+no `FAILED`, no notice. A person moves it once a platform is on.
+
 ### 6.2 Approval enforcement
 
 The approval requirement is checked **twice**: when a slot is scheduled, and again inside the publish job

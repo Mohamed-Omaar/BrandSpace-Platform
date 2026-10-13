@@ -73,7 +73,9 @@ import {
   type VerifySocialPostPayload,
 } from '@brandspace/jobs';
 import {
+  capabilitiesFor,
   createConnectorRegistry,
+  providerForPlatformKey,
   PublishPipelineService,
   refreshIsDue,
   resolvePublishingPolicy,
@@ -85,6 +87,7 @@ import {
 import {
   ContentApprovalService,
   TenantContentPolicySource,
+  holdPostWithoutChannel,
   instantForIntent,
   resolveContentPolicy,
 } from '@brandspace/content';
@@ -92,6 +95,7 @@ import {
   CreditLedgerService,
   SubscriptionService,
   UsageService,
+  createScheduleQuota,
   createTotalResourceQuota,
   creditPolicyFrom,
   findPlan,
@@ -669,8 +673,23 @@ export class MaintenanceScheduler {
             }),
             clock: this.#clock,
           });
+          /*
+           * B-pre 2 — a post none of whose channels can be connected is HELD
+           * (back to PLANNED on its day, quota refunded, its time kept as its
+           * proposal), never failed and never left SCHEDULED to be re-read by
+           * every pass. The same activated policy the pipeline publishes under.
+           */
+          const notConnectable = async (keys: readonly string[]) =>
+            keys.filter((key) => {
+              const provider = providerForPlatformKey(key);
+              return !provider || !capabilitiesFor(policy, provider).enabled;
+            });
+          const quota = createScheduleQuota({ db, workspaceId, environment });
           let made = 0;
           for (const slotId of slotIds) {
+            if (await holdPostWithoutChannel(db, { workspaceId, slotId, notConnectable, quota })) {
+              continue;
+            }
             const result = await pipeline.materialiseSlot(slotId);
             made += result.created;
           }

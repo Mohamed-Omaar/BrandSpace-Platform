@@ -55,6 +55,7 @@ export {
 } from './calendar';
 export { calendarCapacityLockKey, lockCalendarCapacity } from './calendar-capacity-lock';
 export { WorkspaceTimezoneService, timezoneChangeEffects } from './timezone-change';
+export { holdPostWithoutChannel } from './held-posts';
 export type { TimezoneChangeActor, TimezoneChangeEffect } from './timezone-change';
 export type {
   ApprovalGate,

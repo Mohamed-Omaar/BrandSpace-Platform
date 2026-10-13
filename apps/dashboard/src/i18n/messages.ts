@@ -2165,6 +2165,10 @@ export const messages = {
       'أعد ربط الحساب. حتى ذلك الحين تنتظر هذه القناة؛ وإن لم يُعد ربطه خلال {minutes} دقيقة من الموعد المجدول فلن يُنشر عليها. تُنشر القنوات الأخرى في موعدها.',
     'calendar.readiness.NOT_CONNECTED': 'لا يوجد حساب مرتبط',
     'calendar.readiness.UNSUPPORTED': 'القناة غير متاحة للنشر',
+    // B-pre 2 — a post held because none of its channels can be connected yet.
+    'calendar.held': 'لا يمكن النشر بعد — لا توجد قناة مرتبطة',
+    'calendar.heldExplanation':
+      'لا يمكن ربط أيٍّ من قنوات هذا المنشور بعد، لذا يبقى في يومه دون أن يُنشر. ويمكنك إزالته من التقويم؛ ووقته محفوظ.',
     'calendar.readinessBlocked': 'منشورات مجدولة لن تُنشر بحالتها الحالية',
     'calendar.readinessFix': 'إدارة الحسابات المرتبطة',
     'calendar.channels': 'القنوات',
@@ -6264,6 +6268,10 @@ export const messages = {
       'Reconnect the account. Until then this channel waits; if it is not reconnected within {minutes} minutes of the scheduled time, it is not posted there. The other channels go out on time.',
     'calendar.readiness.NOT_CONNECTED': 'No connected account',
     'calendar.readiness.UNSUPPORTED': 'Channel unavailable for publishing',
+    // B-pre 2 — a post held because none of its channels can be connected yet.
+    'calendar.held': 'Can’t publish yet — no connected channel',
+    'calendar.heldExplanation':
+      'None of this post’s channels can be connected yet, so it stays on its day and is not published. You can take it off the calendar; its time is kept.',
     'calendar.readinessBlocked': 'scheduled posts will not go out as they stand',
     'calendar.readinessFix': 'Manage connected accounts',
     'calendar.channels': 'Channels',

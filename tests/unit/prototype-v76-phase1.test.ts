@@ -105,9 +105,9 @@ describe('B-6 · the library offers Schedule only to members who may schedule', 
       "const maySchedule = can.schedule && (status === 'APPROVED' || status === 'DRAFT');",
     );
     // PR F (Q8, D-510): and only while one of the post's channels can be connected.
-    expect(library).toContain(
-      'can={{ ...menu.can, submit: can.submit, schedule: menu.can.schedule && goesOut(card) }}',
-    );
+    expect(library).toContain('schedule: menu.can.schedule && goesOut(card),');
+    // B-pre 2 (D-531): Unschedule is the permission alone — taking a plan off publishes nothing.
+    expect(library).toContain('unschedule: menu.can.schedule,');
     expect(page).toContain("schedule: may('content.schedule')");
     // The server half the link leads to, so the two cannot drift apart.
     expect(calendarActions).toContain("requireWorkspaceAction(locale, 'content.schedule')");

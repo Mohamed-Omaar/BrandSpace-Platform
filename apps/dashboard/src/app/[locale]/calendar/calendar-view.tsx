@@ -99,6 +99,8 @@ export interface SlotDetail {
   readonly itemStatus?: string;
   /** B-4 — whether this plan can still move (PLANNED or SCHEDULED only). */
   readonly reschedulable?: boolean;
+  /** B-pre 2 — none of its channels can be connected yet: it cannot go out. */
+  readonly held?: boolean;
   readonly previewPlatform?: string | null;
   readonly previewBody?: string;
   readonly previewMedia?: readonly {
@@ -176,6 +178,12 @@ export interface CalendarViewProps {
   readonly quotaUsed: number;
   readonly quotaLimit: number | null;
   readonly canSchedule: boolean;
+  /**
+   * B-pre 2 — may take a plan off the calendar (`content.schedule`). Not tied
+   * to Q8 as `canSchedule` is: unscheduling publishes nothing. Defaults to
+   * `canSchedule`.
+   */
+  readonly canUnschedule?: boolean;
   /** D-468 — may start a post (`content.create`): "+ New post on this day", Duplicate. */
   readonly canCreate?: boolean;
   /** The seven weekday heads, from the configured week start (the prototype's `weekdays`). */
@@ -241,6 +249,7 @@ export function CalendarView({
   quotaUsed,
   quotaLimit,
   canSchedule,
+  canUnschedule = canSchedule,
   canCreate = false,
   weekdays = [],
   canSubmit = false,
@@ -576,7 +585,7 @@ export function CalendarView({
         title: post.caption,
         titleDir: post.captionDirection,
         kind: kindOf(post),
-        statusLabel: statusLabelOf(post),
+        statusLabel: slot?.held ? (t['calendar.held'] ?? '') : statusLabelOf(post),
         hhmm: slot?.time ?? post.whenLabel,
         channels,
         art: { src: post.mediaSrc ?? null, seed: post.mediaSeed },
@@ -1155,6 +1164,11 @@ export function CalendarView({
               server sent one, which it does only for a reader holding
               `integrations.read`.
             */}
+            {openSlot.held ? (
+              <Banner tone="warning" testId="calendar-slot-held">
+                {t['calendar.heldExplanation']}
+              </Banner>
+            ) : null}
             {openSlot.readiness && openSlot.readiness.channels.length > 0 ? (
               <Banner tone="warning" testId="calendar-slot-readiness-detail">
                 <ul style={{ margin: 0, paddingInlineStart: spacingTokens.md }}>
@@ -1246,7 +1260,7 @@ export function CalendarView({
                 </form>
               ) : null}
               {/* B7 — only a plan that has not started publishing can be taken off. */}
-              {canSchedule && openSlot.reschedulable !== false ? (
+              {canUnschedule && openSlot.reschedulable !== false ? (
                 <form action={actions.cancel}>
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="month" value={month} />
