@@ -915,6 +915,16 @@ true`.
 | `post.publish.complete` / `.failed` / … | as above                                                                                      | the matching pending post's status is asked now; the status check decides                               |
 | anything else                           | as above                                                                                      | recorded and set aside (IGNORED), purged after the retention period                                     |
 
+### 19.4a A TikTok post without its options (D-538)
+
+The Studio asks for the options only when the post's brand has a TikTok account. A post scheduled
+before the account was connected reaches its time without them, and is **held before dispatch,
+never sent and never failed**: until its lateness deadline it waits (QUEUED,
+`held.tiktok_options_missing`, looked at again every minute), labelled “Choose who can see this
+post”, and goes out at the next look after someone completes the panel. Past the deadline it is
+held as D-531 holds a job — the post back to PLANNED with its time kept — and someone schedules it
+again.
+
 ### 19.5 Not in step C
 
 Photo posts (until a domain is verified), inbox/draft uploads, analytics, and a per-creator daily
