@@ -2178,3 +2178,33 @@ production credential was verified before it was used. An isolation test reads
 truncated to `integration_health_check_category_providerKey_environment_c_idx`, while the migration
 writes the readable one — a difference the drift check in `f80-migration-upgrade` caught before it
 reached a review. The schema now names it, so the two agree.
+
+## 21. Connectors step B — inbound deliveries and data-deletion requests (D-532)
+
+Three migrations, approved by the owner as written:
+
+| Migration                                               | What                                                                                       |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `20261022090000_connectors_b_inbound_tables`            | `social_inbound_event`, `social_data_deletion_request`, three enums — one transaction      |
+| `20261022091000_social_connection_subject_lookup_index` | `social_connection_provider_subject_hash_idx` (partial) on `provider, providerSubjectHash` |
+| `20261022092000_publish_job_handle_lookup_index`        | `publish_job_provider_handle_idx` (partial) on `provider, providerHandle`                  |
+
+**Both tables are PLATFORM-OWNED**, exactly as `billing_event` (§19.3): a platform's callback arrives with
+no tenant, and one deauthorization or deletion can concern connections in several workspaces. RLS is
+enabled and forced with a `platform_only` policy, the tenant role's privileges are revoked, and the
+migration fails if either table is reachable by the tenant role. Work that touches a tenant row (disabling
+a connection, settling a job) happens inside that tenant's own `withWorkspace` context (F-07).
+
+- `social_inbound_event` — every VERIFIED webhook, deauthorize or data-deletion delivery; a row exists only
+  after the signature was checked. `(provider, kind, dedupeKey)` is unique, with `dedupeKey` the sha256 of
+  the raw body, so a redelivery changes nothing. Processing uses the billing-event claim (status +
+  `claimToken` + `claimedAt`, enforced together by a CHECK). `payload` is the normalised event (≤ 64 KiB);
+  the granting user is only W10's versioned hash. **Retention:** rows that finished
+  (`PROCESSED`, `IGNORED`, `FAILED`) more than `publishing.inbound.retentionDays` ago (default 30) are deleted by
+  the maintenance sweep; `RECEIVED` and `PROCESSING` rows are never purged.
+- `social_data_deletion_request` — the confirmation code and status a data-deletion callback must return;
+  the subject is only the versioned hash. `inboundEventId` is `ON DELETE SET NULL`, so a request outlives
+  the delivery it came from.
+
+Each index file is one `CREATE INDEX CONCURRENTLY IF NOT EXISTS` statement (§18.12). Tests:
+`tests/unit/connectors-b-migration.test.ts`, `tests/isolation/connectors-b-tables.test.ts`.

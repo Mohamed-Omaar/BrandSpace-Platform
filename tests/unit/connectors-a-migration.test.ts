@@ -80,7 +80,13 @@ describe('connectors A — handles and subjects', () => {
     }
   });
 
-  it('is the last migration the build expects, directly after PR E', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-2)).toEqual(['20261020090000_group_b_fields', NAME]);
+  it('comes directly after PR E, and only connectors B follows it', () => {
+    const at = EXPECTED_MIGRATIONS.indexOf(NAME);
+    expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261020090000_group_b_fields');
+    expect(EXPECTED_MIGRATIONS.slice(at + 1)).toEqual([
+      '20261022090000_connectors_b_inbound_tables',
+      '20261022091000_social_connection_subject_lookup_index',
+      '20261022092000_publish_job_handle_lookup_index',
+    ]);
   });
 });

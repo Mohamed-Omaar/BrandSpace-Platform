@@ -67,11 +67,15 @@ describe('PR E — the Group B fields', () => {
     }
   });
 
-  it('comes directly after batch 7 PR C, and only connectors A follows it', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-3)).toEqual([
+  it('comes directly after batch 7 PR C, and only connectors A and B follow it', () => {
+    expect(EXPECTED_MIGRATIONS.slice(-6)).toEqual([
       '20261016090000_content_item_publish_time',
       NAME,
       '20261021090000_connectors_a_handles_and_subjects',
+      // Connectors B: the inbound-event and data-deletion tables, then two lookup indexes.
+      '20261022090000_connectors_b_inbound_tables',
+      '20261022091000_social_connection_subject_lookup_index',
+      '20261022092000_publish_job_handle_lookup_index',
     ]);
   });
 });

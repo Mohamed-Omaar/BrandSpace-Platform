@@ -75,6 +75,10 @@ describe('F6 — the brandScope migration', () => {
       '20261020090000_group_b_fields',
       // Connectors A: provider handles (W5) and versioned subject hashes (W10).
       '20261021090000_connectors_a_handles_and_subjects',
+      // Connectors B: the inbound-event and data-deletion tables, then two lookup indexes.
+      '20261022090000_connectors_b_inbound_tables',
+      '20261022091000_social_connection_subject_lookup_index',
+      '20261022092000_publish_job_handle_lookup_index',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe(
       '20261012092000_publish_job_published_population_index',
