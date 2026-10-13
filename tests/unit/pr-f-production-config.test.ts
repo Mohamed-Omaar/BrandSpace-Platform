@@ -120,6 +120,23 @@ describe('the values the owner confirmed on the #79 review', () => {
   });
 });
 
+describe('the values the owner decided on the #81 review', () => {
+  it('safe zones on Instagram and TikTok: the prototype’s bands, as design guidance', () => {
+    // Main.dc.html lines 462 and 489 draw top 13 %, bottom 22 %, inline-end 16 %
+    // on both 9:16 previews. Design guidance, not a platform-published value.
+    const content = parseConfigPayload('content', read('content.json'));
+    const zones = Object.fromEntries(
+      content.platforms.map((platform) => [platform.key, platform.safeZones ?? null]),
+    );
+    expect(zones).toEqual({
+      instagram: { top: 13, bottom: 22, end: 16 },
+      tiktok: { top: 13, bottom: 22, end: 16 },
+      linkedin: null,
+      x: null,
+    });
+  });
+});
+
 describe('the owner-decided values', () => {
   it('onboarding: password floor, legal drafts, twelve industries, no Teach step', () => {
     const onboarding = parseConfigPayload('onboarding', read('onboarding.json'));

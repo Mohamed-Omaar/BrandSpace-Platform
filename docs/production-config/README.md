@@ -162,6 +162,14 @@ on the #79 review"); changing one fails that test.
 | `recommendedHashtags`     | `content.json`          | instagram 3–5, tiktok 3–5, linkedin 1–3, x 1–2. Facebook has no entry: the `content` platforms list has none (instagram, linkedin, x, tiktok only). |
 | `calendar.suggestedTimes` | `content.json`          | EG, SA and AE: 10:00, 16:00, 21:00. Shown as "Suggested time", never "best time" (D-329).                                                           |
 
+### 5.1b Decided by the owner (#81 review)
+
+Pinned by `tests/unit/pr-f-production-config.test.ts` ("the values the owner decided on the #81 review").
+
+| Value       | Where          | Decided                                                                                                                                                                                                                                                                                                                                                 |
+| ----------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `safeZones` | `content.json` | instagram and tiktok: `top` 13, `bottom` 22, `end` 16 (percent of a 9:16 frame). **DESIGN GUIDANCE** — the bands the approved prototype draws (`Main.dc.html` lines 462 and 489), not values Meta or TikTok publish; replace them with the platforms' own templates when the owner has them (D-500, D-505). linkedin and x have none (no 9:16 preview). |
+
 ### 5.2 Still proposed
 
 | Value                                                              | Where                   | Proposed                                                                                                                                                                                                                                  |

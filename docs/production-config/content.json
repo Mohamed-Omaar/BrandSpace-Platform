@@ -35,6 +35,11 @@
       "recommendedHashtags": {
         "min": 3,
         "max": 5
+      },
+      "safeZones": {
+        "top": 13,
+        "bottom": 22,
+        "end": 16
       }
     },
     {
@@ -71,6 +76,11 @@
       "recommendedHashtags": {
         "min": 3,
         "max": 5
+      },
+      "safeZones": {
+        "top": 13,
+        "bottom": 22,
+        "end": 16
       }
     }
   ],
