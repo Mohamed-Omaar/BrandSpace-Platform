@@ -1058,19 +1058,40 @@ export async function scheduleFromStudioAction(formData: FormData): Promise<void
        * CONNECTORS C (D-505 O4) — A TIKTOK POST IS NOT SCHEDULED WITHOUT ITS
        * OPTIONS: TikTok allows no default audience. Read in the member's brand
        * scope; the adapter refuses the same post again before anything is sent.
+       *
+       * ONLY WHEN THE POST'S BRAND HAS A TIKTOK ACCOUNT (owner, #82): the
+       * audiences come from the account, so without one the panel has nothing
+       * to offer and the post schedules as any channel without an account
+       * does. If an account is connected later, the publishing preflight holds
+       * the TikTok post until the panel is completed (D-538) — never a failure.
        */
       const variants = await db.contentVariant.findMany({
         where: {
           contentItemId: itemId,
           ...brandIdQueryFilter({ brandScope: session.workspace.brandScope }),
         },
-        select: { platformKey: true, platformOptions: true },
+        select: { brandId: true, platformKey: true, platformOptions: true },
       });
-      const incomplete = variants.some(
-        (variant) =>
-          providerForPlatformKey(variant.platformKey) === 'TIKTOK' &&
-          tiktokOptionsProblems(readTikTokOptions(variant.platformOptions), null, false).length > 0,
+      const tiktok = variants.filter(
+        (variant) => providerForPlatformKey(variant.platformKey) === 'TIKTOK',
       );
+      const tiktokAccount =
+        tiktok.length > 0 &&
+        (await db.socialConnection.count({
+          where: {
+            workspaceId: session.workspace.workspaceId,
+            brandId: { in: [...new Set(tiktok.map((variant) => variant.brandId))] },
+            provider: 'TIKTOK',
+            status: 'ACTIVE',
+          },
+        })) > 0;
+      const incomplete =
+        tiktokAccount &&
+        tiktok.some(
+          (variant) =>
+            tiktokOptionsProblems(readTikTokOptions(variant.platformOptions), null, false).length >
+            0,
+        );
       if (incomplete) {
         throw new AppError('VALIDATION_FAILED', 'The TikTok post options are not complete.', {
           reason: TIKTOK_OPTIONS_INCOMPLETE,

@@ -238,3 +238,71 @@ test('a TikTok post is not scheduled from the Studio until an audience is chosen
   await page.waitForURL(/ok=CONTENT_SCHEDULED/);
   expect(await slots()).toBe(1);
 });
+
+/**
+ * OWNER (#82) — THE OPTIONS ARE REQUIRED ONLY WHEN THE BRAND HAS A TIKTOK
+ * ACCOUNT. Without one, TikTok offers no audience to choose, the panel says
+ * there is no account, and the post schedules as any channel without an
+ * account does. (Connected later, the publishing preflight holds the TikTok
+ * post until the panel is completed: tests/isolation/connectors-c-tiktok-held.test.ts.)
+ */
+test('a TikTok post on a brand with no TikTok account schedules without options', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile === true, 'one workspace per run; the desktop run covers it');
+  test.setTimeout(150_000);
+  await page.setViewportSize({ width: 1536, height: 864 });
+  const own = await ownWorkspace('c-tiktok-no-account');
+  const itemId = await withPlatformPrisma(async (prisma) => {
+    await prisma.approvalPolicy.create({
+      data: {
+        workspaceId: own.workspaceId,
+        brandId: own.brandId,
+        requireApprovalBeforeScheduling: false,
+      },
+    });
+    const item = await prisma.contentItem.create({
+      data: {
+        workspaceId: own.workspaceId,
+        brandId: own.brandId,
+        title: 'No TikTok account yet',
+        status: 'DRAFT',
+        primaryLocale: 'EN',
+        contentType: 'VIDEO',
+        createdByUserId: own.ownerId,
+      },
+      select: { id: true },
+    });
+    await prisma.contentVariant.create({
+      data: {
+        workspaceId: own.workspaceId,
+        brandId: own.brandId,
+        contentItemId: item.id,
+        platformKey: 'tiktok',
+        locale: 'EN',
+        body: 'Slow mornings, fresh beans.',
+      },
+    });
+    return item.id;
+  });
+  await enter(page, own.slug, 'en');
+  await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
+  await expect(page.getByTestId('content-composer')).toBeVisible();
+
+  await page.getByTestId('editor-when').click();
+  const panel = page.getByTestId('editor-when-panel');
+  await expect(panel).toBeVisible();
+  const day = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+  await panel.getByTestId('editor-schedule-date').fill(day);
+  await panel.getByTestId('editor-schedule-time').fill('10:30');
+  await panel.getByTestId('editor-schedule-submit').click();
+  await page.waitForURL(/ok=CONTENT_SCHEDULED/);
+  expect(
+    await withPlatformPrisma((prisma) =>
+      prisma.calendarSlot.count({ where: { contentItemId: itemId } }),
+    ),
+  ).toBe(1);
+  // Nothing was chosen for it: the options stay empty until an account exists.
+  expect((await storedOptions(itemId))?.['privacyLevel'] ?? null).toBeNull();
+});
