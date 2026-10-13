@@ -69,6 +69,7 @@ export type { ConnectionServiceOptions, ConnectionView } from './connections';
 
 export {
   AWAITING_RECONNECT_CODE,
+  PLATFORM_SWITCHED_OFF_CODE,
   executePublishJob,
   lookupPost,
   PublishPipelineService,

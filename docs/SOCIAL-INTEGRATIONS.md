@@ -257,7 +257,9 @@ materialising, the sweep checks the post's channels (its variants now) against t
 publishing policy. When none can be connected, the slot goes back to `PLANNED` on its day, its
 scheduling quota is refunded, the post returns to `APPROVED` (or `DRAFT` with no approval) with its
 time kept as its proposal, and the calendar says "Can't publish yet — no connected channel". No job,
-no `FAILED`, no notice. A person moves it once a platform is on.
+no `FAILED`, no notice. A person moves it once a platform is on. A job already QUEUED when its platform
+is switched off is held the same way at its preflight (`held.platform_switched_off`), before any account
+check; another platform of the same post that is still on goes out as usual.
 
 ### 6.2 Approval enforcement
 

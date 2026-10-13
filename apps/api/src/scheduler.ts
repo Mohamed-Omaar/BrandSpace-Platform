@@ -673,6 +673,7 @@ export class MaintenanceScheduler {
               workspaceId,
               policy: contentPolicy,
             }),
+            scheduleQuota: createScheduleQuota({ db, workspaceId, environment }),
             clock: this.#clock,
           });
           /*
