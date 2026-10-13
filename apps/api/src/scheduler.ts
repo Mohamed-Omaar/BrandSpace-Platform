@@ -1,3 +1,4 @@
+import { processSocialInboundEvents } from './social-inbound';
 import {
   AssetMaintenanceService,
   TenantAssetPolicySource,
@@ -248,6 +249,8 @@ export interface MaintenanceResult {
   readonly publishJobsRecovered: number;
   /** Connectors B — finished inbound deliveries past `publishing.inbound.retentionDays`. */
   readonly inboundEventsPurged: number;
+  /** Connectors B — Meta deliveries acted on (deauthorize, data deletion) or set aside. */
+  readonly inboundEventsProcessed: number;
   /** Phase 7 — the analytics sweeps. */
   readonly analyticsCursorsDispatched: number;
   readonly analyticsBackfillsDispatched: number;
@@ -1229,6 +1232,26 @@ export class MaintenanceScheduler {
       },
     });
     return deleted.count;
+  }
+
+  /**
+   * CONNECTORS B — ACT ON WHAT META TOLD US (social-inbound.ts): a deauthorize
+   * revokes the connections it names, a data-deletion request also erases
+   * Meta's data about them, each inside its own workspace; a webhook is set
+   * aside. Claimed with a lease (`dispatch.claimLeaseSeconds`), bounded per
+   * pass (`inbound.processBatchSize`), tried `inbound.maxAttempts` times.
+   */
+  async processInboundEvents(): Promise<number> {
+    const policy = await this.#resolvePublishing();
+    return processSocialInboundEvents({
+      platform: getPlatformClient(),
+      inWorkspace: (workspaceId, fn) => withWorkspace(workspaceId, fn),
+      environment: this.#environment,
+      now: this.#clock.now(),
+      batchSize: policy.inbound.processBatchSize,
+      maxAttempts: policy.inbound.maxAttempts,
+      leaseSeconds: policy.dispatch.claimLeaseSeconds,
+    });
   }
 
   async #publishingPolicy(): Promise<{ claimLeaseSeconds: number; staleClaimBatchSize: number }> {
@@ -2368,6 +2391,7 @@ export class MaintenanceScheduler {
     const purged = await this.purgeRetention(cadence.retentionPurgeBatch);
     const assets = await this.sweepAssets(cadence.retentionPurgeBatch);
     const publishing = await this.sweepPublishing(cadence.ingestionReconcileBatch);
+    const inboundEventsProcessed = await this.processInboundEvents();
     const inboundEventsPurged = await this.purgeInboundEvents();
     const analytics = await this.sweepAnalytics(cadence.ingestionReconcileBatch);
     const analyticsRowsPruned = await this.pruneAnalyticsRetention(cadence.retentionPurgeBatch);
@@ -2387,6 +2411,7 @@ export class MaintenanceScheduler {
       publishJobsDispatched: publishing.dispatched,
       publishJobsRecovered: publishing.recovered,
       inboundEventsPurged,
+      inboundEventsProcessed,
       analyticsCursorsDispatched: analytics.dispatched,
       analyticsBackfillsDispatched: analytics.backfills,
       analyticsRowsPruned,
@@ -2505,6 +2530,8 @@ export class MaintenanceScheduler {
     every(cadence.retentionPurgeSeconds, 'analytics-retention', () =>
       this.pruneAnalyticsRetention(cadence.retentionPurgeBatch),
     );
+    // A deauthorize is acted on within the reconcile cadence (a minute).
+    every(cadence.ingestionReconcileSeconds, 'inbound-events', () => this.processInboundEvents());
     every(cadence.retentionPurgeSeconds, 'inbound-event-retention', () =>
       this.purgeInboundEvents(),
     );

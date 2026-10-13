@@ -3,9 +3,9 @@
  *
  * Every one is ours: it is where our own route lives, built from the API's
  * public base URL (`PUBLIC_API_BASE_URL`, per environment) and never typed by
- * hand. The OAuth callback exists today; the webhook, deauthorize and
- * data-deletion routes are built in step B, and their addresses are shown now
- * so the platform apps can be prepared (owner, schema approval of step A).
+ * hand. The OAuth callbacks exist; Meta's webhook, deauthorize and
+ * data-deletion routes were built in step B; TikTok's webhook arrives with
+ * step C, and its address is shown already so the app can be prepared.
  *
  * ONE META APP (D-505 O2/O3): Facebook and Instagram share it, so Instagram
  * lists only its own redirect and points at Facebook's for the rest — one app
@@ -47,16 +47,29 @@ export interface SocialAddress {
 }
 
 /**
- * THE INBOUND SOCIAL ROUTES THIS BUILD SERVES, by address kind. The OAuth
- * callback always exists. The others are added here IN THE SAME CHANGE that
- * registers their route in the API — the API's route registration reads this
- * list too — so the Control Center's "Register after step B" note disappears
- * by itself the moment a route ships, and can never claim a route that is not
- * there.
+ * THE INBOUND SOCIAL ROUTES THIS BUILD SERVES, per platform and address kind.
+ * The OAuth callbacks always exist. Connectors B registered Meta's webhook,
+ * deauthorize and data-deletion routes (`apps/api/src/routes/social-inbound.ts`)
+ * and added them here IN THE SAME CHANGE, so the Control Center stops saying
+ * "register later" the moment a route ships and never claims one that is not
+ * there. PER PLATFORM, because a kind of address is not one route: Meta's
+ * webhook exists, TikTok's arrives with step C.
+ * `tests/unit/connectors-a-social-addresses.test.ts` checks every live address
+ * against the API's registered routes.
  */
-export const LIVE_SOCIAL_ADDRESS_KEYS: ReadonlySet<SocialAddressKey> = new Set<SocialAddressKey>([
-  'redirectUri',
-]);
+export const LIVE_SOCIAL_ADDRESS_KEYS: Readonly<
+  Record<SocialPlatformAddresses['providerKey'], ReadonlySet<SocialAddressKey>>
+> = {
+  facebook: new Set<SocialAddressKey>([
+    'redirectUri',
+    'webhookUrl',
+    'deauthorizeUrl',
+    'dataDeletionUrl',
+  ]),
+  instagram: new Set<SocialAddressKey>(['redirectUri']),
+  tiktok: new Set<SocialAddressKey>(['redirectUri']),
+  x: new Set<SocialAddressKey>(['redirectUri']),
+};
 
 export interface SocialPlatformAddresses {
   readonly providerKey: 'facebook' | 'instagram' | 'tiktok' | 'x';
@@ -68,7 +81,11 @@ export interface SocialPlatformAddresses {
 export function socialPlatformAddresses(apiBaseUrl: string): readonly SocialPlatformAddresses[] {
   const base = apiBaseUrl.replace(/\/+$/, '');
   const at = (path: string) => `${base}/v1/social/${path}`;
-  return [
+  const platforms: {
+    providerKey: SocialPlatformAddresses['providerKey'];
+    sharesAppWith: 'facebook' | null;
+    addresses: { key: SocialAddressKey; url: string }[];
+  }[] = [
     {
       providerKey: 'facebook',
       sharesAppWith: null,
@@ -76,22 +93,18 @@ export function socialPlatformAddresses(apiBaseUrl: string): readonly SocialPlat
         {
           key: 'redirectUri',
           url: at('callback/facebook'),
-          live: LIVE_SOCIAL_ADDRESS_KEYS.has('redirectUri'),
         },
         {
           key: 'webhookUrl',
           url: at('webhooks/facebook'),
-          live: LIVE_SOCIAL_ADDRESS_KEYS.has('webhookUrl'),
         },
         {
           key: 'deauthorizeUrl',
           url: at('deauthorize/facebook'),
-          live: LIVE_SOCIAL_ADDRESS_KEYS.has('deauthorizeUrl'),
         },
         {
           key: 'dataDeletionUrl',
           url: at('data-deletion/facebook'),
-          live: LIVE_SOCIAL_ADDRESS_KEYS.has('dataDeletionUrl'),
         },
       ],
     },
@@ -102,7 +115,6 @@ export function socialPlatformAddresses(apiBaseUrl: string): readonly SocialPlat
         {
           key: 'redirectUri',
           url: at('callback/instagram'),
-          live: LIVE_SOCIAL_ADDRESS_KEYS.has('redirectUri'),
         },
       ],
     },
@@ -113,12 +125,10 @@ export function socialPlatformAddresses(apiBaseUrl: string): readonly SocialPlat
         {
           key: 'redirectUri',
           url: at('callback/tiktok'),
-          live: LIVE_SOCIAL_ADDRESS_KEYS.has('redirectUri'),
         },
         {
           key: 'webhookUrl',
           url: at('webhooks/tiktok'),
-          live: LIVE_SOCIAL_ADDRESS_KEYS.has('webhookUrl'),
         },
       ],
     },
@@ -129,9 +139,15 @@ export function socialPlatformAddresses(apiBaseUrl: string): readonly SocialPlat
         {
           key: 'redirectUri',
           url: at('callback/x'),
-          live: LIVE_SOCIAL_ADDRESS_KEYS.has('redirectUri'),
         },
       ],
     },
   ];
+  return platforms.map((platform) => ({
+    ...platform,
+    addresses: platform.addresses.map((address) => ({
+      ...address,
+      live: LIVE_SOCIAL_ADDRESS_KEYS[platform.providerKey].has(address.key),
+    })),
+  }));
 }

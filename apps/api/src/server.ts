@@ -12,6 +12,7 @@ import { registerCreativeRoutes } from './routes/creative';
 import { registerHealthRoutes } from './routes/health';
 import { registerInternalEmailRoutes } from './routes/internal-email';
 import { registerInternalStorageRoutes } from './routes/internal-storage';
+import { registerSocialInboundRoutes } from './routes/social-inbound';
 import { registerSocialRoutes } from './routes/social';
 import { registerAnalyticsRoutes } from './routes/analytics';
 import { registerAutomationRoutes } from './routes/automation';
@@ -102,6 +103,8 @@ export async function buildServer() {
   // PR F (b), D-507: which AI tasks can run, per task true/false only.
   registerAiAvailabilityRoutes(app);
   await registerBillingWebhookRoutes(app);
+  // Connectors B — Meta's webhook, deauthorize and data-deletion addresses (raw body, own plugin).
+  await registerSocialInboundRoutes(app);
   await registerBillingHostedPageRoutes(app);
 
   log.info('routes registered', { count: registeredRoutes().length });

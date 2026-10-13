@@ -16,7 +16,7 @@ import { CopyValue } from './copy-value';
  * pointed somewhere else. Built from the console's existing table and section
  * header (CLAUDE.md §4.2: an approved design-system extension, recorded in
  * docs/UI-FIDELITY-CONTRACT.md §6). An address whose route is not in this build
- * says "Register after step B": the platform checks the URL when it is
+ * says "Register after step C": the platform checks the URL when it is
  * registered. The note disappears by itself once the route ships
  * (`LIVE_SOCIAL_ADDRESS_KEYS`).
  */
@@ -97,7 +97,7 @@ export function SocialAddresses({
                 <div>{pick(ADDRESS_NAMES[address.key])}</div>
                 {address.live ? null : (
                   <div style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
-                    {isArabic ? 'سجّله بعد الخطوة B.' : 'Register after step B.'}
+                    {isArabic ? 'سجّله بعد الخطوة C.' : 'Register after step C.'}
                   </div>
                 )}
               </Cell>

@@ -34,6 +34,7 @@ import {
   isAppError,
 } from '@brandspace/shared';
 import { route } from '../route-contract';
+import type { MetaAppSecrets, SubjectKeys } from '../social-inbound';
 
 /**
  * Social account connection — the OAuth half of Phase 6.
@@ -207,6 +208,54 @@ export function subjectHasher(): SubjectHasher {
   };
 }
 
+/**
+ * CONNECTORS B — THE META APP'S SECRETS FOR ITS INBOUND ROUTES: the app secret
+ * (which signs webhook deliveries and `signed_request`s) and the webhook verify
+ * token the owner typed into the Meta app (the Facebook entry's
+ * `webhookSecretRef`). Null when no active Facebook application holds a
+ * secret: the routes then answer "not configured" and write nothing.
+ */
+export async function metaAppSecrets(): Promise<MetaAppSecrets | null> {
+  const environment = currentEnvironment();
+  const document = (await configurationService().get(
+    'integrations.social-apps',
+    environment,
+  )) as SocialAppsDocument;
+  let found: ReturnType<typeof socialApplicationFor>;
+  try {
+    found = socialApplicationFor(document, 'FACEBOOK');
+  } catch {
+    return null;
+  }
+  const appSecret = await secretService().resolveSecret(found.clientSecretRef, environment);
+  const verifyRef = found.application.webhookSecretRef ?? null;
+  const verifyToken = verifyRef
+    ? await secretService().resolveSecret(verifyRef, environment)
+    : null;
+  return { appSecret, verifyToken };
+}
+
+/**
+ * CONNECTORS B — EVERY LISTED SUBJECT-HASH KEY, resolved, so a platform
+ * callback can be matched against connections hashed under any version that
+ * may still be stored (D-526).
+ */
+export async function subjectKeys(): Promise<SubjectKeys> {
+  const environment = currentEnvironment();
+  const document = (await configurationService().get(
+    'integrations.social-apps',
+    environment,
+  )) as SocialAppsDocument;
+  const keys = [];
+  for (const key of document.subjectHashKeys ?? []) {
+    keys.push({
+      version: key.version,
+      secret: await secretService().resolveSecret(key.secretRef, environment),
+    });
+  }
+  return { keys, currentVersion: document.subjectHashVersion ?? null };
+}
+
 /** The slice of `integrations.social-apps` the resolver reads. */
 export interface SocialAppsDocument {
   readonly subjectHashKeys?: readonly { readonly version: number; readonly secretRef: string }[];
@@ -215,6 +264,7 @@ export interface SocialAppsDocument {
     readonly providerKey: string;
     readonly appId: string;
     readonly clientSecretRef: string | null;
+    readonly webhookSecretRef?: string | null;
     readonly status: string;
     readonly settings?: Readonly<Record<string, string>>;
     readonly sharesCredentialWith?: string | null;

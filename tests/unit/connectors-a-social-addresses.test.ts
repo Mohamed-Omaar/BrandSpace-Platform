@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   INTEGRATION_DEFINITIONS,
@@ -49,20 +52,60 @@ describe('socialPlatformAddresses', () => {
   });
 
   it('an address is live exactly when its route is in this build (LIVE_SOCIAL_ADDRESS_KEYS)', () => {
-    // Before step B's routes, only the OAuth callback exists.
-    expect([...LIVE_SOCIAL_ADDRESS_KEYS]).toEqual(['redirectUri']);
+    // Step B registered Meta's webhook, deauthorize and data-deletion routes;
+    // TikTok's webhook arrives with step C.
+    expect(
+      Object.fromEntries(
+        Object.entries(LIVE_SOCIAL_ADDRESS_KEYS).map(([key, live]) => [key, [...live]]),
+      ),
+    ).toEqual({
+      facebook: ['redirectUri', 'webhookUrl', 'deauthorizeUrl', 'dataDeletionUrl'],
+      instagram: ['redirectUri'],
+      tiktok: ['redirectUri'],
+      x: ['redirectUri'],
+    });
     for (const platform of staging) {
       for (const address of platform.addresses) {
         expect(address.live, `${platform.providerKey}.${address.key}`).toBe(
-          LIVE_SOCIAL_ADDRESS_KEYS.has(address.key),
+          LIVE_SOCIAL_ADDRESS_KEYS[platform.providerKey].has(address.key),
         );
+      }
+    }
+    const tiktokWebhook = staging
+      .find((platform) => platform.providerKey === 'tiktok')!
+      .addresses.find((address) => address.key === 'webhookUrl');
+    expect(tiktokWebhook?.live).toBe(false);
+  });
+
+  it('every live inbound address is a route the API registers', () => {
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+    const source = ['apps/api/src/routes/social.ts', 'apps/api/src/routes/social-inbound.ts']
+      .map((file) => readFileSync(path.join(root, file), 'utf8'))
+      .join('\n');
+    for (const platform of staging) {
+      for (const address of platform.addresses.filter((candidate) => candidate.live)) {
+        const pathOnly = new URL(address.url).pathname;
+        const registered =
+          address.key === 'redirectUri'
+            ? source.includes("'/v1/social/callback/:provider'")
+            : source.includes(`'${pathOnly}'`);
+        expect(registered, `${platform.providerKey}.${address.key} ${pathOnly}`).toBe(true);
       }
     }
   });
 
-  it('adds no vendor entry to the Hub — the Hub lists only providers with an adapter', () => {
+  it('the Hub lists only providers with an adapter: Meta since step B, and the development double', () => {
     const social = INTEGRATION_DEFINITIONS.filter((definition) => definition.category === 'social');
-    expect(social.map((definition) => definition.providerKey)).toEqual(['mock']);
+    expect(social.map((definition) => definition.providerKey)).toEqual([
+      'facebook',
+      'instagram',
+      'mock',
+    ]);
+    expect(social.every((definition) => definition.adapterAvailable)).toBe(true);
+    // One Meta app: Instagram declares no credential and uses Facebook's.
+    const instagram = social.find((definition) => definition.providerKey === 'instagram')!;
+    expect(instagram.sharesCredentialWith).toBe('facebook');
+    expect(instagram.credentialFields).toEqual([]);
   });
 });
 

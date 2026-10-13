@@ -2429,6 +2429,8 @@ export const messages = {
     'activity.action.social.connection.authorization_started': 'بدأ ربط حساب',
     'activity.action.social.connection.connected': 'رُبط حساب',
     'activity.action.social.connection.disconnected': 'فُصل حساب',
+    'activity.action.social.connection.removed_at_platform': 'أُلغي وصولنا إلى حساب من لدى المنصة',
+    'activity.action.social.connection.data_deleted': 'حُذفت بيانات حساب بطلب من المنصة',
     'activity.action.social.connection.selection_required': 'ربط حساب يحتاج اختيار صفحة',
     'activity.action.copilot.plan_created': 'اقترح المساعد خطة',
     'activity.action.copilot.plan_confirmed': 'أُكّدت خطة المساعد',
@@ -6542,6 +6544,10 @@ export const messages = {
     'activity.action.social.connection.authorization_started': 'An account connection was started',
     'activity.action.social.connection.connected': 'An account was connected',
     'activity.action.social.connection.disconnected': 'An account was disconnected',
+    'activity.action.social.connection.removed_at_platform':
+      'Access to an account was removed at the platform',
+    'activity.action.social.connection.data_deleted':
+      'An account’s platform data was deleted at the platform’s request',
     'activity.action.social.connection.selection_required':
       'An account connection needs a page chosen',
     'activity.action.copilot.plan_created': 'The Copilot proposed a plan',
