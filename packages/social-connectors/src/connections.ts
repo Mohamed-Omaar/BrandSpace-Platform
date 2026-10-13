@@ -176,7 +176,9 @@ export function toConnectionView(
   expiringWindowMs: number | ((provider: SocialProvider) => number) = defaultExpiringWindowMs(),
 ): ConnectionView {
   const windowMs =
-    typeof expiringWindowMs === 'function' ? expiringWindowMs(connection.provider) : expiringWindowMs;
+    typeof expiringWindowMs === 'function'
+      ? expiringWindowMs(connection.provider)
+      : expiringWindowMs;
   return {
     id: connection.id,
     brandId: connection.brandId,
