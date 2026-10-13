@@ -971,6 +971,7 @@ const CALENDAR_KEYS = [
   'calendar.readiness.UNSUPPORTED',
   'calendar.held',
   'calendar.heldExplanation',
+  'calendar.heldTime',
   'calendar.channels',
   'calendar.campaign',
   'calendar.publishState',

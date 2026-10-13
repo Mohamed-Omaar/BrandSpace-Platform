@@ -2167,6 +2167,7 @@ export const messages = {
     'calendar.readiness.UNSUPPORTED': 'القناة غير متاحة للنشر',
     // B-pre 2 — a post held because none of its channels can be connected yet.
     'calendar.held': 'لا يمكن النشر بعد — لا توجد قناة مرتبطة',
+    'calendar.heldTime': 'وقته المحفوظ',
     'calendar.heldExplanation':
       'لا يمكن ربط أيٍّ من قنوات هذا المنشور بعد، لذا يبقى في يومه دون أن يُنشر. ويمكنك إزالته من التقويم؛ ووقته محفوظ.',
     'calendar.readinessBlocked': 'منشورات مجدولة لن تُنشر بحالتها الحالية',
@@ -6270,6 +6271,7 @@ export const messages = {
     'calendar.readiness.UNSUPPORTED': 'Channel unavailable for publishing',
     // B-pre 2 — a post held because none of its channels can be connected yet.
     'calendar.held': 'Can’t publish yet — no connected channel',
+    'calendar.heldTime': 'Its kept time',
     'calendar.heldExplanation':
       'None of this post’s channels can be connected yet, so it stays on its day and is not published. You can take it off the calendar; its time is kept.',
     'calendar.readinessBlocked': 'scheduled posts will not go out as they stand',

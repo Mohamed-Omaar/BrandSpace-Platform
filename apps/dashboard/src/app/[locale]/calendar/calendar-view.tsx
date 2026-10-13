@@ -1072,7 +1072,8 @@ export function CalendarView({
         open={openSlot !== null}
         onClose={() => setOpenSlotId(null)}
         title={openSlot?.title ?? ''}
-        description={t['calendar.slotDialogHint'] ?? ''}
+        // B-pre 2 — a held post does not go out at its time; the drawer says why instead.
+        description={openSlot?.held ? '' : (t['calendar.slotDialogHint'] ?? '')}
         closeLabel={t['common.close'] ?? 'Close'}
         testId="calendar-slot-dialog"
       >
@@ -1094,7 +1095,8 @@ export function CalendarView({
               />
             ) : null}
             <p data-testid="calendar-slot-when" style={{ margin: 0, ...typographyTokens.label }}>
-              {t['calendar.scheduledFor']}: {openSlot.date} {openSlot.time} · {timezone}
+              {openSlot.held ? t['calendar.heldTime'] : t['calendar.scheduledFor']}: {openSlot.date}{' '}
+              {openSlot.time} · {timezone}
             </p>
             {/*
               WHAT THE POST ACTUALLY IS, before what can be done to it.
