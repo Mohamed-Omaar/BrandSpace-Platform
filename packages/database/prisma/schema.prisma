@@ -4110,7 +4110,7 @@ model SocialDataDeletionRequest {
   requestedAt        DateTime                 @default(now()) @db.Timestamptz(6)
   completedAt        DateTime?                @db.Timestamptz(6)
 
-  inboundEvent SocialInboundEvent? @relation(fields: [inboundEventId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  inboundEvent SocialInboundEvent? @relation(fields: [inboundEventId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "social_data_deletion_request_inbound_event_fkey")
 
   @@index([provider, subjectHash])
   @@index([status, requestedAt])
