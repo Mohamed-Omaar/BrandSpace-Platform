@@ -43,6 +43,14 @@
       }
     },
     {
+      "key": "facebook",
+      "labelKey": "content.platform.facebook",
+      "maxBodyChars": 2200,
+      "maxHashtags": 30,
+      "allowsFirstComment": false,
+      "maxMediaItems": 10
+    },
+    {
       "key": "linkedin",
       "labelKey": "content.platform.linkedin",
       "maxBodyChars": 3000,

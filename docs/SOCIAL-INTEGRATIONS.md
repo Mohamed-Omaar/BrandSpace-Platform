@@ -848,3 +848,15 @@ redelivery is the same row and gets the same confirmation code. A delivery the s
 is retried `publishing.inbound.maxAttempts` times and then left FAILED for a person; finished
 deliveries are purged after `publishing.inbound.retentionDays` (30). A deletion keeps the
 customer's own posts, drafts and media.
+
+### 18.5 Decided on #81 (D-534)
+
+- **Disconnecting a Facebook or Instagram account keeps the Meta grant** (it covers every account
+  the person connected). The disconnect confirmation says, in one line, where to remove
+  Brandspace's access fully: Facebook › Settings & privacy › Settings › Business integrations.
+- **Expiring soon, per platform:** `publishing.providers.<key>.expiringSoonHours`. Instagram's
+  long-lived token lasts about 60 days, so production-config warns 168 hours (7 days) ahead with
+  the existing notice; the rest keep `dispatch.expiringSoonHours` (24).
+- **Instagram `dailyPublishCap`: 25**, approved.
+- **Facebook is a `content` platform** (production-config `content.json`; staging steps in its
+  README §5.1b).

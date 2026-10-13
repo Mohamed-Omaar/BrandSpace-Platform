@@ -14,7 +14,8 @@
       "targetKind": "page",
       "mediaByUrl": true,
       "apiVersion": "v26.0",
-      "dailyPublishCap": null
+      "dailyPublishCap": null,
+      "expiringSoonHours": null
     },
     "instagram": {
       "enabled": false,
@@ -35,7 +36,8 @@
       "targetKind": "business_account",
       "mediaByUrl": true,
       "apiVersion": "v26.0",
-      "dailyPublishCap": 25
+      "dailyPublishCap": 25,
+      "expiringSoonHours": 168
     },
     "tiktok": {
       "enabled": false,

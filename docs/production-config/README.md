@@ -170,20 +170,50 @@ Pinned by `tests/unit/pr-f-production-config.test.ts` ("the values the owner dec
 | ----------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `safeZones` | `content.json` | instagram and tiktok: `top` 13, `bottom` 22, `end` 16 (percent of a 9:16 frame). **DESIGN GUIDANCE** — the bands the approved prototype draws (`Main.dc.html` lines 462 and 489), not values Meta or TikTok publish; replace them with the platforms' own templates when the owner has them (D-500, D-505). linkedin and x have none (no 9:16 preview). |
 
+**Also decided on the #81 review** (pinned by the same test block):
+
+| Value                       | Where                        | Decided                                                                                                                                                                                    |
+| --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dailyPublishCap`           | `publishing.json`, instagram | **25** posts per account per rolling 24 hours (Instagram's own `quota_total`, when lower, still wins).                                                                                     |
+| `expiringSoonHours`         | `publishing.json`, instagram | **168** (7 days). Instagram's long-lived token lasts about 60 days, so it is warned about a week ahead with the existing notice. Every other platform: `null`, the dispatch window (24 h). |
+| `facebook` content platform | `content.json`, `platforms`  | **Added**: 2,200 characters, 30 hashtags, no first comment, 10 media items (the same limits its publishing entry enforces). No recommended hashtag range, no safe zones.                   |
+
+#### Adding Facebook to the `content` document on staging (Control Center)
+
+1. Open `/en/console/configuration?domain=content` on the **staging** Control Center.
+2. Change reason, for example "#81: Facebook as a content platform".
+3. Press **Create draft** (it starts as a copy of the active document).
+4. In `platforms`, add this object (after the `instagram` entry), and change nothing else:
+
+   ```json
+   {
+     "key": "facebook",
+     "labelKey": "content.platform.facebook",
+     "maxBodyChars": 2200,
+     "maxHashtags": 30,
+     "allowsFirstComment": false,
+     "maxMediaItems": 10
+   }
+   ```
+
+5. **Save**, then **Validate**, then **Activate**.
+6. Customers can write Facebook versions at once; a Facebook post goes out only once Facebook is
+   switched on in `publishing` (§5.1c) and an account is connected. Until then it is held (D-531).
+
 ### 5.1c Meta (connectors step B) — proposed, for the owner to confirm before Facebook or Instagram is switched on
 
 Both stay `enabled: false` in `publishing.json`. Every value below is from Meta's own documentation (D-505), cited in
 `docs/SOCIAL-INTEGRATIONS.md` §18; nothing here is switched on by a deploy.
 
-| Value                   | Where                                   | Proposed                                                                                                                                                                                                                                                                                                 |
-| ----------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apiVersion`            | `publishing.json`, facebook + instagram | **`v26.0`**, the current Graph API version (announced 2026-07-29). Move it when Meta deprecates it; the adapters read nothing else.                                                                                                                                                                      |
-| `dailyPublishCap`       | `publishing.json`, instagram            | **25** posts per account per rolling 24 hours. Meta's own pages disagree (100 on the publishing guide, 50 on the `content_publishing_limit` reference), so the proposal is half the lower figure; the platform's own `quota_total`, when lower, wins anyway. Facebook: `null` (Meta states no such cap). |
-| `scopes`                | `publishing.json`                       | facebook: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`. instagram: `instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement`. With a Facebook Login for Business configuration id, the configuration decides instead.                               |
-| `postKinds`             | `publishing.json`                       | facebook: text, image, carousel (several photos on one post). instagram: image, carousel (images), reel. Video on Facebook, stories, and a carousel with a video are not published in step B.                                                                                                            |
-| `targetKind`            | `publishing.json`                       | facebook `page`, instagram `business_account`.                                                                                                                                                                                                                                                           |
-| `mediaByUrl`            | `publishing.json`                       | **true** for both: Meta fetches the picture or video from a short-lived pre-signed URL (D-505 O1).                                                                                                                                                                                                       |
-| `facebook` in `content` | `content.json`, `platforms`             | **Not added.** The content document lists instagram, linkedin, x and tiktok; a Facebook post needs a `facebook` platform entry there (owner decision) before a customer can write one.                                                                                                                   |
+| Value                   | Where                                   | Proposed                                                                                                                                                                                                                                                                   |
+| ----------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiVersion`            | `publishing.json`, facebook + instagram | **`v26.0`**, the current Graph API version (announced 2026-07-29). Move it when Meta deprecates it; the adapters read nothing else.                                                                                                                                        |
+| `dailyPublishCap`       | `publishing.json`, instagram            | **25 — approved (#81).** Meta's own pages disagree (100 on the publishing guide, 50 on the `content_publishing_limit` reference), so it is half the lower figure; the platform's own `quota_total`, when lower, wins anyway. Facebook: `null` (Meta states no such cap).   |
+| `scopes`                | `publishing.json`                       | facebook: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`. instagram: `instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement`. With a Facebook Login for Business configuration id, the configuration decides instead. |
+| `postKinds`             | `publishing.json`                       | facebook: text, image, carousel (several photos on one post). instagram: image, carousel (images), reel. Video on Facebook, stories, and a carousel with a video are not published in step B.                                                                              |
+| `targetKind`            | `publishing.json`                       | facebook `page`, instagram `business_account`.                                                                                                                                                                                                                             |
+| `mediaByUrl`            | `publishing.json`                       | **true** for both: Meta fetches the picture or video from a short-lived pre-signed URL (D-505 O1).                                                                                                                                                                         |
+| `facebook` in `content` | `content.json`, `platforms`             | **Added (#81).** See §5.1b for the entry and the staging steps.                                                                                                                                                                                                            |
 
 ### 5.2 Still proposed
 

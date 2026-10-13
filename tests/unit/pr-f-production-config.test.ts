@@ -107,6 +107,8 @@ describe('the values the owner confirmed on the #79 review', () => {
     );
     expect(ranges).toEqual({
       instagram: { min: 3, max: 5 },
+      // #81: Facebook joins the content document with no recommended range.
+      facebook: null,
       tiktok: { min: 3, max: 5 },
       linkedin: { min: 1, max: 3 },
       x: { min: 1, max: 2 },
@@ -131,9 +133,46 @@ describe('the values the owner decided on the #81 review', () => {
     expect(zones).toEqual({
       instagram: { top: 13, bottom: 22, end: 16 },
       tiktok: { top: 13, bottom: 22, end: 16 },
+      facebook: null,
       linkedin: null,
       x: null,
     });
+  });
+
+  it('Facebook is a content platform, with the limits its publishing entry enforces', () => {
+    const content = parseConfigPayload('content', read('content.json'));
+    const publishing = parseConfigPayload('publishing', read('publishing.json'));
+    expect(content.platforms.map((platform) => platform.key)).toEqual([
+      'instagram',
+      'facebook',
+      'linkedin',
+      'x',
+      'tiktok',
+    ]);
+    const facebook = content.platforms.find((platform) => platform.key === 'facebook')!;
+    expect(facebook).toMatchObject({
+      labelKey: 'content.platform.facebook',
+      maxBodyChars: 2_200,
+      maxHashtags: 30,
+      allowsFirstComment: false,
+      maxMediaItems: 10,
+    });
+    // Authoring never allows more than publishing will send.
+    expect(facebook.maxBodyChars).toBeLessThanOrEqual(
+      publishing.providers.facebook.maxBodyCharacters,
+    );
+    expect(facebook.maxMediaItems).toBeLessThanOrEqual(publishing.providers.facebook.maxMediaItems);
+  });
+
+  it('Instagram: at most 25 posts a day, and its token is warned about 7 days ahead', () => {
+    const publishing = parseConfigPayload('publishing', read('publishing.json'));
+    expect(publishing.providers.instagram.dailyPublishCap).toBe(25);
+    expect(publishing.providers.instagram.expiringSoonHours).toBe(168);
+    // Everything else keeps the dispatch window.
+    expect(publishing.providers.facebook.expiringSoonHours).toBeNull();
+    // Still switched off: the owner switches each platform on.
+    for (const provider of Object.values(publishing.providers))
+      expect(provider.enabled).toBe(false);
   });
 });
 
