@@ -15,6 +15,8 @@ import {
   createConnectorRegistry,
   resolvePublishingPolicy,
   expiringSoonMs,
+  subjectHash,
+  type SubjectHasher,
   SocialConnectionService,
   SocialOAuthService,
   SocialTokenVault,
@@ -181,8 +183,34 @@ export function applicationResolver(): ApplicationResolver {
   };
 }
 
+/**
+ * CONNECTORS A (W10) — the hasher for the granting user's id.
+ *
+ * THE KEY IS A SECRET SERVICE RECORD, referenced from
+ * `integrations.social-apps.subjectHashKeys` and resolved HERE, on the one
+ * surface allowed to (F-07); the configuration holds only the reference. The
+ * CURRENT version (`subjectHashVersion`) writes new hashes; with none set, no
+ * hash is stored and nothing else changes. The raw id never leaves this call.
+ */
+export function subjectHasher(): SubjectHasher {
+  return async (subjectId) => {
+    const environment = currentEnvironment();
+    const document = (await configurationService().get(
+      'integrations.social-apps',
+      environment,
+    )) as SocialAppsDocument;
+    const version = document.subjectHashVersion ?? null;
+    const key = document.subjectHashKeys?.find((candidate) => candidate.version === version);
+    if (version === null || !key) return null;
+    const secret = await secretService().resolveSecret(key.secretRef, environment);
+    return subjectHash(subjectId, { version, secret });
+  };
+}
+
 /** The slice of `integrations.social-apps` the resolver reads. */
 export interface SocialAppsDocument {
+  readonly subjectHashKeys?: readonly { readonly version: number; readonly secretRef: string }[];
+  readonly subjectHashVersion?: number | null;
   readonly applications?: readonly {
     readonly providerKey: string;
     readonly appId: string;
@@ -318,6 +346,8 @@ async function oauthServiceFor<T>(
         quota: connectionQuota(db, workspaceId, environment),
         // R3 (connectors A): a refused refresh tells the account's owner.
         reauthNotifier: connectionReauthNotifier({ db, workspaceId }),
+        // W10 (connectors A): the granting user, kept only as a keyed hash.
+        subjectHasher: subjectHasher(),
       }),
     ),
   );

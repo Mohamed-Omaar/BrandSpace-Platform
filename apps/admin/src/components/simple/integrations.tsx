@@ -32,6 +32,7 @@ import {
   generatedSettingsFor,
   getIntegrationsService,
   serviceActor,
+  publicApiBaseUrl,
 } from '../../server/platform-context';
 import {
   saveIntegrationConfigurationAction,
@@ -39,6 +40,7 @@ import {
   testIntegrationAction,
 } from '../../app/[locale]/console/integrations/actions';
 import { AdvancedLink } from '../mode-switch';
+import { SocialAddresses } from '../social-addresses';
 import {
   ActionLink,
   ActionOutcome,
@@ -132,6 +134,9 @@ export async function SimpleIntegrations({
           testId={`integration-choose-${chosen}`}
         >
           {chosen === 'social' ? <Banner tone="info">{copy('int.socialNote')}</Banner> : null}
+          {chosen === 'social' ? (
+            <SocialAddresses isArabic={locale === 'ar'} apiBaseUrl={publicApiBaseUrl()} />
+          ) : null}
           {inCategory.every((view) => view.developmentOnly) ? (
             <Banner tone="warning" testId="integration-no-real">
               {copy('int.noRealProvider')}

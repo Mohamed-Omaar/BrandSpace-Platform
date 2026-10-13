@@ -133,4 +133,10 @@ export type { FailureBehaviour } from './errors';
 export { ProviderRateLimiter } from './rate-limits';
 export { FORMAT_POST_KINDS, postKindFor } from './post-kinds';
 export { markNeedsReauth, type ReauthNotifier } from './reauth';
+export {
+  subjectHash,
+  subjectHashCandidates,
+  type SubjectHasher,
+  type SubjectHashKey,
+} from './subject-hash';
 export type { ProviderBudget, RateLimitDecision, RateLimitPriority } from './rate-limits';

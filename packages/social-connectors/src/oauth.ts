@@ -17,7 +17,15 @@ import {
 import { capabilitiesFor, type PublishingPolicy } from './policy';
 import type { ConnectorRegistry } from './registry';
 import { markNeedsReauth, type ReauthNotifier } from './reauth';
+import type { SubjectHasher } from './subject-hash';
 import type { SocialTokenVault } from './token-vault';
+
+/**
+ * The permission that connects an account — the same key the connect route
+ * requires of the session (`apps/api/src/routes/social.ts`), re-read at the
+ * callback for the person who started the flow (W11). Not a new key.
+ */
+const CONNECT_PERMISSION = 'integrations.manage';
 
 /**
  * The OAuth connection flow — docs/SOCIAL-INTEGRATIONS.md §4.
@@ -85,6 +93,11 @@ export interface SocialOAuthOptions {
   readonly quota: ConnectionQuota;
   /** Connectors A (R3): who is told when a refresh is refused and the account needs reconnecting. */
   readonly reauthNotifier?: ReauthNotifier | undefined;
+  /**
+   * Connectors A (W10): turns the platform's user id into the stored, keyed,
+   * versioned hash. Absent (or answering null): no hash is stored.
+   */
+  readonly subjectHasher?: SubjectHasher | undefined;
   readonly clock?: Clock;
 }
 
@@ -187,6 +200,7 @@ export class SocialOAuthService {
   readonly #vault: SocialTokenVault;
   readonly #applications: ApplicationResolver;
   readonly #reauthNotifier: ReauthNotifier | undefined;
+  readonly #subjectHasher: SubjectHasher | undefined;
   readonly #clock: Clock;
   readonly #quota: ConnectionQuota;
 
@@ -199,6 +213,7 @@ export class SocialOAuthService {
     this.#vault = options.vault;
     this.#applications = options.applications;
     this.#reauthNotifier = options.reauthNotifier;
+    this.#subjectHasher = options.subjectHasher;
     this.#clock = options.clock ?? systemClock;
   }
 
@@ -370,6 +385,18 @@ export class SocialOAuthService {
     // against the request's own value would compare it with itself.
     if (record.redirectUri !== input.redirectUri) throw oauthStateInvalid();
 
+    /*
+     * CONNECTORS A (W11) — THE PERSON WHO STARTED THIS MAY STILL DO IT.
+     *
+     * The callback arrives from the platform, minutes after "Connect", with no
+     * session: it used to trust `startedByUserId`. A member removed in between,
+     * one whose role lost `integrations.manage`, or one whose brand access no
+     * longer covers this brand would still have created a connection. Checked
+     * BEFORE the code is exchanged, so a refused flow obtains no token at all,
+     * and refused with the same sentence as every other invalid state.
+     */
+    if (!(await this.#starterMayConnect(record))) throw oauthStateInvalid();
+
     const adapter = this.#registry.get(record.provider);
     const application = await this.#applications.resolve(record.provider);
     const verifier = await this.#vault.openVerifier({
@@ -426,8 +453,19 @@ export class SocialOAuthService {
      * rather than onto a connection, because a connection row IS a chosen
      * target and nobody has chosen one yet.
      */
+    // W10: the granting USER, kept only as a keyed, versioned hash.
+    const providerSubjectHash = await this.#hashSubject(bundle.subjectId);
+
     if (targets.length > 1) {
-      return this.#pauseForSelection({ record, stateHash, bundle, targets, missingScopes, now });
+      return this.#pauseForSelection({
+        record,
+        stateHash,
+        bundle,
+        targets,
+        missingScopes,
+        now,
+        providerSubjectHash,
+      });
     }
 
     const only = targets[0];
@@ -439,6 +477,7 @@ export class SocialOAuthService {
       bundle,
       missingScopes,
       now,
+      providerSubjectHash,
     });
 
     return { outcome: 'connected', connection, targets, missingScopes };
@@ -461,6 +500,7 @@ export class SocialOAuthService {
     targets: readonly PublishTarget[];
     missingScopes: readonly string[];
     now: Date;
+    providerSubjectHash: string | null;
   }): Promise<CompleteConnectionResult> {
     const selectionToken = randomBytes(32).toString('base64url');
     const sealed = await this.#vault.sealPendingGrant({
@@ -487,6 +527,8 @@ export class SocialOAuthService {
         })),
         grantedScopes: [...input.bundle.grantedScopes],
         selectionTokenHash: sha256(selectionToken),
+        // W10: carried through the pause, never the raw id.
+        pendingSubjectHash: input.providerSubjectHash,
         // THE SAME TTL THE AUTHORIZATION HAD. A grant left unchosen expires
         // with its flow rather than lingering as a usable token indefinitely.
         selectionExpiresAt: new Date(
@@ -560,6 +602,9 @@ export class SocialOAuthService {
     actor: OAuthActor;
   }): Promise<SocialConnection> {
     const record = await this.#loadPendingSelection(input);
+    // W11: the chooser is the starter (checked above); their authority NOW is
+    // re-read from the membership, not trusted from the session alone.
+    if (!(await this.#starterMayConnect(record))) throw oauthStateInvalid();
 
     const target = parseOfferedTargets(record.offeredTargets).find(
       (candidate) => candidate.externalAccountId === input.externalAccountId,
@@ -609,6 +654,7 @@ export class SocialOAuthService {
       },
       missingScopes,
       now,
+      providerSubjectHash: record.pendingSubjectHash,
     });
 
     /*
@@ -634,10 +680,44 @@ export class SocialOAuthService {
         offeredTargets: Prisma.DbNull,
         selectionTokenHash: null,
         selectionExpiresAt: null,
+        pendingSubjectHash: null,
       },
     });
 
     return connection;
+  }
+
+  /**
+   * W11 — may the person who started this authorization still connect an
+   * account to its brand? An ACTIVE membership in THIS workspace, a role that
+   * holds `integrations.manage`, and a BrandScope that is unrestricted or
+   * includes the brand. Read through the tenant client, so a membership
+   * elsewhere is invisible rather than filtered.
+   */
+  async #starterMayConnect(record: {
+    readonly startedByUserId: string;
+    readonly brandId: string;
+  }): Promise<boolean> {
+    const membership = await this.#db.membership.findFirst({
+      where: { workspaceId: this.#workspaceId, userId: record.startedByUserId, status: 'ACTIVE' },
+      select: {
+        brandScope: true,
+        role: { select: { permissions: { select: { permission: { select: { key: true } } } } } },
+      },
+    });
+    if (!membership) return false;
+    const mayManage = membership.role.permissions.some(
+      (row) => row.permission.key === CONNECT_PERMISSION,
+    );
+    const brandInScope =
+      membership.brandScope.length === 0 || membership.brandScope.includes(record.brandId);
+    return mayManage && brandInScope;
+  }
+
+  /** W10 — the stored form of the granting user's id, or null. */
+  async #hashSubject(subjectId: string | null | undefined): Promise<string | null> {
+    if (!subjectId || !this.#subjectHasher) return null;
+    return this.#subjectHasher(subjectId);
   }
 
   /**
@@ -678,6 +758,8 @@ export class SocialOAuthService {
     bundle: TokenBundle;
     missingScopes: readonly string[];
     now: Date;
+    /** W10. Null keeps whatever a reconnected row already holds. */
+    providerSubjectHash: string | null;
   }): Promise<SocialConnection> {
     const capabilities = capabilitiesFor(this.#policy, input.record.provider);
     const expiresAt =
@@ -765,6 +847,10 @@ export class SocialOAuthService {
           lastCheckedAt: input.now,
           consecutiveFailureCount: 0,
           lastFailureClass: input.missingScopes.length > 0 ? 'INSUFFICIENT_SCOPE' : null,
+          // W10: a reconnection rewrites the hash under the CURRENT key version.
+          ...(input.providerSubjectHash === null
+            ? {}
+            : { providerSubjectHash: input.providerSubjectHash }),
         },
       });
       await writeAuditEvent(this.#db, this.#workspaceId, {
@@ -801,6 +887,7 @@ export class SocialOAuthService {
         tokenExpiresAt: expiresAt,
         lastSyncedAt: input.now,
         lastCheckedAt: input.now,
+        providerSubjectHash: input.providerSubjectHash,
         ...(input.missingScopes.length > 0
           ? { lastFailureClass: 'INSUFFICIENT_SCOPE' as const }
           : {}),

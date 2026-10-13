@@ -8,9 +8,11 @@ import { SectionHeader, colorTokens, spacingTokens, typographyTokens } from '@br
 import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
 import { SimpleIntegrations } from '../../../../components/simple/integrations';
 import { getConsoleMode } from '../../../../server/console-mode-cookie';
+import { SocialAddresses } from '../../../../components/social-addresses';
 import {
   currentEnvironment,
   getIntegrationsService,
+  publicApiBaseUrl,
   requirePageActor,
   serviceActor,
 } from '../../../../server/platform-context';
@@ -196,6 +198,9 @@ export default async function IntegrationsPage({
                 ))}
               </DataTable>
             )}
+            {category.key === 'social' ? (
+              <SocialAddresses isArabic={isArabic} apiBaseUrl={publicApiBaseUrl()} />
+            ) : null}
           </section>
         );
       })}

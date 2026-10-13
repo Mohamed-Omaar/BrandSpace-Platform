@@ -96,13 +96,15 @@ export function getIntegrationsService(): IntegrationsService {
  * map by the registry's `generated` flag so a caller cannot smuggle an ordinary
  * setting through it.
  */
+/** The API's public base URL for this environment — where every generated address points. */
+export function publicApiBaseUrl(): string {
+  return (process.env['PUBLIC_API_BASE_URL'] ?? 'http://localhost:3003').replace(/\/+$/, '');
+}
+
 export function generatedSettingsFor(
   definition: IntegrationDefinition,
 ): Readonly<Record<string, string>> {
-  const apiBaseUrl = (process.env['PUBLIC_API_BASE_URL'] ?? 'http://localhost:3003').replace(
-    /\/+$/,
-    '',
-  );
+  const apiBaseUrl = publicApiBaseUrl();
   if (definition.category === 'payment') {
     return { webhookUrl: `${apiBaseUrl}/v1/billing/webhook/${definition.providerKey}` };
   }
