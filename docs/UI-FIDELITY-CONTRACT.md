@@ -2321,6 +2321,17 @@ shadow or interaction model.
   social accounts isn't available yet." in the card's existing muted line; Schedule and Publish now
   are absent (D-510). Removal and one line only.
 
+### 6.3.66 Connectors A — "Addresses to register" in the Control Center (D-530)
+
+The Control Center is not a customer screen and has no prototype; this is an **APPROVED
+DESIGN-SYSTEM EXTENSION (§4.2)** of the Integrations Hub (§6.8) and its Simple mode (§6.9). On the
+Social platforms section (Advanced) and the Social category (Simple), one block: the console's
+existing `SectionHeader` and `DataTable`, one row per address — platform, address name (with a muted
+caption when its route arrives in step B, and on Instagram's row saying it shares the Facebook app),
+the URL in the mono font, and a **Copy** button (`CopyValue`), which is the design system's neutral
+small button plus a visually hidden polite live region that announces "Copied". No new colour, font,
+shadow or interaction model. Arabic and English copy are inline, as on the Hub's other rows.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The

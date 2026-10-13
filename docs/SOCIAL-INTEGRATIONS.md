@@ -703,3 +703,84 @@ post-completion activation stages, after AI and before payments.
 mock in a production environment, because a registry that did would accept publish jobs, mark them
 `PUBLISHED` and store an external id pointing at nothing. Phase 10 left that unchanged and put the same
 refusal in the Hub, so the screen and the pipeline agree.
+
+## 17. Connectors step A — readiness, as built (D-505, D-518 – D-530)
+
+Step A makes the pipeline safe and complete for a real platform **without adding one**: every
+connector in CI is still the deterministic mock, and production still refuses mocks. Steps B (Meta)
+and C (TikTok) add the adapters.
+
+### 17.1 The provider call is never inside a transaction (W1, D-518)
+
+```
+tx 1  claim QUEUED→PUBLISHING, preflight, connection, credential, variant, media,
+      post kind, media rules, request budget                         → commit
+--    adapter.publish (and, after an indeterminate answer, the post lookup)  — no transaction
+tx 2  lock the job row; still ours? (PUBLISHING, or VERIFICATION_PENDING after recovery,
+      same claimedAt) → record the attempt and the outcome           → commit
+```
+
+Verification and stale-claim recovery have the same shape. A worker that dies after tx 1 leaves
+PUBLISHING, which recovery verifies after the lease and never resends. The worker builds one pipeline
+per step (`apps/worker/src/processors/publishing.ts`, `transactionsFor`).
+
+### 17.2 What a publish request now says (W2) and what is checked first (W3, O1, W12)
+
+| Before any call                                                                                                 | Refusal                                                |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| The post kind (`FORMAT_POST_KINDS`: a plain post is `text`, or `image` with media) is one the provider declares | `UNSUPPORTED` · `preflight.post_kind_unsupported`      |
+| Each file meets `publishing.providers.<key>.mediaRules.<kind>`                                                  | `MEDIA_INVALID` · `preflight.media_rule.<rule>`        |
+| A platform that fetches by URL (`mediaByUrl`) got a pre-signed URL for every file                               | `CONTENT_REJECTED` · `preflight.media_url_unavailable` |
+| The account's request budget (`rateLimit`) has room                                                             | held QUEUED · `preflight.awaiting_budget` (no attempt) |
+
+`PublishRequest` also carries `linkUrl` and the variant's `platformOptions` as `options`, which the
+adapter validates. The pre-signed URL (D-520) is minted by the media resolver after the same tenant
+checks as the bytes, lives `publishing.media.fetchUrlTtlSeconds`, and is redacted from logs.
+
+### 17.3 Asynchronous platforms (W5, D-521) and the result check (R8, D-522)
+
+An adapter may answer `pending` with a handle. The job waits in VERIFICATION_PENDING holding it; the
+sweep sends `social.verify-post` every `publishPollSeconds` until `publishPollMaxMinutes`; the
+verification asks `checkPublish(handle)`. A success may carry `observed`; a difference from the
+request is recorded on the attempt and audited as `social.post.result_mismatch`, by field name.
+
+### 17.4 Connections (W6, W10, W11, W14, R3)
+
+- **Refreshed ahead** at `tokenRefreshAtLifetimeRatio` of the token's life, when it has a refresh
+  token (D-525).
+- **The granting user** is stored only as `v<version>:` + HMAC-SHA256 under a Secret Service key
+  (D-526; rotation in OPERATIONS §7.1). Step B uses it to find connections from Meta's deauthorize
+  and data-deletion callbacks.
+- **The callback re-checks the starter** — active member, `integrations.manage`, brand in scope —
+  before exchanging the code, and again at the page choice (D-527).
+- **"Expiring soon"** is `publishing.dispatch.expiringSoonHours` (D-529).
+- **NEEDS_REAUTH tells the owner once** (`publishing.connection_needs_reauth`, D-524).
+
+### 17.5 Configuration added (all optional; defaults keep today's behaviour)
+
+| Domain                                    | Field                                                                             |
+| ----------------------------------------- | --------------------------------------------------------------------------------- |
+| `publishing.providers.<key>`              | `mediaRules`, `rateLimit`, `mediaByUrl`                                           |
+| `publishing.dispatch`                     | `expiringSoonHours` (24), `publishPollSeconds` (30), `publishPollMaxMinutes` (60) |
+| `publishing.media`                        | `fetchUrlTtlSeconds` (900)                                                        |
+| `integrations.social-apps.applications[]` | `settings` (named strings), `sharesCredentialWith` (D-505 O3)                     |
+| `integrations.social-apps`                | `subjectHashKeys`, `subjectHashVersion`                                           |
+
+### 17.6 The addresses to register (D-530)
+
+Control Center → Integrations → Social platforms → **Addresses to register**, generated from
+`PUBLIC_API_BASE_URL`, each with a Copy button. For staging (`https://api-staging.brandspace.cc`):
+
+| Platform app               | Field in the platform's console             | Address                                                              |
+| -------------------------- | ------------------------------------------- | -------------------------------------------------------------------- |
+| Meta (Facebook)            | Valid OAuth Redirect URIs                   | `https://api-staging.brandspace.cc/v1/social/callback/facebook`      |
+| Meta (Instagram, same app) | Valid OAuth Redirect URIs                   | `https://api-staging.brandspace.cc/v1/social/callback/instagram`     |
+| Meta                       | Deauthorize callback URL (route in step B)  | `https://api-staging.brandspace.cc/v1/social/deauthorize/facebook`   |
+| Meta                       | Data deletion request URL (route in step B) | `https://api-staging.brandspace.cc/v1/social/data-deletion/facebook` |
+| Meta                       | Webhooks callback URL (route in step B)     | `https://api-staging.brandspace.cc/v1/social/webhooks/facebook`      |
+| TikTok                     | Redirect URI                                | `https://api-staging.brandspace.cc/v1/social/callback/tiktok`        |
+| TikTok                     | Webhook callback URL (route in step B/C)    | `https://api-staging.brandspace.cc/v1/social/webhooks/tiktok`        |
+| X                          | Callback URI / Redirect URL                 | `https://api-staging.brandspace.cc/v1/social/callback/x`             |
+
+X is not built (D-505); its address is listed so the app can be prepared. The Hub gains no vendor
+entry until its adapter exists.
