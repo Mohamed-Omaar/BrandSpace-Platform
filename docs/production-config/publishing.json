@@ -41,16 +41,29 @@
     },
     "tiktok": {
       "enabled": false,
-      "postKinds": ["text", "image", "video", "reel"],
+      "postKinds": ["video"],
       "maxBodyCharacters": 2200,
       "maxHashtags": 30,
-      "maxMediaItems": 10,
+      "maxMediaItems": 1,
       "supportsFirstComment": false,
       "supportsDelete": false,
       "supportsNativeScheduling": false,
       "supportsPostLookup": false,
-      "scopes": [],
-      "targetKind": "profile"
+      "scopes": ["user.info.basic", "video.publish"],
+      "targetKind": "profile",
+      "apiVersion": "v2",
+      "forcedAudience": "private",
+      "rateLimit": {
+        "requestsPerWindow": 6,
+        "windowSeconds": 60
+      },
+      "mediaRules": {
+        "video": {
+          "mimeTypes": ["video/mp4", "video/quicktime", "video/webm"],
+          "maxBytes": 4000000000,
+          "maxDurationSeconds": 600
+        }
+      }
     },
     "linkedin": {
       "enabled": false,

@@ -94,11 +94,12 @@ describe('socialPlatformAddresses', () => {
     }
   });
 
-  it('the Hub lists only providers with an adapter: Meta since step B, and the development double', () => {
+  it('the Hub lists only providers with an adapter: Meta since step B, TikTok since step C, and the development double', () => {
     const social = INTEGRATION_DEFINITIONS.filter((definition) => definition.category === 'social');
     expect(social.map((definition) => definition.providerKey)).toEqual([
       'facebook',
       'instagram',
+      'tiktok',
       'mock',
     ]);
     expect(social.every((definition) => definition.adapterAvailable)).toBe(true);
@@ -106,6 +107,10 @@ describe('socialPlatformAddresses', () => {
     const instagram = social.find((definition) => definition.providerKey === 'instagram')!;
     expect(instagram.sharesCredentialWith).toBe('facebook');
     expect(instagram.credentialFields).toEqual([]);
+    // TikTok holds its own client secret, which also signs its webhooks.
+    const tiktok = social.find((definition) => definition.providerKey === 'tiktok')!;
+    expect(tiktok.credentialFields.map((field) => field.key)).toEqual(['clientSecret']);
+    expect(tiktok.testable).toBe(true);
   });
 });
 

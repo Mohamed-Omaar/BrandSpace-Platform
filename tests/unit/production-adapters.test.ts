@@ -617,9 +617,13 @@ describe('the registry describes the two real providers honestly', () => {
      */
     for (const category of ['ai', 'social', 'payment'] as const) {
       for (const vendor of ['openai', 'anthropic', 'meta', 'tiktok', 'stripe', 'moyasar']) {
+        // Connectors C (D-536) added the TikTok entry with its adapter; every
+        // other pairing is still absent.
+        if (category === 'social' && vendor === 'tiktok') continue;
         expect(findIntegration(category, vendor), `${category}/${vendor}`).toBeUndefined();
       }
     }
+    expect(findIntegration('social', 'tiktok')?.adapterAvailable).toBe(true);
   });
 });
 

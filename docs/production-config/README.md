@@ -215,6 +215,21 @@ Both stay `enabled: false` in `publishing.json`. Every value below is from Meta'
 | `mediaByUrl`            | `publishing.json`                       | **true** for both: Meta fetches the picture or video from a short-lived pre-signed URL (D-505 O1).                                                                                                                                                                         |
 | `facebook` in `content` | `content.json`, `platforms`             | **Added (#81).** See §5.1b for the entry and the staging steps.                                                                                                                                                                                                            |
 
+### 5.1d TikTok (connectors step C) — proposed, for the owner to confirm before TikTok is switched on
+
+Stays `enabled: false` in `publishing.json`. Values from TikTok's own pages (D-505), cited in
+`docs/SOCIAL-INTEGRATIONS.md` §19.
+
+| Value            | Where                     | Proposed                                                                                                                                                           |
+| ---------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apiVersion`     | `publishing.json`, tiktok | **`v2`** — the Open API version in every TikTok path.                                                                                                              |
+| `forcedAudience` | `publishing.json`, tiktok | **`private`** until TikTok audits the app: every post is "Only me" and the Studio offers only that. Set to `null` once the audit passes — configuration, not code. |
+| `postKinds`      | `publishing.json`, tiktok | **`video`** only. Photos need `mediaByUrl: true` and a storage domain verified with TikTok; add `image` / `carousel` only after that.                              |
+| `scopes`         | `publishing.json`, tiktok | `user.info.basic`, `video.publish`.                                                                                                                                |
+| `rateLimit`      | `publishing.json`, tiktok | 6 requests per 60 s per account (TikTok's limit on the post init calls).                                                                                           |
+| `mediaRules`     | `publishing.json`, tiktok | video: MP4, MOV or WebM, at most 4 GB and 600 s (TikTok's API maximum; each creator's own maximum is checked before posting).                                      |
+| `maxMediaItems`  | `publishing.json`, tiktok | 1 (one video).                                                                                                                                                     |
+
 ### 5.2 Still proposed
 
 | Value                                                              | Where                   | Proposed                                                                                                                                                                                                                                  |

@@ -86,9 +86,11 @@ test.describe('the Integrations Hub', () => {
       await expect(block.getByTestId(live)).not.toContainText('Register after');
     }
 
-    // The Hub lists a provider only with an adapter: Meta's arrived in step B.
+    // The Hub lists a provider only with an adapter: Meta's arrived in step B,
+    // TikTok's in step C.
     await expect(page.getByTestId('integration-social-facebook')).toBeVisible();
     await expect(page.getByTestId('integration-social-instagram')).toBeVisible();
+    await expect(page.getByTestId('integration-social-tiktok')).toBeVisible();
   });
 
   for (const locale of ['en', 'ar'] as const) {

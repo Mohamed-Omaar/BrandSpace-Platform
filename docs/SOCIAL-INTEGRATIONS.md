@@ -860,3 +860,61 @@ customer's own posts, drafts and media.
 - **Instagram `dailyPublishCap`: 25**, approved.
 - **Facebook is a `content` platform** (production-config `content.json`; staging steps in its
   README §5.1b).
+
+## 19. Connectors step C — TikTok, as built (D-536)
+
+### 19.1 What a customer can do
+
+Connect a **TikTok account** and publish a **video** to it, choosing in the Studio who can see the
+post, whether others may comment, duet or stitch, and whether it promotes a brand. Until TikTok
+audits the Brandspace app, every post is visible only to the account owner (`forcedAudience:
+'private'`). Photo posts wait for a storage domain verified with TikTok.
+
+### 19.2 The official pages every value comes from (D-505)
+
+The container cannot reach `developers.tiktok.com`; every value below was checked against these pages
+through search results quoting them.
+
+| What                                                          | TikTok's page                                                                |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Login (authorize URL, comma-separated scopes, no web PKCE)    | developers.tiktok.com/doc/login-kit-web, …/docs/en/login-kit-overview        |
+| Token exchange, refresh (24 h / 365 d), revoke                | developers.tiktok.com/docs/en/oauth-user-access-token-management             |
+| Client token (`client_credentials`, the Control Center Test)  | developers.tiktok.com/doc/client-access-token-management                     |
+| `creator_info` (nickname, audiences, locked interactions)     | developers.tiktok.com/doc/content-posting-api-reference-query-creator-info   |
+| Direct Post video init, error codes, 6 inits a minute         | developers.tiktok.com/doc/content-posting-api-reference-direct-post          |
+| Chunks (5–64 MB, last up to 128 MB, `Content-Range`, 206/201) | developers.tiktok.com/docs/en/content-posting-api-media-transfer-guide       |
+| Photo post (`PULL_FROM_URL`)                                  | developers.tiktok.com/doc/content-posting-api-reference-photo-post           |
+| Post status (`status/fetch`, `fail_reason`)                   | developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status |
+| Webhook signature, `authorization.removed`, `post.publish.*`  | developers.tiktok.com/docs/en/webhooks-verification, …/doc/webhooks-events   |
+| Posting screen requirements (O4)                              | developers.tiktok.com/docs/en/content-sharing-guidelines                     |
+
+### 19.3 Owner steps (staging first, in TikTok's sandbox)
+
+1. **TikTok app** (developers.tiktok.com → Manage apps): add Login Kit and the Content Posting API
+   (Direct Post); add the redirect URI and the webhook URL from the Control Center's "Addresses to
+   register" block; verify the Terms, Privacy and website URLs. Create a **sandbox** and add your
+   TikTok test accounts as target users; set those accounts to **private**.
+2. **Control Center → Integrations → TikTok (developer app):** the client key and client secret (the
+   sandbox has its own pair). Press **Test** — TikTok must issue a client token for them.
+3. **`integrations.social-apps`:** a subject-hash key, if not already set for Meta — without one an
+   `authorization.removed` delivery cannot be matched to a connection and the webhook answers 503.
+4. **`publishing`:** `tiktok` with `apiVersion: v2`, `forcedAudience: private`, the scopes, `postKinds:
+[video]`, the rate limit and media rules (`docs/production-config/README.md` §5.1d), then `enabled:
+true`.
+5. Connect a test account, write a TikTok video post, choose "Only me", schedule it a few minutes
+   ahead, and watch **Publishing**; the post appears on the test profile as private.
+6. Going live after TikTok's audit: the production client key and secret, and `forcedAudience: null`.
+
+### 19.4 What happens when TikTok calls
+
+| Delivery                                | Proof                                                                                         | Then (maintenance sweep)                                                                                |
+| --------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `authorization.removed`                 | `TikTok-Signature` (HMAC-SHA256 of `t.raw-body`, client secret), within 300 s; our client key | each matching TikTok connection revoked in its own workspace (tokens destroyed, slot returned, REVOKED) |
+| `post.publish.complete` / `.failed` / … | as above                                                                                      | the matching pending post's status is asked now; the status check decides                               |
+| anything else                           | as above                                                                                      | recorded and set aside (IGNORED), purged after the retention period                                     |
+
+### 19.5 Not in step C
+
+Photo posts (until a domain is verified), inbox/draft uploads, analytics, and a per-creator daily
+cap (TikTok does not expose one; `creator_info` saying the creator cannot post now is shown and
+refused instead).

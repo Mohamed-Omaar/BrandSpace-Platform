@@ -176,6 +176,22 @@ describe('the values the owner decided on the #81 review', () => {
   });
 });
 
+describe('connectors C — the proposed TikTok values (switched off)', () => {
+  it('video by FILE_UPLOAD on API v2, every post "Only me" until the audit, 6 inits a minute', () => {
+    const publishing = parseConfigPayload('publishing', read('publishing.json'));
+    const tiktok = publishing.providers.tiktok;
+    expect(tiktok.enabled).toBe(false);
+    expect(tiktok.apiVersion).toBe('v2');
+    expect(tiktok.postKinds).toEqual(['video']);
+    expect(tiktok.scopes).toEqual(['user.info.basic', 'video.publish']);
+    expect(tiktok.forcedAudience).toBe('private');
+    // Photos need a pre-signed URL on a domain verified with TikTok: not yet.
+    expect(tiktok.mediaByUrl).toBe(false);
+    expect(tiktok.rateLimit).toEqual({ requestsPerWindow: 6, windowSeconds: 60 });
+    expect(tiktok.mediaRules.video?.maxDurationSeconds).toBe(600);
+  });
+});
+
 describe('the owner-decided values', () => {
   it('onboarding: password floor, legal drafts, twelve industries, no Teach step', () => {
     const onboarding = parseConfigPayload('onboarding', read('onboarding.json'));
