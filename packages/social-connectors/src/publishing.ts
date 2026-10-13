@@ -16,7 +16,13 @@ import {
   systemClock,
   type Clock,
 } from '@brandspace/shared';
-import type { AdapterCredentials, PublishMedia, PublishOutcome } from './adapter';
+import type {
+  AdapterCredentials,
+  PublishMedia,
+  PublishObservation,
+  PublishOutcome,
+  PublishRequest,
+} from './adapter';
 import {
   FAILURE_BEHAVIOUR,
   publishJobNotCancellable,
@@ -29,8 +35,12 @@ import {
   capabilitiesFor,
   PROVIDER_CONFIG_KEYS,
   TenantPublishingPolicySource,
+  type MediaRule,
   type PublishingPolicy,
 } from './policy';
+import { postKindFor } from './post-kinds';
+import { ProviderRateLimiter } from './rate-limits';
+import { markNeedsReauth, type ReauthNotifier } from './reauth';
 
 /**
  * The failures an ACCOUNT caused, which a reconnection of that account fixes
@@ -126,7 +136,7 @@ export interface PublishApprovalGate {
  * OPTIONAL, because the sweep that materialises jobs has nothing to announce
  * and should not be forced to construct one.
  */
-export interface PublishNotifier {
+export interface PublishNotifier extends Partial<ReauthNotifier> {
   published(input: {
     jobId: string;
     contentItemId: string;
@@ -165,6 +175,12 @@ export interface PublishMediaPort {
   resolve(input: {
     readonly brandId: string;
     readonly assetIds: readonly string[];
+    /**
+     * D-505 O1 — present only for a platform that fetches media by URL: mint a
+     * pre-signed GET URL for each file, living this long. A port whose store
+     * cannot pre-sign leaves `fetchUrl` absent and the pipeline refuses.
+     */
+    readonly fetchUrlTtlSeconds?: number;
   }): Promise<readonly PublishMedia[]>;
 }
 
@@ -183,6 +199,12 @@ export interface PublishPipelineOptions {
    */
   readonly media?: PublishMediaPort | undefined;
   readonly notifier?: PublishNotifier | undefined;
+  /**
+   * CONNECTORS A (W12) — the process's request budget, SHARED with analytics.
+   * One per process, held by the caller: a limiter built per pipeline would
+   * forget every reservation with the transaction.
+   */
+  readonly rateLimiter?: ProviderRateLimiter | undefined;
   readonly clock?: Clock;
 }
 
@@ -307,6 +329,10 @@ const RECONNECT_TOO_LATE = 'RECONNECT_TOO_LATE' as const;
 export const AWAITING_RECONNECT_CODE = 'preflight.awaiting_reconnect';
 /** On the job that waited until its deadline and the account never came back. */
 export const RECONNECT_REQUIRED_CODE = 'preflight.reconnect_required';
+/** Connectors A (W12): on a job waiting for its account's request budget. */
+export const AWAITING_BUDGET_CODE = 'preflight.awaiting_budget';
+/** Connectors A (W5): on a job the platform accepted and has not finished. */
+export const PUBLISH_IN_PROGRESS_CODE = 'adapter.publish_in_progress';
 
 type PreflightOutcome =
   PublishFailureClass | typeof AWAITING_RECONNECT | typeof RECONNECT_TOO_LATE | null;
@@ -340,6 +366,7 @@ export class PublishPipelineService {
   readonly #approvals: PublishApprovalGate;
   readonly #media: PublishMediaPort | undefined;
   readonly #notifier: PublishNotifier | undefined;
+  readonly #rateLimiter: ProviderRateLimiter | undefined;
   readonly #clock: Clock;
 
   constructor(options: PublishPipelineOptions) {
@@ -351,6 +378,7 @@ export class PublishPipelineService {
     this.#approvals = options.approvals;
     this.#media = options.media;
     this.#notifier = options.notifier;
+    this.#rateLimiter = options.rateLimiter;
     this.#clock = options.clock ?? systemClock;
   }
 
@@ -582,6 +610,37 @@ export class PublishPipelineService {
    * construction rather than by remembering.
    */
   async execute(jobId: string): Promise<ExecuteResult> {
+    return executePublishJob(this.#inPlace, jobId);
+  }
+
+  /**
+   * W1 (connectors A, D-505) — THE STEPS RUN ON THIS ONE CLIENT, IN ORDER.
+   *
+   * `execute`, `verify` and `recoverStaleClaim` keep their single-call shape
+   * for a caller that already holds one client. The worker does not use them:
+   * it runs `executePublishJob` and friends with a fresh transaction per step,
+   * so the provider call sits between two commits rather than inside one.
+   */
+  readonly #inPlace: PipelineTransactions = { run: (step) => step(this) };
+
+  /**
+   * STEP 1 OF 3 — CLAIM AND PREFLIGHT, then commit (W1).
+   *
+   * Everything decided before a provider is called is decided here, inside
+   * the caller's transaction: the claim QUEUED → PUBLISHING, every preflight
+   * refusal, the connection, the credential, the variant and its media. What
+   * comes back is either the job's settled answer — a duplicate delivery, a
+   * refusal, a hold — or everything the provider call needs, and nothing the
+   * database does.
+   *
+   * THE CLAIM IS COMMITTED BEFORE THE PROVIDER IS CALLED, AND THAT IS THE FIX.
+   * The worker used to run this, the provider call and the outcome in ONE
+   * transaction. A provider slower than the transaction's timeout aborted it,
+   * the claim rolled back to QUEUED with the post possibly live, and the
+   * redelivery published it again. Now the row says PUBLISHING before the
+   * request leaves, whatever happens to the process or the transaction after.
+   */
+  async beginExecution(jobId: string): Promise<ExecutionStep> {
     const now = this.#clock.now();
     const claimed = await this.#db.publishJob.updateMany({
       where: {
@@ -604,12 +663,12 @@ export class PublishPipelineService {
       // NOT AN ERROR. A duplicate delivery finding the job already finished —
       // or already claimed, or awaiting verification — is the system working:
       // the row is the state, and it says what happened. Nothing is sent.
-      return {
+      return settled({
         jobId,
         status: current.status,
         failureClass: current.failureClass,
         externalPostId: current.externalPostId,
-      };
+      });
     }
 
     const job = await this.#db.publishJob.findFirst({
@@ -618,28 +677,38 @@ export class PublishPipelineService {
     if (!job) throw publishJobNotFound();
 
     const preflight = await this.#preflight(job);
-    if (preflight === AWAITING_RECONNECT) return this.#holdForReconnect(job);
+    if (preflight === AWAITING_RECONNECT) return settled(await this.#holdForReconnect(job));
     if (preflight === RECONNECT_TOO_LATE) {
-      return this.#fail(job, 'NOT_CONNECTED', RECONNECT_REQUIRED_CODE, null, PREFLIGHT);
+      return settled(
+        await this.#fail(job, 'NOT_CONNECTED', RECONNECT_REQUIRED_CODE, null, PREFLIGHT),
+      );
     }
     if (preflight)
-      return this.#fail(job, preflight, `preflight.${preflight.toLowerCase()}`, null, PREFLIGHT);
+      return settled(
+        await this.#fail(job, preflight, `preflight.${preflight.toLowerCase()}`, null, PREFLIGHT),
+      );
 
     const connection = await this.#db.socialConnection.findFirst({
       where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },
     });
     if (!connection)
-      return this.#fail(job, 'NOT_CONNECTED', 'preflight.not_connected', null, PREFLIGHT);
+      return settled(
+        await this.#fail(job, 'NOT_CONNECTED', 'preflight.not_connected', null, PREFLIGHT),
+      );
 
     const credentials = await this.#credentialsFor(connection.id);
     if (!credentials)
-      return this.#fail(job, 'NOT_CONNECTED', 'preflight.no_credential', null, PREFLIGHT);
+      return settled(
+        await this.#fail(job, 'NOT_CONNECTED', 'preflight.no_credential', null, PREFLIGHT),
+      );
 
     const variant = await this.#db.contentVariant.findFirst({
       where: { id: job.contentVariantId, workspaceId: this.#workspaceId },
     });
     if (!variant)
-      return this.#fail(job, 'CONTENT_REJECTED', 'preflight.variant_missing', null, PREFLIGHT);
+      return settled(
+        await this.#fail(job, 'CONTENT_REJECTED', 'preflight.variant_missing', null, PREFLIGHT),
+      );
 
     /*
      * MEDIA IS RESOLVED BEFORE THE PROVIDER IS CALLED (AC-29.3), and every
@@ -659,55 +728,119 @@ export class PublishPipelineService {
     let media: readonly PublishMedia[] = [];
     if (variant.assetIds.length > 0) {
       if (variant.assetIds.length > capabilities.maxMediaItems) {
-        return this.#fail(job, 'UNSUPPORTED', 'preflight.too_many_media', null, PREFLIGHT);
+        return settled(
+          await this.#fail(job, 'UNSUPPORTED', 'preflight.too_many_media', null, PREFLIGHT),
+        );
       }
       if (!this.#media) {
-        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_unavailable', null, PREFLIGHT);
+        return settled(
+          await this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_unavailable', null, PREFLIGHT),
+        );
       }
       try {
         media = await this.#media.resolve({
           brandId: job.brandId,
           assetIds: variant.assetIds,
+          // D-505 O1: only for a platform that fetches media by URL.
+          ...(capabilities.mediaByUrl
+            ? { fetchUrlTtlSeconds: this.#policy.media.fetchUrlTtlSeconds }
+            : {}),
         });
       } catch {
         // The reason is the port's and is not a customer's to read as prose: a
         // stable code goes on the job and the history screen translates it.
-        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_rejected', null, PREFLIGHT);
+        return settled(
+          await this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_rejected', null, PREFLIGHT),
+        );
       }
       if (media.length !== variant.assetIds.length) {
-        return this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_rejected', null, PREFLIGHT);
+        return settled(
+          await this.#fail(job, 'CONTENT_REJECTED', 'preflight.media_rejected', null, PREFLIGHT),
+        );
+      }
+      /*
+       * D-505 O1 — A PLATFORM THAT FETCHES BY URL GETS ONE FOR EVERY FILE OR
+       * NOTHING IS SENT. A store that cannot pre-sign (the development store)
+       * cannot serve such a platform, and a post with a missing picture is not
+       * the one the author approved.
+       */
+      if (capabilities.mediaByUrl && media.some((item) => !item.fetchUrl)) {
+        return settled(
+          await this.#fail(
+            job,
+            'CONTENT_REJECTED',
+            'preflight.media_url_unavailable',
+            null,
+            PREFLIGHT,
+          ),
+        );
       }
     }
 
-    const adapter = this.#registry.get(job.provider);
     /*
-     * PR 0 — THE NEXT NUMBER AFTER THE HIGHEST ONE RECORDED, never
-     * `attemptCount + 1`.
-     *
-     * `attemptCount` is the retry BUDGET's counter, and until PR 0 every human
-     * retry reset it to 0 while the attempt history kept its rows — so the
-     * next attempt re-used number 1. It was numbered BEFORE the provider call
-     * and recorded AFTER it, so the provider was called, the record collided
-     * with `@@unique([workspaceId, publishJobId, attemptNumber])`, the worker's
-     * transaction rolled the claim back to QUEUED, and a redelivery called the
-     * provider again. Jobs already reset by the old code still carry that
-     * mismatch, which is why the history — not the counter — decides.
-     *
-     * NO RACE: only the one execution that won the QUEUED → PUBLISHING claim
-     * above reaches this line for this job.
+     * CONNECTORS A (W2) — THE POST KIND, from the post's format and its media,
+     * and it must be one the provider DECLARES. A reel sent to a platform
+     * configured for feed posts only is refused here, before any request,
+     * rather than rejected by the platform as if the content were at fault.
      */
-    const attemptNumber = await this.#nextAttemptNumber(job.id);
-    const startedAt = this.#clock.now();
+    const item = await this.#db.contentItem.findFirst({
+      where: { id: job.contentItemId, workspaceId: this.#workspaceId },
+      select: { contentType: true },
+    });
+    const postKind = item ? postKindFor(item.contentType, media) : null;
+    if (!postKind || !capabilities.postKinds.includes(postKind)) {
+      return settled(
+        await this.#fail(job, 'UNSUPPORTED', 'preflight.post_kind_unsupported', null, PREFLIGHT),
+      );
+    }
 
     /*
-     * THE JOB IS ALREADY IN A STATE THAT SAYS "WE MAY HAVE SENT THIS".
-     * That ordering matters: if this process dies between here and the
-     * response, the row says PUBLISHING, and recovery verifies rather than
-     * resends.
+     * CONNECTORS A (W3) — THE MEDIA RULES FOR THAT KIND, from configuration:
+     * type, size, dimensions, aspect ratio, duration and count. A file the
+     * platform would refuse is refused here, with the rule it broke.
      */
-    let outcome: PublishOutcome;
-    try {
-      outcome = await adapter.publish({
+    const broken = mediaRuleViolation(capabilities.mediaRules[postKind], media);
+    if (broken) {
+      return settled(
+        await this.#fail(job, 'MEDIA_INVALID', `preflight.media_rule.${broken}`, null, PREFLIGHT),
+      );
+    }
+
+    /*
+     * CONNECTORS A (W12) — PUBLISHING SPENDS FROM THE SAME REQUEST BUDGET AS
+     * ANALYTICS, last, so only a request that is really about to leave spends.
+     * An empty budget is not a failure and not an attempt: nothing was sent,
+     * so the job waits for the window like a reconnect hold waits for the
+     * account, and the lateness deadline still applies when it comes back.
+     */
+    if (capabilities.rateLimit && this.#rateLimiter) {
+      const decision = this.#rateLimiter.reserve({
+        key: ProviderRateLimiter.keyFor(
+          this.#workspaceId,
+          job.provider,
+          connection.externalAccountId,
+        ),
+        budget: { ...capabilities.rateLimit, analyticsReserveMilli: 0 },
+        priority: 'publishing',
+      });
+      if (!decision.allowed) {
+        return settled(await this.#holdForBudget(job, decision.retryAfterSeconds));
+      }
+    }
+
+    /*
+     * THE JOB IS ALREADY IN A STATE THAT SAYS "WE MAY HAVE SENT THIS", and
+     * after this step commits, it says so durably. If this process dies
+     * between the commit and the outcome, the row says PUBLISHING, and
+     * recovery verifies rather than resends.
+     */
+    return {
+      kind: 'send',
+      send: {
+        jobId: job.id,
+        claimedAt: now,
+        startedAt: this.#clock.now(),
+        adapter: this.#registry.get(job.provider),
         credentials,
         request: {
           externalAccountId: connection.externalAccountId,
@@ -716,113 +849,191 @@ export class PublishPipelineService {
           firstComment: variant.firstComment,
           media,
           idempotencyKey: job.idempotencyKey,
+          postKind,
+          linkUrl: variant.linkUrl,
+          options: plainOptions(variant.platformOptions),
         },
-      });
-    } catch (error: unknown) {
-      const failureClass = adapter.classifyError(error);
-      const attemptId = await this.#recordAttempt({
-        job,
-        attemptNumber,
-        startedAt,
-        outcome: FAILURE_BEHAVIOUR[failureClass].indeterminate
-          ? 'INDETERMINATE'
-          : FAILURE_BEHAVIOUR[failureClass].retryable
-            ? 'RETRYABLE_FAILURE'
-            : 'PERMANENT_FAILURE',
-        failureClass,
-        providerStatusCode: null,
-        providerErrorCode: null,
-        // NEVER the thrown message: an exception from deep in an HTTP client
-        // can carry the request body, which is the customer's caption.
-        safeSummary: 'The platform call did not complete.',
-      });
-      return this.#afterFailure(
-        job,
-        attemptId,
-        failureClass,
-        `adapter.${failureClass.toLowerCase()}`,
-        adapter,
-        connection.externalAccountId,
-        credentials,
+      },
+    };
+  }
+
+  /**
+   * STEP 3 OF 3 — RECORD WHAT THE PROVIDER SAID, in a second transaction (W1).
+   *
+   * THE ROW IS LOCKED, THEN THE CLAIM IS CHECKED. The outcome belongs to the
+   * claim that sent it: the job must still be PUBLISHING under that claim, or
+   * VERIFICATION_PENDING because recovery decided the claim was dead (a worker
+   * that is alive after all settles it with the real answer, as before). Any
+   * other state means the job moved on without us — the attempt is still
+   * recorded, because it happened, and a post that DID land is still recorded
+   * as published unless another claim is in flight; nothing else is changed.
+   *
+   * PR 0 — THE ATTEMPT IS NUMBERED HERE, after the highest one recorded, not
+   * when the claim was taken. Recovery may have recorded an unknown-send-state
+   * row in between, and numbering it then would collide with that row.
+   */
+  async concludeExecution(send: PreparedSend, report: SendReport): Promise<ExecuteResult> {
+    const job = await this.#lockJob(send.jobId);
+    if (!job) throw publishJobNotFound();
+
+    const mismatches =
+      report.kind === 'answered' && report.outcome.ok === true
+        ? observationMismatches(send.request, report.outcome.observed)
+        : [];
+    const attempt = attemptFromReport(report, mismatches);
+    const landed = landedPost(report);
+    const ours =
+      job.claimedAt !== null &&
+      job.claimedAt.getTime() === send.claimedAt.getTime() &&
+      (job.status === 'PUBLISHING' || job.status === 'VERIFICATION_PENDING');
+
+    const attemptId = await this.#recordAttempt({
+      job,
+      attemptNumber: await this.#nextAttemptNumber(job.id),
+      startedAt: send.startedAt,
+      ...attempt,
+    });
+
+    /*
+     * W12 — THE PLATFORM SAID "TOO MANY". Whatever our own arithmetic said, the
+     * window is spent for this account, so our optimism cannot try again at
+     * once (the platform is the authority on its own limit).
+     */
+    const capabilities = capabilitiesFor(this.#policy, job.provider);
+    if (attempt.failureClass === 'RATE_LIMITED' && capabilities.rateLimit && this.#rateLimiter) {
+      this.#rateLimiter.markRefusedByProvider(
+        ProviderRateLimiter.keyFor(this.#workspaceId, job.provider, send.request.externalAccountId),
+        { ...capabilities.rateLimit, analyticsReserveMilli: 0 },
       );
     }
 
-    if (outcome.ok) {
-      await this.#recordAttempt({
-        job,
-        attemptNumber,
-        startedAt,
-        outcome: 'SUCCEEDED',
-        failureClass: null,
-        providerStatusCode: outcome.providerStatusCode,
-        providerErrorCode: null,
-        safeSummary: null,
-      });
-      return this.#succeed(job, outcome.externalPostId, outcome.externalPostUrl);
+    if (!ours) {
+      // THE JOB MOVED ON. A post that went out is still the truth, unless
+      // another claim is mid-send and will record its own answer.
+      if (landed && job.status !== 'PUBLISHED' && job.status !== 'PUBLISHING') {
+        return this.#succeed(job, landed.externalPostId, landed.externalPostUrl);
+      }
+      return {
+        jobId: job.id,
+        status: job.status,
+        failureClass: job.failureClass,
+        externalPostId: job.externalPostId,
+      };
     }
 
-    const behaviour = FAILURE_BEHAVIOUR[outcome.failureClass];
-    const attemptId = await this.#recordAttempt({
-      job,
-      attemptNumber,
-      startedAt,
-      outcome: behaviour.indeterminate
-        ? 'INDETERMINATE'
-        : behaviour.retryable
-          ? 'RETRYABLE_FAILURE'
-          : 'PERMANENT_FAILURE',
-      failureClass: outcome.failureClass,
-      providerStatusCode: outcome.providerStatusCode,
-      providerErrorCode: outcome.providerErrorCode,
-      safeSummary: outcome.safeSummary,
-    });
-
+    if (report.kind === 'answered' && report.outcome.ok === 'pending') {
+      return this.#awaitPublish(job, report.outcome.providerHandle);
+    }
+    if (report.kind === 'answered' && report.outcome.ok === true) {
+      const result = await this.#succeed(
+        job,
+        report.outcome.externalPostId,
+        report.outcome.externalPostUrl,
+      );
+      if (mismatches.length > 0) await this.#auditMismatch(job, mismatches);
+      return result;
+    }
+    const failureClass = attempt.failureClass ?? 'UNKNOWN';
+    const failureCode =
+      report.kind === 'answered' && report.outcome.ok === false
+        ? report.outcome.failureCode
+        : `adapter.${failureClass.toLowerCase()}`;
     return this.#afterFailure(
       job,
       attemptId,
-      outcome.failureClass,
-      outcome.failureCode,
-      adapter,
-      connection.externalAccountId,
-      credentials,
-      outcome.retryAfterSeconds,
+      failureClass,
+      failureCode,
+      report.lookup,
+      report.kind === 'answered' && report.outcome.ok === false
+        ? report.outcome.retryAfterSeconds
+        : undefined,
     );
+  }
+
+  /**
+   * CONNECTORS A (W5) — THE PLATFORM HAS THE POST AND HAS NOT FINISHED IT.
+   *
+   * The handle is stored and the job waits in VERIFICATION_PENDING — the state
+   * that means "we may have sent this" — to be asked about every
+   * `publishPollSeconds`, never resent. The class is TIMEOUT because that is
+   * the existing name for "sent, outcome not yet known" (and the attempt's
+   * CHECK requires one); the code says it is a publish in progress.
+   */
+  async #awaitPublish(job: PublishJob, providerHandle: string): Promise<ExecuteResult> {
+    await this.#db.publishJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'VERIFICATION_PENDING',
+        providerHandle,
+        attemptCount: { increment: 1 },
+        failureClass: 'TIMEOUT',
+        failureCode: PUBLISH_IN_PROGRESS_CODE,
+        nextAttemptAt: new Date(
+          this.#clock.now().getTime() + this.#policy.dispatch.publishPollSeconds * 1_000,
+        ),
+      },
+    });
+    await this.#syncLifecycle(job);
+    return {
+      jobId: job.id,
+      status: 'VERIFICATION_PENDING',
+      failureClass: 'TIMEOUT',
+      externalPostId: null,
+    };
+  }
+
+  /**
+   * CONNECTORS A (R8) — THE POST WENT OUT, AND THE PLATFORM'S COPY DIFFERS
+   * FROM THE PREVIEW. It is still PUBLISHED — it is live, and saying otherwise
+   * would be false — but the difference is recorded: the attempt's summary
+   * names the fields, and this event says so for support. The NAMES of the
+   * fields only; never the caption.
+   */
+  async #auditMismatch(job: PublishJob, mismatches: readonly string[]): Promise<void> {
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'social.post.result_mismatch',
+      actorType: 'SYSTEM',
+      resourceType: 'PublishJob',
+      resourceId: job.id,
+      brandId: job.brandId,
+      after: { provider: job.provider, differs: [...mismatches] },
+    });
   }
 
   /**
    * What happens after a failed attempt — and the duplicate-prevention rule.
    *
-   * AN INDETERMINATE OUTCOME IS VERIFIED, NEVER RESENT. If the adapter can look
-   * the post up and finds it, the job SUCCEEDED and we say so. If it cannot
-   * look it up at all, the job stops and a human decides — resending a post
-   * that may already be live is the one failure this whole design exists to
-   * avoid.
+   * AN INDETERMINATE OUTCOME IS VERIFIED, NEVER RESENT. If the adapter looked
+   * the post up and found it, the job SUCCEEDED and we say so. If it could not
+   * look it up at all — or asked and got no answer — the job stops and a human
+   * decides: resending a post that may already be live is the one failure this
+   * whole design exists to avoid.
+   *
+   * W1 — THE LOOKUP HAPPENED OUTSIDE ANY TRANSACTION, in the send step, and
+   * this method only reads its answer. A lookup that threw used to abort the
+   * worker's transaction and return the job to QUEUED; it is now "no answer",
+   * which is VERIFICATION_PENDING.
    */
   async #afterFailure(
     job: PublishJob,
     attemptId: string,
     failureClass: PublishFailureClass,
     failureCode: string,
-    adapter: ReturnType<ConnectorRegistry['get']>,
-    externalAccountId: string,
-    credentials: AdapterCredentials,
+    lookup: LookupReport | null,
     retryAfterSeconds?: number,
   ): Promise<ExecuteResult> {
     const behaviour = FAILURE_BEHAVIOUR[failureClass];
 
     if (behaviour.indeterminate) {
-      if (adapter.capabilities.supportsPostLookup && adapter.findPostByIdempotencyKey) {
-        const found = await adapter.findPostByIdempotencyKey({
-          externalAccountId,
-          idempotencyKey: job.idempotencyKey,
-          credentials,
-        });
-        if (found) return this.#succeed(job, found.externalPostId, found.externalPostUrl);
-      } else {
+      if (lookup?.kind === 'found') {
+        return this.#succeed(job, lookup.externalPostId, lookup.externalPostUrl);
+      }
+      if (lookup?.kind !== 'absent') {
         /*
-         * WE CANNOT ASK, SO WE STOP. The alternative is to guess, and a wrong
-         * guess posts twice. `VERIFICATION_PENDING` is a state a human can act
-         * on; a second send is not something they can undo.
+         * WE CANNOT ASK, OR ASKED AND HEARD NOTHING, SO WE STOP. The
+         * alternative is to guess, and a wrong guess posts twice.
+         * `VERIFICATION_PENDING` is a state a human can act on; a second send
+         * is not something they can undo.
          */
         await this.#db.publishJob.update({
           where: { id: job.id },
@@ -844,17 +1055,7 @@ export class PublishPipelineService {
       }
     }
 
-    if (behaviour.needsReconnect) {
-      await this.#db.socialConnection.updateMany({
-        where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },
-        data: {
-          status: 'NEEDS_REAUTH',
-          lastFailureClass: failureClass,
-          lastCheckedAt: this.#clock.now(),
-          consecutiveFailureCount: { increment: 1 },
-        },
-      });
-    }
+    if (behaviour.needsReconnect) await this.#markNeedsReauth(job, failureClass);
 
     const attemptCount = job.attemptCount + 1;
     const exhausted = attemptCount >= job.maxAttempts;
@@ -942,6 +1143,8 @@ export class PublishPipelineService {
         failureClass,
         failureCode,
         claimedAt: null,
+        // A new send gets a new handle (W5).
+        providerHandle: null,
         nextAttemptAt: new Date(this.#clock.now().getTime() + delayMs),
       },
     });
@@ -1101,11 +1304,102 @@ export class PublishPipelineService {
    * returned unchanged, so a duplicate delivery does nothing.
    */
   async verify(jobId: string): Promise<ExecuteResult> {
+    return verifyPublishJob(this.#inPlace, jobId);
+  }
+
+  /**
+   * STEP 1 OF 3 OF A VERIFICATION — decide whether there is anything to ask,
+   * and gather what asking needs (W1). Runs in its own transaction; the
+   * question itself is asked outside any.
+   */
+  async beginVerification(jobId: string): Promise<VerificationStep> {
     const job = await this.#db.publishJob.findFirst({
       where: { id: jobId, workspaceId: this.#workspaceId },
     });
     if (!job) throw publishJobNotFound();
     if (job.status !== 'VERIFICATION_PENDING') {
+      return settled({
+        jobId: job.id,
+        status: job.status,
+        failureClass: job.failureClass,
+        externalPostId: job.externalPostId,
+      });
+    }
+
+    const adapter = this.#registry.get(job.provider);
+    // W5: a publish the platform accepted is asked about by its handle.
+    const byHandle = job.providerHandle !== null && Boolean(adapter.checkPublish);
+    if (
+      !byHandle &&
+      (!adapter.capabilities.supportsPostLookup || !adapter.findPostByIdempotencyKey)
+    ) {
+      // NOT A FAILURE AND NOT A RETRY. It stays where a human can see it.
+      return settled({
+        jobId: job.id,
+        status: 'VERIFICATION_PENDING',
+        failureClass: job.failureClass,
+        externalPostId: null,
+      });
+    }
+
+    const connection = await this.#db.socialConnection.findFirst({
+      where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },
+    });
+    if (!connection)
+      return settled(
+        await this.#fail(job, 'NOT_CONNECTED', 'verify.not_connected', null, VERIFIED),
+      );
+
+    const credentials = await this.#credentialsFor(connection.id);
+    if (!credentials)
+      return settled(
+        await this.#fail(job, 'NOT_CONNECTED', 'verify.no_credential', null, VERIFIED),
+      );
+
+    return {
+      kind: 'lookup',
+      lookup: {
+        jobId: job.id,
+        adapter,
+        credentials,
+        externalAccountId: connection.externalAccountId,
+        idempotencyKey: job.idempotencyKey,
+        providerHandle: byHandle ? job.providerHandle : null,
+      },
+    };
+  }
+
+  /**
+   * STEP 3 OF 3 OF A VERIFICATION — act on the provider's answer, in a second
+   * transaction (W1). The row is locked and must still be VERIFICATION_PENDING:
+   * a worker that settled it meanwhile, or a person who resolved it, already
+   * gave the answer, and this one is not written over it.
+   */
+  async concludeVerification(lookup: PreparedLookup, report: LookupReport): Promise<ExecuteResult> {
+    const job = await this.#lockJob(lookup.jobId);
+    if (!job) throw publishJobNotFound();
+    if (
+      job.status !== 'VERIFICATION_PENDING' ||
+      report.kind === 'unanswered' ||
+      report.kind === 'pending'
+    ) {
+      /*
+       * WE ASKED AND COULD NOT GET AN ANSWER — or the platform is still
+       * working on it, or the job no longer needs one. "No answer" is not "it
+       * did not publish"; it is the same uncertainty we started with, so the
+       * job does not move. The provider's own words are not repeated for the
+       * usual reason.
+       *
+       * W5 — A PUBLISH IN PROGRESS IS ASKED AGAIN after `publishPollSeconds`,
+       * for at most `publishPollMaxMinutes` from when it was sent; after that
+       * it waits for a person, like every outcome we cannot confirm.
+       */
+      if (job.status === 'VERIFICATION_PENDING' && job.providerHandle !== null) {
+        await this.#db.publishJob.update({
+          where: { id: job.id },
+          data: { nextAttemptAt: this.#nextPoll(job) },
+        });
+      }
       return {
         jobId: job.id,
         status: job.status,
@@ -1114,50 +1408,25 @@ export class PublishPipelineService {
       };
     }
 
-    const adapter = this.#registry.get(job.provider);
-    const lookup = adapter.findPostByIdempotencyKey;
-    if (!adapter.capabilities.supportsPostLookup || !lookup) {
-      // NOT A FAILURE AND NOT A RETRY. It stays where a human can see it.
-      return {
-        jobId: job.id,
-        status: 'VERIFICATION_PENDING',
-        failureClass: job.failureClass,
-        externalPostId: null,
-      };
+    if (report.kind === 'found') {
+      return this.#succeed(job, report.externalPostId, report.externalPostUrl);
     }
 
-    const connection = await this.#db.socialConnection.findFirst({
-      where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },
-    });
-    if (!connection)
-      return this.#fail(job, 'NOT_CONNECTED', 'verify.not_connected', null, VERIFIED);
-
-    const credentials = await this.#credentialsFor(connection.id);
-    if (!credentials)
-      return this.#fail(job, 'NOT_CONNECTED', 'verify.no_credential', null, VERIFIED);
-
-    let found: { externalPostId: string; externalPostUrl: string | null } | null;
-    try {
-      found = await lookup.call(adapter, {
-        externalAccountId: connection.externalAccountId,
-        idempotencyKey: job.idempotencyKey,
-        credentials,
-      });
-    } catch {
-      /*
-       * WE ASKED AND COULD NOT GET AN ANSWER. That is not "it did not publish";
-       * it is the same uncertainty we started with, so the job does not move.
-       * The provider's own words are not repeated for the usual reason.
-       */
-      return {
-        jobId: job.id,
-        status: 'VERIFICATION_PENDING',
-        failureClass: job.failureClass,
-        externalPostId: null,
-      };
+    /*
+     * W5 — THE PLATFORM FINISHED, AND THE PUBLISH FAILED. Nothing went out, on
+     * the platform's own word, so this is an ordinary determinate failure: a
+     * class that a retry can fix goes back on the queue within its budget, an
+     * account problem marks the account, and anything else fails with the
+     * attempt that sent it as its evidence.
+     */
+    if (report.kind === 'failed') {
+      const behaviour = FAILURE_BEHAVIOUR[report.failureClass];
+      if (behaviour.needsReconnect) await this.#markNeedsReauth(job, report.failureClass);
+      if (!behaviour.retryable || job.attemptCount >= job.maxAttempts) {
+        return this.#fail(job, report.failureClass, report.failureCode, job.attemptCount, VERIFIED);
+      }
+      return this.#scheduleRetry(job, report.failureClass, report.failureCode, job.attemptCount);
     }
-
-    if (found) return this.#succeed(job, found.externalPostId, found.externalPostUrl);
 
     /*
      * THE PROVIDER SAYS NOTHING LANDED. Only now may this be sent again, and
@@ -1179,6 +1448,7 @@ export class PublishPipelineService {
       data: {
         status: 'QUEUED',
         claimedAt: null,
+        providerHandle: null,
         failureCode: 'verify.not_published',
         nextAttemptAt: this.#clock.now(),
       },
@@ -1210,8 +1480,21 @@ export class PublishPipelineService {
    * THE MOVE IS A CONDITIONAL UPDATE, so a worker that is alive after all and
    * settles a millisecond later simply wins: its `PUBLISHED` or `FAILED` write
    * lands on top, and the row records the real outcome rather than the guess.
+   *
+   * W1 — THE MOVE COMMITS ON ITS OWN, and the verification that follows runs
+   * as its own steps, so a slow lookup cannot roll the move back.
    */
   async recoverStaleClaim(jobId: string): Promise<ExecuteResult> {
+    return recoverStalePublishJob(this.#inPlace, jobId);
+  }
+
+  /**
+   * The recovery's database step: move a claim past its lease to
+   * VERIFICATION_PENDING and record that its send state is unknown. `null`
+   * when the claim was recovered and should now be verified; otherwise the
+   * job's current answer, untouched.
+   */
+  async claimStale(jobId: string): Promise<ExecuteResult | null> {
     const now = this.#clock.now();
     const deadline = new Date(now.getTime() - this.#policy.dispatch.claimLeaseSeconds * 1_000);
 
@@ -1235,6 +1518,14 @@ export class PublishPipelineService {
         where: { id: jobId, workspaceId: this.#workspaceId },
       });
       if (!current) throw publishJobNotFound();
+      /*
+       * W5 — A PUBLISH THE PLATFORM ACCEPTED is polled through this same
+       * message: it is already VERIFICATION_PENDING, holds a handle, and the
+       * verification that follows asks `checkPublish`. Still no path to a send.
+       */
+      if (current.status === 'VERIFICATION_PENDING' && current.providerHandle !== null) {
+        return null;
+      }
       return {
         jobId: current.id,
         status: current.status,
@@ -1247,8 +1538,8 @@ export class PublishPipelineService {
      * PHASE 2B-3 PR 2 (D1) — THE RECOVERY IS RECORDED AS AN ATTEMPT whose send
      * state is unknown. Not a provider answer and not a claim that a request
      * reached the platform: the worker holding the claim stopped, and nobody
-     * knows whether it sent. `verify()` below, and any failure it concludes
-     * with, cites this row.
+     * knows whether it sent. The verification that follows, and any failure it
+     * concludes with, cites this row.
      */
     const recovered = await this.#db.publishJob.findFirst({
       where: { id: jobId, workspaceId: this.#workspaceId },
@@ -1265,10 +1556,49 @@ export class PublishPipelineService {
       before: { status: 'PUBLISHING' },
       after: { status: 'VERIFICATION_PENDING', reason: 'claim_expired' },
     });
+    return null;
+  }
 
-    // AND THEN ASK. A provider that can be queried resolves in this same pass;
-    // one that cannot stays VERIFICATION_PENDING for a human.
-    return this.verify(jobId);
+  /** R3 — the account needs reconnecting; its owner hears it once (`reauth.ts`). */
+  async #markNeedsReauth(job: PublishJob, failureClass: PublishFailureClass): Promise<void> {
+    await markNeedsReauth({
+      db: this.#db,
+      workspaceId: this.#workspaceId,
+      connectionId: job.socialConnectionId,
+      failureClass,
+      now: this.#clock.now(),
+      notifier: this.#notifier?.connectionNeedsReauth
+        ? (this.#notifier as ReauthNotifier)
+        : undefined,
+    });
+  }
+
+  /**
+   * W5 — when a publish in progress is asked about next: `publishPollSeconds`
+   * from now, until `publishPollMaxMinutes` after it was sent; then never
+   * (null), and a person decides.
+   */
+  #nextPoll(job: PublishJob): Date | null {
+    const now = this.#clock.now().getTime();
+    const sentAt = (job.startedAt ?? job.claimedAt ?? job.updatedAt).getTime();
+    if (now - sentAt >= this.#policy.dispatch.publishPollMaxMinutes * 60_000) return null;
+    return new Date(now + this.#policy.dispatch.publishPollSeconds * 1_000);
+  }
+
+  /**
+   * W1 — LOCK THE JOB'S ROW for the rest of this transaction, then read it.
+   * Two record steps for one job (a late worker and a recovery's verification)
+   * are serialized here, so each sees the other's answer.
+   */
+  async #lockJob(jobId: string): Promise<PublishJob | null> {
+    await this.#db.$queryRaw`
+      SELECT "id" FROM "publish_job"
+       WHERE "id" = ${jobId}::uuid
+         AND "workspaceId" = ${this.#workspaceId}::uuid
+       FOR UPDATE`;
+    return this.#db.publishJob.findFirst({
+      where: { id: jobId, workspaceId: this.#workspaceId },
+    });
   }
 
   /**
@@ -1321,6 +1651,7 @@ export class PublishPipelineService {
         // A PERSON DECIDED TO SEND IT, so the budget starts again — same rule
         // as a manual retry, and for the same reason. The history does not.
         ...this.#freshBudget(job),
+        providerHandle: null,
         nextAttemptAt: now,
         completedAt: null,
         claimedAt: null,
@@ -1467,6 +1798,7 @@ export class PublishPipelineService {
         // new decision, not a continuation of the automatic schedule. The
         // history is not rewound (PR 0): see `#freshBudget`.
         ...this.#freshBudget(job),
+        providerHandle: null,
         nextAttemptAt: now,
         completedAt: null,
         claimedAt: null,
@@ -1566,6 +1898,7 @@ export class PublishPipelineService {
         idempotencyKey,
         status: 'QUEUED',
         ...this.#freshBudget(job),
+        providerHandle: null,
         nextAttemptAt: now,
         completedAt: null,
         claimedAt: null,
@@ -1717,6 +2050,28 @@ export class PublishPipelineService {
       },
     });
     return { jobId: job.id, status: 'QUEUED', failureClass: 'NOT_CONNECTED', externalPostId: null };
+  }
+
+  /**
+   * CONNECTORS A (W12) — WAIT FOR THE ACCOUNT'S REQUEST BUDGET. Nothing was
+   * sent and nothing was attempted, exactly as a reconnect hold: the attempt
+   * count is untouched and no attempt row is written. The job comes back when
+   * the window reopens; the lateness deadline is checked again then.
+   */
+  async #holdForBudget(job: PublishJob, retryAfterSeconds: number): Promise<ExecuteResult> {
+    await this.#db.publishJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'QUEUED',
+        claimedAt: null,
+        failureClass: 'RATE_LIMITED',
+        failureCode: AWAITING_BUDGET_CODE,
+        nextAttemptAt: new Date(
+          this.#clock.now().getTime() + Math.max(1, retryAfterSeconds) * 1_000,
+        ),
+      },
+    });
+    return { jobId: job.id, status: 'QUEUED', failureClass: 'RATE_LIMITED', externalPostId: null };
   }
 
   #lateness(): number {
@@ -1874,6 +2229,8 @@ export class PublishPipelineService {
     providerStatusCode: number | null;
     providerErrorCode: string | null;
     safeSummary: string | null;
+    /** Connectors A (W5): the handle a `pending` answer gave. */
+    providerHandle?: string | null;
   }): Promise<string> {
     const finishedAt = this.#clock.now();
     const attempt = await this.#db.publishAttempt.create({
@@ -1891,6 +2248,7 @@ export class PublishPipelineService {
         // BOUNDED HERE AS WELL AS BY THE CHECK. Two guards, because the column
         // is the one place a raw provider body would otherwise land.
         safeSummary: input.safeSummary === null ? null : input.safeSummary.slice(0, 500),
+        providerHandle: input.providerHandle ?? null,
       },
       select: { id: true },
     });
@@ -2025,6 +2383,392 @@ export class PublishPipelineService {
       data: { status: itemStatus },
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// CONNECTORS A — what is checked before a request leaves, and after it lands
+// ---------------------------------------------------------------------------
+
+/**
+ * W3 — THE FIRST MEDIA RULE THIS POST BREAKS, by name, or null. Every rule is
+ * configuration; a rule left null is not checked. A size the library does not
+ * know (no width, no duration) cannot be shown to satisfy a rule that needs
+ * it, so it is refused rather than guessed.
+ */
+export function mediaRuleViolation(
+  rule: MediaRule | undefined,
+  media: readonly Pick<
+    PublishMedia,
+    'mimeType' | 'sizeBytes' | 'width' | 'height' | 'durationMs'
+  >[],
+): string | null {
+  if (!rule) return null;
+  if (rule.minItems !== null && media.length < rule.minItems) return 'min_items';
+  if (rule.maxItems !== null && media.length > rule.maxItems) return 'max_items';
+  for (const item of media) {
+    if (rule.mimeTypes.length > 0 && !rule.mimeTypes.includes(item.mimeType)) return 'mime_type';
+    if (rule.maxBytes !== null && item.sizeBytes > rule.maxBytes) return 'max_bytes';
+    const needsSize =
+      rule.minWidth !== null ||
+      rule.maxWidth !== null ||
+      rule.minHeight !== null ||
+      rule.maxHeight !== null ||
+      rule.minAspectRatio !== null ||
+      rule.maxAspectRatio !== null;
+    if (needsSize && (item.width === null || item.height === null)) return 'dimensions_unknown';
+    if (item.width !== null && item.height !== null) {
+      if (rule.minWidth !== null && item.width < rule.minWidth) return 'min_width';
+      if (rule.maxWidth !== null && item.width > rule.maxWidth) return 'max_width';
+      if (rule.minHeight !== null && item.height < rule.minHeight) return 'min_height';
+      if (rule.maxHeight !== null && item.height > rule.maxHeight) return 'max_height';
+      const aspect = item.width / item.height;
+      if (rule.minAspectRatio !== null && aspect < rule.minAspectRatio) return 'min_aspect_ratio';
+      if (rule.maxAspectRatio !== null && aspect > rule.maxAspectRatio) return 'max_aspect_ratio';
+    }
+    if (rule.minDurationSeconds !== null || rule.maxDurationSeconds !== null) {
+      if (!item.mimeType.startsWith('video/')) continue;
+      const seconds =
+        item.durationMs === null || item.durationMs === undefined ? null : item.durationMs / 1_000;
+      if (seconds === null) return 'duration_unknown';
+      if (rule.minDurationSeconds !== null && seconds < rule.minDurationSeconds)
+        return 'min_duration';
+      if (rule.maxDurationSeconds !== null && seconds > rule.maxDurationSeconds)
+        return 'max_duration';
+    }
+  }
+  return null;
+}
+
+/** Compare captions as words, not bytes: case, spacing and Unicode form aside. */
+function normalisedCaption(text: string): string {
+  return text.normalize('NFC').replace(/\s+/gu, ' ').trim().toLowerCase();
+}
+
+/**
+ * R8 — WHERE THE PLATFORM'S COPY DIFFERS FROM WHAT THE AUTHOR PREVIEWED, as
+ * field names. The caption must CONTAIN what the author wrote: a platform may
+ * append the hashtags or a link, and that is not a different post.
+ */
+export function observationMismatches(
+  request: Pick<PublishRequest, 'postKind' | 'media' | 'body'>,
+  observed: PublishObservation | undefined,
+): string[] {
+  if (!observed) return [];
+  const differs: string[] = [];
+  if (observed.postKind !== undefined && observed.postKind !== request.postKind)
+    differs.push('postKind');
+  if (observed.mediaCount !== undefined && observed.mediaCount !== request.media.length)
+    differs.push('mediaCount');
+  if (observed.caption !== undefined) {
+    const expected = normalisedCaption(request.body);
+    const seen = normalisedCaption(observed.caption ?? '');
+    if (!seen.includes(expected)) differs.push('caption');
+  }
+  return differs;
+}
+
+/** A variant's stored per-platform options, as a plain object, or none. */
+function plainOptions(value: unknown): Readonly<Record<string, unknown>> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+// ---------------------------------------------------------------------------
+// W1 (connectors A, D-505) — THE PROVIDER CALL RUNS BETWEEN TWO COMMITS
+// ---------------------------------------------------------------------------
+
+/**
+ * How a caller runs one database step of a publish or a verification.
+ *
+ * THE WORKER OPENS A FRESH TENANT TRANSACTION PER STEP, with a pipeline bound
+ * to it; a caller that already holds a client runs every step on it
+ * (`PublishPipelineService#execute`). Either way the provider is called by
+ * `sendPrepared` / `lookupPost` BETWEEN steps, never inside one — so a
+ * provider slower than the transaction's timeout can no longer roll the claim
+ * back to QUEUED with the post possibly live.
+ */
+export interface PipelineTransactions {
+  run<T>(step: (pipeline: PublishPipelineService) => Promise<T>): Promise<T>;
+}
+
+type Adapter = ReturnType<ConnectorRegistry['get']>;
+
+/** Everything the provider call needs, and nothing the database does. */
+export interface PreparedSend {
+  readonly jobId: string;
+  /** The claim this send belongs to: the record step is fenced on it. */
+  readonly claimedAt: Date;
+  readonly startedAt: Date;
+  readonly adapter: Adapter;
+  /** Decrypted in memory, exactly as before W1. Never logged or serialized. */
+  readonly credentials: AdapterCredentials;
+  readonly request: PublishRequest;
+}
+
+/** Everything a post lookup needs. */
+export interface PreparedLookup {
+  readonly jobId: string;
+  readonly adapter: Adapter;
+  readonly credentials: AdapterCredentials;
+  readonly externalAccountId: string;
+  readonly idempotencyKey: string;
+  /**
+   * Connectors A (W5): the handle of a publish the platform accepted and had
+   * not finished. When present the question is `checkPublish(handle)`, not a
+   * lookup by key.
+   */
+  readonly providerHandle: string | null;
+}
+
+/** What asking the provider "did this land?" produced. */
+export type LookupReport =
+  | {
+      readonly kind: 'found';
+      readonly externalPostId: string;
+      readonly externalPostUrl: string | null;
+    }
+  | { readonly kind: 'absent' }
+  /** Not asked (no lookup), or asked and no answer came back. */
+  | { readonly kind: 'unanswered' }
+  /** W5: the platform is still working on it. */
+  | { readonly kind: 'pending' }
+  /** W5: the platform finished, and the publish FAILED — nothing went out. */
+  | {
+      readonly kind: 'failed';
+      readonly failureClass: PublishFailureClass;
+      readonly failureCode: string;
+    };
+
+/** What the send step observed. The lookup is present only after an indeterminate failure. */
+export type SendReport =
+  | {
+      readonly kind: 'answered';
+      readonly outcome: PublishOutcome;
+      readonly lookup: LookupReport | null;
+    }
+  | {
+      readonly kind: 'thrown';
+      readonly failureClass: PublishFailureClass;
+      readonly lookup: LookupReport | null;
+    };
+
+export type ExecutionStep =
+  | { readonly kind: 'settled'; readonly result: ExecuteResult }
+  | { readonly kind: 'send'; readonly send: PreparedSend };
+
+export type VerificationStep =
+  | { readonly kind: 'settled'; readonly result: ExecuteResult }
+  | { readonly kind: 'lookup'; readonly lookup: PreparedLookup };
+
+/** Claim and preflight (commit) → send (no transaction) → record (commit). */
+export async function executePublishJob(
+  transactions: PipelineTransactions,
+  jobId: string,
+): Promise<ExecuteResult> {
+  const step = await transactions.run((pipeline) => pipeline.beginExecution(jobId));
+  if (step.kind === 'settled') return step.result;
+  const report = await sendPrepared(step.send);
+  return transactions.run((pipeline) => pipeline.concludeExecution(step.send, report));
+}
+
+/** Read (commit) → ask the provider (no transaction) → act on the answer (commit). */
+export async function verifyPublishJob(
+  transactions: PipelineTransactions,
+  jobId: string,
+): Promise<ExecuteResult> {
+  const step = await transactions.run((pipeline) => pipeline.beginVerification(jobId));
+  if (step.kind === 'settled') return step.result;
+  const report = await lookupPost(step.lookup);
+  return transactions.run((pipeline) => pipeline.concludeVerification(step.lookup, report));
+}
+
+/**
+ * Move a dead claim to VERIFICATION_PENDING (commit), then verify it. THERE IS
+ * NO PATH FROM HERE TO `sendPrepared` (D-143): recovery asks, it never sends.
+ */
+export async function recoverStalePublishJob(
+  transactions: PipelineTransactions,
+  jobId: string,
+): Promise<ExecuteResult> {
+  const unchanged = await transactions.run((pipeline) => pipeline.claimStale(jobId));
+  if (unchanged) return unchanged;
+  return verifyPublishJob(transactions, jobId);
+}
+
+/**
+ * STEP 2 OF 3 — THE ONE EXTERNAL CALL, outside any transaction.
+ *
+ * NEVER THROWS FOR A PROVIDER'S SAKE. A thrown error is classified here, by
+ * the adapter that threw it, and becomes a report; the thrown message is not
+ * kept, because an exception from deep in an HTTP client can carry the
+ * request body, which is the customer's caption. An INDETERMINATE answer is
+ * looked up immediately, still outside any transaction, so the record step
+ * only reads answers and never waits on a provider.
+ */
+export async function sendPrepared(send: PreparedSend): Promise<SendReport> {
+  const lookupAfter = async (failureClass: PublishFailureClass) =>
+    FAILURE_BEHAVIOUR[failureClass].indeterminate &&
+    send.adapter.capabilities.supportsPostLookup &&
+    send.adapter.findPostByIdempotencyKey
+      ? lookupPost({
+          jobId: send.jobId,
+          adapter: send.adapter,
+          credentials: send.credentials,
+          externalAccountId: send.request.externalAccountId,
+          idempotencyKey: send.request.idempotencyKey,
+          providerHandle: null,
+        })
+      : null;
+
+  let outcome: PublishOutcome;
+  try {
+    outcome = await send.adapter.publish({ credentials: send.credentials, request: send.request });
+  } catch (error: unknown) {
+    const failureClass = send.adapter.classifyError(error);
+    return { kind: 'thrown', failureClass, lookup: await lookupAfter(failureClass) };
+  }
+  return {
+    kind: 'answered',
+    outcome,
+    lookup: outcome.ok === false ? await lookupAfter(outcome.failureClass) : null,
+  };
+}
+
+/**
+ * "Did this post land?" — asked outside any transaction. A throw is "no
+ * answer". A publish the platform accepted (W5) is asked about by its handle;
+ * anything else by its idempotency key.
+ */
+export async function lookupPost(lookup: PreparedLookup): Promise<LookupReport> {
+  const check = lookup.adapter.checkPublish;
+  if (lookup.providerHandle !== null && check) {
+    try {
+      const outcome = await check.call(lookup.adapter, {
+        providerHandle: lookup.providerHandle,
+        externalAccountId: lookup.externalAccountId,
+        credentials: lookup.credentials,
+      });
+      if (outcome.ok === true) {
+        return {
+          kind: 'found',
+          externalPostId: outcome.externalPostId,
+          externalPostUrl: outcome.externalPostUrl,
+        };
+      }
+      if (outcome.ok === 'pending') return { kind: 'pending' };
+      // AN INDETERMINATE ANSWER TO "DID IT FINISH?" IS NOT AN ANSWER.
+      if (FAILURE_BEHAVIOUR[outcome.failureClass].indeterminate) return { kind: 'unanswered' };
+      return {
+        kind: 'failed',
+        failureClass: outcome.failureClass,
+        failureCode: outcome.failureCode,
+      };
+    } catch {
+      return { kind: 'unanswered' };
+    }
+  }
+  const find = lookup.adapter.findPostByIdempotencyKey;
+  if (!lookup.adapter.capabilities.supportsPostLookup || !find) return { kind: 'unanswered' };
+  try {
+    const found = await find.call(lookup.adapter, {
+      externalAccountId: lookup.externalAccountId,
+      idempotencyKey: lookup.idempotencyKey,
+      credentials: lookup.credentials,
+    });
+    return found
+      ? {
+          kind: 'found',
+          externalPostId: found.externalPostId,
+          externalPostUrl: found.externalPostUrl,
+        }
+      : { kind: 'absent' };
+  } catch {
+    return { kind: 'unanswered' };
+  }
+}
+
+function settled(result: ExecuteResult): {
+  readonly kind: 'settled';
+  readonly result: ExecuteResult;
+} {
+  return { kind: 'settled', result };
+}
+
+/** Ours, fixed and bounded: what an accepted-but-unfinished publish's attempt says. */
+export const PUBLISH_IN_PROGRESS_SUMMARY = 'Accepted by the platform; still being published.';
+
+/** The attempt row a send report becomes. Ours, bounded, never the provider's prose. */
+function attemptFromReport(
+  report: SendReport,
+  mismatches: readonly string[],
+): {
+  readonly outcome: 'SUCCEEDED' | 'RETRYABLE_FAILURE' | 'PERMANENT_FAILURE' | 'INDETERMINATE';
+  readonly failureClass: PublishFailureClass | null;
+  readonly providerStatusCode: number | null;
+  readonly providerErrorCode: string | null;
+  readonly safeSummary: string | null;
+  readonly providerHandle: string | null;
+} {
+  const failedAs = (failureClass: PublishFailureClass) =>
+    FAILURE_BEHAVIOUR[failureClass].indeterminate
+      ? ('INDETERMINATE' as const)
+      : FAILURE_BEHAVIOUR[failureClass].retryable
+        ? ('RETRYABLE_FAILURE' as const)
+        : ('PERMANENT_FAILURE' as const);
+  if (report.kind === 'thrown') {
+    return {
+      outcome: failedAs(report.failureClass),
+      failureClass: report.failureClass,
+      providerStatusCode: null,
+      providerErrorCode: null,
+      safeSummary: 'The platform call did not complete.',
+      providerHandle: null,
+    };
+  }
+  const outcome = report.outcome;
+  if (outcome.ok === true) {
+    return {
+      outcome: 'SUCCEEDED',
+      failureClass: null,
+      providerStatusCode: outcome.providerStatusCode,
+      providerErrorCode: null,
+      // R8: field NAMES only, never the caption.
+      safeSummary:
+        mismatches.length === 0
+          ? null
+          : `Published; the platform's copy differs from the preview in: ${mismatches.join(', ')}.`,
+      providerHandle: null,
+    };
+  }
+  if (outcome.ok === 'pending') {
+    // W5: sent, outcome not yet known — the attempt's CHECK requires a class.
+    return {
+      outcome: 'INDETERMINATE',
+      failureClass: 'TIMEOUT',
+      providerStatusCode: outcome.providerStatusCode,
+      providerErrorCode: null,
+      safeSummary: PUBLISH_IN_PROGRESS_SUMMARY,
+      providerHandle: outcome.providerHandle,
+    };
+  }
+  return {
+    outcome: failedAs(outcome.failureClass),
+    failureClass: outcome.failureClass,
+    providerStatusCode: outcome.providerStatusCode,
+    providerErrorCode: outcome.providerErrorCode,
+    safeSummary: outcome.safeSummary,
+    providerHandle: null,
+  };
+}
+
+/** The post the send step proved is live, if it proved one. */
+function landedPost(
+  report: SendReport,
+): { externalPostId: string; externalPostUrl: string | null } | null {
+  if (report.kind === 'answered' && report.outcome.ok === true) return report.outcome;
+  if (report.lookup?.kind === 'found') return report.lookup;
+  return null;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import {
   capabilitiesFor,
   providerForPlatformKey,
+  expiringSoonMs,
   toConnectionView,
   type PublishingPolicy,
 } from '@brandspace/social-connectors';
@@ -201,7 +202,7 @@ export async function publishReadiness(
   /** `brandId → provider → the connections on it`, in the query's order. */
   const byBrand = new Map<string, Map<SocialProvider, ReturnType<typeof toConnectionView>[]>>();
   for (const connection of connections) {
-    const view = toConnectionView(connection, input.now);
+    const view = toConnectionView(connection, input.now, expiringSoonMs(input.policy));
     const providers = byBrand.get(connection.brandId) ?? new Map();
     providers.set(connection.provider, [...(providers.get(connection.provider) ?? []), view]);
     byBrand.set(connection.brandId, providers);

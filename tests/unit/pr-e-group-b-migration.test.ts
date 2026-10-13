@@ -67,10 +67,11 @@ describe('PR E — the Group B fields', () => {
     }
   });
 
-  it('is the last migration the build expects, directly after batch 7 PR C', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-2)).toEqual([
+  it('comes directly after batch 7 PR C, and only connectors A follows it', () => {
+    expect(EXPECTED_MIGRATIONS.slice(-3)).toEqual([
       '20261016090000_content_item_publish_time',
       NAME,
+      '20261021090000_connectors_a_handles_and_subjects',
     ]);
   });
 });

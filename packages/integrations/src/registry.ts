@@ -438,7 +438,9 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
     displayNameAr: 'Cloudflare R2 (متوافق مع S3)',
     category: 'storage',
     supportedEnvironments: INTEGRATION_ENVIRONMENTS,
-    capabilities: { put: true, get: true, delete: true, signedUrls: false, versioning: false },
+    // Signed URLs: short-lived read-only links the publishing pipeline mints
+    // for platforms that fetch media themselves (D-505 O1).
+    capabilities: { put: true, get: true, delete: true, signedUrls: true, versioning: false },
     /*
      * NO FORM, AND THAT IS THE POINT.
      *

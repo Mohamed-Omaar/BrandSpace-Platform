@@ -696,6 +696,32 @@ database change: the columns and the index are inert to it.)
   `prototype-v90-phase2c4.spec.ts` `currentSignature`). A run crossing midnight or a month boundary
   between the two could break them; fixing that needs an injected application clock, not a read.
 
+### 6.14 Connectors A: provider handles and subject hashes, and rolling the application back (D-518 – D-530)
+
+**Migration** `20261021090000_connectors_a_handles_and_subjects` adds four nullable text columns —
+`publish_job.providerHandle`, `publish_attempt.providerHandle`, `social_connection.providerSubjectHash`,
+`social_oauth_state.pendingSubjectHash` — each with a shape CHECK, in ONE transaction that starts with
+`SET LOCAL lock_timeout = '5s'` and ends by proving RLS is still enabled and forced on the four tables.
+No table, no index, no enum value, no row written. Safe while the previous release is live: its client
+neither selects nor writes these columns.
+
+- **If the transaction times out on its lock:** nothing changed. Mark it rolled back
+  (`prisma migrate resolve --rolled-back 20261021090000_connectors_a_handles_and_subjects`, migrator
+  role, as §6.11), find the long transaction, deploy again.
+- **Rolling the APPLICATION back** needs no database change. One thing to know first: a job the new
+  release left VERIFICATION_PENDING **with a handle** (a platform that publishes asynchronously, D-521)
+  is not polled by the previous release — it waits for a person, exactly like any outcome that cannot
+  be confirmed. Nothing is resent. In step A no real platform answers "pending", so the count is zero:
+
+  ```sql
+  SELECT count(*) FROM "publish_job" WHERE "status" = 'VERIFICATION_PENDING' AND "providerHandle" IS NOT NULL;
+  ```
+
+- **The worker's transactions are now short (D-518).** A slow platform no longer holds a database
+  transaction open; a job a worker died holding stays PUBLISHING until its lease
+  (`publishing.dispatch.claimLeaseSeconds`) and is then verified, never resent. Keep the lease longer
+  than the slowest realistic provider call.
+
 ## 7. Secret rotation
 
 **Platform capability.** Every provider credential is a REFERENCE in configuration and a row in the
@@ -719,6 +745,25 @@ vault. Rotating one means re-wrapping, which requires both the old and the new k
 **Owner decision.** Which KMS, and the rotation cadence it enforces. Until one is chosen,
 `LocalDevelopmentKeyProvider` is the only implementation and it refuses to run in production, so this
 decision blocks production rather than being silently deferred.
+
+### 7.1 Rotating the social subject-hash key (D-526)
+
+The key that hashes a platform user's id is a Secret Service record referenced from
+`integrations.social-apps.subjectHashKeys`, and every stored hash carries its key's version
+(`v<version>:<hex>`). Rotation never breaks a lookup:
+
+1. Store the new key in **Platform Admin → Secrets**.
+2. In **Configuration → `integrations.social-apps`**, ADD `{ version: <next>, secretRef: <new ref> }`
+   to `subjectHashKeys` and set `subjectHashVersion` to it. Keep the old entry. New connections and
+   reconnections now write `v<next>:`; a lookup tries every listed version.
+3. Remove the old entry only when no row carries its prefix:
+
+   ```sql
+   SELECT count(*) FROM "social_connection" WHERE "providerSubjectHash" LIKE 'v<old>:%';
+   ```
+
+   A row still carrying it simply stops being findable by a platform callback until that account is
+   reconnected — it is never deleted, and nothing else about the connection changes.
 
 ---
 

@@ -60,10 +60,11 @@ describe('B1.0 + Option B — when a post goes out', () => {
   });
 
   it('comes directly after PR 6, and directly before PR E', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-3)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-4)).toEqual([
       '20261015092000_automation_run_execution_due_index',
       NAME,
       '20261020090000_group_b_fields',
+      '20261021090000_connectors_a_handles_and_subjects',
     ]);
   });
 });

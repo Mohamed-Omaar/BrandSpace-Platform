@@ -53,6 +53,17 @@ export interface ObjectStore {
   get(storageKey: string): Promise<Uint8Array | null>;
   /** Idempotent: deleting an absent object succeeds. */
   delete(storageKey: string): Promise<void>;
+  /**
+   * D-505 O1 — a pre-signed, read-only GET URL for one object, living
+   * `expiresInSeconds` from `now`. OPTIONAL: a store that cannot pre-sign (the
+   * development stores) does not have it, and a caller that needs one refuses
+   * rather than falling back to anything else. The URL is a bearer credential
+   * for that file; it is never logged.
+   */
+  presignGet?(
+    storageKey: string,
+    input: { readonly expiresInSeconds: number; readonly now: Date },
+  ): Promise<string>;
 }
 
 /** SHA-256 of the content, lowercase hex. */

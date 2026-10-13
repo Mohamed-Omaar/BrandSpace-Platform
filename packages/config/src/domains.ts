@@ -1752,21 +1752,107 @@ function providerIntegrationSchema() {
   });
 }
 
-const socialAppsSchema = z.object({
-  applications: z
-    .array(
-      z.object({
-        providerKey: z.enum(['facebook', 'instagram', 'tiktok', 'linkedin', 'youtube', 'x']),
-        appId: z.string().min(1),
-        redirectUri: z.string().url(),
-        scopes: z.array(z.string()).default([]),
-        clientSecretRef: z.string().min(1).nullable().default(null),
-        webhookSecretRef: z.string().min(1).nullable().default(null),
-        status: z.enum(['draft', 'validated', 'active', 'disabled']).default('draft'),
-      }),
-    )
-    .default([]),
-});
+const socialAppProviderKey = z.enum([
+  'facebook',
+  'instagram',
+  'tiktok',
+  'linkedin',
+  'youtube',
+  'x',
+]);
+
+const socialAppsSchema = z
+  .object({
+    applications: z
+      .array(
+        z.object({
+          providerKey: socialAppProviderKey,
+          appId: z.string().min(1),
+          redirectUri: z.string().url(),
+          scopes: z.array(z.string()).default([]),
+          clientSecretRef: z.string().min(1).nullable().default(null),
+          webhookSecretRef: z.string().min(1).nullable().default(null),
+          status: z.enum(['draft', 'validated', 'active', 'disabled']).default('draft'),
+          /**
+           * CONNECTORS A (W2/W4 groundwork) — the adapter's own settings, as
+           * named strings: the platform API version the owner pins, a login
+           * configuration id. Generic on purpose: what each key means belongs
+           * to the adapter that reads it, and NO SECRET goes here — a secret is
+           * a `…SecretRef`, never a setting (CLAUDE.md §2.3).
+           */
+          settings: z
+            .record(z.string().regex(/^[a-zA-Z][a-zA-Z0-9]{0,63}$/), z.string().max(500))
+            .default({}),
+          /**
+           * D-505 O3 — ONE PLATFORM APP SERVING TWO PROVIDER KEYS (Facebook and
+           * Instagram are one Meta app). The entry naming another here uses
+           * THAT entry's secret references, so the one secret rotates once and
+           * the two can never drift apart.
+           */
+          sharesCredentialWith: socialAppProviderKey.nullable().default(null),
+        }),
+      )
+      .default([]),
+    /**
+     * CONNECTORS A (W10) — THE KEYS FOR THE PROVIDER-SUBJECT HASH.
+     *
+     * A connection stores `v<version>:` + HMAC-SHA256 of the platform's USER id,
+     * never the id itself; the key is a Secret Service record, referenced here
+     * and resolved only by the API. Every version that may still be on a stored
+     * row stays listed, so a lookup can try each; `subjectHashVersion` is the
+     * one new hashes are written with. Rotation is: add a version, make it
+     * current, and remove the old one only once no row carries it.
+     */
+    subjectHashKeys: z
+      .array(
+        z.object({
+          version: z.number().int().min(1).max(9_999),
+          secretRef: z.string().min(1),
+        }),
+      )
+      .default([]),
+    subjectHashVersion: z.number().int().min(1).max(9_999).nullable().default(null),
+  })
+  .superRefine((value, context) => {
+    const keys = new Set(value.applications.map((app) => app.providerKey));
+    value.applications.forEach((app, index) => {
+      const shared = app.sharesCredentialWith;
+      if (shared === null) return;
+      const target = value.applications.find((other) => other.providerKey === shared);
+      const problem =
+        shared === app.providerKey
+          ? 'An application cannot share its own credential.'
+          : !keys.has(shared)
+            ? 'The application it shares a credential with is not configured.'
+            : target?.sharesCredentialWith
+              ? 'An application can only share the credential of one that holds its own.'
+              : target?.appId !== app.appId
+                ? 'Applications that share a credential must have the same app id.'
+                : null;
+      if (problem) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['applications', index, 'sharesCredentialWith'],
+          message: problem,
+        });
+      }
+    });
+    const versions = value.subjectHashKeys.map((key) => key.version);
+    if (new Set(versions).size !== versions.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['subjectHashKeys'],
+        message: 'Each subject-hash key version may appear once.',
+      });
+    }
+    if (value.subjectHashVersion !== null && !versions.includes(value.subjectHashVersion)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['subjectHashVersion'],
+        message: 'The current subject-hash version must be one of the listed keys.',
+      });
+    }
+  });
 
 /**
  * Phase 6 — the PUBLISHING policy, and the half of it a customer may see.
@@ -1786,13 +1872,40 @@ const socialAppsSchema = z.object({
  * stay in `integrations.social-apps`, which is not projected to tenants. What a
  * platform can do is public; what our app may do it with is not.
  */
+const publishingPostKind = z.enum([
+  'text',
+  'image',
+  'carousel',
+  'video',
+  'reel',
+  'story',
+  'article',
+  'thread',
+]);
+
+/** One post kind's media rule. Null means "not checked". */
+const publishingMediaRuleSchema = z.object({
+  /** MIME types accepted, e.g. `image/jpeg`. Empty: any type the library publishes. */
+  mimeTypes: z.array(z.string().regex(/^[a-z]+\/[a-z0-9.+-]+$/)).default([]),
+  maxBytes: z.number().int().positive().nullable().default(null),
+  minWidth: z.number().int().positive().nullable().default(null),
+  maxWidth: z.number().int().positive().nullable().default(null),
+  minHeight: z.number().int().positive().nullable().default(null),
+  maxHeight: z.number().int().positive().nullable().default(null),
+  /** Width ÷ height. */
+  minAspectRatio: z.number().positive().nullable().default(null),
+  maxAspectRatio: z.number().positive().nullable().default(null),
+  minDurationSeconds: z.number().positive().nullable().default(null),
+  maxDurationSeconds: z.number().positive().nullable().default(null),
+  minItems: z.number().int().min(0).max(50).nullable().default(null),
+  maxItems: z.number().int().min(0).max(50).nullable().default(null),
+});
+
 const publishingCapabilitySchema = z.object({
   /** Whether this provider may be connected at all right now. */
   enabled: z.boolean().default(false),
   /** Post shapes the platform accepts. The composer offers exactly these. */
-  postKinds: z
-    .array(z.enum(['text', 'image', 'carousel', 'video', 'reel', 'story', 'article', 'thread']))
-    .default(['text']),
+  postKinds: z.array(publishingPostKind).default(['text']),
   maxBodyCharacters: z.number().int().positive().max(100_000).default(2_200),
   maxHashtags: z.number().int().min(0).max(100).default(30),
   maxMediaItems: z.number().int().min(0).max(50).default(10),
@@ -1815,6 +1928,32 @@ const publishingCapabilitySchema = z.object({
   scopes: z.array(z.string()).default([]),
   /** What kind of thing gets connected: page, profile, channel, organization. */
   targetKind: z.string().min(1).default('profile'),
+  /**
+   * CONNECTORS A (W3) — WHAT MEDIA EACH POST KIND ACCEPTS, refused before the
+   * call with `MEDIA_INVALID` rather than by the platform. Keyed by post kind;
+   * a kind with no entry, and any field left null, is not checked. Every value
+   * is the owner's, read from the platform's own documentation (D-505): none
+   * is a default here.
+   */
+  mediaRules: z.record(publishingPostKind, publishingMediaRuleSchema).default({}),
+  /**
+   * CONNECTORS A (W12) — the request budget publishing spends from, per
+   * connected account. Null: no budget is enforced by us.
+   */
+  rateLimit: z
+    .object({
+      requestsPerWindow: z.number().int().positive().max(100_000),
+      windowSeconds: z.number().int().positive().max(86_400),
+    })
+    .nullable()
+    .default(null),
+  /**
+   * D-505 O1 — the platform FETCHES media from a URL rather than receiving the
+   * bytes. When true, the pipeline mints a short-lived pre-signed GET URL for
+   * exactly this post's assets (`publishing.media.fetchUrlTtlSeconds`); the
+   * adapter never sees a storage key.
+   */
+  mediaByUrl: z.boolean().default(false),
 });
 
 const publishingSchema = z.object({
@@ -1894,6 +2033,31 @@ const publishingSchema = z.object({
        * then fails saying to reconnect the account.
        */
       reconnectRecheckSeconds: z.number().int().min(30).max(3_600).default(60),
+      /**
+       * CONNECTORS A (W14) — how long before its token expires a connection is
+       * shown as "expiring soon". 24 hours is what the screen used before it
+       * was configuration; a platform whose tokens last weeks wants days.
+       */
+      expiringSoonHours: z.number().int().min(1).max(2_160).default(24),
+      /**
+       * CONNECTORS A (W5) — A PUBLISH THE PLATFORM ACCEPTED BUT HAS NOT
+       * FINISHED is asked about again every `publishPollSeconds`, for at most
+       * `publishPollMaxMinutes` from when it was sent; after that it waits for
+       * a person, exactly like any outcome we cannot confirm. Never resent.
+       */
+      publishPollSeconds: z.number().int().min(10).max(3_600).default(30),
+      publishPollMaxMinutes: z.number().int().min(1).max(1_440).default(60),
+    })
+    .default({}),
+
+  media: z
+    .object({
+      /**
+       * D-505 O1 — the lifetime of a pre-signed media URL the pipeline mints
+       * for a platform that fetches media itself. Fifteen minutes: long enough
+       * for the platform to fetch, short enough that a leaked URL is soon dead.
+       */
+      fetchUrlTtlSeconds: z.number().int().min(60).max(3_600).default(900),
     })
     .default({}),
 });

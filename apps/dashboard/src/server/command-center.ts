@@ -7,7 +7,7 @@ import {
 import type { TenantScopedClient } from '@brandspace/database';
 import type { CustomerWorkspaceContext } from '@brandspace/auth';
 import { NOTE_PERMISSION, readableNoteSubjectTypes } from '@brandspace/collaboration';
-import { EXPIRING_SOON_MS } from '@brandspace/social-connectors';
+import { expiringSoonMs, TenantPublishingPolicySource } from '@brandspace/social-connectors';
 import { AUTOMATION_ACTIONS, satisfiesActionPermissions } from '@brandspace/automation';
 import {
   BrandKnowledgeService,
@@ -515,18 +515,19 @@ async function insightsUnreviewed(
  * Connected accounts whose access expires within the refresh window — or
  * already has, while the connection still reads ACTIVE.
  *
- * NOTHING REFRESHES THESE AUTOMATICALLY. Refreshing is a manual action on
- * `/integrations`, so an expiring token is a genuine task, and the one that
- * turns into `publishing-failed` tomorrow if nobody does it today. The window
- * is the connector package's own `EXPIRING_SOON_MS`, so Home, the integrations
- * screen and the calendar's publish readiness cannot disagree about which
- * accounts are expiring.
+ * An expiring token is a genuine task: the proactive refresh (connectors A,
+ * W6) renews what it can, and one it cannot renew turns into
+ * `publishing-failed` if nobody reconnects it. The window is the connector
+ * package's own `expiringSoonMs`, read from the same publishing policy, so
+ * Home, the integrations screen and the calendar's publish readiness cannot
+ * disagree about which accounts are expiring.
  */
 async function connectionsExpiring(
   db: TenantScopedClient,
   session: CustomerWorkspaceContext,
 ): Promise<AttentionItem | null> {
-  const horizon = new Date(systemClock.now().getTime() + EXPIRING_SOON_MS);
+  const policy = await new TenantPublishingPolicySource(db, currentEnvironment()).load();
+  const horizon = new Date(systemClock.now().getTime() + expiringSoonMs(policy));
   const count = await db.socialConnection.count({
     where: {
       workspaceId: session.workspaceId,

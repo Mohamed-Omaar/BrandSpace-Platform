@@ -3756,6 +3756,9 @@ model SocialConnection {
   /// UI can warn without the token table being read at all.
   tokenExpiresAt  DateTime? @db.Timestamptz(6)
   lastRefreshedAt DateTime? @db.Timestamptz(6)
+  /// Connectors A (W10): "v<n>:" + hex HMAC-SHA256 of the provider user id under key version n.
+  /// Never the raw id. CHECK: ^v[0-9]{1,4}:[0-9a-f]{64}$.
+  providerSubjectHash String?
 
   /// Connection health. `lastSyncedAt` is the last time we successfully talked
   /// to the provider about this account for any reason.
@@ -3919,6 +3922,8 @@ model SocialOAuthState {
   /// What the provider ACTUALLY granted, carried across the selection step so
   /// the connection records the same scopes it would have recorded directly.
   grantedScopes String[] @default([])
+  /// Connectors A (W10): the subject hash carried through the page-selection pause (D-142).
+  pendingSubjectHash String?
 
   /// SHA-256 of the single-use secret that authorises the CHOICE. Held by the
   /// browser that completed the callback; unique platform-wide for the same
@@ -3981,6 +3986,9 @@ model PublishJob {
   /// What the provider called the post, and where a human can see it.
   externalPostId  String?
   externalPostUrl String?
+  /// Connectors A (W5): the platform handle for an accepted, unfinished publish.
+  /// The job is then VERIFICATION_PENDING and verification asks about it; never resent.
+  providerHandle  String?
   publishedAt     DateTime? @db.Timestamptz(6)
 
   createdByUserId String?  @db.Uuid
@@ -4044,6 +4052,8 @@ model PublishAttempt {
   /// A short, redacted description. Bounded by a CHECK so a raw body cannot be
   /// dropped in here by a future call site.
   safeSummary        String?
+  /// Connectors A (W5): the handle this attempt received, when the publish was accepted pending.
+  providerHandle     String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 

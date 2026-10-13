@@ -44,6 +44,22 @@ export const SOCIAL_PROVIDERS = [
   'X',
 ] as const satisfies readonly SocialProvider[];
 
+/** One post kind's media rule (W3). Null: not checked. */
+export interface MediaRule {
+  readonly mimeTypes: readonly string[];
+  readonly maxBytes: number | null;
+  readonly minWidth: number | null;
+  readonly maxWidth: number | null;
+  readonly minHeight: number | null;
+  readonly maxHeight: number | null;
+  readonly minAspectRatio: number | null;
+  readonly maxAspectRatio: number | null;
+  readonly minDurationSeconds: number | null;
+  readonly maxDurationSeconds: number | null;
+  readonly minItems: number | null;
+  readonly maxItems: number | null;
+}
+
 export interface ProviderCapabilities {
   readonly enabled: boolean;
   readonly postKinds: readonly string[];
@@ -56,6 +72,12 @@ export interface ProviderCapabilities {
   readonly supportsPostLookup: boolean;
   readonly scopes: readonly string[];
   readonly targetKind: string;
+  /** Connectors A (W3): media rules by post kind. */
+  readonly mediaRules: Readonly<Partial<Record<string, MediaRule>>>;
+  /** Connectors A (W12): the per-account request budget, or null. */
+  readonly rateLimit: { readonly requestsPerWindow: number; readonly windowSeconds: number } | null;
+  /** D-505 O1: the platform fetches media from a pre-signed URL. */
+  readonly mediaByUrl: boolean;
 }
 
 export interface PublishingPolicy {
@@ -78,6 +100,12 @@ export interface PublishingPolicy {
     readonly claimLeaseSeconds: number;
     readonly staleClaimBatchSize: number;
     readonly reconnectRecheckSeconds: number;
+    readonly expiringSoonHours: number;
+    readonly publishPollSeconds: number;
+    readonly publishPollMaxMinutes: number;
+  };
+  readonly media: {
+    readonly fetchUrlTtlSeconds: number;
   };
 }
 

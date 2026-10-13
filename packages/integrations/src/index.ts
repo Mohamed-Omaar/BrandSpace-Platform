@@ -47,3 +47,9 @@ export type {
   IntegrationTester,
   IntegrationView,
 } from './service';
+export {
+  socialPlatformAddresses,
+  type SocialAddress,
+  type SocialAddressKey,
+  type SocialPlatformAddresses,
+} from './social-addresses';

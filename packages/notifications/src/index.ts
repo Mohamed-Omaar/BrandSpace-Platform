@@ -13,6 +13,7 @@ export {
 export type { NotificationCategory, NotificationPreferences } from './preferences';
 export { resolveRecipients } from './recipients';
 export { NotificationService } from './service';
+export { connectionReauthNotifier } from './connection-reauth';
 export type { CreateNotificationInput, NotificationOptions, NotificationView } from './service';
 export { NOTIFICATION_TEMPLATES, NOTIFICATION_TEMPLATE_KEYS } from './templates';
 export type { NotificationPayload, NotificationTemplateKey } from './templates';

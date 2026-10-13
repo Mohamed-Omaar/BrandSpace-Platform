@@ -23,6 +23,27 @@ const SENSITIVE_VALUE_PATTERNS: readonly RegExp[] = [
   // never sees them — which is exactly how a database password ends up in a log
   // line that everybody assumed was redacted.
   /\b[a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:[^\s/@]+@[^\s]*/gi,
+  // CONNECTORS A (W13) — social-platform token shapes outside a query string.
+  // `EAA…` is the prefix of a Meta access token; `act.` / `rft.` are TikTok's
+  // access and refresh token shapes as its sample responses show them (not a
+  // documented stable format, so matched generously).
+  /\bEAA[A-Za-z0-9]{20,}/g,
+  /\b(?:act|rft)\.[A-Za-z0-9!*._-]{20,}/g,
+];
+
+/**
+ * CONNECTORS A (W13) — CREDENTIALS INSIDE A URL'S QUERY STRING. A platform API
+ * takes its token as `?access_token=…`, and an HTTP client's error message
+ * routinely carries the whole URL; the key-name rule never sees it because it
+ * is not a key. The parameter NAME is kept, so a log still says what was
+ * there; only the value goes. An OAuth `code` is redacted when it is long
+ * enough to be one (a short `code=` is usually an error code). A pre-signed
+ * media URL's signature (D-505 O1) is a bearer credential for that file.
+ */
+const SENSITIVE_QUERY_PATTERNS: readonly RegExp[] = [
+  /([?&](?:access_token|client_secret|fb_exchange_token|refresh_token|input_token)=)[^&\s#"']+/gi,
+  /([?&]code=)[^&\s#"']{20,}/gi,
+  /([?&]X-Amz-Signature=)[^&\s#"']+/gi,
 ];
 
 export const REDACTED = '[REDACTED]';
@@ -32,6 +53,9 @@ const MAX_DEPTH = 8;
 
 function redactString(value: string): string {
   let out = value;
+  for (const pattern of SENSITIVE_QUERY_PATTERNS) {
+    out = out.replace(pattern, `$1${REDACTED}`);
+  }
   for (const pattern of SENSITIVE_VALUE_PATTERNS) {
     out = out.replace(pattern, REDACTED);
   }
