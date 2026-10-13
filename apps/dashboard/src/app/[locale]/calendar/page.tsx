@@ -26,6 +26,7 @@ import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, defaultBrandFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { inSocial } from '../../../server/social-context';
+import { heldSlot } from './slot-moves';
 import { canGoOut, connectableChannels } from '../../../server/connectable-channels';
 import { isBlocking, needsAttention, publishReadiness } from '../../../server/publish-readiness';
 import { mediaForVariants } from '../../../server/media-picker';
@@ -548,9 +549,7 @@ export default async function CalendarPage({
      */
     const variantKeys = [...new Set(view.variants.map((variant) => variant.platformKey))];
     const held =
-      RESCHEDULABLE_SLOT_STATUSES.includes(view.slot.status) &&
-      variantKeys.length > 0 &&
-      !canGoOut(variantKeys, connectable);
+      RESCHEDULABLE_SLOT_STATUSES.includes(view.slot.status) && heldSlot(variantKeys, connectable);
 
     const record: PostRecord = {
       id: view.slot.id,

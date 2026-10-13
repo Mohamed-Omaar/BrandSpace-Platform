@@ -2166,7 +2166,7 @@ export const messages = {
     'calendar.readiness.NOT_CONNECTED': 'لا يوجد حساب مرتبط',
     'calendar.readiness.UNSUPPORTED': 'القناة غير متاحة للنشر',
     // B-pre 2 — a post held because none of its channels can be connected yet.
-    'calendar.held': 'لا يمكن النشر بعد — لا توجد قناة مرتبطة',
+    'calendar.held': 'محجوز',
     'calendar.heldTime': 'وقته المحفوظ',
     'calendar.heldExplanation':
       'لا يمكن ربط أيٍّ من قنوات هذا المنشور بعد، لذا يبقى في يومه دون أن يُنشر. ويمكنك إزالته من التقويم؛ ووقته محفوظ.',
@@ -2206,6 +2206,8 @@ export const messages = {
     'integrations.disconnectConfirmBody':
       'لن تُنشر المنشورات المجدولة لهذا الحساب ما دام مفصولًا. هل تريد فصله؟',
     'integrations.disconnectConfirmSubmit': 'نعم، افصل الحساب',
+    'integrations.disconnectMetaNote':
+      'يبقى إذن فيسبوك قائمًا بعد الفصل. لإزالة وصول Brandspace بالكامل، افتح في فيسبوك: الإعدادات والخصوصية ← الإعدادات ← عمليات تكامل الأعمال، ثم أزل Brandspace.',
     'integrations.check': 'فحص الاتصال',
     'integrations.provider': 'المنصة',
     'integrations.brand': 'العلامة التجارية',
@@ -4039,6 +4041,7 @@ export const messages = {
     'home.p.upScheduled': 'مجدول',
     'home.p.upInReview': 'قيد المراجعة',
     'home.p.upDraft': 'مسودة',
+    'home.p.upHeld': 'محجوز',
     'home.p.upEmpty': 'لا شيء قادم في الأيام المقبلة.',
     'home.p.copilot': 'المساعد',
     'home.p.aiSuggestion': 'اقتراح ذكي',
@@ -6272,7 +6275,7 @@ export const messages = {
     'calendar.readiness.NOT_CONNECTED': 'No connected account',
     'calendar.readiness.UNSUPPORTED': 'Channel unavailable for publishing',
     // B-pre 2 — a post held because none of its channels can be connected yet.
-    'calendar.held': 'Can’t publish yet — no connected channel',
+    'calendar.held': 'Held',
     'calendar.heldTime': 'Its kept time',
     'calendar.heldExplanation':
       'None of this post’s channels can be connected yet, so it stays on its day and is not published. You can take it off the calendar; its time is kept.',
@@ -6313,6 +6316,8 @@ export const messages = {
     'integrations.disconnectConfirmBody':
       'Posts scheduled for this account will not be published while it is disconnected. Disconnect it?',
     'integrations.disconnectConfirmSubmit': 'Yes, disconnect',
+    'integrations.disconnectMetaNote':
+      'Your Facebook permission stays after you disconnect. To remove Brandspace’s access fully, open Facebook: Settings & privacy › Settings › Business integrations, and remove Brandspace.',
     'integrations.check': 'Check connection',
     'integrations.provider': 'Platform',
     'integrations.brand': 'Brand',
@@ -8214,6 +8219,7 @@ export const messages = {
     'home.p.upScheduled': 'Scheduled',
     'home.p.upInReview': 'In review',
     'home.p.upDraft': 'Draft',
+    'home.p.upHeld': 'Held',
     'home.p.upEmpty': 'Nothing coming up in the next days.',
     'home.p.copilot': 'Copilot',
     'home.p.aiSuggestion': 'AI suggestion',

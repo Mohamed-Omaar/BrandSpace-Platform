@@ -29,7 +29,7 @@ import {
 } from '@brandspace/ui';
 import type { MoveSlotResult } from './actions';
 import { pendingMoves, withMoves } from './optimistic-moves';
-import { dragHintShown, slotMovable } from './slot-moves';
+import { dragHintShown, heldPreviewLabels, slotMovable } from './slot-moves';
 import { VariantPreview, previewLabels } from '../content/compose/variant-preview';
 import { CopilotLink } from '../../../components/copilot-link';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
@@ -1094,7 +1094,11 @@ export function CalendarView({
                 accountHandle=""
                 status="SCHEDULED"
                 approval="NOT_REQUIRED"
-                labels={previewLabels(t)}
+                labels={
+                  openSlot.held
+                    ? heldPreviewLabels(previewLabels(t), t['calendar.held'] ?? '')
+                    : previewLabels(t)
+                }
                 testId="calendar-drawer-preview"
               />
             ) : null}

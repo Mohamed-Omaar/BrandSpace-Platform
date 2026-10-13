@@ -160,6 +160,14 @@ for (const locale of ['en', 'ar'] as const) {
     await expect(page.getByTestId('calendar-open-studio')).toBeVisible();
     await expect(page.getByTestId('calendar-cancel-submit')).toBeVisible();
 
+    // 4 (#81). Its state reads "Held" / «محجوز», never "Scheduled", in the drawer.
+    const heldLabel = locale === 'en' ? 'Held' : 'محجوز';
+    await expect(page.getByTestId('calendar-slot-status')).toContainText(heldLabel);
+    await expect(page.getByTestId('calendar-drawer-preview')).toContainText(heldLabel);
+    await expect(page.getByTestId('calendar-drawer-preview')).not.toContainText(
+      locale === 'en' ? 'Scheduled' : 'مجدول',
+    );
+
     // 3. The channel by its configured name.
     await expect(page.getByTestId('calendar-slot-channels')).toContainText('Instagram');
     await expect(page.getByTestId('calendar-slot-channels')).not.toContainText('instagram');
