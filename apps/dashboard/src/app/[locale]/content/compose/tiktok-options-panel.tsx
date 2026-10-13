@@ -55,6 +55,13 @@ export interface TikTokPostingView {
   readonly maxVideoSeconds: number | null;
 }
 
+/**
+ * The Studio's hint line, held to the start edge: the pair the channel-access
+ * line already uses (`bsp-st-hint bsp-st-connect`), because a bare
+ * `bsp-st-hint` centres itself in a column and these lines sit under labels.
+ */
+const HINT = 'bsp-st-hint bsp-st-connect';
+
 const fill = (text: string, values: Readonly<Record<string, string>>) =>
   text.replace(/\{(\w+)\}/g, (match, key: string) => values[key] ?? match);
 
@@ -131,11 +138,11 @@ export function TikTokOptionsPanel({
       </span>
 
       {view.accounts.length === 0 ? (
-        <p className="bsp-st-hint" data-testid={`${testId}-no-account`}>
+        <p className={HINT} data-testid={`${testId}-no-account`}>
           {word('studio.tiktok.noAccount')}
         </p>
       ) : (
-        <p className="bsp-st-hint" data-testid={`${testId}-posting-as`}>
+        <p className={HINT} data-testid={`${testId}-posting-as`}>
           {fill(word('studio.tiktok.postingAs'), { names })}
         </p>
       )}
@@ -144,7 +151,7 @@ export function TikTokOptionsPanel({
         .map((account) => (
           <p
             key={account.id}
-            className="bsp-st-hint"
+            className={HINT}
             role="status"
             data-testid={`${testId}-${account.state === 'cannot_post' ? 'cannot-post' : 'unavailable'}`}
           >
@@ -159,7 +166,7 @@ export function TikTokOptionsPanel({
           </p>
         ))}
       {view.forcedPrivate ? (
-        <p className="bsp-st-hint" data-testid={`${testId}-forced-private`}>
+        <p className={HINT} data-testid={`${testId}-forced-private`}>
           {word('studio.tiktok.forcedPrivate')}
         </p>
       ) : null}
@@ -266,7 +273,7 @@ export function TikTokOptionsPanel({
       ) : null}
 
       {view.maxVideoSeconds !== null && video ? (
-        <p className="bsp-st-hint" data-testid={`${testId}-max-video`}>
+        <p className={HINT} data-testid={`${testId}-max-video`}>
           {fill(word('studio.tiktok.maxVideo'), {
             minutes: String(Math.floor(view.maxVideoSeconds / 60)),
           })}
@@ -274,12 +281,12 @@ export function TikTokOptionsPanel({
       ) : null}
 
       {problems[0] ? (
-        <p className="bsp-st-hint" role="status" data-testid={`${testId}-problem`}>
+        <p className={HINT} role="status" data-testid={`${testId}-problem`}>
           {word(`studio.tiktok.problem.${problems[0].replace('tiktok.', '')}`)}
         </p>
       ) : null}
 
-      <p className="bsp-st-hint" data-testid={`${testId}-consent`}>
+      <p className={HINT} data-testid={`${testId}-consent`}>
         {word(branded ? 'studio.tiktok.consentBranded' : 'studio.tiktok.consent')}
       </p>
     </section>
