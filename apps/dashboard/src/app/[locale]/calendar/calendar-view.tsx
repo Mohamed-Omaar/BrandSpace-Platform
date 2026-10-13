@@ -29,6 +29,7 @@ import {
 } from '@brandspace/ui';
 import type { MoveSlotResult } from './actions';
 import { pendingMoves, withMoves } from './optimistic-moves';
+import { dragHintShown, slotMovable } from './slot-moves';
 import { VariantPreview, previewLabels } from '../content/compose/variant-preview';
 import { CopilotLink } from '../../../components/copilot-link';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
@@ -449,7 +450,7 @@ export function CalendarView({
     }
     const slotId = payload.startsWith('slot:') ? payload.slice('slot:'.length) : '';
     const slot = slots.find((candidate) => candidate.slotId === slotId);
-    if (!slot || !canSchedule || slot.reschedulable === false || !actions.move) return 'ignored';
+    if (!slot || !movable(slot) || !actions.move) return 'ignored';
     if (today !== '' && day < today) {
       setPastDayNotice(true);
       return 'ignored';
@@ -477,10 +478,13 @@ export function CalendarView({
   });
 
   /** B7 — only a post that can still move can be dragged, and only by a scheduler. */
+  // Q8, B-4 and D-531 in one rule (`slot-moves.ts`): the drag, the drop, the chip and the drawer.
+  const movable = (slot: SlotDetail): boolean =>
+    slotMovable({ canSchedule, reschedulable: slot.reschedulable, held: slot.held });
+
   const postDragData = (post: PostRecord): string | undefined => {
-    if (!canSchedule) return undefined;
     const slot = slots.find((candidate) => candidate.slotId === post.id);
-    return slot && slot.reschedulable !== false ? `slot:${post.id}` : undefined;
+    return slot && movable(slot) ? `slot:${post.id}` : undefined;
   };
 
   // §8.2 — the phone's strip: the next 14 days from today, in the workspace's zone.
@@ -593,7 +597,7 @@ export function CalendarView({
           .filter(Boolean)
           .join(' · '),
         caption: slot?.previewBody ?? '',
-        canMove: canSchedule && slot?.reschedulable !== false && actions.move !== undefined,
+        canMove: slot !== undefined && movable(slot) && actions.move !== undefined,
         dragData: postDragData(post),
       };
     }),
@@ -663,7 +667,7 @@ export function CalendarView({
           details: t['calendar.pop.details'] ?? '',
           cancel: t['calendar.cancelMove'] ?? '',
           pickDay: t['calendar.pickDay'] ?? '{title}',
-          hint: canSchedule ? (t['calendar.hint'] ?? '') : '',
+          hint: dragHintShown(canSchedule) ? (t['calendar.hint'] ?? '') : '',
           legend: (
             [
               ['sched', 'SCHEDULED'],
@@ -836,7 +840,7 @@ export function CalendarView({
       />
 
       {/* §8.2 — the hint under the phone's list: a long-press lifts a post. */}
-      {canSchedule ? (
+      {dragHintShown(canSchedule) ? (
         <p className="bs-narrow-only" data-testid="calendar-move-note" style={{ margin: 0 }}>
           <span className="bsp-cal-note">{t['calendar.moveFromPost']}</span>
         </p>
@@ -1110,7 +1114,11 @@ export function CalendarView({
               data-testid="calendar-slot-facts"
               style={{ margin: 0, display: 'grid', gap: spacingTokens['2xs'] }}
             >
-              <SlotFact term={t['calendar.channels'] ?? ''} value={openSlot.channels.join(' · ')} />
+              <SlotFact
+                term={t['calendar.channels'] ?? ''}
+                value={openSlot.channels.map(channelName).join(' · ')}
+                testId="calendar-slot-channels"
+              />
               {openSlot.campaignName ? (
                 <SlotFact
                   term={t['calendar.campaign'] ?? ''}
@@ -1188,7 +1196,7 @@ export function CalendarView({
               </Banner>
             ) : null}
 
-            {canSchedule && openSlot.reschedulable !== false ? (
+            {movable(openSlot) ? (
               <form action={actions.reschedule} style={{ display: 'grid', gap: spacingTokens.md }}>
                 <input type="hidden" name="locale" value={locale} />
                 <input type="hidden" name="month" value={month} />

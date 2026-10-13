@@ -76,7 +76,11 @@ describe('B-4 · the calendar only offers to move a plan that can move', () => {
 
   it('marks each slot and hides the reschedule form for the rest', () => {
     expect(page).toContain('reschedulable: RESCHEDULABLE_SLOT_STATUSES.includes(view.slot.status)');
-    expect(view).toContain('canSchedule && openSlot.reschedulable !== false ? (');
+    // D-531: one rule (`slot-moves.ts`) — scheduling offered, not started, not held.
+    expect(view).toContain('{movable(openSlot) ? (');
+    expect(read('apps/dashboard/src/app/[locale]/calendar/slot-moves.ts')).toContain(
+      'input.canSchedule && input.reschedulable !== false && input.held !== true',
+    );
   });
 });
 

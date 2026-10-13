@@ -523,7 +523,12 @@ export default async function CalendarPage({
   for (const view of visible) {
     const local = formatLocalTime(view.slot.scheduledAtUtc, timezone);
     const day = local.slice(0, 10);
-    const channels = view.slot.platformKeys;
+    /*
+     * B-pre review (item 3) — ONLY CONFIGURED CHANNELS ARE SHOWN. Writes already
+     * refuse a platform the `content` document does not list; a channel the
+     * owner has since removed from it is not named on the calendar either.
+     */
+    const channels = view.slot.platformKeys.filter((key) => platformKeys.includes(key));
     const mediaIds = [...new Set(view.variants.flatMap((variant) => variant.assetIds))];
     const coverId = coverOf.get(view.slot.id);
     const cover = coverId ? coverMedia.get(coverId) : undefined;
@@ -849,7 +854,9 @@ export default async function CalendarPage({
           .map((item): SchedulableDraft => ({
             id: item.id,
             title: item.title,
-            channels: [...new Set(item.variants.map((variant) => variant.platformKey))],
+            channels: [...new Set(item.variants.map((variant) => variant.platformKey))].filter(
+              (key) => platformKeys.includes(key),
+            ),
             status: item.status,
             campaignName: item.campaignId ? (campaignNames.get(item.campaignId) ?? null) : null,
           }))
