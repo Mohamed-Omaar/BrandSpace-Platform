@@ -333,7 +333,9 @@ export default async function IntelligencePage({
                 kind="empty"
                 title={t('intelligence.empty')}
                 // Final walk (Q9): no "analyse" or "explain" while they cannot run.
-                description={t(aiAnalyse ? 'intelligence.emptyBody' : 'intelligence.emptyBodyManual')}
+                description={t(
+                  aiAnalyse ? 'intelligence.emptyBody' : 'intelligence.emptyBodyManual',
+                )}
               />
             ) : (
               insights.map((insight) => {

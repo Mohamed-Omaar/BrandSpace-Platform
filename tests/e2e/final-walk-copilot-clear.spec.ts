@@ -126,7 +126,8 @@ async function covered(
       if (Number(getComputedStyle(parent).zIndex) > 36) continue;
       const range = document.createRange();
       range.selectNodeContents(node);
-      if (Array.from(range.getClientRects()).some((box) => hit(parent, box))) under.push(`text "${text.slice(0, 50)}"`);
+      if (Array.from(range.getClientRects()).some((box) => hit(parent, box)))
+        under.push(`text "${text.slice(0, 50)}"`);
     }
     for (const element of Array.from(
       document.querySelectorAll<HTMLElement>(
