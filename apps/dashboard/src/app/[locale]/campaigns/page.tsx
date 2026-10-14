@@ -19,7 +19,7 @@ import { CAMPAIGN_STATUSES } from '../../../server/campaign-form';
 import { bestCampaign, formatRateMilli } from '../../../server/best-campaign';
 import { ChannelMark } from '../calendar/prototype-calendar';
 import { formLabels, objectiveLabel, periodLabel, statusLabel } from './labels';
-import { createCampaignAction, pauseCampaignAction } from './actions';
+import { createCampaignAction, pauseCampaignAction, resumeCampaignAction } from './actions';
 import { CampaignFormView } from './campaign-form-view';
 import { CampaignDialog } from './campaign-dialog';
 import { CAMPAIGN_OBJECTIVES } from '../../../server/campaign-form';
@@ -595,6 +595,35 @@ export default async function CampaignsPage({
                               <rect x="14" y="5" width="4" height="14" rx="1" />
                             </svg>
                             {t('campaigns.card.pause')}
+                          </button>
+                        </form>
+                      ) : null}
+                      {/*
+                        Final review (owner, item 5) — the same toggle on a
+                        paused card: the prototype's play glyph and "Resume"
+                        (Main.dc.html L1198), one press, same permission.
+                      */}
+                      {mayManage && campaign.status === 'PAUSED' ? (
+                        <form action={resumeCampaignAction}>
+                          <input type="hidden" name="locale" value={locale} />
+                          <input type="hidden" name="campaignId" value={campaign.id} />
+                          <input type="hidden" name="brandId" value={campaign.brandId} />
+                          <button
+                            type="submit"
+                            className="bsp-camp-toggle"
+                            data-testid={`campaign-resume-${campaign.id}`}
+                            aria-label={`${t('campaigns.card.resume')} — ${campaign.name}`}
+                          >
+                            <svg
+                              width="13"
+                              height="13"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path d="M7 5v14l12-7z" />
+                            </svg>
+                            {t('campaigns.card.resume')}
                           </button>
                         </form>
                       ) : null}

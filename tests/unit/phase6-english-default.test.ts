@@ -46,9 +46,9 @@ describe('D-277 · the customer interface defaults to English', () => {
   });
 
   it('the dashboard redirects a locale-less path to the CUSTOMER default', () => {
-    const middleware = read(path.join(DASHBOARD, 'middleware.ts'));
-    expect(middleware).toMatch(/\/\$\{CUSTOMER_DEFAULT_LOCALE\}/);
-    expect(middleware).not.toMatch(/\bDEFAULT_LOCALE\b(?<!CUSTOMER_DEFAULT_LOCALE)/);
+    const proxy = read(path.join(DASHBOARD, 'proxy.ts'));
+    expect(proxy).toMatch(/\/\$\{CUSTOMER_DEFAULT_LOCALE\}/);
+    expect(proxy).not.toMatch(/\bDEFAULT_LOCALE\b(?<!CUSTOMER_DEFAULT_LOCALE)/);
   });
 
   it('no dashboard action falls back to Arabic when the form carries no locale', () => {

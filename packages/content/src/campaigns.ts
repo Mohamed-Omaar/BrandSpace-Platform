@@ -115,6 +115,9 @@ export const PAUSABLE_CAMPAIGN_STATUSES = ['PLANNED', 'ACTIVE'] as const;
 /** Why `pause()` did not pause. Typed outcomes, never matched on a message. */
 export type CampaignPauseRefusal = 'campaign_unavailable' | 'campaign_not_pausable';
 
+/** Why `resume()` did not resume (final review). Typed, never matched on a message. */
+export type CampaignResumeRefusal = 'campaign_unavailable' | 'campaign_not_resumable';
+
 const NAME_MAX = 120;
 
 export class CampaignService {
@@ -435,6 +438,65 @@ export class CampaignService {
     }
     // Changed twice under us: whatever it is now, this request does not decide it.
     return { kind: 'refused', reason: 'campaign_not_pausable' };
+  }
+
+  /**
+   * FINAL REVIEW (owner, item 5) — RESUME A PAUSED CAMPAIGN IN ONE PRESS, the
+   * prototype's card toggle (Main.dc.html L1198: ▶ "Resume" on a paused card).
+   *
+   * The mirror of `pause()`: only a PAUSED campaign, of a brand in the
+   * member's scope, becomes ACTIVE — the status a campaign is paused from when
+   * it is running, and the one the prototype's toggle returns to. Pausing held
+   * nothing (D-447), so resuming releases nothing: it is the status alone. One
+   * conditional write on (id, version, status PAUSED, not deleted), re-read
+   * once on a version miss so an unrelated edit does not block it, and one
+   * `campaign.updated` audit event with reason `manual_resume`.
+   */
+  async resume(input: {
+    campaignId: string;
+    brandId: string;
+    actor: CampaignActor;
+  }): Promise<
+    { kind: 'resumed'; campaign: Campaign } | { kind: 'refused'; reason: CampaignResumeRefusal }
+  > {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const existing = await this.#db.campaign.findFirst({
+        where: {
+          id: input.campaignId,
+          workspaceId: this.#workspaceId,
+          deletedAt: null,
+          ...brandIdQueryFilter({ brandId: input.brandId, brandScope: input.actor.brandScope }),
+        },
+      });
+      if (!existing) return { kind: 'refused', reason: 'campaign_unavailable' };
+      if (existing.status !== 'PAUSED')
+        return { kind: 'refused', reason: 'campaign_not_resumable' };
+      const written = await this.#db.campaign.updateMany({
+        where: {
+          id: existing.id,
+          workspaceId: this.#workspaceId,
+          version: existing.version,
+          status: 'PAUSED',
+          deletedAt: null,
+        },
+        data: { status: 'ACTIVE', version: { increment: 1 } },
+      });
+      if (written.count !== 1) continue;
+      const updated = await this.#db.campaign.findUniqueOrThrow({ where: { id: existing.id } });
+      await writeAuditEvent(this.#db, this.#workspaceId, {
+        action: 'campaign.updated',
+        actorType: 'USER',
+        actorId: input.actor.userId,
+        resourceType: 'Campaign',
+        resourceId: updated.id,
+        brandId: updated.brandId,
+        reason: 'manual_resume',
+        before: { version: existing.version, status: existing.status },
+        after: { version: updated.version, status: updated.status },
+      });
+      return { kind: 'resumed', campaign: updated };
+    }
+    return { kind: 'refused', reason: 'campaign_not_resumable' };
   }
 
   /**

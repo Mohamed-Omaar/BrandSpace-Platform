@@ -176,6 +176,15 @@ test.describe('Round 4 · 3.1 (review of 2a, 7) — the visit continues the SAME
 });
 
 test.describe('Round 4 · 3.4 / 3.5 — every format, and the prototype preview card', () => {
+  /*
+   * FINAL REVIEW (owner, item 6) — THE FILE'S OWN BUDGET. Every other group in
+   * this file signs in and works the Studio with 120 s; this one was left on
+   * the suite's 45 s, and under two workers a new browser page alone took
+   * 20 s once, so `:220` timed out on its first `fill` with nothing wrong on
+   * the page. Same budget as its siblings; every assertion is unchanged.
+   */
+  test.describe.configure({ timeout: 120_000 });
+
   test.beforeEach(async ({ page }) => {
     await signIn(page);
   });

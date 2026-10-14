@@ -236,6 +236,24 @@ export function monthRangeUtc(
 }
 
 /**
+ * F-101 (FINAL REVIEW) — ONE LOCAL DAY AS A UTC RANGE: from the day's local
+ * midnight to the NEXT day's local midnight, never "+24 hours". A day a
+ * daylight-saving change makes 23 or 25 hours long is counted for exactly its
+ * own length, so a slot near midnight is never counted on the neighbouring
+ * day. A midnight the clock skips resolves to the first instant of that day
+ * (`resolveZonedTime`'s gap rule), and a repeated one to its first occurrence.
+ * `null` when the day key or the zone is unusable.
+ */
+export function localDayRangeUtc(
+  dayKey: string,
+  timezone: string,
+): { start: Date; end: Date } | null {
+  const start = instantForIntent(`${dayKey}T00:00`, timezone);
+  const end = instantForIntent(`${nextDayKey(dayKey)}T00:00`, timezone);
+  return start && end ? { start, end } : null;
+}
+
+/**
  * F2 — THE DAY AFTER a calendar day, as `YYYY-MM-DD`. Date arithmetic on the
  * key itself, never "+24 hours" on an instant, so a daylight-saving change in
  * the workspace's zone cannot land it on the same day or skip one.

@@ -78,7 +78,7 @@ describe('D-307 · the mode is a presentation preference, never an access contro
   });
 
   it('no authorization code reads the mode', () => {
-    for (const file of ['server/platform-context.ts', 'server/config-draft.ts', 'middleware.ts']) {
+    for (const file of ['server/platform-context.ts', 'server/config-draft.ts', 'proxy.ts']) {
       expect(read(path.join(ADMIN, file)), file).not.toMatch(/console-mode|getConsoleMode/);
     }
     // Only the mode switch writes the cookie; no other action reads it.
@@ -228,9 +228,7 @@ describe('D-310 · the Control Center opens in English', () => {
   it('has its own default, and the website keeps Arabic', () => {
     expect(CONTROL_CENTER_DEFAULT_LOCALE).toBe('en');
     expect(DEFAULT_LOCALE).toBe('ar');
-    expect(read(path.join(ADMIN, 'middleware.ts'))).toMatch(
-      /\/\$\{CONTROL_CENTER_DEFAULT_LOCALE\}/,
-    );
+    expect(read(path.join(ADMIN, 'proxy.ts'))).toMatch(/\/\$\{CONTROL_CENTER_DEFAULT_LOCALE\}/);
   });
 });
 

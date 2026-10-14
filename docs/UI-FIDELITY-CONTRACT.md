@@ -2286,8 +2286,10 @@ scheduled.
   Posts), en and ar, at 1280, 1536 and 1920: the last row ends above the button.
 - **Pause on the campaign card (a PORT).** The prototype's card toggle (`toggleLabel` / `toggle`,
   L3673): `.bsp-camp-toggle`, a 6px gap, `padding: 6px 4px`, 12px / 600, `#55555c`, the pause glyph,
-  before "Open", on an active card for a person who may manage campaigns. "Resume" is left out: a
-  paused campaign is resumed through Edit, as before.
+  before "Open", on an active card for a person who may manage campaigns. ~~"Resume" is left out: a
+  paused campaign is resumed through Edit, as before.~~ **Resume is ported too (final review,
+  D-543):** the same toggle with the play glyph, "Resume" / «استئناف», on a paused card, the same
+  permission; one press runs the campaign again.
 - **The workspace list rests on whole rows (a state the prototype does not draw, D-468 (c)).** The
   prototype's list never scrolls; the product's does (PR D). Its rows now snap to the list's top edge,
   and a list that overflows is held to a whole number of rows, so no row is cut to an empty bar.

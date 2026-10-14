@@ -4,6 +4,7 @@ import { checksumOf } from '@brandspace/storage';
 import { contentTypeMismatch, resolveFontType, type AssetActor } from '@brandspace/assets';
 import {
   PROCESS_ASSET,
+  assetJobKey,
   enqueue,
   mayProcessInline,
   type ProcessAssetPayload,
@@ -142,10 +143,12 @@ export async function dispatchProcessing(input: {
     kind: PROCESS_ASSET,
     workspaceId: input.workspaceId,
     requestedByUserId: input.actor.userId,
-    // The job row's id IS the natural key for this work. A second dispatch of
-    // the same row is refused by BullMQ rather than scanned twice.
-    idempotencyKey: `asset-${job.id}`,
+    // The job row's id and its FIRST attempt are the natural key for this work
+    // (D-549). A second dispatch of the same attempt is refused by BullMQ
+    // rather than scanned twice; a retry is the reconciler's, under its own id.
+    idempotencyKey: assetJobKey(job.id, 1),
     processingJobId: job.id,
+    attempt: 1,
   } satisfies ProcessAssetPayload);
 
   if (!dispatch.dispatched) {

@@ -4,7 +4,7 @@ const nextConfig = {
   poweredByHeader: false,
   transpilePackages: ['@brandspace/ui', '@brandspace/shared'],
   /*
-   * SECURITY HEADERS LIVE IN `src/middleware.ts` (Phase 10 §21), not here.
+   * SECURITY HEADERS LIVE IN `src/proxy.ts` (Phase 10 §21), not here.
    * Content-Security-Policy needs a per-request nonce, and Next.js reads
    * that nonce off the REQUEST headers to stamp its own inline scripts —
    * which a static `headers()` block cannot provide. Declaring the other

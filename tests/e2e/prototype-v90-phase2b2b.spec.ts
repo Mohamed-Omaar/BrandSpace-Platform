@@ -190,8 +190,34 @@ test.describe('B11 · campaign results', () => {
     await seedPublishedPost(ws, id, { engagements: 47, impressions: 1000 });
     await enter(page, ws.slug);
 
-    await page.goto(`${DASHBOARD_BASE_URL}/en/campaigns/${id}`);
-    await expect(page.getByTestId('campaign-ends-in')).toHaveText('Ends in 5 days');
+    /*
+     * FINAL REVIEW (owner, item 6) — THE DAYS LEFT ON THE DAY THE PAGE WAS
+     * DRAWN. "5 days" was computed when the campaign was seeded; a render just
+     * after UTC midnight reads 4. The end day is read back as stored, and the
+     * expected count is taken from the UTC day before and after the render —
+     * the same day (strict equality) except across midnight, where the page
+     * may honestly show either.
+     */
+    const endKey = await withPlatformPrisma(async (prisma) =>
+      (
+        (await prisma.campaign.findUniqueOrThrow({ where: { id }, select: { endDate: true } }))
+          .endDate ?? new Date(0)
+      )
+        .toISOString()
+        .slice(0, 10),
+    );
+    const daysLeft = (today: string) =>
+      Math.round((Date.parse(endKey) - Date.parse(today)) / 86_400_000);
+    const endsIn = async (path: string, words: (days: number) => string) => {
+      const before = dayKey(0);
+      await page.goto(`${DASHBOARD_BASE_URL}${path}`);
+      const label = page.getByTestId('campaign-ends-in');
+      await expect(label).toBeVisible();
+      const shown = (await label.textContent()) ?? '';
+      const after = dayKey(0);
+      expect([...new Set([before, after])].map((today) => words(daysLeft(today)))).toContain(shown);
+    };
+    await endsIn(`/en/campaigns/${id}`, (days) => `Ends in ${days} days`);
     // Gate 2b — the room is one page; its post-results row reads the same
     // figures: 47 engagements over 1,000 impressions, and no clicks reported.
     const row = page.locator('[data-testid^="campaign-post-"]');
@@ -211,8 +237,7 @@ test.describe('B11 · campaign results', () => {
       'What changed · last 30 days',
     );
 
-    await page.goto(`${DASHBOARD_BASE_URL}/ar/campaigns/${id}`);
-    await expect(page.getByTestId('campaign-ends-in')).toHaveText('تنتهي بعد 5 أيام');
+    await endsIn(`/ar/campaigns/${id}`, (days) => `تنتهي بعد ${days} أيام`);
     await noSeriousViolations(page);
   });
 

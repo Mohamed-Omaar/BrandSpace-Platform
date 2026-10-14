@@ -8,9 +8,11 @@ import { withPlatformPrisma } from './platform-prisma';
  * RUNNING OR ITS SCRIPTS HAVE NOT LOADED YET.
  *
  *   - BEFORE THE SCRIPTS LOAD (blocked outright here, so the page stays the
- *     server's HTML): Enter in the hashtag field makes the browser post the
- *     form itself. The caption typed so far is saved, the typed hashtag is
- *     added, and the stored hashtags and TikTok options are kept.
+ *     server's HTML): a post the browser makes itself. The caption typed so
+ *     far is saved, the typed hashtag is added, and the stored hashtags and
+ *     TikTok options are kept. (Since the final review, Enter in the hashtag
+ *     field no longer makes that post — `final-hashtag-enter.spec.ts` — so the
+ *     form is posted directly here; what the server keeps is the same.)
  *   - RUNNING, ON A BRAND WITH NO TIKTOK ACCOUNT: the audience cannot be
  *     chosen (nothing is offered), and a save must not clear the one stored.
  *
@@ -72,7 +74,7 @@ const hydrated = (page: Page) =>
     .locator('form[data-testid="content-variant"][data-platform="tiktok"]')
     .evaluate((node) => Object.keys(node).some((key) => key.startsWith('__reactProps')));
 
-test('a save posted before the scripts load keeps everything and adds the typed hashtag', async ({
+test('a save the browser posts before the scripts load keeps everything and adds the typed hashtag', async ({
   page,
   isMobile,
 }) => {
@@ -98,7 +100,11 @@ test('a save posted before the scripts load keeps everything and adds the typed 
   await form.locator('textarea[name="body"]').fill('New words before the scripts');
   const tag = form.getByTestId('content-hashtags-tiktok');
   await tag.fill('typedbeforeload');
-  await Promise.all([page.waitForURL(/ok=SAVED/), tag.press('Enter')]);
+  // The browser's own form post (Enter no longer makes one; see the header).
+  await Promise.all([
+    page.waitForURL(/ok=SAVED/),
+    form.evaluate((node) => (node as HTMLFormElement).requestSubmit()),
+  ]);
 
   // The browser's own post, not an action call.
   expect(posts.some((post) => post.url.includes('/content/compose') && !post.action)).toBe(true);

@@ -178,6 +178,11 @@ export class AssetMaintenanceService {
    * found here and re-queued rather than leaving a customer watching a spinner
    * that never resolves.
    *
+   * NOT THE SCHEDULER'S SWEEP (D-549). This lists; it moves nothing, and it
+   * selects QUEUED rows the reconciler already dispatches. The scheduler hands
+   * silent claims back with `recoverStuckAssetJob` (processing.ts), which takes
+   * running stages only and does it as a compare-and-set.
+   *
    * IT RETURNS IDS RATHER THAN DISPATCHING. This package cannot import
    * `@brandspace/jobs` and should not: a domain service that dispatches is a
    * service that needs Redis to be tested. The caller — the maintenance
@@ -234,18 +239,21 @@ export class AssetMaintenanceService {
 export async function findUnclaimedAssetJobs(
   db: {
     assetProcessingJob: {
-      findMany(args: unknown): Promise<Array<{ id: string; workspaceId: string }>>;
+      findMany(
+        args: unknown,
+      ): Promise<Array<{ id: string; workspaceId: string; attempts: number }>>;
     };
   },
   now: Date,
   limit: number,
-): Promise<Array<{ id: string; workspaceId: string }>> {
+): Promise<Array<{ id: string; workspaceId: string; attempts: number }>> {
   return db.assetProcessingJob.findMany({
     where: {
       stage: 'QUEUED',
       OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
     },
-    select: { id: true, workspaceId: true },
+    // The attempts SPENT, so the dispatch names the next one (D-549).
+    select: { id: true, workspaceId: true, attempts: true },
     // Oldest first with an id tie-break: deterministic, and the asset that has
     // been waiting longest goes first.
     orderBy: [{ queuedAt: 'asc' }, { id: 'asc' }],

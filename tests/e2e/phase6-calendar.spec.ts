@@ -153,10 +153,20 @@ test.describe('D-290 · the calendar', () => {
     await signIn(page);
     // REPLACED (item 10, §8.2, D-353): native drag events → a real mouse drag.
     await page.setViewportSize({ width: 1280, height: 2200 });
-    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar`);
+    /*
+     * FINAL REVIEW (owner, item 6) — LAST MONTH, WHERE EVERY DAY HAS PASSED.
+     * The test used to open the current month and skip itself when none of
+     * its days had passed yet (every 1st of the month). Last month always has
+     * past days, whatever the date; the tray does not depend on the month.
+     */
+    const now = new Date();
+    const lastMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15))
+      .toISOString()
+      .slice(0, 7);
+    await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${lastMonth}`);
     await expect(page.locator('[data-testid="calendar-page"][data-drag-ready]')).toBeVisible();
     const past = page.locator('[data-testid^="calendar-day-"][data-drop-state="past"]');
-    test.skip((await past.count()) === 0, 'the month on screen starts today');
+    expect(await past.count(), 'every day of last month has passed').toBeGreaterThan(0);
     await mouseDrag(page, page.getByTestId(`calendar-tray-${itemId}`), past.first());
     await expect(page.getByTestId('calendar-past-day')).toContainText('That day has passed');
     await expect(page.getByTestId('calendar-schedule-dialog')).toHaveCount(0);
@@ -282,7 +292,12 @@ test.describe('D-290 · the post drawer', () => {
   }) => {
     const { itemId } = await draft();
     const loaded = credentials();
-    const month = '2031-06';
+    // FINAL REVIEW (owner, item 6) — a month that is always ahead (it was the
+    // fixed '2031-06', which becomes a past month in July 2031).
+    const now = new Date();
+    const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1))
+      .toISOString()
+      .slice(0, 7);
     await withPlatformPrisma((prisma) =>
       prisma.calendarSlot.create({
         data: {

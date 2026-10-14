@@ -14,6 +14,7 @@ import {
 import { createMetricWindowPort } from '@brandspace/analytics';
 import { knowledgeAsOfSafe, usableKnowledgeWhere } from '@brandspace/brand-brain';
 import {
+  approvalNotifier,
   CampaignService,
   ContentApprovalService,
   ContentCalendarService,
@@ -299,7 +300,19 @@ function portsFor(
       },
       async submitForApproval(input) {
         const policy = await new TenantContentPolicySource(db, environment).load();
-        const approvals = new ContentApprovalService({ db, workspaceId, policy });
+        /*
+         * F-102 (final review) — WITH THE NOTIFIER. Built without one, a review
+         * an automation asked for reached no reviewer's inbox until someone
+         * opened Approvals. The same notifier as a person's submit: the same
+         * recipients (resolved by the service), the same `approval.requested`
+         * and the same idempotency key, so a retried run notifies once.
+         */
+        const approvals = new ContentApprovalService({
+          db,
+          workspaceId,
+          policy,
+          notifier: approvalNotifier({ db, workspaceId }),
+        });
         const approval = await approvals.submit({
           itemId: input.contentItemId,
           actor: {

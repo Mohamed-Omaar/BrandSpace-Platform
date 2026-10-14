@@ -618,6 +618,10 @@ test.describe('Create Post — carousel, reel and the media drawer (§23-§26)',
     await page.getByTestId('media-generate-prompt').fill(`A calm spring window, ${randomUUID()}`);
     await page.getByTestId('media-generate-submit').click();
     await expect(page.getByTestId('media-generating')).toBeVisible();
+    // S6 (final review) — the image names what it cost, as every paid action does.
+    await expect(page.getByTestId('studio-spent-toast')).toContainText('credit', {
+      timeout: 60_000,
+    });
 
     const slide = page.getByTestId('content-media-instagram-slide-0');
     await expect(slide).toBeVisible({ timeout: 120_000 });

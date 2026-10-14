@@ -63,6 +63,19 @@ export function transitionNotAllowed(): AppError {
 }
 
 /**
+ * F8 (final review) — the post's status changed between the moment a request
+ * read it and the moment it would have written over it. Nothing was changed.
+ * `reason` is the stable code a screen may translate.
+ */
+export const CONTENT_MOVED_SINCE_REASON = 'content_moved_since';
+
+export function contentMovedSince(): AppError {
+  return new AppError('CONFLICT', 'This post changed since it was opened. Nothing was changed.', {
+    reason: CONTENT_MOVED_SINCE_REASON,
+  });
+}
+
+/**
  * B-2 — a post that is publishing or has been published is a RECORD of what
  * went out, and its words and media no longer change. A new version is a
  * duplicate, which is a new draft.

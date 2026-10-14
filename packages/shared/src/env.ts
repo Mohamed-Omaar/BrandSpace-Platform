@@ -455,7 +455,8 @@ function forbidProductionValue(env: StartupEnv, name: keyof StartupEnv): void {
  *    key it could not legally use. It may still be present — the same blueprint
  *    builds staging, where it is what encrypts — but production never falls back
  *    to it: `createKeyProvider` prefers the ARN and throws rather than derive a
- *    local KEK when `NODE_ENV=production`.
+ *    local KEK when `APP_ENV=production` (D-97: never `NODE_ENV`, which every
+ *    built app sets).
  */
 function assertKeyDomainBoundaries(env: StartupEnv, profile: StartupServiceProfile): void {
   const permitted = new Set(PERMITTED_KEY_DOMAINS[profile]);

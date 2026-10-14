@@ -45,8 +45,11 @@ These are first because they fail the whole deployment and cost minutes to check
 - ☐ ✅ `worker` — deployment succeeded
 - ☐ ✅ No service is in a crash-restart cycle after five minutes
 
-A crash loop on `api` or `worker` with an environment error is the parser doing
-its job. Read the message: it names the failing variable and never prints a
+A crash loop on any of the five services with an environment error is the
+parser doing its job: `api` and `worker` check at start-up, and `web`,
+`dashboard` and `admin` refuse the same way from their `src/instrumentation.ts`.
+In a Next.js app's deploy log it appears after `An error occurred while loading
+the instrumentation hook`. Read the message: it names the failing variable and never prints a
 value.
 
 ---
@@ -56,10 +59,23 @@ value.
 ```bash
 curl -sS https://api.example.com/health/live
 curl -sSi https://api.example.com/health/ready
+curl -sSi https://app.example.com/api/health/ready
+curl -sSi https://admin.example.com/api/health/ready
 ```
 
 - ☐ ✅ `/health/live` → `200`, `{"status":"ok"}`
-- ☐ ✅ `/health/ready` → `200`, `database` state `ok`
+- ☐ ✅ `/health/ready` → `200`, `database` state `ok` **and** `schema` state `ok`
+  (every migration this build needs is applied)
+- ☐ ✅ The dashboard's and the admin's `/api/health/ready` → `200`,
+  `{"status":"ready","checks":[{"name":"database","state":"ok"},{"name":"schema","state":"ok"}]}`.
+  The admin's route probes the platform database identity, the dashboard's the
+  tenant one.
+- ☐ ✅ **Before the migrations are applied** (first deploy, or a release that
+  adds one), the three readiness routes answer `503` with `status`
+  `not_ready` and `schema` `down`, and the worker's probe answers `503`
+  `{"status":"waiting_for_migrations"}` (its deploy log shows
+  `worker waiting for migrations`). All four turn `200` once the `migration`
+  job has finished — deployment doc §4.4.
 - ☐ ✅ `/health/ready` reports `queue` as `ok` (Redis wired) and **not required**
 - ☐ ✅ `/health/ready` reports `tracing` as `not_configured` — no collector, by design
 - ☐ ✅ `/health/ready` reports `object-storage` as **`ok`** and **not required**.
@@ -125,8 +141,10 @@ curl -sSi https://api.example.com/health/ready
   dashboard — a small Brand Brain document upload is the cheapest — and confirm
   the worker logs picking it up and completing it.
 - ☐ ✅ **Degradation is graceful.** _(staging only, never production)_ Stop
-  Redis. The dashboard and API keep serving; `/health/ready` still returns `200`
-  with `queue` down and capability `background-jobs` degraded. Restart Redis.
+  Redis. The dashboard and API keep serving and `/health/ready` still returns
+  `200`. Its `queue` check stays `ok`: it reports only whether `REDIS_URL` is
+  set, not whether Redis answers, so the outage shows in the worker's and the
+  API's logs, not here. Restart Redis.
   - A `503` here means the readiness contract was changed — deployment doc §5.2.
 
 ---
@@ -169,8 +187,10 @@ this document expected them all to be blocked.
 
 - ☐ 🚫 **An incomplete contract refuses loudly.** _(staging only)_ Unset
   `STORAGE_BUCKET` on `dashboard` and redeploy. An upload now fails with an error
-  that **names the missing variable**, and `/health/ready` reports
-  `object-storage: not_configured`. Restore the value.
+  that **names the missing variable**. Restore the value.
+  - The `object-storage` check exists only on the **api**'s `/health/ready` and
+    reads the api's own variables: to see it report `not_configured`, unset
+    `STORAGE_BUCKET` on `api` instead, redeploy, check, and restore it.
   - **A successful upload here is a failure of this test.** It would mean
     production accepted the filesystem store and wrote a customer file to a
     container the next restart discards.
@@ -184,6 +204,25 @@ this document expected them all to be blocked.
   delete one 32-byte object under `_brandspace/self-test/`; the screen shows no
   bucket, endpoint or key. The storage row on the readiness page then reads
   **Connected**.
+
+**Malware scanning — off for the beta:**
+
+- ☐ ✅ The active `assets` configuration has `scanning.provider: "none"` and
+  `scanning.required: false` (`docs/production-config/assets.json`). The File
+  scanning row on the Control Center readiness page reads **Beta only**, "Off
+  (beta). Uploads are not scanned".
+- ☐ ✅ The upload from the round trip above reaches ready, and its asset record
+  carries `scanReason` `not_scanned` — it says no scan happened rather than
+  claiming one.
+- ☐ ✅ `SCANII_API_KEY` and `SCANII_API_SECRET` are set on **no** service while
+  scanning is off.
+- ☐ ✅ **Only when Scanii is chosen:** `scanning.provider: "scanii"`,
+  `scanning.required: true` and `scanning.scanii.endpoint` set (an `https://`
+  URL), and `SCANII_API_KEY` / `SCANII_API_SECRET` sealed on `worker` only. The
+  readiness row reads **Ready** with Scanii named; an upload is scanned and its
+  `scanReason` is empty. If the endpoint or either variable is missing, the
+  worker refuses the job with "Scanii is selected but not configured" and the
+  asset does not become ready.
 
 ---
 

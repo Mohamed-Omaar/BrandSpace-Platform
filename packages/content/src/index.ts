@@ -86,6 +86,8 @@ export type {
   EffectiveApprovalPolicy,
   ReviewSubject,
 } from './approvals';
+/* F-102 (final review) — the one approval notifier, for the dashboard and the worker. */
+export { approvalNotifier } from './approval-notifier';
 
 export {
   DEFAULT_POST_TIME,
@@ -95,6 +97,7 @@ export {
   formatLocalTime,
   instantForIntent,
   isKnownTimeZone,
+  localDayRangeUtc,
   monthRangeUtc,
   offsetMinutesAt,
   parseLocalTime,
@@ -162,7 +165,9 @@ export {
   scheduleQuotaExceeded,
   scheduleTooFarAhead,
   scheduleTooSoon,
+  CONTENT_MOVED_SINCE_REASON,
   SLOT_MOVED_SINCE_REASON,
+  contentMovedSince,
   slotMovedSince,
   transitionNotAllowed,
   unsupportedDialect,

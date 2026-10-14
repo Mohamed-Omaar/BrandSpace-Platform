@@ -224,6 +224,46 @@ export async function pauseCampaignAction(formData: FormData): Promise<void> {
   redirect(destination);
 }
 
+/**
+ * FINAL REVIEW (owner, item 5) — RESUME ON A PAUSED CAMPAIGN'S CARD, one press,
+ * the prototype's toggle. The same permission as Pause (`campaigns.manage`)
+ * and the same scope; `CampaignService.resume` turns PAUSED into ACTIVE with
+ * one `campaign.updated` audit event, reason `manual_resume`.
+ */
+export async function resumeCampaignAction(formData: FormData): Promise<void> {
+  const locale = String(formData.get('locale') ?? 'en');
+  const campaignId = String(formData.get('campaignId') ?? '');
+  const brandId = String(formData.get('brandId') ?? '');
+  let destination: string;
+
+  try {
+    const session = await requireWorkspaceAction(locale, 'campaigns.manage');
+    const outcome = await inContentStudio(session.workspace.workspaceId, async (services) =>
+      services.campaigns().resume({
+        campaignId,
+        brandId,
+        actor: {
+          userId: session.customer.userId,
+          brandScope: session.workspace.brandScope,
+        },
+      }),
+    );
+    destination =
+      outcome.kind === 'resumed'
+        ? `/${locale}/campaigns?status=ACTIVE&ok=CAMPAIGN_RESUMED`
+        : `/${locale}/campaigns?error=${
+            outcome.reason === 'campaign_not_resumable' ? 'CAMPAIGN_NOT_RESUMABLE' : 'NOT_FOUND'
+          }`;
+  } catch (error: unknown) {
+    if (isRedirectError(error)) throw error;
+    const correlationId = randomUUID();
+    log.warn('campaign resume failed', { correlationId, ...internalErrorFields(error) });
+    destination = `/${locale}/campaigns?error=${actionErrorCode(error)}&ref=${correlationId}`;
+  }
+  revalidatePath(`/${locale}/campaigns`);
+  redirect(destination);
+}
+
 /** "Start now" refusals get their own words; the reason is machine-readable. */
 function startNowErrorCode(error: unknown): string {
   if (isAppError(error) && error.publicDetails['reason'] === CAMPAIGN_ALREADY_ENDED_REASON) {

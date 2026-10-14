@@ -274,6 +274,14 @@ async function main(): Promise<void> {
               version: 1,
               lastReviewedAt: new Date('2026-01-01T00:00:00.000Z'),
               reviewDueAt,
+              /*
+               * FINAL REVIEW (owner, item 6) — A FIXED "UPDATED" DAY. The area
+               * drawer prints "Updated <day>" from this column, which was the
+               * seed's own time, so the pixel baselines (`area-open-*`) read a
+               * different day on every run. A day in a past year prints with
+               * its year and never changes again.
+               */
+              updatedAt: new Date('2025-01-01T00:00:00.000Z'),
             },
           });
         }

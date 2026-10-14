@@ -88,7 +88,8 @@ describe('D-281 · deep links open the exact subject, with the thread highlighte
   });
 
   it('a "changes requested" verdict opens the post in the composer, where its note is', () => {
-    expect(read('apps/dashboard/src/server/approvals-context.ts')).toMatch(
+    // F-102 (final review): the notifier moved, unchanged, to `@brandspace/content`.
+    expect(read('packages/content/src/approval-notifier.ts')).toMatch(
       /linkPath: `\/content\/compose\?item=\$\{event\.itemId\}`/,
     );
   });

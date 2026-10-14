@@ -41,7 +41,7 @@ either "service unavailable" (nothing listening on `PORT`) or a status code (som
 | H2  | **`PORT` not pinned.** `next start --port 3001` / `--port 3002` ignore Railway's `PORT` (`apps/dashboard/package.json:8`, `apps/admin/package.json:8`), and Railway probes `PORT`. The worker serves its probe on `WORKER_PORT` (default 3004), not `PORT` (`apps/worker/src/main.ts:107`). **Not a cause for `api`**: it listens on `PORT` itself (`apps/api/src/server.ts`, the listener).                                                                                                                                                                                                                                                                                                                               | Deploy Logs show Next's `Ready` on `localhost:3001` (or 3002), or the worker's `worker ready … healthPort: 3004`, with no crash, while every healthcheck attempt says "service unavailable". The service's Variables tab shows `PORT` missing or different from 3001 / 3002 / 3004.                                                                                                                                                                                                                                                               |
 | H3  | **`api` could not reach the database as `brandspace_app`.** At `590717e` `/health/ready` was `SELECT 1` on `DATABASE_URL` (`git show 590717e:apps/api/src/routes/health.ts`, line 137); a missing role, a wrong password or host, or Railway's public host instead of the private one gives 503.                                                                                                                                                                                                                                                                                                                                                                                                                           | Healthcheck attempts fail **with status 503** (not "service unavailable"). Today the body reads `database: down` for this case and `schema: down` for missing migrations (`apps/api/src/routes/health.ts:138-175`). Check from your machine with `psql` and the same URL; a 2 s timeout is the probe's deadline (`packages/database/src/schema-readiness.ts:98`).                                                                                                                                                                                 |
 | H4  | **Build or start command not configured.** The live config was entered by hand (`.railway/railway.ts` says it was never applied, line 9). The root `pnpm build` builds only `packages/*` (`package.json:13`), so a default Railpack build never builds the Next apps; the root has no `start` script, and `api` / `worker` have no build output (they run `tsx`).                                                                                                                                                                                                                                                                                                                                                          | Build Logs show which command ran. Deploy Logs show `Could not find a production build in the '.next' directory` (dashboard, admin), or `Missing script: start`, or `tsx: not found`. Compare each service's Settings with §3.                                                                                                                                                                                                                                                                                                                    |
-| H5  | **A redirect.** Unlikely for `/en/reset`: the path has a locale, so the middleware does not redirect it (`apps/dashboard/src/middleware.ts`, the `hasLocale` branch), and the page needs no database.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Healthcheck attempts fail with status 307 or 308.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| H5  | **A redirect.** Unlikely for `/en/reset`: the path has a locale, so the proxy does not redirect it (`apps/dashboard/src/proxy.ts`, the `hasLocale` branch), and the page needs no database.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Healthcheck attempts fail with status 307 or 308.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | H6  | **Healthcheck timeout.** Unlikely: nothing at `590717e` waited on anything slow.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | No error lines; the process is still starting when Railway prints that the healthcheck failed. Compare the service's timeout (Railway default, or `RAILWAY_HEALTHCHECK_TIMEOUT_SEC`) with the start time in the logs.                                                                                                                                                                                                                                                                                                                             |
 
 **New ways the next attempt can fail, which `590717e` could not:**
@@ -325,60 +325,75 @@ to start if the variable is present.
 
 ## 7. Documentation that disagrees with the code
 
-Listed only; those files were not edited.
+The final review aligned these files with the code; each item below says where. The list is kept
+so the history stays readable.
 
 **`docs/RAILWAY-DEPLOYMENT.md`**
 
-1. §0.3 says production refuses when `PUBLIC_WEB_URL` or `PUBLIC_API_BASE_URL` is `http://`, that
+1. ~~§0.3 says production refuses when `PUBLIC_WEB_URL` or `PUBLIC_API_BASE_URL` is `http://`, that
    the schema defaults are `http://localhost`, and that "the API and the worker" run the check.
    Now: no localhost defaults; the required URLs are per service (`PROFILE_PUBLIC_URLS`,
    `env.ts:396`): dashboard `PUBLIC_DASHBOARD_BASE_URL`, admin `PUBLIC_API_BASE_URL`, api both,
    worker none; `PUBLIC_WEB_URL` is required by nobody. All five services run the check (the Next
-   apps in `instrumentation.ts`).
-2. §11's table is outdated: it gives `/` for dashboard, admin and web (dashboard and admin are now
+   apps in `instrumentation.ts`).~~ — fixed in the final review: §0.3 now gives the per-service
+   table, the https rule and all five services (Next apps in `src/instrumentation.ts`).
+2. ~~§11's table is outdated: it gives `/` for dashboard, admin and web (dashboard and admin are now
    `/api/health/ready`, web `/en/status`; a bare `/` answers 307), describes `/health/ready` as
    database-only (it also requires `schema`), and says "The Next.js apps have no dedicated health
-   route". §2 and §4.4 have the correct paths.
-3. `CLIENT_ORIGIN_STRATEGY` appears nowhere in the document, including §20 step 10's list of what
-   to set, although dashboard and api refuse to start without it.
-4. §20 step 10 and step 17 speak of "six public URLs". Three are read (`PUBLIC_API_BASE_URL`,
+   route". §2 and §4.4 have the correct paths.~~ — fixed in the final review: §11's table and
+   prose now match §2 and §4.4 (`schema`, `/api/health/ready`, `/en/status`).
+3. ~~`CLIENT_ORIGIN_STRATEGY` appears nowhere in the document, including §20 step 10's list of what
+   to set, although dashboard and api refuse to start without it.~~ — fixed in the final review:
+   added to §20 step 10 (`railway-edge` on dashboard and api).
+4. ~~§20 step 10 and step 17 speak of "six public URLs". Three are read (`PUBLIC_API_BASE_URL`,
    `PUBLIC_DASHBOARD_BASE_URL`, and `PUBLIC_WEB_URL` by nobody); `DASHBOARD_URL`, `ADMIN_URL` and
-   `API_URL` are read by no code (`env.ts` comment above `PUBLIC_URL_NAMES`).
-5. §24.2 does not say the bootstrap also requires `SECRET_VAULT_KEK`
-   (`bootstrap-owner-guards.ts:172-176`).
-6. §1.3 says the dashboard and worker hold `CUSTOMER_MFA_VAULT_KEK` / `SOCIAL_TOKEN_VAULT_KEK`; in
-   production what they must hold is the matching KMS ARN.
-7. No mention of `SCANII_API_KEY` / `SCANII_API_SECRET` or of scanning being off for the beta.
+   `API_URL` are read by no code (`env.ts` comment above `PUBLIC_URL_NAMES`).~~ — fixed in the
+   final review: steps 10 and 17 name the two URLs that are read and the four that are not.
+5. ~~§24.2 does not say the bootstrap also requires `SECRET_VAULT_KEK`
+   (`bootstrap-owner-guards.ts:172-176`).~~ — fixed in the final review: §24.2 has a checklist item
+   for it.
+6. ~~§1.3 says the dashboard and worker hold `CUSTOMER_MFA_VAULT_KEK` / `SOCIAL_TOKEN_VAULT_KEK`; in
+   production what they must hold is the matching KMS ARN.~~ — fixed in the final review: §1.3
+   "On the key domains" names the KMS ARNs for production and the KEKs for staging.
+7. ~~No mention of `SCANII_API_KEY` / `SCANII_API_SECRET` or of scanning being off for the beta.~~
+   — fixed in the final review: a "Malware scanning" row in §15's table.
 8. ~~§20 step 21: Resend and Cloudflare R2 have no Test Connection~~ — both have one since the #79
    review (D-516); step 21 is accurate again.
 
 **`docs/RAILWAY-ENVIRONMENT-MATRIX.md`**
 
-1. The per-service summary table has no `CLIENT_ORIGIN_STRATEGY` row (class D says it is required
-   on dashboard and api).
-2. No `SCANII_API_KEY` / `SCANII_API_SECRET` rows (worker, only when Scanii is on).
-3. Class C says `SECRET_VAULT_KEK` is "not required in production"; the owner bootstrap requires
-   it (`bootstrap-owner-guards.ts:172-176`).
-4. Class C and the rules list say the KEK provider is refused "when `NODE_ENV=production`"; the
-   key provider now refuses it when `APP_ENV=production` (`packages/vault/src/key-provider.ts:355`).
-5. Class A says `PORT` is pinned "to the port each app's `start` script already uses". True for the
-   three Next apps; the api reads `PORT` itself and the worker's probe reads `WORKER_PORT`.
+1. ~~The per-service summary table has no `CLIENT_ORIGIN_STRATEGY` row (class D says it is required
+   on dashboard and api).~~ — fixed in the final review: row added to the per-service summary.
+2. ~~No `SCANII_API_KEY` / `SCANII_API_SECRET` rows (worker, only when Scanii is on).~~ — fixed in
+   the final review: a "Malware scanning" row in E.3 and two summary rows (worker, footnote ¹).
+3. ~~Class C says `SECRET_VAULT_KEK` is "not required in production"; the owner bootstrap requires
+   it (`bootstrap-owner-guards.ts:172-176`).~~ — fixed in the final review: class C row, the rules
+   list and §H now say the bootstrap requires it.
+4. ~~Class C and the rules list say the KEK provider is refused "when `NODE_ENV=production`"; the
+   key provider now refuses it when `APP_ENV=production` (`packages/vault/src/key-provider.ts:355`).~~
+   — fixed in the final review: both now say `APP_ENV=production`.
+5. ~~Class A says `PORT` is pinned "to the port each app's `start` script already uses". True for the
+   three Next apps; the api reads `PORT` itself and the worker's probe reads `WORKER_PORT`.~~ — fixed
+   in the final review: class A's `PORT` row says so.
 
 **`docs/RAILWAY-SMOKE-TEST.md`**
 
-1. §2 checks only the api's `/health/ready` for `database`; it does not check `schema`, the
+1. ~~§2 checks only the api's `/health/ready` for `database`; it does not check `schema`, the
    dashboard's and admin's `/api/health/ready`, or that the worker answers 503
-   `waiting_for_migrations` before migrations.
-2. §5 expects `/health/ready` to show `queue` down after stopping Redis. The `queue` check only
+   `waiting_for_migrations` before migrations.~~ — fixed in the final review: §2 has all three
+   checks.
+2. ~~§5 expects `/health/ready` to show `queue` down after stopping Redis. The `queue` check only
    reports whether `REDIS_URL` is set (`apps/api/src/routes/health.ts:63`), so
-   it stays `ok` while Redis is stopped.
-3. §6 says unsetting `STORAGE_BUCKET` on the **dashboard** makes `/health/ready` report
+   it stays `ok` while Redis is stopped.~~ — fixed in the final review: §5 expects `queue` `ok`.
+3. ~~§6 says unsetting `STORAGE_BUCKET` on the **dashboard** makes `/health/ready` report
    `object-storage: not_configured`. That check exists only on the **api**, and reads the api's own
-   variables.
-4. §1 says an environment crash loop is "on `api` or `worker`"; dashboard and admin refuse the same
-   way (their `instrumentation.ts`).
-5. No step covers scanning being off (`assets.scanning.provider: "none"`), or Scanii.
+   variables.~~ — fixed in the final review: §6 says to unset it on `api` to see the check.
+4. ~~§1 says an environment crash loop is "on `api` or `worker`"; dashboard and admin refuse the same
+   way (their `instrumentation.ts`).~~ — fixed in the final review: §1 names all five services.
+5. ~~No step covers scanning being off (`assets.scanning.provider: "none"`), or Scanii.~~ — fixed in
+   the final review: "Malware scanning — off for the beta" steps in §6.
 
-**Also stale, outside those three files:** the comment in `.railway/railway.ts:232-241` still says
+**Also stale, outside those three files:** ~~the comment in `.railway/railway.ts:232-241` still says
 `assertProductionSafety` refuses an `http://` `PUBLIC_WEB_URL` or `PUBLIC_API_BASE_URL` on every
-service and that the schema defaults are `http://localhost`.
+service and that the schema defaults are `http://localhost`.~~ — fixed in the final review: the
+"Public base URLs" comment (`.railway/railway.ts:249-261`) now describes the per-service rule.

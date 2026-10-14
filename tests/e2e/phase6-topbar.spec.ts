@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { DASHBOARD_BASE_URL } from './apps';
@@ -18,6 +19,13 @@ import { inlineEndOverhang } from './overflow';
  *
  * READ-ONLY. Both viewport projects run it in parallel against the seeded
  * workspace; it navigates, opens menus and dialogs, and submits nothing.
+ *
+ * FINAL REVIEW (owner, item 6) — ITS OWN OPEN THREAD. The Notes screen draws
+ * its lists only when the reader has a thread to list; the test used to rely on
+ * one another spec had left in the shared workspace, so on its own (a fresh
+ * seed, locally) it met the empty state and failed. It now writes one open
+ * thread from a colleague on the primary brand before the run and removes it
+ * after, so what it reads no longer depends on what ran before it.
  */
 
 function credentials(): E2eAdminCredentials {
@@ -67,6 +75,47 @@ function lastNumber(text: string | null): number {
   const matches = (text ?? '').match(/\d+/g);
   return matches ? Number(matches[matches.length - 1]) : 0;
 }
+
+let openThreadId = '';
+
+test.beforeAll(async () => {
+  const loaded = credentials();
+  const workspaceId = loaded.customer.workspaceId;
+  const brandId = brandFixtures(loaded).primaryBrandId;
+  await withPlatformPrisma(async (prisma) => {
+    // The Copywriter may read the brand's Brain, so may write a BRAND thread (D-409).
+    const colleague = await prisma.user.findFirstOrThrow({
+      where: { email: loaded.customer.copywriterEmail },
+      select: { id: true },
+    });
+    const thread = await prisma.noteThread.create({
+      data: {
+        workspaceId,
+        brandId,
+        subjectType: 'BRAND',
+        status: 'OPEN',
+        createdByUserId: colleague.id,
+      },
+      select: { id: true },
+    });
+    openThreadId = thread.id;
+    await prisma.note.create({
+      data: {
+        workspaceId,
+        threadId: thread.id,
+        authorUserId: colleague.id,
+        body: `An open thread for the top bar ${randomUUID().slice(0, 6)}`,
+      },
+    });
+  });
+});
+
+test.afterAll(async () => {
+  if (!openThreadId) return;
+  await withPlatformPrisma((prisma) =>
+    prisma.noteThread.deleteMany({ where: { id: openThreadId } }),
+  );
+});
 
 test.describe('P6-16 · the customer top bar', () => {
   test('carries Notes, Notifications and Create; Review is the rail’s Approvals and the Copilot floats — and no placeholder', async ({

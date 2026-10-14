@@ -2247,6 +2247,28 @@ export function DraftEditor({
                     submittedRef.current = true;
                   }}
                 >
+                  {/*
+                    ENTER IN A SINGLE-LINE FIELD NEVER POSTS THIS FORM (owner,
+                    final review). The form has no submit button and one
+                    single-line field (the hashtag box), so before the page's
+                    scripts load the browser's implicit submission posted it on
+                    Enter — an ordinary save, which on a post in review
+                    withdraws the review. A DISABLED default button stops that
+                    in plain HTML: implicit submission clicks the form's first
+                    submit button, and does nothing when it is disabled. The
+                    Studio's own saves never go through it (the autosave calls
+                    the action with the form's data, and requestSubmit() needs
+                    no button), so a real save is unchanged.
+                  */}
+                  <button
+                    type="submit"
+                    disabled
+                    hidden
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    style={{ display: 'none' }}
+                    data-testid={`content-variant-noenter-${variant.platformKey}`}
+                  />
                   <input type="hidden" name="locale" value={locale} />
                   <input type="hidden" name="itemId" value={draft.id} />
                   <input type="hidden" name="variantId" value={variant.id} />

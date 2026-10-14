@@ -1615,6 +1615,7 @@ export const messages = {
     'campaigns.card.next': 'التالي',
     'campaigns.card.open': 'افتح',
     'campaigns.card.pause': 'إيقاف مؤقت',
+    'campaigns.card.resume': 'استئناف',
     'campaigns.room.edit': 'تعديل',
     'campaigns.room.linked': 'مرتبطة بـ',
     'campaigns.room.strategyObjective': 'هدف الاستراتيجية',
@@ -2548,6 +2549,8 @@ export const messages = {
     'activity.action.assets.metadata_updated': 'عُدّلت تفاصيل ملف',
     'activity.action.assets.version_created': 'رُفع إصدار جديد لملف',
     'activity.action.assets.version_restored': 'استُعيد إصدار سابق لملف',
+    'activity.action.assets.processing_retry_scheduled': 'ستُعاد معالجة ملف',
+    'activity.action.assets.processing_failed': 'تعذّرت معالجة ملف',
     'activity.action.assets.folder_created': 'أُنشئ مجلد',
     'activity.action.assets.folder_renamed': 'أُعيدت تسمية مجلد',
     'activity.action.assets.folder_moved': 'نُقل مجلد',
@@ -5760,6 +5763,7 @@ export const messages = {
     'campaigns.card.next': 'Next up',
     'campaigns.card.open': 'Open',
     'campaigns.card.pause': 'Pause',
+    'campaigns.card.resume': 'Resume',
     'campaigns.room.edit': 'Edit',
     'campaigns.room.linked': 'Linked to',
     'campaigns.room.strategyObjective': 'Strategy objective',
@@ -6728,6 +6732,8 @@ export const messages = {
     'activity.action.assets.metadata_updated': 'File details were edited',
     'activity.action.assets.version_created': 'A new file version was uploaded',
     'activity.action.assets.version_restored': 'An earlier file version was restored',
+    'activity.action.assets.processing_retry_scheduled': 'A file will be processed again',
+    'activity.action.assets.processing_failed': 'A file could not be processed',
     'activity.action.assets.folder_created': 'A folder was created',
     'activity.action.assets.folder_renamed': 'A folder was renamed',
     'activity.action.assets.folder_moved': 'A folder was moved',
@@ -8573,6 +8579,15 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   CAMPAIGN_NOT_PAUSABLE: {
     en: 'Only a planned or running campaign can be paused.',
     ar: 'لا يمكن إيقاف الحملة مؤقتًا إلا إذا كانت مخططة أو جارية.',
+  },
+  // Final review — Resume on a paused campaign's card.
+  CAMPAIGN_RESUMED: {
+    en: 'The campaign is running again.',
+    ar: 'استُؤنفت الحملة.',
+  },
+  CAMPAIGN_NOT_RESUMABLE: {
+    en: 'Only a paused campaign can be resumed.',
+    ar: 'لا يمكن استئناف الحملة إلا إذا كانت موقوفة مؤقتًا.',
   },
   // B11 (Phase 2B-2b) — "Start now".
   CAMPAIGN_STARTED: {

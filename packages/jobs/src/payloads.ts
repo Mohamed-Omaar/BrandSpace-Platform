@@ -68,6 +68,25 @@ export function ingestionJobKey(ingestionJobId: string, attempt: number): string
 export interface ProcessAssetPayload extends TenantJobPayload {
   readonly kind: 'assets.process-asset';
   readonly processingJobId: string;
+  /**
+   * The attempt this message may claim, counting from 1 — the same contract as
+   * `IngestSourceDocumentPayload.attempt` (final review of #83, D-549). The
+   * consumer claims the row only while it is QUEUED with exactly `attempt - 1`
+   * attempts spent. Optional so a message queued by the previous release still
+   * claims a QUEUED row, once.
+   */
+  readonly attempt?: number;
+}
+
+/**
+ * The queue id of ONE asset processing attempt (D-549), as `ingestionJobKey`
+ * is for ingestion (D-413). It used to be `asset-<id>` for every attempt, and
+ * BullMQ keeps finished jobs and ignores a re-add of an id it still holds: a
+ * retry was reported dispatched and never ran, and the file read PROCESSING
+ * (or stayed quarantined) for as long as the old job was kept.
+ */
+export function assetJobKey(processingJobId: string, attempt: number): string {
+  return `asset-${processingJobId}-${attempt}`;
 }
 
 /**

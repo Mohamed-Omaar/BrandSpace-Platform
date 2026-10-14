@@ -447,7 +447,7 @@ export async function WorkspaceShell({
   const ownName = (code: string) => (code === 'ar' ? 'العربية' : 'English');
 
   /*
-   * THE SAME PAGE, IN THE OTHER LANGUAGE: the middleware puts the real path
+   * THE SAME PAGE, IN THE OTHER LANGUAGE: the proxy puts the real path
    * and query on the request, so the switch is the same route with one segment
    * changed. `activePath` is the fallback.
    */

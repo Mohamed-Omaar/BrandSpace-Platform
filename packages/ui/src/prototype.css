@@ -3172,6 +3172,21 @@ span.bsp-cal-hol {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/*
+ * FINAL REVIEW (owner, item 8) — BELOW 768 PX THE ROW WRAPS RATHER THAN SPILL.
+ * The title's 8rem minimum, the status and the button did not fit a phone's
+ * row, and "Add to calendar" ran 23–31px past the row's own border. The phone
+ * layout is post-launch (D-468 (b)); this only stops the breakage: the button
+ * takes its own line, at the row's end.
+ */
+@media (max-width: 767.98px) {
+  .bsp-cal-tray-row {
+    flex-wrap: wrap;
+  }
+  .bsp-cal-tray-row > .bsp-btn {
+    margin-inline-start: auto;
+  }
+}
 /* A head row with more channels than the prototype's three wraps rather than
    overflow (D-468 (c)); with three it never does. */
 .bsp-cal-head {
@@ -8415,7 +8430,16 @@ img.bsp-pf-art {
 }
 .bsp-ntf-m {
   font-size: var(--bsp-fs-12);
-  color: #6a6a72;
+  color: var(--bsp-faint);
+}
+/* F-103 (final review) — ON AN UNREAD ROW the time line sits on the purple
+   tint, and where the card's 94% glass lets a grey control behind it show
+   through, that composites to #e8e4f2: the quiet grey is 4.29:1 there, under
+   WCAG 2.2 AA's 4.5:1. Unread rows take the prototype's secondary text instead
+   (`--bsp-sub`, 5.92:1 on that worst case, 6.56:1 on the plain tint). Read rows
+   keep the quiet grey (5.36:1 on white). */
+.bsp-ntf-row[data-unread] .bsp-ntf-m {
+  color: var(--bsp-sub);
 }
 .bsp-ntf-note {
   margin: 0;

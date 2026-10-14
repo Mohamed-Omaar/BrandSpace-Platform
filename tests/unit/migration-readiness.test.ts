@@ -196,8 +196,8 @@ describe('every application service is gated', () => {
       expect(route).toContain('status: probe.ready ? 200 : 503');
       expect(route).not.toContain('probe.pending,');
 
-      const middleware = read(`apps/${app}/src/middleware.ts`);
-      expect(middleware).toContain("if (pathname.startsWith('/api/')) return secured(request);");
+      const proxy = read(`apps/${app}/src/proxy.ts`);
+      expect(proxy).toContain("if (pathname.startsWith('/api/')) return secured(request);");
     },
   );
 });
