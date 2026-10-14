@@ -4,6 +4,8 @@ import { MockSocialConnectorAdapter } from './mock-adapters';
 import { FacebookPageAdapter } from './meta/facebook';
 import type { GraphFetch } from './meta/graph';
 import { InstagramAccountAdapter } from './meta/instagram';
+import { TikTokAccountAdapter } from './tiktok/adapter';
+import type { TikTokFetch } from './tiktok/api';
 import { capabilitiesFor, SOCIAL_PROVIDERS, type PublishingPolicy } from './policy';
 import type { SocialConnectorAdapter } from './adapter';
 import { providerNotEnabled } from './errors';
@@ -19,9 +21,10 @@ import { providerNotEnabled } from './errors';
  * and Instagram, through Meta's Graph API. They answer in STAGING and
  * PRODUCTION, and only when the provider's `apiVersion` is configured; in
  * DEVELOPMENT (local and the E2E suite) the deterministic mock still answers,
- * because no development environment holds a Meta app. TikTok, LinkedIn and X
- * have no real adapter yet, so outside DEVELOPMENT they are not registered at
- * all and cannot be connected.
+ * because no development environment holds a Meta app. TikTok joined in
+ * connectors step C on the same terms. LinkedIn and X have no real adapter
+ * yet, so outside DEVELOPMENT they are not registered at all and cannot be
+ * connected.
  *
  * SO PRODUCTION FAILS LOUDLY. `createConnectorRegistry` refuses to hand back a
  * mock in a PRODUCTION environment: a deployment with no real connector must
@@ -43,8 +46,10 @@ export interface ConnectorRegistryOptions {
    * without reaching into a module-level singleton.
    */
   readonly adapters?: Partial<Record<SocialProvider, SocialConnectorAdapter>>;
-  /** The transport real adapters use. Tests hand in recorded answers. */
+  /** The transport the Meta adapters use. Tests hand in recorded answers. */
   readonly fetch?: GraphFetch;
+  /** The transport the TikTok adapter uses (it also PUTs bytes). */
+  readonly tiktokFetch?: TikTokFetch;
 }
 
 /**
@@ -55,11 +60,15 @@ function realAdapterFor(
   provider: SocialProvider,
   capabilities: ReturnType<typeof capabilitiesFor>,
   fetch: GraphFetch | undefined,
+  tiktokFetch: TikTokFetch | undefined,
 ): SocialConnectorAdapter | null {
   if (capabilities.apiVersion === null) return null;
   const options = fetch ? { fetch } : {};
   if (provider === 'FACEBOOK') return new FacebookPageAdapter(capabilities, options);
   if (provider === 'INSTAGRAM') return new InstagramAccountAdapter(capabilities, options);
+  if (provider === 'TIKTOK') {
+    return new TikTokAccountAdapter(capabilities, tiktokFetch ? { fetch: tiktokFetch } : {});
+  }
   return null;
 }
 
@@ -74,7 +83,7 @@ export function createConnectorRegistry(options: ConnectorRegistryOptions): Conn
     }
     const capabilities = capabilitiesFor(options.policy, provider);
     if (options.environment !== 'DEVELOPMENT') {
-      const real = realAdapterFor(provider, capabilities, options.fetch);
+      const real = realAdapterFor(provider, capabilities, options.fetch, options.tiktokFetch);
       if (real) {
         built.set(provider, real);
         continue;

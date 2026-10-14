@@ -58,6 +58,8 @@ import { NotesPanel } from '../../../../components/notes-panel';
 import { NOTE_PERMISSION } from '@brandspace/collaboration';
 import { inSocial } from '../../../../server/social-context';
 import { providerForPlatformKey, retryableAfterReconnect } from '@brandspace/social-connectors';
+import { readTikTokOptions } from '@brandspace/social-connectors/tiktok-options';
+import { tiktokPostingFor } from '../../../../server/tiktok-posting';
 import { bestTimes, readPublishedFigures } from '../../../../server/best-time';
 import { relativeTime } from '../../../../server/home';
 import { plannedDateFrom } from '../../../../server/planned-date';
@@ -1062,10 +1064,31 @@ export default async function ComposePage({
           slides: readSlides(variant.slides),
           updatedAt: variant.updatedAt.toISOString(),
           knowledge: knowledgeOf(variant.id),
+          // Connectors C (O4): a TikTok variant's post options, as stored.
+          ...(providerForPlatformKey(variant.platformKey) === 'TIKTOK'
+            ? { tiktokOptions: readTikTokOptions(variant.platformOptions) }
+            : {}),
         })),
         brandBrainOn: knowledgeUsage?.brandBrainOn ?? true,
       }
     : null;
+
+  /*
+   * CONNECTORS C (D-505 O4) — WHAT THE BRAND'S TIKTOK ACCOUNTS ALLOW NOW, for
+   * the TikTok options: asked fresh on every render, as TikTok's guidelines
+   * require, and only when this draft has a TikTok variant someone may edit.
+   */
+  const tiktokPosting =
+    composerDraft &&
+    !composerDraft.readOnly &&
+    workspace.permissionKeys.includes('content.edit') &&
+    composerDraft.variants.some((variant) => variant.tiktokOptions !== undefined)
+      ? await tiktokPostingFor({
+          workspaceId: workspace.workspaceId,
+          brandId: composerDraft.brandId,
+          brandScope: workspace.brandScope,
+        }).catch(() => null)
+      : null;
 
   /*
    * Q9 (D-332) — A CHANNEL WHOSE ACCOUNT HAS EXPIRED, said in the Studio: a
@@ -1360,6 +1383,7 @@ export default async function ComposePage({
         forgetDefault={decidePreferenceAction}
         formatPlatforms={formatPlatforms}
         channelAccess={channelAccess}
+        tiktokPosting={tiktokPosting}
         templates={templates}
         initialTemplateId={initialTemplateId}
         can={{
@@ -1499,6 +1523,41 @@ const EDITOR_KEYS = [
   'studio.fit.chipCant',
   'studio.fit.switchAndAdd',
   'studio.connect.line',
+  'studio.tiktok.title',
+  'studio.tiktok.postingAs',
+  'studio.tiktok.and',
+  'studio.tiktok.noAccount',
+  'studio.tiktok.cannotPost',
+  'studio.tiktok.unavailable',
+  'studio.tiktok.forcedPrivate',
+  'studio.tiktok.privacy',
+  'studio.tiktok.privacyChoose',
+  'studio.tiktok.privacy.PUBLIC_TO_EVERYONE',
+  'studio.tiktok.privacy.MUTUAL_FOLLOW_FRIENDS',
+  'studio.tiktok.privacy.FOLLOWER_OF_CREATOR',
+  'studio.tiktok.privacy.SELF_ONLY',
+  'studio.tiktok.allow',
+  'studio.tiktok.comment',
+  'studio.tiktok.duet',
+  'studio.tiktok.stitch',
+  'studio.tiktok.lockedByCreator',
+  'studio.tiktok.disclose',
+  'studio.tiktok.discloseHint',
+  'studio.tiktok.yourBrand',
+  'studio.tiktok.yourBrandHint',
+  'studio.tiktok.branded',
+  'studio.tiktok.brandedHint',
+  'studio.tiktok.brandedPrivate',
+  'studio.tiktok.maxVideo',
+  'studio.tiktok.consent',
+  'studio.tiktok.consentBranded',
+  'studio.tiktok.musicUsage',
+  'studio.tiktok.brandedPolicy',
+  'studio.tiktok.problem.privacy_level_missing',
+  'studio.tiktok.problem.privacy_level_not_offered',
+  'studio.tiktok.problem.disclosure_incomplete',
+  'studio.tiktok.problem.branded_content_private',
+  'studio.tiktok.problem.creator_cannot_post',
   'studio.connect.link',
   'studio.connect.unavailable',
   'upload.rules',

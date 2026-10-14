@@ -75,22 +75,22 @@ test.describe('the Integrations Hub', () => {
     await expect(block.getByTestId('copy-facebook-redirectUri')).toHaveText('Copied');
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(shown);
 
-    // Step B: Meta's addresses are live (no "register later" note); TikTok's
-    // webhook still waits for its route (step C).
+    // Step B made Meta's addresses live and step C TikTok's webhook: none
+    // carries a "register later" note.
     for (const live of [
       'social-address-facebook-webhookUrl',
       'social-address-facebook-deauthorizeUrl',
       'social-address-facebook-dataDeletionUrl',
+      'social-address-tiktok-webhookUrl',
     ]) {
       await expect(block.getByTestId(live)).not.toContainText('Register after');
     }
-    await expect(block.getByTestId('social-address-tiktok-webhookUrl')).toContainText(
-      'Register after step C.',
-    );
 
-    // The Hub lists a provider only with an adapter: Meta's arrived in step B.
+    // The Hub lists a provider only with an adapter: Meta's arrived in step B,
+    // TikTok's in step C.
     await expect(page.getByTestId('integration-social-facebook')).toBeVisible();
     await expect(page.getByTestId('integration-social-instagram')).toBeVisible();
+    await expect(page.getByTestId('integration-social-tiktok')).toBeVisible();
   });
 
   for (const locale of ['en', 'ar'] as const) {
@@ -136,7 +136,7 @@ test.describe('the Integrations Hub', () => {
       /repeatable output offline|without a vendor/i,
     );
     // And the environments row is the machine-readable half of the same fact.
-    await expect(page.getByTestId('detail-environments')).not.toContainText('PRODUCTION');
+    await expect(page.getByTestId('detail-environments')).not.toContainText('Production');
   });
 
   test('tests a connection, records the result, and activates nothing', async ({ page }) => {
@@ -152,7 +152,10 @@ test.describe('the Integrations Hub', () => {
     // The outcome is now in the history, which is the point: a test whose
     // result nobody kept reassures the person who pressed it and tells the
     // next operator nothing.
-    await expect(page.getByTestId('detail-connection')).not.toHaveText('never_tested');
+    await expect(page.getByTestId('detail-connection')).not.toHaveAttribute(
+      'data-state',
+      'never_tested',
+    );
     await expect(page.locator('[data-testid^="history-"]').first()).toBeVisible();
 
     // AND NOTHING WAS ACTIVATED. Testing is an observation; activation is a
@@ -462,7 +465,8 @@ test.describe('the owner configures a provider from the Integrations Hub alone',
     const enabledBeforeTest = (await page.getByTestId('detail-enabled').innerText()).trim();
     await page.getByTestId('test-connection').click();
     await expect(page.getByTestId('integration-notice')).toBeVisible();
-    await expect(page.getByTestId('detail-connection')).toHaveText('ok');
+    await expect(page.getByTestId('detail-connection')).toHaveAttribute('data-state', 'ok');
+    await expect(page.getByTestId('detail-connection')).toHaveText('Working');
     await expect(page.locator('[data-testid^="history-"]').first()).toContainText(
       /saved webhook secret/i,
     );

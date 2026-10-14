@@ -4,6 +4,8 @@ import Link from 'next/link';
 import type { UploadRules } from '../../../../components/upload-rules';
 import { takeStudioCarry, type StudioCarry, type StudioHandoff } from './studio-carry';
 import { ChannelAccessLine, type ChannelAccess } from './channel-access-line';
+import { TikTokOptionsPanel, type TikTokPostingView } from './tiktok-options-panel';
+import type { TikTokPostOptions } from '@brandspace/social-connectors/tiktok-options';
 import { fitOf, formatForChannels, listOf } from './format-fit';
 import type { AutosaveResult, ProposeTimeResult, ShapeResult } from '../actions';
 import { AUTOSAVE_STATUSES } from './autosave-statuses';
@@ -200,6 +202,8 @@ export interface DraftEditorProps {
   readonly formatPlatforms?: Readonly<Record<string, readonly string[]>>;
   /** Round 6 (D-481) — which chosen channels still need an account, per brand. */
   readonly channelAccess?: ChannelAccess | null | undefined;
+  /** Connectors C — what the brand's TikTok accounts allow now (O4). */
+  readonly tiktokPosting?: TikTokPostingView | null | undefined;
   readonly actions: {
     save(formData: FormData): Promise<void | AutosaveResult>;
     /** Round 5 (B, D-478) — a draft's format and channels. */
@@ -241,6 +245,8 @@ interface LiveVariant {
   readonly cover: string | null;
   /** B9 — slide headlines by image. */
   readonly headlines: Readonly<Record<string, string>>;
+  /** Connectors C — a TikTok variant's post options; null on other platforms. */
+  readonly tiktok: TikTokPostOptions | null;
 }
 
 const headlinesOf = (variant: ComposerVariant): Record<string, string> =>
@@ -274,6 +280,7 @@ function liveOf(
     assetIds: variant.assetIds,
     cover: variant.coverAssetId ?? null,
     headlines: headlinesOf(variant),
+    tiktok: variant.tiktokOptions ?? null,
   };
 }
 
@@ -324,6 +331,7 @@ export function DraftEditor({
   handoff = null,
   formatPlatforms,
   channelAccess,
+  tiktokPosting = null,
   onTool,
   actions,
 }: DraftEditorProps) {
@@ -532,7 +540,8 @@ export function DraftEditor({
     value.firstComment !== base.firstComment ||
     value.assetIds.join(',') !== base.assetIds.join(',') ||
     value.cover !== base.cover ||
-    headlineKey(value.headlines, value.assetIds) !== headlineKey(base.headlines, base.assetIds);
+    headlineKey(value.headlines, value.assetIds) !== headlineKey(base.headlines, base.assetIds) ||
+    JSON.stringify(value.tiktok) !== JSON.stringify(base.tiktok);
   const isDirty = (variant: ComposerVariant): boolean =>
     differs(live(variant), baselineOf(variant), tagTextOf(variant));
   const anyDirty = draft.variants.some(isDirty);
@@ -2410,6 +2419,14 @@ export function DraftEditor({
                           <input
                             id={`${fieldId}-${variant.id}-tags`}
                             className="bsp-st-tag-input"
+                            /*
+                             * D-539 (owner, #82): named, so a tag typed and
+                             * entered BEFORE the page's scripts load — the
+                             * browser's own form post — reaches the server too.
+                             * Hydrated, the same text is already in `hashtags`
+                             * above and the server adds nothing twice.
+                             */
+                            name="hashtagsTyped"
                             dir="auto"
                             value={tagDrafts[variant.id] ?? ''}
                             placeholder={t['studio.tagPlaceholder']}
@@ -2465,6 +2482,22 @@ export function DraftEditor({
                         <input type="hidden" name="firstComment" value={value.firstComment} />
                       ) : null}
                     </div>
+                    {/*
+                      CONNECTORS C (D-505 O4) — TikTok's post options, which
+                      its guidelines require before a post goes out. Only on a
+                      TikTok variant; they travel with this form.
+                    */}
+                    {value.tiktok && tiktokPosting ? (
+                      <TikTokOptionsPanel
+                        t={t}
+                        view={tiktokPosting}
+                        value={value.tiktok}
+                        onChange={(next) => change(variant, { tiktok: next })}
+                        disabled={!can.edit}
+                        video={draft.contentType === 'VIDEO' || draft.contentType === 'REEL'}
+                        testId={`tiktok-options-${variant.platformKey}`}
+                      />
+                    ) : null}
                   </div>
 
                   <div

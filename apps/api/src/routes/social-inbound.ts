@@ -2,18 +2,25 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { getPlatformClient } from '@brandspace/database/platform';
 import { metaSubscriptionChallenge } from '@brandspace/social-connectors';
-import { createLogger, internalErrorFields } from '@brandspace/shared';
+import { createLogger, internalErrorFields, systemClock } from '@brandspace/shared';
 import { route } from '../route-contract';
 import {
   dataDeletionStatus,
   receiveMetaDataDeletion,
   receiveMetaDeauthorize,
   receiveMetaWebhook,
+  receiveTikTokWebhook,
   signedRequestFrom,
   type MetaAppSecrets,
   type SubjectKeys,
+  type TikTokAppSecrets,
 } from '../social-inbound';
-import { metaAppSecrets, subjectKeys } from './social';
+import {
+  inboundSignatureToleranceSeconds,
+  metaAppSecrets,
+  subjectKeys,
+  tiktokAppSecrets,
+} from './social';
 
 /**
  * CONNECTORS B — THE THREE ADDRESSES THE OWNER REGISTERS IN THE META APP
@@ -24,6 +31,10 @@ import { metaAppSecrets, subjectKeys } from './social';
  *   POST /v1/social/deauthorize/facebook     "this person removed your app"
  *   POST /v1/social/data-deletion/facebook   "delete what you hold about them"
  *   GET  /v1/social/data-deletion/facebook/status/:code   the status page Meta links to
+ *
+ * CONNECTORS C — AND THE ONE TIKTOK ASKS FOR:
+ *
+ *   POST /v1/social/webhooks/tiktok          a webhook delivery (`TikTok-Signature`)
  *
  * ONE META APP SERVES FACEBOOK AND INSTAGRAM (D-505 O3), so these are the
  * app's addresses and act on both kinds of connection.
@@ -45,6 +56,12 @@ export interface SocialInboundDependencies {
   readonly keys: () => Promise<SubjectKeys>;
   /** The API's public base URL, for the status link Meta shows the person. */
   readonly publicBaseUrl: () => string | null;
+  /** Connectors C: the TikTok app's client key and secret, or null. */
+  readonly tiktokSecrets: () => Promise<TikTokAppSecrets | null>;
+  /** Connectors C: how far a signed delivery's timestamp may be from now. */
+  readonly signatureToleranceSeconds: () => Promise<number>;
+  /** The clock a signature's timestamp is held to. */
+  readonly now: () => Date;
 }
 
 const defaults: SocialInboundDependencies = {
@@ -54,6 +71,9 @@ const defaults: SocialInboundDependencies = {
     const base = process.env['PUBLIC_API_BASE_URL']?.trim();
     return base ? base.replace(/\/+$/, '') : null;
   },
+  tiktokSecrets: tiktokAppSecrets,
+  signatureToleranceSeconds: inboundSignatureToleranceSeconds,
+  now: () => systemClock.now(),
 };
 
 function rawBody(req: FastifyRequest): Buffer {
@@ -109,6 +129,33 @@ export async function registerSocialInboundRoutes(
         });
         if (!receipt.accepted) {
           log.warn('meta webhook refused', { reason: receipt.reason });
+          return reply.code(receipt.reason === 'signature' ? 403 : 400).send(INVALID_SIGNATURE);
+        }
+        return reply.code(200).send({ received: true });
+      },
+    );
+
+    route(
+      scoped,
+      'POST',
+      '/v1/social/webhooks/tiktok',
+      { scope: 'public', idempotent: true },
+      async (req, reply) => {
+        const secrets = await dependencies.tiktokSecrets();
+        if (!secrets) return reply.code(503).send(NOT_CONFIGURED);
+        const signature = req.headers['tiktok-signature'];
+        const receipt = await receiveTikTokWebhook({
+          platform: getPlatformClient(),
+          secrets,
+          keys: await dependencies.keys(),
+          raw: rawBody(req),
+          signature: typeof signature === 'string' ? signature : undefined,
+          now: dependencies.now(),
+          toleranceSeconds: await dependencies.signatureToleranceSeconds(),
+        });
+        if (!receipt.accepted) {
+          log.warn('tiktok webhook refused', { reason: receipt.reason });
+          if (receipt.reason === 'not_configured') return reply.code(503).send(NOT_CONFIGURED);
           return reply.code(receipt.reason === 'signature' ? 403 : 400).send(INVALID_SIGNATURE);
         }
         return reply.code(200).send({ received: true });

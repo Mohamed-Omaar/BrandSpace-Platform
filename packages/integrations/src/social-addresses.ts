@@ -4,8 +4,7 @@
  * Every one is ours: it is where our own route lives, built from the API's
  * public base URL (`PUBLIC_API_BASE_URL`, per environment) and never typed by
  * hand. The OAuth callbacks exist; Meta's webhook, deauthorize and
- * data-deletion routes were built in step B; TikTok's webhook arrives with
- * step C, and its address is shown already so the app can be prepared.
+ * data-deletion routes were built in step B; TikTok's webhook in step C.
  *
  * ONE META APP (D-505 O2/O3): Facebook and Instagram share it, so Instagram
  * lists only its own redirect and points at Facebook's for the rest — one app
@@ -53,7 +52,7 @@ export interface SocialAddress {
  * and added them here IN THE SAME CHANGE, so the Control Center stops saying
  * "register later" the moment a route ships and never claims one that is not
  * there. PER PLATFORM, because a kind of address is not one route: Meta's
- * webhook exists, TikTok's arrives with step C.
+ * webhook arrived in step B and TikTok's in step C, each in its own change.
  * `tests/unit/connectors-a-social-addresses.test.ts` checks every live address
  * against the API's registered routes.
  */
@@ -67,7 +66,7 @@ export const LIVE_SOCIAL_ADDRESS_KEYS: Readonly<
     'dataDeletionUrl',
   ]),
   instagram: new Set<SocialAddressKey>(['redirectUri']),
-  tiktok: new Set<SocialAddressKey>(['redirectUri']),
+  tiktok: new Set<SocialAddressKey>(['redirectUri', 'webhookUrl']),
   x: new Set<SocialAddressKey>(['redirectUri']),
 };
 

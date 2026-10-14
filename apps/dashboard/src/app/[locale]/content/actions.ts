@@ -1,11 +1,23 @@
 'use server';
 
+import {
+  readTikTokOptions,
+  tiktokOptionsFromForm,
+  tiktokOptionsProblems,
+} from '@brandspace/social-connectors/tiktok-options';
+import { providerForPlatformKey } from '@brandspace/social-connectors';
 import { revalidatePath } from 'next/cache';
 import { uploadReasonOf } from '../../../server/upload-rules';
 import { notFound, redirect, unstable_rethrow } from 'next/navigation';
 import { randomUUID } from 'node:crypto';
 import { writeAuditEvent } from '@brandspace/database';
-import { AppError, createLogger, internalErrorFields, isAppError } from '@brandspace/shared';
+import {
+  AppError,
+  brandIdQueryFilter,
+  createLogger,
+  internalErrorFields,
+  isAppError,
+} from '@brandspace/shared';
 import {
   CHANNEL_DISCONNECTED_REASON,
   CHANNELS_NOT_CONNECTABLE_REASON,
@@ -92,6 +104,14 @@ function failure(
 export type AutosaveResult =
   | { readonly ok: true; readonly itemId: string; readonly version?: string }
   | { readonly ok: false; readonly code: string; readonly ref: string };
+
+/** The hashtags a form field holds: split on spaces and commas, without "#". */
+function tagsOf(value: FormDataEntryValue | null): string[] {
+  return String(value ?? '')
+    .split(/[\s,]+/)
+    .map((tag) => tag.replace(/^#/, '').trim())
+    .filter((tag) => tag.length > 0);
+}
 
 function isAutosave(formData: FormData): boolean {
   return formData.get('autosave') === '1';
@@ -404,10 +424,19 @@ export async function saveVariantAction(formData: FormData): Promise<void | Auto
     const session = await requireWorkspaceAction(locale, 'content.edit');
     const variantId = String(formData.get('variantId') ?? '');
     const body = String(formData.get('body') ?? '');
-    const hashtags = String(formData.get('hashtags') ?? '')
-      .split(/[\s,]+/)
-      .map((tag) => tag.replace(/^#/, '').trim())
-      .filter((tag) => tag.length > 0);
+    const listed = tagsOf(formData.get('hashtags'));
+    /*
+     * D-539 (owner, #82) — A TAG TYPED BEFORE THE PAGE'S SCRIPTS LOADED. Enter
+     * in the hashtag field then makes the browser post this form itself, and
+     * `hashtags` carries only what was stored. The field's own text arrives as
+     * `hashtagsTyped`; what it adds is kept. Once the page is running, the
+     * typed text is already in `hashtags` (it counts before "Add"), so nothing
+     * is added twice.
+     */
+    const hashtags = [
+      ...listed,
+      ...tagsOf(formData.get('hashtagsTyped')).filter((tag) => !listed.includes(tag)),
+    ];
 
     /*
      * PHASE 8 — MEDIA, AND THE DIFFERENCE BETWEEN "leave it" AND "remove it".
@@ -450,6 +479,18 @@ export async function saveVariantAction(formData: FormData): Promise<void | Auto
           }))
         : undefined;
 
+    /*
+     * CONNECTORS C (D-505 O4) — A TIKTOK VARIANT'S POST OPTIONS, under
+     * `tiktokOptionsPresent` for the reason `mediaPresent` exists: without it
+     * this submission says nothing about them and the stored ones stay. Read
+     * with TikTok's own rules (no default audience, interactions off unless
+     * turned on); a draft may be unfinished, so an incomplete choice is kept.
+     */
+    const platformOptions =
+      formData.get('tiktokOptionsPresent') !== null
+        ? { ...tiktokOptionsFromForm(formData) }
+        : undefined;
+
     const saved = await inContentStudio(session.workspace.workspaceId, async ({ library, db }) => {
       if (isAutosave(formData)) {
         // Round 4 (3.1): only a post a save changes nothing about saves itself.
@@ -470,6 +511,7 @@ export async function saveVariantAction(formData: FormData): Promise<void | Auto
         // PHASE 6 FINAL (D-285) — present only where a cover can be chosen.
         ...(coverAssetId === undefined ? {} : { coverAssetId }),
         ...(assetIds === undefined ? {} : { assetIds }),
+        ...(platformOptions === undefined ? {} : { platformOptions }),
         ...actorOf(session),
         // Q8 — taken from the session, never the form.
         actorPermissionKeys: session.workspace.permissionKeys,
@@ -1017,6 +1059,9 @@ export async function duplicateContentAction(formData: FormData): Promise<void> 
  * differs: back to the post, with the calendar's own success and refusal
  * codes.
  */
+/** Connectors C — the code a Studio schedule refusal carries for incomplete TikTok options. */
+const TIKTOK_OPTIONS_INCOMPLETE = 'TIKTOK_OPTIONS_INCOMPLETE';
+
 export async function scheduleFromStudioAction(formData: FormData): Promise<void> {
   const locale = String(formData.get('locale') ?? 'en');
   const itemId = String(formData.get('contentItemId') ?? '');
@@ -1025,13 +1070,56 @@ export async function scheduleFromStudioAction(formData: FormData): Promise<void
     const session = await requireWorkspaceAction(locale, 'content.schedule');
     const date = String(formData.get('date') ?? '').trim();
     const time = String(formData.get('time') ?? '').trim();
-    await inContentStudio(session.workspace.workspaceId, async ({ calendar }) =>
-      (await calendar()).schedule({
+    await inContentStudio(session.workspace.workspaceId, async ({ calendar, db }) => {
+      /*
+       * CONNECTORS C (D-505 O4) — A TIKTOK POST IS NOT SCHEDULED WITHOUT ITS
+       * OPTIONS: TikTok allows no default audience. Read in the member's brand
+       * scope; the adapter refuses the same post again before anything is sent.
+       *
+       * ONLY WHEN THE POST'S BRAND HAS A TIKTOK ACCOUNT (owner, #82): the
+       * audiences come from the account, so without one the panel has nothing
+       * to offer and the post schedules as any channel without an account
+       * does. If an account is connected later, the publishing preflight holds
+       * the TikTok post until the panel is completed (D-538) — never a failure.
+       */
+      const variants = await db.contentVariant.findMany({
+        where: {
+          contentItemId: itemId,
+          ...brandIdQueryFilter({ brandScope: session.workspace.brandScope }),
+        },
+        select: { brandId: true, platformKey: true, platformOptions: true },
+      });
+      const tiktok = variants.filter(
+        (variant) => providerForPlatformKey(variant.platformKey) === 'TIKTOK',
+      );
+      const tiktokAccount =
+        tiktok.length > 0 &&
+        (await db.socialConnection.count({
+          where: {
+            workspaceId: session.workspace.workspaceId,
+            brandId: { in: [...new Set(tiktok.map((variant) => variant.brandId))] },
+            provider: 'TIKTOK',
+            status: 'ACTIVE',
+          },
+        })) > 0;
+      const incomplete =
+        tiktokAccount &&
+        tiktok.some(
+          (variant) =>
+            tiktokOptionsProblems(readTikTokOptions(variant.platformOptions), null, false).length >
+            0,
+        );
+      if (incomplete) {
+        throw new AppError('VALIDATION_FAILED', 'The TikTok post options are not complete.', {
+          reason: TIKTOK_OPTIONS_INCOMPLETE,
+        });
+      }
+      return (await calendar()).schedule({
         contentItemId: itemId,
         localTime: `${date}T${time}`,
         ...actorOf(session),
-      }),
-    );
+      });
+    });
     destination = pageUrl(locale, '/compose', { item: itemId, ok: 'CONTENT_SCHEDULED' });
   } catch (error: unknown) {
     const correlationId = randomUUID();
@@ -1047,7 +1135,9 @@ export async function scheduleFromStudioAction(formData: FormData): Promise<void
           ? CHANNEL_DISCONNECTED_REASON
           : isAppError(error) && error.publicDetails['reason'] === CHANNELS_NOT_CONNECTABLE_REASON
             ? CHANNELS_NOT_CONNECTABLE_REASON
-            : actionErrorCode(error);
+            : isAppError(error) && error.publicDetails['reason'] === TIKTOK_OPTIONS_INCOMPLETE
+              ? TIKTOK_OPTIONS_INCOMPLETE
+              : actionErrorCode(error);
     destination = pageUrl(locale, '/compose', { item: itemId, error: code, ref: correlationId });
   }
   revalidatePath(`/${locale}/calendar`);

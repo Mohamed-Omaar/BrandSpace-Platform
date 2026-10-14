@@ -84,6 +84,11 @@ export interface ProviderCapabilities {
   readonly dailyPublishCap: number | null;
   /** Connectors B: this platform's expiring-soon window in hours, or null (the dispatch one). */
   readonly expiringSoonHours: number | null;
+  /**
+   * Connectors C: the audience every post is forced to while the platform app
+   * is unaudited (`'private'`: TikTok's "Only me"), or null once it is audited.
+   */
+  readonly forcedAudience: 'private' | null;
 }
 
 export interface PublishingPolicy {
@@ -119,6 +124,8 @@ export interface PublishingPolicy {
     readonly purgeBatchSize: number;
     readonly processBatchSize: number;
     readonly maxAttempts: number;
+    /** Connectors C: a signed delivery's timestamp tolerance, in seconds. */
+    readonly signatureToleranceSeconds: number;
   };
 }
 

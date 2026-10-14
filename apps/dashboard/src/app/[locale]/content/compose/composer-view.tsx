@@ -18,6 +18,8 @@ import { previewGeometry } from './preview-geometry';
 import { StudioCopilotButton } from './studio-copilot';
 import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 import { ChannelAccessLine, type ChannelAccess } from './channel-access-line';
+import type { TikTokPostingView } from './tiktok-options-panel';
+import type { TikTokPostOptions } from '@brandspace/social-connectors/tiktok-options';
 import { fitOf, formatForChannels, listOf } from './format-fit';
 import {
   countCharacters,
@@ -87,6 +89,8 @@ export interface ComposerVariant {
    * nothing was recorded: Brand Brain off, no fact, or a post from before.
    */
   readonly knowledge?: readonly VariantKnowledgeView[];
+  /** Connectors C — a TikTok variant's stored post options; absent elsewhere. */
+  readonly tiktokOptions?: TikTokPostOptions | null;
 }
 
 /** One recorded fact, as the Studio shows it (D9/D10). */
@@ -360,6 +364,8 @@ export interface ComposerViewProps {
   readonly formatPlatforms?: Readonly<Record<string, readonly string[]>>;
   /** Round 6 (D-481) — which chosen channels still need an account, per brand. */
   readonly channelAccess?: ChannelAccess | null;
+  /** Connectors C — what the draft's brand's TikTok accounts allow now (O4). */
+  readonly tiktokPosting?: TikTokPostingView | null;
   /** E4 / B2 — the templates of `defaultBrandId`, the default first. */
   readonly templates?: readonly ComposerTemplate[];
   /** E4 / B2 — a template the reader arrived with (`?template=`), already checked. */
@@ -461,6 +467,7 @@ export function ComposerView({
   initialGoal = '',
   formatPlatforms,
   channelAccess = null,
+  tiktokPosting = null,
   templates = [],
   initialTemplateId = '',
   now = 0,
@@ -1252,6 +1259,7 @@ export function ComposerView({
           handoff={handoffFor(draft)}
           {...(formatPlatforms ? { formatPlatforms } : {})}
           channelAccess={channelAccess}
+          tiktokPosting={tiktokPosting}
           draft={draft}
           platforms={platforms}
           campaigns={campaigns}

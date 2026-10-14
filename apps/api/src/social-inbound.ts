@@ -12,6 +12,8 @@ import {
   inboundDedupeKey,
   metaWebhookSignatureValid,
   parseMetaSignedRequest,
+  parseTikTokWebhook,
+  tiktokWebhookSignatureValid,
   subjectHash,
   subjectHashCandidates,
   type SubjectHashKey,
@@ -65,6 +67,15 @@ export interface SubjectKeys {
 /** Providers one Meta app serves: a person's grant covers both. */
 const META_PROVIDERS: readonly SocialProvider[] = ['FACEBOOK', 'INSTAGRAM'];
 
+/** The platform's own name, which replaces an erased account's name. */
+const PLATFORM_NAMES: Readonly<Record<SocialProvider, string>> = {
+  FACEBOOK: 'Facebook',
+  INSTAGRAM: 'Instagram',
+  TIKTOK: 'TikTok',
+  LINKEDIN: 'LinkedIn',
+  X: 'X',
+};
+
 /** The largest payload kept; the column refuses more than 64 KiB. */
 const MAX_KEPT_PAYLOAD_BYTES = 48 * 1_024;
 
@@ -117,6 +128,74 @@ export async function receiveMetaWebhook(input: {
   });
 }
 
+/** The TikTok app's own identity for its webhook (never logged). */
+export interface TikTokAppSecrets {
+  readonly clientKey: string;
+  readonly clientSecret: string;
+}
+
+/**
+ * CONNECTORS C — A TIKTOK WEBHOOK DELIVERY: the `TikTok-Signature` over the
+ * raw bytes and inside the tolerance, then one row.
+ *
+ *   - `authorization.removed` ("this person removed your app"; TikTok has
+ *     already revoked the token): recorded as a DEAUTHORIZE with the matched
+ *     connections, found now while the person's open id is in hand — the
+ *     sweep revokes each one exactly as Meta's deauthorize does.
+ *   - `post.publish.*`: recorded with the publish id; the sweep asks the
+ *     matching post's status now rather than at its next poll.
+ *   - Anything else: recorded and set aside (IGNORED).
+ */
+export async function receiveTikTokWebhook(input: {
+  readonly platform: PlatformPrismaClient;
+  readonly secrets: TikTokAppSecrets;
+  readonly keys: SubjectKeys;
+  readonly raw: Buffer;
+  readonly signature: string | undefined;
+  readonly now: Date;
+  readonly toleranceSeconds: number;
+}): Promise<InboundReceipt> {
+  const valid = tiktokWebhookSignatureValid({
+    raw: input.raw,
+    header: input.signature,
+    clientSecret: input.secrets.clientSecret,
+    nowSeconds: Math.floor(input.now.getTime() / 1_000),
+    toleranceSeconds: input.toleranceSeconds,
+  });
+  if (!valid) return { accepted: false, reason: 'signature' };
+  const event = parseTikTokWebhook(input.raw, input.secrets.clientKey);
+  if (!event) return { accepted: false, reason: 'unreadable' };
+  const dedupeKey = inboundDedupeKey(input.raw);
+  if (event.kind === 'deauthorized') {
+    const hash = currentHash(event.openId, input.keys);
+    if (hash === null) return { accepted: false, reason: 'not_configured' };
+    const connections = await connectionsOf(input.platform, event.openId, input.keys, ['TIKTOK']);
+    return record(input.platform, {
+      provider: 'TIKTOK',
+      kind: 'DEAUTHORIZE',
+      dedupeKey,
+      subjectHash: hash,
+      payload: { event: 'authorization.removed', reason: event.reason, connections },
+    });
+  }
+  if (event.kind === 'publish_status') {
+    return record(input.platform, {
+      provider: 'TIKTOK',
+      kind: 'WEBHOOK',
+      dedupeKey,
+      subjectHash: null,
+      payload: { event: event.event, publishId: event.publishId },
+    });
+  }
+  return record(input.platform, {
+    provider: 'TIKTOK',
+    kind: 'WEBHOOK',
+    dedupeKey,
+    subjectHash: null,
+    payload: { event: event.event },
+  });
+}
+
 async function record(
   platform: PlatformPrismaClient,
   data: {
@@ -151,19 +230,21 @@ async function record(
 }
 
 /**
- * The connections a Meta person's grant reached, found while their id is in
- * hand: every listed key version, both Meta providers, every workspace.
+ * The connections a person's grant reached, found while their id is in hand:
+ * every listed key version, the platform's providers (both Meta keys, or
+ * TikTok), every workspace.
  */
 async function connectionsOf(
   platform: PlatformPrismaClient,
   userId: string,
   keys: SubjectKeys,
+  providers: readonly SocialProvider[] = META_PROVIDERS,
 ): Promise<{ workspaceId: string; connectionId: string }[]> {
   const candidates = subjectHashCandidates(userId, keys.keys);
   if (candidates.length === 0) return [];
   const rows = await platform.socialConnection.findMany({
     where: {
-      provider: { in: [...META_PROVIDERS] },
+      provider: { in: [...providers] },
       providerSubjectHash: { in: candidates },
     },
     select: { id: true, workspaceId: true },
@@ -378,12 +459,13 @@ async function act(
   options: InboundProcessingOptions,
   event: {
     id: string;
+    provider: SocialProvider;
     kind: 'WEBHOOK' | 'DEAUTHORIZE' | 'DATA_DELETION';
     payload: unknown;
     deletionRequest: { id: string } | null;
   },
 ): Promise<{ ignored: boolean }> {
-  if (event.kind === 'WEBHOOK') return { ignored: true };
+  if (event.kind === 'WEBHOOK') return askPublishStatusNow(options, event);
   const erase = event.kind === 'DATA_DELETION';
   const connections = connectionsIn(event.payload);
   if (erase && event.deletionRequest) {
@@ -411,6 +493,44 @@ async function act(
       where: { id: event.deletionRequest.id, status: { not: 'COMPLETED' } },
       data: { status: 'COMPLETED', completedAt: options.now, connectionsDeleted: erased },
     });
+  }
+  return { ignored: false };
+}
+
+/**
+ * CONNECTORS C — TIKTOK SAYS A PUBLISH FINISHED (OR FAILED): the post behind
+ * that publish id is asked about NOW instead of at its next poll. The status
+ * check itself still decides what happened — a webhook is a nudge, never the
+ * verdict, so a forged or stale event can at most make us ask early. Found by
+ * `(provider, providerHandle)` (its partial index), each in its own workspace.
+ */
+async function askPublishStatusNow(
+  options: InboundProcessingOptions,
+  event: { provider: SocialProvider; payload: unknown },
+): Promise<{ ignored: boolean }> {
+  const payload =
+    event.payload !== null && typeof event.payload === 'object' && !Array.isArray(event.payload)
+      ? (event.payload as Record<string, unknown>)
+      : {};
+  const publishId = payload['publishId'];
+  if (event.provider !== 'TIKTOK' || typeof publishId !== 'string') return { ignored: true };
+  const jobs = await options.platform.publishJob.findMany({
+    where: { provider: 'TIKTOK', providerHandle: publishId },
+    select: { id: true, workspaceId: true },
+  });
+  if (jobs.length === 0) return { ignored: true };
+  for (const job of jobs) {
+    await options.inWorkspace(job.workspaceId, (db) =>
+      db.publishJob.updateMany({
+        where: {
+          id: job.id,
+          workspaceId: job.workspaceId,
+          status: 'VERIFICATION_PENDING',
+          nextAttemptAt: { gt: options.now },
+        },
+        data: { nextAttemptAt: options.now },
+      }),
+    );
   }
   return { ignored: false };
 }
@@ -485,7 +605,7 @@ async function revokeAtPlatform(
     data: {
       // The platform's name for it, not the account's: the row stays so the
       // customer's own posts keep their history, but says nothing about the person.
-      displayName: connection.provider === 'INSTAGRAM' ? 'Instagram' : 'Facebook',
+      displayName: PLATFORM_NAMES[connection.provider],
       avatarUrl: null,
       externalAccountId: `erased-${connection.id}`,
       providerSubjectHash: null,

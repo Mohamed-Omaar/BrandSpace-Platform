@@ -238,6 +238,9 @@ export function integrationTester(options: IntegrationTesterOptions = {}): Integ
         case 'social:facebook':
           return testMetaApp(input, credentials, startedAt);
 
+        case 'social:tiktok':
+          return testTikTokApp(input, credentials, startedAt);
+
         case 'social:mock':
           return {
             ok: true,
@@ -574,5 +577,85 @@ async function testMetaApp(
     ok: true,
     latencyMs: elapsed(),
     message: `Meta accepted this app ID and secret (Graph API ${version}).`,
+  };
+}
+
+/* ------------------------------------------------------------------------ */
+/* TikTok — a client token for the saved app                                 */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * CONNECTORS C — DOES TIKTOK ACCEPT THIS CLIENT KEY AND CLIENT SECRET?
+ *
+ * One documented call: TikTok issues a CLIENT access token for the
+ * client-credentials grant (`POST /v2/oauth/token/`, `grant_type=
+ * client_credentials`, developers.tiktok.com/doc/client-access-token-management).
+ * No customer account is touched and nothing TikTok returns is shown: the
+ * result is a sentence we wrote, with TikTok's error word when there is one.
+ * The version is the one publishing is configured with
+ * (`publishing.providers.tiktok.apiVersion`).
+ */
+async function testTikTokApp(
+  input: Parameters<IntegrationTester['test']>[0],
+  credentials: Readonly<Record<string, string>>,
+  startedAt: number,
+): Promise<TestResult> {
+  const elapsed = () => Date.now() - startedAt;
+  const clientKey = input.settings['appId'];
+  const clientSecret = credentials['clientSecret'];
+  if (!clientKey || !clientSecret) {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message: 'Save the client key and client secret first.',
+    };
+  }
+  const publishing = (await getConfigService().get('publishing', currentEnvironment())) as {
+    providers?: { tiktok?: { apiVersion?: string | null } };
+  };
+  const version = publishing.providers?.tiktok?.apiVersion ?? null;
+  if (!version) {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message:
+        'Set the TikTok API version first (Publishing configuration: providers.tiktok.apiVersion).',
+    };
+  }
+  let body: Record<string, unknown> | null = null;
+  let status = 0;
+  try {
+    const response = await fetch(`https://open.tiktokapis.com/${version}/oauth/token/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_key: clientKey,
+        client_secret: clientSecret,
+        grant_type: 'client_credentials',
+      }).toString(),
+      signal: AbortSignal.timeout(10_000),
+    });
+    status = response.status;
+    body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  } catch {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message: 'TikTok did not answer. Try again in a moment.',
+    };
+  }
+  const error = body?.['error'];
+  const word = typeof error === 'string' && /^[a-z0-9_.]{1,80}$/.test(error) ? error : null;
+  if (status >= 400 || word !== null || typeof body?.['access_token'] !== 'string') {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      message: `TikTok refused this client key and secret (${word ?? `HTTP ${status}`}). Check both on the app’s page at developers.tiktok.com.`,
+    };
+  }
+  return {
+    ok: true,
+    latencyMs: elapsed(),
+    message: `TikTok accepted this client key and secret (API ${version}).`,
   };
 }

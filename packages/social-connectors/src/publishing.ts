@@ -39,6 +39,7 @@ import {
   type PublishingPolicy,
 } from './policy';
 import { postKindFor } from './post-kinds';
+import { readTikTokOptions, tiktokOptionsProblems } from './tiktok/options';
 import { ProviderRateLimiter } from './rate-limits';
 import { markNeedsReauth, type ReauthNotifier } from './reauth';
 
@@ -339,6 +340,16 @@ const RECONNECT_TOO_LATE = 'RECONNECT_TOO_LATE' as const;
 const PLATFORM_SWITCHED_OFF = 'PLATFORM_SWITCHED_OFF' as const;
 /** The code a job held for a switched-off platform is cancelled with. */
 export const PLATFORM_SWITCHED_OFF_CODE = 'held.platform_switched_off';
+/**
+ * D-538 (owner, #82) — A TIKTOK POST WHOSE OPTIONS ARE NOT CHOSEN IS HELD
+ * BEFORE DISPATCH, NEVER SENT AND NEVER FAILED. On the job while it waits for
+ * the panel, and on the job cancelled when its lateness deadline passes with
+ * the panel still incomplete. The publishing log says "Choose who can see this
+ * post".
+ */
+export const TIKTOK_OPTIONS_HELD_CODE = 'held.tiktok_options_missing';
+const TIKTOK_OPTIONS_MISSING = 'TIKTOK_OPTIONS_MISSING' as const;
+const TIKTOK_OPTIONS_TOO_LATE = 'TIKTOK_OPTIONS_TOO_LATE' as const;
 /** On a held job, while it waits. */
 export const AWAITING_RECONNECT_CODE = 'preflight.awaiting_reconnect';
 /** On the job that waited until its deadline and the account never came back. */
@@ -353,6 +364,8 @@ type PreflightOutcome =
   | typeof AWAITING_RECONNECT
   | typeof RECONNECT_TOO_LATE
   | typeof PLATFORM_SWITCHED_OFF
+  | typeof TIKTOK_OPTIONS_MISSING
+  | typeof TIKTOK_OPTIONS_TOO_LATE
   | null;
 
 /**
@@ -699,6 +712,8 @@ export class PublishPipelineService {
     const preflight = await this.#preflight(job);
     if (preflight === AWAITING_RECONNECT) return settled(await this.#holdForReconnect(job));
     if (preflight === PLATFORM_SWITCHED_OFF) return settled(await this.#holdSwitchedOff(job));
+    if (preflight === TIKTOK_OPTIONS_MISSING) return settled(await this.#holdForOptions(job));
+    if (preflight === TIKTOK_OPTIONS_TOO_LATE) return settled(await this.#holdWithoutOptions(job));
     if (preflight === RECONNECT_TOO_LATE) {
       return settled(
         await this.#fail(job, 'NOT_CONNECTED', RECONNECT_REQUIRED_CODE, null, PREFLIGHT),
@@ -2189,6 +2204,103 @@ export class PublishPipelineService {
     });
   }
 
+  /**
+   * D-538 (owner, #82) — WAIT FOR THE TIKTOK OPTIONS. Nothing was sent and
+   * nothing was attempted, exactly as a reconnect hold: no attempt row, the
+   * attempt count untouched, no failure class, no notice. The job goes back to
+   * QUEUED with `held.tiktok_options_missing` and is looked at again after the
+   * reconnect interval — or just after its lateness deadline, whichever comes
+   * first. Once someone completes the panel, the next look sends it.
+   */
+  async #holdForOptions(job: PublishJob): Promise<ExecuteResult> {
+    const now = this.#clock.now().getTime();
+    const deadline = job.scheduledAtUtc.getTime() + this.#lateness();
+    const next = Math.min(
+      now + this.#policy.dispatch.reconnectRecheckSeconds * 1_000,
+      deadline + 1_000,
+    );
+    await this.#db.publishJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'QUEUED',
+        claimedAt: null,
+        failureClass: null,
+        failureCode: TIKTOK_OPTIONS_HELD_CODE,
+        nextAttemptAt: new Date(Math.max(next, now + 1_000)),
+      },
+    });
+    if (job.failureCode !== TIKTOK_OPTIONS_HELD_CODE) {
+      await writeAuditEvent(this.#db, this.#workspaceId, {
+        action: 'social.post.held',
+        actorType: 'SYSTEM',
+        resourceType: 'PublishJob',
+        resourceId: job.id,
+        brandId: job.brandId,
+        after: { status: 'QUEUED', reason: 'tiktok_options_missing', provider: job.provider },
+      });
+    }
+    return { jobId: job.id, status: 'QUEUED', failureClass: null, externalPostId: null };
+  }
+
+  /**
+   * D-538 — THE LATENESS DEADLINE PASSED AND THE OPTIONS ARE STILL NOT CHOSEN.
+   * Held exactly as D-531 holds a job whose platform was switched off: this
+   * job is CANCELLED with `held.tiktok_options_missing` (no attempt, no
+   * FAILED, no notice, a SYSTEM audit), and if nothing of the post is left to
+   * send, the post goes back to PLANNED on its day with its quota refunded and
+   * its time kept as its proposal; someone completes the panel and schedules
+   * it again. If another channel still has its own job, the post's state
+   * follows its jobs.
+   */
+  async #holdWithoutOptions(job: PublishJob): Promise<ExecuteResult> {
+    const now = this.#clock.now();
+    const mine = await this.#db.publishJob.updateMany({
+      where: {
+        id: job.id,
+        workspaceId: this.#workspaceId,
+        status: 'PUBLISHING',
+        claimedAt: job.claimedAt,
+      },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: now,
+        completedAt: now,
+        nextAttemptAt: null,
+        failureClass: null,
+        failureCode: TIKTOK_OPTIONS_HELD_CODE,
+      },
+    });
+    if (mine.count !== 1) {
+      const current = await this.#db.publishJob.findFirst({
+        where: { id: job.id, workspaceId: this.#workspaceId },
+      });
+      return {
+        jobId: job.id,
+        status: current?.status ?? job.status,
+        failureClass: current?.failureClass ?? null,
+        externalPostId: current?.externalPostId ?? null,
+      };
+    }
+    await writeAuditEvent(this.#db, this.#workspaceId, {
+      action: 'social.post.cancelled',
+      actorType: 'SYSTEM',
+      resourceType: 'PublishJob',
+      resourceId: job.id,
+      brandId: job.brandId,
+      after: { status: 'CANCELLED', reason: 'tiktok_options_missing', provider: job.provider },
+    });
+    const jobs = await this.#db.publishJob.findMany({
+      where: { workspaceId: this.#workspaceId, calendarSlotId: job.calendarSlotId },
+      select: { status: true },
+    });
+    if (jobs.every((candidate) => candidate.status === 'CANCELLED')) {
+      await this.#holdPost(job);
+    } else {
+      await this.#syncLifecycle(job);
+    }
+    return { jobId: job.id, status: 'CANCELLED', failureClass: null, externalPostId: null };
+  }
+
   async #holdForReconnect(job: PublishJob): Promise<ExecuteResult> {
     const now = this.#clock.now().getTime();
     const deadline = job.scheduledAtUtc.getTime() + this.#lateness();
@@ -2316,6 +2428,30 @@ export class PublishPipelineService {
 
     const lateByMs = this.#clock.now().getTime() - job.scheduledAtUtc.getTime();
     const tooLate = lateByMs > this.#lateness();
+
+    /*
+     * D-538 (owner, #82): A TIKTOK POST WITHOUT ITS OPTIONS IS HELD, NOT SENT
+     * AND NOT FAILED. The Studio requires them only when the brand has a
+     * TikTok account; an account connected after the post was scheduled leaves
+     * it without them. The same check the adapter makes before any call, made
+     * here first so the post waits instead of failing. Before the account is
+     * looked at, so an account problem cannot turn the hold into a failure.
+     */
+    if (job.provider === 'TIKTOK') {
+      const variant = await this.#db.contentVariant.findFirst({
+        where: { id: job.contentVariantId, workspaceId: this.#workspaceId },
+        select: { platformOptions: true },
+      });
+      const forcedPrivate =
+        capabilitiesFor(this.#policy, job.provider).forcedAudience === 'private';
+      if (
+        variant &&
+        tiktokOptionsProblems(readTikTokOptions(variant.platformOptions), null, forcedPrivate)
+          .length > 0
+      ) {
+        return tooLate ? TIKTOK_OPTIONS_TOO_LATE : TIKTOK_OPTIONS_MISSING;
+      }
+    }
 
     const connection = await this.#db.socialConnection.findFirst({
       where: { id: job.socialConnectionId, workspaceId: this.#workspaceId },

@@ -1983,6 +1983,15 @@ const publishingCapabilitySchema = z.object({
    * token lasts about 60 days. Null: `dispatch.expiringSoonHours`.
    */
   expiringSoonHours: z.number().int().min(1).max(2_160).nullable().default(null),
+  /**
+   * CONNECTORS C — EVERY POST GOES OUT TO THIS AUDIENCE, whatever the author
+   * chose. `'private'` while TikTok has not audited the app: TikTok makes an
+   * unaudited client's posts "Only me" (developers.tiktok.com/docs/en/
+   * content-sharing-guidelines), so the post is sent that way and the Studio
+   * offers only that. Going live after the audit is setting this to null —
+   * configuration, not code (D-505).
+   */
+  forcedAudience: z.enum(['private']).nullable().default(null),
 });
 
 const publishingSchema = z.object({
@@ -2118,6 +2127,13 @@ const publishingSchema = z.object({
        * until the retention purge).
        */
       maxAttempts: z.number().int().min(1).max(100).default(10),
+      /**
+       * CONNECTORS C — how far a signed delivery's own timestamp may be from
+       * our clock (TikTok's `TikTok-Signature: t=…`). Older or newer is refused
+       * even with a good signature, so a captured delivery cannot be replayed
+       * later. TikTok names no window; five minutes is ours.
+       */
+      signatureToleranceSeconds: z.number().int().min(30).max(3_600).default(300),
     })
     .default({}),
 });

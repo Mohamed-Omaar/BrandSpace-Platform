@@ -619,6 +619,71 @@ export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
     noteAr:
       'ينشر على حسابات إنستغرام الاحترافية المرتبطة بصفحة فيسبوك. يستخدم معرّف تطبيق فيسبوك ومفتاحه السري، لذا احفظ فيسبوك أولًا؛ ويجري الاختبار من إدخال فيسبوك.',
   },
+  /*
+   * CONNECTORS C — TIKTOK (D-505). One TikTok developer app: its client key
+   * and client secret. The secret also signs TikTok's webhook deliveries. The
+   * API version, what may be published, and `forcedAudience` (every post
+   * "Only me" until TikTok audits the app) are in the publishing
+   * configuration, not here.
+   */
+  {
+    providerKey: 'tiktok',
+    displayNameEn: 'TikTok (developer app)',
+    displayNameAr: 'TikTok (تطبيق المطوّر)',
+    category: 'social',
+    supportedEnvironments: ['DEVELOPMENT', 'STAGING', 'PRODUCTION'],
+    capabilities: {
+      oauth: true,
+      publish: true,
+      media: true,
+      analytics: false,
+      tokenRefresh: true,
+      webhooks: true,
+    },
+    credentialFields: [
+      {
+        key: 'clientSecret',
+        labelEn: 'Client secret',
+        labelAr: 'المفتاح السري للعميل',
+        secret: true,
+        required: true,
+        helpEn:
+          'From the TikTok app’s page on developers.tiktok.com. Also checks every webhook delivery from TikTok.',
+        helpAr:
+          'من صفحة التطبيق على developers.tiktok.com. ويُستخدم أيضًا للتحقق من كل ما يصل من TikTok عبر الويب هوك.',
+      },
+    ],
+    settingFields: [
+      {
+        key: 'appId',
+        labelEn: 'Client key',
+        labelAr: 'مفتاح العميل',
+        secret: false,
+        required: true,
+        helpEn: 'The TikTok app’s client key. The sandbox has its own key and secret.',
+        helpAr: 'مفتاح العميل لتطبيق TikTok. لبيئة الاختبار (Sandbox) مفتاح وسرّ خاصان بها.',
+      },
+      {
+        key: 'redirectUri',
+        labelEn: 'OAuth redirect URL',
+        labelAr: 'رابط إعادة التوجيه (OAuth)',
+        secret: false,
+        required: false,
+        copyable: true,
+        generated: true,
+        kind: 'url',
+        helpEn: 'Add this to the TikTok app’s Login Kit redirect URIs.',
+        helpAr: 'أضف هذا الرابط إلى روابط إعادة التوجيه في Login Kit لتطبيق TikTok.',
+      },
+    ],
+    adapterAvailable: true,
+    testable: true,
+    developmentOnly: false,
+    noteEn:
+      'Publishes videos to TikTok accounts through the Content Posting API. Test asks TikTok for a client token with this client key and secret; no customer account is touched. Until TikTok audits the app, every post is visible only to its owner.',
+    noteAr:
+      'ينشر مقاطع الفيديو على حسابات TikTok عبر واجهة نشر المحتوى. زر الاختبار يطلب من TikTok رمز عميل بهذا المفتاح والسرّ، دون لمس أي حساب لعميل. وإلى أن تراجع TikTok التطبيق، يظهر كل منشور لصاحب الحساب وحده.',
+  },
   {
     providerKey: 'mock',
     displayNameEn: 'Deterministic social connectors (development)',

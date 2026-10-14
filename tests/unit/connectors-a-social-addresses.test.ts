@@ -53,7 +53,7 @@ describe('socialPlatformAddresses', () => {
 
   it('an address is live exactly when its route is in this build (LIVE_SOCIAL_ADDRESS_KEYS)', () => {
     // Step B registered Meta's webhook, deauthorize and data-deletion routes;
-    // TikTok's webhook arrives with step C.
+    // step C registered TikTok's webhook.
     expect(
       Object.fromEntries(
         Object.entries(LIVE_SOCIAL_ADDRESS_KEYS).map(([key, live]) => [key, [...live]]),
@@ -61,7 +61,7 @@ describe('socialPlatformAddresses', () => {
     ).toEqual({
       facebook: ['redirectUri', 'webhookUrl', 'deauthorizeUrl', 'dataDeletionUrl'],
       instagram: ['redirectUri'],
-      tiktok: ['redirectUri'],
+      tiktok: ['redirectUri', 'webhookUrl'],
       x: ['redirectUri'],
     });
     for (const platform of staging) {
@@ -74,7 +74,7 @@ describe('socialPlatformAddresses', () => {
     const tiktokWebhook = staging
       .find((platform) => platform.providerKey === 'tiktok')!
       .addresses.find((address) => address.key === 'webhookUrl');
-    expect(tiktokWebhook?.live).toBe(false);
+    expect(tiktokWebhook?.live).toBe(true);
   });
 
   it('every live inbound address is a route the API registers', () => {
@@ -94,11 +94,12 @@ describe('socialPlatformAddresses', () => {
     }
   });
 
-  it('the Hub lists only providers with an adapter: Meta since step B, and the development double', () => {
+  it('the Hub lists only providers with an adapter: Meta since step B, TikTok since step C, and the development double', () => {
     const social = INTEGRATION_DEFINITIONS.filter((definition) => definition.category === 'social');
     expect(social.map((definition) => definition.providerKey)).toEqual([
       'facebook',
       'instagram',
+      'tiktok',
       'mock',
     ]);
     expect(social.every((definition) => definition.adapterAvailable)).toBe(true);
@@ -106,6 +107,10 @@ describe('socialPlatformAddresses', () => {
     const instagram = social.find((definition) => definition.providerKey === 'instagram')!;
     expect(instagram.sharesCredentialWith).toBe('facebook');
     expect(instagram.credentialFields).toEqual([]);
+    // TikTok holds its own client secret, which also signs its webhooks.
+    const tiktok = social.find((definition) => definition.providerKey === 'tiktok')!;
+    expect(tiktok.credentialFields.map((field) => field.key)).toEqual(['clientSecret']);
+    expect(tiktok.testable).toBe(true);
   });
 });
 

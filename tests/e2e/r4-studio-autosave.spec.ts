@@ -261,6 +261,24 @@ test.describe('Round 4 · 3.1 — the server saves as typed only what a save lea
       .toBe('IN_REVIEW');
     await page.reload();
     await expect(page.getByTestId('editor-in-review-warning')).toBeVisible();
+    /*
+     * WAIT FOR THE PAGE TO FINISH LOADING ITS SCRIPTS (owner, #82). The notice
+     * is server-rendered and shows before React has hydrated; a submit in that
+     * window is the browser's own form post, not the action call this test
+     * checks, and it waits for a `next-action` answer that never comes. React
+     * marks a hydrated element with its props key, so the form having one is
+     * the page being ready. (The plain post is safe on its own — see D-539.)
+     */
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const form = document.querySelector('form[data-testid="content-variant"]');
+            return form !== null && Object.keys(form).some((key) => key.startsWith('__reactProps'));
+          }),
+        { timeout: 30_000 },
+      )
+      .toBe(true);
 
     /*
      * What a late or hand-built autosave would carry: the panel's own form,

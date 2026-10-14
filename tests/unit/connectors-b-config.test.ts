@@ -17,6 +17,7 @@ type Publishing = {
     purgeBatchSize: number;
     processBatchSize: number;
     maxAttempts: number;
+    signatureToleranceSeconds: number;
   };
 };
 
@@ -29,7 +30,17 @@ describe('connectors B · publishing.inbound — how long verified deliveries ar
       purgeBatchSize: 500,
       processBatchSize: 50,
       maxAttempts: 10,
+      // Connectors C: a signed delivery's timestamp may be five minutes off.
+      signatureToleranceSeconds: 300,
     });
+  });
+
+  it('connectors C · bounds the signature timestamp tolerance to 30 s – 1 h', () => {
+    expect(
+      publishing({ inbound: { signatureToleranceSeconds: 30 } }).inbound.signatureToleranceSeconds,
+    ).toBe(30);
+    expect(() => publishing({ inbound: { signatureToleranceSeconds: 29 } })).toThrow();
+    expect(() => publishing({ inbound: { signatureToleranceSeconds: 3_601 } })).toThrow();
   });
 
   it('bounds how many deliveries are acted on per pass, and how often one is tried', () => {

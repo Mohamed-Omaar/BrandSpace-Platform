@@ -1805,6 +1805,49 @@ export const messages = {
     'studio.fit.chipCant': 'لا يمكن نشر {format} على {channel}.',
     'studio.fit.switchAndAdd': 'انتقل إلى {format} وأضف {channel}',
     'studio.connect.line': 'اربط {channels} لنشر هذا المنشور.',
+    'studio.tiktok.title': 'إعدادات منشور TikTok',
+    'studio.tiktok.postingAs': 'سيُنشر على {names}.',
+    'studio.tiktok.and': '، ',
+    'studio.tiktok.noAccount': 'اربط حساب TikTok لتختار من يمكنه رؤية هذا المنشور.',
+    'studio.tiktok.cannotPost': 'تفيد TikTok بأن {name} لا يستطيع النشر الآن. حاول لاحقًا.',
+    'studio.tiktok.unavailable':
+      'تعذّرت قراءة إعدادات {name} من TikTok. أعد تحميل الصفحة للمحاولة مجددًا.',
+    'studio.tiktok.forcedPrivate':
+      'إلى أن تراجع TikTok تطبيق Brandspace، يظهر كل منشور على TikTok لصاحب الحساب وحده.',
+    'studio.tiktok.privacy': 'من يمكنه رؤية هذا المنشور',
+    'studio.tiktok.privacyChoose': 'اختر…',
+    'studio.tiktok.privacy.PUBLIC_TO_EVERYONE': 'الجميع',
+    'studio.tiktok.privacy.MUTUAL_FOLLOW_FRIENDS': 'الأصدقاء',
+    'studio.tiktok.privacy.FOLLOWER_OF_CREATOR': 'المتابعون',
+    'studio.tiktok.privacy.SELF_ONLY': 'أنا فقط',
+    'studio.tiktok.allow': 'السماح للآخرين',
+    'studio.tiktok.comment': 'التعليق',
+    'studio.tiktok.duet': 'الثنائي (Duet)',
+    'studio.tiktok.stitch': 'الدمج (Stitch)',
+    'studio.tiktok.lockedByCreator': 'مُعطّل في إعدادات TikTok لهذا الحساب.',
+    'studio.tiktok.disclose': 'الإفصاح عن محتوى المنشور',
+    'studio.tiktok.discloseHint':
+      'أعلِم الآخرين بأن هذا المنشور يروّج لعلامة تجارية أو منتج أو خدمة.',
+    'studio.tiktok.yourBrand': 'علامتك التجارية',
+    'studio.tiktok.yourBrandHint':
+      'تروّج لنفسك أو لعملك. ستضع TikTok على المنشور وسم «محتوى ترويجي».',
+    'studio.tiktok.branded': 'محتوى ممول',
+    'studio.tiktok.brandedHint':
+      'تروّج لعلامة تجارية أو جهة أخرى. ستضع TikTok على المنشور وسم «شراكة مدفوعة».',
+    'studio.tiktok.brandedPrivate': 'لا يمكن أن يظهر المحتوى الممول لصاحب الحساب وحده.',
+    'studio.tiktok.maxVideo': 'يمكن أن تصل مدة الفيديو على هذا الحساب إلى {minutes} دقيقة.',
+    'studio.tiktok.consent': 'بالنشر، فإنك توافق على {music} لدى TikTok.',
+    'studio.tiktok.consentBranded': 'بالنشر، فإنك توافق على {branded} و{music} لدى TikTok.',
+    'studio.tiktok.musicUsage': 'تأكيد استخدام الموسيقى',
+    'studio.tiktok.brandedPolicy': 'سياسة المحتوى الممول',
+    'studio.tiktok.problem.privacy_level_missing': 'اختر من يمكنه رؤية هذا المنشور قبل نشره.',
+    'studio.tiktok.problem.privacy_level_not_offered':
+      'هذا الحساب لا يتيح هذا الجمهور الآن. اختر مجددًا.',
+    'studio.tiktok.problem.disclosure_incomplete':
+      'حدّد إن كان المنشور لعلامتك التجارية أو محتوى ممولًا أو كليهما.',
+    'studio.tiktok.problem.branded_content_private':
+      'لا يمكن أن يظهر المحتوى الممول لصاحب الحساب وحده.',
+    'studio.tiktok.problem.creator_cannot_post': 'لا يستطيع حساب TikTok هذا النشر الآن.',
     'studio.connect.link': 'ربط الحسابات',
     'studio.connect.unavailable': 'لا يمكن ربط {channels} بعد.',
     'upload.rules': '{formats} · حتى {size}',
@@ -2283,6 +2326,7 @@ export const messages = {
     'publishing.failure.unknown': 'ردّ غير متوقع من المنصة.',
     /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
     'publishing.code.preflight.not_connected': 'الحساب لم يعد متصلًا. أعد ربطه ثم أعد المحاولة.',
+    'publishing.code.held.tiktok_options_missing': 'اختر من يمكنه رؤية المنشور',
     'publishing.code.preflight.awaiting_reconnect':
       'بانتظار إعادة ربط الحساب. أعد ربطه ليُنشر المنشور؛ وإن لم يُعد ربطه في الوقت المناسب فلن يُرسل إلى هذا الحساب.',
     'publishing.code.preflight.reconnect_required':
@@ -2299,6 +2343,20 @@ export const messages = {
       'تحقّقنا من المنصة ولم نجد المنشور. لم يُنشر شيء مرتين.',
     'publishing.code.recovery.claim_expired':
       'انقطعت محاولة سابقة. أُعيد المنشور إلى قائمة الانتظار بأمان.',
+    'publishing.code.tiktok.privacy_level_missing':
+      'لم يُحدَّد من يمكنه رؤية منشور TikTok. اختره في الاستوديو ثم أعد المحاولة.',
+    'publishing.code.tiktok.privacy_level_not_offered':
+      'حساب TikTok لم يعد يتيح الجمهور المختار. اختر جمهورًا آخر في الاستوديو.',
+    'publishing.code.tiktok.disclosure_incomplete':
+      'الإفصاح غير مكتمل. حدّد نوع الترويج في الاستوديو.',
+    'publishing.code.tiktok.branded_content_private':
+      'لا يمكن نشر المحتوى الممول لصاحب الحساب وحده.',
+    'publishing.code.tiktok.video_too_long_for_creator':
+      'الفيديو أطول مما يسمح به حساب TikTok هذا.',
+    'publishing.code.tiktok.photo_needs_verified_url':
+      'منشورات الصور على TikTok غير متاحة بعد لهذه المساحة.',
+    'publishing.code.tiktok.spam_risk_too_many_posts':
+      'بلغ حساب TikTok حد النشر اليومي. سنعيد المحاولة لاحقًا.',
     'nav.notifications': 'الإشعارات',
 
     'content.status.CHANGES_REQUESTED': 'مطلوب تعديل',
@@ -5903,6 +5961,49 @@ export const messages = {
     'studio.fit.chipCant': '{channel} can’t post a {format}.',
     'studio.fit.switchAndAdd': 'Switch to {format} and add {channel}',
     'studio.connect.line': 'Connect {channels} to publish this post.',
+    'studio.tiktok.title': 'TikTok post settings',
+    'studio.tiktok.postingAs': 'Posting to {names}.',
+    'studio.tiktok.and': ', ',
+    'studio.tiktok.noAccount': 'Connect a TikTok account to choose who can see this post.',
+    'studio.tiktok.cannotPost': 'TikTok says {name} can’t post right now. Try again later.',
+    'studio.tiktok.unavailable':
+      'We couldn’t read {name}’s settings from TikTok. Reload the page to try again.',
+    'studio.tiktok.forcedPrivate':
+      'Until TikTok reviews the Brandspace app, every TikTok post is visible only to the account owner.',
+    'studio.tiktok.privacy': 'Who can see this post',
+    'studio.tiktok.privacyChoose': 'Choose…',
+    'studio.tiktok.privacy.PUBLIC_TO_EVERYONE': 'Everyone',
+    'studio.tiktok.privacy.MUTUAL_FOLLOW_FRIENDS': 'Friends',
+    'studio.tiktok.privacy.FOLLOWER_OF_CREATOR': 'Followers',
+    'studio.tiktok.privacy.SELF_ONLY': 'Only me',
+    'studio.tiktok.allow': 'Allow others to',
+    'studio.tiktok.comment': 'Comment',
+    'studio.tiktok.duet': 'Duet',
+    'studio.tiktok.stitch': 'Stitch',
+    'studio.tiktok.lockedByCreator': 'Turned off in this account’s TikTok settings.',
+    'studio.tiktok.disclose': 'Disclose post content',
+    'studio.tiktok.discloseHint': 'Let others know this post promotes a brand, product or service.',
+    'studio.tiktok.yourBrand': 'Your brand',
+    'studio.tiktok.yourBrandHint':
+      'You’re promoting yourself or your own business. TikTok will label the post “Promotional content”.',
+    'studio.tiktok.branded': 'Branded content',
+    'studio.tiktok.brandedHint':
+      'You’re promoting another brand or a third party. TikTok will label the post “Paid partnership”.',
+    'studio.tiktok.brandedPrivate': 'Branded content can’t be visible only to the account owner.',
+    'studio.tiktok.maxVideo': 'Videos on this account can be up to {minutes} min long.',
+    'studio.tiktok.consent': 'By posting, you agree to TikTok’s {music}.',
+    'studio.tiktok.consentBranded': 'By posting, you agree to TikTok’s {branded} and {music}.',
+    'studio.tiktok.musicUsage': 'Music Usage Confirmation',
+    'studio.tiktok.brandedPolicy': 'Branded Content Policy',
+    'studio.tiktok.problem.privacy_level_missing':
+      'Choose who can see this post before it goes out.',
+    'studio.tiktok.problem.privacy_level_not_offered':
+      'This account doesn’t offer that audience now. Choose again.',
+    'studio.tiktok.problem.disclosure_incomplete':
+      'Say whether it’s your brand, branded content, or both.',
+    'studio.tiktok.problem.branded_content_private':
+      'Branded content can’t be visible only to the account owner.',
+    'studio.tiktok.problem.creator_cannot_post': 'This TikTok account can’t post right now.',
     'studio.connect.link': 'Connect accounts',
     'studio.connect.unavailable': '{channels} can’t be connected yet.',
     'upload.rules': '{formats} · up to {size}',
@@ -6399,6 +6500,7 @@ export const messages = {
     /* Phase 8 — our own pre-flight refusals, which never reached a platform. */
     'publishing.code.preflight.not_connected':
       'The account is no longer connected. Reconnect it and try again.',
+    'publishing.code.held.tiktok_options_missing': 'Choose who can see this post',
     'publishing.code.preflight.awaiting_reconnect':
       'Waiting for the account to be reconnected. Reconnect it and this post goes out; if it is not reconnected in time, it is not sent to this account.',
     'publishing.code.preflight.reconnect_required':
@@ -6417,6 +6519,20 @@ export const messages = {
       'We checked with the platform and the post is not there. Nothing was published twice.',
     'publishing.code.recovery.claim_expired':
       'An earlier attempt was interrupted. The post was safely put back in the queue.',
+    'publishing.code.tiktok.privacy_level_missing':
+      'No one was chosen to see this TikTok post. Choose who can see it in the Studio, then retry.',
+    'publishing.code.tiktok.privacy_level_not_offered':
+      'The TikTok account no longer offers the chosen audience. Choose another in the Studio.',
+    'publishing.code.tiktok.disclosure_incomplete':
+      'The disclosure is incomplete. Say what the post promotes in the Studio.',
+    'publishing.code.tiktok.branded_content_private':
+      'Branded content can’t be posted as visible only to the account owner.',
+    'publishing.code.tiktok.video_too_long_for_creator':
+      'The video is longer than this TikTok account may post.',
+    'publishing.code.tiktok.photo_needs_verified_url':
+      'TikTok photo posts aren’t available here yet.',
+    'publishing.code.tiktok.spam_risk_too_many_posts':
+      'The TikTok account reached its daily posting limit. We’ll try again later.',
     'nav.notifications': 'Notifications',
 
     'content.status.CHANGES_REQUESTED': 'Changes requested',
@@ -8396,6 +8512,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   CHANNELS_NOT_CONNECTABLE: {
     en: 'None of this post’s channels can be connected yet, so it can’t be scheduled or published. Its proposed time is kept.',
     ar: 'لا يمكن ربط أيٍّ من قنوات هذا المنشور بعد، لذا لا يمكن جدولته أو نشره. ووقته المقترح محفوظ.',
+  },
+  // Connectors C (D-505 O4) — a TikTok post goes out only with its options chosen.
+  TIKTOK_OPTIONS_INCOMPLETE: {
+    en: 'Finish the TikTok post settings first: choose who can see the post, and complete the disclosure if it is on.',
+    ar: 'أكمل إعدادات منشور TikTok أولًا: اختر من يمكنه رؤية المنشور، وأكمل الإفصاح إن كان مفعّلًا.',
   },
   // Q9 (D-332) — every account for one of the post's channels was revoked.
   CHANNEL_DISCONNECTED: {

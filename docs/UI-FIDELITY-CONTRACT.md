@@ -2332,6 +2332,22 @@ the URL in the mono font, and a **Copy** button (`CopyValue`), which is the desi
 small button plus a visually hidden polite live region that announces "Copied". No new colour, font,
 shadow or interaction model. Arabic and English copy are inline, as on the Hub's other rows.
 
+### 6.3.67 Connectors C — the TikTok post options in the Studio (D-505 O4, D-536)
+
+The prototype draws no TikTok options and TikTok's content-sharing guidelines require them, so this is
+an **APPROVED DESIGN-SYSTEM EXTENSION (§4.2)** inside the Studio's variant form (words tab, TikTok
+variants only). Composed from what the Studio already draws: the caption's field and label
+(`bsp-st-field`, `bsp-st-label`), the Studio's select (`bsp-fdis-field` / `bs-control
+bsp-fdis-control`), the Settings switch row (`bsp-tg-row` with the `.tgl` switch, written out rather
+than `CheckboxRow` because these switches are controlled and can be locked) and the hint line
+(`bsp-st-hint`). It shows the creator's TikTok nickname, "Who can see this post" with no default and
+only the audiences the accounts offer, Comment / Duet / Stitch (Duet and Stitch for video only; locked
+off where the creator turned them off), disclosure with "Your brand" and "Branded content", the first
+problem in one line, and the consent line, whose two TikTok page names are links opening in a new tab
+(D-537) in the hint line's existing link colour (`.bsp-st-connect a`). No new colour, font, shadow or
+interaction model; ar and en.
+`tests/e2e/c-tiktok-options.spec.ts` covers both languages.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The
