@@ -154,21 +154,21 @@ Q13, D-481) or a schema default.
 These are pinned by `tests/unit/pr-f-production-config.test.ts` ("the values the owner confirmed
 on the #79 review"); changing one fails that test.
 
-| Value                     | Where                   | Confirmed                                                                                                                                           |
-| ------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `monthlyCredits`          | `plans.json`, `starter` | **500.** During the trial Home reads "n of" the trial grant (200), not of 500 (D-514).                                                              |
-| `quotas.workspaces`       | `plans.json`, `starter` | **1.** A trial owner can hold one workspace.                                                                                                        |
-| `industries` (12)         | `onboarding.json`       | The twelve names and keys as written, with their question sets.                                                                                     |
-| `recommendedHashtags`     | `content.json`          | instagram 3–5, tiktok 3–5, linkedin 1–3, x 1–2. Facebook has no entry: the `content` platforms list has none (instagram, linkedin, x, tiktok only). |
-| `calendar.suggestedTimes` | `content.json`          | EG, SA and AE: 10:00, 16:00, 21:00. Shown as "Suggested time", never "best time" (D-329).                                                           |
+| Value                     | Where                   | Confirmed                                                                                                                                                                                            |
+| ------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `monthlyCredits`          | `plans.json`, `starter` | **500.** During the trial Home reads "n of" the trial grant (200), not of 500 (D-514).                                                                                                               |
+| `quotas.workspaces`       | `plans.json`, `starter` | **1.** A trial owner can hold one workspace.                                                                                                                                                         |
+| `industries` (12)         | `onboarding.json`       | The twelve names and keys as written, with their question sets.                                                                                                                                      |
+| `recommendedHashtags`     | `content.json`          | instagram 3–5, tiktok 3–5. Facebook has no range. The `content` platforms list is instagram, facebook and tiktok only: LinkedIn and X are left out of "Post to" until their connectors ship (D-554). |
+| `calendar.suggestedTimes` | `content.json`          | EG, SA and AE: 10:00, 16:00, 21:00. Shown as "Suggested time", never "best time" (D-329).                                                                                                            |
 
 ### 5.1b Decided by the owner (#81 review)
 
 Pinned by `tests/unit/pr-f-production-config.test.ts` ("the values the owner decided on the #81 review").
 
-| Value       | Where          | Decided                                                                                                                                                                                                                                                                                                                                                 |
-| ----------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `safeZones` | `content.json` | instagram and tiktok: `top` 13, `bottom` 22, `end` 16 (percent of a 9:16 frame). **DESIGN GUIDANCE** — the bands the approved prototype draws (`Main.dc.html` lines 462 and 489), not values Meta or TikTok publish; replace them with the platforms' own templates when the owner has them (D-500, D-505). linkedin and x have none (no 9:16 preview). |
+| Value       | Where          | Decided                                                                                                                                                                                                                                                                                                                        |
+| ----------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `safeZones` | `content.json` | instagram and tiktok: `top` 13, `bottom` 22, `end` 16 (percent of a 9:16 frame). **DESIGN GUIDANCE** — the bands the approved prototype draws (`Main.dc.html` lines 462 and 489), not values Meta or TikTok publish; replace them with the platforms' own templates when the owner has them (D-500, D-505). facebook has none. |
 
 **Also decided on the #81 review** (pinned by the same test block):
 

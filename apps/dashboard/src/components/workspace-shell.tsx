@@ -15,6 +15,7 @@ import {
   PrototypeTopbarLink,
   PrototypeUserCard,
   Banner,
+  InfoIcon,
   StateMessage,
   type CustomerNavSection,
   type PrototypeCreateItem,
@@ -1119,6 +1120,21 @@ export function CustomerBanner({
   tone: Tone;
   children: ReactNode;
 }) {
+  /*
+   * D-556 (b): an information line draws as the prototype's purple hint card,
+   * never the design system's blue info tone (the prototype has no blue). The
+   * icon keeps the tone readable without its colour (WCAG 1.4.1).
+   */
+  if (tone === 'info') {
+    return (
+      <div role="status" data-testid="info-banner" className="bsp-hint-card">
+        <span aria-hidden="true" style={{ display: 'inline-flex', flexShrink: 0 }}>
+          <InfoIcon size={16} />
+        </span>
+        <span className="bsp-hint-card-t">{children}</span>
+      </div>
+    );
+  }
   return <Banner tone={tone}>{children}</Banner>;
 }
 

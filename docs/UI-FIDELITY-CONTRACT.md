@@ -2370,6 +2370,11 @@ walk, and wording fixes that change no layout:
 - **Nothing AI-only while no AI task can run (D-553)** and **a fresh workspace says "nothing yet" in
   words (D-555)**: the elements are left out or their wording changes; no layout changes, except
   that Home's figures row draws three cards instead of four when the AI credits card is left out.
+- **Information lines are the prototype's hint card, not the design system's blue (D-556 b, owner on
+  review).** The prototype has no blue; a customer information line (`CustomerBanner` tone `info`:
+  Intelligence's "no external data", Integrations' retry-after-reconnect and resume-set-up lines) now
+  reuses the prototype's own `.bsp-hint-card` (purple tint, `#3d2a74` text) with an info icon. A
+  reuse, not a new treatment; no layout changes.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 

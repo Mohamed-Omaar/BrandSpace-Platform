@@ -110,8 +110,6 @@ describe('the values the owner confirmed on the #79 review', () => {
       // #81: Facebook joins the content document with no recommended range.
       facebook: null,
       tiktok: { min: 3, max: 5 },
-      linkedin: { min: 1, max: 3 },
-      x: { min: 1, max: 2 },
     });
     const times = Object.fromEntries(
       (content.calendar.suggestedTimes ?? []).map((entry) => [entry.country, entry.times]),
@@ -134,19 +132,17 @@ describe('the values the owner decided on the #81 review', () => {
       instagram: { top: 13, bottom: 22, end: 16 },
       tiktok: { top: 13, bottom: 22, end: 16 },
       facebook: null,
-      linkedin: null,
-      x: null,
     });
   });
 
   it('Facebook is a content platform, with the limits its publishing entry enforces', () => {
     const content = parseConfigPayload('content', read('content.json'));
     const publishing = parseConfigPayload('publishing', read('publishing.json'));
+    // D-554 (owner, final walk): "Post to" offers only the channels the beta
+    // has a connector for; LinkedIn and X return with their connectors.
     expect(content.platforms.map((platform) => platform.key)).toEqual([
       'instagram',
       'facebook',
-      'linkedin',
-      'x',
       'tiktok',
     ]);
     const facebook = content.platforms.find((platform) => platform.key === 'facebook')!;

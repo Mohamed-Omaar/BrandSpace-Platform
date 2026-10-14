@@ -250,3 +250,24 @@ describe('small defects the walk found', () => {
     );
   });
 });
+
+describe('the owner’s answers on the final-walk review', () => {
+  it('an information line is the prototype’s purple hint card, never the blue info tone (D-556 b)', () => {
+    const shell = read('apps/dashboard/src/components/workspace-shell.tsx');
+    const banner = shell.slice(shell.indexOf('export function CustomerBanner('));
+    expect(banner).toMatch(/if \(tone === 'info'\) \{[\s\S]*className="bsp-hint-card"/);
+    expect(rule('.bsp-hint-card')).toContain('background: #f6f3ff;');
+    expect(rule('.bsp-hint-card')).not.toMatch(/#175cd3|#00adee/i);
+  });
+
+  it('"Post to" on the beta offers only channels with a connector (D-554)', () => {
+    const content = JSON.parse(read('docs/production-config/content.json')) as {
+      platforms: { key: string }[];
+    };
+    expect(content.platforms.map((platform) => platform.key)).toEqual([
+      'instagram',
+      'facebook',
+      'tiktok',
+    ]);
+  });
+});
