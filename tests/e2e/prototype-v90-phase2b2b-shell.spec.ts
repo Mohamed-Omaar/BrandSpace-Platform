@@ -436,7 +436,7 @@ test.describe('§8 motion — overlays (D-350)', () => {
     return `${style.animationName} ${style.animationDuration} ${style.animationDelay}`;
   };
 
-  test('MO5: a menu is glass, pops in as the prototype’s does, and it leaves inert', async ({
+  test('MO5: a menu is opaque, pops in as the prototype’s does, and it leaves inert', async ({
     page,
   }) => {
     await signIn(page);
@@ -445,12 +445,14 @@ test.describe('§8 motion — overlays (D-350)', () => {
     const menu = page.getByTestId('topbar-create-menu');
     await expect(menu).toBeVisible();
     // D-468: `[role="menu"]{animation:bsPop .18s cubic-bezier(.16,1,.3,1) both}`
-    // and `backdrop-filter: blur(22px) saturate(180%)` (Main.dc.html); the
-    // prototype's menus do not stagger their rows, so the rows carry no entrance.
+    // (Main.dc.html); the prototype's menus do not stagger their rows, so the
+    // rows carry no entrance. Final walk (owner, D-552): every overlay is fully
+    // opaque — solid white, no backdrop blur — where the prototype drew glass.
     expect(await menu.evaluate(anim)).toBe('bsp-pop 0.18s 0s');
-    expect(await menu.evaluate((el) => getComputedStyle(el).backdropFilter)).toBe(
-      'blur(22px) saturate(1.8)',
+    expect(await menu.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+      'rgb(255, 255, 255)',
     );
+    expect(await menu.evaluate((el) => getComputedStyle(el).backdropFilter)).toBe('none');
     const rows = await menu
       .locator(':scope > *')
       .evaluateAll((els) => els.map((el) => getComputedStyle(el).animationName));

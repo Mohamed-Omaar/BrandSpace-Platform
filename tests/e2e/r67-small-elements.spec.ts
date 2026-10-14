@@ -131,6 +131,8 @@ test.describe('review of #67 · the prototype’s small elements, from real data
     await expect(page.getByTestId('topbar-notifications-dot')).toHaveCount(0);
 
     // Final walk — with nothing unread the feed no longer offers the action.
+    // (Opened from Home: on the Notifications page the bell is that page.)
+    await page.goto(`${DASHBOARD_BASE_URL}/en/overview`);
     await page.getByTestId('topbar-notifications').click();
     await expect(page.getByTestId('notifications-feed')).toBeVisible();
     await expect(
