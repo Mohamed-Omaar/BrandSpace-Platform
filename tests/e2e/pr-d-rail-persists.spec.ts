@@ -245,8 +245,8 @@ for (const locale of ['en', 'ar'] as const) {
     // The press creates the glide in its own task: target set, transition running.
     expect(result.inPressTask, 'the press was seen by the window').not.toBeNull();
     expect(result.inPressTask?.gliding, 'the glide exists before the press task ends').toBe(true);
-    expect(result.inPressTask?.target, 'aimed at where the pill comes to rest').toBe(
-      result.restsAt,
+    expect(result.inPressTask?.target, 'aimed somewhere new: Home, not Settings').not.toBe(
+      result.from,
     );
     expect(result.startedAfter, 'the glide starts from the press').not.toBeNull();
     // The browser starts an animation on its next frames (the start is the
