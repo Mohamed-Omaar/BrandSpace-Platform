@@ -873,6 +873,7 @@ export const messages = {
     'assets.media.filters': 'تصفية',
     'assets.media.title': 'الوسائط',
     'assets.media.subtitle': 'صورك وفيديوهاتك، وصور تُولَّد على هوية علامتك.',
+    'assets.media.subtitleNoAi': 'صورك وفيديوهاتك وملفات علامتك.',
     'assets.media.more': 'خيارات أخرى',
     'assets.media.upload': 'رفع',
     'assets.storageLeft': 'متبقٍ {left} غيغابايت',
@@ -928,6 +929,7 @@ export const messages = {
     'assets.emptyGenerate': 'أنشئ صورة',
     'assets.emptyBody':
       'ارفع صور علامتك وشعاراتها وملفاتها المعتمدة. يُفحص كل ملف قبل أن يصبح متاحًا للاستخدام.',
+    'assets.emptyBodyNotScanned': 'ارفع صور علامتك وشعاراتها وملفاتها المعتمدة.',
     'assets.emptyFilteredTitle': 'لا نتائج',
     'assets.emptyFilteredBody': 'لا يوجد ملف يطابق ما بحثت عنه. جرّب تعديل البحث أو المرشّحات.',
     'assets.loading': 'جارٍ تحميل المكتبة…',
@@ -1032,6 +1034,7 @@ export const messages = {
     'bb.orbCenterTop': 'عقل',
     'bb.orbCenterBottom': 'العلامة',
     'bb.orbHint': 'اضغط على أي نقطة لفتح مجالها، أو على المنتصف لتسأل',
+    'bb.orbHintNoChat': 'اضغط على أي نقطة لفتح مجالها',
     'bb.orbOpenChat': 'افتح محادثة عقل العلامة',
     'bb.completion': 'الأسئلة الأساسية',
     'bb.answeredOf': 'أُجيب عن {answered} من {total}',
@@ -1088,6 +1091,9 @@ export const messages = {
     'bb.attention.expired_items': 'حقائق انتهت صلاحيتها',
     'bb.tabsLabel': 'أقسام عقل العلامة',
     'bb.pageSub': 'كل ما يعرفه Brandspace عن علامتك، ويكتب منه.',
+    'bb.pageSubNoAi': 'كل ما يعرفه Brandspace عن علامتك.',
+    'bb.leadNoAi':
+      'اجمع ما يعرفه فريقك عن العلامة في مكان واحد. كلما أكملت مجالات أكثر، اكتمل ملف علامتك.',
     'bb.lead':
       'تُكتب كل مسودة وكل فكرة من المعرفة المعتمدة هنا فقط. كلما أكملت مجالات أكثر، اقتربت المسودات من صوتك.',
     'bb.askBrand': 'اسأل العلامة',
@@ -1117,6 +1123,7 @@ export const messages = {
     'bb.waitingReview': 'بانتظار مراجعتك',
     'bb.usedBy': 'تستخدمها: المسودات والاستراتيجية والمساعد والمحادثة مع العلامة.',
     'bb.chatSubFacts': 'يجيب من {count} معلومة معتمدة',
+    'bb.chatSubFacts.one': 'يجيب من معلومة معتمدة واحدة',
     'bb.voice.sub': 'هذا ما يقرؤه الذكاء الاصطناعي قبل أن يكتب أي كلمة.',
     'bb.tab.knowledge': 'المعرفة',
     'bb.tab.look': 'المظهر والأسلوب',
@@ -1126,6 +1133,8 @@ export const messages = {
     'hint.close': 'إغلاق',
     'hint.brain':
       'عقل العلامة هو ما يعرف نشاطك. ابدأ بالأسئلة الناقصة أدناه، أو ارفع ملفًا مثل قائمة الطعام أو ملف الشركة، أو علّمه بنفسك في «تحدّث مع العلامة». كل مسودة تُكتب من الحقائق المعتمدة هنا فقط.',
+    'hint.brainNoChat':
+      'عقل العلامة هو ما يعرف نشاطك. ابدأ بالأسئلة الناقصة أدناه، أو ارفع ملفًا مثل قائمة الطعام أو ملف الشركة.',
     'hint.strategy':
       'تحوّل الاستراتيجية هدفك إلى خطة: محاور المحتوى، وموضوعات كل أسبوع، ورقم واحد تتابعه. يقترح Brandspace، وأنت تقبل أو تعدّل.',
     'bb.missingTitle': 'ما الذي ينقص',
@@ -1501,6 +1510,7 @@ export const messages = {
     'content.emptyAction': 'أنشئ منشورك الأول',
     'content.emptyBody':
       'اكتب وصفًا لما تريد نشره، وسيكتب الاستوديو صيغة لكل قناة اعتمادًا على عقل علامتك وحده.',
+    'content.emptyBodyManual': 'اكتب منشورًا لكل قناة، ثم أرسله للمراجعة.',
     'content.emptyFilteredTitle': 'لا نتائج',
     'content.emptyFilteredBody': 'لا توجد مسودة تطابق ما بحثت عنه. جرّب تعديل البحث أو المرشّحات.',
     'content.status.DRAFT': 'مسودة',
@@ -2879,6 +2889,7 @@ export const messages = {
     'intelligence.empty': 'لا توجد ملاحظات بعد',
     'intelligence.emptyBody':
       'حلّل فجوات المحتوى، أو اطلب شرحًا للأداء من شاشة التحليلات، لتظهر النتائج هنا.',
+    'intelligence.emptyBodyManual': 'تظهر هنا الملاحظات عن منشوراتك بعد نشرها.',
     'strategy.title': 'الاستراتيجية',
     'strategy.view.label': 'فترة الاستراتيجية',
     'strategy.view.current': 'الاستراتيجية الحالية',
@@ -3104,6 +3115,8 @@ export const messages = {
     'automations.empty': 'لا توجد أتمتة بعد',
     'automations.emptyBody':
       'تتولى الأتمتة الأعمال المتكررة عنك — تبدأ متوقفة، وتسألك قبل نشر أي شيء. اطلبها من المساعد أعلاه، أو ابنِها يدويًا.',
+    'automations.emptyBodyManual':
+      'تتولى الأتمتة الأعمال المتكررة عنك — تبدأ متوقفة، وتسألك قبل نشر أي شيء. ابنِها يدويًا.',
     'automations.runsEmpty': 'لم تعمل أي أتمتة بعد',
     'automations.runsEmptyBody': 'كل مرة تعمل فيها أتمتة، يظهر هنا ما فعلته ومتى.',
     'automations.create': 'قاعدة جديدة',
@@ -3862,7 +3875,9 @@ export const messages = {
     'setup.wz.ready.title': '{brand} جاهزة',
     'setup.wz.ready.body': 'ابدأ بواحدة من هذه، أو اذهب إلى الرئيسية.',
     'setup.wz.ready.facts': 'معلومة معتمدة',
+    'setup.wz.ready.facts.one': 'معلومة معتمدة',
     'setup.wz.ready.accounts': 'حساب مرتبط',
+    'setup.wz.ready.accounts.one': 'حساب مرتبط',
     'setup.wz.ready.goal': 'الهدف',
     'setup.wz.ready.ideas': 'أولى أفكارك',
     'setup.wz.ready.make': 'اصنعه',
@@ -4057,6 +4072,7 @@ export const messages = {
     'home.p.perfTitle': 'الأداء · آخر 28 يومًا',
     'home.p.reach': 'وصول',
     'home.p.waitingApproval': 'بانتظار موافقتك',
+    'home.p.waitingApprovalNone': 'لا شيء بانتظار موافقتك',
     'home.p.kSched': 'مجدولة',
     'home.p.kSchedSub': 'في الأسبوعين القادمين',
     'home.p.kWaiting': 'بانتظار موافقتك',
@@ -4064,6 +4080,9 @@ export const messages = {
     'home.p.kWaitingClear': 'لا شيء بانتظارك',
     'home.p.kPub': 'نُشرت',
     'home.p.kPubSub': 'آخر 28 يومًا · {count} قنوات',
+    'home.p.kPubSub.none': 'آخر 28 يومًا · لا توجد قنوات متصلة',
+    'home.p.kPubSub.one': 'آخر 28 يومًا · قناة واحدة',
+    'home.p.kPubSub.two': 'آخر 28 يومًا · قناتان',
     'home.p.kCred': 'رصيد الذكاء الاصطناعي',
     'home.p.kCredSub': 'من {total} · يتجدد {date}',
     'home.p.kCredSubTotal': 'من {total}',
@@ -5005,6 +5024,7 @@ export const messages = {
     'assets.media.filters': 'Filters',
     'assets.media.title': 'Media',
     'assets.media.subtitle': 'Your photos and videos, plus images generated on-brand.',
+    'assets.media.subtitleNoAi': 'Your photos, videos and brand files.',
     'assets.media.more': 'More options',
     'assets.media.upload': 'Upload',
     'assets.storageLeft': '{left} GB left',
@@ -5060,6 +5080,7 @@ export const messages = {
     'assets.emptyGenerate': 'Generate a visual',
     'assets.emptyBody':
       'Upload your brand photography, logos and approved files. Every file is scanned before it becomes available for use.',
+    'assets.emptyBodyNotScanned': 'Upload your brand photography, logos and approved files.',
     'assets.emptyFilteredTitle': 'No matches',
     'assets.emptyFilteredBody':
       'No file matches what you searched for. Try a different search or filter.',
@@ -5167,6 +5188,7 @@ export const messages = {
     'bb.orbCenterTop': 'Brand',
     'bb.orbCenterBottom': 'Brain',
     'bb.orbHint': 'Click a dot to open its area, or the centre to ask',
+    'bb.orbHintNoChat': 'Click a dot to open its area',
     'bb.orbOpenChat': 'Open Brand Brain chat',
     'bb.completion': 'Key questions',
     'bb.answeredOf': 'answered {answered} of {total}',
@@ -5223,6 +5245,9 @@ export const messages = {
     'bb.attention.expired_items': 'Facts past their end date',
     'bb.tabsLabel': 'Brand Brain sections',
     'bb.pageSub': 'Everything Brandspace knows about your brand, and writes from.',
+    'bb.pageSubNoAi': 'Everything Brandspace knows about your brand.',
+    'bb.leadNoAi':
+      'Keep what your team knows about the brand in one place. The more areas you fill, the more complete your brand profile.',
     'bb.lead':
       'Every draft and idea is written only from the approved knowledge here. The more areas you fill, the more drafts sound like you.',
     'bb.askBrand': 'Ask the brand',
@@ -5252,6 +5277,7 @@ export const messages = {
     'bb.waitingReview': 'Waiting for your review',
     'bb.usedBy': 'Used by: drafts, strategy, Copilot and brand chat.',
     'bb.chatSubFacts': 'Answers from {count} approved facts',
+    'bb.chatSubFacts.one': 'Answers from 1 approved fact',
     'bb.voice.sub': 'This is what the AI reads before it writes a word.',
     'bb.tab.knowledge': 'Knowledge',
     'bb.tab.look': 'Look & voice',
@@ -5261,6 +5287,8 @@ export const messages = {
     'hint.close': 'Close',
     'hint.brain':
       'Brand Brain is what knows your business. Start with the missing questions below, upload a file like your menu or company profile, or teach it yourself in “Talk with the brand”. Every draft is written only from the approved facts here.',
+    'hint.brainNoChat':
+      'Brand Brain is what knows your business. Start with the missing questions below, or upload a file like your menu or company profile.',
     'hint.strategy':
       'Strategy turns your goal into a plan: content pillars, weekly topics and one number to track. Brandspace suggests; you accept or change.',
     'bb.missingTitle': "What's missing",
@@ -5645,6 +5673,7 @@ export const messages = {
     'content.emptyAction': 'Create your first post',
     'content.emptyBody':
       'Describe what you want to post and the studio writes a version for each channel, from your Brand Brain and nothing else.',
+    'content.emptyBodyManual': 'Write a post for each channel, then send it for review.',
     'content.emptyFilteredTitle': 'No results',
     'content.emptyFilteredBody':
       'No draft matches what you searched for. Try a different search or filter.',
@@ -7080,6 +7109,8 @@ export const messages = {
     'intelligence.empty': 'No findings yet',
     'intelligence.emptyBody':
       'Analyse content gaps, or ask Analytics to explain performance, and the findings appear here.',
+    'intelligence.emptyBodyManual':
+      'Findings about your posts appear here once they are published.',
     'strategy.title': 'Strategy',
     'strategy.view.label': 'Strategy period',
     'strategy.view.current': 'This strategy',
@@ -7316,6 +7347,8 @@ export const messages = {
     'automations.empty': 'No automations yet',
     'automations.emptyBody':
       'Automations take repeat work off your hands — they start switched off and ask before anything goes out. Ask the Copilot above, or build one by hand.',
+    'automations.emptyBodyManual':
+      'Automations take repeat work off your hands — they start switched off and ask before anything goes out. Build one by hand.',
     'automations.runsEmpty': 'No automation has run yet',
     'automations.runsEmptyBody': 'Each time an automation runs, what it did and when appears here.',
     'automations.create': 'New rule',
@@ -8103,7 +8136,9 @@ export const messages = {
     'setup.wz.ready.title': '{brand} is ready',
     'setup.wz.ready.body': 'Start with one of these, or go to Home.',
     'setup.wz.ready.facts': 'approved facts',
+    'setup.wz.ready.facts.one': 'approved fact',
     'setup.wz.ready.accounts': 'accounts connected',
+    'setup.wz.ready.accounts.one': 'account connected',
     'setup.wz.ready.goal': 'goal',
     'setup.wz.ready.ideas': 'Your first ideas',
     'setup.wz.ready.make': 'Make it',
@@ -8296,6 +8331,7 @@ export const messages = {
     'home.p.perfTitle': 'Performance · last 28 days',
     'home.p.reach': 'reach',
     'home.p.waitingApproval': 'waiting for your approval',
+    'home.p.waitingApprovalNone': 'Nothing waiting for your approval',
     'home.p.kSched': 'Scheduled',
     'home.p.kSchedSub': 'next two weeks',
     'home.p.kWaiting': 'Waiting for you',
@@ -8303,6 +8339,9 @@ export const messages = {
     'home.p.kWaitingClear': 'Nothing waiting',
     'home.p.kPub': 'Published',
     'home.p.kPubSub': 'Last 28 days · {count} channels',
+    'home.p.kPubSub.none': 'Last 28 days · no channels connected',
+    'home.p.kPubSub.one': 'Last 28 days · 1 channel',
+    'home.p.kPubSub.two': 'Last 28 days · 2 channels',
     'home.p.kCred': 'AI credits',
     'home.p.kCredSub': 'of {total} · resets {date}',
     'home.p.kCredSubTotal': 'of {total}',
@@ -8917,8 +8956,9 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
     ar: 'تم حذف الملف. يمكن استعادته خلال فترة السماح.',
   },
   ASSET_VERSION_CREATED: {
-    en: 'New version uploaded. It is scanned before it replaces the current file.',
-    ar: 'تم رفع إصدار جديد. سيُفحص قبل أن يحل محل الملف الحالي.',
+    // Final walk (D-511): true whether or not files are scanned.
+    en: 'New version uploaded. It replaces the current file once it is ready.',
+    ar: 'تم رفع إصدار جديد. يحل محل الملف الحالي عندما يصبح جاهزًا.',
   },
   ASSET_VERSION_RESTORED: {
     en: 'Version restored as a new version. Nothing in the history was removed.',

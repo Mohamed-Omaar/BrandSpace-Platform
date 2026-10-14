@@ -129,6 +129,14 @@ test.describe('review of #67 · the prototype’s small elements, from real data
     await feed.getByTestId('notifications-mark-all').click();
     await page.waitForURL(/\/en\/notifications/);
     await expect(page.getByTestId('topbar-notifications-dot')).toHaveCount(0);
+
+    // Final walk — with nothing unread the feed no longer offers the action.
+    await page.getByTestId('topbar-notifications').click();
+    await expect(page.getByTestId('notifications-feed')).toBeVisible();
+    await expect(
+      page.getByTestId('notifications-feed').locator('[data-unread="true"]'),
+    ).toHaveCount(0);
+    await expect(page.getByTestId('notifications-mark-all')).toHaveCount(0);
   });
 });
 

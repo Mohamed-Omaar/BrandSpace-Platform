@@ -77,6 +77,7 @@ function lastNumber(text: string | null): number {
 }
 
 let openThreadId = '';
+let unreadNotificationId = '';
 
 test.beforeAll(async () => {
   const loaded = credentials();
@@ -107,14 +108,36 @@ test.beforeAll(async () => {
         body: `An open thread for the top bar ${randomUUID().slice(0, 6)}`,
       },
     });
+    /*
+     * FINAL WALK — "Mark all as read" is offered only while something is
+     * unread, so the run writes the owner one unread notification of its own
+     * rather than relying on whatever the shared workspace holds.
+     */
+    const owner = await prisma.user.findFirstOrThrow({
+      where: { email: loaded.customer.email },
+      select: { id: true },
+    });
+    const notification = await prisma.notification.create({
+      data: {
+        workspaceId,
+        userId: owner.id,
+        brandId,
+        templateKey: 'approval.requested',
+        payload: { itemTitle: 'Top bar check' },
+        idempotencyKey: `phase6-topbar-${randomUUID()}`,
+      },
+      select: { id: true },
+    });
+    unreadNotificationId = notification.id;
   });
 });
 
 test.afterAll(async () => {
-  if (!openThreadId) return;
-  await withPlatformPrisma((prisma) =>
-    prisma.noteThread.deleteMany({ where: { id: openThreadId } }),
-  );
+  await withPlatformPrisma(async (prisma) => {
+    if (openThreadId) await prisma.noteThread.deleteMany({ where: { id: openThreadId } });
+    if (unreadNotificationId)
+      await prisma.notification.deleteMany({ where: { id: unreadNotificationId } });
+  });
 });
 
 test.describe('P6-16 · the customer top bar', () => {
@@ -170,7 +193,8 @@ test.describe('P6-16 · the customer top bar', () => {
     await page.getByTestId('topbar-notifications').click();
     const feed = page.getByTestId('notifications-feed');
     await expect(feed).toBeVisible();
-    // Review of #67 — its footer is the prototype's "Mark all as read".
+    // Review of #67 — its footer is the prototype's "Mark all as read" (offered
+    // while something is unread: the run wrote one above).
     // Gate 2b review (4f) — no "⋯": the title opens the full page.
     await expect(feed.getByTestId('notifications-mark-all')).toBeVisible();
     await expect(feed.getByTestId('notifications-more')).toHaveCount(0);

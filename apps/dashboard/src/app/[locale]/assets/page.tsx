@@ -350,8 +350,9 @@ export default async function AssetsPage({
          * C7 — "Latest 48 of M files": the newest-first first page says
          * "latest"; any other order, or a later page, says only "N of M".
          */
+        // Final walk: an empty library says its sentence, never "Latest 0 of 0 files".
         countLabel:
-          page.total === null
+          page.total === null || page.total === 0
             ? null
             : t(sort === 'createdAt' && !cursor ? 'assets.latestOf' : 'assets.shownOf')
                 .replace('{shown}', countFormat.format(page.items.length))
@@ -453,6 +454,8 @@ export default async function AssetsPage({
   const reference = single('ref');
   const successText = status ? statusMessage(status, locale) : null;
   const errorText = error ? statusMessage(error, locale, reference) : null;
+  // PR F (b), Q9 — whether an image model can run now (D-507).
+  const imageAi = await aiAvailableFor('image.generate');
 
   return (
     <WorkspaceShell
@@ -460,7 +463,8 @@ export default async function AssetsPage({
       locale={locale}
       eyebrow={t('nav.group.create')}
       heading={t('assets.media.title')}
-      description={t('assets.media.subtitle')}
+      // Final walk (Q9): "plus images generated on-brand" only while they can be.
+      description={t(imageAi ? 'assets.media.subtitle' : 'assets.media.subtitleNoAi')}
       activePath="/assets"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -509,9 +513,7 @@ export default async function AssetsPage({
         can={{
           // D-468 — the Generate tab is the Creative Studio, behind its own gate.
           // PR F (b), Q9 — and only while an image model can run (D-507).
-          generate:
-            maySpendCredits(permissions, 'assets.upload') &&
-            (await aiAvailableFor('image.generate')),
+          generate: maySpendCredits(permissions, 'assets.upload') && imageAi,
           upload: can('assets.upload'),
           edit: can('assets.edit'),
           manageTaxonomy: can('assets.manage_taxonomy'),

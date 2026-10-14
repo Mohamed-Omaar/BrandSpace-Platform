@@ -1359,9 +1359,9 @@ button.bsp-xcard:hover {
   }
 }
 .bsp-menu {
-  background: rgba(255, 255, 255, 0.62);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
+  /* Final walk (owner, review of #83): every overlay is fully opaque, so
+     nothing behind it reaches its text (the prototype's glass let it). */
+  background: #fff;
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: var(--bsp-px-16);
   box-shadow:
@@ -2080,6 +2080,30 @@ a[data-pending] {
 body:has([role='dialog'][aria-modal='true']) .bsp-fab {
   visibility: hidden;
 }
+/* FINAL WALK (owner, review of #83, must-check 1) — THE FLOATING COPILOT
+   NEVER COVERS TEXT, DATA OR A CONTROL, at any width and at every scroll
+   position, not only once the page is scrolled to its end. At 1536x864 the
+   Calendar's last line ("…The time stays the same.") lay under it on the
+   first screen. So while the shell shows the button, the scroll area stops
+   short of it: a lane of the button's 24px offset, its 48px height and 16px
+   is kept clear at the frame's bottom, the button sits in that lane, and the
+   page's end padding returns to the prototype's 40px. Where the Studio's bar
+   carries its own Copilot button the floating one is hidden, and so is the
+   lane. */
+@media (min-width: 768px) {
+  .bsp-main[data-fab] > .bsp-scroll {
+    margin-block-end: calc(var(--bsp-px-24) + var(--bsp-px-48) + var(--bsp-px-16));
+  }
+  .bsp-main[data-fab] > .bsp-scroll > .bsp-page {
+    padding-block-end: var(--bsp-px-40);
+  }
+  body:has(.bsp-st-cp) .bsp-main[data-fab] > .bsp-scroll {
+    margin-block-end: 0;
+  }
+  body:has(.bsp-st-cp) .bsp-main[data-fab] > .bsp-scroll > .bsp-page {
+    padding-block-end: calc(var(--bsp-px-24) + var(--bsp-px-48) + var(--bsp-px-16));
+  }
+}
 
 /* `fadeSbLabels`: out over 110 ms ease-out before the rail narrows; in over
    220 ms ease-out, 150 ms late, after it widens (only after a click). */
@@ -2783,9 +2807,9 @@ span.bsp-cal-hol {
   z-index: 12;
   width: var(--bsp-px-260);
   box-sizing: content-box;
-  background: rgba(255, 255, 255, 0.62);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
+  /* Final walk (owner, review of #83): every overlay is fully opaque, so
+     nothing behind it reaches its text (the prototype's glass let it). */
+  background: #fff;
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: var(--bsp-px-18);
   box-shadow:
@@ -2838,9 +2862,9 @@ span.bsp-cal-hol {
   z-index: 10;
   width: var(--bsp-px-230);
   box-sizing: content-box;
-  background: rgba(255, 255, 255, 0.62);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
+  /* Final walk (owner, review of #83): every overlay is fully opaque, so
+     nothing behind it reaches its text (the prototype's glass let it). */
+  background: #fff;
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: var(--bsp-px-16);
   box-shadow:
@@ -3429,9 +3453,9 @@ span.bsp-cal-hol {
   z-index: 20;
   width: var(--bsp-px-210);
   box-sizing: content-box;
-  background: rgba(255, 255, 255, 0.62);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
+  /* Final walk (owner, review of #83): every overlay is fully opaque, so
+     nothing behind it reaches its text (the prototype's glass let it). */
+  background: #fff;
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: var(--bsp-px-16);
   box-shadow:
@@ -3549,9 +3573,9 @@ span.bsp-cal-hol {
   inset-inline-end: 0;
   z-index: 30;
   inline-size: var(--bsp-px-300);
-  background: rgba(255, 255, 255, 0.94);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
+  /* Final walk (owner, review of #83): every overlay is fully opaque, so
+     nothing behind it reaches its text (the prototype's glass let it). */
+  background: #fff;
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: var(--bsp-px-16);
   box-shadow:
@@ -3970,9 +3994,9 @@ span.bsp-cal-hol {
   inset-inline-start: 0;
   z-index: 25;
   width: var(--bsp-px-300);
-  background: rgba(255, 255, 255, 0.62);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
+  /* Final walk (owner, review of #83): every overlay is fully opaque, so
+     nothing behind it reaches its text (the prototype's glass let it). */
+  background: #fff;
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: var(--bsp-px-18);
   box-shadow:
@@ -8333,10 +8357,11 @@ img.bsp-pf-art {
   max-inline-size: calc(100vw - var(--bsp-px-32));
   text-align: start;
   /* Accessibility finding: the prototype's `.62` glass let the page behind (Home's hero
-     heading) show through the feed's text; `.94` keeps the blur and the edge. */
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(22px) saturate(180%);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
+     heading) show through the feed's text; `.94` was not enough either — Home's
+     "Performance · last 28 days" still read through an unread row. Final walk
+     (owner, review of #83): the popover is FULLY OPAQUE, so nothing behind it
+     ever reaches its text; with nothing to blur, the backdrop filter goes. */
+  background: #fff;
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: var(--bsp-px-18);
   box-shadow:
@@ -8699,9 +8724,9 @@ img.bsp-pf-art {
   inset-inline-end: var(--bsp-px-16);
   z-index: 20;
   inline-size: var(--bsp-px-160);
-  background: rgba(255, 255, 255, 0.62);
-  backdrop-filter: blur(22px) saturate(180%);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  /* Final walk (owner, review of #83): every overlay is fully opaque, so
+     nothing behind it reaches its text (the prototype's glass let it). */
+  background: #fff;
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: var(--bsp-px-14);
   box-shadow:
@@ -13820,9 +13845,9 @@ select.bs-select.bsp-chevron {
   gap: var(--bsp-px-10);
   max-inline-size: min(var(--bsp-px-560), calc(100vw - var(--bsp-px-32)));
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.62);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
+  /* Final walk (owner, review of #83): every overlay is fully opaque, so
+     nothing behind it reaches its text (the prototype's glass let it). */
+  background: #fff;
   border: 1px solid rgba(255, 255, 255, 0.85);
   color: #111114;
   border-radius: var(--bsp-px-99);
@@ -14341,9 +14366,9 @@ select.bs-select.bsp-chevron {
   inset-block-start: var(--bsp-px-40);
   z-index: 20;
   inline-size: var(--bsp-px-220);
-  background: rgba(255, 255, 255, 0.62);
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
+  /* Final walk (owner, review of #83): every overlay is fully opaque, so
+     nothing behind it reaches its text (the prototype's glass let it). */
+  background: #fff;
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: var(--bsp-px-16);
   box-shadow:

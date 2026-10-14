@@ -37,7 +37,7 @@ import {
   sparkPath,
   type HomeKind,
 } from '../../../server/home-prototype';
-import { aiAvailableFor } from '../../../server/ai-availability';
+import { aiAvailability, aiAvailableFor } from '../../../server/ai-availability';
 import { mediaForVariants } from '../../../server/media-picker';
 import {
   optionalMessage,
@@ -149,7 +149,14 @@ export default async function OverviewPage({
   const mayReviewInsights = may('strategy.manage');
   const mayCreate = may('content.create');
   const mayApprove = may('content.approve');
-  const mayReadCredits = mayReadCreditBalance(workspace.permissionKeys);
+  /*
+   * FINAL WALK (owner, review of #83, must-check 3) — AI CREDITS ARE AI-ONLY.
+   * While no AI task can run (no provider configured, Q9 / D-507) the credits
+   * figure has nothing to spend on and is not drawn; the row keeps its other
+   * three figures. Plan & billing still states the plan's monthly credits.
+   */
+  const anyAi = Object.values(await aiAvailability()).some(Boolean);
+  const mayReadCredits = mayReadCreditBalance(workspace.permissionKeys) && anyAi;
   const kind: HomeKind = homeKindFor(workspace.permissionKeys);
 
   const brandContext = await brandContextFor(workspace, '/overview');
@@ -1159,10 +1166,17 @@ export default async function OverviewPage({
                 className="bsp-float-approvals"
                 data-testid="hero-approvals"
               >
-                <span className="bsp-float-approvals-count bsp-ltr">
-                  {integer(pendingApprovals)}
-                </span>
-                {t('home.p.waitingApproval')}
+                {/* Final walk: nothing waiting is a sentence, never "0 waiting". */}
+                {pendingApprovals > 0 ? (
+                  <>
+                    <span className="bsp-float-approvals-count bsp-ltr">
+                      {integer(pendingApprovals)}
+                    </span>
+                    {t('home.p.waitingApproval')}
+                  </>
+                ) : (
+                  t('home.p.waitingApprovalNone')
+                )}
               </Link>
             ) : null}
           </section>
@@ -1171,7 +1185,7 @@ export default async function OverviewPage({
           <div
             className="bsp-xgrid bsp-home-kpis"
             data-testid="overview-metrics"
-            style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}
+            style={{ gridTemplateColumns: `repeat(${anyAi ? 4 : 3}, minmax(0, 1fr))` }}
           >
             <Figure
               testId="metric-scheduled"
@@ -1212,7 +1226,18 @@ export default async function OverviewPage({
               label={t('home.p.kPub')}
               sub={
                 schedule
-                  ? fill('home.p.kPubSub', { count: String(schedule.channels) })
+                  ? // Final walk: no connected channel is a sentence, and one is singular.
+                    schedule.channels <= 2
+                    ? t(
+                        (
+                          [
+                            'home.p.kPubSub.none',
+                            'home.p.kPubSub.one',
+                            'home.p.kPubSub.two',
+                          ] as const
+                        )[schedule.channels] as MessageKey,
+                      )
+                    : fill('home.p.kPubSub', { count: String(schedule.channels) })
                   : t('overview.metric.hidden')
               }
               delay=".16s"
@@ -1247,7 +1272,7 @@ export default async function OverviewPage({
                 }
                 delay=".24s"
               />
-            ) : (
+            ) : anyAi ? (
               <Figure
                 testId="metric-credits"
                 glyph="✦"
@@ -1256,7 +1281,7 @@ export default async function OverviewPage({
                 sub={t('overview.metric.hidden')}
                 delay=".24s"
               />
-            )}
+            ) : null}
           </div>
 
           {setupCard}

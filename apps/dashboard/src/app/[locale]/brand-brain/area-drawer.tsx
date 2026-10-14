@@ -406,22 +406,38 @@ export function AreaDrawer({
                 className="bs-control bsp-bb-in"
                 name="bodyAr"
                 rows={2}
-                placeholder={chosen?.prompt ?? t('bb.newItem.bodyAr')}
+                // Final walk: the question once, on the first box; this one says what it is for.
+                placeholder={t('bb.newItem.bodyAr')}
                 aria-label={t('bb.newItem.bodyAr')}
               />
               <span className="bsp-bb-add-grid">
-                <input
-                  // Q19 — a chosen question sets the key of the fact that answers it.
-                  key={chosen?.itemKey ?? 'free'}
-                  className="bs-control bsp-bb-in"
-                  name="itemKey"
-                  required
-                  defaultValue={chosen?.itemKey ?? ''}
-                  placeholder="identity.positioning"
-                  aria-label={t('bb.newItem.key')}
-                  data-testid="new-item-key"
-                  dir="ltr"
-                />
+                {chosen ? (
+                  /*
+                    Q19 — a chosen question sets the key of the fact that answers
+                    it. Final walk: that key is the product's own identifier
+                    ("identity.what"), so it travels hidden rather than being
+                    shown to the customer as a field to edit.
+                  */
+                  <input
+                    key={chosen.itemKey}
+                    type="hidden"
+                    name="itemKey"
+                    value={chosen.itemKey}
+                    data-testid="new-item-key"
+                  />
+                ) : (
+                  <input
+                    key="free"
+                    className="bs-control bsp-bb-in"
+                    name="itemKey"
+                    required
+                    defaultValue=""
+                    placeholder="identity.positioning"
+                    aria-label={t('bb.newItem.key')}
+                    data-testid="new-item-key"
+                    dir="ltr"
+                  />
+                )}
                 <input
                   className="bs-control bsp-bb-in"
                   name="titleEn"
@@ -538,7 +554,8 @@ export function AreaDrawer({
               {t('bb.intelReview')}
             </button>
           ) : null}
-          <p className="bsp-bb-wait-foot">{t('bb.usedBy')}</p>
+          {/* Final walk (Q9): "Used by … Copilot and brand chat" only while AI can run. */}
+          {permissions.aiOff === true ? null : <p className="bsp-bb-wait-foot">{t('bb.usedBy')}</p>}
         </section>
       </div>
     </div>

@@ -929,7 +929,8 @@ export default async function AnalyticsPage({
                   </span>
                 ))}
                 <span
-                  className={`bsp-xstatus ${FRESHNESS_X[data.summary.freshness]}`}
+                  // Final walk: nothing connected is not an error — the badge is neutral then.
+                  className={`bsp-xstatus ${data.summary.connectionCount === 0 ? 'bsp-neu' : FRESHNESS_X[data.summary.freshness]}`}
                   data-testid="analytics-freshness"
                 >
                   {t('analytics.freshness')}:{' '}

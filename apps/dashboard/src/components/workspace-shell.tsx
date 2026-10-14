@@ -53,7 +53,7 @@ import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 import { signOutAction, switchWorkspaceAction } from '../app/[locale]/(auth)/actions';
 import { requestMessageLocale } from '../server/message-locale';
 import { paymentsSwitchedOn } from '../server/payments-switch';
-import { aiAvailableFor } from '../server/ai-availability';
+import { aiAvailability, aiAvailableFor } from '../server/ai-availability';
 import { MessageLocaleProvider } from '../i18n/message-locale-context';
 
 /**
@@ -489,6 +489,8 @@ export async function WorkspaceShell({
   const sections = focus
     ? []
     : navSections(permissionKeys, locale, railPath, t, brandContext, counts);
+  // Final walk (Q9): the profile menu's "AI credits" only while some AI task can run.
+  const anyAi = Object.values(await aiAvailability()).some(Boolean);
 
   /*
    * THE GLOBAL COPILOT (D-277 §37): what the drawer opens with — the rail's
@@ -960,7 +962,7 @@ export async function WorkspaceShell({
       role={customerRoleName(roleName)}
       initials={initialsFrom(latinInitialsFrom ?? identity)}
     >
-      {typeof counts.credits === 'number' ? (
+      {typeof counts.credits === 'number' && anyAi ? (
         /*
          * PR D (Shell 4) — "AI credits" for every member who may read the
          * balance (`credits.read` + `copilot.use`, Q18). With `billing.read`

@@ -1094,7 +1094,7 @@ export function CustomerShell({
       contentLang={contentLang}
       after={hosted ? null : floating}
     >
-      <div className="bs-panel bsp-main">
+      <div className="bs-panel bsp-main" data-fab={fab ? '' : undefined}>
         <header className="bs-topbar bsp-header">
           <div
             style={{

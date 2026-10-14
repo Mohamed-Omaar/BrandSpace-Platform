@@ -394,24 +394,27 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               ['VIDEO', t('assets.media.video'), { kind: 'VIDEO', view: undefined }],
               ['ai', t('assets.media.ai'), { kind: undefined, view: 'ai' }],
             ] as const
-          ).map(([id, label, change]) => {
-            const on =
-              id === 'all'
-                ? filters.kind === undefined && filters.view === undefined
-                : id === 'ai'
-                  ? filters.view === 'ai'
-                  : filters.kind === id && filters.view === undefined;
-            return (
-              <a
-                key={id}
-                href={filterHref(props.locale, filters, change)}
-                className="bsp-chip"
-                aria-current={on ? 'true' : undefined}
-              >
-                {label}
-              </a>
-            );
-          })}
+          )
+            // Final walk (Q9): the AI chip only while images can be generated.
+            .filter(([id]) => id !== 'ai' || can.generate || filters.view === 'ai')
+            .map(([id, label, change]) => {
+              const on =
+                id === 'all'
+                  ? filters.kind === undefined && filters.view === undefined
+                  : id === 'ai'
+                    ? filters.view === 'ai'
+                    : filters.kind === id && filters.view === undefined;
+              return (
+                <a
+                  key={id}
+                  href={filterHref(props.locale, filters, change)}
+                  className="bsp-chip"
+                  aria-current={on ? 'true' : undefined}
+                >
+                  {label}
+                </a>
+              );
+            })}
         </nav>
         {/*
           THE PRODUCT'S OTHER FILTERS (review of #67): every kind, the views,
@@ -822,20 +825,23 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
               ) : null}
             </div>
             <div className="bsp-med-sto-cats" data-testid="assets-storage-cats">
-              {props.storageCategories.map((row) => (
-                <span key={row.key} data-testid={`assets-storage-cat-${row.key}`}>
-                  <span className="bsp-med-sto-dot" data-cat={row.key} aria-hidden="true" />
-                  {t(`assets.storageCat.${row.key}`)}{' '}
-                  <b className="bsp-ltr">{formatBytes(row.bytes, props.locale)}</b>
-                  <span className="bsp-med-sto-n">
-                    {' · '}
-                    {(t('assets.storageFiles') ?? '{count}').replace(
-                      '{count}',
-                      row.files.toLocaleString('en-US'),
-                    )}
+              {props.storageCategories
+                // Final walk (Q9): no "AI images" row while none can be made and none exist.
+                .filter((row) => row.key !== 'ai' || can.generate || row.files > 0)
+                .map((row) => (
+                  <span key={row.key} data-testid={`assets-storage-cat-${row.key}`}>
+                    <span className="bsp-med-sto-dot" data-cat={row.key} aria-hidden="true" />
+                    {t(`assets.storageCat.${row.key}`)}{' '}
+                    <b className="bsp-ltr">{formatBytes(row.bytes, props.locale)}</b>
+                    <span className="bsp-med-sto-n">
+                      {' · '}
+                      {(t('assets.storageFiles') ?? '{count}').replace(
+                        '{count}',
+                        row.files.toLocaleString('en-US'),
+                      )}
+                    </span>
                   </span>
-                </span>
-              ))}
+                ))}
               {storageRest > 0 ? (
                 <span data-testid="assets-storage-cat-rest" title={t('assets.storageRestHint')}>
                   <span className="bsp-med-sto-dot" data-cat="rest" aria-hidden="true" />
@@ -851,17 +857,20 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           first (the library's own Video filter, by size) and the plan.
         */}
         <span className="bsp-med-sto-acts">
-          <a
-            href={filterHref(props.locale, filters, {
-              kind: 'VIDEO',
-              view: undefined,
-              sort: 'sizeBytes',
-            })}
-            className="bsp-btn bsp-sm bsp-sec"
-            data-testid="assets-largest"
-          >
-            {t('assets.media.videosLargest')}
-          </a>
+          {/* Final walk: "Videos (largest)" only while there is a video to list. */}
+          {props.storageCategories.some((row) => row.key === 'videos' && row.files > 0) ? (
+            <a
+              href={filterHref(props.locale, filters, {
+                kind: 'VIDEO',
+                view: undefined,
+                sort: 'sizeBytes',
+              })}
+              className="bsp-btn bsp-sm bsp-sec"
+              data-testid="assets-largest"
+            >
+              {t('assets.media.videosLargest')}
+            </a>
+          ) : null}
           {props.planHref ? (
             <a href={props.planHref} className="bsp-btn bsp-sm bsp-ghost" data-testid="assets-plan">
               {t('assets.media.planStorage')} →
@@ -900,7 +909,14 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
           {props.cards.length === 0 ? (
             <div className="bsp-card bsp-med-empty" data-testid="assets-empty">
               <b>{filtered ? t('assets.emptyFilteredTitle') : t('assets.emptyTitle')}</b>
-              <span>{filtered ? t('assets.emptyFilteredBody') : t('assets.emptyBody')}</span>
+              <span>
+                {filtered
+                  ? t('assets.emptyFilteredBody')
+                  : // Final walk (D-511): never claim a scan while scanning is off.
+                    props.uploadRules.notScanned
+                    ? t('assets.emptyBodyNotScanned')
+                    : t('assets.emptyBody')}
+              </span>
               {/*
                 D-299 (§43) — an empty library offers the two ways a file
                 arrives: Upload (the same dialog as the header's) and Generate

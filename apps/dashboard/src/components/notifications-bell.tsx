@@ -185,13 +185,17 @@ export function NotificationsBell({
             </ul>
           )}
 
-          {/* "Mark all as read" — the product's existing action, as the prototype's footer. */}
-          <form action={markAllNotificationsReadAction}>
-            <input type="hidden" name="locale" value={locale} />
-            <button type="submit" className="bsp-ntf-all" data-testid="notifications-mark-all">
-              {strings.markAll}
-            </button>
-          </form>
+          {/* "Mark all as read" — the product's existing action, as the prototype's footer.
+              Final walk: offered only while something in the feed is unread; on an
+              empty or all-read feed it was a button with nothing to do. */}
+          {shown.some((item) => item.unread) ? (
+            <form action={markAllNotificationsReadAction}>
+              <input type="hidden" name="locale" value={locale} />
+              <button type="submit" className="bsp-ntf-all" data-testid="notifications-mark-all">
+                {strings.markAll}
+              </button>
+            </form>
+          ) : null}
         </div>
       ) : null}
     </span>

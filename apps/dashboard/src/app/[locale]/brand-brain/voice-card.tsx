@@ -34,6 +34,7 @@ export function VoiceCard({
   profileHref,
   pending = { tone: 0, rules: 0 },
   onOpenArea,
+  aiOff = false,
 }: {
   locale: string;
   brandId: string;
@@ -44,6 +45,8 @@ export function VoiceCard({
   pending?: { readonly tone: number; readonly rules: number };
   /** PR D (Brand Brain 3, 4) — "Open area →": that area, on the Knowledge tab. */
   onOpenArea?: (area: 'TONE_OF_VOICE' | 'DO_DONT') => void;
+  /** Final walk (Q9) — no AI task can run, so nothing "reads" the voice yet. */
+  aiOff?: boolean;
 }) {
   const messageLocale = useMessageLocale(locale);
   const t = translator(messageLocale);
@@ -80,7 +83,7 @@ export function VoiceCard({
       {/* The prototype's Voice card (line 874): the label, what it is for, three columns. */}
       <span className="bsp-bb-lc-h">
         <span className="bsp-lbl">{t('bb.voice.title')}</span>
-        <span>{t('bb.voice.sub')}</span>
+        {aiOff ? null : <span>{t('bb.voice.sub')}</span>}
       </span>
       <div className="bsp-bb-voice-grid">
         <section data-testid="voice-words" style={sectionStyle}>

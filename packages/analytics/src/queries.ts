@@ -768,9 +768,11 @@ export class AnalyticsQueryService {
    */
   #absenceReason(metricKey: string, context: ScopeContext): MetricAbsenceReason {
     const definition = findMetric(metricKey);
+    // Final walk: with no connected account, a derived figure (engagement rate)
+    // says so like every other figure, not "a component is missing".
+    if (context.connectionCount === 0) return 'no_connection';
     if (definition?.derivedFrom) return 'components_missing';
 
-    if (context.connectionCount === 0) return 'no_connection';
     if (
       context.providers.length > 0 &&
       !context.providers.some((p) => providerSupportsMetric(p, metricKey))
