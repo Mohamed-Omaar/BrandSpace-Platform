@@ -476,15 +476,18 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                   href: filterHref(props.locale, filters, { view: undefined }),
                   label: t('assets.view.all'),
                 },
-                ...ASSET_VIEWS.filter((view) => view !== 'shared' || !singleBrand).map((view) => ({
-                  id: view,
-                  href: filterHref(props.locale, filters, {
-                    view,
-                    kind: undefined,
-                    ...(view === 'shared' ? { scope: undefined } : {}),
-                  }),
-                  label: t(`assets.view.${view}` as MessageKey),
-                })),
+                // D-553: the "AI generated" view follows image generation, as its chip does.
+                ...ASSET_VIEWS.filter((view) => view !== 'shared' || !singleBrand)
+                  .filter((view) => view !== 'ai' || can.generate || filters.view === 'ai')
+                  .map((view) => ({
+                    id: view,
+                    href: filterHref(props.locale, filters, {
+                      view,
+                      kind: undefined,
+                      ...(view === 'shared' ? { scope: undefined } : {}),
+                    }),
+                    label: t(`assets.view.${view}` as MessageKey),
+                  })),
               ]}
             />
 

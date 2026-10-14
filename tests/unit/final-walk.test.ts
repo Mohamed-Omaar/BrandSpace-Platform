@@ -60,6 +60,9 @@ describe('nothing AI-only is drawn while no AI task can run (must-check 3, Q9)',
       ".filter(([id]) => id !== 'ai' || can.generate || filters.view === 'ai')",
     );
     expect(view).toContain(".filter((row) => row.key !== 'ai' || can.generate || row.files > 0)");
+    expect(view).toMatch(
+      /\.filter\(\(view\)\s*=>\s*view !== 'ai' \|\| can\.generate \|\| filters\.view === 'ai'\)/,
+    );
     expect(page).toContain("t(imageAi ? 'assets.media.subtitle' : 'assets.media.subtitleNoAi')");
   });
 
