@@ -8,6 +8,7 @@ import { AppError, createLogger, internalErrorFields } from '@brandspace/shared'
 import { ASSET_CHANGED_REASON, type AssetActor } from '@brandspace/assets';
 import {
   PROCESS_ASSET,
+  assetJobKey,
   enqueue,
   mayProcessInline,
   type ProcessAssetPayload,
@@ -379,8 +380,9 @@ export async function addAssetVersionAction(formData: FormData): Promise<void> {
         kind: PROCESS_ASSET,
         workspaceId: session.workspace.workspaceId,
         requestedByUserId: session.customer.userId,
-        idempotencyKey: `asset-${job.id}`,
+        idempotencyKey: assetJobKey(job.id, 1),
         processingJobId: job.id,
+        attempt: 1,
       } satisfies ProcessAssetPayload);
 
       if (!dispatch.dispatched && mayProcessInline()) {

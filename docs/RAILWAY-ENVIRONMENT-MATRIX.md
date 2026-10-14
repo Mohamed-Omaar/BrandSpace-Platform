@@ -152,9 +152,9 @@ on nobody having set the wrong variable.
 | `TRUSTED_PROXY_HOPS`        | —         |   no   |    no    | `1`                                      | Only under the `xff-hops` strategy, which this deployment does not use. Digits only, 1–10; a malformed value is **refused, never coerced**.             |
 | `LOG_LEVEL`                 | all       |   no   |    no    | `info` in production, `debug` in staging | Default `info`.                                                                                                                                         |
 | `PUBLIC_WEB_URL`            | W D A P K |   no   |    no    | `https://www.example.com`                | **Required by no service** — no code in `apps/` or `packages/` reads it. Https-checked if set. See the profile note below.                              |
-| `DASHBOARD_URL`             | W D A P K |   no   |   yes    | `https://app.example.com`                |                                                                                                                                                         |
-| `ADMIN_URL`                 | D A P K   |   no   |   yes    | `https://admin.example.com`              |                                                                                                                                                         |
-| `API_URL`                   | D A P K   |   no   |   yes    | `https://api.example.com`                |                                                                                                                                                         |
+| `DASHBOARD_URL`             | W D A P K |   no   |    no    | `https://app.example.com`                | **Required by no service** — no code in `apps/` or `packages/` reads it; `env.ts` keeps a localhost default and does not https-check it (D-549).        |
+| `ADMIN_URL`                 | D A P K   |   no   |    no    | `https://admin.example.com`              | **Required by no service** — no code in `apps/` or `packages/` reads it; `env.ts` keeps a localhost default and does not https-check it (D-549).        |
+| `API_URL`                   | D A P K   |   no   |    no    | `https://api.example.com`                | **Required by no service** — no code in `apps/` or `packages/` reads it; `env.ts` keeps a localhost default and does not https-check it (D-549).        |
 | `PUBLIC_API_BASE_URL`       | D A P K   |   no   | **A P**  | `https://api.example.com`                | **Required by `admin` and `api`** — they read it. Every OAuth callback and webhook URL is built from it. Https-checked if set.                          |
 | `PUBLIC_DASHBOARD_BASE_URL` | D A P K   |   no   | **D P**  | `https://app.example.com`                | **Required by `dashboard` and `api`** — every customer return URL and email link is built from it. Https-checked if set.                                |
 | `BRANDSPACE_API_URL`        | D A       |   no   |   yes    | `http://api.railway.internal:3003`       | **Internal only.** `http://` is correct: Railway's private network is already WireGuard-encrypted.                                                      |
@@ -365,8 +365,8 @@ What to set on each Railway service. `—` means _do not set_.
 | `SCANII_API_SECRET`                |  —   |  —   |  —   |  —   |  ¹   |  —  |
 | `BILLING_DEV_WEBHOOK_SECRET`       |  ❌  |  ❌  |  ❌  |  ❌  |  ❌  | ❌  |
 
-`web` carries `PUBLIC_WEB_URL` and `DASHBOARD_URL` so its links point at the
-right origins; it needs no database, no Redis and no key.
+`web` is given `PUBLIC_WEB_URL` and `DASHBOARD_URL` by the blueprint, but no code
+reads either today (class D); it needs no database, no Redis and no key.
 
 ¹ Only when `assets.scanning.provider` is `scanii`. Scanning is off for the beta
 (`none`), so leave both unset (class E.3).

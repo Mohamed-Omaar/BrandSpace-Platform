@@ -19,6 +19,7 @@ export {
 export {
   INGEST_SOURCE_DOCUMENT,
   ingestionJobKey,
+  assetJobKey,
   PROCESS_ASSET,
   PUBLISH_SOCIAL_POST,
   VERIFY_SOCIAL_POST,

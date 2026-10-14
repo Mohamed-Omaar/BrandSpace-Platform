@@ -52,6 +52,13 @@ export interface ProcessAssetResult {
   readonly failureReason: AssetFailureReason | null;
 }
 
+/** What `claim` took: the attempt, and whether this delivery really owns it (D-549). */
+export interface AssetClaim {
+  readonly jobId: string;
+  readonly attempt: number;
+  readonly claimed: boolean;
+}
+
 /** The failures where a second attempt could plausibly succeed. */
 const RETRYABLE_REASONS: ReadonlySet<AssetFailureReason> = new Set([
   'scan_failed',
@@ -76,31 +83,71 @@ export class AssetProcessingService {
     this.#clock = options.clock ?? systemClock;
   }
 
-  async process(jobId: string): Promise<ProcessAssetResult> {
+  /**
+   * Claim and run one attempt in the caller's context — the inline path a
+   * non-production dashboard takes when no queue is configured, and the
+   * composition the tests drive. THE WORKER DOES NOT CALL THIS: it claims in a
+   * transaction of its own and commits it before `run` reads a byte (D-549).
+   */
+  async process(jobId: string, expectedAttempt?: number): Promise<ProcessAssetResult> {
+    return this.run(await this.claim(jobId, expectedAttempt));
+  }
+
+  /**
+   * Claim one attempt: SCANNING, one more attempt, `startedAt` now.
+   *
+   * A REAL CLAIM (final review of #83, D-549 — the ingestion fix, D-413, made
+   * for assets). It used to be an unconditional update, so a redelivered
+   * message re-ran a job that was running, and the update was rolled back with
+   * everything else whenever the run threw, so the attempt was never counted.
+   * Now it is ONE compare-and-set: the row must still be QUEUED with the
+   * attempts this claim read — and, when the message names its attempt,
+   * exactly that one attempt short. Two deliveries of the same attempt race one
+   * row lock; the loser matches no row and `claimed` is false.
+   */
+  async claim(jobId: string, expectedAttempt?: number): Promise<AssetClaim> {
     const job = await this.#db.assetProcessingJob.findUnique({ where: { id: jobId } });
     // A job in another workspace is invisible to RLS and arrives as null.
     if (!job) throw new Error('Asset processing job not found.');
 
-    const asset = await this.#db.asset.findUnique({ where: { id: job.assetId } });
-    if (!asset) throw new Error('Asset not found.');
-
+    const unclaimed: AssetClaim = { jobId: job.id, attempt: job.attempts + 1, claimed: false };
     // A DUPLICATE DELIVERY STOPS HERE. The row is the state; a finished job
     // reports what it found rather than doing the work again.
-    if (job.stage === 'COMPLETED' || job.stage === 'FAILED') {
-      return {
-        assetId: asset.id,
-        status: asset.status,
-        scanStatus: asset.scanStatus,
-        derivativesCreated: job.derivativesCreated,
-        failureReason: (job.failureReason as AssetFailureReason | null) ?? null,
-      };
-    }
+    if (job.stage === 'COMPLETED' || job.stage === 'FAILED') return unclaimed;
+    // A message for another attempt — an older one replayed — claims nothing.
+    if (expectedAttempt !== undefined && expectedAttempt !== unclaimed.attempt) return unclaimed;
 
-    const now = this.#clock.now();
-    await this.#db.assetProcessingJob.update({
-      where: { id: job.id },
-      data: { stage: 'SCANNING', attempts: { increment: 1 }, startedAt: now },
+    const claim = await this.#db.assetProcessingJob.updateMany({
+      where: { id: job.id, stage: 'QUEUED', attempts: job.attempts },
+      data: { stage: 'SCANNING', attempts: { increment: 1 }, startedAt: this.#clock.now() },
     });
+    return { ...unclaimed, claimed: claim.count === 1 };
+  }
+
+  /**
+   * Run a claimed attempt: scan, inspect, derive.
+   *
+   * ONLY THE ATTEMPT THAT CLAIMED THE ROW MAY WRITE (D-549). A claim that took
+   * nothing writes nothing and reports the row as it stands. A claimed one
+   * FENCES first: the row must still be SCANNING on this very attempt — the
+   * stuck-job sweep may have handed it back (or failed it) while this attempt
+   * was silent. The fence is an UPDATE, so it holds the row lock for the rest
+   * of this transaction and the sweep's own compare-and-set waits for it:
+   * exactly one of the two wins.
+   */
+  async run(claimed: AssetClaim): Promise<ProcessAssetResult> {
+    if (!claimed.claimed) return this.#asItStands(claimed.jobId);
+    const fence = await this.#db.assetProcessingJob.updateMany({
+      where: { id: claimed.jobId, stage: 'SCANNING', attempts: claimed.attempt },
+      data: { stage: 'SCANNING' },
+    });
+    if (fence.count !== 1) return this.#asItStands(claimed.jobId);
+
+    const job = await this.#db.assetProcessingJob.findUniqueOrThrow({
+      where: { id: claimed.jobId },
+    });
+    const asset = await this.#db.asset.findUnique({ where: { id: job.assetId } });
+    if (!asset) throw new Error('Asset not found.');
 
     const bytes = await this.#store.get(asset.storageKey);
     if (!bytes) {
@@ -232,6 +279,21 @@ export class AssetProcessingService {
     };
   }
 
+  /** What a delivery that claimed nothing reports: the job and its asset as they stand. */
+  async #asItStands(jobId: string): Promise<ProcessAssetResult> {
+    const job = await this.#db.assetProcessingJob.findUnique({ where: { id: jobId } });
+    if (!job) throw new Error('Asset processing job not found.');
+    const asset = await this.#db.asset.findUnique({ where: { id: job.assetId } });
+    if (!asset) throw new Error('Asset not found.');
+    return {
+      assetId: asset.id,
+      status: asset.status,
+      scanStatus: asset.scanStatus,
+      derivativesCreated: job.derivativesCreated,
+      failureReason: (job.failureReason as AssetFailureReason | null) ?? null,
+    };
+  }
+
   /**
    * Record a failure.
    *
@@ -321,4 +383,135 @@ export class AssetProcessingService {
       after,
     });
   }
+}
+
+/** The stages a claimed attempt passes through. A row in one of them is being worked on. */
+const RUNNING_STAGES = ['SCANNING', 'INSPECTING', 'DERIVING'] as const;
+
+/**
+ * HOW LONG A CLAIM MUST HAVE BEEN SILENT BEFORE IT IS STUCK (D-549), as
+ * `stuckIngestionThresholdSeconds` is for ingestion (D-413).
+ *
+ * Asset processing shares the `media-processing` worker and its five-minute
+ * BullMQ lock (`apps/worker/src/main.ts`), and one scan is bounded by the
+ * configured `scanning.timeoutMs`. A claim younger than that bound plus the
+ * lock could belong to a worker that is still alive, so the sweep never takes
+ * one, whatever `processing.stuckAfterSeconds` says. The fence in `run` covers
+ * the rest: an attempt that overruns even this finds itself superseded and
+ * writes nothing.
+ */
+export const ASSET_WORKER_LOCK_SECONDS = 5 * 60;
+
+export function stuckAssetThresholdSeconds(policy: {
+  readonly processing: { readonly stuckAfterSeconds: number };
+  readonly scanning: { readonly timeoutMs: number };
+}): number {
+  return Math.max(
+    policy.processing.stuckAfterSeconds,
+    Math.ceil(policy.scanning.timeoutMs / 1000) + ASSET_WORKER_LOCK_SECONDS,
+  );
+}
+
+export interface StuckAssetJob {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly brandId: string | null;
+  readonly assetId: string;
+  readonly attempts: number;
+  readonly maxAttempts: number;
+}
+
+/**
+ * The claims that went silent: a running stage, claimed before `stuckBefore`.
+ * Takes a client rather than opening one, as `findUnclaimedAssetJobs` does:
+ * the platform identity sees every tenant's (the scheduler), a tenant client
+ * its own workspace's.
+ */
+export async function findStuckAssetJobs(
+  db: { assetProcessingJob: { findMany(args: unknown): Promise<StuckAssetJob[]> } },
+  stuckBefore: Date,
+  limit: number,
+): Promise<StuckAssetJob[]> {
+  return db.assetProcessingJob.findMany({
+    where: { stage: { in: [...RUNNING_STAGES] }, startedAt: { lt: stuckBefore } },
+    select: {
+      id: true,
+      workspaceId: true,
+      brandId: true,
+      assetId: true,
+      attempts: true,
+      maxAttempts: true,
+    },
+    orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
+    take: limit,
+  });
+}
+
+/**
+ * Hand one stuck claim back, or fail it for good (D-549).
+ *
+ * ONE COMPARE-AND-SET: the row must still be in a running stage, on the very
+ * attempt that was found, claimed before `stuckBefore`. A worker that finished
+ * in between, a second attempt that claimed it, or another replica's sweep all
+ * make it match nothing, and nothing is written. Below the attempt limit it
+ * goes back to QUEUED with its backoff and the reconciler dispatches the NEXT
+ * attempt under a new id; the asset keeps the status it had (PROCESSING, or
+ * QUARANTINED while a scan is owed) — neither is usable. At the limit the job
+ * is FAILED `stuck_timeout`, and a PROCESSING asset becomes PROCESSING_FAILED,
+ * which the library offers to retry or delete: an upload never reads
+ * "processing" for ever. A QUARANTINED one stays quarantined. Either way it is
+ * audited.
+ */
+export async function recoverStuckAssetJob(input: {
+  readonly db: TenantScopedClient;
+  readonly workspaceId: string;
+  readonly job: StuckAssetJob;
+  readonly stuckBefore: Date;
+  readonly retryBackoffSeconds: number;
+  readonly clock: Clock;
+}): Promise<'requeued' | 'failed' | 'skipped'> {
+  const { db, job } = input;
+  const now = input.clock.now();
+  const terminal = job.attempts >= job.maxAttempts;
+  const moved = await db.assetProcessingJob.updateMany({
+    where: {
+      id: job.id,
+      workspaceId: input.workspaceId,
+      stage: { in: [...RUNNING_STAGES] },
+      attempts: job.attempts,
+      startedAt: { lt: input.stuckBefore },
+    },
+    data: terminal
+      ? {
+          stage: 'FAILED',
+          failureReason: 'stuck_timeout',
+          failureCode: 'stuck_timeout',
+          completedAt: now,
+          nextAttemptAt: null,
+        }
+      : {
+          stage: 'QUEUED',
+          failureReason: 'stuck_timeout',
+          failureCode: 'stuck_timeout',
+          nextAttemptAt: new Date(now.getTime() + input.retryBackoffSeconds * 1000),
+        },
+  });
+  if (moved.count !== 1) return 'skipped';
+
+  if (terminal) {
+    await db.asset.updateMany({
+      where: { id: job.assetId, status: 'PROCESSING' },
+      data: { status: 'PROCESSING_FAILED', failureReason: 'stuck_timeout' },
+    });
+  }
+  await writeAuditEvent(db, input.workspaceId, {
+    action: terminal ? 'assets.processing_failed' : 'assets.processing_retry_scheduled',
+    actorType: 'SYSTEM',
+    resourceType: 'Asset',
+    resourceId: job.assetId,
+    brandId: job.brandId ?? undefined,
+    severity: terminal ? 'WARNING' : 'INFO',
+    after: { jobId: job.id, attempt: job.attempts, reason: 'stuck_timeout' },
+  });
+  return terminal ? 'failed' : 'requeued';
 }

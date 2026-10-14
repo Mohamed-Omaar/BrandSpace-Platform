@@ -32,20 +32,17 @@ import { signIn } from './own-workspace';
  * it. The budget is the rail's, so it is measured from the moment the browser
  * starts processing the click — the first listener to run, a capture listener
  * on the window — to the glide's creation. The queueing before it is logged,
- * not budgeted. (That 20 ms budget is replaced by the next paragraph.)
+ * not budgeted. The 20 ms budget is unchanged.
  *
- * FINAL REVIEW (owner, item 6) — CREATED IN THE PRESS'S OWN TASK, NOT WITHIN
- * 20 MS OF WALL CLOCK. The 20 ms budget measured the machine as much as the
- * rail: the press runs the same few lines on every run, and under load
- * (CI's runner, or this suite next to a typecheck) the same lines took 32 ms
- * once and the test failed with nothing wrong in the rail. What the budget
- * stood for is that the press itself creates the glide — no frame, no fetch,
- * no other task in between. That is now asserted directly and the same way on
- * every machine: a listener on the window, which the click reaches after
- * React's own handler and before the event's task ends, finds the pill's new
- * target set and its transform transition already created. The milliseconds
- * are still measured and logged, never budgeted.
+ * FINAL REVIEW (owner, item 6 and review of #83) — AND CREATED IN THE PRESS'S
+ * OWN TASK. In addition to the 20 ms budget (never instead of it): a listener
+ * on the window, which the click reaches after React's own handler and before
+ * the event's task ends, finds the pill's new target set and its transform
+ * transition already created — no frame, no fetch, no other task in between.
+ * The frames the glide takes to start are logged beside the milliseconds.
  */
+
+const START_BUDGET_MS = 20;
 
 async function settle(page: Page): Promise<void> {
   await expect
@@ -264,6 +261,7 @@ for (const locale of ['en', 'ar'] as const) {
       `rail glide (${locale}): created ${result.createdAfter?.toFixed(1)} ms, started ${result.startedAfter?.toFixed(1)} ms (frame ${result.framesToStart}) after the press was processed (queued ${result.queued?.toFixed(1)} ms before it; frame ${frame.toFixed(1)} ms)`,
     );
     expect(result.createdAfter, 'the press creates the glide').not.toBeNull();
+    expect(result.createdAfter ?? Infinity).toBeLessThanOrEqual(START_BUDGET_MS);
     // The press creates the glide in its own task: target set, transition running.
     expect(result.inPressTask, 'the press was seen by the window').not.toBeNull();
     expect(result.inPressTask?.gliding, 'the glide exists before the press task ends').toBe(true);

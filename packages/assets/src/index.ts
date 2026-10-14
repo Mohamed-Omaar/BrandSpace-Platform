@@ -65,9 +65,15 @@ export {
   type SortDirection,
 } from './library';
 export {
+  ASSET_WORKER_LOCK_SECONDS,
   AssetProcessingService,
+  findStuckAssetJobs,
+  recoverStuckAssetJob,
+  stuckAssetThresholdSeconds,
+  type AssetClaim,
   type AssetProcessingServiceOptions,
   type ProcessAssetResult,
+  type StuckAssetJob,
 } from './processing';
 export {
   AssetVersionService,

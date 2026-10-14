@@ -2,7 +2,11 @@ import { processSocialInboundEvents } from './social-inbound';
 import {
   AssetMaintenanceService,
   TenantAssetPolicySource,
+  findStuckAssetJobs,
   findUnclaimedAssetJobs,
+  recoverStuckAssetJob,
+  resolveAssetPolicy,
+  stuckAssetThresholdSeconds,
 } from '@brandspace/assets';
 import {
   findStuckIngestionJobs,
@@ -61,6 +65,7 @@ import {
   PROCESS_ASSET,
   PUBLISH_SOCIAL_POST,
   VERIFY_SOCIAL_POST,
+  assetJobKey,
   enqueue,
   enqueueReplacingFinished,
   ingestionJobKey,
@@ -240,6 +245,8 @@ export interface MaintenanceResult {
   readonly gatewayOutputsPurged: number;
   /** Phase 5B-1 — the Asset Library sweeps. */
   readonly assetJobsDispatched: number;
+  /** Final review of #83 (D-549) — silent asset processing claims handed back or failed. */
+  readonly assetJobsRecovered: number;
   readonly uploadSessionsExpired: number;
   readonly deletedAssetsPurged: number;
   /** Phase 6 — the publishing sweep. */
@@ -508,18 +515,80 @@ export class MaintenanceScheduler {
 
     let dispatched = 0;
     for (const job of waiting) {
-      const result = await enqueue('media-processing', PROCESS_ASSET, {
+      const attempt = job.attempts + 1;
+      /*
+       * ONE ID PER ATTEMPT (final review of #83, D-549 — D-413 for assets). It
+       * used to be `asset-<id>` for every attempt, and BullMQ keeps finished
+       * jobs and ignores a re-add of an id it holds — so a retry was reported
+       * dispatched and never ran. The first attempt's id is the one the
+       * producer used, so a sweep racing a live dispatch still adds nothing. A
+       * FINISHED job under the same id (its message threw before the claim and
+       * spent BullMQ's own retries) is replaced; the row's compare-and-set
+       * claim is what stops a double run.
+       */
+      const result = await enqueueReplacingFinished('media-processing', PROCESS_ASSET, {
         kind: PROCESS_ASSET,
         workspaceId: job.workspaceId,
-        // THE SAME KEY THE PRODUCER USES. BullMQ refuses a duplicate job id, so
-        // a sweep racing a successful dispatch adds nothing rather than queuing
-        // a second scan of the same asset.
-        idempotencyKey: `asset-${job.id}`,
+        idempotencyKey: assetJobKey(job.id, attempt),
         processingJobId: job.id,
+        attempt,
       } satisfies ProcessAssetPayload);
       if (result.dispatched) dispatched += 1;
     }
     return dispatched;
+  }
+
+  /**
+   * Hand back asset processing claims that went silent (D-549).
+   *
+   * `reclaimStuckJobs` existed and nothing called it — and it only listed rows.
+   * A worker that dies after claiming an upload leaves it SCANNING, and a
+   * redelivered message claims nothing, so without this the file read
+   * PROCESSING for ever. Running stages only (a QUEUED row is
+   * `reconcileAssetProcessing`'s), claimed longer ago than
+   * `stuckAssetThresholdSeconds` — never less than the scan's own bound plus
+   * the worker's lock, so a live worker is not robbed. Each row is one
+   * compare-and-set inside its own workspace's context; two replicas running
+   * this at once recover a row once.
+   */
+  async recoverStuckAssetProcessing(limit: number): Promise<number> {
+    const platform = getPlatformClient();
+    const policy = await resolveAssetPolicy(
+      new ConfigurationService({ prisma: platform }),
+      this.#environment,
+    );
+    const now = this.#clock.now();
+    const stuckBefore = new Date(now.getTime() - stuckAssetThresholdSeconds(policy) * 1000);
+    const stuck = await findStuckAssetJobs(platform, stuckBefore, limit);
+
+    let recovered = 0;
+    const tenantPrisma = getPrisma();
+    for (const job of stuck) {
+      try {
+        const outcome = await withWorkspace(
+          job.workspaceId,
+          async (db) =>
+            recoverStuckAssetJob({
+              db,
+              workspaceId: job.workspaceId,
+              job,
+              stuckBefore,
+              retryBackoffSeconds: policy.processing.retryBackoffSeconds,
+              clock: this.#clock,
+            }),
+          { prisma: tenantPrisma },
+        );
+        if (outcome !== 'skipped') recovered += 1;
+      } catch (error: unknown) {
+        // One row must not starve the rest (F-65).
+        log.error('could not recover a stuck asset processing job', {
+          workspaceId: job.workspaceId,
+          jobId: job.id,
+          ...internalErrorFields(error),
+        });
+      }
+    }
+    return recovered;
   }
 
   /**
@@ -2385,6 +2454,9 @@ export class MaintenanceScheduler {
       cadence.ingestionReconcileBatch,
     );
     const ingestionDispatched = await this.reconcileIngestion(cadence.ingestionReconcileBatch);
+    const assetJobsRecovered = await this.recoverStuckAssetProcessing(
+      cadence.ingestionReconcileBatch,
+    );
     const assetJobsDispatched = await this.reconcileAssetProcessing(
       cadence.ingestionReconcileBatch,
     );
@@ -2405,6 +2477,7 @@ export class MaintenanceScheduler {
       chatContentPurged: purged.chat,
       gatewayOutputsPurged: purged.gateway,
       assetJobsDispatched,
+      assetJobsRecovered,
       uploadSessionsExpired: assets.sessions,
       deletedAssetsPurged: assets.purged,
       publishJobsCreated: publishing.created,
@@ -2495,9 +2568,11 @@ export class MaintenanceScheduler {
     // Phase 5B-1. The asset sweeps ride the cadences their Brand Brain
     // counterparts already use rather than introducing two more operator
     // settings for the same two pressures.
-    every(cadence.ingestionReconcileSeconds, 'asset-reconcile', () =>
-      this.reconcileAssetProcessing(cadence.ingestionReconcileBatch),
-    );
+    every(cadence.ingestionReconcileSeconds, 'asset-reconcile', async () => {
+      // D-549: silent claims are handed back first, then everything due is dispatched.
+      const recovered = await this.recoverStuckAssetProcessing(cadence.ingestionReconcileBatch);
+      return recovered + (await this.reconcileAssetProcessing(cadence.ingestionReconcileBatch));
+    });
     every(cadence.retentionPurgeSeconds, 'asset-sweep', async () => {
       const swept = await this.sweepAssets(cadence.retentionPurgeBatch);
       return swept.sessions + swept.purged;
