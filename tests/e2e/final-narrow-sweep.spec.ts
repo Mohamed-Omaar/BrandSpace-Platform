@@ -143,6 +143,50 @@ async function overlaps(page: Page): Promise<string[]> {
         }
       }
     }
+    /*
+     * A control spilling out of the box it is drawn in: the nearest ancestor
+     * that paints a box (a border or a background) must hold it. Inside a
+     * box that scrolls, it may run on (it scrolls); inside one that clips
+     * without scrolling, it is cut off; inside a visible one, it spills.
+     */
+    const paints = (element: Element) => {
+      const style = getComputedStyle(element);
+      return (
+        parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth) > 0 ||
+        (style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.backgroundColor !== 'transparent')
+      );
+    };
+    for (const control of Array.from(
+      document.querySelectorAll(
+        'main a[href], main button, main input, main select, main textarea',
+      ),
+    )) {
+      if (!visible(control)) continue;
+      const style = getComputedStyle(control);
+      if (style.position === 'fixed' || style.position === 'absolute') continue;
+      const at = control.getBoundingClientRect();
+      if (at.width <= 2 || at.height <= 2) continue;
+      let box = control.parentElement;
+      let scrolls = false;
+      while (box && box !== document.body) {
+        const overflow = getComputedStyle(box).overflowX;
+        if (overflow === 'auto' || overflow === 'scroll') {
+          scrolls = true;
+          break;
+        }
+        if (paints(box)) break;
+        box = box.parentElement;
+      }
+      if (!box || box === document.body || scrolls) continue;
+      const frame = box.getBoundingClientRect();
+      const out = Math.max(frame.left - at.left, at.right - frame.right);
+      if (out > 1) {
+        const clipped = getComputedStyle(box).overflowX !== 'visible';
+        found.push(
+          `${name(control)} ${clipped ? 'is cut off by' : 'spills out of'} ${name(box)} by ${Math.round(out)}px`,
+        );
+      }
+    }
     return found;
   });
 }
