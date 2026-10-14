@@ -338,7 +338,8 @@ export default async function StrategyPage({
             {/* D-496 (Strategy 1) — the first-visit hint, Main.dc.html L977. */}
             <FirstVisitHint
               storageKey="brandspace.hint.strategy"
-              text={t('hint.strategy')}
+              // Final walk (Q9): "Brandspace suggests" only while a strategy can be proposed.
+              text={t(aiStrategy ? 'hint.strategy' : 'hint.strategyNoAi')}
               closeLabel={t('hint.close')}
               testId="hint-strategy"
             />

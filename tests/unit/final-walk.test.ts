@@ -75,6 +75,12 @@ describe('nothing AI-only is drawn while no AI task can run (must-check 3, Q9)',
     );
   });
 
+  it('Strategy promises no suggestions while none can be proposed', () => {
+    expect(read('apps/dashboard/src/app/[locale]/strategy/page.tsx')).toContain(
+      "t(aiStrategy ? 'hint.strategy' : 'hint.strategyNoAi')",
+    );
+  });
+
   it('Brand Brain offers no chat (tab, Ask the brand, the orb centre) while it cannot run', () => {
     const view = read('apps/dashboard/src/app/[locale]/brand-brain/brand-brain-view.tsx');
     expect(view).toContain(
@@ -97,6 +103,7 @@ describe('nothing AI-only is drawn while no AI task can run (must-check 3, Q9)',
         'automations.emptyBodyManual',
         'intelligence.emptyBodyManual',
         'hint.brainNoChat',
+        'hint.strategyNoAi',
         'bb.orbHintNoChat',
       ] as const) {
         const text = (messages[locale] as Record<string, string>)[key];

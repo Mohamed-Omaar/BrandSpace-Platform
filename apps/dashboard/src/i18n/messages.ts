@@ -1137,6 +1137,8 @@ export const messages = {
       'عقل العلامة هو ما يعرف نشاطك. ابدأ بالأسئلة الناقصة أدناه، أو ارفع ملفًا مثل قائمة الطعام أو ملف الشركة.',
     'hint.strategy':
       'تحوّل الاستراتيجية هدفك إلى خطة: محاور المحتوى، وموضوعات كل أسبوع، ورقم واحد تتابعه. يقترح Brandspace، وأنت تقبل أو تعدّل.',
+    'hint.strategyNoAi':
+      'تحوّل الاستراتيجية هدفك إلى خطة: محاور المحتوى، وموضوعات كل أسبوع، ورقم واحد تتابعه.',
     'bb.missingTitle': 'ما الذي ينقص',
     'bb.questionAnswered': 'تمت الإجابة',
     'bb.questionOpen': 'لم تتم الإجابة بعد',
@@ -5291,6 +5293,8 @@ export const messages = {
       'Brand Brain is what knows your business. Start with the missing questions below, or upload a file like your menu or company profile.',
     'hint.strategy':
       'Strategy turns your goal into a plan: content pillars, weekly topics and one number to track. Brandspace suggests; you accept or change.',
+    'hint.strategyNoAi':
+      'Strategy turns your goal into a plan: content pillars, weekly topics and one number to track.',
     'bb.missingTitle': "What's missing",
     'bb.questionAnswered': 'answered',
     'bb.questionOpen': 'not answered yet',
