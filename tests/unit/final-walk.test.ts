@@ -70,8 +70,8 @@ describe('nothing AI-only is drawn while no AI task can run (must-check 3, Q9)',
     expect(read('apps/dashboard/src/app/[locale]/automations/page.tsx')).toContain(
       "t(mayCopilot ? 'automations.emptyBody' : 'automations.emptyBodyManual')",
     );
-    expect(read('apps/dashboard/src/app/[locale]/intelligence/page.tsx')).toContain(
-      "t(aiAnalyse ? 'intelligence.emptyBody' : 'intelligence.emptyBodyManual')",
+    expect(read('apps/dashboard/src/app/[locale]/intelligence/page.tsx')).toMatch(
+      /t\(\s*aiAnalyse \? 'intelligence\.emptyBody' : 'intelligence\.emptyBodyManual',?\s*\)/,
     );
   });
 
