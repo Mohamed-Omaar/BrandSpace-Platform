@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { messages } from '../../apps/dashboard/src/i18n/messages';
+import { channelChart } from '../../apps/dashboard/src/server/performance-view';
 
 /**
  * FINAL WALK (master plan item 7) — what the walk on the beta configuration
@@ -217,6 +218,18 @@ describe('small defects the walk found', () => {
     expect(home).toContain(
       "label: canScheduleStep ? t('home.p.stepSchedule') : t('home.p.stepSubmit'),",
     );
+  });
+
+  it('a first day of readings draws dots, and its end values never print on top of each other', () => {
+    const chart = channelChart([
+      { key: 'facebook', points: [{ label: 'Oct 11', value: 5900 }] },
+      { key: 'instagram', points: [{ label: 'Oct 11', value: 5600 }] },
+      { key: 'tiktok', points: [{ label: 'Oct 11', value: 5700 }] },
+    ]);
+    expect(chart).not.toBeNull();
+    for (const line of chart?.lines ?? []) expect(line.paths[0]).toMatch(/h0\.01$/);
+    const ys = (chart?.lines ?? []).map((line) => line.end?.y ?? 0).sort((a, b) => a - b);
+    for (let i = 1; i < ys.length; i += 1) expect(ys[i]! - ys[i - 1]!).toBeGreaterThanOrEqual(12);
   });
 
   it('a derived figure with no connected account says so, like every other figure', () => {
