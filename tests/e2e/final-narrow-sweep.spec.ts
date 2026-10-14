@@ -81,6 +81,9 @@ async function overlaps(page: Page): Promise<string[]> {
     const visible = (element: Element) => {
       const box = element.getBoundingClientRect();
       const style = getComputedStyle(element);
+      // `checkVisibility` also says no for the content of a closed <details>,
+      // which Chromium still lays out (with a box) but does not show.
+      if (!element.checkVisibility({ contentVisibilityAuto: true })) return false;
       return (
         box.width > 1 &&
         box.height > 1 &&
