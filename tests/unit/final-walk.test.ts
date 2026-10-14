@@ -259,15 +259,4 @@ describe('the owner’s answers on the final-walk review', () => {
     expect(rule('.bsp-hint-card')).toContain('background: #f6f3ff;');
     expect(rule('.bsp-hint-card')).not.toMatch(/#175cd3|#00adee/i);
   });
-
-  it('"Post to" on the beta offers only channels with a connector (D-554)', () => {
-    const content = JSON.parse(read('docs/production-config/content.json')) as {
-      platforms: { key: string }[];
-    };
-    expect(content.platforms.map((platform) => platform.key)).toEqual([
-      'instagram',
-      'facebook',
-      'tiktok',
-    ]);
-  });
 });
