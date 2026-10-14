@@ -35,6 +35,7 @@ import type { ContentPolicy } from './policy';
 import {
   formatLocalTime,
   instantForIntent,
+  localDayRangeUtc,
   monthRangeUtc,
   nextDayKey,
   resolveZonedTime,
@@ -1124,17 +1125,18 @@ export class ContentCalendarService {
 
   /**
    * The range one local day's cap is counted over: from the day's local
-   * midnight, for 24 hours. (A fixed 24 hours rather than the day's real
-   * length across a DST change — a recorded follow-up, unchanged here.)
+   * midnight to the next day's (F-101, final review). It used to be the
+   * day's midnight plus a fixed 24 hours, which on a day a daylight-saving
+   * change makes 23 or 25 hours long reached an hour into the next day or
+   * stopped an hour short of this one's end.
    */
   #dayRange(instant: Date): { dayStart: Date; dayEnd: Date } {
     const day = formatLocalTime(instant, this.#timezone).slice(0, 10);
-    const start = instantForIntent(`${day}T00:00`, this.#timezone);
-    // A day whose midnight does not exist is a DST gap at 00:00 — real, in a
-    // handful of zones. Counting from one minute later is correct and is not
-    // worth refusing the whole request over.
-    const dayStart = start ?? instant;
-    return { dayStart, dayEnd: new Date(dayStart.getTime() + 24 * 3_600_000) };
+    const range = localDayRangeUtc(day, this.#timezone);
+    // Only an unusable zone gets here (the workspace's zone is validated when
+    // it is set); count the plain day around the instant rather than refuse.
+    if (!range) return { dayStart: instant, dayEnd: new Date(instant.getTime() + 24 * 3_600_000) };
+    return { dayStart: range.start, dayEnd: range.end };
   }
 
   #audit(

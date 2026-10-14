@@ -3,12 +3,18 @@ import { CUSTOMER_DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@brandspace/ui';
 /*
  * IMPORTED FROM THE SUBPATH, NOT THE BARREL, and that is load-bearing.
  *
- * Middleware runs in the EDGE runtime, which has no `process.stdout`. Importing
- * `@brandspace/shared` pulls its index, which pulls the logger, which writes to
- * stdout at module scope — and the build fails with a Node API error pointing
- * at a file this middleware never meant to use. The subpath reaches
- * `security-headers.ts` and its one dependency (`deployment.ts`, which reads
- * `process.env` and nothing else).
+ * This file was `middleware.ts`, which ran in the EDGE runtime, with no
+ * `process.stdout`: importing `@brandspace/shared` pulled its index, which
+ * pulled the logger, which writes to stdout at module scope — and the build
+ * failed with a Node API error pointing at a file this code never meant to
+ * use. The subpath reaches `security-headers.ts` and its one dependency
+ * (`deployment.ts`, which reads `process.env` and nothing else).
+ *
+ * FINAL REVIEW (owner, item 10) — NEXT 16'S `proxy` CONVENTION. Next 16
+ * deprecated the `middleware` file for `proxy` (same matcher, same request
+ * and response API; it runs on the Node.js runtime). The rename changes no
+ * behaviour: the same headers, redirects and nonce for the same paths. The
+ * subpath import stays, so the proxy still loads nothing it does not use.
  */
 import { AUTHENTICATED_CACHE_CONTROL, securityHeaders } from '@brandspace/shared/security-headers';
 
@@ -58,7 +64,7 @@ function secured(request: NextRequest, redirectTo?: URL): NextResponse {
          * filter, the asset cursor and the selected row.
          *
          * A HEADER RATHER THAN A PROP ON TWENTY-NINE PAGES: the path is a fact
-         * about the request, the middleware is the one place that sees every
+         * about the request, the proxy is the one place that sees every
          * request, and a prop each page has to remember is a prop a new page
          * will forget.
          */
@@ -86,7 +92,7 @@ function secured(request: NextRequest, redirectTo?: URL): NextResponse {
  * D-277, which replaced the D-03 Arabic default for the customer app), so every
  * route resolves to an explicit locale and `dir`/`lang` are always unambiguous.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   /*

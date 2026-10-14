@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
  *
  * Every console page nests inside this layout, so no page can be reached
  * without a session that has passed MFA and carries an admin-capable role.
- * This is enforcement, not decoration: middleware and client routing are
+ * This is enforcement, not decoration: the proxy and client routing are
  * conveniences, and neither is trusted (docs/SECURITY.md §4.5).
  */
 export default async function ConsoleLayout({

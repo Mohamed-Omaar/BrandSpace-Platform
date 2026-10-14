@@ -123,9 +123,12 @@ test.describe('D-281 · notes as conversations', () => {
     await page.getByTestId(`note-importance-${threadId}`).click();
     await expect(page.getByTestId(`note-important-${threadId}`)).toBeVisible();
     await openOptions();
-    await page.getByTestId(`note-due-input-${threadId}`).fill('2030-01-15');
+    // FINAL REVIEW (owner, item 6) — next year, always (it was the fixed
+    // 2030-01-15: in 2030 the year is the current one and may not be shown).
+    const dueYear = String(new Date().getUTCFullYear() + 1);
+    await page.getByTestId(`note-due-input-${threadId}`).fill(`${dueYear}-01-15`);
     await page.getByTestId(`note-due-save-${threadId}`).click();
-    await expect(page.getByTestId(`note-due-${threadId}`)).toContainText('2030');
+    await expect(page.getByTestId(`note-due-${threadId}`)).toContainText(dueYear);
 
     // --- The Notes inbox links to THIS thread, and it opens highlighted.
     // Round 4, Gate 2b: the prototype's two panes — the chosen thread's pane

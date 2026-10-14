@@ -250,11 +250,14 @@ export default defineRailway((ctx, project) => {
    * Public base URLs.
    *
    * THESE BLOCK THE FIRST PRODUCTION BOOT UNTIL THEY EXIST, and the deployment
-   * order in the doc is arranged around that. `assertProductionSafety` refuses
-   * to start a production process whose `PUBLIC_WEB_URL` or
-   * `PUBLIC_API_BASE_URL` begins with `http://`, and the schema defaults are
-   * `http://localhost:...`. So a domain — even a generated `*.up.railway.app`
-   * one — has to exist before the API or worker will come up at all.
+   * order in the doc is arranged around that. `assertProductionSafety`
+   * requires, per service, the public URLs that service reads
+   * (`PROFILE_PUBLIC_URLS` in packages/shared/src/env.ts): dashboard
+   * `PUBLIC_DASHBOARD_BASE_URL`, admin `PUBLIC_API_BASE_URL`, api both, web and
+   * worker none. Any of the three `PUBLIC_*` URLs that is set must be https.
+   * They have no localhost defaults: an absent URL is absent. So a domain —
+   * even a generated `*.up.railway.app` one — has to exist before the
+   * dashboard, admin or API will come up at all.
    */
   const publicUrlEnv = {
     PUBLIC_WEB_URL: ownerSetting(

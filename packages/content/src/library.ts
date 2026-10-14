@@ -9,6 +9,7 @@ import {
 import { AppError, brandIdQueryFilter, systemClock } from '@brandspace/shared';
 import {
   contentItemNotFound,
+  contentMovedSince,
   contentNotEditable,
   draftLimitReached,
   formatNotCarried,
@@ -1232,7 +1233,19 @@ export class ContentLibraryService {
     }
 
     if (item.status !== 'APPROVED') return;
-    await this.db.contentItem.update({ where: { id: item.id }, data: { status: 'DRAFT' } });
+    /*
+     * F8 (FINAL REVIEW) — WRITTEN ONLY OVER THE STATUS THAT WAS READ. Between
+     * the read above and this write another request could schedule the post
+     * (APPROVED → SCHEDULED, with a live slot); an unconditional write then
+     * turned a scheduled post back into a draft under its slot. The write is
+     * now conditional on APPROVED, and a post that moved meanwhile refuses the
+     * edit — nothing is changed, and the person tries again on what is there.
+     */
+    const revoked = await this.db.contentItem.updateMany({
+      where: { id: item.id, status: 'APPROVED' },
+      data: { status: 'DRAFT' },
+    });
+    if (revoked.count === 0) throw contentMovedSince();
     await writeAuditEvent(this.db, this.workspaceId, {
       action: 'content.approval_revoked',
       actorType: 'USER',
@@ -1317,10 +1330,19 @@ export class ContentLibraryService {
     };
     if (!(allowed[item.status] ?? []).includes(input.to)) throw transitionNotAllowed();
 
-    const updated = await this.db.contentItem.update({
-      where: { id: item.id },
+    /*
+     * F8 (FINAL REVIEW) — ONLY FROM THE STATUS THE RULE WAS CHECKED AGAINST.
+     * The allowed edge above was judged on the status read; a concurrent
+     * change (a schedule, a submit) used to be overwritten here — an approved
+     * post scheduled meanwhile was archived under its live slot. Conditional
+     * now: a post that moved since is refused, unchanged.
+     */
+    const moved = await this.db.contentItem.updateMany({
+      where: { id: item.id, status: item.status },
       data: { status: input.to },
     });
+    if (moved.count === 0) throw contentMovedSince();
+    const updated = await this.db.contentItem.findUniqueOrThrow({ where: { id: item.id } });
     await writeAuditEvent(this.db, this.workspaceId, {
       action: 'content.item.transitioned',
       actorType: 'USER',

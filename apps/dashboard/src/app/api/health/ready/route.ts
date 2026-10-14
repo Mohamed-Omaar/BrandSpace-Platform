@@ -22,7 +22,7 @@ const log = createLogger({ context: { component: 'dashboard.readiness' } });
  *
  * PUBLIC AND DETAIL-FREE, like the api's `/health/ready`: one word per check.
  * The pending migration names are logged for the operator, never returned.
- * Outside the locale redirect because the middleware passes `/api/*` through.
+ * Outside the locale redirect because the proxy passes `/api/*` through.
  */
 export async function GET(): Promise<NextResponse> {
   const probe = await probeDatabaseReadiness(getPrisma());

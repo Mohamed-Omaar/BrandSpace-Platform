@@ -690,6 +690,14 @@ test('11 · the post is scheduled and the calendar states its context', async ({
   await page.getByTestId('schedule-time').fill(`${part('hour')}:${part('minute')}`);
   await clickAndSettle(page.getByTestId('schedule-submit'), page);
 
+  /*
+   * FINAL REVIEW (owner, item 6) — THE SLOT'S OWN MONTH. The action returns
+   * to the month on screen; in the last minute of a month the slot (a minute
+   * ahead) is in the next one and its chip was not there. Open the month the
+   * slot was scheduled in, in the zone it was scheduled in.
+   */
+  await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${part('year')}-${part('month')}`);
+
   // THE SLOT IS ON THE MONTH, and opening it states the facts a planner scans
   // for — the campaign it belongs to, its publishing state, its media count.
   const chip = page.locator('[data-testid^="calendar-post-"]', { hasText: CONTENT_TITLE }).first();

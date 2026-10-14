@@ -26,7 +26,7 @@ export async function AuthCard({
    * PR D (Auth 1) — THE LANGUAGE BUTTON KEEPS THE SCREEN, as the prototype's
    * does (`Auth.dc.html`: the language flips in place). It linked to sign-in
    * from every card, so sign-up, reset, verify and the workspace list lost
-   * their screen. The middleware puts the real path and query on the request;
+   * their screen. The proxy (`src/proxy.ts`) puts the real path and query on the request;
    * sign-in is the fallback.
    */
   const languageHref = switchLocalePath(

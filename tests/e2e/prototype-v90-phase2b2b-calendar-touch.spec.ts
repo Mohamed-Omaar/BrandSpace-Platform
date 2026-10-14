@@ -46,6 +46,7 @@ test.describe('§8.2 · dragging a post with a finger (phone)', () => {
     page,
   }) => {
     const workspace = await ownWorkspace('touch-move');
+    const startedOn = utcDay(0);
     const from = utcDay(2);
     const to = utcDay(5);
     const post = await seedPost(workspace, `${from}T12:00`);
@@ -69,8 +70,18 @@ test.describe('§8.2 · dragging a post with a finger (phone)', () => {
     await expect(strip).toBeVisible();
     const days = strip.locator('[data-drop-day]');
     await expect(days).toHaveCount(14);
-    await expect(days.first()).toHaveAttribute('data-drop-day', utcDay(0));
-    await expect(days.last()).toHaveAttribute('data-drop-day', utcDay(13));
+    /*
+     * FINAL REVIEW (owner, item 6) — TODAY AS THE STRIP DREW IT. It was compared
+     * with the UTC day at the moment of the check, which across midnight is a
+     * day after the one the strip was drawn on. Today first — the day the test
+     * began or, across midnight, the next — and thirteen days after it last.
+     */
+    const first = (await days.first().getAttribute('data-drop-day')) ?? '';
+    expect([...new Set([startedOn, utcDay(0)])]).toContain(first);
+    const thirteenAfter = new Date(Date.parse(`${first}T00:00:00Z`) + 13 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    await expect(days.last()).toHaveAttribute('data-drop-day', thirteenAfter);
 
     const target = page.getByTestId(`calendar-strip-${to}`);
     await stripSettled(page);

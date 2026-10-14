@@ -3,12 +3,18 @@ import { CONTROL_CENTER_DEFAULT_LOCALE, SUPPORTED_LOCALES } from '@brandspace/ui
 /*
  * IMPORTED FROM THE SUBPATH, NOT THE BARREL, and that is load-bearing.
  *
- * Middleware runs in the EDGE runtime, which has no `process.stdout`. Importing
- * `@brandspace/shared` pulls its index, which pulls the logger, which writes to
- * stdout at module scope — and the build fails with a Node API error pointing
- * at a file this middleware never meant to use. The subpath reaches
- * `security-headers.ts` and its one dependency (`deployment.ts`, which reads
- * `process.env` and nothing else).
+ * This file was `middleware.ts`, which ran in the EDGE runtime, with no
+ * `process.stdout`: importing `@brandspace/shared` pulled its index, which
+ * pulled the logger, which writes to stdout at module scope — and the build
+ * failed with a Node API error pointing at a file this code never meant to
+ * use. The subpath reaches `security-headers.ts` and its one dependency
+ * (`deployment.ts`, which reads `process.env` and nothing else).
+ *
+ * FINAL REVIEW (owner, item 10) — NEXT 16'S `proxy` CONVENTION. Next 16
+ * deprecated the `middleware` file for `proxy` (same matcher, same request
+ * and response API; it runs on the Node.js runtime). The rename changes no
+ * behaviour: the same headers, redirects and nonce for the same paths. The
+ * subpath import stays, so the proxy still loads nothing it does not use.
  */
 import { AUTHENTICATED_CACHE_CONTROL, securityHeaders } from '@brandspace/shared/security-headers';
 
@@ -70,13 +76,13 @@ function secured(request: NextRequest, redirectTo?: URL): NextResponse {
  * access, so it could not verify a session even if we wanted it to — which is
  * exactly why the headers above are the only security work it does.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   /*
    * `/api/*` is a machine endpoint — today only `/api/health/ready`, Railway's
    * healthcheck (RAILWAY-DEPLOYMENT.md §4.4). A locale redirect would answer
    * the probe with a 307 instead of the readiness verdict. Same rule as the
-   * customer dashboard's middleware.
+   * customer dashboard's proxy.
    */
   if (pathname.startsWith('/api/')) return secured(request);
   const hasLocale = SUPPORTED_LOCALES.some(

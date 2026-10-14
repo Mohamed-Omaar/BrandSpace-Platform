@@ -15,6 +15,7 @@ import {
   SideSheet,
   colorTokens,
   radiusTokens,
+  showToast,
 } from '@brandspace/ui';
 import {
   aspectLabel,
@@ -22,6 +23,7 @@ import {
   fill,
   fingerprint,
   formatCredits,
+  spentMessage,
 } from '../../../../server/composer-editor';
 import type { MediaOptionView } from './media-picker';
 
@@ -344,6 +346,12 @@ export function MediaDrawer({
                 setBusy(false);
                 if (payload && typeof payload['assetId'] === 'string') {
                   onGenerated(payload['assetId']);
+                  // S6 (final review) — the image names what it cost, as every
+                  // other paid Studio action does (nothing for a replay).
+                  const spent = spentMessage(payload['creditsChargedMilli'], t);
+                  if (spent) {
+                    showToast({ tone: 'success', message: spent, testId: 'studio-spent-toast' });
+                  }
                 }
               }}
             >

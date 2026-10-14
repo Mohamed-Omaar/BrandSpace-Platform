@@ -3,12 +3,12 @@ import { expect, test, type Page } from '@playwright/test';
 import { DASHBOARD_BASE_URL } from './apps';
 import {
   dayWords,
+  localPartsIn,
   moveBehindTheBack,
   nextUtcMonth,
   openCalendar,
   seedPost,
   slotState,
-  utcDay,
 } from './calendar-seed';
 import { E2E_CREDENTIALS_FILE, type E2eAdminCredentials } from './env';
 import { enter, ownWorkspace } from './own-workspace';
@@ -152,15 +152,29 @@ test.describe('§8.2 · dragging a post with a mouse', () => {
   });
 
   test('F2: a day that has passed turns grey, says so, and refuses the drop', async ({ page }) => {
-    const today = utcDay();
-    test.skip(today.endsWith('-01'), 'the month on screen starts today: no day of it has passed');
-    const workspace = await ownWorkspace('drag-past');
-    const month = today.slice(0, 7);
+    /*
+     * FINAL REVIEW (owner, item 6) — A WORKSPACE WHOSE DAY ALWAYS HAS A PAST.
+     * The drag needs a passed day and a day still to come in the month on
+     * screen. In UTC that is impossible on the 1st (the test skipped itself),
+     * and in the last hour of a month the 23:59 post has nearly passed. The
+     * workspace's zone is chosen for the moment of the run instead: UTC, or
+     * one of two zones without daylight saving whose local day is the 2nd
+     * (UTC+14) or the month's last day well before its end (UTC−11).
+     */
+    const now = new Date();
+    const timezone =
+      ['UTC', 'Pacific/Kiritimati', 'Pacific/Pago_Pago'].find((zone) => {
+        const p = localPartsIn(now, zone);
+        const lastOfMonth = new Date(Date.UTC(p.year, p.month, 0)).getUTCDate();
+        const minutesLeft = 24 * 60 - (p.hour * 60 + p.minute);
+        return p.day >= 2 && !(p.day === lastOfMonth && minutesLeft < 60);
+      }) ?? 'UTC';
+    const local = localPartsIn(now, timezone);
+    const month = `${local.year}-${String(local.month).padStart(2, '0')}`;
+    const workspace = await ownWorkspace('drag-past', { timezone });
     // The month's last day, late: still to come for the whole of today.
-    const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0))
-      .toISOString()
-      .slice(0, 10);
-    const post = await seedPost(workspace, `${last}T23:59`);
+    const last = new Date(Date.UTC(local.year, local.month, 0)).toISOString().slice(0, 10);
+    const post = await seedPost(workspace, `${last}T23:59`, 'SCHEDULED', timezone);
     await enter(page, workspace.slug);
     await openCalendar(page, month);
     const sent = posts(page);

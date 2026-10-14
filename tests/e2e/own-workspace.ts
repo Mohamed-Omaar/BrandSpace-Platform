@@ -45,7 +45,11 @@ export interface OwnWorkspace {
 }
 
 /** A workspace of its own, owned by the e2e customer, with one ACTIVE brand. */
-export async function ownWorkspace(label: string): Promise<OwnWorkspace> {
+export async function ownWorkspace(
+  label: string,
+  /** The workspace's zone; UTC unless a test needs a particular local day. */
+  options: { readonly timezone?: string } = {},
+): Promise<OwnWorkspace> {
   const { customer } = credentials();
   const slug = `e2e-${label}-${randomUUID().slice(0, 8)}`;
   const brandId = randomUUID();
@@ -71,7 +75,7 @@ export async function ownWorkspace(label: string): Promise<OwnWorkspace> {
         status: 'ACTIVE',
         country: 'US',
         defaultLocale: 'EN',
-        timezone: 'UTC',
+        timezone: options.timezone ?? 'UTC',
         currency: 'USD',
       },
     });

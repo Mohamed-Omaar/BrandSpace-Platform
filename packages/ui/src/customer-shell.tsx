@@ -800,11 +800,30 @@ export function CustomerFrameHost({ children }: { readonly children: ReactNode }
       if (new URL(anchor.href, window.location.href).origin !== window.location.origin) return;
       store.activate();
     };
+    /*
+     * FINAL REVIEW (owner, item 2) — A FORM'S REDIRECT IS A PAGE CHANGE TOO.
+     * A form in the page (Duplicate, Pause, Resume…) posts its action and the
+     * answer may be a redirect to another page, which used to arrive before
+     * any hand-over and draw its own rail. The host now takes over when such
+     * a form is submitted, before its action leaves: the form itself is in the
+     * page's panel, which the hand-over never re-creates. Forms in the rail,
+     * its menus and the floating parts stay with the shell, as links do.
+     */
+    const onSubmit = (event: SubmitEvent) => {
+      if (store.active()) return;
+      const form = event.target instanceof HTMLFormElement ? event.target : null;
+      if (!form?.closest('.bs-panel')) return;
+      const target = event.submitter?.getAttribute('formtarget') ?? form.target;
+      if (target && target !== '_self') return;
+      store.activate();
+    };
     const onHistory = () => store.activate();
     document.addEventListener('click', onClick, true);
+    document.addEventListener('submit', onSubmit, true);
     window.addEventListener('popstate', onHistory);
     return () => {
       document.removeEventListener('click', onClick, true);
+      document.removeEventListener('submit', onSubmit, true);
       window.removeEventListener('popstate', onHistory);
     };
   }, [store]);

@@ -70,7 +70,11 @@ for (const locale of ['en', 'ar'] as const) {
         ).id;
       return {
         run: await make('Running one', 'ACTIVE', day(0, 5), day(1, 1)),
-        paused: await make('Paused one', 'PAUSED', day(-2, 1), day(0, 20)),
+        // FINAL REVIEW (owner, item 6) — every row is inside the window whether
+        // the server renders in this month or (seconds later) the next: the
+        // paused one ran to the 20th of THIS month, and a render after midnight
+        // on the 1st dropped it.
+        paused: await make('Paused one', 'PAUSED', day(-2, 1), day(1, 20)),
         plan: await make('Planned one', 'PLANNED', day(2, 3), day(4, 1)),
         outside: await make('Long ago', 'COMPLETED', day(-6, 1), day(-5, 1)),
       };

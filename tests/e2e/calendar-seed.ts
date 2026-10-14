@@ -35,11 +35,55 @@ export function nextUtcMonth(): { month: string; day: (d: number) => string } {
 }
 
 /** A post planned at `localTime` (`YYYY-MM-DDTHH:mm`, UTC), SCHEDULED unless told otherwise. */
+/** A zone's local parts at an instant (the calendar's own reading of a day). */
+export function localPartsIn(instant: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant);
+  const read = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? '0');
+  return {
+    year: read('year'),
+    month: read('month'),
+    day: read('day'),
+    hour: read('hour'),
+    minute: read('minute'),
+  };
+}
+
+/**
+ * The instant a `YYYY-MM-DDTHH:mm` wall-clock means in a zone, for the zones a
+ * fixture uses (no daylight-saving gap at the times they seed). Two passes of
+ * "subtract the zone's offset", as the product's own resolver does.
+ */
+export function instantIn(localTime: string, timezone: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(localTime);
+  if (!match) return null;
+  const [, y, mo, d, h, mi] = match.map(Number);
+  const target = Date.UTC(y ?? 0, (mo ?? 1) - 1, d ?? 1, h ?? 0, mi ?? 0);
+  let candidate = new Date(target);
+  for (let pass = 0; pass < 2; pass += 1) {
+    const p = localPartsIn(candidate, timezone);
+    const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+    candidate = new Date(candidate.getTime() - (asUtc - target));
+  }
+  return candidate;
+}
+
 export async function seedPost(
   workspace: OwnWorkspace,
   localTime: string,
   status: 'SCHEDULED' | 'PUBLISHED' = 'SCHEDULED',
+  /** The slot's zone — the workspace's. UTC unless the workspace has another. */
+  timezone = 'UTC',
 ): Promise<SeededPost> {
+  const instant = instantIn(localTime, timezone);
+  if (!instant) throw new Error(`${localTime} is not a time in ${timezone}`);
   const title = `Drag post ${randomUUID().slice(0, 6)}`;
   return withPlatformPrisma(async (prisma) => {
     const item = await prisma.contentItem.create({
@@ -67,9 +111,9 @@ export async function seedPost(
         workspaceId: workspace.workspaceId,
         brandId: workspace.brandId,
         contentItemId: item.id,
-        scheduledAtUtc: new Date(`${localTime}:00Z`),
+        scheduledAtUtc: instant,
         scheduledLocalTime: localTime,
-        timezone: 'UTC',
+        timezone,
         status,
         platformKeys: ['instagram'],
         createdByUserId: workspace.ownerId,

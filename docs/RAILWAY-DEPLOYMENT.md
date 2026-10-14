@@ -77,13 +77,18 @@ and §22 lists it as one.
 
 ### 0.3 Public URLs must exist before the first production boot succeeds
 
-`assertProductionSafety` refuses to start a production process whose
-`PUBLIC_WEB_URL` or `PUBLIC_API_BASE_URL` begins with `http://`, and the schema
-defaults are `http://localhost:…`. The API and the worker call
-`validateStartupConfiguration()` on the way up and **throw** in production.
+`assertProductionSafety` requires, per service, the public URLs that service
+reads (`PROFILE_PUBLIC_URLS` in `packages/shared/src/env.ts`): dashboard
+`PUBLIC_DASHBOARD_BASE_URL`, admin `PUBLIC_API_BASE_URL`, api both, worker and
+web none. `PUBLIC_WEB_URL` is required by no service. Any of the three that is
+set must be `https://`. There are no `http://localhost` defaults for them any
+more: an absent URL is absent. All five services call
+`validateStartupConfiguration()` on the way up and **throw** in production —
+the api and the worker in their entry points, the three Next.js apps in
+`src/instrumentation.ts`.
 
 So a domain — even a generated `*.up.railway.app` one — has to exist before the
-API will start at all. The deployment order in §20 is arranged around this; the
+dashboard, the admin and the API will start at all. The deployment order in §20 is arranged around this; the
 generic "deploy, then add domains" sequence would produce a crash-looping API
 and a confusing first hour.
 
@@ -158,10 +163,13 @@ divergence: splitting the platform surface out of the API is a real
 architectural question, and not one a deployment blueprint should decide.
 
 **On the key domains.** Each process gets only the key domains it uses. The
-dashboard verifies a TOTP code at sign-in so it holds `CUSTOMER_MFA_VAULT_KEK`
+dashboard verifies a TOTP code at sign-in so it holds the customer MFA domain
 and neither of the others — a login request must not be able to unwrap a
 platform provider credential. The worker unwraps customer social tokens when
-publishing, so it holds `SOCIAL_TOKEN_VAULT_KEK` alone. This is D-136 and D-206
+publishing, so it holds the social token domain alone. In production a domain
+is held as its KMS ARN (`CUSTOMER_MFA_VAULT_KMS_KEY_ARN` on the dashboard,
+`SOCIAL_TOKEN_VAULT_KMS_KEY_ARN` on the worker), which is what the boot check
+requires; the matching `*_VAULT_KEK` is what staging uses (§25.4). This is D-136 and D-206
 expressed as a deployment topology.
 
 ### 1.4 Region, and a residency problem
@@ -809,23 +817,25 @@ providers are activated.
 
 ## 11. Health checks
 
-| Service     | Path            | What it proves                                                                                                     |
-| ----------- | --------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `api`       | `/health/ready` | The tenant database answered within 2 s; the queue, tracing and `STORAGE_*` contract are reported but non-required |
-| `worker`    | `/`             | `worker.isRunning()` — the BullMQ consumer is consuming                                                            |
-| `web`       | `/`             | The Next.js server renders                                                                                         |
-| `dashboard` | `/`             | The Next.js server renders                                                                                         |
-| `admin`     | `/`             | The Next.js server renders                                                                                         |
+| Service     | Path                | What it proves                                                                                                                                                                        |
+| ----------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api`       | `/health/ready`     | The tenant database answered within 2 s (`database`) and holds every migration this build needs (`schema`); the queue, tracing and `STORAGE_*` contract are reported but non-required |
+| `worker`    | `/`                 | `worker.isRunning()` — the BullMQ consumer is consuming; 503 `waiting_for_migrations` until the schema is current                                                                     |
+| `web`       | `/en/status`        | The Next.js server renders (a bare `/` answers 307)                                                                                                                                   |
+| `dashboard` | `/api/health/ready` | The tenant database answered (`database`) and holds every migration this build needs (`schema`)                                                                                       |
+| `admin`     | `/api/health/ready` | The platform database identity answered (`database`) and holds every migration this build needs (`schema`)                                                                            |
 
 **Readiness, not liveness, for the API's routing probe.** `/health/live` checks
 nothing external by design — a liveness probe that touched the database would
 restart the whole fleet the moment the database blinked. `/health/ready` returns
-503 when the tenant database is down, which is exactly when Railway should stop
-routing to that instance.
+503 when the tenant database is down or a migration this build needs is not
+applied yet (`schema`, §4.4), which is exactly when Railway should stop routing
+to that instance.
 
 **The semantics are preserved, not reinterpreted.** `/health/ready` reports the
-queue, tracing and object storage as non-required: Redis being down degrades
-`background-jobs` and leaves the service ready. Railway will keep routing to it,
+queue, tracing and object storage as non-required: an unset `REDIS_URL` degrades
+`background-jobs` and leaves the service ready. (The `queue` check reports only
+whether `REDIS_URL` is set; it does not connect to Redis.) Railway will keep routing to it,
 which is the documented intent.
 
 **The `object-storage` check reports configuration, not reachability**, and says
@@ -838,9 +848,10 @@ the platform still serves every screen and every non-media action, and
 `createObjectStore` already refuses loudly where the missing capability actually
 matters. The round-trip proof is `docs/RAILWAY-SMOKE-TEST.md` §6.
 
-No new endpoint was created. The Next.js apps have no dedicated health route, so
-`/` is used — it exercises rendering, middleware and the CSP path, which is more
-than a static handler would.
+The dashboard and admin have a dedicated readiness route,
+`src/app/api/health/ready/route.ts`, outside the locale redirect (the proxy
+passes `/api/*` through). The web app has none; `/en/status` exercises
+rendering, the proxy and the CSP path.
 
 `healthcheckTimeout` is 300 s on every service: a cold Next.js start plus Prisma
 client load can exceed a short default, and a healthcheck that times out during
@@ -974,14 +985,15 @@ production credential for any vendor appears anywhere in this blueprint.
 The platform is designed to start without them and fails closed where a
 capability is genuinely unavailable:
 
-| Capability        | Without a provider                                                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------- |
-| AI generation     | The deterministic provider refuses to construct in production; AI features are unavailable, the platform runs |
-| Social publishing | Mock connectors refuse in production; no account can be connected                                             |
-| Payments          | The development adapter refuses in production; checkout is unavailable                                        |
-| Email             | `UnconfiguredEmailProvider` **throws** until Resend is activated — §16                                        |
-| Object storage    | `createObjectStore` throws, naming the missing `STORAGE_*` variables — §6                                     |
-| Observability     | Spans are created locally and nothing is exported; readiness reports it                                       |
+| Capability        | Without a provider                                                                                                                                                                                                                                                                                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI generation     | The deterministic provider refuses to construct in production; AI features are unavailable, the platform runs                                                                                                                                                                                                                                               |
+| Social publishing | Mock connectors refuse in production; no account can be connected                                                                                                                                                                                                                                                                                           |
+| Payments          | The development adapter refuses in production; checkout is unavailable                                                                                                                                                                                                                                                                                      |
+| Email             | `UnconfiguredEmailProvider` **throws** until Resend is activated — §16                                                                                                                                                                                                                                                                                      |
+| Object storage    | `createObjectStore` throws, naming the missing `STORAGE_*` variables — §6                                                                                                                                                                                                                                                                                   |
+| Malware scanning  | Off for the beta: `assets.scanning.provider: "none"` with `required: false` (`docs/production-config/assets.json`); uploads become usable and are recorded `not_scanned`. `mock` refuses in production. Scanii, when chosen, needs `assets.scanning.scanii.endpoint` and the worker's `SCANII_API_KEY` / `SCANII_API_SECRET`, or the worker refuses the job |
+| Observability     | Spans are created locally and nothing is exported; readiness reports it                                                                                                                                                                                                                                                                                     |
 
 **No guard is weakened to make the first deployment green.** A green deployment
 that pretends to publish, charge or email is worse than a deployment that says
@@ -1299,8 +1311,12 @@ verified with `docs/RAILWAY-SMOKE-TEST.md`, and only then repeats for production
 10. **Create the three KMS keys and the four IAM users** for this environment
     (§25), and set the secrets and URLs: three database URLs, two session
     secrets, the key-domain ARNs and per-service AWS pairs each service is
-    entitled to, six public URLs, the four `STORAGE_*` values from step 6, and
-    `INTERNAL_SERVICE_TOKEN` — per service, per
+    entitled to, the public URLs each service reads (§0.3:
+    `PUBLIC_DASHBOARD_BASE_URL` on dashboard and api, `PUBLIC_API_BASE_URL` on
+    admin and api; `PUBLIC_WEB_URL`, `DASHBOARD_URL`, `ADMIN_URL` and `API_URL`
+    are read by no code), `CLIENT_ORIGIN_STRATEGY=railway-edge` on dashboard and
+    api (both refuse to start without it), the four `STORAGE_*` values from
+    step 6, and `INTERNAL_SERVICE_TOKEN` — per service, per
     `docs/RAILWAY-ENVIRONMENT-MATRIX.md`. Generate with §22's commands. In
     staging, set the three KEKs and escrow them outside Railway now, not later.
     **A service given a key domain it may not reach refuses to start**, so this
@@ -1317,8 +1333,9 @@ verified with `docs/RAILWAY-SMOKE-TEST.md`, and only then repeats for production
 16. **Bootstrap the platform owner** — the exact command and the one-time MFA
     enrolment are §24 — and sign in to the Control Center with MFA. §25 must
     be done first, or the owner's TOTP seed cannot be sealed.
-17. **Custom domains** (§10), then update the six public URL variables and
-    redeploy so callbacks are built from the real origins.
+17. **Custom domains** (§10), then update `PUBLIC_API_BASE_URL` and
+    `PUBLIC_DASHBOARD_BASE_URL` on the services that carry them and redeploy
+    those services so callbacks are built from the real origins.
 18. **Re-run the smoke test** against the custom domains.
 19. **Repeat 3–18 for production**, with its own instances and its own secrets.
 20. **Activate Resend** in the Integrations Hub (§16.1): enter the key and From
@@ -1456,6 +1473,9 @@ if any table outside the list above holds a single row.
   vault cannot seal anything in a production process, and the command
   refuses up front rather than creating an owner whose second factor then
   fails to save.
+- ☐ `SECRET_VAULT_KEK` is set (not a placeholder) on the service you will SSH
+  into. The command's guard demands it even in production, where the KMS key
+  is what seals (`packages/database/prisma/bootstrap-owner-guards.ts`).
 - ☐ `DATABASE_PLATFORM_URL` is set on the service you will SSH into, and points
   at `brandspace_platform`. The command asks PostgreSQL who it is connected
   as and refuses anything else.

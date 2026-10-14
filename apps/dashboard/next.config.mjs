@@ -7,7 +7,7 @@ const nextConfig = {
    * PHASE 2C-4 — THE TRANSPORT CEILING FOR A 20 MiB BRAND BRAIN SOURCE.
    *
    * Next.js refuses a Server Action body over 1 MB, and buffers at most 10 MB
-   * of a request for the middleware (`proxyClientMaxBodySize`), so a 20 MiB
+   * of a request for the proxy (`proxyClientMaxBodySize`), so a 20 MiB
    * document never reached the upload action at all. Both are raised to
    * 24 MiB (25,165,824 bytes): the approved file ceiling, 20 * 1024 * 1024 =
    * 20,971,520 bytes, plus room for the multipart envelope and the form's
@@ -32,7 +32,7 @@ const nextConfig = {
     staleTimes: { dynamic: 0, static: 30 },
   },
   /*
-   * SECURITY HEADERS LIVE IN `src/middleware.ts` (Phase 10 §21), not here.
+   * SECURITY HEADERS LIVE IN `src/proxy.ts` (Phase 10 §21), not here.
    * Content-Security-Policy needs a per-request nonce, and Next.js reads
    * that nonce off the REQUEST headers to stamp its own inline scripts —
    * which a static `headers()` block cannot provide. Declaring the other

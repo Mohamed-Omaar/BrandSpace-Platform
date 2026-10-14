@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Secret, TOTP } from 'otpauth';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { hashPassword } from '@brandspace/auth';
 import { DASHBOARD_BASE_URL } from './apps';
@@ -280,6 +282,27 @@ async function seededFixtureHolidayDay(): Promise<string> {
   });
 }
 
+/**
+ * FINAL REVIEW (owner, item 6) — A FIXTURE DAY THAT IS STILL AHEAD. The seed
+ * writes the holiday three days after it runs; a database seeded four or more
+ * days earlier holds a day that has passed, and a past day's chip has no link
+ * (`day.key >= todayKey`). When the stored day is not at least tomorrow (UTC,
+ * the fixture workspaces' zone), the seed is run again — the same operator-like
+ * activation — and the day it wrote is read back. CI seeds every run, so there
+ * this never fires; a local run on an older database no longer fails by date.
+ */
+async function aheadFixtureHolidayDay(): Promise<string> {
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const day = await seededFixtureHolidayDay();
+  if (day >= tomorrow) return day;
+  execFileSync('pnpm', ['exec', 'tsx', 'tests/e2e/seed-calendar-fixture.ts'], {
+    // The repository root, where `.e2e-admin.json` lives.
+    cwd: path.dirname(E2E_CREDENTIALS_FILE),
+    stdio: 'inherit',
+  });
+  return seededFixtureHolidayDay();
+}
+
 test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; suggested times', () => {
   test('a holiday chip, the Studio for that day, and "Suggested time" in the schedule dialog', async ({
     page,
@@ -289,7 +312,7 @@ test.describe('G6 · the calendar: a ★ holiday opens the Studio for its day; s
     // `seed-calendar-fixture.ts`: a fixture holiday three days after the seed, in
     // the fixture workspaces' country, and suggested times for that country —
     // on the day the seed wrote, read back rather than recomputed.
-    const day = await seededFixtureHolidayDay();
+    const day = await aheadFixtureHolidayDay();
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${day.slice(0, 7)}`);
     const chip = page.getByTestId(`calendar-marker-${day}-0`);
