@@ -119,6 +119,7 @@ for (const locale of ['en', 'ar'] as const) {
           glides: Animation[];
           inPressTask: { target: string; gliding: boolean } | null;
           from: string;
+          framesToStart: number | null;
         };
       };
       const nav = document.querySelector('[data-testid="sidebar"] nav');
@@ -132,6 +133,7 @@ for (const locale of ['en', 'ar'] as const) {
         glides: [],
         inPressTask: null,
         from: pill?.style.transform ?? '',
+        framesToStart: null,
       };
       // The window, bubbling: after React's handler, still inside the press's task.
       window.addEventListener(
@@ -169,6 +171,24 @@ for (const locale of ['en', 'ar'] as const) {
             w.__rail.pressedAt = event.timeStamp;
             // The browser has started processing the click: the first listener runs now.
             w.__rail.processingAt = performance.now();
+            /*
+             * Frames, counted rather than timed: each animation frame after
+             * the press asks whether the glide has started (its start time is
+             * resolved before that frame's callbacks run).
+             */
+            let frames = 0;
+            const count = () => {
+              frames += 1;
+              const started = pill
+                ?.getAnimations()
+                .some(
+                  (a) =>
+                    (a as CSSTransition).transitionProperty === 'transform' && a.startTime !== null,
+                );
+              if (started) w.__rail.framesToStart = frames;
+              else if (frames < 120) requestAnimationFrame(count);
+            };
+            requestAnimationFrame(count);
           }
         },
         { capture: true, once: true },
@@ -206,6 +226,7 @@ for (const locale of ['en', 'ar'] as const) {
           glides: Animation[];
           inPressTask: { target: string; gliding: boolean } | null;
           from: string;
+          framesToStart: number | null;
         };
       };
       const nav = document.querySelector('[data-testid="sidebar"] nav');
@@ -233,13 +254,14 @@ for (const locale of ['en', 'ar'] as const) {
         finished: glide?.playState === 'finished',
         inPressTask: w.__rail.inPressTask,
         from: w.__rail.from,
+        framesToStart: w.__rail.framesToStart,
       };
     });
     expect(result.sameNav, 'the rail’s nav is the same element after the move').toBe(true);
     expect(result.samePill, 'the pill is the same element after the move').toBe(true);
     expect(result.glides, 'one glide: the arriving page does not restart it').toBe(1);
     console.log(
-      `rail glide (${locale}): created ${result.createdAfter?.toFixed(1)} ms, started ${result.startedAfter?.toFixed(1)} ms after the press was processed (queued ${result.queued?.toFixed(1)} ms before it)`,
+      `rail glide (${locale}): created ${result.createdAfter?.toFixed(1)} ms, started ${result.startedAfter?.toFixed(1)} ms (frame ${result.framesToStart}) after the press was processed (queued ${result.queued?.toFixed(1)} ms before it; frame ${frame.toFixed(1)} ms)`,
     );
     expect(result.createdAfter, 'the press creates the glide').not.toBeNull();
     // The press creates the glide in its own task: target set, transition running.
