@@ -206,6 +206,19 @@ describe('small defects the walk found', () => {
     );
   });
 
+  it("Home's checklist offers no step that cannot be done on the beta", () => {
+    const home = read('apps/dashboard/src/app/[locale]/overview/page.tsx');
+    expect(home).toContain(
+      "ok: may('integrations.manage') && (connectable.length > 0 || setup.connections > 0),",
+    );
+    expect(home).toContain(
+      "const canScheduleStep = may('content.schedule') && connectable.length > 0;",
+    );
+    expect(home).toContain(
+      "label: canScheduleStep ? t('home.p.stepSchedule') : t('home.p.stepSubmit'),",
+    );
+  });
+
   it('a derived figure with no connected account says so, like every other figure', () => {
     const queries = read('packages/analytics/src/queries.ts');
     const reason = queries.slice(queries.indexOf('#absenceReason(metricKey'));

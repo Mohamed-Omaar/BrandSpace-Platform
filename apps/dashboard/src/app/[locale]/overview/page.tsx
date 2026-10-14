@@ -739,6 +739,7 @@ export default async function OverviewPage({
     send: '➚',
     team: '◎',
   };
+  const canScheduleStep = may('content.schedule') && connectable.length > 0;
   const steps = setup
     ? [
         { k: 'prof', label: t('home.p.stepProfile'), done: true, ok: true, href: null },
@@ -746,7 +747,8 @@ export default async function OverviewPage({
           k: 'conn',
           label: t('home.p.stepConnect'),
           done: setup.connections > 0,
-          ok: may('integrations.manage'),
+          // Final walk: no step that cannot be done — connecting needs a channel to connect.
+          ok: may('integrations.manage') && (connectable.length > 0 || setup.connections > 0),
           href: `/${locale}/integrations`,
         },
         {
@@ -768,9 +770,11 @@ export default async function OverviewPage({
         },
         {
           k: 'send',
-          label: may('content.schedule') ? t('home.p.stepSchedule') : t('home.p.stepSubmit'),
+          // Final walk: scheduling needs a channel that can be connected; until
+          // one can, the step is sending the first post for review.
+          label: canScheduleStep ? t('home.p.stepSchedule') : t('home.p.stepSubmit'),
           done: setup.hasSent,
-          ok: may('content.schedule') || may('content.submit'),
+          ok: canScheduleStep || may('content.submit'),
           href: setup.hasPost ? `/${locale}/content` : `/${locale}/content/compose`,
         },
         {
