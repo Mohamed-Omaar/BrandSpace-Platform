@@ -1,38 +1,38 @@
 import type { ReactNode } from 'react';
-import {
-  AmbientBackground,
-  BrandMark,
-  ShieldIcon,
-  colorTokens,
-  radiusTokens,
-  shadowTokens,
-  spacingTokens,
-  typographyTokens,
-} from '@brandspace/ui';
+import { EntryCard } from '@brandspace/ui';
+import { translator } from '../i18n/messages';
 
 /**
- * The Platform Admin's unauthenticated shell: sign-in and the MFA challenge.
+ * The Control Center's unauthenticated screens: sign-in and the second step.
  *
- * WHAT IT REPLACES. Both pages were raw markup — browser-default inputs, a blue
- * button and an `h1` in `brandBlueText` — from before the design system
- * existed. They are the first screen an operator sees, and they looked like a
- * different product from the console behind them.
+ * THE CUSTOMER'S ENTRY CARD, BY OWNER DECISION (Control Center Simple mode,
+ * overriding D-58's "visually distinct"): the same `EntryCard` from
+ * `@brandspace/ui`, the same layout, card, background, 0.80 sizes (D-491),
+ * fonts, inputs, buttons, links, mark, name and language switch. The one
+ * difference is the "Control Center" label beside the name, so the two are
+ * never confused. The realms stay separate where it matters — the session,
+ * the cookie, the permission model (`docs/SECURITY.md` §2).
  *
- * DELIBERATELY NOT the customer's sign-in. This is an internal tool: no
- * marketing panel, no benefits list, a shield rather than a brand flourish, and
- * a narrower card. The realms are separate everywhere else in the system
- * (`docs/SECURITY.md` §2), and looking the same would be the wrong signal.
+ * MFA stays mandatory (D-27) and every failure reads the same, whatever the
+ * cause, so nothing tells a caller whether an account exists.
  *
  * The landmarks the accessibility suite asserts are unchanged: one `main` with
  * `id="main"` for the skip link, exactly one `h1`, and `data-testid="heading"`.
  */
 export function PlatformAuthShell({
+  locale,
+  screen,
+  eyebrow,
   heading,
   description,
   descriptionTestId,
   error,
   children,
 }: {
+  readonly locale: string;
+  /** This screen's path after the locale, so the language link keeps it. */
+  readonly screen: 'login' | 'mfa';
+  readonly eyebrow: string;
   readonly heading: string;
   readonly description: string;
   /** The suites address the two pages' descriptions by different ids. */
@@ -40,75 +40,22 @@ export function PlatformAuthShell({
   readonly error?: ReactNode;
   readonly children: ReactNode;
 }) {
+  const t = translator(locale);
+  const other = locale === 'ar' ? 'en' : 'ar';
   return (
-    <main
-      id="main"
-      style={{
-        minBlockSize: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: spacingTokens.lg,
-      }}
+    <EntryCard
+      locale={locale}
+      eyebrow={eyebrow}
+      heading={heading}
+      description={description}
+      descriptionTestId={descriptionTestId}
+      footNote={t('auth.footer')}
+      languageHref={`/${other}/${screen}`}
+      realmLabel={t('auth.realm')}
+      cardTestId="platform-auth-card"
     >
-      {/* Platform Admin shares the ground and the geometry, never the layout:
-          the realms stay visually distinct, which is the point of D-58. */}
-      <AmbientBackground />
-      <div
-        style={{
-          inlineSize: '100%',
-          maxInlineSize: '24rem',
-          display: 'grid',
-          gap: spacingTokens.lg,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <BrandMark title="Brandspace" />
-        </div>
-
-        <div
-          data-testid="platform-auth-card"
-          style={{
-            background: colorTokens.surface,
-            borderRadius: radiusTokens['2xl'],
-            boxShadow: shadowTokens.raised,
-            padding: spacingTokens.xl,
-            display: 'grid',
-            gap: spacingTokens.md,
-          }}
-        >
-          <span
-            aria-hidden="true"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              inlineSize: '2.5rem',
-              blockSize: '2.5rem',
-              borderRadius: radiusTokens.lg,
-              background: colorTokens.surfaceLavender,
-              color: colorTokens.brandPurple,
-            }}
-          >
-            <ShieldIcon size={20} />
-          </span>
-
-          <div style={{ display: 'grid', gap: spacingTokens.xs }}>
-            <h1 data-testid="heading" style={{ ...typographyTokens.h1, margin: 0 }}>
-              {heading}
-            </h1>
-            <p
-              data-testid={descriptionTestId}
-              style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
-            >
-              {description}
-            </p>
-          </div>
-
-          {error}
-          {children}
-        </div>
-      </div>
-    </main>
+      {error}
+      {children}
+    </EntryCard>
   );
 }

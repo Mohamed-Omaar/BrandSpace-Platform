@@ -606,6 +606,10 @@ test.describe('the Control Center is operable by keyboard alone', () => {
     await page.goto(`${ADMIN_BASE_URL}/en/login`);
 
     await page.keyboard.press('Tab'); // skip link
+    // Control Center Simple mode: the sign-in is the customer's entry card, whose
+    // language button sits in the card's top row, before the form.
+    await page.keyboard.press('Tab'); // language button
+    await expect(page.getByTestId('locale-switch')).toBeFocused();
     await page.keyboard.press('Tab'); // email
     await expect(page.getByTestId('email')).toBeFocused();
     await page.keyboard.type(email);
@@ -621,11 +625,12 @@ test.describe('the Control Center is operable by keyboard alone', () => {
     await expect(page).toHaveURL(`${ADMIN_BASE_URL}/en/mfa`);
     await expect(page.getByTestId('mfa-code')).toBeVisible();
 
-    // Tab until the code field has focus. Bounded at three so this still fails
-    // if the field is buried behind a pile of other stops, but it does not
-    // depend on exactly when the freshly navigated document takes focus.
-    const tabs = await tabUntilFocused(page, 'mfa-code', 3);
-    expect(tabs, 'the verification code field should be an early tab stop').toBeLessThanOrEqual(3);
+    // Tab until the code field has focus. Bounded at four (skip link, the entry
+    // card's language button, the field — and one for when the freshly
+    // navigated document takes focus) so this still fails if the field is
+    // buried behind a pile of other stops.
+    const tabs = await tabUntilFocused(page, 'mfa-code', 4);
+    expect(tabs, 'the verification code field should be an early tab stop').toBeLessThanOrEqual(4);
 
     await page.keyboard.type(totpCode(totpSecret));
     await page.keyboard.press('Enter');

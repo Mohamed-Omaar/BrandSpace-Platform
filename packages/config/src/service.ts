@@ -17,6 +17,7 @@ import {
   type WorkspaceUsageSnapshot,
 } from './impact';
 import { validateConfiguration, type ConfigContext, type ValidationReport } from './validation';
+import { configLeafDiff } from './audit-diff';
 
 /**
  * Configuration Service — docs/ARCHITECTURE.md §7.
@@ -644,15 +645,11 @@ export class ConfigurationService {
       );
     }
 
-    const preview = buildImpactPreview(
-      version.domain,
-      (
-        await this.#prisma.configurationVersion.findFirst({
-          where: { domain: version.domain, environment: version.environment, status: 'ACTIVE' },
-        })
-      )?.payload ?? defaultPayload(version.domain),
-      version.payload,
-    );
+    const previousActive = await this.#prisma.configurationVersion.findFirst({
+      where: { domain: version.domain, environment: version.environment, status: 'ACTIVE' },
+    });
+    const previousPayload = previousActive?.payload ?? defaultPayload(version.domain);
+    const preview = buildImpactPreview(version.domain, previousPayload, version.payload);
 
     if (preview.highImpactCount > 0 && !options.acknowledgeHighImpact) {
       throw new AppError(
@@ -720,12 +717,31 @@ export class ConfigurationService {
     });
 
     this.#cache.invalidate(`${version.domain}:${version.environment}`);
-    await this.#audit(actor, 'config.activated', versionId, version.changeReason, {
-      domain: version.domain,
-      environment: version.environment,
-      versionNumber: version.versionNumber,
-      highImpactCount: preview.highImpactCount,
-    });
+    /*
+     * OLD -> NEW IN THE AUDIT EVENT (Control Center Simple mode). Every leaf the
+     * activation changed, keyed lists matched by key, credential-like leaves
+     * masked, bounded — the same row for Simple and Advanced, since both reach
+     * this one method.
+     */
+    const diff = configLeafDiff(previousPayload, version.payload);
+    await this.#audit(
+      actor,
+      'config.activated',
+      versionId,
+      version.changeReason,
+      {
+        domain: version.domain,
+        environment: version.environment,
+        versionNumber: version.versionNumber,
+        highImpactCount: preview.highImpactCount,
+        changes: diff.changes.map((change) => ({ path: change.path, value: change.after })),
+        changesTruncated: diff.truncated,
+      },
+      {
+        versionNumber: previousActive?.versionNumber ?? null,
+        changes: diff.changes.map((change) => ({ path: change.path, value: change.before })),
+      },
+    );
     return toSummary(activated);
   }
 
@@ -849,6 +865,7 @@ export class ConfigurationService {
     resourceId: string,
     reason: string,
     after: Record<string, unknown>,
+    before?: Record<string, unknown>,
   ): Promise<void> {
     await this.#prisma.auditEvent.create({
       data: {
@@ -861,6 +878,7 @@ export class ConfigurationService {
         severity: action === 'config.activated' ? 'WARNING' : 'NOTICE',
         outcome: 'SUCCESS',
         reason,
+        ...(before ? { before: before as never } : {}),
         after: after as never,
       },
     });

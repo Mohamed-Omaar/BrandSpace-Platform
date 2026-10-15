@@ -2380,6 +2380,28 @@ walk, and wording fixes that change no layout:
   / Videos views. The panel itself and its New folder stay as the recorded product extension for
   filters the prototype does not draw.
 
+### 6.3.69 Control Center Simple mode — the owner's card pages (D-558, D-560)
+
+An APPROVED DESIGN-SYSTEM EXTENSION in the Control Center (which has no prototype; its screens have
+always been extensions). Composed only from existing pieces: `Card`, `ContentGrid`, `SectionHeader`,
+`StatusBadge`, `Banner`, `Field`, `inputStyle` / `CONTROL_CLASS` controls, the button styles and the
+`ActionLink` idiom; switches are native checkboxes with `role="switch"`. No new colour, font, shadow or
+interaction model. Every state is drawn: the cards, an empty collection, read-only (no permission), an
+unfinished draft blocking changes, the editor with per-field refusals, the preview with refusals, archive,
+undo (and "nothing to go back to"), saved / archived / undone / stale / unchanged notices. The plan
+card's customer preview reuses the card surface and type. Measured by `owner-simple-mode.spec.ts`
+(every page in en and ar, axe, no sideways scroll at 390px).
+
+Owner review of PR #85 added three states, built from the same pieces: the half-saved message (a
+`Banner` in the warning tone with a primary button, D-564), Change history rows in the editor's own
+words (D-563), and the Control Center's scroll padding so a scrolled-to section clears the sticky bar
+and its fade (D-565, measured at 1536x864 in en and ar).
+
+The Control Center sign-in and second step are not an extension: they ARE the customer entry card
+(`EntryCard`, `entry.css`), the prototype's `Auth.dc.html` card at 0.80 (D-491). The one addition is the
+`.bsp-auth-realm` label, composed from the eyebrow pill's shape in the prototype's chip grey and
+secondary ink.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The

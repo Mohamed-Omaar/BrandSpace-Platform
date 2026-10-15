@@ -86,9 +86,12 @@ function simple(
 }
 
 /**
- * SIMPLE — the owner's eight destinations, in the contract's order (§4).
- * Support and the raw audit log are deliberately absent: they are Advanced
- * tools (§19).
+ * SIMPLE — the owner's everyday control panel (owner decision, Control Center
+ * Simple mode; was the contract's eight destinations, §4). Grouped the way the
+ * owner thinks about the business: what is sold, what customers use, the
+ * rules around sign-up and email, and running the platform. Support and the
+ * raw audit log stay Advanced tools (§19); the change history here is the
+ * configuration changes only, in plain words.
  */
 export const SIMPLE_SECTIONS: readonly ConsoleNavSection[] = [
   {
@@ -101,8 +104,55 @@ export const SIMPLE_SECTIONS: readonly ConsoleNavSection[] = [
         'platform.workspace.read',
         'building',
       ),
+      simple(
+        '/manage',
+        'nav.manage',
+        'page.manage',
+        'platform.configuration.read',
+        'sliders',
+        true,
+      ),
+    ],
+  },
+  {
+    title: { ar: 'ما تبيعه', en: 'What you sell' },
+    items: [
       simple('/plans', 'nav.plans', 'page.plans', 'platform.configuration.read', 'layers'),
+      simple('/manage/trial', 'nav.trial', 'page.trial', 'platform.configuration.read', 'credit'),
       simple('/features', 'nav.features', 'page.features', 'platform.configuration.read', 'flag'),
+    ],
+  },
+  {
+    title: { ar: 'ما يستخدمه العملاء', en: 'What customers use' },
+    items: [
+      simple(
+        '/manage/channels',
+        'nav.channels',
+        'page.channels',
+        'platform.configuration.read',
+        'route',
+      ),
+      simple(
+        '/manage/publishing',
+        'nav.publishing',
+        'page.publishing',
+        'platform.configuration.read',
+        'plug',
+      ),
+      simple(
+        '/manage/content',
+        'nav.content',
+        'page.content',
+        'platform.configuration.read',
+        'list',
+      ),
+      simple(
+        '/manage/uploads',
+        'nav.uploads',
+        'page.uploads',
+        'platform.configuration.read',
+        'layers',
+      ),
       simple('/ai', 'nav.ai', 'page.ai', 'platform.configuration.read', 'spark'),
       simple(
         '/ai/connect',
@@ -120,6 +170,20 @@ export const SIMPLE_SECTIONS: readonly ConsoleNavSection[] = [
         'spark',
         true,
       ),
+    ],
+  },
+  {
+    title: { ar: 'التسجيل والبريد والقواعد', en: 'Sign-up, email and rules' },
+    items: [
+      simple(
+        '/manage/signups',
+        'nav.signups',
+        'page.signups',
+        'platform.configuration.read',
+        'key',
+      ),
+      simple('/manage/email', 'nav.email', 'page.email', 'platform.configuration.read', 'lifebuoy'),
+      simple('/manage/legal', 'nav.legal', 'page.legal', 'platform.configuration.read', 'list'),
       simple(
         '/integrations',
         'nav.integrations',
@@ -127,8 +191,15 @@ export const SIMPLE_SECTIONS: readonly ConsoleNavSection[] = [
         'platform.configuration.read',
         'plug',
       ),
+    ],
+  },
+  {
+    title: { ar: 'تشغيل المنصة', en: 'Running the platform' },
+    items: [
       simple('/usage', 'nav.usage', 'page.usage', 'platform.workspace.read', 'credit'),
       simple('/health', 'nav.system', 'page.system', 'platform.workspace.read', 'pulse'),
+      simple('/team', 'nav.team', 'page.team', 'platform.user.read', 'building'),
+      simple('/changes', 'nav.changes', 'page.changes', 'platform.audit.read', 'list'),
     ],
   },
 ];

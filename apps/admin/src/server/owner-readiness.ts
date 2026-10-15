@@ -244,6 +244,9 @@ const TRIAL_QUOTAS = [
 
 export interface TrialPlanInput {
   readonly key: string;
+  /** The name customers see; the owner's pages show it, never the key. */
+  readonly nameEn?: string;
+  readonly nameAr?: string;
   readonly status: string;
   readonly tier: number;
   readonly trialDays: number;
@@ -266,6 +269,8 @@ export function trialAreaState(plans: readonly TrialPlanInput[], currency: strin
   if (!trial) return { state: 'setup_required', reason: 'trial_missing', provider: null };
   const detail = {
     plan: trial.key,
+    planEn: trial.nameEn ?? '',
+    planAr: trial.nameAr ?? '',
     days: String(trial.trialDays),
     credits: String(trial.trialCredits),
     currency,

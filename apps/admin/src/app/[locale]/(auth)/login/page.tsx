@@ -1,4 +1,4 @@
-import { Banner, Button, CONTROL_CLASS, Field, inputStyle, spacingTokens } from '@brandspace/ui';
+import { Banner, CONTROL_CLASS, Field, spacingTokens } from '@brandspace/ui';
 import { translator } from '../../../../i18n/messages';
 import { PlatformAuthShell } from '../../../../components/platform-auth';
 import { signInAction } from './actions';
@@ -18,7 +18,10 @@ export default async function LoginPage({
 
   return (
     <PlatformAuthShell
-      heading={t('login.title')}
+      locale={locale}
+      screen="login"
+      eyebrow={t('login.eyebrow')}
+      heading={t('login.welcome')}
       description={t('login.mfaRequired')}
       descriptionTestId="mfa-notice"
       error={
@@ -33,7 +36,9 @@ export default async function LoginPage({
         ) : null
       }
     >
-      <form action={signInAction} style={{ display: 'grid', gap: spacingTokens.xs }}>
+      {/* The customer sign-in's form, field for field: `entry.css` draws the
+          inputs and the button exactly as it does there. */}
+      <form action={signInAction}>
         <input type="hidden" name="locale" value={locale} />
         <Field label={t('login.email')} htmlFor="email" required>
           <input
@@ -44,7 +49,7 @@ export default async function LoginPage({
             autoComplete="username"
             data-testid="email"
             className={CONTROL_CLASS}
-            style={inputStyle({ size: 'lg' })}
+            style={{ inlineSize: '100%' }}
           />
         </Field>
         <Field label={t('login.password')} htmlFor="password" required>
@@ -56,18 +61,16 @@ export default async function LoginPage({
             autoComplete="current-password"
             data-testid="password"
             className={CONTROL_CLASS}
-            style={inputStyle({ size: 'lg' })}
+            style={{ inlineSize: '100%' }}
           />
         </Field>
-        <Button
+        <button
           type="submit"
-          size="lg"
-          fullWidth
           data-testid="submit"
-          style={{ marginBlockStart: spacingTokens.sm }}
+          style={{ inlineSize: '100%', marginBlockStart: spacingTokens.sm }}
         >
           {t('login.submit')}
-        </Button>
+        </button>
       </form>
     </PlatformAuthShell>
   );

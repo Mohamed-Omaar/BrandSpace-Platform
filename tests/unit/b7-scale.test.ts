@@ -53,7 +53,9 @@ describe('D-484 · the size tables', () => {
 });
 
 describe('D-484 amended · the entry screens are the prototype at 0.80', () => {
-  const css = read('packages/ui/src/prototype.css');
+  // Control Center Simple mode: the entry screens' rules moved, verbatim, to
+  // `entry.css`, which the Control Center's sign-in imports too.
+  const css = read('packages/ui/src/entry.css');
   const start = css.indexOf('\n.bsp-auth {\n');
   const entry = table(css.slice(start, css.indexOf('\n}\n', start)));
   const ENTRY = 0.8;

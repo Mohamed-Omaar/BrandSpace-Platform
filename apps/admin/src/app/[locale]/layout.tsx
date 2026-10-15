@@ -8,6 +8,24 @@ import {
   webfontHref,
 } from '@brandspace/ui';
 import '@brandspace/ui/tokens.css';
+/*
+ * Control Center Simple mode (owner decision): the sign-in and second step are
+ * the customer's entry card, so they take its stylesheet and its faces —
+ * Inter for Latin, Cairo for Arabic, at 400–800, bundled rather than fetched
+ * (the customer app's own reasoning). `entry.css` is scoped to `.bsp-auth`, so
+ * it draws nothing on the console screens.
+ */
+import '@brandspace/ui/entry.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/inter/800.css';
+import '@fontsource/cairo/400.css';
+import '@fontsource/cairo/500.css';
+import '@fontsource/cairo/600.css';
+import '@fontsource/cairo/700.css';
+import '@fontsource/cairo/800.css';
 
 export const metadata = {
   title: 'Brandspace Control Center',

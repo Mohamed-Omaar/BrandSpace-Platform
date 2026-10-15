@@ -10,6 +10,8 @@ import {
 } from '@brandspace/ui';
 import '@brandspace/ui/tokens.css';
 import '@brandspace/ui/prototype.css';
+// The entry screens' card and 0.80 scale, shared with the Control Center's sign-in.
+import '@brandspace/ui/entry.css';
 /*
  * THE PROTOTYPE'S TYPE, SERVED FROM THIS ORIGIN (D-468). `prototype-2026-09-27`
  * sets Latin in Inter and Arabic in Cairo, at 400–800. The policy allows fonts

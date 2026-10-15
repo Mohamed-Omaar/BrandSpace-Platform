@@ -1,3 +1,4 @@
+export * from './audit-diff';
 export * from './domains';
 export * from './impact';
 export * from './service';

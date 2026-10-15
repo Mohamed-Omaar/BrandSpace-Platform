@@ -680,6 +680,29 @@ export function AppShell({
   const drawerId = useId();
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
+  /*
+   * THE TOP BAR'S HEIGHT, FOR SCROLLING (owner review of the Simple home).
+   * The bar is sticky over the page, so anything scrolled into view — a
+   * section, a field focused by Tab, an anchor — landed under it, its first
+   * line hidden. The bar's measured height becomes the scroll padding of
+   * whatever scrolls (`tokens.css`), so it lands just below the bar instead.
+   */
+  const topbarRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const bar = topbarRef.current;
+    if (!bar) return undefined;
+    const root = document.documentElement;
+    const set = () =>
+      root.style.setProperty('--bs-topbar-block-size', `${bar.getBoundingClientRect().height}px`);
+    set();
+    const observer = new ResizeObserver(set);
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--bs-topbar-block-size');
+    };
+  }, []);
+
   useOverlayBehaviour({ open: drawerOpen, onClose: closeDrawer, containerRef: drawerRef });
   // MO5: the drawer leaves (180 ms) after it has closed.
   const drawer = usePresence(drawerOpen, drawerRef);
@@ -916,6 +939,7 @@ export function AppShell({
            * through twenty-nine pages.
            */}
           <header
+            ref={topbarRef}
             className="bs-topbar"
             style={{
               display: 'flex',

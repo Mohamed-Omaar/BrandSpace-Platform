@@ -10,7 +10,8 @@
     "./tokens.css": "./src/tokens.css",
     "./brand-brain.css": "./src/brand-brain.css",
     "./content-studio.css": "./src/content-studio.css",
-    "./prototype.css": "./src/prototype.css"
+    "./prototype.css": "./src/prototype.css",
+    "./entry.css": "./src/entry.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
