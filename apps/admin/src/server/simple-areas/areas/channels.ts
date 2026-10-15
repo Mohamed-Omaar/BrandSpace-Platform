@@ -1,6 +1,7 @@
 import { findIntegration } from '@brandspace/integrations';
 import type { AreaContext, AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
 import { arrayOf, bool, num, rec, str, upsertBy, sameJson } from '../json';
+import { dialectName } from '../plain';
 
 /**
  * CHANNELS — one card per channel: shown to customers or not, the kinds of
@@ -195,6 +196,7 @@ const collection: CollectionSpec = {
   id: 'channels',
   title: 'ch.title',
   domains: ['content', 'publishing'],
+  parts: { content: 'ch.part.content', publishing: 'ch.part.publishing' },
   archiveLabel: 'a.hide',
   fields: (docs, ctx, mode, itemKey) => fields(docs, ctx, mode, itemKey),
   items,
@@ -303,16 +305,16 @@ export const channelsArea: AreaSpec = {
     },
     {
       label: 'ch.d.labels',
-      value: (docs) =>
+      value: (docs, ctx) =>
         platforms(docs)
-          .map((p) => str(p['labelKey']))
+          .map((p) => CHANNEL_NAMES[str(p['key'])] ?? ctx.t('w.developerValue'))
           .join(' · ') || '—',
     },
     {
       label: 'ch.d.dialects',
-      value: (docs) =>
+      value: (docs, ctx) =>
         arrayOf(rec(docs.content?.['dialects'])['supported'])
-          .map((d) => str(rec(d)['key']))
+          .map((d) => dialectName(ctx, str(rec(d)['key'])))
           .join(' · ') || '—',
     },
   ],

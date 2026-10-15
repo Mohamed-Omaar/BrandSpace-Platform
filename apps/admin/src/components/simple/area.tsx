@@ -18,6 +18,7 @@ import {
 } from '@brandspace/ui';
 import {
   archiveAreaItemAction,
+  retryPartAction,
   saveAreaItemAction,
   undoAreaItemAction,
 } from '../../app/[locale]/console/manage/actions';
@@ -47,6 +48,10 @@ import type {
 import { currentEnvironment, getConfigService } from '../../server/platform-context';
 import { minorToMajorInput } from '../../server/money';
 import { loadOpenDrafts } from '../../server/simple-config';
+import { readPartial, type PartialChange } from '../../server/simple-areas/partial';
+import { sameJson } from '../../server/simple-areas/json';
+import { domainName, listJoin } from '../../i18n/simple-names';
+import type { ConfigDomain, ConfigContext } from '@brandspace/config';
 import { AdvancedLink } from '../mode-switch';
 import { OpenDraftNotice } from './open-drafts';
 import { ActionLink, ActionOutcome, SimpleSection, flash, formatWhen } from '../simple-ui';
@@ -117,6 +122,9 @@ export async function SimpleArea({
   // notice says so up front and no change control is offered until it is gone.
   const canChange = mayWrite && drafts.length === 0;
   const { ok, error, ref } = flash(query);
+  const partial = mayWrite ? await readPartial() : null;
+  const missingPart =
+    partial && partial.area === area.key ? await stillMissing(partial, area, docs, ctx) : null;
 
   const notices = (
     <>
@@ -132,7 +140,9 @@ export async function SimpleArea({
               ? ctx.t('ui.undone')
               : code === 'ARCHIVED'
                 ? ctx.t('ui.archived')
-                : null
+                : code === 'PART_DONE'
+                  ? ctx.t('ui.partial.done')
+                  : null
         }
         errorText={(code) =>
           code === 'DRAFT_OPEN'
@@ -146,6 +156,14 @@ export async function SimpleArea({
                   : null
         }
       />
+      {missingPart ? (
+        <PartialNotice
+          partial={missingPart}
+          collection={missingPart.collection}
+          ctx={ctx}
+          locale={locale}
+        />
+      ) : null}
       {!mayWrite ? (
         <Banner tone="info" testId="area-read-only">
           {ctx.t('ui.readOnly')}
@@ -740,17 +758,20 @@ function Editor({
           </Banner>
         ) : null}
         <ContentGrid min="20rem" gap={spacingTokens.md}>
-          {fields.map((field) => (
-            <FieldControl
-              key={field.id}
-              field={field}
-              value={values[field.id]}
-              now={mode === 'edit' ? item?.values[field.id] : undefined}
-              error={errors[field.id]}
-              locked={mode === 'edit' && field.lockedOnEdit === true}
-              ctx={ctx}
-            />
-          ))}
+          {/* A short name cannot change once made, and is the platform's own
+              key for the item: an edit leaves it out rather than show it. */}
+          {fields
+            .filter((field) => !(mode === 'edit' && field.lockedOnEdit === true))
+            .map((field) => (
+              <FieldControl
+                key={field.id}
+                field={field}
+                value={values[field.id]}
+                now={mode === 'edit' ? item?.values[field.id] : undefined}
+                error={errors[field.id]}
+                ctx={ctx}
+              />
+            ))}
         </ContentGrid>
         <div
           style={{
@@ -782,14 +803,12 @@ function FieldControl({
   value,
   now,
   error,
-  locked,
   ctx,
 }: {
   readonly field: FieldSpec;
   readonly value: FieldValue | undefined;
   readonly now: FieldValue | undefined;
   readonly error: string | undefined;
-  readonly locked: boolean;
   readonly ctx: AreaContext;
 }) {
   const label =
@@ -1009,8 +1028,6 @@ function FieldControl({
           name={fieldName(field.id)}
           defaultValue={typeof value === 'string' ? value : ''}
           maxLength={field.maxLength}
-          readOnly={locked}
-          aria-readonly={locked || undefined}
           dir={field.dir}
           className={CONTROL_CLASS}
           style={input}
@@ -1252,5 +1269,94 @@ function Confirm({
         ) : null}
       </div>
     </Card>
+  );
+}
+
+/**
+ * A KEPT HALF-SAVED CHANGE, IF IT IS STILL HALF-SAVED: re-run against the
+ * documents live now, it would still change something. Otherwise (someone
+ * finished it, or the item is gone) there is nothing to say.
+ */
+async function stillMissing(
+  partial: PartialChange,
+  area: AreaSpec,
+  docs: Docs,
+  ctx: AreaContext,
+): Promise<(PartialChange & { readonly collection: CollectionSpec }) | null> {
+  const collection = area.collections.find((candidate) => candidate.id === partial.c);
+  if (!collection) return null;
+  const context: ConfigContext = await getConfigService().getContext(currentEnvironment());
+  if (partial.kind === 'archive') {
+    const archive = prepareArchive({ collection, docs, ctx, context, itemKey: partial.item });
+    if (!archive) return null;
+    const changes = (Object.keys(archive.after) as ConfigDomain[]).some(
+      (domain) => !sameJson(archive.after[domain], docs[domain]),
+    );
+    return changes ? { ...partial, collection } : null;
+  }
+  const source = {
+    get: (name: string) => partial.values.find(([key]) => key === name)?.[1] ?? null,
+    getAll: (name: string) =>
+      partial.values.filter(([key]) => key === name).map(([, value]) => value),
+  };
+  const edit = prepareEdit({
+    collection,
+    docs,
+    ctx,
+    context,
+    mode: 'edit',
+    itemKey: partial.item,
+    source,
+  });
+  return 'missing' in edit || edit.unchanged ? null : { ...partial, collection };
+}
+
+/** "Saved: …. Not saved: …." — one message, and the one button that finishes it. */
+function PartialNotice({
+  partial,
+  collection,
+  ctx,
+  locale,
+}: {
+  readonly partial: PartialChange;
+  readonly collection: CollectionSpec;
+  readonly ctx: AreaContext;
+  readonly locale: string;
+}) {
+  const part = (domain: ConfigDomain) => {
+    const key = collection.parts?.[domain];
+    return key ? ctx.t(key) : domainName(locale, domain);
+  };
+  const why =
+    partial.why === 'DRAFT_OPEN'
+      ? 'ui.partial.whyDraft'
+      : partial.why === 'INVALID'
+        ? 'ui.partial.whyInvalid'
+        : 'ui.partial.whyOther';
+  return (
+    <Banner tone="warning" testId="area-partial">
+      <div style={{ display: 'grid', gap: spacingTokens.xs }}>
+        <strong>{ctx.t('ui.partial.title')}</strong>
+        <span data-testid="area-partial-saved">
+          {ctx.t('ui.partial.saved', { what: listJoin(locale, partial.saved.map(part)) })}
+        </span>
+        <span data-testid="area-partial-not-saved">
+          {ctx.t('ui.partial.notSaved', { what: part(partial.failed) })}
+        </span>
+        <span data-testid="area-partial-why">{ctx.t(why)}</span>
+        <form action={retryPartAction}>
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="confirm" value="yes" />
+          <button
+            type="submit"
+            className={buttonClass('primary')}
+            style={buttonStyle('primary')}
+            data-testid="area-partial-retry"
+          >
+            {ctx.t('ui.partial.retry')}
+          </button>
+        </form>
+      </div>
+    </Banner>
   );
 }

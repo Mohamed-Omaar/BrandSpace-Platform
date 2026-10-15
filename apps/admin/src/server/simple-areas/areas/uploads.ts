@@ -1,5 +1,6 @@
 import type { AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
 import { arrayOf, bool, num, rec, str } from '../json';
+import { amount } from '../plain';
 
 /**
  * UPLOADS — per kind of file: which types are accepted and how large; and
@@ -302,11 +303,13 @@ export const uploadsArea: AreaSpec = {
     },
     {
       label: 'up.d.previews',
-      value: (docs) => `${num(rec(docs.assets?.['derivatives'])['thumbnailMaxEdgePx']) ?? '—'} px`,
+      value: (docs, ctx) =>
+        amount(ctx, rec(docs.assets?.['derivatives'])['thumbnailMaxEdgePx'], 'u.pixels'),
     },
     {
       label: 'up.d.retention',
-      value: (docs) => `${num(rec(docs.assets?.['retention'])['purgeDeletedAfterDays']) ?? '—'} d`,
+      value: (docs, ctx) =>
+        amount(ctx, rec(docs.assets?.['retention'])['purgeDeletedAfterDays'], 'u.days'),
     },
     { label: 'up.d.keys', value: (_docs, ctx) => ctx.t('up.d.keysValue') },
   ],

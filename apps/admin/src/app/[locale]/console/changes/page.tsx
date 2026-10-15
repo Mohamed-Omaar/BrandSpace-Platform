@@ -1,8 +1,10 @@
 import { Card, Stack, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
-import type { ConfigDomain } from '@brandspace/config';
+import { CONFIG_DOMAIN_KEYS, isConfigDomain, parseConfigPayload } from '@brandspace/config';
 import { areaCopy } from '../../../../i18n/simple-areas';
+import { domainName } from '../../../../i18n/simple-names';
 import { formatWhen } from '../../../../components/simple-ui';
-import { AREAS } from '../../../../server/simple-areas/registry';
+import { plainChange } from '../../../../server/simple-areas/history';
+import { areaContext, loadDocs } from '../../../../server/simple-areas/runtime';
 import { getPlatformPrisma, requirePageActor } from '../../../../server/platform-context';
 
 export const dynamic = 'force-dynamic';
@@ -13,29 +15,23 @@ export const dynamic = 'force-dynamic';
  *
  * It reads the Configuration Service's own `config.activated` audit events,
  * so a change made in Advanced appears here exactly like one made in Simple —
- * the same row, written by the one method both reach. Credential-like values
- * are masked when the event is written (`configLeafDiff`), never here.
+ * the same row, written by the one method both reach.
+ *
+ * Each row is read through the cards (`plainChange`): the item's name and the
+ * editor's own field labels and values, never the stored path the event keeps
+ * for Advanced. A change no card shows is counted and left to Advanced.
  */
 const LIMIT = 50;
 
-interface Change {
-  readonly path: string;
-  readonly value: unknown;
-}
+const field = (value: unknown, name: string): unknown =>
+  typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)[name]
+    : undefined;
 
-const changesOf = (value: unknown): readonly Change[] => {
-  const list = (value as { changes?: unknown } | null)?.changes;
-  return Array.isArray(list) ? (list as Change[]) : [];
+const countOf = (value: unknown): number => {
+  const list = field(value, 'changes');
+  return Array.isArray(list) ? list.length : 0;
 };
-
-const shown = (value: unknown): string =>
-  value === undefined
-    ? '—'
-    : value === null
-      ? '∅'
-      : typeof value === 'string'
-        ? value
-        : JSON.stringify(value);
 
 export default async function Page({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -60,10 +56,39 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
       })
     ).map((user) => [user.id, user.name ?? user.email]),
   );
-  const areaOf = (domain: string) =>
-    AREAS.find((area) =>
-      area.collections.some((collection) => collection.domains.includes(domain as ConfigDomain)),
+
+  // The two versions each event moved between, read once for the whole page.
+  const activated = await prisma.configurationVersion.findMany({
+    where: {
+      id: { in: events.map((event) => event.resourceId).filter((id): id is string => !!id) },
+    },
+    select: { id: true, domain: true, environment: true, payload: true },
+  });
+  const byId = new Map(activated.map((version) => [version.id, version]));
+  const previousKeys = events.flatMap((event) => {
+    const version = event.resourceId ? byId.get(event.resourceId) : undefined;
+    const number = field(event.before, 'versionNumber');
+    return version && typeof number === 'number'
+      ? [{ domain: version.domain, environment: version.environment, versionNumber: number }]
+      : [];
+  });
+  const previous = previousKeys.length
+    ? await prisma.configurationVersion.findMany({
+        where: { OR: previousKeys },
+        select: { domain: true, environment: true, versionNumber: true, payload: true },
+      })
+    : [];
+  const previousOf = (domain: string, environment: string, versionNumber: number) =>
+    previous.find(
+      (v) =>
+        v.domain === domain && v.environment === environment && v.versionNumber === versionNumber,
     );
+  const docs = await loadDocs(CONFIG_DOMAIN_KEYS);
+  const ctx = await areaContext(locale, docs);
+  const read = (domain: string, payload: unknown) =>
+    isConfigDomain(domain)
+      ? (parseConfigPayload(domain, payload) as unknown as Record<string, unknown>)
+      : null;
 
   return (
     <Stack>
@@ -84,10 +109,25 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
         </Card>
       ) : (
         events.map((event) => {
-          const after = changesOf(event.after);
-          const before = changesOf(event.before);
-          const domain = String((event.after as { domain?: unknown } | null)?.domain ?? '');
-          const area = areaOf(domain);
+          const domain = String(field(event.after, 'domain') ?? '');
+          const version = event.resourceId ? byId.get(event.resourceId) : undefined;
+          const number = field(event.before, 'versionNumber');
+          const was =
+            version && typeof number === 'number'
+              ? previousOf(version.domain, version.environment, number)
+              : undefined;
+          const now = version && isConfigDomain(domain) ? read(domain, version.payload) : null;
+          const plain =
+            now && isConfigDomain(domain)
+              ? plainChange({
+                  domain,
+                  before: was ? read(domain, was.payload) : null,
+                  after: now,
+                  docs,
+                  ctx,
+                })
+              : { area: null, lines: [] };
+          const technical = countOf(event.after);
           return (
             <Card key={event.id} testId="change-row">
               <div style={{ display: 'grid', gap: spacingTokens.xs }}>
@@ -100,7 +140,9 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
                   }}
                 >
                   <h3 style={{ margin: 0, ...typographyTokens.h3 }}>
-                    {area ? t(area.title) : domain}
+                    {plain.area
+                      ? t(plain.area.title)
+                      : t('ch2.technical', { name: domainName(locale, domain) })}
                   </h3>
                   <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
                     {formatWhen(locale, event.occurredAt)}
@@ -112,9 +154,11 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
                   })}
                 </span>
                 {event.reason ? (
-                  <p style={{ margin: 0, ...typographyTokens.bodySm }}>{event.reason}</p>
+                  <p style={{ margin: 0, ...typographyTokens.bodySm }} data-testid="change-reason">
+                    {event.reason}
+                  </p>
                 ) : null}
-                {after.length > 0 ? (
+                {plain.lines.length > 0 ? (
                   <ul
                     style={{
                       margin: 0,
@@ -123,10 +167,9 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
                     }}
                     data-testid="change-lines"
                   >
-                    {after.map((change, index) => (
-                      <li key={`${change.path}-${index}`}>
-                        <bdi dir="ltr">{change.path}</bdi>: <bdi>{shown(before[index]?.value)}</bdi>{' '}
-                        → <bdi>{shown(change.value)}</bdi>
+                    {plain.lines.map((line, index) => (
+                      <li key={`${line.label}-${index}`}>
+                        <bdi>{line.label}</bdi>: <bdi>{line.before}</bdi> → <bdi>{line.after}</bdi>
                       </li>
                     ))}
                   </ul>
@@ -134,7 +177,9 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
                   <p
                     style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textMuted }}
                   >
-                    {t('ch2.noDetail')}
+                    {technical > 0
+                      ? t('w.technicalChanges', { count: technical })
+                      : t('ch2.noDetail')}
                   </p>
                 )}
               </div>

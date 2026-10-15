@@ -311,9 +311,12 @@ test.describe('Simple writes go through the existing services', () => {
     const change = await lastActivationChange(`plans[${key}].monthlyCredits`);
     expect(change).toEqual({ before: 250, after: 300 });
     await page.goto(`${ADMIN_BASE_URL}/en/console/changes`);
+    // Change history reads it through the card: the plan's name and the
+    // editor's own words, never the stored path.
     await expect(page.getByTestId('change-row').first()).toContainText(
-      `plans[${key}].monthlyCredits: 250 → 300`,
+      'Simple E2E Plan: Monthly credits: 250 credits → 300 credits',
     );
+    await expect(page.getByTestId('change-row').first()).not.toContainText(key);
 
     // Undo the last change: a new version that puts the plan back.
     await page.goto(`${ADMIN_BASE_URL}/en/console/plans`);
@@ -560,6 +563,80 @@ test.describe('the owner card pages write through the Configuration Service', ()
     });
   });
 
+  test('a change refused on its second document says what was saved and finishes on "Try again"', async ({
+    page,
+  }) => {
+    // D-558: a plan and its features are two activations. When the second is
+    // refused, the first stays; the owner is told exactly which part is
+    // missing and can try that part again.
+    await signIn(page, 'en', { mode: 'simple' });
+    await openArea(page, '/en/console/plans');
+    const key = `e2e-pt-${randomUUID().slice(0, 8)}`;
+    await page.getByTestId('area-new-plans').click();
+    await page.getByTestId('field-key').fill(key);
+    await page.getByTestId('field-nameEn').fill('Partial E2E Plan');
+    await page.getByTestId('field-nameAr').fill('خطة الحفظ الجزئي');
+    await page.getByTestId('field-availability').selectOption('draft');
+    await page.locator('[data-testid^="field-priceMonthly-"]').first().fill('9.00');
+    await page.getByTestId('field-monthlyCredits').fill('250');
+    await page.getByTestId('area-check').click();
+    await saveChange(page);
+    const card = page.getByTestId(`area-card-plans-${key}`);
+    await expect(card).toContainText('Partial E2E Plan');
+
+    // One edit that writes both documents: more credits, and a feature.
+    await page.getByTestId(`area-edit-plans-${key}`).click();
+    await page.getByTestId('field-monthlyCredits').fill('275');
+    const feature = page.locator('[data-testid^="field-features-"]').first();
+    const featureName = (await feature.locator('xpath=..').innerText()).trim();
+    await feature.check();
+    await page.getByTestId('area-check').click();
+
+    // Meanwhile, someone opens an unfinished change to the features in Advanced.
+    const other = await page.context().newPage();
+    await other.goto(`${ADMIN_BASE_URL}/en/console/configuration`);
+    await useMode(other, 'advanced');
+    await other.getByTestId('domain-entitlements').click();
+    await other.getByTestId('draft-reason').fill('A change to feature access left open');
+    await other.getByTestId('create-draft').click();
+    await expect(other.getByTestId('config-ok')).toContainText('Draft created');
+    await useMode(other, 'simple');
+    await other.close();
+
+    // Saved: the plan. Not saved: its features. One message, one button.
+    await page.getByTestId('area-preview-confirm').check();
+    await page.getByTestId('area-preview-submit').click();
+    await expect(page).toHaveURL(/partial=1/);
+    const notice = page.getByTestId('area-partial');
+    await expect(notice).toContainText('Only part of this change was saved');
+    await expect(page.getByTestId('area-partial-saved')).toHaveText(
+      'Saved: the plan itself — its name, prices, trial, credits and limits.',
+    );
+    await expect(page.getByTestId('area-partial-not-saved')).toHaveText(
+      'Not saved: which features the plan includes.',
+    );
+    await expect(page.getByTestId('area-partial-why')).toContainText(
+      'an unfinished change to it is open in Advanced',
+    );
+    await expectAccessible(page, 'the partial-save message');
+    await expect(card).toContainText('275');
+    await expect(card).not.toContainText(featureName);
+
+    // Trying again while the other change is still open is refused the same way.
+    await page.getByTestId('area-partial-retry').click();
+    await expect(page).toHaveURL(/partial=1&error=DRAFT_OPEN/);
+    await expect(notice).toBeVisible();
+
+    // With it gone, "Try the second part again" saves the missing part only.
+    await discardLeftovers(page);
+    await expect(notice).toBeVisible();
+    await page.getByTestId('area-partial-retry').click();
+    await expect(page).toHaveURL(/ok=PART_DONE/);
+    await expect(page.getByTestId('area-partial')).toHaveCount(0);
+    await expect(card).toContainText(featureName);
+    await expect(card).toContainText('275');
+  });
+
   test('Content: an industry and a country’s posting times are added, edited and removed', async ({
     page,
   }) => {
@@ -578,7 +655,8 @@ test.describe('the owner card pages write through the Configuration Service', ()
     await expect(page.getByTestId(`area-card-industries-${key}`)).toContainText('Test industry');
 
     await page.getByTestId(`area-edit-industries-${key}`).click();
-    await expect(page.getByTestId('field-key')).toHaveAttribute('readonly', '');
+    // The short name cannot change and is the platform's own key: an edit leaves it out.
+    await expect(page.getByTestId('field-key')).toHaveCount(0);
     await page.getByTestId('field-nameEn').fill('Renamed industry');
     await page.getByTestId('area-check').click();
     await saveChange(page);
@@ -692,6 +770,179 @@ test.describe('the owner card pages write through the Configuration Service', ()
 
     expect(await versions()).toBe(before);
   });
+});
+
+/**
+ * NO STORED KEY ON AN OWNER PAGE (owner review of the card pages).
+ *
+ * A plan reads by the name customers see, a limit by its plain name, a
+ * configuration document by what it is about — on Home, on every card page
+ * and its "Changed by your developer" list, in an editor of each area and in
+ * Change history. The words that would leak: every configuration document's
+ * id, every plan key the platform stores, and the stored names of plan limits.
+ * In Arabic none of them may appear at all; in English the ids that are also
+ * ordinary words ("plans", "content", "brands") are left to the reader.
+ */
+const DOMAIN_IDS = [
+  'ai.providers',
+  'ai.models',
+  'ai.routing',
+  'ai.credit-rules',
+  'ai.capability-routing',
+  'ai.budgets',
+  'plans',
+  'entitlements',
+  'feature-flags',
+  'credits',
+  'beta-cohorts',
+  'usage-limits',
+  'brand-brain',
+  'assets',
+  'content',
+  'integrations.email',
+  'integrations.storage',
+  'integrations.payment',
+  'integrations.observability',
+  'integrations.social-apps',
+  'publishing',
+  'analytics',
+  'copilot',
+  'automations',
+  'templates',
+  'website',
+  'operations',
+  'commerce',
+  'onboarding',
+];
+const QUOTA_KEYS = [
+  'seats',
+  'brands',
+  'workspaces',
+  'socialAccounts',
+  'scheduledPostsPerMonth',
+  'storageGb',
+  'analyticsRetentionDays',
+  'automationAiActionsPerMonth',
+  'trialAutomationAiActionsPerMonth',
+];
+/** A stored id that is also an ordinary English word can't be told apart in English. */
+const PLAIN_WORD = /^[a-z]+$/;
+
+async function storedPlanKeys(): Promise<readonly string[]> {
+  return withPlatformPrisma(async (prisma) => {
+    const versions = await prisma.configurationVersion.findMany({
+      where: { domain: 'plans' },
+      select: { payload: true },
+    });
+    const keys = versions.flatMap((version) => {
+      const list = (version.payload as { plans?: { key?: unknown }[] } | null)?.plans ?? [];
+      return list.map((plan) => plan.key).filter((key): key is string => typeof key === 'string');
+    });
+    return [...new Set(keys)];
+  });
+}
+
+function leaks(text: string, words: readonly string[]): string[] {
+  return words.filter((word) => {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?<![\\w.-])${escaped}(?![\\w-])`).test(text);
+  });
+}
+
+test.describe('Simple pages never show a stored key', () => {
+  for (const locale of ['en', 'ar'] as const) {
+    test(`no plan key, document id or limit key on any Simple page (${locale})`, async ({
+      page,
+    }) => {
+      const planKeys = await storedPlanKeys();
+      expect(planKeys.length).toBeGreaterThan(0);
+      const words = [
+        ...planKeys,
+        ...DOMAIN_IDS.filter((id) => locale === 'ar' || !PLAIN_WORD.test(id)),
+        ...QUOTA_KEYS.filter((key) => locale === 'ar' || !PLAIN_WORD.test(key)),
+      ];
+      await signIn(page, locale, { mode: 'simple' });
+      const check = async (label: string) => {
+        // A change's reason is what the person who made it wrote, in their own
+        // words; it is quoted, not rendered from a key, so it is not read here.
+        const text = await page.locator('main').evaluate((main) => {
+          const copy = main.cloneNode(true) as HTMLElement;
+          copy.querySelectorAll('[data-testid="change-reason"]').forEach((node) => node.remove());
+          document.body.append(copy);
+          const shown = copy.innerText;
+          copy.remove();
+          return shown;
+        });
+        expect(leaks(text, words), `${locale} ${label}`).toEqual([]);
+      };
+      for (const screen of SIMPLE_SCREENS) {
+        await page.goto(`${ADMIN_BASE_URL}/${locale}${screen.path}`);
+        await expect(page.getByTestId(screen.marker), screen.path).toBeVisible();
+        await check(screen.path);
+        // One editor of every card page, read the same way.
+        const edit = page.locator('[data-testid^="area-edit-"]').first();
+        if (screen.path.startsWith('/console/manage/') || screen.path === '/console/plans') {
+          if ((await edit.count()) > 0) {
+            await edit.click();
+            await expect(page.getByTestId('area-editor')).toBeVisible();
+            await check(`${screen.path} editor`);
+          }
+        }
+      }
+    });
+  }
+
+  test('the Home rows and "Changed by your developer" read in plain words', async ({ page }) => {
+    await signIn(page, 'en', { mode: 'simple' });
+    await page.goto(`${ADMIN_BASE_URL}/en/console/plans`);
+    const developer = page.getByTestId('area-developer');
+    await expect(developer).toContainText('Fixture Starter:');
+    await expect(developer).toContainText('Tax is added on top');
+    await expect(developer).not.toContainText('exclusive');
+    await page.goto(`${ADMIN_BASE_URL}/ar/console/plans`);
+    await expect(page.getByTestId('area-developer')).toContainText('تُضاف الضريبة إلى السعر');
+  });
+});
+
+test.describe('the Home grid heading is never under the top bar', () => {
+  for (const locale of ['en', 'ar'] as const) {
+    test(`"Manage your platform" scrolled to sits fully below the bar at 1536x864 (${locale})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 1536, height: 864 });
+      await signIn(page, locale, { mode: 'simple' });
+      await page.goto(`${ADMIN_BASE_URL}/${locale}/console`);
+      const grid = page.getByTestId('manage-grid');
+      const heading = grid.getByRole('heading', { level: 2 }).first();
+      // Both ways a page is brought to a section: the browser's own scroll to
+      // an element, and Playwright's (what a reviewer's capture does).
+      for (const bring of ['scrollIntoView', 'playwright'] as const) {
+        await page.evaluate(() => document.querySelector('.bs-panel')?.scrollTo(0, 0));
+        if (bring === 'scrollIntoView') {
+          await grid.evaluate((section) => section.scrollIntoView({ block: 'start' }));
+        } else {
+          await grid.scrollIntoViewIfNeeded();
+        }
+        const bar = await page.locator('.bs-topbar').boundingBox();
+        const box = await heading.boundingBox();
+        expect(bar && box, bring).toBeTruthy();
+        // The bar fades out over 0.75rem (12px) below its box; the heading clears that too.
+        const fade = await page
+          .locator('.bs-topbar')
+          .evaluate((bar) => parseFloat(getComputedStyle(bar, '::after').height) || 0);
+        expect(box!.y, `${locale} ${bring}: heading top below the bar`).toBeGreaterThanOrEqual(
+          bar!.y + bar!.height + fade - 0.5,
+        );
+        // Nothing paints over it: the point at its middle belongs to the heading.
+        const own = await heading.evaluate((node) => {
+          const r = node.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + 2);
+          return hit !== null && node.contains(hit);
+        });
+        expect(own, `${locale} ${bring}: heading not covered`).toBe(true);
+      }
+    });
+  }
 });
 
 test.describe('Simple shows only what the reader may do', () => {

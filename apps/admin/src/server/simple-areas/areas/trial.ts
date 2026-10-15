@@ -1,5 +1,6 @@
 import type { AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
 import { arrayOf, num, rec, str, upsertBy, sameJson } from '../json';
+import { amount, choiceName, planName } from '../plain';
 
 /**
  * TRIAL AND CREDITS — what a new workspace gets, in numbers.
@@ -333,15 +334,18 @@ export const trialArea: AreaSpec = {
     },
     {
       label: 'trial.d.order',
-      value: (docs, ctx) =>
-        str(docs.credits?.['consumptionOrder']) === 'fifo_by_expiry'
-          ? ctx.t('trial.d.orderValue')
-          : str(docs.credits?.['consumptionOrder']),
+      value: (docs, ctx) => choiceName(ctx, 'order', str(docs.credits?.['consumptionOrder'])),
     },
     {
       label: 'trial.d.reservation',
-      value: (docs) => `${num(docs.credits?.['reservationTimeoutSeconds']) ?? '—'} s`,
+      value: (docs, ctx) => amount(ctx, docs.credits?.['reservationTimeoutSeconds'], 'u.seconds'),
     },
-    { label: 'trial.d.whichPlan', value: (docs) => str(trialPlanOf(docs)?.['key']) || '—' },
+    {
+      label: 'trial.d.whichPlan',
+      value: (docs, ctx) => {
+        const plan = trialPlanOf(docs);
+        return plan ? planName(docs, str(plan['key']), ctx) : '—';
+      },
+    },
   ],
 };

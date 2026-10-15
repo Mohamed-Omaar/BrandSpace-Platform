@@ -17,6 +17,7 @@ import type {
 import { formatMinor } from '../../money';
 import { PLAN_AI_CAP_FIELDS } from '../../plan-ai-cap';
 import { arrayOf, num, rec, str, upsertBy, sameJson } from '../json';
+import { amount, choiceName, planName } from '../plain';
 
 /**
  * PLANS — one card per plan; create, edit, duplicate, archive (owner, D-557+).
@@ -404,11 +405,10 @@ export interface PlanPreview {
 export function planPreview(docs: Docs, key: string, ctx: AreaContext): PlanPreview | null {
   const plan = plans(docs).find((candidate) => str(candidate['key']) === key);
   if (!plan) return null;
-  const name = rec(plan['name']);
   const all = facts(plan, docs, ctx);
   const value = (label: string) => all.find((fact) => fact.label === label)?.value ?? '—';
   return {
-    name: str(ctx.locale === 'ar' ? name['ar'] : name['en']) || key,
+    name: planName(docs, key, ctx),
     description: str(rec(plan['description'])[ctx.locale === 'ar' ? 'ar' : 'en']),
     price: value(ctx.t('plans.c.price')),
     trial: value(ctx.t('plans.c.trial')),
@@ -432,12 +432,10 @@ const STATUS_TONE = {
 
 function items(docs: Docs, ctx: AreaContext): readonly ItemView[] {
   return plans(docs).map((plan) => {
-    const name = rec(plan['name']);
     const availability = availabilityOf(plan);
     return {
       key: str(plan['key']),
-      title:
-        str(ctx.locale === 'ar' ? name['ar'] : name['en']) || str(name['en']) || str(plan['key']),
+      title: planName(docs, str(plan['key']), ctx),
       subtitle: str(rec(plan['description'])[ctx.locale === 'ar' ? 'ar' : 'en']) || undefined,
       status: { label: ctx.t(`plans.o.${availability}`), tone: STATUS_TONE[availability] },
       facts: facts(plan, docs, ctx),
@@ -537,6 +535,7 @@ const collection: CollectionSpec = {
   title: 'plans.title',
   domains: ['plans', 'entitlements'],
   reads: ['feature-flags'],
+  parts: { plans: 'plans.part.plans', entitlements: 'plans.part.entitlements' },
   canCreate: true,
   canDuplicate: true,
   archiveLabel: 'a.archive',
@@ -650,27 +649,37 @@ export const plansArea: AreaSpec = {
   developer: [
     {
       label: 'plans.d.rollover',
-      value: (docs) => developerList(docs, (plan) => str(rec(plan['creditRollover'])['policy'])),
+      value: (docs, ctx) =>
+        developerList(docs, ctx, (plan) =>
+          choiceName(ctx, 'rollover', str(rec(plan['creditRollover'])['policy'])),
+        ),
     },
     {
       label: 'plans.d.analyticsRetention',
-      value: (docs) =>
-        developerList(docs, (plan) => String(rec(plan['quotas'])['analyticsRetentionDays'] ?? '—')),
+      value: (docs, ctx) =>
+        developerList(docs, ctx, (plan) => {
+          const days = rec(plan['quotas'])['analyticsRetentionDays'];
+          return days === null ? ctx.t('w.noLimit') : amount(ctx, days, 'u.days');
+        }),
     },
     {
       label: 'plans.d.addOns',
-      value: (docs) => developerList(docs, (plan) => String(arrayOf(plan['addOns']).length)),
+      value: (docs, ctx) =>
+        developerList(docs, ctx, (plan) => String(arrayOf(plan['addOns']).length)),
     },
     {
       label: 'plans.d.tax',
-      value: (docs) => developerList(docs, (plan) => str(plan['taxBehavior'])),
+      value: (docs, ctx) =>
+        developerList(docs, ctx, (plan) => choiceName(ctx, 'tax', str(plan['taxBehavior']))),
     },
   ],
 };
 
-function developerList(docs: Docs, read: (plan: Plan) => string): string {
+function developerList(docs: Docs, ctx: AreaContext, read: (plan: Plan) => string): string {
   const list = plans(docs);
   return list.length === 0
     ? '—'
-    : list.map((plan) => `${str(plan['key'])}: ${read(plan) || '—'}`).join(' · ');
+    : list
+        .map((plan) => `${planName(docs, str(plan['key']), ctx)}: ${read(plan) || '—'}`)
+        .join(' · ');
 }

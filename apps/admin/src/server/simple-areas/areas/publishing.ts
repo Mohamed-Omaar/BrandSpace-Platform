@@ -1,6 +1,10 @@
-import type { AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
+import type { AreaContext, AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
 import { arrayOf, bool, num, rec, str } from '../json';
 import { CHANNEL_NAMES, connectorBuilt } from './channels';
+import { amount } from '../plain';
+
+const channel = (key: string, ctx: AreaContext): string =>
+  CHANNEL_NAMES[key] ?? ctx.t('w.developerValue');
 
 /**
  * PUBLISHING — one card per provider: whether customers may connect and
@@ -206,43 +210,54 @@ export const publishingArea: AreaSpec = {
   developer: [
     {
       label: 'pub.d.backoff',
-      value: (docs) => {
+      value: (docs, ctx) => {
         const r = rec(docs.publishing?.['retry']);
-        return `${num(r['initialBackoffSeconds']) ?? '—'} s × ${num(r['backoffMultiplier']) ?? '—'} ≤ ${num(r['maxBackoffSeconds']) ?? '—'} s`;
+        return ctx.t('w.backoff', {
+          first: num(r['initialBackoffSeconds']) ?? '—',
+          factor: num(r['backoffMultiplier']) ?? '—',
+          max: num(r['maxBackoffSeconds']) ?? '—',
+        });
       },
     },
     {
       label: 'pub.d.rateLimits',
-      value: (docs) =>
+      value: (docs, ctx) =>
         Object.entries(providers(docs))
           .map(([k, p]) => {
             const l = rec(rec(p)['rateLimit']);
-            return `${CHANNEL_NAMES[k] ?? k}: ${num(l['requestsPerWindow']) ?? '—'}/${num(l['windowSeconds']) ?? '—'} s`;
+            return `${channel(k, ctx)}: ${ctx.t('w.perWindow', {
+              count: num(l['requestsPerWindow']) ?? '—',
+              seconds: num(l['windowSeconds']) ?? '—',
+            })}`;
           })
           .join(' · ') || '—',
     },
     {
       label: 'pub.d.scopes',
-      value: (docs) =>
+      value: (docs, ctx) =>
         Object.entries(providers(docs))
-          .map(([k, p]) => `${CHANNEL_NAMES[k] ?? k}: ${arrayOf(rec(p)['scopes']).length}`)
+          .map(([k, p]) => `${channel(k, ctx)}: ${arrayOf(rec(p)['scopes']).length}`)
           .join(' · ') || '—',
     },
     {
       label: 'pub.d.tokenWarning',
-      value: (docs) =>
+      value: (docs, ctx) =>
         Object.entries(providers(docs))
-          .map(([k, p]) => `${CHANNEL_NAMES[k] ?? k}: ${num(rec(p)['expiringSoonHours']) ?? '—'}`)
+          .map(
+            ([k, p]) =>
+              `${channel(k, ctx)}: ${amount(ctx, rec(p)['expiringSoonHours'], 'u.hours')}`,
+          )
           .join(' · ') || '—',
     },
     {
       label: 'pub.d.dispatch',
-      value: (docs) =>
-        `${num(rec(docs.publishing?.['dispatch'])['latenessToleranceMinutes']) ?? '—'} min`,
+      value: (docs, ctx) =>
+        amount(ctx, rec(docs.publishing?.['dispatch'])['latenessToleranceMinutes'], 'u.minutes'),
     },
     {
       label: 'pub.d.inbound',
-      value: (docs) => `${num(rec(docs.publishing?.['inbound'])['retentionDays']) ?? '—'} d`,
+      value: (docs, ctx) =>
+        amount(ctx, rec(docs.publishing?.['inbound'])['retentionDays'], 'u.days'),
     },
   ],
 };

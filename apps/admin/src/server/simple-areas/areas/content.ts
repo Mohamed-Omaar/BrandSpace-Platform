@@ -1,6 +1,7 @@
 import type { AreaContext, AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
 import { arrayOf, bool, num, rec, str, upsertBy, sameJson } from '../json';
 import { CHANNEL_NAMES } from './channels';
+import { amount, dialectName, questionSetName } from '../plain';
 
 /**
  * CONTENT — the lists the customer's writing tools offer:
@@ -77,7 +78,10 @@ const industryFields = (
       label: 'ct.f.questions',
       help: 'ct.h.questions',
       impact: 'ct.i.questions',
-      options: sets.map((set) => ({ value: set, label: { literal: set } })),
+      options: sets.map((set) => ({
+        value: set,
+        label: { literal: questionSetName(docs, set, _ctx) },
+      })),
     },
   ];
 };
@@ -101,7 +105,10 @@ const industryCollection: CollectionSpec = {
         title: str(ctx.locale === 'ar' ? name['ar'] : name['en']) || str(industry['key']),
         subtitle: str(ctx.locale === 'ar' ? name['en'] : name['ar']),
         facts: [
-          { label: ctx.t('ct.f.questions'), value: str(industry['offersQuestionSet']) || '—' },
+          {
+            label: ctx.t('ct.f.questions'),
+            value: questionSetName(docs, str(industry['offersQuestionSet']), ctx),
+          },
         ],
         values: {
           key: str(industry['key']),
@@ -481,12 +488,15 @@ export const contentArea: AreaSpec = {
   developer: [
     {
       label: 'ct.d.dialects',
-      value: (docs) =>
+      value: (docs, ctx) =>
         arrayOf(rec(docs.content?.['dialects'])['supported'])
-          .map((d) => str(rec(d)['key']))
+          .map((d) => dialectName(ctx, str(rec(d)['key'])))
           .join(' · ') || '—',
     },
-    { label: 'ct.d.horizon', value: (docs) => `${num(calendar(docs)['maxDaysAhead']) ?? '—'} d` },
+    {
+      label: 'ct.d.horizon',
+      value: (docs, ctx) => amount(ctx, calendar(docs)['maxDaysAhead'], 'u.days'),
+    },
     { label: 'ct.d.slots', value: (docs) => String(num(calendar(docs)['maxSlotsPerDay']) ?? '—') },
     {
       label: 'ct.d.approval',
@@ -498,6 +508,12 @@ export const contentArea: AreaSpec = {
       label: 'ct.d.observances',
       value: (docs) => String(arrayOf(calendar(docs)['observances']).length),
     },
-    { label: 'ct.d.questionSets', value: (docs) => questionSets(docs).join(' · ') || '—' },
+    {
+      label: 'ct.d.questionSets',
+      value: (docs, ctx) =>
+        questionSets(docs)
+          .map((set) => questionSetName(docs, set, ctx))
+          .join(' · ') || '—',
+    },
   ],
 };

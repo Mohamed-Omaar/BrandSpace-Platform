@@ -1,12 +1,24 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { configLeafDiff, parseConfigPayload, type ConfigDomain } from '@brandspace/config';
+import {
+  CONFIG_DOMAIN_KEYS,
+  configLeafDiff,
+  parseConfigPayload,
+  type ConfigDomain,
+} from '@brandspace/config';
 import { AREA_COPY, areaCopy } from '../../apps/admin/src/i18n/simple-areas';
 import { parseFields, sourceOf } from '../../apps/admin/src/server/simple-areas/fields';
 import { prepareArchive, prepareEdit } from '../../apps/admin/src/server/simple-areas/edit';
 import { AREAS, findArea, findCollection } from '../../apps/admin/src/server/simple-areas/registry';
 import type { AreaContext, Docs, FieldSpec } from '../../apps/admin/src/server/simple-areas/types';
+import { plainChange } from '../../apps/admin/src/server/simple-areas/history';
+import {
+  domainName,
+  pendingName,
+  plainDetail,
+  quotaName,
+} from '../../apps/admin/src/i18n/simple-names';
 
 /**
  * CONTROL CENTER SIMPLE MODE (owner decision) — the card engine's pure parts:
@@ -333,5 +345,106 @@ describe('Simple writes through the Configuration Service only (D-312)', () => {
     }
     // The one writer is the existing lifecycle helper.
     expect(read('apps/admin/src/server/simple-areas/runtime.ts')).toContain('proposeAndActivate');
+  });
+});
+
+/**
+ * NO STORED KEY ON AN OWNER PAGE (owner review of the card pages): a plan by
+ * the name customers see, a limit by its plain name, a document by what it is
+ * about, a stored choice by what it means and a number by its unit — in both
+ * languages. The end-to-end suite reads the pages; this reads the words.
+ */
+describe('Simple pages name things in plain words, never by their stored keys', () => {
+  const QUOTAS = [
+    'seats',
+    'brands',
+    'workspaces',
+    'socialAccounts',
+    'scheduledPostsPerMonth',
+    'storageGb',
+    'analyticsRetentionDays',
+  ];
+  const RAW_CHOICES = /\b(?:exclusive|inclusive|fifo_by_expiry|capped|msa|gulf|egyptian)\b/;
+  const UNIT_ABBREVIATION = /\d (?:s|d|min|px)\b/;
+
+  it('every configuration document has a plain name, never its id, in both languages', () => {
+    for (const locale of ['en', 'ar']) {
+      for (const domain of CONFIG_DOMAIN_KEYS) {
+        const name = domainName(locale, domain);
+        // An id that is an ordinary word ("publishing") may read as itself in English.
+        if (locale === 'ar' || /[.-]/.test(domain))
+          expect(name, `${locale} ${domain}`).not.toBe(domain);
+        if (domain.includes('.') || domain.includes('-')) expect(name).not.toContain(domain);
+        if (locale === 'ar') expect(name, domain).not.toMatch(/[a-z]{3,}/);
+        if (domain.includes('.') || domain.includes('-') || locale === 'ar')
+          expect(pendingName(locale, domain), `${locale} ${domain}`).not.toContain(domain);
+      }
+    }
+    expect(pendingName('en', 'usage-limits')).toBe('technical settings (usage limits)');
+    expect(pendingName('ar', 'usage-limits')).toBe('إعدادات تقنية (حدود الاستخدام)');
+  });
+
+  it('the trial row names the plan and its unset limits plainly', () => {
+    const detail = {
+      plan: 'fixture-starter',
+      planEn: 'Fixture Starter',
+      planAr: 'المبتدئ',
+      days: '14',
+      credits: '200',
+      quotas: QUOTAS.join(', '),
+    };
+    const en = plainDetail('en', detail);
+    expect(en['plan']).toBe('Fixture Starter');
+    expect(en['quotas']).toBe(QUOTAS.map((quota) => quotaName('en', quota)).join(', '));
+    for (const quota of QUOTAS.filter((q) => /[A-Z]/.test(q))) {
+      expect(en['quotas']).not.toContain(quota);
+    }
+    const ar = plainDetail('ar', detail);
+    expect(ar['plan']).toBe('المبتدئ');
+    expect(ar['quotas']).not.toMatch(/[a-z]/);
+  });
+
+  it('"Changed by your developer" shows no plan key, raw choice or unit abbreviation', () => {
+    const docs = productionDocs();
+    const planKeys = (docs.plans?.['plans'] as { key: string }[]).map((plan) => plan.key);
+    expect(planKeys.length).toBeGreaterThan(0);
+    for (const locale of ['en', 'ar']) {
+      const ctx = context(locale);
+      for (const area of AREAS) {
+        for (const row of area.developer ?? []) {
+          const value = row.value(docs, ctx);
+          const label = `${locale} ${area.key} ${row.label}`;
+          for (const key of planKeys) expect(value, label).not.toMatch(new RegExp(`\\b${key}\\b`));
+          expect(value, label).not.toMatch(RAW_CHOICES);
+          expect(value, label).not.toMatch(UNIT_ABBREVIATION);
+          for (const domain of CONFIG_DOMAIN_KEYS.filter((d) => /[.-]/.test(d))) {
+            expect(value, label).not.toContain(domain);
+          }
+        }
+      }
+    }
+    const plans = findArea('plans')!;
+    const tax = plans.developer!.find((row) => row.label === 'plans.d.tax')!;
+    expect(tax.value(docs, context('en'))).toMatch(/^Starter: /);
+  });
+
+  it('Change history reads a change through the card, not as a stored path', () => {
+    const docs = productionDocs();
+    const before = docs.plans!;
+    const after = structuredClone(before) as { plans: { key: string; monthlyCredits: number }[] };
+    after.plans[0]!.monthlyCredits = 999;
+    const change = plainChange({
+      domain: 'plans',
+      before,
+      after: after as unknown as Record<string, unknown>,
+      docs,
+      ctx: context('en'),
+    });
+    expect(change.area?.key).toBe('plans');
+    expect(change.lines.map((line) => `${line.label}: ${line.before} → ${line.after}`)).toContain(
+      'Starter: Monthly credits: ' +
+        `${(before['plans'] as { monthlyCredits: number }[])[0]!.monthlyCredits} credits → 999 credits`,
+    );
+    for (const line of change.lines) expect(line.label).not.toContain('plans[');
   });
 });

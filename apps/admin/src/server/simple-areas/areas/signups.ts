@@ -1,5 +1,6 @@
 import type { AreaSpec, CollectionSpec, FieldSpec, ItemView } from '../types';
 import { arrayOf, bool, num, rec, sameJson } from '../json';
+import { amount } from '../plain';
 
 /**
  * SIGN-UPS AND SECURITY — open or invitation-only, the shortest password,
@@ -152,15 +153,18 @@ export const signupsArea: AreaSpec = {
   developer: [
     {
       label: 'su.d.abuse',
-      value: (docs) => {
+      value: (docs, ctx) => {
         const a = rec(docs.onboarding?.['abuse']);
-        return `${num(a['signInPerAccount']) ?? '—'} / ${num(a['windowSeconds']) ?? '—'} s`;
+        return ctx.t('w.perWindow', {
+          count: num(a['signInPerAccount']) ?? '—',
+          seconds: num(a['windowSeconds']) ?? '—',
+        });
       },
     },
     {
       label: 'su.d.verification',
-      value: (docs) =>
-        `${num(rec(docs.onboarding?.['signup'])['verificationTtlMinutes']) ?? '—'} min`,
+      value: (docs, ctx) =>
+        amount(ctx, rec(docs.onboarding?.['signup'])['verificationTtlMinutes'], 'u.minutes'),
     },
     {
       label: 'su.d.recoveryCodes',
@@ -168,7 +172,8 @@ export const signupsArea: AreaSpec = {
     },
     {
       label: 'su.d.deletion',
-      value: (docs) => `${num(rec(docs.onboarding?.['workspaceDeletion'])['graceDays']) ?? '—'} d`,
+      value: (docs, ctx) =>
+        amount(ctx, rec(docs.onboarding?.['workspaceDeletion'])['graceDays'], 'u.days'),
     },
     { label: 'su.d.steps', value: (docs) => String(arrayOf(docs.onboarding?.['steps']).length) },
   ],

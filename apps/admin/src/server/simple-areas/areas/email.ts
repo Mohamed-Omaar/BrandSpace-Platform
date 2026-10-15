@@ -139,7 +139,14 @@ export const emailArea: AreaSpec = {
     },
     {
       label: 'em.d.active',
-      value: (docs) => str(docs['integrations.email']?.['activeProviderKey']) || '—',
+      value: (docs, ctx) => {
+        const active = str(docs['integrations.email']?.['activeProviderKey']);
+        if (active === '') return ctx.t('w.notSet');
+        return (
+          str(providers(docs).find((p) => str(p['key']) === active)?.['name']) ||
+          ctx.t('w.developerValue')
+        );
+      },
     },
   ],
 };

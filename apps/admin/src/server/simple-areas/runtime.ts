@@ -79,6 +79,23 @@ export function mayChange(actor: AuthenticatedPlatformActor): boolean {
  * Each domain is its own activation (the service's unit of change); a refusal
  * stops before the next one, and the ones already activated are reported.
  */
+/**
+ * A change that writes two documents saved the first and was refused on a
+ * later one (D-558: sequential activations, not one transaction). What was
+ * activated stays; the owner is told which part is missing and may try it
+ * again (`retryPartAction`).
+ */
+export class PartialWrite extends Error {
+  constructor(
+    readonly written: readonly ConfigDomain[],
+    readonly failed: ConfigDomain,
+    readonly refusal: unknown,
+  ) {
+    super('PARTIAL_WRITE');
+    this.name = 'PartialWrite';
+  }
+}
+
 export async function writeDocs(input: {
   readonly actor: AuthenticatedPlatformActor;
   readonly before: Docs;
@@ -92,14 +109,19 @@ export async function writeDocs(input: {
   if (changed.length === 0) throw new AppError('CONFLICT', 'UNCHANGED');
   for (const domain of changed) {
     const next = input.after[domain] as Record<string, unknown>;
-    await proposeAndActivate<Record<string, unknown>>({
-      actor: input.actor,
-      domain,
-      reason: input.reason,
-      acknowledged: true,
-      change: () => structuredClone(next),
-      unchanged: (active) => sameJson(active, next),
-    });
+    try {
+      await proposeAndActivate<Record<string, unknown>>({
+        actor: input.actor,
+        domain,
+        reason: input.reason,
+        acknowledged: true,
+        change: () => structuredClone(next),
+        unchanged: (active) => sameJson(active, next),
+      });
+    } catch (error: unknown) {
+      if (written.length > 0) throw new PartialWrite([...written], domain, error);
+      throw error;
+    }
     written.push(domain);
   }
   return written;

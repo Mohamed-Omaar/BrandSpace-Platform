@@ -2,6 +2,7 @@ import { ContentGrid, MetricCard, Stack, colorTokens, typographyTokens } from '@
 import { ManageGrid } from './manage';
 import type { ConfigDomain } from '@brandspace/config';
 import { fill, simpleCopy, type SimpleKey } from '../../i18n/simple';
+import { pendingName } from '../../i18n/simple-names';
 import {
   loadAiSummary,
   loadBillingIssues,
@@ -33,17 +34,9 @@ const PENDING_HREF: Partial<Record<ConfigDomain, string>> = {
   'ai.capability-routing': '/ai/profile',
 };
 
+/** What an unfinished change is about, in plain words — never the document's id. */
 export function pendingLabel(locale: string, domain: ConfigDomain): string {
-  const copy = simpleCopy(locale);
-  const key = `pending.${domain}` as SimpleKey;
-  const known: readonly string[] = [
-    'plans',
-    'entitlements',
-    'feature-flags',
-    'ai.capability-routing',
-    'ai.providers',
-  ];
-  return known.includes(domain) ? copy(key) : fill(copy('pending.other'), { domain });
+  return pendingName(locale, domain);
 }
 
 /**

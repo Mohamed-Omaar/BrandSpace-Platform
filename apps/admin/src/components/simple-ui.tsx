@@ -14,6 +14,7 @@ import {
   type BadgeTone,
 } from '@brandspace/ui';
 import { fill, simpleCopy, type SimpleKey } from '../i18n/simple';
+import { plainDetail } from '../i18n/simple-names';
 import type { AreaState, ReadinessArea } from '../server/owner-readiness';
 
 /**
@@ -48,7 +49,7 @@ export function reasonText(
   const copy = simpleCopy(locale);
   if (area.reason === 'ok') return copy(area.key === 'plans' ? 'reason.okPlans' : 'reason.ok');
   // PR F (e): the facts behind a reason (days, quotas, a sender's name) fill its sentence.
-  return fill(copy(`reason.${area.reason}` as SimpleKey), area.detail ?? {});
+  return fill(copy(`reason.${area.reason}` as SimpleKey), plainDetail(locale, area.detail ?? {}));
 }
 
 export function AreaBadge({

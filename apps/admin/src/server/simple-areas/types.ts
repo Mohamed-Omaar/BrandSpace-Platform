@@ -123,6 +123,11 @@ export interface CollectionSpec {
   readonly domains: readonly ConfigDomain[];
   /** Documents it only reads (a question-set list, the apps' set-up state). */
   readonly reads?: readonly ConfigDomain[];
+  /**
+   * What each written document holds, in the owner's words — for a change that
+   * writes two (D-558) and saves only the first: "Saved: …, not saved: …".
+   */
+  readonly parts?: Partial<Record<ConfigDomain, AreaCopyKey>>;
   readonly fields: (
     docs: Docs,
     ctx: AreaContext,
