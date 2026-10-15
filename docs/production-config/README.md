@@ -68,6 +68,23 @@ may not activate it, unless that person holds the `platform_owner` role. With on
 account, the owner can draft and activate. With a second staff member, one drafts and the other
 activates.
 
+### 2.1 Never remove a platform from `content.platforms` once a workspace has content for it
+
+**Removing a platform from `content.platforms` breaks every post that already has a version
+for it.** The rows are not deleted, but while the platform is absent from the list (D-554):
+
+- saving an edit to that version is refused (`packages/content/src/library.ts`, `updateVariant`
+  → `unsupportedPlatform`);
+- duplicating a post that has one is refused as a whole (`assertPlatforms`);
+- an AI rewrite of that version is refused (`packages/content/src/studio.ts`);
+- the Studio's "Post to" has no toggle for it and names it by its raw key.
+
+Adding the platform back restores those posts unchanged. **So remove a platform only from a
+configuration that has never had content for it** — a fresh production database, as at launch
+(this file lists instagram, facebook and tiktok; LinkedIn and X were never offered). Staging
+keeps its own list. Removing a platform later needs the post-launch change in
+`docs/ROADMAP.md` ("keep a removed platform's posts editable and visible") first.
+
 ## 3. Secrets in the Control Center
 
 ### 3.1 Email (Resend)
@@ -154,21 +171,21 @@ Q13, D-481) or a schema default.
 These are pinned by `tests/unit/pr-f-production-config.test.ts` ("the values the owner confirmed
 on the #79 review"); changing one fails that test.
 
-| Value                     | Where                   | Confirmed                                                                                                                                           |
-| ------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `monthlyCredits`          | `plans.json`, `starter` | **500.** The trial grants the same 500 (`trialCredits`, D-556 a); Home reads "n of" the trial grant during the trial (D-514).                       |
-| `quotas.workspaces`       | `plans.json`, `starter` | **1.** A trial owner can hold one workspace.                                                                                                        |
-| `industries` (12)         | `onboarding.json`       | The twelve names and keys as written, with their question sets.                                                                                     |
-| `recommendedHashtags`     | `content.json`          | instagram 3–5, tiktok 3–5, linkedin 1–3, x 1–2. Facebook has no entry: the `content` platforms list has none (instagram, linkedin, x, tiktok only). |
-| `calendar.suggestedTimes` | `content.json`          | EG, SA and AE: 10:00, 16:00, 21:00. Shown as "Suggested time", never "best time" (D-329).                                                           |
+| Value                     | Where                   | Confirmed                                                                                                                          |
+| ------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `monthlyCredits`          | `plans.json`, `starter` | **500.** The trial grants the same 500 (`trialCredits`, D-556 a); Home reads "n of" the trial grant during the trial (D-514).      |
+| `quotas.workspaces`       | `plans.json`, `starter` | **1.** A trial owner can hold one workspace.                                                                                       |
+| `industries` (12)         | `onboarding.json`       | The twelve names and keys as written, with their question sets.                                                                    |
+| `recommendedHashtags`     | `content.json`          | instagram 3–5, tiktok 3–5. Facebook has no range. LinkedIn and X are not in the production list (D-554, §2.1); staging keeps them. |
+| `calendar.suggestedTimes` | `content.json`          | EG, SA and AE: 10:00, 16:00, 21:00. Shown as "Suggested time", never "best time" (D-329).                                          |
 
 ### 5.1b Decided by the owner (#81 review)
 
 Pinned by `tests/unit/pr-f-production-config.test.ts` ("the values the owner decided on the #81 review").
 
-| Value       | Where          | Decided                                                                                                                                                                                                                                                                                                                                                 |
-| ----------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `safeZones` | `content.json` | instagram and tiktok: `top` 13, `bottom` 22, `end` 16 (percent of a 9:16 frame). **DESIGN GUIDANCE** — the bands the approved prototype draws (`Main.dc.html` lines 462 and 489), not values Meta or TikTok publish; replace them with the platforms' own templates when the owner has them (D-500, D-505). linkedin and x have none (no 9:16 preview). |
+| Value       | Where          | Decided                                                                                                                                                                                                                                                                                                                        |
+| ----------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `safeZones` | `content.json` | instagram and tiktok: `top` 13, `bottom` 22, `end` 16 (percent of a 9:16 frame). **DESIGN GUIDANCE** — the bands the approved prototype draws (`Main.dc.html` lines 462 and 489), not values Meta or TikTok publish; replace them with the platforms' own templates when the owner has them (D-500, D-505). facebook has none. |
 
 **Also decided on the #81 review** (pinned by the same test block):
 

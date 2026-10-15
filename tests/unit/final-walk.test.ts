@@ -259,4 +259,26 @@ describe('the owner’s answers on the final-walk review', () => {
     expect(rule('.bsp-hint-card')).toContain('background: #f6f3ff;');
     expect(rule('.bsp-hint-card')).not.toMatch(/#175cd3|#00adee/i);
   });
+
+  it('production "Post to" offers only the channels the beta can connect (D-554)', () => {
+    const content = JSON.parse(read('docs/production-config/content.json')) as {
+      platforms: { key: string }[];
+    };
+    expect(content.platforms.map((platform) => platform.key)).toEqual([
+      'instagram',
+      'facebook',
+      'tiktok',
+    ]);
+    // The warning that keeps it from ever being done to a configuration with content.
+    expect(read('docs/production-config/README.md')).toContain(
+      '### 2.1 Never remove a platform from `content.platforms` once a workspace has content for it',
+    );
+  });
+
+  it('Media filters by type in one row, the prototype’s chips (D-557)', () => {
+    const view = read('apps/dashboard/src/app/[locale]/assets/asset-library-view.tsx');
+    expect(view).toContain('data-testid="assets-kinds"');
+    expect(view).not.toContain('data-testid="assets-kind-all"');
+    expect(view).toMatch(/\.filter\(\(view\) => view !== 'images' && view !== 'videos'\)/);
+  });
 });

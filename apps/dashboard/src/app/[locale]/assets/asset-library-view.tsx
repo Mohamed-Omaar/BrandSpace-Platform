@@ -450,22 +450,13 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
             </button>
           ) : null}
           <div className="bsp-med-filters">
-            <nav
-              className="bsp-med-kinds"
-              aria-label={t('assets.filter.kind')}
-              data-testid="assets-kind-all"
-            >
-              {[undefined, ...(Object.keys(KIND_LABEL) as AssetKind[])].map((kind) => (
-                <a
-                  key={kind ?? '__all__'}
-                  href={filterHref(props.locale, filters, { kind })}
-                  className="bsp-chip"
-                  aria-current={filters.kind === kind ? 'true' : undefined}
-                >
-                  {kind ? t(KIND_LABEL[kind]) : t('assets.filter.all')}
-                </a>
-              ))}
-            </nav>
+            {/*
+              FINAL-WALK REVIEW (owner): ONE ROW FILTERS BY TYPE, the prototype's
+              chips above. The panel no longer repeats them as a second chip row,
+              and its views leave out Images and Videos for the same reason;
+              Documents (documents, fonts and audio) stays, since no chip covers
+              it. `?view=images` and `?kind=` still resolve.
+            */}
             <LinkTabs
               label={t('assets.views.label')}
               testId="assets-views"
@@ -478,6 +469,7 @@ export function AssetLibraryView(props: AssetLibraryViewProps) {
                 },
                 // D-553: the "AI generated" view follows image generation, as its chip does.
                 ...ASSET_VIEWS.filter((view) => view !== 'shared' || !singleBrand)
+                  .filter((view) => view !== 'images' && view !== 'videos')
                   .filter((view) => view !== 'ai' || can.generate || filters.view === 'ai')
                   .map((view) => ({
                     id: view,

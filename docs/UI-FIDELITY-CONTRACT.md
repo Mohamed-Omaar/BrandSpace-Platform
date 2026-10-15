@@ -2375,6 +2375,10 @@ walk, and wording fixes that change no layout:
   Intelligence's "no external data", Integrations' retry-after-reconnect and resume-set-up lines) now
   reuses the prototype's own `.bsp-hint-card` (purple tint, `#3d2a74` text) with an info icon. A
   reuse, not a new treatment; no layout changes.
+- **Media filters by type in one row (D-557).** The prototype's chip row (All, Photos, Video, AI) is
+  the only type filter; the product's Filters panel no longer repeats it as a kind row or as Images
+  / Videos views. The panel itself and its New folder stay as the recorded product extension for
+  filters the prototype does not draw.
 
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
