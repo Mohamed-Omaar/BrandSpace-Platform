@@ -6,6 +6,7 @@ import {
   CONDITION_FIELDS,
   CONDITION_FIELD_CONTRACTS,
   authorableConditionFieldsFor,
+  channelForPlatformKey,
   conditionFieldsForRule,
   entitledActionTypes,
   isAuthorablePair,
@@ -37,6 +38,7 @@ import {
 } from '../../../server/automation-run-display';
 import { createAutomationAiQuota, workspaceMonthLabel } from '@brandspace/entitlements';
 import { inAnalytics } from '../../../server/analytics-context';
+import { inContentStudio } from '../../../server/content-context';
 import {
   optionalMessage,
   statusMessage,
@@ -94,10 +96,27 @@ function conditionChoicesFor(
     readonly brands: readonly { readonly id: string; readonly name: string }[];
     readonly campaigns: readonly { readonly id: string; readonly name: string }[];
     readonly members: readonly { readonly id: string; readonly name: string }[];
+    /** The channels "Post to" offers: the active `content` platforms, in order. */
+    readonly channels: readonly { readonly key: string; readonly labelKey: string }[];
   },
 ): readonly { readonly value: string; readonly label: string }[] {
   const t = translator(messageLocale);
   const contract = CONDITION_FIELD_CONTRACTS[field];
+  /*
+   * THE CHANNEL CONDITION OFFERS WHAT THE STUDIO OFFERS (Control Center PR,
+   * owner): the configured `content.platforms`, each mapped to the provider the
+   * condition compares — never the registry's whole provider set, which named
+   * LinkedIn and X where no post can carry them. A saved rule naming a channel
+   * no longer offered keeps it, as "No longer available" (the form's rule).
+   */
+  if (field === 'content.channels') {
+    return catalogues.channels.flatMap((channel) => {
+      const provider = channelForPlatformKey(channel.key);
+      if (provider === null) return [];
+      const label = t(channel.labelKey as MessageKey) as string | undefined;
+      return [{ value: provider, label: typeof label === 'string' && label ? label : channel.key }];
+    });
+  }
 
   if (contract.catalogue === 'brands') {
     return catalogues.brands.map((brand) => ({ value: brand.id, label: brand.name }));
@@ -130,7 +149,7 @@ function conditionChoicesFor(
       label: t(`content.type.${value}` as MessageKey),
     }));
   }
-  if (field === 'publish.provider' || field === 'content.channels') {
+  if (field === 'publish.provider') {
     return contract.options.map((value) => ({
       value,
       label: t(`integrations.provider.${value.toLowerCase()}` as MessageKey),
@@ -488,6 +507,13 @@ export default async function AutomationsPage({
     }
     return byBrand;
   });
+  // The channels "Post to" offers — the same configured list the Studio reads.
+  const channels = await inContentStudio(workspace.workspaceId, async (services) =>
+    (await services.policy()).platforms.map((platform) => ({
+      key: platform.key,
+      labelKey: platform.labelKey,
+    })),
+  );
   const conditionChoices = (
     field: ConditionField,
     brandId: string | undefined,
@@ -496,6 +522,7 @@ export default async function AutomationsPage({
       brands,
       campaigns: (brandId ? catalogueByBrand.get(brandId)?.campaigns : undefined) ?? [],
       members: (brandId ? catalogueByBrand.get(brandId)?.members : undefined) ?? [],
+      channels,
     });
   /** A brand-dependent catalogue, one list per brand the form can pick. */
   const perBrand = (field: ConditionField) =>
