@@ -519,7 +519,11 @@ export function ComposerView({
    * this screen, so claiming one would be a lie about where the post is.
    */
   const brandName = brands.find((brand) => brand.id === brandId)?.name ?? '';
-  const brandHandle = brandName === '' ? '' : `@${brandName.replace(/\s+/g, '').toLowerCase()}`;
+  // Final walk: a handle holds only letters, digits, "." and "_" — never the
+  // brand name's spaces, apostrophes or other punctuation ("Sara's Bakery" →
+  // "@sarasbakery", not "@sara'sbakery").
+  const brandHandle =
+    brandName === '' ? '' : `@${brandName.replace(/[^\p{L}\p{N}._]+/gu, '').toLowerCase()}`;
   /*
    * §18 — THE FORMATS ON OFFER ARE THE ONES SOMETHING CAN CARRY. With no
    * registry answer every configured format stays, exactly as before.
@@ -1507,8 +1511,9 @@ export function ComposerView({
                     );
                   })()
                 : null}
-              {/* D-300 (§23) — what Generate does differently for a carousel. */}
-              {contentType === 'CAROUSEL' ? (
+              {/* D-300 (§23) — what Generate does differently for a carousel; only
+                  while Generate can run (final walk, Q9). */}
+              {contentType === 'CAROUSEL' && !aiOff ? (
                 <span className="bsp-st-hint" data-testid="carousel-outline-hint">
                   {t['create.carousel.outlineHint']}
                 </span>

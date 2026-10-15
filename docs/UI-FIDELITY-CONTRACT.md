@@ -2350,6 +2350,36 @@ problem in one line, and the consent line, whose two TikTok page names are links
 interaction model; ar and en.
 `tests/e2e/c-tiktok-options.spec.ts` covers both languages.
 
+### 6.3.68 Final walk — the beta as a customer sees it (D-551 to D-556)
+
+Two recorded DEVIATIONS from the prototype, each authorised by the owner's requirement in the final
+walk, and wording fixes that change no layout:
+
+- **The floating Copilot keeps a lane (D-551).** From 768px up, while the shell shows the button, the
+  scroll area stops `24px + 48px + 16px` above the frame's bottom edge and the button sits in that
+  lane, so it never covers text, data or a control at any scroll position; the page's end padding
+  returns to the prototype's 40px. This replaces §6.3.64's raised end padding and its "rows passing
+  under it while scrolling is accepted". The button's place and size are unchanged (`Main.dc.html`
+  L1483). With no AI provider there is no button and no lane. Measured in
+  `tests/e2e/final-walk-copilot-clear.spec.ts`.
+- **Every overlay is opaque (D-552).** The notifications popover and the other popovers, menus and
+  toasts (`.bsp-ntf`, `.bsp-menu`, `.bsp-cal-pop`, `.bsp-cal-popx`, `.bsp-post-menu`,
+  `.bsp-fdis-panel`, `.bsp-st-when`, `.bsp-au-menu`, `.bsp-toast`, `.bsp-lbx`) draw on solid white
+  with no backdrop filter, where the prototype draws translucent glass. Geometry, radius, shadow and
+  type are unchanged.
+- **Nothing AI-only while no AI task can run (D-553)** and **a fresh workspace says "nothing yet" in
+  words (D-555)**: the elements are left out or their wording changes; no layout changes, except
+  that Home's figures row draws three cards instead of four when the AI credits card is left out.
+- **Information lines are the prototype's hint card, not the design system's blue (D-556 b, owner on
+  review).** The prototype has no blue; a customer information line (`CustomerBanner` tone `info`:
+  Intelligence's "no external data", Integrations' retry-after-reconnect and resume-set-up lines) now
+  reuses the prototype's own `.bsp-hint-card` (purple tint, `#3d2a74` text) with an info icon. A
+  reuse, not a new treatment; no layout changes.
+- **Media filters by type in one row (D-557).** The prototype's chip row (All, Photos, Video, AI) is
+  the only type filter; the product's Filters panel no longer repeats it as a kind row or as Images
+  / Videos views. The panel itself and its New folder stay as the recorded product extension for
+  filters the prototype does not draw.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The

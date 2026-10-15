@@ -69,18 +69,21 @@ export function channelChart(series: readonly ChannelSeries[]): ChannelChart | n
     .map((point, index) => ({ index, label: point.label }))
     .filter(({ index }) => index % every === 0)
     .map(({ index, label }) => ({ x: X(index), label }));
+  // Final walk: a reading with no neighbour is drawn as a dot (a zero-length
+  // stroke with the line's round cap), not as nothing.
+  const closed = (path: string) => (path.includes('L') ? path : `${path}h0.01`);
   const lines = series.map((entry) => {
     const paths: string[] = [];
     let current = '';
     entry.points.forEach((point, index) => {
       if (point.value === null) {
-        if (current) paths.push(current);
+        if (current) paths.push(closed(current));
         current = '';
         return;
       }
       current += `${current ? 'L' : 'M'}${X(index).toFixed(1)},${Y(point.value).toFixed(1)}`;
     });
-    if (current) paths.push(current);
+    if (current) paths.push(closed(current));
     const lastIndex = entry.points.map((point) => point.value !== null).lastIndexOf(true);
     const last = lastIndex >= 0 ? entry.points[lastIndex] : undefined;
     return {
@@ -91,6 +94,17 @@ export function channelChart(series: readonly ChannelSeries[]): ChannelChart | n
           ? { x: X(lastIndex) + 6, y: Y(last.value) + 4, label: shortCount(last.value) }
           : null,
     };
+  });
+  // Final walk: end values that would print on top of one another (the same
+  // day, close readings) are spread apart, top to bottom, by one line height.
+  const GAP = 12;
+  const ends = lines
+    .map((line) => line.end)
+    .filter((end): end is { x: number; y: number; label: string } => end !== null)
+    .sort((a, b) => a.y - b.y);
+  ends.forEach((end, index) => {
+    const above = ends[index - 1];
+    if (above && Math.abs(end.x - above.x) < 40 && end.y - above.y < GAP) end.y = above.y + GAP;
   });
   return { grid, xlabels, lines };
 }

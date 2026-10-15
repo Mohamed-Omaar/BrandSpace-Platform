@@ -15,6 +15,7 @@ import {
   PrototypeTopbarLink,
   PrototypeUserCard,
   Banner,
+  InfoIcon,
   StateMessage,
   type CustomerNavSection,
   type PrototypeCreateItem,
@@ -53,7 +54,7 @@ import { selectBrandAction } from '../app/[locale]/brand-context-actions';
 import { signOutAction, switchWorkspaceAction } from '../app/[locale]/(auth)/actions';
 import { requestMessageLocale } from '../server/message-locale';
 import { paymentsSwitchedOn } from '../server/payments-switch';
-import { aiAvailableFor } from '../server/ai-availability';
+import { aiAvailability, aiAvailableFor } from '../server/ai-availability';
 import { MessageLocaleProvider } from '../i18n/message-locale-context';
 
 /**
@@ -489,6 +490,8 @@ export async function WorkspaceShell({
   const sections = focus
     ? []
     : navSections(permissionKeys, locale, railPath, t, brandContext, counts);
+  // Final walk (Q9): the profile menu's "AI credits" only while some AI task can run.
+  const anyAi = Object.values(await aiAvailability()).some(Boolean);
 
   /*
    * THE GLOBAL COPILOT (D-277 §37): what the drawer opens with — the rail's
@@ -960,7 +963,7 @@ export async function WorkspaceShell({
       role={customerRoleName(roleName)}
       initials={initialsFrom(latinInitialsFrom ?? identity)}
     >
-      {typeof counts.credits === 'number' ? (
+      {typeof counts.credits === 'number' && anyAi ? (
         /*
          * PR D (Shell 4) — "AI credits" for every member who may read the
          * balance (`credits.read` + `copilot.use`, Q18). With `billing.read`
@@ -1117,6 +1120,21 @@ export function CustomerBanner({
   tone: Tone;
   children: ReactNode;
 }) {
+  /*
+   * D-556 (b): an information line draws as the prototype's purple hint card,
+   * never the design system's blue info tone (the prototype has no blue). The
+   * icon keeps the tone readable without its colour (WCAG 1.4.1).
+   */
+  if (tone === 'info') {
+    return (
+      <div role="status" data-testid="info-banner" className="bsp-hint-card">
+        <span aria-hidden="true" style={{ display: 'inline-flex', flexShrink: 0 }}>
+          <InfoIcon size={16} />
+        </span>
+        <span className="bsp-hint-card-t">{children}</span>
+      </div>
+    );
+  }
   return <Banner tone={tone}>{children}</Banner>;
 }
 

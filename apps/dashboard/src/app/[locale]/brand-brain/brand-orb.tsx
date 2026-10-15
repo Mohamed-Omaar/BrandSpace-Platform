@@ -308,7 +308,8 @@ export function BrandOrb({
   /** The stage's own name — a knowledge map. */
   stageAriaLabel: string;
   onSelectArea: (area: string) => void;
-  onOpenChat: () => void;
+  /** Null while the chat cannot run (final walk, Q9): the centre is then not a button. */
+  onOpenChat: (() => void) | null;
   onDropFile: (area: string | null, file: File) => void;
   canUpload: boolean;
 }) {
@@ -377,13 +378,15 @@ export function BrandOrb({
       onDrop={handleDrop(null)}
     >
       <canvas ref={canvasRef} className="bsp-bb-canvas" aria-hidden="true" />
-      <button
-        type="button"
-        className="bsp-bb-centre"
-        data-testid="orb-center"
-        aria-label={centerAriaLabel}
-        onClick={onOpenChat}
-      />
+      {onOpenChat ? (
+        <button
+          type="button"
+          className="bsp-bb-centre"
+          data-testid="orb-center"
+          aria-label={centerAriaLabel}
+          onClick={onOpenChat}
+        />
+      ) : null}
       {nodes.map((node, index) => (
         <button
           key={node.area}

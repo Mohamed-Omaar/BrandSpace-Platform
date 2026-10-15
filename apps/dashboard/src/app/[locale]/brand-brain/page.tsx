@@ -50,7 +50,7 @@ import type { ChatStart } from './brand-chat';
  */
 import '@brandspace/ui/brand-brain.css';
 import { createBrandAction } from './actions';
-import { aiAvailableFor } from '../../../server/ai-availability';
+import { aiAvailability, aiAvailableFor } from '../../../server/ai-availability';
 import { dayFormatter } from '../../../server/prototype-dates';
 
 export const dynamic = 'force-dynamic';
@@ -84,6 +84,8 @@ export default async function BrandBrainPage({
   const { customer, workspace } = access.session;
   // PR F (b), Q9 — the brand chat's answers are a `copilot.chat` call.
   const aiChat = await aiAvailableFor('copilot.chat');
+  // Final walk (Q9): whether any AI task can run, for the wording that promises AI writing.
+  const aiAny = Object.values(await aiAvailability()).some(Boolean);
 
   const permissions = workspace.permissionKeys;
   const can = (key: string) => permissions.includes(key);
@@ -878,7 +880,7 @@ export default async function BrandBrainPage({
       heading={t('bb.title')}
       // The prototype's eyebrow over "Brand Brain" is the brand's own name.
       eyebrow={brand.name}
-      description={t('bb.pageSub')}
+      description={t(aiAny ? 'bb.pageSub' : 'bb.pageSubNoAi')}
       activePath="/brand-brain"
       workspaceName={workspace.workspaceName}
       roleName={locale === 'ar' ? workspace.roleNameAr : workspace.roleNameEn}
@@ -899,7 +901,8 @@ export default async function BrandBrainPage({
       {/* D-496 (Brand Brain 1) — the first-visit hint, Main.dc.html L759. */}
       <FirstVisitHint
         storageKey="brandspace.hint.brain"
-        text={t('hint.brain')}
+        // Final walk (Q9): no "Talk with the brand" in the hint while the chat cannot run.
+        text={t(aiChat ? 'hint.brain' : 'hint.brainNoChat')}
         closeLabel={t('hint.close')}
         testId="hint-brain"
       />
@@ -968,6 +971,7 @@ export default async function BrandBrainPage({
           // PR F (b), Q9 — and a model that can answer (D-507).
           chat: maySpendCredits(workspace.permissionKeys, 'brand_brain.chat') && aiChat,
           chatOff: maySpendCredits(workspace.permissionKeys, 'brand_brain.chat') && !aiChat,
+          aiOff: !aiAny,
         }}
       />
 

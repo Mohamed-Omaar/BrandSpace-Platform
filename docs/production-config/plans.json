@@ -29,7 +29,7 @@
       "taxBehavior": "exclusive",
       "trialDays": 90,
       "trialRequiresCard": false,
-      "trialCredits": 200,
+      "trialCredits": 500,
       "monthlyCredits": 500,
       "creditRollover": {
         "policy": "capped",

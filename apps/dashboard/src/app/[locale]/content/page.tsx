@@ -6,6 +6,7 @@ import { NoAccessPage } from '../../../components/no-access-page';
 import { brandContextFor, brandFilterFor } from '../../../server/brand-context';
 import { inContentStudio } from '../../../server/content-context';
 import { connectableChannels } from '../../../server/connectable-channels';
+import { aiAvailableFor } from '../../../server/ai-availability';
 import { firstPictures } from '../../../server/first-pictures';
 import { relativeTime } from '../../../server/home';
 import { optionalMessage, statusMessage, translator } from '../../../i18n/messages';
@@ -108,6 +109,8 @@ export default async function ContentPage({
   const t = (key: string): string => optionalMessage(messageLocale, key) ?? key;
   if (!access.allowed) return <NoAccessPage locale={locale} access={access} />;
   const { customer, workspace } = access.session;
+  // PR F (b), Q9 — whether the studio can write a caption now (D-507).
+  const aiCaption = await aiAvailableFor('caption.generate');
   const may = (key: string) => workspace.permissionKeys.includes(key);
 
   const single = (key: string): string | undefined => {
@@ -570,7 +573,10 @@ export default async function ContentPage({
       {errorText ? <CustomerBanner tone="error">{errorText}</CustomerBanner> : null}
       <ContentLibrary
         locale={locale}
-        t={t}
+        // Final walk (Q9): the empty library promises the AI studio only while it can write.
+        t={(key: string) =>
+          key === 'content.emptyBody' && !aiCaption ? t('content.emptyBodyManual') : t(key)
+        }
         cards={cards}
         tabs={tabs}
         currentStatus={currentTab}

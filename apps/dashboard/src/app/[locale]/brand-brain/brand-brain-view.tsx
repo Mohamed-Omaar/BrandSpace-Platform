@@ -194,6 +194,8 @@ export interface BrandBrainPermissions {
   readonly chat: boolean;
   /** PR F (b), Q9 — the member may ask, but no model can answer now. */
   readonly chatOff?: boolean;
+  /** Final walk — no AI task can run, so nothing reads the facts for a model yet. */
+  readonly aiOff?: boolean;
 }
 
 /**
@@ -383,6 +385,8 @@ export function BrandBrainView({
     }
   }, []);
 
+  // Final walk (Q9): the chat is AI; while it cannot run nothing offers it.
+  const chatOff = permissions.chatOff === true;
   const openChat = useCallback(
     (area: string | null) => {
       setChatArea(area);
@@ -462,7 +466,8 @@ export function BrandBrainView({
     },
     { id: 'look', label: t('bb.tab.look') },
     { id: 'sources', label: t('bb.tab.sources') },
-    { id: 'chat', label: t('bb.tab.chat') },
+    // Final walk (Q9): "Talk with the brand" is AI; no tab while it cannot run.
+    ...(chatOff ? [] : [{ id: 'chat' as const, label: t('bb.tab.chat') }]),
   ];
 
   /*
@@ -477,6 +482,7 @@ export function BrandBrainView({
       voice={voice}
       canEdit={permissions.edit}
       profileHref={profileHref}
+      aiOff={permissions.aiOff === true}
       pending={{
         tone: candidates.filter((entry) => entry.area === 'TONE_OF_VOICE').length,
         rules: candidates.filter((entry) => entry.area === 'DO_DONT').length,
@@ -572,11 +578,13 @@ export function BrandBrainView({
                     centerAriaLabel={t('bb.orbOpenChat')}
                     stageAriaLabel={t('bb.orbLabel')}
                     onSelectArea={setOpenArea}
-                    onOpenChat={() => openChat(null)}
+                    onOpenChat={chatOff ? null : () => openChat(null)}
                     onDropFile={onDropFile}
                     canUpload={permissions.upload}
                   />
-                  <span className="bsp-bb-hint">{t('bb.orbHint')}</span>
+                  <span className="bsp-bb-hint">
+                    {t(chatOff ? 'bb.orbHintNoChat' : 'bb.orbHint')}
+                  </span>
                 </div>
                 <div className="bsp-bb-herotext" data-testid="completion-card">
                   <div className="bsp-bb-count" data-testid="completion-areas">
@@ -592,16 +600,20 @@ export function BrandBrainView({
                   >
                     <span style={{ width: `${areasPct}%` }} />
                   </div>
-                  <p className="bsp-bb-lead">{t('bb.lead')}</p>
+                  <p className="bsp-bb-lead">
+                    {t(permissions.aiOff === true ? 'bb.leadNoAi' : 'bb.lead')}
+                  </p>
                   <div className="bsp-bb-acts">
-                    <button
-                      type="button"
-                      className="bsp-btn bsp-sm bsp-pur"
-                      data-testid="brand-brain-ask-brand"
-                      onClick={() => openChat(null)}
-                    >
-                      {t('bb.askBrand')}
-                    </button>
+                    {chatOff ? null : (
+                      <button
+                        type="button"
+                        className="bsp-btn bsp-sm bsp-pur"
+                        data-testid="brand-brain-ask-brand"
+                        onClick={() => openChat(null)}
+                      >
+                        {t('bb.askBrand')}
+                      </button>
+                    )}
                     {permissions.upload ? (
                       <label className="bsp-btn bsp-sm bsp-bb-pick">
                         {t('bb.uploadFiles')}
@@ -1022,7 +1034,10 @@ export function BrandBrainView({
             labels={{
               // The prototype's chat head: "Brand Brain", answering from n facts.
               title: t('bb.title'),
-              subtitle: t('bb.chatSubFacts').replace('{count}', String(totalActiveItems)),
+              subtitle: (totalActiveItems === 1
+                ? t('bb.chatSubFacts.one')
+                : t('bb.chatSubFacts')
+              ).replace('{count}', String(totalActiveItems)),
               placeholder: t('bb.chatPlaceholder'),
               send: t('bb.chatSend'),
               cancel: t('bb.chatCancel'),

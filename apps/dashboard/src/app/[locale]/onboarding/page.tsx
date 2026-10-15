@@ -1254,11 +1254,19 @@ export default async function OnboardingPage({
         <div className="bsp-wz-sum">
           <div>
             <b className="bsp-ltr">{facts.activeKnowledge}</b>
-            <span>{t('setup.wz.ready.facts')}</span>
+            <span>
+              {t(facts.activeKnowledge === 1 ? 'setup.wz.ready.facts.one' : 'setup.wz.ready.facts')}
+            </span>
           </div>
           <div>
             <b className="bsp-ltr">{facts.activeConnections}</b>
-            <span>{t('setup.wz.ready.accounts')}</span>
+            <span>
+              {t(
+                facts.activeConnections === 1
+                  ? 'setup.wz.ready.accounts.one'
+                  : 'setup.wz.ready.accounts',
+              )}
+            </span>
           </div>
           <div>
             <b>{goalLabel ?? t('setup.done.noGoal')}</b>

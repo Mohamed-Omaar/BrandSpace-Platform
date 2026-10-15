@@ -812,7 +812,9 @@ export default async function AutomationsPage({
             <section className="bsp-xcard bsp-au-card" aria-label={t('automations.rules')}>
               {rules.length === 0 ? (
                 <div className="bsp-au-none">
-                  <b>{t('automations.empty')}</b> {t('automations.emptyBody')}
+                  <b>{t('automations.empty')}</b>{' '}
+                  {/* Final walk (Q9): no "Ask the Copilot" while it cannot run. */}
+                  {t(mayCopilot ? 'automations.emptyBody' : 'automations.emptyBodyManual')}
                 </div>
               ) : (
                 <ul className="bsp-au-list" data-testid="automation-rules">

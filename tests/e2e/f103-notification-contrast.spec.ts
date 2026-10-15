@@ -11,6 +11,10 @@ import { withPlatformPrisma } from './platform-prisma';
  * depended on the data. Here the unread row is always there: the workspace's
  * owner gets one unread and one read notification, and the open feed passes
  * axe's colour-contrast rule at phone and desktop widths, in en and ar.
+ *
+ * FINAL WALK — AND THE POPOVER IS FULLY OPAQUE. Home's "Performance · last 28
+ * days" showed through an unread row of the 94% glass; the card is now solid
+ * white with no backdrop filter, asserted at both widths.
  */
 
 const SIZES = [
@@ -52,6 +56,15 @@ for (const locale of ['en', 'ar'] as const) {
       await expect(feed.locator('.bsp-ntf-row[data-unread]')).toHaveCount(1);
       // Let the entrance transition settle before measuring colours.
       await page.waitForTimeout(400);
+      // Final walk (owner, review of #83): the popover is fully opaque, so the
+      // page behind it never shows through its rows.
+      expect(
+        await feed.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return { background: style.backgroundColor, backdrop: style.backdropFilter };
+        }),
+        `${size.width}px`,
+      ).toEqual({ background: 'rgb(255, 255, 255)', backdrop: 'none' });
       const results = await new AxeBuilder({ page })
         .include('[data-testid="notifications-feed"]')
         .withRules(['color-contrast'])
