@@ -1,5 +1,6 @@
 import { validateConfiguration, type ConfigContext, type ConfigDomain } from '@brandspace/config';
 import { parseFields, type Source } from './fields';
+import { sameJson } from './json';
 import { changeLines, type ChangeLine } from './registry';
 import type {
   AreaContext,
@@ -48,7 +49,7 @@ export type EditOutcome = PreparedChange | { readonly missing: true };
 
 function changedDomains(before: Docs, after: Docs): ConfigDomain[] {
   return (Object.keys(after) as ConfigDomain[]).filter(
-    (domain) => JSON.stringify(before[domain]) !== JSON.stringify(after[domain]),
+    (domain) => !sameJson(before[domain], after[domain]),
   );
 }
 

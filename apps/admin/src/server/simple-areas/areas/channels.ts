@@ -1,6 +1,6 @@
 import { findIntegration } from '@brandspace/integrations';
 import type { AreaContext, AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
-import { arrayOf, bool, num, rec, str, upsertBy } from '../json';
+import { arrayOf, bool, num, rec, str, upsertBy, sameJson } from '../json';
 
 /**
  * CHANNELS — one card per channel: shown to customers or not, the kinds of
@@ -241,8 +241,10 @@ const collection: CollectionSpec = {
     if (!wasShown && nowShown) out.push(ctx.t('ch.p.shown'));
     if (wasShown && !nowShown) out.push(ctx.t('ch.p.hidden'));
     if (
-      JSON.stringify(rec(providers(before)[itemKey])['postKinds']) !==
-      JSON.stringify(rec(providers(after)[itemKey])['postKinds'])
+      !sameJson(
+        rec(providers(before)[itemKey])['postKinds'],
+        rec(providers(after)[itemKey])['postKinds'],
+      )
     )
       out.push(ctx.t('ch.p.postKinds'));
     if (nowShown && !bool(rec(providers(after)[itemKey])['enabled']))

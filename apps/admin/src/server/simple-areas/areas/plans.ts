@@ -16,7 +16,7 @@ import type {
 } from '../types';
 import { formatMinor } from '../../money';
 import { PLAN_AI_CAP_FIELDS } from '../../plan-ai-cap';
-import { arrayOf, num, rec, str, upsertBy } from '../json';
+import { arrayOf, num, rec, str, upsertBy, sameJson } from '../json';
 
 /**
  * PLANS — one card per plan; create, edit, duplicate, archive (owner, D-557+).
@@ -460,11 +460,26 @@ function applyValues(plan: Plan, values: FieldValues, ctx: AreaContext): Plan {
     key: values['key'],
     name: { en: values['nameEn'], ar: values['nameAr'] },
     description: { en: values['descriptionEn'], ar: values['descriptionAr'] },
-    prices: ctx.currencies.map((currency) => ({
-      currency,
-      monthlyMinor: monthly.minor[currency] ?? 0,
-      annualMinor: annual.minor[currency] ?? 0,
-    })),
+    // A currency the plan already prices, or one the owner gave a price now;
+    // never a zero row for every currency the platform supports.
+    prices: ctx.currencies
+      .filter(
+        (currency) =>
+          arrayOf(plan['prices']).some((price) => str(rec(price)['currency']) === currency) ||
+          (monthly.minor[currency] ?? 0) > 0 ||
+          (annual.minor[currency] ?? 0) > 0,
+      )
+      .map((currency) => {
+        const existing = rec(
+          arrayOf(plan['prices']).find((price) => str(rec(price)['currency']) === currency),
+        );
+        return {
+          ...existing,
+          currency,
+          monthlyMinor: monthly.minor[currency] ?? 0,
+          annualMinor: annual.minor[currency] ?? 0,
+        };
+      }),
     trialDays: trialOn ? values['trialDays'] : 0,
     trialCredits: values['trialCredits'],
     monthlyCredits: values['monthlyCredits'],
@@ -585,8 +600,7 @@ const collection: CollectionSpec = {
       if (availabilityOf(was) !== availabilityOf(now)) {
         out.push(ctx.t(`plans.p.availability.${availabilityOf(now)}`));
       }
-      if (JSON.stringify(was['prices']) !== JSON.stringify(now['prices']))
-        out.push(ctx.t('plans.p.price'));
+      if (!sameJson(was['prices'], now['prices'])) out.push(ctx.t('plans.p.price'));
     }
     if (out.length === 0) out.push(ctx.t('w.noCustomerChange'));
     return out;

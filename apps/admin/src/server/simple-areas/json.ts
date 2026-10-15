@@ -36,3 +36,19 @@ export function upsertBy(
   if (index < 0) return [...list, item];
   return list.map((entry, at) => (at === index ? item : entry));
 }
+
+/** The same JSON value, whatever the order of an object's keys (arrays stay ordered). */
+export function sameJson(a: unknown, b: unknown): boolean {
+  return canonical(a) === canonical(b);
+}
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (typeof value === 'object' && value !== null) {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}

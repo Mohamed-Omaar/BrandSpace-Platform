@@ -1,5 +1,5 @@
 import type { AreaSpec, CollectionSpec, FieldSpec, ItemView } from '../types';
-import { arrayOf, bool, num, rec } from '../json';
+import { arrayOf, bool, num, rec, sameJson } from '../json';
 
 /**
  * SIGN-UPS AND SECURITY — open or invitation-only, the shortest password,
@@ -110,7 +110,7 @@ const collection: CollectionSpec = {
       if ((num(now['minPasswordLength']) ?? 8) < RECOMMENDED_MIN_PASSWORD)
         out.push(ctx.t('su.p.short', { min: RECOMMENDED_MIN_PASSWORD }));
     }
-    if (JSON.stringify(before.onboarding?.['mfa']) !== JSON.stringify(after.onboarding?.['mfa']))
+    if (!sameJson(before.onboarding?.['mfa'], after.onboarding?.['mfa']))
       out.push(ctx.t('su.i.mfa'));
     return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
   },

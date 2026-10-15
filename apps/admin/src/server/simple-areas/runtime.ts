@@ -11,7 +11,7 @@ import {
   serviceActor,
 } from '../platform-context';
 import { proposeAndActivate } from '../simple-config';
-import { arrayOf, rec, str } from './json';
+import { arrayOf, rec, sameJson, str } from './json';
 import type { AreaContext, CollectionSpec, Docs, ItemSlice } from './types';
 
 /**
@@ -87,7 +87,7 @@ export async function writeDocs(input: {
 }): Promise<readonly ConfigDomain[]> {
   const written: ConfigDomain[] = [];
   const changed = (Object.keys(input.after) as ConfigDomain[]).filter(
-    (domain) => JSON.stringify(input.before[domain]) !== JSON.stringify(input.after[domain]),
+    (domain) => !sameJson(input.before[domain], input.after[domain]),
   );
   if (changed.length === 0) throw new AppError('CONFLICT', 'UNCHANGED');
   for (const domain of changed) {
@@ -98,7 +98,7 @@ export async function writeDocs(input: {
       reason: input.reason,
       acknowledged: true,
       change: () => structuredClone(next),
-      unchanged: (active) => JSON.stringify(active) === JSON.stringify(next),
+      unchanged: (active) => sameJson(active, next),
     });
     written.push(domain);
   }
@@ -155,7 +155,7 @@ export async function findUndo(
     let newer = versions[0]!;
     for (const version of versions.slice(1)) {
       const value = await read(version.id);
-      if (JSON.stringify(value ?? null) !== JSON.stringify(live ?? null)) {
+      if (!sameJson(value ?? null, live ?? null)) {
         const changedAt = newer.activatedAt as Date;
         if (!best || changedAt > best.changedAt)
           best = { domain: slice.domain, slice, value, changedAt };

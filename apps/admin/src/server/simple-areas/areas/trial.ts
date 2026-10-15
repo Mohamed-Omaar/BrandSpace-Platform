@@ -1,5 +1,5 @@
 import type { AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
-import { arrayOf, num, rec, str, upsertBy } from '../json';
+import { arrayOf, num, rec, str, upsertBy, sameJson } from '../json';
 
 /**
  * TRIAL AND CREDITS — what a new workspace gets, in numbers.
@@ -302,10 +302,7 @@ const credits: CollectionSpec = {
       )
     )
       out.push(ctx.t('trial.i.expiry'));
-    if (
-      JSON.stringify(was['lowBalanceThresholdPercents']) !==
-      JSON.stringify(now['lowBalanceThresholdPercents'])
-    )
+    if (!sameJson(was['lowBalanceThresholdPercents'], now['lowBalanceThresholdPercents']))
       out.push(ctx.t('trial.i.warn'));
     return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
   },

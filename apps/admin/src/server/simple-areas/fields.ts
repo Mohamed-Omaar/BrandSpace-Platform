@@ -1,5 +1,6 @@
 import type { AreaCopyKey } from '../../i18n/simple-areas';
 import { formatMinor, majorToMinor, minorToMajorInput } from '../money';
+import { sameJson } from './json';
 import type { AreaContext, FieldSpec, FieldValue, FieldValues, MoneyValue } from './types';
 
 /**
@@ -225,5 +226,5 @@ function optionLabel(field: FieldSpec, value: string, ctx: AreaContext): string 
 
 /** Same value? Compared as JSON, so a list in the same order is the same list. */
 export function sameValue(a: FieldValue | undefined, b: FieldValue | undefined): boolean {
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  return sameJson(a ?? null, b ?? null);
 }

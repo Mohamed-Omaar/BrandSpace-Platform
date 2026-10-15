@@ -1,5 +1,5 @@
 import type { AreaContext, AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
-import { arrayOf, bool, num, rec, str, upsertBy } from '../json';
+import { arrayOf, bool, num, rec, str, upsertBy, sameJson } from '../json';
 import { CHANNEL_NAMES } from './channels';
 
 /**
@@ -436,12 +436,9 @@ const writingCollection: CollectionSpec = {
     const was = platforms(before).find((p) => str(p['key']) === itemKey);
     const now = platforms(after).find((p) => str(p['key']) === itemKey);
     const out: string[] = [];
-    if (
-      JSON.stringify(was?.['recommendedHashtags']) !== JSON.stringify(now?.['recommendedHashtags'])
-    )
+    if (!sameJson(was?.['recommendedHashtags'], now?.['recommendedHashtags']))
       out.push(ctx.t('ct.i.hashtags'));
-    if (JSON.stringify(was?.['safeZones']) !== JSON.stringify(now?.['safeZones']))
-      out.push(ctx.t('ct.i.safe'));
+    if (!sameJson(was?.['safeZones'], now?.['safeZones'])) out.push(ctx.t('ct.i.safe'));
     return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
   },
   slices: (itemKey) => [

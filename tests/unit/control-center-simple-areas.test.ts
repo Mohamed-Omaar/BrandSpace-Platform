@@ -265,6 +265,45 @@ describe('an edit becomes the next documents, checked the way the service checks
     }
   });
 
+  it('opening any card and checking without changing anything changes nothing', async () => {
+    const { toQuery } = await import('../../apps/admin/src/server/simple-areas/fields');
+    const ctx = { ...context('en'), currencies: ['USD', 'SAR'] };
+    const offenders: string[] = [];
+    for (const area of AREAS) {
+      for (const collection of area.collections) {
+        for (const item of collection.items(docs, ctx)) {
+          const fields = collection.fields(docs, ctx, 'edit', item.key);
+          const edit = prepareEdit({
+            collection,
+            docs,
+            ctx,
+            context: config,
+            mode: 'edit',
+            itemKey: item.key,
+            source: sourceOf(toQuery(fields, item.values)),
+          });
+          if ('missing' in edit) offenders.push(`${area.key}/${item.key}: missing`);
+          else if (Object.keys(edit.fieldErrors).length > 0)
+            offenders.push(`${area.key}/${item.key}: ${JSON.stringify(edit.fieldErrors)}`);
+          else if (!edit.unchanged) {
+            const changed = Object.keys(edit.after).filter(
+              (d) =>
+                JSON.stringify(edit.after[d as ConfigDomain]) !==
+                JSON.stringify(docs[d as ConfigDomain]),
+            );
+            const detail = changed.map((d) =>
+              configLeafDiff(docs[d as ConfigDomain], edit.after[d as ConfigDomain])
+                .changes.map((c) => c.path)
+                .join(','),
+            );
+            offenders.push(`${area.key}/${item.key}: ${detail.join(' | ')}`);
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('the Arabic copy has every English sentence, and no domain key leaks into either', () => {
     expect(Object.keys(AREA_COPY.ar).sort()).toEqual(Object.keys(AREA_COPY.en).sort());
     for (const text of [...Object.values(AREA_COPY.en), ...Object.values(AREA_COPY.ar)]) {
