@@ -69,16 +69,18 @@ describe('reading the cap from a form', () => {
     }
   });
 
-  it('both editors post the same field names, and the save action spreads them', () => {
-    const simple = read('apps/admin/src/components/simple/plans.tsx');
+  it('the Advanced editor posts the cap fields and the save action spreads them; the Simple plan card edits the same two caps', () => {
     const advanced = read('apps/admin/src/app/[locale]/console/plans/page.tsx');
-    for (const source of [simple, advanced]) {
-      expect(source).toContain('name={`aiCap.${field}.kind`}');
-      expect(source).toContain('name={`aiCap.${field}.value`}');
-    }
+    expect(advanced).toContain('name={`aiCap.${field}.kind`}');
+    expect(advanced).toContain('name={`aiCap.${field}.value`}');
     expect(read('apps/admin/src/app/[locale]/console/plans/actions.ts')).toContain(
       '...readPlanAiCaps(formData)',
     );
+    // Control Center Simple mode: the card editor reads the same field list and
+    // leaves an "off" cap OUT of the plan, never null (D-458).
+    const simple = read('apps/admin/src/server/simple-areas/areas/plans.ts');
+    expect(simple).toContain('PLAN_AI_CAP_FIELDS.flatMap');
+    expect(simple).toContain('delete next[cap]');
   });
 });
 

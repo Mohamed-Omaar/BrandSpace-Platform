@@ -179,5 +179,6 @@ export type AreaKey =
   | 'publishing'
   | 'signups'
   | 'uploads'
+  | 'email'
   | 'content'
   | 'legal';

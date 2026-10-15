@@ -1,4 +1,5 @@
 import { ContentGrid, MetricCard, Stack, colorTokens, typographyTokens } from '@brandspace/ui';
+import { ManageGrid } from './manage';
 import type { ConfigDomain } from '@brandspace/config';
 import { fill, simpleCopy, type SimpleKey } from '../../i18n/simple';
 import {
@@ -175,6 +176,8 @@ export async function SimpleHome({
       <SimpleSection title={copy('home.attention')} testId="home-attention">
         <AttentionList locale={locale} items={attention} />
       </SimpleSection>
+
+      <ManageGrid locale={locale} actor={actor} />
 
       <SimpleSection
         title={copy('home.ready')}

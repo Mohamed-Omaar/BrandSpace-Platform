@@ -139,6 +139,12 @@ export async function SimpleAiOverview({
             : null
         }
       />
+      {area && area.state !== 'ready' ? (
+        // Owner decision (Control Center Simple mode): until a provider is live, AI reads "not available yet".
+        <Banner tone="info" testId="ai-not-available">
+          {copy('ai.notYet')}
+        </Banner>
+      ) : null}
       <p
         style={{
           margin: 0,

@@ -10,6 +10,7 @@ import type {
   MoneyValue,
 } from '../types';
 import { formatMinor } from '../../money';
+import { PLAN_AI_CAP_FIELDS } from '../../plan-ai-cap';
 import { arrayOf, num, rec, str, upsertBy } from '../json';
 
 /**
@@ -174,6 +175,10 @@ function fields(docs: Docs, ctx: AreaContext, mode: string): readonly FieldSpec[
         unlimited: true,
       }),
     ),
+    ...PLAN_AI_CAP_FIELDS.flatMap((cap): FieldSpec[] => [
+      { id: `aiOn.${cap}`, kind: 'switch', label: `plans.f.aiOn.${cap}`, help: 'plans.h.aiOn', impact: 'plans.i.ai' },
+      { id: `ai.${cap}`, kind: 'number', label: `plans.f.ai.${cap}`, help: 'plans.h.ai', impact: 'plans.i.ai', unit: 'u.actions', min: 1, max: 1_000, unlimited: true },
+    ]),
     ...(features.length > 0
       ? [
           {
@@ -221,6 +226,15 @@ function valuesOf(plan: Plan, docs: Docs, ctx: AreaContext): FieldValues {
     trialCredits: num(plan['trialCredits']) ?? 0,
     monthlyCredits: num(plan['monthlyCredits']) ?? 0,
     ...Object.fromEntries(PLAN_QUOTAS.map((quota) => [`q.${quota}`, num(quotas[quota]) ?? null])),
+    ...Object.fromEntries(
+      PLAN_AI_CAP_FIELDS.flatMap((cap) => {
+        const value = quotas[cap] === undefined || quotas[cap] === null ? null : rec(quotas[cap]);
+        return [
+          [`aiOn.${cap}`, value !== null],
+          [`ai.${cap}`, value === null ? 100 : str(value['kind']) === 'unlimited' ? null : (num(value['value']) ?? 100)],
+        ];
+      }),
+    ),
     features: booleanFeatures(docs, ctx.locale)
       .filter((feature) => feature.plans?.includes(key))
       .map((feature) => feature.key),
@@ -271,6 +285,36 @@ function facts(plan: Plan, docs: Docs, ctx: AreaContext) {
   ];
 }
 
+/** What a customer reads on this plan's card: the same facts, in the customer's order. */
+export interface PlanPreview {
+  readonly name: string;
+  readonly description: string;
+  readonly price: string;
+  readonly trial: string;
+  readonly credits: string;
+  readonly limits: readonly { readonly label: string; readonly value: string }[];
+  readonly features: readonly string[];
+}
+
+export function planPreview(docs: Docs, key: string, ctx: AreaContext): PlanPreview | null {
+  const plan = plans(docs).find((candidate) => str(candidate['key']) === key);
+  if (!plan) return null;
+  const name = rec(plan['name']);
+  const all = facts(plan, docs, ctx);
+  const value = (label: string) => all.find((fact) => fact.label === label)?.value ?? '—';
+  return {
+    name: str(ctx.locale === 'ar' ? name['ar'] : name['en']) || key,
+    description: str(rec(plan['description'])[ctx.locale === 'ar' ? 'ar' : 'en']),
+    price: value(ctx.t('plans.c.price')),
+    trial: value(ctx.t('plans.c.trial')),
+    credits: value(ctx.t('plans.c.monthlyCredits')),
+    limits: PLAN_QUOTAS.map((quota) => ({ label: ctx.t(`plans.f.q.${quota}`), value: value(ctx.t(`plans.f.q.${quota}`)) })),
+    features: booleanFeatures(docs, ctx.locale)
+      .filter((feature) => feature.plans?.includes(key) ?? feature.defaultValue === true)
+      .map((feature) => feature.name),
+  };
+}
+
 const STATUS_TONE = { public: 'success', private: 'info', draft: 'neutral', archived: 'neutral' } as const;
 
 function items(docs: Docs, ctx: AreaContext): readonly ItemView[] {
@@ -308,12 +352,23 @@ function applyValues(plan: Plan, values: FieldValues, ctx: AreaContext): Plan {
     trialDays: trialOn ? values['trialDays'] : 0,
     trialCredits: values['trialCredits'],
     monthlyCredits: values['monthlyCredits'],
-    quotas: {
-      ...quotas,
-      ...Object.fromEntries(PLAN_QUOTAS.map((quota) => [quota, values[`q.${quota}`]])),
-    },
+    quotas: withAiCaps(
+      { ...quotas, ...Object.fromEntries(PLAN_QUOTAS.map((quota) => [quota, values[`q.${quota}`]])) },
+      values,
+    ),
   };
   next = withAvailability(next, String(values['availability']));
+  return next;
+}
+
+/** An AI cap that is off is LEFT OUT of the plan, never `null` (which reads as unlimited, D-458). */
+function withAiCaps(quotas: Record<string, unknown>, values: FieldValues): Record<string, unknown> {
+  const next = { ...quotas };
+  for (const cap of PLAN_AI_CAP_FIELDS) {
+    if (values[`aiOn.${cap}`] === undefined) continue;
+    if (values[`aiOn.${cap}`] !== true) delete next[cap];
+    else next[cap] = values[`ai.${cap}`] === null ? { kind: 'unlimited' } : { kind: 'limited', value: values[`ai.${cap}`] };
+  }
   return next;
 }
 
@@ -428,7 +483,6 @@ export const plansArea: AreaSpec = {
     { label: 'plans.d.analyticsRetention', value: (docs) => developerList(docs, (plan) => String(rec(plan['quotas'])['analyticsRetentionDays'] ?? '—')) },
     { label: 'plans.d.addOns', value: (docs) => developerList(docs, (plan) => String(arrayOf(plan['addOns']).length)) },
     { label: 'plans.d.tax', value: (docs) => developerList(docs, (plan) => str(plan['taxBehavior'])) },
-    { label: 'plans.d.aiCaps', value: (docs) => developerList(docs, (plan) => (rec(plan['quotas'])['automationAiActionsPerMonth'] ? '✓' : '—')) },
   ],
 };
 

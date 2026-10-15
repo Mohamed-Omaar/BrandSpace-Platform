@@ -13,6 +13,7 @@ import { channelsArea } from './areas/channels';
 import { publishingArea } from './areas/publishing';
 import { signupsArea } from './areas/signups';
 import { uploadsArea } from './areas/uploads';
+import { emailArea } from './areas/email';
 import { contentArea } from './areas/content';
 import { legalArea } from './areas/legal';
 
@@ -24,6 +25,7 @@ export const AREAS: readonly AreaSpec[] = [
   publishingArea,
   signupsArea,
   uploadsArea,
+  emailArea,
   contentArea,
   legalArea,
 ];

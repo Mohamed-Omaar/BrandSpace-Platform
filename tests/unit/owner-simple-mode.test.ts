@@ -134,16 +134,26 @@ describe('D-308 · two navigations', () => {
       section.items.filter((item) => !visibleOnly || !item.hidden).map((item) => item.href),
     );
 
-  it('Simple lists the owner destinations, in the contract order', () => {
+  it('Simple lists the owner destinations, grouped as the control panel (owner decision, Control Center Simple mode)', () => {
     expect(hrefs(SIMPLE_SECTIONS)).toEqual([
       '',
       '/workspaces',
       '/plans',
+      '/manage/trial',
       '/features',
+      '/manage/channels',
+      '/manage/publishing',
+      '/manage/content',
+      '/manage/uploads',
       '/ai',
+      '/manage/signups',
+      '/manage/email',
+      '/manage/legal',
       '/integrations',
       '/usage',
       '/health',
+      '/team',
+      '/changes',
     ]);
     expect(
       SIMPLE_SECTIONS.flatMap((s) => s.items)
@@ -153,11 +163,28 @@ describe('D-308 · two navigations', () => {
       'Home',
       'Customers',
       'Plans & Pricing',
+      'Trial & credits',
       'Features',
+      'Channels',
+      'Publishing',
+      'Content',
+      'Uploads',
       'AI',
+      'Sign-ups & security',
+      'Email',
+      'Legal pages',
       'Integrations',
       'Usage & Billing',
       'System',
+      'Team',
+      'Change history',
+    ]);
+    expect(SIMPLE_SECTIONS.map((section) => section.title?.en ?? null)).toEqual([
+      null,
+      'What you sell',
+      'What customers use',
+      'Sign-up, email and rules',
+      'Running the platform',
     ]);
   });
 

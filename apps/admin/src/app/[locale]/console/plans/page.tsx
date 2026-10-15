@@ -34,7 +34,8 @@ import {
   validatePlansAction,
 } from './actions';
 
-import { SimplePlans } from '../../../../components/simple/plans';
+import { SimpleArea } from '../../../../components/simple/area';
+import { plansArea } from '../../../../server/simple-areas/areas/plans';
 import { getConsoleMode } from '../../../../server/console-mode-cookie';
 
 export const dynamic = 'force-dynamic';
@@ -87,9 +88,9 @@ export default async function PlansPage({
   const isArabic = locale === 'ar';
 
   const actor = await requirePageActor(locale, 'platform.configuration.read');
-  // Simple mode: plan cards and a plain editor over the same actions (D-307).
+  // Simple mode: the owner's plan cards and editor, through the same service (D-307).
   if ((await getConsoleMode()) === 'simple') {
-    return <SimplePlans locale={locale} actor={actor} query={search} />;
+    return <SimpleArea locale={locale} actor={actor} area={plansArea} query={search} />;
   }
   const mayEdit = actor.permissionKeys.includes('platform.configuration.manage');
   const mayActivate = actor.permissionKeys.includes('platform.configuration.activate');
