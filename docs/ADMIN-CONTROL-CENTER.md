@@ -897,6 +897,10 @@ the same permission as the screen behind it. Support and the raw audit log are A
 carries the mode switch and the language switch and nothing else: the Control Center has no search,
 notification or create domain, so those placeholders are gone (D-309).
 
+**Superseded in part by §24 (D-558):** the Simple navigation is now grouped into sections and carries
+the owner's card pages (Trial & credits, Channels, Publishing, Content, Uploads, Sign-ups & security,
+Email, Legal pages, Team, Change history).
+
 ### 23.3 Service map — every Simple action is an existing path
 
 | Simple UI                                   | Existing service → call                                                                                                | Authorization (unchanged)                                                         | Audit                                   |
@@ -959,3 +963,48 @@ re-checks each.
 - **Customer Plan screen (`apps/dashboard`, `/plan`)**: a feature is now named by its registered name in the
   reader's language rather than its key, with the key as a fallback where the registry has no name. This
   surfaced when the development seed registered real features (D-314). No other customer screen changed.
+
+## 24. The owner's control panel — card pages (D-558 … D-562)
+
+> **ملخّص بالعربية:** أصبح الوضع البسيط لوحة التحكم اليومية للمالك: كل مجال صفحة بطاقات، وكل بطاقة تفتح محرّرًا
+> سهلًا، ثم معاينة لما سيتغيّر وما سيلاحظه العملاء، ثم حفظ بعد التأكيد — عبر خدمة الإعدادات نفسها التي يستخدمها
+> الوضع المتقدم. ولكل عنصر «التراجع عن آخر تغيير»، وكل تغيير مسجَّل بقيمته قبل وبعد.
+
+### 24.1 Pages
+
+| Page                | Route                        | Writes                              | Cards                                                                                                        |
+| ------------------- | ---------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Plans & Pricing     | `/console/plans` (Simple)    | `plans`, `entitlements`             | one per plan: create, edit, duplicate, archive, undo; customer preview                                       |
+| Trial & credits     | `/console/manage/trial`      | `plans` (the trial plan), `credits` | a new workspace; credit expiry and warnings                                                                  |
+| Channels            | `/console/manage/channels`   | `content`, `publishing`             | one per channel: shown, post kinds, writing limits; hide (refused while posts use it)                        |
+| Publishing          | `/console/manage/publishing` | `publishing`                        | one per provider: on/off, daily cap; retries; guided set-ups linked                                          |
+| Sign-ups & security | `/console/manage/signups`    | `onboarding`                        | open/closed, shortest password, customer second step                                                         |
+| Uploads             | `/console/manage/uploads`    | `assets`                            | one per kind of file; malware scanning with its disclaimer                                                   |
+| Email               | `/console/manage/email`      | `integrations.email`                | sender name and address; key and Test in the guided set-up                                                   |
+| Content             | `/console/manage/content`    | `onboarding`, `content`             | industries (add/edit/remove), suggested posting times per country, hashtag ranges and safe zones per channel |
+| Legal pages         | `/console/manage/legal`      | `onboarding`                        | version and "reviewed by a lawyer" per document                                                              |
+| Team                | `/console/team`              | —                                   | the Control Center's people and roles (read-only)                                                            |
+| Change history      | `/console/changes`           | —                                   | every `config.activated` event: who, when, why, each value old → new                                         |
+| AI                  | `/console/ai`                | (unchanged)                         | says "not available yet" until a provider is live                                                            |
+
+### 24.2 How a change is made
+
+Edit (GET, so it works before scripts load) → **Check the change**: a preview listing each field old → new,
+what customers will notice, and any refusal (the field checks, the area's rules, and the Configuration
+Service's own `validateConfiguration`) → tick "I have read what changes" (+ an optional note) → **Save**.
+The save re-reads the live documents, re-runs the edit and writes through `proposeAndActivate`; if
+anything changed in between it is refused as stale and nothing is written. **Undo last change** finds
+the item's most recent change in its documents' activated versions and puts that slice back as a new
+version, previewed and confirmed the same way.
+
+### 24.3 What stays in Advanced
+
+Every risky or technical setting is listed on its page under "Changed by your developer", with its
+current value, and opened in Advanced (Configuration). The full inventory, with which are safe for the
+owner, is `docs/CONTROL-CENTER-SETTINGS.md`.
+
+### 24.4 Sign-in
+
+The Control Center's sign-in and second step are the customer's entry card (`EntryCard` in
+`@brandspace/ui`, `entry.css`) with a "Control Center / مركز التحكم" label (D-560). MFA is mandatory
+(D-27); a recovery code is entered in the second-step field.

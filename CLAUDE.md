@@ -304,3 +304,4 @@ A change is done when:
 | `docs/OPERATIONS.md`              | Backup, verification, restore, queue recovery, migration policy, rotation, incident response      |
 | `docs/UI-FIDELITY-CONTRACT.md`    | **Binding.** The demo as UI specification, the route-to-reference manifest, authorised deviations |
 | `docs/ARABIC-GLOSSARY.md`         | One formal Arabic term per concept; the wordmark and digit rules (D-474)                          |
+| `docs/CONTROL-CENTER-SETTINGS.md` | Every setting the platform reads: where it lives in Simple, what it does, safe or risky (D-558)   |
