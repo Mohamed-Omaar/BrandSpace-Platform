@@ -2392,6 +2392,11 @@ undo (and "nothing to go back to"), saved / archived / undone / stale / unchange
 card's customer preview reuses the card surface and type. Measured by `owner-simple-mode.spec.ts`
 (every page in en and ar, axe, no sideways scroll at 390px).
 
+Owner review of PR #85 added three states, built from the same pieces: the half-saved message (a
+`Banner` in the warning tone with a primary button, D-564), Change history rows in the editor's own
+words (D-563), and the Control Center's scroll padding so a scrolled-to section clears the sticky bar
+and its fade (D-565, measured at 1536x864 in en and ar).
+
 The Control Center sign-in and second step are not an extension: they ARE the customer entry card
 (`EntryCard`, `entry.css`), the prototype's `Auth.dc.html` card at 0.80 (D-491). The one addition is the
 `.bsp-auth-realm` label, composed from the eyebrow pill's shape in the prototype's chip grey and

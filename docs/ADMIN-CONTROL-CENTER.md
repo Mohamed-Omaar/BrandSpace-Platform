@@ -964,7 +964,7 @@ re-checks each.
   reader's language rather than its key, with the key as a fallback where the registry has no name. This
   surfaced when the development seed registered real features (D-314). No other customer screen changed.
 
-## 24. The owner's control panel — card pages (D-558 … D-562)
+## 24. The owner's control panel — card pages (D-558 … D-565)
 
 > **ملخّص بالعربية:** أصبح الوضع البسيط لوحة التحكم اليومية للمالك: كل مجال صفحة بطاقات، وكل بطاقة تفتح محرّرًا
 > سهلًا، ثم معاينة لما سيتغيّر وما سيلاحظه العملاء، ثم حفظ بعد التأكيد — عبر خدمة الإعدادات نفسها التي يستخدمها
@@ -997,11 +997,20 @@ anything changed in between it is refused as stale and nothing is written. **Und
 the item's most recent change in its documents' activated versions and puts that slice back as a new
 version, previewed and confirmed the same way.
 
+A change that writes two documents (a plan and its features; a channel and its post kinds) is two
+activations in a row (D-558). If the second is refused, the first stays and the page says, in one
+message, what was saved and what was not, and why, with **Try the second part again** — which re-runs
+the same change against the live documents, so only the missing part is written (D-564).
+
 ### 24.3 What stays in Advanced
 
 Every risky or technical setting is listed on its page under "Changed by your developer", with its
 current value, and opened in Advanced (Configuration). The full inventory, with which are safe for the
 owner, is `docs/CONTROL-CENTER-SETTINGS.md`.
+
+Nothing on a Simple page is named by its stored key (D-563): plans by their customer name, limits and
+documents by plain names, stored choices by what they mean, numbers with their unit in words. Change
+history shows each change through the cards, field by field, and only counts what no card shows.
 
 ### 24.4 Sign-in
 
