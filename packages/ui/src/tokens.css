@@ -836,6 +836,15 @@ h4 {
 .bs-topbar:not(.bsp-header) {
   background: rgb(255, 255, 255);
 }
+/*
+ * Whatever scrolls under the sticky bar — the panel on a desktop, the page on
+ * a phone — keeps a scrolled-to element below it: the bar's measured height
+ * (set by the shell) plus the fade under it.
+ */
+.bs-panel:has(> .bs-topbar:not(.bsp-header)),
+html:has(.bs-topbar:not(.bsp-header)) {
+  scroll-padding-block-start: calc(var(--bs-topbar-block-size, 0px) + var(--bsp-rem-0-75));
+}
 .bs-topbar:not(.bsp-header)::after {
   content: '';
   position: absolute;
