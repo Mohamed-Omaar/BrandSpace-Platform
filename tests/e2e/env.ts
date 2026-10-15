@@ -123,6 +123,15 @@ export interface E2eAdminCredentials {
   readonly totpSecret: string;
   readonly recoveryCode: string;
   /**
+   * Control Center Simple mode — a read-only Control Center account
+   * (`operations_viewer`), generated per run like the owner's.
+   */
+  readonly operator?: {
+    readonly email: string;
+    readonly password: string;
+    readonly totpSecret: string;
+  };
+  /**
    * A throwaway CUSTOMER account (Phase 2B), in the same file and under the
    * same rules: generated per run, never committed, worthless a minute later.
    * The two realms are separate everywhere else — this file is a test artefact,

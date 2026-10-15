@@ -46,7 +46,8 @@ const en = {
   'v.tooLong': '{field}: please keep it to {max} characters.',
   'v.tooMany': '{field}: please give at most {max}.',
   'v.format': '{field}: this is not in the expected form.',
-  'v.key': '{field}: use small English letters, digits and dashes, starting with a letter (for example "pro-plus").',
+  'v.key':
+    '{field}: use small English letters, digits and dashes, starting with a letter (for example "pro-plus").',
   'v.wholeNumber': '{field}: please enter a whole number, like 12.',
   'v.numberOrNone': '{field}: enter a number, or tick "No limit".',
   'v.atLeast': '{field}: it must be at least {min}.',
@@ -74,14 +75,16 @@ const en = {
   'a.setUp': 'Guided set-up',
   'a.openAdvanced': 'Open in Advanced',
   'a.open': 'Open',
-  'tm.intro': 'The people who can sign in to the Control Center. Adding a person or changing a role is done by your developer.',
+  'tm.intro':
+    'The people who can sign in to the Control Center. Adding a person or changing a role is done by your developer.',
   'tm.active': 'Active',
   'tm.inactive': 'Not active',
   'tm.role': 'Role',
   'tm.mfa': 'Second sign-in step set up',
   'tm.lastSignIn': 'Last signed in',
   'tm.never': 'Never',
-  'ch2.intro': 'The {count} most recent settings changes, from Simple or Advanced: who, when, why, and each value before → after.',
+  'ch2.intro':
+    'The {count} most recent settings changes, from Simple or Advanced: who, when, why, and each value before → after.',
   'ch2.by': 'By {person}',
   'ch2.someone': 'someone',
   'ch2.noDetail': 'This change was saved before the values were recorded.',
@@ -114,19 +117,23 @@ const en = {
   'ui.saved': 'Saved. Customers see it now.',
   'ui.undone': 'The last change was undone.',
   'ui.unchanged': 'Nothing changed, so there was nothing to save.',
-  'ui.draftOpen': 'Someone has an unfinished change to these settings in Advanced. Finish or discard it there first.',
+  'ui.draftOpen':
+    'Someone has an unfinished change to these settings in Advanced. Finish or discard it there first.',
   'ui.readOnly': 'You can see these settings. Changing them needs the configuration permissions.',
   'ui.developerTitle': 'Changed by your developer',
-  'ui.developerIntro': 'These settings are technical or risky. They exist and are shown here, but they are changed in Advanced only.',
+  'ui.developerIntro':
+    'These settings are technical or risky. They exist and are shown here, but they are changed in Advanced only.',
   'ui.customerPreview': 'How customers see this plan',
   'ui.empty': 'Nothing here yet.',
   'ui.reason': '{area}: {item} changed in Simple mode',
   'ui.reasonUndo': '{area}: last change to {item} undone in Simple mode',
   'ui.manageTitle': 'Manage your platform',
-  'ui.manageIntro': 'Plans, numbers, limits and channels — each area is a page of cards you can change yourself.',
+  'ui.manageIntro':
+    'Plans, numbers, limits and channels — each area is a page of cards you can change yourself.',
   'ui.notFound': 'That item no longer exists. It may have been changed by someone else.',
   'ui.archived': 'Done. Customers see the change now.',
-  'ui.stale': 'Something changed since you checked. Nothing was saved; please open it and check again.',
+  'ui.stale':
+    'Something changed since you checked. Nothing was saved; please open it and check again.',
   'ui.notConfirmed': 'Please tick the box to confirm you have read what changes, then save again.',
   'ui.developerBadge': 'changed by your developer',
 
@@ -178,7 +185,8 @@ const en = {
   'plans.h.q.scheduledPostsPerMonth': 'How many posts one workspace can schedule each month.',
   'plans.f.q.storageGb': 'Storage',
   'plans.h.q.storageGb': 'How much space one workspace has for its media.',
-  'plans.i.limit': 'Applies at once. A workspace already above a lower limit keeps what it has but cannot add more.',
+  'plans.i.limit':
+    'Applies at once. A workspace already above a lower limit keeps what it has but cannot add more.',
   'plans.f.features': 'Included features',
   'plans.h.features': 'Features whose access the Features page decides plan by plan.',
   'plans.i.features': 'Workspaces on this plan gain or lose these features at once.',
@@ -191,15 +199,21 @@ const en = {
   'plans.c.monthlyCredits': 'Monthly credits',
   'plans.c.customers': 'Workspaces on it',
   'plans.r.alreadyArchived': 'This plan is already archived.',
-  'plans.p.new': 'A new plan. Nobody is on it until you choose it for a workspace or put it on sale.',
+  'plans.p.new':
+    'A new plan. Nobody is on it until you choose it for a workspace or put it on sale.',
   'plans.p.customers': '{count} workspaces are on this plan now.',
-  'plans.p.lowered': 'A limit goes down: workspaces already above it keep what they have but cannot add more.',
-  'plans.p.monthlyCredits': 'Workspaces on this plan receive the new monthly credits from their next month.',
-  'plans.p.trial': 'Only workspaces created from now on get the new trial; running trials stay as they are.',
+  'plans.p.lowered':
+    'A limit goes down: workspaces already above it keep what they have but cannot add more.',
+  'plans.p.monthlyCredits':
+    'Workspaces on this plan receive the new monthly credits from their next month.',
+  'plans.p.trial':
+    'Only workspaces created from now on get the new trial; running trials stay as they are.',
   'plans.p.availability.public': 'New customers can now choose this plan.',
-  'plans.p.availability.private': 'The plan stays active for whoever has it, but is no longer listed.',
+  'plans.p.availability.private':
+    'The plan stays active for whoever has it, but is no longer listed.',
   'plans.p.availability.draft': 'The plan is marked not ready; it is not offered to anyone.',
-  'plans.p.availability.archived': 'The plan is archived: workspaces on it keep it, nobody new can be put on it.',
+  'plans.p.availability.archived':
+    'The plan is archived: workspaces on it keep it, nobody new can be put on it.',
   'plans.p.price': 'Customers see the new price. Payments are off, so nobody is charged.',
   'plans.d.rollover': 'Unused credits carried to next month',
   'plans.d.analyticsRetention': 'How long performance data is kept',
@@ -209,28 +223,33 @@ const en = {
   'plans.f.ai.automationAiActionsPerMonth': 'AI actions a month',
   'plans.f.aiOn.trialAutomationAiActionsPerMonth': 'AI in automations during the trial',
   'plans.f.ai.trialAutomationAiActionsPerMonth': 'AI actions during the trial',
-  'plans.h.aiOn': 'Whether automations on this plan may use AI. AI works only once an AI provider is set up.',
+  'plans.h.aiOn':
+    'Whether automations on this plan may use AI. AI works only once an AI provider is set up.',
   'plans.h.ai': 'How many AI actions automations can take each month.',
   'plans.i.ai': 'Applies from the next automation run.',
   // --- Trial and credits ----------------------------------------------------
   'trial.title': 'Trial and credits',
   'trial.intro': 'What a new workspace gets, in numbers, and how long credits last.',
   'trial.c.title': 'What a new workspace gets',
-  'trial.c.intro': 'A new workspace starts the trial of the cheapest active plan that has trial days. These are that plan’s numbers; the Plans card shows the same ones.',
+  'trial.c.intro':
+    'A new workspace starts the trial of the cheapest active plan that has trial days. These are that plan’s numbers; the Plans card shows the same ones.',
   'trial.c.cardTitle': 'A new workspace',
   'trial.c.plan': 'Starts on: {plan}',
   'trial.c.noTrial': 'No trial',
   'trial.c.never': 'Never',
   'trial.c.warnings': 'Low-balance warnings',
   'trial.f.days': 'Trial length',
-  'trial.h.days': 'How many days a new workspace can use the platform before choosing a plan. 0 means no trial.',
+  'trial.h.days':
+    'How many days a new workspace can use the platform before choosing a plan. 0 means no trial.',
   'trial.k.title': 'How long credits last',
-  'trial.k.intro': 'When credits run out of date, and when customers are warned that they are running low.',
+  'trial.k.intro':
+    'When credits run out of date, and when customers are warned that they are running low.',
   'trial.k.cardTitle': 'Credit expiry and warnings',
   'trial.f.planExpiry': 'Plan credits expire after',
   'trial.f.promoExpiry': 'Gift credits expire after',
   'trial.f.packExpiry': 'Bought credits expire after',
-  'trial.h.expiry': 'How many months credits can be used before they expire. 0 means they never expire.',
+  'trial.h.expiry':
+    'How many months credits can be used before they expire. 0 means they never expire.',
   'trial.i.expiry': 'Applies to credits given from now on; credits already given keep their date.',
   'trial.f.warnFirst': 'First warning when left is below',
   'trial.f.warnSecond': 'Second warning when left is below',
@@ -244,7 +263,8 @@ const en = {
 
   // --- Channels -------------------------------------------------------------
   'ch.title': 'Channels',
-  'ch.intro': 'Each card is a social channel: whether customers see it when writing a post, the kinds of post it carries, and its limits.',
+  'ch.intro':
+    'Each card is a social channel: whether customers see it when writing a post, the kinds of post it carries, and its limits.',
   'ch.s.shown': 'Shown to customers',
   'ch.s.hidden': 'Hidden',
   'ch.c.connect': 'Connecting accounts',
@@ -259,7 +279,8 @@ const en = {
   'ch.h.postKinds': 'The post formats customers can choose for this channel.',
   'ch.i.postKinds': 'The Studio offers only these formats for this channel.',
   'ch.f.maxBody': 'Longest text',
-  'ch.h.maxBody': 'How many characters a post’s text can have. It cannot pass what the channel itself accepts.',
+  'ch.h.maxBody':
+    'How many characters a post’s text can have. It cannot pass what the channel itself accepts.',
   'ch.f.maxHashtags': 'Most hashtags',
   'ch.h.maxHashtags': 'How many hashtags one post can have.',
   'ch.f.maxMedia': 'Most pictures or videos',
@@ -267,11 +288,13 @@ const en = {
   'ch.f.firstComment': 'First comment',
   'ch.h.firstComment': 'Whether customers can add a first comment that is posted with the post.',
   'ch.i.limits': 'The Studio uses the new limits for posts written from now on.',
-  'ch.r.hasPosts': 'This channel cannot be hidden: {count} posts are written for it, and hiding it would stop them opening.',
+  'ch.r.hasPosts':
+    'This channel cannot be hidden: {count} posts are written for it, and hiding it would stop them opening.',
   'ch.p.shown': 'Customers can choose this channel when they write a post.',
   'ch.p.hidden': 'Customers no longer see this channel when they write a post.',
   'ch.p.postKinds': 'The formats offered for this channel change.',
-  'ch.p.notConnectable': 'Customers will see the channel but cannot connect it until it is switched on in Publishing.',
+  'ch.p.notConnectable':
+    'Customers will see the channel but cannot connect it until it is switched on in Publishing.',
   'ch.k.text': 'Text',
   'ch.k.image': 'Picture',
   'ch.k.carousel': 'Carousel',
@@ -286,7 +309,8 @@ const en = {
 
   // --- Publishing -----------------------------------------------------------
   'pub.title': 'Publishing',
-  'pub.intro': 'Each card is a platform the posts go out to: whether customers may connect it, how many posts a day, and its guided set-up.',
+  'pub.intro':
+    'Each card is a platform the posts go out to: whether customers may connect it, how many posts a day, and its guided set-up.',
   'pub.s.on': 'On',
   'pub.s.off': 'Off',
   'pub.c.setUp': 'Set-up',
@@ -307,8 +331,10 @@ const en = {
   'pub.i.attempts': 'Applies to posts that fail from now on.',
   'pub.r.notBuilt': 'This platform cannot be switched on: it is not available yet.',
   'pub.p.on': 'Customers can now connect accounts on this platform and publish to them.',
-  'pub.p.setUpFirst': 'The guided set-up is not finished: customers will see the platform, but connecting will fail until it is.',
-  'pub.p.off': 'Customers can no longer connect or publish here; scheduled posts wait until it is switched on again.',
+  'pub.p.setUpFirst':
+    'The guided set-up is not finished: customers will see the platform, but connecting will fail until it is.',
+  'pub.p.off':
+    'Customers can no longer connect or publish here; scheduled posts wait until it is switched on again.',
   'pub.g.facebook': 'Facebook set-up',
   'pub.g.instagram': 'Instagram set-up',
   'pub.g.tiktok': 'TikTok set-up',
@@ -334,7 +360,8 @@ const en = {
   'su.f.mfaOffered': 'Customers can add a second sign-in step',
   'su.h.mfaOffered': 'Lets customers protect their account with a code from an authenticator app.',
   'su.f.mfaRequired': 'Every customer must use a second sign-in step',
-  'su.h.mfaRequired': 'When on, customers without one are asked to set it up at their next sign-in.',
+  'su.h.mfaRequired':
+    'When on, customers without one are asked to set it up at their next sign-in.',
   'su.i.mfa': 'Customers see the change at their next sign-in.',
   'su.r.mfa': 'A second step cannot be required while customers cannot add one.',
   'su.p.closed': 'The sign-up page closes: only invited people can create an account.',
@@ -348,7 +375,8 @@ const en = {
 
   // --- Uploads --------------------------------------------------------------
   'up.title': 'Uploads',
-  'up.intro': 'Which files customers can upload, how large they can be, and whether they are checked for malware.',
+  'up.intro':
+    'Which files customers can upload, how large they can be, and whether they are checked for malware.',
   'up.k.title': 'Kinds of file',
   'up.kind.image': 'Pictures',
   'up.kind.video': 'Videos',
@@ -357,7 +385,8 @@ const en = {
   'up.kind.font': 'Fonts',
   'up.f.types': 'Accepted types',
   'up.h.types': 'The file types customers can upload in this kind.',
-  'up.i.types': 'Files of a type you remove can no longer be uploaded; files already uploaded stay.',
+  'up.i.types':
+    'Files of a type you remove can no longer be uploaded; files already uploaded stay.',
   'up.f.maxMb': 'Largest file',
   'up.h.maxMb': 'The biggest single file a customer can upload.',
   'up.i.maxMb': 'Applies to the next upload; files already uploaded stay.',
@@ -367,7 +396,8 @@ const en = {
   'up.s.on': 'On',
   'up.s.off': 'Off',
   'up.f.scanner': 'Scanner',
-  'up.h.scanner': 'The service that checks each file. Its key is set by your developer, never here.',
+  'up.h.scanner':
+    'The service that checks each file. Its key is set by your developer, never here.',
   'up.i.scanner': 'Applies to the next upload.',
   'up.o.none': 'No scanning',
   'up.o.scanii': 'Scanii',
@@ -382,7 +412,8 @@ const en = {
   'up.r.endpoint': 'Scanii needs its address before it can be chosen.',
   'up.p.off': 'Uploads are not scanned; customers are told so under every upload.',
   'up.p.on': 'Every new upload is scanned before it can be used.',
-  'up.p.disclaimer': 'No scanner catches everything: scanning lowers the risk, it does not remove it.',
+  'up.p.disclaimer':
+    'No scanner catches everything: scanning lowers the risk, it does not remove it.',
   'up.d.perBrand': 'Most files per brand',
   'up.d.tags': 'Most tags per file',
   'up.d.versions': 'Versions kept per file',
@@ -393,7 +424,8 @@ const en = {
 
   // --- Email ----------------------------------------------------------------
   'em.title': 'Email',
-  'em.intro': 'The name and address customers see on every email the platform sends them. The key, the Test and switching email on are in the guided set-up.',
+  'em.intro':
+    'The name and address customers see on every email the platform sends them. The key, the Test and switching email on are in the guided set-up.',
   'em.s.title': 'Senders',
   'em.st.sending': 'Sending now',
   'em.st.ready': 'Set up, not in use',
@@ -401,7 +433,8 @@ const en = {
   'em.f.name': 'Sender name',
   'em.h.name': 'The name shown beside the address in the inbox, like your brand name.',
   'em.f.address': 'Sender address',
-  'em.h.address': 'The address every email is sent from. Its domain must be verified with the email service.',
+  'em.h.address':
+    'The address every email is sent from. Its domain must be verified with the email service.',
   'em.v.address': 'Sender address: please enter an email address, like hello@example.com.',
   'em.i.sender': 'The next emails customers receive show the new sender.',
   'em.g.resend': 'Email set-up (key and Test)',
@@ -413,7 +446,8 @@ const en = {
   'ct.title': 'Content',
   'ct.intro': 'The lists customers choose from when they set up a brand and write posts.',
   'ct.ind.title': 'Industries',
-  'ct.ind.intro': 'What customers can choose as their brand’s industry. “Something else” is always offered too.',
+  'ct.ind.intro':
+    'What customers can choose as their brand’s industry. “Something else” is always offered too.',
   'ct.f.key': 'Short name (cannot change later)',
   'ct.h.key': 'Used inside the platform to recognise this industry.',
   'ct.f.nameEn': 'Name in English',
@@ -421,22 +455,27 @@ const en = {
   'ct.h.name': 'The name customers see in the list.',
   'ct.i.name': 'Customers see the new name the next time they open the list.',
   'ct.f.questions': 'Questions asked about offers',
-  'ct.h.questions': 'Which set of questions the Brand Brain asks brands in this industry about what they sell.',
+  'ct.h.questions':
+    'Which set of questions the Brand Brain asks brands in this industry about what they sell.',
   'ct.i.questions': 'Brands in this industry are asked the chosen questions from now on.',
   'ct.r.noSet': 'Choose one of the question sets the Brand Brain has.',
   'ct.p.added': 'Customers can now choose this industry.',
-  'ct.p.removed': 'The industry is no longer offered. Brands that chose it keep it, shown as their own words.',
+  'ct.p.removed':
+    'The industry is no longer offered. Brands that chose it keep it, shown as their own words.',
   'ct.t.title': 'Suggested posting times',
-  'ct.t.intro': 'Times shown as “Suggested time” for each country, until a brand has its own measured best time.',
+  'ct.t.intro':
+    'Times shown as “Suggested time” for each country, until a brand has its own measured best time.',
   'ct.f.country': 'Country code',
   'ct.h.country': 'Two letters, like EG, SA or AE.',
   'ct.v.country': 'Country code: please use two letters, like EG.',
   'ct.f.times': 'Times',
   'ct.h.times': 'Up to six times of day, like 10:00, 16:00 (24-hour clock).',
-  'ct.i.times': 'Brands in this country see the new suggestions; brands with measured times are not affected.',
+  'ct.i.times':
+    'Brands in this country see the new suggestions; brands with measured times are not affected.',
   'ct.p.timesRemoved': 'Brands in this country no longer see suggested times.',
   'ct.w.title': 'Writing help per channel',
-  'ct.w.intro': 'The hashtag range the Studio recommends, and the safe zones it draws on stories and reels.',
+  'ct.w.intro':
+    'The hashtag range the Studio recommends, and the safe zones it draws on stories and reels.',
   'ct.c.hashtags': 'Recommended hashtags',
   'ct.c.ceiling': 'Most allowed',
   'ct.c.safe': 'Safe zones',
@@ -448,11 +487,13 @@ const en = {
   'ct.h.hashtagsRange': 'Cannot go above the most hashtags the channel allows.',
   'ct.i.hashtags': 'The Studio shows the new range on the next post opened.',
   'ct.f.safeOn': 'Show safe zones',
-  'ct.h.safeOn': 'When on, the Studio can draw where the channel puts its own buttons over a story or reel.',
+  'ct.h.safeOn':
+    'When on, the Studio can draw where the channel puts its own buttons over a story or reel.',
   'ct.f.safeTop': 'Top band',
   'ct.f.safeBottom': 'Bottom band',
   'ct.f.safeEnd': 'Side band',
-  'ct.h.safeBand': 'The share of the picture’s height or width covered by the channel’s own buttons.',
+  'ct.h.safeBand':
+    'The share of the picture’s height or width covered by the channel’s own buttons.',
   'ct.i.safe': 'The Studio draws the new safe zones on the next preview.',
   'ct.d.dialects': 'Writing styles offered',
   'ct.d.horizon': 'How far ahead posts can be planned',
@@ -464,15 +505,18 @@ const en = {
 
   // --- Legal pages ----------------------------------------------------------
   'lg.title': 'Legal pages',
-  'lg.intro': 'The documents people accept when they sign up: the version they accept, and whether a lawyer has reviewed it.',
+  'lg.intro':
+    'The documents people accept when they sign up: the version they accept, and whether a lawyer has reviewed it.',
   'lg.s.reviewed': 'Reviewed by a lawyer',
   'lg.s.pending': 'Draft, review pending',
   'lg.c.required': 'Must be accepted',
   'lg.f.version': 'Version',
-  'lg.h.version': 'The version people accept at sign-up. When the text changes, your developer publishes the new text with the same version.',
+  'lg.h.version':
+    'The version people accept at sign-up. When the text changes, your developer publishes the new text with the same version.',
   'lg.i.version': 'People who sign up from now accept this version.',
   'lg.f.reviewed': 'Reviewed by a lawyer',
-  'lg.h.reviewed': 'Your mark that a lawyer has read this version. Set it again after every new version.',
+  'lg.h.reviewed':
+    'Your mark that a lawyer has read this version. Set it again after every new version.',
   'lg.i.reviewed': 'Changes the readiness check; customers see no difference.',
   'lg.p.version': 'People who sign up from now accept the new version.',
   'lg.p.reviewed': 'The readiness check counts this document as reviewed.',
@@ -548,14 +592,16 @@ const ar: Copy = {
   'a.setUp': 'الإعداد الموجَّه',
   'a.openAdvanced': 'فتح في الوضع المتقدم',
   'a.open': 'فتح',
-  'tm.intro': 'الأشخاص الذين يمكنهم تسجيل الدخول إلى مركز التحكم. يتولى المطوّر إضافة شخص أو تغيير دوره.',
+  'tm.intro':
+    'الأشخاص الذين يمكنهم تسجيل الدخول إلى مركز التحكم. يتولى المطوّر إضافة شخص أو تغيير دوره.',
   'tm.active': 'نشط',
   'tm.inactive': 'غير نشط',
   'tm.role': 'الدور',
   'tm.mfa': 'خطوة التحقق الثانية مُعدّة',
   'tm.lastSignIn': 'آخر تسجيل دخول',
   'tm.never': 'لم يسجّل الدخول بعد',
-  'ch2.intro': 'أحدث {count} تغييرًا في الإعدادات، من الوضع البسيط أو المتقدم: من، ومتى، ولماذا، وكل قيمة قبل ← بعد.',
+  'ch2.intro':
+    'أحدث {count} تغييرًا في الإعدادات، من الوضع البسيط أو المتقدم: من، ومتى، ولماذا، وكل قيمة قبل ← بعد.',
   'ch2.by': 'بواسطة {person}',
   'ch2.someone': 'شخص ما',
   'ch2.noDetail': 'حُفظ هذا التغيير قبل بدء تسجيل القيم.',
@@ -588,16 +634,19 @@ const ar: Copy = {
   'ui.saved': 'تم الحفظ، ويراه العملاء الآن.',
   'ui.undone': 'تم التراجع عن آخر تغيير.',
   'ui.unchanged': 'لم يتغير شيء، فلا يوجد ما يُحفظ.',
-  'ui.draftOpen': 'لدى شخص آخر تغيير غير مكتمل على هذه الإعدادات في الوضع المتقدم. أكمله أو تجاهله هناك أولًا.',
+  'ui.draftOpen':
+    'لدى شخص آخر تغيير غير مكتمل على هذه الإعدادات في الوضع المتقدم. أكمله أو تجاهله هناك أولًا.',
   'ui.readOnly': 'يمكنك الاطلاع على هذه الإعدادات. يتطلب تغييرها صلاحيات الإعدادات.',
   'ui.developerTitle': 'يغيّرها المطوّر',
-  'ui.developerIntro': 'هذه إعدادات تقنية أو حساسة. هي موجودة ومعروضة هنا، لكن تغييرها يتم في الوضع المتقدم فقط.',
+  'ui.developerIntro':
+    'هذه إعدادات تقنية أو حساسة. هي موجودة ومعروضة هنا، لكن تغييرها يتم في الوضع المتقدم فقط.',
   'ui.customerPreview': 'كيف يرى العملاء هذه الخطة',
   'ui.empty': 'لا يوجد شيء هنا بعد.',
   'ui.reason': '{area}: تغيير {item} من الوضع البسيط',
   'ui.reasonUndo': '{area}: التراجع عن آخر تغيير في {item} من الوضع البسيط',
   'ui.manageTitle': 'إدارة منصتك',
-  'ui.manageIntro': 'الخطط والأرقام والحدود والقنوات — كل مجال صفحة من البطاقات يمكنك تعديلها بنفسك.',
+  'ui.manageIntro':
+    'الخطط والأرقام والحدود والقنوات — كل مجال صفحة من البطاقات يمكنك تعديلها بنفسك.',
   'ui.notFound': 'هذا العنصر لم يعد موجودًا. ربما غيّره شخص آخر.',
   'ui.archived': 'تم. يرى العملاء التغيير الآن.',
   'ui.stale': 'تغيّر شيء منذ مراجعتك. لم يُحفظ شيء؛ يُرجى فتحه ومراجعته من جديد.',
@@ -638,7 +687,8 @@ const ar: Copy = {
   'plans.i.trialCredits': 'تحصل مساحات العمل الجديدة فقط على الرقم الجديد.',
   'plans.f.monthlyCredits': 'الرصيد الشهري',
   'plans.h.monthlyCredits': 'الرصيد الذي تحصل عليه مساحة العمل المشتركة كل شهر.',
-  'plans.i.monthlyCredits': 'تحصل مساحات العمل على هذه الخطة على الرقم الجديد بدءًا من شهرها التالي.',
+  'plans.i.monthlyCredits':
+    'تحصل مساحات العمل على هذه الخطة على الرقم الجديد بدءًا من شهرها التالي.',
   'plans.f.q.brands': 'العلامات',
   'plans.h.q.brands': 'عدد العلامات في مساحة العمل الواحدة.',
   'plans.f.q.workspaces': 'مساحات العمل',
@@ -648,10 +698,12 @@ const ar: Copy = {
   'plans.f.q.socialAccounts': 'حسابات التواصل',
   'plans.h.q.socialAccounts': 'عدد حسابات التواصل التي يمكن ربطها بمساحة العمل الواحدة.',
   'plans.f.q.scheduledPostsPerMonth': 'المنشورات المجدولة شهريًا',
-  'plans.h.q.scheduledPostsPerMonth': 'عدد المنشورات التي يمكن جدولتها لمساحة العمل الواحدة كل شهر.',
+  'plans.h.q.scheduledPostsPerMonth':
+    'عدد المنشورات التي يمكن جدولتها لمساحة العمل الواحدة كل شهر.',
   'plans.f.q.storageGb': 'التخزين',
   'plans.h.q.storageGb': 'المساحة المتاحة لوسائط مساحة العمل الواحدة.',
-  'plans.i.limit': 'يُطبَّق فورًا. مساحة العمل التي تتجاوز حدًّا أقل تحتفظ بما لديها لكنها لا تستطيع إضافة المزيد.',
+  'plans.i.limit':
+    'يُطبَّق فورًا. مساحة العمل التي تتجاوز حدًّا أقل تحتفظ بما لديها لكنها لا تستطيع إضافة المزيد.',
   'plans.f.features': 'الميزات المشمولة',
   'plans.h.features': 'الميزات التي تحدد صفحة الميزات الوصول إليها حسب الخطة.',
   'plans.i.features': 'تكسب مساحات العمل على هذه الخطة هذه الميزات أو تفقدها فورًا.',
@@ -666,13 +718,17 @@ const ar: Copy = {
   'plans.r.alreadyArchived': 'هذه الخطة مؤرشفة بالفعل.',
   'plans.p.new': 'خطة جديدة. لن يكون عليها أحد حتى تختارها لمساحة عمل أو تطرحها للبيع.',
   'plans.p.customers': 'على هذه الخطة الآن {count} مساحة عمل.',
-  'plans.p.lowered': 'ينخفض أحد الحدود: مساحات العمل التي تتجاوزه تحتفظ بما لديها لكنها لا تستطيع إضافة المزيد.',
-  'plans.p.monthlyCredits': 'تحصل مساحات العمل على هذه الخطة على الرصيد الشهري الجديد بدءًا من شهرها التالي.',
-  'plans.p.trial': 'تحصل مساحات العمل المنشأة من الآن فقط على التجربة الجديدة؛ التجارب الجارية تبقى كما هي.',
+  'plans.p.lowered':
+    'ينخفض أحد الحدود: مساحات العمل التي تتجاوزه تحتفظ بما لديها لكنها لا تستطيع إضافة المزيد.',
+  'plans.p.monthlyCredits':
+    'تحصل مساحات العمل على هذه الخطة على الرصيد الشهري الجديد بدءًا من شهرها التالي.',
+  'plans.p.trial':
+    'تحصل مساحات العمل المنشأة من الآن فقط على التجربة الجديدة؛ التجارب الجارية تبقى كما هي.',
   'plans.p.availability.public': 'يمكن للعملاء الجدد الآن اختيار هذه الخطة.',
   'plans.p.availability.private': 'تبقى الخطة مفعّلة لمن لديه، لكنها لم تعد معروضة.',
   'plans.p.availability.draft': 'الخطة غير جاهزة؛ لا تُعرض على أحد.',
-  'plans.p.availability.archived': 'الخطة مؤرشفة: مساحات العمل عليها تحتفظ بها، ولا يمكن وضع أحد جديد عليها.',
+  'plans.p.availability.archived':
+    'الخطة مؤرشفة: مساحات العمل عليها تحتفظ بها، ولا يمكن وضع أحد جديد عليها.',
   'plans.p.price': 'يرى العملاء السعر الجديد. الدفع متوقف، فلا يُخصم من أحد.',
   'plans.d.rollover': 'ترحيل الرصيد غير المستخدم إلى الشهر التالي',
   'plans.d.analyticsRetention': 'مدة الاحتفاظ ببيانات الأداء',
@@ -682,27 +738,31 @@ const ar: Copy = {
   'plans.f.ai.automationAiActionsPerMonth': 'إجراءات الذكاء الاصطناعي شهريًا',
   'plans.f.aiOn.trialAutomationAiActionsPerMonth': 'الذكاء الاصطناعي في الأتمتة خلال التجربة',
   'plans.f.ai.trialAutomationAiActionsPerMonth': 'إجراءات الذكاء الاصطناعي خلال التجربة',
-  'plans.h.aiOn': 'هل يمكن للأتمتة على هذه الخطة استخدام الذكاء الاصطناعي. لا يعمل الذكاء الاصطناعي إلا بعد إعداد مزوّد له.',
+  'plans.h.aiOn':
+    'هل يمكن للأتمتة على هذه الخطة استخدام الذكاء الاصطناعي. لا يعمل الذكاء الاصطناعي إلا بعد إعداد مزوّد له.',
   'plans.h.ai': 'عدد إجراءات الذكاء الاصطناعي التي يمكن للأتمتة تنفيذها كل شهر.',
   'plans.i.ai': 'يُطبَّق بدءًا من التشغيل التالي للأتمتة.',
   'trial.title': 'التجربة والرصيد',
   'trial.intro': 'ما تحصل عليه مساحة العمل الجديدة بالأرقام، ومدة صلاحية الرصيد.',
   'trial.c.title': 'ما تحصل عليه مساحة العمل الجديدة',
-  'trial.c.intro': 'تبدأ مساحة العمل الجديدة تجربة أرخص خطة مفعّلة لها أيام تجربة. هذه أرقام تلك الخطة، وتعرض بطاقة الخطط الأرقام نفسها.',
+  'trial.c.intro':
+    'تبدأ مساحة العمل الجديدة تجربة أرخص خطة مفعّلة لها أيام تجربة. هذه أرقام تلك الخطة، وتعرض بطاقة الخطط الأرقام نفسها.',
   'trial.c.cardTitle': 'مساحة عمل جديدة',
   'trial.c.plan': 'تبدأ على: {plan}',
   'trial.c.noTrial': 'بلا تجربة',
   'trial.c.never': 'لا تنتهي',
   'trial.c.warnings': 'تنبيهات انخفاض الرصيد',
   'trial.f.days': 'مدة التجربة',
-  'trial.h.days': 'عدد الأيام التي تستخدم فيها مساحة العمل الجديدة المنصة قبل اختيار خطة. 0 يعني بلا تجربة.',
+  'trial.h.days':
+    'عدد الأيام التي تستخدم فيها مساحة العمل الجديدة المنصة قبل اختيار خطة. 0 يعني بلا تجربة.',
   'trial.k.title': 'مدة صلاحية الرصيد',
   'trial.k.intro': 'متى تنتهي صلاحية الرصيد، ومتى يُنبَّه العملاء إلى انخفاضه.',
   'trial.k.cardTitle': 'انتهاء الرصيد والتنبيهات',
   'trial.f.planExpiry': 'ينتهي رصيد الخطة بعد',
   'trial.f.promoExpiry': 'ينتهي الرصيد المُهدى بعد',
   'trial.f.packExpiry': 'ينتهي الرصيد المشترى بعد',
-  'trial.h.expiry': 'عدد الأشهر التي يمكن فيها استخدام الرصيد قبل انتهاء صلاحيته. 0 يعني أنه لا ينتهي.',
+  'trial.h.expiry':
+    'عدد الأشهر التي يمكن فيها استخدام الرصيد قبل انتهاء صلاحيته. 0 يعني أنه لا ينتهي.',
   'trial.i.expiry': 'يُطبَّق على الرصيد الممنوح من الآن؛ الرصيد الممنوح سابقًا يحتفظ بتاريخه.',
   'trial.f.warnFirst': 'التنبيه الأول عندما يقل المتبقي عن',
   'trial.f.warnSecond': 'التنبيه الثاني عندما يقل المتبقي عن',
@@ -715,7 +775,8 @@ const ar: Copy = {
   'trial.d.whichPlan': 'الخطة التي تبدأ عليها مساحة العمل الجديدة',
 
   'ch.title': 'القنوات',
-  'ch.intro': 'كل بطاقة قناة تواصل: هل يراها العملاء عند كتابة منشور، وأنواع المنشورات التي تقبلها، وحدودها.',
+  'ch.intro':
+    'كل بطاقة قناة تواصل: هل يراها العملاء عند كتابة منشور، وأنواع المنشورات التي تقبلها، وحدودها.',
   'ch.s.shown': 'تظهر للعملاء',
   'ch.s.hidden': 'مخفية',
   'ch.c.connect': 'ربط الحسابات',
@@ -756,7 +817,8 @@ const ar: Copy = {
   'ch.d.dialects': 'أساليب الكتابة المعروضة',
 
   'pub.title': 'النشر',
-  'pub.intro': 'كل بطاقة منصة تُنشر عليها المنشورات: هل يمكن للعملاء ربطها، وعدد المنشورات يوميًا، والإعداد الموجَّه لها.',
+  'pub.intro':
+    'كل بطاقة منصة تُنشر عليها المنشورات: هل يمكن للعملاء ربطها، وعدد المنشورات يوميًا، والإعداد الموجَّه لها.',
   'pub.s.on': 'مفعّل',
   'pub.s.off': 'متوقف',
   'pub.c.setUp': 'الإعداد',
@@ -778,7 +840,8 @@ const ar: Copy = {
   'pub.r.notBuilt': 'لا يمكن تفعيل هذه المنصة: إنها غير متاحة بعد.',
   'pub.p.on': 'يمكن للعملاء الآن ربط حساباتهم على هذه المنصة والنشر عليها.',
   'pub.p.setUpFirst': 'الإعداد الموجَّه غير مكتمل: سيرى العملاء المنصة، لكن الربط سيفشل حتى يكتمل.',
-  'pub.p.off': 'لم يعد بإمكان العملاء الربط أو النشر هنا؛ تنتظر المنشورات المجدولة حتى يُعاد التفعيل.',
+  'pub.p.off':
+    'لم يعد بإمكان العملاء الربط أو النشر هنا؛ تنتظر المنشورات المجدولة حتى يُعاد التفعيل.',
   'pub.g.facebook': 'إعداد فيسبوك',
   'pub.g.instagram': 'إعداد إنستغرام',
   'pub.g.tiktok': 'إعداد تيك توك',
@@ -816,7 +879,8 @@ const ar: Copy = {
   'su.d.steps': 'خطوات قائمة البدء',
 
   'up.title': 'الرفع',
-  'up.intro': 'الملفات التي يمكن للعملاء رفعها، وأكبر حجم لها، وهل تُفحص بحثًا عن البرمجيات الضارة.',
+  'up.intro':
+    'الملفات التي يمكن للعملاء رفعها، وأكبر حجم لها، وهل تُفحص بحثًا عن البرمجيات الضارة.',
   'up.k.title': 'أنواع الملفات',
   'up.kind.image': 'الصور',
   'up.kind.video': 'الفيديوهات',
@@ -860,7 +924,8 @@ const ar: Copy = {
   'up.d.keysValue': 'محفوظة في إعدادات الخادم، ولا تُعرض أبدًا',
 
   'em.title': 'البريد الإلكتروني',
-  'em.intro': 'الاسم والعنوان اللذان يراهما العملاء في كل رسالة ترسلها المنصة. المفتاح والاختبار وتفعيل البريد في الإعداد الموجَّه.',
+  'em.intro':
+    'الاسم والعنوان اللذان يراهما العملاء في كل رسالة ترسلها المنصة. المفتاح والاختبار وتفعيل البريد في الإعداد الموجَّه.',
   'em.s.title': 'المُرسِلون',
   'em.st.sending': 'يُرسل الآن',
   'em.st.ready': 'مُعدّ، غير مستخدم',
@@ -914,7 +979,8 @@ const ar: Copy = {
   'ct.h.hashtagsRange': 'لا يتجاوز أكبر عدد من الوسوم تسمح به القناة.',
   'ct.i.hashtags': 'يعرض الاستوديو النطاق الجديد في المنشور التالي الذي يُفتح.',
   'ct.f.safeOn': 'عرض المناطق الآمنة',
-  'ct.h.safeOn': 'عند تفعيله، يمكن للاستوديو رسم المواضع التي تضع فيها القناة أزرارها فوق القصة أو الريلز.',
+  'ct.h.safeOn':
+    'عند تفعيله، يمكن للاستوديو رسم المواضع التي تضع فيها القناة أزرارها فوق القصة أو الريلز.',
   'ct.f.safeTop': 'الشريط العلوي',
   'ct.f.safeBottom': 'الشريط السفلي',
   'ct.f.safeEnd': 'الشريط الجانبي',
@@ -929,12 +995,14 @@ const ar: Copy = {
   'ct.d.questionSets': 'مجموعات أسئلة العروض',
 
   'lg.title': 'الصفحات القانونية',
-  'lg.intro': 'المستندات التي يوافق عليها الأشخاص عند التسجيل: الإصدار الذي يوافقون عليه، وهل راجعه محامٍ.',
+  'lg.intro':
+    'المستندات التي يوافق عليها الأشخاص عند التسجيل: الإصدار الذي يوافقون عليه، وهل راجعه محامٍ.',
   'lg.s.reviewed': 'راجعه محامٍ',
   'lg.s.pending': 'مسودة، بانتظار المراجعة',
   'lg.c.required': 'تجب الموافقة عليه',
   'lg.f.version': 'الإصدار',
-  'lg.h.version': 'الإصدار الذي يوافق عليه الأشخاص عند التسجيل. عند تغيّر النص، ينشر المطوّر النص الجديد بالإصدار نفسه.',
+  'lg.h.version':
+    'الإصدار الذي يوافق عليه الأشخاص عند التسجيل. عند تغيّر النص، ينشر المطوّر النص الجديد بالإصدار نفسه.',
   'lg.i.version': 'يوافق من يسجّل من الآن على هذا الإصدار.',
   'lg.f.reviewed': 'راجعه محامٍ',
   'lg.h.reviewed': 'علامتك على أن محاميًا قرأ هذا الإصدار. ضعها مجددًا بعد كل إصدار جديد.',

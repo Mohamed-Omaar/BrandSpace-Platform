@@ -32,6 +32,7 @@ loadE2eEnv();
 const EMAIL = 'e2e-admin@brandspace.test';
 const ENVIRONMENT = 'DEVELOPMENT' as const;
 const MFA_SECRET_REF = `mfa-totp/platform/development/${EMAIL}`;
+const OPERATOR_EMAIL = 'e2e-operator@brandspace.test';
 
 /**
  * Run the repository seed against the TEST database.
@@ -155,6 +156,15 @@ async function main(): Promise<void> {
 
     await auth.storeRecoveryCodes(user.id, recoveryCodes);
 
+    // Control Center Simple mode — a READ-ONLY operator (`operations_viewer`:
+    // configuration read, never manage or activate), so "Simple never offers a
+    // change the reader may not make" is proved through a real sign-in.
+    const operator = await seedPlatformAccount(prisma, secrets, actor, {
+      email: OPERATOR_EMAIL,
+      roleKey: 'operations_viewer',
+      name: 'End-to-end Operations Viewer',
+    });
+
     // --- Phase 2B: a throwaway CUSTOMER estate ---------------------------
     //
     // Provisioned through the SAME services the Control Center uses, so the
@@ -168,6 +178,7 @@ async function main(): Promise<void> {
       password,
       totpSecret: enrolment.secret,
       recoveryCode: recoveryCodes[0]!,
+      operator,
       customer,
     };
 
@@ -180,6 +191,70 @@ async function main(): Promise<void> {
   } finally {
     await prisma.$disconnect();
   }
+}
+
+/**
+ * A second Control Center account, under the same rules as the owner's: a
+ * fresh password and TOTP seed per run, the seed in the vault (rotated, never
+ * overwritten), nothing printed.
+ */
+async function seedPlatformAccount(
+  prisma: PrismaClient,
+  secrets: SecretService,
+  actor: {
+    platformUserId: string;
+    roleKey: string;
+    mfaVerified: boolean;
+    permissionKeys: readonly string[];
+  },
+  account: { readonly email: string; readonly roleKey: string; readonly name: string },
+): Promise<NonNullable<E2eAdminCredentials['operator']>> {
+  const role = await prisma.role.findFirst({ where: { key: account.roleKey, workspaceId: null } });
+  if (!role)
+    throw new Error(
+      `The ${account.roleKey} platform role is missing; the repository seed builds it.`,
+    );
+  const secretRef = `mfa-totp/platform/development/${account.email}`;
+  const password = `e2e-${randomBytes(18).toString('base64url')}`;
+  const enrolment = generateTotpEnrolment(account.email);
+  const passwordHash = await hashPassword(password);
+  const fields = {
+    status: 'ACTIVE' as const,
+    roleId: role.id,
+    passwordHash,
+    mfaEnabled: true,
+    mfaSecretRef: secretRef,
+    mfaEnrolledAt: new Date(),
+  };
+  await prisma.platformUser.upsert({
+    where: { email: account.email },
+    create: { email: account.email, name: account.name, ...fields },
+    update: { ...fields, failedLoginCount: 0 },
+  });
+  const existing = await prisma.secretRecord.findUnique({
+    where: { ref_environment: { ref: secretRef, environment: ENVIRONMENT } },
+  });
+  if (existing) {
+    if (existing.status !== 'ACTIVE') {
+      await secrets.enableSecret(actor, existing.id, 'Re-enabled for the end-to-end run');
+    }
+    await secrets.rotateSecret(
+      actor,
+      existing.id,
+      enrolment.secret,
+      'New TOTP seed for the end-to-end run',
+    );
+  } else {
+    await secrets.createSecret(actor, {
+      ref: secretRef,
+      name: `End-to-end ${account.roleKey} TOTP seed`,
+      category: 'mfa_totp',
+      environment: ENVIRONMENT,
+      value: enrolment.secret,
+      description: 'Generated for the end-to-end suite. Not a real credential.',
+    });
+  }
+  return { email: account.email, password, totpSecret: enrolment.secret };
 }
 
 /**

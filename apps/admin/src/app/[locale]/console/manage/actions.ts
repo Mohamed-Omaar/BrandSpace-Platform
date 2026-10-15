@@ -57,7 +57,9 @@ function target(formData: FormData): Target {
 }
 
 function reason(formData: FormData, base: string): string {
-  const note = String(formData.get('note') ?? '').trim().slice(0, 300);
+  const note = String(formData.get('note') ?? '')
+    .trim()
+    .slice(0, 300);
   return note ? `${base} — ${note}` : base;
 }
 
@@ -72,7 +74,7 @@ async function run(kind: Kind, formData: FormData): Promise<void> {
     if (formData.get('confirm') !== 'yes') throw new AppError('VALIDATION_FAILED', 'NOT_CONFIRMED');
 
     const { area, collection, locale } = where;
-    const docs = await loadDocs(collection.domains);
+    const docs = await loadDocs([...collection.domains, ...(collection.reads ?? [])]);
     const ctx = await areaContext(locale, docs);
     const context = await getConfigService().getContext(currentEnvironment());
     const areaTitle = ctx.t(area.title);
@@ -80,18 +82,39 @@ async function run(kind: Kind, formData: FormData): Promise<void> {
     if (kind === 'save') {
       const rawMode = String(formData.get('mode') ?? 'edit');
       const mode: EditMode = rawMode === 'new' || rawMode === 'duplicate' ? rawMode : 'edit';
-      const edit = prepareEdit({ collection, docs, ctx, context, mode, itemKey: where.itemKey, source: formSource(formData) });
+      const edit = prepareEdit({
+        collection,
+        docs,
+        ctx,
+        context,
+        mode,
+        itemKey: where.itemKey,
+        source: formSource(formData),
+      });
       if ('missing' in edit) throw new AppError('CONFLICT', 'STALE');
-      if (Object.keys(edit.fieldErrors).length > 0 || edit.problems.length > 0) throw new AppError('CONFLICT', 'STALE');
+      if (Object.keys(edit.fieldErrors).length > 0 || edit.problems.length > 0)
+        throw new AppError('CONFLICT', 'STALE');
       if (edit.unchanged) throw new AppError('CONFLICT', 'UNCHANGED');
-      const title = collection.items(edit.after, ctx).find((item) => item.key === edit.targetKey)?.title ?? edit.targetKey;
-      await writeDocs({ actor, before: docs, after: edit.after, reason: reason(formData, ctx.t('ui.reason', { area: areaTitle, item: title })) });
+      const title =
+        collection.items(edit.after, ctx).find((item) => item.key === edit.targetKey)?.title ??
+        edit.targetKey;
+      await writeDocs({
+        actor,
+        before: docs,
+        after: edit.after,
+        reason: reason(formData, ctx.t('ui.reason', { area: areaTitle, item: title })),
+      });
       destination = `${back}?ok=SAVED&c=${encodeURIComponent(collection.id)}&item=${encodeURIComponent(edit.targetKey)}`;
     } else if (kind === 'archive') {
       if (!where.itemKey) throw new AppError('CONFLICT', 'STALE');
       const archive = prepareArchive({ collection, docs, ctx, context, itemKey: where.itemKey });
       if (!archive || archive.problems.length > 0) throw new AppError('CONFLICT', 'STALE');
-      await writeDocs({ actor, before: docs, after: archive.after, reason: reason(formData, ctx.t('ui.reason', { area: areaTitle, item: archive.item.title })) });
+      await writeDocs({
+        actor,
+        before: docs,
+        after: archive.after,
+        reason: reason(formData, ctx.t('ui.reason', { area: areaTitle, item: archive.item.title })),
+      });
       destination = `${back}?ok=ARCHIVED&c=${encodeURIComponent(collection.id)}`;
     } else {
       if (!where.itemKey) throw new AppError('CONFLICT', 'STALE');
@@ -110,18 +133,32 @@ async function run(kind: Kind, formData: FormData): Promise<void> {
         write: (doc) => undo.slice.write(doc, undo.value),
       });
       if (!restore || restore.problems.length > 0) throw new AppError('CONFLICT', 'STALE');
-      await writeDocs({ actor, before: docs, after: restore.after, reason: reason(formData, ctx.t('ui.reasonUndo', { area: areaTitle, item: restore.item.title })) });
+      await writeDocs({
+        actor,
+        before: docs,
+        after: restore.after,
+        reason: reason(
+          formData,
+          ctx.t('ui.reasonUndo', { area: areaTitle, item: restore.item.title }),
+        ),
+      });
       destination = `${back}?ok=UNDONE&c=${encodeURIComponent(collection.id)}&item=${encodeURIComponent(where.itemKey)}`;
     }
   } catch (error: unknown) {
     const code =
       refusalCode(error) ??
-      (error instanceof AppError && (error.message === 'STALE' || error.message === 'NOT_CONFIRMED') ? error.message : null);
+      (error instanceof AppError && (error.message === 'STALE' || error.message === 'NOT_CONFIRMED')
+        ? error.message
+        : null);
     if (code) {
       destination = `${back}?error=${code}`;
     } else {
       const correlationId = randomUUID();
-      log.error('simple area change failed', { correlationId, kind, ...internalErrorFields(error) });
+      log.error('simple area change failed', {
+        correlationId,
+        kind,
+        ...internalErrorFields(error),
+      });
       destination = `${back}?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
     }
   }

@@ -27,9 +27,36 @@ export function trialPlanOf(docs: Docs): Plan | null {
 }
 
 const trialFields: readonly FieldSpec[] = [
-  { id: 'trialDays', kind: 'number', label: 'trial.f.days', help: 'trial.h.days', impact: 'plans.i.trial', unit: 'u.days', min: 0, max: 365 },
-  { id: 'trialCredits', kind: 'number', label: 'plans.f.trialCredits', help: 'plans.h.trialCredits', impact: 'plans.i.trialCredits', unit: 'u.credits', min: 0, max: 1_000_000 },
-  { id: 'monthlyCredits', kind: 'number', label: 'plans.f.monthlyCredits', help: 'plans.h.monthlyCredits', impact: 'plans.i.monthlyCredits', unit: 'u.credits', min: 0, max: 1_000_000 },
+  {
+    id: 'trialDays',
+    kind: 'number',
+    label: 'trial.f.days',
+    help: 'trial.h.days',
+    impact: 'plans.i.trial',
+    unit: 'u.days',
+    min: 0,
+    max: 365,
+  },
+  {
+    id: 'trialCredits',
+    kind: 'number',
+    label: 'plans.f.trialCredits',
+    help: 'plans.h.trialCredits',
+    impact: 'plans.i.trialCredits',
+    unit: 'u.credits',
+    min: 0,
+    max: 1_000_000,
+  },
+  {
+    id: 'monthlyCredits',
+    kind: 'number',
+    label: 'plans.f.monthlyCredits',
+    help: 'plans.h.monthlyCredits',
+    impact: 'plans.i.monthlyCredits',
+    unit: 'u.credits',
+    min: 0,
+    max: 1_000_000,
+  },
 ];
 
 const newWorkspace: CollectionSpec = {
@@ -38,7 +65,8 @@ const newWorkspace: CollectionSpec = {
   intro: 'trial.c.intro',
   domains: ['plans'],
   fields: () => trialFields,
-  keyOf: () => 'trial',
+  // The card is the trial plan itself, so its key is the plan's.
+  keyOf: (_values, _mode, itemKey) => itemKey ?? '',
   items: (docs, ctx): readonly ItemView[] => {
     const plan = trialPlanOf(docs);
     if (!plan) return [];
@@ -48,14 +76,28 @@ const newWorkspace: CollectionSpec = {
       {
         key: str(plan['key']),
         title: ctx.t('trial.c.cardTitle'),
-        subtitle: ctx.t('trial.c.plan', { plan: str(ctx.locale === 'ar' ? name['ar'] : name['en']) || str(plan['key']) }),
-        status: days > 0 ? { label: ctx.t('w.on'), tone: 'success' } : { label: ctx.t('trial.c.noTrial'), tone: 'neutral' },
+        subtitle: ctx.t('trial.c.plan', {
+          plan: str(ctx.locale === 'ar' ? name['ar'] : name['en']) || str(plan['key']),
+        }),
+        status:
+          days > 0
+            ? { label: ctx.t('w.on'), tone: 'success' }
+            : { label: ctx.t('trial.c.noTrial'), tone: 'neutral' },
         facts: [
           { label: ctx.t('trial.f.days'), value: `${days} ${ctx.t('u.days')}` },
           { label: ctx.t('plans.f.trialCredits'), value: String(num(plan['trialCredits']) ?? 0) },
-          { label: ctx.t('plans.f.monthlyCredits'), value: String(num(plan['monthlyCredits']) ?? 0) },
-          { label: ctx.t('plans.f.q.brands'), value: String(rec(plan['quotas'])['brands'] ?? ctx.t('w.noLimit')) },
-          { label: ctx.t('plans.f.q.workspaces'), value: String(rec(plan['quotas'])['workspaces'] ?? ctx.t('w.noLimit')) },
+          {
+            label: ctx.t('plans.f.monthlyCredits'),
+            value: String(num(plan['monthlyCredits']) ?? 0),
+          },
+          {
+            label: ctx.t('plans.f.q.brands'),
+            value: String(rec(plan['quotas'])['brands'] ?? ctx.t('w.noLimit')),
+          },
+          {
+            label: ctx.t('plans.f.q.workspaces'),
+            value: String(rec(plan['quotas'])['workspaces'] ?? ctx.t('w.noLimit')),
+          },
         ],
         values: {
           trialDays: days,
@@ -75,44 +117,112 @@ const newWorkspace: CollectionSpec = {
         plans: upsertBy(
           plans,
           'key',
-          { ...plan, trialDays: values['trialDays'], trialCredits: values['trialCredits'], monthlyCredits: values['monthlyCredits'] },
+          {
+            ...plan,
+            trialDays: values['trialDays'],
+            trialCredits: values['trialCredits'],
+            monthlyCredits: values['monthlyCredits'],
+          },
           itemKey,
         ),
       },
     };
   },
   impact: (before, after, ctx, itemKey) => {
-    const find = (docs: Docs) => arrayOf(docs.plans?.['plans']).map(rec).find((plan) => str(plan['key']) === itemKey) ?? {};
+    const find = (docs: Docs) =>
+      arrayOf(docs.plans?.['plans'])
+        .map(rec)
+        .find((plan) => str(plan['key']) === itemKey) ?? {};
     const was = find(before);
     const now = find(after);
     const out: string[] = [];
-    if (num(was['trialDays']) !== num(now['trialDays']) || num(was['trialCredits']) !== num(now['trialCredits'])) out.push(ctx.t('plans.p.trial'));
-    if (num(was['monthlyCredits']) !== num(now['monthlyCredits'])) out.push(ctx.t('plans.p.monthlyCredits'));
+    if (
+      num(was['trialDays']) !== num(now['trialDays']) ||
+      num(was['trialCredits']) !== num(now['trialCredits'])
+    )
+      out.push(ctx.t('plans.p.trial'));
+    if (num(was['monthlyCredits']) !== num(now['monthlyCredits']))
+      out.push(ctx.t('plans.p.monthlyCredits'));
     return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
   },
   slices: (itemKey) => [
     {
       domain: 'plans',
       read: (doc) => {
-        const plan = arrayOf(doc['plans']).map(rec).find((candidate) => str(candidate['key']) === itemKey);
-        return plan ? { trialDays: plan['trialDays'], trialCredits: plan['trialCredits'], monthlyCredits: plan['monthlyCredits'] } : undefined;
+        const plan = arrayOf(doc['plans'])
+          .map(rec)
+          .find((candidate) => str(candidate['key']) === itemKey);
+        return plan
+          ? {
+              trialDays: plan['trialDays'],
+              trialCredits: plan['trialCredits'],
+              monthlyCredits: plan['monthlyCredits'],
+            }
+          : undefined;
       },
       write: (doc, value) => ({
         ...doc,
         plans: arrayOf(doc['plans'])
           .map(rec)
-          .map((plan) => (str(plan['key']) === itemKey && value ? { ...plan, ...rec(value) } : plan)),
+          .map((plan) =>
+            str(plan['key']) === itemKey && value ? { ...plan, ...rec(value) } : plan,
+          ),
       }),
     },
   ],
 };
 
 const creditFields: readonly FieldSpec[] = [
-  { id: 'planGrantExpiryMonths', kind: 'number', label: 'trial.f.planExpiry', help: 'trial.h.expiry', impact: 'trial.i.expiry', unit: 'u.months', min: 0, max: 120 },
-  { id: 'promotionalExpiryMonths', kind: 'number', label: 'trial.f.promoExpiry', help: 'trial.h.expiry', impact: 'trial.i.expiry', unit: 'u.months', min: 0, max: 120 },
-  { id: 'purchasedPackExpiryMonths', kind: 'number', label: 'trial.f.packExpiry', help: 'trial.h.expiry', impact: 'trial.i.expiry', unit: 'u.months', min: 0, max: 120 },
-  { id: 'warnFirst', kind: 'number', label: 'trial.f.warnFirst', help: 'trial.h.warn', impact: 'trial.i.warn', unit: 'u.percent', min: 0, max: 100 },
-  { id: 'warnSecond', kind: 'number', label: 'trial.f.warnSecond', help: 'trial.h.warn', impact: 'trial.i.warn', unit: 'u.percent', min: 0, max: 100 },
+  {
+    id: 'planGrantExpiryMonths',
+    kind: 'number',
+    label: 'trial.f.planExpiry',
+    help: 'trial.h.expiry',
+    impact: 'trial.i.expiry',
+    unit: 'u.months',
+    min: 0,
+    max: 120,
+  },
+  {
+    id: 'promotionalExpiryMonths',
+    kind: 'number',
+    label: 'trial.f.promoExpiry',
+    help: 'trial.h.expiry',
+    impact: 'trial.i.expiry',
+    unit: 'u.months',
+    min: 0,
+    max: 120,
+  },
+  {
+    id: 'purchasedPackExpiryMonths',
+    kind: 'number',
+    label: 'trial.f.packExpiry',
+    help: 'trial.h.expiry',
+    impact: 'trial.i.expiry',
+    unit: 'u.months',
+    min: 0,
+    max: 120,
+  },
+  {
+    id: 'warnFirst',
+    kind: 'number',
+    label: 'trial.f.warnFirst',
+    help: 'trial.h.warn',
+    impact: 'trial.i.warn',
+    unit: 'u.percent',
+    min: 0,
+    max: 100,
+  },
+  {
+    id: 'warnSecond',
+    kind: 'number',
+    label: 'trial.f.warnSecond',
+    help: 'trial.h.warn',
+    impact: 'trial.i.warn',
+    unit: 'u.percent',
+    min: 0,
+    max: 100,
+  },
 ];
 
 const months = (value: unknown, never: string, unit: string) =>
@@ -127,16 +237,39 @@ const credits: CollectionSpec = {
   keyOf: () => 'credits',
   items: (docs, ctx): readonly ItemView[] => {
     const doc = docs.credits ?? {};
-    const warn = arrayOf(doc['lowBalanceThresholdPercents']).map((value) => num(value) ?? 0).sort((a, b) => b - a);
+    const warn = arrayOf(doc['lowBalanceThresholdPercents'])
+      .map((value) => num(value) ?? 0)
+      .sort((a, b) => b - a);
     return [
       {
         key: 'credits',
         title: ctx.t('trial.k.cardTitle'),
         facts: [
-          { label: ctx.t('trial.f.planExpiry'), value: months(doc['planGrantExpiryMonths'], ctx.t('trial.c.never'), ctx.t('u.months')) },
-          { label: ctx.t('trial.f.promoExpiry'), value: months(doc['promotionalExpiryMonths'], ctx.t('trial.c.never'), ctx.t('u.months')) },
-          { label: ctx.t('trial.f.packExpiry'), value: months(doc['purchasedPackExpiryMonths'], ctx.t('trial.c.never'), ctx.t('u.months')) },
-          { label: ctx.t('trial.c.warnings'), value: warn.length === 0 ? ctx.t('w.none') : warn.map((value) => `${value}%`).join(' · ') },
+          {
+            label: ctx.t('trial.f.planExpiry'),
+            value: months(doc['planGrantExpiryMonths'], ctx.t('trial.c.never'), ctx.t('u.months')),
+          },
+          {
+            label: ctx.t('trial.f.promoExpiry'),
+            value: months(
+              doc['promotionalExpiryMonths'],
+              ctx.t('trial.c.never'),
+              ctx.t('u.months'),
+            ),
+          },
+          {
+            label: ctx.t('trial.f.packExpiry'),
+            value: months(
+              doc['purchasedPackExpiryMonths'],
+              ctx.t('trial.c.never'),
+              ctx.t('u.months'),
+            ),
+          },
+          {
+            label: ctx.t('trial.c.warnings'),
+            value:
+              warn.length === 0 ? ctx.t('w.none') : warn.map((value) => `${value}%`).join(' · '),
+          },
         ],
         values: {
           planGrantExpiryMonths: num(doc['planGrantExpiryMonths']) ?? 0,
@@ -163,8 +296,17 @@ const credits: CollectionSpec = {
     const was = before.credits ?? {};
     const now = after.credits ?? {};
     const out: string[] = [];
-    if (['planGrantExpiryMonths', 'promotionalExpiryMonths', 'purchasedPackExpiryMonths'].some((key) => num(was[key]) !== num(now[key]))) out.push(ctx.t('trial.i.expiry'));
-    if (JSON.stringify(was['lowBalanceThresholdPercents']) !== JSON.stringify(now['lowBalanceThresholdPercents'])) out.push(ctx.t('trial.i.warn'));
+    if (
+      ['planGrantExpiryMonths', 'promotionalExpiryMonths', 'purchasedPackExpiryMonths'].some(
+        (key) => num(was[key]) !== num(now[key]),
+      )
+    )
+      out.push(ctx.t('trial.i.expiry'));
+    if (
+      JSON.stringify(was['lowBalanceThresholdPercents']) !==
+      JSON.stringify(now['lowBalanceThresholdPercents'])
+    )
+      out.push(ctx.t('trial.i.warn'));
     return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
   },
   slices: () => [
@@ -188,9 +330,21 @@ export const trialArea: AreaSpec = {
   href: (locale) => `/${locale}/console/manage/trial`,
   collections: [newWorkspace, credits],
   developer: [
-    { label: 'trial.d.hardStop', value: (docs, ctx) => ctx.t(docs.credits?.['hardStopAtZero'] === false ? 'w.no' : 'w.yes') },
-    { label: 'trial.d.order', value: (docs, ctx) => (str(docs.credits?.['consumptionOrder']) === 'fifo_by_expiry' ? ctx.t('trial.d.orderValue') : str(docs.credits?.['consumptionOrder'])) },
-    { label: 'trial.d.reservation', value: (docs) => `${num(docs.credits?.['reservationTimeoutSeconds']) ?? '—'} s` },
+    {
+      label: 'trial.d.hardStop',
+      value: (docs, ctx) => ctx.t(docs.credits?.['hardStopAtZero'] === false ? 'w.no' : 'w.yes'),
+    },
+    {
+      label: 'trial.d.order',
+      value: (docs, ctx) =>
+        str(docs.credits?.['consumptionOrder']) === 'fifo_by_expiry'
+          ? ctx.t('trial.d.orderValue')
+          : str(docs.credits?.['consumptionOrder']),
+    },
+    {
+      label: 'trial.d.reservation',
+      value: (docs) => `${num(docs.credits?.['reservationTimeoutSeconds']) ?? '—'} s`,
+    },
     { label: 'trial.d.whichPlan', value: (docs) => str(trialPlanOf(docs)?.['key']) || '—' },
   ],
 };

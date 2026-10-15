@@ -39,7 +39,8 @@ export function formSource(form: FormData): Source {
       const value = form.get(name);
       return typeof value === 'string' ? value : null;
     },
-    getAll: (name) => form.getAll(name).filter((value): value is string => typeof value === 'string'),
+    getAll: (name) =>
+      form.getAll(name).filter((value): value is string => typeof value === 'string'),
   };
 }
 
@@ -56,7 +57,11 @@ export function parseFields(
 ): { readonly values: FieldValues; readonly errors: Readonly<Record<string, string>> } {
   const values: Record<string, FieldValue> = {};
   const errors: Record<string, string> = {};
-  const refuse = (field: FieldSpec, key: AreaCopyKey, extra: Record<string, string | number> = {}) => {
+  const refuse = (
+    field: FieldSpec,
+    key: AreaCopyKey,
+    extra: Record<string, string | number> = {},
+  ) => {
     errors[field.id] = ctx.t(key, { field: labelOf(ctx, field.label), ...extra });
   };
 
@@ -71,11 +76,15 @@ export function parseFields(
         const chosen = [...new Set(source.getAll(fieldName(field.id)))];
         if (chosen.some((value) => !allowed.has(value))) refuse(field, 'v.choice');
         else if (field.required && chosen.length === 0) refuse(field, 'v.pickOne');
-        else values[field.id] = (field.options ?? []).map((o) => o.value).filter((v) => chosen.includes(v));
+        else
+          values[field.id] = (field.options ?? [])
+            .map((o) => o.value)
+            .filter((v) => chosen.includes(v));
         break;
       }
       case 'choice': {
-        if (!(field.options ?? []).some((option) => option.value === raw)) refuse(field, 'v.choice');
+        if (!(field.options ?? []).some((option) => option.value === raw))
+          refuse(field, 'v.choice');
         else values[field.id] = raw;
         break;
       }
@@ -93,8 +102,7 @@ export function parseFields(
           .split(/[,،\s]+/)
           .map((part) => part.trim())
           .filter(Boolean);
-        if (parts.length === 0 || parts.some((part) => !TIME.test(part)))
-          refuse(field, 'v.times');
+        if (parts.length === 0 || parts.some((part) => !TIME.test(part))) refuse(field, 'v.times');
         else if (field.max !== undefined && parts.length > field.max)
           refuse(field, 'v.tooMany', { max: field.max });
         else values[field.id] = [...new Set(parts)].sort();
@@ -141,7 +149,10 @@ export function parseFields(
 }
 
 /** A value as the editor's input shows it again (the preview's "Change" goes back with these). */
-export function toQuery(fields: readonly FieldSpec[], values: FieldValues): Record<string, string | string[]> {
+export function toQuery(
+  fields: readonly FieldSpec[],
+  values: FieldValues,
+): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
   for (const field of fields) {
     const value = values[field.id];
@@ -152,7 +163,8 @@ export function toQuery(fields: readonly FieldSpec[], values: FieldValues): Reco
         break;
       case 'multi':
       case 'times':
-        if (field.kind === 'times') out[fieldName(field.id)] = (value as readonly string[]).join(', ');
+        if (field.kind === 'times')
+          out[fieldName(field.id)] = (value as readonly string[]).join(', ');
         else out[fieldName(field.id)] = [...(value as readonly string[])];
         break;
       case 'number':
@@ -172,7 +184,11 @@ export function toQuery(fields: readonly FieldSpec[], values: FieldValues): Reco
 }
 
 /** A value as a person reads it in a card or a preview sentence. */
-export function displayValue(field: FieldSpec, value: FieldValue | undefined, ctx: AreaContext): string {
+export function displayValue(
+  field: FieldSpec,
+  value: FieldValue | undefined,
+  ctx: AreaContext,
+): string {
   if (value === undefined) return '—';
   switch (field.kind) {
     case 'switch':
@@ -185,16 +201,16 @@ export function displayValue(field: FieldSpec, value: FieldValue | undefined, ct
     case 'multi':
       return (value as readonly string[]).length === 0
         ? ctx.t('w.none')
-        : (value as readonly string[]).map((v) => optionLabel(field, v, ctx)).join(ctx.locale === 'ar' ? '، ' : ', ');
+        : (value as readonly string[])
+            .map((v) => optionLabel(field, v, ctx))
+            .join(ctx.locale === 'ar' ? '، ' : ', ');
     case 'times':
       return (value as readonly string[]).join(ctx.locale === 'ar' ? '، ' : ', ');
     case 'money': {
       const entries = Object.entries((value as MoneyValue).minor);
       return entries.length === 0
         ? '—'
-        : entries
-            .map(([currency, minor]) => formatMinor(minor, currency, ctx.locale))
-            .join(' · ');
+        : entries.map(([currency, minor]) => formatMinor(minor, currency, ctx.locale)).join(' · ');
     }
     default:
       return String(value) === '' ? '—' : String(value);

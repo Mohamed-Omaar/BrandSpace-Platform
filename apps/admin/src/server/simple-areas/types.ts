@@ -69,7 +69,10 @@ export interface FieldSpec {
 
 /** A parsed value. Money is minor units per currency. */
 export type FieldValue = string | number | boolean | null | readonly string[] | MoneyValue;
-export type MoneyValue = { readonly kind: 'money'; readonly minor: Readonly<Record<string, number>> };
+export type MoneyValue = {
+  readonly kind: 'money';
+  readonly minor: Readonly<Record<string, number>>;
+};
 
 export type FieldValues = Readonly<Record<string, FieldValue>>;
 
@@ -116,7 +119,10 @@ export interface CollectionSpec {
   readonly id: string;
   readonly title: AreaCopyKey;
   readonly intro?: AreaCopyKey;
+  /** The documents this collection WRITES — an open draft of one blocks a change (D-312). */
   readonly domains: readonly ConfigDomain[];
+  /** Documents it only reads (a question-set list, the apps' set-up state). */
+  readonly reads?: readonly ConfigDomain[];
   readonly fields: (
     docs: Docs,
     ctx: AreaContext,
@@ -128,7 +134,11 @@ export interface CollectionSpec {
   readonly apply: (
     docs: Docs,
     ctx: AreaContext,
-    edit: { readonly mode: EditMode; readonly itemKey: string | null; readonly values: FieldValues },
+    edit: {
+      readonly mode: EditMode;
+      readonly itemKey: string | null;
+      readonly values: FieldValues;
+    },
   ) => Docs;
   /** Archive (plans: retire) or remove (industries, posting times, hide a channel). */
   readonly archive?: (docs: Docs, ctx: AreaContext, itemKey: string) => Docs;
@@ -147,7 +157,12 @@ export interface CollectionSpec {
     edit: { readonly mode: EditMode | 'archive'; readonly itemKey: string },
   ) => readonly string[];
   /** What customers will notice, in plain sentences, for this change. */
-  readonly impact?: (before: Docs, after: Docs, ctx: AreaContext, itemKey: string) => readonly string[];
+  readonly impact?: (
+    before: Docs,
+    after: Docs,
+    ctx: AreaContext,
+    itemKey: string,
+  ) => readonly string[];
   /** The configuration the item owns, per domain, for "Undo last change". */
   readonly slices: (itemKey: string) => readonly ItemSlice[];
   /** The new item's key, from the edited values. */

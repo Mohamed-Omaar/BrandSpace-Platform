@@ -104,7 +104,14 @@ export const SIMPLE_SECTIONS: readonly ConsoleNavSection[] = [
         'platform.workspace.read',
         'building',
       ),
-      simple('/manage', 'nav.manage', 'page.manage', 'platform.configuration.read', 'sliders', true),
+      simple(
+        '/manage',
+        'nav.manage',
+        'page.manage',
+        'platform.configuration.read',
+        'sliders',
+        true,
+      ),
     ],
   },
   {
@@ -118,10 +125,34 @@ export const SIMPLE_SECTIONS: readonly ConsoleNavSection[] = [
   {
     title: { ar: 'ما يستخدمه العملاء', en: 'What customers use' },
     items: [
-      simple('/manage/channels', 'nav.channels', 'page.channels', 'platform.configuration.read', 'route'),
-      simple('/manage/publishing', 'nav.publishing', 'page.publishing', 'platform.configuration.read', 'plug'),
-      simple('/manage/content', 'nav.content', 'page.content', 'platform.configuration.read', 'list'),
-      simple('/manage/uploads', 'nav.uploads', 'page.uploads', 'platform.configuration.read', 'layers'),
+      simple(
+        '/manage/channels',
+        'nav.channels',
+        'page.channels',
+        'platform.configuration.read',
+        'route',
+      ),
+      simple(
+        '/manage/publishing',
+        'nav.publishing',
+        'page.publishing',
+        'platform.configuration.read',
+        'plug',
+      ),
+      simple(
+        '/manage/content',
+        'nav.content',
+        'page.content',
+        'platform.configuration.read',
+        'list',
+      ),
+      simple(
+        '/manage/uploads',
+        'nav.uploads',
+        'page.uploads',
+        'platform.configuration.read',
+        'layers',
+      ),
       simple('/ai', 'nav.ai', 'page.ai', 'platform.configuration.read', 'spark'),
       simple(
         '/ai/connect',
@@ -144,7 +175,13 @@ export const SIMPLE_SECTIONS: readonly ConsoleNavSection[] = [
   {
     title: { ar: 'التسجيل والبريد والقواعد', en: 'Sign-up, email and rules' },
     items: [
-      simple('/manage/signups', 'nav.signups', 'page.signups', 'platform.configuration.read', 'key'),
+      simple(
+        '/manage/signups',
+        'nav.signups',
+        'page.signups',
+        'platform.configuration.read',
+        'key',
+      ),
       simple('/manage/email', 'nav.email', 'page.email', 'platform.configuration.read', 'lifebuoy'),
       simple('/manage/legal', 'nav.legal', 'page.legal', 'platform.configuration.read', 'list'),
       simple(

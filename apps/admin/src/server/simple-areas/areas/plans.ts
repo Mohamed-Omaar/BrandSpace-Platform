@@ -1,4 +1,9 @@
-import { featureAccess, withPlanGrants, type FlagShape, type GrantShape } from '../../feature-access';
+import {
+  featureAccess,
+  withPlanGrants,
+  type FlagShape,
+  type GrantShape,
+} from '../../feature-access';
 import type {
   AreaContext,
   AreaSpec,
@@ -140,10 +145,42 @@ function fields(docs: Docs, ctx: AreaContext, mode: string): readonly FieldSpec[
       pattern: /^[a-z][a-z0-9-]{1,39}$/,
       patternMessage: 'v.key',
     },
-    { id: 'nameEn', kind: 'text', label: 'plans.f.nameEn', help: 'plans.h.name', required: true, maxLength: 60, dir: 'ltr', impact: 'plans.i.name' },
-    { id: 'nameAr', kind: 'text', label: 'plans.f.nameAr', help: 'plans.h.name', required: true, maxLength: 60, dir: 'rtl', impact: 'plans.i.name' },
-    { id: 'descriptionEn', kind: 'text', label: 'plans.f.descriptionEn', help: 'plans.h.description', maxLength: 200, dir: 'ltr' },
-    { id: 'descriptionAr', kind: 'text', label: 'plans.f.descriptionAr', help: 'plans.h.description', maxLength: 200, dir: 'rtl' },
+    {
+      id: 'nameEn',
+      kind: 'text',
+      label: 'plans.f.nameEn',
+      help: 'plans.h.name',
+      required: true,
+      maxLength: 60,
+      dir: 'ltr',
+      impact: 'plans.i.name',
+    },
+    {
+      id: 'nameAr',
+      kind: 'text',
+      label: 'plans.f.nameAr',
+      help: 'plans.h.name',
+      required: true,
+      maxLength: 60,
+      dir: 'rtl',
+      impact: 'plans.i.name',
+    },
+    {
+      id: 'descriptionEn',
+      kind: 'text',
+      label: 'plans.f.descriptionEn',
+      help: 'plans.h.description',
+      maxLength: 200,
+      dir: 'ltr',
+    },
+    {
+      id: 'descriptionAr',
+      kind: 'text',
+      label: 'plans.f.descriptionAr',
+      help: 'plans.h.description',
+      maxLength: 200,
+      dir: 'rtl',
+    },
     {
       id: 'availability',
       kind: 'choice',
@@ -158,26 +195,73 @@ function fields(docs: Docs, ctx: AreaContext, mode: string): readonly FieldSpec[
       ],
     },
     ...priceFields(ctx),
-    { id: 'trialOn', kind: 'switch', label: 'plans.f.trialOn', help: 'plans.h.trialOn', impact: 'plans.i.trial' },
-    { id: 'trialDays', kind: 'number', label: 'plans.f.trialDays', help: 'plans.h.trialDays', impact: 'plans.i.trial', unit: 'u.days', min: 0, max: 365 },
-    { id: 'trialCredits', kind: 'number', label: 'plans.f.trialCredits', help: 'plans.h.trialCredits', impact: 'plans.i.trialCredits', unit: 'u.credits', min: 0, max: 1_000_000 },
-    { id: 'monthlyCredits', kind: 'number', label: 'plans.f.monthlyCredits', help: 'plans.h.monthlyCredits', impact: 'plans.i.monthlyCredits', unit: 'u.credits', min: 0, max: 1_000_000 },
-    ...PLAN_QUOTAS.map(
-      (quota): FieldSpec => ({
-        id: `q.${quota}`,
-        kind: 'number',
-        label: `plans.f.q.${quota}`,
-        help: `plans.h.q.${quota}`,
-        impact: 'plans.i.limit',
-        unit: quotaUnit[quota],
-        min: 1,
-        max: 1_000_000,
-        unlimited: true,
-      }),
-    ),
+    {
+      id: 'trialOn',
+      kind: 'switch',
+      label: 'plans.f.trialOn',
+      help: 'plans.h.trialOn',
+      impact: 'plans.i.trial',
+    },
+    {
+      id: 'trialDays',
+      kind: 'number',
+      label: 'plans.f.trialDays',
+      help: 'plans.h.trialDays',
+      impact: 'plans.i.trial',
+      unit: 'u.days',
+      min: 0,
+      max: 365,
+    },
+    {
+      id: 'trialCredits',
+      kind: 'number',
+      label: 'plans.f.trialCredits',
+      help: 'plans.h.trialCredits',
+      impact: 'plans.i.trialCredits',
+      unit: 'u.credits',
+      min: 0,
+      max: 1_000_000,
+    },
+    {
+      id: 'monthlyCredits',
+      kind: 'number',
+      label: 'plans.f.monthlyCredits',
+      help: 'plans.h.monthlyCredits',
+      impact: 'plans.i.monthlyCredits',
+      unit: 'u.credits',
+      min: 0,
+      max: 1_000_000,
+    },
+    ...PLAN_QUOTAS.map((quota): FieldSpec => ({
+      id: `q.${quota}`,
+      kind: 'number',
+      label: `plans.f.q.${quota}`,
+      help: `plans.h.q.${quota}`,
+      impact: 'plans.i.limit',
+      unit: quotaUnit[quota],
+      min: 1,
+      max: 1_000_000,
+      unlimited: true,
+    })),
     ...PLAN_AI_CAP_FIELDS.flatMap((cap): FieldSpec[] => [
-      { id: `aiOn.${cap}`, kind: 'switch', label: `plans.f.aiOn.${cap}`, help: 'plans.h.aiOn', impact: 'plans.i.ai' },
-      { id: `ai.${cap}`, kind: 'number', label: `plans.f.ai.${cap}`, help: 'plans.h.ai', impact: 'plans.i.ai', unit: 'u.actions', min: 1, max: 1_000, unlimited: true },
+      {
+        id: `aiOn.${cap}`,
+        kind: 'switch',
+        label: `plans.f.aiOn.${cap}`,
+        help: 'plans.h.aiOn',
+        impact: 'plans.i.ai',
+      },
+      {
+        id: `ai.${cap}`,
+        kind: 'number',
+        label: `plans.f.ai.${cap}`,
+        help: 'plans.h.ai',
+        impact: 'plans.i.ai',
+        unit: 'u.actions',
+        min: 1,
+        max: 1_000,
+        unlimited: true,
+      },
     ]),
     ...(features.length > 0
       ? [
@@ -187,14 +271,21 @@ function fields(docs: Docs, ctx: AreaContext, mode: string): readonly FieldSpec[
             label: 'plans.f.features',
             help: 'plans.h.features',
             impact: 'plans.i.features',
-            options: features.map((feature) => ({ value: feature.key, label: { literal: feature.name } })),
+            options: features.map((feature) => ({
+              value: feature.key,
+              label: { literal: feature.name },
+            })),
           } satisfies FieldSpec,
         ]
       : []),
   ];
 }
 
-function moneyOf(plan: Plan, field: 'monthlyMinor' | 'annualMinor', currencies: readonly string[]): MoneyValue {
+function moneyOf(
+  plan: Plan,
+  field: 'monthlyMinor' | 'annualMinor',
+  currencies: readonly string[],
+): MoneyValue {
   const prices = arrayOf(plan['prices']).map(rec);
   return {
     kind: 'money',
@@ -231,7 +322,14 @@ function valuesOf(plan: Plan, docs: Docs, ctx: AreaContext): FieldValues {
         const value = quotas[cap] === undefined || quotas[cap] === null ? null : rec(quotas[cap]);
         return [
           [`aiOn.${cap}`, value !== null],
-          [`ai.${cap}`, value === null ? 100 : str(value['kind']) === 'unlimited' ? null : (num(value['value']) ?? 100)],
+          [
+            `ai.${cap}`,
+            value === null
+              ? 100
+              : str(value['kind']) === 'unlimited'
+                ? null
+                : (num(value['value']) ?? 100),
+          ],
         ];
       }),
     ),
@@ -252,7 +350,11 @@ function facts(plan: Plan, docs: Docs, ctx: AreaContext) {
       label: ctx.t('plans.c.price'),
       value: firstPrice
         ? ctx.t('plans.c.perMonth', {
-            amount: formatMinor(num(firstPrice['monthlyMinor']) ?? 0, str(firstPrice['currency']), ctx.locale),
+            amount: formatMinor(
+              num(firstPrice['monthlyMinor']) ?? 0,
+              str(firstPrice['currency']),
+              ctx.locale,
+            ),
           })
         : ctx.t('plans.c.noPrice'),
     },
@@ -260,7 +362,10 @@ function facts(plan: Plan, docs: Docs, ctx: AreaContext) {
       label: ctx.t('plans.c.trial'),
       value:
         (num(plan['trialDays']) ?? 0) > 0
-          ? ctx.t('plans.c.trialDays', { days: num(plan['trialDays']) ?? 0, credits: num(plan['trialCredits']) ?? 0 })
+          ? ctx.t('plans.c.trialDays', {
+              days: num(plan['trialDays']) ?? 0,
+              credits: num(plan['trialCredits']) ?? 0,
+            })
           : ctx.t('plans.c.noTrial'),
     },
     { label: ctx.t('plans.c.monthlyCredits'), value: String(num(plan['monthlyCredits']) ?? 0) },
@@ -308,14 +413,22 @@ export function planPreview(docs: Docs, key: string, ctx: AreaContext): PlanPrev
     price: value(ctx.t('plans.c.price')),
     trial: value(ctx.t('plans.c.trial')),
     credits: value(ctx.t('plans.c.monthlyCredits')),
-    limits: PLAN_QUOTAS.map((quota) => ({ label: ctx.t(`plans.f.q.${quota}`), value: value(ctx.t(`plans.f.q.${quota}`)) })),
+    limits: PLAN_QUOTAS.map((quota) => ({
+      label: ctx.t(`plans.f.q.${quota}`),
+      value: value(ctx.t(`plans.f.q.${quota}`)),
+    })),
     features: booleanFeatures(docs, ctx.locale)
       .filter((feature) => feature.plans?.includes(key) ?? feature.defaultValue === true)
       .map((feature) => feature.name),
   };
 }
 
-const STATUS_TONE = { public: 'success', private: 'info', draft: 'neutral', archived: 'neutral' } as const;
+const STATUS_TONE = {
+  public: 'success',
+  private: 'info',
+  draft: 'neutral',
+  archived: 'neutral',
+} as const;
 
 function items(docs: Docs, ctx: AreaContext): readonly ItemView[] {
   return plans(docs).map((plan) => {
@@ -323,13 +436,16 @@ function items(docs: Docs, ctx: AreaContext): readonly ItemView[] {
     const availability = availabilityOf(plan);
     return {
       key: str(plan['key']),
-      title: str(ctx.locale === 'ar' ? name['ar'] : name['en']) || str(name['en']) || str(plan['key']),
+      title:
+        str(ctx.locale === 'ar' ? name['ar'] : name['en']) || str(name['en']) || str(plan['key']),
       subtitle: str(rec(plan['description'])[ctx.locale === 'ar' ? 'ar' : 'en']) || undefined,
       status: { label: ctx.t(`plans.o.${availability}`), tone: STATUS_TONE[availability] },
       facts: facts(plan, docs, ctx),
       values: valuesOf(plan, docs, ctx),
       previewKind: 'plan',
-      ...(availability === 'archived' ? { archiveBlockedReason: ctx.t('plans.r.alreadyArchived') } : {}),
+      ...(availability === 'archived'
+        ? { archiveBlockedReason: ctx.t('plans.r.alreadyArchived') }
+        : {}),
     } satisfies ItemView;
   });
 }
@@ -353,7 +469,10 @@ function applyValues(plan: Plan, values: FieldValues, ctx: AreaContext): Plan {
     trialCredits: values['trialCredits'],
     monthlyCredits: values['monthlyCredits'],
     quotas: withAiCaps(
-      { ...quotas, ...Object.fromEntries(PLAN_QUOTAS.map((quota) => [quota, values[`q.${quota}`]])) },
+      {
+        ...quotas,
+        ...Object.fromEntries(PLAN_QUOTAS.map((quota) => [quota, values[`q.${quota}`]])),
+      },
       values,
     ),
   };
@@ -367,12 +486,21 @@ function withAiCaps(quotas: Record<string, unknown>, values: FieldValues): Recor
   for (const cap of PLAN_AI_CAP_FIELDS) {
     if (values[`aiOn.${cap}`] === undefined) continue;
     if (values[`aiOn.${cap}`] !== true) delete next[cap];
-    else next[cap] = values[`ai.${cap}`] === null ? { kind: 'unlimited' } : { kind: 'limited', value: values[`ai.${cap}`] };
+    else
+      next[cap] =
+        values[`ai.${cap}`] === null
+          ? { kind: 'unlimited' }
+          : { kind: 'limited', value: values[`ai.${cap}`] };
   }
   return next;
 }
 
-function withFeatures(docs: Docs, planKey: string, chosen: readonly string[], ctx: AreaContext): Docs {
+function withFeatures(
+  docs: Docs,
+  planKey: string,
+  chosen: readonly string[],
+  ctx: AreaContext,
+): Docs {
   const entitlements = docs.entitlements;
   if (!entitlements) return {};
   const features = booleanFeatures(docs, ctx.locale).filter((feature) => feature.plans !== null);
@@ -393,6 +521,7 @@ const collection: CollectionSpec = {
   id: 'plans',
   title: 'plans.title',
   domains: ['plans', 'entitlements'],
+  reads: ['feature-flags'],
   canCreate: true,
   canDuplicate: true,
   archiveLabel: 'a.archive',
@@ -404,19 +533,31 @@ const collection: CollectionSpec = {
     const key = String(values['key']);
     const source =
       mode === 'new'
-        ? { key, tier: Math.max(0, ...list.map((plan) => num(plan['tier']) ?? 0)) + 1, sortOrder: list.length }
+        ? {
+            key,
+            tier: Math.max(0, ...list.map((plan) => num(plan['tier']) ?? 0)) + 1,
+            sortOrder: list.length,
+          }
         : (list.find((plan) => str(plan['key']) === itemKey) ?? {});
     const base = mode === 'duplicate' ? { ...source, key, sortOrder: list.length } : source;
     const plan = applyValues(base, values, ctx);
-    const out: Docs = { plans: { ...docs.plans, plans: upsertBy(list, 'key', plan, mode === 'edit' ? itemKey : null) } };
+    const out: Docs = {
+      plans: {
+        ...docs.plans,
+        plans: upsertBy(list, 'key', plan, mode === 'edit' ? itemKey : null),
+      },
+    };
     const chosen = (values['features'] as readonly string[] | undefined) ?? [];
-    if (values['features'] !== undefined) Object.assign(out, withFeatures({ ...docs, ...out }, key, chosen, ctx));
+    if (values['features'] !== undefined)
+      Object.assign(out, withFeatures({ ...docs, ...out }, key, chosen, ctx));
     return out;
   },
   archive: (docs, _ctx, itemKey) => ({
     plans: {
       ...docs.plans,
-      plans: plans(docs).map((plan) => (str(plan['key']) === itemKey ? withAvailability(plan, 'archived') : plan)),
+      plans: plans(docs).map((plan) =>
+        str(plan['key']) === itemKey ? withAvailability(plan, 'archived') : plan,
+      ),
     },
   }),
   impact: (before, after, ctx, itemKey) => {
@@ -434,13 +575,18 @@ const collection: CollectionSpec = {
         return b !== null && (a === null || b < a);
       });
       if (lowered.length > 0) out.push(ctx.t('plans.p.lowered'));
-      if (num(was['monthlyCredits']) !== num(now['monthlyCredits'])) out.push(ctx.t('plans.p.monthlyCredits'));
-      if (num(was['trialCredits']) !== num(now['trialCredits']) || num(was['trialDays']) !== num(now['trialDays']))
+      if (num(was['monthlyCredits']) !== num(now['monthlyCredits']))
+        out.push(ctx.t('plans.p.monthlyCredits'));
+      if (
+        num(was['trialCredits']) !== num(now['trialCredits']) ||
+        num(was['trialDays']) !== num(now['trialDays'])
+      )
         out.push(ctx.t('plans.p.trial'));
       if (availabilityOf(was) !== availabilityOf(now)) {
         out.push(ctx.t(`plans.p.availability.${availabilityOf(now)}`));
       }
-      if (JSON.stringify(was['prices']) !== JSON.stringify(now['prices'])) out.push(ctx.t('plans.p.price'));
+      if (JSON.stringify(was['prices']) !== JSON.stringify(now['prices']))
+        out.push(ctx.t('plans.p.price'));
     }
     if (out.length === 0) out.push(ctx.t('w.noCustomerChange'));
     return out;
@@ -448,23 +594,32 @@ const collection: CollectionSpec = {
   slices: (itemKey) => [
     {
       domain: 'plans',
-      read: (doc) => arrayOf(doc['plans']).map(rec).find((plan) => str(plan['key']) === itemKey),
+      read: (doc) =>
+        arrayOf(doc['plans'])
+          .map(rec)
+          .find((plan) => str(plan['key']) === itemKey),
       write: (doc, value) => ({
         ...doc,
         plans:
           value === undefined
-            ? arrayOf(doc['plans']).map(rec).filter((plan) => str(plan['key']) !== itemKey)
+            ? arrayOf(doc['plans'])
+                .map(rec)
+                .filter((plan) => str(plan['key']) !== itemKey)
             : upsertBy(arrayOf(doc['plans']).map(rec), 'key', rec(value), itemKey),
       }),
     },
     {
       domain: 'entitlements',
       read: (doc) =>
-        arrayOf(doc['planEntitlements']).map(rec).filter((grant) => str(grant['planKey']) === itemKey),
+        arrayOf(doc['planEntitlements'])
+          .map(rec)
+          .filter((grant) => str(grant['planKey']) === itemKey),
       write: (doc, value) => ({
         ...doc,
         planEntitlements: [
-          ...arrayOf(doc['planEntitlements']).map(rec).filter((grant) => str(grant['planKey']) !== itemKey),
+          ...arrayOf(doc['planEntitlements'])
+            .map(rec)
+            .filter((grant) => str(grant['planKey']) !== itemKey),
           ...arrayOf(value).map(rec),
         ],
       }),
@@ -479,14 +634,29 @@ export const plansArea: AreaSpec = {
   href: (locale) => `/${locale}/console/plans`,
   collections: [collection],
   developer: [
-    { label: 'plans.d.rollover', value: (docs) => developerList(docs, (plan) => str(rec(plan['creditRollover'])['policy'])) },
-    { label: 'plans.d.analyticsRetention', value: (docs) => developerList(docs, (plan) => String(rec(plan['quotas'])['analyticsRetentionDays'] ?? '—')) },
-    { label: 'plans.d.addOns', value: (docs) => developerList(docs, (plan) => String(arrayOf(plan['addOns']).length)) },
-    { label: 'plans.d.tax', value: (docs) => developerList(docs, (plan) => str(plan['taxBehavior'])) },
+    {
+      label: 'plans.d.rollover',
+      value: (docs) => developerList(docs, (plan) => str(rec(plan['creditRollover'])['policy'])),
+    },
+    {
+      label: 'plans.d.analyticsRetention',
+      value: (docs) =>
+        developerList(docs, (plan) => String(rec(plan['quotas'])['analyticsRetentionDays'] ?? '—')),
+    },
+    {
+      label: 'plans.d.addOns',
+      value: (docs) => developerList(docs, (plan) => String(arrayOf(plan['addOns']).length)),
+    },
+    {
+      label: 'plans.d.tax',
+      value: (docs) => developerList(docs, (plan) => str(plan['taxBehavior'])),
+    },
   ],
 };
 
 function developerList(docs: Docs, read: (plan: Plan) => string): string {
   const list = plans(docs);
-  return list.length === 0 ? '—' : list.map((plan) => `${str(plan['key'])}: ${read(plan) || '—'}`).join(' · ');
+  return list.length === 0
+    ? '—'
+    : list.map((plan) => `${str(plan['key'])}: ${read(plan) || '—'}`).join(' · ');
 }

@@ -23,6 +23,15 @@ const DISCARDABLE: readonly ConfigDomain[] = [
   'feature-flags',
   'entitlements',
   'ai.capability-routing',
+  // Control Center Simple mode — the documents the owner's card pages write
+  // (`server/simple-areas`), each shown with the same notice before a change.
+  'plans',
+  'credits',
+  'content',
+  'publishing',
+  'onboarding',
+  'assets',
+  'integrations.email',
 ];
 
 /**

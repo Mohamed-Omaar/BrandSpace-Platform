@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { ADMIN_BASE_URL } from './apps';
-import { signIn, useMode } from './admin-session';
+import { signIn, totpCode, useMode } from './admin-session';
+import { credentials } from './admin-session';
+import { withPlatformPrisma } from './platform-prisma';
 import { expectNoHorizontalOverflow } from './overflow';
 
 /**
@@ -57,21 +59,76 @@ async function discardLeftovers(page: Page): Promise<void> {
   await expect(page).toHaveURL(/ok=DRAFT_DISCARDED/);
 }
 
+/** Open a card page with nothing left unfinished in Advanced (the earlier suites leave drafts). */
+async function openArea(page: Page, path: string): Promise<void> {
+  await page.goto(`${ADMIN_BASE_URL}${path}`);
+  await discardLeftovers(page);
+}
+
+/** The preview's confirmation and Save. */
+async function saveChange(page: Page): Promise<void> {
+  await page.getByTestId('area-preview-confirm').check();
+  await page.getByTestId('area-preview-submit').click();
+  await expect(page).toHaveURL(/ok=SAVED/);
+}
+
+/** The newest `config.activated` audit event's old -> new for one changed value. */
+async function lastActivationChange(
+  path: string,
+): Promise<{ before: unknown; after: unknown } | null> {
+  return withPlatformPrisma(async (prisma) => {
+    const events = await prisma.auditEvent.findMany({
+      where: { action: 'config.activated' },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+      take: 10,
+    });
+    for (const event of events) {
+      type Changes = { changes?: { path: string; value: unknown }[] } | null;
+      const after = (event.after as Changes)?.changes ?? [];
+      const before = (event.before as Changes)?.changes ?? [];
+      const index = after.findIndex((change) => change.path === path);
+      if (index >= 0) return { before: before[index]?.value, after: after[index]?.value };
+    }
+    return null;
+  });
+}
+
 const SIMPLE_NAV = [
   'nav-nav.home',
   'nav-nav.customers',
   'nav-nav.plans',
+  'nav-nav.trial',
   'nav-nav.features',
+  'nav-nav.channels',
+  'nav-nav.publishing',
+  'nav-nav.content',
+  'nav-nav.uploads',
   'nav-nav.ai',
+  'nav-nav.signups',
+  'nav-nav.email',
+  'nav-nav.legal',
   'nav-nav.integrations',
   'nav-nav.usage',
   'nav-nav.system',
+  'nav-nav.team',
+  'nav-nav.changes',
 ];
 
 const SIMPLE_SCREENS: readonly { path: string; marker: string }[] = [
   { path: '/console', marker: 'home-readiness' },
   { path: '/console/workspaces', marker: 'customer-filters' },
-  { path: '/console/plans', marker: 'plan-cards' },
+  { path: '/console/plans', marker: 'area-collection-plans' },
+  { path: '/console/manage', marker: 'manage-grid' },
+  { path: '/console/manage/trial', marker: 'area-collection-trial' },
+  { path: '/console/manage/channels', marker: 'area-collection-channels' },
+  { path: '/console/manage/publishing', marker: 'area-collection-providers' },
+  { path: '/console/manage/signups', marker: 'area-collection-signups' },
+  { path: '/console/manage/uploads', marker: 'area-collection-kinds' },
+  { path: '/console/manage/email', marker: 'area-collection-senders' },
+  { path: '/console/manage/content', marker: 'area-collection-industries' },
+  { path: '/console/manage/legal', marker: 'area-collection-documents' },
+  { path: '/console/team', marker: 'team-cards' },
+  { path: '/console/changes', marker: 'changes-intro' },
   { path: '/console/features', marker: 'features-technical' },
   { path: '/console/ai', marker: 'ai-current' },
   { path: '/console/ai/connect', marker: 'connect-steps' },
@@ -212,31 +269,75 @@ test.describe('the owner questions have truthful answers', () => {
 });
 
 test.describe('Simple writes go through the existing services', () => {
-  test('a plan draft is saved in major units, described in plain words, checked and discarded', async ({
+  test('a plan is created, edited, duplicated and archived from its cards, and its last change undone', async ({
     page,
   }) => {
+    // Control Center Simple mode (owner decision): the plan cards replace the
+    // draft-based plan editor, and every step is one activation through the
+    // Configuration Service.
     await signIn(page, 'en', { mode: 'simple' });
-    const key = `e2e-simple-${randomUUID().slice(0, 8)}`;
-    await page.goto(`${ADMIN_BASE_URL}/en/console/plans?edit=new`);
-    await page.getByTestId('pe-key').fill(key);
-    await page.getByTestId('pe-name-en').fill('Simple E2E Plan');
-    await page.getByTestId('pe-name-ar').fill('خطة اختبار');
-    await page.getByTestId('pe-price-USD-monthly').fill('19.50');
-    await page.getByTestId('pe-price-USD-annual').fill('195');
-    await page.getByTestId('pe-monthly-credits').fill('250');
-    await page.getByTestId('pe-reason').fill('End-to-end check of the Simple plan editor');
-    await page.getByTestId('pe-save').click();
-    await expect(page).toHaveURL(/ok=DRAFT_SAVED/);
-    await expect(page.getByTestId('plans-pending-changes')).toContainText(
-      'New plan: Simple E2E Plan',
+    const key = `e2e-cc-${randomUUID().slice(0, 8)}`;
+    await openArea(page, '/en/console/plans');
+    await page.getByTestId('area-new-plans').click();
+    await page.getByTestId('field-key').fill(key);
+    await page.getByTestId('field-nameEn').fill('Simple E2E Plan');
+    await page.getByTestId('field-nameAr').fill('خطة اختبار');
+    // Not offered to anyone, so the customer suites running beside this one never see it.
+    await page.getByTestId('field-availability').selectOption('draft');
+    await page.locator('[data-testid^="field-priceMonthly-"]').first().fill('19.50');
+    await page.getByTestId('field-monthlyCredits').fill('250');
+    await expectAccessible(page, 'the plan editor');
+    await page.getByTestId('area-check').click();
+    await expect(page.getByTestId('area-preview')).toContainText('New: Simple E2E Plan');
+    await expectAccessible(page, 'the plan preview');
+    await expect(page.getByTestId('plan-customer-card')).toContainText('Simple E2E Plan');
+    await expect(page.getByTestId('plan-customer-card')).toContainText('19.50');
+    await saveChange(page);
+    const card = page.getByTestId(`area-card-plans-${key}`);
+    await expect(card).toContainText('Simple E2E Plan');
+
+    // Edit: the editor shows the current value; the preview says old -> new.
+    await page.getByTestId(`area-edit-plans-${key}`).click();
+    await expect(page.getByTestId('field-monthlyCredits-now')).toContainText('250');
+    await page.getByTestId('field-monthlyCredits').fill('300');
+    await page.getByTestId('area-check').click();
+    await expect(page.getByTestId('area-preview-changes')).toContainText(
+      'Monthly credits: 250 credits → 300 credits',
+    );
+    await saveChange(page);
+    await expect(card).toContainText('300');
+
+    // The audit event is the Configuration Service's own, with old -> new.
+    const change = await lastActivationChange(`plans[${key}].monthlyCredits`);
+    expect(change).toEqual({ before: 250, after: 300 });
+    await page.goto(`${ADMIN_BASE_URL}/en/console/changes`);
+    await expect(page.getByTestId('change-row').first()).toContainText(
+      `plans[${key}].monthlyCredits: 250 → 300`,
     );
 
-    await page.getByTestId('plans-check').click();
-    await expect(page).toHaveURL(/ok=VALIDATION_/);
-    // Either verdict is a real answer from the service; the draft is not activated here.
-    await page.getByTestId('plans-discard').click();
-    await expect(page).toHaveURL(/ok=DRAFT_DISCARDED/);
-    await expect(page.getByTestId('plans-pending')).toHaveCount(0);
+    // Undo the last change: a new version that puts the plan back.
+    await page.goto(`${ADMIN_BASE_URL}/en/console/plans`);
+    await page.getByTestId(`area-undo-plans-${key}`).click();
+    await expect(page.getByTestId('area-undo-changes')).toContainText('300 credits → 250 credits');
+    await expectAccessible(page, 'undo');
+    await page.getByTestId('area-undo-confirm').check();
+    await page.getByTestId('area-undo-submit').click();
+    await expect(page).toHaveURL(/ok=UNDONE/);
+    await expect(card).toContainText('250');
+
+    // Duplicate, then archive the copy.
+    await page.getByTestId(`area-duplicate-plans-${key}`).click();
+    await expect(page.getByTestId('field-key')).toHaveValue(`${key}-copy`);
+    await page.getByTestId('area-check').click();
+    await saveChange(page);
+    await expect(page.getByTestId(`area-card-plans-${key}-copy`)).toBeVisible();
+    await page.getByTestId(`area-archive-plans-${key}-copy`).click();
+    await expectAccessible(page, 'archive');
+    await page.getByTestId('area-archive-confirm').check();
+    await page.getByTestId('area-archive-submit').click();
+    await expect(page).toHaveURL(/ok=ARCHIVED/);
+    await expect(page.getByTestId(`area-card-plans-${key}-copy-status`)).toHaveText('Archived');
+    await expect(page.getByTestId(`area-archive-plans-${key}-copy`)).toHaveCount(0);
   });
 
   test('the AI profile changes only with a reason and a confirmation, and is restored', async ({
@@ -404,4 +505,277 @@ test.describe('Simple writes go through the existing services', () => {
     await page.goto(`${ADMIN_BASE_URL}/en/console/workspaces?status=ACTIVE`);
     await expect(page.getByTestId(`customer-${slug}`)).toBeVisible();
   });
+});
+
+// ---------------------------------------------------------------------------
+// Control Center Simple mode (owner decision) — the owner's card pages
+// ---------------------------------------------------------------------------
+
+/** The testid suffix of the first card in a collection: the item's key. */
+async function firstKey(page: Page, collection: string): Promise<string> {
+  const id = await page
+    .locator(`[data-testid^="area-card-${collection}-"]`)
+    .first()
+    .getAttribute('data-testid');
+  return (id ?? '').replace(`area-card-${collection}-`, '');
+}
+
+test.describe('the owner card pages write through the Configuration Service', () => {
+  test('Trial and credits: a new workspace’s credits are edited, previewed, saved, audited and undone', async ({
+    page,
+  }) => {
+    await signIn(page, 'en', { mode: 'simple' });
+    await openArea(page, '/en/console/manage/trial');
+    const key = await firstKey(page, 'trial');
+    await page.getByTestId(`area-edit-trial-${key}`).click();
+    const was = Number(await page.getByTestId('field-trialCredits').inputValue());
+    await page.getByTestId('field-trialCredits').fill(String(was + 7));
+    await page.getByTestId('area-check').click();
+    await expect(page.getByTestId('area-preview-changes')).toContainText(
+      `Trial credits: ${was} credits → ${was + 7} credits`,
+    );
+    await expect(page.getByTestId('area-preview-impacts')).toContainText(
+      'Only workspaces created from now on',
+    );
+    await saveChange(page);
+    expect(await lastActivationChange(`plans[${key}].trialCredits`)).toEqual({
+      before: was,
+      after: was + 7,
+    });
+
+    // SAME SERVICE: Advanced lists the version Simple activated, with its reason.
+    await useMode(page, 'advanced');
+    await page.goto(`${ADMIN_BASE_URL}/en/console/configuration?domain=plans`);
+    await expect(page.locator('main')).toContainText('changed in Simple mode');
+    await useMode(page, 'simple');
+
+    await page.goto(`${ADMIN_BASE_URL}/en/console/manage/trial`);
+    await page.getByTestId(`area-undo-trial-${key}`).click();
+    await page.getByTestId('area-undo-confirm').check();
+    await page.getByTestId('area-undo-submit').click();
+    await expect(page).toHaveURL(/ok=UNDONE/);
+    expect(await lastActivationChange(`plans[${key}].trialCredits`)).toEqual({
+      before: was + 7,
+      after: was,
+    });
+  });
+
+  test('Content: an industry and a country’s posting times are added, edited and removed', async ({
+    page,
+  }) => {
+    await signIn(page, 'en', { mode: 'simple' });
+    await openArea(page, '/en/console/manage/content');
+    const key = `e2e-ind-${randomUUID().slice(0, 6)}`;
+    await page.getByTestId('area-new-industries').click();
+    await page.getByTestId('field-key').fill(key);
+    await page.getByTestId('field-nameEn').fill('Test industry');
+    await page.getByTestId('field-nameAr').fill('مجال تجريبي');
+    await page.getByTestId('area-check').click();
+    await expect(page.getByTestId('area-preview-impacts')).toContainText(
+      'Customers can now choose this industry.',
+    );
+    await saveChange(page);
+    await expect(page.getByTestId(`area-card-industries-${key}`)).toContainText('Test industry');
+
+    await page.getByTestId(`area-edit-industries-${key}`).click();
+    await expect(page.getByTestId('field-key')).toHaveAttribute('readonly', '');
+    await page.getByTestId('field-nameEn').fill('Renamed industry');
+    await page.getByTestId('area-check').click();
+    await saveChange(page);
+    await expect(page.getByTestId(`area-card-industries-${key}`)).toContainText('Renamed industry');
+
+    await page.getByTestId(`area-archive-industries-${key}`).click();
+    await expect(page.getByTestId('area-archive-impacts')).toContainText(
+      'Brands that chose it keep it',
+    );
+    await page.getByTestId('area-archive-confirm').check();
+    await page.getByTestId('area-archive-submit').click();
+    await expect(page).toHaveURL(/ok=ARCHIVED/);
+    await expect(page.getByTestId(`area-card-industries-${key}`)).toHaveCount(0);
+
+    await page.getByTestId('area-new-times').click();
+    await page.getByTestId('field-country').fill('xq');
+    await page.getByTestId('field-times').fill('18:00, 09:30');
+    await page.getByTestId('area-check').click();
+    await saveChange(page);
+    await expect(page.getByTestId('area-card-times-XQ')).toContainText('09:30, 18:00');
+    await page.getByTestId('area-archive-times-XQ').click();
+    await page.getByTestId('area-archive-confirm').check();
+    await page.getByTestId('area-archive-submit').click();
+    await expect(page.getByTestId('area-card-times-XQ')).toHaveCount(0);
+  });
+
+  test('Legal pages: the reviewed mark is set and undone', async ({ page }) => {
+    await signIn(page, 'en', { mode: 'simple' });
+    await openArea(page, '/en/console/manage/legal');
+    const key = await firstKey(page, 'documents');
+    const status = page.getByTestId(`area-card-documents-${key}-status`);
+    const before = (await status.textContent()) ?? '';
+    await page.getByTestId(`area-edit-documents-${key}`).click();
+    await page.getByTestId('field-reviewed').click();
+    await page.getByTestId('area-check').click();
+    await saveChange(page);
+    await expect(status).not.toHaveText(before);
+    await page.getByTestId(`area-undo-documents-${key}`).click();
+    await page.getByTestId('area-undo-confirm').check();
+    await page.getByTestId('area-undo-submit').click();
+    await expect(page).toHaveURL(/ok=UNDONE/);
+    await expect(status).toHaveText(before);
+  });
+
+  test('the editor and its preview read right to left in Arabic, with Arabic help, and pass axe', async ({
+    page,
+  }) => {
+    await signIn(page, 'ar', { mode: 'simple' });
+    await openArea(page, '/ar/console/manage/trial');
+    await page.locator('[data-testid^="area-edit-trial-"]').first().click();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByTestId('area-editor')).toContainText('رصيد التجربة');
+    await expect(page.getByTestId('field-trialCredits-impact')).toContainText(
+      'مساحات العمل الجديدة',
+    );
+    await expectAccessible(page, 'ar editor');
+    await page.getByTestId('area-check').click();
+    await expect(page.getByTestId('area-preview')).toContainText('راجِع قبل الحفظ');
+    await expectAccessible(page, 'ar preview');
+  });
+
+  test('a value that does not fit is refused in plain words, and nothing is saved', async ({
+    page,
+  }) => {
+    await signIn(page, 'en', { mode: 'simple' });
+    const versions = () =>
+      withPlatformPrisma((prisma) =>
+        prisma.configurationVersion.count({ where: { status: 'ACTIVE' } }),
+      );
+    const before = await versions();
+
+    await openArea(page, '/en/console/plans');
+    await page.getByTestId('area-new-plans').click();
+    await page.getByTestId('field-key').fill('Not A Key');
+    await page.getByTestId('area-check').click();
+    await expect(page.getByTestId('area-field-errors')).toContainText('use small English letters');
+    await expect(page.getByTestId('area-preview-submit')).toHaveCount(0);
+
+    await page.goto(`${ADMIN_BASE_URL}/en/console/manage/signups`);
+    await page.getByTestId('area-edit-signups-signups').click();
+    await page.getByTestId('field-minPasswordLength').fill('7');
+    await page.getByTestId('area-check').click();
+    await expect(page.getByTestId('area-field-errors')).toContainText(
+      'Shortest password: it must be at least 8.',
+    );
+
+    await page.goto(`${ADMIN_BASE_URL}/en/console/manage/trial`);
+    await page.locator('[data-testid^="area-edit-trial-"]').first().click();
+    await page.getByTestId('field-trialCredits').fill('-5');
+    await page.getByTestId('area-check').click();
+    await expect(page.getByTestId('area-field-errors')).toContainText(
+      'please enter a whole number',
+    );
+
+    // An area rule the fields cannot see: scanning cannot be required while off.
+    await page.goto(`${ADMIN_BASE_URL}/en/console/manage/uploads`);
+    await page.getByTestId('area-edit-scanning-scanning').click();
+    await page.getByTestId('field-provider').selectOption('none');
+    await page.getByTestId('field-required').check();
+    await page.getByTestId('area-check').click();
+    await expect(page.getByTestId('area-preview-problems')).toContainText(
+      'cannot be required to pass a scan',
+    );
+    await expect(page.getByTestId('area-preview-submit')).toHaveCount(0);
+
+    // And a channel with posts cannot be hidden — the card says why, before anyone tries.
+    await page.goto(`${ADMIN_BASE_URL}/en/console/manage/channels`);
+    await expect(
+      page.locator('[data-testid^="area-archive-blocked-channels-"]').first(),
+    ).toContainText('cannot be hidden');
+
+    expect(await versions()).toBe(before);
+  });
+});
+
+test.describe('Simple shows only what the reader may do', () => {
+  async function signInOperator(page: Page, locale: 'en' | 'ar'): Promise<void> {
+    const operator = credentials().operator;
+    if (!operator)
+      throw new Error('No read-only operator in the end-to-end credentials: run `pnpm e2e:seed`.');
+    await page.goto(`${ADMIN_BASE_URL}/${locale}/login`);
+    await page.getByTestId('email').fill(operator.email);
+    await page.getByTestId('password').fill(operator.password);
+    await page.getByTestId('submit').click();
+    await expect(page).toHaveURL(`${ADMIN_BASE_URL}/${locale}/mfa`);
+    await page.getByTestId('mfa-code').fill(totpCode(operator.totpSecret));
+    await page.getByTestId('submit').click();
+    await expect(page).toHaveURL(`${ADMIN_BASE_URL}/${locale}/console`);
+  }
+
+  test('a read-only operator sees the cards, never a change control, and no editor by URL', async ({
+    page,
+  }) => {
+    await signInOperator(page, 'en');
+    for (const path of ['/manage/trial', '/plans', '/manage/content']) {
+      await page.goto(`${ADMIN_BASE_URL}/en/console${path}`);
+      await expect(page.getByTestId('area-read-only')).toBeVisible();
+      await expect(page.locator('[data-testid^="area-edit-"]')).toHaveCount(0);
+      await expect(page.locator('[data-testid^="area-new-"]')).toHaveCount(0);
+      await expect(page.locator('[data-testid^="area-undo-"]')).toHaveCount(0);
+    }
+    await page.goto(`${ADMIN_BASE_URL}/en/console/manage/trial?view=edit&c=trial`);
+    await expect(page.getByTestId('area-editor')).toHaveCount(0);
+    await page.goto(`${ADMIN_BASE_URL}/en/console/plans?view=edit&c=plans&mode=new`);
+    await expect(page.getByTestId('area-editor')).toHaveCount(0);
+    // No `platform.user.read`: the Team page is neither listed nor opened.
+    await expect(page.getByTestId('nav-nav.team')).toHaveCount(0);
+    await expect(page.getByTestId('nav-nav.changes')).toHaveCount(1);
+    const team = await page.goto(`${ADMIN_BASE_URL}/en/console/team`);
+    expect(team?.status()).toBe(404);
+  });
+});
+
+test.describe('the Control Center sign-in is the customer entry card', () => {
+  for (const locale of ['en', 'ar'] as const) {
+    test(`sign-in and second step, uniform failures, the Control Center label (${locale})`, async ({
+      page,
+    }) => {
+      const label = locale === 'ar' ? 'مركز التحكم' : 'Control Center';
+      const invalid = locale === 'ar' ? 'بيانات الدخول غير صحيحة.' : 'Invalid credentials.';
+      await page.goto(`${ADMIN_BASE_URL}/${locale}/login`);
+      await expect(page.locator('html')).toHaveAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
+      await expect(page.getByTestId('platform-auth-card')).toHaveClass(/bsp-auth-card/);
+      await expect(page.getByTestId('auth-realm')).toHaveText(label);
+      await expect(page.getByTestId('auth-brand-mark')).toBeVisible();
+      await expect(page.locator('h1')).toHaveCount(1);
+      await expectAccessible(page, `${locale}/login`);
+
+      // The language button keeps the screen.
+      const other = locale === 'ar' ? 'en' : 'ar';
+      await expect(page.getByTestId('locale-switch')).toHaveAttribute('href', `/${other}/login`);
+
+      // An unknown address and a wrong password read exactly the same.
+      const { email } = credentials();
+      for (const who of [`nobody-${randomUUID().slice(0, 6)}@example.test`, email]) {
+        await page.goto(`${ADMIN_BASE_URL}/${locale}/login`);
+        await page.getByTestId('email').fill(who);
+        await page.getByTestId('password').fill('not-the-password');
+        await page.getByTestId('submit').click();
+        await expect(page.getByTestId('login-error')).toHaveText(invalid);
+      }
+
+      // The second step is mandatory, in the same card.
+      const { password } = credentials();
+      await page.goto(`${ADMIN_BASE_URL}/${locale}/login`);
+      await page.getByTestId('email').fill(email);
+      await page.getByTestId('password').fill(password);
+      await page.getByTestId('submit').click();
+      await expect(page).toHaveURL(`${ADMIN_BASE_URL}/${locale}/mfa`);
+      await expect(page.getByTestId('platform-auth-card')).toHaveClass(/bsp-auth-card/);
+      await expect(page.getByTestId('auth-realm')).toHaveText(label);
+      await expectAccessible(page, `${locale}/mfa`);
+      await page.getByTestId('mfa-code').fill('000000');
+      await page.getByTestId('submit').click();
+      await expect(page.getByTestId('mfa-error')).toHaveText(
+        locale === 'ar' ? 'رمز التحقق غير صحيح.' : 'Invalid verification code.',
+      );
+    });
+  }
 });

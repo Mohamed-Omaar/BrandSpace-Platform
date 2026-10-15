@@ -28,13 +28,49 @@ function questionSets(docs: Docs): readonly string[] {
 
 const KEY = /^[a-z][a-z0-9_-]{0,39}$/;
 
-const industryFields = (docs: Docs, _ctx: AreaContext, _mode: string, itemKey: string | null): readonly FieldSpec[] => {
-  const current = itemKey ? str(industries(docs).find((i) => str(i['key']) === itemKey)?.['offersQuestionSet']) : '';
+const industryFields = (
+  docs: Docs,
+  _ctx: AreaContext,
+  _mode: string,
+  itemKey: string | null,
+): readonly FieldSpec[] => {
+  const current = itemKey
+    ? str(industries(docs).find((i) => str(i['key']) === itemKey)?.['offersQuestionSet'])
+    : '';
   const sets = [...new Set([...questionSets(docs), ...(current ? [current] : [])])];
   return [
-    { id: 'key', kind: 'text', label: 'ct.f.key', help: 'ct.h.key', required: true, maxLength: 40, dir: 'ltr', lockedOnEdit: true, pattern: KEY, patternMessage: 'v.key' },
-    { id: 'nameEn', kind: 'text', label: 'ct.f.nameEn', help: 'ct.h.name', impact: 'ct.i.name', required: true, maxLength: 80, dir: 'ltr' },
-    { id: 'nameAr', kind: 'text', label: 'ct.f.nameAr', help: 'ct.h.name', impact: 'ct.i.name', required: true, maxLength: 80, dir: 'rtl' },
+    {
+      id: 'key',
+      kind: 'text',
+      label: 'ct.f.key',
+      help: 'ct.h.key',
+      required: true,
+      maxLength: 40,
+      dir: 'ltr',
+      lockedOnEdit: true,
+      pattern: KEY,
+      patternMessage: 'v.key',
+    },
+    {
+      id: 'nameEn',
+      kind: 'text',
+      label: 'ct.f.nameEn',
+      help: 'ct.h.name',
+      impact: 'ct.i.name',
+      required: true,
+      maxLength: 80,
+      dir: 'ltr',
+    },
+    {
+      id: 'nameAr',
+      kind: 'text',
+      label: 'ct.f.nameAr',
+      help: 'ct.h.name',
+      impact: 'ct.i.name',
+      required: true,
+      maxLength: 80,
+      dir: 'rtl',
+    },
     {
       id: 'questionSet',
       kind: 'choice',
@@ -50,7 +86,8 @@ const industryCollection: CollectionSpec = {
   id: 'industries',
   title: 'ct.ind.title',
   intro: 'ct.ind.intro',
-  domains: ['onboarding', 'brand-brain'],
+  domains: ['onboarding'],
+  reads: ['brand-brain'],
   canCreate: true,
   canDuplicate: true,
   archiveLabel: 'a.remove',
@@ -63,7 +100,9 @@ const industryCollection: CollectionSpec = {
         key: str(industry['key']),
         title: str(ctx.locale === 'ar' ? name['ar'] : name['en']) || str(industry['key']),
         subtitle: str(ctx.locale === 'ar' ? name['en'] : name['ar']),
-        facts: [{ label: ctx.t('ct.f.questions'), value: str(industry['offersQuestionSet']) || '—' }],
+        facts: [
+          { label: ctx.t('ct.f.questions'), value: str(industry['offersQuestionSet']) || '—' },
+        ],
         values: {
           key: str(industry['key']),
           nameEn: str(name['en']),
@@ -74,7 +113,8 @@ const industryCollection: CollectionSpec = {
     }),
   apply: (docs, _ctx, { mode, itemKey, values }) => {
     const key = mode === 'edit' ? (itemKey ?? '') : str(values['key']);
-    const existing = mode === 'edit' ? industries(docs).find((i) => str(i['key']) === itemKey) : undefined;
+    const existing =
+      mode === 'edit' ? industries(docs).find((i) => str(i['key']) === itemKey) : undefined;
     const entry = {
       ...existing,
       key,
@@ -82,16 +122,24 @@ const industryCollection: CollectionSpec = {
       offersQuestionSet: values['questionSet'],
     };
     return {
-      onboarding: { ...docs.onboarding, industries: upsertBy(industries(docs), 'key', entry, mode === 'edit' ? itemKey : null) },
+      onboarding: {
+        ...docs.onboarding,
+        industries: upsertBy(industries(docs), 'key', entry, mode === 'edit' ? itemKey : null),
+      },
     };
   },
   archive: (docs, _ctx, itemKey) => ({
-    onboarding: { ...docs.onboarding, industries: industries(docs).filter((i) => str(i['key']) !== itemKey) },
+    onboarding: {
+      ...docs.onboarding,
+      industries: industries(docs).filter((i) => str(i['key']) !== itemKey),
+    },
   }),
   check: (_before, after, ctx, { itemKey }) => {
     const entry = industries(after).find((i) => str(i['key']) === itemKey);
     if (!entry) return [];
-    return questionSets(after).includes(str(entry['offersQuestionSet'])) ? [] : [ctx.t('ct.r.noSet')];
+    return questionSets(after).includes(str(entry['offersQuestionSet']))
+      ? []
+      : [ctx.t('ct.r.noSet')];
   },
   impact: (before, after, ctx, itemKey) => {
     const was = industries(before).some((i) => str(i['key']) === itemKey);
@@ -103,12 +151,18 @@ const industryCollection: CollectionSpec = {
   slices: (itemKey) => [
     {
       domain: 'onboarding',
-      read: (doc) => arrayOf(doc['industries']).map(rec).find((i) => str(i['key']) === itemKey),
+      read: (doc) =>
+        arrayOf(doc['industries'])
+          .map(rec)
+          .find((i) => str(i['key']) === itemKey),
       write: (doc, value) => {
         const list = arrayOf(doc['industries']).map(rec);
         return {
           ...doc,
-          industries: value === undefined ? list.filter((i) => str(i['key']) !== itemKey) : upsertBy(list, 'key', rec(value), itemKey),
+          industries:
+            value === undefined
+              ? list.filter((i) => str(i['key']) !== itemKey)
+              : upsertBy(list, 'key', rec(value), itemKey),
         };
       },
     },
@@ -117,15 +171,35 @@ const industryCollection: CollectionSpec = {
 
 function countryName(code: string, locale: string): string {
   try {
-    return new Intl.DisplayNames([locale === 'ar' ? 'ar' : 'en'], { type: 'region' }).of(code) ?? code;
+    return (
+      new Intl.DisplayNames([locale === 'ar' ? 'ar' : 'en'], { type: 'region' }).of(code) ?? code
+    );
   } catch {
     return code;
   }
 }
 
 const timeFields: readonly FieldSpec[] = [
-  { id: 'country', kind: 'text', label: 'ct.f.country', help: 'ct.h.country', required: true, maxLength: 2, dir: 'ltr', lockedOnEdit: true, pattern: /^[A-Za-z]{2}$/, patternMessage: 'ct.v.country' },
-  { id: 'times', kind: 'times', label: 'ct.f.times', help: 'ct.h.times', impact: 'ct.i.times', max: 6 },
+  {
+    id: 'country',
+    kind: 'text',
+    label: 'ct.f.country',
+    help: 'ct.h.country',
+    required: true,
+    maxLength: 2,
+    dir: 'ltr',
+    lockedOnEdit: true,
+    pattern: /^[A-Za-z]{2}$/,
+    patternMessage: 'ct.v.country',
+  },
+  {
+    id: 'times',
+    kind: 'times',
+    label: 'ct.f.times',
+    help: 'ct.h.times',
+    impact: 'ct.i.times',
+    max: 6,
+  },
 ];
 
 const timesCollection: CollectionSpec = {
@@ -137,7 +211,8 @@ const timesCollection: CollectionSpec = {
   canDuplicate: false,
   archiveLabel: 'a.remove',
   fields: () => timeFields,
-  keyOf: (values, mode, itemKey) => (mode === 'edit' ? (itemKey ?? '') : str(values['country']).toUpperCase()),
+  keyOf: (values, mode, itemKey) =>
+    mode === 'edit' ? (itemKey ?? '') : str(values['country']).toUpperCase(),
   items: (docs, ctx): readonly ItemView[] =>
     suggested(docs).map((row) => {
       const country = str(row['country']).toUpperCase();
@@ -146,14 +221,18 @@ const timesCollection: CollectionSpec = {
         key: country,
         title: countryName(country, ctx.locale),
         subtitle: country,
-        facts: [{ label: ctx.t('ct.f.times'), value: times.join(ctx.locale === 'ar' ? '، ' : ', ') }],
+        facts: [
+          { label: ctx.t('ct.f.times'), value: times.join(ctx.locale === 'ar' ? '، ' : ', ') },
+        ],
         values: { country, times },
       } satisfies ItemView;
     }),
   apply: (docs, _ctx, { mode, itemKey, values }) => {
     const country = mode === 'edit' ? (itemKey ?? '') : str(values['country']).toUpperCase();
     const list = suggested(docs);
-    const index = list.findIndex((row) => str(row['country']).toUpperCase() === (mode === 'edit' ? itemKey : country));
+    const index = list.findIndex(
+      (row) => str(row['country']).toUpperCase() === (mode === 'edit' ? itemKey : country),
+    );
     const entry = { country, times: values['times'] };
     const next = index < 0 ? [...list, entry] : list.map((row, at) => (at === index ? entry : row));
     return { content: { ...docs.content, calendar: { ...calendar(docs), suggestedTimes: next } } };
@@ -161,7 +240,12 @@ const timesCollection: CollectionSpec = {
   archive: (docs, _ctx, itemKey) => ({
     content: {
       ...docs.content,
-      calendar: { ...calendar(docs), suggestedTimes: suggested(docs).filter((row) => str(row['country']).toUpperCase() !== itemKey) },
+      calendar: {
+        ...calendar(docs),
+        suggestedTimes: suggested(docs).filter(
+          (row) => str(row['country']).toUpperCase() !== itemKey,
+        ),
+      },
     },
   }),
   impact: (before, after, ctx, itemKey) => {
@@ -173,7 +257,10 @@ const timesCollection: CollectionSpec = {
   slices: (itemKey) => [
     {
       domain: 'content',
-      read: (doc) => arrayOf(rec(doc['calendar'])['suggestedTimes']).map(rec).find((row) => str(row['country']).toUpperCase() === itemKey),
+      read: (doc) =>
+        arrayOf(rec(doc['calendar'])['suggestedTimes'])
+          .map(rec)
+          .find((row) => str(row['country']).toUpperCase() === itemKey),
       write: (doc, value) => {
         const cal = rec(doc['calendar']);
         const list = arrayOf(cal['suggestedTimes']).map(rec);
@@ -190,17 +277,79 @@ const timesCollection: CollectionSpec = {
   ],
 };
 
-const writingFields = (docs: Docs, _ctx: AreaContext, _mode: string, itemKey: string | null): readonly FieldSpec[] => {
+const writingFields = (
+  docs: Docs,
+  _ctx: AreaContext,
+  _mode: string,
+  itemKey: string | null,
+): readonly FieldSpec[] => {
   const entry = platforms(docs).find((p) => str(p['key']) === itemKey);
   const ceiling = Math.min(100, num(entry?.['maxHashtags']) ?? 100);
   return [
-    { id: 'hashtagsOn', kind: 'switch', label: 'ct.f.hashtagsOn', help: 'ct.h.hashtagsOn', impact: 'ct.i.hashtags' },
-    { id: 'hashtagsMin', kind: 'number', label: 'ct.f.hashtagsMin', help: 'ct.h.hashtagsRange', impact: 'ct.i.hashtags', unit: 'u.hashtags', min: 0, max: ceiling },
-    { id: 'hashtagsMax', kind: 'number', label: 'ct.f.hashtagsMax', help: 'ct.h.hashtagsRange', impact: 'ct.i.hashtags', unit: 'u.hashtags', min: 0, max: ceiling },
-    { id: 'safeOn', kind: 'switch', label: 'ct.f.safeOn', help: 'ct.h.safeOn', impact: 'ct.i.safe' },
-    { id: 'safeTop', kind: 'number', label: 'ct.f.safeTop', help: 'ct.h.safeBand', impact: 'ct.i.safe', unit: 'u.percent', min: 0, max: 50 },
-    { id: 'safeBottom', kind: 'number', label: 'ct.f.safeBottom', help: 'ct.h.safeBand', impact: 'ct.i.safe', unit: 'u.percent', min: 0, max: 50 },
-    { id: 'safeEnd', kind: 'number', label: 'ct.f.safeEnd', help: 'ct.h.safeBand', impact: 'ct.i.safe', unit: 'u.percent', min: 0, max: 50 },
+    {
+      id: 'hashtagsOn',
+      kind: 'switch',
+      label: 'ct.f.hashtagsOn',
+      help: 'ct.h.hashtagsOn',
+      impact: 'ct.i.hashtags',
+    },
+    {
+      id: 'hashtagsMin',
+      kind: 'number',
+      label: 'ct.f.hashtagsMin',
+      help: 'ct.h.hashtagsRange',
+      impact: 'ct.i.hashtags',
+      unit: 'u.hashtags',
+      min: 0,
+      max: ceiling,
+    },
+    {
+      id: 'hashtagsMax',
+      kind: 'number',
+      label: 'ct.f.hashtagsMax',
+      help: 'ct.h.hashtagsRange',
+      impact: 'ct.i.hashtags',
+      unit: 'u.hashtags',
+      min: 0,
+      max: ceiling,
+    },
+    {
+      id: 'safeOn',
+      kind: 'switch',
+      label: 'ct.f.safeOn',
+      help: 'ct.h.safeOn',
+      impact: 'ct.i.safe',
+    },
+    {
+      id: 'safeTop',
+      kind: 'number',
+      label: 'ct.f.safeTop',
+      help: 'ct.h.safeBand',
+      impact: 'ct.i.safe',
+      unit: 'u.percent',
+      min: 0,
+      max: 50,
+    },
+    {
+      id: 'safeBottom',
+      kind: 'number',
+      label: 'ct.f.safeBottom',
+      help: 'ct.h.safeBand',
+      impact: 'ct.i.safe',
+      unit: 'u.percent',
+      min: 0,
+      max: 50,
+    },
+    {
+      id: 'safeEnd',
+      kind: 'number',
+      label: 'ct.f.safeEnd',
+      help: 'ct.h.safeBand',
+      impact: 'ct.i.safe',
+      unit: 'u.percent',
+      min: 0,
+      max: 50,
+    },
   ];
 };
 
@@ -214,18 +363,28 @@ const writingCollection: CollectionSpec = {
   items: (docs, ctx): readonly ItemView[] =>
     platforms(docs).map((entry) => {
       const key = str(entry['key']);
-      const range = entry['recommendedHashtags'] === undefined ? null : rec(entry['recommendedHashtags']);
+      const range =
+        entry['recommendedHashtags'] === undefined ? null : rec(entry['recommendedHashtags']);
       const zones = entry['safeZones'] === undefined ? null : rec(entry['safeZones']);
       return {
         key,
         title: CHANNEL_NAMES[key] ?? key,
         facts: [
-          { label: ctx.t('ct.c.hashtags'), value: range ? `${num(range['min']) ?? 0}–${num(range['max']) ?? 0}` : ctx.t('w.notSet') },
+          {
+            label: ctx.t('ct.c.hashtags'),
+            value: range
+              ? `${num(range['min']) ?? 0}–${num(range['max']) ?? 0}`
+              : ctx.t('w.notSet'),
+          },
           { label: ctx.t('ct.c.ceiling'), value: String(num(entry['maxHashtags']) ?? '—') },
           {
             label: ctx.t('ct.c.safe'),
             value: zones
-              ? ctx.t('ct.c.safeValue', { top: num(zones['top']) ?? 0, bottom: num(zones['bottom']) ?? 0, end: num(zones['end']) ?? 0 })
+              ? ctx.t('ct.c.safeValue', {
+                  top: num(zones['top']) ?? 0,
+                  bottom: num(zones['bottom']) ?? 0,
+                  end: num(zones['end']) ?? 0,
+                })
               : ctx.t('w.notSet'),
           },
         ],
@@ -247,34 +406,57 @@ const writingCollection: CollectionSpec = {
     const { recommendedHashtags: _range, safeZones: _zones, ...rest } = existing;
     const entry = {
       ...rest,
-      ...(values['hashtagsOn'] === true ? { recommendedHashtags: { min: values['hashtagsMin'], max: values['hashtagsMax'] } } : {}),
-      ...(values['safeOn'] === true ? { safeZones: { top: values['safeTop'], bottom: values['safeBottom'], end: values['safeEnd'] } } : {}),
+      ...(values['hashtagsOn'] === true
+        ? { recommendedHashtags: { min: values['hashtagsMin'], max: values['hashtagsMax'] } }
+        : {}),
+      ...(values['safeOn'] === true
+        ? {
+            safeZones: {
+              top: values['safeTop'],
+              bottom: values['safeBottom'],
+              end: values['safeEnd'],
+            },
+          }
+        : {}),
     };
     return { content: { ...docs.content, platforms: upsertBy(list, 'key', entry, itemKey) } };
   },
   check: (_before, after, ctx, { itemKey }) => {
     const entry = platforms(after).find((p) => str(p['key']) === itemKey);
-    const range = entry?.['recommendedHashtags'] === undefined ? null : rec(entry['recommendedHashtags']);
+    const range =
+      entry?.['recommendedHashtags'] === undefined ? null : rec(entry['recommendedHashtags']);
     if (!range) return [];
     const errors: string[] = [];
     if ((num(range['min']) ?? 0) > (num(range['max']) ?? 0)) errors.push(ctx.t('v.rangeOrder'));
-    if ((num(range['max']) ?? 0) > (num(entry?.['maxHashtags']) ?? 0)) errors.push(ctx.t('v.hashtagCeiling'));
+    if ((num(range['max']) ?? 0) > (num(entry?.['maxHashtags']) ?? 0))
+      errors.push(ctx.t('v.hashtagCeiling'));
     return errors;
   },
   impact: (before, after, ctx, itemKey) => {
     const was = platforms(before).find((p) => str(p['key']) === itemKey);
     const now = platforms(after).find((p) => str(p['key']) === itemKey);
     const out: string[] = [];
-    if (JSON.stringify(was?.['recommendedHashtags']) !== JSON.stringify(now?.['recommendedHashtags'])) out.push(ctx.t('ct.i.hashtags'));
-    if (JSON.stringify(was?.['safeZones']) !== JSON.stringify(now?.['safeZones'])) out.push(ctx.t('ct.i.safe'));
+    if (
+      JSON.stringify(was?.['recommendedHashtags']) !== JSON.stringify(now?.['recommendedHashtags'])
+    )
+      out.push(ctx.t('ct.i.hashtags'));
+    if (JSON.stringify(was?.['safeZones']) !== JSON.stringify(now?.['safeZones']))
+      out.push(ctx.t('ct.i.safe'));
     return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
   },
   slices: (itemKey) => [
     {
       domain: 'content',
       read: (doc) => {
-        const entry = arrayOf(doc['platforms']).map(rec).find((p) => str(p['key']) === itemKey);
-        return entry ? { recommendedHashtags: entry['recommendedHashtags'] ?? null, safeZones: entry['safeZones'] ?? null } : undefined;
+        const entry = arrayOf(doc['platforms'])
+          .map(rec)
+          .find((p) => str(p['key']) === itemKey);
+        return entry
+          ? {
+              recommendedHashtags: entry['recommendedHashtags'] ?? null,
+              safeZones: entry['safeZones'] ?? null,
+            }
+          : undefined;
       },
       write: (doc, value) => {
         const list = arrayOf(doc['platforms']).map(rec);
@@ -300,12 +482,25 @@ export const contentArea: AreaSpec = {
   href: (locale) => `/${locale}/console/manage/content`,
   collections: [industryCollection, timesCollection, writingCollection],
   developer: [
-    { label: 'ct.d.dialects', value: (docs) => arrayOf(rec(docs.content?.['dialects'])['supported']).map((d) => str(rec(d)['key'])).join(' · ') || '—' },
+    {
+      label: 'ct.d.dialects',
+      value: (docs) =>
+        arrayOf(rec(docs.content?.['dialects'])['supported'])
+          .map((d) => str(rec(d)['key']))
+          .join(' · ') || '—',
+    },
     { label: 'ct.d.horizon', value: (docs) => `${num(calendar(docs)['maxDaysAhead']) ?? '—'} d` },
     { label: 'ct.d.slots', value: (docs) => String(num(calendar(docs)['maxSlotsPerDay']) ?? '—') },
-    { label: 'ct.d.approval', value: (docs, ctx) => ctx.t(bool(calendar(docs)['requireApprovalBeforeScheduling']) ? 'w.yes' : 'w.no') },
+    {
+      label: 'ct.d.approval',
+      value: (docs, ctx) =>
+        ctx.t(bool(calendar(docs)['requireApprovalBeforeScheduling']) ? 'w.yes' : 'w.no'),
+    },
     { label: 'ct.d.holidays', value: (docs) => String(arrayOf(calendar(docs)['holidays']).length) },
-    { label: 'ct.d.observances', value: (docs) => String(arrayOf(calendar(docs)['observances']).length) },
+    {
+      label: 'ct.d.observances',
+      value: (docs) => String(arrayOf(calendar(docs)['observances']).length),
+    },
     { label: 'ct.d.questionSets', value: (docs) => questionSets(docs).join(' · ') || '—' },
   ],
 };

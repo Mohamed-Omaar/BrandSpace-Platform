@@ -13,8 +13,23 @@ import { arrayOf, bool, rec, str, upsertBy } from '../json';
 const documents = (docs: Docs) => arrayOf(docs.onboarding?.['legalDocuments']).map(rec);
 
 const fields: readonly FieldSpec[] = [
-  { id: 'version', kind: 'text', label: 'lg.f.version', help: 'lg.h.version', impact: 'lg.i.version', required: true, maxLength: 32, dir: 'ltr' },
-  { id: 'reviewed', kind: 'switch', label: 'lg.f.reviewed', help: 'lg.h.reviewed', impact: 'lg.i.reviewed' },
+  {
+    id: 'version',
+    kind: 'text',
+    label: 'lg.f.version',
+    help: 'lg.h.version',
+    impact: 'lg.i.version',
+    required: true,
+    maxLength: 32,
+    dir: 'ltr',
+  },
+  {
+    id: 'reviewed',
+    kind: 'switch',
+    label: 'lg.f.reviewed',
+    help: 'lg.h.reviewed',
+    impact: 'lg.i.reviewed',
+  },
 ];
 
 const collection: CollectionSpec = {
@@ -30,10 +45,15 @@ const collection: CollectionSpec = {
       return {
         key: str(doc['key']),
         title: str(ctx.locale === 'ar' ? title['ar'] : title['en']) || str(doc['key']),
-        status: reviewed ? { label: ctx.t('lg.s.reviewed'), tone: 'success' } : { label: ctx.t('lg.s.pending'), tone: 'warning' },
+        status: reviewed
+          ? { label: ctx.t('lg.s.reviewed'), tone: 'success' }
+          : { label: ctx.t('lg.s.pending'), tone: 'warning' },
         facts: [
           { label: ctx.t('lg.f.version'), value: str(doc['version']) || '—' },
-          { label: ctx.t('lg.c.required'), value: ctx.t(doc['required'] === false ? 'w.no' : 'w.yes') },
+          {
+            label: ctx.t('lg.c.required'),
+            value: ctx.t(doc['required'] === false ? 'w.no' : 'w.yes'),
+          },
         ],
         values: { version: str(doc['version']), reviewed },
       } satisfies ItemView;
@@ -44,7 +64,12 @@ const collection: CollectionSpec = {
     return {
       onboarding: {
         ...docs.onboarding,
-        legalDocuments: upsertBy(documents(docs), 'key', { ...existing, version: values['version'], reviewed: values['reviewed'] }, itemKey),
+        legalDocuments: upsertBy(
+          documents(docs),
+          'key',
+          { ...existing, version: values['version'], reviewed: values['reviewed'] },
+          itemKey,
+        ),
       },
     };
   },
@@ -53,21 +78,27 @@ const collection: CollectionSpec = {
     const now = documents(after).find((doc) => str(doc['key']) === itemKey);
     const out: string[] = [];
     if (str(was?.['version']) !== str(now?.['version'])) out.push(ctx.t('lg.p.version'));
-    if (bool(was?.['reviewed']) !== bool(now?.['reviewed'])) out.push(ctx.t(bool(now?.['reviewed']) ? 'lg.p.reviewed' : 'lg.p.unreviewed'));
+    if (bool(was?.['reviewed']) !== bool(now?.['reviewed']))
+      out.push(ctx.t(bool(now?.['reviewed']) ? 'lg.p.reviewed' : 'lg.p.unreviewed'));
     return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
   },
   slices: (itemKey) => [
     {
       domain: 'onboarding',
       read: (doc) => {
-        const entry = arrayOf(doc['legalDocuments']).map(rec).find((d) => str(d['key']) === itemKey);
+        const entry = arrayOf(doc['legalDocuments'])
+          .map(rec)
+          .find((d) => str(d['key']) === itemKey);
         return entry ? { version: entry['version'], reviewed: entry['reviewed'] } : undefined;
       },
       write: (doc, value) => {
         const list = arrayOf(doc['legalDocuments']).map(rec);
         const entry = list.find((d) => str(d['key']) === itemKey);
         if (!entry || value === undefined) return doc;
-        return { ...doc, legalDocuments: upsertBy(list, 'key', { ...entry, ...rec(value) }, itemKey) };
+        return {
+          ...doc,
+          legalDocuments: upsertBy(list, 'key', { ...entry, ...rec(value) }, itemKey),
+        };
       },
     },
   ],
@@ -81,7 +112,19 @@ export const legalArea: AreaSpec = {
   collections: [collection],
   developer: [
     { label: 'lg.d.text', value: (_docs, ctx) => ctx.t('lg.d.textValue') },
-    { label: 'lg.d.required', value: (docs) => documents(docs).filter((doc) => doc['required'] !== false).length.toString() },
-    { label: 'lg.d.links', value: (docs) => documents(docs).map((doc) => str(rec(doc['url'])['en']) || '—').join(' · ') || '—' },
+    {
+      label: 'lg.d.required',
+      value: (docs) =>
+        documents(docs)
+          .filter((doc) => doc['required'] !== false)
+          .length.toString(),
+    },
+    {
+      label: 'lg.d.links',
+      value: (docs) =>
+        documents(docs)
+          .map((doc) => str(rec(doc['url'])['en']) || '—')
+          .join(' · ') || '—',
+    },
   ],
 };

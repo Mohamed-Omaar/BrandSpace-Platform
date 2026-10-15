@@ -29,7 +29,13 @@ const changesOf = (value: unknown): readonly Change[] => {
 };
 
 const shown = (value: unknown): string =>
-  value === undefined ? '—' : value === null ? '∅' : typeof value === 'string' ? value : JSON.stringify(value);
+  value === undefined
+    ? '—'
+    : value === null
+      ? '∅'
+      : typeof value === 'string'
+        ? value
+        : JSON.stringify(value);
 
 export default async function Page({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -41,19 +47,35 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
     orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
     take: LIMIT,
   });
-  const actorIds = [...new Set(events.map((event) => event.actorId).filter((id): id is string => typeof id === 'string'))];
+  const actorIds = [
+    ...new Set(
+      events.map((event) => event.actorId).filter((id): id is string => typeof id === 'string'),
+    ),
+  ];
   const people = new Map(
-    (await prisma.platformUser.findMany({ where: { id: { in: actorIds } }, select: { id: true, name: true, email: true } })).map((user) => [
-      user.id,
-      user.name ?? user.email,
-    ]),
+    (
+      await prisma.platformUser.findMany({
+        where: { id: { in: actorIds } },
+        select: { id: true, name: true, email: true },
+      })
+    ).map((user) => [user.id, user.name ?? user.email]),
   );
   const areaOf = (domain: string) =>
-    AREAS.find((area) => area.collections.some((collection) => collection.domains.includes(domain as ConfigDomain)));
+    AREAS.find((area) =>
+      area.collections.some((collection) => collection.domains.includes(domain as ConfigDomain)),
+    );
 
   return (
     <Stack>
-      <p style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textSecondary, maxInlineSize: '68ch' }} data-testid="changes-intro">
+      <p
+        style={{
+          margin: 0,
+          ...typographyTokens.bodySm,
+          color: colorTokens.textSecondary,
+          maxInlineSize: '68ch',
+        }}
+        data-testid="changes-intro"
+      >
         {t('ch2.intro', { count: LIMIT })}
       </p>
       {events.length === 0 ? (
@@ -69,24 +91,51 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
           return (
             <Card key={event.id} testId="change-row">
               <div style={{ display: 'grid', gap: spacingTokens.xs }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.xs, justifyContent: 'space-between' }}>
-                  <h3 style={{ margin: 0, ...typographyTokens.h3 }}>{area ? t(area.title) : domain}</h3>
-                  <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>{formatWhen(locale, event.occurredAt)}</span>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: spacingTokens.xs,
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <h3 style={{ margin: 0, ...typographyTokens.h3 }}>
+                    {area ? t(area.title) : domain}
+                  </h3>
+                  <span style={{ ...typographyTokens.caption, color: colorTokens.textMuted }}>
+                    {formatWhen(locale, event.occurredAt)}
+                  </span>
                 </div>
                 <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                  {t('ch2.by', { person: (event.actorId && people.get(event.actorId)) || t('ch2.someone') })}
+                  {t('ch2.by', {
+                    person: (event.actorId && people.get(event.actorId)) || t('ch2.someone'),
+                  })}
                 </span>
-                {event.reason ? <p style={{ margin: 0, ...typographyTokens.bodySm }}>{event.reason}</p> : null}
+                {event.reason ? (
+                  <p style={{ margin: 0, ...typographyTokens.bodySm }}>{event.reason}</p>
+                ) : null}
                 {after.length > 0 ? (
-                  <ul style={{ margin: 0, paddingInlineStart: spacingTokens.md, ...typographyTokens.caption }} data-testid="change-lines">
+                  <ul
+                    style={{
+                      margin: 0,
+                      paddingInlineStart: spacingTokens.md,
+                      ...typographyTokens.caption,
+                    }}
+                    data-testid="change-lines"
+                  >
                     {after.map((change, index) => (
                       <li key={`${change.path}-${index}`}>
-                        <bdi dir="ltr">{change.path}</bdi>: <bdi>{shown(before[index]?.value)}</bdi> → <bdi>{shown(change.value)}</bdi>
+                        <bdi dir="ltr">{change.path}</bdi>: <bdi>{shown(before[index]?.value)}</bdi>{' '}
+                        → <bdi>{shown(change.value)}</bdi>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textMuted }}>{t('ch2.noDetail')}</p>
+                  <p
+                    style={{ margin: 0, ...typographyTokens.caption, color: colorTokens.textMuted }}
+                  >
+                    {t('ch2.noDetail')}
+                  </p>
                 )}
               </div>
             </Card>

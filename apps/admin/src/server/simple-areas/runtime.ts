@@ -28,7 +28,9 @@ export async function loadDocs(domains: readonly ConfigDomain[]): Promise<Docs> 
   const entries = await Promise.all(
     [...new Set(domains)].map(async (domain) => [
       domain,
-      structuredClone((await config.get(domain, environment)) as unknown as Record<string, unknown>),
+      structuredClone(
+        (await config.get(domain, environment)) as unknown as Record<string, unknown>,
+      ),
     ]),
   );
   return Object.fromEntries(entries) as Docs;
@@ -47,7 +49,9 @@ export async function areaContext(locale: string, docs: Docs): Promise<AreaConte
   const [perPlan, perPlatform, operations] = await Promise.all([
     loadCustomersPerPlan(),
     variantsPerPlatform(),
-    docs.operations ? Promise.resolve(docs.operations) : loadDocs(['operations']).then((d) => d.operations ?? {}),
+    docs.operations
+      ? Promise.resolve(docs.operations)
+      : loadDocs(['operations']).then((d) => d.operations ?? {}),
   ]);
   const planCurrencies = arrayOf(docs.plans?.['plans'])
     .flatMap((plan) => arrayOf(rec(plan)['prices']).map((price) => str(rec(price)['currency'])))
@@ -132,16 +136,20 @@ export async function findUndo(
   let best: UndoTarget | null = null;
   for (const slice of collection.slices(itemKey)) {
     const versions = (await config.listVersions(service, slice.domain, environment))
-      .filter((version) => version.activatedAt !== null && (version.status === 'ACTIVE' || version.status === 'SUPERSEDED'))
+      .filter(
+        (version) =>
+          version.activatedAt !== null &&
+          (version.status === 'ACTIVE' || version.status === 'SUPERSEDED'),
+      )
       .sort((a, b) => (b.activatedAt?.getTime() ?? 0) - (a.activatedAt?.getTime() ?? 0))
       .slice(0, limit);
     if (versions.length < 2) continue;
     const read = async (id: string) =>
       slice.read(
-        parseConfigPayload(slice.domain, (await config.getVersion(service, id)).payload) as unknown as Record<
-          string,
-          unknown
-        >,
+        parseConfigPayload(
+          slice.domain,
+          (await config.getVersion(service, id)).payload,
+        ) as unknown as Record<string, unknown>,
       );
     const live = await read(versions[0]!.id);
     let newer = versions[0]!;
@@ -149,7 +157,8 @@ export async function findUndo(
       const value = await read(version.id);
       if (JSON.stringify(value ?? null) !== JSON.stringify(live ?? null)) {
         const changedAt = newer.activatedAt as Date;
-        if (!best || changedAt > best.changedAt) best = { domain: slice.domain, slice, value, changedAt };
+        if (!best || changedAt > best.changedAt)
+          best = { domain: slice.domain, slice, value, changedAt };
         break;
       }
       newer = version;

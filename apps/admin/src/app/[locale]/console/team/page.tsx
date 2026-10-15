@@ -1,4 +1,11 @@
-import { Card, ContentGrid, StatusBadge, colorTokens, spacingTokens, typographyTokens } from '@brandspace/ui';
+import {
+  Card,
+  ContentGrid,
+  StatusBadge,
+  colorTokens,
+  spacingTokens,
+  typographyTokens,
+} from '@brandspace/ui';
 import { areaCopy } from '../../../../i18n/simple-areas';
 import { formatWhen } from '../../../../components/simple-ui';
 import { getPlatformPrisma, requirePageActor } from '../../../../server/platform-context';
@@ -30,18 +37,45 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
   });
   return (
     <div style={{ display: 'grid', gap: spacingTokens.md }}>
-      <p style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textSecondary, maxInlineSize: '68ch' }} data-testid="team-intro">
+      <p
+        style={{
+          margin: 0,
+          ...typographyTokens.bodySm,
+          color: colorTokens.textSecondary,
+          maxInlineSize: '68ch',
+        }}
+        data-testid="team-intro"
+      >
         {t('tm.intro')}
       </p>
       <ContentGrid min="16rem" testId="team-cards">
         {users.map((user) => (
           <Card key={user.id} testId="team-card">
             <div style={{ display: 'grid', gap: spacingTokens.xs }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.xs, justifyContent: 'space-between', alignItems: 'center' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: spacingTokens.xs,
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
                 <h3 style={{ margin: 0, ...typographyTokens.h3 }}>{user.name ?? user.email}</h3>
-                <StatusBadge label={user.status === 'ACTIVE' ? t('tm.active') : t('tm.inactive')} tone={user.status === 'ACTIVE' ? 'success' : 'neutral'} dot />
+                <StatusBadge
+                  label={user.status === 'ACTIVE' ? t('tm.active') : t('tm.inactive')}
+                  tone={user.status === 'ACTIVE' ? 'success' : 'neutral'}
+                  dot
+                />
               </div>
-              <span dir="ltr" style={{ ...typographyTokens.caption, color: colorTokens.textMuted, textAlign: 'start' }}>
+              <span
+                dir="ltr"
+                style={{
+                  ...typographyTokens.caption,
+                  color: colorTokens.textMuted,
+                  textAlign: 'start',
+                }}
+              >
                 {user.email}
               </span>
               <span style={{ ...typographyTokens.bodySm }}>
@@ -51,7 +85,8 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
                 {t('tm.mfa')}: {t(user.mfaEnabled ? 'w.yes' : 'w.no')}
               </span>
               <span style={{ ...typographyTokens.caption, color: colorTokens.textSecondary }}>
-                {t('tm.lastSignIn')}: {user.lastLoginAt ? formatWhen(locale, user.lastLoginAt) : t('tm.never')}
+                {t('tm.lastSignIn')}:{' '}
+                {user.lastLoginAt ? formatWhen(locale, user.lastLoginAt) : t('tm.never')}
               </span>
             </div>
           </Card>

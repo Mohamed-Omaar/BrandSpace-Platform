@@ -57,7 +57,9 @@ const upload = (docs: Docs) => rec(docs.assets?.['upload']);
 
 function kindFields(docs: Docs, kind: string): readonly FieldSpec[] {
   const current = arrayOf(rec(upload(docs)['allowedMimeTypes'])[kind]).map(str);
-  const types = [...new Set([...(KNOWN_TYPES[kind as keyof typeof KNOWN_TYPES] ?? []), ...current])];
+  const types = [
+    ...new Set([...(KNOWN_TYPES[kind as keyof typeof KNOWN_TYPES] ?? []), ...current]),
+  ];
   return [
     {
       id: 'types',
@@ -68,7 +70,16 @@ function kindFields(docs: Docs, kind: string): readonly FieldSpec[] {
       required: true,
       options: types.map((type) => ({ value: type, label: { literal: TYPE_NAMES[type] ?? type } })),
     },
-    { id: 'maxMb', kind: 'number', label: 'up.f.maxMb', help: 'up.h.maxMb', impact: 'up.i.maxMb', unit: 'u.mb', min: 1, max: MAX_MB },
+    {
+      id: 'maxMb',
+      kind: 'number',
+      label: 'up.f.maxMb',
+      help: 'up.h.maxMb',
+      impact: 'up.i.maxMb',
+      unit: 'u.mb',
+      min: 1,
+      max: MAX_MB,
+    },
   ];
 }
 
@@ -86,7 +97,13 @@ const kinds: CollectionSpec = {
         key: kind,
         title: ctx.t(`up.kind.${kind}`),
         facts: [
-          { label: ctx.t('up.f.types'), value: types.map((type) => TYPE_NAMES[type] ?? type).join(ctx.locale === 'ar' ? '، ' : ', ') || ctx.t('w.none') },
+          {
+            label: ctx.t('up.f.types'),
+            value:
+              types
+                .map((type) => TYPE_NAMES[type] ?? type)
+                .join(ctx.locale === 'ar' ? '، ' : ', ') || ctx.t('w.none'),
+          },
           { label: ctx.t('up.f.maxMb'), value: `${Math.round(bytes / MB)} ${ctx.t('u.mb')}` },
         ],
         values: { types, maxMb: Math.max(1, Math.round(bytes / MB)) },
@@ -101,7 +118,10 @@ const kinds: CollectionSpec = {
         upload: {
           ...current,
           allowedMimeTypes: { ...rec(current['allowedMimeTypes']), [kind]: values['types'] },
-          maxFileBytes: { ...rec(current['maxFileBytes']), [kind]: (values['maxMb'] as number) * MB },
+          maxFileBytes: {
+            ...rec(current['maxFileBytes']),
+            [kind]: (values['maxMb'] as number) * MB,
+          },
         },
       },
     };
@@ -109,8 +129,16 @@ const kinds: CollectionSpec = {
   impact: (before, after, ctx, itemKey) => {
     const read = (docs: Docs) => rec(docs.assets?.['upload']);
     const out: string[] = [];
-    if (JSON.stringify(rec(read(before)['allowedMimeTypes'])[itemKey]) !== JSON.stringify(rec(read(after)['allowedMimeTypes'])[itemKey])) out.push(ctx.t('up.i.types'));
-    if (num(rec(read(before)['maxFileBytes'])[itemKey]) !== num(rec(read(after)['maxFileBytes'])[itemKey])) out.push(ctx.t('up.i.maxMb'));
+    if (
+      JSON.stringify(rec(read(before)['allowedMimeTypes'])[itemKey]) !==
+      JSON.stringify(rec(read(after)['allowedMimeTypes'])[itemKey])
+    )
+      out.push(ctx.t('up.i.types'));
+    if (
+      num(rec(read(before)['maxFileBytes'])[itemKey]) !==
+      num(rec(read(after)['maxFileBytes'])[itemKey])
+    )
+      out.push(ctx.t('up.i.maxMb'));
     return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
   },
   slices: (itemKey) => [
@@ -151,8 +179,23 @@ const scanningFields = (docs: Docs): readonly FieldSpec[] => {
         ...(current === 'mock' ? [{ value: 'mock', label: 'up.o.mock' as const }] : []),
       ],
     },
-    { id: 'required', kind: 'switch', label: 'up.f.required', help: 'up.h.required', impact: 'up.i.required' },
-    { id: 'endpoint', kind: 'text', label: 'up.f.endpoint', help: 'up.h.endpoint', maxLength: 300, dir: 'ltr', pattern: /^https:\/\/\S+$/, patternMessage: 'up.v.endpoint' },
+    {
+      id: 'required',
+      kind: 'switch',
+      label: 'up.f.required',
+      help: 'up.h.required',
+      impact: 'up.i.required',
+    },
+    {
+      id: 'endpoint',
+      kind: 'text',
+      label: 'up.f.endpoint',
+      help: 'up.h.endpoint',
+      maxLength: 300,
+      dir: 'ltr',
+      pattern: /^https:\/\/\S+$/,
+      patternMessage: 'up.v.endpoint',
+    },
   ];
 };
 
@@ -177,9 +220,20 @@ const scanning: CollectionSpec = {
               ? { label: ctx.t('up.o.mock'), tone: 'info' }
               : { label: ctx.t('up.s.on'), tone: 'success' },
         facts: [
-          { label: ctx.t('up.f.scanner'), value: ctx.t(`up.o.${provider === 'scanii' ? 'scanii' : provider === 'none' ? 'none' : 'mock'}`) },
-          { label: ctx.t('up.f.required'), value: ctx.t(bool(scan['required']) ? 'w.yes' : 'w.no') },
-          { label: ctx.t('up.f.endpoint'), value: str(rec(scan['scanii'])['endpoint']) || ctx.t('w.notSet') },
+          {
+            label: ctx.t('up.f.scanner'),
+            value: ctx.t(
+              `up.o.${provider === 'scanii' ? 'scanii' : provider === 'none' ? 'none' : 'mock'}`,
+            ),
+          },
+          {
+            label: ctx.t('up.f.required'),
+            value: ctx.t(bool(scan['required']) ? 'w.yes' : 'w.no'),
+          },
+          {
+            label: ctx.t('up.f.endpoint'),
+            value: str(rec(scan['scanii'])['endpoint']) || ctx.t('w.notSet'),
+          },
         ],
         values: {
           provider,
@@ -198,7 +252,10 @@ const scanning: CollectionSpec = {
           ...scan,
           provider: values['provider'],
           required: values['required'],
-          scanii: { ...rec(scan['scanii']), endpoint: values['endpoint'] === '' ? null : values['endpoint'] },
+          scanii: {
+            ...rec(scan['scanii']),
+            endpoint: values['endpoint'] === '' ? null : values['endpoint'],
+          },
         },
       },
     };
@@ -206,12 +263,16 @@ const scanning: CollectionSpec = {
   check: (_before, after, ctx) => {
     const scan = rec(after.assets?.['scanning']);
     const errors: string[] = [];
-    if (str(scan['provider']) === 'none' && bool(scan['required'])) errors.push(ctx.t('up.r.noneRequired'));
-    if (str(scan['provider']) === 'scanii' && !str(rec(scan['scanii'])['endpoint'])) errors.push(ctx.t('up.r.endpoint'));
+    if (str(scan['provider']) === 'none' && bool(scan['required']))
+      errors.push(ctx.t('up.r.noneRequired'));
+    if (str(scan['provider']) === 'scanii' && !str(rec(scan['scanii'])['endpoint']))
+      errors.push(ctx.t('up.r.endpoint'));
     return errors;
   },
   impact: (_before, after, ctx) => [
-    str(rec(after.assets?.['scanning'])['provider']) === 'none' ? ctx.t('up.p.off') : ctx.t('up.p.on'),
+    str(rec(after.assets?.['scanning'])['provider']) === 'none'
+      ? ctx.t('up.p.off')
+      : ctx.t('up.p.on'),
     ctx.t('up.p.disclaimer'),
   ],
   slices: () => [
@@ -230,11 +291,23 @@ export const uploadsArea: AreaSpec = {
   href: (locale) => `/${locale}/console/manage/uploads`,
   collections: [kinds, scanning],
   developer: [
-    { label: 'up.d.perBrand', value: (docs) => String(num(upload(docs)['maxAssetsPerBrand']) ?? '—') },
+    {
+      label: 'up.d.perBrand',
+      value: (docs) => String(num(upload(docs)['maxAssetsPerBrand']) ?? '—'),
+    },
     { label: 'up.d.tags', value: (docs) => `${num(upload(docs)['maxTagsPerAsset']) ?? '—'}` },
-    { label: 'up.d.versions', value: (docs) => String(num(rec(docs.assets?.['versions'])['maxVersionsPerAsset']) ?? '—') },
-    { label: 'up.d.previews', value: (docs) => `${num(rec(docs.assets?.['derivatives'])['thumbnailMaxEdgePx']) ?? '—'} px` },
-    { label: 'up.d.retention', value: (docs) => `${num(rec(docs.assets?.['retention'])['purgeDeletedAfterDays']) ?? '—'} d` },
+    {
+      label: 'up.d.versions',
+      value: (docs) => String(num(rec(docs.assets?.['versions'])['maxVersionsPerAsset']) ?? '—'),
+    },
+    {
+      label: 'up.d.previews',
+      value: (docs) => `${num(rec(docs.assets?.['derivatives'])['thumbnailMaxEdgePx']) ?? '—'} px`,
+    },
+    {
+      label: 'up.d.retention',
+      value: (docs) => `${num(rec(docs.assets?.['retention'])['purgeDeletedAfterDays']) ?? '—'} d`,
+    },
     { label: 'up.d.keys', value: (_docs, ctx) => ctx.t('up.d.keysValue') },
   ],
 };

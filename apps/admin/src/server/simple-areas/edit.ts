@@ -53,7 +53,12 @@ function changedDomains(before: Docs, after: Docs): ConfigDomain[] {
 }
 
 /** The same check `validateDraft` makes, for every domain this edit changes. */
-export function serviceProblems(before: Docs, after: Docs, context: ConfigContext, ctx: AreaContext): string[] {
+export function serviceProblems(
+  before: Docs,
+  after: Docs,
+  context: ConfigContext,
+  ctx: AreaContext,
+): string[] {
   const merged: ConfigContext = { ...context, ...after };
   return changedDomains(before, after).flatMap((domain) =>
     validateConfiguration(domain, after[domain], merged)
@@ -113,7 +118,10 @@ export function prepareEdit(input: {
     return { ...empty, fieldErrors: { [keyField?.id ?? 'key']: ctx.t('v.keyTaken') } };
   }
 
-  const after: Docs = { ...docs, ...collection.apply(docs, ctx, { mode, itemKey: input.itemKey, values }) };
+  const after: Docs = {
+    ...docs,
+    ...collection.apply(docs, ctx, { mode, itemKey: input.itemKey, values }),
+  };
   const unchanged = changedDomains(docs, after).length === 0;
   const problems = [
     ...(collection.check?.(docs, after, ctx, { mode, itemKey: targetKey }) ?? []),
@@ -175,7 +183,13 @@ export function prepareRestore(input: {
   readonly itemKey: string;
   readonly domain: ConfigDomain;
   readonly write: (doc: Record<string, unknown>) => Record<string, unknown>;
-}): { readonly item: ItemView; readonly after: Docs; readonly changes: readonly ChangeLine[]; readonly impacts: readonly string[]; readonly problems: readonly string[] } | null {
+}): {
+  readonly item: ItemView;
+  readonly after: Docs;
+  readonly changes: readonly ChangeLine[];
+  readonly impacts: readonly string[];
+  readonly problems: readonly string[];
+} | null {
   const { collection, docs, ctx, itemKey } = input;
   const item = collection.items(docs, ctx).find((i) => i.key === itemKey);
   if (!item) return null;

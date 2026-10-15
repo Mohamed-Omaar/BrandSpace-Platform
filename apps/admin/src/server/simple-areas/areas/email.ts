@@ -19,8 +19,26 @@ const hasSender = (key: string) =>
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const fields: readonly FieldSpec[] = [
-  { id: 'fromName', kind: 'text', label: 'em.f.name', help: 'em.h.name', impact: 'em.i.sender', maxLength: 100 },
-  { id: 'fromEmail', kind: 'text', label: 'em.f.address', help: 'em.h.address', impact: 'em.i.sender', required: true, maxLength: 200, dir: 'ltr', pattern: EMAIL, patternMessage: 'em.v.address' },
+  {
+    id: 'fromName',
+    kind: 'text',
+    label: 'em.f.name',
+    help: 'em.h.name',
+    impact: 'em.i.sender',
+    maxLength: 100,
+  },
+  {
+    id: 'fromEmail',
+    kind: 'text',
+    label: 'em.f.address',
+    help: 'em.h.address',
+    impact: 'em.i.sender',
+    required: true,
+    maxLength: 200,
+    dir: 'ltr',
+    pattern: EMAIL,
+    patternMessage: 'em.v.address',
+  },
 ];
 
 const senders: CollectionSpec = {
@@ -48,7 +66,10 @@ const senders: CollectionSpec = {
                 : { label: ctx.t('em.st.notSetUp'), tone: 'neutral' },
           facts: [
             { label: ctx.t('em.f.name'), value: str(settings['fromName']) || ctx.t('w.notSet') },
-            { label: ctx.t('em.f.address'), value: str(settings['fromEmail']) || ctx.t('w.notSet') },
+            {
+              label: ctx.t('em.f.address'),
+              value: str(settings['fromEmail']) || ctx.t('w.notSet'),
+            },
           ],
           values: { fromName: str(settings['fromName']), fromEmail: str(settings['fromEmail']) },
         } satisfies ItemView;
@@ -58,7 +79,10 @@ const senders: CollectionSpec = {
     const list = providers(docs);
     const provider = list.find((p) => str(p['key']) === itemKey);
     if (!provider) return {};
-    const settings: Record<string, unknown> = { ...rec(provider['settings']), fromEmail: values['fromEmail'] };
+    const settings: Record<string, unknown> = {
+      ...rec(provider['settings']),
+      fromEmail: values['fromEmail'],
+    };
     if (values['fromName'] === '') delete settings['fromName'];
     else settings['fromName'] = values['fromName'];
     return {
@@ -73,7 +97,9 @@ const senders: CollectionSpec = {
     {
       domain: 'integrations.email',
       read: (doc) => {
-        const provider = arrayOf(doc['providers']).map(rec).find((p) => str(p['key']) === itemKey);
+        const provider = arrayOf(doc['providers'])
+          .map(rec)
+          .find((p) => str(p['key']) === itemKey);
         if (!provider) return undefined;
         const settings = rec(provider['settings']);
         return { fromName: settings['fromName'] ?? null, fromEmail: settings['fromEmail'] ?? null };
@@ -103,7 +129,17 @@ export const emailArea: AreaSpec = {
   guided: [{ label: 'em.g.resend', href: '/console/integrations/email/resend' }],
   developer: [
     { label: 'em.d.key', value: (_docs, ctx) => ctx.t('up.d.keysValue') },
-    { label: 'em.d.replyTo', value: (docs) => providers(docs).map((p) => str(rec(p['settings'])['replyTo'])).filter(Boolean).join(' · ') || '—' },
-    { label: 'em.d.active', value: (docs) => str(docs['integrations.email']?.['activeProviderKey']) || '—' },
+    {
+      label: 'em.d.replyTo',
+      value: (docs) =>
+        providers(docs)
+          .map((p) => str(rec(p['settings'])['replyTo']))
+          .filter(Boolean)
+          .join(' · ') || '—',
+    },
+    {
+      label: 'em.d.active',
+      value: (docs) => str(docs['integrations.email']?.['activeProviderKey']) || '—',
+    },
   ],
 };

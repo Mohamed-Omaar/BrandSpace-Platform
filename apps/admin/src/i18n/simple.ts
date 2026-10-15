@@ -62,7 +62,8 @@ const en = {
   'mode.technicalDetails': 'View technical details',
   // Shared words.
   'common.notAvailable': 'Not available',
-  'ai.notYet': 'AI is not available yet: no AI provider is set up. Customers see no AI features until one is connected and switched on.',
+  'ai.notYet':
+    'AI is not available yet: no AI provider is set up. Customers see no AI features until one is connected and switched on.',
   'common.noPermission': 'Your role cannot see this',
   'common.open': 'Open',
   'common.manage': 'Manage',
@@ -696,7 +697,8 @@ const ar: Copy = {
   'mode.backToSimple': 'العودة إلى الرئيسية البسيطة',
   'mode.technicalDetails': 'عرض التفاصيل التقنية',
   'common.notAvailable': 'غير متوفر',
-  'ai.notYet': 'الذكاء الاصطناعي غير متاح بعد: لم يُعدّ أي مزوّد له. لا يرى العملاء أي ميزة للذكاء الاصطناعي حتى يُربط مزوّد ويُفعَّل.',
+  'ai.notYet':
+    'الذكاء الاصطناعي غير متاح بعد: لم يُعدّ أي مزوّد له. لا يرى العملاء أي ميزة للذكاء الاصطناعي حتى يُربط مزوّد ويُفعَّل.',
   'common.noPermission': 'دورك لا يسمح برؤية هذا',
   'common.open': 'فتح',
   'common.manage': 'إدارة',
