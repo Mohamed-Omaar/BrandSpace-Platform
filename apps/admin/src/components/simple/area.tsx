@@ -200,7 +200,7 @@ export async function SimpleArea({
               {ctx.t('ui.undoNothing', { item: item.title })}
             </p>
             <div>
-              <ActionLink href={base}>{ctx.t('a.back')}</ActionLink>
+              <ActionLink href={base}>{ctx.t('a.backToCards')}</ActionLink>
             </div>
           </Stack>
         </Card>
@@ -460,7 +460,7 @@ function Missing({ ctx, base }: { readonly ctx: AreaContext; readonly base: stri
       <Stack gap={spacingTokens.sm}>
         <p style={body}>{ctx.t('ui.notFound')}</p>
         <div>
-          <ActionLink href={base}>{ctx.t('a.back')}</ActionLink>
+          <ActionLink href={base} testId="area-missing-back">{ctx.t('a.backToCards')}</ActionLink>
         </div>
       </Stack>
     </Card>

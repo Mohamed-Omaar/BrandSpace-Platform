@@ -1,13 +1,18 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { PLATFORM_REALM } from '@brandspace/auth';
-import { Banner, Button, CONTROL_CLASS, Field, inputStyle, spacingTokens } from '@brandspace/ui';
+import { Banner, CONTROL_CLASS, Field, spacingTokens } from '@brandspace/ui';
 import { translator } from '../../../../i18n/messages';
 import { PlatformAuthShell } from '../../../../components/platform-auth';
 import { verifyMfaAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * The second step (D-27: never optional). A recovery code goes in the same
+ * field as the authenticator's code — there is no separate recovery screen,
+ * and the description says so.
+ */
 export default async function MfaPage({
   params,
   searchParams,
@@ -25,6 +30,9 @@ export default async function MfaPage({
 
   return (
     <PlatformAuthShell
+      locale={locale}
+      screen="mfa"
+      eyebrow={t('mfa.eyebrow')}
       heading={t('mfa.title')}
       description={t('mfa.recoveryHint')}
       descriptionTestId="description"
@@ -38,7 +46,7 @@ export default async function MfaPage({
         ) : null
       }
     >
-      <form action={verifyMfaAction} style={{ display: 'grid', gap: spacingTokens.xs }}>
+      <form action={verifyMfaAction}>
         <input type="hidden" name="locale" value={locale} />
         <Field label={t('mfa.code')} htmlFor="code" required>
           <input
@@ -49,18 +57,16 @@ export default async function MfaPage({
             required
             data-testid="mfa-code"
             className={CONTROL_CLASS}
-            style={inputStyle({ size: 'lg' })}
+            style={{ inlineSize: '100%' }}
           />
         </Field>
-        <Button
+        <button
           type="submit"
-          size="lg"
-          fullWidth
           data-testid="submit"
-          style={{ marginBlockStart: spacingTokens.sm }}
+          style={{ inlineSize: '100%', marginBlockStart: spacingTokens.sm }}
         >
           {t('mfa.submit')}
-        </Button>
+        </button>
       </form>
     </PlatformAuthShell>
   );

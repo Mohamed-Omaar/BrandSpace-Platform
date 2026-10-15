@@ -16,6 +16,7 @@ export * from './data';
 export * from './design-studio';
 export * from './direction';
 export * from './feature-card';
+export * from './entry-card';
 export * from './feedback';
 export * from './icons';
 export * from './media';

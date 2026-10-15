@@ -255,9 +255,16 @@ describe('P6-03a · Platform Admin is untouched', () => {
     // REPORTS the customer minimum (the closed beta wants 12). It reads the
     // value to show it; no platform sign-in, password or MFA path is involved,
     // and the two files are named here so a new reader cannot slip in.
+    //
+    // CONTROL CENTER SIMPLE MODE — ONE CONFIGURATION EDITOR: the owner's
+    // "Sign-ups and security" card edits the customer minimum through the
+    // Configuration Service, as Advanced's JSON editor always could. It is a
+    // configuration document, not a sign-in path, and the same no-auth check
+    // below holds for it.
     const READINESS_REPORT = [
       'apps/admin/src/server/owner-overview.ts',
       'apps/admin/src/server/owner-readiness.ts',
+      'apps/admin/src/server/simple-areas/areas/signups.ts',
     ];
     const offenders: string[] = [];
     for (const file of sourceFiles('apps/admin/src', ['.ts', '.tsx'])) {

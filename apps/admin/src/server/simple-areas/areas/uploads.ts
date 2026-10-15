@@ -106,7 +106,13 @@ const kinds: CollectionSpec = {
       },
     };
   },
-  impact: (_before, _after, ctx) => [ctx.t('up.i.types'), ctx.t('up.i.maxMb')],
+  impact: (before, after, ctx, itemKey) => {
+    const read = (docs: Docs) => rec(docs.assets?.['upload']);
+    const out: string[] = [];
+    if (JSON.stringify(rec(read(before)['allowedMimeTypes'])[itemKey]) !== JSON.stringify(rec(read(after)['allowedMimeTypes'])[itemKey])) out.push(ctx.t('up.i.types'));
+    if (num(rec(read(before)['maxFileBytes'])[itemKey]) !== num(rec(read(after)['maxFileBytes'])[itemKey])) out.push(ctx.t('up.i.maxMb'));
+    return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
+  },
   slices: (itemKey) => [
     {
       domain: 'assets',

@@ -81,7 +81,15 @@ const newWorkspace: CollectionSpec = {
       },
     };
   },
-  impact: (_before, _after, ctx) => [ctx.t('plans.p.trial'), ctx.t('plans.p.monthlyCredits')],
+  impact: (before, after, ctx, itemKey) => {
+    const find = (docs: Docs) => arrayOf(docs.plans?.['plans']).map(rec).find((plan) => str(plan['key']) === itemKey) ?? {};
+    const was = find(before);
+    const now = find(after);
+    const out: string[] = [];
+    if (num(was['trialDays']) !== num(now['trialDays']) || num(was['trialCredits']) !== num(now['trialCredits'])) out.push(ctx.t('plans.p.trial'));
+    if (num(was['monthlyCredits']) !== num(now['monthlyCredits'])) out.push(ctx.t('plans.p.monthlyCredits'));
+    return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
+  },
   slices: (itemKey) => [
     {
       domain: 'plans',
@@ -151,7 +159,14 @@ const credits: CollectionSpec = {
         .sort((a, b) => b - a),
     },
   }),
-  impact: (_before, _after, ctx) => [ctx.t('trial.i.expiry'), ctx.t('trial.i.warn')],
+  impact: (before, after, ctx) => {
+    const was = before.credits ?? {};
+    const now = after.credits ?? {};
+    const out: string[] = [];
+    if (['planGrantExpiryMonths', 'promotionalExpiryMonths', 'purchasedPackExpiryMonths'].some((key) => num(was[key]) !== num(now[key]))) out.push(ctx.t('trial.i.expiry'));
+    if (JSON.stringify(was['lowBalanceThresholdPercents']) !== JSON.stringify(now['lowBalanceThresholdPercents'])) out.push(ctx.t('trial.i.warn'));
+    return out.length > 0 ? out : [ctx.t('w.noCustomerChange')];
+  },
   slices: () => [
     {
       domain: 'credits',

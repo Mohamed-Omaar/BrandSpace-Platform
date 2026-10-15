@@ -1,0 +1,664 @@
+/*
+ * THE ENTRY SCREENS — sign-in, sign-up, forgot password, check your email,
+ * the workspace chooser and the setup wizard (`Auth.dc.html`), and since the
+ * Control Center Simple-mode pass the Control Center's own sign-in and second
+ * step, which the owner asked to look the same (D-491's 0.80 scale included).
+ *
+ * MOVED HERE VERBATIM FROM `prototype.css`, not copied: that sheet also
+ * rescales every customer screen to 0.88 at `:root`, which the Control Center
+ * must not take, so the entry card's rules live in their own sheet that both
+ * apps import. The customer app imports it straight after `prototype.css`;
+ * the before/after pixel comparison of every customer entry screen is in the
+ * Control Center Simple-mode PR.
+ */
+/*
+ * BATCH 7 PR C (D-484 amended) — THE ENTRY SCREENS ARE THE PROTOTYPE AT 0.80.
+ *
+ * The owner's amendment: sign-in, sign-up, forgot password, check your email,
+ * the workspace chooser and every setup-wizard step use 0.80 instead of 0.88;
+ * every other screen keeps 0.88. The same tokens, redefined on `.bsp-auth` —
+ * the one ancestor every entry screen shares (`AuthCard` and `SetupFrame`) —
+ * at the prototype's value x 0.80, rounded to the nearest 0.5px, type never
+ * under 11px, a hairline still a hairline, the 24px target minimum untouched.
+ * No zoom, no transform. `tests/unit/b7-scale.test.ts` checks this table
+ * against `tokens.css` the way it checks the 0.88 one.
+ */
+.bsp-auth {
+  --bsp-px-1-5: 1px;
+  --bsp-px-2: 1.5px;
+  --bsp-px-3: 2.5px;
+  --bsp-px-4: 3px;
+  --bsp-px-5: 4px;
+  --bsp-px-5-5: 4.5px;
+  --bsp-px-6: 5px;
+  --bsp-px-7: 5.5px;
+  --bsp-px-8: 6.5px;
+  --bsp-px-8-5: 7px;
+  --bsp-px-9: 7px;
+  --bsp-px-10: 8px;
+  --bsp-px-11: 9px;
+  --bsp-px-12: 9.5px;
+  --bsp-px-13: 10.5px;
+  --bsp-px-14: 11px;
+  --bsp-px-15: 12px;
+  --bsp-px-16: 13px;
+  --bsp-px-17: 13.5px;
+  --bsp-px-18: 14.5px;
+  --bsp-px-19: 15px;
+  --bsp-px-20: 16px;
+  --bsp-px-21: 17px;
+  --bsp-px-22: 17.5px;
+  --bsp-px-24: 19px;
+  --bsp-px-25: 20px;
+  --bsp-px-26: 21px;
+  --bsp-px-28: 22.5px;
+  --bsp-px-30: 24px;
+  --bsp-px-32: 25.5px;
+  --bsp-px-34: 27px;
+  --bsp-px-35: 28px;
+  --bsp-px-36: 29px;
+  --bsp-px-38: 30.5px;
+  --bsp-px-40: 32px;
+  --bsp-px-41: 33px;
+  --bsp-px-42: 33.5px;
+  --bsp-px-44: 35px;
+  --bsp-px-46: 37px;
+  --bsp-px-48: 38.5px;
+  --bsp-px-50: 40px;
+  --bsp-px-52: 41.5px;
+  --bsp-px-55: 44px;
+  --bsp-px-56: 45px;
+  --bsp-px-58: 46.5px;
+  --bsp-px-60: 48px;
+  --bsp-px-64: 51px;
+  --bsp-px-70: 56px;
+  --bsp-px-72: 57.5px;
+  --bsp-px-74: 59px;
+  --bsp-px-76: 61px;
+  --bsp-px-80: 64px;
+  --bsp-px-84: 67px;
+  --bsp-px-90: 72px;
+  --bsp-px-92: 73.5px;
+  --bsp-px-96: 77px;
+  --bsp-px-99: 79px;
+  --bsp-px-100: 80px;
+  --bsp-px-104: 83px;
+  --bsp-px-110: 88px;
+  --bsp-px-112: 89.5px;
+  --bsp-px-116: 93px;
+  --bsp-px-120: 96px;
+  --bsp-px-122: 97.5px;
+  --bsp-px-125: 100px;
+  --bsp-px-130: 104px;
+  --bsp-px-140: 112px;
+  --bsp-px-150: 120px;
+  --bsp-px-160: 128px;
+  --bsp-px-168: 134.5px;
+  --bsp-px-170: 136px;
+  --bsp-px-176: 141px;
+  --bsp-px-180: 144px;
+  --bsp-px-200: 160px;
+  --bsp-px-210: 168px;
+  --bsp-px-220: 176px;
+  --bsp-px-230: 184px;
+  --bsp-px-240: 192px;
+  --bsp-px-250: 200px;
+  --bsp-px-260: 208px;
+  --bsp-px-270: 216px;
+  --bsp-px-280: 224px;
+  --bsp-px-290: 232px;
+  --bsp-px-300: 240px;
+  --bsp-px-320: 256px;
+  --bsp-px-330: 264px;
+  --bsp-px-340: 272px;
+  --bsp-px-350: 280px;
+  --bsp-px-360: 288px;
+  --bsp-px-362: 289.5px;
+  --bsp-px-380: 304px;
+  --bsp-px-400: 320px;
+  --bsp-px-420: 336px;
+  --bsp-px-450: 360px;
+  --bsp-px-470: 376px;
+  --bsp-px-520: 416px;
+  --bsp-px-540: 432px;
+  --bsp-px-560: 448px;
+  --bsp-px-570: 456px;
+  --bsp-px-580: 464px;
+  --bsp-px-600: 480px;
+  --bsp-px-620: 496px;
+  --bsp-px-640: 512px;
+  --bsp-px-720: 576px;
+  --bsp-px-760: 608px;
+  --bsp-px-780: 624px;
+  --bsp-px-836: 669px;
+  --bsp-px-900: 720px;
+  --bsp-px-999: 799px;
+  --bsp-px-9999: 7999px;
+  --bsp-px-54: 43px;
+  --bsp-rem-0-0625: 1px;
+  --bsp-rem-0-125: 1.5px;
+  --bsp-rem-0-1875: 2.5px;
+  --bsp-rem-0-25: 3px;
+  --bsp-rem-0-3125: 4px;
+  --bsp-rem-0-375: 5px;
+  --bsp-rem-0-4375: 5.5px;
+  --bsp-rem-0-5: 6.5px;
+  --bsp-rem-0-5625: 7px;
+  --bsp-rem-0-625: 8px;
+  --bsp-rem-0-6875: 9px;
+  --bsp-rem-0-75: 9.5px;
+  --bsp-rem-0-8125: 10.5px;
+  --bsp-rem-0-875: 11px;
+  --bsp-rem-0-9375: 12px;
+  --bsp-rem-1: 13px;
+  --bsp-rem-1-0625: 13.5px;
+  --bsp-rem-1-125: 14.5px;
+  --bsp-rem-1-1875: 15px;
+  --bsp-rem-1-25: 16px;
+  --bsp-rem-1-375: 17.5px;
+  --bsp-rem-1-4: 18px;
+  --bsp-rem-1-5: 19px;
+  --bsp-rem-1-5625: 20px;
+  --bsp-rem-1-75: 22.5px;
+  --bsp-rem-1-875: 24px;
+  --bsp-rem-2: 25.5px;
+  --bsp-rem-2-125: 27px;
+  --bsp-rem-2-25: 29px;
+  --bsp-rem-2-375: 30.5px;
+  --bsp-rem-2-4375: 31px;
+  --bsp-rem-2-5: 32px;
+  --bsp-rem-2-625: 33.5px;
+  --bsp-rem-2-75: 35px;
+  --bsp-rem-3: 38.5px;
+  --bsp-rem-3-25: 41.5px;
+  --bsp-rem-3-375: 43px;
+  --bsp-rem-3-625: 46.5px;
+  --bsp-rem-3-75: 48px;
+  --bsp-rem-4: 51px;
+  --bsp-rem-4-5: 57.5px;
+  --bsp-rem-4-625: 59px;
+  --bsp-rem-4-875: 62.5px;
+  --bsp-rem-5: 64px;
+  --bsp-rem-5-25: 67px;
+  --bsp-rem-5-5: 70.5px;
+  --bsp-rem-5-625: 72px;
+  --bsp-rem-6: 77px;
+  --bsp-rem-7: 89.5px;
+  --bsp-rem-7-375: 94.5px;
+  --bsp-rem-8-25: 105.5px;
+  --bsp-rem-10: 128px;
+  --bsp-rem-11: 141px;
+  --bsp-rem-11-25: 144px;
+  --bsp-rem-11-875: 152px;
+  --bsp-rem-12: 153.5px;
+  --bsp-rem-13: 166.5px;
+  --bsp-rem-13-75: 176px;
+  --bsp-rem-14: 179px;
+  --bsp-rem-14-375: 184px;
+  --bsp-rem-15: 192px;
+  --bsp-rem-15-5: 198.5px;
+  --bsp-rem-16: 205px;
+  --bsp-rem-17: 217.5px;
+  --bsp-rem-18: 230.5px;
+  --bsp-rem-18-75: 240px;
+  --bsp-rem-20-625: 264px;
+  --bsp-rem-21-25: 272px;
+  --bsp-rem-24: 307px;
+  --bsp-rem-26: 333px;
+  --bsp-rem-26-875: 344px;
+  --bsp-rem-28: 358.5px;
+  --bsp-rem-30: 384px;
+  --bsp-rem-31-25: 400px;
+  --bsp-rem-32: 409.5px;
+  --bsp-rem-34: 435px;
+  --bsp-rem-35-625: 456px;
+  --bsp-rem-38-75: 496px;
+  --bsp-rem-40: 512px;
+  --bsp-rem-41-25: 528px;
+  --bsp-rem-96-25: 1232px;
+  --bsp-rem-3-5: 45px;
+  --bsp-rem-19: 243px;
+  --bs-space-3xs: 1.5px;
+  --bs-space-2xs: 2.5px;
+  --bs-space-xs: 3px;
+  --bs-space-sm: 6.5px;
+  --bs-space-md: 13px;
+  --bs-space-lg: 19px;
+  --bs-space-xl: 25.5px;
+  --bs-space-2xl: 38.5px;
+  --bs-space-3xl: 51px;
+  --bs-radius-xs: 4px;
+  --bs-radius-sm: 6.5px;
+  --bs-radius-md: 8px;
+  --bs-radius-lg: 9px;
+  --bs-radius-control: 9.5px;
+  --bs-radius-xl: 10.5px;
+  --bs-radius-rail: 13px;
+  --bs-radius-2xl: 14.5px;
+  --bs-radius-card: 16px;
+  --bs-radius-3xl: 22.5px;
+  --bs-radius-shell: 27px;
+  --bsp-fs-7: 11px;
+  --bsp-fs-8: 11px;
+  --bsp-fs-9: 11px;
+  --bsp-fs-9-5: 11px;
+  --bsp-fs-10: 11px;
+  --bsp-fs-10-5: 11px;
+  --bsp-fs-11: 11px;
+  --bsp-fs-11-5: 11px;
+  --bsp-fs-12: 11px;
+  --bsp-fs-12-5: 11px;
+  --bsp-fs-13: 11px;
+  --bsp-fs-13-5: 11px;
+  --bsp-fs-14: 11px;
+  --bsp-fs-14-5: 11.5px;
+  --bsp-fs-15: 12px;
+  --bsp-fs-15-5: 12.5px;
+  --bsp-fs-16: 13px;
+  --bsp-fs-16-5: 13px;
+  --bsp-fs-17: 13.5px;
+  --bsp-fs-18: 14.5px;
+  --bsp-fs-19: 15px;
+  --bsp-fs-20: 16px;
+  --bsp-fs-21: 17px;
+  --bsp-fs-21-6: 17.5px;
+  --bsp-fs-22: 17.5px;
+  --bsp-fs-24: 19px;
+  --bsp-fs-26: 21px;
+  --bsp-fs-28: 22.5px;
+  --bsp-fs-29: 23px;
+  --bsp-fs-30: 24px;
+  --bsp-fs-32: 25.5px;
+  --bsp-fs-34: 27px;
+  --bsp-fs-40: 32px;
+  --bsp-fs-42: 33.5px;
+  --bsp-fs-48: 38.5px;
+  --bsp-fs-52: 41.5px;
+  --bsp-fs-56: 45px;
+  --bsp-fs-64: 51px;
+  /* `body` takes its size from the 0.88 table; text here that sets none of its
+     own takes the 0.80 one. */
+  font-size: var(--bsp-fs-15);
+}
+
+/* ----------------------------------------------------------- §3-AUTH ---- */
+
+/*
+ * SIGN-IN AND THE OTHER ENTRY SCREENS — `Auth.dc.html` lines 12–117 (D-468,
+ * batch 6): the stage's three radial washes on `#f3f3f3`, one 540px card
+ * (`rgba(255,255,255,.96)`, radius 36, `padding: 42px 44px 34px`,
+ * `0 40px 100px rgba(20,16,35,.14)`, `gap: 20px`), the 46px logo beside the
+ * 44px language button, the purple eyebrow, a 42px / 1.05 / 800 heading over
+ * a 15px line, `.lb` labels, `.in` fields and `.btn` buttons. The footer's
+ * `#8a8a92` takes `#6a6a72`.
+ */
+.bsp-auth {
+  min-block-size: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(
+      var(--bsp-px-720) var(--bsp-px-540) at 12% 8%,
+      rgba(121, 53, 254, 0.26),
+      transparent 70%
+    ),
+    radial-gradient(
+      var(--bsp-px-640) var(--bsp-px-520) at 88% 10%,
+      rgba(255, 120, 170, 0.14),
+      transparent 70%
+    ),
+    radial-gradient(
+      var(--bsp-px-780) var(--bsp-px-580) at 94% 100%,
+      rgba(255, 214, 10, 0.34),
+      transparent 70%
+    ),
+    #f3f3f3;
+  color: #111114;
+}
+.bsp-auth-stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--bsp-px-32);
+  box-sizing: border-box;
+}
+/*
+ * BATCH 7 (A2) — ONE SCROLL ONLY: the browser window never scrolls. From the
+ * tablet width the entry screens (sign-in, sign-up, the wizard, the workspace
+ * list) are held to the window; a card taller than the window scrolls inside
+ * itself, and only a window too short for even the capped card lets the stage
+ * around it scroll. The phone layout still scrolls the page (post-launch).
+ */
+@media (min-width: 768px) {
+  .bsp-auth {
+    block-size: 100vh;
+    min-block-size: 0;
+    overflow: hidden;
+  }
+  .bsp-auth-stage {
+    min-block-size: 0;
+    overflow-y: auto;
+  }
+  .bsp-auth-card {
+    max-block-size: calc(100vh - var(--bsp-px-64));
+    overflow-y: auto;
+  }
+  /* PR D (review of #75) — CHOOSING A WORKSPACE: the rows scroll inside the
+     card, under its heading, and "Create workspace · n/limit" (or the limit
+     note) stays in view at the card's foot. The card no longer scrolls as a
+     whole, so the create row is never pushed below its edge. */
+  .bsp-auth-card:has(.bsp-auth-wslist) {
+    overflow: hidden;
+  }
+  .bsp-auth-card:has(.bsp-auth-wslist) > * {
+    flex-shrink: 0;
+  }
+  .bsp-auth-card > .bsp-auth-body:has(> .bsp-auth-wslist) {
+    flex: 0 1 auto;
+    min-block-size: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .bsp-auth-body > .bsp-auth-wslist {
+    flex: 0 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Room for a row's lift and focus ring inside the scrolling box. */
+    padding: var(--bsp-px-4);
+    margin: calc(-1 * var(--bsp-px-4));
+    /* Fix PR 2c — the list comes to rest on a whole row, so no row is cut
+       to an empty bar along the top edge (owner review of #77). */
+    scroll-snap-type: y mandatory;
+    scroll-padding-block: var(--bsp-px-4);
+  }
+  .bsp-auth-body > .bsp-auth-wslist > li {
+    scroll-snap-align: start;
+  }
+  .bsp-auth-body:has(> .bsp-auth-wslist) > :not(.bsp-auth-wslist) {
+    flex-shrink: 0;
+  }
+}
+.bsp-auth-card {
+  inline-size: min(var(--bsp-px-540), 100%);
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: var(--bsp-px-36);
+  padding: var(--bsp-px-42) var(--bsp-px-44) var(--bsp-px-34);
+  box-shadow: 0 var(--bsp-px-40) var(--bsp-px-100) rgba(20, 16, 35, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-20);
+}
+.bsp-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--bsp-px-12);
+}
+.bsp-auth-logo {
+  inline-size: var(--bsp-px-46);
+  block-size: var(--bsp-px-46);
+  display: block;
+  flex: none;
+}
+.bsp-auth-lang {
+  margin-inline-start: auto;
+}
+.bsp-auth-lang [data-testid='locale-switch'] {
+  inline-size: var(--bsp-px-44);
+  block-size: var(--bsp-px-44);
+  min-inline-size: var(--bsp-px-44);
+  padding: 0;
+  border: 0;
+  border-radius: var(--bsp-px-12);
+  background: #f4f4f5;
+  color: #111114;
+  font-size: var(--bsp-fs-13);
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  box-shadow: none;
+}
+.bsp-auth-lang [data-testid='locale-switch'] svg {
+  display: none;
+}
+/* `.eyebrow`: `#f0e9ff` / `#5312c4`, `padding: 6px 12px`, 11.5px / 800, a 7px dot. */
+.bsp-auth-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bsp-px-8);
+  align-self: flex-start;
+  background: #f0e9ff;
+  color: #5312c4;
+  border-radius: var(--bsp-px-99);
+  padding: var(--bsp-px-6) var(--bsp-px-12);
+  font-size: var(--bsp-fs-11-5);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.bsp-auth-eyebrow > span {
+  inline-size: var(--bsp-px-7);
+  block-size: var(--bsp-px-7);
+  border-radius: 50%;
+  background: #7935fe;
+}
+.bsp-auth-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-8);
+}
+.bsp-auth-head > h1 {
+  margin: 0;
+  font-size: var(--bsp-fs-42);
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+.bsp-auth-head > p {
+  margin: 0;
+  font-size: var(--bsp-fs-15);
+  color: #55555c;
+  line-height: 1.6;
+}
+.bsp-auth-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-14);
+}
+/* `.lb`: 11.5px / 800, `.08em`, capitals, `#6a6a72`, `margin-block-end: 8px`. */
+.bsp-auth-body div > label[for]:first-child {
+  font-size: var(--bsp-fs-11-5) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a6a72 !important;
+  margin-block-end: var(--bsp-px-8) !important;
+}
+/* `.in`: `background: #f4f4f5; border-radius: 14px; padding: 14px 18px; font-size: 15.5px; min-block-size: 58px`. */
+.bsp-auth-body
+  :is(
+    input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+    select,
+    textarea
+  ).bs-control {
+  display: block;
+  inline-size: 100%;
+  box-sizing: border-box;
+  border: 1px solid transparent !important;
+  background: #f4f4f5 !important;
+  border-radius: var(--bsp-px-14) !important;
+  padding: var(--bsp-px-14) var(--bsp-px-18) !important;
+  font-size: var(--bsp-fs-15-5) !important;
+  min-block-size: var(--bsp-px-58) !important;
+  color: #111114;
+  box-shadow: none !important;
+}
+/*
+ * Review of #67 — the password row (`Auth.dc.html` lines 24, 28, 47): the label
+ * and "Forgot password?" (`.lnk`, 12.5px here) on one line, and `.pw .show` —
+ * the white 10px-radius button 7px inside the field's trailing edge, 13px / 800
+ * `#55555c` — on sign-in's field and on the shared password field's reveal.
+ */
+/* The label and "Forgot password?" share the first line; the field is the
+   second. The link comes after the field in the document, so the keyboard goes
+   from the email to the password as it always has. */
+.bsp-pw-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--bsp-px-10);
+}
+.bsp-pw-row > .bsp-pw {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.bsp-pw-row > .bsp-lnk {
+  grid-column: 2;
+  grid-row: 1;
+}
+.bsp-pw-row > label {
+  font-size: var(--bsp-fs-11-5);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a6a72;
+  margin-block-end: var(--bsp-px-8);
+}
+.bsp-auth-body .bsp-lnk {
+  border: 0;
+  background: transparent;
+  color: #5312c4;
+  font-weight: 700;
+  font-size: var(--bsp-fs-12-5);
+  text-decoration: underline;
+  padding: 0;
+}
+.bsp-pw {
+  position: relative;
+}
+.bsp-auth-body .bsp-pw > input.bs-control,
+.bsp-auth-body input.bs-control:has(+ .bs-reveal) {
+  padding-inline-end: var(--bsp-px-84) !important;
+}
+.bsp-pw-show,
+.bsp-auth-body .bs-reveal {
+  position: absolute;
+  inset-block: var(--bsp-px-7) !important;
+  inset-inline-end: var(--bsp-px-7) !important;
+  transform: none !important;
+  border: 0 !important;
+  background: #fff !important;
+  border-radius: var(--bsp-px-10) !important;
+  padding: 0 var(--bsp-px-12) !important;
+  min-block-size: 0 !important;
+  font-size: var(--bsp-fs-13) !important;
+  font-weight: 800 !important;
+  color: #55555c !important;
+  box-shadow: 0 1px var(--bsp-px-3) rgba(0, 0, 0, 0.06) !important;
+  cursor: pointer;
+}
+.bsp-auth-trial {
+  margin: 0;
+  background: #f6f3ff;
+  border-radius: var(--bsp-px-12);
+  padding: var(--bsp-px-10) var(--bsp-px-12);
+  font-size: var(--bsp-fs-12-5);
+  color: #5312c4;
+}
+.bsp-auth-alt {
+  display: block;
+  text-align: center;
+  font-size: var(--bsp-fs-13-5);
+  color: #4d4c53;
+}
+/* `.btn`: 56px, radius 14, `padding: 12px 20px`, 15px / 800, ink; sign-up's is purple. */
+.bsp-auth-body form button[type='submit']:not(.bsp-auth-ws) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bsp-px-8);
+  inline-size: 100%;
+  border: 0 !important;
+  border-radius: var(--bsp-px-14) !important;
+  padding: var(--bsp-px-12) var(--bsp-px-20) !important;
+  font-size: var(--bsp-fs-15) !important;
+  font-weight: 800 !important;
+  background: #111114 !important;
+  color: #fff !important;
+  min-block-size: var(--bsp-px-56) !important;
+  box-shadow: none !important;
+}
+.bsp-auth-body form button[type='submit'][data-testid='signup-submit'] {
+  background: #7935fe !important;
+}
+.bsp-auth-body a,
+.bsp-auth-links a {
+  color: #5312c4;
+  font-weight: 700;
+}
+.bsp-auth-word {
+  font-size: var(--bsp-fs-19);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.bsp-auth-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bsp-px-8);
+  flex-wrap: wrap;
+  font-size: var(--bsp-fs-13-5);
+  color: #4d4c53;
+  text-align: center;
+}
+/* The footer line: 12px, a 7px `#ffd60a` dot, `padding-top: 6px`. */
+.bsp-auth-foot {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--bsp-px-8);
+  font-size: var(--bsp-fs-12);
+  color: #6a6a72;
+  padding-block-start: var(--bsp-px-6);
+}
+.bsp-auth-foot > span {
+  inline-size: var(--bsp-px-7);
+  block-size: var(--bsp-px-7);
+  border-radius: 50%;
+  background: #ffd60a;
+  flex-shrink: 0;
+}
+
+/* The entry screens below 768px: the product's phone layout — the card fills the width. */
+@media (max-width: 767.98px) {
+  .bsp-auth-stage {
+    padding: var(--bsp-px-16);
+  }
+  .bsp-auth-card {
+    padding: var(--bsp-px-28) var(--bsp-px-22) var(--bsp-px-24);
+    border-radius: var(--bsp-px-28);
+  }
+  .bsp-auth-head > h1 {
+    font-size: var(--bsp-fs-32);
+  }
+}
+
+/*
+ * CONTROL CENTER SIMPLE MODE — THE ONE DIFFERENCE: a small label beside the
+ * name on the Control Center's sign-in and second step, so they are never
+ * confused with the customer's. Composed from the eyebrow pill's own shape
+ * (radius, type) in the prototype's chip grey `#f2f2f4` and secondary ink
+ * `#55555c` (7.0:1), so it reads as a name, not as a second call to action.
+ */
+.bsp-auth-realm {
+  border-radius: var(--bsp-px-99);
+  padding: var(--bsp-px-4) var(--bsp-px-10);
+  background: #f2f2f4;
+  color: #55555c;
+  font-size: var(--bsp-fs-11-5);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
