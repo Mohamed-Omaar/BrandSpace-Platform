@@ -8,7 +8,7 @@
 
 /** Field names whose values are always replaced, regardless of content. */
 const SENSITIVE_KEY_PATTERN =
-  /(password|passwd|secret|token|apikey|api_key|authorization|auth|credential|privatekey|private_key|clientsecret|client_secret|refreshtoken|refresh_token|accesstoken|access_token|sessionid|session_id|cookie|mfa|totp|otp|signature|salt|hash)/i;
+  /(password|passwd|secret|token|apikey|api_key|authorization|auth|credential|privatekey|private_key|clientsecret|client_secret|refreshtoken|refresh_token|accesstoken|access_token|sessionid|session_id|cookie|mfa|totp|otp|signature|salt|hash|code_verifier|codeverifier)/i;
 
 /** Value shapes that look like credentials even under an innocuous key name. */
 const SENSITIVE_VALUE_PATTERNS: readonly RegExp[] = [
@@ -29,6 +29,10 @@ const SENSITIVE_VALUE_PATTERNS: readonly RegExp[] = [
   // documented stable format, so matched generously).
   /\bEAA[A-Za-z0-9]{20,}/g,
   /\b(?:act|rft)\.[A-Za-z0-9!*._-]{20,}/g,
+  // D-566 — Connected AI apps: Brandspace's own access and refresh tokens, its
+  // one-time authorization codes and its registered app ids. All are opaque,
+  // prefixed values, so the prefix is enough to recognise one anywhere.
+  /\bbsp_(?:at|rt|code|cli)_[A-Za-z0-9_-]{20,}/g,
 ];
 
 /**

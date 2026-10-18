@@ -60,7 +60,14 @@ export type RateLimitScope =
    * sign-in budget let ordinary sign-ins exhaust it, so an owner who had signed
    * in often could not confirm a deletion.
    */
-  | 'step-up:account';
+  | 'step-up:account'
+  /**
+   * D-566 — the two public endpoints of the Connected-AI-apps authorization
+   * server: app registration (RFC 7591) and the token endpoint, per source
+   * address. Their ceilings are configuration (`ai-apps.oauth`).
+   */
+  | 'ai-apps-register:ip'
+  | 'ai-apps-token:ip';
 
 /**
  * The ceilings, as the activated `onboarding` document carries them.
