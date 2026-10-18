@@ -2891,6 +2891,54 @@ const operationsSchema = z.object({
   supportedCurrencies: z.array(z.string().length(3)).default(['SAR', 'USD']),
 });
 
+/**
+ * D-566 — CONNECTED AI APPS (the remote MCP server).
+ *
+ * A customer connects Claude, ChatGPT or any MCP client to their account; the
+ * external AI writes the text and Brandspace runs no AI for these calls and
+ * spends no credits. This document holds the operator's switches and numbers
+ * for it — nothing about who may connect (that is each member's own
+ * permissions) and nothing about which plans (that is the entitlement
+ * `feature.ai_apps`, decided per plan, with the kill switch in feature flags).
+ *
+ * OFF BY DEFAULT. A fresh environment, and production until the owner decides,
+ * answers every AI app with "AI apps are turned off" (CLAUDE.md §2.2).
+ */
+const aiAppsSchema = z.object({
+  /** The whole feature, for everyone. Off: no new connection, no tool call. */
+  enabled: z.boolean().default(false),
+  rateLimit: z
+    .object({
+      /** The fixed window tool calls are counted in, per connection. */
+      windowSeconds: z.number().int().min(10).max(3_600).default(60),
+      /** Tool calls one connection may make per window. */
+      maxCallsPerConnection: z.number().int().min(1).max(10_000).default(60),
+    })
+    .default({}),
+  oauth: z
+    .object({
+      /** How long a one-time authorization code lives (the database caps it at 10 minutes). */
+      authorizationCodeTtlSeconds: z.number().int().min(10).max(600).default(60),
+      /** How long an access token lives before the app refreshes it. */
+      accessTokenTtlSeconds: z.number().int().min(300).max(86_400).default(3_600),
+      /** How long an unused refresh token lives; each refresh rotates it (the database caps it at 90 days). */
+      refreshTokenTtlDays: z.number().int().min(1).max(90).default(30),
+      /** App registrations accepted per source address per hour (RFC 7591). */
+      registrationPerIpPerHour: z.number().int().min(1).max(10_000).default(20),
+      /** Token requests accepted per source address per minute. */
+      tokenPerIpPerMinute: z.number().int().min(1).max(10_000).default(60),
+      /** A registered app that never got a connection is removed after this many days. */
+      unusedClientRetentionDays: z.number().int().min(1).max(365).default(30),
+    })
+    .default({}),
+  /**
+   * Browser origins allowed to call the MCP endpoint (MCP transport spec: an
+   * invalid Origin is refused with 403). Claude and ChatGPT call from their
+   * servers and send no Origin, so the list is empty by default.
+   */
+  allowedOrigins: z.array(z.string().url().max(200)).max(20).default([]),
+});
+
 // --- Registry ---------------------------------------------------------------
 
 export const CONFIG_DOMAINS = {
@@ -2967,6 +3015,11 @@ export const CONFIG_DOMAINS = {
   // and at which version, customer MFA, and the first-run checklist. It carries
   // no country, locale, timezone or currency default (D-194).
   onboarding: { schema: onboardingSchema, schemaVersion: 1 },
+  // D-566. Connected AI apps (the remote MCP server): the whole-feature switch,
+  // the per-connection rate limit and the OAuth lifetimes. Off by default. Who
+  // may connect is each member's own permissions; which plans is the
+  // `feature.ai_apps` entitlement.
+  'ai-apps': { schema: aiAppsSchema, schemaVersion: 1 },
 } as const;
 
 export type ConfigDomain = keyof typeof CONFIG_DOMAINS;

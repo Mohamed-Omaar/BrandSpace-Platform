@@ -33,9 +33,11 @@ defect. The prototype's Arabic wording is not ported (an allowed difference); it
 | Team / member / role                      | الفريق / عضو / دور                                                                | Team / Member / Role               |
 | Settings                                  | الإعدادات                                                                         | Settings                           |
 | Environment (Control Center)              | بيئة: التطوير / ما قبل الإنتاج / الإنتاج                                          | Development / Staging / Production |
+| Connected AI app (D-566)                  | تطبيق ذكاء اصطناعي متصل (plural تطبيقات الذكاء الاصطناعي المتصلة)                 | Connected AI app                   |
+| Connect an AI app / Revoke its access     | ربط / إلغاء الوصول                                                                | Connect / Revoke                   |
 
 **The wordmark** is always `Brandspace` (D-482; earlier `BrandSpace`), in Latin, in both languages — never transliterated.
-Channel and platform names (Instagram, Facebook, TikTok, LinkedIn, X) stay in Latin too.
+Channel and platform names (Instagram, Facebook, TikTok, LinkedIn, X) and AI app names (Claude, ChatGPT) stay in Latin too.
 
 **Digits** are Latin (0–9) in both languages; every number, date and money formatter sets
 `numberingSystem: 'latn'` (or a `-u-nu-latn` tag).

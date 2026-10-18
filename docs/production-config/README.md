@@ -23,6 +23,7 @@ context.
 | `assets.json`             | `assets`             |      no      |
 | `entitlements.json`       | `entitlements`       |      no      |
 | `feature-flags.json`      | `feature-flags`      |      no      |
+| `ai-apps.json`            | `ai-apps`            |      no      |
 
 **Activate in this order:**
 
@@ -37,6 +38,12 @@ context.
 8. `entitlements`
 9. `feature-flags`
 10. `integrations.email`, last, and through the Integrations screen (see §3.1), not by pasting.
+11. `ai-apps` (optional; it records the decision).
+
+`ai-apps.json` is the schema default with **`enabled: false`**: Connected AI apps (D-566, the
+remote MCP server) stay **off in production** until the owner decides (owner answer Q5). No
+plan is granted `feature.ai_apps` either, so production is off twice over. Staging turns it on
+from the Control Center (Simple → AI apps), not from this file.
 
 `entitlements.json` and `feature-flags.json` are the schema defaults (empty lists). That is the
 correct production document. The plan's quotas become `limit.*` entitlements automatically
