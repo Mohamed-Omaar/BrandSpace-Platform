@@ -41,33 +41,12 @@ export { FORMAT_POST_KINDS };
 /** The social-first formats shown first; the rest sit under "More formats". */
 export const PRIMARY_FORMATS = ['POST', 'CAROUSEL', 'REEL', 'STORY', 'VIDEO'] as const;
 
-export interface ProviderKinds {
-  readonly enabled: boolean;
-  readonly postKinds: readonly string[];
-}
-
 /**
- * For each format, the platforms that can carry it. A format with no platform
- * is absent from the result, so the composer cannot offer it. `enabled` is
- * read nowhere here (D-481).
+ * For each format, the platforms that can carry it — moved to
+ * `@brandspace/social-connectors` (D-566) so the MCP server's `create_post`
+ * applies exactly the Studio's rule. Re-exported so every import keeps its path.
  */
-export function platformsByFormat(
-  formats: readonly string[],
-  platformKeys: readonly string[],
-  providers: Readonly<Record<string, ProviderKinds | undefined>>,
-): Readonly<Record<string, readonly string[]>> {
-  const result: Record<string, string[]> = {};
-  for (const format of formats) {
-    const needs = FORMAT_POST_KINDS[format] ?? [];
-    const supported = platformKeys.filter((key) => {
-      const provider = providers[key];
-      if (!provider) return format === 'POST';
-      return needs.some((kind) => provider.postKinds.includes(kind));
-    });
-    if (supported.length > 0) result[format] = supported;
-  }
-  return result;
-}
+export { platformsByFormat, type ProviderKinds } from '@brandspace/social-connectors';
 
 /*
  * ---------------------------------------------------------------------------

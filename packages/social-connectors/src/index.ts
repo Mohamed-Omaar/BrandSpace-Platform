@@ -170,7 +170,12 @@ export type { FailureBehaviour } from './errors';
  * so a backfill cannot spend the allowance a scheduled post needs.
  */
 export { ProviderRateLimiter } from './rate-limits';
-export { FORMAT_POST_KINDS, postKindFor } from './post-kinds';
+export {
+  FORMAT_POST_KINDS,
+  platformsByFormat,
+  postKindFor,
+  type ProviderKinds,
+} from './post-kinds';
 export { markNeedsReauth, type ReauthNotifier } from './reauth';
 export {
   subjectHash,

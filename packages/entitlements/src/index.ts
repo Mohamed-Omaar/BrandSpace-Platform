@@ -8,6 +8,7 @@
  */
 export * from './automation-ai-cap';
 export * from './ai-apps';
+export * from './brand-access';
 export * from './automation-ai-quota';
 export * from './beta-cohorts';
 export * from './credit-ledger';
