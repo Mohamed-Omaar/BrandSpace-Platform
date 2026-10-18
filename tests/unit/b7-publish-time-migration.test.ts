@@ -59,8 +59,8 @@ describe('B1.0 + Option B — when a post goes out', () => {
     }
   });
 
-  it('comes directly after PR 6, and directly before PR E (then connectors A and B)', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-7)).toEqual([
+  it('comes directly after PR 6, and directly before PR E (then connectors A and B, then AI apps)', () => {
+    expect(EXPECTED_MIGRATIONS.slice(-8)).toEqual([
       '20261015092000_automation_run_execution_due_index',
       NAME,
       '20261020090000_group_b_fields',
@@ -69,6 +69,8 @@ describe('B1.0 + Option B — when a post goes out', () => {
       '20261022090000_connectors_b_inbound_tables',
       '20261022091000_social_connection_subject_lookup_index',
       '20261022092000_publish_job_handle_lookup_index',
+      // D-566: Connected AI apps (the remote MCP server).
+      '20261023090000_ai_app_connections',
     ]);
   });
 });

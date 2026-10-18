@@ -126,4 +126,35 @@ export async function withCustomerSession<T>(
   );
 }
 
+/**
+ * D-566 — look up ONE AI-app token or authorization code by the hash the caller
+ * already holds, with no workspace context.
+ *
+ * The companion to `withCustomerSession()` for Connected AI apps: a bearer
+ * token arrives before any workspace is known. The `token_lookup` and
+ * `code_lookup` policies grant SELECT on exactly the row whose hash equals the
+ * GUC, and nothing else; every write then happens inside `withWorkspace()` of
+ * the workspace that row names. The HASH is passed, never the token.
+ */
+export async function withAiAppToken<T>(
+  tokenHash: string,
+  fn: (db: TenantScopedClient) => Promise<T>,
+  options: WithWorkspaceOptions = {},
+): Promise<T> {
+  if (!/^[0-9a-f]{64}$/.test(tokenHash)) {
+    // Fail closed, exactly as withCustomerSession(): an unparseable hash never
+    // reaches the GUC.
+    throw new AppError('TENANT_CONTEXT_MISSING', 'Invalid token scope.');
+  }
+  const prisma = options.prisma ?? getPrisma();
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.workspace_id', '', true)`;
+      await tx.$executeRaw`SELECT set_config('app.ai_app_token_hash', ${tokenHash}, true)`;
+      return fn(tx as unknown as TenantScopedClient);
+    },
+    { timeout: options.timeoutMs ?? 15_000 },
+  );
+}
+
 export type { Prisma };

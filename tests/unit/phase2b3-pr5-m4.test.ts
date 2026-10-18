@@ -68,6 +68,8 @@ describe('M4 — the asks-first expiry index', () => {
       '20261022090000_connectors_b_inbound_tables',
       '20261022091000_social_connection_subject_lookup_index',
       '20261022092000_publish_job_handle_lookup_index',
+      // D-566: Connected AI apps (the remote MCP server).
+      '20261023090000_ai_app_connections',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261013090000_brand_scope_not_null');
   });
