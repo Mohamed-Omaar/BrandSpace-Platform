@@ -744,3 +744,15 @@ returns, plus the production integration gaps.
   nobody has chosen, and the console says so rather than drawing an empty chart.
 
 **The platform is complete. What remains is configuration an owner enters.**
+
+## 15. Connected AI apps (D-566)
+
+A customer can connect Claude, ChatGPT or any MCP app to Brandspace and, in plain words, ask it to write
+posts, put them on the calendar as a proposal, read how things are going and pull a report. The app
+writes the text; Brandspace spends no AI credits for it. The app works as the person who connected it —
+their permissions, one workspace, the brands they chose — and can never approve, schedule, publish,
+delete, disconnect, change billing or change the team: a person does that in Brandspace. A draft it
+proposes shows on the calendar as a dashed "Proposed" chip. Settings → Connected AI apps lists each
+connection with "last used" and a Revoke; Settings → Connect gives the address and the steps for Claude
+and ChatGPT (ChatGPT write actions need Business, Enterprise or Edu). It is on or off per plan, from the
+Control Center. Reference: `docs/AI-APPS.md`.

@@ -201,4 +201,5 @@ export type AreaKey =
   | 'uploads'
   | 'email'
   | 'content'
-  | 'legal';
+  | 'legal'
+  | 'ai-apps';

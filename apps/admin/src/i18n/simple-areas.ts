@@ -33,7 +33,7 @@ const en = {
   'ch.part.content': 'whether customers see the channel, and its writing limits',
   'ch.part.publishing': 'the kinds of post the channel carries',
   'w.developerValue': 'Set by your developer',
-  'w.perWindow': '{count} every {seconds} seconds',
+  'w.perWindow': '{count} every {window}',
   'w.backoff': 'first {first} seconds, then ×{factor}, at most {max} seconds',
   'w.technicalChanges': '{count} technical value(s) changed. The details are in Advanced.',
   'w.added': 'Added',
@@ -75,6 +75,7 @@ const en = {
   'u.seconds': 'seconds',
   'u.minutes': 'minutes',
   'u.pixels': 'pixels',
+  'u.calls': 'requests',
 
   // --- Validation -----------------------------------------------------------
   'v.required': '{field}: please fill this in.',
@@ -562,6 +563,54 @@ const en = {
   'lg.d.textValue': 'Written and published by your developer',
   'lg.d.required': 'Documents that must be accepted',
   'lg.d.links': 'Page addresses',
+
+  // --- AI apps (D-566) ------------------------------------------------------
+  'aa.title': 'AI apps',
+  'aa.intro':
+    'Whether customers can connect Claude, ChatGPT or another AI app to their account, and on which plans.',
+  'aa.e.title': 'For everyone',
+  'aa.e.intro':
+    'The whole feature. When it is off, no AI app can connect or do anything, whatever the plan.',
+  'aa.e.cardTitle': 'Connected AI apps',
+  'aa.e.credits': 'AI credits',
+  'aa.e.noCredits': 'Not used: the customer’s own AI app writes the text',
+  'aa.f.enabled': 'Customers can connect AI apps',
+  'aa.h.enabled':
+    'When on, a member can connect an AI app to work in their workspace as them, within their own permissions.',
+  'aa.i.enabled':
+    'Turning it off stops every connected AI app at once; turning it on lets members on an included plan connect.',
+  'aa.f.calls': 'Requests per connection',
+  'aa.h.calls': 'How many things one connected AI app may ask for in each short window.',
+  'aa.i.calls': 'An AI app asking for more is told to wait a moment.',
+  'aa.p.title': 'Plans',
+  'aa.p.intro': 'The plans whose workspaces may connect AI apps.',
+  'aa.p.cardTitle': 'Plans that include AI apps',
+  'aa.f.plans': 'Included in',
+  'aa.h.plans': 'Workspaces on these plans may connect AI apps while the feature is on.',
+  'aa.i.plans': 'Members on a removed plan can no longer use their connected AI apps.',
+  'aa.s.killed': 'Stopped by the emergency switch',
+  'aa.s.custom': 'Custom rules',
+  'aa.s.everyPlan': 'Every plan',
+  'aa.s.noPlan': 'No plan',
+  'aa.s.advanced': 'Set in Advanced',
+  'aa.r.killed':
+    'The emergency switch for this feature is on. It is turned off in Advanced, on the Features page.',
+  'aa.r.advanced':
+    'This feature has rules set in Advanced (for everyone, nobody, or chosen customers). Change it there.',
+  'aa.p.on': 'Members on an included plan can connect AI apps.',
+  'aa.p.off': 'Every connected AI app stops working at once. Connections are kept.',
+  'aa.p.added': 'Workspaces on {plans} can connect AI apps.',
+  'aa.p.removed': 'Workspaces on {plans} can no longer use AI apps.',
+  'aa.p.stillOff': 'The feature is off for everyone, so nobody notices until it is turned on.',
+  'aa.d.window': 'The window requests are counted in',
+  'aa.d.access': 'How long an AI app’s sign-in lasts before it renews',
+  'aa.d.refresh': 'How long an unused connection stays signed in',
+  'aa.d.code': 'How long the one-time sign-in code works',
+  'aa.d.register': 'New AI apps accepted from one address',
+  'aa.d.token': 'Sign-in renewals accepted from one address',
+  'aa.d.unused': 'Days before an AI app that never connected is removed',
+  'aa.d.origins': 'Websites allowed to call directly',
+  'aa.d.noOrigins': 'None (AI apps call from their own servers)',
 } as const;
 
 export type AreaCopyKey = keyof typeof en;
@@ -591,7 +640,7 @@ const ar: Copy = {
   'ch.part.content': 'هل يرى العملاء القناة، وحدود الكتابة فيها',
   'ch.part.publishing': 'أنواع المنشورات التي تحملها القناة',
   'w.developerValue': 'يضبطه المطوّر',
-  'w.perWindow': '{count} كل {seconds} ثانية',
+  'w.perWindow': '{count} كل {window}',
   'w.backoff': 'أولًا {first} ثانية، ثم ×{factor}، وبحدّ أقصى {max} ثانية',
   'w.technicalChanges': 'تغيّرت {count} من القيم التقنية. التفاصيل في الوضع المتقدم.',
   'w.added': 'أُضيف',
@@ -632,6 +681,7 @@ const ar: Copy = {
   'u.seconds': 'ثانية',
   'u.minutes': 'دقيقة',
   'u.pixels': 'بكسل',
+  'u.calls': 'طلبًا',
 
   'v.required': '{field}: يُرجى تعبئة هذا الحقل.',
   'v.choice': '{field}: يُرجى اختيار أحد الخيارات.',
@@ -1088,6 +1138,53 @@ const ar: Copy = {
   'lg.d.textValue': 'يكتبه المطوّر وينشره',
   'lg.d.required': 'المستندات التي تجب الموافقة عليها',
   'lg.d.links': 'عناوين الصفحات',
+
+  'aa.title': 'تطبيقات الذكاء الاصطناعي',
+  'aa.intro':
+    'هل يمكن للعملاء ربط Claude أو ChatGPT أو تطبيق ذكاء اصطناعي آخر بحساباتهم، وفي أي خطط.',
+  'aa.e.title': 'للجميع',
+  'aa.e.intro':
+    'الميزة كلها. عند إيقافها لا يمكن لأي تطبيق ذكاء اصطناعي الاتصال أو القيام بأي شيء، أيًّا كانت الخطة.',
+  'aa.e.cardTitle': 'تطبيقات الذكاء الاصطناعي المرتبطة',
+  'aa.e.credits': 'رصيد الذكاء الاصطناعي',
+  'aa.e.noCredits': 'لا يُستخدم: تطبيق الذكاء الاصطناعي الخاص بالعميل هو الذي يكتب النص',
+  'aa.f.enabled': 'يمكن للعملاء ربط تطبيقات الذكاء الاصطناعي',
+  'aa.h.enabled':
+    'عند تفعيله، يمكن للعضو ربط تطبيق ذكاء اصطناعي يعمل في مساحة عمله باسمه، ضمن صلاحياته فقط.',
+  'aa.i.enabled':
+    'إيقافه يوقف كل التطبيقات المرتبطة فورًا؛ وتفعيله يتيح لأعضاء الخطط المشمولة الربط.',
+  'aa.f.calls': 'الطلبات لكل ارتباط',
+  'aa.h.calls': 'عدد الطلبات التي يمكن لتطبيق مرتبط واحد إرسالها في كل فترة قصيرة.',
+  'aa.i.calls': 'يُطلب من التطبيق الذي يتجاوز ذلك الانتظار قليلًا.',
+  'aa.p.title': 'الخطط',
+  'aa.p.intro': 'الخطط التي يمكن لمساحات العمل فيها ربط تطبيقات الذكاء الاصطناعي.',
+  'aa.p.cardTitle': 'الخطط التي تشمل تطبيقات الذكاء الاصطناعي',
+  'aa.f.plans': 'مشمولة في',
+  'aa.h.plans':
+    'يمكن لمساحات العمل في هذه الخطط ربط تطبيقات الذكاء الاصطناعي ما دامت الميزة مفعّلة.',
+  'aa.i.plans': 'لا يستطيع أعضاء الخطة المُزالة استخدام تطبيقاتهم المرتبطة بعد ذلك.',
+  'aa.s.killed': 'أوقفه مفتاح الطوارئ',
+  'aa.s.custom': 'قواعد مخصصة',
+  'aa.s.everyPlan': 'كل الخطط',
+  'aa.s.noPlan': 'لا توجد خطة',
+  'aa.s.advanced': 'مضبوط في الوضع المتقدم',
+  'aa.r.killed': 'مفتاح الطوارئ لهذه الميزة مفعّل. يُوقف من الوضع المتقدم، في صفحة الميزات.',
+  'aa.r.advanced':
+    'لهذه الميزة قواعد مضبوطة في الوضع المتقدم (للجميع أو لا أحد أو لعملاء محددين). غيّرها هناك.',
+  'aa.p.on': 'يمكن لأعضاء الخطط المشمولة ربط تطبيقات الذكاء الاصطناعي.',
+  'aa.p.off': 'تتوقف كل التطبيقات المرتبطة فورًا. تبقى الارتباطات محفوظة.',
+  'aa.p.added': 'يمكن لمساحات العمل في {plans} ربط تطبيقات الذكاء الاصطناعي.',
+  'aa.p.removed': 'لا يمكن لمساحات العمل في {plans} استخدام تطبيقات الذكاء الاصطناعي بعد الآن.',
+  'aa.p.stillOff': 'الميزة متوقفة للجميع، فلن يلاحظ أحد شيئًا حتى تُفعَّل.',
+  'aa.d.window': 'الفترة التي تُحسب فيها الطلبات',
+  'aa.d.access': 'مدة دخول التطبيق قبل تجديده',
+  'aa.d.refresh': 'مدة بقاء الارتباط غير المستخدم مسجّلًا',
+  'aa.d.code': 'مدة صلاحية رمز الدخول لمرة واحدة',
+  'aa.d.register': 'التطبيقات الجديدة المقبولة من عنوان واحد',
+  'aa.d.token': 'تجديدات الدخول المقبولة من عنوان واحد',
+  'aa.d.unused': 'الأيام قبل إزالة تطبيق لم يرتبط قط',
+  'aa.d.origins': 'المواقع المسموح لها بالاتصال المباشر',
+  'aa.d.noOrigins': 'لا شيء (تتصل التطبيقات من خوادمها)',
 };
 
 export function areaCopy(locale: string) {

@@ -187,6 +187,7 @@ export type {
 export {
   BRAND_GOAL_SELECT,
   GOAL_KEY_PREFIX,
+  approvedFactsFor,
   brandBrainChangedSince,
   brandBrainEnabledForWriting,
   declaredPillarIdeas,
@@ -211,7 +212,13 @@ export {
   parseValidUntil,
   workspaceKnowledgeAsOf,
 } from './validity';
-export type { Grounding, GroundingPurpose, GroundingRequest, RewriteResolution } from './grounding';
+export type {
+  ApprovedFact,
+  Grounding,
+  GroundingPurpose,
+  GroundingRequest,
+  RewriteResolution,
+} from './grounding';
 
 export { purgeExpiredChatContent } from './chat';
 export { BrandBrainChatService } from './chat';

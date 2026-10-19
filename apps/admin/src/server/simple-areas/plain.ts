@@ -25,6 +25,34 @@ export function amount(ctx: AreaContext, value: unknown, unit: AreaCopyKey): str
   return n === null ? '—' : `${n} ${ctx.t(unit)}`;
 }
 
+/** Whole units, largest first, that a stored length of time is worded in. */
+const DURATION_UNITS = [
+  ['day', 86_400],
+  ['hour', 3_600],
+  ['minute', 60],
+  ['second', 1],
+] as const;
+
+/**
+ * A length of time stored in seconds, in the largest whole unit and the
+ * reader's language (D-563): "1 hour", "30 days", "ساعتان" — never
+ * "3600 seconds". `Intl` words the unit, so Arabic gets its own singular,
+ * dual and plural forms. "—" when the value is missing.
+ */
+export function duration(ctx: AreaContext, seconds: unknown): string {
+  const n = num(seconds);
+  if (n === null) return '—';
+  const [unit, size] = DURATION_UNITS.find(([, size]) => n >= size && n % size === 0) ?? [
+    'second',
+    1,
+  ];
+  return new Intl.NumberFormat(ctx.locale === 'ar' ? 'ar-u-nu-latn' : 'en', {
+    style: 'unit',
+    unit,
+    unitDisplay: 'long',
+  }).format(n / size);
+}
+
 export function joined(ctx: AreaContext, values: readonly string[]): string {
   return values.length === 0 ? '—' : values.join(ctx.locale === 'ar' ? '، ' : ', ');
 }

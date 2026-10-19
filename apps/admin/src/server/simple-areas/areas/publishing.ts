@@ -1,7 +1,7 @@
 import type { AreaContext, AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
 import { arrayOf, bool, num, rec, str } from '../json';
 import { CHANNEL_NAMES, connectorBuilt } from './channels';
-import { amount } from '../plain';
+import { amount, duration } from '../plain';
 
 const channel = (key: string, ctx: AreaContext): string =>
   CHANNEL_NAMES[key] ?? ctx.t('w.developerValue');
@@ -227,7 +227,7 @@ export const publishingArea: AreaSpec = {
             const l = rec(rec(p)['rateLimit']);
             return `${channel(k, ctx)}: ${ctx.t('w.perWindow', {
               count: num(l['requestsPerWindow']) ?? '—',
-              seconds: num(l['windowSeconds']) ?? '—',
+              window: duration(ctx, l['windowSeconds']),
             })}`;
           })
           .join(' · ') || '—',

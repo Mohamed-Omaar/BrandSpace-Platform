@@ -123,6 +123,7 @@ import {
 import { createObjectStore } from '@brandspace/storage';
 import { connectionReauthNotifier } from '@brandspace/notifications';
 import { applicationResolver } from './routes/social';
+import { purgeAiApps } from './ai-apps/sweep';
 import { gateway as aiGateway } from './routes/phase7-context';
 import { AutomationAiExecutor, type RoutingRuleView } from './automation-ai-executor';
 import { WorkspaceDeletionService } from '@brandspace/onboarding';
@@ -258,6 +259,8 @@ export interface MaintenanceResult {
   readonly inboundEventsPurged: number;
   /** Connectors B — Meta deliveries acted on (deauthorize, data deletion) or set aside. */
   readonly inboundEventsProcessed: number;
+  /** D-566 — expired AI-app codes, tokens and windows, and apps never connected. */
+  readonly aiAppRowsPurged: number;
   /** Phase 7 — the analytics sweeps. */
   readonly analyticsCursorsDispatched: number;
   readonly analyticsBackfillsDispatched: number;
@@ -1276,6 +1279,19 @@ export class MaintenanceScheduler {
    *
    * The table is platform-owned, so this runs on the platform connection.
    */
+  /** D-566 — the Connected-AI-apps purge (ai-apps/sweep.ts). */
+  async purgeAiApps(batch: number): Promise<number> {
+    const platform = getPlatformClient();
+    const purged = await purgeAiApps({
+      platform,
+      configuration: new ConfigurationService({ prisma: platform }),
+      environment: this.#environment,
+      now: this.#clock.now(),
+      batch,
+    });
+    return purged.codes + purged.tokens + purged.windows + purged.clients;
+  }
+
   async purgeInboundEvents(): Promise<number> {
     const platform = getPlatformClient();
     const policy = await this.#resolvePublishing();
@@ -2465,6 +2481,7 @@ export class MaintenanceScheduler {
     const publishing = await this.sweepPublishing(cadence.ingestionReconcileBatch);
     const inboundEventsProcessed = await this.processInboundEvents();
     const inboundEventsPurged = await this.purgeInboundEvents();
+    const aiAppRowsPurged = await this.purgeAiApps(cadence.retentionPurgeBatch);
     const analytics = await this.sweepAnalytics(cadence.ingestionReconcileBatch);
     const analyticsRowsPruned = await this.pruneAnalyticsRetention(cadence.retentionPurgeBatch);
     const automations = await this.sweepAutomations(cadence.ingestionReconcileBatch);
@@ -2485,6 +2502,7 @@ export class MaintenanceScheduler {
       publishJobsRecovered: publishing.recovered,
       inboundEventsPurged,
       inboundEventsProcessed,
+      aiAppRowsPurged,
       analyticsCursorsDispatched: analytics.dispatched,
       analyticsBackfillsDispatched: analytics.backfills,
       analyticsRowsPruned,

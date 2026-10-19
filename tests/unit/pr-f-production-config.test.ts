@@ -34,6 +34,8 @@ const directory = path.join(root, 'docs/production-config');
 
 /** File name → configuration domain. */
 const DOMAIN_BY_FILE: Readonly<Record<string, ConfigDomain>> = {
+  // D-566: Connected AI apps, off in production (owner answer Q5).
+  'ai-apps.json': 'ai-apps',
   'assets.json': 'assets',
   'commerce.json': 'commerce',
   'content.json': 'content',
@@ -87,6 +89,18 @@ describe('docs/production-config', () => {
       expect(report.valid).toBe(true);
     });
   }
+});
+
+describe('D-566 — Connected AI apps stay off in production', () => {
+  it('ai-apps.json is the switch off, and no plan is granted the feature', () => {
+    const aiApps = parseConfigPayload('ai-apps', read('ai-apps.json'));
+    expect(aiApps.enabled).toBe(false);
+    expect(aiApps).toEqual(defaultPayload('ai-apps'));
+    const entitlements = parseConfigPayload('entitlements', read('entitlements.json'));
+    expect(entitlements.planEntitlements.some((g) => g.featureKey === 'feature.ai_apps')).toBe(
+      false,
+    );
+  });
 });
 
 describe('the values the owner confirmed on the #79 review', () => {

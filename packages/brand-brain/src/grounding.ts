@@ -530,3 +530,46 @@ export async function usableFactsForDisplay(
     take: request.take,
   });
 }
+
+/** One approved fact, as an external AI app reads it (D-566). */
+export interface ApprovedFact {
+  readonly area: BrandKnowledgeArea;
+  readonly title: unknown;
+  readonly body: unknown;
+  readonly updatedAt: Date;
+}
+
+/**
+ * D-566 — THE BRAND'S APPROVED FACTS, FOR AN EXTERNAL AI APP (`get_brand_summary`).
+ *
+ * The same rule as every writing path, applied here and nowhere else: "Use
+ * Brand Brain" off (or the brand deleted, or not visible to this caller) → no
+ * facts; otherwise only usable knowledge — ACTIVE or STALE, not past its
+ * "valid until" day in the workspace's zone. Never a draft, a proposal, a
+ * candidate or an archived item. A stable order (area, then key), at most
+ * `maxItems`; `truncated` says more exist.
+ */
+export async function approvedFactsFor(
+  db: TenantScopedClient,
+  request: { readonly brandId: string; readonly maxItems: number },
+  clock: Clock = systemClock,
+): Promise<{
+  readonly enabled: boolean;
+  readonly facts: readonly ApprovedFact[];
+  readonly truncated: boolean;
+}> {
+  if (!(await brandBrainEnabledForWriting(db, request.brandId))) {
+    return { enabled: false, facts: [], truncated: false };
+  }
+  const rows = await db.brandKnowledgeItem.findMany({
+    where: { brandId: request.brandId, ...(await writingKnowledgeWhere(db, clock)) },
+    orderBy: [{ area: 'asc' }, { itemKey: 'asc' }],
+    take: request.maxItems + 1,
+    select: { area: true, title: true, body: true, updatedAt: true },
+  });
+  return {
+    enabled: true,
+    facts: rows.slice(0, request.maxItems),
+    truncated: rows.length > request.maxItems,
+  };
+}

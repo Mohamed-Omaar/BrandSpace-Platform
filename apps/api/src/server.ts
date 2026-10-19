@@ -23,6 +23,9 @@ import { registerBillingHostedPageRoutes } from './routes/billing-hosted-page';
 import { registerAccountRoutes } from './routes/account';
 import { registerOnboardingRoutes } from './routes/onboarding';
 import { registerCopilotRoutes } from './routes/copilot';
+import { registerAiAppsConsentRoutes } from './ai-apps/consent-routes';
+import { registerAiAppsMcpRoutes } from './ai-apps/mcp-route';
+import { registerAiAppsOAuthRoutes } from './ai-apps/oauth-routes';
 import { registeredRoutes } from './route-contract';
 import { MaintenanceScheduler } from './scheduler';
 
@@ -106,6 +109,14 @@ export async function buildServer() {
   // Connectors B — Meta's webhook, deauthorize and data-deletion addresses (raw body, own plugin).
   await registerSocialInboundRoutes(app);
   await registerBillingHostedPageRoutes(app);
+  /*
+   * D-566 — Connected AI apps: Brandspace's OAuth 2.1 authorization server, the
+   * consent screen's API and the remote MCP endpoint. The token endpoint parses
+   * form bodies in its own plugin, like the webhooks above.
+   */
+  await registerAiAppsOAuthRoutes(app);
+  registerAiAppsConsentRoutes(app);
+  registerAiAppsMcpRoutes(app);
 
   log.info('routes registered', { count: registeredRoutes().length });
   return app;

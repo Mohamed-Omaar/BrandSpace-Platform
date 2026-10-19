@@ -176,6 +176,14 @@ export const STRICT_TENANT_MODELS = [
   'MemberSuggestion',
   'PaymentAttempt',
   'CreditPackPurchase',
+  // D-566. Connected AI apps (the remote MCP server). A person grant to an AI
+  // app, its one-time codes, its tokens (hash only) and its rate windows. A
+  // token is looked up by the hash the caller holds before any workspace is
+  // known (read-only policy); every write runs inside the workspace.
+  'AiAppConnection',
+  'AiAppAuthorizationCode',
+  'AiAppToken',
+  'AiAppRateWindow',
 ] as const;
 
 /**
@@ -286,6 +294,11 @@ export const GLOBAL_MODELS = [
   // The `configuration_version` table itself stays platform-owned and remains
   // unreadable by the tenant role.
   'EntitlementCatalogueSnapshot',
+  // D-566. Registered AI apps (OAuth public clients, RFC 7591): a name and the
+  // redirect addresses the app gave. No customer data, no secret (public
+  // clients have none). The tenant role may read it, so the consent screen can
+  // name the app, and may not write it.
+  'AiAppClient',
 ] as const;
 
 export type TenantModel =
@@ -405,6 +418,12 @@ export const MODEL_TABLE_NAMES: Record<string, string> = {
   UserLegalAcceptance: 'user_legal_acceptance',
   UserMfaRecoveryCode: 'user_mfa_recovery_code',
   AuthRateLimit: 'auth_rate_limit',
+  // D-566 — Connected AI apps.
+  AiAppClient: 'ai_app_client',
+  AiAppConnection: 'ai_app_connection',
+  AiAppAuthorizationCode: 'ai_app_authorization_code',
+  AiAppToken: 'ai_app_token',
+  AiAppRateWindow: 'ai_app_rate_window',
 };
 
 export function isTenantOwned(model: string): model is TenantModel {

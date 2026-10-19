@@ -170,6 +170,8 @@ export const SIMPLE_SECTIONS: readonly ConsoleNavSection[] = [
         'spark',
         true,
       ),
+      // D-566 — customers connecting Claude, ChatGPT or another AI app.
+      simple('/manage/ai-apps', 'nav.aiApps', 'page.aiApps', 'platform.configuration.read', 'plug'),
     ],
   },
   {

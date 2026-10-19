@@ -78,6 +78,8 @@ describe('P8: the settings nav offers only what the member can open', () => {
       '/ar/permissions',
       '/ar/settings/notifications',
       '/ar/settings/security',
+      // D-566: Connected AI apps, every member's (owner answer Q2).
+      '/ar/settings/ai-apps',
       '/ar/settings/data',
       '/ar/activity',
       '/ar/billing',
@@ -118,7 +120,7 @@ describe('P8: the settings nav offers only what the member can open', () => {
    * PERMISSIONS IS THE ONE ROW EVERY MEMBER GETS, because it shows the reader
    * their own effective permissions and the route asks for nothing.
    */
-  it('always offers the rows every member may read — roles, notifications, security, activity — and nothing else', () => {
+  it('always offers the rows every member may read — roles, notifications, security, AI apps, activity — and nothing else', () => {
     const items = settingsNavItems({
       locale: 'en',
       permissionKeys: MEMBER_ONLY,
@@ -131,6 +133,7 @@ describe('P8: the settings nav offers only what the member can open', () => {
       '/en/permissions',
       '/en/settings/notifications',
       '/en/settings/security',
+      '/en/settings/ai-apps',
       '/en/activity',
     ]);
   });
@@ -174,6 +177,7 @@ describe('P8: the settings nav permission column matches the routes themselves',
     '/settings/notifications': 'apps/dashboard/src/app/[locale]/settings/notifications/page.tsx',
     '/settings/ai': 'apps/dashboard/src/app/[locale]/settings/ai/page.tsx',
     '/settings/security': 'apps/dashboard/src/app/[locale]/settings/security/page.tsx',
+    '/settings/ai-apps': 'apps/dashboard/src/app/[locale]/settings/ai-apps/page.tsx',
     '/integrations': 'apps/dashboard/src/app/[locale]/integrations/page.tsx',
     '/settings/data': 'apps/dashboard/src/app/[locale]/settings/data/page.tsx',
     '/members': 'apps/dashboard/src/app/[locale]/members/page.tsx',

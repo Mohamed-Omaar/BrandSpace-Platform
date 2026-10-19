@@ -748,6 +748,34 @@ until the retention purge. To look: `SELECT kind, status, attempts, "failureCode
 social_inbound_event WHERE status IN ('RECEIVED','PROCESSING','FAILED') ORDER BY "receivedAt";` on
 the platform connection — rows hold hashes and connection ids, never a Meta user id or token.
 
+### 6.16 Connected AI apps: the migration, the purge, and turning it on (D-566)
+
+`20261023090000_ai_app_connections` is one short transaction that creates five new tables and two
+enums; nothing existing is touched, so the previous release runs unchanged against it.
+`20261023091000_ai_app_token_replaced_scoped` (D-568) is a second short transaction on the new
+`ai_app_token` table only: one unique index and the rotation key re-created composite on
+`workspaceId`. It needs **PostgreSQL 15 or later** (`ON DELETE SET NULL ("replacedById")`).
+**Checked (2026-10-19):** staging and production both run the Railway image `postgres-ssl:18`
+(PostgreSQL 18), read by the reviewer on Railway; nothing to change before deploying.
+
+**What purges.** The API's maintenance scheduler (`purgeAiApps`, in every `runOnce` and on the retention
+cadence) deletes authorization codes an hour after they expired, tokens a day after they expired (a
+revoked refresh token is kept until then, so presenting it again is still recognised as reuse and
+revokes the connection), rate windows older than a day, and registered apps that never got a connection
+`ai-apps.oauth.unusedClientRetentionDays` (default 30) after registration — audited
+`ai_app.client.purged` with the count only. Connections are never purged.
+
+**Turning it on (staging, owner answer Q5).** Control Center → Simple → AI apps: "For everyone" on, and
+"Plans" → every plan. Production stays off (`docs/production-config/ai-apps.json`) until the owner
+decides. Nothing is set on Railway: the API's existing `PUBLIC_API_BASE_URL` and
+`PUBLIC_DASHBOARD_BASE_URL` give the MCP address (`{PUBLIC_API_BASE_URL}/mcp`) and the consent screen.
+
+**Stopping it at once.** "For everyone" off answers every app with "AI apps are turned off" at its next
+call; connections are kept and work again when it is turned back on. A single customer's app is revoked
+by the customer (Settings → Connected AI apps). To look:
+`SELECT status, count(*) FROM ai_app_connection GROUP BY status;` on the platform connection — rows hold
+hashes, never a token.
+
 ## 7. Secret rotation
 
 **Platform capability.** Every provider credential is a REFERENCE in configuration and a row in the

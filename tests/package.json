@@ -34,6 +34,7 @@
     "@brandspace/storage": "workspace:*",
     "@brandspace/ui": "workspace:*",
     "@brandspace/vault": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "7.10.0"
   },

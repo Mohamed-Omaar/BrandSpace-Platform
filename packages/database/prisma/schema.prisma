@@ -313,6 +313,10 @@ model User {
   /// A10 / G2 (D-331) — this person's notification switches, per workspace.
   notificationPreferences NotificationPreference[]
 
+  /// D-566 — the AI apps this person connected, and the ones they revoked.
+  aiAppConnections        AiAppConnection[] @relation("AiAppConnectionUser")
+  aiAppConnectionsRevoked AiAppConnection[] @relation("AiAppConnectionRevoker")
+
   @@index([status])
   @@map("user")
 }
@@ -560,6 +564,9 @@ model Workspace {
   noteMentions        NoteMention[]
 
   memberSuggestions MemberSuggestion[]
+
+  /// D-566 — Connected AI apps (the remote MCP server).
+  aiAppConnections AiAppConnection[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -6579,4 +6586,137 @@ enum MemberSuggestionStatus {
   ACCEPTED
   DISMISSED
   SNOOZED
+}
+
+// ---------------------------------------------------------------------------
+// D-566 — Connected AI apps: the remote MCP server (docs/AI-APPS.md).
+// Migration 20261023090000_ai_app_connections, approved as written.
+// ---------------------------------------------------------------------------
+
+enum AiAppConnectionStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum AiAppTokenKind {
+  ACCESS
+  REFRESH
+}
+
+/// GLOBAL registry of AI apps (OAuth public clients, RFC 7591). No customer data
+/// and no secret: public clients have none. The tenant role may only read it.
+model AiAppClient {
+  id              String    @id @default(uuid()) @db.Uuid
+  /// `bsp_cli_…` — what the app sends as `client_id`.
+  clientId        String    @unique
+  clientName      String
+  redirectUris    String[]
+  softwareId      String?
+  softwareVersion String?
+  clientUri       String?
+  logoUri         String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  disabledAt      DateTime? @db.Timestamptz(6)
+
+  connections AiAppConnection[]
+
+  @@map("ai_app_client")
+}
+
+/// TENANT. One person's grant: this app may act as this member, in this
+/// workspace, on these brands. `brandIds` empty = every brand the member may
+/// see, including brands added later. Revoking kills every token at once.
+model AiAppConnection {
+  id              String                @id @default(uuid()) @db.Uuid
+  workspaceId     String                @db.Uuid
+  userId          String                @db.Uuid
+  clientId        String                @db.Uuid
+  brandIds        String[]              @default([]) @db.Uuid
+  scopes          String[]
+  status          AiAppConnectionStatus @default(ACTIVE)
+  createdAt       DateTime              @default(now()) @db.Timestamptz(6)
+  lastUsedAt      DateTime?             @db.Timestamptz(6)
+  revokedAt       DateTime?             @db.Timestamptz(6)
+  revokedByUserId String?               @db.Uuid
+  /// A machine code only (`user.revoked`, `refresh.reused`, …).
+  revokedReason   String?
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "ai_app_connection_workspace_fkey")
+  user      User        @relation("AiAppConnectionUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "ai_app_connection_user_fkey")
+  client    AiAppClient @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Cascade, map: "ai_app_connection_client_fkey")
+  revokedBy User?       @relation("AiAppConnectionRevoker", fields: [revokedByUserId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "ai_app_connection_revoker_fkey")
+
+  codes       AiAppAuthorizationCode[]
+  tokens      AiAppToken[]
+  rateWindows AiAppRateWindow[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, status])
+  @@index([userId])
+  @@index([clientId])
+  @@map("ai_app_connection")
+}
+
+/// TENANT. One-time authorization code (RFC 6749 §4.1): PKCE S256 challenge,
+/// bound to the redirect URI and the resource (RFC 8707). Hash only.
+model AiAppAuthorizationCode {
+  id            String    @id @default(uuid()) @db.Uuid
+  workspaceId   String    @db.Uuid
+  connectionId  String    @db.Uuid
+  codeHash      String    @unique
+  codeChallenge String
+  redirectUri   String
+  resource      String
+  scopes        String[]
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  expiresAt     DateTime  @db.Timestamptz(6)
+  consumedAt    DateTime? @db.Timestamptz(6)
+
+  connection AiAppConnection @relation(fields: [workspaceId, connectionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "ai_app_authorization_code_connection_fkey")
+
+  @@index([expiresAt])
+  @@map("ai_app_authorization_code")
+}
+
+/// TENANT. Access and refresh tokens; only the SHA-256 hash is stored. A rotated
+/// refresh token points at its successor; presenting it again revokes the
+/// whole connection.
+model AiAppToken {
+  id           String         @id @default(uuid()) @db.Uuid
+  workspaceId  String         @db.Uuid
+  connectionId String         @db.Uuid
+  kind         AiAppTokenKind
+  tokenHash    String         @unique
+  resource     String
+  scopes       String[]
+  createdAt    DateTime       @default(now()) @db.Timestamptz(6)
+  expiresAt    DateTime       @db.Timestamptz(6)
+  revokedAt    DateTime?      @db.Timestamptz(6)
+  replacedById String?        @db.Uuid
+
+  connection AiAppConnection @relation(fields: [workspaceId, connectionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "ai_app_token_connection_fkey")
+  /// D-112 / D-568: composite on the workspace, so a rotated token can only
+  /// point at a successor in its own workspace. ON DELETE sets only
+  /// "replacedById" to NULL (`SET NULL ("replacedById")` in the migration).
+  replacedBy AiAppToken?     @relation("AiAppTokenRotation", fields: [workspaceId, replacedById], references: [workspaceId, id], onDelete: SetNull, onUpdate: Cascade, map: "ai_app_token_replaced_fkey")
+  replaces   AiAppToken[]    @relation("AiAppTokenRotation")
+
+  @@unique([workspaceId, id])
+  @@index([connectionId, kind])
+  @@index([expiresAt])
+  @@map("ai_app_token")
+}
+
+/// TENANT. Per-connection rate limit: fixed windows, counted atomically.
+model AiAppRateWindow {
+  workspaceId  String   @db.Uuid
+  connectionId String   @db.Uuid
+  windowStart  DateTime @db.Timestamptz(6)
+  count        Int      @default(0)
+
+  connection AiAppConnection @relation(fields: [workspaceId, connectionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "ai_app_rate_window_connection_fkey")
+
+  @@id([connectionId, windowStart])
+  @@index([windowStart])
+  @@map("ai_app_rate_window")
 }

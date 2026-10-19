@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { SignInPassword } from '../../../../components/sign-in-password';
 import { redirect } from 'next/navigation';
+import { signInReturnPath } from '../../../../server/return-path';
 import { Banner, Field, spacingTokens } from '@brandspace/ui';
 import {
   customerLandingPath,
@@ -32,14 +33,17 @@ export default async function SignInPage({
   const query = await searchParams;
   const t = translator(locale);
 
-  // Already signed in: there is nothing to do here.
+  const next = typeof query['next'] === 'string' ? query['next'] : '';
+  // Already signed in: there is nothing to do here — go where sign-in was asked for.
   const existing = await getCustomer().catch(() => null);
   if (existing) {
     const token = await getSessionToken();
-    redirect(token ? await customerLandingPath(locale, token) : `/${locale}/workspaces`);
+    redirect(
+      signInReturnPath(next) ??
+        (token ? await customerLandingPath(locale, token) : `/${locale}/workspaces`),
+    );
   }
 
-  const next = typeof query['next'] === 'string' ? query['next'] : '';
   const error = typeof query['error'] === 'string' ? query['error'] : null;
   const ok = typeof query['ok'] === 'string' ? query['ok'] : null;
   const ref = typeof query['ref'] === 'string' ? query['ref'] : undefined;

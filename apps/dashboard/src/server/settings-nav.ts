@@ -32,6 +32,7 @@ export type SettingsNavKey =
   | 'notifications'
   | 'ai'
   | 'security'
+  | 'aiApps'
   | 'connections'
   | 'data'
   | 'members'
@@ -127,6 +128,18 @@ export const SETTINGS_NAV_ROUTES: readonly SettingsNavRoute[] = [
    * there is no other person whose security it could show.
    */
   { key: 'security', path: '/settings/security', labelKey: 'security.title', permission: null },
+  /*
+   * D-566 — CONNECTED AI APPS is open to every member, like Security: any
+   * member may connect Claude or ChatGPT (owner answer Q2), and the page shows
+   * the reader's OWN connections. A member holding `integrations.manage` also
+   * sees, and may revoke, everyone's — the API decides that, not this row.
+   */
+  {
+    key: 'aiApps',
+    path: '/settings/ai-apps',
+    labelKey: 'settings.aiApps',
+    permission: null,
+  },
   /*
    * P6-13 — DATA CONTROLS: one page naming every control this product has over
    * a workspace's data, and saying plainly which ones it does not have yet.

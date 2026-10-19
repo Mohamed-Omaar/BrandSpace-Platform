@@ -104,6 +104,7 @@ const SIMPLE_NAV = [
   'nav-nav.content',
   'nav-nav.uploads',
   'nav-nav.ai',
+  'nav-nav.aiApps',
   'nav-nav.signups',
   'nav-nav.email',
   'nav-nav.legal',
@@ -127,6 +128,7 @@ const SIMPLE_SCREENS: readonly { path: string; marker: string }[] = [
   { path: '/console/manage/email', marker: 'area-collection-senders' },
   { path: '/console/manage/content', marker: 'area-collection-industries' },
   { path: '/console/manage/legal', marker: 'area-collection-documents' },
+  { path: '/console/manage/ai-apps', marker: 'area-collection-ai-apps' },
   { path: '/console/team', marker: 'team-cards' },
   { path: '/console/changes', marker: 'changes-intro' },
   { path: '/console/features', marker: 'features-technical' },
@@ -813,6 +815,7 @@ const DOMAIN_IDS = [
   'operations',
   'commerce',
   'onboarding',
+  'ai-apps',
 ];
 const QUOTA_KEYS = [
   'seats',

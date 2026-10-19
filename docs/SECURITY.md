@@ -3240,3 +3240,27 @@ counts and sizes · the deployment environment · a platform user id for an audi
 
 **Traces carry the same rule.** A span attribute is a log field with a different name: the secret
 actions record a ref, a category and an environment, and never a value.
+
+## 40. Connected AI apps — an external AI acting as a member (D-566)
+
+The full contract is `docs/AI-APPS.md` §2. The security-relevant points:
+
+- **OAuth 2.1, public clients only.** PKCE S256 is required; `plain` is refused. Codes live 60 seconds
+  (configurable, at most 10 minutes by CHECK) and are single-use; a reused code or rotated refresh token
+  revokes the whole connection. `resource` (RFC 8707) must be this server's `/mcp`. `iss` (RFC 9207) is
+  returned with every code. Redirect addresses are exact matches, except loopback on any port.
+- **An unknown app or an unregistered return address is never redirected** — the consent screen shows an
+  error, so the authorization endpoint cannot be used as an open redirect.
+- **The token never carries authority on its own.** Each call re-reads the member's live permissions
+  and brand scope and runs under RLS in the connection's one workspace; the tool list cannot reach
+  approve, schedule, publish, delete, disconnect, billing, team or settings.
+- **Secrets.** Tokens, codes and client ids are 32 random bytes with a recognisable prefix, stored as
+  SHA-256 only. The redaction layer masks `bsp_at_…`, `bsp_rt_…`, `bsp_code_…`, `bsp_cli_…` values and
+  the `code_verifier` key in every log sink and error serializer. `tests/isolation/ai-apps-mcp.test.ts`
+  runs the whole flow and searches every audit row, log line, error body and tool result for each value.
+- **Abuse.** Per-address ceilings on registration and token requests (`auth_rate_limit`), a
+  per-connection call ceiling (`ai_app_rate_window`), and `Origin` checked on `/mcp` (empty allow-list:
+  browsers refused, server-to-server clients send none).
+- **Audit.** `ai_app.client.registered`, `ai_app.connection.granted`, `ai_app.token.issued`,
+  `ai_app.tool.called` (every call, including refusals), `ai_app.connection.revoked`,
+  `ai_app.client.purged`. No input, caption or token is copied into an audit row.

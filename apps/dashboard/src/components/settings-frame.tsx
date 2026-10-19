@@ -35,7 +35,7 @@ const GROUPS: readonly {
     keys: ['connections', 'publishing', 'notifications'],
   },
   { labelKey: 'settings.group.aiBilling', keys: ['ai', 'billing'] },
-  { labelKey: 'settings.group.security', keys: ['security', 'data'] },
+  { labelKey: 'settings.group.security', keys: ['security', 'aiApps', 'data'] },
 ];
 
 /**
@@ -59,6 +59,7 @@ const SECTION: Readonly<Record<SettingsNavKey, string>> = {
   ai: 'ai',
   billing: 'bill',
   security: 'sec',
+  aiApps: 'aiapps',
   activity: 'sec',
   data: 'data',
 };

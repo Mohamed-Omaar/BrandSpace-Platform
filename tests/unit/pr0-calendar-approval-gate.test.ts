@@ -99,9 +99,11 @@ describe('PR 0 — ContentCalendarService requires the brand approval gate', () 
       }
     }
 
-    // The four that used to omit it, and the three that already passed it.
+    // The four that used to omit it, and the three that already passed it,
+    // and D-566's MCP tools (which only ever propose a time, and pass it too).
     expect(sites.map((site) => site.file).sort()).toEqual(
       [
+        'apps/api/src/ai-apps/tools.ts',
         'apps/api/src/routes/automation.ts',
         'apps/api/src/routes/content.ts',
         'apps/api/src/routes/copilot.ts',

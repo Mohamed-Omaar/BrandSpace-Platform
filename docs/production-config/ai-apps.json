@@ -1,0 +1,16 @@
+{
+  "enabled": false,
+  "rateLimit": {
+    "windowSeconds": 60,
+    "maxCallsPerConnection": 60
+  },
+  "oauth": {
+    "authorizationCodeTtlSeconds": 60,
+    "accessTokenTtlSeconds": 3600,
+    "refreshTokenTtlDays": 30,
+    "registrationPerIpPerHour": 20,
+    "tokenPerIpPerMinute": 60,
+    "unusedClientRetentionDays": 30
+  },
+  "allowedOrigins": []
+}

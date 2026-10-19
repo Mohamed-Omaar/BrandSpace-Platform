@@ -67,11 +67,14 @@ async function hasPrivilege(
 }
 
 describe('global catalogues are read-only to the tenant role', () => {
-  it('classifies exactly the three tables this suite is about', () => {
+  it('classifies exactly the four tables this suite is about', () => {
     // A guard on the guard: if a global model is added, this test names it so
     // the rest of the suite is understood to cover it rather than silently
     // widening. It is not a reason to stop adding them.
+    // D-566 added `ai_app_client`: the registry of AI apps (no customer data,
+    // no secret), read by the consent screen, written only by the platform role.
     expect([...GLOBAL_TABLES].sort()).toEqual([
+      'ai_app_client',
       'entitlement_catalogue_snapshot',
       'permission',
       'role_permission',

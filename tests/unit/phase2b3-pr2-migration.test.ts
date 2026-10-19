@@ -65,6 +65,10 @@ describe('M2 — PREFLIGHT_REFUSED on PublishAttemptOutcome', () => {
       '20261022090000_connectors_b_inbound_tables',
       '20261022091000_social_connection_subject_lookup_index',
       '20261022092000_publish_job_handle_lookup_index',
+      // D-566: Connected AI apps (the remote MCP server).
+      '20261023090000_ai_app_connections',
+      // D-568: the rotation link made composite on the workspace (D-112).
+      '20261023091000_ai_app_token_replaced_scoped',
     ]);
   });
 
