@@ -754,8 +754,9 @@ the platform connection — rows hold hashes and connection ids, never a Meta us
 enums; nothing existing is touched, so the previous release runs unchanged against it.
 `20261023091000_ai_app_token_replaced_scoped` (D-568) is a second short transaction on the new
 `ai_app_token` table only: one unique index and the rotation key re-created composite on
-`workspaceId`. It needs **PostgreSQL 15 or later** (`ON DELETE SET NULL ("replacedById")`); check
-`SELECT version();` on staging and production before deploying.
+`workspaceId`. It needs **PostgreSQL 15 or later** (`ON DELETE SET NULL ("replacedById")`).
+**Checked (2026-10-19):** staging and production both run the Railway image `postgres-ssl:18`
+(PostgreSQL 18), read by the reviewer on Railway; nothing to change before deploying.
 
 **What purges.** The API's maintenance scheduler (`purgeAiApps`, in every `runOnce` and on the retention
 cadence) deletes authorization codes an hour after they expired, tokens a day after they expired (a

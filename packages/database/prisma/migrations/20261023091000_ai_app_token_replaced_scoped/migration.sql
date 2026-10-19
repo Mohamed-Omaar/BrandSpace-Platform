@@ -4,8 +4,9 @@
 -- successor with a plain single-column key ("replacedById" -> "id"). D-112
 -- forbids that between tenant-owned rows: the key is checked without RLS, so
 -- the database itself must keep both ends in the same workspace. This makes
--- the key composite on "workspaceId". The SQL was sent to the owner as written
--- and approved ("fix it") on 2026-10-19.
+-- the key composite on "workspaceId". The SQL was proposed to the owner on
+-- 2026-10-19 but written before its review, which the rule requires first;
+-- the merge waits for that review (D-568).
 --
 -- Behaviour is unchanged: when the sweep deletes the successor, only
 -- "replacedById" becomes NULL (PostgreSQL 15+ column list), so the old row —
