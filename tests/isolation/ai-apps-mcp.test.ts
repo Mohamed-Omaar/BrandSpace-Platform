@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { PrismaClient } from '@prisma/client';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { hashSessionToken } from '@brandspace/auth';
 import { ConfigurationService } from '@brandspace/config';
@@ -228,11 +229,12 @@ async function connect(
 
 async function mcpClient(access: string): Promise<Client> {
   const client = new Client({ name: 'brandspace-ci', version: '1.0.0' });
-  await client.connect(
-    new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
-      requestInit: { headers: { authorization: `Bearer ${access}` } },
-    }),
-  );
+  const transport = new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
+    requestInit: { headers: { authorization: `Bearer ${access}` } },
+  });
+  // The SDK declares its optional fields without `| undefined`, which this
+  // repository's `exactOptionalPropertyTypes` reads as a mismatch; same object.
+  await client.connect(transport as unknown as Transport);
   return client;
 }
 

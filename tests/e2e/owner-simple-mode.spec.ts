@@ -104,6 +104,7 @@ const SIMPLE_NAV = [
   'nav-nav.content',
   'nav-nav.uploads',
   'nav-nav.ai',
+  'nav-nav.aiApps',
   'nav-nav.signups',
   'nav-nav.email',
   'nav-nav.legal',

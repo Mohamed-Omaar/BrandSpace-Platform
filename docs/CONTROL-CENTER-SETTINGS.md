@@ -157,6 +157,21 @@ Production ships **no** features or flags; they are added in Advanced. Each one 
 | `ai.credit-rules`                                                         | Credits per AI action and the margin targets. | —             | —                                                                | risky  |
 | `ai.budgets`                                                              | Spending ceilings per plan.                   | —             | —                                                                | risky  |
 
+## AI apps — `ai-apps`, `feature.ai_apps` (Simple: **AI apps**, D-566)
+
+| Setting                                                 | What it does                                                       | Simple before | Simple now                   | Owner? |
+| ------------------------------------------------------- | ------------------------------------------------------------------ | ------------- | ---------------------------- | ------ |
+| `enabled`                                               | Customers can connect AI apps at all. Off stops every app at once. | —             | edit                         | safe   |
+| `rateLimit.maxCallsPerConnection`                       | Requests one connected app may make per window.                    | —             | edit                         | safe   |
+| `feature.ai_apps` per plan                              | Which plans include AI apps.                                       | —             | edit (and on each plan card) | safe   |
+| `rateLimit.windowSeconds`                               | The window requests are counted in.                                | —             | shown ("by your developer")  | risky  |
+| `oauth.accessTokenTtlSeconds`, `refreshTokenTtlDays`    | How long an app's sign-in lasts.                                   | —             | shown                        | risky  |
+| `oauth.authorizationCodeTtlSeconds`                     | How long the one-time sign-in code works.                          | —             | shown                        | risky  |
+| `oauth.registrationPerIpPerHour`, `tokenPerIpPerMinute` | Requests accepted from one address.                                | —             | shown                        | risky  |
+| `oauth.unusedClientRetentionDays`                       | When an app that never connected is removed.                       | —             | shown                        | risky  |
+| `allowedOrigins`                                        | Websites allowed to call the MCP address from a browser.           | —             | shown                        | risky  |
+| The `feature.ai_apps` kill switch                       | Emergency off for the feature.                                     | —             | shown (Advanced)             | risky  |
+
 ## Everything else (Advanced only, listed so nothing is hidden)
 
 | Domain                                                                 | What it does                                                                   | Simple        | Owner?                   |

@@ -1017,3 +1017,17 @@ history shows each change through the cards, field by field, and only counts wha
 The Control Center's sign-in and second step are the customer's entry card (`EntryCard` in
 `@brandspace/ui`, `entry.css`) with a "Control Center / مركز التحكم" label (D-560). MFA is mandatory
 (D-27); a recovery code is entered in the second-step field.
+
+## 25. AI apps (D-566)
+
+- **Simple → AI apps** (`/console/manage/ai-apps`, in the nav under "What customers use" and on the
+  Manage grid). Card "For everyone": the whole feature on or off (`ai-apps.enabled`) and the requests one
+  connection may make per window (`ai-apps.rateLimit.maxCallsPerConnection`). Card "Plans": which plans
+  include the yes/no feature `feature.ai_apps`, written through the Features page's grant rule; the
+  feature's registry entry is added the first time a plan gets it, and it then also appears on every plan
+  card. A kill switch or custom targeting is shown and must be changed in Advanced. "Changed by your
+  developer": the window, the sign-in lifetimes, the per-address ceilings, the unused-app retention and
+  the allowed origins. Reading needs `platform.configuration.read`; changing needs
+  `platform.configuration.manage` and `.activate`, through the Configuration Service like every card.
+- **Customer page → Connected AI apps**: each active connection — the app, the person, last used.
+  Read-only: revoking is the customer's.

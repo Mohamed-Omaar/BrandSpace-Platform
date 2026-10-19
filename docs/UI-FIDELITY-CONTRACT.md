@@ -2402,6 +2402,31 @@ The Control Center sign-in and second step are not an extension: they ARE the cu
 `.bsp-auth-realm` label, composed from the eyebrow pill's shape in the prototype's chip grey and
 secondary ink.
 
+### 6.3.70 Connected AI apps — consent, Settings, Connect, the Proposed chip (D-566)
+
+APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2); the prototype draws none of these screens.
+
+- **The consent screen** (`/[locale]/oauth/authorize`): the customer entry card (`AuthCard` /
+  `EntryCard`, the sign-in screens' own), its primary button and banner, plain radio and checkbox rows
+  and the eyebrow. The `.bsp-consent*` rules in `entry.css` only space and list what the card already
+  draws (headings at the card's label size, bullet lists, a fieldset without a frame, the workspace links
+  as the card's secondary link style). Every state: not signed in (to sign-in and back, through two-step
+  sign-in), an unknown app or return address (the card with an error banner), no workspace available
+  (warning banner, Cancel), a refusal from Allow (error banner), workspaces not on an included plan
+  (listed, not choosable).
+- **Settings → Connected AI apps** and **Settings → Connect**: Security's own card and rows
+  (`bsp-card bsp-secu`, `bsp-secu-row`, `bsp-secu-note`, `bsp-btn`), the Connections page's two-step
+  disconnect (`bsp-acc-disc`, `bsp-acc-confirm`, `bsp-acc-danger`), ordered lists in the row's subtitle
+  type, and a read-only `bs-control` input for the address. Empty, unavailable, off and not-on-plan
+  states are a `bsp-secu-note` line. A new row in the Settings rail's Security group.
+- **The calendar's "Proposed" chip**: a draft with a proposed time and no slot, drawn with the ★ chip's
+  geometry (`.bsp-cal-hol`) and the draft chip's dashed look (`.bsp-calchip[data-k='draft']` values,
+  transcribed), no ★, labelled "Proposed · HH:MM · title", opening the post; the phone agenda's chip uses
+  the same tokens. No new colour.
+
+No new colour, font, shadow or interaction model; en and ar. Measured by `tests/e2e/ai-apps.spec.ts`
+(axe in both languages, RTL) and covered in the reviewer screenshots.
+
 ## 7. `/[locale]/overview` — the Command Center, extended rather than re-ported
 
 > **Superseded by D-468 (batch 1).** Home is now ported from `prototype-2026-09-27` — see §4.3. The

@@ -719,6 +719,11 @@
   color: #55555c;
 }
 .bsp-consent-ws {
+  /* WCAG 2.5.8: each workspace is a target at least 24px tall (the ★ chip's
+     own fix, `--bsp-target-min`), however many are listed. */
+  display: flex;
+  align-items: center;
+  min-block-size: var(--bsp-target-min);
   color: #4d4c53;
   text-decoration: none;
 }

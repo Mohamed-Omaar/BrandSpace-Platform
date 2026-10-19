@@ -2208,3 +2208,24 @@ a connection, settling a job) happens inside that tenant's own `withWorkspace` c
 
 Each index file is one `CREATE INDEX CONCURRENTLY IF NOT EXISTS` statement (§18.12). Tests:
 `tests/unit/connectors-b-migration.test.ts`, `tests/isolation/connectors-b-tables.test.ts`.
+
+## 22. Connected AI apps (D-566)
+
+One migration, approved by the owner as written: `20261023090000_ai_app_connections` (one transaction).
+
+| Table                       | Owner                  | What                                                                                                                                                                                                            |
+| --------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ai_app_client`             | GLOBAL (platform)      | An app registered by RFC 7591: its `clientId` (`bsp_cli_…`), name and redirect addresses. Read by everyone (the consent screen names the app); written only by the platform role. Never a secret.               |
+| `ai_app_connection`         | tenant (`workspaceId`) | One person's grant to one app in one workspace: `userId`, `clientId`, `brandIds` (empty = every brand, including ones added later), `scopes`, `status` (`ACTIVE`/`REVOKED`), `lastUsedAt`, who revoked and why. |
+| `ai_app_authorization_code` | tenant                 | A one-time code: its SHA-256, the PKCE challenge, redirect, resource, scopes; expires within 10 minutes (CHECK); `usedAt` once exchanged.                                                                       |
+| `ai_app_token`              | tenant                 | Access and refresh tokens (`kind`), SHA-256 only, `expiresAt` (refresh at most 90 days, CHECK), `revokedAt`, `replacedById` for rotation.                                                                       |
+| `ai_app_rate_window`        | tenant                 | The per-connection fixed window counter (`connectionId`, `windowStart`, `count`), one atomic upsert per tool call.                                                                                              |
+
+The four tenant tables force RLS with the standard tenant policy plus two read-only lookup policies keyed
+on `app.ai_app_token_hash` (a bearer token or code is found by its hash before any workspace is known);
+every write happens in `withWorkspace`. Every foreign key into a tenant table is workspace-scoped
+(§16). **Retention:** the maintenance sweep deletes codes an hour after expiry, tokens a day after expiry,
+windows older than a day, and registered apps never connected after `ai-apps.oauth.unusedClientRetentionDays`
+(30, audited as a count). Connections are never purged; a revoked one stays as the record. Tests:
+`tests/unit/ai-apps-migration.test.ts`, `tests/isolation/ai-apps-tables.test.ts`,
+`tests/isolation/ai-apps-sweep.test.ts`.
