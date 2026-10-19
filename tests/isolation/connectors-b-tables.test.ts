@@ -133,7 +133,10 @@ describe('connectors B — what the database refuses', () => {
   });
 
   it('a redelivery of the same body is the same row', async () => {
-    const dedupeKey = sha('the same raw body');
+    // One body per run, so the test also passes on a database it has already
+    // run against (the row it writes is never removed); within the run the
+    // second delivery of the same body is still refused.
+    const dedupeKey = sha(`the same raw body ${randomUUID()}`);
     await event({ dedupeKey });
     expect(await refusal(() => event({ dedupeKey }))).toMatch(/Unique constraint|unique/i);
     // The same body for another kind is a different delivery.
