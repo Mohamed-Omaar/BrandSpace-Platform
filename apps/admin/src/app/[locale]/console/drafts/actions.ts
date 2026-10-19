@@ -32,6 +32,8 @@ const DISCARDABLE: readonly ConfigDomain[] = [
   'onboarding',
   'assets',
   'integrations.email',
+  // D-566 — Simple → AI apps.
+  'ai-apps',
 ];
 
 /**

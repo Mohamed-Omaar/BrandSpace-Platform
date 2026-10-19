@@ -146,6 +146,8 @@ describe('D-308 · two navigations', () => {
       '/manage/content',
       '/manage/uploads',
       '/ai',
+      // D-566: Simple → AI apps.
+      '/manage/ai-apps',
       '/manage/signups',
       '/manage/email',
       '/manage/legal',
@@ -170,6 +172,7 @@ describe('D-308 · two navigations', () => {
       'Content',
       'Uploads',
       'AI',
+      'AI apps',
       'Sign-ups & security',
       'Email',
       'Legal pages',

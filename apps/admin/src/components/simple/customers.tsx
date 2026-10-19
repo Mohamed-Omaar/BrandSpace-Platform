@@ -390,6 +390,7 @@ export async function SimpleCustomerDetail({
     connections,
     catalogue,
     entitlementDoc,
+    aiApps,
   ] = await Promise.all([
     getMembershipService().list(workspaceId),
     getSubscriptionService().get(workspaceId),
@@ -411,6 +412,19 @@ export async function SimpleCustomerDetail({
     }),
     getPlanCatalogue(),
     getConfigService().get('entitlements', currentEnvironment()),
+    // D-566 — the AI apps working in this workspace: which app, as whom, last used.
+    prisma.aiAppConnection.findMany({
+      where: { workspaceId, status: 'ACTIVE' },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        createdAt: true,
+        lastUsedAt: true,
+        client: { select: { clientName: true } },
+        user: { select: { name: true, email: true } },
+      },
+      take: 50,
+    }),
   ]);
 
   const may = (key: string) => actor.permissionKeys.includes(key);
@@ -687,6 +701,32 @@ export async function SimpleCustomerDetail({
                         ? `cd.conn.${connection.status}`
                         : 'cd.conn.other') as SimpleKey,
                     )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card
+          title={`${copy('cd.aiAppsTitle')} · ${formatCount(locale, aiApps.length)}`}
+          testId="customer-ai-apps"
+        >
+          {aiApps.length === 0 ? (
+            <p style={{ margin: 0, ...typographyTokens.bodySm }}>{copy('cd.aiAppsNone')}</p>
+          ) : (
+            <ul style={listStyle}>
+              {aiApps.map((connection) => (
+                <li key={connection.id} style={rowStyle} data-testid="customer-ai-app">
+                  <span style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>
+                    {connection.client.clientName}
+                  </span>
+                  <span style={{ color: colorTokens.textSecondary, overflowWrap: 'anywhere' }}>
+                    {connection.user.name ?? connection.user.email} ·{' '}
+                    {connection.lastUsedAt
+                      ? fill(copy('cd.aiAppsLastUsed'), {
+                          when: formatDay(locale, connection.lastUsedAt),
+                        })
+                      : copy('cd.aiAppsNeverUsed')}
                   </span>
                 </li>
               ))}

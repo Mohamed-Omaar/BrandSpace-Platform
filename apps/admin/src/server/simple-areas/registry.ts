@@ -16,6 +16,7 @@ import { uploadsArea } from './areas/uploads';
 import { emailArea } from './areas/email';
 import { contentArea } from './areas/content';
 import { legalArea } from './areas/legal';
+import { aiAppsArea } from './areas/ai-apps';
 
 /** Every Simple area, in the order the owner's navigation lists them. */
 export const AREAS: readonly AreaSpec[] = [
@@ -28,6 +29,7 @@ export const AREAS: readonly AreaSpec[] = [
   emailArea,
   contentArea,
   legalArea,
+  aiAppsArea,
 ];
 
 export function findArea(key: string): AreaSpec | null {
