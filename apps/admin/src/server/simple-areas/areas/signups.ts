@@ -1,6 +1,6 @@
 import type { AreaSpec, CollectionSpec, FieldSpec, ItemView } from '../types';
 import { arrayOf, bool, num, rec, sameJson } from '../json';
-import { amount } from '../plain';
+import { amount, duration } from '../plain';
 
 /**
  * SIGN-UPS AND SECURITY — open or invitation-only, the shortest password,
@@ -157,7 +157,7 @@ export const signupsArea: AreaSpec = {
         const a = rec(docs.onboarding?.['abuse']);
         return ctx.t('w.perWindow', {
           count: num(a['signInPerAccount']) ?? '—',
-          seconds: num(a['windowSeconds']) ?? '—',
+          window: duration(ctx, a['windowSeconds']),
         });
       },
     },

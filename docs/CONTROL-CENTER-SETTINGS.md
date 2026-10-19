@@ -172,6 +172,14 @@ Production ships **no** features or flags; they are added in Advanced. Each one 
 | `allowedOrigins`                                        | Websites allowed to call the MCP address from a browser.           | —             | shown                        | risky  |
 | The `feature.ai_apps` kill switch                       | Emergency off for the feature.                                     | —             | shown (Advanced)             | risky  |
 
+Every length of time on this page reads in plain units, en and ar (D-563): the defaults show as
+"20 every 1 hour" and "60 every 1 minute" from one address, "1 hour" for an access token, "30 days" for
+a refresh token. One helper (`duration()` in `apps/admin/src/server/simple-areas/plain.ts`) words them,
+and the other Simple pages that showed a window in seconds (publishing rate limits, sign-in attempts,
+the credit reservation timeout) use it too. The E2E seed (`tests/e2e/seed-ai-apps.ts`, development
+only) raises both per-address ceilings to 1,000 because every test connects from one address; a
+database that ran it shows those numbers, never staging or production.
+
 ## Everything else (Advanced only, listed so nothing is hidden)
 
 | Domain                                                                 | What it does                                                                   | Simple        | Owner?                   |

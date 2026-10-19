@@ -8,7 +8,7 @@ import {
 } from '../../feature-access';
 import type { AreaContext, AreaSpec, CollectionSpec, Docs, FieldSpec, ItemView } from '../types';
 import { arrayOf, rec, str } from '../json';
-import { amount, joined, planName } from '../plain';
+import { duration, joined, planName } from '../plain';
 
 /**
  * AI APPS — CONNECTING CLAUDE, CHATGPT OR ANY MCP CLIENT (D-566).
@@ -74,7 +74,7 @@ const everyone: CollectionSpec = {
             label: ctx.t('aa.f.calls'),
             value: ctx.t('w.perWindow', {
               count: doc.rateLimit.maxCallsPerConnection,
-              seconds: doc.rateLimit.windowSeconds,
+              window: duration(ctx, doc.rateLimit.windowSeconds),
             }),
           },
           { label: ctx.t('aa.e.credits'), value: ctx.t('aa.e.noCredits') },
@@ -312,37 +312,39 @@ export const aiAppsArea: AreaSpec = {
   developer: [
     {
       label: 'aa.d.window',
-      value: (docs, ctx) => amount(ctx, aiApps(docs).rateLimit.windowSeconds, 'u.seconds'),
+      value: (docs, ctx) => duration(ctx, aiApps(docs).rateLimit.windowSeconds),
     },
     {
       label: 'aa.d.access',
-      value: (docs, ctx) => amount(ctx, aiApps(docs).oauth.accessTokenTtlSeconds, 'u.seconds'),
+      value: (docs, ctx) => duration(ctx, aiApps(docs).oauth.accessTokenTtlSeconds),
     },
     {
       label: 'aa.d.refresh',
-      value: (docs, ctx) => amount(ctx, aiApps(docs).oauth.refreshTokenTtlDays, 'u.days'),
+      value: (docs, ctx) => duration(ctx, aiApps(docs).oauth.refreshTokenTtlDays * 86_400),
     },
     {
       label: 'aa.d.code',
-      value: (docs, ctx) =>
-        amount(ctx, aiApps(docs).oauth.authorizationCodeTtlSeconds, 'u.seconds'),
+      value: (docs, ctx) => duration(ctx, aiApps(docs).oauth.authorizationCodeTtlSeconds),
     },
     {
       label: 'aa.d.register',
       value: (docs, ctx) =>
         ctx.t('w.perWindow', {
           count: aiApps(docs).oauth.registrationPerIpPerHour,
-          seconds: 3_600,
+          window: duration(ctx, 3_600),
         }),
     },
     {
       label: 'aa.d.token',
       value: (docs, ctx) =>
-        ctx.t('w.perWindow', { count: aiApps(docs).oauth.tokenPerIpPerMinute, seconds: 60 }),
+        ctx.t('w.perWindow', {
+          count: aiApps(docs).oauth.tokenPerIpPerMinute,
+          window: duration(ctx, 60),
+        }),
     },
     {
       label: 'aa.d.unused',
-      value: (docs, ctx) => amount(ctx, aiApps(docs).oauth.unusedClientRetentionDays, 'u.days'),
+      value: (docs, ctx) => duration(ctx, aiApps(docs).oauth.unusedClientRetentionDays * 86_400),
     },
     {
       label: 'aa.d.origins',

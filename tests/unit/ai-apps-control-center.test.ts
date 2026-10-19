@@ -7,6 +7,7 @@ import { areaCopy } from '../../apps/admin/src/i18n/simple-areas';
 import { sourceOf } from '../../apps/admin/src/server/simple-areas/fields';
 import { prepareEdit } from '../../apps/admin/src/server/simple-areas/edit';
 import { findArea, findCollection } from '../../apps/admin/src/server/simple-areas/registry';
+import { duration } from '../../apps/admin/src/server/simple-areas/plain';
 import type { AreaContext, Docs } from '../../apps/admin/src/server/simple-areas/types';
 
 /**
@@ -175,5 +176,60 @@ describe('D-566 · Control Center → AI apps', () => {
     });
     if ('missing' in edit) throw new Error('missing');
     expect(edit.problems).toContain(ctx.t('aa.r.killed'));
+  });
+});
+
+describe('D-563 · every length of time on the AI apps page reads in plain units', () => {
+  it('the production numbers: the audited ceilings, in hours, minutes and days, en and ar', () => {
+    const docs = productionDocs();
+    const expected = {
+      en: {
+        'aa.d.window': '1 minute',
+        'aa.d.access': '1 hour',
+        'aa.d.refresh': '30 days',
+        'aa.d.code': '1 minute',
+        'aa.d.register': '20 every 1 hour',
+        'aa.d.token': '60 every 1 minute',
+        'aa.d.unused': '30 days',
+        calls: '60 every 1 minute',
+      },
+      ar: {
+        'aa.d.window': 'دقيقة',
+        'aa.d.access': 'ساعة',
+        'aa.d.refresh': '30 يومًا',
+        'aa.d.code': 'دقيقة',
+        'aa.d.register': '20 كل ساعة',
+        'aa.d.token': '60 كل دقيقة',
+        'aa.d.unused': '30 يومًا',
+        calls: '60 كل دقيقة',
+      },
+    } as const;
+    for (const locale of ['en', 'ar'] as const) {
+      const ctx = context(locale);
+      const rows = Object.fromEntries(
+        (area.developer ?? [])
+          .filter((row) => row.label !== 'aa.d.origins')
+          .map((row) => [row.label, row.value(docs, ctx)]),
+      );
+      const calls = everyone
+        .items(docs, ctx)[0]!
+        .facts?.find((fact) => fact.label === ctx.t('aa.f.calls'))?.value;
+      expect({ ...rows, calls }).toEqual(expected[locale]);
+      expect(JSON.stringify(rows)).not.toMatch(/seconds|ثانية/);
+    }
+  });
+
+  it('duration() takes the largest whole unit and keeps seconds only when nothing larger divides', () => {
+    const en = context('en');
+    const ar = context('ar');
+    expect(duration(en, 3_600)).toBe('1 hour');
+    expect(duration(en, 60)).toBe('1 minute');
+    expect(duration(en, 2_592_000)).toBe('30 days');
+    expect(duration(en, 7_200)).toBe('2 hours');
+    expect(duration(en, 90)).toBe('90 seconds');
+    expect(duration(en, undefined)).toBe('—');
+    expect(duration(ar, 7_200)).toBe('ساعتان');
+    expect(duration(ar, 600)).toBe('10 دقائق');
+    expect(duration(ar, 90)).toBe('90 ثانية');
   });
 });
