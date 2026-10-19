@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultPayload, parseConfigPayload } from '@brandspace/config';
 import { redact } from '@brandspace/shared';
 import {
+  addressesFrom,
   authorizationRedirect,
   authorizationServerMetadata,
   bearerChallenge,
@@ -15,6 +16,7 @@ import {
   pkceS256Matches,
   protectedResourceMetadata,
   redirectUriRegistered,
+  resourceUrl,
   sha256Hex,
 } from '../../apps/api/src/ai-apps/oauth-core';
 import {
@@ -130,6 +132,24 @@ describe('metadata documents', () => {
     expect(bearerChallenge(ADDRESSES, { error: 'invalid_token' })).toMatch(
       /^Bearer error="invalid_token", /,
     );
+  });
+});
+
+describe('the MCP address (the Connect page, the metadata, the 401 challenge)', () => {
+  it('is PUBLIC_API_BASE_URL + /mcp, read from the deployment, never from a request', () => {
+    const addresses = addressesFrom({
+      PUBLIC_API_BASE_URL: 'https://api.example.test/',
+      PUBLIC_DASHBOARD_BASE_URL: 'https://app.example.test',
+    });
+    expect(addresses).toEqual({
+      api: 'https://api.example.test',
+      dashboard: 'https://app.example.test',
+    });
+    expect(resourceUrl(addresses!)).toBe('https://api.example.test/mcp');
+    // Not configured: no address at all (the Connect page says so) rather than a guess.
+    expect(addressesFrom({ PUBLIC_DASHBOARD_BASE_URL: 'https://app.example.test' })).toBeNull();
+    // The function takes the environment only; nothing about a request can reach it.
+    expect(addressesFrom.length).toBeLessThanOrEqual(1);
   });
 });
 

@@ -392,6 +392,43 @@ describe('D-566 · discovery, as the MCP spec and RFC 9728 / RFC 8414 require', 
     }
   });
 
+  it("the MCP address is the deployment's own, whatever Host a request claims", async () => {
+    const forged = {
+      host: 'attacker.example',
+      'x-forwarded-host': 'attacker.example',
+      'x-forwarded-proto': 'http',
+      forwarded: 'host=attacker.example;proto=http',
+    };
+    const metadata = await server.inject({
+      method: 'GET',
+      url: '/.well-known/oauth-protected-resource/mcp',
+      headers: forged,
+    });
+    expect(metadata.json()).toMatchObject({
+      resource: `${base}/mcp`,
+      authorization_servers: [base],
+    });
+    const challenge = await server.inject({
+      method: 'POST',
+      url: '/mcp',
+      headers: { ...forged, 'content-type': 'application/json' },
+      payload: { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+    });
+    expect(challenge.headers['www-authenticate']).toContain(
+      `resource_metadata="${base}/.well-known/oauth-protected-resource/mcp"`,
+    );
+    // The Connect page's address comes from this answer.
+    const connections = await server.inject({
+      method: 'GET',
+      url: '/v1/ai-apps/connections',
+      headers: { ...forged, authorization: `Bearer ${owner.session}` },
+    });
+    expect(connections.json()).toMatchObject({ mcpUrl: `${base}/mcp` });
+    expect(metadata.body + JSON.stringify(challenge.headers) + connections.body).not.toContain(
+      'attacker.example',
+    );
+  });
+
   it('authorization server metadata: S256 only, public clients, offline_access, iss in the response', async () => {
     const { body } = await json('GET', '/.well-known/oauth-authorization-server');
     expect(body).toMatchObject({
