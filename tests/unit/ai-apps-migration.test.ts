@@ -195,10 +195,11 @@ describe('D-566 · the AI apps migration', () => {
     expect(MODEL_TABLE_NAMES['AiAppToken']).toBe('ai_app_token');
   });
 
-  it('comes directly after connectors B and is the last', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-2)).toEqual([
+  it('comes directly after connectors B, and only its D-112 fix (D-568) follows', () => {
+    expect(EXPECTED_MIGRATIONS.slice(-3)).toEqual([
       '20261022092000_publish_job_handle_lookup_index',
       NAME,
+      '20261023091000_ai_app_token_replaced_scoped',
     ]);
   });
 });

@@ -70,7 +70,7 @@ edit (no service edits a title), and `list_posts` has no date range.
 
 ## 5. Data
 
-Five tables (migration `20261023090000_ai_app_connections`; `docs/DATABASE.md` §AI apps):
+Five tables (migrations `20261023090000_ai_app_connections` and `20261023091000_ai_app_token_replaced_scoped`, D-568; `docs/DATABASE.md` §AI apps):
 `ai_app_client` (global registry, written only by the platform role), `ai_app_connection`,
 `ai_app_authorization_code`, `ai_app_token`, `ai_app_rate_window` (tenant-owned, forced RLS). A token is
 looked up by hash under `app.ai_app_token_hash` with read-only policies; every write runs in the

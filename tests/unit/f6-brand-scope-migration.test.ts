@@ -81,6 +81,8 @@ describe('F6 — the brandScope migration', () => {
       '20261022092000_publish_job_handle_lookup_index',
       // D-566: Connected AI apps (the remote MCP server).
       '20261023090000_ai_app_connections',
+      // D-568: the rotation link made composite on the workspace (D-112).
+      '20261023091000_ai_app_token_replaced_scoped',
     ]);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe(
       '20261012092000_publish_job_published_population_index',

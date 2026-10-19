@@ -6695,9 +6695,13 @@ model AiAppToken {
   replacedById String?        @db.Uuid
 
   connection AiAppConnection @relation(fields: [workspaceId, connectionId], references: [workspaceId, id], onDelete: Cascade, onUpdate: Cascade, map: "ai_app_token_connection_fkey")
-  replacedBy AiAppToken?     @relation("AiAppTokenRotation", fields: [replacedById], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "ai_app_token_replaced_fkey")
+  /// D-112 / D-568: composite on the workspace, so a rotated token can only
+  /// point at a successor in its own workspace. ON DELETE sets only
+  /// "replacedById" to NULL (`SET NULL ("replacedById")` in the migration).
+  replacedBy AiAppToken?     @relation("AiAppTokenRotation", fields: [workspaceId, replacedById], references: [workspaceId, id], onDelete: SetNull, onUpdate: Cascade, map: "ai_app_token_replaced_fkey")
   replaces   AiAppToken[]    @relation("AiAppTokenRotation")
 
+  @@unique([workspaceId, id])
   @@index([connectionId, kind])
   @@index([expiresAt])
   @@map("ai_app_token")

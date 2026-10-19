@@ -148,14 +148,16 @@ describe('connectors B · B2 and B3 — one concurrent index each, nothing else'
 });
 
 describe('connectors B · order', () => {
-  it('the three come directly after connectors A, in order, and only the AI apps migration follows', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-5)).toEqual([
+  it('the three come directly after connectors A, in order, and only the AI apps migrations follow', () => {
+    expect(EXPECTED_MIGRATIONS.slice(-6)).toEqual([
       '20261021090000_connectors_a_handles_and_subjects',
       B1,
       B2,
       B3,
       // D-566: Connected AI apps (the remote MCP server).
       '20261023090000_ai_app_connections',
+      // D-568: the rotation link made composite on the workspace (D-112).
+      '20261023091000_ai_app_token_replaced_scoped',
     ]);
   });
 });

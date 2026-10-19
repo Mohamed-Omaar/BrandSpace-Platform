@@ -235,6 +235,37 @@ describe('D-566 · the four tenant tables — one workspace only', () => {
     );
     expect(result).toMatch(/ai_app_token_connection_fkey|Foreign key constraint/i);
   });
+
+  it('a rotated token can never point at a successor in another workspace (D-112, D-568)', async () => {
+    const now = new Date();
+    const refresh = (workspaceId: string, connectionId: string, replacedById?: string) =>
+      platform.aiAppToken.create({
+        data: {
+          workspaceId,
+          connectionId,
+          kind: 'REFRESH',
+          tokenHash: sha(randomUUID()),
+          resource: RESOURCE,
+          scopes: ['brandspace.read', 'offline_access'],
+          createdAt: now,
+          expiresAt: new Date(now.getTime() + 86_400_000),
+          ...(replacedById ? { replacedById } : {}),
+        },
+      });
+    // Workspace B's token as A's successor: refused by the database itself.
+    expect(
+      await refusal(() => refresh(fixtures.a.workspaceId, seededA.connectionId, seededB.tokenId)),
+    ).toMatch(/ai_app_token_replaced_fkey|Foreign key constraint/i);
+
+    // A successor in the same workspace is accepted; deleting it clears only
+    // the link, so the old row (and the reuse check) stays.
+    const successor = await refresh(fixtures.a.workspaceId, seededA.connectionId);
+    const old = await refresh(fixtures.a.workspaceId, seededA.connectionId, successor.id);
+    await platform.aiAppToken.delete({ where: { id: successor.id } });
+    const after = await platform.aiAppToken.findUniqueOrThrow({ where: { id: old.id } });
+    expect(after.replacedById).toBeNull();
+    expect(after.workspaceId).toBe(fixtures.a.workspaceId);
+  });
 });
 
 describe('D-566 · the hash lookup — one row, read-only, only for the holder', () => {
