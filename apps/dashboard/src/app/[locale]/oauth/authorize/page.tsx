@@ -191,7 +191,7 @@ export default async function ConsentPage({
                 type="submit"
                 name="decision"
                 value="cancel"
-                className="bsp-btn bsp-ghost"
+                className="bsp-btn bsp-ghost bsp-consent-cancel"
                 data-testid="consent-cancel"
               >
                 {t('consent.cancel')}
@@ -207,7 +207,7 @@ export default async function ConsentPage({
               type="submit"
               name="decision"
               value="cancel"
-              className="bsp-btn bsp-ghost"
+              className="bsp-btn bsp-ghost bsp-consent-cancel"
               data-testid="consent-cancel"
             >
               {t('consent.cancel')}

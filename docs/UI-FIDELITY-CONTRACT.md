@@ -2410,7 +2410,8 @@ APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2); the prototype draws none of these scr
   `EntryCard`, the sign-in screens' own), its primary button and banner, plain radio and checkbox rows
   and the eyebrow. The `.bsp-consent*` rules in `entry.css` only space and list what the card already
   draws (headings at the card's label size, bullet lists, a fieldset without a frame, the workspace links
-  as the card's secondary link style). Every state: not signed in (to sign-in and back, through two-step
+  as the card's secondary link style, each a 24px target). Allow is the card's ink button; Cancel is the
+  same button in the card's chip grey (`#f2f2f4`, as `.bsp-auth-realm`), so there is one primary action. Every state: not signed in (to sign-in and back, through two-step
   sign-in), an unknown app or return address (the card with an error banner), no workspace available
   (warning banner, Cancel), a refusal from Allow (error banner), workspaces not on an included plan
   (listed, not choosable).

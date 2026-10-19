@@ -53,27 +53,38 @@ export default async function ConnectAiAppPage({
       >
         <section className="bsp-card bsp-secu" data-testid="ai-apps-connect">
           <div className="bsp-secu-block">
-            <span className="bsp-secu-text">
-              <span className="bsp-secu-t">{t('aiApps.connect.title')}</span>
-              <span className="bsp-secu-s">{t('aiApps.connect.intro')}</span>
-            </span>
+            <div className="bsp-row bsp-secu-row">
+              <span className="bsp-secu-text">
+                <span className="bsp-secu-t">{t('aiApps.connect.title')}</span>
+                <span className="bsp-secu-s">{t('aiApps.connect.intro')}</span>
+              </span>
+            </div>
           </div>
 
           <div className="bsp-secu-block">
-            <label className="bsp-secu-text" htmlFor="ai-apps-mcp-url">
-              <span className="bsp-secu-t bsp-sm">{t('aiApps.connect.urlLabel')}</span>
-              <span className="bsp-secu-s">{t('aiApps.connect.urlHelp')}</span>
-            </label>
-            {view?.mcpUrl ? (
-              <input
-                id="ai-apps-mcp-url"
-                className="bs-control"
-                readOnly
-                dir="ltr"
-                value={view.mcpUrl}
-                data-testid="ai-apps-mcp-url"
-              />
-            ) : (
+            <div className="bsp-row bsp-secu-row">
+              <span className="bsp-secu-text">
+                <span className="bsp-secu-t bsp-sm" id="ai-apps-mcp-url-label">
+                  {t('aiApps.connect.urlLabel')}
+                </span>
+                <span className="bsp-secu-s" id="ai-apps-mcp-url-help">
+                  {t('aiApps.connect.urlHelp')}
+                </span>
+                {view?.mcpUrl ? (
+                  <input
+                    id="ai-apps-mcp-url"
+                    className="bs-control"
+                    readOnly
+                    dir="ltr"
+                    value={view.mcpUrl}
+                    aria-labelledby="ai-apps-mcp-url-label"
+                    aria-describedby="ai-apps-mcp-url-help"
+                    data-testid="ai-apps-mcp-url"
+                  />
+                ) : null}
+              </span>
+            </div>
+            {view?.mcpUrl ? null : (
               <p className="bsp-secu-panel bsp-secu-note" data-testid="ai-apps-mcp-url-missing">
                 {t('aiApps.connect.urlMissing')}
               </p>
@@ -86,44 +97,58 @@ export default async function ConnectAiAppPage({
           </div>
 
           <div className="bsp-secu-block" data-testid="ai-apps-steps-claude">
-            <span className="bsp-secu-t bsp-sm">{t('aiApps.connect.claude')}</span>
-            <ol className="bsp-secu-s">
-              {steps('claude').map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
+            <div className="bsp-row bsp-secu-row">
+              <span className="bsp-secu-text">
+                <span className="bsp-secu-t bsp-sm">{t('aiApps.connect.claude')}</span>
+                <ol className="bsp-secu-s">
+                  {steps('claude').map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </span>
+            </div>
           </div>
 
           <div className="bsp-secu-block" data-testid="ai-apps-steps-chatgpt">
-            <span className="bsp-secu-t bsp-sm">{t('aiApps.connect.chatgpt')}</span>
-            <ol className="bsp-secu-s">
-              {steps('chatgpt').map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
+            <div className="bsp-row bsp-secu-row">
+              <span className="bsp-secu-text">
+                <span className="bsp-secu-t bsp-sm">{t('aiApps.connect.chatgpt')}</span>
+                <ol className="bsp-secu-s">
+                  {steps('chatgpt').map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </span>
+            </div>
             <p className="bsp-secu-panel bsp-secu-note" data-testid="ai-apps-plans-chatgpt">
               {t('aiApps.connect.chatgptPlans')}
             </p>
           </div>
 
           <div className="bsp-secu-block" data-testid="ai-apps-try">
-            <span className="bsp-secu-t bsp-sm">{t('aiApps.connect.try')}</span>
-            <ul className="bsp-secu-s">
-              <li>{t('aiApps.connect.try1')}</li>
-              <li>{t('aiApps.connect.try2')}</li>
-              <li>{t('aiApps.connect.try3')}</li>
-            </ul>
+            <div className="bsp-row bsp-secu-row">
+              <span className="bsp-secu-text">
+                <span className="bsp-secu-t bsp-sm">{t('aiApps.connect.try')}</span>
+                <ul className="bsp-secu-s">
+                  <li>{t('aiApps.connect.try1')}</li>
+                  <li>{t('aiApps.connect.try2')}</li>
+                  <li>{t('aiApps.connect.try3')}</li>
+                </ul>
+              </span>
+            </div>
             <p className="bsp-secu-panel bsp-secu-note">{t('aiApps.connect.never')}</p>
           </div>
 
           <div className="bsp-secu-block">
-            <Link
-              href={`/${locale}/settings/ai-apps`}
-              className="bsp-btn bsp-sm bsp-sec"
-              data-testid="ai-apps-manage-link"
-            >
-              {t('aiApps.connect.manage')}
-            </Link>
+            <div className="bsp-row bsp-secu-row">
+              <Link
+                href={`/${locale}/settings/ai-apps`}
+                className="bsp-btn bsp-sm bsp-sec"
+                data-testid="ai-apps-manage-link"
+              >
+                {t('aiApps.connect.manage')}
+              </Link>
+            </div>
           </div>
         </section>
       </SettingsFrame>

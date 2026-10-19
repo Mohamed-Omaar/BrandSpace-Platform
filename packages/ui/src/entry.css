@@ -593,6 +593,13 @@
 .bsp-auth-body form button[type='submit'][data-testid='signup-submit'] {
   background: #7935fe !important;
 }
+/* D-566 — the consent screen's Cancel: the same 56px button in the card's chip
+   grey (`#f2f2f4`, `.bsp-auth-realm`'s) with ink, so Allow stays the one
+   primary action (WCAG contrast 17:1). */
+.bsp-auth-body form button[type='submit'].bsp-consent-cancel {
+  background: #f2f2f4 !important;
+  color: #111114 !important;
+}
 .bsp-auth-body a,
 .bsp-auth-links a {
   color: #5312c4;
