@@ -2384,6 +2384,17 @@ body:has([role='dialog'][aria-modal='true']) .bsp-fab {
 span.bsp-cal-hol {
   cursor: default;
 }
+/* D-566 (owner answer Q1) — A DRAFT WITH A PROPOSED TIME ONLY, no slot: the
+   ★ chip's geometry wearing the draft chip's own dashed look (`.calchip`
+   `[data-k='draft']`, values transcribed), so it reads as "not scheduled".
+   DESIGN-SYSTEM EXTENSION (CLAUDE.md §4.2): the prototype draws no proposed
+   post; no new colour, only the two chips it already has. */
+.bsp-cal-hol[data-kind='proposed'] {
+  background: #f5f5f7;
+  border: 1px dashed #d8d8de;
+  color: #111114;
+  font-weight: 600;
+}
 /* `.caladd` — `position: absolute; top: 6px; inset-inline-end: 6px; z-index: 2;
    width: 24px; height: 24px; border: 0; border-radius: 8px; background: #f2edff;
    color: #5312c4; font-size: 15px; font-weight: 700`, shown on the day's hover

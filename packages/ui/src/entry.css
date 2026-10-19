@@ -662,3 +662,76 @@
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
+
+/*
+ * D-566 — THE AI-APP CONSENT SCREEN (`/{locale}/oauth/authorize`), inside the
+ * customer entry card. A DESIGN-SYSTEM EXTENSION (CLAUDE.md §4.2,
+ * UI-FIDELITY-CONTRACT §6): no approved reference draws it, so it is composed
+ * from the entry card's own type, spacing tokens, the secondary inks it
+ * already uses (`#4d4c53`, `#55555c`) and the one purple. Lists, radio and
+ * checkbox rows only; logical properties throughout, so Arabic mirrors.
+ */
+.bsp-consent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-8);
+  font-size: var(--bsp-fs-13-5);
+  color: #4d4c53;
+}
+.bsp-consent-h {
+  margin: var(--bsp-px-6) 0 0;
+  font-weight: 800;
+  color: #26262b;
+}
+.bsp-consent-list {
+  margin: 0;
+  padding-inline-start: var(--bsp-px-18);
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-4);
+}
+.bsp-consent-set {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-6);
+}
+.bsp-consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--bsp-px-8);
+}
+.bsp-consent-row input {
+  margin-block-start: var(--bsp-px-4);
+  accent-color: #7935fe;
+}
+.bsp-consent-brands {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-4);
+  padding-inline-start: var(--bsp-px-24);
+}
+.bsp-consent-note {
+  display: block;
+  font-size: var(--bsp-fs-12-5);
+  color: #55555c;
+}
+.bsp-consent-ws {
+  color: #4d4c53;
+  text-decoration: none;
+}
+.bsp-consent-ws[aria-current='true'] {
+  color: #7935fe;
+  font-weight: 800;
+}
+.bsp-consent-ws[aria-disabled='true'] {
+  color: #55555c;
+}
+.bsp-consent-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bsp-px-8);
+  margin-block-start: var(--bsp-px-10);
+}

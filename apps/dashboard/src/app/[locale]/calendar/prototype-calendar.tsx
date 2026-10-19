@@ -75,6 +75,7 @@ export interface ProtoCalendarDay {
     readonly label: string;
     readonly kind: string;
     readonly href?: string | undefined;
+    readonly hint?: string | undefined;
   }[];
 }
 
@@ -399,23 +400,25 @@ export function PrototypeCalendar({
                 <Link
                   key={index}
                   href={marker.href}
-                  title={marker.label}
+                  title={marker.hint ?? marker.label}
                   className="bsp-cal-hol"
                   data-testid={`calendar-marker-${day.key}-${index}`}
                   data-kind={marker.kind}
                   aria-label={`${marker.label} — ${day.longLabel}`}
                 >
-                  ★ {marker.label}
+                  {marker.kind === 'proposed' ? '' : '★ '}
+                  {marker.label}
                 </Link>
               ) : (
                 <span
                   key={index}
-                  title={marker.label}
+                  title={marker.hint ?? marker.label}
                   className="bsp-cal-hol"
                   data-testid={`calendar-marker-${day.key}-${index}`}
                   data-kind={marker.kind}
                 >
-                  ★ {marker.label}
+                  {marker.kind === 'proposed' ? '' : '★ '}
+                  {marker.label}
                 </span>
               ),
             )

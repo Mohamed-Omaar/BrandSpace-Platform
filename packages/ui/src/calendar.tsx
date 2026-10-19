@@ -61,8 +61,15 @@ export interface CalendarDay {
 
 export interface CalendarDayMarker {
   readonly label: string;
-  readonly kind: 'holiday' | 'observance';
+  /**
+   * `proposed` (D-566, owner answer Q1) — a draft with a proposed time only:
+   * no slot, nothing scheduled. Drawn without the ★, in the draft chip's
+   * dashed neutral look, so it never reads as a holiday or as scheduled.
+   */
+  readonly kind: 'holiday' | 'observance' | 'proposed';
   readonly href?: string | undefined;
+  /** The tooltip, when it says more than the label ("Nothing is scheduled"). */
+  readonly hint?: string | undefined;
 }
 
 /**
@@ -104,10 +111,18 @@ function DayMarkers({
           whiteSpace: 'nowrap',
           ...typographyTokens.micro,
           fontWeight: 700,
+          ...(marker.kind === 'proposed'
+            ? {
+                background: colorTokens.surfaceMuted,
+                color: colorTokens.textPrimary,
+                border: `1px dashed ${colorTokens.borderStrong}`,
+                fontWeight: 600,
+              }
+            : {}),
         } as const;
         const content = (
           <>
-            <span aria-hidden="true">★</span>
+            {marker.kind === 'proposed' ? null : <span aria-hidden="true">★</span>}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{marker.label}</span>
           </>
         );
@@ -119,6 +134,7 @@ function DayMarkers({
             className="bs-pressable"
             data-testid={testId}
             data-kind={marker.kind}
+            title={marker.hint}
             aria-label={`${marker.label} — ${day.longLabel}`}
             style={style}
           >

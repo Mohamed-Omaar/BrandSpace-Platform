@@ -7,6 +7,7 @@ import {
 } from '../../../../server/customer-context';
 import { translator } from '../../../../i18n/messages';
 import { AuthCard, authButtonStyle, authInputStyle } from '../../../../components/auth-card';
+import { signInReturnPath } from '../../../../server/return-path';
 import { verifyMfaAction } from '../actions';
 
 export const dynamic = 'force-dynamic';
@@ -35,10 +36,11 @@ export default async function MfaChallengePage({
   const t = translator(locale);
   const query = await searchParams;
 
+  const next = signInReturnPath(query['next']);
   const resolved = await getCustomer().catch(() => null);
   if (resolved) {
     const token = await getSessionToken();
-    redirect(token ? await customerLandingPath(locale, token) : `/${locale}/workspaces`);
+    redirect(next ?? (token ? await customerLandingPath(locale, token) : `/${locale}/workspaces`));
   }
 
   const error = typeof query['error'] === 'string' ? query['error'] : null;
@@ -56,6 +58,7 @@ export default async function MfaChallengePage({
       ) : null}
       <form action={verifyMfaAction} data-testid="mfa-form">
         <input type="hidden" name="locale" value={locale} />
+        {next ? <input type="hidden" name="next" value={next} /> : null}
         <Field label={t('mfa.code')} htmlFor="code" required>
           <input
             className="bs-control"

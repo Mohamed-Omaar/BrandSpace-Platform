@@ -9,7 +9,7 @@ import {
 } from '@brandspace/content';
 import { TenantOnboardingPolicySource, industryKeyFor } from '@brandspace/onboarding';
 import { QUOTA_FEATURES } from '@brandspace/entitlements';
-import { systemClock } from '@brandspace/shared';
+import { brandIdQueryFilter, systemClock } from '@brandspace/shared';
 import type {
   ApprovalStatus,
   CalendarDay,
@@ -263,6 +263,38 @@ export default async function CalendarPage({
       })
     ).filter((item) => item.variants.length > 0);
     /*
+     * D-566 (owner answer Q1) — DRAFTS WITH A PROPOSED TIME ONLY: what a
+     * connected AI app (or a member) suggested, with no slot, no quota and
+     * nothing scheduled. Drawn as a "Proposed" chip on its day so a planner
+     * sees it where it would go. Read under RLS and the member's BrandScope
+     * with the same filters as the month; a post that already has a live slot
+     * is on the calendar as itself and is not drawn twice. The proposed time
+     * is workspace-local `YYYY-MM-DDTHH:mm`, so the grid's padded window is a
+     * plain string range.
+     */
+    const proposedFrom = new Date(Date.UTC(year, month - 1, 1) - 7 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const proposedTo = new Date(Date.UTC(year, month, 1) + 14 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const proposed = filterStatus
+      ? []
+      : await services.db.contentItem.findMany({
+          where: {
+            deletedAt: null,
+            status: { in: ['DRAFT', 'IN_REVIEW', 'CHANGES_REQUESTED', 'APPROVED'] },
+            proposedLocalTime: { gte: `${proposedFrom}T00:00`, lte: `${proposedTo}T23:59` },
+            calendarSlots: { none: { status: { notIn: ['CANCELLED', 'FAILED'] } } },
+            ...brandIdQueryFilter({ brandId: filterBrand, brandScope: workspace.brandScope }),
+            ...(filterCampaign ? { campaignId: filterCampaign } : {}),
+            ...(filterPlatform ? { variants: { some: { platformKey: filterPlatform } } } : {}),
+          },
+          orderBy: [{ proposedLocalTime: 'asc' }, { id: 'asc' }],
+          take: 300,
+          select: { id: true, title: true, proposedLocalTime: true },
+        });
+    /*
      * THE ONE QUIET SUGGESTION (D-290): a weekday nothing went on for the last
      * GAP_WEEKS whole weeks, from the brand's own slots. Read under RLS and the
      * member's BrandScope (plus the brand filter); a cancelled slot is not a
@@ -380,6 +412,7 @@ export default async function CalendarPage({
       month,
       visible,
       schedulable,
+      proposed,
       gapDays,
       filterBrands,
       platformKeys: policy.platforms.map((platform) => platform.key),
@@ -401,6 +434,7 @@ export default async function CalendarPage({
     month,
     visible,
     schedulable,
+    proposed,
     gapDays,
     quotaLimit,
     quotaUsed,
@@ -681,17 +715,29 @@ export default async function CalendarPage({
   ];
   for (const [index, day] of days.entries()) {
     const onDay = markers.filter((marker) => marker.date === day.key);
-    if (onDay.length === 0) continue;
+    const proposedOnDay = proposed.filter(
+      (item) => item.proposedLocalTime?.slice(0, 10) === day.key,
+    );
+    if (onDay.length === 0 && proposedOnDay.length === 0) continue;
     days[index] = {
       ...day,
-      markers: onDay.map((marker) => ({
-        label: locale === 'ar' ? marker.name.ar : marker.name.en,
-        kind: marker.kind,
-        href:
-          mayCreate && day.key >= todayKey
-            ? `/${locale}/content/compose?date=${day.key}`
-            : undefined,
-      })),
+      markers: [
+        ...onDay.map((marker) => ({
+          label: locale === 'ar' ? marker.name.ar : marker.name.en,
+          kind: marker.kind,
+          href:
+            mayCreate && day.key >= todayKey
+              ? `/${locale}/content/compose?date=${day.key}`
+              : undefined,
+        })),
+        // D-566 — "Proposed · 10:00 · title", opening the post.
+        ...proposedOnDay.map((item) => ({
+          label: `${translate('calendar.proposedChip')} · ${item.proposedLocalTime?.slice(11, 16) ?? ''} · ${item.title}`,
+          kind: 'proposed' as const,
+          href: `/${locale}/content/compose?item=${item.id}`,
+          hint: translate('calendar.proposedHint'),
+        })),
+      ],
     };
   }
 

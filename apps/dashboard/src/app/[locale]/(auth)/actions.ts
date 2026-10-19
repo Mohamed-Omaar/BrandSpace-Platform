@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { signInReturnPath } from '../../../server/return-path';
 import { randomUUID } from 'node:crypto';
 import { CUSTOMER_REALM } from '@brandspace/auth';
 import {
@@ -114,15 +115,16 @@ export async function signInAction(formData: FormData): Promise<void> {
      * session resolves to NOTHING until a code is presented — so landing
      * anywhere but the challenge would simply bounce back to sign-in.
      */
+    const back = signInReturnPath(next);
     if (session.mfaRequired) {
-      destination = `/${locale}/mfa`;
+      // D-566: the return path travels through the second step too.
+      destination = back
+        ? `/${locale}/mfa?${new URLSearchParams({ next: back }).toString()}`
+        : `/${locale}/mfa`;
     } else {
       // Only a relative in-app path is honoured, so `?next=` cannot be turned
       // into an open redirect to another origin (docs/SECURITY.md §9).
-      destination =
-        next.startsWith('/') && !next.startsWith('//')
-          ? next
-          : await customerLandingPath(locale, session.token);
+      destination = back ?? (await customerLandingPath(locale, session.token));
     }
   } catch (error: unknown) {
     const correlationId = randomUUID();
@@ -550,12 +552,19 @@ export async function verifyMfaAction(formData: FormData): Promise<void> {
       userAgent: origin.userAgent,
       verify: (userId, code) => service.verifyMfa(userId, code),
     });
-    destination = await customerLandingPath(locale, token!);
+    // D-566: back to where sign-in was asked for (the AI-app consent screen).
+    destination =
+      signInReturnPath(formData.get('next')) ?? (await customerLandingPath(locale, token!));
   } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
     const correlationId = randomUUID();
     log.warn('customer mfa failed', { correlationId, ...internalErrorFields(error) });
-    destination = `/${locale}/mfa?error=${toPublicErrorCode(error)}&ref=${correlationId}`;
+    const back = signInReturnPath(formData.get('next'));
+    destination = `/${locale}/mfa?${new URLSearchParams({
+      error: toPublicErrorCode(error),
+      ref: correlationId,
+      ...(back ? { next: back } : {}),
+    }).toString()}`;
   }
   redirect(destination);
 }

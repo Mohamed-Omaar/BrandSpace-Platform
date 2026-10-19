@@ -963,6 +963,8 @@ export function buildMcpServer(caller: McpCaller, ctx: AiAppsContext): McpServer
             deletedAt: null,
             status: { in: ['DRAFT', 'IN_REVIEW', 'CHANGES_REQUESTED', 'APPROVED'] },
             proposedLocalTime: { gte: `${input.from}T00:00`, lte: `${input.to}T23:59` },
+            // A post with a live slot is listed above as planned, not twice.
+            calendarSlots: { none: { status: { notIn: ['CANCELLED', 'FAILED'] } } },
             ...brandIdQueryFilter({ brandId: input.brandId, brandScope: scope }),
             ...(input.channel ? { variants: { some: { platformKey: input.channel } } } : {}),
           },

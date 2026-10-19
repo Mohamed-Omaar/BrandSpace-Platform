@@ -398,10 +398,13 @@ export function registerAiAppsConsentRoutes(app: FastifyInstance): void {
         },
         { prisma: ctx.tenant },
       );
+      const addresses = ctx.addresses();
       return reply.send({
         available: view.refusal === null,
         reason: view.refusal,
         manageAll,
+        // The address a person types into Claude or ChatGPT (the Connect page).
+        mcpUrl: addresses ? resourceUrl(addresses) : null,
         connections: view.rows,
       });
     },
