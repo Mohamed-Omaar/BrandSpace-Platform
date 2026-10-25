@@ -2457,3 +2457,29 @@ omission: the demo captions its floating card "Engagement is up 18.4%" and its f
 "Published 28 across 4 channels". Publishing is Phase 6 and analytics Phase 7, so both would be
 fabricated measurements — `CLAUDE.md` §2.2, and rule 6 of §1 above. Their POSITION, TYPOGRAPHY and
 TREATMENT are the demo's; only the content says what it will hold and that it holds nothing yet.
+
+### 6.3.71 The Studio's "Will it land right?" card and Design tab (D-569)
+
+PORTED, not extended (§4.1), from `Main.dc.html:514-524` (the card), `:2365-2372` (its rows),
+`:2396-2399` (its states) and `:401-409`, `:2281-2287` (the Design tab's tiles), on the product's own
+data. One card component (`check-card.tsx`, its words in `check-rows.ts`) draws the new post and the
+draft alike.
+
+- **The card:** the mark, the name and the status pill (`.xstatus`, `.warn`, `.bad`, `.info`); the
+  expired line at `11.5px / 1.45 / #8a5a00`; the rows on the `14px 64px 1fr` grid with ✓ `#16794b`, ✕
+  `#b83245` and "!" `#b86e00`; the link at `12px / 700 / #5312c4`. Size from the preview geometry;
+  Caption "n / limit"; Hashtags "n (min–max)" from the configured recommended range ("n / max" where
+  none is configured); Media "Image" / "Video" / "n slides", "No picture yet" / "Needs a video" from the
+  channel's configured post kinds, "No media" where a text post is accepted.
+- **Recorded differences (owner, D-569):** "!" is shown outside the recommended range, below it as well
+  as above; "Not connected" and "Connect X →" appear only where the channel can be connected (the beta
+  keeps "can't be connected yet" beside "Post to"); the link goes to the Integrations page; D-332's longer
+  explanation stays as the expired line's tooltip and in the card's issue list; the product's validation
+  in words follows the rows (D-468 (c)); the subtitle stays the product's own, because no post-publish
+  comparison runs.
+- **The Design tab:** on a post with no media, the tiles (`.tile`: `14px` padding, `16px` radius,
+  `96px` minimum, the `36px` `#f2edff` / `#5312c4` icon, `13.5px / 800` and `11.5px #6a6a72` lines) on
+  the prototype's four-column grid. Brand template is left out (D-473), so its column stays empty. From
+  Media shows the brand's count; Generate with AI its credit quote and only where image generation is
+  available; Upload only with `assets.upload`. Each opens the D-285 drawer on its tab; the media list and
+  "Add media" stay below.
