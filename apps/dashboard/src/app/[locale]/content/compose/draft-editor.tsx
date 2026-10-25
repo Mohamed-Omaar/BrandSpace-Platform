@@ -42,6 +42,8 @@ import { MediaDrawer, type CreativeFormatOption } from './media-drawer';
 import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
+import { CheckCard, type CheckConnection } from './check-card';
+import { missingMediaFor } from '@brandspace/config/publishing-media';
 import { StudioCopilotButton } from './studio-copilot';
 import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 import type {
@@ -1220,12 +1222,16 @@ export function DraftEditor({
     const characters = countCharacters(value.body);
     const limit = platform?.maxBodyChars ?? 0;
     const has = (keys: readonly string[]) => issues.some((issue) => keys.includes(issue.key));
+    const mediaKinds = media.map((option) => option.kind);
     return {
       platform,
       issues,
       hashtags,
       characters,
       limit,
+      mediaKinds,
+      // D-569 — what the channel's configured post kinds still need.
+      mediaNeeds: missingMediaFor(shownFormat, mediaKinds, platform?.media),
       rows: [
         {
           key: 'caption',
@@ -2852,34 +2858,49 @@ export function DraftEditor({
             {draft.variants.map((variant) => {
               const check = checkOf(variant);
               const expired = expiredChannels[variant.platformKey];
-              const bad = check.rows.some((row) => !row.ok);
-              const channel = channelOf(variant.platformKey);
+              const row = (key: string) => check.rows.find((entry) => entry.key === key);
+              const connected = channelAccess?.connected[draft.brandId] ?? [];
+              /*
+               * D-569 — "Connect <channel> →" only where the channel can be
+               * connected at all: in the beta, where none can, the card stays
+               * quiet and "can't be connected yet" beside "Post to" says why.
+               */
+              const connection: CheckConnection = expired
+                ? 'expired'
+                : channelAccess &&
+                    channelAccess.connectable.includes(variant.platformKey) &&
+                    !connected.includes(variant.platformKey)
+                  ? 'notConnected'
+                  : 'connected';
               return (
-                <div
+                <CheckCard
                   key={variant.id}
-                  className="bsp-st-check"
-                  data-testid={`studio-check-${variant.platformKey}`}
+                  channel={channelOf(variant.platformKey)}
+                  contentType={shownFormat}
+                  geometry={previewGeometry(shownFormat, variant.platformKey)}
+                  caption={{
+                    characters: check.characters,
+                    limit: check.limit,
+                    ok: row('caption')?.ok ?? true,
+                  }}
+                  hashtags={{
+                    count: check.hashtags.length,
+                    max: check.platform?.maxHashtags ?? 0,
+                    recommended: check.platform?.recommendedHashtags,
+                    ok: row('tags')?.ok ?? true,
+                  }}
+                  media={{
+                    kinds: check.mediaKinds,
+                    needs: check.mediaNeeds,
+                    ok: row('media')?.ok ?? true,
+                  }}
+                  connection={connection}
+                  expiredLabel={expired?.label}
+                  expiredExplanation={expired?.explanation}
+                  connectHref={channelAccess?.connectHref ?? null}
+                  t={t}
+                  testId={`studio-check-${variant.platformKey}`}
                 >
-                  <div className="bsp-st-check-head">
-                    <span className="bsp-st-check-mark">
-                      <ChannelMark channel={channel} size={14} label={false} />
-                    </span>
-                    <span className="bsp-ltr bsp-st-check-name">{channel.name}</span>
-                    <span
-                      className={`bsp-xstatus ${expired || bad ? 'bsp-warn' : ''} bsp-st-noshrink`}
-                    >
-                      {expired ? expired.label : bad ? t['studio.fix'] : t['studio.ready']}
-                    </span>
-                  </div>
-                  {check.rows.map((row) => (
-                    <div key={row.key} className="bsp-st-check-row" data-ok={row.ok}>
-                      <span aria-hidden="true">{row.ok ? '✓' : '✕'}</span>
-                      <span>{t[`studio.row.${row.key}`]}</span>
-                      <span className="bsp-ltr" title={row.value}>
-                        {row.value}
-                      </span>
-                    </div>
-                  ))}
                   {/*
                     §21 — WHAT IS WRONG, IN WORDS, WITH THE FIX BESIDE IT. The
                     numbers are the platform's configured limits.
@@ -2921,7 +2942,7 @@ export function DraftEditor({
                       ))}
                     </ul>
                   ) : null}
-                </div>
+                </CheckCard>
               );
             })}
           </div>

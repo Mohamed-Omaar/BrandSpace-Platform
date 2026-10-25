@@ -15,11 +15,12 @@ import { CalendarGlyph, DraftEditor, SparkGlyph, type StudioNotes } from './draf
 import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
+import { CheckCard } from './check-card';
 import { StudioCopilotButton } from './studio-copilot';
 import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 import { ChannelAccessLine, type ChannelAccess } from './channel-access-line';
 import type { TikTokPostingView } from './tiktok-options-panel';
-import type { ChannelMediaCapability } from '@brandspace/config/publishing-media';
+import { missingMediaFor, type ChannelMediaCapability } from '@brandspace/config/publishing-media';
 import type { TikTokPostOptions } from '@brandspace/social-connectors/tiktok-options';
 import { fitOf, formatForChannels, listOf } from './format-fit';
 import {
@@ -2267,8 +2268,6 @@ export function ComposerView({
                 {selected.map((key) => {
                   const platform = platforms.find((entry) => entry.key === key);
                   const channel = { key, name: platform?.label ?? key };
-                  const characters = countCharacters(caption);
-                  const limit = platform?.maxBodyChars ?? 0;
                   const issues = platform
                     ? variantIssues(platform, contentType, {
                         body: caption,
@@ -2279,41 +2278,40 @@ export function ComposerView({
                     : [];
                   const has = (keys: readonly string[]) =>
                     issues.some((issue) => keys.includes(issue.key));
-                  const rows = [
-                    {
-                      key: 'caption',
-                      ok: !has(['editor.issue.empty', 'editor.issue.tooLong']),
-                      value: `${characters} / ${limit}`,
-                    },
-                    { key: 'tags', ok: true, value: `0 / ${platform?.maxHashtags ?? 0}` },
-                    {
-                      key: 'media',
-                      ok: !issues.some((issue) => issue.fix === 'media'),
-                      value: `0 / ${platform?.maxMediaItems ?? 0}`,
-                    },
-                  ];
-                  const bad = rows.some((row) => !row.ok);
+                  const connected = channelAccess?.connected[brandId] ?? [];
+                  // D-569 — the link only where the channel can be connected at all.
+                  const notConnected =
+                    channelAccess !== null &&
+                    brandId !== '' &&
+                    channelAccess.connectable.includes(key) &&
+                    !connected.includes(key);
                   return (
-                    <div key={key} className="bsp-st-check" data-testid={`composer-check-${key}`}>
-                      <div className="bsp-st-check-head">
-                        <span className="bsp-st-check-mark">
-                          <ChannelMark channel={channel} size={14} label={false} />
-                        </span>
-                        <span className="bsp-ltr bsp-st-check-name">{channel.name}</span>
-                        <span className={`bsp-xstatus ${bad ? 'bsp-warn' : ''} bsp-st-noshrink`}>
-                          {bad ? t['studio.fix'] : t['studio.ready']}
-                        </span>
-                      </div>
-                      {rows.map((row) => (
-                        <div key={row.key} className="bsp-st-check-row" data-ok={row.ok}>
-                          <span aria-hidden="true">{row.ok ? '✓' : '✕'}</span>
-                          <span>{t[`studio.row.${row.key}`]}</span>
-                          <span className="bsp-ltr" title={row.value}>
-                            {row.value}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                    <CheckCard
+                      key={key}
+                      channel={channel}
+                      contentType={contentType}
+                      geometry={previewGeometry(contentType, key)}
+                      caption={{
+                        characters: countCharacters(caption),
+                        limit: platform?.maxBodyChars ?? 0,
+                        ok: !has(['editor.issue.empty', 'editor.issue.tooLong']),
+                      }}
+                      hashtags={{
+                        count: 0,
+                        max: platform?.maxHashtags ?? 0,
+                        recommended: platform?.recommendedHashtags,
+                        ok: true,
+                      }}
+                      media={{
+                        kinds: [],
+                        needs: missingMediaFor(contentType, [], platform?.media),
+                        ok: !issues.some((issue) => issue.fix === 'media'),
+                      }}
+                      connection={notConnected ? 'notConnected' : 'connected'}
+                      connectHref={channelAccess?.connectHref ?? null}
+                      t={t}
+                      testId={`composer-check-${key}`}
+                    />
                   );
                 })}
               </div>

@@ -4341,6 +4341,29 @@ span.bsp-cal-hol {
 .bsp-st-check-row[data-ok='false'] > span:first-child {
   color: #b83245;
 }
+/* D-569 — the prototype's "!" (a count outside the recommended range):
+   `color: #b86e00` (`Main.dc.html:2401`). */
+.bsp-st-check-row[data-ok='warn'] > span:first-child {
+  color: #b86e00;
+}
+/* D-569 — the expired line: `font-size: 11.5px; line-height: 1.45;
+   color: #8a5a00` (`Main.dc.html:520`). */
+.bsp-st-check-expired {
+  font-size: var(--bsp-fs-11-5);
+  line-height: 1.45;
+  color: #8a5a00;
+}
+/* D-569 — "Reconnect / Connect <channel> →": `align-self: flex-start;
+   margin-top: 2px; font-size: 12px; font-weight: 700; color: #5312c4`
+   (`Main.dc.html:521`). */
+.bsp-st-check-cta {
+  align-self: flex-start;
+  margin-block-start: var(--bsp-px-2);
+  font-size: var(--bsp-fs-12);
+  font-weight: 700;
+  color: #5312c4;
+  text-decoration: none;
+}
 .bsp-st-check-row > span:nth-child(2) {
   color: #6a6a72;
 }
