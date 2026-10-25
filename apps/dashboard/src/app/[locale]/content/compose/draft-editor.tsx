@@ -792,7 +792,7 @@ export function DraftEditor({
           setShapeNote(
             result.reason === 'format_not_carried'
               ? fill(t['studio.shape.notCarried'] ?? '{channels}', {
-                  channels: (result.platformKeys ?? []).map(channelLabel).join(', '),
+                  channels: listOf(locale, (result.platformKeys ?? []).map(channelLabel)),
                   format: formatLabel(target.format),
                 })
               : result.reason === 'shape_locked'
@@ -804,7 +804,7 @@ export function DraftEditor({
         setShapeNote(
           result.mediaDropped.length > 0
             ? fill(t['studio.shape.mediaDropped'] ?? '{channels}', {
-                channels: result.mediaDropped.map(channelLabel).join(', '),
+                channels: listOf(locale, result.mediaDropped.map(channelLabel)),
               })
             : null,
         );

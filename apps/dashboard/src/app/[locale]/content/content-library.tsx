@@ -15,6 +15,7 @@ import {
   transitionItemAction,
 } from './actions';
 import { cancelScheduleAction, rescheduleContentAction } from '../calendar/actions';
+import { listOf } from './compose/format-fit';
 import { PostMenu } from './post-menu';
 import { ChannelMark } from '../calendar/prototype-calendar';
 import { FiltersDisclosure } from '../../../components/filters-disclosure';
@@ -361,7 +362,12 @@ export function ContentLibrary({
     <span className="bsp-post-meta">
       {[
         t(`content.type.${card.contentType}`),
-        card.platforms.map((platform) => t(`content.platform.${platform}`)).join(', ') || null,
+        card.platforms.length > 0
+          ? listOf(
+              locale,
+              card.platforms.map((platform) => t(`content.platform.${platform}`)),
+            )
+          : null,
         card.locale === 'AR' ? t('content.language.AR') : t('content.language.EN'),
       ]
         .filter(Boolean)
