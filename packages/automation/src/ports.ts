@@ -142,6 +142,7 @@ export interface CalendarPort {
           | 'approval_required'
           | 'schedule_quota_reached'
           | 'channel_disconnected'
+          | 'needs_media'
           | 'not_schedulable'
           | 'content_unavailable';
       }

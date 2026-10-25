@@ -42,6 +42,9 @@ import { MediaDrawer, type CreativeFormatOption } from './media-drawer';
 import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
+import { CheckCard, type CheckConnection } from './check-card';
+import { MediaSources, type MediaSourceTab } from './media-sources';
+import { missingMediaFor } from '@brandspace/config/publishing-media';
 import { StudioCopilotButton } from './studio-copilot';
 import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 import type {
@@ -792,7 +795,7 @@ export function DraftEditor({
           setShapeNote(
             result.reason === 'format_not_carried'
               ? fill(t['studio.shape.notCarried'] ?? '{channels}', {
-                  channels: (result.platformKeys ?? []).map(channelLabel).join(', '),
+                  channels: listOf(locale, (result.platformKeys ?? []).map(channelLabel)),
                   format: formatLabel(target.format),
                 })
               : result.reason === 'shape_locked'
@@ -804,7 +807,7 @@ export function DraftEditor({
         setShapeNote(
           result.mediaDropped.length > 0
             ? fill(t['studio.shape.mediaDropped'] ?? '{channels}', {
-                channels: result.mediaDropped.map(channelLabel).join(', '),
+                channels: listOf(locale, result.mediaDropped.map(channelLabel)),
               })
             : null,
         );
@@ -901,7 +904,11 @@ export function DraftEditor({
    * THE MEDIA DRAWER — for which variant, and whether it replaces a slide.
    */
   // Batch 7 (A3): a refused upload comes back with its drawer open on the upload.
-  const [drawer, setDrawer] = useState<{ variantId: string; replace: number | null } | null>(() =>
+  const [drawer, setDrawer] = useState<{
+    variantId: string;
+    replace: number | null;
+    tab?: MediaSourceTab;
+  } | null>(() =>
     uploadReason && draft.variants[0] ? { variantId: draft.variants[0].id, replace: null } : null,
   );
   /*
@@ -1220,12 +1227,16 @@ export function DraftEditor({
     const characters = countCharacters(value.body);
     const limit = platform?.maxBodyChars ?? 0;
     const has = (keys: readonly string[]) => issues.some((issue) => keys.includes(issue.key));
+    const mediaKinds = media.map((option) => option.kind);
     return {
       platform,
       issues,
       hashtags,
       characters,
       limit,
+      mediaKinds,
+      // D-569 — what the channel's configured post kinds still need.
+      mediaNeeds: missingMediaFor(shownFormat, mediaKinds, platform?.media),
       rows: [
         {
           key: 'caption',
@@ -1247,6 +1258,13 @@ export function DraftEditor({
       ],
     };
   };
+
+  /** The creative size the drawer quotes first: vertical for a Reel, Story or video. */
+  const defaultCreativeFormat =
+    ['REEL', 'STORY', 'VIDEO'].includes(draft.contentType) &&
+    creativeFormats.some((format) => format.key === 'story')
+      ? 'story'
+      : (creativeFormats[0]?.key ?? '');
 
   /* "Choose media" from a check: the Design tab of that channel, then its slides. */
   const focusMedia = (variant: ComposerVariant) => {
@@ -2528,6 +2546,24 @@ export function DraftEditor({
                     tabIndex={-1}
                     hidden={tab !== 'visual'}
                   >
+                    {/*
+                      D-569 (owner decision 3) — WITH NO MEDIA YET, THE
+                      PROTOTYPE'S CARDS ARE THE WAY IN, each opening the drawer
+                      on its tab; the media list and "Add media" stay below.
+                    */}
+                    {value.assetIds.length === 0 && can.edit ? (
+                      <MediaSources
+                        t={t}
+                        count={mediaOptions.length}
+                        canUpload={can.uploadMedia}
+                        canGenerate={canGenerateMedia && creativeFormats.length > 0}
+                        quoteFormat={defaultCreativeFormat}
+                        onOpen={(sourceTab) =>
+                          setDrawer({ variantId: variant.id, replace: null, tab: sourceTab })
+                        }
+                        testId={`media-sources-${variant.platformKey}`}
+                      />
+                    ) : null}
                     <MediaSlides
                       locale={locale}
                       t={t}
@@ -2852,34 +2888,49 @@ export function DraftEditor({
             {draft.variants.map((variant) => {
               const check = checkOf(variant);
               const expired = expiredChannels[variant.platformKey];
-              const bad = check.rows.some((row) => !row.ok);
-              const channel = channelOf(variant.platformKey);
+              const row = (key: string) => check.rows.find((entry) => entry.key === key);
+              const connected = channelAccess?.connected[draft.brandId] ?? [];
+              /*
+               * D-569 — "Connect <channel> →" only where the channel can be
+               * connected at all: in the beta, where none can, the card stays
+               * quiet and "can't be connected yet" beside "Post to" says why.
+               */
+              const connection: CheckConnection = expired
+                ? 'expired'
+                : channelAccess &&
+                    channelAccess.connectable.includes(variant.platformKey) &&
+                    !connected.includes(variant.platformKey)
+                  ? 'notConnected'
+                  : 'connected';
               return (
-                <div
+                <CheckCard
                   key={variant.id}
-                  className="bsp-st-check"
-                  data-testid={`studio-check-${variant.platformKey}`}
+                  channel={channelOf(variant.platformKey)}
+                  contentType={shownFormat}
+                  geometry={previewGeometry(shownFormat, variant.platformKey)}
+                  caption={{
+                    characters: check.characters,
+                    limit: check.limit,
+                    ok: row('caption')?.ok ?? true,
+                  }}
+                  hashtags={{
+                    count: check.hashtags.length,
+                    max: check.platform?.maxHashtags ?? 0,
+                    recommended: check.platform?.recommendedHashtags,
+                    ok: row('tags')?.ok ?? true,
+                  }}
+                  media={{
+                    kinds: check.mediaKinds,
+                    needs: check.mediaNeeds,
+                    ok: row('media')?.ok ?? true,
+                  }}
+                  connection={connection}
+                  expiredLabel={expired?.label}
+                  expiredExplanation={expired?.explanation}
+                  connectHref={channelAccess?.connectHref ?? null}
+                  t={t}
+                  testId={`studio-check-${variant.platformKey}`}
                 >
-                  <div className="bsp-st-check-head">
-                    <span className="bsp-st-check-mark">
-                      <ChannelMark channel={channel} size={14} label={false} />
-                    </span>
-                    <span className="bsp-ltr bsp-st-check-name">{channel.name}</span>
-                    <span
-                      className={`bsp-xstatus ${expired || bad ? 'bsp-warn' : ''} bsp-st-noshrink`}
-                    >
-                      {expired ? expired.label : bad ? t['studio.fix'] : t['studio.ready']}
-                    </span>
-                  </div>
-                  {check.rows.map((row) => (
-                    <div key={row.key} className="bsp-st-check-row" data-ok={row.ok}>
-                      <span aria-hidden="true">{row.ok ? '✓' : '✕'}</span>
-                      <span>{t[`studio.row.${row.key}`]}</span>
-                      <span className="bsp-ltr" title={row.value}>
-                        {row.value}
-                      </span>
-                    </div>
-                  ))}
                   {/*
                     §21 — WHAT IS WRONG, IN WORDS, WITH THE FIX BESIDE IT. The
                     numbers are the platform's configured limits.
@@ -2921,7 +2972,7 @@ export function DraftEditor({
                       ))}
                     </ul>
                   ) : null}
-                </div>
+                </CheckCard>
               );
             })}
           </div>
@@ -3258,12 +3309,8 @@ export function DraftEditor({
           canGenerate={canGenerateMedia && creativeFormats.length > 0}
           creativeFormats={creativeFormats}
           defaultPrompt={live(drawerVariant).body.slice(0, 1_000)}
-          defaultFormat={
-            ['REEL', 'STORY', 'VIDEO'].includes(draft.contentType) &&
-            creativeFormats.some((format) => format.key === 'story')
-              ? 'story'
-              : (creativeFormats[0]?.key ?? '')
-          }
+          defaultFormat={defaultCreativeFormat}
+          {...(drawer?.tab ? { initialTab: drawer.tab } : {})}
           uploadAction={actions.uploadMedia}
           rules={mediaRules}
           uploadResult={uploadReason}

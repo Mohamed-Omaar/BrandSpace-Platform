@@ -54,6 +54,11 @@ const COPY: Record<string, readonly [string, string]> = {
     "Not scheduled — one of this post's channels has no connected account.",
     'لم تتم الجدولة — إحدى قنوات هذا المنشور ليس لها حساب متصل.',
   ],
+  // D-569 — a channel needs a picture or a video the post does not have.
+  needs_media: [
+    "Not scheduled — one of this post's channels needs a picture or a video the post doesn't have.",
+    'لم تتم الجدولة — إحدى قنوات هذا المنشور تحتاج إلى صورة أو فيديو لا يحتويه المنشور.',
+  ],
   not_schedulable: [
     "Not scheduled — the post isn't in a state that can be scheduled.",
     'لم تتم الجدولة — حالة المنشور لا تسمح بجدولته.',

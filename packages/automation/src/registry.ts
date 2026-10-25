@@ -1564,6 +1564,8 @@ export const ACTION_OUTCOME_STATUS = {
   approval_required: 'BLOCKED_BY_POLICY',
   schedule_quota_reached: 'BLOCKED_BY_POLICY',
   channel_disconnected: 'BLOCKED_BY_POLICY',
+  // D-569: a channel needs a picture or a video the post does not have.
+  needs_media: 'BLOCKED_BY_POLICY',
   not_schedulable: 'BLOCKED_BY_POLICY',
   recipient_unavailable: 'BLOCKED_BY_POLICY',
   campaign_unavailable: 'BLOCKED_BY_POLICY',

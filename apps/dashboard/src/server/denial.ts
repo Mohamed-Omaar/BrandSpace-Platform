@@ -5,6 +5,7 @@ import {
   isOwnerOnlyPermission,
   toPublicErrorCode,
 } from '@brandspace/shared';
+import { CHANNEL_NEEDS_MEDIA_REASON } from '@brandspace/content';
 import { optionalMessage } from '../i18n/messages';
 import { requestMessageLocale } from './message-locale';
 
@@ -52,6 +53,11 @@ export function deniedPermission(error: unknown): string | null {
  * KEY — never text — so `statusMessage` can name it.
  */
 export function actionErrorCode(error: unknown): string {
+  // D-569: a channel needs a picture or a video — its own words on every screen
+  // that sends for review or schedules.
+  if (isAppError(error) && error.publicDetails['reason'] === CHANNEL_NEEDS_MEDIA_REASON) {
+    return CHANNEL_NEEDS_MEDIA_REASON;
+  }
   const permission = deniedPermission(error);
   if (!permission) return toPublicErrorCode(error);
   return `${isOwnerOnlyPermission(permission) ? 'FORBIDDEN_OWNER' : 'FORBIDDEN'}:${permission}`;

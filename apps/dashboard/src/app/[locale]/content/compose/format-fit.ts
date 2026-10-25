@@ -51,11 +51,29 @@ export function formatForChannels(
   return formats.find((format) => keys.every((key) => carriersOf(format).includes(key))) ?? null;
 }
 
-/** "Instagram and Facebook" / "Instagram, Facebook and X", in the reader's language. */
+/** Locales whose text runs right to left. */
+const RTL_LANGUAGES = new Set(['ar', 'fa', 'he', 'ur']);
+
+/**
+ * "Instagram and Facebook" / "Instagram, Facebook and X", in the reader's
+ * language — «Facebook وInstagram وTikTok» in Arabic.
+ *
+ * D-569 (Studio review, owner decision 5) — IN A RIGHT-TO-LEFT LANGUAGE EACH
+ * NAME IS ISOLATED (U+2068 FIRST STRONG ISOLATE … U+2069 POP DIRECTIONAL
+ * ISOLATE), so a Latin channel name never takes the Arabic «و» or the
+ * sentence around it into its own direction, wherever the list lands — the
+ * start of a line, a tooltip, a `dir="auto"` block. English is unchanged.
+ */
 export function listOf(locale: string, items: readonly string[]): string {
+  const rtl = RTL_LANGUAGES.has(locale.toLowerCase().split('-')[0] ?? '');
   try {
-    return new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(items);
+    const format = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' });
+    if (!rtl) return format.format(items);
+    return format
+      .formatToParts(items)
+      .map((part) => (part.type === 'element' ? `\u2068${part.value}\u2069` : part.value))
+      .join('');
   } catch {
-    return items.join(', ');
+    return items.join(rtl ? '، ' : ', ');
   }
 }

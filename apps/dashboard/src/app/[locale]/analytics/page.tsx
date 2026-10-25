@@ -46,6 +46,7 @@ import { bestPostingHours, channelChart, pillarTotals } from '../../../server/pe
 import { dayFormatter, dayLabel, whenFormatter } from '../../../server/prototype-dates';
 
 import { EmptyAction } from '../../../components/empty-action';
+import { listOf } from '../content/compose/format-fit';
 
 export const dynamic = 'force-dynamic';
 
@@ -1309,7 +1310,7 @@ export default async function AnalyticsPage({
                               <Tooltip
                                 label={t('analytics.notPublishedBy').replace(
                                   '{platforms}',
-                                  missing.join(', '),
+                                  listOf(locale, missing),
                                 )}
                               >
                                 <span

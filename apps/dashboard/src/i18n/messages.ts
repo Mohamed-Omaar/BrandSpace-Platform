@@ -1815,6 +1815,16 @@ export const messages = {
     'editor.media.drawerTitle': 'أضف وسائط',
     'editor.media.replaceTitle': 'استبدل هذه الشريحة',
     'editor.media.drawerBody': 'من مكتبتك، أو رفع جديد، أو صورة تُولَّد لهذه العلامة.',
+    'editor.media.drawerBodyNoGenerate': 'من مكتبتك أو رفع جديد.',
+    'editor.media.drawerBodyNoUpload': 'من مكتبتك، أو صورة تُولَّد لهذه العلامة.',
+    'editor.media.drawerBodyLibrary': 'من مكتبتك.',
+    'studio.source.library': 'من الوسائط',
+    'studio.source.librarySub': '{count} صورة وفيديو',
+    'studio.source.upload': 'رفع',
+    'studio.source.uploadSub': 'من جهازك',
+    'studio.source.generate': 'أنشئ بالذكاء الاصطناعي',
+    'studio.source.generateSub': 'تُعرض التكلفة قبل أي خصم.',
+    'studio.source.generateQuote': 'نحو {credits} رصيد لكل صورة',
     'editor.media.close': 'إغلاق',
     'editor.media.tab.library': 'مكتبة الوسائط',
     'editor.media.tab.upload': 'رفع',
@@ -2052,6 +2062,9 @@ export const messages = {
     'editor.issue.videoNeedsVideo': 'يحتاج منشور الفيديو هذا إلى فيديو.',
     'editor.issue.carouselNeedsSlides': 'يحتاج الكاروسيل إلى صورتين على الأقل؛ وفيه {count}.',
     'editor.issue.storyNeedsMedia': 'تحتاج القصة إلى صورة أو فيديو.',
+    'editor.issue.needsPicture':
+      'لا توجد صورة بعد. يحتاج {platform} إلى صورة أو فيديو لهذا المنشور.',
+    'editor.issue.needsVideo': 'يحتاج {platform} إلى فيديو لهذا المنشور.',
     'content.tool.hashtags': 'الوسوم',
     'create.entry.title': 'ماذا تريد أن تنشئ؟',
     'create.mode.ai': 'أنشئ بالذكاء الاصطناعي',
@@ -2266,6 +2279,17 @@ export const messages = {
     'studio.row.caption': 'النص',
     'studio.row.tags': 'الوسوم',
     'studio.row.media': 'الوسائط',
+    'studio.row.size': 'المقاس',
+    'studio.notConnected': 'غير مرتبط',
+    'studio.expiredLine': 'انتهى ربط الحساب · أعد ربطه قبل موعد النشر',
+    'studio.reconnectChannel': 'أعد ربط {channel} ←',
+    'studio.connectChannel': 'اربط {channel} ←',
+    'studio.media.noPicture': 'لا توجد صورة بعد',
+    'studio.media.needsVideo': 'يحتاج إلى فيديو',
+    'studio.media.none': 'بلا وسائط',
+    'studio.media.image': 'صورة',
+    'studio.media.video': 'فيديو',
+    'studio.media.slides': '{count} شرائح',
     'studio.tagsNone': 'لا توجد وسوم بعد.',
     'studio.tagRemove': 'إزالة {tag}',
     'studio.tagAdd': 'إضافة',
@@ -3460,6 +3484,8 @@ export const messages = {
       'لم تتم الجدولة — تم بلوغ حد المنشورات المجدولة في خطتك.',
     'automations.failure.channel_disconnected':
       'لم تتم الجدولة — إحدى قنوات هذا المنشور ليس لها حساب متصل.',
+    'automations.failure.needs_media':
+      'لم تتم الجدولة — إحدى قنوات هذا المنشور تحتاج إلى صورة أو فيديو لا يحتويه المنشور.',
     'automations.failure.not_schedulable': 'لم تتم الجدولة — حالة المنشور لا تسمح بجدولته.',
     'automations.failure.recipient_unavailable':
       'لم يُرسل — الشخص الذي تنبّهه هذه الأتمتة لم يعد عضوًا نشطًا له صلاحية على هذه العلامة التجارية. عدّل القاعدة واختر شخصًا آخر.',
@@ -6092,6 +6118,16 @@ export const messages = {
     'editor.media.replaceTitle': 'Replace this slide',
     'editor.media.drawerBody':
       'From your library, a new upload, or an image generated for this brand.',
+    'editor.media.drawerBodyNoGenerate': 'From your library or a new upload.',
+    'editor.media.drawerBodyNoUpload': 'From your library, or an image generated for this brand.',
+    'editor.media.drawerBodyLibrary': 'From your library.',
+    'studio.source.library': 'From Media',
+    'studio.source.librarySub': '{count} photos and videos',
+    'studio.source.upload': 'Upload',
+    'studio.source.uploadSub': 'From your device',
+    'studio.source.generate': 'Generate with AI',
+    'studio.source.generateSub': 'Quoted before anything is spent.',
+    'studio.source.generateQuote': 'About {credits} credits per image',
     'editor.media.close': 'Close',
     'editor.media.tab.library': 'Asset Library',
     'editor.media.tab.upload': 'Upload',
@@ -6334,6 +6370,9 @@ export const messages = {
     'editor.issue.videoNeedsVideo': 'This video post needs a video.',
     'editor.issue.carouselNeedsSlides': 'A carousel needs at least 2 images; this has {count}.',
     'editor.issue.storyNeedsMedia': 'A story needs an image or a video.',
+    'editor.issue.needsPicture':
+      'No picture yet. {platform} needs a picture or a video for this post.',
+    'editor.issue.needsVideo': '{platform} needs a video for this post.',
     'content.tool.hashtags': 'Hashtags',
     'create.entry.title': 'What would you like to create?',
     'create.mode.ai': 'Generate with AI',
@@ -6557,6 +6596,17 @@ export const messages = {
     'studio.row.caption': 'Caption',
     'studio.row.tags': 'Hashtags',
     'studio.row.media': 'Media',
+    'studio.row.size': 'Size',
+    'studio.notConnected': 'Not connected',
+    'studio.expiredLine': 'Connection expired · reconnect before it goes out',
+    'studio.reconnectChannel': 'Reconnect {channel} →',
+    'studio.connectChannel': 'Connect {channel} →',
+    'studio.media.noPicture': 'No picture yet',
+    'studio.media.needsVideo': 'Needs a video',
+    'studio.media.none': 'No media',
+    'studio.media.image': 'Image',
+    'studio.media.video': 'Video',
+    'studio.media.slides': '{count} slides',
     'studio.tagsNone': 'No hashtags yet.',
     'studio.tagRemove': 'Remove {tag}',
     'studio.tagAdd': 'Add',
@@ -7800,6 +7850,8 @@ export const messages = {
       "Not scheduled — your plan's limit on scheduled posts has been reached.",
     'automations.failure.channel_disconnected':
       "Not scheduled — one of this post's channels has no connected account.",
+    'automations.failure.needs_media':
+      "Not scheduled — one of this post's channels needs a picture or a video the post doesn't have.",
     'automations.failure.not_schedulable':
       "Not scheduled — the post isn't in a state that can be scheduled.",
     'automations.failure.recipient_unavailable':
@@ -8766,6 +8818,11 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   TIKTOK_OPTIONS_INCOMPLETE: {
     en: 'Finish the TikTok post settings first: choose who can see the post, and complete the disclosure if it is on.',
     ar: 'أكمل إعدادات منشور TikTok أولًا: اختر من يمكنه رؤية المنشور، وأكمل الإفصاح إن كان مفعّلًا.',
+  },
+  // D-569 — a channel needs a picture or a video the post does not have.
+  CHANNEL_NEEDS_MEDIA: {
+    en: 'A channel of this post needs a picture or a video before it can go out. “Will it land right?” shows which one: add it, or remove that channel.',
+    ar: 'تحتاج إحدى قنوات هذا المنشور إلى صورة أو فيديو قبل أن يُنشر. يبيّن قسم «هل سيُنشر كما ينبغي؟» أيّها: أضفه أو احذف تلك القناة.',
   },
   // Q9 (D-332) — every account for one of the post's channels was revoked.
   CHANNEL_DISCONNECTED: {

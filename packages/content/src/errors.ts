@@ -244,6 +244,28 @@ export function alreadyScheduled(): AppError {
 }
 
 /** An item with no variants has nothing to publish, so it cannot be planned. */
+/**
+ * D-569 (Studio review, owner decision 1) — A CHANNEL NEEDS MEDIA THE POST DOES
+ * NOT HAVE: Instagram a picture for a plain post, TikTok a video — each read
+ * from the channel's configured post kinds and media rules. Send-for-review and
+ * scheduling refuse with this; `channels` names each channel with what it needs
+ * (`instagram:picture,tiktok:video`), which the screens translate.
+ */
+export const CHANNEL_NEEDS_MEDIA_REASON = 'CHANNEL_NEEDS_MEDIA';
+
+export function channelsNeedMedia(
+  missing: readonly { readonly platformKey: string; readonly need: string }[],
+): AppError {
+  return new AppError(
+    'CONFLICT',
+    'A channel of this post needs a picture or a video before it can go out. Add it, or remove the channel.',
+    {
+      reason: CHANNEL_NEEDS_MEDIA_REASON,
+      channels: missing.map((entry) => `${entry.platformKey}:${entry.need}`).join(','),
+    },
+  );
+}
+
 export function nothingToSchedule(): AppError {
   return new AppError('VALIDATION_FAILED', 'Write at least one caption before scheduling.');
 }

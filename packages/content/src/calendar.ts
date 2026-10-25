@@ -16,6 +16,7 @@ import {
   approvalRequiredBeforeScheduling,
   calendarSlotNotFound,
   channelDisconnected,
+  channelsNeedMedia,
   channelsNotConnectable,
   contentItemNotFound,
   DAY_IS_FULL_REASON,
@@ -31,6 +32,7 @@ import {
   slotNotReschedulable,
   transitionNotAllowed,
 } from './errors';
+import { channelsMissingMedia } from './media-readiness';
 import type { ContentPolicy } from './policy';
 import {
   formatLocalTime,
@@ -154,6 +156,7 @@ export type NextFreeSlotRefusal =
   | 'approval_required'
   | 'schedule_quota_reached'
   | 'channel_disconnected'
+  | 'needs_media'
   | 'not_schedulable'
   | 'content_unavailable';
 
@@ -341,6 +344,7 @@ export class ContentCalendarService {
         item.brandId,
         variants.map((variant) => variant.platformKey),
       );
+      await this.#assertMediaReady(item);
       const claimed = await this.#db.calendarSlot.updateMany({
         where: { id: live.id, status: 'SCHEDULED' },
         data: { scheduledAtUtc: now, scheduledLocalTime: localTime },
@@ -391,6 +395,7 @@ export class ContentCalendarService {
       item.brandId,
       variants.map((variant) => variant.platformKey),
     );
+    await this.#assertMediaReady(item);
 
     const live = await this.#liveSlotFor(item.id);
     if (live) throw alreadyScheduled();
@@ -544,6 +549,9 @@ export class ContentCalendarService {
       ...new Set(variants.map((variant) => variant.platformKey)),
     ]);
     if (unreachable.length > 0) return refused('channel_disconnected');
+    if ((await channelsMissingMedia(this.#db, this.#workspaceId, item)).length > 0) {
+      return refused('needs_media');
+    }
 
     const time = await this.#defaultPublishingTimeFor(item.brandId);
     const now = this.#clock.now();
@@ -727,6 +735,7 @@ export class ContentCalendarService {
       slot.brandId,
       variants.map((variant) => variant.platformKey),
     );
+    await this.#assertMediaReady(item);
 
     /*
      * THE KEY IS THE SLOT'S PERSISTED ATTEMPT (review item 13), read — never
@@ -785,6 +794,15 @@ export class ContentCalendarService {
     if (keys.length > 0 && (await this.#noneConnectable(keys))) throw channelsNotConnectable(keys);
     const unreachable = await this.#channelGate.unreachableChannels(brandId, keys);
     if (unreachable.length > 0) throw channelDisconnected(unreachable);
+  }
+
+  /** D-569: refuse a channel that needs a picture or a video the post does not have. */
+  async #assertMediaReady(item: {
+    readonly id: string;
+    readonly contentType: string;
+  }): Promise<void> {
+    const missing = await channelsMissingMedia(this.#db, this.#workspaceId, item);
+    if (missing.length > 0) throw channelsNeedMedia(missing);
   }
 
   async #noneConnectable(platformKeys: readonly string[]): Promise<boolean> {

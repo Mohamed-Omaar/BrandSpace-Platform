@@ -19,6 +19,7 @@ import {
 } from '@brandspace/ui';
 import {
   aspectLabel,
+  drawerDescriptionKey,
   durationLabel,
   fill,
   fingerprint,
@@ -65,6 +66,7 @@ export function MediaDrawer({
   uploadAction,
   rules = null,
   uploadResult = null,
+  initialTab = 'library',
   onPick,
   onGenerated,
 }: {
@@ -72,6 +74,8 @@ export function MediaDrawer({
   readonly rules?: UploadRules | null;
   /** Why the last upload was refused: the drawer opens on the upload, saying so. */
   readonly uploadResult?: string | null;
+  /** D-569 — the tab a Design-tab card opened it on. */
+  readonly initialTab?: 'library' | 'upload' | 'generate';
   readonly open: boolean;
   readonly onClose: () => void;
   readonly locale: string;
@@ -94,7 +98,12 @@ export function MediaDrawer({
 }) {
   const fieldId = useId();
   const [tab, setTab] = useState<'library' | 'upload' | 'generate'>(
-    uploadResult ? 'upload' : 'library',
+    uploadResult
+      ? 'upload'
+      : (initialTab === 'upload' && canUpload && !replacing) ||
+          (initialTab === 'generate' && canGenerate)
+        ? initialTab
+        : 'library',
   );
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [formatKey, setFormatKey] = useState(defaultFormat);
@@ -143,7 +152,10 @@ export function MediaDrawer({
       open={open}
       onClose={onClose}
       title={(replacing ? t['editor.media.replaceTitle'] : t['editor.media.drawerTitle']) ?? ''}
-      description={t['editor.media.drawerBody']}
+      description={
+        // D-569 (owner decision 4) — only the ways in this drawer offers.
+        t[drawerDescriptionKey({ canUpload: canUpload && !replacing, canGenerate })]
+      }
       closeLabel={t['editor.media.close'] ?? ''}
       testId="media-drawer"
     >
