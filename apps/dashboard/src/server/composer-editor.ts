@@ -321,3 +321,18 @@ export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
   next.splice(to, 0, item as T);
   return next;
 }
+
+/**
+ * D-569 (Studio review, owner decision 4) — THE "ADD MEDIA" DRAWER'S SUBTITLE
+ * NAMES ONLY THE WAYS IN IT OFFERS: never generating where Generate is hidden
+ * (no AI provider, no permission), never uploading where Upload is.
+ */
+export function drawerDescriptionKey(input: {
+  readonly canUpload: boolean;
+  readonly canGenerate: boolean;
+}): string {
+  if (input.canGenerate) {
+    return input.canUpload ? 'editor.media.drawerBody' : 'editor.media.drawerBodyNoUpload';
+  }
+  return input.canUpload ? 'editor.media.drawerBodyNoGenerate' : 'editor.media.drawerBodyLibrary';
+}

@@ -13805,3 +13805,73 @@ select.bs-select.bsp-chevron {
   outline: 2px solid #7935fe;
   outline-offset: -2px;
 }
+
+/* D-569 (owner decision 3) — the Design tab's ways in, on a post with no media
+   yet (`Main.dc.html:401-409`): `display: grid; grid-template-columns:
+   repeat(4, minmax(0, 1fr)); gap: 10px`. Brand template stays out (D-473), so
+   its column is left empty rather than the others stretched. */
+.bsp-st-sources {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--bsp-px-10);
+}
+/* `.tile` (`Main.dc.html:45-47`): `display: flex; flex-direction: column;
+   align-items: flex-start; gap: 6px; text-align: start; border: 1px solid
+   #e8e8ec; background: #fff; border-radius: 16px; padding: 14px;
+   min-block-size: 96px`, the hover border `#c9c9d1` and lift. */
+.bsp-st-source {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--bsp-px-6);
+  text-align: start;
+  border: 1px solid #e8e8ec;
+  background: #fff;
+  border-radius: var(--bsp-px-16);
+  padding: var(--bsp-px-14);
+  min-block-size: var(--bsp-px-96);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.2s ease,
+    translate 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bsp-st-source:hover {
+  border-color: #c9c9d1;
+  translate: 0 -2px;
+  box-shadow: 0 8px 20px rgba(20, 16, 35, 0.06);
+}
+/* The icon: `width: 36px; height: 36px; border-radius: 12px; background:
+   #f2edff; color: #5312c4`. */
+.bsp-st-source-icon {
+  width: var(--bsp-px-36);
+  height: var(--bsp-px-36);
+  border-radius: var(--bsp-px-12);
+  background: #f2edff;
+  color: #5312c4;
+  display: grid;
+  place-items: center;
+}
+.bsp-st-source-label {
+  font-size: var(--bsp-fs-13-5);
+  font-weight: 800;
+}
+.bsp-st-source-sub {
+  font-size: var(--bsp-fs-11-5);
+  color: #6a6a72;
+}
+@media (max-width: 640px) {
+  .bsp-st-sources {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bsp-st-source {
+    transition: none;
+  }
+  .bsp-st-source:hover {
+    translate: none;
+  }
+}

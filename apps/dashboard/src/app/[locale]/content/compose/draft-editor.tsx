@@ -43,6 +43,7 @@ import { VariantPreview, previewLabels } from './variant-preview';
 import { MoreDisclosure } from '../../../../components/more-disclosure';
 import { previewGeometry } from './preview-geometry';
 import { CheckCard, type CheckConnection } from './check-card';
+import { MediaSources, type MediaSourceTab } from './media-sources';
 import { missingMediaFor } from '@brandspace/config/publishing-media';
 import { StudioCopilotButton } from './studio-copilot';
 import { AiUnavailableLine } from '../../../../components/ai-unavailable';
@@ -903,7 +904,11 @@ export function DraftEditor({
    * THE MEDIA DRAWER — for which variant, and whether it replaces a slide.
    */
   // Batch 7 (A3): a refused upload comes back with its drawer open on the upload.
-  const [drawer, setDrawer] = useState<{ variantId: string; replace: number | null } | null>(() =>
+  const [drawer, setDrawer] = useState<{
+    variantId: string;
+    replace: number | null;
+    tab?: MediaSourceTab;
+  } | null>(() =>
     uploadReason && draft.variants[0] ? { variantId: draft.variants[0].id, replace: null } : null,
   );
   /*
@@ -1253,6 +1258,13 @@ export function DraftEditor({
       ],
     };
   };
+
+  /** The creative size the drawer quotes first: vertical for a Reel, Story or video. */
+  const defaultCreativeFormat =
+    ['REEL', 'STORY', 'VIDEO'].includes(draft.contentType) &&
+    creativeFormats.some((format) => format.key === 'story')
+      ? 'story'
+      : (creativeFormats[0]?.key ?? '');
 
   /* "Choose media" from a check: the Design tab of that channel, then its slides. */
   const focusMedia = (variant: ComposerVariant) => {
@@ -2534,6 +2546,24 @@ export function DraftEditor({
                     tabIndex={-1}
                     hidden={tab !== 'visual'}
                   >
+                    {/*
+                      D-569 (owner decision 3) — WITH NO MEDIA YET, THE
+                      PROTOTYPE'S CARDS ARE THE WAY IN, each opening the drawer
+                      on its tab; the media list and "Add media" stay below.
+                    */}
+                    {value.assetIds.length === 0 && can.edit ? (
+                      <MediaSources
+                        t={t}
+                        count={mediaOptions.length}
+                        canUpload={can.uploadMedia}
+                        canGenerate={canGenerateMedia && creativeFormats.length > 0}
+                        quoteFormat={defaultCreativeFormat}
+                        onOpen={(sourceTab) =>
+                          setDrawer({ variantId: variant.id, replace: null, tab: sourceTab })
+                        }
+                        testId={`media-sources-${variant.platformKey}`}
+                      />
+                    ) : null}
                     <MediaSlides
                       locale={locale}
                       t={t}
@@ -3279,12 +3309,8 @@ export function DraftEditor({
           canGenerate={canGenerateMedia && creativeFormats.length > 0}
           creativeFormats={creativeFormats}
           defaultPrompt={live(drawerVariant).body.slice(0, 1_000)}
-          defaultFormat={
-            ['REEL', 'STORY', 'VIDEO'].includes(draft.contentType) &&
-            creativeFormats.some((format) => format.key === 'story')
-              ? 'story'
-              : (creativeFormats[0]?.key ?? '')
-          }
+          defaultFormat={defaultCreativeFormat}
+          {...(drawer?.tab ? { initialTab: drawer.tab } : {})}
           uploadAction={actions.uploadMedia}
           rules={mediaRules}
           uploadResult={uploadReason}
