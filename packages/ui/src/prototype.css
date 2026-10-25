@@ -4353,6 +4353,34 @@ span.bsp-cal-hol {
   line-height: 1.45;
   color: #8a5a00;
 }
+/* D-570 — D-332's explanation as the expired line's tooltip: the product's
+   tooltip in ink (`Tooltip` in packages/ui), wrapped to the card's width. */
+.bsp-st-check-tipwrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.bsp-st-check-expired[tabindex] {
+  cursor: help;
+  border-radius: var(--bsp-px-4);
+}
+.bsp-st-check-tip {
+  position: absolute;
+  inset-block-start: calc(100% + var(--bsp-px-6));
+  inset-inline-start: 0;
+  z-index: 30;
+  inline-size: max(100%, var(--bsp-px-230));
+  padding: var(--bsp-px-8) var(--bsp-px-10);
+  border-radius: var(--bsp-px-10);
+  background: #111114;
+  color: #fff;
+  font-size: var(--bsp-fs-11-5);
+  line-height: 1.45;
+  box-shadow: 0 12px 28px rgba(20, 16, 35, 0.18);
+}
+.bsp-st-check-tip[hidden] {
+  display: none;
+}
 /* D-569 — "Reconnect / Connect <channel> →": `align-self: flex-start;
    margin-top: 2px; font-size: 12px; font-weight: 700; color: #5312c4`
    (`Main.dc.html:521`). */

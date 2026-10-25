@@ -2474,7 +2474,7 @@ draft alike.
 - **Recorded differences (owner, D-569):** "!" is shown outside the recommended range, below it as well
   as above; "Not connected" and "Connect X →" appear only where the channel can be connected (the beta
   keeps "can't be connected yet" beside "Post to"); the link goes to the Integrations page; D-332's longer
-  explanation stays as the expired line's tooltip and in the card's issue list; the product's validation
+  explanation is the expired line's tooltip only — hover, keyboard focus, Escape, and the line's `aria-describedby` (D-570), so "Expired" is said once; the product's validation
   in words follows the rows (D-468 (c)); the subtitle stays the product's own, because no post-publish
   comparison runs.
 - **The Design tab:** on a post with no media, the tiles (`.tile`: `14px` padding, `16px` radius,

@@ -2935,30 +2935,11 @@ export function DraftEditor({
                     §21 — WHAT IS WRONG, IN WORDS, WITH THE FIX BESIDE IT. The
                     numbers are the platform's configured limits.
                   */}
-                  {check.issues.length > 0 || expired ? (
+                  {check.issues.length > 0 ? (
                     <ul
                       className="bsp-st-issues"
                       data-testid={`editor-issues-${variant.platformKey}`}
                     >
-                      {/*
-                        Q9 (D-332) — THE ACCOUNT FOR THIS CHANNEL HAS EXPIRED. A
-                        warning row in the list the Studio already has: the
-                        short status, and what it means on its own line.
-                      */}
-                      {expiredChannels[variant.platformKey] ? (
-                        <li
-                          className="warning"
-                          data-issue="channel.expired"
-                          data-testid={`editor-channel-expired-${variant.platformKey}`}
-                        >
-                          <span>
-                            <b>{expiredChannels[variant.platformKey]?.label}</b>
-                            <span style={{ display: 'block' }}>
-                              {expiredChannels[variant.platformKey]?.explanation}
-                            </span>
-                          </span>
-                        </li>
-                      ) : null}
                       {check.issues.map((issue) => (
                         <IssueRow
                           key={issue.key}
