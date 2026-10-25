@@ -141,6 +141,7 @@ export type { ContentPurgeResult } from './purge';
 
 export {
   CHANNEL_DISCONNECTED_REASON,
+  CHANNEL_NEEDS_MEDIA_REASON,
   CHANNELS_NOT_CONNECTABLE_REASON,
   DECISION_NOTE_REQUIRED_REASON,
   SCHEDULE_IN_PAST_REASON,
@@ -226,3 +227,5 @@ export {
   type SuggestionDecision,
   type ToolObservation,
 } from './suggestions';
+
+export { channelsMissingMedia, type ChannelMissingMedia } from './media-readiness';

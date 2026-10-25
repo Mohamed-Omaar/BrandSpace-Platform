@@ -92,6 +92,7 @@ import {
   transitionItemAction,
 } from '../actions';
 import { aiAvailableFor } from '../../../../server/ai-availability';
+import type { ChannelMediaCapability } from '@brandspace/config/publishing-media';
 import {
   ComposerView,
   type ComposerDraft,
@@ -942,6 +943,40 @@ export default async function ComposePage({
   }).catch(() => ({ POST: policy.platforms.map((platform) => platform.key) }));
 
   /*
+   * D-569 — WHAT MEDIA EACH CHANNEL NEEDS, from the same capability registry
+   * (`postKinds`, `mediaRules`): the check card's "No picture yet" / "Needs a
+   * video", which sending for review and scheduling refuse with on the server.
+   */
+  const mediaCapabilities: Record<string, ChannelMediaCapability> = await inSocial(
+    workspace.workspaceId,
+    async (services) => {
+      const publishing = await services.policy();
+      return Object.fromEntries(
+        Object.entries(
+          publishing.providers as unknown as Record<
+            string,
+            {
+              postKinds: readonly string[];
+              mediaRules?: Record<string, { minItems?: number | null }>;
+            }
+          >,
+        ).map(([key, provider]) => [
+          key,
+          {
+            postKinds: [...provider.postKinds],
+            mediaRules: Object.fromEntries(
+              Object.entries(provider.mediaRules ?? {}).map(([kind, rule]) => [
+                kind,
+                { minItems: rule.minItems ?? null },
+              ]),
+            ),
+          },
+        ]),
+      );
+    },
+  ).catch(() => ({}));
+
+  /*
    * Round 6 (D-481) — WHICH CHOSEN CHANNELS STILL NEED AN ACCOUNT. Drafting
    * never waits for one; the Studio says, beside "Post to", which channels
    * must be connected before the post can go out, and which cannot be
@@ -983,6 +1018,7 @@ export default async function ComposePage({
     allowsFirstComment: platform.allowsFirstComment,
     ...(platform.safeZones ? { safeZones: platform.safeZones } : {}),
     ...(platform.recommendedHashtags ? { recommendedHashtags: platform.recommendedHashtags } : {}),
+    ...(mediaCapabilities[platform.key] ? { media: mediaCapabilities[platform.key] } : {}),
   }));
 
   /*
@@ -1731,6 +1767,8 @@ const EDITOR_KEYS = [
   'editor.issue.videoNeedsVideo',
   'editor.issue.carouselNeedsSlides',
   'editor.issue.storyNeedsMedia',
+  'editor.issue.needsPicture',
+  'editor.issue.needsVideo',
   'content.tool.hashtags',
 ] as const satisfies readonly MessageKey[];
 

@@ -27,8 +27,10 @@ import {
   notSubmittable,
   reviewCycleLimitReached,
   selfApprovalNotPermitted,
+  channelsNeedMedia,
 } from './errors';
 import { NotificationService } from '@brandspace/notifications';
+import { channelsMissingMedia } from './media-readiness';
 import type { ContentPolicy } from './policy';
 import { readSlides } from './slides';
 import { RESCHEDULABLE_ITEM_STATUS, liveSlotWhere } from './calendar';
@@ -425,6 +427,14 @@ export class ContentApprovalService {
       ]);
       if (live || published > 0) throw notSubmittable();
     }
+
+    /*
+     * D-569 — A CHANNEL THAT NEEDS MEDIA IS NOT SENT FOR REVIEW WITHOUT IT: a
+     * reviewer would approve a post that cannot go out there. The same rule
+     * the Studio's check card and scheduling read.
+     */
+    const missingMedia = await channelsMissingMedia(this.#db, this.#workspaceId, item);
+    if (missingMedia.length > 0) throw channelsNeedMedia(missingMedia);
 
     const priorCycles = await this.#db.approval.count({
       where: { workspaceId: this.#workspaceId, contentItemId: item.id },

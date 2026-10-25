@@ -19,6 +19,7 @@ import { StudioCopilotButton } from './studio-copilot';
 import { AiUnavailableLine } from '../../../../components/ai-unavailable';
 import { ChannelAccessLine, type ChannelAccess } from './channel-access-line';
 import type { TikTokPostingView } from './tiktok-options-panel';
+import type { ChannelMediaCapability } from '@brandspace/config/publishing-media';
 import type { TikTokPostOptions } from '@brandspace/social-connectors/tiktok-options';
 import { fitOf, formatForChannels, listOf } from './format-fit';
 import {
@@ -63,6 +64,8 @@ export interface ComposerPlatform {
   readonly safeZones?: { readonly top: number; readonly bottom: number; readonly end: number };
   /** D-496 (S9) — the configured recommended hashtag range; absent is none known. */
   readonly recommendedHashtags?: { readonly min: number; readonly max: number };
+  /** D-569 — the channel's configured post kinds and media rules: what media it needs. */
+  readonly media?: ChannelMediaCapability;
 }
 
 export interface ComposerVariant {

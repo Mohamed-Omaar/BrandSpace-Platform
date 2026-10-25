@@ -1,19 +1,15 @@
+import { FORMAT_POST_KINDS as CONFIGURED_FORMAT_POST_KINDS } from '@brandspace/config';
 import type { PublishMedia, PublishPostKind } from './adapter';
 
 /**
- * W2 — WHICH POST KINDS EACH CONTENT FORMAT CAN BE PUBLISHED AS. The one map
- * the composer (which formats a platform can carry) and the pipeline (what a
- * post is, when it is sent) both read, so the two cannot disagree.
+ * W2 — WHICH POST KINDS EACH CONTENT FORMAT CAN BE PUBLISHED AS. The map now
+ * lives beside the media rule that reads it (`@brandspace/config`,
+ * `publishing-media.ts`, D-569); this is the same object, typed as the post
+ * kinds an adapter knows.
  */
-export const FORMAT_POST_KINDS: Readonly<Record<string, readonly PublishPostKind[]>> = {
-  POST: ['text', 'image'],
-  CAROUSEL: ['carousel'],
-  REEL: ['reel'],
-  STORY: ['story'],
-  VIDEO: ['video'],
-  ARTICLE: ['article'],
-  THREAD: ['thread'],
-};
+export const FORMAT_POST_KINDS = CONFIGURED_FORMAT_POST_KINDS as Readonly<
+  Record<string, readonly PublishPostKind[]>
+>;
 
 /**
  * The one post kind a post IS: its format's kind, and for a plain post, `text`

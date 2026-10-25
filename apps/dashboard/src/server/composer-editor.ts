@@ -4,6 +4,7 @@
  * PURE, AND NOT `server-only`: the composer imports it in the browser to judge
  * a caption as it is typed, and the unit suite imports it directly.
  */
+import { missingMediaFor, type ChannelMediaCapability } from '@brandspace/config/publishing-media';
 
 /**
  * Characters as a person counts them — grapheme clusters, the same unit the
@@ -64,6 +65,13 @@ export interface EditorPlatformLimits {
   readonly maxBodyChars: number;
   readonly maxHashtags: number;
   readonly maxMediaItems: number;
+  /**
+   * D-569 — the channel's configured capability
+   * (`publishing.providers.<key>.postKinds` and `.mediaRules`): what media it
+   * needs before a post can go out. Absent for a channel the registry does not
+   * describe.
+   */
+  readonly media?: ChannelMediaCapability;
 }
 
 export interface EditorVariantState {
@@ -127,7 +135,26 @@ export function variantIssues(
     });
   }
 
-  if (VIDEO_FORMATS.has(contentType) && !variant.mediaKinds.includes('VIDEO')) {
+  /*
+   * D-569 — A CHANNEL THAT NEEDS MEDIA: Instagram a picture for a plain post,
+   * TikTok a video. An ERROR, never a warning: sending for review and
+   * scheduling refuse it on the server with the same rule.
+   */
+  const needs = missingMediaFor(contentType, variant.mediaKinds, platform.media);
+  if (needs) {
+    issues.push({
+      key: needs === 'video' ? 'editor.issue.needsVideo' : 'editor.issue.needsPicture',
+      values: { platform: platform.label },
+      severity: 'error',
+      fix: 'media',
+    });
+  }
+
+  if (
+    needs !== 'video' &&
+    VIDEO_FORMATS.has(contentType) &&
+    !variant.mediaKinds.includes('VIDEO')
+  ) {
     issues.push({
       key: contentType === 'REEL' ? 'editor.issue.reelNeedsVideo' : 'editor.issue.videoNeedsVideo',
       values: {},
@@ -143,7 +170,7 @@ export function variantIssues(
       fix: 'media',
     });
   }
-  if (contentType === 'STORY' && variant.mediaKinds.length === 0) {
+  if (!needs && contentType === 'STORY' && variant.mediaKinds.length === 0) {
     issues.push({
       key: 'editor.issue.storyNeedsMedia',
       values: {},
