@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import type { MissingMedia } from '@brandspace/config/publishing-media';
 import { checkView } from './check-rows';
 import { ChannelMark } from '../../calendar/prototype-calendar';
@@ -42,7 +42,11 @@ export interface CheckCardProps {
   readonly connection: CheckConnection;
   /** The status word for an expired account ("Expired"), as the server translated it. */
   readonly expiredLabel?: string | undefined;
-  /** D-332's longer explanation of an expired account, kept as the line's tooltip. */
+  /**
+   * D-332's longer explanation of an expired account: the expired line's
+   * tooltip (D-570), reachable by hover, by keyboard focus and by a screen
+   * reader through `aria-describedby`.
+   */
   readonly expiredExplanation?: string | undefined;
   /** The Integrations page, for a member who may connect accounts; `null` hides the link. */
   readonly connectHref: string | null;
@@ -54,6 +58,9 @@ export interface CheckCardProps {
 export function CheckCard(props: CheckCardProps) {
   const { channel, t, connection } = props;
   const { rows, status, cta } = checkView(props);
+  const tipId = useId();
+  const [tipOpen, setTipOpen] = useState(false);
+  const explanation = props.expiredExplanation;
   return (
     <div className="bsp-st-check" data-testid={props.testId} data-connection={connection}>
       <div className="bsp-st-check-head">
@@ -68,13 +75,42 @@ export function CheckCard(props: CheckCardProps) {
           {status.label}
         </span>
       </div>
+      {/*
+        D-570 — THE SHORT LINE, WITH D-332'S EXPLANATION AS ITS TOOLTIP: shown
+        on hover and on keyboard focus, dismissed with Escape (WCAG 1.4.13),
+        and always the line's accessible description, so the status word is
+        said once and the explanation is never lost.
+      */}
       {connection === 'expired' ? (
         <span
-          className="bsp-st-check-expired"
-          title={props.expiredExplanation}
-          data-testid={`${props.testId}-expired`}
+          className="bsp-st-check-tipwrap"
+          onMouseEnter={() => setTipOpen(true)}
+          onMouseLeave={() => setTipOpen(false)}
         >
-          {t['studio.expiredLine']}
+          <span
+            className="bsp-st-check-expired"
+            tabIndex={explanation ? 0 : undefined}
+            aria-describedby={explanation ? tipId : undefined}
+            data-testid={`${props.testId}-expired`}
+            onFocus={() => setTipOpen(true)}
+            onBlur={() => setTipOpen(false)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setTipOpen(false);
+            }}
+          >
+            {t['studio.expiredLine']}
+          </span>
+          {explanation ? (
+            <span
+              role="tooltip"
+              id={tipId}
+              className="bsp-st-check-tip"
+              hidden={!tipOpen}
+              data-testid={`${props.testId}-expired-tip`}
+            >
+              {explanation}
+            </span>
+          ) : null}
         </span>
       ) : null}
       {rows.map((row) => (

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Secret, TOTP } from 'otpauth';
 import {
@@ -51,7 +51,7 @@ let secrets: SecretService;
 let ownerRoleId: string;
 let provisionerId: string;
 
-function totpCode(secret: string): string {
+function totp(secret: string): TOTP {
   return new TOTP({
     issuer: 'BrandSpace Platform',
     label: 'lockout',
@@ -59,7 +59,30 @@ function totpCode(secret: string): string {
     digits: 6,
     period: 30,
     secret: Secret.fromBase32(secret),
-  }).generate();
+  });
+}
+
+function totpCode(secret: string): string {
+  return totp(secret).generate();
+}
+
+/**
+ * A six-digit code GUARANTEED to be wrong for `secret`: never one of the codes
+ * the verifier accepts now (the current step and the ±1 steps of its window),
+ * and never the code of the step after or before those, in case a step
+ * boundary passes between this call and the verification. A fixed code such as
+ * "000000" is right by coincidence about once in 70,000 runs of a ±1 window.
+ */
+function wrongTotpCode(secret: string): string {
+  const generator = totp(secret);
+  const now = Date.now();
+  const accepted = new Set(
+    [-2, -1, 0, 1, 2].map((step) => generator.generate({ timestamp: now + step * 30_000 })),
+  );
+  for (;;) {
+    const candidate = randomInt(0, 1_000_000).toString().padStart(6, '0');
+    if (!accepted.has(candidate)) return candidate;
+  }
 }
 
 interface TestUser {
@@ -151,7 +174,9 @@ describe('MFA lockout cannot be bypassed by a pre-existing session', () => {
 
     for (let i = 0; i < MAX_FAILED_ATTEMPTS; i += 1) {
       const token = await preMfaToken(user);
-      await expect(auth.verifyMfa({ token, code: '000000' })).rejects.toThrow();
+      await expect(
+        auth.verifyMfa({ token, code: wrongTotpCode(user.totpSecret) }),
+      ).rejects.toThrow();
     }
 
     const row = await prisma.platformUser.findUniqueOrThrow({ where: { id: user.id } });

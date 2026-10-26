@@ -121,8 +121,8 @@ describe('the values the owner confirmed on the #79 review', () => {
     );
     expect(ranges).toEqual({
       instagram: { min: 3, max: 5 },
-      // #81: Facebook joins the content document with no recommended range.
-      facebook: null,
+      // #81 joined Facebook with no range; D-570 (owner, Studio review) gives it 1–3.
+      facebook: { min: 1, max: 3 },
       tiktok: { min: 3, max: 5 },
     });
     const times = Object.fromEntries(

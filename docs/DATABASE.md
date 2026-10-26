@@ -2211,7 +2211,7 @@ Each index file is one `CREATE INDEX CONCURRENTLY IF NOT EXISTS` statement (§18
 
 ## 22. Connected AI apps (D-566)
 
-Two migrations: `20261023090000_ai_app_connections` (one transaction, approved by the owner as written) and `20261023091000_ai_app_token_replaced_scoped` (D-568, its review by the owner pending: the rotation link `replacedById` made composite on `workspaceId`, so a token can only point at a successor in its own workspace; requires PostgreSQL 15+ for `SET NULL ("replacedById")`; staging and production run PostgreSQL 18).
+Two migrations: `20261023090000_ai_app_connections` (one transaction, approved by the owner as written) and `20261023091000_ai_app_token_replaced_scoped` (D-568, reviewed and approved as sent, 2026-10-19: the rotation link `replacedById` made composite on `workspaceId`, so a token can only point at a successor in its own workspace; requires PostgreSQL 15+ for `SET NULL ("replacedById")`; staging and production run PostgreSQL 18).
 
 | Table                       | Owner                  | What                                                                                                                                                                                                            |
 | --------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

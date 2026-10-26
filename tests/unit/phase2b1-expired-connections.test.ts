@@ -117,15 +117,30 @@ describe('Q9 · a revoked channel is refused on the server, by every caller', ()
   });
 });
 
-describe('Q9 · the Studio says "Expired", with its explanation on the next line', () => {
-  it('renders the short status and the explanation as two lines of one row', () => {
+describe('Q9 · the Studio says "Expired" once, with its explanation as the line\'s tooltip (D-570)', () => {
+  it('the status says "Expired"; the explanation is in a tooltip the short line describes itself with', () => {
     const editor = read('apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx');
+    const card = read('apps/dashboard/src/app/[locale]/content/compose/check-card.tsx');
+    // The draft hands the card the status word and the explanation, as before.
     expect(editor).toMatch(
-      /data-testid=\{`editor-channel-expired-\$\{variant\.platformKey\}`\}[\s\S]{0,200}<b>\{expiredChannels\[variant\.platformKey\]\?\.label\}<\/b>\s*<span style=\{\{ display: 'block' \}\}>/,
+      /expiredLabel=\{expired\?\.label\}\s*expiredExplanation=\{expired\?\.explanation\}/,
     );
+    // Said once: the issue list no longer repeats "Expired" and its explanation.
+    expect(editor).not.toContain('editor-channel-expired-');
+    // The explanation is not removed: it is the tooltip's text, and the focusable
+    // short line names it as its description (hover, keyboard, screen reader).
+    expect(card).toMatch(/role="tooltip"\s*id=\{tipId\}[\s\S]{0,200}\{explanation\}/);
+    expect(card).toMatch(
+      /tabIndex=\{explanation \? 0 : undefined\}\s*aria-describedby=\{explanation \? tipId : undefined\}/,
+    );
+    expect(card).toMatch(/onFocus=\{\(\) => setTipOpen\(true\)\}/);
+    expect(card).toMatch(/event\.key === 'Escape'/);
     expect(optionalMessage('en', 'calendar.readiness.EXPIRED')).toBe('Expired');
     expect(optionalMessage('en', 'readiness.expiredExplanation')).toMatch(
       /waits[\s\S]*\{minutes\}[\s\S]*other channels go out on time/,
     );
+    // And in Arabic: the status word once, the explanation in the tooltip.
+    expect(optionalMessage('ar', 'calendar.readiness.EXPIRED')).toBe('منتهي الصلاحية');
+    expect(optionalMessage('ar', 'readiness.expiredExplanation')).toContain('{minutes}');
   });
 });

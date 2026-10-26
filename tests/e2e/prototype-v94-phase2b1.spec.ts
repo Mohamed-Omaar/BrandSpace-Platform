@@ -597,7 +597,7 @@ test.describe('A10 / G2 / G3 · my notification switches, and the AI writing lan
 });
 
 test.describe('A11 / Q9 · an expired account warns in the Studio and does not block', () => {
-  test('the channel reads "Expired", with what that means on the next line', async ({
+  test('the channel reads "Expired" once, with what that means in the line\'s tooltip (D-570)', async ({
     page,
     isMobile,
   }) => {
@@ -695,17 +695,36 @@ test.describe('A11 / Q9 · an expired account warns in the Studio and does not b
     await page.waitForURL(/\/en\/overview$/);
 
     await page.goto(`${DASHBOARD_BASE_URL}/en/content/compose?item=${itemId}`);
-    const row = page.getByTestId('editor-channel-expired-linkedin');
-    await expect(row).toBeVisible({ timeout: 15_000 });
-    await expect(row.locator('b')).toHaveText('Expired');
-    await expect(row).toContainText('Reconnect the account');
-    await expect(row).toContainText('120 minutes');
-    // A warning, not a block: the row is a warning and the draft can still be scheduled.
-    await expect(row).toHaveClass(/warning/);
+    const card = page.getByTestId('studio-check-linkedin');
+    const status = page.getByTestId('studio-check-linkedin-status');
+    await expect(status).toBeVisible({ timeout: 15_000 });
+    await expect(status).toHaveText('Expired');
+    // A warning, not a block: the status is a warning and the draft can still be scheduled.
+    await expect(status).toHaveClass(/bsp-warn/);
+    // Said once (D-570): the issue list no longer repeats it.
+    await expect(card.getByText('Expired', { exact: true })).toHaveCount(1);
+    const line = page.getByTestId('studio-check-linkedin-expired');
+    await expect(line).toHaveText('Connection expired · reconnect before it goes out');
+    // What it means is the line's tooltip, reached by keyboard and named as its description.
+    const tip = page.getByTestId('studio-check-linkedin-expired-tip');
+    await expect(tip).toBeHidden();
+    await line.focus();
+    await expect(tip).toBeVisible();
+    await expect(tip).toHaveAttribute('role', 'tooltip');
+    await expect(line).toHaveAttribute('aria-describedby', (await tip.getAttribute('id')) ?? '');
+    await expect(tip).toContainText('Reconnect the account');
+    await expect(tip).toContainText('120 minutes');
+    await page.keyboard.press('Escape');
+    await expect(tip).toBeHidden();
 
     await page.goto(`${DASHBOARD_BASE_URL}/ar/content/compose?item=${itemId}`);
-    await expect(page.getByTestId('editor-channel-expired-linkedin').locator('b')).toHaveText(
-      'منتهي الصلاحية',
+    await expect(page.getByTestId('studio-check-linkedin-status')).toHaveText('منتهي الصلاحية');
+    await expect(
+      page.getByTestId('studio-check-linkedin').getByText('منتهي الصلاحية', { exact: true }),
+    ).toHaveCount(1);
+    await page.getByTestId('studio-check-linkedin-expired').focus();
+    await expect(page.getByTestId('studio-check-linkedin-expired-tip')).toContainText(
+      'أعد ربط الحساب',
     );
   });
 });

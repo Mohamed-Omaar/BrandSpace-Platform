@@ -11,7 +11,7 @@ import { EXPECTED_MIGRATIONS } from '../../packages/database/src/migration-manif
  * single-column key; the platform-wide D-112 invariant
  * (tests/isolation/d112-platform-wide-invariant.test.ts) refuses that between
  * tenant-owned rows. This forward migration makes the key composite on
- * "workspaceId", exactly as proposed to the owner (its review is pending, D-568): one transaction, the unique
+ * "workspaceId", exactly as reviewed and approved as sent (2026-10-19, D-568): one transaction, the unique
  * index the key needs, drop and re-add the key with `SET NULL ("replacedById")`,
  * and a proof. Nothing else changes.
  */
@@ -32,7 +32,7 @@ const statements = sql
   .filter((statement) => statement.length > 0);
 
 describe('D-568 · the AI apps token key, scoped to the workspace', () => {
-  it('is exactly the statements sent to the owner, in one transaction, ending in the proof', () => {
+  it('is exactly the statements reviewed and approved as sent (2026-10-19), in one transaction, ending in the proof', () => {
     expect(statements).toEqual([
       'BEGIN',
       `SET LOCAL lock_timeout = '5s'`,

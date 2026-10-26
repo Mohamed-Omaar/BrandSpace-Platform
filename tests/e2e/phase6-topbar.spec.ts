@@ -455,6 +455,18 @@ test.describe('P6-16 · the customer top bar', () => {
       await page.goto(`${DASHBOARD_BASE_URL}/${locale}/overview`);
       await page.getByTestId('topbar-create').click();
       await expect(page.getByTestId('topbar-create-menu')).toBeVisible();
+      // The menu enters with `bsp-pop` (opacity 0 → 1 over 0.18s). Scanned
+      // mid-entry, axe measures the rows' sub-lines at partial opacity and
+      // reports a contrast their final colour does not have (4.9:1 at the
+      // lowest, on the first row's #f6f3ff). Scan the menu as it stays.
+      await page.waitForFunction(() => {
+        const menu = document.querySelector('[data-testid="topbar-create-menu"]');
+        return (
+          menu !== null &&
+          menu.getAnimations({ subtree: true }).every((a) => a.playState === 'finished') &&
+          getComputedStyle(menu).opacity === '1'
+        );
+      });
       const results = await new AxeBuilder({ page })
         .include('header.bs-topbar')
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])

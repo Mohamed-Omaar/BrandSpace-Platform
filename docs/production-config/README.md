@@ -178,13 +178,13 @@ Q13, D-481) or a schema default.
 These are pinned by `tests/unit/pr-f-production-config.test.ts` ("the values the owner confirmed
 on the #79 review"); changing one fails that test.
 
-| Value                     | Where                   | Confirmed                                                                                                                          |
-| ------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `monthlyCredits`          | `plans.json`, `starter` | **500.** The trial grants the same 500 (`trialCredits`, D-556 a); Home reads "n of" the trial grant during the trial (D-514).      |
-| `quotas.workspaces`       | `plans.json`, `starter` | **1.** A trial owner can hold one workspace.                                                                                       |
-| `industries` (12)         | `onboarding.json`       | The twelve names and keys as written, with their question sets.                                                                    |
-| `recommendedHashtags`     | `content.json`          | instagram 3–5, tiktok 3–5. Facebook has no range. LinkedIn and X are not in the production list (D-554, §2.1); staging keeps them. |
-| `calendar.suggestedTimes` | `content.json`          | EG, SA and AE: 10:00, 16:00, 21:00. Shown as "Suggested time", never "best time" (D-329).                                          |
+| Value                     | Where                   | Confirmed                                                                                                                         |
+| ------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `monthlyCredits`          | `plans.json`, `starter` | **500.** The trial grants the same 500 (`trialCredits`, D-556 a); Home reads "n of" the trial grant during the trial (D-514).     |
+| `quotas.workspaces`       | `plans.json`, `starter` | **1.** A trial owner can hold one workspace.                                                                                      |
+| `industries` (12)         | `onboarding.json`       | The twelve names and keys as written, with their question sets.                                                                   |
+| `recommendedHashtags`     | `content.json`          | instagram 3–5, facebook 1–3 (D-570), tiktok 3–5. LinkedIn and X are not in the production list (D-554, §2.1); staging keeps them. |
+| `calendar.suggestedTimes` | `content.json`          | EG, SA and AE: 10:00, 16:00, 21:00. Shown as "Suggested time", never "best time" (D-329).                                         |
 
 ### 5.1b Decided by the owner (#81 review)
 
@@ -200,7 +200,7 @@ Pinned by `tests/unit/pr-f-production-config.test.ts` ("the values the owner dec
 | --------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `dailyPublishCap`           | `publishing.json`, instagram | **25** posts per account per rolling 24 hours (Instagram's own `quota_total`, when lower, still wins).                                                                                     |
 | `expiringSoonHours`         | `publishing.json`, instagram | **168** (7 days). Instagram's long-lived token lasts about 60 days, so it is warned about a week ahead with the existing notice. Every other platform: `null`, the dispatch window (24 h). |
-| `facebook` content platform | `content.json`, `platforms`  | **Added**: 2,200 characters, 30 hashtags, no first comment, 10 media items (the same limits its publishing entry enforces). No recommended hashtag range, no safe zones.                   |
+| `facebook` content platform | `content.json`, `platforms`  | **Added**: 2,200 characters, 30 hashtags, no first comment, 10 media items (the same limits its publishing entry enforces). Recommended hashtags 1–3 (D-570); no safe zones.               |
 
 #### Adding Facebook to the `content` document on staging (Control Center)
 
