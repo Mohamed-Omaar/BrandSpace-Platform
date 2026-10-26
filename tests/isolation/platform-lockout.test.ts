@@ -193,7 +193,9 @@ describe('MFA lockout cannot be bypassed by a pre-existing session', () => {
 
     for (let i = 0; i < MAX_FAILED_ATTEMPTS; i += 1) {
       const token = await preMfaToken(user);
-      await expect(auth.verifyMfa({ token, code: '000000' })).rejects.toThrow();
+      await expect(
+        auth.verifyMfa({ token, code: wrongTotpCode(user.totpSecret) }),
+      ).rejects.toThrow();
     }
 
     await expect(
@@ -212,10 +214,12 @@ describe('MFA lockout cannot be bypassed by a pre-existing session', () => {
     const token = await preMfaToken(user);
 
     for (let i = 0; i < MAX_FAILED_ATTEMPTS; i += 1) {
-      await expect(auth.verifyMfa({ token, code: '000000' })).rejects.toThrow();
+      await expect(
+        auth.verifyMfa({ token, code: wrongTotpCode(user.totpSecret) }),
+      ).rejects.toThrow();
     }
 
-    await expect(auth.verifyMfa({ token, code: '111111' })).rejects.toThrow();
+    await expect(auth.verifyMfa({ token, code: wrongTotpCode(user.totpSecret) })).rejects.toThrow();
 
     // Pre-MFA sessions are worthless once the account locks: they are revoked,
     // not merely refused by a check someone could later forget to write.
@@ -232,7 +236,9 @@ describe('MFA lockout cannot be bypassed by a pre-existing session', () => {
     const third = await preMfaToken(user);
 
     for (let i = 0; i < MAX_FAILED_ATTEMPTS; i += 1) {
-      await expect(auth.verifyMfa({ token: first, code: '000000' })).rejects.toThrow();
+      await expect(
+        auth.verifyMfa({ token: first, code: wrongTotpCode(user.totpSecret) }),
+      ).rejects.toThrow();
     }
 
     const code = totpCode(user.totpSecret);
