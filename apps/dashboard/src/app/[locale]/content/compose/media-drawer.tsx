@@ -133,8 +133,11 @@ export function MediaDrawer({
     if (!response.ok) {
       const code = (payload as { error?: { code?: string } } | null)?.error?.code ?? '';
       setFailure(
-        (code === 'QUOTA_EXCEEDED' ? t['content.error.quota'] : t['editor.media.generateFailed']) ??
-          '',
+        (code === 'QUOTA_EXCEEDED'
+          ? t['content.error.quota']
+          : code === 'AI_PAUSED'
+            ? t['ai.paused']
+            : t['editor.media.generateFailed']) ?? '',
       );
       return null;
     }

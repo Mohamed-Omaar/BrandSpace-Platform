@@ -1993,6 +1993,7 @@ const COMPOSER_KEYS = [
   'content.type.THREAD',
   'content.error.generic',
   'content.error.quota',
+  'ai.paused',
   'content.error.invalid',
   'content.error.notFound',
   'content.noBrand',

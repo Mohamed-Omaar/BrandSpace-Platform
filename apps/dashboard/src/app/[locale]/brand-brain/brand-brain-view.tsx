@@ -1050,6 +1050,7 @@ export function BrandBrainView({
               retention: t('bb.chatRetention').replace('{days}', String(retentionDays)),
               expired: t('bb.chatExpired'),
               error: t('bb.chatError'),
+              paused: t('ai.paused'),
               close: t('bb.chatClose'),
               contextAll: t('bb.chatContextAll'),
               areaDetails: t('bb.chatAreaDetails'),

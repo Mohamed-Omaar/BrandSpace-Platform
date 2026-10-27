@@ -39,6 +39,8 @@ export const PUBLIC_ERROR_CODES = [
   'ENTITLEMENT_REQUIRED',
   'QUOTA_EXCEEDED',
   'INSUFFICIENT_CREDITS',
+  // D-573 — the platform AI ceiling. "Try again later" is the truth here.
+  'AI_PAUSED',
   'INTERNAL',
 ] as const;
 
@@ -70,6 +72,7 @@ const APP_ERROR_CODE_MAP: Partial<Record<string, PublicErrorCode>> = {
   ENTITLEMENT_REQUIRED: 'ENTITLEMENT_REQUIRED',
   QUOTA_EXCEEDED: 'QUOTA_EXCEEDED',
   INSUFFICIENT_CREDITS: 'INSUFFICIENT_CREDITS',
+  AI_PAUSED: 'AI_PAUSED',
   // TENANT_* and INTERNAL still fall through: they describe a defect, not a
   // decision the customer can respond to.
 };

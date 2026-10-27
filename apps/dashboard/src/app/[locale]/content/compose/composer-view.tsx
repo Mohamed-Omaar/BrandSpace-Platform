@@ -434,6 +434,7 @@ export interface ComposerViewProps {
 /** The customer-safe codes the proxy and the API can return. */
 const FAILURE_KEYS: Record<string, string> = {
   QUOTA_EXCEEDED: 'content.error.quota',
+  AI_PAUSED: 'ai.paused',
   VALIDATION_FAILED: 'content.error.invalid',
   NOT_FOUND: 'content.error.notFound',
 };

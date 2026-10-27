@@ -42,6 +42,8 @@ export class ConfigurationAiSource implements AiConfigurationSource {
     return {
       providers: providers.providers.map((provider) => ({
         key: provider.key,
+        // D-573 — the adapter that serves this record; its own key when unset.
+        adapterKey: provider.adapter ?? provider.key,
         baseUrl: provider.baseUrl,
         apiKeySecretRef: provider.apiKeySecretRef,
         status: provider.status,
@@ -123,6 +125,10 @@ export class ConfigurationAiSource implements AiConfigurationSource {
         unit: cost.unit,
       })),
       budgets: { defaults: budgets.defaults, perPlan: budgets.perPlan },
+      // D-573 — the platform-wide provider-cost ceiling and the owner's
+      // allow-list of provider hosts beyond each adapter's official ones.
+      platformBudget: budgets.platform,
+      allowedHosts: providers.allowedHosts,
     };
   }
 }

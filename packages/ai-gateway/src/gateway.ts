@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { Prisma, type PrismaClient } from '@brandspace/database';
 import type { CreditLedgerService } from '@brandspace/entitlements';
 import { AppError, type Clock, systemClock } from '@brandspace/shared';
@@ -5,12 +7,19 @@ import { AppError, type Clock, systemClock } from '@brandspace/shared';
 import type { AdapterContext, AdapterRegistry, GeneratedImage, UsageUnits } from './adapter';
 import {
   assessBudget,
+  assessPlatformBudget,
   budgetRefusal,
+  platformPeriodStarts,
+  platformThresholdsReached,
   resolveBudget,
   withinRequestCostCap,
   BudgetExceededError,
+  PlatformAiPausedError,
   type AiBudgets,
   type BudgetUsage,
+  type PlatformBudgetLimits,
+  type PlatformSpend,
+  type PlatformThresholdCrossing,
 } from './budgets';
 import {
   AiProviderError,
@@ -36,6 +45,8 @@ import {
   type ResolvedRoute,
   type RoutingRule,
 } from './routing';
+import { findAiCapability } from './capabilities';
+import { JSON_OUTPUT_TASKS } from './tasks';
 
 /**
  * The request lifecycle — docs/AI-GATEWAY.md §6.
@@ -68,6 +79,15 @@ export interface AiGatewayOptions {
   readonly clock?: Clock;
   /** Retry jitter. Injectable so a test is not at the mercy of randomness. */
   readonly random?: () => number;
+  /**
+   * D-573 — told when platform spend reaches 80% or 100% of a daily or monthly
+   * platform ceiling. The caller alerts the owner and makes the alert
+   * once-per-period; this process also reports each crossing only once. A
+   * failure here never fails or delays the customer's request.
+   */
+  readonly onPlatformThreshold?: (
+    crossings: readonly PlatformThresholdCrossing[],
+  ) => Promise<void> | void;
 }
 
 /** The active AI configuration, already parsed. */
@@ -86,10 +106,28 @@ export interface AiConfiguration {
   readonly capabilityRouting?: CapabilityRouting;
   readonly creditRules: readonly CreditRule[];
   readonly budgets: AiBudgets;
+  /**
+   * D-573 — the platform-wide provider-cost ceiling (`ai.budgets.platform`).
+   * Optional so a source written before it still satisfies the interface; its
+   * absence means no platform ceiling, exactly as nulls in the document do.
+   */
+  readonly platformBudget?: PlatformBudgetLimits;
+  /**
+   * D-573 — hosts the owner allows beyond each adapter's official ones
+   * (`ai.providers.allowedHosts`). Handed to the adapter, which refuses any
+   * other host before a connection is opened.
+   */
+  readonly allowedHosts?: readonly string[];
 }
 
 export interface AiProviderConfig {
   readonly key: string;
+  /**
+   * D-573 — which registered adapter serves this provider record. Defaults to
+   * the record's own key, which is what every record written before D-573
+   * meant. The gateway, never the app, reads it.
+   */
+  readonly adapterKey?: string;
   readonly baseUrl: string;
   readonly apiKeySecretRef: string | null;
   readonly status: 'draft' | 'validated' | 'active' | 'disabled';
@@ -245,6 +283,9 @@ export class AiGateway {
   readonly #environment: AiGatewayOptions['environment'];
   readonly #clock: Clock;
   readonly #random: () => number;
+  readonly #onPlatformThreshold: AiGatewayOptions['onPlatformThreshold'];
+  /** Crossings this process has already reported, so each is reported once. */
+  readonly #reportedCrossings = new Set<string>();
 
   constructor(options: AiGatewayOptions) {
     this.#prisma = options.prisma;
@@ -255,6 +296,7 @@ export class AiGateway {
     this.#environment = options.environment;
     this.#clock = options.clock ?? systemClock;
     this.#random = options.random ?? Math.random;
+    this.#onPlatformThreshold = options.onPlatformThreshold;
   }
 
   async execute(request: AiGatewayRequest): Promise<AiGatewayResult> {
@@ -336,7 +378,26 @@ export class AiGateway {
     );
     if (!decision.allowed) throw budgetRefusal(decision);
 
-    const aiRequest = await this.#createRequest(request, route, modelKey, reservationEstimate);
+    /*
+     * D-573 — THE PROVIDER-COST ESTIMATE, for the platform ceiling. Like the
+     * reservation, it is the DEAREST model in the chain at worst-case usage, so
+     * a fallback cannot cost the platform more than was admitted. A model with
+     * no cost basis estimates zero, which is also what it would settle at.
+     */
+    const providerCostEstimate = chain.reduce((highest, candidate) => {
+      const basis = config.costBases.find((b) => b.modelKey === candidate);
+      const estimate = basis ? providerCostMicroMinor(worstCase, basis) : 0n;
+      return estimate > highest ? estimate : highest;
+    }, 0n);
+
+    const aiRequest = await this.#createRequest(
+      request,
+      route,
+      modelKey,
+      reservationEstimate,
+      providerCostEstimate,
+      config.platformBudget,
+    );
     if (aiRequest.replayed) return aiRequest.result;
 
     return this.#runReserved({
@@ -504,30 +565,33 @@ export class AiGateway {
     route: ResolvedRoute,
     modelKey: string,
     reservationEstimate: bigint,
+    providerCostEstimate: bigint,
+    platformBudget: PlatformBudgetLimits | undefined,
   ): Promise<{ id: string; replayed: false } | { replayed: true; result: AiGatewayResult }> {
     const now = this.#clock.now();
+    const data = {
+      workspaceId: request.workspaceId,
+      userId: request.userId,
+      taskKey: request.taskKey,
+      idempotencyKey: request.idempotencyKey,
+      routingTaskKey: route.taskKey,
+      // Phase 10 — which capability constrained the choice, and which
+      // profile ranked it. Null profile means a TASK rule answered.
+      routingCapability: route.capability,
+      routingProfile: route.profile,
+      resolvedModelKey: modelKey,
+      attemptedModelKeys: [],
+      status: 'PENDING',
+      // Metadata only. §11: raw prompt content is never written here.
+      inputSummary: summariseInput(request.input),
+      creditsReservedMilli: reservationEstimate,
+      providerCostEstimateMicroMinor: providerCostEstimate,
+      deadlineAt: new Date(now.getTime() + route.timeoutMs),
+    } satisfies Prisma.AiRequestUncheckedCreateInput;
     try {
-      const created = await this.#prisma.aiRequest.create({
-        data: {
-          workspaceId: request.workspaceId,
-          userId: request.userId,
-          taskKey: request.taskKey,
-          idempotencyKey: request.idempotencyKey,
-          routingTaskKey: route.taskKey,
-          // Phase 10 — which capability constrained the choice, and which
-          // profile ranked it. Null profile means a TASK rule answered.
-          routingCapability: route.capability,
-          routingProfile: route.profile,
-          resolvedModelKey: modelKey,
-          attemptedModelKeys: [],
-          status: 'PENDING',
-          // Metadata only. §11: raw prompt content is never written here.
-          inputSummary: summariseInput(request.input),
-          creditsReservedMilli: reservationEstimate,
-          deadlineAt: new Date(now.getTime() + route.timeoutMs),
-        },
-        select: { id: true },
-      });
+      const created = hasPlatformCeiling(platformBudget)
+        ? await this.#admitUnderPlatformCeiling(platformBudget, providerCostEstimate, now, data)
+        : await this.#prisma.aiRequest.create({ data, select: { id: true } });
       return { id: created.id, replayed: false };
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
@@ -537,6 +601,87 @@ export class AiGateway {
       /* c8 ignore next -- the row exists: the unique violation proves it. */
       if (!replay) throw error;
       return { replayed: true, result: replay };
+    }
+  }
+
+  /**
+   * D-573 — ADMIT UNDER THE PLATFORM CEILING, then write the row, atomically.
+   *
+   * One transaction holds a platform-wide advisory lock, measures the period's
+   * spend, decides, and inserts the row whose estimate the next request will
+   * see. Without the lock, twenty requests admitted in the same instant would
+   * each measure the same headroom and all fit. The lock is held only for a
+   * read and an insert, never across a provider call.
+   *
+   * A refusal writes nothing, so a refused request counts zero by
+   * construction. The owner is told about 80% and 100% after the decision,
+   * outside the transaction, and never at the customer's expense.
+   */
+  async #admitUnderPlatformCeiling(
+    limits: PlatformBudgetLimits,
+    estimate: bigint,
+    now: Date,
+    data: Prisma.AiRequestUncheckedCreateInput,
+  ): Promise<{ id: string }> {
+    const starts = platformPeriodStarts(now);
+    const outcome = await this.#prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PLATFORM_CEILING_LOCK_KEY}::bigint)`;
+      const spend: PlatformSpend = {
+        todayMicroMinor: await platformSpendSince(tx, starts.day),
+        thisMonthMicroMinor: await platformSpendSince(tx, starts.month),
+      };
+      const decision = assessPlatformBudget(limits, spend, estimate);
+      if (!decision.allowed)
+        return { admitted: false as const, spend, breached: decision.breached };
+      const created = await tx.aiRequest.create({ data, select: { id: true } });
+      return {
+        admitted: true as const,
+        id: created.id,
+        spend: {
+          todayMicroMinor: spend.todayMicroMinor + estimate,
+          thisMonthMicroMinor: spend.thisMonthMicroMinor + estimate,
+        },
+        breached: null,
+      };
+    });
+
+    this.#reportCrossings(
+      platformThresholdsReached(limits, outcome.spend, starts, outcome.breached),
+    );
+    if (!outcome.admitted) {
+      /* c8 ignore next -- a refusal always names its period. */
+      throw new PlatformAiPausedError(outcome.breached ?? 'day');
+    }
+    return { id: outcome.id };
+  }
+
+  /** Hand new crossings to the owner's alert, once each per process. */
+  #reportCrossings(crossings: readonly PlatformThresholdCrossing[]): void {
+    if (!this.#onPlatformThreshold) return;
+    const fresh = crossings.filter((crossing) => {
+      const key = `${crossing.period}:${crossing.periodStart.toISOString()}:${crossing.thresholdPercent}`;
+      if (this.#reportedCrossings.has(key)) return false;
+      this.#reportedCrossings.add(key);
+      return true;
+    });
+    if (fresh.length === 0) return;
+    try {
+      void Promise.resolve(this.#onPlatformThreshold(fresh)).catch(() => {
+        // An alert that could not be sent must not fail a customer's request;
+        // forget the crossings so the next request tries again.
+        for (const crossing of fresh) {
+          this.#reportedCrossings.delete(
+            `${crossing.period}:${crossing.periodStart.toISOString()}:${crossing.thresholdPercent}`,
+          );
+        }
+      });
+    } catch {
+      /* c8 ignore next -- a synchronous throw from the hook is treated the same way. */
+      for (const crossing of fresh) {
+        this.#reportedCrossings.delete(
+          `${crossing.period}:${crossing.periodStart.toISOString()}:${crossing.thresholdPercent}`,
+        );
+      }
     }
   }
 
@@ -653,10 +798,18 @@ export class AiGateway {
 
     for (const modelKey of chain) {
       const model = config.models.find((m) => m.key === modelKey);
+      /*
+       * D-573 — only an ACTIVE provider is called, and through the adapter its
+       * record names. A provider the owner has saved but not yet tested and
+       * activated, or has switched off, is skipped exactly like a missing one:
+       * fallback moves on, and nothing is charged.
+       */
       const provider = model
-        ? config.providers.find((p) => p.key === model.providerKey)
+        ? config.providers.find((p) => p.key === model.providerKey && p.status === 'active')
         : undefined;
-      const adapter = model ? this.#adapters.get(model.providerKey) : undefined;
+      const adapter = provider
+        ? this.#adapters.get(provider.adapterKey ?? provider.key)
+        : undefined;
 
       if (!model || !provider || !adapter) {
         // An unusable entry is not an outage of the whole chain: try the next
@@ -705,16 +858,26 @@ export class AiGateway {
         const controller = new AbortController();
         // The deadline is ours, not the provider's. A provider that ignores its
         // own timeout must not be able to hold a reservation open — and the
-        // budget is what REMAINS, so retries cannot extend it.
-        const timer = setTimeout(() => controller.abort(), remainingMs);
+        // budget is what REMAINS, so retries cannot extend it. D-573: one
+        // attempt is also capped by the provider's own `timeoutMs`, so a slow
+        // provider leaves time for the next model in the chain.
+        const attemptMs = Math.min(remainingMs, provider.timeoutMs);
+        const timer = setTimeout(() => controller.abort(), attemptMs);
         try {
+          /*
+           * D-573 — THE CREDENTIAL, PER ATTEMPT, IN MEMORY ONLY. Resolved from
+           * the vault for this attempt, handed to the adapter in the context,
+           * and dropped with it. Never stored on the gateway, never logged,
+           * never in an error: a resolve failure is classified, not echoed.
+           */
           const ctx: AdapterContext = {
             environment: this.#environment,
             apiKey: await this.#credentials.resolve(provider.apiKeySecretRef),
             baseUrl: provider.baseUrl,
-            timeoutMs: remainingMs,
+            timeoutMs: attemptMs,
             signal: controller.signal,
             requestId,
+            allowedHosts: config.allowedHosts ?? [],
           };
 
           const { output, usage } = await this.#invoke(
@@ -867,6 +1030,8 @@ export class AiGateway {
             // the resolved route rather than from any request body, so it is
             // always a key from the closed registry.
             taskKey: route.taskKey,
+            // D-573 — the caller will parse JSON: ask the provider for it.
+            ...(wantsJson(route) ? { outputFormat: 'json' as const } : {}),
           },
           ctx,
         );
@@ -1524,4 +1689,60 @@ export async function purgeExpiredOutputs(input: {
   }
 
   return purged;
+}
+
+/**
+ * D-573 — one advisory-lock key for the platform ceiling, derived from a
+ * namespace the way the calendar capacity lock derives its keys.
+ */
+const PLATFORM_CEILING_LOCK_KEY: bigint = createHash('sha256')
+  .update('brandspace:ai-platform-ceiling:v1')
+  .digest()
+  .readBigInt64BE(0);
+
+/** Is any platform ceiling configured at all? Without one, no lock is taken. */
+function hasPlatformCeiling(
+  limits: PlatformBudgetLimits | undefined,
+): limits is PlatformBudgetLimits {
+  return (
+    limits !== undefined &&
+    (limits.providerCostPerDayMicroMinor !== null || limits.providerCostPerMonthMicroMinor !== null)
+  );
+}
+
+/** Statuses whose provider cost is not yet known: they count at their estimate. */
+const IN_FLIGHT_STATUSES = ['PENDING', 'RESERVED', 'RUNNING'] as const;
+
+/**
+ * The platform's provider spend since `since` — docs/AI-GATEWAY.md, D-573:
+ * actual cost of SUCCEEDED requests plus the estimate of in-flight ones.
+ * FAILED, TIMEOUT, MODERATION_BLOCKED and CANCELLED count zero, and so does a
+ * request on the customer's own key (BYOK), which BrandSpace is not invoiced for.
+ */
+async function platformSpendSince(tx: Prisma.TransactionClient, since: Date): Promise<bigint> {
+  const rows = await tx.aiRequest.groupBy({
+    by: ['status'],
+    where: { createdAt: { gte: since }, byok: false },
+    _sum: { providerCostMicroMinor: true, providerCostEstimateMicroMinor: true },
+  });
+  let total = 0n;
+  for (const row of rows) {
+    if (row.status === 'SUCCEEDED') total += row._sum.providerCostMicroMinor ?? 0n;
+    if ((IN_FLIGHT_STATUSES as readonly string[]).includes(row.status)) {
+      total += row._sum.providerCostEstimateMicroMinor ?? 0n;
+    }
+  }
+  return total;
+}
+
+/**
+ * D-573 — does the caller parse this task's answer as JSON? The tasks whose
+ * parsers expect a JSON object, and any capability that requires structured
+ * output. Decided from the resolved route, never from a request body.
+ */
+function wantsJson(route: ResolvedRoute): boolean {
+  return (
+    JSON_OUTPUT_TASKS.has(route.taskKey) ||
+    findAiCapability(route.capability)?.requires.structuredOutput === true
+  );
 }

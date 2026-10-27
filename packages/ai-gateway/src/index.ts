@@ -130,8 +130,13 @@ export type {
 
 export {
   assessBudget,
+  assessPlatformBudget,
   budgetRefusal,
   BudgetExceededError,
+  PLATFORM_ALERT_THRESHOLDS,
+  PlatformAiPausedError,
+  platformPeriodStarts,
+  platformThresholdsReached,
   resolveBudget,
   withinRequestCostCap,
 } from './budgets';
@@ -142,6 +147,12 @@ export type {
   BudgetLimits,
   BudgetUsage,
   PlanBudgetLimits,
+  PlatformAlertThreshold,
+  PlatformBudgetDecision,
+  PlatformBudgetLimits,
+  PlatformPeriod,
+  PlatformSpend,
+  PlatformThresholdCrossing,
 } from './budgets';
 
 export { ConfigurationAiSource } from './config-source';

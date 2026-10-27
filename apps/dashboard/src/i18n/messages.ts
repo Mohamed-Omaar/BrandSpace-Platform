@@ -2196,6 +2196,8 @@ export const messages = {
     'content.type.THREAD': 'سلسلة',
     'content.error.generic': 'تعذّر إتمام الطلب. حاول مرة أخرى.',
     'content.error.quota': 'لا يوجد رصيد كافٍ من أرصدة الذكاء الاصطناعي.',
+    // D-573 — the platform AI ceiling, in the owner's words.
+    'ai.paused': 'الذكاء الاصطناعي متوقف مؤقتًا. حاول مرة أخرى لاحقًا.',
     'content.error.invalid': 'راجع ما أدخلته ثم حاول مرة أخرى.',
     'content.error.notFound': 'لم يعد هذا العنصر متاحًا.',
     'content.noBrand': 'لا توجد علامة تجارية بعد',
@@ -6512,6 +6514,8 @@ export const messages = {
     'content.type.THREAD': 'Thread',
     'content.error.generic': 'That could not be completed. Please try again.',
     'content.error.quota': 'Not enough AI credits.',
+    // D-573 — the platform AI ceiling, in the owner's words.
+    'ai.paused': 'AI is paused right now. Please try again later.',
     'content.error.invalid': 'Check what you entered and try again.',
     'content.error.notFound': 'That is no longer available.',
     'content.noBrand': 'No brand yet',
@@ -9011,6 +9015,15 @@ const STATUS_TEXT: Record<string, { en: string; ar: string }> = {
   INSUFFICIENT_CREDITS: {
     en: 'There are not enough AI credits for that.',
     ar: 'لا يوجد رصيد ذكاء اصطناعي كافٍ لهذا.',
+  },
+  /*
+   * D-573 — the platform-wide AI spending ceiling is reached. The owner's own
+   * words. Not the customer's wall, so nothing about plans or credits, and
+   * "later" is true: the period rolls or the owner raises the ceiling.
+   */
+  AI_PAUSED: {
+    en: 'AI is paused right now. Please try again later.',
+    ar: 'الذكاء الاصطناعي متوقف مؤقتًا. حاول مرة أخرى لاحقًا.',
   },
   MEMBER_INVITED: { en: 'Invitation sent.', ar: 'تم إرسال الدعوة.' },
   MEMBER_REMOVED: { en: 'Member removed.', ar: 'تمت إزالة العضو.' },

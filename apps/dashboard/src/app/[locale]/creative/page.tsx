@@ -162,6 +162,7 @@ export default async function CreativeStudioPage({
     scanning: t('creative.scanning'),
     failed: t('creative.failed'),
     insufficientCredits: t('creative.insufficientCredits'),
+    aiPaused: t('ai.paused'),
     usesBrand: brand ? t('creative.usesBrand').replace('{brand}', brand.name) : '',
   };
 
