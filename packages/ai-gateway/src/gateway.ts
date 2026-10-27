@@ -1719,6 +1719,23 @@ const IN_FLIGHT_STATUSES = ['PENDING', 'RESERVED', 'RUNNING'] as const;
  * FAILED, TIMEOUT, MODERATION_BLOCKED and CANCELLED count zero, and so does a
  * request on the customer's own key (BYOK), which BrandSpace is not invoiced for.
  */
+/**
+ * The platform's provider spend for the UTC day and month containing `now`,
+ * by the same sum the ceiling admits against. The Control Center reads it for
+ * its notice; it takes no lock, so it is a reading, not an admission.
+ */
+export async function measurePlatformSpend(
+  prisma: Pick<PrismaClient, 'aiRequest'>,
+  now: Date,
+): Promise<PlatformSpend> {
+  const starts = platformPeriodStarts(now);
+  const client = prisma as unknown as Prisma.TransactionClient;
+  return {
+    todayMicroMinor: await platformSpendSince(client, starts.day),
+    thisMonthMicroMinor: await platformSpendSince(client, starts.month),
+  };
+}
+
 async function platformSpendSince(tx: Prisma.TransactionClient, since: Date): Promise<bigint> {
   const rows = await tx.aiRequest.groupBy({
     by: ['status'],

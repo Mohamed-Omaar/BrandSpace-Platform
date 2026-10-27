@@ -61,6 +61,11 @@ const ERROR_TEXT: Record<PublicErrorCode, { en: string; ar: string }> = {
     en: 'That workspace does not have enough AI credits for this action.',
     ar: 'لا تملك مساحة العمل هذه رصيد ذكاء اصطناعي كافيًا لهذا الإجراء.',
   },
+  // D-573 — the platform AI ceiling is reached; the operator's view of it.
+  AI_PAUSED: {
+    en: 'AI is paused: the platform spending ceiling for this day or month is reached.',
+    ar: 'الذكاء الاصطناعي متوقف مؤقتًا: بلغ الإنفاق حد المنصة لهذا اليوم أو الشهر.',
+  },
   INTERNAL: {
     en: 'Something went wrong and nothing was changed.',
     ar: 'حدث خطأ ولم يتغيّر شيء.',

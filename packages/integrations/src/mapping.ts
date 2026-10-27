@@ -1,4 +1,4 @@
-import { AppError } from '@brandspace/shared';
+import { AppError, unsafeProviderUrlReason } from '@brandspace/shared';
 import type { IntegrationDefinition } from './registry';
 
 /**
@@ -91,10 +91,13 @@ function applyAiProvider(next: Record<string, unknown>, input: ProviderRecordWri
    */
   const baseUrl = input.settings['baseUrl'];
   const apiKeyRef = input.secretRefs['apiKey'] ?? null;
+  if (baseUrl !== undefined) assertAllowedAiHost(baseUrl, input);
 
   if (existing) {
     if (baseUrl !== undefined) existing['baseUrl'] = baseUrl;
     if (apiKeyRef !== null) existing['apiKeySecretRef'] = apiKeyRef;
+    // D-573: a record saved before `adapter` existed learns which one serves it.
+    existing['adapter'] ??= input.definition.providerKey;
     return;
   }
 
@@ -112,12 +115,41 @@ function applyAiProvider(next: Record<string, unknown>, input: ProviderRecordWri
 
   providers.push({
     key: input.definition.providerKey,
+    // D-573: the catalogue entry's key IS its adapter's key (pinned by a test).
+    adapter: input.definition.providerKey,
     name: input.definition.displayNameEn,
     baseUrl,
     apiKeySecretRef: apiKeyRef,
     ...AI_PROVIDER_DEFAULTS,
   });
   next['providers'] = providers;
+}
+
+/**
+ * D-573 — AN AI PROVIDER'S ADDRESS MUST BE ITS OWN, OR ONE THE OWNER ALLOWED.
+ *
+ * Configuration validation already refuses an unsafe URL (not https, a port,
+ * credentials, an IP address, a private name). This adds the membership rule:
+ * the host is one of the catalogue entry's official hosts, or is on
+ * `ai.providers.allowedHosts`. The gateway's egress applies the same rule on
+ * every call and also checks the address the name resolves to.
+ */
+function assertAllowedAiHost(baseUrl: string, input: ProviderRecordWrite): void {
+  const official = input.definition.officialHosts;
+  if (!official) return;
+  const unsafe = unsafeProviderUrlReason(baseUrl);
+  if (unsafe) throw new AppError('VALIDATION_FAILED', unsafe);
+  const host = new URL(baseUrl).hostname.toLowerCase().replace(/\.$/, '');
+  const allowed = Array.isArray(input.document['allowedHosts'])
+    ? (input.document['allowedHosts'] as unknown[]).filter(
+        (entry): entry is string => typeof entry === 'string',
+      )
+    : [];
+  if (official.includes(host) || allowed.map((entry) => entry.toLowerCase()).includes(host)) return;
+  throw new AppError(
+    'VALIDATION_FAILED',
+    `The host "${host}" is not this provider’s own address and is not on the AI host allow-list.`,
+  );
 }
 
 function applySocialApplication(next: Record<string, unknown>, input: ProviderRecordWrite): void {

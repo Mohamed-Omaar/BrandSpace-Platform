@@ -121,6 +121,21 @@ export async function SimpleHome({
       actionLabel: copy('common.review'),
     });
   }
+  if (ai?.platformCeiling) {
+    const paused = ai.platformCeiling.percent >= 100;
+    attention.push({
+      id: 'ai-ceiling',
+      severity: paused ? 'critical' : 'warning',
+      title: fill(copy(paused ? 'attn.aiCeilingPaused' : 'attn.aiCeiling'), {
+        period: copy(
+          ai.platformCeiling.period === 'day' ? 'attn.aiCeiling.day' : 'attn.aiCeiling.month',
+        ),
+      }),
+      detail: copy(paused ? 'attn.aiCeilingPaused.detail' : 'attn.aiCeiling.detail'),
+      href: `${base}/configuration?domain=ai.budgets`,
+      actionLabel: copy('common.review'),
+    });
+  }
   if (ai?.stuckRequests) {
     attention.push({
       id: 'stuck-ai',

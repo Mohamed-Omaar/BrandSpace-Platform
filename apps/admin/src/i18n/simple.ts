@@ -199,6 +199,15 @@ const en = {
   'attn.pending.detail':
     'A saved change is waiting to be checked and activated. Nothing changes for customers until it is.',
   'attn.stuckAi': '{count} AI request(s) never finished',
+  // D-573 — the platform AI spending ceiling.
+  'attn.aiCeiling': 'AI spending has reached 80% of the {period} platform ceiling',
+  'attn.aiCeiling.detail':
+    'At 100% AI pauses for every customer until the period ends. Raise the ceiling in AI spending limits if this is expected.',
+  'attn.aiCeilingPaused': 'AI is paused: the {period} platform ceiling is reached',
+  'attn.aiCeilingPaused.detail':
+    'Customers see “AI is paused right now. Please try again later.” until the period ends or you raise the ceiling.',
+  'attn.aiCeiling.day': 'daily',
+  'attn.aiCeiling.month': 'monthly',
   'attn.stuckAi.detail':
     'Their reserved credits are being held. The technical view has each request.',
   'attn.system': 'The platform is not fully operational',
@@ -868,6 +877,15 @@ const ar: Copy = {
   'attn.pending': 'تغيير غير مكتمل: {what}',
   'attn.pending.detail': 'يوجد تغيير محفوظ بانتظار الفحص والتفعيل. لا يتغيّر شيء للعملاء قبل ذلك.',
   'attn.stuckAi': '{count} من طلبات الذكاء الاصطناعي لم تكتمل',
+  // D-573 — حد إنفاق الذكاء الاصطناعي على مستوى المنصة.
+  'attn.aiCeiling': 'بلغ إنفاق الذكاء الاصطناعي 80% من الحد {period} للمنصة',
+  'attn.aiCeiling.detail':
+    'عند 100% يتوقف الذكاء الاصطناعي لجميع العملاء حتى تنتهي المدة. ارفع الحد في حدود إنفاق الذكاء الاصطناعي إن كان هذا متوقعًا.',
+  'attn.aiCeilingPaused': 'الذكاء الاصطناعي متوقف: بلغ الإنفاق الحد {period} للمنصة',
+  'attn.aiCeilingPaused.detail':
+    'يرى العملاء «الذكاء الاصطناعي متوقف مؤقتًا. حاول مرة أخرى لاحقًا.» حتى تنتهي المدة أو ترفع الحد.',
+  'attn.aiCeiling.day': 'اليومي',
+  'attn.aiCeiling.month': 'الشهري',
   'attn.stuckAi.detail': 'رصيدها المحجوز ما زال معلّقًا. العرض التقني يعرض كل طلب.',
   'attn.system': 'المنصة لا تعمل بالكامل',
   'attn.system.detail': 'أحد الأنظمة المطلوبة لا يستجيب.',

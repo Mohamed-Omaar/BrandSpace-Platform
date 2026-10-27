@@ -110,7 +110,7 @@ export {
 } from './pricing';
 export type { AiBillingUnit, CreditRule, MarginAssessment, ModelCostBasis } from './pricing';
 
-export { purgeExpiredOutputs } from './gateway';
+export { measurePlatformSpend, purgeExpiredOutputs } from './gateway';
 export { AiGateway } from './gateway';
 export type {
   AiConfiguration,

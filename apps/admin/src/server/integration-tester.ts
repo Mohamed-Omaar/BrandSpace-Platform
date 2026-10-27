@@ -5,7 +5,7 @@ import {
   DEVELOPMENT_TIMESTAMP_HEADER,
   DevelopmentPaymentProvider,
 } from '@brandspace/billing';
-import { MockProviderAdapter } from '@brandspace/ai-gateway';
+import { aiAdapterDescriptor, aiAdapterRegistry } from '@brandspace/ai-gateway/adapters';
 import {
   OutboxEmailProvider,
   ResendEmailProvider,
@@ -137,23 +137,41 @@ export function integrationTester(options: IntegrationTesterOptions = {}): Integ
         };
       }
 
-      switch (`${input.category}:${input.providerKey}`) {
-        case 'ai:mock': {
-          const adapter = new MockProviderAdapter();
-          const result = await adapter.testConnection({
-            environment: input.environment,
-            // Both from the saved configuration. The deterministic provider
-            // declares neither field, so both are absent today — and the day a
-            // real adapter declares them, this call already carries them.
-            apiKey: credentials['apiKey'] ?? null,
-            baseUrl: input.settings['baseUrl'] ?? 'mock://local',
-            timeoutMs: 5_000,
-            signal: AbortSignal.timeout(5_000),
-            requestId: 'integration-test',
-          });
-          return { ok: result.ok, latencyMs: result.latencyMs, message: result.message };
+      /*
+       * D-573 — EVERY AI PROVIDER IS TESTED THE SAME WAY, through its adapter's
+       * own `testConnection`: a read that generates nothing and costs nothing.
+       * The adapter comes from the package registry by the record's key, so
+       * this file names no vendor and no adapter, and a second provider needs
+       * no change here. The credential is the one the owner saved, resolved
+       * above for this call only; the hosts it may reach are the adapter's
+       * official ones plus the owner's allow-list, exactly as at runtime.
+       */
+      if (input.category === 'ai') {
+        const adapter = aiAdapterRegistry(currentEnvironment()).get(input.providerKey);
+        const descriptor = aiAdapterDescriptor(input.providerKey);
+        if (!adapter || !descriptor) {
+          return {
+            ok: false,
+            latencyMs: 0,
+            message: 'No adapter is available for this AI provider in this deployment.',
+          };
         }
+        const providers = (await getConfigService().get('ai.providers', input.environment)) as {
+          readonly allowedHosts?: readonly string[];
+        };
+        const result = await adapter.testConnection({
+          environment: input.environment,
+          apiKey: credentials['apiKey'] ?? null,
+          baseUrl: input.settings['baseUrl'] ?? descriptor.defaultBaseUrl ?? 'mock://local',
+          timeoutMs: 10_000,
+          signal: AbortSignal.timeout(10_000),
+          requestId: 'integration-test',
+          allowedHosts: providers.allowedHosts ?? [],
+        });
+        return { ok: result.ok, latencyMs: result.latencyMs, message: result.message };
+      }
 
+      switch (`${input.category}:${input.providerKey}`) {
         case 'payment:development-mock': {
           /*
            * THE REGRESSION PATH §9 NAMES. The adapter is constructed from the
