@@ -395,6 +395,37 @@ describe('D-573 · routing and fallback through the real gateway', () => {
   });
 });
 
+describe('D-573 · a provider counting more tokens than estimated', () => {
+  it('succeeds, charges no more than was reserved (the quote), and records the real cost', async () => {
+    platformBudget = undefined;
+    chain = { primary: PROVIDER_MODEL, fallbacks: [], timeoutMs: 5_000 };
+    const workspaceId = await freshWorkspace();
+    const before = await wallet(workspaceId);
+    // An Arabic-heavy prompt can take far more tokens than characters / 4.
+    script = [
+      {
+        status: 200,
+        body: {
+          model: PROVIDER_MODEL,
+          choices: [{ message: { content: CAPTION }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 50_000, completion_tokens: 300 },
+        },
+      },
+    ];
+    const result = await run(request(workspaceId));
+    chain = { primary: PROVIDER_MODEL, fallbacks: [MOCK_MODEL], timeoutMs: 5_000 };
+
+    expect(result.status).toBe('SUCCEEDED');
+    const row = await platform.aiRequest.findUniqueOrThrow({ where: { id: result.requestId } });
+    expect(result.creditsChargedMilli).toBe(row.creditsReservedMilli);
+    const after = await wallet(workspaceId);
+    expect(before.balance - after.balance).toBe(row.creditsReservedMilli);
+    expect(after.reserved).toBe(0n);
+    // 50,000 input at 250,000 and 300 output at 1,000,000 per 1k.
+    expect(result.providerCostMicroMinor).toBe(12_800_000n);
+  });
+});
+
 describe('D-573 · no failure is ever charged', () => {
   const cases: [string, Reply, string][] = [
     ['auth', { status: 401, body: { error: { code: 'invalid_api_key' } } }, 'AUTH_ERROR'],

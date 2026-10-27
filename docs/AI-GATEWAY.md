@@ -955,6 +955,11 @@ insert. A request that would cross a ceiling is refused before the wallet or a p
 `AI_PAUSED` (503) and the owner's words: "AI is paused right now. Please try again later." /
 "الذكاء الاصطناعي متوقف مؤقتًا. حاول مرة أخرى لاحقًا."
 
+**A charge never exceeds the reservation.** The reservation is sized on an estimate of the prompt's
+tokens (characters ÷ 4), and a real provider's count can be higher — Arabic text takes more tokens per
+character than English. The customer is charged at most what was reserved (the price they were quoted);
+the provider cost is recorded as it really was, so the margin report shows the difference.
+
 At 80% and at 100% of each ceiling the owner is told once per period and threshold: an
 `ai.platform_ceiling.threshold_reached` audit event (the de-duplication record), a notice on Control
 Center Home, and the `platform.ai_spend_alert` email to every active platform owner.

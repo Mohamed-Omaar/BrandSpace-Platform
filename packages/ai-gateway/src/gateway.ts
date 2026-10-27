@@ -748,6 +748,7 @@ export class AiGateway {
       multiplier,
       requestId,
       reservationId,
+      reservationEstimate: args.reservationEstimate,
       config,
     });
   }
@@ -775,6 +776,7 @@ export class AiGateway {
     multiplier: number;
     requestId: string;
     reservationId: string;
+    reservationEstimate: bigint;
     config: AiConfiguration;
   }): Promise<AiGatewayResult> {
     const { request, route, chain, multiplier, requestId, reservationId, config } = args;
@@ -890,7 +892,20 @@ export class AiGateway {
 
           const basis = config.costBases.find((b) => b.modelKey === modelKey);
           const cost = basis ? providerCostMicroMinor(usage, basis) : 0n;
-          const charged = creditsChargedMilli(usage, creditRule, multiplier);
+          /*
+           * D-573 — NEVER MORE THAN WAS RESERVED, which is the price quoted.
+           *
+           * The reservation is sized on an estimate of the prompt's tokens
+           * (characters / 4), and a real provider's count can exceed it — Arabic
+           * text takes more tokens per character than English. Settling above
+           * the reservation is refused by the ledger, which would turn a
+           * generation the provider already delivered (and billed) into a
+           * customer error. So the charge is capped at the reservation: the
+           * customer pays at most what they were quoted, and the provider cost
+           * is recorded as it really was.
+           */
+          const metered = creditsChargedMilli(usage, creditRule, multiplier);
+          const charged = metered > args.reservationEstimate ? args.reservationEstimate : metered;
 
           await this.#settle({
             requestId,
