@@ -12,7 +12,11 @@ import {
   type Clock,
   systemClock,
 } from '@brandspace/shared';
-import type { AiGateway, AiGatewayResult } from '@brandspace/ai-gateway';
+import {
+  answerLanguageInstruction,
+  type AiGateway,
+  type AiGatewayResult,
+} from '@brandspace/ai-gateway';
 import { AppError } from '@brandspace/shared';
 import { z } from 'zod';
 import { fenceUntrusted, type Citation } from './retrieval';
@@ -185,6 +189,12 @@ export class BrandBrainChatService {
       readonly areas: Readonly<Partial<Record<BrandKnowledgeArea, readonly KeyQuestion[]>>>;
       readonly offersSets: Readonly<Record<string, readonly KeyQuestion[]>>;
     };
+    /**
+     * D-573 — the language to answer in when the question does not make it
+     * clear: the brand's own (`Brand.defaultLocale`). The answer otherwise
+     * follows the question's language, never fixed to English.
+     */
+    fallbackLocale?: string | null;
   }): Promise<ChatTurn> {
     /*
      * SCOPE FIRST, BEFORE THE REPLAY CHECK.
@@ -308,7 +318,7 @@ export class BrandBrainChatService {
         kind: 'text',
         // The question is the customer's own words: fenced like every other
         // piece of customer text in a prompt.
-        prompt: `${SYSTEM_INSTRUCTION}\n\n${fenceUntrusted('CUSTOMER QUESTION', input.message)}`,
+        prompt: `${SYSTEM_INSTRUCTION} ${answerLanguageInstruction(input.fallbackLocale)}\n\n${fenceUntrusted('CUSTOMER QUESTION', input.message)}`,
         // Retrieved content goes here, NOT into the prompt.
         untrustedContext: [fenceUntrusted('BRAND BRAIN CONTEXT', retrieval.contextText)],
       },

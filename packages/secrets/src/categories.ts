@@ -90,7 +90,7 @@ export function isSecretCategory(value: string): value is SecretCategory {
   return (SECRET_CATEGORIES as readonly string[]).includes(value);
 }
 
-/** `ai/openai/production/api-key` — the shape configuration documents reference. */
+/** `ai/<provider>/production/api-key` — the shape configuration documents reference. */
 export function buildSecretRef(parts: {
   category: SecretCategory;
   provider: string;

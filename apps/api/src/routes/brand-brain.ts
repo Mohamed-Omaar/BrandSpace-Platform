@@ -195,7 +195,7 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
         async (db) =>
           db.brand.findFirst({
             where: { id: parsed.data.brandId, deletedAt: null },
-            select: { id: true },
+            select: { id: true, defaultLocale: true },
           }),
         { prisma: tenantPrisma },
       );
@@ -245,6 +245,8 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
               planKey,
               // D7 — so a question nothing answers names what is missing.
               keyQuestions: policy.questions,
+              // D-573 — answered in the question's language, else the brand's.
+              fallbackLocale: brand.defaultLocale,
             }),
           { prisma: tenantPrisma },
         );

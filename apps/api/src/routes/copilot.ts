@@ -487,7 +487,6 @@ export function registerCopilotRoutes(app: FastifyInstance): void {
               authorization,
               planKey: facts.planKey,
               idempotencyKey: body.idempotencyKey,
-              locale: 'EN',
               expiresAt,
               ...(keyQuestions ? { keyQuestions } : {}),
             });

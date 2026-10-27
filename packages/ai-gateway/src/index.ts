@@ -175,3 +175,10 @@ export type {
   AiUsageExplorerOptions,
   AiUsageRollupRow,
 } from './explorer';
+
+export {
+  answerLanguageInstruction,
+  ENGLISH_INSTRUCTION,
+  FORMAL_ARABIC_INSTRUCTION,
+  languageInstruction,
+} from './prompt-language';

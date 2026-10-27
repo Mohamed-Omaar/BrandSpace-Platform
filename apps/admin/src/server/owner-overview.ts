@@ -34,6 +34,7 @@ import {
   scannerAreaState,
   senderAreaState,
   trialAreaState,
+  withAiKeyRotation,
   withCustomerEffect,
   type LegalDocumentInput,
   type ReadinessArea,
@@ -111,6 +112,19 @@ export async function loadReadiness(actor: Actor): Promise<OwnerReadiness> {
     let required = definition?.requiredInProduction ?? false;
     // PR F (e): AI and social say what their absence means to a customer.
     if (views && (key === 'ai' || key === 'social')) derived = withCustomerEffect(key, derived);
+    // D-573: the AI key and the secret rotation.
+    if (views && key === 'ai' && beta) {
+      derived = withAiKeyRotation(derived, {
+        rotationCompletedAt: beta.secretRotationCompletedAt,
+        realKeysSetAt: views
+          .filter((view) => view.category === 'ai' && !view.developmentOnly)
+          .flatMap((view) =>
+            view.credentials
+              .filter((credential) => credential.present)
+              .map((credential) => credential.lastRotatedAt),
+          ),
+      });
+    }
     // PR F (e), Q6: payments off for the beta is a decision, not a gap.
     if (key === 'payment' && beta && !beta.paymentsEnabled) {
       derived = paymentsOffArea();
@@ -169,14 +183,16 @@ export async function loadReadiness(actor: Actor): Promise<OwnerReadiness> {
 /** The activated settings the beta rows read — values only, never a credential. */
 async function loadBetaConfiguration(environment: ReturnType<typeof currentEnvironment>) {
   const configuration = getConfigService();
-  const [assets, onboarding, publishing, publishingVersion, commerce, email] = await Promise.all([
-    configuration.get('assets', environment),
-    configuration.get('onboarding', environment),
-    configuration.get('publishing', environment),
-    configuration.activeVersionId('publishing', environment),
-    configuration.get('commerce', environment),
-    configuration.get('integrations.email', environment),
-  ]);
+  const [assets, onboarding, publishing, publishingVersion, commerce, email, operations] =
+    await Promise.all([
+      configuration.get('assets', environment),
+      configuration.get('onboarding', environment),
+      configuration.get('publishing', environment),
+      configuration.activeVersionId('publishing', environment),
+      configuration.get('commerce', environment),
+      configuration.get('integrations.email', environment),
+      configuration.get('operations', environment),
+    ]);
   const scanning = (
     assets as { scanning?: { provider?: string; scanii?: { endpoint?: string | null } } }
   ).scanning;
@@ -199,6 +215,9 @@ async function loadBetaConfiguration(environment: ReturnType<typeof currentEnvir
     postKinds: ((publishing as { providers?: Record<string, { postKinds: string[] }> }).providers ??
       {}) as Readonly<Record<string, { readonly postKinds: readonly string[] }>>,
     industries: ((onboarding as { industries?: unknown[] }).industries ?? []).length,
+    secretRotationCompletedAt:
+      (operations as { secretRotation?: { completedAt?: string | null } }).secretRotation
+        ?.completedAt ?? null,
   };
 }
 
