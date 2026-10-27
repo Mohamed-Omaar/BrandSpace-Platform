@@ -95,6 +95,8 @@ export interface ChatLabels {
   readonly retention: string;
   readonly expired: string;
   readonly error: string;
+  /** D-573 — the platform AI ceiling is reached. */
+  readonly paused?: string;
   readonly close: string;
   readonly contextAll: string;
   readonly areaDetails: string;
@@ -341,7 +343,13 @@ export function BrandChat({
         if (!response.ok) {
           // The server answers with a stable code and never an internal message.
           // The screen shows its own copy rather than echoing anything back.
-          setError(labels.error);
+          // D-573: a paused platform says so, in the owner's words.
+          const code = (
+            (await response.json().catch(() => null)) as {
+              error?: { code?: string };
+            } | null
+          )?.error?.code;
+          setError(code === 'AI_PAUSED' && labels.paused ? labels.paused : labels.error);
           return;
         }
 

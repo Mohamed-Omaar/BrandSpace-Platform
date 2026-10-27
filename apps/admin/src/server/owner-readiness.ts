@@ -96,7 +96,15 @@ export type AreaReason =
   | 'post_kinds_default'
   | 'post_kinds_ok'
   | 'industries_missing'
-  | 'industries_ok';
+  | 'industries_ok'
+  /** D-573: the AI key was saved before the recorded secret rotation. */
+  | 'ai_key_before_rotation';
+
+/**
+ * D-573 — sentences a card shows under its reason, in addition to it. Each is
+ * a key; the card translates it.
+ */
+export type ReadinessNote = 'ai_reissue_after_rotation' | 'kek_rewrap_first';
 
 export interface ReadinessArea {
   readonly key: ReadinessAreaKey;
@@ -114,9 +122,11 @@ export interface ReadinessArea {
    * fills them into its sentence; nothing here is translated.
    */
   readonly detail?: Readonly<Record<string, string>>;
+  /** D-573 — extra sentences the card shows under the reason. */
+  readonly notes?: readonly ReadinessNote[];
 }
 
-type Derived = Pick<ReadinessArea, 'state' | 'reason' | 'provider' | 'detail'>;
+type Derived = Pick<ReadinessArea, 'state' | 'reason' | 'provider' | 'detail' | 'notes'>;
 
 /**
  * One integration category's state, from the Hub's own views.
@@ -218,6 +228,45 @@ export function withCustomerEffect(
 ): Derived {
   if (derived.state !== 'setup_required' && derived.state !== 'disabled') return derived;
   return { ...derived, reason: key === 'ai' ? 'ai_hidden' : 'social_hidden' };
+}
+
+/**
+ * D-573 — THE AI KEY AND THE SECRET ROTATION.
+ *
+ * Railway disclosed on 2026-10-21 that environment variables may have leaked,
+ * so the vault key and the database credentials are treated as exposed until
+ * rotated, and an AI key saved before that rotation as exposed with them.
+ *
+ *   - Rotation not recorded (`operations.secretRotation.completedAt` empty):
+ *     the row says, in plain words, that the AI key must be reissued after the
+ *     rotation, and that SECRET_VAULT_KEK must not be changed until the re-wrap
+ *     command exists (changing it first makes every stored secret unreadable).
+ *     The first sentence is shown only when a real provider's key is saved.
+ *   - Rotation recorded, and a real provider's key was set BEFORE it: the row
+ *     needs attention — reissue the key.
+ *   - Otherwise nothing is added.
+ */
+export function withAiKeyRotation(
+  derived: Derived,
+  input: {
+    readonly rotationCompletedAt: string | null;
+    /** When each REAL (not development-only) AI provider's key was last set. */
+    readonly realKeysSetAt: readonly (Date | null)[];
+  },
+): Derived {
+  if (input.rotationCompletedAt === null) {
+    const notes: ReadinessNote[] = [
+      ...(input.realKeysSetAt.length > 0 ? (['ai_reissue_after_rotation'] as const) : []),
+      'kek_rewrap_first',
+    ];
+    return { ...derived, notes };
+  }
+  const rotatedAt = new Date(`${input.rotationCompletedAt}T00:00:00Z`);
+  const stale = input.realKeysSetAt.some(
+    (setAt) => setAt === null || setAt.getTime() < rotatedAt.getTime(),
+  );
+  if (!stale) return derived;
+  return { ...derived, state: 'needs_attention', reason: 'ai_key_before_rotation' };
 }
 
 /** Payments switched off for the beta (Q6): not set up on purpose, not required. */

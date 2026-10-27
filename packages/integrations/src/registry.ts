@@ -210,9 +210,70 @@ export interface IntegrationDefinition {
    * Facebook in `sharesCredentialWith`, so the one secret rotates once.
    */
   readonly sharesCredentialWith?: string;
+  /**
+   * D-573 — AN AI PROVIDER'S OWN HOSTS, the only ones its base URL may name
+   * without the owner adding a host to `ai.providers.allowedHosts`. A copy of
+   * the adapter descriptor's list (`@brandspace/ai-gateway/adapters`), which
+   * this package may not import; `tests/unit/d573-ai-provider-catalogue.test.ts`
+   * fails if the two ever differ.
+   */
+  readonly officialHosts?: readonly string[];
+  /** Values the set-up form starts with, for a field the owner may still change. */
+  readonly defaultSettings?: Readonly<Record<string, string>>;
 }
 
 const DEVELOPMENT_AND_TEST: readonly IntegrationEnvironment[] = ['DEVELOPMENT', 'STAGING'];
+
+/*
+ * D-573 — the first real AI provider. A catalogue entry, not an integration:
+ * the adapter it names lives in `@brandspace/ai-gateway`, and everything the
+ * product does with AI goes through the gateway by capability. Adding another
+ * provider is one adapter and one entry like this.
+ */
+const OPENAI_ENTRY: IntegrationDefinition = {
+  providerKey: 'openai',
+  displayNameEn: 'OpenAI',
+  displayNameAr: 'OpenAI',
+  category: 'ai',
+  supportedEnvironments: INTEGRATION_ENVIRONMENTS,
+  capabilities: { text: true, image: true, moderation: false, embeddings: false, streaming: false },
+  credentialFields: [
+    {
+      key: 'apiKey',
+      labelEn: 'API key',
+      labelAr: 'مفتاح الواجهة',
+      secret: true,
+      required: true,
+      helpEn:
+        'A project-scoped key for this environment only, from a project with a hard monthly spending limit. Entered once and never shown again — only a mask, a fingerprint and the date it was set.',
+      helpAr:
+        'مفتاح خاص بمشروع لهذه البيئة وحدها، من مشروع له حد إنفاق شهري ثابت. يُدخل مرة واحدة ولا يُعرض مجددًا — يظهر القناع والبصمة وتاريخ الضبط فقط.',
+    },
+  ],
+  settingFields: [
+    {
+      key: 'baseUrl',
+      labelEn: 'API address',
+      labelAr: 'عنوان الواجهة',
+      secret: false,
+      required: true,
+      kind: 'url',
+      helpEn:
+        'Leave the provider’s own address unless you have a reason. Another host is accepted only if it is on the AI host allow-list; https only, never a private address.',
+      helpAr:
+        'اترك عنوان المزود نفسه ما لم يكن لديك سبب. لا يُقبل مضيف آخر إلا إن كان في قائمة المضيفين المسموح بهم للذكاء الاصطناعي؛ https فقط، ولا عنوان خاص أبدًا.',
+    },
+  ],
+  adapterAvailable: true,
+  testable: true,
+  developmentOnly: false,
+  officialHosts: ['api.openai.com'],
+  defaultSettings: { baseUrl: 'https://api.openai.com/v1' },
+  noteEn:
+    'Text and images through the AI gateway. Test reads the model list and generates nothing. Set the provider’s data retention to the shortest it offers, and reissue the key after the platform’s secret rotation.',
+  noteAr:
+    'النصوص والصور عبر بوابة الذكاء الاصطناعي. الاختبار يقرأ قائمة النماذج ولا يولّد شيئًا. اضبط مدة احتفاظ المزود بالبيانات على أقصر مدة يتيحها، وأعد إصدار المفتاح بعد تدوير أسرار المنصة.',
+};
 
 /**
  * The providers BrandSpace can actually talk to today.
@@ -223,11 +284,13 @@ const DEVELOPMENT_AND_TEST: readonly IntegrationEnvironment[] = ['DEVELOPMENT', 
  * cashed: two rows below, two adapters, no change to the Hub, the
  * configuration service, the Secret Service or any screen.
  *
- * AI AND PAYMENTS REMAIN DOUBLES. No vendor has been chosen for either. SOCIAL
+ * AI HAS ITS FIRST REAL PROVIDER (D-573, `OPENAI_ENTRY` above); PAYMENTS
+ * REMAIN A DOUBLE, with no vendor chosen. SOCIAL
  * has Meta (Facebook Pages and Instagram) since connectors step B (D-533),
  * beside the development double; TikTok follows in step C.
  */
 export const INTEGRATION_DEFINITIONS: readonly IntegrationDefinition[] = [
+  OPENAI_ENTRY,
   {
     providerKey: 'mock',
     displayNameEn: 'Deterministic AI (development)',

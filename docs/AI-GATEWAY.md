@@ -896,3 +896,94 @@ An override a ranking could outvote would not be one.
 `ai_usage_ledger` stores the cost basis the request was charged under. The catalogue's
 `pricingEffectiveFrom` is the OPERATOR-FACING record of when the current rates were entered — a date a
 margin report that moves can point at — and is deliberately not an input to any calculation (D-213).
+
+## 18. D-573 — the platform's own provider
+
+The first real provider runs on the generic gateway; nothing about it is special-cased outside its
+adapter. Staging first; production AI stays off until the owner turns it on.
+
+### 18.1 One adapter, one registry, one gateway per process
+
+| Piece               | Where                                          | What it does                                                                                                             |
+| ------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| The adapter         | `packages/ai-gateway/src/adapters/openai.ts`   | The ONLY file that names the vendor or holds its HTTP client. Text and image; `classifyError`; `testConnection` (a read) |
+| The registry        | `packages/ai-gateway/src/adapters/registry.ts` | Every real adapter, always; the development double only outside production (D-215)                                       |
+| The egress guard    | `packages/ai-gateway/src/egress.ts`            | The only way an adapter reaches the network (§18.4)                                                                      |
+| The gateway         | `apps/api/src/ai-gateway-factory.ts`           | `platformAiGateway()`: every route, the scheduler and the automation executor share it                                   |
+| The catalogue entry | `packages/integrations/src/registry.ts`        | What the Control Center shows and saves; pinned to the adapter descriptor by a unit test                                 |
+
+A provider record names the adapter that serves it (`ai.providers[].adapter`, defaulting to its own
+key). The gateway calls a provider only when it is `active`, through that adapter. Adding a provider is
+one adapter file, one registry line and one catalogue entry.
+
+**The adapter contract is unchanged** except two optional fields: `AdapterContext.allowedHosts` (the
+owner's allow-list, so the adapter refuses any other host before connecting) and
+`TextRequest.outputFormat` (`'json'` for the tasks in `JSON_OUTPUT_TASKS` and any capability that
+requires structured output).
+
+One attempt is capped at the provider's own `timeoutMs`, inside the route's single deadline, so a slow
+provider leaves time for the next model in the chain.
+
+`maxConcurrency` on a provider record is recorded but **not enforced** by the gateway. Concurrency is
+enforced per workspace (`ai.budgets`, `maxConcurrentRequests`) and by the provider's own rate limits,
+which the gateway classifies as `RATE_LIMITED`.
+
+### 18.2 Credentials
+
+Control Center → Secret Service (vault, `apiKeySecretRef`) → gateway → adapter. The key is resolved
+**per attempt** (`vaultCredentials` in the factory) and lives in memory for that one call. A reference
+with nothing stored behind it resolves to no key (the provider then refuses with an auth error); a key
+that cannot be used (disabled, expired, undecryptable) is an `AUTH_ERROR` whose text names no reference
+and no value. The key never appears in configuration, `.env`, a plain-text row, a log, a span, an error,
+an API response or frontend code; `tests/isolation/d573-ai-provider.test.ts` plants a canary key and
+looks for it in each.
+
+### 18.3 The platform ceiling
+
+`ai.budgets.platform` holds a daily and a monthly ceiling in **provider cost** (micro-minor units of
+`currency`; every model must be priced in that currency, and validation refuses one that is not —
+there is no conversion). The sum for a UTC period is:
+
+- the actual `providerCostMicroMinor` of every SUCCEEDED request, plus
+- the `providerCostEstimateMicroMinor` of every PENDING, RESERVED or RUNNING request;
+- FAILED, TIMEOUT, MODERATION_BLOCKED and CANCELLED requests, and any request on the customer's own
+  key, count zero. A refused request writes no row.
+
+The estimate is the dearest model in the chain at worst-case usage, the same sizing the credit
+reservation uses. Admission is one transaction under a platform-wide advisory lock: measure, decide,
+insert. A request that would cross a ceiling is refused before the wallet or a provider is touched, with
+`AI_PAUSED` (503) and the owner's words: "AI is paused right now. Please try again later." /
+"الذكاء الاصطناعي متوقف مؤقتًا. حاول مرة أخرى لاحقًا."
+
+**A charge never exceeds the reservation.** The reservation is sized on an estimate of the prompt's
+tokens (characters ÷ 4), and a real provider's count can be higher — Arabic text takes more tokens per
+character than English. The customer is charged at most what was reserved (the price they were quoted);
+the provider cost is recorded as it really was, so the margin report shows the difference.
+
+At 80% and at 100% of each ceiling the owner is told once per period and threshold: an
+`ai.platform_ceiling.threshold_reached` audit event (the de-duplication record), a notice on Control
+Center Home, and the `platform.ai_spend_alert` email to every active platform owner.
+
+### 18.4 Egress
+
+A provider's `baseUrl` must be https on 443, with no credentials, no IP literal and no private name
+(validation and the Hub refuse it). Its host must be the adapter's official one or on
+`ai.providers.allowedHosts`, which only the owner edits. On every connection the host is resolved once
+inside the socket's own lookup; every answer must be a public address (never loopback, private,
+link-local where the cloud metadata service lives, carrier-grade NAT, multicast or documentation
+ranges), and the socket connects to exactly the address that was checked, so there is no DNS-rebinding
+window between check and connect. Redirects are refused. Responses are capped at 40 MB.
+
+### 18.5 Language
+
+Every text task carries one shared instruction (`packages/shared/src/prompt-language.ts`): correct
+formal Arabic, no dialect, Latin digits (D-474). Brand Brain chat answers in the language of the
+question, else the brand's; the Copilot writes both summaries and the Arabic one in formal Arabic.
+
+### 18.6 What CI proves
+
+CI never calls a provider. A local server answers with recorded response shapes through the production
+transport. Covered: routing and fallback (mock and adapter), every failure class, no charge on failure,
+timeout or filter, idempotent replay, both ceilings and the sum rule (including concurrent admission
+against PostgreSQL), the currency rule, the egress rules, the leak check, and that no customer response
+carries a provider cost.

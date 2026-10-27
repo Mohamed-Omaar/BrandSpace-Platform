@@ -4,10 +4,8 @@ import {
   chatMessageSchema,
   resolveBrandBrainPolicy,
 } from '@brandspace/brand-brain';
-import { AiGateway, MockProviderAdapter, type AiProviderAdapter } from '@brandspace/ai-gateway';
+import type { AiGateway } from '@brandspace/ai-gateway';
 import { ConfigurationService } from '@brandspace/config';
-import { CreditLedgerService } from '@brandspace/entitlements';
-import { ConfigurationAiSource } from '@brandspace/ai-gateway';
 import { CUSTOMER_REALM, CustomerAuthService } from '@brandspace/auth';
 import { getPrisma, withWorkspace } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
@@ -19,6 +17,7 @@ import {
   internalErrorFields,
   isAppError,
 } from '@brandspace/shared';
+import { platformAiGateway } from '../ai-gateway-factory';
 import { route } from '../route-contract';
 
 /**
@@ -59,7 +58,6 @@ interface GatewayDeps {
   readonly gateway: AiGateway;
 }
 
-let cachedGateway: GatewayDeps | null = null;
 let cachedConfiguration: ConfigurationService | null = null;
 
 /**
@@ -76,60 +74,12 @@ function configurationService(): ConfigurationService {
 }
 
 /**
- * Build the gateway once per process.
- *
- * The MOCK adapter is the only one registered: D-13 approved the provider
- * architecture and deferred vendor selection, so registering a real one here
- * would be the decision D-13 explicitly withheld. Everything else about the
- * call is real — routing, reservation, settlement, budgets, idempotency and the
- * ledger row.
- *
- * OUTSIDE PRODUCTION the mock answers from the retrieved material rather than
- * from its placeholder vocabulary. Without it, a developer or an end-to-end run
- * sees "[mock:mock-fast] placeholder sample draft" on the chat panel, which
- * proves nothing about whether retrieval, grounding, citation and the refusal
- * path work, and puts a model key on a customer-shaped screen. The flag SELECTS
- * from the workspace's own approved knowledge; it invents nothing, and it is
- * off in production, where a mock answer should look unmistakably like one.
+ * The process's one AI gateway — D-573, `../ai-gateway-factory.ts`. Outside
+ * production its development double still answers from the retrieved
+ * material (`answerFromContext`), as this route's own gateway did.
  */
 function gatewayDeps(): GatewayDeps {
-  if (cachedGateway) return cachedGateway;
-
-  const platform = getPlatformClient();
-  const environment = currentEnvironment();
-  const adapters = new Map<string, AiProviderAdapter>([
-    /*
-     * PHASE 10 §11 — NO ADAPTER AT ALL IN PRODUCTION, rather than a mock with
-     * its context-answering turned off.
-     *
-     * With no adapter registered, routing still resolves and the pipeline still
-     * reserves, but the chain finds nothing to call and the request fails with
-     * MODEL_UNAVAILABLE — which releases the reservation, charges nothing, and
-     * shows the customer "this is temporarily unavailable". That is the honest
-     * outcome when no AI provider has been configured. Serving invented text
-     * that looks like a model wrote it is the outcome this replaces.
-     *
-     * `MockProviderAdapter` also refuses to be constructed in production, so
-     * this is the second of two locks rather than the only one.
-     */
-    ...(environment === 'PRODUCTION'
-      ? []
-      : ([['mock', new MockProviderAdapter({ answerFromContext: true })]] as const)),
-  ]);
-
-  cachedGateway = {
-    gateway: new AiGateway({
-      prisma: platform,
-      ledger: new CreditLedgerService({ prisma: platform }),
-      adapters,
-      configuration: new ConfigurationAiSource(configurationService(), environment),
-      // The mock needs no credential, and nothing here can resolve one: the
-      // Secret Service decrypt path is not imported by this route at all.
-      credentials: { resolve: async () => null },
-      environment,
-    }),
-  };
-  return cachedGateway;
+  return { gateway: platformAiGateway() };
 }
 
 /** The session token, from the cookie the dashboard sets or an explicit header. */
@@ -245,7 +195,7 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
         async (db) =>
           db.brand.findFirst({
             where: { id: parsed.data.brandId, deletedAt: null },
-            select: { id: true },
+            select: { id: true, defaultLocale: true },
           }),
         { prisma: tenantPrisma },
       );
@@ -295,6 +245,8 @@ export function registerBrandBrainRoutes(app: FastifyInstance): void {
               planKey,
               // D7 — so a question nothing answers names what is missing.
               keyQuestions: policy.questions,
+              // D-573 — answered in the question's language, else the brand's.
+              fallbackLocale: brand.defaultLocale,
             }),
           { prisma: tenantPrisma },
         );

@@ -60,7 +60,7 @@ describe('B1.0 + Option B — when a post goes out', () => {
   });
 
   it('comes directly after PR 6, and directly before PR E (then connectors A and B, then the AI apps migrations)', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-9)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-10)).toEqual([
       '20261015092000_automation_run_execution_due_index',
       NAME,
       '20261020090000_group_b_fields',
@@ -73,6 +73,8 @@ describe('B1.0 + Option B — when a post goes out', () => {
       '20261023090000_ai_app_connections',
       // D-568: the rotation link made composite on the workspace (D-112).
       '20261023091000_ai_app_token_replaced_scoped',
+      // D-573: the platform AI ceiling's in-flight estimate.
+      '20261027100000_ai_platform_spend_ceiling',
     ]);
   });
 });

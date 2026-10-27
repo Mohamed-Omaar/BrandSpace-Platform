@@ -63,6 +63,8 @@ export interface CreativeStudioLabels {
   readonly scanning: string;
   readonly failed: string;
   readonly insufficientCredits: string;
+  /** D-573 — the platform AI ceiling is reached. */
+  readonly aiPaused?: string;
   /** The prototype's purple line, the brand named: "Uses … from Brand Brain." */
   readonly usesBrand?: string;
 }
@@ -71,6 +73,7 @@ export interface CreativeStudioLabels {
 const FAILURE_KEYS: Readonly<Record<string, keyof CreativeStudioLabels>> = {
   INSUFFICIENT_CREDITS: 'insufficientCredits',
   QUOTA_EXCEEDED: 'insufficientCredits',
+  AI_PAUSED: 'aiPaused',
 };
 
 export function CreativeStudioView({

@@ -18,6 +18,10 @@ export const ERROR_CODES = [
   // there is no postpaid overage, so the only paths forward are a top-up or a
   // plan change, and the customer must be told which.
   'INSUFFICIENT_CREDITS',
+  // D-573. The platform-wide AI spending ceiling is reached: AI is paused for
+  // everyone until the period rolls or the owner raises it. Not the
+  // customer's wall, so it never names a plan, a limit or a price.
+  'AI_PAUSED',
   'TENANT_CONTEXT_MISSING',
   'TENANT_SCOPE_VIOLATION',
   'INTERNAL',
@@ -35,6 +39,7 @@ const HTTP_STATUS: Record<ErrorCode, number> = {
   ENTITLEMENT_REQUIRED: 402,
   QUOTA_EXCEEDED: 402,
   INSUFFICIENT_CREDITS: 402,
+  AI_PAUSED: 503,
   TENANT_CONTEXT_MISSING: 500,
   TENANT_SCOPE_VIOLATION: 500,
   INTERNAL: 500,

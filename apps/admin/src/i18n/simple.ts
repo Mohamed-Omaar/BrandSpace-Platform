@@ -140,6 +140,12 @@ const en = {
   'area.industries.about': 'The industries offered during sign-up and setup.',
   'state.beta_only': 'Beta only',
   'reason.ai_hidden': 'Not configured. AI controls are hidden from customers.',
+  // D-573 — the AI key and the secret rotation.
+  'reason.ai_key_before_rotation':
+    'The AI key was saved before the secret rotation. Reissue it at the provider and save the new key.',
+  'note.ai_reissue_after_rotation':
+    'Reissue the AI key after the platform’s secret rotation: a key saved before it is treated as exposed.',
+  'note.kek_rewrap_first': 'Do not change SECRET_VAULT_KEK until the re-wrap command exists.',
   'reason.social_hidden': 'Not configured. Scheduling is hidden from customers.',
   'reason.payments_off': 'Off for the beta. Not counted as required while off.',
   'reason.scanning_off':
@@ -199,6 +205,15 @@ const en = {
   'attn.pending.detail':
     'A saved change is waiting to be checked and activated. Nothing changes for customers until it is.',
   'attn.stuckAi': '{count} AI request(s) never finished',
+  // D-573 — the platform AI spending ceiling.
+  'attn.aiCeiling': 'AI spending has reached 80% of the {period} platform ceiling',
+  'attn.aiCeiling.detail':
+    'At 100% AI pauses for every customer until the period ends. Raise the ceiling in AI spending limits if this is expected.',
+  'attn.aiCeilingPaused': 'AI is paused: the {period} platform ceiling is reached',
+  'attn.aiCeilingPaused.detail':
+    'Customers see “AI is paused right now. Please try again later.” until the period ends or you raise the ceiling.',
+  'attn.aiCeiling.day': 'daily',
+  'attn.aiCeiling.month': 'monthly',
   'attn.stuckAi.detail':
     'Their reserved credits are being held. The technical view has each request.',
   'attn.system': 'The platform is not fully operational',
@@ -811,6 +826,12 @@ const ar: Copy = {
   'area.industries.about': 'المجالات المعروضة أثناء التسجيل والإعداد.',
   'state.beta_only': 'للفترة التجريبية فقط',
   'reason.ai_hidden': 'غير مُعدّ. أدوات الذكاء الاصطناعي مخفية عن العملاء.',
+  // D-573 — مفتاح الذكاء الاصطناعي وتدوير الأسرار.
+  'reason.ai_key_before_rotation':
+    'حُفظ مفتاح الذكاء الاصطناعي قبل تدوير الأسرار. أعد إصداره لدى المزود واحفظ المفتاح الجديد.',
+  'note.ai_reissue_after_rotation':
+    'أعد إصدار مفتاح الذكاء الاصطناعي بعد تدوير أسرار المنصة: المفتاح المحفوظ قبله يُعدّ مكشوفًا.',
+  'note.kek_rewrap_first': 'لا تغيّر SECRET_VAULT_KEK قبل أن يتوفر أمر إعادة التغليف.',
   'reason.social_hidden': 'غير مُعدّ. الجدولة مخفية عن العملاء.',
   'reason.payments_off': 'متوقفة خلال الفترة التجريبية، ولا تُحسب مطلوبة ما دامت متوقفة.',
   'reason.scanning_off':
@@ -868,6 +889,15 @@ const ar: Copy = {
   'attn.pending': 'تغيير غير مكتمل: {what}',
   'attn.pending.detail': 'يوجد تغيير محفوظ بانتظار الفحص والتفعيل. لا يتغيّر شيء للعملاء قبل ذلك.',
   'attn.stuckAi': '{count} من طلبات الذكاء الاصطناعي لم تكتمل',
+  // D-573 — حد إنفاق الذكاء الاصطناعي على مستوى المنصة.
+  'attn.aiCeiling': 'بلغ إنفاق الذكاء الاصطناعي 80% من الحد {period} للمنصة',
+  'attn.aiCeiling.detail':
+    'عند 100% يتوقف الذكاء الاصطناعي لجميع العملاء حتى تنتهي المدة. ارفع الحد في حدود إنفاق الذكاء الاصطناعي إن كان هذا متوقعًا.',
+  'attn.aiCeilingPaused': 'الذكاء الاصطناعي متوقف: بلغ الإنفاق الحد {period} للمنصة',
+  'attn.aiCeilingPaused.detail':
+    'يرى العملاء «الذكاء الاصطناعي متوقف مؤقتًا. حاول مرة أخرى لاحقًا.» حتى تنتهي المدة أو ترفع الحد.',
+  'attn.aiCeiling.day': 'اليومي',
+  'attn.aiCeiling.month': 'الشهري',
   'attn.stuckAi.detail': 'رصيدها المحجوز ما زال معلّقًا. العرض التقني يعرض كل طلب.',
   'attn.system': 'المنصة لا تعمل بالكامل',
   'attn.system.detail': 'أحد الأنظمة المطلوبة لا يستجيب.',

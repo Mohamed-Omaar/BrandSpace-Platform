@@ -2,7 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { ConfigurationAiSource, aiAvailability } from '@brandspace/ai-gateway';
 import { ConfigurationService } from '@brandspace/config';
 import { getPlatformClient } from '@brandspace/database/platform';
-import { integrationsInCategory } from '@brandspace/integrations';
+import {
+  DEVELOPMENT_ONLY_AI_ADAPTERS,
+  registeredAiAdapterKeys,
+} from '@brandspace/ai-gateway/adapters';
 import { route } from '../route-contract';
 import { currentEnvironment, resolveCaller, workspaceFacts } from './phase7-context';
 
@@ -27,16 +30,17 @@ import { currentEnvironment, resolveCaller, workspaceFacts } from './phase7-cont
  *     Control Center turns the controls on with no release.
  */
 
-/** The adapters this process registers — the rule the gateways in `content.ts` and the other routes follow. */
+/**
+ * The adapters this process registers — D-573: the package registry's own
+ * answer, the same one `platformAiGateway()` is built from. Every real adapter;
+ * the development double only outside production.
+ */
 export function registeredAdapters(production: boolean): ReadonlySet<string> {
-  return new Set(production ? [] : ['mock']);
+  return registeredAiAdapterKeys(production);
 }
 
-export const DEVELOPMENT_ONLY_AI: ReadonlySet<string> = new Set(
-  integrationsInCategory('ai')
-    .filter((definition) => definition.developmentOnly)
-    .map((definition) => definition.providerKey),
-);
+/** The adapter keys that are development doubles, from the registry's descriptors. */
+export const DEVELOPMENT_ONLY_AI: ReadonlySet<string> = DEVELOPMENT_ONLY_AI_ADAPTERS;
 
 export function registerAiAvailabilityRoutes(app: FastifyInstance): void {
   route(

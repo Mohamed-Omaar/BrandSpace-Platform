@@ -823,8 +823,13 @@ export class IntegrationsService {
   ): IntegrationView {
     const key = `${definition.category}:${definition.providerKey}`;
     const entry = configured.get(key);
+    // D-573: a provider never saved starts from its declared defaults (an AI
+    // provider's own API address), which the owner may still change.
     const settings = Object.fromEntries(
-      Object.entries(entry?.record.settings ?? {}).map(([k, v]) => [k, String(v)]),
+      Object.entries(entry?.record.settings ?? definition.defaultSettings ?? {}).map(([k, v]) => [
+        k,
+        String(v),
+      ]),
     );
 
     const credentials: CredentialStatus[] = definition.credentialFields.map((field) => {

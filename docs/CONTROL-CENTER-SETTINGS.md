@@ -150,12 +150,17 @@ Production ships **no** features or flags; they are added in Advanced. Each one 
 
 ## AI — `ai.*` (Simple: **AI**)
 
-| Setting                                                                   | What it does                                  | Simple before | Simple now                                                       | Owner? |
-| ------------------------------------------------------------------------- | --------------------------------------------- | ------------- | ---------------------------------------------------------------- | ------ |
-| `ai.capability-routing.activeProfile`                                     | Economy / Balanced / Premium.                 | edit          | edit; the page says "not available yet" until a provider is live | safe   |
-| `ai.providers`, `ai.models`, `ai.routing`, `ai.capability-routing.routes` | Which provider and model does what.           | shown         | shown                                                            | risky  |
-| `ai.credit-rules`                                                         | Credits per AI action and the margin targets. | —             | —                                                                | risky  |
-| `ai.budgets`                                                              | Spending ceilings per plan.                   | —             | —                                                                | risky  |
+| Setting                                                                   | What it does                                                                                          | Simple before | Simple now                                                       | Owner? |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------- | ---------------------------------------------------------------- | ------ |
+| `ai.capability-routing.activeProfile`                                     | Economy / Balanced / Premium.                                                                         | edit          | edit; the page says "not available yet" until a provider is live | safe   |
+| `ai.providers`, `ai.models`, `ai.routing`, `ai.capability-routing.routes` | Which provider and model does what.                                                                   | shown         | shown                                                            | risky  |
+| `ai.credit-rules`                                                         | Credits per AI action and the margin targets.                                                         | —             | —                                                                | risky  |
+| `ai.budgets`                                                              | Spending ceilings per plan.                                                                           | —             | —                                                                | risky  |
+| `ai.providers[].adapter` (D-573)                                          | Which adapter serves a provider record.                                                               | —             | shown (Providers); the Hub writes it when a provider is saved    | risky  |
+| `ai.providers.allowedHosts` (D-573)                                       | Hosts an AI provider may use besides its own.                                                         | —             | shown (Providers); edited in Advanced                            | risky  |
+| `ai.providers[].maxConcurrency`                                           | Recorded only: **not enforced** (D-573).                                                              | —             | shown, with "recorded but not enforced" on Providers             | risky  |
+| `ai.budgets.platform` (D-573)                                             | Platform-wide daily and monthly AI provider-cost ceiling; AI pauses for every customer past it.       | —             | edited in Advanced; Home warns at 80% and 100%                   | risky  |
+| `operations.secretRotation.completedAt` (D-573)                           | The day the platform's secrets were rotated; readiness asks for the AI key to be reissued until then. | —             | edited in Advanced; read by Home → Is Brandspace ready           | risky  |
 
 ## AI apps — `ai-apps`, `feature.ai_apps` (Simple: **AI apps**, D-566)
 
@@ -198,7 +203,7 @@ database that ran it shows those numbers, never staging or production.
 | `website`                                                              | Public site name, locale, announcement, pages.                                 | —             | safe (not yet in Simple) |
 | `operations`                                                           | Maintenance mode, support-mode time limit, currencies, trial default.          | —             | risky                    |
 | `commerce`                                                             | Payments, currencies, markets, tax, credit packs, checkout, dunning, invoices. | —             | risky                    |
-| `ai.credit-rules`, `ai.budgets`                                        | Credit costs and AI budgets.                                                   | —             | risky                    |
+| `ai.credit-rules`, `ai.budgets`                                        | Credit costs and AI budgets, including the platform ceiling (D-573).           | —             | risky                    |
 
 ## Who may change what
 

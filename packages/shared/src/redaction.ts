@@ -8,11 +8,14 @@
 
 /** Field names whose values are always replaced, regardless of content. */
 const SENSITIVE_KEY_PATTERN =
-  /(password|passwd|secret|token|apikey|api_key|authorization|auth|credential|privatekey|private_key|clientsecret|client_secret|refreshtoken|refresh_token|accesstoken|access_token|sessionid|session_id|cookie|mfa|totp|otp|signature|salt|hash|code_verifier|codeverifier)/i;
+  /(password|passwd|secret|token|api[-_]?key|authorization|auth|credential|privatekey|private_key|clientsecret|client_secret|refreshtoken|refresh_token|accesstoken|access_token|sessionid|session_id|cookie|mfa|totp|otp|signature|salt|hash|code_verifier|codeverifier)/i;
 
 /** Value shapes that look like credentials even under an innocuous key name. */
 const SENSITIVE_VALUE_PATTERNS: readonly RegExp[] = [
   /\bsk-[A-Za-z0-9_-]{16,}\b/g, // provider-style API keys
+  // D-573 — Google-style API keys (`AIza…`), for the AI providers that follow
+  // the first one. The key-name rule above now also catches `x-api-key`.
+  /\bAIza[0-9A-Za-z_-]{30,}/g,
   /\bAKIA[0-9A-Z]{16}\b/g, // AWS access key id
   /\bghp_[A-Za-z0-9]{20,}\b/g, // GitHub token
   /\bBearer\s+[A-Za-z0-9._~+/-]{16,}=*/gi, // bearer tokens

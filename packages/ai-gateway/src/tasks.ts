@@ -178,6 +178,25 @@ export function capabilityForTask(taskKey: string): AiCapabilityKey | undefined 
   return BY_KEY.get(taskKey)?.capability;
 }
 
+/**
+ * D-573 — THE TEXT TASKS WHOSE CALLER PARSES THE ANSWER AS JSON.
+ *
+ * Every text task the product calls today expects a JSON object back (the
+ * Studio's variants, the Copilot's plan, the strategy and insights schemas,
+ * the three draft ideas). The gateway tells the adapter so, and a real model
+ * is asked for its JSON mode; a capability that REQUIRES structured output
+ * (REASONING_COMPLEX) is JSON whatever this list says. `content.translate`
+ * returns plain text and is not here.
+ */
+export const JSON_OUTPUT_TASKS: ReadonlySet<string> = new Set([
+  'caption.generate',
+  'ideas.generate',
+  'plan.monthly',
+  'strategy.generate',
+  'analytics.explain',
+  'copilot.chat',
+]);
+
 /** Which product tasks actually request a capability. Empty is legitimate. */
 export function tasksForCapability(capability: string): readonly AiTaskDefinition[] {
   return AI_TASKS.filter((task) => task.capability === capability);

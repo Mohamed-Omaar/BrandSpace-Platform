@@ -2,6 +2,9 @@ import { CONFIG_DOMAIN_KEYS, type ConfigDomain } from '@brandspace/config';
 import {
   AI_CAPABILITIES,
   ConfigurationAiSource,
+  measurePlatformSpend,
+  platformPeriodStarts,
+  platformThresholdsReached,
   REQUESTED_AI_CAPABILITIES,
   RoutingError,
   resolveRoute,
@@ -31,6 +34,7 @@ import {
   scannerAreaState,
   senderAreaState,
   trialAreaState,
+  withAiKeyRotation,
   withCustomerEffect,
   type LegalDocumentInput,
   type ReadinessArea,
@@ -108,6 +112,19 @@ export async function loadReadiness(actor: Actor): Promise<OwnerReadiness> {
     let required = definition?.requiredInProduction ?? false;
     // PR F (e): AI and social say what their absence means to a customer.
     if (views && (key === 'ai' || key === 'social')) derived = withCustomerEffect(key, derived);
+    // D-573: the AI key and the secret rotation.
+    if (views && key === 'ai' && beta) {
+      derived = withAiKeyRotation(derived, {
+        rotationCompletedAt: beta.secretRotationCompletedAt,
+        realKeysSetAt: views
+          .filter((view) => view.category === 'ai' && !view.developmentOnly)
+          .flatMap((view) =>
+            view.credentials
+              .filter((credential) => credential.present)
+              .map((credential) => credential.lastRotatedAt),
+          ),
+      });
+    }
     // PR F (e), Q6: payments off for the beta is a decision, not a gap.
     if (key === 'payment' && beta && !beta.paymentsEnabled) {
       derived = paymentsOffArea();
@@ -166,14 +183,16 @@ export async function loadReadiness(actor: Actor): Promise<OwnerReadiness> {
 /** The activated settings the beta rows read — values only, never a credential. */
 async function loadBetaConfiguration(environment: ReturnType<typeof currentEnvironment>) {
   const configuration = getConfigService();
-  const [assets, onboarding, publishing, publishingVersion, commerce, email] = await Promise.all([
-    configuration.get('assets', environment),
-    configuration.get('onboarding', environment),
-    configuration.get('publishing', environment),
-    configuration.activeVersionId('publishing', environment),
-    configuration.get('commerce', environment),
-    configuration.get('integrations.email', environment),
-  ]);
+  const [assets, onboarding, publishing, publishingVersion, commerce, email, operations] =
+    await Promise.all([
+      configuration.get('assets', environment),
+      configuration.get('onboarding', environment),
+      configuration.get('publishing', environment),
+      configuration.activeVersionId('publishing', environment),
+      configuration.get('commerce', environment),
+      configuration.get('integrations.email', environment),
+      configuration.get('operations', environment),
+    ]);
   const scanning = (
     assets as { scanning?: { provider?: string; scanii?: { endpoint?: string | null } } }
   ).scanning;
@@ -196,6 +215,9 @@ async function loadBetaConfiguration(environment: ReturnType<typeof currentEnvir
     postKinds: ((publishing as { providers?: Record<string, { postKinds: string[] }> }).providers ??
       {}) as Readonly<Record<string, { readonly postKinds: readonly string[] }>>,
     industries: ((onboarding as { industries?: unknown[] }).industries ?? []).length,
+    secretRotationCompletedAt:
+      (operations as { secretRotation?: { completedAt?: string | null } }).secretRotation
+        ?.completedAt ?? null,
   };
 }
 
@@ -369,6 +391,14 @@ export interface AiSummary {
   readonly usage: { readonly creditsMilli: bigint; readonly entries: number } | null;
   /** Requests past their deadline and never finished — the explorer's figure. */
   readonly stuckRequests: number | null;
+  /**
+   * D-573 — the highest platform-ceiling alert level reached right now (80 or
+   * 100), with its period, or null below 80% or with no ceiling set.
+   */
+  readonly platformCeiling: {
+    readonly period: 'day' | 'month';
+    readonly percent: 80 | 100;
+  } | null;
 }
 
 export async function loadAiSummary(
@@ -393,7 +423,40 @@ export async function loadAiSummary(
     };
     stuckRequests = leaks;
   }
-  return { profile: routing.activeProfile, usage, stuckRequests };
+  return {
+    profile: routing.activeProfile,
+    usage,
+    stuckRequests,
+    platformCeiling: await loadPlatformCeiling(clock),
+  };
+}
+
+/**
+ * D-573 — where the platform's AI spend stands against `ai.budgets.platform`,
+ * by the same sum the gateway admits against. 100% means AI is paused for
+ * every customer. A month alert outranks a day alert at the same level,
+ * because it lasts longer.
+ */
+async function loadPlatformCeiling(clock: Clock): Promise<AiSummary['platformCeiling']> {
+  const budgets = await getConfigService().get('ai.budgets', currentEnvironment());
+  const limits = budgets.platform;
+  if (
+    limits.providerCostPerDayMicroMinor === null &&
+    limits.providerCostPerMonthMicroMinor === null
+  ) {
+    return null;
+  }
+  const now = clock.now();
+  const spend = await measurePlatformSpend(getPlatformPrisma(), now);
+  const crossings = platformThresholdsReached(limits, spend, platformPeriodStarts(now));
+  let best: AiSummary['platformCeiling'] = null;
+  for (const crossing of crossings) {
+    const rank = (c: { percent: number; period: string }) =>
+      c.percent * 2 + (c.period === 'month' ? 1 : 0);
+    const candidate = { period: crossing.period, percent: crossing.thresholdPercent };
+    if (best === null || rank(candidate) > rank(best)) best = candidate;
+  }
+  return best;
 }
 
 /**

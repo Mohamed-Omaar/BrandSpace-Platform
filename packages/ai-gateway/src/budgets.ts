@@ -169,3 +169,142 @@ export function withinRequestCostCap(
   if (maxCostPerRequestMinor === null) return true;
   return worstCaseCostMicroMinor <= BigInt(maxCostPerRequestMinor) * 1_000_000n;
 }
+
+/*
+ * D-573 — THE PLATFORM-WIDE CEILING.
+ *
+ * The workspace budgets above protect one customer's credits. This one protects
+ * the platform's own money: what the AI providers will invoice, across every
+ * workspace, per UTC day and per UTC month. It is in PROVIDER cost (micro-minor
+ * units of `ai.budgets.platform.currency`, which validation pins to every
+ * model's `costCurrency`), never in credits, because a provider's invoice does
+ * not know what a credit is.
+ *
+ * THE SUM, for one period, is:
+ *
+ *   the actual provider cost of every SUCCEEDED request
+ *   + the provider cost ESTIMATE of every request still in flight
+ *     (PENDING, RESERVED, RUNNING)
+ *
+ * and a released, failed, refused or filtered request counts ZERO: it was never
+ * charged to the customer, and an attempt the provider refused before doing work
+ * is not on the invoice either. In-flight requests count at their estimate so
+ * that twenty requests admitted at once cannot each see the same headroom.
+ */
+
+/** The active `ai.budgets.platform` payload. `null` means no ceiling. */
+export interface PlatformBudgetLimits {
+  readonly providerCostPerDayMicroMinor: number | null;
+  readonly providerCostPerMonthMicroMinor: number | null;
+  readonly currency: string;
+}
+
+/** The platform's spend so far, measured by the gateway (see the sum above). */
+export interface PlatformSpend {
+  readonly todayMicroMinor: bigint;
+  readonly thisMonthMicroMinor: bigint;
+}
+
+export type PlatformPeriod = 'day' | 'month';
+
+export interface PlatformBudgetDecision {
+  readonly allowed: boolean;
+  /** The period whose ceiling the request would break, when refused. */
+  readonly breached: PlatformPeriod | null;
+}
+
+/** The share of a ceiling at which the owner is told, in percent, lowest first. */
+export const PLATFORM_ALERT_THRESHOLDS = [80, 100] as const;
+export type PlatformAlertThreshold = (typeof PLATFORM_ALERT_THRESHOLDS)[number];
+
+/**
+ * Would admitting a request with this worst-case provider cost take the
+ * platform past a ceiling? A request that would land exactly ON the ceiling is
+ * admitted; one that would cross it is not.
+ */
+export function assessPlatformBudget(
+  limits: PlatformBudgetLimits,
+  spend: PlatformSpend,
+  estimateMicroMinor: bigint,
+): PlatformBudgetDecision {
+  const day = limits.providerCostPerDayMicroMinor;
+  if (day !== null && spend.todayMicroMinor + estimateMicroMinor > BigInt(day)) {
+    return { allowed: false, breached: 'day' };
+  }
+  const month = limits.providerCostPerMonthMicroMinor;
+  if (month !== null && spend.thisMonthMicroMinor + estimateMicroMinor > BigInt(month)) {
+    return { allowed: false, breached: 'month' };
+  }
+  return { allowed: true, breached: null };
+}
+
+/** One threshold crossed in one period, for the owner's notice and email. */
+export interface PlatformThresholdCrossing {
+  readonly period: PlatformPeriod;
+  /** The UTC start of the period, so a crossing is reported once per period. */
+  readonly periodStart: Date;
+  readonly thresholdPercent: PlatformAlertThreshold;
+  readonly ceilingMicroMinor: number;
+  readonly spentMicroMinor: bigint;
+  readonly currency: string;
+}
+
+/**
+ * Which thresholds does this spend sit at or above? The caller reports each one
+ * at most once per period; this function only measures. A refusal at the
+ * ceiling counts as reaching 100% even when the admitted sum is below it,
+ * because the owner needs to know that customers are being turned away.
+ */
+export function platformThresholdsReached(
+  limits: PlatformBudgetLimits,
+  spend: PlatformSpend,
+  periodStarts: { readonly day: Date; readonly month: Date },
+  refused: PlatformPeriod | null = null,
+): PlatformThresholdCrossing[] {
+  const crossings: PlatformThresholdCrossing[] = [];
+  const periods: [PlatformPeriod, number | null, bigint][] = [
+    ['day', limits.providerCostPerDayMicroMinor, spend.todayMicroMinor],
+    ['month', limits.providerCostPerMonthMicroMinor, spend.thisMonthMicroMinor],
+  ];
+  for (const [period, ceiling, spent] of periods) {
+    if (ceiling === null || ceiling <= 0) continue;
+    for (const threshold of PLATFORM_ALERT_THRESHOLDS) {
+      const reached =
+        spent * 100n >= BigInt(ceiling) * BigInt(threshold) ||
+        (threshold === 100 && refused === period);
+      if (!reached) continue;
+      crossings.push({
+        period,
+        periodStart: periodStarts[period],
+        thresholdPercent: threshold,
+        ceilingMicroMinor: ceiling,
+        spentMicroMinor: spent,
+        currency: limits.currency,
+      });
+    }
+  }
+  return crossings;
+}
+
+/** The UTC starts of the day and the month containing `now`. */
+export function platformPeriodStarts(now: Date): { day: Date; month: Date } {
+  return {
+    day: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())),
+    month: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+  };
+}
+
+/**
+ * AI is paused for everyone. The customer is told only that, in the owner's
+ * words (D-573): it is not their wall, so no plan, limit, price or provider is
+ * named, and "try again later" is true — the period rolls or the owner acts.
+ */
+export class PlatformAiPausedError extends AppError {
+  readonly period: PlatformPeriod;
+
+  constructor(period: PlatformPeriod) {
+    super('AI_PAUSED', 'AI is paused right now. Please try again later.');
+    this.name = 'PlatformAiPausedError';
+    this.period = period;
+  }
+}

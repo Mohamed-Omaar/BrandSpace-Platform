@@ -110,7 +110,7 @@ export {
 } from './pricing';
 export type { AiBillingUnit, CreditRule, MarginAssessment, ModelCostBasis } from './pricing';
 
-export { purgeExpiredOutputs } from './gateway';
+export { measurePlatformSpend, purgeExpiredOutputs } from './gateway';
 export { AiGateway } from './gateway';
 export type {
   AiConfiguration,
@@ -130,8 +130,13 @@ export type {
 
 export {
   assessBudget,
+  assessPlatformBudget,
   budgetRefusal,
   BudgetExceededError,
+  PLATFORM_ALERT_THRESHOLDS,
+  PlatformAiPausedError,
+  platformPeriodStarts,
+  platformThresholdsReached,
   resolveBudget,
   withinRequestCostCap,
 } from './budgets';
@@ -142,6 +147,12 @@ export type {
   BudgetLimits,
   BudgetUsage,
   PlanBudgetLimits,
+  PlatformAlertThreshold,
+  PlatformBudgetDecision,
+  PlatformBudgetLimits,
+  PlatformPeriod,
+  PlatformSpend,
+  PlatformThresholdCrossing,
 } from './budgets';
 
 export { ConfigurationAiSource } from './config-source';
@@ -164,3 +175,10 @@ export type {
   AiUsageExplorerOptions,
   AiUsageRollupRow,
 } from './explorer';
+
+export {
+  answerLanguageInstruction,
+  ENGLISH_INSTRUCTION,
+  FORMAL_ARABIC_INSTRUCTION,
+  languageInstruction,
+} from './prompt-language';

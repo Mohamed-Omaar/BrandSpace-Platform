@@ -31,7 +31,7 @@ export function aiAvailableFor(
   adapters: {
     readonly registered: ReadonlySet<string>;
     readonly production: boolean;
-    /** Provider keys that are development doubles (the registry's `developmentOnly`). */
+    /** Adapter keys that are development doubles (the registry's `developmentOnly`). */
     readonly developmentOnly: ReadonlySet<string>;
   },
 ): boolean {
@@ -50,11 +50,17 @@ export function aiAvailableFor(
   return chain.some((modelKey) => {
     const model = configuration.models.find((candidate) => candidate.key === modelKey);
     if (!model) return false;
-    if (adapters.production && adapters.developmentOnly.has(model.providerKey)) return false;
     const provider = configuration.providers.find(
       (candidate) => candidate.key === model.providerKey,
     );
-    return provider?.status === 'active' && adapters.registered.has(model.providerKey);
+    if (!provider || provider.status !== 'active') return false;
+    // D-573 — judged by the ADAPTER the record names, which is what the
+    // gateway will call; a provider record keyed differently is the same
+    // adapter, and a development double is one wherever it is named.
+    const adapterKey = provider.adapterKey ?? provider.key;
+    if (adapters.production && adapters.developmentOnly.has(adapterKey)) return false;
+    if (adapters.production && adapters.developmentOnly.has(model.providerKey)) return false;
+    return adapters.registered.has(adapterKey);
   });
 }
 

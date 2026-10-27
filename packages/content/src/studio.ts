@@ -13,7 +13,12 @@ import {
   systemClock,
   type Clock,
 } from '@brandspace/shared';
-import type { AiGateway, AiGatewayResult, AiQuote } from '@brandspace/ai-gateway';
+import {
+  languageInstruction,
+  type AiGateway,
+  type AiGatewayResult,
+  type AiQuote,
+} from '@brandspace/ai-gateway';
 import {
   fenceUntrusted,
   groundingFor,
@@ -117,8 +122,8 @@ const TOOL_DIRECTIVE: Record<ContentTool, string> = {
     'Translate the caption into the requested language.',
     'This is a BRAND translation, not a literal one: preserve the glossary terms',
     'and brand names exactly as the reference material spells them, keep the',
-    'brand voice, and write naturally in the requested Arabic dialect rather',
-    'than transliterating the source sentence structure.',
+    'brand voice, and write naturally in the requested language rather than',
+    'transliterating the source sentence structure.',
   ].join(' '),
   // PHASE 6 FINAL (D-284) — hashtags only. The caption the model returns is
   // DISCARDED below: this tool may not change a word the person wrote.
@@ -715,8 +720,8 @@ export class ContentStudioService extends ContentLibraryService {
       SYSTEM_INSTRUCTION,
       TOOL_DIRECTIVE[input.tool],
       input.tool === 'tone' && input.argument ? `Requested tone: ${input.argument}.` : '',
-      `Target language: ${targetLocale === 'AR' ? 'Arabic' : 'English'}.`,
-      targetLocale === 'AR' ? `Arabic dialect: ${dialect.key} (${dialect.bcp47}).` : '',
+      // D-573 / D-474: one formal Arabic, never a dialect.
+      languageInstruction(targetLocale),
       `Keep it under ${platform.maxBodyChars} characters.`,
       `Use at most ${platform.maxHashtags} hashtags.`,
       'Respond with JSON: {"body": string, "hashtags": string[]}.',
@@ -794,7 +799,6 @@ export class ContentStudioService extends ContentLibraryService {
     return this.#prompt(
       input.brief,
       input.platformKeys,
-      input.dialect,
       input.locale,
       preferenceInstructions(
         accepted.map((row) => row.key),
@@ -807,7 +811,6 @@ export class ContentStudioService extends ContentLibraryService {
   #prompt(
     brief: string,
     platformKeys: readonly string[],
-    dialect?: ContentDialect,
     locale?: Locale,
     /** D-295 — the author's accepted defaults (closed-key instructions). */
     authorDefaults: readonly string[] = [],
@@ -826,10 +829,9 @@ export class ContentStudioService extends ContentLibraryService {
       SYSTEM_INSTRUCTION,
       '',
       `Write for these channels: ${platforms}.`,
-      locale ? `Language: ${locale === 'AR' ? 'Arabic' : 'English'}.` : '',
-      // D-115 reaches the prompt only when the output is Arabic. Naming a
-      // dialect on an English caption would be noise the model has to ignore.
-      locale === 'AR' && dialect ? `Arabic dialect: ${dialect.key} (${dialect.bcp47}).` : '',
+      // D-573 / D-474: the dialect line is gone. Every Arabic caption asks for
+      // the one formal Arabic the product writes, in the shared words.
+      locale ? languageInstruction(locale) : '',
       ...(authorDefaults.length > 0
         ? ['Defaults this author chose for their own drafts:', ...authorDefaults]
         : []),

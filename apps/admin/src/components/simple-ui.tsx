@@ -146,6 +146,15 @@ export function ReadinessCard({
         <p style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textSecondary }}>
           {reasonText(locale, area)}
         </p>
+        {(area.notes ?? []).map((note) => (
+          <p
+            key={note}
+            data-testid={`readiness-${area.key}-note-${note}`}
+            style={{ margin: 0, ...typographyTokens.bodySm, color: colorTokens.textSecondary }}
+          >
+            {copy(`note.${note}` as SimpleKey)}
+          </p>
+        ))}
         {action ? (
           <div>
             <ActionLink

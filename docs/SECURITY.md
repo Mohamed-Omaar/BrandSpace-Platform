@@ -484,6 +484,31 @@ decision with its own time box and audit trail (D-76), not a side effect of open
 
 ---
 
+### 9.3 AI provider egress and credentials — D-573
+
+The platform's own AI provider is called with the platform's key, so where a request goes is a
+security boundary, enforced in `packages/ai-gateway/src/egress.ts` on every call and in configuration
+validation and the Integrations Hub before a value is saved:
+
+- **The address.** `baseUrl` is https on port 443 with no user name or password; never an IP literal
+  and never a private name (`localhost`, `.local`, `.internal`, `.lan`, `.home.arpa`, `.intranet`).
+- **The host.** The adapter's official host, or one the owner put on `ai.providers.allowedHosts`.
+- **The resolved address.** The name is resolved once, inside the socket's own lookup, and every
+  answer must be public: never loopback, RFC 1918, link-local (`169.254.0.0/16`, the cloud metadata
+  service), carrier-grade NAT, multicast, documentation or IPv6 ULA/link-local, and IPv4-mapped or
+  NAT64 IPv6 is judged by the IPv4 inside. The socket connects to exactly the address that was
+  checked, so a DNS answer that changes between "checked" and "connected" (rebinding) cannot reach
+  the internal network.
+- **Redirects** are refused, never followed.
+- **The credential** goes from the Control Center to the vault and from the vault, per attempt, to the
+  adapter's one request header. It is never in configuration, `.env`, a plain-text row, a log, a span,
+  an error message, an API response or frontend code; the redaction layer also catches `x-api-key`
+  headers and `AIza…` keys. `tests/isolation/d573-ai-provider.test.ts` plants a canary key and checks
+  each of those places.
+- **Data retention.** Set the provider's own retention to the shortest it offers; D-13's gates (no
+  training guarantee, retention policy, privacy review) still decide whether a provider may be
+  activated.
+
 ## 10. Rate Limiting and Abuse Prevention
 
 | Dimension          | Example limits (all configuration, not constants)                              |
