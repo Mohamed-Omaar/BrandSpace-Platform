@@ -297,6 +297,42 @@ for (const locale of LOCALES) {
       }
     });
 
+    test(`Settings → Connected AI apps: the note clears the divider, each app has its icon, Revoke is secondary (D-572, ${locale})`, async ({
+      page,
+      request,
+    }) => {
+      test.setTimeout(120_000);
+      const own = await ownWorkspace(`ai-apps-card-${locale}`);
+      await entitled(own);
+      await enter(page, own.slug, locale);
+      await consent(page, request, own, locale, `E2E card check ${locale}`);
+      await page.setViewportSize({ width: 1536, height: 864 });
+      await page.goto(`${DASHBOARD_BASE_URL}/${locale}/settings/ai-apps`);
+      const connection = await withPlatformPrisma((prisma) =>
+        prisma.aiAppConnection.findFirstOrThrow({
+          where: { workspaceId: own.workspaceId, status: 'ACTIVE' },
+          select: { id: true },
+        }),
+      );
+      // The header's divider sits below its last note, with the panel's own margin between.
+      const gap = await page.evaluate(() => {
+        const head = document.querySelector('[data-testid="ai-apps-head"]') as HTMLElement;
+        const notes = head.querySelectorAll('.bsp-secu-panel');
+        const last = notes[notes.length - 1] as HTMLElement;
+        return head.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom;
+      });
+      expect(gap).toBeGreaterThanOrEqual(10);
+      const row = page.getByTestId(`ai-app-${connection.id}`);
+      await expect(row.getByTestId('ai-app-icon')).toBeVisible();
+      // The test app registered no logo: the neutral icon.
+      await expect(row.getByTestId('ai-app-icon')).toHaveAttribute('data-icon', 'neutral');
+      const revoke = page.getByTestId(`ai-app-revoke-${connection.id}`);
+      await expect(revoke).toHaveCSS('background-color', 'rgb(242, 242, 244)');
+      await revoke.click();
+      await expect(page.getByTestId(`ai-app-revoke-confirm-${connection.id}`)).toBeVisible();
+      await noSeriousViolations(page);
+    });
+
     test(`an unknown app is an error on the consent screen and is never redirected (${locale})`, async ({
       page,
     }) => {

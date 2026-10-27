@@ -361,7 +361,7 @@ export function registerAiAppsConsentRoutes(app: FastifyInstance): void {
               scopes: true,
               createdAt: true,
               lastUsedAt: true,
-              client: { select: { clientName: true } },
+              client: { select: { clientName: true, logoUri: true } },
             },
           });
           // People are read on their own: under RLS a former member is not
@@ -384,6 +384,8 @@ export function registerAiAppsConsentRoutes(app: FastifyInstance): void {
             rows: rows.map((row) => ({
               id: row.id,
               app: row.client.clientName,
+              // The https logo the app registered (RFC 7591 `logo_uri`), or null.
+              logoUri: row.client.logoUri,
               person: personOf.get(row.userId) ?? null,
               mine: row.userId === caller.userId,
               brands:
