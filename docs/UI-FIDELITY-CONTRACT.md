@@ -2415,8 +2415,8 @@ APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2); the prototype draws none of these scr
   sign-in), an unknown app or return address (the card with an error banner), no workspace available
   (warning banner, Cancel), a refusal from Allow (error banner), workspaces not on an included plan
   (listed, not choosable). D-572: the card is held to the window at every width and its body scrolls
-  inside it, under the heading, with the customer frame's own thin scrollbar rules (transcribed from
-  `prototype.css`), never the browser's bar on the card's edge.
+  inside it, under the heading, its bar inside the card's padding — the platform's one thin scrollbar
+  (UI-1, `tokens.css`), never a bar on the card's edge.
 - **Settings → Connected AI apps** and **Settings → Connect**: Security's own card and rows
   (`bsp-card bsp-secu`, `bsp-secu-row`, `bsp-secu-note`, `bsp-btn`), the Connections page's two-step
   disconnect (`bsp-acc-disc`, `bsp-acc-confirm`, `bsp-acc-danger`), ordered lists in the row's subtitle

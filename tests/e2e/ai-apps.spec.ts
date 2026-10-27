@@ -241,7 +241,7 @@ for (const locale of LOCALES) {
       );
     });
 
-    test(`the consent card scrolls inside itself with the thin bar, never the page (D-572, ${locale})`, async ({
+    test(`the consent card scrolls inside itself, its bar inside the card, never the page (D-572, ${locale})`, async ({
       page,
       request,
     }) => {
@@ -271,14 +271,16 @@ for (const locale of LOCALES) {
           const card = document.querySelector('.bsp-auth-card') as HTMLElement;
           const body = card.querySelector('.bsp-auth-body') as HTMLElement;
           const box = card.getBoundingClientRect();
-          const style = getComputedStyle(body);
+          const inner = body.getBoundingClientRect();
+          const rtl = getComputedStyle(card).direction === 'rtl';
           return {
             pageScrolls: document.scrollingElement!.scrollHeight > window.innerHeight + 1,
             cardTop: box.top,
             cardBottom: box.bottom,
             cardScrolls: card.scrollHeight > card.clientHeight + 1,
-            bodyOverflow: style.overflowY,
-            bodyBar: style.scrollbarWidth,
+            bodyOverflow: getComputedStyle(body).overflowY,
+            // How far inside the card's edge the scrolling box (and its bar) ends.
+            barInset: rtl ? inner.left - box.left : box.right - inner.right,
             innerHeight: window.innerHeight,
           };
         });
@@ -286,10 +288,10 @@ for (const locale of LOCALES) {
         expect(geometry.pageScrolls, label).toBe(false);
         expect(geometry.cardTop, label).toBeGreaterThanOrEqual(0);
         expect(geometry.cardBottom, label).toBeLessThanOrEqual(geometry.innerHeight);
-        // The card itself never scrolls; its body does, with the platform's thin bar.
+        // The card itself never scrolls; its body does, its bar inside the card's padding.
         expect(geometry.cardScrolls, label).toBe(false);
         expect(geometry.bodyOverflow, label).toBe('auto');
-        expect(geometry.bodyBar, label).toBe('thin');
+        expect(geometry.barInset, label).toBeGreaterThanOrEqual(12);
         // Scrolled to its end, Allow is reachable inside the window.
         await page.getByTestId('consent-allow').scrollIntoViewIfNeeded();
         const allow = await page.getByTestId('consent-allow').boundingBox();
