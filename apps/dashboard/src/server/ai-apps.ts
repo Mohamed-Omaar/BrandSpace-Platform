@@ -61,6 +61,8 @@ export type ConsentCheck =
 export interface AiAppConnectionRow {
   readonly id: string;
   readonly app: string;
+  /** The https logo the app registered, or null. Shown only if it passes `appLogoSrc`. */
+  readonly logoUri: string | null;
   readonly person: string | null;
   readonly mine: boolean;
   readonly brands: 'all' | readonly string[];

@@ -747,3 +747,35 @@
   gap: var(--bsp-px-8);
   margin-block-start: var(--bsp-px-10);
 }
+
+/*
+ * D-572 (owner's edits list, 2026-10-27) — THE CONSENT CARD SCROLLS INSIDE
+ * ITSELF, at every width. The card is held to the window (the stage's own
+ * padding either side) and stops scrolling as a whole; its body scrolls under
+ * the heading, inside the card's padding, so the bar never sits on the card's
+ * rounded edge. The bar is the platform's one thin scrollbar (UI-1, the
+ * universal rules in `tokens.css`); nothing here restyles it.
+ */
+.bsp-auth-card:has(.bsp-consent) {
+  max-block-size: calc(100dvh - 2 * var(--bsp-px-16));
+  overflow: hidden;
+}
+.bsp-auth-card:has(.bsp-consent) > * {
+  flex-shrink: 0;
+}
+.bsp-auth-card > .bsp-auth-body:has(> .bsp-consent) {
+  flex: 0 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Room for a focus ring inside the scrolling box, and a gutter for the bar,
+     which stays inside the card's padding (not borrowed from it) at every width. */
+  padding: var(--bsp-px-4);
+  padding-inline-end: var(--bsp-px-12);
+  margin: calc(-1 * var(--bsp-px-4));
+}
+@media (min-width: 768px) {
+  .bsp-auth-card:has(.bsp-consent) {
+    max-block-size: calc(100vh - var(--bsp-px-64));
+  }
+}

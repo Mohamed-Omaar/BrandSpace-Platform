@@ -88,7 +88,18 @@ per-address ceilings, `unusedClientRetentionDays`, `allowedOrigins`. Off in prod
 Simple → AI apps or on the plan cards; the kill switch is in Advanced.
 
 **Staging (owner answer Q5):** after the deploy, Control Center → Simple → AI apps → "For everyone" on,
-and "Plans" → every plan.
+and "Plans" → every plan. A plan has to exist first: the Plans editor offers every plan in the active
+`plans` document that is not retired, and with none it says so and links to Plans (D-571). A workspace
+created while no plan existed has no plan, so it is given one from Simple → Customers → the workspace →
+"Change plan".
+
+**The connector's icon (D-572).** The API host serves the Brandspace mark at `/favicon.ico`,
+`/favicon.svg`, `/apple-touch-icon.png` and `/icon-48.png`, and the MCP `initialize` response lists
+them in `serverInfo.icons`. Neither Claude nor ChatGPT documents how it picks a connector's icon:
+community reports on `anthropics/claude-ai-mcp#152` say Claude takes Google's favicon service for the
+host (sometimes cut to the parent domain, hence Railway's icon on `*.up.railway.app`), and ChatGPT's
+connector dialog takes an uploaded icon. Serving the API from a Brandspace domain is what makes
+Claude's tile reliable.
 
 ## 7. Connecting
 

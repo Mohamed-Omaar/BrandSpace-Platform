@@ -55,6 +55,16 @@ export interface FieldSpec {
   /** Numbers: offer "No limit" (stored as null). */
   readonly unlimited?: boolean;
   readonly options?: readonly FieldOption[];
+  /**
+   * Multi: what the editor says when there is nothing to choose, and the
+   * Simple page (after the locale) where the missing choices are made — so an
+   * empty list is never a silent dead end (D-571).
+   */
+  readonly empty?: {
+    readonly text: AreaCopyKey;
+    readonly link: AreaCopyKey;
+    readonly path: string;
+  };
   readonly required?: boolean;
   readonly maxLength?: number;
   /** Text typed in one script: Latin for keys and addresses, Arabic for Arabic names. */

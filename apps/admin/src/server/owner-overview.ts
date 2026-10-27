@@ -25,6 +25,7 @@ import {
   passwordAreaState,
   paymentsOffArea,
   plansAreaState,
+  plansRowRequired,
   postKindsAreaState,
   readinessVerdict,
   scannerAreaState,
@@ -117,10 +118,11 @@ export async function loadReadiness(actor: Actor): Promise<OwnerReadiness> {
 
   const catalogue = mayReadConfiguration ? (await getPlanCatalogue()).plans : null;
   const plans = catalogue ? plansAreaState(catalogue) : WITHHELD;
-  // While payments are off nothing is sold, so "a plan on sale" is not required.
+  // While payments are off nothing is sold, so "a plan on sale" is not
+  // required — but no plan at all always is (D-571).
   areas.push({
     key: 'plans',
-    required: beta ? beta.paymentsEnabled : true,
+    required: plansRowRequired(beta ? beta.paymentsEnabled : null, plans.reason),
     href: areaHref('plans'),
     ...plans,
   });

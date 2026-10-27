@@ -1000,16 +1000,20 @@ export class UsageService {
   /** Every counter for a workspace in the current windows — the usage view. */
   async currentCounters(
     workspaceId: string,
-  ): Promise<ReadonlyArray<{ featureKey: string; used: number; periodEnd: Date }>> {
+  ): Promise<
+    ReadonlyArray<{ featureKey: string; used: number; usedBytes: number; periodEnd: Date }>
+  > {
     const now = this.#clock.now();
     const rows = await this.#prisma.usageCounter.findMany({
       where: { workspaceId, periodEnd: { gt: now } },
       orderBy: { featureKey: 'asc' },
-      select: { featureKey: true, usedValue: true, periodEnd: true },
+      select: { featureKey: true, usedValue: true, usedBytes: true, periodEnd: true },
     });
     return rows.map((r) => ({
       featureKey: r.featureKey,
       used: r.usedValue,
+      // The storage counter's exact bytes (B-1); 0 on every other counter.
+      usedBytes: Number(r.usedBytes),
       periodEnd: r.periodEnd,
     }));
   }

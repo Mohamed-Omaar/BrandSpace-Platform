@@ -187,10 +187,14 @@ const perPlan: CollectionSpec = {
       label: 'aa.f.plans',
       help: 'aa.h.plans',
       impact: 'aa.i.plans',
+      // Every plan in the active catalogue that is not retired — drafts and
+      // unlisted plans included, so a plan can be readied before it is sold.
       options: planKeysOf(docs).map((key) => ({
         value: key,
         label: { literal: planName(docs, key, ctx) },
       })),
+      // No plan exists at all (staging, D-571): say so and point to Plans.
+      empty: { text: 'aa.p.noPlans', link: 'aa.p.toPlans', path: '/console/plans' },
     },
   ],
   keyOf: () => 'plans',
@@ -206,16 +210,18 @@ const perPlan: CollectionSpec = {
           {
             label: ctx.t('aa.f.plans'),
             value:
-              now.kind === 'everyone'
-                ? ctx.t('aa.s.everyPlan')
-                : now.kind === 'plans'
-                  ? chosen.length > 0
-                    ? joined(
-                        ctx,
-                        chosen.map((key) => planName(docs, key, ctx)),
-                      )
-                    : ctx.t('w.none')
-                  : ctx.t('aa.s.advanced'),
+              planKeysOf(docs).length === 0
+                ? ctx.t('aa.s.noPlanYet')
+                : now.kind === 'everyone'
+                  ? ctx.t('aa.s.everyPlan')
+                  : now.kind === 'plans'
+                    ? chosen.length > 0
+                      ? joined(
+                          ctx,
+                          chosen.map((key) => planName(docs, key, ctx)),
+                        )
+                      : ctx.t('w.none')
+                    : ctx.t('aa.s.advanced'),
           },
         ],
         values: { plans: chosen },
@@ -248,6 +254,7 @@ const perPlan: CollectionSpec = {
     };
   },
   check: (before, _after, ctx) => {
+    if (planKeysOf(before).length === 0) return [ctx.t('aa.p.noPlans')];
     const now = access(before);
     if (now.kind === 'kill_switch') return [ctx.t('aa.r.killed')];
     if (now.kind === 'custom' || now.kind === 'everyone' || now.kind === 'nobody')

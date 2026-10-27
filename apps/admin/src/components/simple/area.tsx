@@ -781,20 +781,32 @@ function Editor({
             marginBlockStart: spacingTokens.sm,
           }}
         >
-          <button
-            type="submit"
-            className={buttonClass('primary')}
-            style={buttonStyle('primary')}
-            data-testid="area-check"
-          >
-            {ctx.t('a.check')}
-          </button>
+          {/* Nothing to choose anywhere (D-571): no change can be made here, so
+              no "Check the change" — the empty field says where to go. */}
+          {nothingToChoose(fields) ? null : (
+            <button
+              type="submit"
+              className={buttonClass('primary')}
+              style={buttonStyle('primary')}
+              data-testid="area-check"
+            >
+              {ctx.t('a.check')}
+            </button>
+          )}
           <ActionLink href={base} variant="ghost" testId="area-cancel">
             {ctx.t('a.cancel')}
           </ActionLink>
         </div>
       </form>
     </Card>
+  );
+}
+
+/** Every field is a choice list with nothing in it: the editor can change nothing. */
+function nothingToChoose(fields: readonly FieldSpec[]): boolean {
+  return (
+    fields.length > 0 &&
+    fields.every((field) => field.kind === 'multi' && (field.options ?? []).length === 0)
   );
 }
 
@@ -839,6 +851,17 @@ function FieldControl({
       >
         <legend style={{ ...typographyTokens.bodySm, fontWeight: 600, padding: 0 }}>{label}</legend>
         <p style={{ ...muted, marginBlock: '4px' }}>{ctx.t(field.help)}</p>
+        {(field.options ?? []).length === 0 && field.empty ? (
+          <Banner tone="warning" testId={`field-${field.id}-empty`}>
+            <span>{ctx.t(field.empty.text)} </span>
+            <ActionLink
+              href={`/${ctx.locale}${field.empty.path}`}
+              testId={`field-${field.id}-empty-link`}
+            >
+              {ctx.t(field.empty.link)}
+            </ActionLink>
+          </Banner>
+        ) : null}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacingTokens.xs }}>
           {(field.options ?? []).map((option) => (
             <label

@@ -261,9 +261,50 @@ test.describe('D-290 · the calendar', () => {
     const { month } = nextMonth();
     await signIn(page);
     await page.goto(`${DASHBOARD_BASE_URL}/en/calendar?month=${month}`);
+    /*
+     * D-572 (CI on #90) — AN EMPTY DAY IS CHECKED, NOT ASSUMED. It took the
+     * first day with a "+", which is not the same as empty: on 2026-10-27
+     * `b7-proposed-time` scheduled a post five days ahead — 1 November, the
+     * first day of next month — in this same workspace, and its chip covered
+     * the day's button. The day is now the first of next month with no slot
+     * and no proposed time in the workspace's data AND no post chip drawn.
+     */
+    const busy = await withPlatformPrisma(async (prisma) => {
+      const workspaceId = credentials().customer.workspaceId;
+      const [slots, proposals] = await Promise.all([
+        prisma.calendarSlot.findMany({
+          where: { workspaceId, scheduledLocalTime: { startsWith: month } },
+          select: { scheduledLocalTime: true },
+        }),
+        prisma.contentItem.findMany({
+          where: { workspaceId, deletedAt: null, proposedLocalTime: { startsWith: month } },
+          select: { proposedLocalTime: true },
+        }),
+      ]);
+      return new Set(
+        [...slots.map((s) => s.scheduledLocalTime), ...proposals.map((p) => p.proposedLocalTime)]
+          .filter((value): value is string => typeof value === 'string')
+          .map((value) => value.slice(0, 10)),
+      );
+    });
+    let key = '';
+    for (const offered of await page.locator('[data-testid^="calendar-new-"]').all()) {
+      const candidate = ((await offered.getAttribute('data-testid')) ?? '').replace(
+        'calendar-new-',
+        '',
+      );
+      if (!candidate.startsWith(month) || busy.has(candidate)) continue;
+      const chips = page
+        .getByTestId(`calendar-day-${candidate}`)
+        .locator('[data-testid^="calendar-post-"]');
+      if ((await chips.count()) > 0) continue;
+      key = candidate;
+      break;
+    }
+    // Never skipped: a month with no free day is a fixture problem to see.
+    expect(key, `no day of ${month} is free of posts in the E2E workspace`).not.toBe('');
     // D-468 — the day's "+" is the prototype's: a new post in the Studio, dated.
-    const create = page.locator('[data-testid^="calendar-new-"]').first();
-    const key = ((await create.getAttribute('data-testid')) ?? '').replace('calendar-new-', '');
+    const create = page.getByTestId(`calendar-new-${key}`);
     await expect(create).toHaveAttribute('href', `/en/content/compose?date=${key}`);
     // …and pressing the empty day opens its popover, whose "Drafts without a
     // date" schedules one of them on THAT day, through the same dialog.

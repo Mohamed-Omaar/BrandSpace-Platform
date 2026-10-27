@@ -2414,12 +2414,17 @@ APPROVED DESIGN-SYSTEM EXTENSIONS (§4.2); the prototype draws none of these scr
   same button in the card's chip grey (`#f2f2f4`, as `.bsp-auth-realm`), so there is one primary action. Every state: not signed in (to sign-in and back, through two-step
   sign-in), an unknown app or return address (the card with an error banner), no workspace available
   (warning banner, Cancel), a refusal from Allow (error banner), workspaces not on an included plan
-  (listed, not choosable).
+  (listed, not choosable). D-572: the card is held to the window at every width and its body scrolls
+  inside it, under the heading, its bar inside the card's padding — the platform's one thin scrollbar
+  (UI-1, `tokens.css`), never a bar on the card's edge.
 - **Settings → Connected AI apps** and **Settings → Connect**: Security's own card and rows
   (`bsp-card bsp-secu`, `bsp-secu-row`, `bsp-secu-note`, `bsp-btn`), the Connections page's two-step
   disconnect (`bsp-acc-disc`, `bsp-acc-confirm`, `bsp-acc-danger`), ordered lists in the row's subtitle
   type, and a read-only `bs-control` input for the address. Empty, unavailable, off and not-on-plan
-  states are a `bsp-secu-note` line. A new row in the Settings rail's Security group.
+  states are a `bsp-secu-note` line. A new row in the Settings rail's Security group. D-572: the notes
+  sit inside the header block as Security's do; each connection leads with the Connections rows' own
+  38px tile (`bsp-acc-ic`) holding the app's logo when it passes the image rule, else the `spark`
+  glyph; Revoke is the secondary button (`bsp-sec`).
 - **The calendar's "Proposed" chip**: a draft with a proposed time and no slot, drawn with the ★ chip's
   geometry (`.bsp-cal-hol`) and the draft chip's dashed look (`.bsp-calchip[data-k='draft']` values,
   transcribed), no ★, labelled "Proposed · HH:MM · title", opening the post; the phone agenda's chip uses

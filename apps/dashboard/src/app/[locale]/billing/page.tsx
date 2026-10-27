@@ -41,6 +41,7 @@ import {
   SimpleActionButton,
 } from './actions';
 import { dayLabel } from '../../../server/prototype-dates';
+import { storagePercent, storageUsed } from '../../../components/storage-usage';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,6 +105,10 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
       ]);
       const counted = (featureKey: string): number =>
         Number(counters.find((counter) => counter.featureKey === featureKey)?.used ?? 0);
+      // D-572: storage reads the counter's exact bytes, not its rounded-up gigabytes.
+      const storedBytes = Number(
+        counters.find((counter) => counter.featureKey === QUOTA_FEATURES.storageGb)?.usedBytes ?? 0,
+      );
       const rows = [
         ...(multiBrand
           ? [
@@ -138,6 +143,28 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
       return rows.map((row) => {
         const ceiling = ceilingFor(effective.decisions, row.feature);
         const unit = 'unit' in row ? row.unit : '';
+        if (row.key === 'storage') {
+          // Below 1 GB in MB ("12 MB / 5 GB"); from 1 GB the prototype's "3.1 / 50".
+          const used = storageUsed(storedBytes);
+          const inMb = used.unit === 'MB';
+          const usedText = inMb ? t('plan.unitMb').replace('{n}', used.amount) : used.amount;
+          const limitText = (limit: number) =>
+            inMb ? t('plan.unitGb').replace('{n}', String(limit)) : String(limit);
+          const share =
+            ceiling.kind === 'limited' ? storagePercent(storedBytes, ceiling.limit) : null;
+          return {
+            key: row.key,
+            label: row.label,
+            value:
+              ceiling.kind === 'limited'
+                ? `${usedText} / ${limitText(ceiling.limit)}`
+                : t('plan.usageUnstated').replace(
+                    '{used}',
+                    t(inMb ? 'plan.unitMb' : 'plan.unitGb').replace('{n}', used.amount),
+                  ),
+            pct: share === null ? null : Math.max(2, Math.min(100, Math.round(share))),
+          };
+        }
         return {
           key: row.key,
           label: row.label,

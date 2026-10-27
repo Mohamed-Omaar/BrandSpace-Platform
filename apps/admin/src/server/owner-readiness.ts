@@ -72,6 +72,8 @@ export type AreaReason =
   | 'switched_off'
   | 'no_permission'
   | 'no_sellable_plan'
+  /** D-571: no plan at all — a workspace has nothing to be on, nothing per plan can be on. */
+  | 'no_plans'
   // PR F (e)
   | 'ai_hidden'
   | 'social_hidden'
@@ -175,9 +177,25 @@ export function isSellable(plan: SellablePlanInput): boolean {
 export function plansAreaState(
   plans: readonly SellablePlanInput[],
 ): Pick<ReadinessArea, 'state' | 'reason' | 'provider'> {
+  if (!plans.some((plan) => plan.status !== 'retired')) {
+    return { state: 'setup_required', reason: 'no_plans', provider: null };
+  }
   return plans.some(isSellable)
     ? { state: 'ready', reason: 'ok', provider: null }
     : { state: 'setup_required', reason: 'no_sellable_plan', provider: null };
+}
+
+/**
+ * Whether the Plans row blocks the verdict. A plan on sale is required only
+ * while payments are on (Q6) — but NO PLAN AT ALL always blocks (D-571): a
+ * workspace then has no plan, so every per-plan feature (AI apps among them)
+ * is off for everyone, whatever the switches say. `null`: payments unknown.
+ */
+export function plansRowRequired(
+  paymentsEnabled: boolean | null,
+  reason: ReadinessArea['reason'],
+): boolean {
+  return reason === 'no_plans' || paymentsEnabled !== false;
 }
 
 export const WITHHELD: Pick<ReadinessArea, 'state' | 'reason' | 'provider'> = {
