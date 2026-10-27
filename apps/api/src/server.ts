@@ -26,6 +26,7 @@ import { registerCopilotRoutes } from './routes/copilot';
 import { registerAiAppsConsentRoutes } from './ai-apps/consent-routes';
 import { registerAiAppsMcpRoutes } from './ai-apps/mcp-route';
 import { registerAiAppsOAuthRoutes } from './ai-apps/oauth-routes';
+import { registerBrandIconRoutes } from './brand-icons';
 import { registeredRoutes } from './route-contract';
 import { MaintenanceScheduler } from './scheduler';
 
@@ -117,6 +118,8 @@ export async function buildServer() {
   await registerAiAppsOAuthRoutes(app);
   registerAiAppsConsentRoutes(app);
   registerAiAppsMcpRoutes(app);
+  // D-572: the Brandspace icon at the addresses an app looks one up on this host.
+  registerBrandIconRoutes(app);
 
   log.info('routes registered', { count: registeredRoutes().length });
   return app;

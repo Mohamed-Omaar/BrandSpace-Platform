@@ -39,6 +39,7 @@ import {
   WHAT_THE_AI_CAN_DO,
   type HelpTopic,
 } from './help';
+import { mcpServerIcons } from '../brand-icons';
 
 /**
  * D-566 — THE ELEVEN TOOLS AN AI APP MAY CALL, AND NOTHING ELSE.
@@ -235,8 +236,16 @@ function postView(
 }
 
 export function buildMcpServer(caller: McpCaller, ctx: AiAppsContext): McpServer {
+  const api = ctx.addresses()?.api ?? '';
   const server = new McpServer(
-    { name: 'brandspace', version: '1.0.0', title: 'Brandspace' },
+    {
+      name: 'brandspace',
+      version: '1.0.0',
+      title: 'Brandspace',
+      // MCP 2025-11-25 `Implementation.icons` and `websiteUrl` (D-572).
+      ...(api ? { icons: mcpServerIcons(api) } : {}),
+      ...(ctx.addresses()?.dashboard ? { websiteUrl: ctx.addresses()!.dashboard } : {}),
+    },
     {
       instructions:
         'Brandspace is this person’s brand and social media workspace. Write posts as drafts, give them a ' +
