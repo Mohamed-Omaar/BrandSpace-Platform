@@ -67,8 +67,8 @@ describe('PR E — the Group B fields', () => {
     }
   });
 
-  it('comes directly after batch 7 PR C, and only connectors A and B and the AI apps migrations follow it', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-8)).toEqual([
+  it('comes directly after batch 7 PR C, and only connectors A and B, the AI apps migrations and the D-573 ceiling follow it', () => {
+    expect(EXPECTED_MIGRATIONS.slice(-9)).toEqual([
       '20261016090000_content_item_publish_time',
       NAME,
       '20261021090000_connectors_a_handles_and_subjects',
@@ -80,6 +80,8 @@ describe('PR E — the Group B fields', () => {
       '20261023090000_ai_app_connections',
       // D-568: the rotation link made composite on the workspace (D-112).
       '20261023091000_ai_app_token_replaced_scoped',
+      // D-573: the platform AI ceiling's in-flight estimate.
+      '20261027100000_ai_platform_spend_ceiling',
     ]);
   });
 });

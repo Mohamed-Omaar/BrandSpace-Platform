@@ -80,7 +80,7 @@ describe('connectors A — handles and subjects', () => {
     }
   });
 
-  it('comes directly after PR E, and only connectors B and the AI apps migrations follow it', () => {
+  it('comes directly after PR E, and only connectors B, the AI apps migrations and the D-573 ceiling follow it', () => {
     const at = EXPECTED_MIGRATIONS.indexOf(NAME);
     expect(EXPECTED_MIGRATIONS[at - 1]).toBe('20261020090000_group_b_fields');
     expect(EXPECTED_MIGRATIONS.slice(at + 1)).toEqual([
@@ -91,6 +91,8 @@ describe('connectors A — handles and subjects', () => {
       '20261023090000_ai_app_connections',
       // D-568: the rotation link made composite on the workspace (D-112).
       '20261023091000_ai_app_token_replaced_scoped',
+      // D-573: the platform AI ceiling's in-flight estimate.
+      '20261027100000_ai_platform_spend_ceiling',
     ]);
   });
 });

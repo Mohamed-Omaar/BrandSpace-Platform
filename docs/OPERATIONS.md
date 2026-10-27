@@ -800,6 +800,19 @@ vault. Rotating one means re-wrapping, which requires both the old and the new k
 `LocalDevelopmentKeyProvider` is the only implementation and it refuses to run in production, so this
 decision blocks production rather than being silently deferred.
 
+**D-573 — the order after Railway's 2026-10-21 disclosure.** Railway said environment variables may
+have leaked, in an attack aimed at AI provider keys. On staging the vault KEK and the database
+credentials are treated as exposed until rotated, and so is any AI key saved before the rotation.
+
+1. **Do not change `SECRET_VAULT_KEK` until the re-wrap command exists** (F-105, the next small PR).
+   Changing it first leaves every data key wrapped under the old KEK, and every stored secret
+   unreadable. Home → Is Brandspace ready says this on the AI row until the rotation is recorded.
+2. Rotate the database credentials and, with the re-wrap command, the KEK.
+3. Record the day in **Configuration → `operations` → `secretRotation.completedAt`** (`YYYY-MM-DD`).
+4. Reissue the AI key at the provider (a project-scoped key for this environment, with a hard monthly
+   spending limit), save it in **Integrations → AI**, Test, and revoke the old one at the provider.
+   Until then the AI row reads "needs attention" for a key saved before the recorded day.
+
 ### 7.1 Rotating the social subject-hash key (D-526)
 
 The key that hashes a platform user's id is a Secret Service record referenced from

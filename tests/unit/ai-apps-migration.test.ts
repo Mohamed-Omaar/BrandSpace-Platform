@@ -195,11 +195,13 @@ describe('D-566 · the AI apps migration', () => {
     expect(MODEL_TABLE_NAMES['AiAppToken']).toBe('ai_app_token');
   });
 
-  it('comes directly after connectors B, and only its D-112 fix (D-568) follows', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-3)).toEqual([
+  it('comes directly after connectors B; only its D-112 fix (D-568) and the D-573 ceiling follow', () => {
+    expect(EXPECTED_MIGRATIONS.slice(-4)).toEqual([
       '20261022092000_publish_job_handle_lookup_index',
       NAME,
       '20261023091000_ai_app_token_replaced_scoped',
+      // D-573: the platform AI ceiling's in-flight estimate.
+      '20261027100000_ai_platform_spend_ceiling',
     ]);
   });
 });

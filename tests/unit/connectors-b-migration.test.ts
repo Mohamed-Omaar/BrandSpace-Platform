@@ -148,8 +148,8 @@ describe('connectors B · B2 and B3 — one concurrent index each, nothing else'
 });
 
 describe('connectors B · order', () => {
-  it('the three come directly after connectors A, in order, and only the AI apps migrations follow', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-6)).toEqual([
+  it('the three come directly after connectors A, in order, and only the AI apps migrations and the D-573 ceiling follow', () => {
+    expect(EXPECTED_MIGRATIONS.slice(-7)).toEqual([
       '20261021090000_connectors_a_handles_and_subjects',
       B1,
       B2,
@@ -158,6 +158,8 @@ describe('connectors B · order', () => {
       '20261023090000_ai_app_connections',
       // D-568: the rotation link made composite on the workspace (D-112).
       '20261023091000_ai_app_token_replaced_scoped',
+      // D-573: the platform AI ceiling's in-flight estimate.
+      '20261027100000_ai_platform_spend_ceiling',
     ]);
   });
 });

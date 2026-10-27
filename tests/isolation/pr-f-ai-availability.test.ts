@@ -256,10 +256,12 @@ describe('PR F (b) · switching AI in the Control Center flips the answer, with 
 });
 
 describe('PR F (b) · a development double never counts in production', () => {
-  it('production registers no adapter, and the mock is a development-only provider', async () => {
+  it('production registers no development double, and the mock is a development-only provider', async () => {
     const { registeredAdapters, DEVELOPMENT_ONLY_AI } =
       await import('../../apps/api/src/routes/ai-availability');
-    expect([...registeredAdapters(true)]).toEqual([]);
+    // D-573: production now registers the real adapter(s), and still never the mock.
+    expect(registeredAdapters(true).has('mock')).toBe(false);
+    expect([...registeredAdapters(true)].every((key) => !DEVELOPMENT_ONLY_AI.has(key))).toBe(true);
     expect(registeredAdapters(false).has('mock')).toBe(true);
     expect(DEVELOPMENT_ONLY_AI.has('mock')).toBe(true);
   });

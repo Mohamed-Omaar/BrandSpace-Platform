@@ -19,7 +19,10 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
     unknown
   >;
   const rows = (payload['providers'] ?? []) as Record<string, unknown>[];
-  const columns = ['key', 'name', 'baseUrl', 'status', 'noTrainingGuarantee'] as const;
+  const columns = ['key', 'adapter', 'name', 'baseUrl', 'status', 'noTrainingGuarantee'] as const;
+  const allowedHosts = Array.isArray(payload['allowedHosts'])
+    ? (payload['allowedHosts'] as unknown[]).map(String)
+    : [];
 
   return (
     <>
@@ -30,6 +33,15 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
             : 'Read from the active configuration version. Edit via the Configuration page.'
         }
       />
+      {/* D-573 — what two of this domain's settings do, and one that does nothing yet. */}
+      <p
+        data-testid="providers-help"
+        style={{ margin: '0 0 12px', color: colorTokens.textSecondary }}
+      >
+        {isArabic
+          ? `المضيفون المسموح بهم غير مضيف المزود الرسمي: ${allowedHosts.length > 0 ? allowedHosts.join('، ') : 'لا أحد'}. لا يُتصل إلا عبر https وبعنوان عام. الحقل maxConcurrency مسجّل لكنه غير مُطبّق: التزامن يُحدّ لكل مساحة عمل في حدود إنفاق الذكاء الاصطناعي، ومن حدود المزود نفسه.`
+          : `Hosts allowed besides each provider’s official one: ${allowedHosts.length > 0 ? allowedHosts.join(', ') : 'none'}. Connections are https only, to public addresses only. maxConcurrency is recorded but not enforced: concurrency is limited per workspace in AI spending limits, and by the provider’s own rate limits.`}
+      </p>
       {rows.length === 0 ? (
         <EmptyState
           message={

@@ -130,7 +130,15 @@ const MAX_RESPONSE_BYTES = 40 * 1024 * 1024;
 export function pinnedHttpsTransport(
   allowedHosts: readonly string[],
   lookup: LookupFunction = pinnedLookup(),
+  /**
+   * TEST SEAM ONLY: a test sends the same request over plain http to a local
+   * port so that pinning, redirects and the size cap run for real. Production
+   * passes nothing and gets https on 443.
+   */
+  connection: { readonly request?: typeof httpsRequest; readonly port?: number } = {},
 ): EgressTransport {
+  const send = connection.request ?? httpsRequest;
+  const port = connection.port ?? 443;
   return (request) =>
     new Promise<EgressResponse>((resolvePromise, reject) => {
       const refusal = egressRefusal(request.url, allowedHosts);
@@ -143,11 +151,11 @@ export function pinnedHttpsTransport(
         return;
       }
       const target = new URL(request.url);
-      const outgoing = httpsRequest(
+      const outgoing = send(
         {
-          protocol: 'https:',
+          ...(connection.request ? {} : { protocol: 'https:' }),
           hostname: target.hostname,
-          port: 443,
+          port,
           path: `${target.pathname}${target.search}`,
           method: request.method,
           headers: {

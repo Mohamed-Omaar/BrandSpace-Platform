@@ -9,7 +9,7 @@ import {
 } from '@brandspace/ai-gateway';
 import { aiAdapterRegistry } from '@brandspace/ai-gateway/adapters';
 import { ConfigurationService } from '@brandspace/config';
-import { Prisma } from '@brandspace/database';
+import type { Prisma } from '@brandspace/database';
 import { getPlatformClient } from '@brandspace/database/platform';
 import { CreditLedgerService } from '@brandspace/entitlements';
 import { SecretService } from '@brandspace/secrets';
