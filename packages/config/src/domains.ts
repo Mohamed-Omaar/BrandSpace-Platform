@@ -31,7 +31,20 @@ const aiProvidersSchema = z.object({
     .array(
       z.object({
         key: z.string().min(1),
+        /**
+         * D-573 — WHICH ADAPTER SERVES THIS RECORD, by the adapter's own key
+         * (the gateway's registry). Absent: the record's `key`, as before. Two
+         * records — a staging account and a second one — can then share one
+         * adapter, and nothing anywhere branches on a vendor's name.
+         */
+        adapter: z.string().min(1).optional(),
         name: z.string().min(1),
+        /**
+         * D-573 — https only, never an IP literal or a private name, and the
+         * host must be the adapter's official one or on `allowedHosts` below
+         * (validation.ts). At call time the host is resolved and the connection
+         * goes to the address that was checked (`ai-gateway/src/egress.ts`).
+         */
         baseUrl: z.string().url(),
         /** Reference into the Secret Service. NEVER a key value. */
         apiKeySecretRef: z.string().min(1).nullable(),
@@ -70,6 +83,20 @@ const aiProvidersSchema = z.object({
          */
         privacyReviewRef: z.string().nullable().default(null),
       }),
+    )
+    .default([]),
+  /**
+   * D-573 — THE OWNER'S ALLOW-LIST of AI provider hosts beyond each adapter's
+   * official one (a regional endpoint, a proxy the owner runs). Exact host
+   * names, lower case; no wildcards, no IP addresses.
+   */
+  allowedHosts: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(253)
+        .regex(/^[a-z0-9.-]+$/),
     )
     .default([]),
 });
@@ -426,6 +453,22 @@ const aiBudgetsSchema = z.object({
    * unlimited.
    */
   perPlan: z.array(aiBudgetLimitsSchema.extend({ planKey: z.string().min(1) })).default([]),
+  /**
+   * D-573 (F-66) — THE PLATFORM-WIDE CEILING on what BrandSpace pays its AI
+   * providers, across every workspace, per UTC day and per UTC month, in
+   * MICRO-MINOR units of `currency` (a millionth of a cent for USD). The sum is
+   * the actual provider cost of settled requests plus the estimate of requests
+   * still in flight; released, failed and refused requests count zero. `null`
+   * means no ceiling. Every model's `costCurrency` must equal `currency`: there
+   * is no conversion (validation.ts).
+   */
+  platform: z
+    .object({
+      providerCostPerDayMicroMinor: z.number().int().nonnegative().nullable().default(null),
+      providerCostPerMonthMicroMinor: z.number().int().nonnegative().nullable().default(null),
+      currency: z.string().length(3).default('USD'),
+    })
+    .default({}),
 });
 
 const aiCreditRulesSchema = z.object({
@@ -2889,6 +2932,22 @@ const operationsSchema = z.object({
     .default({}),
   trialDefaultDays: z.number().int().nonnegative().default(14),
   supportedCurrencies: z.array(z.string().length(3)).default(['SAR', 'USD']),
+  /**
+   * D-573 — WHEN THE PLATFORM'S SECRETS WERE LAST ROTATED (the vault KEK and
+   * the database credentials), `YYYY-MM-DD`, set by the owner once it is done.
+   * Hosting variables may have leaked on 2026-10-21; until this is set, and for
+   * any AI key saved before it, Home → Is Brandspace ready says to reissue the
+   * AI key (owner-readiness.ts).
+   */
+  secretRotation: z
+    .object({
+      completedAt: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .default(null),
+    })
+    .default({}),
 });
 
 /**

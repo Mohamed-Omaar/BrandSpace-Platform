@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import { systemClock } from '@brandspace/shared';
+import { systemClock, unsafeHostReason, unsafeProviderUrlReason } from '@brandspace/shared';
 import { AI_CAPABILITY_REQUIREMENTS, CONFIG_DOMAINS, type ConfigDomain } from './domains';
 
 /**
@@ -64,6 +64,7 @@ interface ModelLike {
   key: string;
   providerKey: string;
   status: string;
+  costCurrency?: string;
   disableSwitch?: boolean;
   inputCostPerUnitMicroMinor?: number | null;
   outputCostPerUnitMicroMinor?: number | null;
@@ -111,6 +112,7 @@ function capabilityRefusalFor(capability: string, model: ModelLike): string | nu
 }
 interface ProviderLike {
   key: string;
+  baseUrl?: string;
   status: string;
   apiKeySecretRef: string | null;
   noTrainingGuarantee: boolean;
@@ -131,7 +133,22 @@ function semantic(
       []) as ProviderLike[];
     const known = new Set(providers.map((p) => p.key));
     const seenModelKeys = new Set<string>();
+    // D-573 — one currency with the platform ceiling; there is no conversion.
+    const budgets = context['ai.budgets'] as { platform?: { currency?: string } } | undefined;
+    const platformCurrency = budgets
+      ? String(budgets.platform?.currency ?? 'USD').toUpperCase()
+      : null;
     for (const [i, model] of ((doc['models'] ?? []) as ModelLike[]).entries()) {
+      if (
+        platformCurrency &&
+        String(model.costCurrency ?? 'USD').toUpperCase() !== platformCurrency
+      ) {
+        issues.push({
+          severity: 'error',
+          path: `models.${i}.costCurrency`,
+          message: `Priced in ${String(model.costCurrency ?? 'USD').toUpperCase()}, but the platform AI ceiling is in ${platformCurrency}. There is no conversion: use ${platformCurrency}.`,
+        });
+      }
       if (known.size > 0 && !known.has(model.providerKey)) {
         issues.push({
           severity: 'error',
@@ -425,7 +442,19 @@ function semantic(
   }
 
   if (domain === 'ai.providers') {
+    // D-573 — the owner's allow-list holds host NAMES, never an address.
+    for (const [i, host] of ((doc['allowedHosts'] ?? []) as string[]).entries()) {
+      const problem = unsafeHostReason(host);
+      if (problem) {
+        issues.push({ severity: 'error', path: `allowedHosts.${i}`, message: problem });
+      }
+    }
     for (const [i, provider] of ((doc['providers'] ?? []) as ProviderLike[]).entries()) {
+      // D-573 — at every status: a draft is where an unsafe address would first appear.
+      const urlProblem = unsafeProviderUrlReason(provider.baseUrl);
+      if (urlProblem) {
+        issues.push({ severity: 'error', path: `providers.${i}.baseUrl`, message: urlProblem });
+      }
       if (provider.status === 'active' && !provider.apiKeySecretRef) {
         issues.push({
           severity: 'error',
@@ -841,6 +870,38 @@ function semantic(
   }
 
   if (domain === 'ai.budgets') {
+    // D-573 — the platform ceiling is in one currency and no model is priced in another.
+    const platformCurrency = String(
+      ((doc['platform'] ?? {}) as { currency?: string }).currency ?? 'USD',
+    ).toUpperCase();
+    const models = ((context['ai.models'] as { models?: ModelLike[] })?.models ??
+      []) as ModelLike[];
+    for (const model of models) {
+      const currency = String(model.costCurrency ?? 'USD').toUpperCase();
+      if (currency !== platformCurrency) {
+        issues.push({
+          severity: 'error',
+          path: 'platform.currency',
+          message: `Model "${model.key}" is priced in ${currency}, the platform ceiling in ${platformCurrency}. There is no conversion: price every model in the ceiling's currency.`,
+        });
+      }
+    }
+    const platform = (doc['platform'] ?? {}) as Record<string, number | null>;
+    const platformDay = platform['providerCostPerDayMicroMinor'];
+    const platformMonth = platform['providerCostPerMonthMicroMinor'];
+    if (
+      typeof platformDay === 'number' &&
+      typeof platformMonth === 'number' &&
+      platformDay > platformMonth
+    ) {
+      issues.push({
+        severity: 'error',
+        path: 'platform.providerCostPerDayMicroMinor',
+        message:
+          'The daily platform ceiling exceeds the monthly one, so the monthly one is unreachable.',
+      });
+    }
+
     const perPlan = (doc['perPlan'] ?? []) as { planKey: string }[];
     const seen = new Set<string>();
     for (const [i, entry] of perPlan.entries()) {

@@ -12,6 +12,7 @@ export * from './geography';
 export * from './internal-record-text';
 export * from './logger';
 export * from './money';
+export * from './outbound-address';
 export * from './password-policy';
 export * from './permissions';
 export * from './public-error';
