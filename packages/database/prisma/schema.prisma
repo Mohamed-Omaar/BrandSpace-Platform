@@ -1606,8 +1606,12 @@ model AiRequest {
   /// million input tokens is 0.015 of a cent per thousand tokens, which as an
   /// integer count of cents is zero. Accrues across attempts — including
   /// failed ones, which the customer is never billed for.
-  providerCostMicroMinor BigInt @default(0)
-  currency               String @default("USD") @db.Char(3)
+  providerCostMicroMinor         BigInt @default(0)
+  currency                       String @default("USD") @db.Char(3)
+  /// D-573 — the ESTIMATED provider cost of this request, written when it is
+  /// admitted, so the platform-wide ceiling counts a request still in flight.
+  /// Never in a customer response. CHECK >= 0 (migration).
+  providerCostEstimateMicroMinor BigInt @default(0)
 
   /// Milli-credits (D-14). Reserved generously up front, charged on the actual.
   creditsReservedMilli BigInt @default(0)
@@ -1641,6 +1645,8 @@ model AiRequest {
   /// The stuck-request sweep, ordered so the oldest is reconciled first — the
   /// A-7 lesson applied before the defect rather than after it.
   @@index([status, deadlineAt])
+  /// D-573 — the platform ceiling sums the period across every workspace.
+  @@index([createdAt])
   @@map("ai_request")
 }
 
