@@ -146,8 +146,10 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
         if (row.key === 'storage') {
           // Below 1 GB in MB ("12 MB / 5 GB"); from 1 GB the prototype's "3.1 / 50".
           const used = storageUsed(storedBytes);
-          const usedText = used.unit === 'MB' ? `${used.amount} MB` : used.amount;
-          const limitText = (limit: number) => (used.unit === 'MB' ? `${limit} GB` : `${limit}`);
+          const inMb = used.unit === 'MB';
+          const usedText = inMb ? t('plan.unitMb').replace('{n}', used.amount) : used.amount;
+          const limitText = (limit: number) =>
+            inMb ? t('plan.unitGb').replace('{n}', String(limit)) : String(limit);
           const share =
             ceiling.kind === 'limited' ? storagePercent(storedBytes, ceiling.limit) : null;
           return {
@@ -156,7 +158,10 @@ export default async function BillingPage({ params }: { params: Promise<{ locale
             value:
               ceiling.kind === 'limited'
                 ? `${usedText} / ${limitText(ceiling.limit)}`
-                : t('plan.usageUnstated').replace('{used}', `${used.amount} ${used.unit}`),
+                : t('plan.usageUnstated').replace(
+                    '{used}',
+                    t(inMb ? 'plan.unitMb' : 'plan.unitGb').replace('{n}', used.amount),
+                  ),
             pct: share === null ? null : Math.max(2, Math.min(100, Math.round(share))),
           };
         }

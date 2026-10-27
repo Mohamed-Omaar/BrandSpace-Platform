@@ -47,8 +47,13 @@ describe('the screens read bytes, not the rounded-up gigabytes', () => {
   it('Plan & billing: "12 MB / 5 GB" below a gigabyte, "3.1 / 50" from one', () => {
     const billing = read('apps/dashboard/src/app/[locale]/billing/page.tsx');
     expect(billing).toMatch(/featureKey === QUOTA_FEATURES\.storageGb\)\?\.usedBytes/);
-    expect(billing).toMatch(/used\.unit === 'MB' \? `\$\{used\.amount\} MB` : used\.amount/);
-    expect(billing).toMatch(/used\.unit === 'MB' \? `\$\{limit\} GB` : `\$\{limit\}`/);
+    // The units are the reader's words: "12 MB / 5 GB", "12 ميغابايت / 5 غيغابايت".
+    expect(billing).toMatch(
+      /inMb \? t\('plan\.unitMb'\)\.replace\('\{n\}', used\.amount\) : used\.amount/,
+    );
+    expect(billing).toMatch(
+      /inMb \? t\('plan\.unitGb'\)\.replace\('\{n\}', String\(limit\)\) : String\(limit\)/,
+    );
   });
 
   it('Usage & limits and the quota table use the same reading, en and ar', () => {
