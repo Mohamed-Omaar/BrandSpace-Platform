@@ -68,6 +68,13 @@ export const EMAIL_TEMPLATE_KEYS = [
    * `CONTROL_CENTER_ONLY_TEMPLATE_KEYS` below.
    */
   'integration.test_message',
+  /*
+   * D-573 — the platform's AI spending reached 80% or 100% of a daily or
+   * monthly platform ceiling. Sent by the API to active platform owners, once
+   * per period and threshold. Fixed text, no figure, no link and no variable:
+   * the numbers are on the Control Center's Home, behind its sign-in.
+   */
+  'platform.ai_spend_alert',
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];

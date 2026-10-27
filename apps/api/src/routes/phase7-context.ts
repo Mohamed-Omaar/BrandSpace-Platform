@@ -1,17 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { CUSTOMER_REALM, CustomerAuthService } from '@brandspace/auth';
-import {
-  AiGateway,
-  ConfigurationAiSource,
-  MockProviderAdapter,
-  type AiProviderAdapter,
-} from '@brandspace/ai-gateway';
+import type { AiGateway } from '@brandspace/ai-gateway';
 import { ConfigurationService } from '@brandspace/config';
-import {
-  CreditLedgerService,
-  EntitlementService,
-  TenantCatalogueSource,
-} from '@brandspace/entitlements';
+import { EntitlementService, TenantCatalogueSource } from '@brandspace/entitlements';
 import {
   getPrisma,
   withWorkspace,
@@ -22,6 +13,7 @@ import type { InsightDenialSink } from '@brandspace/analytics';
 import type { CopilotDenialSink } from '@brandspace/copilot';
 import type { AutomationDenialSink } from '@brandspace/automation';
 import { getPlatformClient } from '@brandspace/database/platform';
+import { platformAiGateway } from '../ai-gateway-factory';
 import {
   createLogger,
   currentEnvironment,
@@ -48,7 +40,6 @@ import {
 
 const log = createLogger({ context: { component: 'api.phase7' } });
 
-let cachedGateway: AiGateway | null = null;
 let cachedConfiguration: ConfigurationService | null = null;
 
 export function configurationService(): ConfigurationService {
@@ -57,48 +48,11 @@ export function configurationService(): ConfigurationService {
 }
 
 /**
- * Build the gateway once per process.
- *
- * THE MOCK ADAPTER IS THE ONLY ONE REGISTERED, for the reason D-13 gave and
- * Phase 5B-2 repeated: the provider architecture is approved and vendor
- * selection is deferred, so registering a real one here would be the decision
- * D-13 explicitly withheld. Everything else about the call is real — routing,
- * the reservation, settlement, budgets, idempotency and the ledger row.
+ * The process's one AI gateway — D-573, `../ai-gateway-factory.ts`. Kept under
+ * this name because the Phase 7, 8 and 9 routes and the scheduler import it.
  */
 export function gateway(): AiGateway {
-  if (cachedGateway) return cachedGateway;
-  const platform = getPlatformClient();
-  const environment = currentEnvironment();
-  const adapters = new Map<string, AiProviderAdapter>([
-    /*
-     * PHASE 10 §11 — NO ADAPTER AT ALL IN PRODUCTION, rather than a mock with
-     * its context-answering turned off.
-     *
-     * With no adapter registered, routing still resolves and the pipeline still
-     * reserves, but the chain finds nothing to call and the request fails with
-     * MODEL_UNAVAILABLE — which releases the reservation, charges nothing, and
-     * shows the customer "this is temporarily unavailable". That is the honest
-     * outcome when no AI provider has been configured. Serving invented text
-     * that looks like a model wrote it is the outcome this replaces.
-     *
-     * `MockProviderAdapter` also refuses to be constructed in production, so
-     * this is the second of two locks rather than the only one.
-     */
-    ...(environment === 'PRODUCTION'
-      ? []
-      : ([['mock', new MockProviderAdapter({ answerFromContext: true })]] as const)),
-  ]);
-  cachedGateway = new AiGateway({
-    prisma: platform,
-    ledger: new CreditLedgerService({ prisma: platform }),
-    adapters,
-    configuration: new ConfigurationAiSource(configurationService(), environment),
-    // The mock needs no credential, and nothing here can resolve one: the Secret
-    // Service decrypt path is not imported by this route at all.
-    credentials: { resolve: async () => null },
-    environment,
-  });
-  return cachedGateway;
+  return platformAiGateway();
 }
 
 export function sessionTokenFrom(req: FastifyRequest): string | null {

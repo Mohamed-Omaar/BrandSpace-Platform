@@ -162,6 +162,21 @@ const TEMPLATES: Readonly<Record<EmailTemplateKey, LocalisedTemplate>> = {
       body: 'هذه رسالة اختبار من مركز تحكم Brandspace. إن وصلتك، فإرسال البريد يعمل.',
     },
   },
+  /*
+   * D-573 — the platform AI spending alert. No figure and no link: the numbers
+   * are on the Control Center's Home. At 100% AI is paused for every customer
+   * until the period ends or the ceiling is raised; the body says so plainly.
+   */
+  'platform.ai_spend_alert': {
+    EN: {
+      subject: 'Brandspace AI spending alert',
+      body: 'AI spending has reached 80% or more of a platform spending ceiling. At 100%, AI pauses for every customer until the day or month ends or you raise the ceiling. Open the Control Center to see the figures.',
+    },
+    AR: {
+      subject: 'تنبيه إنفاق الذكاء الاصطناعي في Brandspace',
+      body: 'بلغ إنفاق الذكاء الاصطناعي 80% أو أكثر من أحد حدود الإنفاق على مستوى المنصة. عند 100% يتوقف الذكاء الاصطناعي لجميع العملاء حتى ينتهي اليوم أو الشهر أو ترفع الحد. افتح مركز التحكم لرؤية الأرقام.',
+    },
+  },
 };
 
 /** Escape for an HTML text node or a double-quoted attribute. */
