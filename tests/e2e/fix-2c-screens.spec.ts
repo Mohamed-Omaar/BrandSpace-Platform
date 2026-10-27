@@ -56,7 +56,10 @@ for (const locale of LOCALES) {
     await expect(quota.locator('th').first()).toHaveText(locale === 'ar' ? 'الحصة' : 'Allowance');
     const storage = page.getByTestId('quota-limit.storage_gb');
     await expect(storage.locator('td').first()).toHaveText(locale === 'ar' ? 'التخزين' : 'Storage');
-    await expect(storage.locator('td').nth(1)).toHaveText(locale === 'ar' ? '1 غيغابايت' : '1 GB');
+    // D-572: 300 MB stored reads "300 MB", not the counter's rounded-up "1 GB".
+    await expect(storage.locator('td').nth(1)).toHaveText(
+      locale === 'ar' ? '300 ميغابايت' : '300 MB',
+    );
 
     const features = page.getByTestId('features-table');
     await expect(features.locator('th').nth(1)).toHaveText(

@@ -34,6 +34,7 @@ import {
   customerThStyle,
 } from '../../../components/workspace-shell';
 import { dayLabel, rangeLabel } from '../../../server/prototype-dates';
+import { storageUsed } from '../../../components/storage-usage';
 
 export const dynamic = 'force-dynamic';
 
@@ -196,14 +197,28 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
   const valueTypeOf = (featureKey: string): string | undefined =>
     features.find((entry) => entry.key === featureKey)?.valueType;
 
+  /**
+   * D-572 — STORAGE USED, FROM THE COUNTER'S EXACT BYTES: "12 MB" below one
+   * gigabyte, "3.1 GB" from it. The counter's `used` is whole gigabytes rounded
+   * up, which read "1 GB" for a workspace holding a few megabytes.
+   */
+  const storageText = (bytes: number): string => {
+    const used = storageUsed(bytes);
+    return t(used.unit === 'MB' ? 'plan.unitMb' : 'plan.unitGb').replace('{n}', used.amount);
+  };
+  const storedBytes = Number(
+    counters.find((counter) => counter.featureKey === QUOTA_FEATURES.storageGb)?.usedBytes ?? 0,
+  );
+
   /** "12 of 50", "12 · no ceiling stated" — the ceiling is the resolved decision. */
-  const againstCeiling = (used: string, featureKey: string): string => {
+  const againstCeiling = (used: string, featureKey: string, usedText?: string): string => {
     const ceiling = ceilingFor(effective.decisions, featureKey);
+    const shown = usedText ?? amount(featureKey, used);
     return ceiling.kind === 'limited'
       ? t('plan.usageOf')
-          .replace('{used}', amount(featureKey, used))
+          .replace('{used}', shown)
           .replace('{limit}', amount(featureKey, ceiling.limit))
-      : t('plan.usageUnstated').replace('{used}', amount(featureKey, used));
+      : t('plan.usageUnstated').replace('{used}', shown);
   };
 
   /*
@@ -273,7 +288,11 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
     {
       key: 'storage',
       label: t('plan.usageStorage'),
-      value: againstCeiling(usedFor(QUOTA_FEATURES.storageGb), QUOTA_FEATURES.storageGb),
+      value: againstCeiling(
+        usedFor(QUOTA_FEATURES.storageGb),
+        QUOTA_FEATURES.storageGb,
+        storageText(storedBytes),
+      ),
       unavailable: laterPhase,
     },
   ];
@@ -510,7 +529,9 @@ export default async function PlanPage({ params }: { params: Promise<{ locale: s
                       <tr key={counter.featureKey} data-testid={`quota-${counter.featureKey}`}>
                         <td style={customerTdStyle()}>{featureName(counter.featureKey)}</td>
                         <td style={customerTdStyle()}>
-                          {amount(counter.featureKey, counter.used)}
+                          {counter.featureKey === QUOTA_FEATURES.storageGb
+                            ? storageText(counter.usedBytes)
+                            : amount(counter.featureKey, counter.used)}
                         </td>
                         <td style={customerTdStyle()}>
                           {decision?.limitValue === null || decision?.limitValue === undefined
