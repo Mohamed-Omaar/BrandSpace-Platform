@@ -121,6 +121,8 @@ const en = {
   'reason.switched_off': 'It was set up and is switched off.',
   'reason.no_permission': 'Ask the platform owner for access.',
   'reason.no_sellable_plan': 'No plan is active, public and priced yet.',
+  'reason.no_plans':
+    'No plan is defined yet. A workspace has no plan to be on, so nothing included per plan (AI apps among them) can be switched on.',
   // PR F (e) — the closed beta's own rows.
   'area.scanner': 'File scanning',
   'area.scanner.about': 'Checks every uploaded file for malware before it can be used.',
@@ -790,6 +792,8 @@ const ar: Copy = {
   'reason.switched_off': 'سبق إعداده وهو الآن معطّل.',
   'reason.no_permission': 'اطلب الصلاحية من مالك المنصة.',
   'reason.no_sellable_plan': 'لا توجد بعد خطة مفعّلة وعامة ومسعّرة.',
+  'reason.no_plans':
+    'لم تُعرَّف أي خطة بعد. لا توجد خطة تنضم إليها مساحة العمل، فلا يمكن تفعيل أي شيء يُمنح حسب الخطة (ومنه تطبيقات الذكاء الاصطناعي).',
   // PR F (e)
   'area.scanner': 'فحص الملفات',
   'area.scanner.about': 'يفحص كل ملف مرفوع بحثًا عن البرمجيات الضارة قبل استخدامه.',

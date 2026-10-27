@@ -21,6 +21,7 @@ import {
   integrationAreaState,
   isSellable,
   plansAreaState,
+  plansRowRequired,
   readinessVerdict,
   type ReadinessArea,
 } from '../../apps/admin/src/server/owner-readiness';
@@ -334,6 +335,28 @@ describe('D-311 · readiness is derived, and never claims more than it knows', (
     expect(isSellable({ status: 'draft', visibility: 'public', prices: [{}] })).toBe(false);
     expect(isSellable({ status: 'active', visibility: 'public', prices: [] })).toBe(false);
     expect(plansAreaState([]).state).toBe('setup_required');
+  });
+
+  it('no plan defined at all is its own reason, and always blocks — payments on or off (D-571)', () => {
+    const retired = { status: 'retired', visibility: 'public', prices: [{}] };
+    const draft = { status: 'draft', visibility: 'private', prices: [] };
+    expect(plansAreaState([])).toEqual({
+      state: 'setup_required',
+      reason: 'no_plans',
+      provider: null,
+    });
+    expect(plansAreaState([retired]).reason).toBe('no_plans');
+    // A plan exists but none is on sale: the earlier reason, unchanged.
+    expect(plansAreaState([draft]).reason).toBe('no_sellable_plan');
+    for (const payments of [true, false, null]) {
+      expect(plansRowRequired(payments, 'no_plans')).toBe(true);
+    }
+    // While payments are off a plan on sale is not required (Q6); on or unknown, it is.
+    expect(plansRowRequired(false, 'no_sellable_plan')).toBe(false);
+    expect(plansRowRequired(true, 'no_sellable_plan')).toBe(true);
+    expect(plansRowRequired(null, 'no_sellable_plan')).toBe(true);
+    expect(simpleCopy('en')('reason.no_plans')).toMatch(/^No plan is defined yet\./);
+    expect(simpleCopy('ar')('reason.no_plans')).toMatch(/^لم تُعرَّف أي خطة بعد\./);
   });
 
   it('the verdict needs every required area ready, and never guesses a withheld one', () => {
