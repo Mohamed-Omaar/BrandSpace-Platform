@@ -768,11 +768,11 @@
   min-block-size: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* Room for a focus ring inside the scrolling box, and a gutter for the bar. */
+  /* Room for a focus ring inside the scrolling box, and a gutter for the bar,
+     which stays inside the card's padding (not borrowed from it) at every width. */
   padding: var(--bsp-px-4);
   padding-inline-end: var(--bsp-px-12);
   margin: calc(-1 * var(--bsp-px-4));
-  margin-inline-end: calc(-1 * var(--bsp-px-12));
 }
 @media (min-width: 768px) {
   .bsp-auth-card:has(.bsp-consent) {
