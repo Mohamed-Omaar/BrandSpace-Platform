@@ -241,6 +241,62 @@ for (const locale of LOCALES) {
       );
     });
 
+    test(`the consent card scrolls inside itself with the thin bar, never the page (D-572, ${locale})`, async ({
+      page,
+      request,
+    }) => {
+      const own = await ownWorkspace(`ai-apps-scroll-${locale}`);
+      await entitled(own);
+      await enter(page, own.slug, locale);
+      const clientId = await registerApp(request, `E2E scroll check ${locale}`);
+      const { challenge } = pkce();
+      const params = new URLSearchParams({
+        response_type: 'code',
+        client_id: clientId,
+        redirect_uri: REDIRECT,
+        code_challenge: challenge,
+        code_challenge_method: 'S256',
+        scope: 'brandspace.read brandspace.write offline_access',
+        resource: MCP_URL,
+      });
+      for (const size of [
+        { width: 1536, height: 864 },
+        { width: 1366, height: 768 },
+        { width: 375, height: 667 },
+      ]) {
+        await page.setViewportSize(size);
+        await page.goto(`${DASHBOARD_BASE_URL}/${locale}/oauth/authorize?${params.toString()}`);
+        await expect(page.getByTestId('consent')).toBeVisible();
+        const geometry = await page.evaluate(() => {
+          const card = document.querySelector('.bsp-auth-card') as HTMLElement;
+          const body = card.querySelector('.bsp-auth-body') as HTMLElement;
+          const box = card.getBoundingClientRect();
+          const style = getComputedStyle(body);
+          return {
+            pageScrolls: document.scrollingElement!.scrollHeight > window.innerHeight + 1,
+            cardTop: box.top,
+            cardBottom: box.bottom,
+            cardScrolls: card.scrollHeight > card.clientHeight + 1,
+            bodyOverflow: style.overflowY,
+            bodyBar: style.scrollbarWidth,
+            innerHeight: window.innerHeight,
+          };
+        });
+        const label = `${size.width}x${size.height}`;
+        expect(geometry.pageScrolls, label).toBe(false);
+        expect(geometry.cardTop, label).toBeGreaterThanOrEqual(0);
+        expect(geometry.cardBottom, label).toBeLessThanOrEqual(geometry.innerHeight);
+        // The card itself never scrolls; its body does, with the platform's thin bar.
+        expect(geometry.cardScrolls, label).toBe(false);
+        expect(geometry.bodyOverflow, label).toBe('auto');
+        expect(geometry.bodyBar, label).toBe('thin');
+        // Scrolled to its end, Allow is reachable inside the window.
+        await page.getByTestId('consent-allow').scrollIntoViewIfNeeded();
+        const allow = await page.getByTestId('consent-allow').boundingBox();
+        expect(allow!.y + allow!.height, label).toBeLessThanOrEqual(geometry.innerHeight);
+      }
+    });
+
     test(`an unknown app is an error on the consent screen and is never redirected (${locale})`, async ({
       page,
     }) => {
@@ -320,6 +376,33 @@ for (const locale of LOCALES) {
     });
   });
 }
+
+test('the API host serves the Brandspace icon at every icon address, and consent links one (D-572)', async ({
+  request,
+  page,
+}) => {
+  const icons: Record<string, string> = {
+    '/favicon.ico': 'image/x-icon',
+    '/favicon.svg': 'image/svg+xml',
+    '/apple-touch-icon.png': 'image/png',
+    '/icon-48.png': 'image/png',
+  };
+  for (const [path, type] of Object.entries(icons)) {
+    const response = await request.get(`${API_BASE_URL}${path}`);
+    expect(response.status(), path).toBe(200);
+    expect(response.headers()['content-type'], path).toBe(type);
+    expect((await response.body()).length, path).toBeGreaterThan(100);
+  }
+  // The consent page names its icon (the dashboard's own mark), so the tab shows Brandspace.
+  const own = await ownWorkspace('ai-apps-icon');
+  await enter(page, own.slug, 'en');
+  await page.goto(`${DASHBOARD_BASE_URL}/en/oauth/authorize?client_id=unknown`);
+  const href = await page.locator('link[rel="icon"]').first().getAttribute('href');
+  expect(href).toBeTruthy();
+  const icon = await request.get(new URL(href!, DASHBOARD_BASE_URL).toString());
+  expect(icon.status()).toBe(200);
+  expect(icon.headers()['content-type']).toContain('image/');
+});
 
 test('Control Center → AI apps: the card, in both languages', async ({ page, isMobile }) => {
   for (const locale of LOCALES) {
