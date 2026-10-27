@@ -42,6 +42,12 @@ export interface AdapterContext {
    */
   readonly signal: AbortSignal;
   readonly requestId: string;
+  /**
+   * D-573 — the owner's allow-list of provider hosts (`ai.providers.allowedHosts`).
+   * An adapter that reaches the network allows its own official host plus
+   * these, and nothing else (`egress.ts`). Optional: the mock never connects.
+   */
+  readonly allowedHosts?: readonly string[];
 }
 
 /** Usage as the gateway counts it, normalised from whatever the provider reports. */
@@ -77,6 +83,14 @@ export interface TextRequest {
    * OPTIONAL, so an adapter that does not care never has to look.
    */
   readonly taskKey?: string;
+  /**
+   * D-573 — whether the caller parses the answer as JSON. Set by the GATEWAY
+   * from the task (a capability that requires structured output, or a task
+   * whose caller parses JSON), never by a request body, so a real model can be
+   * asked for its JSON mode instead of an adapter guessing from the prompt.
+   * Optional: an adapter that does not care never has to look.
+   */
+  readonly outputFormat?: 'text' | 'json';
 }
 
 export interface TextResult {
