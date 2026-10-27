@@ -88,7 +88,10 @@ per-address ceilings, `unusedClientRetentionDays`, `allowedOrigins`. Off in prod
 Simple → AI apps or on the plan cards; the kill switch is in Advanced.
 
 **Staging (owner answer Q5):** after the deploy, Control Center → Simple → AI apps → "For everyone" on,
-and "Plans" → every plan.
+and "Plans" → every plan. A plan has to exist first: the Plans editor offers every plan in the active
+`plans` document that is not retired, and with none it says so and links to Plans (D-571). A workspace
+created while no plan existed has no plan, so it is given one from Simple → Customers → the workspace →
+"Change plan".
 
 ## 7. Connecting
 

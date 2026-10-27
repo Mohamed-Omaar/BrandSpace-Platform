@@ -565,6 +565,29 @@ test.describe('the owner card pages write through the Configuration Service', ()
     });
   });
 
+  test('AI apps: the plans editor offers every plan in the active catalogue, in both languages (D-571)', async ({
+    page,
+  }) => {
+    for (const locale of ['en', 'ar'] as const) {
+      await signIn(page, locale, { mode: 'simple' });
+      await openArea(page, `/${locale}/console/manage/ai-apps`);
+      // Read after any leftover draft is gone: the earlier tests add and archive plans.
+      const plans = await activeCataloguePlans();
+      expect(plans.length).toBeGreaterThan(0);
+      await page.getByTestId('area-edit-plans-plans').click();
+      const field = page.getByTestId('field-plans');
+      await expect(field.locator('input[type="checkbox"]')).toHaveCount(plans.length);
+      for (const plan of plans) {
+        await expect(page.getByTestId(`field-plans-${plan.key}`)).toBeVisible();
+        await expect(field).toContainText(plan.name[locale] || plan.name.en);
+      }
+      await expect(page.getByTestId('field-plans-empty')).toHaveCount(0);
+      await expect(page.getByTestId('area-check')).toBeVisible();
+      await page.getByTestId('area-cancel').click();
+      await page.context().clearCookies();
+    }
+  });
+
   test('a change refused on its second document says what was saved and finishes on "Try again"', async ({
     page,
   }) => {
@@ -830,6 +853,30 @@ const QUOTA_KEYS = [
 ];
 /** A stored id that is also an ordinary English word can't be told apart in English. */
 const PLAIN_WORD = /^[a-z]+$/;
+
+/** The active catalogue's plans that are not retired: what the AI apps editor must offer. */
+async function activeCataloguePlans(): Promise<
+  readonly { key: string; name: { en: string; ar: string } }[]
+> {
+  return withPlatformPrisma(async (prisma) => {
+    const active = await prisma.configurationVersion.findFirst({
+      where: { domain: 'plans', environment: 'DEVELOPMENT', status: 'ACTIVE' },
+      select: { payload: true },
+    });
+    const list =
+      (
+        active?.payload as {
+          plans?: { key: string; status?: string; name?: { en?: string; ar?: string } }[];
+        } | null
+      )?.plans ?? [];
+    return list
+      .filter((plan) => plan.status !== 'retired')
+      .map((plan) => ({
+        key: plan.key,
+        name: { en: plan.name?.en ?? '', ar: plan.name?.ar ?? '' },
+      }));
+  });
+}
 
 async function storedPlanKeys(): Promise<readonly string[]> {
   return withPlatformPrisma(async (prisma) => {

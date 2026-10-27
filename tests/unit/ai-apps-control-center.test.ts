@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseConfigPayload, type ConfigDomain } from '@brandspace/config';
+import {
+  defaultPayload,
+  parseConfigPayload,
+  validateConfiguration,
+  type ConfigDomain,
+} from '@brandspace/config';
 import { AI_APPS_FEATURE } from '@brandspace/entitlements';
 import { areaCopy } from '../../apps/admin/src/i18n/simple-areas';
 import { sourceOf } from '../../apps/admin/src/server/simple-areas/fields';
@@ -176,6 +181,108 @@ describe('D-566 · Control Center → AI apps', () => {
     });
     if ('missing' in edit) throw new Error('missing');
     expect(edit.problems).toContain(ctx.t('aa.r.killed'));
+  });
+});
+
+/** The production catalogue plus a draft, an unlisted and a retired plan. */
+function catalogueWithEveryStatus(): Docs {
+  const docs = productionDocs();
+  const plans = docs.plans?.['plans'] as Record<string, unknown>[];
+  const like = (key: string, status: string, visibility: string, en: string, ar: string) => ({
+    ...plans[0],
+    key,
+    status,
+    visibility,
+    name: { en, ar },
+  });
+  return {
+    ...docs,
+    plans: parseConfigPayload('plans', {
+      plans: [
+        ...plans,
+        like('draft-plan', 'draft', 'public', 'Draft plan', 'خطة مسودة'),
+        like('unlisted-plan', 'active', 'private', 'Unlisted plan', 'خطة غير معروضة'),
+        like('old-plan', 'retired', 'public', 'Old plan', 'خطة قديمة'),
+      ],
+    }) as unknown as Record<string, unknown>,
+  };
+}
+
+/** Staging on 2026-10-27: no plan in the active catalogue, everything else default. */
+function noPlanDocs(): Docs {
+  return {
+    ...productionDocs(),
+    plans: defaultPayload('plans') as unknown as Record<string, unknown>,
+  };
+}
+
+describe('D-571 · the plans editor offers every plan, and never a silent empty list', () => {
+  it('lists every plan that is not retired as a choice — drafts and unlisted plans included', () => {
+    const docs = catalogueWithEveryStatus();
+    for (const locale of ['en', 'ar']) {
+      const ctx = context(locale);
+      const field = perPlan.fields(docs, ctx, 'edit', 'plans')[0]!;
+      expect(field.options?.map((option) => option.value)).toEqual([
+        ...planKeys(productionDocs()),
+        'draft-plan',
+        'unlisted-plan',
+      ]);
+      expect(field.options?.map((option) => option.label)).toContainEqual({
+        literal: locale === 'ar' ? 'خطة مسودة' : 'Draft plan',
+      });
+    }
+  });
+
+  it('with no plan at all: the editor says so and points to Plans; the check refuses; the card says so, en and ar', () => {
+    const docs = noPlanDocs();
+    for (const locale of ['en', 'ar']) {
+      const ctx = context(locale);
+      const field = perPlan.fields(docs, ctx, 'edit', 'plans')[0]!;
+      expect(field.options).toEqual([]);
+      expect(field.empty).toEqual({
+        text: 'aa.p.noPlans',
+        link: 'aa.p.toPlans',
+        path: '/console/plans',
+      });
+      expect(perPlan.check?.(docs, docs, ctx, { mode: 'edit', itemKey: 'plans' })).toEqual([
+        ctx.t('aa.p.noPlans'),
+      ]);
+      const card = perPlan.items(docs, ctx)[0]!;
+      expect(card.facts[0]?.value).toBe(ctx.t('aa.s.noPlanYet'));
+      expect(card.status?.label).toBe(ctx.t('aa.s.noPlan'));
+    }
+    expect(context('en').t('aa.p.noPlans')).toBe(
+      'There is no plan yet, so there is nothing to include. Make a plan first.',
+    );
+    expect(context('ar').t('aa.p.noPlans')).not.toBe(context('en').t('aa.p.noPlans'));
+  });
+
+  it('from empty entitlements, ticking a plan writes the registry entry and the grant, and the document validates', () => {
+    const docs = catalogueWithEveryStatus();
+    const ctx = context('en');
+    const edit = prepareEdit({
+      collection: perPlan,
+      docs,
+      ctx,
+      context: {},
+      mode: 'edit',
+      itemKey: 'plans',
+      source: sourceOf({ 'f.plans': ['draft-plan'] }),
+    });
+    if ('missing' in edit) throw new Error('missing');
+    expect(edit.problems).toEqual([]);
+    const after = edit.after.entitlements as {
+      features: { key: string }[];
+      planEntitlements: { planKey: string; featureKey: string; enabled: boolean }[];
+    };
+    expect(after.features.map((feature) => feature.key)).toContain(AI_APPS_FEATURE);
+    expect(
+      after.planEntitlements
+        .filter((grant) => grant.featureKey === AI_APPS_FEATURE && grant.enabled)
+        .map((grant) => grant.planKey),
+    ).toEqual(['draft-plan']);
+    const report = validateConfiguration('entitlements', after, { plans: docs.plans });
+    expect(report.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
   });
 });
 

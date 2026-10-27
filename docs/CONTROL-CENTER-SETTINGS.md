@@ -159,18 +159,18 @@ Production ships **no** features or flags; they are added in Advanced. Each one 
 
 ## AI apps — `ai-apps`, `feature.ai_apps` (Simple: **AI apps**, D-566)
 
-| Setting                                                 | What it does                                                       | Simple before | Simple now                   | Owner? |
-| ------------------------------------------------------- | ------------------------------------------------------------------ | ------------- | ---------------------------- | ------ |
-| `enabled`                                               | Customers can connect AI apps at all. Off stops every app at once. | —             | edit                         | safe   |
-| `rateLimit.maxCallsPerConnection`                       | Requests one connected app may make per window.                    | —             | edit                         | safe   |
-| `feature.ai_apps` per plan                              | Which plans include AI apps.                                       | —             | edit (and on each plan card) | safe   |
-| `rateLimit.windowSeconds`                               | The window requests are counted in.                                | —             | shown ("by your developer")  | risky  |
-| `oauth.accessTokenTtlSeconds`, `refreshTokenTtlDays`    | How long an app's sign-in lasts.                                   | —             | shown                        | risky  |
-| `oauth.authorizationCodeTtlSeconds`                     | How long the one-time sign-in code works.                          | —             | shown                        | risky  |
-| `oauth.registrationPerIpPerHour`, `tokenPerIpPerMinute` | Requests accepted from one address.                                | —             | shown                        | risky  |
-| `oauth.unusedClientRetentionDays`                       | When an app that never connected is removed.                       | —             | shown                        | risky  |
-| `allowedOrigins`                                        | Websites allowed to call the MCP address from a browser.           | —             | shown                        | risky  |
-| The `feature.ai_apps` kill switch                       | Emergency off for the feature.                                     | —             | shown (Advanced)             | risky  |
+| Setting                                                 | What it does                                                                                                                | Simple before | Simple now                   | Owner? |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------- | ---------------------------- | ------ |
+| `enabled`                                               | Customers can connect AI apps at all. Off stops every app at once.                                                          | —             | edit                         | safe   |
+| `rateLimit.maxCallsPerConnection`                       | Requests one connected app may make per window.                                                                             | —             | edit                         | safe   |
+| `feature.ai_apps` per plan                              | Which plans include AI apps. Every plan not retired is offered; with no plan the editor says so and links to Plans (D-571). | —             | edit (and on each plan card) | safe   |
+| `rateLimit.windowSeconds`                               | The window requests are counted in.                                                                                         | —             | shown ("by your developer")  | risky  |
+| `oauth.accessTokenTtlSeconds`, `refreshTokenTtlDays`    | How long an app's sign-in lasts.                                                                                            | —             | shown                        | risky  |
+| `oauth.authorizationCodeTtlSeconds`                     | How long the one-time sign-in code works.                                                                                   | —             | shown                        | risky  |
+| `oauth.registrationPerIpPerHour`, `tokenPerIpPerMinute` | Requests accepted from one address.                                                                                         | —             | shown                        | risky  |
+| `oauth.unusedClientRetentionDays`                       | When an app that never connected is removed.                                                                                | —             | shown                        | risky  |
+| `allowedOrigins`                                        | Websites allowed to call the MCP address from a browser.                                                                    | —             | shown                        | risky  |
+| The `feature.ai_apps` kill switch                       | Emergency off for the feature.                                                                                              | —             | shown (Advanced)             | risky  |
 
 Every length of time on this page reads in plain units, en and ar (D-563): the defaults show as
 "20 every 1 hour" and "60 every 1 minute" from one address, "1 hour" for an access token, "30 days" for
