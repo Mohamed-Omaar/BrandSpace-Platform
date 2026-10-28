@@ -372,6 +372,11 @@
       "baked-token": 3,
       "inline-style": 6
     },
+    "apps/dashboard/src/app/[locale]/design-system/components/components-client.tsx": {
+      "baked-token": 8,
+      "inline-style": 83,
+      "length": 1
+    },
     "apps/dashboard/src/app/[locale]/design-system/components/page.tsx": {
       "baked-token": 4,
       "inline-style": 5,
@@ -385,6 +390,11 @@
     "apps/dashboard/src/app/[locale]/design-system/showcase-client.tsx": {
       "baked-token": 9,
       "inline-style": 25
+    },
+    "apps/dashboard/src/app/[locale]/design-system/tokens/page.tsx": {
+      "baked-token": 26,
+      "inline-style": 49,
+      "length": 3
     },
     "apps/dashboard/src/app/[locale]/error.tsx": {
       "baked-token": 1,
