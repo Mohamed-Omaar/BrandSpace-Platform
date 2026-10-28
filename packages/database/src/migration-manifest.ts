@@ -105,4 +105,5 @@ export const EXPECTED_MIGRATIONS: readonly string[] = [
   '20261023090000_ai_app_connections',
   '20261023091000_ai_app_token_replaced_scoped',
   '20261027100000_ai_platform_spend_ceiling',
+  '20261028090000_secret_version_kek_rewrap',
 ];

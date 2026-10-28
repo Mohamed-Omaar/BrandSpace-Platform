@@ -71,6 +71,8 @@ describe('M2 — PREFLIGHT_REFUSED on PublishAttemptOutcome', () => {
       '20261023091000_ai_app_token_replaced_scoped',
       // D-573: the platform AI ceiling's in-flight estimate.
       '20261027100000_ai_platform_spend_ceiling',
+      // D-574: the KEK re-wrap may replace a version's wrapped data key.
+      '20261028090000_secret_version_kek_rewrap',
     ]);
   });
 

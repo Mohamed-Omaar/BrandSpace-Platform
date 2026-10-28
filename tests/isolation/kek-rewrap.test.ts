@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -388,21 +388,89 @@ describe.each(DOMAINS)('D-574 · re-wrapping the %s key domain', (domain) => {
 });
 
 describe('D-574 · the platform vault still refuses any other change to secret material', () => {
-  it('without the re-wrap flag, a wrapped key cannot change', async () => {
+  /** One connection the test controls, so "after the commit" is the same session. */
+  async function session(): Promise<Client> {
+    const client = new Client({ connectionString: libpqUrl(urlFor('platform', database)) });
+    await client.connect();
+    return client;
+  }
+
+  it('the re-wrap flag is transaction-scoped: gone after the commit, and a plain UPDATE of the wrapped key is then refused', async () => {
     const version = await prisma.secretVersion.findFirstOrThrow();
-    await expect(
-      prisma.secretVersion.update({ where: { id: version.id }, data: { wrappedDataKey: 'AAAA' } }),
-    ).rejects.toThrow();
+    const client = await session();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.kek_rewrap', 'on', true)`);
+      const inside = await client.query(`SELECT current_setting('app.kek_rewrap', true) AS flag`);
+      expect(inside.rows[0].flag).toBe('on');
+      await client.query('COMMIT');
+
+      const after = await client.query(`SELECT current_setting('app.kek_rewrap', true) AS flag`);
+      expect(after.rows[0].flag ?? '').toBe('');
+      await expect(
+        client.query(`UPDATE "secret_version" SET "wrappedDataKey" = 'AAAA' WHERE id = $1`, [
+          version.id,
+        ]),
+      ).rejects.toThrow(/only through the KEK re-wrap/);
+    } finally {
+      await client.end();
+    }
   });
 
-  it('even with the re-wrap flag, the ciphertext cannot change', async () => {
+  it('without the re-wrap flag, the wrapped key, its provider and its key id cannot change', async () => {
     const version = await prisma.secretVersion.findFirstOrThrow();
-    await expect(
-      prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT set_config('app.kek_rewrap', 'on', true)`;
-        await tx.secretVersion.update({ where: { id: version.id }, data: { ciphertext: 'AAAA' } });
-      }),
-    ).rejects.toThrow();
+    for (const data of [{ wrappedDataKey: 'AAAA' }, { keyProvider: 'other' }, { keyId: 'other' }]) {
+      await expect(
+        prisma.secretVersion.update({ where: { id: version.id }, data }),
+        Object.keys(data)[0],
+      ).rejects.toThrow();
+    }
+  });
+
+  it('even with the re-wrap flag, the material and the identity cannot change', async () => {
+    const version = await prisma.secretVersion.findFirstOrThrow();
+    const other = await prisma.secretRecord.findFirstOrThrow({
+      where: { id: { not: version.secretRecordId } },
+    });
+    const changes: Record<string, unknown>[] = [
+      { ciphertext: 'AAAA' },
+      { iv: 'AAAA' },
+      { authTag: 'AAAA' },
+      { encryptionContext: 'brandspace:other' },
+      { id: randomUUID() },
+      { secretRecordId: other.id },
+      { version: version.version + 100 },
+    ];
+    for (const data of changes) {
+      await expect(
+        prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT set_config('app.kek_rewrap', 'on', true)`;
+          await tx.secretVersion.update({ where: { id: version.id }, data });
+        }),
+        Object.keys(data)[0],
+      ).rejects.toThrow();
+    }
+    const unchanged = await prisma.secretVersion.findUniqueOrThrow({ where: { id: version.id } });
+    expect(unchanged).toEqual(version);
+  });
+
+  it('the status still changes without the flag (rotate and revoke)', async () => {
+    const version = await prisma.secretVersion.findFirstOrThrow();
+    await prisma.secretVersion.update({
+      where: { id: version.id },
+      data: { status: 'RETIRED', retiredAt: new Date() },
+    });
+    await prisma.secretVersion.update({
+      where: { id: version.id },
+      data: { status: version.status, retiredAt: version.retiredAt },
+    });
+  });
+
+  it('the re-wrap sets its flag with set_config(..., true), never for the session', () => {
+    const source = readFileSync(path.resolve(here, '../../packages/secrets/src/rewrap.ts'), 'utf8');
+    expect(source).toContain("set_config('app.kek_rewrap', 'on', true)");
+    expect(source).not.toMatch(/set_config\('app\.kek_rewrap',\s*'on',\s*false\)/);
+    expect(source).not.toMatch(/SET\s+(SESSION\s+)?app\.kek_rewrap/i);
   });
 });
 

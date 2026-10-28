@@ -68,7 +68,7 @@ describe('PR E — the Group B fields', () => {
   });
 
   it('comes directly after batch 7 PR C, and only connectors A and B, the AI apps migrations and the D-573 ceiling follow it', () => {
-    expect(EXPECTED_MIGRATIONS.slice(-9)).toEqual([
+    expect(EXPECTED_MIGRATIONS.slice(-10)).toEqual([
       '20261016090000_content_item_publish_time',
       NAME,
       '20261021090000_connectors_a_handles_and_subjects',
@@ -82,6 +82,8 @@ describe('PR E — the Group B fields', () => {
       '20261023091000_ai_app_token_replaced_scoped',
       // D-573: the platform AI ceiling's in-flight estimate.
       '20261027100000_ai_platform_spend_ceiling',
+      // D-574: the KEK re-wrap may replace a version's wrapped data key.
+      '20261028090000_secret_version_kek_rewrap',
     ]);
   });
 });
