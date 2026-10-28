@@ -949,6 +949,23 @@ function semantic(
           message: 'This task is free at every volume. Confirm that is intended.',
         });
       }
+      /*
+       * F-109 (D-14): customers see whole credits, rounded up. A rule that is
+       * not a whole number of credits per action shows a price above the
+       * actual charge; one that is, shows exactly the charge.
+       */
+      const wholePerAction =
+        cost['unit'] === 'request' &&
+        Number(cost['perUnitMilliCredits'] ?? 0) === 0 &&
+        Number(cost['baseMilliCredits']) % 1000 === 0;
+      if (!wholePerAction) {
+        issues.push({
+          severity: 'warning',
+          path: `costs.${i}`,
+          message:
+            'Customers see whole credits, rounded up. Price this task in whole credits per action (unit "request", no per-unit amount, base a multiple of 1,000 milli-credits) so the shown price equals the charge.',
+        });
+      }
     }
   }
 

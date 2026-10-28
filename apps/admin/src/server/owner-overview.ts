@@ -2,9 +2,6 @@ import { CONFIG_DOMAIN_KEYS, type ConfigDomain } from '@brandspace/config';
 import {
   AI_CAPABILITIES,
   ConfigurationAiSource,
-  measurePlatformSpend,
-  platformPeriodStarts,
-  platformThresholdsReached,
   REQUESTED_AI_CAPABILITIES,
   RoutingError,
   resolveRoute,
@@ -40,6 +37,7 @@ import {
   type ReadinessArea,
   type ReadinessAreaKey,
 } from './owner-readiness';
+import { platformCeilingNotice, type PlatformCeilingNotice } from './platform-ceiling';
 import {
   currentEnvironment,
   getAiUsageExplorer,
@@ -395,10 +393,7 @@ export interface AiSummary {
    * D-573 — the highest platform-ceiling alert level reached right now (80 or
    * 100), with its period, or null below 80% or with no ceiling set.
    */
-  readonly platformCeiling: {
-    readonly period: 'day' | 'month';
-    readonly percent: 80 | 100;
-  } | null;
+  readonly platformCeiling: PlatformCeilingNotice;
 }
 
 export async function loadAiSummary(
@@ -431,32 +426,14 @@ export async function loadAiSummary(
   };
 }
 
-/**
- * D-573 — where the platform's AI spend stands against `ai.budgets.platform`,
- * by the same sum the gateway admits against. 100% means AI is paused for
- * every customer. A month alert outranks a day alert at the same level,
- * because it lasts longer.
- */
-async function loadPlatformCeiling(clock: Clock): Promise<AiSummary['platformCeiling']> {
-  const budgets = await getConfigService().get('ai.budgets', currentEnvironment());
-  const limits = budgets.platform;
-  if (
-    limits.providerCostPerDayMicroMinor === null &&
-    limits.providerCostPerMonthMicroMinor === null
-  ) {
-    return null;
-  }
-  const now = clock.now();
-  const spend = await measurePlatformSpend(getPlatformPrisma(), now);
-  const crossings = platformThresholdsReached(limits, spend, platformPeriodStarts(now));
-  let best: AiSummary['platformCeiling'] = null;
-  for (const crossing of crossings) {
-    const rank = (c: { percent: number; period: string }) =>
-      c.percent * 2 + (c.period === 'month' ? 1 : 0);
-    const candidate = { period: crossing.period, percent: crossing.thresholdPercent };
-    if (best === null || rank(candidate) > rank(best)) best = candidate;
-  }
-  return best;
+/** D-573 — the Home notice, from `platform-ceiling.ts`, with this app's dependencies. */
+export function loadPlatformCeiling(clock: Clock = systemClock): Promise<PlatformCeilingNotice> {
+  return platformCeilingNotice({
+    configuration: getConfigService(),
+    prisma: getPlatformPrisma(),
+    environment: currentEnvironment(),
+    clock,
+  });
 }
 
 /**

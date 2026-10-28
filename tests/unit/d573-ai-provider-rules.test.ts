@@ -434,13 +434,13 @@ describe('D-573 · readiness and the secret rotation', () => {
     expect(after).toEqual(ready);
   });
 
-  it('the Control Center says the KEK sentence verbatim, in en and ar', () => {
-    const copy = read('apps/admin/src/i18n/simple.ts');
+  it('the Control Center says the KEK sentence verbatim, in en and ar, pointing at the runbook (D-574)', () => {
+    const copy = read('apps/admin/src/i18n/simple.ts').replace(/:\s+'/g, ": '");
     expect(copy).toContain(
-      "'note.kek_rewrap_first': 'Do not change SECRET_VAULT_KEK until the re-wrap command exists.'",
+      "'note.kek_rewrap_first': 'Change SECRET_VAULT_KEK only by docs/SECRET-ROTATION.md: the new key beside the old, then the re-wrap command.'",
     );
     expect(copy).toContain(
-      "'note.kek_rewrap_first': 'لا تغيّر SECRET_VAULT_KEK قبل أن يتوفر أمر إعادة التغليف.'",
+      "'note.kek_rewrap_first': 'لا تغيّر SECRET_VAULT_KEK إلا باتباع docs/SECRET-ROTATION.md: المفتاح الجديد بجانب القديم، ثم أمر إعادة التغليف.'",
     );
   });
 });
@@ -556,5 +556,49 @@ describe('D-573 · maxConcurrency is documented as not enforced', () => {
   it('the docs say so where the setting is described', () => {
     expect(read('docs/AI-GATEWAY.md')).toMatch(/maxConcurrency[^\n]*not enforced/i);
     expect(read('docs/CONTROL-CENTER-SETTINGS.md')).toMatch(/maxConcurrency[^\n]*not enforced/i);
+  });
+});
+
+describe('F-109 · credit rules are priced in whole credits per action', () => {
+  const rule = (overrides: Record<string, unknown>) => ({
+    costs: [
+      {
+        taskKey: 'caption.generate',
+        modelKey: 'text-model-x',
+        baseMilliCredits: 2000,
+        perUnitMilliCredits: 0,
+        unit: 'request',
+        ...overrides,
+      },
+    ],
+  });
+  const warned = (payload: Record<string, unknown>) =>
+    validateConfiguration('ai.credit-rules', payload).issues.some(
+      (issue) => issue.severity === 'warning' && /whole credits per action/.test(issue.message),
+    );
+
+  it('a whole number of credits per action passes quietly', () => {
+    expect(warned(rule({}))).toBe(false);
+  });
+
+  it('a per-token rule, a per-unit amount or a fraction of a credit is warned about', () => {
+    expect(warned(rule({ unit: '1k_tokens', perUnitMilliCredits: 450 }))).toBe(true);
+    expect(warned(rule({ perUnitMilliCredits: 50 }))).toBe(true);
+    expect(warned(rule({ baseMilliCredits: 1500 }))).toBe(true);
+  });
+
+  it('is a warning, never a refusal: existing rules still activate', () => {
+    expect(validateConfiguration('ai.credit-rules', rule({ baseMilliCredits: 1500 })).valid).toBe(
+      true,
+    );
+  });
+});
+
+describe('F-108 · the Studio names the language, not a dialect (D-474)', () => {
+  it('reads "اللغة" in Arabic and "Language" in English', () => {
+    const messages = read('apps/dashboard/src/i18n/messages.ts');
+    expect(messages).toContain("'content.composer.dialect': 'اللغة'");
+    expect(messages).toContain("'content.composer.dialect': 'Language'");
+    expect(messages).not.toContain("'content.composer.dialect': 'اللهجة'");
   });
 });

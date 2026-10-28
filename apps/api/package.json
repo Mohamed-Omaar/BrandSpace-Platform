@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "secrets:rewrap-kek": "tsx src/scripts/rewrap-kek.ts"
   },
   "dependencies": {
     "@brandspace/ai-gateway": "workspace:*",

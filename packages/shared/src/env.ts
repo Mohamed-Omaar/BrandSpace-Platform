@@ -127,6 +127,14 @@ const baseEnvSchema = z.object({
   SOCIAL_TOKEN_VAULT_KEK: z.string().min(32).optional(),
   /** Phase 9 — customers' own MFA seeds, reachable from the login surface (D-206). */
   CUSTOMER_MFA_VAULT_KEK: z.string().min(32).optional(),
+  /*
+   * D-574 — THE OLD KEK, ONLY WHILE A ROTATION IS IN PROGRESS. Unwrap-only; the
+   * same service boundaries as the KEK it precedes; removed once the re-wrap
+   * command reports no failures (docs/SECRET-ROTATION.md).
+   */
+  SECRET_VAULT_KEK_PREVIOUS: z.string().min(32).optional(),
+  SOCIAL_TOKEN_VAULT_KEK_PREVIOUS: z.string().min(32).optional(),
+  CUSTOMER_MFA_VAULT_KEK_PREVIOUS: z.string().min(32).optional(),
 
   /*
    * THE SAME THREE DOMAINS, AS MANAGED KEYS (F-09).
@@ -303,10 +311,25 @@ export type StartupServiceProfile = 'complete' | 'web' | 'dashboard' | 'admin' |
  * replaces it in production.
  */
 const KEY_DOMAIN_VARIABLES = {
-  platform: { kms: 'SECRET_VAULT_KMS_KEY_ARN', kek: 'SECRET_VAULT_KEK' },
-  social: { kms: 'SOCIAL_TOKEN_VAULT_KMS_KEY_ARN', kek: 'SOCIAL_TOKEN_VAULT_KEK' },
-  customerMfa: { kms: 'CUSTOMER_MFA_VAULT_KMS_KEY_ARN', kek: 'CUSTOMER_MFA_VAULT_KEK' },
-} as const satisfies Record<string, { readonly kms: keyof Env; readonly kek: keyof Env }>;
+  platform: {
+    kms: 'SECRET_VAULT_KMS_KEY_ARN',
+    kek: 'SECRET_VAULT_KEK',
+    previous: 'SECRET_VAULT_KEK_PREVIOUS',
+  },
+  social: {
+    kms: 'SOCIAL_TOKEN_VAULT_KMS_KEY_ARN',
+    kek: 'SOCIAL_TOKEN_VAULT_KEK',
+    previous: 'SOCIAL_TOKEN_VAULT_KEK_PREVIOUS',
+  },
+  customerMfa: {
+    kms: 'CUSTOMER_MFA_VAULT_KMS_KEY_ARN',
+    kek: 'CUSTOMER_MFA_VAULT_KEK',
+    previous: 'CUSTOMER_MFA_VAULT_KEK_PREVIOUS',
+  },
+} as const satisfies Record<
+  string,
+  { readonly kms: keyof Env; readonly kek: keyof Env; readonly previous: keyof Env }
+>;
 
 export type KeyDomainName = keyof typeof KEY_DOMAIN_VARIABLES;
 
@@ -483,11 +506,13 @@ function assertKeyDomainBoundaries(env: StartupEnv, profile: StartupServiceProfi
    * REQUIRED in its own environment rather than tolerated.
    */
   for (const domain of ALL_KEY_DOMAINS) {
-    const { kms, kek } = KEY_DOMAIN_VARIABLES[domain];
+    const { kms, kek, previous } = KEY_DOMAIN_VARIABLES[domain];
     if (permitted.has(domain)) {
       if (deployment === 'PRODUCTION') requireProductionValue(env, kms);
       else requireProductionValue(env, kek);
     } else {
+      // D-574: the old KEK of a rotation obeys the same boundary as the KEK.
+      forbidProductionValue(env, previous);
       /*
        * THE FORBID HALF IS UNCHANGED AND APPLIES TO BOTH. A service must not
        * hold a domain it does not use, in any deployment — that is the
@@ -512,7 +537,8 @@ function assertKeyDomainBoundaries(env: StartupEnv, profile: StartupServiceProfi
   );
   assertDistinct(
     env,
-    ALL_KEY_DOMAINS.map((d) => KEY_DOMAIN_VARIABLES[d].kek),
+    ALL_KEY_DOMAINS.flatMap((d) => [KEY_DOMAIN_VARIABLES[d].kek, KEY_DOMAIN_VARIABLES[d].previous]),
+    // D-574: a rotation's old key differs from its new one and from every other domain's.
     'Each key domain needs its OWN key-encryption key',
   );
 

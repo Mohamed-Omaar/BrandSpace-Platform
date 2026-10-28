@@ -10,3 +10,4 @@
 export * from '@brandspace/vault';
 export * from './categories';
 export * from './service';
+export * from './rewrap';

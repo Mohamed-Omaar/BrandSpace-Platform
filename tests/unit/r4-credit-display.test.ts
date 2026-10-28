@@ -4,36 +4,37 @@ import { describe, expect, it } from 'vitest';
 import { formatCredits } from '../../apps/dashboard/src/server/composer-editor';
 
 /*
- * ROUND 4 (3.6) — the credit DISPLAY rounding rule (docs/BILLING-AND-CREDITS.md):
- * at most one decimal, rounded away from zero to the next tenth, a trailing
- * `.0` dropped. Presentation only — the milli figure itself is never rounded.
+ * F-109 (D-14) — the credit DISPLAY rounding rule (docs/BILLING-AND-CREDITS.md
+ * §13.1): WHOLE credits, rounded away from zero. It replaces Round 4's one
+ * decimal. Presentation only — the milli figure itself is never rounded.
  */
-describe('formatCredits — one decimal, rounded up', () => {
+describe('formatCredits — whole credits, rounded up', () => {
   it.each([
     ['0', '0'],
-    ['1', '0.1'],
-    ['100', '0.1'],
-    ['101', '0.2'],
-    ['369', '0.4'],
+    ['1', '1'],
+    ['100', '1'],
+    ['101', '1'],
+    ['369', '1'],
     ['999', '1'],
     ['1000', '1'],
-    ['1050', '1.1'],
-    ['1100', '1.1'],
+    ['1001', '2'],
+    ['1050', '2'],
+    ['1100', '2'],
     ['2000', '2'],
-    ['12345', '12.4'],
+    ['12345', '13'],
     ['250000', '250'],
   ])('%s milli reads %s', (milli, shown) => {
     expect(formatCredits(milli)).toBe(shown);
   });
 
   it('keeps the sign and rounds a negative amount away from zero', () => {
-    expect(formatCredits('-369')).toBe('-0.4');
+    expect(formatCredits('-369')).toBe('-1');
     expect(formatCredits('-2000')).toBe('-2');
   });
 
-  it('never shows more than one decimal', () => {
+  it('always shows a whole number', () => {
     for (let milli = 0; milli <= 3_000; milli += 7) {
-      expect(formatCredits(String(milli))).toMatch(/^\d+(\.\d)?$/);
+      expect(formatCredits(String(milli))).toMatch(/^\d+$/);
     }
   });
 
@@ -43,8 +44,14 @@ describe('formatCredits — one decimal, rounded up', () => {
     }
   });
 
+  it('shows a whole-credit charge exactly', () => {
+    for (const credits of [1, 2, 12, 60]) {
+      expect(formatCredits(String(credits * 1_000))).toBe(String(credits));
+    }
+  });
+
   it('is exact past the float range — the figure never goes through a number', () => {
-    expect(formatCredits('90071992547409930001')).toBe('90071992547409930.1');
+    expect(formatCredits('90071992547409930001')).toBe('90071992547409931');
   });
 
   it('reads a malformed figure as zero rather than throwing', () => {

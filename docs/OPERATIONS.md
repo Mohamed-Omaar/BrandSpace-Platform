@@ -796,6 +796,11 @@ vault. Rotating one means re-wrapping, which requires both the old and the new k
 `KeyProvider` is the seam that makes this possible without touching any caller — `wrapDataKey` /
 `unwrapDataKey` and nothing else — and moving to a cloud KMS is a new implementation of that one file.
 
+**D-574 — the re-wrap command exists.** `<KEK>_PREVIOUS` holds the old key beside the new one (it opens
+envelopes, never seals one), and `pnpm secrets:rewrap-kek --domain <domain> --actor <email>` moves every
+data key of a domain to the new KEK, verifies each opens with the new key alone, and reports counts
+only. The owner's step-by-step procedure, for staging then production, is **`docs/SECRET-ROTATION.md`**.
+
 **Owner decision.** Which KMS, and the rotation cadence it enforces. Until one is chosen,
 `LocalDevelopmentKeyProvider` is the only implementation and it refuses to run in production, so this
 decision blocks production rather than being silently deferred.
@@ -804,10 +809,11 @@ decision blocks production rather than being silently deferred.
 have leaked, in an attack aimed at AI provider keys. On staging the vault KEK and the database
 credentials are treated as exposed until rotated, and so is any AI key saved before the rotation.
 
-1. **Do not change `SECRET_VAULT_KEK` until the re-wrap command exists** (F-105, the next small PR).
-   Changing it first leaves every data key wrapped under the old KEK, and every stored secret
-   unreadable. Home → Is Brandspace ready says this on the AI row until the rotation is recorded.
-2. Rotate the database credentials and, with the re-wrap command, the KEK.
+1. **Change a KEK only by `docs/SECRET-ROTATION.md` step 1**: the new key beside the old
+   (`<KEK>_PREVIOUS`), then the re-wrap command, then remove the old. Changing the variable alone
+   leaves every data key wrapped under the old KEK, and every stored secret unreadable. Home → Is
+   Brandspace ready says this on the AI row until the rotation is recorded.
+2. Rotate the database credentials (`docs/SECRET-ROTATION.md` step 2).
 3. Record the day in **Configuration → `operations` → `secretRotation.completedAt`** (`YYYY-MM-DD`).
 4. Reissue the AI key at the provider (a project-scoped key for this environment, with a hard monthly
    spending limit), save it in **Integrations → AI**, Test, and revoke the old one at the provider.
@@ -863,8 +869,9 @@ credential that might be compromised should be treated as compromised.
 
 - **A provider credential**: rotate it, then read the Integrations verification history to see when it
   last worked.
-- **A KEK**: this is the severe case. Every secret sealed under it must be re-wrapped, and until that is
-  done the old key cannot be destroyed. Plan for it to take hours, not minutes.
+- **A KEK**: this is the severe case. Every secret sealed under it must be re-wrapped
+  (`docs/SECRET-ROTATION.md` step 1), and until the command reports every envelope verified the old key
+  cannot be removed.
 - **A platform user's session**: revoke the session; MFA is mandatory for platform roles (D-27), so a
   password alone does not admit anybody.
 

@@ -23,6 +23,7 @@
     "db:reset": "pnpm --filter @brandspace/database reset",
     "db:seed": "pnpm --filter @brandspace/database seed",
     "bootstrap:production-owner": "pnpm --filter @brandspace/database bootstrap:production-owner",
+    "secrets:rewrap-kek": "pnpm --filter @brandspace/api secrets:rewrap-kek --",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:isolation": "vitest run --project isolation",

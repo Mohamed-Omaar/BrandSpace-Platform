@@ -145,7 +145,8 @@ const en = {
     'The AI key was saved before the secret rotation. Reissue it at the provider and save the new key.',
   'note.ai_reissue_after_rotation':
     'Reissue the AI key after the platform’s secret rotation: a key saved before it is treated as exposed.',
-  'note.kek_rewrap_first': 'Do not change SECRET_VAULT_KEK until the re-wrap command exists.',
+  'note.kek_rewrap_first':
+    'Change SECRET_VAULT_KEK only by docs/SECRET-ROTATION.md: the new key beside the old, then the re-wrap command.',
   'reason.social_hidden': 'Not configured. Scheduling is hidden from customers.',
   'reason.payments_off': 'Off for the beta. Not counted as required while off.',
   'reason.scanning_off':
@@ -831,7 +832,8 @@ const ar: Copy = {
     'حُفظ مفتاح الذكاء الاصطناعي قبل تدوير الأسرار. أعد إصداره لدى المزود واحفظ المفتاح الجديد.',
   'note.ai_reissue_after_rotation':
     'أعد إصدار مفتاح الذكاء الاصطناعي بعد تدوير أسرار المنصة: المفتاح المحفوظ قبله يُعدّ مكشوفًا.',
-  'note.kek_rewrap_first': 'لا تغيّر SECRET_VAULT_KEK قبل أن يتوفر أمر إعادة التغليف.',
+  'note.kek_rewrap_first':
+    'لا تغيّر SECRET_VAULT_KEK إلا باتباع docs/SECRET-ROTATION.md: المفتاح الجديد بجانب القديم، ثم أمر إعادة التغليف.',
   'reason.social_hidden': 'غير مُعدّ. الجدولة مخفية عن العملاء.',
   'reason.payments_off': 'متوقفة خلال الفترة التجريبية، ولا تُحسب مطلوبة ما دامت متوقفة.',
   'reason.scanning_off':
