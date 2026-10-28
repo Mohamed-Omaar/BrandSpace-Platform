@@ -532,6 +532,13 @@ page shows every colour with its variable and WCAG contrast. `tests/e2e/gallery.
 takes one screenshot per section in English and Arabic at 1536×864; those images are the baseline
 every later step is compared with.
 
+**CI renders the baselines** (owner rule, 2026-10-28). A baseline is never generated on a developer
+machine or in a remote container: with the same Chromium build, a different system's font rasteriser
+still moved glyph edges by 3–4% of the pixels on the text-dense sections (PR #93), above the 2%
+tolerance. When a baseline must change — only for an intended, reviewed visual change — take the
+`*-actual.png` from that CI run's `playwright-report-shard-2` artifact (`test-results/<test>/`) and
+commit it under the baseline's file name. The programme's pixel checks are likewise read from CI.
+
 **The ratchet** — `scripts/style/measure.ts` counts, file by file, every hard-coded colour, length,
 duration, easing, z-index, blur, font size and font family in the stylesheets, and every colour
 string, numeric style value, literal length, inline `style=` and reference to a baked-literal token

@@ -11,8 +11,16 @@ import { DASHBOARD_BASE_URL } from './apps';
  * production (see `design-system/page.tsx`). Hover and focus are not faked in
  * the page; this spec performs them before the shot.
  *
- * Baselines live in `gallery.design-system.spec.ts-snapshots/`. Regenerate with
- * `--update-snapshots` ONLY when a visual change is intended and reviewed.
+ * Baselines live in `gallery.design-system.spec.ts-snapshots/`.
+ *
+ * CI RENDERS THE BASELINES (owner rule, 2026-10-28). A baseline is never
+ * generated on a developer machine or in a remote container: even with the
+ * same Chromium build, a different system's font rasteriser changes glyph edges
+ * by more than the tolerance on text-dense sections (it did, on PR #93). When a
+ * baseline must change — only for an intended, reviewed visual change — take
+ * the `*-actual.png` from that run's `playwright-report-shard-2` artifact
+ * (`test-results/<test>/`) and commit it under the baseline's name. Pixel checks
+ * for later steps of the programme are read from CI, not from a local run.
  */
 
 const FAMILIES = [
