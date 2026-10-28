@@ -476,6 +476,223 @@
   --bs-shadow-drawer: 0 30px 80px rgba(0, 0, 0, 0.2);
   --bs-shadow-command-dialog: 0 35px 90px rgba(0, 0, 0, 0.24);
   --bs-shadow-focus: 0 0 0 2px #ffffff, 0 0 0 4px #7935fe;
+
+  /*
+   * S3: the TRANSITIONAL literal palette. Every colour the stylesheets wrote
+   * literally that no token carried, as a token named for its own value. S5 folds
+   * them into semantic tokens as each component is unified; nothing new may use
+   * them (the style ratchet counts every remaining literal).
+   */
+  --bs-lit-000000-a05: rgba(0, 0, 0, 0.05);
+  --bs-lit-000000-a06: rgba(0, 0, 0, 0.06);
+  --bs-lit-000000-a08: rgba(0, 0, 0, 0.08);
+  --bs-lit-000000-a12: rgba(0, 0, 0, 0.12);
+  --bs-lit-000000-a25: rgba(0, 0, 0, 0.25);
+  --bs-lit-020203: #020203;
+  --bs-lit-0a66c2: #0a66c2;
+  --bs-lit-0b0b0f: #0b0b0f;
+  --bs-lit-100e1c-a06: rgba(16, 14, 28, 0.06);
+  --bs-lit-111114-a11: rgba(17, 17, 20, 0.11);
+  --bs-lit-111114-a14: rgba(17, 17, 20, 0.14);
+  --bs-lit-111114-a18: rgba(17, 17, 20, 0.18);
+  --bs-lit-111114-a2: rgba(17, 17, 20, 0.2);
+  --bs-lit-111114-a28: rgba(17, 17, 20, 0.28);
+  --bs-lit-111114-a35: rgba(17, 17, 20, 0.35);
+  --bs-lit-111114-a55: rgba(17, 17, 20, 0.55);
+  --bs-lit-111114-a72: rgba(17, 17, 20, 0.72);
+  --bs-lit-141023-a035: rgba(20, 16, 35, 0.035);
+  --bs-lit-141023-a04: rgba(20, 16, 35, 0.04);
+  --bs-lit-141023-a045: rgba(20, 16, 35, 0.045);
+  --bs-lit-141023-a05: rgba(20, 16, 35, 0.05);
+  --bs-lit-141023-a055: rgba(20, 16, 35, 0.055);
+  --bs-lit-141023-a06: rgba(20, 16, 35, 0.06);
+  --bs-lit-141023-a07: rgba(20, 16, 35, 0.07);
+  --bs-lit-141023-a08: rgba(20, 16, 35, 0.08);
+  --bs-lit-141023-a1: rgba(20, 16, 35, 0.1);
+  --bs-lit-141023-a12: rgba(20, 16, 35, 0.12);
+  --bs-lit-141023-a14: rgba(20, 16, 35, 0.14);
+  --bs-lit-141023-a16: rgba(20, 16, 35, 0.16);
+  --bs-lit-141023-a18: rgba(20, 16, 35, 0.18);
+  --bs-lit-141023-a2: rgba(20, 16, 35, 0.2);
+  --bs-lit-141023-a25: rgba(20, 16, 35, 0.25);
+  --bs-lit-141023-a3: rgba(20, 16, 35, 0.3);
+  --bs-lit-151020: #151020;
+  --bs-lit-15121b: #15121b;
+  --bs-lit-17171d: #17171d;
+  --bs-lit-178a4c: #178a4c;
+  --bs-lit-1baf7a: #1baf7a;
+  --bs-lit-1d1a12: #1d1a12;
+  --bs-lit-1f1635-a055: rgba(31, 22, 53, 0.055);
+  --bs-lit-24242b: #24242b;
+  --bs-lit-28145a-a14: rgba(40, 20, 90, 0.14);
+  --bs-lit-28145a-a2: rgba(40, 20, 90, 0.2);
+  --bs-lit-29292f: #29292f;
+  --bs-lit-2a2a30: #2a2a30;
+  --bs-lit-2a78d6: #2a78d6;
+  --bs-lit-2b2b30: #2b2b30;
+  --bs-lit-2fb36d: #2fb36d;
+  --bs-lit-333333: #333;
+  --bs-lit-34343d: #34343d;
+  --bs-lit-36363f: #36363f;
+  --bs-lit-3a2a4f: #3a2a4f;
+  --bs-lit-3d2a74: #3d2a74;
+  --bs-lit-40139f: #40139f;
+  --bs-lit-417a59: #417a59;
+  --bs-lit-4b8a64: #4b8a64;
+  --bs-lit-4c8a67: #4c8a67;
+  --bs-lit-5312c4-a16: rgba(83, 18, 196, 0.16);
+  --bs-lit-5312c4-a3: rgba(83, 18, 196, 0.3);
+  --bs-lit-5312c4-a35: rgba(83, 18, 196, 0.35);
+  --bs-lit-55555c: #55555c;
+  --bs-lit-55555e: #55555e;
+  --bs-lit-5b1fd6: #5b1fd6;
+  --bs-lit-5c5866: #5c5866;
+  --bs-lit-5d5641: #5d5641;
+  --bs-lit-5f23da: #5f23da;
+  --bs-lit-696973: #696973;
+  --bs-lit-6a5a9a: #6a5a9a;
+  --bs-lit-6d6d76: #6d6d76;
+  --bs-lit-75757e: #75757e;
+  --bs-lit-7935fe-a0: rgba(121, 53, 254, 0);
+  --bs-lit-7935fe-a07: rgba(121, 53, 254, 0.07);
+  --bs-lit-7935fe-a08: rgba(121, 53, 254, 0.08);
+  --bs-lit-7935fe-a12: rgba(121, 53, 254, 0.12);
+  --bs-lit-7935fe-a18: rgba(121, 53, 254, 0.18);
+  --bs-lit-7935fe-a22: rgba(121, 53, 254, 0.22);
+  --bs-lit-7935fe-a26: rgba(121, 53, 254, 0.26);
+  --bs-lit-7935fe-a3: rgba(121, 53, 254, 0.3);
+  --bs-lit-7935fe-a35: rgba(121, 53, 254, 0.35);
+  --bs-lit-7935fe-a45: rgba(121, 53, 254, 0.45);
+  --bs-lit-7935fe-a8: rgba(121, 53, 254, 0.8);
+  --bs-lit-7a5600: #7a5600;
+  --bs-lit-7e7e88: #7e7e88;
+  --bs-lit-8a5534: #8a5534;
+  --bs-lit-8a5a00: #8a5a00;
+  --bs-lit-8a6b00: #8a6b00;
+  --bs-lit-8a8a92: #8a8a92;
+  --bs-lit-8f5bff: #8f5bff;
+  --bs-lit-92929d: #92929d;
+  --bs-lit-999999: #999;
+  --bs-lit-9b6bff: #9b6bff;
+  --bs-lit-9c6539: #9c6539;
+  --bs-lit-9c6dfe: #9c6dfe;
+  --bs-lit-9d6aff: #9d6aff;
+  --bs-lit-9e2a3b: #9e2a3b;
+  --bs-lit-a3231f: #a3231f;
+  --bs-lit-a578ff: #a578ff;
+  --bs-lit-aaaaaa: #aaa;
+  --bs-lit-b58cff: #b58cff;
+  --bs-lit-b5b5bd: #b5b5bd;
+  --bs-lit-b83245-a12: rgba(184, 50, 69, 0.12);
+  --bs-lit-b83245-a18: rgba(184, 50, 69, 0.18);
+  --bs-lit-b86e00: #b86e00;
+  --bs-lit-b8a4ff: #b8a4ff;
+  --bs-lit-b9b9c0: #b9b9c0;
+  --bs-lit-bdbdc4: #bdbdc4;
+  --bs-lit-c3a6ff: #c3a6ff;
+  --bs-lit-c49dff: #c49dff;
+  --bs-lit-c6a8ff: #c6a8ff;
+  --bs-lit-c8c8cf: #c8c8cf;
+  --bs-lit-c9adff: #c9adff;
+  --bs-lit-c9b3ff: #c9b3ff;
+  --bs-lit-c9b5ff: #c9b5ff;
+  --bs-lit-c9c9cf: #c9c9cf;
+  --bs-lit-c9c9d1: #c9c9d1;
+  --bs-lit-cfcfd6: #cfcfd6;
+  --bs-lit-d2d2d8: #d2d2d8;
+  --bs-lit-d4a900: #d4a900;
+  --bs-lit-d92d45: #d92d45;
+  --bs-lit-d9a066: #d9a066;
+  --bs-lit-d9ccff: #d9ccff;
+  --bs-lit-dff6e8: #dff6e8;
+  --bs-lit-e0b400: #e0b400;
+  --bs-lit-e4e4e8: #e4e4e8;
+  --bs-lit-e6dcff: #e6dcff;
+  --bs-lit-e6e6ea: #e6e6ea;
+  --bs-lit-e6f6ee: #e6f6ee;
+  --bs-lit-e7ddff: #e7ddff;
+  --bs-lit-e8e8ec: #e8e8ec;
+  --bs-lit-eaf3ff: #eaf3ff;
+  --bs-lit-eaf7ef: #eaf7ef;
+  --bs-lit-eb6834: #eb6834;
+  --bs-lit-ece4ff: #ece4ff;
+  --bs-lit-ece6ff: #ece6ff;
+  --bs-lit-eee6ff: #eee6ff;
+  --bs-lit-eeeef2: #eeeef2;
+  --bs-lit-eef8f2: #eef8f2;
+  --bs-lit-efe4ff: #efe4ff;
+  --bs-lit-efe7ff: #efe7ff;
+  --bs-lit-efedf3: #efedf3;
+  --bs-lit-efeff2: #efeff2;
+  --bs-lit-f0e5ff: #f0e5ff;
+  --bs-lit-f0f0f2: #f0f0f2;
+  --bs-lit-f0f0f3: #f0f0f3;
+  --bs-lit-f1eff6: #f1eff6;
+  --bs-lit-f2edff: #f2edff;
+  --bs-lit-f2f2f4: #f2f2f4;
+  --bs-lit-f3c9d1: #f3c9d1;
+  --bs-lit-f3d2d8: #f3d2d8;
+  --bs-lit-f3dfa0: #f3dfa0;
+  --bs-lit-f3f2f6: #f3f2f6;
+  --bs-lit-f3f3f5: #f3f3f5;
+  --bs-lit-f4e3c8: #f4e3c8;
+  --bs-lit-f4efff: #f4efff;
+  --bs-lit-f4f4f5: #f4f4f5;
+  --bs-lit-f5dfb3: #f5dfb3;
+  --bs-lit-f5f3ff: #f5f3ff;
+  --bs-lit-f5f5f7: #f5f5f7;
+  --bs-lit-f5fbf7: #f5fbf7;
+  --bs-lit-f6d6dc: #f6d6dc;
+  --bs-lit-f6f1ff: #f6f1ff;
+  --bs-lit-f6f3ff: #f6f3ff;
+  --bs-lit-f6f6f7: #f6f6f7;
+  --bs-lit-f7f7f9: #f7f7f9;
+  --bs-lit-f7fbf8: #f7fbf8;
+  --bs-lit-f8f8f9-a7: rgba(248, 248, 249, 0.7);
+  --bs-lit-faf7ff: #faf7ff;
+  --bs-lit-faf8ff: #faf8ff;
+  --bs-lit-faf9fc: #faf9fc;
+  --bs-lit-fafafb: #fafafb;
+  --bs-lit-fbf9ff: #fbf9ff;
+  --bs-lit-fbfaff: #fbfaff;
+  --bs-lit-fbfbfc: #fbfbfc;
+  --bs-lit-fcfaff: #fcfaff;
+  --bs-lit-fcfbff: #fcfbff;
+  --bs-lit-fde8ec: #fde8ec;
+  --bs-lit-ff78aa-a14: rgba(255, 120, 170, 0.14);
+  --bs-lit-ffd60a: #ffd60a;
+  --bs-lit-ffd60a-a34: rgba(255, 214, 10, 0.34);
+  --bs-lit-ffdd15-a3: rgba(255, 221, 21, 0.3);
+  --bs-lit-ffdd15-a7: rgba(255, 221, 21, 0.7);
+  --bs-lit-fff1c2: #fff1c2;
+  --bs-lit-fff3cc: #fff3cc;
+  --bs-lit-fff4c2: #fff4c2;
+  --bs-lit-fff4c7: #fff4c7;
+  --bs-lit-fff5b0: #fff5b0;
+  --bs-lit-fff5c8: #fff5c8;
+  --bs-lit-fff6cf: #fff6cf;
+  --bs-lit-fff6d6: #fff6d6;
+  --bs-lit-fff7a8: #fff7a8;
+  --bs-lit-fff7f8: #fff7f8;
+  --bs-lit-fff8e1: #fff8e1;
+  --bs-lit-fff8f9: #fff8f9;
+  --bs-lit-fff9d7: #fff9d7;
+  --bs-lit-fff9e6: #fff9e6;
+  --bs-lit-fffbe6: #fffbe6;
+  --bs-lit-fffbe8: #fffbe8;
+  --bs-lit-fffbea: #fffbea;
+  --bs-lit-fffbf2: #fffbf2;
+  --bs-lit-fffdf4: #fffdf4;
+  --bs-lit-ffffff-a0: rgba(255, 255, 255, 0);
+  --bs-lit-ffffff-a1: rgba(255, 255, 255, 0.1);
+  --bs-lit-ffffff-a35: rgba(255, 255, 255, 0.35);
+  --bs-lit-ffffff-a62: rgba(255, 255, 255, 0.62);
+  --bs-lit-ffffff-a7: rgba(255, 255, 255, 0.7);
+  --bs-lit-ffffff-a75: rgba(255, 255, 255, 0.75);
+  --bs-lit-ffffff-a85: rgba(255, 255, 255, 0.85);
+  --bs-lit-ffffff-a92: rgba(255, 255, 255, 0.92);
+  --bs-lit-ffffff-a93: rgba(255, 255, 255, 0.93);
+  --bs-lit-ffffff-a94: rgba(255, 255, 255, 0.94);
 }
 
 html[dir='rtl'] {
@@ -621,7 +838,7 @@ html:has(.bsp-frame),
 .bsp-frame,
 .bsp-frame * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(20, 16, 35, 0.2) transparent;
+  scrollbar-color: var(--bs-lit-141023-a2) transparent;
 }
 
 /* The sidebar navigation scrolls without a visible bar — `.nav-scroll` in the
@@ -798,7 +1015,7 @@ h4 {
     min-block-size: calc(100vh - var(--bs-shell-inset) * 2);
     margin: var(--bs-shell-inset) auto;
     border-radius: var(--bs-radius-shell);
-    background: rgba(255, 255, 255, 0.78);
+    background: var(--bs-shell-alpha);
     backdrop-filter: blur(24px);
     box-shadow: var(--bs-shadow-shell);
   }
@@ -839,7 +1056,7 @@ h4 {
   position: sticky;
   inset-block-start: 0;
   z-index: var(--bs-z-sticky);
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.96) 70%, rgba(255, 255, 255, 0));
+  background: linear-gradient(to bottom, var(--bs-surface-glass) 70%, var(--bs-lit-ffffff-a0));
 }
 
 /*
@@ -850,7 +1067,7 @@ h4 {
  * the prototype's own and is not sticky; it is untouched.
  */
 .bs-topbar:not(.bsp-header) {
-  background: rgb(255, 255, 255);
+  background: var(--bs-brand-blue-ink);
 }
 /*
  * Whatever scrolls under the sticky bar — the panel on a desktop, the page on
@@ -867,7 +1084,7 @@ html:has(.bs-topbar:not(.bsp-header)) {
   inset-inline: 0;
   inset-block-start: 100%;
   block-size: var(--bsp-rem-0-75);
-  background: linear-gradient(to bottom, rgb(255, 255, 255), rgba(255, 255, 255, 0));
+  background: linear-gradient(to bottom, var(--bs-brand-blue-ink), var(--bs-lit-ffffff-a0));
   pointer-events: none;
 }
 
@@ -1971,7 +2188,7 @@ html[dir='rtl'] input[type='week'] {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: #9a9aa2 transparent;
+  scrollbar-color: var(--bs-scrollbar-thumb) transparent;
   border: 1px solid transparent;
   border-radius: var(--bs-radius-control);
   /*
@@ -1984,7 +2201,7 @@ html[dir='rtl'] input[type='week'] {
   /* Unprefixed only: with the \`-webkit-\` twin beside it the build keeps just
      the prefixed one, which Chrome ignores (the glass read as \`none\`). */
   backdrop-filter: blur(24px);
-  box-shadow: 0 14px 36px rgba(17, 17, 20, 0.14);
+  box-shadow: 0 14px 36px var(--bs-lit-111114-a14);
 }
 
 .bs-dropdown-panel::-webkit-scrollbar {
@@ -1996,7 +2213,7 @@ html[dir='rtl'] input[type='week'] {
 }
 
 .bs-dropdown-panel::-webkit-scrollbar-thumb {
-  background: #9a9aa2;
+  background: var(--bs-scrollbar-thumb);
   border: 2px solid var(--bs-surface);
   border-radius: var(--bs-radius-full);
 }
@@ -2089,13 +2306,13 @@ select option {
     padding: 6px;
     max-block-size: 18rem;
     overflow-y: auto;
-    border: 1px solid rgba(255, 255, 255, 0.75);
+    border: 1px solid var(--bs-lit-ffffff-a75);
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.62);
+    background: var(--bs-lit-ffffff-a62);
     backdrop-filter: blur(22px) saturate(180%);
     box-shadow:
-      0 22px 55px rgba(40, 20, 90, 0.14),
-      0 0 0 1px rgba(20, 16, 35, 0.05);
+      0 22px 55px var(--bs-lit-28145a-a14),
+      0 0 0 1px var(--bs-lit-141023-a05);
   }
 
   /* `role="option"`: radius 10, padding 8px 10px, 13px; the chosen row `#f6f3ff`. */
@@ -2110,7 +2327,7 @@ select option {
   select:not([multiple]) option:hover,
   select:not([multiple]) option:focus,
   select:not([multiple]) option:checked {
-    background: #f6f3ff;
+    background: var(--bs-lit-f6f3ff);
   }
 
   select:not([multiple]) option::checkmark {
@@ -2219,10 +2436,10 @@ select option {
    the MO13 rhythm, as a ring (§8's box-shadow exception for the status pulse). */
 @keyframes bs-status-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(121, 53, 254, 0.45);
+    box-shadow: 0 0 0 0 var(--bs-lit-7935fe-a45);
   }
   100% {
-    box-shadow: 0 0 0 10px rgba(121, 53, 254, 0);
+    box-shadow: 0 0 0 10px var(--bs-lit-7935fe-a0);
   }
 }
 

@@ -3,37 +3,37 @@
     "packages/ui/src/brand-brain.css": {
       "blur": 2,
       "border-width": 13,
-      "colour": 120,
       "duration": 1,
       "font-size": 1,
       "letter-spacing": 8,
+      "lit-token": 82,
       "size": 4,
       "spacing": 2,
       "z-index": 4
     },
     "packages/ui/src/content-studio.css": {
       "border-width": 7,
-      "colour": 29,
       "font-size": 1,
       "letter-spacing": 3,
+      "lit-token": 7,
       "size": 3,
       "spacing": 1
     },
     "packages/ui/src/entry.css": {
       "border-width": 1,
-      "colour": 42,
       "letter-spacing": 6,
+      "lit-token": 16,
       "shadow": 1,
       "size": 4
     },
     "packages/ui/src/prototype.css": {
       "blur": 8,
       "border-width": 196,
-      "colour": 1274,
       "duration": 57,
       "easing": 49,
       "font-family": 3,
       "letter-spacing": 37,
+      "lit-token": 524,
       "radius": 1,
       "shadow": 25,
       "size": 53,
@@ -43,9 +43,9 @@
     "packages/ui/src/tokens.css": {
       "blur": 8,
       "border-width": 12,
-      "colour": 17,
       "easing": 1,
       "font-size": 2,
+      "lit-token": 11,
       "radius": 2,
       "shadow": 3,
       "size": 42,

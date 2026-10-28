@@ -299,21 +299,21 @@
   background:
     radial-gradient(
       var(--bsp-px-720) var(--bsp-px-540) at 12% 8%,
-      rgba(121, 53, 254, 0.26),
+      var(--bs-lit-7935fe-a26),
       transparent 70%
     ),
     radial-gradient(
       var(--bsp-px-640) var(--bsp-px-520) at 88% 10%,
-      rgba(255, 120, 170, 0.14),
+      var(--bs-lit-ff78aa-a14),
       transparent 70%
     ),
     radial-gradient(
       var(--bsp-px-780) var(--bsp-px-580) at 94% 100%,
-      rgba(255, 214, 10, 0.34),
+      var(--bs-lit-ffd60a-a34),
       transparent 70%
     ),
-    #f3f3f3;
-  color: #111114;
+    var(--bs-ambient-ground);
+  color: var(--bs-text-primary);
 }
 .bsp-auth-stage {
   flex: 1;
@@ -382,10 +382,10 @@
 .bsp-auth-card {
   inline-size: min(var(--bsp-px-540), 100%);
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--bs-surface-glass);
   border-radius: var(--bsp-px-36);
   padding: var(--bsp-px-42) var(--bsp-px-44) var(--bsp-px-34);
-  box-shadow: 0 var(--bsp-px-40) var(--bsp-px-100) rgba(20, 16, 35, 0.14);
+  box-shadow: 0 var(--bsp-px-40) var(--bsp-px-100) var(--bs-lit-141023-a14);
   display: flex;
   flex-direction: column;
   gap: var(--bsp-px-20);
@@ -411,8 +411,8 @@
   padding: 0;
   border: 0;
   border-radius: var(--bsp-px-12);
-  background: #f4f4f5;
-  color: #111114;
+  background: var(--bs-lit-f4f4f5);
+  color: var(--bs-text-primary);
   font-size: var(--bsp-fs-13);
   font-weight: 800;
   display: grid;
@@ -429,8 +429,8 @@
   align-items: center;
   gap: var(--bsp-px-8);
   align-self: flex-start;
-  background: #f0e9ff;
-  color: #5312c4;
+  background: var(--bs-brand-purple-tint);
+  color: var(--bs-brand-purple-pressed);
   border-radius: var(--bsp-px-99);
   padding: var(--bsp-px-6) var(--bsp-px-12);
   font-size: var(--bsp-fs-11-5);
@@ -442,7 +442,7 @@
   inline-size: var(--bsp-px-7);
   block-size: var(--bsp-px-7);
   border-radius: 50%;
-  background: #7935fe;
+  background: var(--bs-brand-purple);
 }
 .bsp-auth-head {
   display: flex;
@@ -459,7 +459,7 @@
 .bsp-auth-head > p {
   margin: 0;
   font-size: var(--bsp-fs-15);
-  color: #55555c;
+  color: var(--bs-lit-55555c);
   line-height: 1.6;
 }
 .bsp-auth-body {
@@ -473,7 +473,7 @@
   font-weight: 800 !important;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #6a6a72 !important;
+  color: var(--bs-text-muted) !important;
   margin-block-end: var(--bsp-px-8) !important;
 }
 /* `.in`: `background: #f4f4f5; border-radius: 14px; padding: 14px 18px; font-size: 15.5px; min-block-size: 58px`. */
@@ -487,12 +487,12 @@
   inline-size: 100%;
   box-sizing: border-box;
   border: 1px solid transparent !important;
-  background: #f4f4f5 !important;
+  background: var(--bs-lit-f4f4f5) !important;
   border-radius: var(--bsp-px-14) !important;
   padding: var(--bsp-px-14) var(--bsp-px-18) !important;
   font-size: var(--bsp-fs-15-5) !important;
   min-block-size: var(--bsp-px-58) !important;
-  color: #111114;
+  color: var(--bs-text-primary);
   box-shadow: none !important;
 }
 /*
@@ -523,13 +523,13 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #6a6a72;
+  color: var(--bs-text-muted);
   margin-block-end: var(--bsp-px-8);
 }
 .bsp-auth-body .bsp-lnk {
   border: 0;
   background: transparent;
-  color: #5312c4;
+  color: var(--bs-brand-purple-pressed);
   font-weight: 700;
   font-size: var(--bsp-fs-12-5);
   text-decoration: underline;
@@ -549,29 +549,29 @@
   inset-inline-end: var(--bsp-px-7) !important;
   transform: none !important;
   border: 0 !important;
-  background: #fff !important;
+  background: var(--bs-brand-blue-ink) !important;
   border-radius: var(--bsp-px-10) !important;
   padding: 0 var(--bsp-px-12) !important;
   min-block-size: 0 !important;
   font-size: var(--bsp-fs-13) !important;
   font-weight: 800 !important;
-  color: #55555c !important;
-  box-shadow: 0 1px var(--bsp-px-3) rgba(0, 0, 0, 0.06) !important;
+  color: var(--bs-lit-55555c) !important;
+  box-shadow: 0 1px var(--bsp-px-3) var(--bs-lit-000000-a06) !important;
   cursor: pointer;
 }
 .bsp-auth-trial {
   margin: 0;
-  background: #f6f3ff;
+  background: var(--bs-lit-f6f3ff);
   border-radius: var(--bsp-px-12);
   padding: var(--bsp-px-10) var(--bsp-px-12);
   font-size: var(--bsp-fs-12-5);
-  color: #5312c4;
+  color: var(--bs-brand-purple-pressed);
 }
 .bsp-auth-alt {
   display: block;
   text-align: center;
   font-size: var(--bsp-fs-13-5);
-  color: #4d4c53;
+  color: var(--bs-text-secondary);
 }
 /* `.btn`: 56px, radius 14, `padding: 12px 20px`, 15px / 800, ink; sign-up's is purple. */
 .bsp-auth-body form button[type='submit']:not(.bsp-auth-ws) {
@@ -585,24 +585,24 @@
   padding: var(--bsp-px-12) var(--bsp-px-20) !important;
   font-size: var(--bsp-fs-15) !important;
   font-weight: 800 !important;
-  background: #111114 !important;
-  color: #fff !important;
+  background: var(--bs-text-primary) !important;
+  color: var(--bs-brand-blue-ink) !important;
   min-block-size: var(--bsp-px-56) !important;
   box-shadow: none !important;
 }
 .bsp-auth-body form button[type='submit'][data-testid='signup-submit'] {
-  background: #7935fe !important;
+  background: var(--bs-brand-purple) !important;
 }
 /* D-566 — the consent screen's Cancel: the same 56px button in the card's chip
    grey (`#f2f2f4`, `.bsp-auth-realm`'s) with ink, so Allow stays the one
    primary action (WCAG contrast 17:1). */
 .bsp-auth-body form button[type='submit'].bsp-consent-cancel {
-  background: #f2f2f4 !important;
-  color: #111114 !important;
+  background: var(--bs-lit-f2f2f4) !important;
+  color: var(--bs-text-primary) !important;
 }
 .bsp-auth-body a,
 .bsp-auth-links a {
-  color: #5312c4;
+  color: var(--bs-brand-purple-pressed);
   font-weight: 700;
 }
 .bsp-auth-word {
@@ -617,7 +617,7 @@
   gap: var(--bsp-px-8);
   flex-wrap: wrap;
   font-size: var(--bsp-fs-13-5);
-  color: #4d4c53;
+  color: var(--bs-text-secondary);
   text-align: center;
 }
 /* The footer line: 12px, a 7px `#ffd60a` dot, `padding-top: 6px`. */
@@ -627,14 +627,14 @@
   align-items: center;
   gap: var(--bsp-px-8);
   font-size: var(--bsp-fs-12);
-  color: #6a6a72;
+  color: var(--bs-text-muted);
   padding-block-start: var(--bsp-px-6);
 }
 .bsp-auth-foot > span {
   inline-size: var(--bsp-px-7);
   block-size: var(--bsp-px-7);
   border-radius: 50%;
-  background: #ffd60a;
+  background: var(--bs-lit-ffd60a);
   flex-shrink: 0;
 }
 
@@ -662,8 +662,8 @@
 .bsp-auth-realm {
   border-radius: var(--bsp-px-99);
   padding: var(--bsp-px-4) var(--bsp-px-10);
-  background: #f2f2f4;
-  color: #55555c;
+  background: var(--bs-lit-f2f2f4);
+  color: var(--bs-lit-55555c);
   font-size: var(--bsp-fs-11-5);
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -683,12 +683,12 @@
   flex-direction: column;
   gap: var(--bsp-px-8);
   font-size: var(--bsp-fs-13-5);
-  color: #4d4c53;
+  color: var(--bs-text-secondary);
 }
 .bsp-consent-h {
   margin: var(--bsp-px-6) 0 0;
   font-weight: 800;
-  color: #26262b;
+  color: var(--bs-ink-hover);
 }
 .bsp-consent-list {
   margin: 0;
@@ -712,7 +712,7 @@
 }
 .bsp-consent-row input {
   margin-block-start: var(--bsp-px-4);
-  accent-color: #7935fe;
+  accent-color: var(--bs-brand-purple);
 }
 .bsp-consent-brands {
   display: flex;
@@ -723,7 +723,7 @@
 .bsp-consent-note {
   display: block;
   font-size: var(--bsp-fs-12-5);
-  color: #55555c;
+  color: var(--bs-lit-55555c);
 }
 .bsp-consent-ws {
   /* WCAG 2.5.8: each workspace is a target at least 24px tall (the ★ chip's
@@ -731,15 +731,15 @@
   display: flex;
   align-items: center;
   min-block-size: var(--bsp-target-min);
-  color: #4d4c53;
+  color: var(--bs-text-secondary);
   text-decoration: none;
 }
 .bsp-consent-ws[aria-current='true'] {
-  color: #7935fe;
+  color: var(--bs-brand-purple);
   font-weight: 800;
 }
 .bsp-consent-ws[aria-disabled='true'] {
-  color: #55555c;
+  color: var(--bs-lit-55555c);
 }
 .bsp-consent-actions {
   display: flex;

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { canonicalHex, resolveColourTokens } from '../support/style-tokens';
 import { messages } from '../../apps/dashboard/src/i18n/messages';
 import { channelChart } from '../../apps/dashboard/src/server/performance-view';
 
@@ -12,7 +13,8 @@ import { channelChart } from '../../apps/dashboard/src/server/performance-view';
  */
 
 const read = (path: string) => readFileSync(path, 'utf8');
-const css = read('packages/ui/src/prototype.css');
+// S3: colour tokens are read back as their exact colours, one spelling per hex.
+const css = canonicalHex(resolveColourTokens(read('packages/ui/src/prototype.css')));
 
 /** The declarations of the first top-level rule for `selector`. */
 function rule(selector: string): string {
@@ -36,7 +38,7 @@ describe('every overlay is fully opaque (owner, must-check 2)', () => {
   ]) {
     it(`${selector} has a solid background and no backdrop filter`, () => {
       const body = rule(selector);
-      expect(body).toMatch(/background: #fff;/);
+      expect(body).toMatch(/background: #ffffff;/);
       expect(body).not.toMatch(/background: rgba\(255, 255, 255, 0\./);
       expect(body).not.toMatch(/backdrop-filter/);
     });

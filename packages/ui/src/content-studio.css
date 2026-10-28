@@ -48,13 +48,13 @@
    * `:root` in `demo/styles-1.css`, scoped to this page rather than global so
    * the port cannot recolour a screen it was never about.
    */
-  --cs-ink: #111114;
-  --cs-soft: #f5f5f6;
-  --cs-purple: #7935fe;
-  --cs-yellow: #ffdd15;
-  --cs-success: #16794b;
-  --cs-warning: #875f00;
-  --cs-soft-shadow: 0 var(--bsp-px-12) var(--bsp-px-35) rgba(16, 14, 28, 0.06);
+  --cs-ink: var(--bs-text-primary);
+  --cs-soft: var(--bs-surface-muted);
+  --cs-purple: var(--bs-brand-purple);
+  --cs-yellow: var(--bs-brand-yellow);
+  --cs-success: var(--bs-success);
+  --cs-warning: var(--bs-warning);
+  --cs-soft-shadow: 0 var(--bsp-px-12) var(--bsp-px-35) var(--bs-lit-100e1c-a06);
   width: 100%;
   color: var(--cs-ink);
 }
@@ -126,8 +126,8 @@
 }
 
 .cs-tabs button.selected {
-  background: #fff;
-  box-shadow: 0 var(--bsp-px-5) var(--bsp-px-14) rgba(0, 0, 0, 0.05);
+  background: var(--bs-brand-blue-ink);
+  box-shadow: 0 var(--bsp-px-5) var(--bsp-px-14) var(--bs-lit-000000-a05);
 }
 
 .cs-search-field {
@@ -156,12 +156,12 @@
 
 .cs-primary-button {
   background: var(--cs-purple);
-  color: #fff;
+  color: var(--bs-brand-blue-ink);
 }
 
 .cs-dark-button {
   background: var(--cs-ink);
-  color: #fff;
+  color: var(--bs-brand-blue-ink);
 }
 
 .cs-ghost-button {
@@ -215,7 +215,7 @@
 .cs-post-card {
   border: 0;
   border-radius: var(--bsp-px-19);
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--bs-float-card-alpha);
   overflow: hidden;
   text-align: start;
   box-shadow: var(--cs-soft-shadow);
@@ -256,24 +256,35 @@
 }
 
 .cs-gradient-a {
-  background: linear-gradient(145deg, #efe4ff, #a578ff 45%, #7935fe 74%, #ffdd15 150%);
+  background: linear-gradient(
+    145deg,
+    var(--bs-lit-efe4ff),
+    var(--bs-lit-a578ff) 45%,
+    var(--bs-brand-purple) 74%,
+    var(--bs-brand-yellow) 150%
+  );
 }
 
 .cs-gradient-b {
   background:
-    radial-gradient(circle at 75% 18%, rgba(255, 221, 21, 0.7) 0 15%, transparent 16%),
-    linear-gradient(145deg, #15121b, #7935fe 78%);
-  color: #fff;
+    radial-gradient(circle at 75% 18%, var(--bs-lit-ffdd15-a7) 0 15%, transparent 16%),
+    linear-gradient(145deg, var(--bs-lit-15121b), var(--bs-brand-purple) 78%);
+  color: var(--bs-brand-blue-ink);
 }
 
 .cs-gradient-c {
   background:
-    radial-gradient(circle at 25% 76%, #ffdd15 0 21%, transparent 22%),
-    linear-gradient(145deg, #fff, #f0e5ff);
+    radial-gradient(circle at 25% 76%, var(--bs-brand-yellow) 0 21%, transparent 22%),
+    linear-gradient(145deg, var(--bs-brand-blue-ink), var(--bs-lit-f0e5ff));
 }
 
 .cs-gradient-d {
-  background: linear-gradient(145deg, #fff5b0, #ffdd15, #ff99b9);
+  background: linear-gradient(
+    145deg,
+    var(--bs-lit-fff5b0),
+    var(--bs-brand-yellow),
+    var(--bs-ambient-blush)
+  );
 }
 
 /* --- the status pill ------------------------------------------------- */
@@ -281,14 +292,14 @@
 .cs-status {
   padding: var(--bsp-px-6) var(--bsp-px-8);
   border-radius: var(--bsp-px-99);
-  background: #e8f8ef;
+  background: var(--bs-success-tint);
   color: var(--cs-success);
   font-size: var(--bsp-fs-8);
   font-weight: 800;
 }
 
 .cs-status.review {
-  background: #fff6d3;
+  background: var(--bs-warning-tint);
   color: var(--cs-warning);
 }
 
@@ -307,7 +318,7 @@
 }
 
 .cs-surface-card {
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--bs-surface-card-alpha);
   border-radius: var(--bsp-px-18);
   box-shadow: var(--cs-soft-shadow);
   padding: var(--bsp-px-22);
@@ -383,7 +394,7 @@
 
 .cs-channel.selected {
   background: var(--cs-ink);
-  color: #fff;
+  color: var(--bs-brand-blue-ink);
 }
 
 .cs-form-actions {
@@ -459,7 +470,7 @@
  * 5.03:1. Not perceptibly different from the demo's value at these sizes.
  */
 .content-page {
-  --cs-muted: #6a6a72;
+  --cs-muted: var(--bs-text-muted);
 }
 
 /*
@@ -528,7 +539,7 @@
 }
 
 .cs-notice.warning {
-  background: #fff6d3;
+  background: var(--bs-warning-tint);
   color: var(--cs-warning);
 }
 
@@ -573,7 +584,7 @@
 }
 
 .cs-counter.over {
-  color: #b83245;
+  color: var(--bs-danger);
 }
 
 /* The citation list under a generated draft — AC-11.4 made visible. */
@@ -669,7 +680,7 @@
 
 .cs-lifecycle li.current {
   background: var(--cs-purple);
-  color: #fff;
+  color: var(--bs-brand-blue-ink);
 }
 
 .cs-draft-facts {
@@ -767,13 +778,13 @@
   padding: var(--bsp-px-8) var(--bsp-px-10);
   font-size: var(--bsp-fs-9);
   line-height: 1.5;
-  background: #fff6d3;
+  background: var(--bs-warning-tint);
   color: var(--cs-warning);
 }
 
 .cs-issues li.error {
   background: var(--cs-soft);
-  color: #b83245;
+  color: var(--bs-danger);
 }
 
 @media (max-width: 1180px) {
@@ -841,7 +852,7 @@
   min-inline-size: 12rem;
   border: 0;
   outline: 0;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--bs-surface-card-alpha);
   color: var(--cs-ink);
   border-radius: var(--bsp-px-13);
   padding: var(--bsp-px-8) var(--bsp-px-10);
