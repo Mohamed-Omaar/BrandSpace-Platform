@@ -13,7 +13,7 @@
  * design review that may not happen.
  */
 
-export const colorTokens = {
+export const colorValues = {
   /**
    * BRAND IDENTITY blue. The PUBLIC MARKETING SITE's primary — logos, large
    * graphics, borders and accents.
@@ -296,7 +296,7 @@ export const colorTokens = {
   focusRingContrast: '#FFFFFF',
 } as const;
 
-export type ColorToken = keyof typeof colorTokens;
+export type ColorToken = keyof typeof colorValues;
 
 /**
  * Spacing scale (rem), applied through LOGICAL properties so Arabic mirrors
@@ -487,7 +487,7 @@ export type TypographyToken = keyof typeof typographyTokens;
  * largest value in the set is reserved for a drawer that genuinely floats above
  * a scrim.
  */
-export const shadowTokens = {
+export const shadowValues = {
   /** `.auth-card` — `0 24px 70px rgba(44,25,82,.12)`. Violet-tinted, not grey. */
   authCard: '0 24px 70px rgba(44, 25, 82, 0.12)',
   /** `--shadow` — the application shell. */
@@ -513,7 +513,7 @@ export const shadowTokens = {
   /** A brand-tinted glow. Used sparingly; the demo has no purple glow. */
   brandGlow: '0 10px 24px rgba(121, 53, 254, 0.2)',
   /** The focus ring, as a shadow, for controls that cannot use `outline`. */
-  focus: `0 0 0 2px ${colorTokens.focusRingContrast}, 0 0 0 4px ${colorTokens.focusRing}`,
+  focus: `0 0 0 2px ${colorValues.focusRingContrast}, 0 0 0 4px ${colorValues.focusRing}`,
 } as const;
 
 /**
@@ -593,7 +593,7 @@ export function mediaBelow(breakpoint: BreakpointToken): string {
  * Motion. Short, purposeful, and always subject to `prefers-reduced-motion`,
  * which `tokens.css` disables globally — so nothing here needs to remember.
  */
-export const motionTokens = {
+export const motionValues = {
   instant: '80ms',
   fast: '140ms',
   base: '200ms',
@@ -601,6 +601,65 @@ export const motionTokens = {
   easeOut: 'cubic-bezier(0.16, 1, 0.3, 1)',
   easeInOut: 'cubic-bezier(0.4, 0, 0.2, 1)',
 } as const;
+
+/**
+ * DESIGN-SYSTEM PROGRAMME, S2 — the TOKEN OBJECTS NOW NAME CSS VARIABLES.
+ *
+ * `colorTokens.brandPurple` used to be the literal `'#7935FE'`, baked into the
+ * HTML wherever an inline style used it, so a change to tokens.css never reached
+ * it. It is now `'var(--bs-brand-purple)'`: every inline style follows the
+ * stylesheet, and a later Look & feel setting reaches the whole platform.
+ *
+ * The literal values live on in `colorValues`, `shadowValues` and
+ * `motionValues` for the places a browser cannot resolve a variable: contrast
+ * arithmetic, a native colour input's value, e-mail. (An SVG presentation
+ * attribute cannot take `var()` either, so charts set fill and stroke through
+ * `style`.) `tokens.css :root` is GENERATED from them
+ * (`cssRootTokens` below, `pnpm style:tokens`), so the value is decided once.
+ */
+function kebab(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Za-z])([0-9])/g, '$1-$2')
+    .toLowerCase();
+}
+
+/** The CSS variable each TS token key is mirrored as. */
+export const cssVariableName = {
+  color: (key: string) => `--bs-${kebab(key)}`,
+  shadow: (key: string) => `--bs-shadow-${kebab(key)}`,
+  motion: (key: string) =>
+    key.startsWith('ease') ? `--bs-${kebab(key)}` : `--bs-duration-${kebab(key)}`,
+} as const;
+
+function asVariables<T extends Record<string, string>>(
+  values: T,
+  name: (key: string) => string,
+  keepLiteral: ReadonlySet<string> = new Set(),
+): { readonly [K in keyof T]: string } {
+  return Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [
+      key,
+      keepLiteral.has(key) ? value : `var(${name(key)})`,
+    ]),
+  ) as { readonly [K in keyof T]: string };
+}
+
+/**
+ * Three colours stay LITERAL for now: tokens.css redefines them inside
+ * `prefers-contrast: more` and `forced-colors` (D-55). As variables, every
+ * inline style using them would start following those restorations — right,
+ * but a visual change, and S2 makes none. They become variables in S4 with D-2.
+ */
+export const LITERAL_UNTIL_S4: ReadonlySet<string> = new Set([
+  'controlBorder',
+  'hairline',
+  'cardBorder',
+]);
+
+export const colorTokens = asVariables(colorValues, cssVariableName.color, LITERAL_UNTIL_S4);
+export const shadowTokens = asVariables(shadowValues, cssVariableName.shadow);
+export const motionTokens = asVariables(motionValues, cssVariableName.motion);
 
 /**
  * §8 MOTION (prototype v105, Phase 2B-2b), in milliseconds, for the Web
@@ -955,3 +1014,524 @@ export const platformBrandTokens = {
   x: '#000000',
   tiktok: '#000000',
 } as const;
+
+/**
+ * THE `:root` BLOCK OF tokens.css, in order (design-system programme, S2).
+ *
+ * `scripts/style/tokens-css.ts` (`pnpm style:tokens`) writes tokens.css's
+ * `:root { … }` from this list and `tests/unit/style-tokens-css.test.ts`
+ * fails if the committed stylesheet differs from it by one byte. A value that
+ * has a TypeScript twin is not repeated here: the entry points at it, so the
+ * value is decided in exactly one place. Comments are carried verbatim.
+ */
+export type CssRootEntry =
+  | { readonly name: string; readonly value: string; readonly note?: string }
+  | { readonly comment: string }
+  | { readonly blank: true };
+
+export const cssRootTokens: readonly CssRootEntry[] = [
+  {
+    comment:
+      "  /*\n   * TYPE SIZES (batch 7). Every font size the product's stylesheets use is one\n   * of these, so the size scale is changed here and nowhere else. The values\n   * are the 2026-09-27 prototype's, transcribed; a scale decision changes the\n   * values, never the stylesheets.\n   */",
+  },
+  { name: '--bsp-fs-7', value: '7px' },
+  { name: '--bsp-fs-8', value: '8px' },
+  { name: '--bsp-fs-9', value: '9px' },
+  { name: '--bsp-fs-9-5', value: '9.5px' },
+  { name: '--bsp-fs-10', value: '10px' },
+  { name: '--bsp-fs-10-5', value: '10.5px' },
+  { name: '--bsp-fs-11', value: '11px' },
+  { name: '--bsp-fs-11-5', value: '11.5px' },
+  { name: '--bsp-fs-12', value: '12px' },
+  { name: '--bsp-fs-12-5', value: '12.5px' },
+  { name: '--bsp-fs-13', value: '13px' },
+  { name: '--bsp-fs-13-5', value: '13.5px' },
+  { name: '--bsp-fs-14', value: '14px' },
+  { name: '--bsp-fs-14-5', value: '14.5px' },
+  { name: '--bsp-fs-15', value: '15px' },
+  { name: '--bsp-fs-15-5', value: '15.5px' },
+  { name: '--bsp-fs-16', value: '16px' },
+  { name: '--bsp-fs-16-5', value: '16.5px' },
+  { name: '--bsp-fs-17', value: '17px' },
+  { name: '--bsp-fs-18', value: '18px' },
+  { name: '--bsp-fs-19', value: '19px' },
+  { name: '--bsp-fs-20', value: '20px' },
+  { name: '--bsp-fs-21', value: '21px' },
+  { name: '--bsp-fs-21-6', value: '21.6px' },
+  { name: '--bsp-fs-22', value: '22px' },
+  { name: '--bsp-fs-24', value: '24px' },
+  { name: '--bsp-fs-26', value: '26px' },
+  { name: '--bsp-fs-28', value: '28px' },
+  { name: '--bsp-fs-29', value: '29px' },
+  { name: '--bsp-fs-30', value: '30px' },
+  { name: '--bsp-fs-32', value: '32px' },
+  { name: '--bsp-fs-34', value: '34px' },
+  { name: '--bsp-fs-40', value: '40px' },
+  { name: '--bsp-fs-42', value: '42px' },
+  { name: '--bsp-fs-48', value: '48px' },
+  { name: '--bsp-fs-52', value: '52px' },
+  { name: '--bsp-fs-56', value: '56px' },
+  { name: '--bsp-fs-64', value: '64px' },
+  {
+    comment:
+      "  /* BATCH 7 (D-484) — the design system's rem lengths, named; scaled the same way. */",
+  },
+  { name: '--bsp-rem-0-0625', value: '0.0625rem' },
+  { name: '--bsp-rem-0-125', value: '0.125rem' },
+  { name: '--bsp-rem-0-1875', value: '0.1875rem' },
+  { name: '--bsp-rem-0-25', value: '0.25rem' },
+  { name: '--bsp-rem-0-3125', value: '0.3125rem' },
+  { name: '--bsp-rem-0-375', value: '0.375rem' },
+  { name: '--bsp-rem-0-4375', value: '0.4375rem' },
+  { name: '--bsp-rem-0-5', value: '0.5rem' },
+  { name: '--bsp-rem-0-5625', value: '0.5625rem' },
+  { name: '--bsp-rem-0-625', value: '0.625rem' },
+  { name: '--bsp-rem-0-6875', value: '0.6875rem' },
+  { name: '--bsp-rem-0-75', value: '0.75rem' },
+  { name: '--bsp-rem-0-8125', value: '0.8125rem' },
+  { name: '--bsp-rem-0-875', value: '0.875rem' },
+  { name: '--bsp-rem-0-9375', value: '0.9375rem' },
+  { name: '--bsp-rem-1', value: '1rem' },
+  { name: '--bsp-rem-1-0625', value: '1.0625rem' },
+  { name: '--bsp-rem-1-125', value: '1.125rem' },
+  { name: '--bsp-rem-1-1875', value: '1.1875rem' },
+  { name: '--bsp-rem-1-25', value: '1.25rem' },
+  { name: '--bsp-rem-1-375', value: '1.375rem' },
+  { name: '--bsp-rem-1-4', value: '1.4rem' },
+  { name: '--bsp-rem-1-5', value: '1.5rem' },
+  { name: '--bsp-rem-1-5625', value: '1.5625rem' },
+  { name: '--bsp-rem-1-75', value: '1.75rem' },
+  { name: '--bsp-rem-1-875', value: '1.875rem' },
+  { name: '--bsp-rem-2', value: '2rem' },
+  { name: '--bsp-rem-2-125', value: '2.125rem' },
+  { name: '--bsp-rem-2-25', value: '2.25rem' },
+  { name: '--bsp-rem-2-375', value: '2.375rem' },
+  { name: '--bsp-rem-2-4375', value: '2.4375rem' },
+  { name: '--bsp-rem-2-5', value: '2.5rem' },
+  { name: '--bsp-rem-2-625', value: '2.625rem' },
+  { name: '--bsp-rem-2-75', value: '2.75rem' },
+  { name: '--bsp-rem-3', value: '3rem' },
+  { name: '--bsp-rem-3-25', value: '3.25rem' },
+  { name: '--bsp-rem-3-375', value: '3.375rem' },
+  { name: '--bsp-rem-3-625', value: '3.625rem' },
+  { name: '--bsp-rem-3-75', value: '3.75rem' },
+  { name: '--bsp-rem-4', value: '4rem' },
+  { name: '--bsp-rem-4-5', value: '4.5rem' },
+  { name: '--bsp-rem-4-625', value: '4.625rem' },
+  { name: '--bsp-rem-4-875', value: '4.875rem' },
+  { name: '--bsp-rem-5', value: '5rem' },
+  { name: '--bsp-rem-5-25', value: '5.25rem' },
+  { name: '--bsp-rem-5-5', value: '5.5rem' },
+  { name: '--bsp-rem-5-625', value: '5.625rem' },
+  { name: '--bsp-rem-6', value: '6rem' },
+  { name: '--bsp-rem-7', value: '7rem' },
+  { name: '--bsp-rem-7-375', value: '7.375rem' },
+  { name: '--bsp-rem-8-25', value: '8.25rem' },
+  { name: '--bsp-rem-10', value: '10rem' },
+  { name: '--bsp-rem-11', value: '11rem' },
+  { name: '--bsp-rem-11-25', value: '11.25rem' },
+  { name: '--bsp-rem-11-875', value: '11.875rem' },
+  { name: '--bsp-rem-12', value: '12rem' },
+  { name: '--bsp-rem-13', value: '13rem' },
+  { name: '--bsp-rem-13-75', value: '13.75rem' },
+  { name: '--bsp-rem-14', value: '14rem' },
+  { name: '--bsp-rem-14-375', value: '14.375rem' },
+  { name: '--bsp-rem-15', value: '15rem' },
+  { name: '--bsp-rem-15-5', value: '15.5rem' },
+  { name: '--bsp-rem-16', value: '16rem' },
+  { name: '--bsp-rem-17', value: '17rem' },
+  { name: '--bsp-rem-18', value: '18rem' },
+  { name: '--bsp-rem-18-75', value: '18.75rem' },
+  { name: '--bsp-rem-20-625', value: '20.625rem' },
+  { name: '--bsp-rem-21-25', value: '21.25rem' },
+  { name: '--bsp-rem-24', value: '24rem' },
+  { name: '--bsp-rem-26', value: '26rem' },
+  { name: '--bsp-rem-26-875', value: '26.875rem' },
+  { name: '--bsp-rem-28', value: '28rem' },
+  { name: '--bsp-rem-30', value: '30rem' },
+  { name: '--bsp-rem-31-25', value: '31.25rem' },
+  { name: '--bsp-rem-32', value: '32rem' },
+  { name: '--bsp-rem-34', value: '34rem' },
+  { name: '--bsp-rem-35-625', value: '35.625rem' },
+  { name: '--bsp-rem-38-75', value: '38.75rem' },
+  { name: '--bsp-rem-40', value: '40rem' },
+  { name: '--bsp-rem-41-25', value: '41.25rem' },
+  { name: '--bsp-rem-96-25', value: '96.25rem' },
+  { name: '--bsp-rem-3-5', value: '3.5rem' },
+  { name: '--bsp-rem-19', value: '19rem' },
+  { name: '--bsp-target-min', value: '24px' },
+  {
+    comment:
+      "  /* BATCH 7 (D-484) — the prototype's own lengths, named. Here every token is\n     its own value; the customer app (`prototype.css`) scales them by 0.88. */",
+  },
+  { name: '--bsp-px-1-5', value: '1.5px' },
+  { name: '--bsp-px-2', value: '2px' },
+  { name: '--bsp-px-3', value: '3px' },
+  { name: '--bsp-px-4', value: '4px' },
+  { name: '--bsp-px-5', value: '5px' },
+  { name: '--bsp-px-5-5', value: '5.5px' },
+  { name: '--bsp-px-6', value: '6px' },
+  { name: '--bsp-px-7', value: '7px' },
+  { name: '--bsp-px-8', value: '8px' },
+  { name: '--bsp-px-8-5', value: '8.5px' },
+  { name: '--bsp-px-9', value: '9px' },
+  { name: '--bsp-px-10', value: '10px' },
+  { name: '--bsp-px-11', value: '11px' },
+  { name: '--bsp-px-12', value: '12px' },
+  { name: '--bsp-px-13', value: '13px' },
+  { name: '--bsp-px-14', value: '14px' },
+  { name: '--bsp-px-15', value: '15px' },
+  { name: '--bsp-px-16', value: '16px' },
+  { name: '--bsp-px-17', value: '17px' },
+  { name: '--bsp-px-18', value: '18px' },
+  { name: '--bsp-px-19', value: '19px' },
+  { name: '--bsp-px-20', value: '20px' },
+  { name: '--bsp-px-21', value: '21px' },
+  { name: '--bsp-px-22', value: '22px' },
+  { name: '--bsp-px-24', value: '24px' },
+  { name: '--bsp-px-25', value: '25px' },
+  { name: '--bsp-px-26', value: '26px' },
+  { name: '--bsp-px-28', value: '28px' },
+  { name: '--bsp-px-30', value: '30px' },
+  { name: '--bsp-px-32', value: '32px' },
+  { name: '--bsp-px-34', value: '34px' },
+  { name: '--bsp-px-35', value: '35px' },
+  { name: '--bsp-px-36', value: '36px' },
+  { name: '--bsp-px-38', value: '38px' },
+  { name: '--bsp-px-40', value: '40px' },
+  { name: '--bsp-px-41', value: '41px' },
+  { name: '--bsp-px-42', value: '42px' },
+  { name: '--bsp-px-44', value: '44px' },
+  { name: '--bsp-px-46', value: '46px' },
+  { name: '--bsp-px-48', value: '48px' },
+  { name: '--bsp-px-50', value: '50px' },
+  { name: '--bsp-px-52', value: '52px' },
+  { name: '--bsp-px-55', value: '55px' },
+  { name: '--bsp-px-56', value: '56px' },
+  { name: '--bsp-px-58', value: '58px' },
+  { name: '--bsp-px-60', value: '60px' },
+  { name: '--bsp-px-64', value: '64px' },
+  { name: '--bsp-px-70', value: '70px' },
+  { name: '--bsp-px-72', value: '72px' },
+  { name: '--bsp-px-74', value: '74px' },
+  { name: '--bsp-px-76', value: '76px' },
+  { name: '--bsp-px-80', value: '80px' },
+  { name: '--bsp-px-84', value: '84px' },
+  { name: '--bsp-px-90', value: '90px' },
+  { name: '--bsp-px-92', value: '92px' },
+  { name: '--bsp-px-96', value: '96px' },
+  { name: '--bsp-px-99', value: '99px' },
+  { name: '--bsp-px-100', value: '100px' },
+  { name: '--bsp-px-104', value: '104px' },
+  { name: '--bsp-px-110', value: '110px' },
+  { name: '--bsp-px-112', value: '112px' },
+  { name: '--bsp-px-116', value: '116px' },
+  { name: '--bsp-px-120', value: '120px' },
+  { name: '--bsp-px-122', value: '122px' },
+  { name: '--bsp-px-125', value: '125px' },
+  { name: '--bsp-px-130', value: '130px' },
+  { name: '--bsp-px-140', value: '140px' },
+  { name: '--bsp-px-150', value: '150px' },
+  { name: '--bsp-px-160', value: '160px' },
+  { name: '--bsp-px-168', value: '168px' },
+  { name: '--bsp-px-170', value: '170px' },
+  { name: '--bsp-px-176', value: '176px' },
+  { name: '--bsp-px-180', value: '180px' },
+  { name: '--bsp-px-200', value: '200px' },
+  { name: '--bsp-px-210', value: '210px' },
+  { name: '--bsp-px-220', value: '220px' },
+  { name: '--bsp-px-230', value: '230px' },
+  { name: '--bsp-px-240', value: '240px' },
+  { name: '--bsp-px-250', value: '250px' },
+  { name: '--bsp-px-260', value: '260px' },
+  { name: '--bsp-px-270', value: '270px' },
+  { name: '--bsp-px-280', value: '280px' },
+  { name: '--bsp-px-290', value: '290px' },
+  { name: '--bsp-px-300', value: '300px' },
+  { name: '--bsp-px-320', value: '320px' },
+  { name: '--bsp-px-330', value: '330px' },
+  { name: '--bsp-px-340', value: '340px' },
+  { name: '--bsp-px-350', value: '350px' },
+  { name: '--bsp-px-360', value: '360px' },
+  { name: '--bsp-px-362', value: '362px' },
+  { name: '--bsp-px-380', value: '380px' },
+  { name: '--bsp-px-400', value: '400px' },
+  { name: '--bsp-px-420', value: '420px' },
+  { name: '--bsp-px-450', value: '450px' },
+  { name: '--bsp-px-470', value: '470px' },
+  { name: '--bsp-px-520', value: '520px' },
+  { name: '--bsp-px-540', value: '540px' },
+  { name: '--bsp-px-560', value: '560px' },
+  { name: '--bsp-px-570', value: '570px' },
+  { name: '--bsp-px-580', value: '580px' },
+  { name: '--bsp-px-600', value: '600px' },
+  { name: '--bsp-px-620', value: '620px' },
+  { name: '--bsp-px-640', value: '640px' },
+  { name: '--bsp-px-720', value: '720px' },
+  { name: '--bsp-px-760', value: '760px' },
+  { name: '--bsp-px-780', value: '780px' },
+  { name: '--bsp-px-836', value: '836px' },
+  { name: '--bsp-px-900', value: '900px' },
+  { name: '--bsp-px-999', value: '999px' },
+  { name: '--bsp-px-9999', value: '9999px' },
+  { name: '--bsp-px-54', value: '54px' },
+  { comment: "  /* Identity blue — the marketing site's primary. NOT for text (2.56:1). */" },
+  { name: '--bs-brand-blue', value: colorValues.brandBlue },
+  { name: '--bs-brand-blue-hover', value: colorValues.brandBlueHover },
+  { name: '--bs-brand-blue-text', value: colorValues.brandBlueText },
+  { name: '--bs-brand-blue-surface', value: colorValues.brandBlueSurface },
+  { name: '--bs-brand-blue-ink', value: colorValues.brandBlueInk },
+  { blank: true },
+  {
+    comment:
+      '  /* Application primary (D-42). 5.60:1 on white: safe as text AND as a filled\n     surface with white ink. */',
+  },
+  { name: '--bs-brand-purple', value: colorValues.brandPurple },
+  { name: '--bs-brand-purple-hover', value: colorValues.brandPurpleHover },
+  { name: '--bs-brand-purple-pressed', value: colorValues.brandPurplePressed },
+  { name: '--bs-brand-purple-ink', value: colorValues.brandPurpleInk },
+  { name: '--bs-brand-purple-tint', value: colorValues.brandPurpleTint },
+  { name: '--bs-brand-purple-border', value: colorValues.brandPurpleBorder },
+  { blank: true },
+  { comment: '  /* Accent yellow. Never body text, never white text on it. */' },
+  { name: '--bs-brand-yellow', value: colorValues.brandYellow },
+  { name: '--bs-brand-yellow-ink', value: colorValues.brandYellowInk },
+  { name: '--bs-brand-yellow-text', value: colorValues.brandYellowText },
+  { name: '--bs-brand-yellow-tint', value: colorValues.brandYellowTint },
+  { blank: true },
+  { name: '--bs-surface', value: colorValues.surface },
+  {
+    comment:
+      "  /* `drawerAlpha` in tokens.ts: the notifications sheet's glass, reused by menus (MO5). */",
+  },
+  { name: '--bs-surface-glass', value: 'rgba(255, 255, 255, 0.96)' },
+  { name: '--bs-surface-soft', value: colorValues.surfaceSoft },
+  { name: '--bs-surface-warm', value: colorValues.surfaceWarm },
+  { name: '--bs-surface-lavender', value: colorValues.surfaceLavender },
+  { name: '--bs-surface-lavender-strong', value: colorValues.surfaceLavenderStrong },
+  { name: '--bs-surface-muted', value: colorValues.surfaceMuted },
+  { name: '--bs-surface-sunken', value: colorValues.surfaceSunken },
+  { name: '--bs-surface-ink', value: colorValues.surfaceInk },
+  {
+    comment:
+      '  /* The ambient ground the shell floats on. Never white: the shell is white,\n     and it needs something to float ON (D-59). */',
+  },
+  { name: '--bs-app-background', value: colorValues.appBackground },
+  { blank: true },
+  {
+    comment:
+      '  /* Controls are identified by fill, label and focus ring — not by a resting\n     stroke (D-55). See the prefers-contrast block near the end of this file. */',
+  },
+  { name: '--bs-control-surface', value: colorValues.controlSurface },
+  { name: '--bs-control-surface-hover', value: colorValues.controlSurfaceHover },
+  { name: '--bs-control-surface-focus', value: colorValues.controlSurfaceFocus },
+  { name: '--bs-control-surface-disabled', value: colorValues.controlSurfaceDisabled },
+  { name: '--bs-control-border', value: colorValues.controlBorder },
+  { name: '--bs-control-border-contrast', value: colorValues.controlBorderContrast },
+  { blank: true },
+  { name: '--bs-hairline', value: colorValues.hairline },
+  { name: '--bs-card-border', value: colorValues.cardBorder },
+  { name: '--bs-border', value: colorValues.border },
+  { name: '--bs-border-strong', value: colorValues.borderStrong },
+  { name: '--bs-document-rule', value: colorValues.documentRule },
+  { blank: true },
+  { comment: '  /* UI-1: the one scrollbar thumb, resting and hovered. */' },
+  { name: '--bs-scrollbar-thumb', value: colorValues.scrollbarThumb },
+  { name: '--bs-scrollbar-thumb-hover', value: colorValues.scrollbarThumbHover },
+  { blank: true },
+  { name: '--bs-text-primary', value: colorValues.textPrimary },
+  { name: '--bs-text-secondary', value: colorValues.textSecondary },
+  { name: '--bs-text-muted', value: colorValues.textMuted },
+  { name: '--bs-text-subtle', value: colorValues.textSubtle },
+  { name: '--bs-text-inverse', value: colorValues.textInverse },
+  { blank: true },
+  {
+    comment:
+      '  /* INK — the approved demo\'s workhorse primary. Black carries almost every\n     action; purple is reserved for the single "create" entry point. */',
+  },
+  { name: '--bs-ink', value: colorValues.ink },
+  { name: '--bs-ink-hover', value: colorValues.inkHover },
+  { name: '--bs-ink-ink', value: colorValues.inkInk },
+  { blank: true },
+  { comment: '  /* The floating application shell, resolved over the ambient ground. */' },
+  { name: '--bs-shell-surface', value: colorValues.shellSurface },
+  { name: '--bs-shell-sidebar', value: colorValues.shellSidebar },
+  { name: '--bs-shell-panel', value: colorValues.shellPanel },
+  { name: '--bs-ambient-ground', value: colorValues.ambientGround },
+  { blank: true },
+  { name: '--bs-danger', value: colorValues.danger },
+  { name: '--bs-danger-tint', value: colorValues.dangerTint },
+  { name: '--bs-danger-border', value: colorValues.dangerBorder },
+  { name: '--bs-warning', value: colorValues.warning },
+  { name: '--bs-warning-tint', value: colorValues.warningTint },
+  { name: '--bs-warning-border', value: colorValues.warningBorder },
+  { name: '--bs-success', value: colorValues.success },
+  { name: '--bs-success-tint', value: colorValues.successTint },
+  { name: '--bs-success-border', value: colorValues.successBorder },
+  { name: '--bs-info', value: colorValues.info },
+  { name: '--bs-info-tint', value: colorValues.infoTint },
+  { name: '--bs-info-border', value: colorValues.infoBorder },
+  { blank: true },
+  { name: '--bs-focus-ring', value: colorValues.focusRing },
+  { name: '--bs-focus-ring-contrast', value: colorValues.focusRingContrast },
+  { blank: true },
+  {
+    comment:
+      '  /* Wide, far and very low in opacity — that is what lets a surface carry no\n     border and still read as a separate plane. */',
+  },
+  { name: '--bs-shadow-shell', value: shadowValues.shell },
+  { name: '--bs-shadow-card', value: shadowValues.card },
+  { name: '--bs-shadow-metric', value: shadowValues.metric },
+  { name: '--bs-shadow-rail', value: shadowValues.rail },
+  { name: '--bs-shadow-nav-active', value: shadowValues.navActive },
+  { name: '--bs-shadow-raised', value: shadowValues.raised },
+  { name: '--bs-shadow-overlay', value: shadowValues.overlay },
+  { name: '--bs-shadow-brand-glow', value: shadowValues.brandGlow },
+  { blank: true },
+  { name: '--bs-space-3xs', value: '0.125rem' },
+  { name: '--bs-space-2xs', value: '0.1875rem' },
+  { name: '--bs-space-xs', value: '0.25rem' },
+  { name: '--bs-space-sm', value: '0.5rem' },
+  { name: '--bs-space-md', value: '1rem' },
+  { name: '--bs-space-lg', value: '1.5rem' },
+  { name: '--bs-space-xl', value: '2rem' },
+  { name: '--bs-space-2xl', value: '3rem' },
+  { name: '--bs-space-3xl', value: '4rem' },
+  { blank: true },
+  { name: '--bs-radius-xs', value: '0.3125rem' },
+  { name: '--bs-radius-sm', value: '0.5rem' },
+  { name: '--bs-radius-md', value: '0.625rem' },
+  { name: '--bs-radius-lg', value: '0.6875rem' },
+  { name: '--bs-radius-control', value: '0.75rem' },
+  { name: '--bs-radius-xl', value: '0.8125rem' },
+  { name: '--bs-radius-rail', value: '1rem' },
+  { name: '--bs-radius-2xl', value: '1.125rem' },
+  { name: '--bs-radius-card', value: '1.25rem' },
+  { name: '--bs-radius-3xl', value: '1.75rem' },
+  { name: '--bs-radius-shell', value: '2.125rem' },
+  { name: '--bs-radius-full', value: '9999px' },
+  { blank: true },
+  { name: '--bs-duration-instant', value: motionValues.instant },
+  { name: '--bs-duration-fast', value: motionValues.fast },
+  { name: '--bs-duration-base', value: motionValues.base },
+  { name: '--bs-duration-slow', value: motionValues.slow },
+  { name: '--bs-ease-out', value: motionValues.easeOut },
+  { name: '--bs-ease-in-out', value: motionValues.easeInOut },
+  { blank: true },
+  {
+    comment:
+      '  /*\n   * §8 MOTION (prototype v105, Phase 2B-2b). Named for WHAT moves, so a\n   * component asks for "the menu\'s rows" rather than for a number, and the\n   * numbers are §8\'s exactly. `tokens.ts` mirrors them for the Web Animations\n   * API; `motion-tokens.test.ts` keeps the two equal.\n   */',
+  },
+  { name: '--bs-motion-page', value: '440ms', note: '/* MO1 a block entering */' },
+  { name: '--bs-motion-page-late', value: '300ms', note: '/* MO1 blocks after the 7th */' },
+  { name: '--bs-motion-page-step', value: '45ms', note: '/* MO1 stagger */' },
+  { name: '--bs-motion-pill', value: '440ms', note: '/* MO2 the sidebar pill */' },
+  { name: '--bs-motion-collapse', value: '380ms', note: '/* MO3 the sidebar column */' },
+  { name: '--bs-motion-label-out', value: '110ms', note: '/* MO3 labels fade out */' },
+  { name: '--bs-motion-label-in', value: '220ms', note: '/* MO3 labels fade in */' },
+  { name: '--bs-motion-label-in-delay', value: '150ms', note: '/* MO3 … after the width */' },
+  { name: '--bs-motion-seg', value: '380ms', note: '/* MO4 the segmented pill */' },
+  {
+    name: '--bs-motion-menu-in',
+    value: '200ms',
+    note: '/* MO5 a menu, listbox, popover or sheet opens */',
+  },
+  { name: '--bs-motion-menu-row', value: '220ms', note: '/* MO5 its rows */' },
+  { name: '--bs-motion-menu-row-step', value: '22ms', note: '/* MO5 row stagger */' },
+  { name: '--bs-motion-menu-out', value: '180ms', note: '/* MO5 it closes */' },
+  { name: '--bs-motion-dialog', value: '300ms', note: '/* MO6 the dialog */' },
+  { name: '--bs-motion-veil', value: '260ms', note: '/* MO6 its veil */' },
+  { name: '--bs-motion-copilot', value: '340ms', note: '/* MO7 the Copilot panel */' },
+  {
+    name: '--bs-motion-toast-in',
+    value: '420ms',
+    note: '/* MO8 a toast enters; its check draws */',
+  },
+  { name: '--bs-motion-toast-step', value: '50ms', note: '/* MO8 content stagger */' },
+  { name: '--bs-motion-toast-check-delay', value: '160ms', note: '/* MO8 */' },
+  { name: '--bs-motion-toast-out', value: '280ms', note: '/* MO8 a toast leaves */' },
+  { name: '--bs-motion-bar', value: '800ms', note: '/* MO11 a bar grows */' },
+  { name: '--bs-motion-bar-step', value: '35ms', note: '/* MO11 bar stagger */' },
+  { name: '--bs-motion-line', value: '1000ms', note: '/* MO11 a line draws */' },
+  { name: '--bs-motion-dot', value: '360ms', note: '/* MO11 dots and labels pop */' },
+  { name: '--bs-motion-dot-step', value: '40ms', note: '/* MO11 dot stagger */' },
+  { name: '--bs-motion-count', value: '650ms', note: '/* MO12 a KPI counts up */' },
+  { name: '--bs-motion-loop', value: '1600ms', note: '/* MO13 shimmer and pulse */' },
+  { name: '--bs-motion-hover', value: '220ms', note: '/* MO14 a card lifts */' },
+  { name: '--bs-motion-drag-lift', value: '180ms', note: '/* §8.2 a post lifts */' },
+  { name: '--bs-motion-drop', value: '360ms', note: '/* §8.2 it flies into place */' },
+  {
+    name: '--bs-motion-settle',
+    value: '300ms',
+    note: '/* §8.2 others slide; a cancel glides back */',
+  },
+  {
+    name: '--bs-motion-state',
+    value: '200ms',
+    note: '/* colour/background/border state feedback (≤ 200 ms) */',
+  },
+  { blank: true },
+  { name: '--bs-z-sticky', value: '10' },
+  { name: '--bs-z-drawer', value: '40' },
+  { name: '--bs-z-overlay', value: '50' },
+  { name: '--bs-z-dialog', value: '60' },
+  { name: '--bs-z-toast', value: '70' },
+  { name: '--bs-z-tooltip', value: '80' },
+  { name: '--bs-z-skip-link', value: '100' },
+  { blank: true },
+  { name: '--bs-sidebar-expanded', value: '15.5rem' },
+  { name: '--bs-sidebar-collapsed', value: '4.875rem' },
+  { name: '--bs-header-height', value: '5.5rem' },
+  { name: '--bs-shell-max-width', value: '96.25rem' },
+  { name: '--bs-shell-inset', value: '1.25rem' },
+  { name: '--bs-rail-pad-inline', value: '0.875rem' },
+  { name: '--bs-rail-pad-block', value: '1.25rem' },
+  { name: '--bs-panel-pad-inline', value: '1.75rem' },
+  { name: '--bs-panel-pad-block-end', value: '2.25rem' },
+  { name: '--bs-section-gap', value: '0.875rem' },
+  { blank: true },
+  {
+    comment:
+      '  /* The ambient orbs. Full-saturation brand colour appears ONLY here, at 24–38%\n     opacity behind a 100px blur, where it reads as light rather than as a\n     theme. Nothing sits on it: the shell above is opaque. */',
+  },
+  { name: '--bs-ambient-blush', value: '#ff99b9' },
+  { name: '--bs-ambient-blur', value: '100px' },
+  { name: '--bs-ambient-size', value: '56vw' },
+  { name: '--bs-ambient-drift', value: '16s' },
+  { blank: true },
+  {
+    name: '--bs-gradient-hero',
+    value:
+      'linear-gradient(\n    120deg,\n    rgba(255, 221, 21, 0.35),\n    rgba(255, 255, 255, 0.65) 42%,\n    rgba(121, 53, 254, 0.34)\n  )',
+  },
+  { blank: true },
+  {
+    name: '--bs-font-latin',
+    value:
+      "\n    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+  },
+  {
+    name: '--bs-font-arabic',
+    value:
+      "\n    'Cairo', 'IBM Plex Sans Arabic', 'Noto Sans Arabic', system-ui, 'Segoe UI', Tahoma, Arial,\n    sans-serif",
+  },
+  {
+    name: '--bs-font-mono',
+    value: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+  },
+  { blank: true },
+  { comment: '  /* S2: the translucent surfaces and shadows tokens.ts had no CSS twin for. */' },
+  { name: '--bs-shell-alpha', value: colorValues.shellAlpha },
+  { name: '--bs-shell-sidebar-alpha', value: colorValues.shellSidebarAlpha },
+  { name: '--bs-metric-alpha', value: colorValues.metricAlpha },
+  { name: '--bs-surface-card-alpha', value: colorValues.surfaceCardAlpha },
+  { name: '--bs-float-card-alpha', value: colorValues.floatCardAlpha },
+  { name: '--bs-drawer-alpha', value: colorValues.drawerAlpha },
+  { name: '--bs-auth-card-alpha', value: colorValues.authCardAlpha },
+  { name: '--bs-preview-panel-alpha', value: colorValues.previewPanelAlpha },
+  { name: '--bs-shadow-auth-card', value: shadowValues.authCard },
+  { name: '--bs-shadow-float', value: shadowValues.float },
+  { name: '--bs-shadow-drawer', value: shadowValues.drawer },
+  { name: '--bs-shadow-command-dialog', value: shadowValues.commandDialog },
+  { name: '--bs-shadow-focus', value: shadowValues.focus },
+];

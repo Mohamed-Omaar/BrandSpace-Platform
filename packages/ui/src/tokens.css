@@ -5,8 +5,9 @@
  * inset-inline) so Arabic RTL mirrors correctly without a second stylesheet —
  * CLAUDE.md §4.
  *
- * `tests/unit/token-parity.test.ts` asserts that every colour here matches the
- * TypeScript token of the same name, so the two cannot drift.
+ * THE `:root` BLOCK BELOW IS GENERATED from `cssRootTokens` in tokens.ts
+ * (`pnpm style:tokens`); tests/unit/style-tokens-css.test.ts fails on a hand
+ * edit. Everything after it is hand-written.
  */
 :root {
   /*
@@ -460,6 +461,21 @@
     'Cairo', 'IBM Plex Sans Arabic', 'Noto Sans Arabic', system-ui, 'Segoe UI', Tahoma, Arial,
     sans-serif;
   --bs-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* S2: the translucent surfaces and shadows tokens.ts had no CSS twin for. */
+  --bs-shell-alpha: rgba(255, 255, 255, 0.78);
+  --bs-shell-sidebar-alpha: rgba(250, 250, 251, 0.78);
+  --bs-metric-alpha: rgba(255, 255, 255, 0.72);
+  --bs-surface-card-alpha: rgba(255, 255, 255, 0.82);
+  --bs-float-card-alpha: rgba(255, 255, 255, 0.8);
+  --bs-drawer-alpha: rgba(255, 255, 255, 0.96);
+  --bs-auth-card-alpha: rgba(255, 255, 255, 0.9);
+  --bs-preview-panel-alpha: rgba(255, 255, 255, 0.88);
+  --bs-shadow-auth-card: 0 24px 70px rgba(44, 25, 82, 0.12);
+  --bs-shadow-float: 0 18px 45px rgba(73, 48, 112, 0.12);
+  --bs-shadow-drawer: 0 30px 80px rgba(0, 0, 0, 0.2);
+  --bs-shadow-command-dialog: 0 35px 90px rgba(0, 0, 0, 0.24);
+  --bs-shadow-focus: 0 0 0 2px #ffffff, 0 0 0 4px #7935fe;
 }
 
 html[dir='rtl'] {
@@ -1834,6 +1850,11 @@ html[dir='rtl'] input[type='week'] {
   animation-name: bs-line-draw-rtl;
 }
 
+/* The series line's colour. A class rather than the SVG attribute, because an
+   attribute cannot take var() (design-system programme, S2). */
+.bs-chart-series {
+  stroke: var(--bs-brand-purple);
+}
 .bs-chart-dot {
   transform-box: fill-box;
   transform-origin: center;

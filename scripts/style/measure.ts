@@ -22,9 +22,10 @@
  *   the token source — excluded): colour strings, numeric `zIndex` /
  *   `fontSize` / `borderRadius` / `letterSpacing` / `lineHeight` style values,
  *   literal length strings in style objects, every inline `style=` attribute,
- *   and every reference to a token object whose values are baked literals
- *   (`colorTokens.*`, `shadowTokens.*`, `motionTokens.*`, `zIndexTokens.*`,
- *   `fontTokens.*`) — those do not follow a change to tokens.css.
+ *   and every reference to a token whose value is a baked literal
+ *   (`zIndexTokens.*`, `fontTokens.*`, and the three D-55 colours) — those do
+ *   not follow a change to tokens.css. Since S2 the other colour, shadow and
+ *   motion tokens are `var(--bs-…)` and are not counted.
  *
  * The TSX categories are found with the SAME selectors the ESLint
  * `style/no-restricted-syntax` rule reports in the editor (`style-rules.mjs`),

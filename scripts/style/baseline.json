@@ -61,16 +61,13 @@
       "inline-style": 2
     },
     "apps/admin/src/app/[locale]/console/ai-models/page.tsx": {
-      "baked-token": 1,
       "inline-style": 1
     },
     "apps/admin/src/app/[locale]/console/ai-usage/[requestId]/page.tsx": {
-      "baked-token": 3,
       "inline-style": 5,
       "length": 4
     },
     "apps/admin/src/app/[locale]/console/ai-usage/page.tsx": {
-      "baked-token": 3,
       "inline-style": 6
     },
     "apps/admin/src/app/[locale]/console/audit/page.tsx": {
@@ -78,78 +75,66 @@
       "inline-style": 1
     },
     "apps/admin/src/app/[locale]/console/changes/page.tsx": {
-      "baked-token": 4,
       "inline-style": 10,
       "length": 1
     },
     "apps/admin/src/app/[locale]/console/configuration/page.tsx": {
-      "baked-token": 14,
+      "baked-token": 2,
       "inline-style": 24,
       "length": 3
     },
     "apps/admin/src/app/[locale]/console/features/page.tsx": {
-      "baked-token": 2,
       "inline-style": 29
     },
     "apps/admin/src/app/[locale]/console/flags/page.tsx": {
-      "baked-token": 1,
       "inline-style": 23
     },
     "apps/admin/src/app/[locale]/console/health/page.tsx": {
-      "baked-token": 11,
+      "baked-token": 2,
       "inline-style": 11
     },
     "apps/admin/src/app/[locale]/console/integrations/[category]/[providerKey]/page.tsx": {
-      "baked-token": 15,
+      "baked-token": 4,
       "inline-style": 39,
       "numeric-style": 1
     },
     "apps/admin/src/app/[locale]/console/integrations/page.tsx": {
-      "baked-token": 8,
       "inline-style": 7,
       "numeric-style": 1
     },
     "apps/admin/src/app/[locale]/console/page.tsx": {
-      "baked-token": 1,
       "inline-style": 2
     },
     "apps/admin/src/app/[locale]/console/plans/page.tsx": {
-      "baked-token": 4,
       "inline-style": 45
     },
     "apps/admin/src/app/[locale]/console/providers/page.tsx": {
-      "baked-token": 2,
       "inline-style": 2
     },
     "apps/admin/src/app/[locale]/console/routing/page.tsx": {
-      "baked-token": 13,
+      "baked-token": 2,
       "inline-style": 13
     },
     "apps/admin/src/app/[locale]/console/secrets/page.tsx": {
-      "baked-token": 7,
+      "baked-token": 2,
       "inline-style": 33,
       "length": 7
     },
     "apps/admin/src/app/[locale]/console/support/page.tsx": {
-      "baked-token": 1,
       "inline-style": 28
     },
     "apps/admin/src/app/[locale]/console/team/page.tsx": {
-      "baked-token": 4,
       "inline-style": 9,
       "length": 1
     },
     "apps/admin/src/app/[locale]/console/workspaces/[workspaceId]/page.tsx": {
-      "baked-token": 5,
       "inline-style": 136
     },
     "apps/admin/src/app/[locale]/console/workspaces/page.tsx": {
-      "baked-token": 2,
       "inline-style": 17,
       "length": 3
     },
     "apps/admin/src/components/admin-shell.tsx": {
-      "baked-token": 6,
       "inline-style": 4,
       "length": 2
     },
@@ -161,71 +146,62 @@
       "inline-style": 3
     },
     "apps/admin/src/components/mode-switch.tsx": {
-      "baked-token": 9,
       "inline-style": 8
     },
     "apps/admin/src/components/simple-ui.tsx": {
-      "baked-token": 7,
+      "baked-token": 1,
       "inline-style": 14,
       "length": 1
     },
     "apps/admin/src/components/simple/ai.tsx": {
-      "baked-token": 16,
+      "baked-token": 1,
       "inline-style": 37,
       "length": 4
     },
     "apps/admin/src/components/simple/area.tsx": {
-      "baked-token": 12,
+      "baked-token": 1,
       "inline-style": 74,
       "length": 13
     },
     "apps/admin/src/components/simple/customers.tsx": {
-      "baked-token": 13,
       "inline-style": 69,
       "length": 3
     },
     "apps/admin/src/components/simple/features.tsx": {
-      "baked-token": 7,
       "inline-style": 25,
       "length": 2
     },
     "apps/admin/src/components/simple/home.tsx": {
-      "baked-token": 2,
       "inline-style": 2,
       "length": 1
     },
     "apps/admin/src/components/simple/integrations.tsx": {
-      "baked-token": 9,
+      "baked-token": 1,
       "inline-style": 42,
       "length": 6
     },
     "apps/admin/src/components/simple/manage.tsx": {
-      "baked-token": 1,
       "inline-style": 4
     },
     "apps/admin/src/components/simple/open-drafts.tsx": {
-      "baked-token": 1,
       "inline-style": 7,
       "length": 2
     },
     "apps/admin/src/components/simple/system.tsx": {
-      "baked-token": 2,
       "inline-style": 7,
       "length": 1
     },
     "apps/admin/src/components/simple/usage.tsx": {
-      "baked-token": 5,
       "inline-style": 16
     },
     "apps/admin/src/components/social-addresses.tsx": {
-      "baked-token": 3,
+      "baked-token": 1,
       "inline-style": 3
     },
     "apps/dashboard/src/app/[locale]/(auth)/mfa/page.tsx": {
       "inline-style": 2
     },
     "apps/dashboard/src/app/[locale]/(auth)/reset/[token]/page.tsx": {
-      "baked-token": 1,
       "inline-style": 2
     },
     "apps/dashboard/src/app/[locale]/(auth)/reset/page.tsx": {
@@ -235,54 +211,44 @@
       "inline-style": 2
     },
     "apps/dashboard/src/app/[locale]/(auth)/sign-up/page.tsx": {
-      "baked-token": 2,
       "inline-style": 6
     },
     "apps/dashboard/src/app/[locale]/(auth)/sign-up/sent/page.tsx": {
-      "baked-token": 3,
       "inline-style": 4
     },
     "apps/dashboard/src/app/[locale]/(auth)/sign-up/sent/resend-button.tsx": {
       "inline-style": 1
     },
     "apps/dashboard/src/app/[locale]/(auth)/verify/page.tsx": {
-      "baked-token": 1,
       "inline-style": 1
     },
     "apps/dashboard/src/app/[locale]/activity/page.tsx": {
-      "baked-token": 3,
       "inline-style": 8
     },
     "apps/dashboard/src/app/[locale]/analytics/page.tsx": {
       "inline-style": 5
     },
     "apps/dashboard/src/app/[locale]/assets/asset-library-view.tsx": {
-      "baked-token": 33,
+      "baked-token": 1,
       "inline-style": 71
     },
     "apps/dashboard/src/app/[locale]/automations/automation-form.tsx": {
-      "baked-token": 1,
       "inline-style": 37
     },
     "apps/dashboard/src/app/[locale]/billing/actions.tsx": {
-      "baked-token": 2,
       "inline-style": 10
     },
     "apps/dashboard/src/app/[locale]/billing/checkout/[outcome]/page.tsx": {
-      "baked-token": 1,
       "inline-style": 4
     },
     "apps/dashboard/src/app/[locale]/billing/invoices/[invoiceId]/document/page.tsx": {
-      "baked-token": 17,
       "inline-style": 29,
       "numeric-style": 1
     },
     "apps/dashboard/src/app/[locale]/billing/invoices/[invoiceId]/page.tsx": {
-      "baked-token": 5,
       "inline-style": 32
     },
     "apps/dashboard/src/app/[locale]/billing/page.tsx": {
-      "baked-token": 2,
       "inline-style": 18
     },
     "apps/dashboard/src/app/[locale]/brand-brain/area-drawer.tsx": {
@@ -298,27 +264,22 @@
       "colour": 1
     },
     "apps/dashboard/src/app/[locale]/brand-brain/look-card.tsx": {
-      "baked-token": 2,
       "inline-style": 8
     },
     "apps/dashboard/src/app/[locale]/brand-brain/page.tsx": {
-      "baked-token": 5,
       "inline-style": 6
     },
     "apps/dashboard/src/app/[locale]/brand-brain/voice-card.tsx": {
-      "baked-token": 5,
       "inline-style": 15,
       "numeric-style": 1
     },
     "apps/dashboard/src/app/[locale]/calendar/calendar-view.tsx": {
-      "baked-token": 3,
       "inline-style": 22
     },
     "apps/dashboard/src/app/[locale]/calendar/prototype-calendar.tsx": {
       "inline-style": 9
     },
     "apps/dashboard/src/app/[locale]/campaigns/[campaignId]/page.tsx": {
-      "baked-token": 14,
       "inline-style": 38
     },
     "apps/dashboard/src/app/[locale]/campaigns/page.tsx": {
@@ -328,92 +289,79 @@
       "inline-style": 1
     },
     "apps/dashboard/src/app/[locale]/content/compose/create-entry.tsx": {
-      "baked-token": 2,
       "inline-style": 14
     },
     "apps/dashboard/src/app/[locale]/content/compose/draft-editor.tsx": {
       "inline-style": 2
     },
     "apps/dashboard/src/app/[locale]/content/compose/media-drawer.tsx": {
-      "baked-token": 1,
       "inline-style": 4
     },
     "apps/dashboard/src/app/[locale]/content/compose/media-picker.tsx": {
-      "baked-token": 2,
       "inline-style": 7
     },
     "apps/dashboard/src/app/[locale]/content/compose/media-slides.tsx": {
-      "baked-token": 1,
       "inline-style": 4
     },
     "apps/dashboard/src/app/[locale]/content/compose/variant-preview.tsx": {
       "inline-style": 1
     },
     "apps/dashboard/src/app/[locale]/content/content-library.tsx": {
-      "baked-token": 1,
       "inline-style": 7
     },
     "apps/dashboard/src/app/[locale]/content/post-menu.tsx": {
       "inline-style": 7
     },
     "apps/dashboard/src/app/[locale]/copilot/copilot-view.tsx": {
-      "baked-token": 14,
       "inline-style": 32
     },
     "apps/dashboard/src/app/[locale]/creative/creative-studio-view.tsx": {
       "inline-style": 1
     },
     "apps/dashboard/src/app/[locale]/creative/page.tsx": {
-      "baked-token": 4,
+      "baked-token": 1,
       "inline-style": 12,
       "numeric-style": 1
     },
     "apps/dashboard/src/app/[locale]/deletion-pending/page.tsx": {
-      "baked-token": 3,
       "inline-style": 6
     },
     "apps/dashboard/src/app/[locale]/design-system/components/components-client.tsx": {
-      "baked-token": 8,
+      "baked-token": 2,
       "inline-style": 83,
       "length": 1
     },
     "apps/dashboard/src/app/[locale]/design-system/components/page.tsx": {
-      "baked-token": 4,
+      "baked-token": 1,
       "inline-style": 5,
       "length": 1
     },
     "apps/dashboard/src/app/[locale]/design-system/page.tsx": {
-      "baked-token": 21,
+      "baked-token": 2,
       "inline-style": 12,
       "length": 1
     },
     "apps/dashboard/src/app/[locale]/design-system/showcase-client.tsx": {
-      "baked-token": 9,
       "inline-style": 25
     },
     "apps/dashboard/src/app/[locale]/design-system/tokens/page.tsx": {
-      "baked-token": 26,
+      "baked-token": 4,
       "inline-style": 49,
       "length": 3
     },
     "apps/dashboard/src/app/[locale]/error.tsx": {
-      "baked-token": 1,
       "inline-style": 2
     },
     "apps/dashboard/src/app/[locale]/integrations/integrations-view.tsx": {
-      "baked-token": 5,
       "inline-style": 23
     },
     "apps/dashboard/src/app/[locale]/intelligence/page.tsx": {
-      "baked-token": 13,
       "inline-style": 22
     },
     "apps/dashboard/src/app/[locale]/invitations/[token]/page.tsx": {
-      "baked-token": 4,
       "inline-style": 15
     },
     "apps/dashboard/src/app/[locale]/members/page.tsx": {
-      "baked-token": 3,
       "inline-style": 25
     },
     "apps/dashboard/src/app/[locale]/mfa-setup/page.tsx": {
@@ -423,7 +371,6 @@
       "inline-style": 1
     },
     "apps/dashboard/src/app/[locale]/notifications/page.tsx": {
-      "baked-token": 3,
       "inline-style": 7
     },
     "apps/dashboard/src/app/[locale]/oauth/authorize/page.tsx": {
@@ -436,7 +383,6 @@
       "inline-style": 8
     },
     "apps/dashboard/src/app/[locale]/onboarding/workspace/page.tsx": {
-      "baked-token": 1,
       "inline-style": 1
     },
     "apps/dashboard/src/app/[locale]/overview/page.tsx": {
@@ -445,20 +391,17 @@
       "numeric-style": 2
     },
     "apps/dashboard/src/app/[locale]/permissions/page.tsx": {
-      "baked-token": 9,
       "inline-style": 16,
       "numeric-style": 1
     },
     "apps/dashboard/src/app/[locale]/plan/page.tsx": {
-      "baked-token": 13,
+      "baked-token": 1,
       "inline-style": 58
     },
     "apps/dashboard/src/app/[locale]/publishing/page.tsx": {
-      "baked-token": 3,
       "inline-style": 7
     },
     "apps/dashboard/src/app/[locale]/settings/brand/page.tsx": {
-      "baked-token": 3,
       "inline-style": 19
     },
     "apps/dashboard/src/app/[locale]/settings/general-fields.tsx": {
@@ -468,22 +411,18 @@
       "inline-style": 2
     },
     "apps/dashboard/src/app/[locale]/settings/publishing/page.tsx": {
-      "baked-token": 3,
       "inline-style": 20
     },
     "apps/dashboard/src/app/[locale]/strategy/page.tsx": {
-      "baked-token": 2,
       "inline-style": 6
     },
     "apps/dashboard/src/app/[locale]/strategy/start-busy.tsx": {
       "inline-style": 1
     },
     "apps/dashboard/src/app/[locale]/workspaces/page.tsx": {
-      "baked-token": 1,
       "inline-style": 1
     },
     "apps/dashboard/src/components/activity-timeline.tsx": {
-      "baked-token": 1,
       "inline-style": 4
     },
     "apps/dashboard/src/components/copilot-link.tsx": {
@@ -496,16 +435,15 @@
       "inline-style": 4
     },
     "apps/dashboard/src/components/mention-field.tsx": {
-      "baked-token": 6,
+      "baked-token": 1,
       "inline-style": 5
     },
     "apps/dashboard/src/components/mfa-enrolment.tsx": {
-      "baked-token": 2,
       "inline-style": 7,
       "length": 1
     },
     "apps/dashboard/src/components/notes-panel.tsx": {
-      "baked-token": 11,
+      "baked-token": 1,
       "inline-style": 29
     },
     "apps/dashboard/src/components/notes-popover.tsx": {
@@ -518,7 +456,6 @@
       "inline-style": 1
     },
     "apps/dashboard/src/components/route-state.tsx": {
-      "baked-token": 1,
       "inline-style": 2,
       "length": 1
     },
@@ -530,7 +467,7 @@
       "numeric-style": 1
     },
     "apps/web/src/components/app-shell.tsx": {
-      "baked-token": 2,
+      "baked-token": 1,
       "inline-style": 3,
       "length": 1
     },
@@ -541,101 +478,89 @@
       "inline-style": 3
     },
     "packages/ui/src/app-shell.tsx": {
-      "baked-token": 23,
+      "baked-token": 2,
       "colour": 4,
       "inline-style": 36,
       "length": 7
     },
     "packages/ui/src/calendar.tsx": {
-      "baked-token": 28,
+      "baked-token": 1,
       "colour": 4,
       "inline-style": 29,
       "length": 3,
       "numeric-style": 1
     },
     "packages/ui/src/charts.tsx": {
-      "baked-token": 18,
+      "baked-token": 1,
       "inline-style": 19
     },
     "packages/ui/src/composer.tsx": {
-      "baked-token": 19,
       "inline-style": 28
     },
     "packages/ui/src/copilot-shell.tsx": {
-      "baked-token": 68,
+      "baked-token": 4,
       "colour": 2,
       "inline-style": 64
     },
     "packages/ui/src/customer-shell.tsx": {
-      "baked-token": 3,
+      "baked-token": 1,
       "colour": 1,
       "inline-style": 14
     },
     "packages/ui/src/data.tsx": {
-      "baked-token": 37,
+      "baked-token": 2,
       "inline-style": 30,
       "length": 4
     },
     "packages/ui/src/design-studio.tsx": {
-      "baked-token": 44,
+      "baked-token": 1,
       "colour": 1,
       "inline-style": 42,
       "length": 4,
       "numeric-style": 1
     },
     "packages/ui/src/feature-card.tsx": {
-      "baked-token": 6,
       "inline-style": 9
     },
     "packages/ui/src/feedback.tsx": {
-      "baked-token": 20,
       "inline-style": 10,
       "length": 2,
       "numeric-style": 1
     },
     "packages/ui/src/link-tabs.tsx": {
-      "baked-token": 11,
       "inline-style": 4
     },
     "packages/ui/src/media-image.tsx": {
       "inline-style": 1
     },
     "packages/ui/src/media.tsx": {
-      "baked-token": 5,
       "colour": 27,
       "inline-style": 11,
       "length": 2
     },
-    "packages/ui/src/menu-style.ts": {
-      "baked-token": 1
-    },
     "packages/ui/src/overlays.tsx": {
-      "baked-token": 36,
+      "baked-token": 6,
       "colour": 2,
       "inline-style": 24,
       "length": 1
     },
     "packages/ui/src/overview-hero.tsx": {
-      "baked-token": 9,
       "colour": 1,
       "inline-style": 12
     },
     "packages/ui/src/password-field.tsx": {
-      "baked-token": 3,
       "inline-style": 7,
       "numeric-style": 1
     },
     "packages/ui/src/platform-icons.tsx": {
-      "baked-token": 1,
       "inline-style": 2
     },
     "packages/ui/src/post-card.tsx": {
-      "baked-token": 14,
       "inline-style": 20,
       "length": 1
     },
     "packages/ui/src/post-detail-drawer.tsx": {
-      "baked-token": 9,
+      "baked-token": 3,
       "colour": 1,
       "inline-style": 11
     },
@@ -643,7 +568,7 @@
       "inline-style": 1
     },
     "packages/ui/src/primitives.tsx": {
-      "baked-token": 40,
+      "baked-token": 1,
       "inline-style": 15,
       "numeric-style": 1
     },
@@ -659,26 +584,24 @@
       "numeric-style": 3
     },
     "packages/ui/src/save-bar.tsx": {
-      "baked-token": 6,
+      "baked-token": 2,
       "inline-style": 5
     },
     "packages/ui/src/searchable-select.tsx": {
-      "baked-token": 5,
+      "baked-token": 1,
       "inline-style": 7
     },
     "packages/ui/src/social-post-preview.tsx": {
-      "baked-token": 31,
       "colour": 3,
       "inline-style": 50,
       "numeric-style": 6
     },
     "packages/ui/src/surfaces.tsx": {
-      "baked-token": 30,
+      "baked-token": 1,
       "inline-style": 34,
       "length": 1
     },
     "packages/ui/src/switchers.tsx": {
-      "baked-token": 29,
       "inline-style": 38,
       "numeric-style": 1
     },
@@ -687,7 +610,6 @@
       "inline-style": 6
     },
     "packages/ui/src/topbar-actions.tsx": {
-      "baked-token": 4,
       "inline-style": 4
     },
     "packages/ui/src/use-calendar-drag.ts": {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_LOCALE,
   SUPPORTED_LOCALES,
-  colorTokens,
+  colorValues,
   directionForLocale,
   htmlLangForLocale,
   isSupportedLocale,
@@ -35,12 +35,12 @@ describe('bilingual direction', () => {
 
 describe('brand tokens', () => {
   it('carries the approved brand colours', () => {
-    expect(colorTokens.brandBlue).toBe('#00ADEE');
-    expect(colorTokens.brandYellow).toBe('#FFDD15');
+    expect(colorValues.brandBlue).toBe('#00ADEE');
+    expect(colorValues.brandYellow).toBe('#FFDD15');
   });
 
   it('pairs the yellow with a dark ink, because yellow-on-white fails contrast', () => {
-    expect(colorTokens.brandYellowInk).toBe('#1A1A1A');
-    expect(colorTokens.brandYellowText).not.toBe(colorTokens.brandYellow);
+    expect(colorValues.brandYellowInk).toBe('#1A1A1A');
+    expect(colorValues.brandYellowText).not.toBe(colorValues.brandYellow);
   });
 });

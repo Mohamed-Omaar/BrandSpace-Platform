@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { colorTokens } from '@brandspace/ui';
+import { colorValues } from '@brandspace/ui';
 
 /**
  * UI-1 (prototype v94) — ONE GLOBAL SCROLLBAR STYLE, AND THE HIDDEN ONES STAY
@@ -119,8 +119,8 @@ describe('UI-1 · the global scrollbar', () => {
     );
     expect(tokens).toMatch(/--bs-scrollbar-thumb:\s*#9a9aa2;/);
     expect(tokens).toMatch(/--bs-scrollbar-thumb-hover:\s*#6a6a72;/);
-    expect(colorTokens.scrollbarThumb.toLowerCase()).toBe('#9a9aa2');
-    expect(colorTokens.scrollbarThumbHover.toLowerCase()).toBe('#6a6a72');
+    expect(colorValues.scrollbarThumb.toLowerCase()).toBe('#9a9aa2');
+    expect(colorValues.scrollbarThumbHover.toLowerCase()).toBe('#6a6a72');
   });
 
   it('uses scrollbar-width / scrollbar-color only where the pseudo-elements do not exist (Firefox)', () => {
