@@ -265,16 +265,21 @@ export function spentMessage(
   );
 }
 
+/**
+ * F-109 (D-14) — WHOLE CREDITS ON SCREEN, rounded away from zero.
+ *
+ * D-14 keeps milli-credits inside and whole credits on screen. Rounding UP
+ * means a price is never shown below what it is; with credit rules priced in
+ * whole credits per action (the configuration warns otherwise), the shown
+ * price is exactly the charge.
+ */
 export function formatCredits(milli: string): string {
   const negative = milli.startsWith('-');
   const magnitude = BigInt(
     /^\d+$/.test(negative ? milli.slice(1) : milli) ? (negative ? milli.slice(1) : milli) : '0',
   );
-  // Tenths of a credit, rounded away from zero: 100 milli is one tenth.
-  const tenths = (magnitude + 99n) / 100n;
-  const whole = (tenths / 10n).toString();
-  const fraction = (tenths % 10n).toString();
-  return `${negative && tenths > 0n ? '-' : ''}${whole}${fraction === '0' ? '' : `.${fraction}`}`;
+  const whole = (magnitude + 999n) / 1000n;
+  return `${negative && whole > 0n ? '-' : ''}${whole.toString()}`;
 }
 
 /**

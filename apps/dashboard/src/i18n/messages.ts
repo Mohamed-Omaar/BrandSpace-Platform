@@ -2137,7 +2137,8 @@ export const messages = {
     'content.composer.quoteHint': 'هذه تقدير قبل الخصم، وهو المبلغ نفسه الذي سيُحجز عند التوليد.',
     'content.composer.results': 'النسخ المولّدة',
     'content.composer.resultsEmpty': 'ستظهر نسخة لكل قناة هنا بعد كتابة المسودة.',
-    'content.composer.dialect': 'اللهجة',
+    // F-108: the dialect setting is retired (D-474); this names the language.
+    'content.composer.dialect': 'اللغة',
     'content.composer.characters': 'حرفًا',
     'content.composer.of': 'من',
     'content.composer.hashtags': 'الوسوم',
@@ -6455,7 +6456,8 @@ export const messages = {
     'content.composer.results': 'Generated versions',
     'content.composer.resultsEmpty':
       'A version for each channel appears here once the draft is written.',
-    'content.composer.dialect': 'Dialect',
+    // F-108: the dialect setting is retired (D-474); this names the language.
+    'content.composer.dialect': 'Language',
     'content.composer.characters': 'characters',
     'content.composer.of': 'of',
     'content.composer.hashtags': 'Hashtags',
