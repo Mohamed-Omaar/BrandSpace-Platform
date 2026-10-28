@@ -434,13 +434,13 @@ describe('D-573 · readiness and the secret rotation', () => {
     expect(after).toEqual(ready);
   });
 
-  it('the Control Center says the KEK sentence verbatim, in en and ar', () => {
-    const copy = read('apps/admin/src/i18n/simple.ts');
+  it('the Control Center says the KEK sentence verbatim, in en and ar, pointing at the runbook (D-574)', () => {
+    const copy = read('apps/admin/src/i18n/simple.ts').replace(/:\s+'/g, ": '");
     expect(copy).toContain(
-      "'note.kek_rewrap_first': 'Do not change SECRET_VAULT_KEK until the re-wrap command exists.'",
+      "'note.kek_rewrap_first': 'Change SECRET_VAULT_KEK only by docs/SECRET-ROTATION.md: the new key beside the old, then the re-wrap command.'",
     );
     expect(copy).toContain(
-      "'note.kek_rewrap_first': 'لا تغيّر SECRET_VAULT_KEK قبل أن يتوفر أمر إعادة التغليف.'",
+      "'note.kek_rewrap_first': 'لا تغيّر SECRET_VAULT_KEK إلا باتباع docs/SECRET-ROTATION.md: المفتاح الجديد بجانب القديم، ثم أمر إعادة التغليف.'",
     );
   });
 });
