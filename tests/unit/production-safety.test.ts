@@ -231,6 +231,23 @@ describe('the production configuration contract', () => {
     ).toThrow(/must all differ/i);
   });
 
+  it("D-574: refuses a rotation whose old KEK equals its new one, or another domain's", () => {
+    expect(() =>
+      parseEnv({
+        ...COMPLETE,
+        SECRET_VAULT_KEK: 'c'.repeat(48),
+        SECRET_VAULT_KEK_PREVIOUS: 'c'.repeat(48),
+      } as NodeJS.ProcessEnv),
+    ).toThrow(/must all differ/i);
+    expect(() =>
+      parseEnv({
+        ...COMPLETE,
+        SOCIAL_TOKEN_VAULT_KEK: 'd'.repeat(48),
+        SECRET_VAULT_KEK_PREVIOUS: 'd'.repeat(48),
+      } as NodeJS.ProcessEnv),
+    ).toThrow(/must all differ/i);
+  });
+
   it('requires the AWS identity that makes those keys usable', () => {
     // Railway runs no instance role, so a service with a key and no credentials
     // cannot call KMS at all — and would discover that at the first save.
@@ -345,6 +362,9 @@ describe('each service holds exactly the key domains it uses', () => {
         ['CUSTOMER_MFA_VAULT_KMS_KEY_ARN', KMS.customerMfa],
         ['SOCIAL_TOKEN_VAULT_KEK', 'd'.repeat(48)],
         ['CUSTOMER_MFA_VAULT_KEK', 'e'.repeat(48)],
+        // D-574: a rotation's old key obeys the same boundary.
+        ['SOCIAL_TOKEN_VAULT_KEK_PREVIOUS', 'f'.repeat(48)],
+        ['CUSTOMER_MFA_VAULT_KEK_PREVIOUS', 'g'.repeat(48)],
       ] as [string, string][],
     },
     {
@@ -369,6 +389,8 @@ describe('each service holds exactly the key domains it uses', () => {
         ['SOCIAL_TOKEN_VAULT_KMS_KEY_ARN', KMS.social],
         ['SECRET_VAULT_KEK', 'c'.repeat(48)],
         ['SOCIAL_TOKEN_VAULT_KEK', 'd'.repeat(48)],
+        ['SECRET_VAULT_KEK_PREVIOUS', 'f'.repeat(48)],
+        ['SOCIAL_TOKEN_VAULT_KEK_PREVIOUS', 'g'.repeat(48)],
       ] as [string, string][],
     },
     {
@@ -386,6 +408,8 @@ describe('each service holds exactly the key domains it uses', () => {
         ['CUSTOMER_MFA_VAULT_KMS_KEY_ARN', KMS.customerMfa],
         ['SECRET_VAULT_KEK', 'c'.repeat(48)],
         ['CUSTOMER_MFA_VAULT_KEK', 'e'.repeat(48)],
+        ['SECRET_VAULT_KEK_PREVIOUS', 'f'.repeat(48)],
+        ['CUSTOMER_MFA_VAULT_KEK_PREVIOUS', 'g'.repeat(48)],
       ] as [string, string][],
     },
     {

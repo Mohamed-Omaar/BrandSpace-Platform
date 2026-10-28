@@ -271,6 +271,12 @@ export interface KeyDomain {
   readonly kmsVar: string;
   /** Environment variable holding the development KEK. */
   readonly kekVar: string;
+  /**
+   * D-574 — environment variable holding the PREVIOUS development KEK during a
+   * rotation. Used to UNWRAP only, never to wrap, and removed once the re-wrap
+   * command has moved every data key to the current KEK (docs/SECRET-ROTATION.md).
+   */
+  readonly previousKekVar: string;
   /** Human-readable domain name, used only in error messages. */
   readonly label: string;
 }
@@ -279,6 +285,7 @@ export interface KeyDomain {
 export const PLATFORM_SECRET_DOMAIN: KeyDomain = {
   kmsVar: 'SECRET_VAULT_KMS_KEY_ARN',
   kekVar: 'SECRET_VAULT_KEK',
+  previousKekVar: 'SECRET_VAULT_KEK_PREVIOUS',
   label: 'Secret encryption',
 };
 
@@ -286,6 +293,7 @@ export const PLATFORM_SECRET_DOMAIN: KeyDomain = {
 export const SOCIAL_TOKEN_DOMAIN: KeyDomain = {
   kmsVar: 'SOCIAL_TOKEN_VAULT_KMS_KEY_ARN',
   kekVar: 'SOCIAL_TOKEN_VAULT_KEK',
+  previousKekVar: 'SOCIAL_TOKEN_VAULT_KEK_PREVIOUS',
   label: 'Social token encryption',
 };
 
@@ -302,6 +310,7 @@ export const SOCIAL_TOKEN_DOMAIN: KeyDomain = {
 export const CUSTOMER_MFA_DOMAIN: KeyDomain = {
   kmsVar: 'CUSTOMER_MFA_VAULT_KMS_KEY_ARN',
   kekVar: 'CUSTOMER_MFA_VAULT_KEK',
+  previousKekVar: 'CUSTOMER_MFA_VAULT_KEK_PREVIOUS',
   label: 'Customer MFA encryption',
 };
 
@@ -368,5 +377,56 @@ export function createKeyProvider(
     );
   }
 
-  return new LocalDevelopmentKeyProvider(masterKey);
+  const current = new LocalDevelopmentKeyProvider(masterKey);
+  const previousKey = env[domain.previousKekVar];
+  if (!previousKey || previousKey.trim() === '') return current;
+  if (previousKey === masterKey) {
+    throw new Error(
+      `${domain.previousKekVar} is the same as ${domain.kekVar}. During a rotation the previous ` +
+        'key is the OLD one and the current key is the NEW one. (No value is ever shown.)',
+    );
+  }
+  return new RotatingKeyProvider(current, new LocalDevelopmentKeyProvider(previousKey));
+}
+
+/**
+ * D-574 — A KEK ROTATION IN PROGRESS: wrap with the current key, unwrap with
+ * the current key and, only if that fails, with the previous one.
+ *
+ * This is what lets a rotation happen without downtime. The owner sets the NEW
+ * key as the KEK and the OLD one as `<KEK>_PREVIOUS` on every service and
+ * redeploys: from then on every new secret is sealed with the new key, every
+ * old secret still opens, and the re-wrap command moves the old ones across.
+ * When it reports no failures, `<KEK>_PREVIOUS` is removed and the old key is
+ * gone for good (docs/SECRET-ROTATION.md).
+ *
+ * AES-GCM authenticates the wrapped key, so trying the current key on a data
+ * key the previous one sealed fails cleanly rather than yielding a wrong key.
+ */
+export class RotatingKeyProvider implements KeyProvider {
+  readonly name: string;
+  readonly #current: KeyProvider;
+  readonly #previous: KeyProvider;
+
+  constructor(current: KeyProvider, previous: KeyProvider) {
+    this.#current = current;
+    this.#previous = previous;
+    this.name = current.name;
+  }
+
+  currentKeyId(): string {
+    return this.#current.currentKeyId();
+  }
+
+  wrapDataKey(dataKey: Buffer, context: string): Promise<WrappedKey> {
+    return this.#current.wrapDataKey(dataKey, context);
+  }
+
+  async unwrapDataKey(wrapped: WrappedKey, context: string): Promise<Buffer> {
+    try {
+      return await this.#current.unwrapDataKey(wrapped, context);
+    } catch {
+      return this.#previous.unwrapDataKey(wrapped, context);
+    }
+  }
 }
