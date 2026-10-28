@@ -880,3 +880,68 @@ describe('the design showcase cannot reach production', () => {
     }
   });
 });
+
+describe('3- and 8-digit hex, and the design-system package itself', () => {
+  /**
+   * DESIGN-SYSTEM PROGRAMME, S1. The scan above checks the apps for 6-digit hex
+   * only, and not packages/ui, where every remaining TSX colour literal lives
+   * (docs/FULL-CHECKUP-2026-10-28.md §9.5, D-9). This extends it:
+   *
+   *   - the apps hold NO hex colour in any length (#rgb, #rrggbb, #rrggbbaa);
+   *   - packages/ui may hold no MORE hex colours, file by file, than it does
+   *     today (`UI_HEX_BASELINE`). The numbers only go down: S3 and S5 replace
+   *     them with tokens and S6 sets the baseline to zero.
+   *
+   * tokens.ts is the token source, so its literals are the tokens themselves.
+   */
+  const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g;
+  const UI_HEX_BASELINE: Readonly<Record<string, number>> = {
+    'packages/ui/src/app-shell.tsx': 2,
+    'packages/ui/src/composer.tsx': 1,
+    'packages/ui/src/design-studio.tsx': 5,
+    'packages/ui/src/media.tsx': 24,
+    'packages/ui/src/overlays.tsx': 1,
+    'packages/ui/src/prototype-hero-canvas.tsx': 1,
+    'packages/ui/src/prototype-rail.tsx': 11,
+    'packages/ui/src/switchers.tsx': 5,
+  };
+
+  function hexCount(file: string): number {
+    let total = 0;
+    for (const line of read(file).split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('*') || trimmed.startsWith('//') || trimmed.startsWith('/*')) continue;
+      total += (line.match(HEX) ?? []).length;
+    }
+    return total;
+  }
+
+  it('the apps hold no hex colour of any length', () => {
+    const files = ['apps/dashboard/src', 'apps/admin/src', 'apps/web/src'].flatMap(
+      collectSourceFiles,
+    );
+    expect(files.length).toBeGreaterThan(20);
+    const offenders = files
+      .filter((file) => !/\.(test|spec)\.tsx?$/.test(file))
+      .map((file) => [file, hexCount(file)] as const)
+      .filter(([, n]) => n > 0);
+    expect(offenders).toEqual([]);
+  });
+
+  it('packages/ui holds no more hex colours than its baseline, file by file', () => {
+    const files = collectSourceFiles('packages/ui/src').filter(
+      (file) => !file.endsWith('tokens.ts') && !/\.(test|spec)\.tsx?$/.test(file),
+    );
+    expect(files.length).toBeGreaterThan(20);
+    const above = files
+      .map((file) => [file.split(path.sep).join('/'), hexCount(file)] as const)
+      .filter(([file, n]) => n > (UI_HEX_BASELINE[file] ?? 0))
+      .map(([file, n]) => `${file}: ${UI_HEX_BASELINE[file] ?? 0} -> ${n}`);
+    expect(above).toEqual([]);
+  });
+
+  it('matches 3-, 6- and 8-digit hex and nothing shorter or longer', () => {
+    expect('#fff #7935fe #7935fe80'.match(HEX)).toEqual(['#fff', '#7935fe', '#7935fe80']);
+    expect('#ff #fffff #123456789'.match(HEX)).toBeNull();
+  });
+});

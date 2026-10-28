@@ -517,6 +517,34 @@ The gate keys on `APP_ENV`, **not** `NODE_ENV`: `next start` always sets `NODE_E
 gate keyed on it would be a deletion rather than a gate — the route could never be served from a
 production build, including in the end-to-end suite, which is exactly what happened to the first draft.
 
+### 10.1 The component gallery and the style ratchet (design-system programme, S1)
+
+The programme that makes one token source and one component set for both apps is described in
+`docs/FULL-CHECKUP-2026-10-28.md` §9. Its first step adds two things and changes nothing on screen.
+
+**The gallery** — `/{locale}/design-system/components` and `/{locale}/design-system/tokens`, behind
+the same gate as the showcase. One section per component family (button, input, select, checkbox,
+card, badge, dialog, backdrop, tooltip, table, empty state, navigation), every static state, and
+**both looks side by side**: the customer look inside `.bsp-frame`, the Control Center look inside
+`.bs-gallery-console`. That scope is generated (`pnpm style:gallery`, from tokens.css and
+prototype.css) and puts back the unscaled 1.0 size scale prototype.css replaces on `:root`. The tokens
+page shows every colour with its variable and WCAG contrast. `tests/e2e/gallery.design-system.spec.ts`
+takes one screenshot per section in English and Arabic at 1536×864; those images are the baseline
+every later step is compared with.
+
+**The ratchet** — `scripts/style/measure.ts` counts, file by file, every hard-coded colour, length,
+duration, easing, z-index, blur, font size and font family in the stylesheets, and every colour
+string, numeric style value, literal length, inline `style=` and reference to a baked-literal token
+object (`colorTokens.*` and its siblings) in the TS/TSX. The counts are committed in
+`scripts/style/baseline.json`. `tests/unit/style-ratchet.test.ts` fails if any count goes **up**;
+`pnpm style:ratchet --write` records a lower baseline. The same values are reported, as warnings only,
+by stylelint (`pnpm lint:style`, `scale-unlimited/declaration-strict-value`) and by ESLint
+(`style/no-restricted-syntax`, a second name for the core rule so the `new Date()` error keeps its
+severity). Step S6 turns both into errors.
+
+**Parity** — `tests/unit/token-parity.test.ts` compares every colour, shadow, z-index, font and
+motion token in tokens.ts with its tokens.css twin, and pins the list of tokens that have no twin yet.
+
 ---
 
 ## 11. What remains for Phase 2C-B

@@ -11,7 +11,8 @@
     "./brand-brain.css": "./src/brand-brain.css",
     "./content-studio.css": "./src/content-studio.css",
     "./prototype.css": "./src/prototype.css",
-    "./entry.css": "./src/entry.css"
+    "./entry.css": "./src/entry.css",
+    "./gallery-console.css": "./src/gallery-console.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
