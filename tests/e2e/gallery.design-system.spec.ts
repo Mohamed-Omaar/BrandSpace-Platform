@@ -136,7 +136,11 @@ for (const locale of LOCALES) {
           await expect(box.locator('[role="dialog"]')).toBeVisible();
           // The entrance animation is a transition, not a still; wait it out.
           await page.waitForTimeout(500);
-          await expect(box).toHaveScreenshot(`gallery-open-${name}-${look}-${locale}.png`, SHOT);
+          // Soft (S5): a mismatch still fails the test, and every later shot in
+          // the loop is still taken, so one CI run yields every changed image.
+          await expect
+            .soft(box)
+            .toHaveScreenshot(`gallery-open-${name}-${look}-${locale}.png`, SHOT);
           await page.keyboard.press('Escape');
           await expect(box.locator('[role="dialog"]')).toHaveCount(0);
         }
@@ -152,10 +156,10 @@ for (const locale of LOCALES) {
           await page.getByTestId(`gallery-open-bd-${kind}-${look}`).click();
           await expect(box.locator('[role="dialog"]')).toBeVisible();
           await page.waitForTimeout(500);
-          await expect(box).toHaveScreenshot(
-            `gallery-backdrop-open-${kind}-${look}-${locale}.png`,
-            SHOT,
-          );
+          // Soft, as above: one run records every look.
+          await expect
+            .soft(box)
+            .toHaveScreenshot(`gallery-backdrop-open-${kind}-${look}-${locale}.png`, SHOT);
           await page.keyboard.press('Escape');
           await expect(box.locator('[role="dialog"]')).toHaveCount(0);
         }
