@@ -4,7 +4,6 @@ import { INTEGRATION_CATEGORY_DEFINITIONS } from '@brandspace/integrations';
 import {
   SectionHeader,
   buttonClass,
-  buttonStyle,
   colorTokens,
   fontTokens,
   spacingTokens,
@@ -248,8 +247,7 @@ export default async function HealthPage({ params }: { params: Promise<{ locale:
                     <button
                       type="submit"
                       data-testid={`replay-${event.id}`}
-                      className={buttonClass('neutral')}
-                      style={buttonStyle('neutral', 'sm')}
+                      className={buttonClass('neutral', 'sm')}
                     >
                       {isArabic ? 'أعد التشغيل' : 'Replay'}
                     </button>

@@ -18,7 +18,6 @@ import {
   Stack,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   fontTokens,
   inputStyle,
@@ -640,7 +639,6 @@ export async function SimpleIntegrationSetup({
                 <button
                   type="submit"
                   className={buttonClass('primary')}
-                  style={buttonStyle('primary')}
                   data-testid="save-configuration"
                 >
                   {copy('setup.save')}
@@ -675,7 +673,6 @@ export async function SimpleIntegrationSetup({
               <button
                 type="submit"
                 className={buttonClass('neutral')}
-                style={buttonStyle('neutral')}
                 data-testid="test-connection"
               >
                 {copy('setup.testRun')}
@@ -751,7 +748,6 @@ export async function SimpleIntegrationSetup({
                 <button
                   type="submit"
                   className={buttonClass(view.enabled ? 'danger' : 'primary')}
-                  style={buttonStyle(view.enabled ? 'danger' : 'primary')}
                   data-testid={view.enabled ? 'disable-integration' : 'activate-integration'}
                 >
                   {fill(copy(view.enabled ? 'setup.switchOff' : 'setup.switchOn'), {

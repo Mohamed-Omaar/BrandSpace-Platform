@@ -12,15 +12,12 @@ import {
   radiusTokens,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { translator } from '../../../../i18n/messages';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
-import {
-  inputStyle as sharedInputStyle,
-  primaryButtonStyle,
-  secondaryButtonStyle,
-} from '../../../../components/console-ui';
+import { inputStyle as sharedInputStyle } from '../../../../components/console-ui';
 import {
   currentEnvironment,
   getSecretService,
@@ -215,7 +212,7 @@ export default async function SecretsPage({
               style={fieldStyle}
             />
           </div>
-          <button type="submit" data-testid="secret-save" style={buttonStyle}>
+          <button type="submit" data-testid="secret-save" className={buttonClass('primary')}>
             {isArabic ? 'حفظ' : 'Save'}
           </button>
         </form>
@@ -298,13 +295,19 @@ export default async function SecretsPage({
             ))}
           </select>
         </div>
-        <button type="submit" style={smallButton} data-testid="secret-search-apply">
+        <button
+          type="submit"
+          className={buttonClass('neutral')}
+          style={compactButton}
+          data-testid="secret-search-apply"
+        >
           {t('secrets.searchApply')}
         </button>
         {query || category ? (
           <a
             href={`/${locale}/console/secrets`}
-            style={{ ...smallButton, textDecoration: 'none' }}
+            className={buttonClass('neutral')}
+            style={compactButton}
             data-testid="secret-search-clear"
           >
             {t('secrets.searchClear')}
@@ -410,7 +413,8 @@ export default async function SecretsPage({
                         <button
                           type="submit"
                           data-testid={`rotate-${secret.ref}`}
-                          style={smallButton}
+                          className={buttonClass('neutral')}
+                          style={compactButton}
                         >
                           {isArabic ? 'تدوير' : 'Rotate'}
                         </button>
@@ -433,7 +437,8 @@ export default async function SecretsPage({
                           <button
                             type="submit"
                             data-testid={`disable-${secret.ref}`}
-                            style={smallButton}
+                            className={buttonClass('neutral')}
+                            style={compactButton}
                           >
                             {isArabic ? 'تعطيل' : 'Disable'}
                           </button>
@@ -487,9 +492,7 @@ const smallInput = {
   minBlockSize: layoutTokens.controlHeightSm,
   maxInlineSize: '11rem',
 } as const;
-const buttonStyle = primaryButtonStyle();
-const smallButton = {
-  ...secondaryButtonStyle(),
+const compactButton = {
   minBlockSize: layoutTokens.controlHeightSm,
   paddingInline: spacingTokens.md,
   fontSize: typographyTokens.caption.fontSize,

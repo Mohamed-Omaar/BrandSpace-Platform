@@ -721,76 +721,7 @@ select.bsp-chip {
   color: var(--bs-surface);
 }
 
-/* `.btn` and its variants */
-.bsp-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--bsp-px-8);
-  border: 0;
-  border-radius: calc(var(--bsp-px-12) * var(--bs-radius-scale));
-  padding: var(--bsp-px-9) var(--bsp-px-16);
-  font-size: var(--bsp-fs-13-5);
-  font-weight: 700;
-  line-height: normal;
-  background: var(--bs-text-primary);
-  color: var(--bs-surface);
-  white-space: nowrap;
-  min-block-size: var(--bsp-px-40);
-  box-sizing: border-box;
-  text-decoration: none;
-  transition:
-    background-color var(--bs-dur-150) var(--bs-ease-css),
-    border-color var(--bs-dur-150) var(--bs-ease-css),
-    box-shadow var(--bs-dur-200) var(--bs-ease-css),
-    translate var(--bs-dur-200) var(--bs-ease-out),
-    scale var(--bs-dur-120) var(--bs-ease-css);
-}
-.bsp-btn:hover {
-  background: var(--bs-lit-2a2a30);
-}
-.bsp-btn.bsp-pur {
-  background: var(--bs-brand-purple);
-}
-.bsp-btn.bsp-pur:hover {
-  background: var(--bs-brand-purple-hover);
-}
-.bsp-btn.bsp-sec {
-  background: var(--bs-lit-f2f2f4);
-  color: var(--bs-text-primary);
-}
-.bsp-btn.bsp-sec:hover {
-  background: var(--bs-lit-e6e6ea);
-}
-.bsp-btn.bsp-ghost {
-  background: transparent;
-  color: var(--bs-text-primary);
-}
-.bsp-btn.bsp-ghost:hover {
-  background: var(--bs-lit-f2f2f4);
-}
-.bsp-btn.bsp-sm {
-  padding: var(--bsp-px-6) var(--bsp-px-12);
-  font-size: var(--bsp-fs-12-5);
-  min-block-size: var(--bsp-px-32);
-  border-radius: calc(var(--bsp-px-10) * var(--bs-radius-scale));
-}
-/* The hero's large `.btn`: `min-block-size: 48px; padding: 12px 20px; font-size: 14.5px`. */
-.bsp-btn.bsp-lg {
-  padding: var(--bsp-px-12) var(--bsp-px-20);
-  font-size: var(--bsp-fs-14-5);
-  min-block-size: var(--bsp-px-48);
-}
-/* A destructive action: the prototype's `.btn` with `color: #b83245` (Remove, Delete, Disconnect). */
-.bsp-btn.bsp-danger {
-  color: var(--bs-danger);
-}
-.bsp-btn[disabled],
-.bsp-btn[aria-disabled='true'] {
-  background: var(--bs-control-surface-hover);
-  color: var(--bs-scrollbar-thumb);
-  cursor: not-allowed;
-}
+/* `.btn` and its variants: S5 moved them to tokens.css (`.bsp-btn`), which both apps load. */
 
 /*
  * THE ONE FORM FIELD (review of #68, round 4, step 1). Measured from the

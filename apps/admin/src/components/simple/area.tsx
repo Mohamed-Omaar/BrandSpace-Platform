@@ -9,7 +9,6 @@ import {
   StatusBadge,
   CONTROL_CLASS,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   radiusTokens,
@@ -784,12 +783,7 @@ function Editor({
           {/* Nothing to choose anywhere (D-571): no change can be made here, so
               no "Check the change" — the empty field says where to go. */}
           {nothingToChoose(fields) ? null : (
-            <button
-              type="submit"
-              className={buttonClass('primary')}
-              style={buttonStyle('primary')}
-              data-testid="area-check"
-            >
+            <button type="submit" className={buttonClass('primary')} data-testid="area-check">
               {ctx.t('a.check')}
             </button>
           )}
@@ -1272,7 +1266,6 @@ function Confirm({
               <button
                 type="submit"
                 className={buttonClass('primary')}
-                style={buttonStyle('primary')}
                 data-testid={`${testId}-submit`}
               >
                 {submit}
@@ -1370,12 +1363,7 @@ function PartialNotice({
         <form action={retryPartAction}>
           <input type="hidden" name="locale" value={locale} />
           <input type="hidden" name="confirm" value="yes" />
-          <button
-            type="submit"
-            className={buttonClass('primary')}
-            style={buttonStyle('primary')}
-            data-testid="area-partial-retry"
-          >
+          <button type="submit" className={buttonClass('primary')} data-testid="area-partial-retry">
             {ctx.t('ui.partial.retry')}
           </button>
         </form>

@@ -143,7 +143,7 @@ describe('P6-02 · no control renders in browser chrome', () => {
     expect(
       bare,
       `These <button> elements carry no styling at all, so they render in the browser's own ` +
-        `chrome. Use the Button component, or buttonStyle() WITH buttonClass() where a plain ` +
+        `chrome. Use the Button component, or buttonClass() on the element where a plain ` +
         `submit is required:\n  ${bare.join('\n  ')}`,
     ).toEqual([]);
   });

@@ -7,17 +7,12 @@ import {
   radiusTokens,
   spacingTokens,
   typographyTokens,
+  buttonClass,
 } from '@brandspace/ui';
 import { errorMessage, successMessage } from '../../../../i18n/status-messages';
 import Link from 'next/link';
 import { Cell, DataTable, EmptyState, PageIntro } from '../../../../components/admin-shell';
-import {
-  Card,
-  Field,
-  inputStyle,
-  primaryButtonStyle,
-  secondaryButtonStyle,
-} from '../../../../components/console-ui';
+import { Card, Field, inputStyle } from '../../../../components/console-ui';
 import {
   currentEnvironment,
   getConfigService,
@@ -176,7 +171,8 @@ export default async function ConfigurationPage({
           <button
             type="submit"
             data-testid="create-draft"
-            style={{ ...buttonStyle, justifySelf: 'start' }}
+            className={buttonClass('primary')}
+            style={{ justifySelf: 'start' }}
           >
             {isArabic ? 'إنشاء مسودة' : 'Create draft'}
           </button>
@@ -236,7 +232,7 @@ export default async function ConfigurationPage({
             />
           </Field>
           <div>
-            <button type="submit" data-testid="save-draft" style={buttonStyle}>
+            <button type="submit" data-testid="save-draft" className={buttonClass('primary')}>
               {isArabic ? 'حفظ المسودة' : 'Save draft'}
             </button>
           </div>
@@ -363,7 +359,8 @@ export default async function ConfigurationPage({
                               <button
                                 type="submit"
                                 data-testid={`validate-${version.versionNumber}`}
-                                style={smallButton}
+                                className={buttonClass('neutral')}
+                                style={compactButton}
                               >
                                 {isArabic ? 'تحقق ومعاينة' : 'Validate & preview'}
                               </button>
@@ -402,7 +399,8 @@ export default async function ConfigurationPage({
                               <button
                                 type="submit"
                                 data-testid={`activate-${version.versionNumber}`}
-                                style={smallButton}
+                                className={buttonClass('neutral')}
+                                style={compactButton}
                               >
                                 {isArabic ? 'تفعيل' : 'Activate'}
                               </button>
@@ -434,7 +432,8 @@ export default async function ConfigurationPage({
                           <button
                             type="submit"
                             data-testid={`rollback-${version.versionNumber}`}
-                            style={smallButton}
+                            className={buttonClass('neutral')}
+                            style={compactButton}
                           >
                             {isArabic ? 'تراجع' : 'Roll back'}
                           </button>
@@ -462,5 +461,3 @@ export default async function ConfigurationPage({
  * from the design system, so the primary action here is ink like every other
  * primary action in the product.
  */
-const buttonStyle = primaryButtonStyle();
-const smallButton = { ...secondaryButtonStyle(), ...compactButton } as const;

@@ -6,7 +6,6 @@ import {
   SectionHeader,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   radiusTokens,
   spacingTokens,
@@ -86,12 +85,7 @@ export function ActionLink({
   readonly testId?: string | undefined;
 }) {
   return (
-    <Link
-      href={href}
-      className={buttonClass(variant)}
-      style={{ ...buttonStyle(variant, 'sm'), textDecoration: 'none' }}
-      data-testid={testId}
-    >
+    <Link href={href} className={buttonClass(variant, 'sm')} data-testid={testId}>
       {children}
     </Link>
   );

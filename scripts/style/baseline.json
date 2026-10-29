@@ -27,7 +27,7 @@
       "border-width": 196,
       "font-family": 3,
       "letter-spacing": 37,
-      "lit-token": 461,
+      "lit-token": 457,
       "radius": 1,
       "shadow": 23,
       "size": 53,
@@ -58,7 +58,7 @@
       "length": 4
     },
     "apps/admin/src/app/[locale]/console/ai-usage/page.tsx": {
-      "inline-style": 6
+      "inline-style": 5
     },
     "apps/admin/src/app/[locale]/console/audit/page.tsx": {
       "baked-token": 1,
@@ -70,22 +70,22 @@
     },
     "apps/admin/src/app/[locale]/console/configuration/page.tsx": {
       "baked-token": 1,
-      "inline-style": 24,
+      "inline-style": 23,
       "length": 3
     },
     "apps/admin/src/app/[locale]/console/features/page.tsx": {
-      "inline-style": 29
+      "inline-style": 23
     },
     "apps/admin/src/app/[locale]/console/flags/page.tsx": {
-      "inline-style": 23
+      "inline-style": 16
     },
     "apps/admin/src/app/[locale]/console/health/page.tsx": {
       "baked-token": 2,
-      "inline-style": 11
+      "inline-style": 10
     },
     "apps/admin/src/app/[locale]/console/integrations/[category]/[providerKey]/page.tsx": {
       "baked-token": 4,
-      "inline-style": 39,
+      "inline-style": 36,
       "numeric-style": 1
     },
     "apps/admin/src/app/[locale]/console/integrations/page.tsx": {
@@ -93,10 +93,10 @@
       "numeric-style": 1
     },
     "apps/admin/src/app/[locale]/console/page.tsx": {
-      "inline-style": 2
+      "inline-style": 1
     },
     "apps/admin/src/app/[locale]/console/plans/page.tsx": {
-      "inline-style": 45
+      "inline-style": 41
     },
     "apps/admin/src/app/[locale]/console/providers/page.tsx": {
       "inline-style": 2
@@ -107,21 +107,21 @@
     },
     "apps/admin/src/app/[locale]/console/secrets/page.tsx": {
       "baked-token": 2,
-      "inline-style": 33,
+      "inline-style": 32,
       "length": 7
     },
     "apps/admin/src/app/[locale]/console/support/page.tsx": {
-      "inline-style": 28
+      "inline-style": 26
     },
     "apps/admin/src/app/[locale]/console/team/page.tsx": {
       "inline-style": 9,
       "length": 1
     },
     "apps/admin/src/app/[locale]/console/workspaces/[workspaceId]/page.tsx": {
-      "inline-style": 136
+      "inline-style": 125
     },
     "apps/admin/src/app/[locale]/console/workspaces/page.tsx": {
-      "inline-style": 17,
+      "inline-style": 14,
       "length": 3
     },
     "apps/admin/src/components/admin-shell.tsx": {
@@ -133,29 +133,29 @@
       "length": 1
     },
     "apps/admin/src/components/copy-value.tsx": {
-      "inline-style": 3
+      "inline-style": 2
     },
     "apps/admin/src/components/mode-switch.tsx": {
-      "inline-style": 8
+      "inline-style": 5
     },
     "apps/admin/src/components/simple-ui.tsx": {
-      "inline-style": 14,
+      "inline-style": 13,
       "length": 1
     },
     "apps/admin/src/components/simple/ai.tsx": {
-      "inline-style": 37,
+      "inline-style": 36,
       "length": 4
     },
     "apps/admin/src/components/simple/area.tsx": {
-      "inline-style": 74,
+      "inline-style": 71,
       "length": 13
     },
     "apps/admin/src/components/simple/customers.tsx": {
-      "inline-style": 69,
+      "inline-style": 65,
       "length": 3
     },
     "apps/admin/src/components/simple/features.tsx": {
-      "inline-style": 25,
+      "inline-style": 23,
       "length": 2
     },
     "apps/admin/src/components/simple/home.tsx": {
@@ -164,14 +164,14 @@
     },
     "apps/admin/src/components/simple/integrations.tsx": {
       "baked-token": 1,
-      "inline-style": 42,
+      "inline-style": 39,
       "length": 6
     },
     "apps/admin/src/components/simple/manage.tsx": {
       "inline-style": 4
     },
     "apps/admin/src/components/simple/open-drafts.tsx": {
-      "inline-style": 7,
+      "inline-style": 6,
       "length": 2
     },
     "apps/admin/src/components/simple/system.tsx": {

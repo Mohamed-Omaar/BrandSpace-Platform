@@ -25,19 +25,24 @@ function files(dir: string): string[] {
   });
 }
 
-describe('1.1 · one button system on customer screens', () => {
-  it('no customer screen draws the retired inline button', () => {
-    // `apps/admin` (the Control Center) keeps its own look and the legacy
-    // `buttonStyle`; `app-shell.tsx` is its shell. Everything else is the
-    // prototype's `.btn` class system, through `buttonClass()`/`Button`.
-    const customer = [
+describe('1.1 · one button system in both apps', () => {
+  it('no screen in either app draws the retired inline button', () => {
+    // S5: the Control Center keeps its own look as the console token set in
+    // tokens.css (`.bs-console .bsp-btn`), not as an inline style, so the
+    // inline `buttonStyle` is gone everywhere and every button is the one
+    // `.bsp-btn` class system, through `buttonClass()`/`Button`.
+    const everywhere = [
       ...files(join(ROOT, 'apps', 'dashboard', 'src')),
-      ...files(join(ROOT, 'packages', 'ui', 'src')).filter(
-        (path) => !/[\\/](primitives|app-shell)\.tsx$/.test(path),
-      ),
+      ...files(join(ROOT, 'apps', 'admin', 'src')),
+      ...files(join(ROOT, 'packages', 'ui', 'src')),
     ];
-    const offenders = customer
-      .filter((path) => /\bbuttonStyle\(/.test(readFileSync(path, 'utf8')))
+    const offenders = everywhere
+      .filter((path) =>
+        // A call, not a mention in a comment (`buttonStyle()` in backticks).
+        /(?<!`)\b(button|primaryButton|secondaryButton|dangerButton)Style\(/.test(
+          readFileSync(path, 'utf8'),
+        ),
+      )
       .map((path) => relative(ROOT, path));
     expect(offenders).toEqual([]);
   });

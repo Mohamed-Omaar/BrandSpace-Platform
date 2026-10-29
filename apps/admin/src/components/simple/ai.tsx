@@ -12,7 +12,6 @@ import {
   Stack,
   StatusBadge,
   buttonClass,
-  buttonStyle,
   colorTokens,
   inputStyle,
   radiusTokens,
@@ -641,12 +640,7 @@ export async function SimpleAiProfile({
               {copy('profile.confirm')}
             </label>
             <div>
-              <button
-                type="submit"
-                className={buttonClass('primary')}
-                style={buttonStyle('primary')}
-                data-testid="profile-submit"
-              >
+              <button type="submit" className={buttonClass('primary')} data-testid="profile-submit">
                 {fill(copy('profile.apply'), { profile: candidateName })}
               </button>
             </div>
